@@ -20,8 +20,11 @@ from typing import Optional, Dict, Any, List
 
 # Import existing components
 from .db import Database
-from .embeddings import EmbeddingGenerator
-from .spirv_encoder import MemorySpirvEncoder
+from .embeddings import EmbeddingGenerator, EMBEDDING_DIM
+from .spirv_encoder import MemorySpirvEncoder, MEMORY_STRIDE
+
+# Memory type to opcode mapping - centralized in memory_glyph.py
+from .memory_glyph import CATEGORY_OPCODES
 
 
 class AgentBridge:
@@ -29,17 +32,9 @@ class AgentBridge:
 
     Handles the async/sync boundary by running async operations
     in a dedicated event loop thread.
-    """
 
-    # Memory type to opcode mapping
-    TYPE_OPCODES = {
-        "decision": 0x30,  # Purple - Planner outputs
-        "code": 0x60,      # Green - Worker outputs
-        "note": 0x10,      # Cyan - System messages
-        "error": 0x20,     # Red - Errors
-        "plan": 0x31,      # Light purple - Plan fragments
-        "result": 0x61,    # Light green - Result fragments
-    }
+    Uses CATEGORY_OPCODES from memory_glyph.py for type-to-opcode mapping.
+    """
 
     def __init__(self, database_url: Optional[str] = None):
         self.database_url = database_url or os.environ.get(

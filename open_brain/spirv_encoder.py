@@ -3,6 +3,14 @@ import struct
 import numpy as np
 from typing import List, Dict, Any
 from .memory_glyph import CATEGORY_OPCODES
+from .embeddings import EMBEDDING_DIM
+
+# Memory layout constants
+# Layout: ID(1) + Type(1) + Priority(1) + Embedding(384) = 387 words
+# Padded to 512 for GPU alignment
+MEMORY_STRIDE = 512
+HEADER_OFFSET = 3  # ID, Type, Priority before embedding
+
 
 class MemorySpirvEncoder:
     """Encodes memory entries into a SPIR-V binary module.
@@ -59,32 +67,32 @@ class MemorySpirvEncoder:
 
         # 2. Encode Memories
         # Layout in RAM:
-        # Base Address = Memory ID * 512
+        # Base Address = Memory ID * MEMORY_STRIDE
         # Offset 0: ID
         # Offset 1: Type Opcode
         # Offset 2: Priority
-        # Offset 3-386: Embedding (384 floats)
-        
+        # Offset 3-(3+EMBEDDING_DIM): Embedding
+
         for memory in memories:
             mem_id = memory.get("id", 0)
             mem_type = memory.get("type", "note")
             priority = memory.get("priority", 0.5)
             embedding = memory.get("embedding", [])
-            
+
             opcode = CATEGORY_OPCODES.get(mem_type, 0x10)
-            base_addr = mem_id * 512
-            
+            base_addr = mem_id * MEMORY_STRIDE
+
             # Store ID
             self._emit_store(emit, next_id, float_type_id, base_addr, float(mem_id))
             # Store Type
             self._emit_store(emit, next_id, float_type_id, base_addr + 1, float(opcode))
             # Store Priority
             self._emit_store(emit, next_id, float_type_id, base_addr + 2, priority)
-            
+
             # Store Embedding
             if embedding:
-                for i, val in enumerate(embedding[:384]):
-                    self._emit_store(emit, next_id, float_type_id, base_addr + 3 + i, float(val))
+                for i, val in enumerate(embedding[:EMBEDDING_DIM]):
+                    self._emit_store(emit, next_id, float_type_id, base_addr + HEADER_OFFSET + i, float(val))
 
         # 3. Finalize
         emit(253, [])  # OpReturn

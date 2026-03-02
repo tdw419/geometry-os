@@ -1,11 +1,22 @@
 /**
  * Geometry OS 3D Memory Browser
- * 
+ *
  * Visualizes the SPIR-V memory substrate as a 3D semantic landscape.
  * Uses a Hybrid (Hilbert + Semantic Gravity) topography.
  */
 
 import { GeometryFont } from './GeometryFont.js';
+
+// Memory layout constants (must match open_brain/spirv_encoder.py)
+const EMBEDDING_DIM = 384;
+const MEMORY_STRIDE = 512;
+const HEADER_WORDS = 3;  // ID, Type, Priority
+
+// Opcode constants (must match open_brain/memory_glyph.py CATEGORY_OPCODES)
+const OPC_NOTE = 0x10;
+const OPC_TASK = 0x20;
+const OPC_DECISION = 0x30;
+const OPC_CODE = 0x60;
 
 export class MemoryBrowser {
     constructor(canvas) {
@@ -82,35 +93,34 @@ export class MemoryBrowser {
         const words = new Uint32Array(buffer, headerOffset);
         const floats = new Float32Array(buffer, headerOffset);
         
-        // Stride is 512 words
-        const stride = 512;
-        const memoryCount = words.length / stride;
-        
+        // Stride is MEMORY_STRIDE words
+        const memoryCount = words.length / MEMORY_STRIDE;
+
         console.log(`[GOS Browser] Loading ${memoryCount} memories from substrate...`);
-        
-        const embeddingData = new Float32Array(memoryCount * 384);
+
+        const embeddingData = new Float32Array(memoryCount * EMBEDDING_DIM);
         const metaData = new Float32Array(memoryCount * 4); // [ID, Opcode, Priority, 0]
-        
+
         for (let i = 0; i < memoryCount; i++) {
-            const base = i * stride;
-            
+            const base = i * MEMORY_STRIDE;
+
             // Layout from spirv_encoder.py:
             // Offset 0: ID
             // Offset 1: Type Opcode
             // Offset 2: Priority
-            // Offset 3-386: Embedding
-            
+            // Offset 3-(3+EMBEDDING_DIM): Embedding
+
             const id = floats[base];
             const opcode = floats[base + 1];
             const priority = floats[base + 2];
-            
+
             metaData[i * 4 + 0] = id;
             metaData[i * 4 + 1] = opcode;
             metaData[i * 4 + 2] = priority;
-            
+
             // Extract embedding
-            embeddingData.set(floats.subarray(base + 3, base + 3 + 384), i * 384);
-            
+            embeddingData.set(floats.subarray(base + HEADER_WORDS, base + HEADER_WORDS + EMBEDDING_DIM), i * EMBEDDING_DIM);
+
             // Cache locally for UI interaction
             this.memories.push({
                 id,
@@ -118,7 +128,7 @@ export class MemoryBrowser {
                 priority,
                 content: `Memory Entry #${id}`, // Placeholder until we fetch text
                 tags: ['geometry_os', 'substrate'],
-                embedding: embeddingData.subarray(i * 384, (i + 1) * 384)
+                embedding: embeddingData.subarray(i * EMBEDDING_DIM, (i + 1) * EMBEDDING_DIM)
             });
         }
 
