@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS | 3D Memory Browser</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #050505;
+            color: #00ffcc;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .panel {
+            background: rgba(0, 20, 20, 0.8);
+            border: 1px solid #00ffcc;
+            padding: 15px;
+            margin-bottom: 10px;
+            pointer-events: auto;
+            max-width: 300px;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+        }
+
+        h1 {
+            font-size: 18px;
+            margin: 0 0 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .stats {
+            font-size: 12px;
+            color: #008888;
+        }
+
+        #detail-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 400px;
+            display: none;
+            pointer-events: auto;
+        }
+
+        .memory-id { font-weight: bold; color: #ff00ff; }
+        .memory-type { color: #ffff00; text-transform: uppercase; font-size: 12px; }
+        .memory-content { margin: 10px 0; font-size: 14px; line-height: 1.4; color: #fff; }
+        .memory-tags { font-size: 11px; color: #00ffcc; opacity: 0.7; }
+
+        .btn {
+            background: #00ffcc;
+            color: #000;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .btn:hover { background: #fff; }
+
+        #loading-screen {
+            position: absolute;
+            inset: 0;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #00ffcc;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <p>Igniting Brain Substrate...</p>
+    </div>
+
+    <div id="ui-overlay">
+        <div class="panel">
+            <h1>Memory Browser</h1>
+            <div class="stats" id="stats-display">
+                Memories: 0 | Substrate: SPIR-V
+            </div>
+            <div style="margin-top: 10px;">
+                <label style="font-size: 10px;">Gravity Tension</label><br>
+                <input type="range" id="tension-slider" min="0" max="100" value="15" style="width: 100%;">
+            </div>
+        </div>
+    </div>
+
+    <div id="detail-panel" class="panel">
+        <div class="memory-type" id="det-type">CODE_PATTERN</div>
+        <div class="memory-id" id="det-id">#42</div>
+        <div class="memory-content" id="det-content">Loading memory content...</div>
+        <div class="memory-tags" id="det-tags">#embeddings #geometry_os</div>
+        <button class="btn" onclick="document.getElementById('detail-panel').style.display='none'">Close</button>
+    </div>
+
+    <canvas id="gpu-canvas"></canvas>
+
+    <script type="module">
+        import { MemoryBrowser } from './MemoryBrowser.js';
+
+        async function init() {
+            const canvas = document.getElementById('gpu-canvas');
+            const browser = new MemoryBrowser(canvas);
+
+            try {
+                await browser.init();
+                document.getElementById('loading-screen').style.display = 'none';
+
+                // Handle UI interactions
+                document.getElementById('tension-slider').oninput = (e) => {
+                    browser.setTension(e.target.value / 100);
+                };
+
+                // Browser events
+                browser.on('select', (memory) => {
+                    const panel = document.getElementById('detail-panel');
+                    document.getElementById('det-id').innerText = `#${memory.id}`;
+                    document.getElementById('det-type').innerText = memory.type;
+                    document.getElementById('det-content').innerText = memory.content;
+                    document.getElementById('det-tags').innerText = memory.tags.map(t => `#${t}`).join(' ');
+                    panel.style.display = 'block';
+                });
+
+                browser.on('stats', (stats) => {
+                    document.getElementById('stats-display').innerText = 
+                        `Memories: ${stats.count} | Substrate: ${stats.format}`;
+                });
+
+            } catch (err) {
+                console.error('Failed to ignite browser:', err);
+                document.getElementById('loading-screen').innerHTML = 
+                    `<p style="color: red;">ERROR: ${err.message}</p>`;
+            }
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
