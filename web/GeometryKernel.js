@@ -189,4 +189,42 @@ export class GeometryKernel {
 
         return pcbs;
     }
+
+    /**
+     * Read shared memory region (IPC mailboxes).
+     * @param {number} offset - Start offset in words
+     * @param {number} count - Number of words to read
+     * @returns {Promise<Uint32Array>} Shared memory data
+     */
+    async readSharedMemory(offset = 0, count = 512) {
+        const stagingBuffer = this.device.createBuffer({
+            size: count * 4,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+        });
+
+        const encoder = this.device.createCommandEncoder();
+        encoder.copyBufferToBuffer(
+            this.ramBuffer, offset * 4,
+            stagingBuffer, 0,
+            count * 4
+        );
+        this.device.queue.submit([encoder.finish()]);
+
+        await stagingBuffer.mapAsync(GPUMapMode.READ);
+        const data = new Uint32Array(stagingBuffer.getMappedRange().slice(0));
+
+        stagingBuffer.unmap();
+        stagingBuffer.destroy();
+
+        return data;
+    }
+
+    /**
+     * Write to shared memory region.
+     * @param {number} offset - Start offset in words
+     * @param {Uint32Array} data - Data to write
+     */
+    writeSharedMemory(offset, data) {
+        this.device.queue.writeBuffer(this.ramBuffer, offset * 4, data);
+    }
 }
