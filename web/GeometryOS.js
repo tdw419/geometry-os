@@ -9,6 +9,7 @@
 
 import { GeometryKernel } from './GeometryKernel.js';
 import { GeometryFont } from './GeometryFont.js';
+import { AgentManager } from './AgentManager.js';
 
 // Hilbert Sector Map - Different subsystems occupy dedicated regions
 const HILBERT_SECTORS = {
@@ -98,6 +99,7 @@ export class GeometryOS {
         // Agents
         this.agents = [];
         this.agentPositions = new Map();
+        this.agentManager = null;
 
         // Stats
         this.frameCount = 0;
@@ -145,10 +147,14 @@ export class GeometryOS {
         // 5. Create default windows
         this._createDefaultWindows();
 
-        // 6. Wire interactions
+        // 6. Initialize Agent Manager
+        this.agentManager = new AgentManager(this);
+        await this.agentManager.init();
+
+        // 7. Wire interactions
         this._wireInteractions();
 
-        // 7. Start render loop
+        // 8. Start render loop
         requestAnimationFrame((t) => this._render(t));
 
         console.log('[GeometryOS] Desktop Environment ready');
@@ -617,6 +623,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
             this._stepKernel();
         }
 
+        // Update agents
+        if (this.agentManager) {
+            this.agentManager.update(dt);
+
+            // Simulate activity for demo
+            if (this.frameCount % 60 === 0) {
+                this.agentManager.simulateActivity();
+            }
+        }
+
         // Render
         const encoder = this.device.createCommandEncoder();
 
@@ -645,6 +661,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
             renderPass.draw(6, visibleWindows.length);
         }
 
+        // Render agents
+        if (this.agentManager) {
+            this.agentManager.render(encoder, renderPass);
+        }
+
         renderPass.end();
 
         this.device.queue.submit([encoder.finish()]);
@@ -656,11 +677,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
      * Get system statistics
      */
     getStats() {
+        const agentStats = this.agentManager?.getStats() || {};
         return {
             fps: this.fps,
             windowCount: this.windows.size,
             processCount: this.kernel.processes.length,
-            agentCount: this.agents.length,
+            agentCount: agentStats.agentCount || 0,
+            agentCycles: agentStats.totalCycles || 0,
+            agentReads: agentStats.totalReads || 0,
+            agentWrites: agentStats.totalWrites || 0,
             ipcEventCount: this.ipcEvents.length,
             cameraPosition: { ...this.cameraPosition }
         };
