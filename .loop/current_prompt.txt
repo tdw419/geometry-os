@@ -1,0 +1,238 @@
+You are in an AUTO-PROMPTING LOOP. Your job is to:
+
+1. Read the current STATE.md below
+2. Perform the action specified in G: Action
+3. Update STATE.md with your progress and next action
+
+## STATE ENCODING (Geometry OS Style)
+- **R (Context)**: File state, progress, what's been done
+- **G (Action)**: What to do next: READ, WRITE, EDIT, RUN, ANALYZE, or DONE
+- **B (Target)**: File path, command, or content for the action
+
+## SYSTEM INSTRUCTIONS:
+# SYSTEM.md: Claude Loop Instructions
+
+## Loop Behavior
+
+You are running in an auto-prompting loop. Each iteration:
+1. Read STATE.md to understand current context
+2. Execute the action specified in G: Action
+3. Update STATE.md with progress and next action
+4. The loop continues until DONE: appears in G: Action
+
+## RGB Encoding (Geometry OS)
+
+STATE.md uses RGB channels to represent agent state:
+
+| Channel | Meaning | Contains |
+|---------|---------|----------|
+| **R (Red)** | Context | Goal, progress, files modified, blockers |
+| **G (Green)** | Action | Current action opcode + description |
+| **B (Blue)** | Target | File path, command, or content |
+
+## Actions
+
+Execute exactly one action per iteration:
+
+### READ
+Read file contents to gather information.
+```
+G: Action
+READ: Check current implementation in src/main.py
+
+B: Target
+target: src/main.py
+```
+
+### WRITE
+Create a new file with specified content.
+```
+G: Action
+WRITE: Create new utility module
+
+B: Target
+target: src/utils.py
+content: |
+  def helper():
+      pass
+```
+
+### EDIT
+Modify an existing file.
+```
+G: Action
+EDIT: Add error handling to process function
+
+B: Target
+target: src/main.py
+content: |
+  # Add try/except block around process()
+```
+
+### RUN
+Execute a shell command.
+```
+G: Action
+RUN: Run tests to verify changes
+
+B: Target
+target: python -m pytest tests/
+```
+
+### ANALYZE
+Analyze codebase or state without file changes.
+```
+G: Action
+ANALYZE: Review project structure for missing modules
+```
+
+### DONE
+Signal task completion. Include summary.
+```
+G: Action
+DONE: Created hello.txt with greeting message
+```
+
+## Completion Signal
+
+When the task is complete, set G: Action to DONE: with a summary:
+
+```markdown
+## G: Action
+DONE: All objectives achieved - created hello.txt with greeting
+```
+
+The loop terminates automatically when DONE: is detected.
+
+## Rules
+
+1. **No questions**: Never ask for clarification. Make reasonable assumptions.
+
+2. **Always update state**: After each action, update STATE.md:
+   - R: Context - add progress, files modified
+   - G: Action - set next action or DONE:
+   - B: Target - set target for next action
+
+3. **One action per iteration**: Execute only what's in G: Action, then update state.
+
+4. **Atomic writes**: When writing files, use temp file + rename for crash safety.
+
+5. **Summarize progress**: Keep R: Context concise. Don't include full file contents.
+
+6. **Document blockers**: If stuck, add to R: Context blockers section.
+
+7. **No external dependencies**: Only use Python standard library and Claude tools.
+
+## Example Loop Flow
+
+**Initial STATE.md:**
+```markdown
+# STATE: RUNNING
+
+## R: Context
+- **Goal**: Create hello.txt with greeting
+- **Progress**: Task initialized
+- **Files**: None
+- **Blockers**: None
+
+## G: Action
+ANALYZE: Check if hello.txt already exists
+
+## B: Target
+target: hello.txt
+```
+
+**After ANALYZE (file doesn't exist):**
+```markdown
+# STATE: RUNNING
+
+## R: Context
+- **Goal**: Create hello.txt with greeting
+- **Progress**: Analyzed - hello.txt does not exist
+- **Files**: None
+- **Blockers**: None
+
+## G: Action
+WRITE: Create hello.txt with greeting message
+
+## B: Target
+target: hello.txt
+content: |
+  Hello from Geometry OS!
+```
+
+**After WRITE:**
+```markdown
+# STATE: RUNNING
+
+## R: Context
+- **Goal**: Create hello.txt with greeting
+- **Progress**: Created hello.txt
+- **Files**: hello.txt
+- **Blockers**: None
+
+## G: Action
+DONE: Created hello.txt with greeting message
+
+## B: Target
+target: hello.txt
+```
+
+Loop terminates on DONE: detection.
+
+
+## CURRENT STATE:
+# STATE: RUNNING
+
+## R: Context
+- **Goal**: Deploy the 7 Area Agents as isolated kernel processes
+- **Progress**: Analysis complete. Understanding established:
+  - **Existing Infrastructure**:
+    - GeometryKernel.js: Multi-process GPU kernel (max 16 processes)
+    - kernel.wgsl: WGSL compute shader with PCB table, shared memory opcodes (206/207)
+    - VisualShell.js: Process spawner with dashboard
+    - Shared memory region: 0-1023 (KERNEL_MEM_BASE=1024 separates user RAM)
+  - **7 Area Agents to create**:
+    1. Compositor (PID 0) - Visual composition/rendering
+    2. Shell (PID 1) - Command interpreter
+    3. Cognitive (PID 2) - AI/LLM integration
+    4. Memory (PID 3) - Memory management
+    5. I/O (PID 4) - Input/output handling
+    6. Scheduler (PID 5) - Process coordination
+    7. Network (PID 6) - Communication
+  - **IPC Protocol Design**:
+    - Addresses 0-6: Agent heartbeats (1 float per agent, increments each cycle)
+    - Addresses 10-16: Agent status (0=idle, 1=running, 2=waiting, 3=error)
+    - Addresses 20-50: Message queue
+    - Addresses 50-100: Shared data buffer
+- **Files**: None yet
+- **Blockers**: None
+
+## G: Action
+WRITE: Create the 7 Area Agent SPIR-V programs as .spv files
+
+## B: Target
+target: web/agents/
+content: |
+  Create agent programs:
+  - compositor.spv
+  - shell.spv
+  - cognitive.spv
+  - memory.spv
+  - io.spv
+  - scheduler.spv
+  - network.spv
+
+
+## YOUR TASK:
+1. Execute the action in G: Action
+2. Update STATE.md:
+   - Update R: Context with what you did
+   - Set G: Action to the NEXT action needed
+   - Set B: Target for that next action
+3. If the overall task is complete, set G: Action to: DONE: [summary]
+
+Use the Write tool to update .loop/STATE.md
+Use Read/Edit/Write/Bash tools as needed for the action.
+
+DO NOT ask questions. Execute autonomously. Update state and continue.

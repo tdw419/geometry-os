@@ -7,6 +7,7 @@
 
 import { MemoryBrowser } from './MemoryBrowser.js';
 import { GeometryKernel } from './GeometryKernel.js';
+import { generateAllAgents, AGENTS, IPC, PROC_STATE } from './agents/index.js';
 
 // Process states (must match kernel.wgsl)
 const PROC_STATE = {
