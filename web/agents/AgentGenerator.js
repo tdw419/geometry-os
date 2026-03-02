@@ -189,6 +189,27 @@ export class AgentGenerator {
     }
 
     /**
+     * Execute a system call
+     * @param {number} syscallId - Syscall ID (1=GET_MOUSE, 2=GET_KEY, etc.)
+     * @param {number} arg1 - First argument
+     * @param {number} arg2 - Second argument
+     * @param {number} arg3 - Third argument
+     */
+    syscall(syscallId, arg1 = 0, arg2 = 0, arg3 = 0) {
+        this.emit(instr(OP_SYSCALL, 5));  // count=5
+        this.emit(syscallId);
+        this.emit(arg1);
+        this.emit(arg2);
+        this.emit(arg3);
+    }
+
+    /**
+     * Read syscall result from shared memory (after syscall completes)
+     */
+    readSyscallResult() {
+        this.sharedLoad(IO.SYSCALL_RESULT);
+    }
+    /**
      * Unconditional jump to PC offset
      */
     jmp(targetPc) {
@@ -389,6 +410,16 @@ export function generateIOAgent() {
     // Set status
     gen.pushConstant(PROC_STATE.RUNNING);
     gen.sharedStore(agent.status);
+
+    // === SYSCALL: Get Mouse Position ===
+    gen.syscall(SYS.GET_MOUSE, 0, 0, 0);
+
+    // After syscall completes, read result
+    // Result is packed: (X << 16) | Y
+    gen.readSyscallResult();
+
+    // Store packed result directly at shared memory addr 56
+    gen.sharedStore(56);
 
     // Process I/O queue at address 53
     gen.sharedLoad(53);
