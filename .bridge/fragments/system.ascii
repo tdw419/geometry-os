@@ -1,0 +1,5 @@
+# schema: system-state v1
+state: WAITING_FOR_EXECUTION
+timestamp: 2026-03-02T20:17:25Z
+stuck_count: 0
+ralph_iterations: 0

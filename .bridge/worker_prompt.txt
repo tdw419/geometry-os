@@ -1,0 +1,138 @@
+You are a WORKER AGENT. Execute the plan provided below.
+Read the plan carefully and perform each step using your tools (Read, Edit, Write, Bash).
+When the task is fully complete and verified, output: <promise>DONE</promise>
+If you encounter issues, describe them clearly before stopping.
+
+PLAN TO EXECUTE:
+# schema: plan v3 (TOON)
+created: 2026-03-02T18:40:08Z
+objective: |
+  {
+    "analysis": {
+      "key_insight": 0.95,
+      "current_status": "The project has a functional SPIR-V compilation and GPU execution pipeline. Visual PNGs are compiled to SPIR-V and executed via a WebGPU-based WGSL interpreter.",
+      "next_steps": "The infrastructure for a Visual IDE has been initialized. The logical next step is to bridge the Visual IDE with the SPIR-V compiler and runner to allow users to draw, compile, and run programs in a single interface."
+    },
+    "simulation_phase": {
+      "ARCHITECTURE_VALIDATE": "The Stack-based (Postfix) model is optimal for Hilbert-order execution as it eliminates the need for complex jump logic in the initial interpreter.",
+      "PIXIJS_REACTIVE": "The Visual IDE uses a standard Canvas API; migrating this to PixiJS v8 would improve performance for large-scale visual programs (37m+ particles)."
+    }
+  }
+  
+  # Geometry OS: Visual Computing Architecture
+  
+  This project is a **Visual Operating System substrate**. It replaces the traditional text-based "symbolic" computing model with a "geometric" model where the screen is the hard drive and pixels are the instructions.
+  
+  ### 1. The Current Implementation (Phase 20-25)
+  
+  | Component | Technology | Purpose |
+  | :--- | :--- | :--- |
+  | **Visual Substrate** | `.rts.png` | Programs stored as images with Hilbert-curve locality. |
+  | **Compiler** | `visual_to_spirv.py` | PNG (Semantic RGB) → SPIR-V Bytecode. |
+  | **Execution** | `executor.wgsl` | GPU-side Virtual Machine (Stack-based) running in WebGPU. |
+  | **Interface** | `VisualIDE.js` | Interactive grid-based editor for "drawing" code. |
+  
+  ### 2. How to Build an OS from This
+  
+  To transition from a "toolkit" to a full "Operating System" like Linux or Windows, we are following the **Geometry OS Roadmap**:
+  
+  1.  **Memory Management (Next Phase):** Implement "Visual Pages" where the GPU can swap instruction textures (PNGs) in and out of the active execution buffer.
+  2.  **Process Isolation:** Use WebGPU `RenderGroups` to isolate different visual programs on the same infinite map.
+  3.  **Hardware Abstraction:** Treat the GPU as the primary CPU. Disk I/O becomes "Pixel I/O" (saving/loading textures).
+  4.  **Infinite Map Compositor:** The `systems/infinite_map_rs` (Rust/Smithay) component is the "Kernel" that manages the spatial windowing of these visual programs.
+  
+  ### 3. Immediate Action Plan
+  
+  To continue the development of the **Visual IDE** and integrate it with the **SPIR-V pipeline**:
+  
+  # schema: plan v3 (TOON)
+  objective: Bridge the Visual IDE with the SPIR-V compiler and runner to enable real-time "Draw-to-GPU" execution.
+  
+  plugin_directives:
+    - primary: /superpowers:executing-plans
+    - secondary: /ralph-specum:implement
+  
+  context:
+    relevant_files:
+      - path: web/VisualIDE.js
+        reason: Main editor logic
+      - path: web/demo.html
+        reason: Integration UI
+      - path: web/SpirvRunner.js
+        reason: GPU execution engine
+  
+  steps:
+    - action: edit_file
+      target: web/VisualIDE.js
+      instruction: "Implement `compileAndRun()` which converts the grid data into a format the SPIR-V runner can execute."
+    - action: edit_file
+      target: web/demo.html
+      instruction: "Add the Visual IDE canvas and a palette of available GeoASM opcodes (+, -, *)."
+    - action: run_command
+      target: "cd web && python3 -m http.server 8770"
+      instruction: "Launch the integrated environment for verification."
+  
+  **Would you like me to begin the integration of the Visual IDE, or should we expand the opcode set to include logic/comparisons?** .95,
+      "current_status": "The project has a functional  SPIR-V compilation and GPU execution pipeline. Visual PNGs are compiled to SPIR-V and executed via a WebGPU-based WGSL interpreter.",
+      "next_ steps": "The infrastructure for a Visual IDE has been initialized. The logical next step is to bridge the Visual IDE with the SPIR-V compiler and runner to allow users  to draw, compile, and run programs in a single interface."
+    },
+    "simulation_phase": {
+      "ARCHITECTURE_VALIDATE": "The Stack-based (Postfix) model is optimal for Hilbert-order execution  as it eliminates the need for complex jump logic in the initial interpreter.",
+      "PIXIJS_REACTIVE": "The Visual IDE uses a standard Canvas API; migrating this to PixiJS v8 would improve performance for large- scale visual programs (37m+ particles)."
+    }
+  }
+  
+  # Geometry OS: Visual Computing Architecture
+  
+  This project is a **Visual Operating System substrate**. It replaces the traditional text-based "symbolic" computing model with a "geometric" model where the screen is the hard drive and pixels are the instructions .
+  
+  ### 1. The Current Implementation (Phase 20-25)
+  
+  | Component | Technology | Purpose |
+  | :--- | :--- | :--- |
+  | **Visual Substrate** | `.rts.png` | Programs stored as images with Hilbert-curve locality. |
+   | **Compiler** | `visual_to_spirv.py` | PNG (Semantic RGB) → SPIR-V Bytecode. |
+  | **Execution** | `executor.wgsl` | GPU-side Virtual Machine (Stack-based) running in WebGPU. |
+  | **Interface** |  `VisualIDE.js` | Interactive grid-based editor for "drawing" code. |
+  
+  ### 2. How to Build an OS from This
+  
+  To transition from a "toolkit" to a full "Operating System" like Linux or Windows, we are following the **Geometry OS Roadmap**:
+  
+  1.  **Memory  Management (Next Phase):** Implement "Visual Pages" where the GPU can swap instruction textures (PNGs) in and out of the active execution buffer.
+  2.  **Process Isolation:** Use WebGPU `RenderGroups` to isolate different visual programs on the same infinite map.
+  3.  **Hardware Abstraction :** Treat the GPU as the primary CPU. Disk I/O becomes "Pixel I/O" (saving/loading textures).
+  4.  **Infinite Map Compositor:** The `systems/infinite_map_rs` (Rust/Smithay) component is the "Kernel" that manages the spatial windowing of these  visual programs.
+  
+  ### 3. Immediate Action Plan
+  
+  To continue the development of the **Visual IDE** and integrate it with the **SPIR-V pipeline**:
+  
+  # schema: plan v3 (TOON)
+  objective: Bridge the Visual IDE with the SPIR-V compiler and runner to enable real-time " Draw-to-GPU" execution.
+  
+  plugin_directives:
+    - primary: /superpowers:executing-plans
+    - secondary: /ralph-specum:implement
+  
+  context:
+    relevant_files:
+      - path: web/VisualIDE.js
+        reason: Main editor logic 
+      - path: web/demo.html
+        reason: Integration UI
+      - path: web/SpirvRunner.js
+        reason: GPU execution engine
+  
+  steps:
+    - action: edit_file
+      target: web/VisualIDE.js
+      instruction: "Implement  `compileAndRun()` which converts the grid data into a format the SPIR-V runner can execute."
+    - action: edit_file
+      target: web/demo.html
+      instruction: "Add the Visual IDE canvas and a palette of available GeoASM opcodes (+, -, *)."
+    -  action: run_command
+      target: "cd web && python3 -m http.server 8770"
+      instruction: "Launch the integrated environment for verification."
+  
+  **Would you like me to begin the integration of the Visual IDE, or should we expand the opcode set to include logic/ comparisons?**

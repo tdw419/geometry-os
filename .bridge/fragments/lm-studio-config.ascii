@@ -1,0 +1,81 @@
+# schema: lm-studio-config v1
+# LM Studio Fallback Configuration
+# Edit this file to customize LM Studio fallback behavior
+
+# ═══════════════════════════════════════════════════════════════
+# CONNECTION SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
+# LM Studio server endpoint (default: http://localhost:1234)
+# Set via environment: LM_STUDIO_ENDPOINT
+endpoint: http://localhost:1234
+
+# Request timeout in seconds (default: 120)
+# Set via environment: LM_STUDIO_TIMEOUT
+timeout: 120
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL SELECTION
+# ═══════════════════════════════════════════════════════════════
+
+# Model for planning (Gemini replacement)
+# Set via environment: LM_STUDIO_PLANNER_MODEL
+# Use model ID from LM Studio (e.g., "llama-3.1-70b", "qwen2.5-72b")
+planner_model: local-model
+
+# Model for execution (Claude replacement)
+# Set via environment: LM_STUDIO_WORKER_MODEL
+# Use model ID from LM Studio
+worker_model: local-model
+
+# ═══════════════════════════════════════════════════════════════
+# FALLBACK BEHAVIOR (Tiered System)
+# ═══════════════════════════════════════════════════════════════
+
+# Enable fallback to LM Studio when all CLIs fail
+fallback_enabled: true
+
+# CLI Timeouts (in seconds)
+# Planner needs less time (just generating a plan)
+planner_timeout: 300
+
+# Worker needs much more time (actually executing code)
+# Default: 2 hours (7200 seconds)
+worker_timeout: 7200
+
+# TIERED FALLBACK ORDER:
+#
+# For PLANNER role:
+#   Tier 1: Gemini CLI (primary)
+#   Tier 2: Claude CLI (first fallback)
+#   Tier 3: LM Studio (last resort)
+#
+# For WORKER role:
+#   Tier 1: Claude CLI (primary)
+#   Tier 2: LM Studio (last resort)
+#
+# Fallback triggers:
+# - CLI not installed
+# - CLI timeout (planner: 300s, worker: 7200s)
+# - Non-zero exit code
+
+# ═══════════════════════════════════════════════════════════════
+# SETUP INSTRUCTIONS
+# ═══════════════════════════════════════════════════════════════
+
+# 1. Install and run LM Studio: https://lmstudio.ai/
+# 2. Load a model (recommended: llama-3.1-70b or qwen2.5-72b)
+# 3. Start the local server (default port: 1234)
+# 4. Verify: curl http://localhost:1234/v1/models
+# 5. The bridge will automatically fallback when CLIs are unavailable
+
+# ═══════════════════════════════════════════════════════════════
+# ENVIRONMENT VARIABLES (override this file)
+# ═══════════════════════════════════════════════════════════════
+
+# export LM_STUDIO_ENDPOINT="http://localhost:1234"
+# export LM_STUDIO_PLANNER_MODEL="llama-3.1-70b"
+# export LM_STUDIO_WORKER_MODEL="llama-3.1-70b"
+# export LM_STUDIO_TIMEOUT="120"
+# export BRIDGE_PLANNER_TIMEOUT="300"
+# export BRIDGE_WORKER_TIMEOUT="7200"

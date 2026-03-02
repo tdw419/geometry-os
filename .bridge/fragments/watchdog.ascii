@@ -1,0 +1,5 @@
+# schema: watchdog v1
+heartbeat: 2026-03-02T18:46:32.386182Z
+active_pid: 1281986
+health_status: GREEN
+recovery_action: NONE
