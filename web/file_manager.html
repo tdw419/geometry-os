@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS | Visual File Manager</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #050505;
+            color: #00ffcc;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Header Bar */
+        #header-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: rgba(0, 20, 20, 0.95);
+            border-bottom: 1px solid #00ffcc;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 100;
+        }
+
+        #header-bar h1 {
+            font-size: 16px;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .header-stat {
+            font-size: 11px;
+            opacity: 0.7;
+        }
+
+        /* Panels */
+        .panel {
+            background: rgba(0, 20, 20, 0.9);
+            border: 1px solid #00ffcc;
+            padding: 15px;
+            color: #00ffcc;
+            font-family: monospace;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.15);
+        }
+
+        .panel-header {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(0, 255, 204, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* File Tree Panel */
+        #file-tree-panel {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            width: 280px;
+            max-height: calc(100vh - 100px);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .search-box {
+            margin-bottom: 10px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 8px;
+            background: rgba(0, 50, 50, 0.5);
+            border: 1px solid #00ffcc44;
+            color: #00ffcc;
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #00ffcc;
+        }
+
+        .file-tree {
+            flex: 1;
+            overflow-y: auto;
+            background: rgba(0, 30, 30, 0.5);
+            border-radius: 4px;
+            padding: 8px;
+            min-height: 200px;
+            max-height: 400px;
+        }
+
+        .tree-folder, .tree-file {
+            padding: 6px 8px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 2px 0;
+            font-size: 11px;
+            transition: background 0.2s;
+        }
+
+        .tree-folder:hover, .tree-file:hover {
+            background: rgba(0, 100, 100, 0.3);
+        }
+
+        .tree-file.active {
+            background: rgba(0, 255, 204, 0.2);
+        }
+
+        .folder-icon, .file-icon {
+            margin-right: 6px;
+            font-weight: bold;
+        }
+
+        .file-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Editor Panel */
+        #editor-panel {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            width: 500px;
+            max-height: calc(100vh - 100px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .editor-toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .btn-sm {
+            background: transparent;
+            color: #00ffcc;
+            border: 1px solid #00ffcc44;
+            padding: 5px 12px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 10px;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+
+        .btn-sm:hover {
+            background: #00ffcc;
+            color: #000;
+        }
+
+        .editor-container {
+            display: flex;
+            background: #001515;
+            border-radius: 4px;
+            overflow: hidden;
+            min-height: 300px;
+            max-height: 500px;
+        }
+
+        .line-numbers {
+            padding: 10px 8px;
+            background: rgba(0, 50, 50, 0.3);
+            color: #666;
+            font-size: 11px;
+            text-align: right;
+            user-select: none;
+            min-width: 40px;
+            overflow: hidden;
+        }
+
+        .line-numbers div {
+            height: 16px;
+            line-height: 16px;
+        }
+
+        #code-editor {
+            flex: 1;
+            padding: 10px;
+            background: transparent;
+            border: none;
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 16px;
+            resize: none;
+            outline: none;
+            white-space: pre;
+            overflow-wrap: normal;
+            overflow-x: auto;
+        }
+
+        .editor-status {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 10px;
+            color: #666;
+        }
+
+        /* Buttons */
+        .btn {
+            background: transparent;
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 10px;
+            flex: 1;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #00ffcc;
+            color: #000;
+        }
+
+        /* Loading Screen */
+        #loading-screen {
+            position: absolute;
+            inset: 0;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #00ffcc;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 3D View Stats */
+        #view-stats {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 20, 20, 0.8);
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 10px;
+            color: #888;
+        }
+
+        #view-stats span {
+            margin-right: 15px;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 50, 50, 0.3);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #00ffcc44;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00ffcc;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <p>Loading Visual File Manager...</p>
+    </div>
+
+    <div id="header-bar">
+        <h1>Geometry OS File Manager</h1>
+        <div class="header-actions">
+            <span class="header-stat" id="file-count">0 files</span>
+            <span class="header-stat" id="selected-file">No selection</span>
+        </div>
+    </div>
+
+    <canvas id="gpu-canvas"></canvas>
+
+    <div id="view-stats">
+        <span>View: Semantic</span>
+        <span>Files: <span id="viz-file-count">0</span></span>
+        <span>Selected: <span id="viz-selected">None</span></span>
+    </div>
+
+    <!-- Panels dynamically created by VisualFileManager.js -->
+
+    <script type="module">
+        import { VisualFileManager } from './VisualFileManager.js';
+
+        async function init() {
+            const canvas = document.getElementById('gpu-canvas');
+
+            const fileManager = new VisualFileManager(canvas, {
+                rootPath: './'
+            });
+
+            // Wire events
+            fileManager.on('filesLoaded', ({ count }) => {
+                document.getElementById('file-count').textContent = `${count} files`;
+                document.getElementById('viz-file-count').textContent = count;
+            });
+
+            fileManager.onFileOpen = (file) => {
+                document.getElementById('selected-file').textContent = file.name;
+                document.getElementById('viz-selected').textContent = file.name;
+            };
+
+            try {
+                await fileManager.init();
+                document.getElementById('loading-screen').style.display = 'none';
+                console.log('[FileManager] 3D File Manager initialized');
+            } catch (err) {
+                console.error('Failed to initialize file manager:', err);
+                document.getElementById('loading-screen').innerHTML = `
+                    <p style="color: red;">ERROR: ${err.message}</p>
+                    <p style="font-size: 12px; color: #888;">Check console for details</p>
+                `;
+            }
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
