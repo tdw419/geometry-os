@@ -138,7 +138,8 @@ export class ProcessManager {
         this.device.queue.writeBuffer(this.programBuffer, programOffset, binary);
 
         // Create PCB entry
-        // Layout: pid, pc, sp, mem_base, mem_limit, status, priority, program_offset, reserved[8]
+        // Layout: pid, pc, sp, mem_base, mem_limit, status, priority, waiting_on, msg_count, reserved[7]
+        // Note: programOffset moved to pcb[15] (reserved)
         const pcb = new Uint32Array(16);
         pcb[0] = pid;
         pcb[1] = 5 + programOffset;  // PC starts after header, offset by program location
@@ -147,7 +148,9 @@ export class ProcessManager {
         pcb[4] = this.PROCESS_MEM_SIZE; // Memory limit
         pcb[5] = 1;                   // Status: Running
         pcb[6] = options.priority || 5; // Priority
-        pcb[7] = programOffset;       // Program offset for PC calculations
+        pcb[7] = 0xFF;                // waiting_on (0xFF = none/any)
+        pcb[8] = 0;                   // msg_count
+        pcb[15] = programOffset;      // Store program offset in last reserved word
 
         this.device.queue.writeBuffer(this.pcbBuffer, pid * 16 * 4, pcb);
 

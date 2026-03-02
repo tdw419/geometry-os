@@ -37,6 +37,10 @@ export class VisualShell extends MemoryBrowser {
         // Neural pulse tracking
         this.lastIterationCount = 0;
         this.pulseRate = 0;
+
+        // IPC tracking
+        this.ipcCount = 0;
+        this.ipcChannels = new Map();  // channelKey -> { from, to, count, lastMsg }
     }
 
     async init() {
@@ -98,12 +102,21 @@ export class VisualShell extends MemoryBrowser {
                 <span>iter/s</span>
             </div>
             <div class="stat-row">
+                <span>IPC Messages:</span>
+                <span id="ipc-count">0</span>
+            </div>
+            <div class="stat-row">
                 <span>Uptime:</span>
                 <span id="uptime">00:00:00</span>
             </div>
             <div class="divider"></div>
             <div class="stat-row">
                 <label><input type="checkbox" id="saccade-toggle"> Kernel Saccades</label>
+            </div>
+            <div class="divider"></div>
+            <div class="panel-subheader">IPC Channels</div>
+            <div id="ipc-monitor" class="ipc-monitor">
+                <div class="ipc-empty">No active channels</div>
             </div>
         `;
         this.dashboardPanel.style.cssText = `
@@ -347,6 +360,61 @@ export class VisualShell extends MemoryBrowser {
         if (pulseEl) {
             pulseEl.textContent = this.pulseRate;
         }
+
+        // IPC count
+        const ipcEl = document.getElementById('ipc-count');
+        if (ipcEl) {
+            ipcEl.textContent = this.ipcCount;
+        }
+
+        // Update IPC monitor
+        this._updateIPCMonitor();
+    }
+
+    /**
+     * Record an IPC message sent between processes.
+     * @param {number} fromPid - Sender PID
+     * @param {number} toPid - Receiver PID
+     * @param {number} msgType - Message type
+     */
+    recordIPC(fromPid, toPid, msgType = 0) {
+        this.ipcCount++;
+
+        const key = `${fromPid}->${toPid}`;
+        const channel = this.ipcChannels.get(key) || {
+            from: fromPid,
+            to: toPid,
+            count: 0,
+            lastMsg: 0
+        };
+        channel.count++;
+        channel.lastMsg = msgType;
+        this.ipcChannels.set(key, channel);
+    }
+
+    _updateIPCMonitor() {
+        const monitor = document.getElementById('ipc-monitor');
+        if (!monitor) return;
+
+        if (this.ipcChannels.size === 0) {
+            monitor.innerHTML = '<div class="ipc-empty">No active channels</div>';
+            return;
+        }
+
+        const rows = [];
+        for (const [key, ch] of this.ipcChannels) {
+            const fromName = this.processes.get(ch.from)?.name || `#${ch.from}`;
+            const toName = this.processes.get(ch.to)?.name || `#${ch.to}`;
+            rows.push(`
+                <div class="ipc-channel">
+                    <span class="ipc-from">${fromName.slice(0, 10)}</span>
+                    <span class="ipc-arrow">→</span>
+                    <span class="ipc-to">${toName.slice(0, 10)}</span>
+                    <span class="ipc-count">${ch.count}</span>
+                </div>
+            `);
+        }
+        monitor.innerHTML = rows.join('');
     }
 
     _updateUptime() {

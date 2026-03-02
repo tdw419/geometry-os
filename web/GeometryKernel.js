@@ -85,7 +85,7 @@ export class GeometryKernel {
         this.device.queue.writeBuffer(this.programBuffer, 0, binary);
 
         // 2. Create PCB entry
-        // Layout: pid, pc, sp, mem_base, mem_limit, status, priority, reserved[9]
+        // Layout: pid, pc, sp, mem_base, mem_limit, status, priority, waiting_on, msg_count, reserved[7]
         const pcb = new Uint32Array(16);
         pcb[0] = pid;
         pcb[1] = 5; // Start after header
@@ -94,6 +94,8 @@ export class GeometryKernel {
         pcb[4] = memLimit;
         pcb[5] = 1; // Running
         pcb[6] = 5; // Default priority
+        pcb[7] = 0xFF; // waiting_on
+        pcb[8] = 0; // msg_count
 
         this.device.queue.writeBuffer(this.pcbBuffer, pid * 16 * 4, pcb);
         

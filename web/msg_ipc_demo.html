@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Message IPC Demo</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: #050505;
+            color: #00ffcc;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 { border-bottom: 2px solid #00ffcc; padding-bottom: 10px; }
+        h2 { color: #00ff88; margin-top: 30px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .panel {
+            background: #001a1a;
+            border: 1px solid #00ffcc;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .panel h3 { margin-top: 0; color: #00ff88; }
+        .log {
+            background: #001111;
+            border: 1px solid #006655;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .log-entry { margin: 2px 0; border-bottom: 1px solid #003322; padding: 2px 0; }
+        .log-info { color: #88ccff; }
+        .log-success { color: #00ff00; }
+        .log-warning { color: #ffaa00; }
+        .log-error { color: #ff4444; }
+
+        .mailbox-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+            margin-top: 10px;
+        }
+        .mailbox-cell {
+            background: #002222;
+            padding: 4px;
+            text-align: center;
+            font-size: 10px;
+            border: 1px solid #004444;
+        }
+        .mailbox-cell.header { background: #003333; color: #ffaa00; }
+
+        .process-card {
+            background: #001a1a;
+            border: 1px solid #00ffcc;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .process-card.running { border-color: #00ff00; }
+        .process-card.waiting { border-color: #ffaa00; }
+        .process-card.exit { border-color: #ff4444; opacity: 0.7; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        .status-running { background: #004400; color: #00ff00; }
+        .status-waiting { background: #444400; color: #ffaa00; }
+        .status-exit { background: #440000; color: #ff4444; }
+
+        .controls { margin: 20px 0; }
+        button {
+            background: #003333;
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            margin-right: 10px;
+        }
+        button:hover { background: #004444; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS - Message IPC Demo</h1>
+    <p>Demonstrates blocking message-passing between processes using OP_MSG_SEND and OP_MSG_RECV.</p>
+
+    <div class="controls">
+        <button id="btn-init">Initialize Kernel</button>
+        <button id="btn-step" disabled>Step Once</button>
+        <button id="btn-run" disabled>Auto Run</button>
+        <button id="btn-reset" disabled>Reset</button>
+    </div>
+
+    <div class="grid">
+        <div class="panel">
+            <h3>Process States</h3>
+            <div id="process-states">
+                <p style="color: #666;">No processes running</p>
+            </div>
+        </div>
+        <div class="panel">
+            <h3>Mailbox 0 (Process 0)</h3>
+            <div id="mailbox-0" class="mailbox-grid"></div>
+            <h3 style="margin-top: 20px;">Mailbox 1 (Process 1)</h3>
+            <div id="mailbox-1" class="mailbox-grid"></div>
+        </div>
+    </div>
+
+    <div class="panel" style="margin-top: 20px;">
+        <h3>Execution Log</h3>
+        <div class="log" id="log"></div>
+    </div>
+
+    <script type="module">
+        import { ProcessManager } from './ProcessManager.js';
+
+        let pm = null;
+        let autoRunInterval = null;
+
+        const logEl = document.getElementById('log');
+        function log(msg, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function renderMailbox(containerId, data) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            // Header row
+            ['Snd', 'Typ', 'Siz', 'Dat', '-', '-', '-', '-'].forEach(h => {
+                const cell = document.createElement('div');
+                cell.className = 'mailbox-cell header';
+                cell.textContent = h;
+                container.appendChild(cell);
+            });
+
+            for (let i = 0; i < 8; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'mailbox-cell';
+                cell.textContent = data[i];
+                container.appendChild(cell);
+            }
+        }
+
+        function renderProcessStates(states) {
+            const container = document.getElementById('process-states');
+            if (states.length === 0) {
+                container.innerHTML = '<p style="color: #666;">No processes running</p>';
+                return;
+            }
+            container.innerHTML = states.map(s => `
+                <div class="process-card ${s.status}">
+                    <strong>PID ${s.pid}</strong>
+                    <span class="status-badge status-${s.status}">${s.status.toUpperCase()}</span>
+                    <div style="font-size: 11px; margin-top: 5px;">
+                        PC: ${s.pc} | SP: ${s.sp}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function updateDisplay() {
+            if (!pm) return;
+
+            try {
+                const states = await pm.readProcessStates();
+                renderProcessStates(states);
+
+                const sharedMem = await pm.readSharedMemory();
+                // Mailbox 0 is at RAM[0], Mailbox 1 is at RAM[32]
+                renderMailbox('mailbox-0', sharedMem.slice(0, 32));
+                renderMailbox('mailbox-1', sharedMem.slice(32, 64));
+
+                // Check if all processes are done
+                const allDone = states.every(s => s.status === 'exit');
+                if (allDone && autoRunInterval) {
+                    stopAutoRun();
+                    log('All processes completed!', 'success');
+                }
+            } catch (e) {
+                log(`Error reading state: ${e.message}`, 'error');
+            }
+        }
+
+        function stopAutoRun() {
+            if (autoRunInterval) {
+                clearInterval(autoRunInterval);
+                autoRunInterval = null;
+                document.getElementById('btn-run').textContent = 'Auto Run';
+            }
+        }
+
+        // Producer: Send 777 to PID 1
+        function createProducerBinary() {
+            // Instructions:
+            // 1. MSG_SEND target=1, type=10, data=777
+            // 2. RETURN
+            const binary = new Uint32Array(512);
+            binary.set([
+                0x07230203, 0x00010000, 0, 10, 0,       // SPIR-V Header
+                (4 << 16) | 208, 1, 10, 777,           // MSG_SEND [target=1, type=10, data=777]
+                (1 << 16) | 253                        // RETURN
+            ]);
+            return binary.buffer;
+        }
+
+        // Consumer: Receive from PID 0
+        function createConsumerBinary() {
+            // Instructions:
+            // 1. MSG_RECV from=0, timeout=0 (blocking)
+            // 2. STORE [0] (store sender pid)
+            // 3. STORE [1] (store msg type)
+            // 4. STORE [2] (store data)
+            // 5. RETURN
+            const binary = new Uint32Array(512);
+            binary.set([
+                0x07230203, 0x00010000, 0, 10, 0,       // SPIR-V Header
+                (3 << 16) | 209, 0, 0,                 // MSG_RECV [from=0, timeout=0]
+                (3 << 16) | 62, 0, 0,                  // STORE [0] sender (assuming it's on top after recv)
+                (3 << 16) | 62, 1, 0,                  // STORE [1] type
+                (3 << 16) | 62, 2, 0,                  // STORE [2] data
+                (1 << 16) | 253                        // RETURN
+            ]);
+            return binary.buffer;
+        }
+
+        // Button handlers
+        document.getElementById('btn-init').onclick = async () => {
+            try {
+                log('Initializing ProcessManager...');
+                pm = new ProcessManager();
+                await pm.init();
+                log('ProcessManager initialized', 'success');
+
+                // Spawn Consumer first (he will block)
+                pm.spawn(1, createConsumerBinary());
+                log('Spawned Consumer (PID 1): Waiting for message from PID 0');
+
+                // Spawn Producer
+                pm.spawn(0, createProducerBinary());
+                log('Spawned Producer (PID 0): Sending 777 to PID 1');
+
+                await updateDisplay();
+
+                document.getElementById('btn-init').disabled = true;
+                document.getElementById('btn-step').disabled = false;
+                document.getElementById('btn-run').disabled = false;
+                document.getElementById('btn-reset').disabled = false;
+            } catch (e) {
+                log(`Init failed: ${e.message}`, 'error');
+                console.error(e);
+            }
+        };
+
+        document.getElementById('btn-step').onclick = async () => {
+            if (!pm) return;
+            log('Executing step...');
+            await pm.step();
+            await updateDisplay();
+        };
+
+        document.getElementById('btn-run').onclick = () => {
+            if (autoRunInterval) {
+                stopAutoRun();
+            } else {
+                autoRunInterval = setInterval(async () => {
+                    if (pm) {
+                        await pm.step();
+                        await updateDisplay();
+                    }
+                }, 500);
+                document.getElementById('btn-run').textContent = 'Stop';
+            }
+        };
+
+        document.getElementById('btn-reset').onclick = () => {
+            stopAutoRun();
+            pm = null;
+            logEl.innerHTML = '';
+            document.getElementById('process-states').innerHTML = '<p style="color: #666;">No processes running</p>';
+            document.getElementById('mailbox-0').innerHTML = '';
+            document.getElementById('mailbox-1').innerHTML = '';
+
+            document.getElementById('btn-init').disabled = false;
+            document.getElementById('btn-step').disabled = true;
+            document.getElementById('btn-run').disabled = true;
+            document.getElementById('btn-reset').disabled = true;
+        };
+    </script>
+</body>
+</html>

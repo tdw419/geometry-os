@@ -1,8 +1,14 @@
 /**
  * Geometry OS Kernel (WGSL)
- * 
+ *
  * Multi-process scheduler and memory-mapped OS core.
  * Manages processes in a cooperative multitasking model on the GPU.
+ *
+ * IPC Architecture:
+ * - Shared Memory Region: RAM[0..1023] (first 1K words)
+ * - Message Queues: RAM[0..511] (16 mailboxes × 32 words each)
+ * - Process Mailboxes: Each PID has a dedicated mailbox at (PID * 32)
+ * - Message Format: [sender, type, size, data0, data1, ...]
  */
 
 struct Process {
@@ -11,10 +17,20 @@ struct Process {
     sp: u32,
     mem_base: u32,
     mem_limit: u32,
-    status: u32, // 0=Idle, 1=Running, 2=Waiting, 3=Exit
+    status: u32, // 0=Idle, 1=Running, 2=Waiting(IPC), 3=Exit, 4=Error
     priority: u32,
-    reserved: array<u32, 9>,
+    waiting_on: u32, // PID we're waiting for message from (0xFF = any)
+    msg_count: u32,  // Messages received this session
+    reserved: array<u32, 6>,
 }
+
+// Message header offsets
+const MSG_SENDER: u32 = 0u;
+const MSG_TYPE: u32 = 1u;
+const MSG_SIZE: u32 = 2u;
+const MSG_DATA: u32 = 3u;
+const MAILBOX_SIZE: u32 = 32u;
+const MAX_MAILBOXES: u32 = 16u;
 
 @group(0) @binding(0) var<storage, read_write> program: array<u32>;
 @group(0) @binding(1) var<storage, read_write> stack: array<f32>;
@@ -100,6 +116,78 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                     stack[stack_base + sp] = ram[shared_addr];
                     sp = sp + 1;
                 }
+            } else if (opcode == 208u) { // OP_MSG_SEND - Send message to another process
+                // Format: [count|208], [target_pid], [msg_type], [data_word]
+                // Uses stack for additional data
+                let target_pid = program[pc + 1];
+                let msg_type = program[pc + 2];
+                let data = program[pc + 3];
+
+                if (target_pid < MAX_MAILBOXES) {
+                    let mailbox_base = target_pid * MAILBOX_SIZE;
+
+                    // Write message header
+                    ram[mailbox_base + MSG_SENDER] = p.pid;
+                    ram[mailbox_base + MSG_TYPE] = msg_type;
+                    ram[mailbox_base + MSG_SIZE] = 1u;
+                    ram[mailbox_base + MSG_DATA] = data;
+
+                    // Check if target is waiting for this message
+                    if (target_pid < arrayLength(&pcb_table)) {
+                        var target = pcb_table[target_pid];
+                        if (target.status == 2u &&  // Waiting
+                            (target.waiting_on == 0xFFu || target.waiting_on == p.pid)) {
+                            target.status = 1u;  // Wake up
+                            target.msg_count = target.msg_count + 1u;
+                            pcb_table[target_pid] = target;
+                        }
+                    }
+                }
+            } else if (opcode == 209u) { // OP_MSG_RECV - Receive message (blocking)
+                // Format: [count|209], [from_pid], [timeout]
+                // from_pid = 0xFF means receive from anyone
+                let from_pid = program[pc + 1];
+                let timeout = program[pc + 2];
+
+                let mailbox_base = p.pid * MAILBOX_SIZE;
+                let has_message = ram[mailbox_base + MSG_SIZE] > 0u;
+
+                // Check if message is from expected sender
+                let sender = ram[mailbox_base + MSG_SENDER];
+                let valid_sender = (from_pid == 0xFFu) || (sender == from_pid);
+
+                if (has_message && valid_sender) {
+                    // Push message data to stack
+                    stack[stack_base + sp] = ram[mailbox_base + MSG_SENDER];
+                    stack[stack_base + sp + 1] = ram[mailbox_base + MSG_TYPE];
+                    stack[stack_base + sp + 2] = ram[mailbox_base + MSG_DATA];
+                    sp = sp + 3;
+
+                    // Clear mailbox (mark as read)
+                    ram[mailbox_base + MSG_SIZE] = 0u;
+                } else {
+                    // Block and wait for message
+                    p.status = 2u;  // Waiting
+                    p.waiting_on = from_pid;
+                    pc = pc + count;
+                    break;  // Yield time slice
+                }
+            } else if (opcode == 210u) { // OP_MSG_PEEK - Non-blocking message check
+                // Format: [count|210], [from_pid]
+                let from_pid = program[pc + 1];
+                let mailbox_base = p.pid * MAILBOX_SIZE;
+
+                let has_message = ram[mailbox_base + MSG_SIZE] > 0u;
+                let sender = ram[mailbox_base + MSG_SENDER];
+                let valid_sender = (from_pid == 0xFFu) || (sender == from_pid);
+
+                // Push result: 1 if message available, 0 otherwise
+                if (has_message && valid_sender) {
+                    stack[stack_base + sp] = 1.0;
+                } else {
+                    stack[stack_base + sp] = 0.0;
+                }
+                sp = sp + 1;
             } else if (opcode == 253u) { // OP_RETURN (Exit Process)
                 p.status = 3u;
                 break;
