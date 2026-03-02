@@ -57,6 +57,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let stack_base = p_idx * 1024u; // Each process gets 1024 floats of stack
         let ram_base = p.mem_base;
         
+        var inst_executed: u32 = 0u;
         for (var inst_count: u32 = 0u; inst_count < MAX_INST_PER_SLICE; inst_count = inst_count + 1u) {
             if (pc >= arrayLength(&program)) {
                 p.status = 3u; // Terminate if OOB
@@ -68,6 +69,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             let count = (word >> 16u) & 0xFFFFu;
             
             if (count == 0u) { p.status = 3u; break; }
+            
+            inst_executed = inst_executed + 1u;
             
             // --- Opcode Interpretation ---
             
@@ -233,6 +236,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // Save process state back to PCB
         p.pc = pc;
         p.sp = sp;
+        p.priority = p.priority + inst_executed;
         pcb_table[p_idx] = p;
     }
 }
