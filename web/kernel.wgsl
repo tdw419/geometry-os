@@ -200,6 +200,25 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                     stack[stack_base + sp] = 0.0;
                 }
                 sp = sp + 1;
+            } else if (opcode == 211u) { // OP_SYSCALL - Request external I/O
+                // Format: [count|211], [syscall_id], [arg1], [arg2], [arg3]
+                let syscall_id = program[pc + 1];
+                let arg1 = program[pc + 2];
+                let arg2 = program[pc + 3];
+                let arg3 = program[pc + 4];
+
+                // Write syscall request to shared memory
+                ram[100u] = bitcast<f32>(syscall_id);
+                ram[101u] = bitcast<f32>(arg1);
+                ram[102u] = bitcast<f32>(arg2);
+                ram[103u] = bitcast<f32>(arg3);
+                ram[105u] = 0.0;  // Status: pending
+
+                // Set process to WAITING state
+                p.status = 2u;  // Waiting for syscall
+                p.waiting_on = 0xFEu;  // Special: waiting for syscall
+                pc = pc + count;
+                break;  // Yield until syscall completes
             } else if (opcode == 253u) { // OP_RETURN (Exit Process)
                 p.status = 3u;
                 break;
