@@ -10,6 +10,7 @@
 import { GeometryKernel } from './GeometryKernel.js';
 import { GeometryFont } from './GeometryFont.js';
 import { AgentManager } from './AgentManager.js';
+import { InteractionManager } from './InteractionManager.js';
 
 // Hilbert Sector Map - Different subsystems occupy dedicated regions
 const HILBERT_SECTORS = {
@@ -100,6 +101,7 @@ export class GeometryOS {
         this.agents = [];
         this.agentPositions = new Map();
         this.agentManager = null;
+        this.interactionManager = null;
 
         // Stats
         this.frameCount = 0;
@@ -151,10 +153,14 @@ export class GeometryOS {
         this.agentManager = new AgentManager(this);
         await this.agentManager.init();
 
-        // 7. Wire interactions
+        // 7. Initialize Interaction Manager
+        this.interactionManager = new InteractionManager(this);
+        await this.interactionManager.init();
+
+        // 8. Wire interactions
         this._wireInteractions();
 
-        // 8. Start render loop
+        // 9. Start render loop
         requestAnimationFrame((t) => this._render(t));
 
         console.log('[GeometryOS] Desktop Environment ready');
@@ -633,6 +639,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
             }
         }
 
+        // Update interactions
+        if (this.interactionManager) {
+            this.interactionManager.update(dt);
+        }
+
         // Render
         const encoder = this.device.createCommandEncoder();
 
@@ -678,6 +689,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
      */
     getStats() {
         const agentStats = this.agentManager?.getStats() || {};
+        const interactionStats = this.interactionManager?.getStats() || {};
         return {
             fps: this.fps,
             windowCount: this.windows.size,
@@ -686,6 +698,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
             agentCycles: agentStats.totalCycles || 0,
             agentReads: agentStats.totalReads || 0,
             agentWrites: agentStats.totalWrites || 0,
+            interactionMode: interactionStats.mode || 'SELECT',
+            grabbedEntity: interactionStats.grabbed,
             ipcEventCount: this.ipcEvents.length,
             cameraPosition: { ...this.cameraPosition }
         };
