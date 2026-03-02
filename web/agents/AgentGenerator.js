@@ -25,6 +25,32 @@ export const IPC = {
     MAX_SHARED: 1023        // Max shared memory address
 };
 
+// Syscall Opcodes
+const OP_SYSCALL = 211;  // Trap to kernel for I/O
+
+// Syscall IDs
+const SYS = {
+    GET_MOUSE: 1,
+    GET_KEY: 2,
+    WRITE_LOG: 3,
+    GET_TIME: 4
+};
+
+// I/O Memory Map (extends IPC)
+const IO = {
+    MOUSE_X: 50,
+    MOUSE_Y: 51,
+    MOUSE_BTN: 52,
+    KEY_CODE: 53,
+    KEY_STATE: 54,
+    SYSCALL_ID: 100,
+    SYSCALL_ARG1: 101,
+    SYSCALL_ARG2: 102,
+    SYSCALL_ARG3: 103,
+    SYSCALL_RESULT: 104,
+    SYSCALL_STATUS: 105
+};
+
 // Opcodes (matching kernel.wgsl)
 const OP = {
     CONSTANT: 43,
