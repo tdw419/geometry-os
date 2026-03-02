@@ -228,6 +228,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             } else if (opcode == 228u) { // GEO_YIELD (Custom Opcode)
                 pc = pc + count;
                 break; // End current time slice
+            } else if (opcode == 176u) { // GEO_ROUTE (0xB0)
+                let target_addr = program[pc + 1];
+                ram[2047u] = bitcast<f32>(1u); // Request: Register Route
+                ram[2048u + 256u] = bitcast<f32>(target_addr);
+            } else if (opcode == 177u) { // GEO_FWD (0xB1)
+                let target_addr = program[pc + 1];
+                ram[2047u] = bitcast<f32>(2u); // Request: Forward
+                ram[2048u + 256u] = bitcast<f32>(target_addr);
             }
             
             pc = pc + count;
