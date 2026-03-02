@@ -1,0 +1,888 @@
+{
+  "glyphs": {
+    "32": {
+      "char": " ",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "33": {
+      "char": "!",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "34": {
+      "char": "\"",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "35": {
+      "char": "#",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "36": {
+      "char": "$",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "37": {
+      "char": "%",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "38": {
+      "char": "&",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "39": {
+      "char": "'",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "40": {
+      "char": "(",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "41": {
+      "char": ")",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "42": {
+      "char": "*",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "43": {
+      "char": "+",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "44": {
+      "char": ",",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "45": {
+      "char": "-",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "46": {
+      "char": ".",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "47": {
+      "char": "/",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "48": {
+      "char": "0",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "49": {
+      "char": "1",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "50": {
+      "char": "2",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "51": {
+      "char": "3",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "52": {
+      "char": "4",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "53": {
+      "char": "5",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "54": {
+      "char": "6",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "55": {
+      "char": "7",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "56": {
+      "char": "8",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "57": {
+      "char": "9",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "58": {
+      "char": ":",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "59": {
+      "char": ";",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "60": {
+      "char": "<",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "61": {
+      "char": "=",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "62": {
+      "char": ">",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "63": {
+      "char": "?",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "64": {
+      "char": "@",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "65": {
+      "char": "A",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "66": {
+      "char": "B",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "67": {
+      "char": "C",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "68": {
+      "char": "D",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "69": {
+      "char": "E",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "70": {
+      "char": "F",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "71": {
+      "char": "G",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "72": {
+      "char": "H",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "73": {
+      "char": "I",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "74": {
+      "char": "J",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "75": {
+      "char": "K",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "76": {
+      "char": "L",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "77": {
+      "char": "M",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "78": {
+      "char": "N",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "79": {
+      "char": "O",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "80": {
+      "char": "P",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "81": {
+      "char": "Q",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "82": {
+      "char": "R",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "83": {
+      "char": "S",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "84": {
+      "char": "T",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "85": {
+      "char": "U",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "86": {
+      "char": "V",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "87": {
+      "char": "W",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "88": {
+      "char": "X",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "89": {
+      "char": "Y",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "90": {
+      "char": "Z",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "91": {
+      "char": "[",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "92": {
+      "char": "\\",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "93": {
+      "char": "]",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "94": {
+      "char": "^",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "95": {
+      "char": "_",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "96": {
+      "char": "`",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "97": {
+      "char": "a",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "98": {
+      "char": "b",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "99": {
+      "char": "c",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "100": {
+      "char": "d",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "101": {
+      "char": "e",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "102": {
+      "char": "f",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "103": {
+      "char": "g",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "104": {
+      "char": "h",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "105": {
+      "char": "i",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "106": {
+      "char": "j",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "107": {
+      "char": "k",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "108": {
+      "char": "l",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "109": {
+      "char": "m",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "110": {
+      "char": "n",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "111": {
+      "char": "o",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "112": {
+      "char": "p",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "113": {
+      "char": "q",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "114": {
+      "char": "r",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "115": {
+      "char": "s",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "116": {
+      "char": "t",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "117": {
+      "char": "u",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "118": {
+      "char": "v",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "119": {
+      "char": "w",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "120": {
+      "char": "x",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "121": {
+      "char": "y",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "122": {
+      "char": "z",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "123": {
+      "char": "{",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "124": {
+      "char": "|",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "125": {
+      "char": "}",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "126": {
+      "char": "~",
+      "r": 255,
+      "g": 0,
+      "b": 0,
+      "is_instruction": false,
+      "symmetry": 0
+    },
+    "128": {
+      "char": "+",
+      "r": 255,
+      "g": 106,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 1
+    },
+    "129": {
+      "char": "-",
+      "r": 255,
+      "g": 107,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 1
+    },
+    "130": {
+      "char": "*",
+      "r": 255,
+      "g": 108,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 1
+    },
+    "136": {
+      "char": "/",
+      "r": 255,
+      "g": 109,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 3
+    },
+    "137": {
+      "char": "sin",
+      "r": 255,
+      "g": 112,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 1
+    },
+    "138": {
+      "char": "cos",
+      "r": 255,
+      "g": 113,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 1
+    },
+    "131": {
+      "char": ">",
+      "r": 255,
+      "g": 16,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 2
+    },
+    "139": {
+      "char": "<",
+      "r": 255,
+      "g": 17,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 2
+    },
+    "140": {
+      "char": "st",
+      "r": 255,
+      "g": 114,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 3
+    },
+    "141": {
+      "char": "ld",
+      "r": 255,
+      "g": 115,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 3
+    },
+    "132": {
+      "char": "?",
+      "r": 255,
+      "g": 69,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 4
+    },
+    "142": {
+      "char": ":",
+      "r": 255,
+      "g": 70,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 1
+    },
+    "143": {
+      "char": "rect",
+      "r": 255,
+      "g": 128,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 3
+    },
+    "144": {
+      "char": "clr",
+      "r": 255,
+      "g": 129,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 3
+    },
+    "133": {
+      "char": "=",
+      "r": 255,
+      "g": 33,
+      "b": 0,
+      "is_instruction": true,
+      "symmetry": 3
+    }
+  },
+  "atlas_size": 512,
+  "glyph_size": 16,
+  "format": "png",
+  "atlas_file": "universal_font.rts.png"
+}
