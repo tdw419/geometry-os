@@ -7,16 +7,7 @@
 
 import { MemoryBrowser } from './MemoryBrowser.js';
 import { GeometryKernel } from './GeometryKernel.js';
-import { generateAllAgents, AGENTS, IPC, PROC_STATE } from './agents/index.js';
-
-// Process states (must match kernel.wgsl)
-const PROC_STATE = {
-    IDLE: 0,
-    RUNNING: 1,
-    WAITING: 2,
-    DONE: 3,
-    ERROR: 4
-};
+import { PROC_STATE } from './agents/index.js';
 
 // State colors
 const STATE_COLORS = {
