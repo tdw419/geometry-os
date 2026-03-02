@@ -73,6 +73,20 @@ class EmbeddingGenerator:
         else:
             raise ValueError(f"Unknown backend: {self.backend}")
 
+    async def generate_async(self, text: str) -> np.ndarray:
+        """Async wrapper for embedding generation.
+
+        Args:
+            text: Input text to embed
+
+        Returns:
+            384-dimensional numpy array
+        """
+        # Run synchronous generate in a thread pool
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.generate, text)
+
     def generate_batch(self, texts: list[str]) -> np.ndarray:
         """Generate embeddings for multiple texts.
 
