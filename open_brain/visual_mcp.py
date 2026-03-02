@@ -1,11 +1,12 @@
 """Visual MCP Server for Open Brain."""
 import json
 import base64
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from io import BytesIO
 
 from .db import Database
 from .memory_glyph import MemoryGlyphEncoder
+from .embeddings import EmbeddingGenerator
 
 
 class VisualMCPServer:
@@ -15,11 +16,21 @@ class VisualMCPServer:
     - query_memory: Retrieve memories as TSV (token-efficient)
     - query_visual_memory: Retrieve memories as glyph atlas
     - store_memory: Store new memory entry
+    - search_memory: Semantic search using embeddings
     """
 
-    def __init__(self, connection_string: str):
+    def __init__(
+        self,
+        connection_string: str,
+        embedding_backend: str = "local",
+        lm_studio_url: Optional[str] = None
+    ):
         self.db = Database(connection_string)
         self.encoder = MemoryGlyphEncoder()
+        self.embedding_gen = EmbeddingGenerator(
+            backend=embedding_backend,
+            lm_studio_url=lm_studio_url
+        )
         self._connected = False
 
     async def connect(self):
@@ -97,6 +108,25 @@ class VisualMCPServer:
                     },
                     "required": ["content"]
                 }
+            },
+            {
+                "name": "search_memory",
+                "description": "Semantic search over memories using embeddings. Finds similar content even without exact keyword matches.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query text"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum results to return",
+                            "default": 10
+                        }
+                    },
+                    "required": ["query"]
+                }
             }
         ]
 
@@ -110,6 +140,8 @@ class VisualMCPServer:
             return await self._query_visual_memory(arguments)
         elif name == "store_memory":
             return await self._store_memory(arguments)
+        elif name == "search_memory":
+            return await self._search_memory(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
 
@@ -170,21 +202,66 @@ class VisualMCPServer:
         }
 
     async def _store_memory(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Store a new memory entry."""
+        """Store a new memory entry with automatic embedding generation."""
+        content = args.get("content", "")
         entry = {
             "type": args.get("type", "note"),
-            "content": args.get("content", ""),
+            "content": content,
             "priority": args.get("priority", 0.5),
             "tags": args.get("tags", []),
             "metadata": {}
         }
 
-        memory_id = await self.db.store_memory(entry)
+        # Generate embedding from content
+        embedding = self.embedding_gen.generate(content)
+        embedding_list = embedding.tolist()
+
+        memory_id = await self.db.store_memory(entry, embedding=embedding_list)
 
         return {
             "id": memory_id,
             "status": "stored",
-            "type": entry["type"]
+            "type": entry["type"],
+            "embedding_generated": True
+        }
+
+    async def _search_memory(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Semantic search over memories using embeddings."""
+        query = args.get("query", "")
+        limit = args.get("limit", 10)
+
+        if not query:
+            return {
+                "format": "search_results",
+                "results": [],
+                "query": query,
+                "message": "Empty query"
+            }
+
+        # Generate embedding for query
+        query_embedding = self.embedding_gen.generate(query)
+        embedding_list = query_embedding.tolist()
+
+        # Search by similarity
+        results = await self.db.search_by_embedding(embedding_list, limit=limit)
+
+        # Format results
+        formatted_results = []
+        for r in results:
+            formatted_results.append({
+                "id": r.get("id"),
+                "type": r.get("type"),
+                "content": r.get("content"),
+                "priority": r.get("priority"),
+                "similarity": r.get("similarity"),
+                "tags": r.get("tags", [])
+            })
+
+        return {
+            "format": "search_results",
+            "query": query,
+            "results": formatted_results,
+            "count": len(formatted_results)
         }
 
 

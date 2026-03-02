@@ -120,3 +120,32 @@ class Database:
                 memory_id
             )
             return dict(row) if row else None
+
+    async def search_by_embedding(
+        self,
+        embedding: List[float],
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Search memories by embedding similarity using pgvector.
+
+        Args:
+            embedding: Query embedding vector (384-dimensional)
+            limit: Maximum number of results
+
+        Returns:
+            List of memory entries ordered by cosine similarity
+        """
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, type, content, priority, tags, metadata,
+                       1 - (embedding <=> $1) as similarity
+                FROM memory_entries
+                WHERE embedding IS NOT NULL
+                ORDER BY embedding <=> $1
+                LIMIT $2
+                """,
+                embedding,
+                limit
+            )
+            return [dict(row) for row in rows]
