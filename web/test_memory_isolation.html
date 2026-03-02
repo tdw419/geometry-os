@@ -186,7 +186,7 @@
                 }
 
                 // Test 3: Boundary check
-                const section3 = logSection('Test 3: Boundary Enforcement');
+                const section3 = logSection('Test 3: Boundary Enforcement (SIGSEGV)');
 
                 // Spawn a process that tries to write at the edge of its limit
                 const overflowProc = createOverflowProgram(MEM_SIZE, 999);
@@ -196,9 +196,15 @@
                 await pm.tick();
                 await pm.tick();
 
-                // The write should have been blocked - check that RAM at the boundary
-                // location doesn't have our value
-                log('Boundary write should be blocked (addr >= mem_limit)', 'pending');
+                // Check process status
+                const states = await pm.readProcessStates();
+                const overflowProcState = states.find(s => s.pid === pidOverflow);
+                
+                if (overflowProcState && overflowProcState.status === 'error') {
+                    log(`PASS: Process entered 'error' state (SIGSEGV) as expected`, 'pass');
+                } else {
+                    log(`FAIL: Process status is '${overflowProcState?.status}', expected 'error'`, 'fail');
+                }
 
                 // Test 4: Shared memory is accessible
                 const section4 = logSection('Test 4: Shared Memory Region');

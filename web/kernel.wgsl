@@ -90,31 +90,43 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 }
             } else if (opcode == 62u) { // OP_STORE (Relative to mem_base)
                 let addr = program[pc + 1];
-                if (sp >= 1u && addr < p.mem_limit) {
-                    ram[ram_base + addr] = stack[stack_base + sp - 1];
-                    sp = sp - 1;
+                if (sp >= 1u) {
+                    if (addr < p.mem_limit) {
+                        ram[ram_base + addr] = stack[stack_base + sp - 1];
+                        sp = sp - 1;
+                    } else {
+                        p.status = 4u; // SIGSEGV
+                        break;
+                    }
                 }
             } else if (opcode == 61u) { // OP_LOAD (Relative to mem_base)
                 let addr = program[pc + 3];
                 if (addr < p.mem_limit) {
                     stack[stack_base + sp] = ram[ram_base + addr];
                     sp = sp + 1;
+                } else {
+                    p.status = 4u; // SIGSEGV
+                    break;
                 }
             } else if (opcode == 206u) { // OP_SHARED_STORE - Write to shared memory
-                // Format: [count|206], [shared_addr]
-                // Pops value from stack and writes to shared memory region
                 let shared_addr = program[pc + 1];
-                if (sp >= 1u && shared_addr < 1024u) {
-                    ram[shared_addr] = stack[stack_base + sp - 1];
-                    sp = sp - 1;
+                if (sp >= 1u) {
+                    if (shared_addr < 1024u) {
+                        ram[shared_addr] = stack[stack_base + sp - 1];
+                        sp = sp - 1;
+                    } else {
+                        p.status = 4u; // SIGSEGV
+                        break;
+                    }
                 }
             } else if (opcode == 207u) { // OP_SHARED_LOAD - Read from shared memory
-                // Format: [count|207], [shared_addr]
-                // Reads from shared memory and pushes to stack
                 let shared_addr = program[pc + 1];
                 if (shared_addr < 1024u) {
                     stack[stack_base + sp] = ram[shared_addr];
                     sp = sp + 1;
+                } else {
+                    p.status = 4u; // SIGSEGV
+                    break;
                 }
             } else if (opcode == 208u) { // OP_MSG_SEND - Send message to another process
                 // Format: [count|208], [target_pid], [msg_type], [data_word]
