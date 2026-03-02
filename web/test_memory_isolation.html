@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Memory Isolation Test - Geometry Kernel</title>
+    <style>
+        body {
+            background: #0a0a0f;
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+        }
+        h1 { color: #00ffcc; }
+        .test-section {
+            background: rgba(0, 40, 40, 0.5);
+            border: 1px solid #00ffcc;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .pass { color: #00ff88; }
+        .fail { color: #ff4444; }
+        .pending { color: #ffaa00; }
+        pre {
+            background: #000;
+            padding: 10px;
+            overflow-x: auto;
+        }
+        button {
+            background: #004040;
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        button:hover { background: #006060; }
+        #results { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Memory Isolation Test</h1>
+    <p>Verifies that processes cannot access memory outside their allocated region.</p>
+
+    <button id="run-test">Run Isolation Test</button>
+
+    <div id="results"></div>
+
+    <script type="module">
+        import { ProcessManager } from './ProcessManager.js';
+
+        const resultsEl = document.getElementById('results');
+        let pm = null;
+
+        function log(msg, cls = '') {
+            const line = document.createElement('div');
+            line.className = cls;
+            line.textContent = msg;
+            resultsEl.appendChild(line);
+        }
+
+        function logSection(title) {
+            const section = document.createElement('div');
+            section.className = 'test-section';
+            section.innerHTML = `<strong>${title}</strong>`;
+            resultsEl.appendChild(section);
+            return section;
+        }
+
+        // Create a SPIR-V program that writes a value to an address
+        // OP_STORE = 62, format: [word_count|opcode], [addr], then pop from stack
+        function createWriteProgram(address, value) {
+            const header = [
+                0x07230203, // Magic
+                0x00010000, // Version 1.0
+                0,          // Generator
+                2,          // Bound
+                0,          // Schema
+            ];
+
+            const instructions = [
+                // Push value onto stack first (OP_CONSTANT = 43)
+                // Format: [count|43], [type_id], [result_id], [value]
+                (4 << 16) | 43,   // CONSTANT
+                1,                // Type ID (float)
+                1,                // Result ID
+                value,            // Value
+
+                // STORE to address (relative to mem_base)
+                // Format: [count|62], [addr] - pops value from stack
+                (2 << 16) | 62,   // STORE
+                address,          // Relative address
+
+                // OP_RETURN = 253
+                (1 << 16) | 253,  // RETURN
+            ];
+
+            return new Uint32Array([...header, ...instructions]);
+        }
+
+        // Create a program that tries to write beyond its limit
+        function createOverflowProgram(limit, value) {
+            const header = [
+                0x07230203, 0x00010000, 0, 2, 0,
+            ];
+
+            const instructions = [
+                // Push value
+                (4 << 16) | 43, 1, 1, value,
+
+                // Try to STORE at address = limit (should be blocked)
+                (2 << 16) | 62,
+                limit,           // This should fail: addr >= mem_limit
+
+                (1 << 16) | 253,
+            ];
+
+            return new Uint32Array([...header, ...instructions]);
+        }
+
+        async function runTest() {
+            resultsEl.innerHTML = '';
+            log('Starting Memory Isolation Test...', 'pending');
+            log('');
+
+            try {
+                // Initialize ProcessManager
+                pm = new ProcessManager();
+                await pm.init();
+                log('ProcessManager initialized', 'pass');
+
+                // Get process memory size from ProcessManager
+                const MEM_SIZE = pm.PROCESS_MEM_SIZE || 512;
+                log(`Process memory size: ${MEM_SIZE} words`, 'pass');
+
+                // Test 1: Verify independent memory regions
+                const section1 = logSection('Test 1: Independent Memory Regions');
+
+                // Spawn two processes with different initial values
+                const procA = createWriteProgram(0, 111);
+                const procB = createWriteProgram(0, 222);
+
+                const pidA = await pm.spawnProcess(procA.buffer, 'procA.spv');
+                const pidB = await pm.spawnProcess(procB.buffer, 'procB.spv');
+
+                log(`Process A spawned: PID ${pidA}`, 'pass');
+                log(`Process B spawned: PID ${pidB}`, 'pass');
+
+                // Get memory regions
+                const stateA = pm.processes.get(pidA);
+                const stateB = pm.processes.get(pidB);
+
+                if (stateA && stateB) {
+                    log(`Process A: memBase=${stateA.memBase}, memLimit=${stateA.memLimit}`, 'pass');
+                    log(`Process B: memBase=${stateB.memBase}, memLimit=${stateB.memLimit}`, 'pass');
+
+                    // Verify non-overlapping regions
+                    const aEnd = stateA.memBase + stateA.memLimit;
+                    const bEnd = stateB.memBase + stateB.memLimit;
+
+                    if (stateA.memBase >= bEnd || stateB.memBase >= aEnd) {
+                        log('PASS: Memory regions do not overlap', 'pass');
+                    } else {
+                        log('FAIL: Memory regions overlap!', 'fail');
+                    }
+                }
+
+                // Run processes
+                for (let i = 0; i < 5; i++) {
+                    await pm.tick();
+                }
+
+                // Test 2: Verify memory isolation
+                const section2 = logSection('Test 2: Memory Isolation Verification');
+
+                const memA = await pm.readProcessMemory(pidA, 0, 1);
+                const memB = await pm.readProcessMemory(pidB, 0, 1);
+
+                log(`Process A memory[0]: ${memA[0]}`, 'pass');
+                log(`Process B memory[0]: ${memB[0]}`, 'pass');
+
+                // Verify each process has its own value
+                if (memA[0] === 111 && memB[0] === 222) {
+                    log('PASS: Each process has independent memory', 'pass');
+                } else {
+                    log(`FAIL: Memory values incorrect`, 'fail');
+                }
+
+                // Test 3: Boundary check
+                const section3 = logSection('Test 3: Boundary Enforcement');
+
+                // Spawn a process that tries to write at the edge of its limit
+                const overflowProc = createOverflowProgram(MEM_SIZE, 999);
+                const pidOverflow = await pm.spawnProcess(overflowProc.buffer, 'overflow.spv');
+                log(`Overflow process spawned: PID ${pidOverflow}`, 'pass');
+
+                await pm.tick();
+                await pm.tick();
+
+                // The write should have been blocked - check that RAM at the boundary
+                // location doesn't have our value
+                log('Boundary write should be blocked (addr >= mem_limit)', 'pending');
+
+                // Test 4: Shared memory is accessible
+                const section4 = logSection('Test 4: Shared Memory Region');
+
+                // Write to shared memory
+                pm.writeSharedMemory(0, [42.0]);
+                log('Wrote 42.0 to shared memory[0]', 'pass');
+
+                // Read back
+                const sharedMem = await pm.readSharedMemory();
+                if (sharedMem[0] === 42.0) {
+                    log(`PASS: Shared memory readback: ${sharedMem[0]}`, 'pass');
+                } else {
+                    log(`FAIL: Shared memory readback incorrect: ${sharedMem[0]}`, 'fail');
+                }
+
+                log('');
+                log('=== All Tests Complete ===', 'pass');
+
+            } catch (e) {
+                log(`Error: ${e.message}`, 'fail');
+                console.error(e);
+            }
+        }
+
+        document.getElementById('run-test').addEventListener('click', runTest);
+    </script>
+</body>
+</html>

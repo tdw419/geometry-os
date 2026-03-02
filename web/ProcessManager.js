@@ -193,6 +193,29 @@ export class ProcessManager {
     }
 
     /**
+     * Spawn a process from SPIR-V binary with auto-assigned PID.
+     * @param {ArrayBuffer} spirvBinary - The SPIR-V binary
+     * @param {string} name - Process name for display
+     * @returns {Promise<number>} The assigned PID
+     */
+    async spawnProcess(spirvBinary, name = 'unnamed') {
+        const pid = this.processes.size;
+        if (pid >= this.maxProcesses) {
+            throw new Error(`Maximum processes (${this.maxProcesses}) reached`);
+        }
+
+        this.spawn(pid, spirvBinary, { name });
+        return pid;
+    }
+
+    /**
+     * Execute one scheduler step (alias for step)
+     */
+    async tick() {
+        return this.step();
+    }
+
+    /**
      * Execute one scheduler step (runs all active processes)
      * @returns {Promise<void>}
      */
