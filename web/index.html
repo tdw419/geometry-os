@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS | Boot Loader</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #000;
+            color: #00ffcc;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Boot Screen */
+        #boot-screen {
+            position: absolute;
+            inset: 0;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        #boot-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .boot-logo {
+            font-size: 48px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            margin-bottom: 30px;
+            color: #00ffcc;
+            text-shadow: 0 0 20px #00ffcc;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .boot-progress {
+            width: 300px;
+            height: 4px;
+            background: #1a1a1a;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .boot-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #00ffcc, #00ff88);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .boot-status {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .boot-log {
+            position: absolute;
+            bottom: 50px;
+            left: 50px;
+            right: 50px;
+            font-size: 10px;
+            color: #444;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .boot-log-entry {
+            margin: 2px 0;
+        }
+
+        .boot-log-entry.ok { color: #00ff88; }
+        .boot-log-entry.warn { color: #ffaa00; }
+        .boot-log-entry.error { color: #ff4444; }
+
+        /* Desktop Header */
+        #desktop-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: rgba(0, 20, 20, 0.9);
+            border-bottom: 1px solid #00ffcc44;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #desktop-header.visible {
+            opacity: 1;
+        }
+
+        .header-left, .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .header-title {
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .header-stat {
+            font-size: 11px;
+            color: #888;
+        }
+
+        .header-stat span {
+            color: #00ff88;
+        }
+
+        /* Task Bar */
+        #task-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: rgba(0, 20, 20, 0.9);
+            border-top: 1px solid #00ffcc44;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #task-bar.visible {
+            opacity: 1;
+        }
+
+        .task-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .task-btn {
+            background: rgba(0, 100, 100, 0.3);
+            border: 1px solid #00ffcc44;
+            color: #00ffcc;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .task-btn:hover {
+            background: rgba(0, 150, 150, 0.4);
+        }
+
+        .task-btn.active {
+            background: #00ffcc;
+            color: #000;
+        }
+
+        .system-tray {
+            display: flex;
+            gap: 15px;
+            font-size: 11px;
+            color: #888;
+        }
+
+        /* Hilbert Minimap */
+        #hilbert-minimap {
+            position: absolute;
+            bottom: 60px;
+            right: 20px;
+            width: 150px;
+            height: 150px;
+            background: rgba(0, 20, 20, 0.8);
+            border: 1px solid #00ffcc44;
+            border-radius: 4px;
+            z-index: 90;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #hilbert-minimap.visible {
+            opacity: 1;
+        }
+
+        .minimap-title {
+            font-size: 9px;
+            padding: 5px;
+            border-bottom: 1px solid #00ffcc22;
+            color: #888;
+        }
+
+        .minimap-canvas {
+            width: 100%;
+            height: calc(100% - 20px);
+        }
+
+        /* Window Templates (CSS for 3D windows) */
+        .window-template {
+            display: none;
+        }
+
+        /* Agent Indicators */
+        #agent-indicators {
+            position: absolute;
+            top: 50px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            z-index: 90;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #agent-indicators.visible {
+            opacity: 1;
+        }
+
+        .agent-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff00ff;
+            animation: agentPulse 1s infinite;
+        }
+
+        @keyframes agentPulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.3); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Boot Screen -->
+    <div id="boot-screen">
+        <div class="boot-logo">GEOMETRY OS</div>
+        <div class="boot-progress">
+            <div class="boot-progress-bar" id="boot-progress"></div>
+        </div>
+        <div class="boot-status" id="boot-status">Initializing...</div>
+        <div class="boot-log" id="boot-log"></div>
+    </div>
+
+    <!-- Main Canvas -->
+    <canvas id="gpu-canvas"></canvas>
+
+    <!-- Desktop Header -->
+    <div id="desktop-header">
+        <div class="header-left">
+            <span class="header-title">GEOMETRY OS</span>
+            <span class="header-stat">FPS: <span id="stat-fps">0</span></span>
+            <span class="header-stat">Processes: <span id="stat-procs">0</span></span>
+        </div>
+        <div class="header-right">
+            <span class="header-stat">IPC: <span id="stat-ipc">0</span> events</span>
+            <span class="header-stat">Camera: <span id="stat-cam">0, 0</span></span>
+        </div>
+    </div>
+
+    <!-- Task Bar -->
+    <div id="task-bar">
+        <div class="task-buttons">
+            <button class="task-btn active" data-window="shell">Shell</button>
+            <button class="task-btn" data-window="files">Files</button>
+            <button class="task-btn" data-window="memory">Memory</button>
+            <button class="task-btn" data-window="ipc">IPC</button>
+        </div>
+        <div class="system-tray">
+            <span>Zoom: <span id="stat-zoom">50</span></span>
+            <span id="stat-time">00:00:00</span>
+        </div>
+    </div>
+
+    <!-- Hilbert Minimap -->
+    <div id="hilbert-minimap">
+        <div class="minimap-title">Hilbert Space</div>
+        <canvas class="minimap-canvas" id="minimap-canvas"></canvas>
+    </div>
+
+    <!-- Agent Indicators -->
+    <div id="agent-indicators">
+        <!-- Dynamically populated -->
+    </div>
+
+    <script type="module">
+        import { GeometryOS } from './GeometryOS.js';
+
+        const bootLog = document.getElementById('boot-log');
+        const bootProgress = document.getElementById('boot-progress');
+        const bootStatus = document.getElementById('boot-status');
+
+        function logBoot(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `boot-log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            bootLog.appendChild(entry);
+            bootLog.scrollTop = bootLog.scrollHeight;
+        }
+
+        async function boot() {
+            logBoot('Starting boot sequence...');
+
+            try {
+                // Phase 1: WebGPU
+                bootStatus.textContent = 'Initializing WebGPU...';
+                bootProgress.style.width = '20%';
+                logBoot('WebGPU adapter request...', 'ok');
+                await new Promise(r => setTimeout(r, 200));
+
+                // Phase 2: GeometryOS
+                bootStatus.textContent = 'Loading GeometryOS kernel...';
+                bootProgress.style.width = '40%';
+                logBoot('GeometryOS kernel loading...', 'ok');
+                await new Promise(r => setTimeout(r, 200));
+
+                const canvas = document.getElementById('gpu-canvas');
+                const os = new GeometryOS(canvas);
+
+                // Phase 3: Kernel
+                bootStatus.textContent = 'Initializing kernel buffers...';
+                bootProgress.style.width = '60%';
+                logBoot('Kernel buffers allocated', 'ok');
+                await new Promise(r => setTimeout(r, 200));
+
+                // Phase 4: Desktop
+                bootStatus.textContent = 'Creating desktop windows...';
+                bootProgress.style.width = '80%';
+                logBoot('Desktop windows created', 'ok');
+                await new Promise(r => setTimeout(r, 200));
+
+                // Initialize OS
+                await os.init();
+
+                // Phase 5: Complete
+                bootStatus.textContent = 'Boot complete!';
+                bootProgress.style.width = '100%';
+                logBoot('GeometryOS ready', 'ok');
+                await new Promise(r => setTimeout(r, 500));
+
+                // Hide boot screen
+                document.getElementById('boot-screen').classList.add('hidden');
+                document.getElementById('desktop-header').classList.add('visible');
+                document.getElementById('task-bar').classList.add('visible');
+                document.getElementById('hilbert-minimap').classList.add('visible');
+                document.getElementById('agent-indicators').classList.add('visible');
+
+                // Wire task bar buttons
+                document.querySelectorAll('.task-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const windowId = btn.dataset.window;
+                        os.focusWindow(windowId);
+
+                        // Update active state
+                        document.querySelectorAll('.task-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                    });
+                });
+
+                // Stats update loop
+                setInterval(() => {
+                    const stats = os.getStats();
+                    document.getElementById('stat-fps').textContent = Math.round(stats.fps);
+                    document.getElementById('stat-procs').textContent = stats.processCount;
+                    document.getElementById('stat-ipc').textContent = stats.ipcEventCount;
+                    document.getElementById('stat-cam').textContent =
+                        `${Math.round(stats.cameraPosition.x)}, ${Math.round(stats.cameraPosition.y)}`;
+                    document.getElementById('stat-zoom').textContent = Math.round(stats.cameraPosition.z);
+
+                    // Time
+                    const now = new Date();
+                    document.getElementById('stat-time').textContent =
+                        now.toTimeString().split(' ')[0];
+                }, 100);
+
+                // Expose for debugging
+                window.geometryOS = os;
+
+                logBoot('Desktop environment active', 'ok');
+
+            } catch (err) {
+                logBoot(`Boot failed: ${err.message}`, 'error');
+                bootStatus.textContent = `Error: ${err.message}`;
+                console.error(err);
+            }
+        }
+
+        window.addEventListener('load', boot);
+    </script>
+</body>
+</html>
