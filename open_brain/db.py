@@ -54,6 +54,12 @@ class Database:
                 )
             """)
 
+    def _format_embedding(self, embedding: Optional[List[float]]) -> Optional[str]:
+        """Format embedding list as pgvector string."""
+        if embedding is None:
+            return None
+        return '[' + ','.join(str(x) for x in embedding) + ']'
+
     async def store_memory(
         self,
         entry: Dict[str, Any],
@@ -71,7 +77,7 @@ class Database:
                 entry.get("type", "note"),
                 json.dumps(entry.get("content", "")),
                 entry.get("priority", 0.5),
-                embedding,
+                self._format_embedding(embedding),
                 entry.get("tags", []),
                 json.dumps(entry.get("metadata", {}))
             )
@@ -139,13 +145,13 @@ class Database:
             rows = await conn.fetch(
                 """
                 SELECT id, type, content, priority, tags, metadata,
-                       1 - (embedding <=> $1) as similarity
+                       1 - (embedding <=> $1::vector) as similarity
                 FROM memory_entries
                 WHERE embedding IS NOT NULL
-                ORDER BY embedding <=> $1
+                ORDER BY embedding <=> $1::vector
                 LIMIT $2
                 """,
-                embedding,
+                self._format_embedding(embedding),
                 limit
             )
             return [dict(row) for row in rows]
