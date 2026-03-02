@@ -6,6 +6,7 @@
  */
 
 import { MemoryBrowser } from './MemoryBrowser.js';
+import { SyscallManager } from "./SyscallManager.js";
 import { GeometryKernel } from './GeometryKernel.js';
 import { PROC_STATE } from './agents/index.js';
 
@@ -25,6 +26,7 @@ export class VisualShell extends MemoryBrowser {
         // Shell-specific state
         this.kernel = options.kernel || new GeometryKernel();
         this.processes = new Map();  // PID -> ProcessInfo
+        this.syscalls = new SyscallManager(this.kernel);
         this.activePID = 0;
         this.saccadeEnabled = false;
         this.cameraTarget = { x: 0, y: 0, z: 0 };
@@ -49,6 +51,8 @@ export class VisualShell extends MemoryBrowser {
 
         // Initialize parent MemoryBrowser (shares device if compatible)
         await super.init();
+        // Attach syscall manager to capture events
+        this.syscalls.attach(this.canvas);
 
         // Build UI
         this._initUI();
@@ -267,6 +271,17 @@ export class VisualShell extends MemoryBrowser {
             if (!this.kernel || !this.device) return;
 
             try {
+                // Sync I/O to GPU before step
+                await this.syscalls.syncToGPU();
+
+                // Dispatch kernel step (if not already handled by another loop)
+                // Note: The main kernel execution usually happens in its own ticker,
+                // but we ensure synchronization here.
+                await this.kernel.step();
+
+                // Process pending syscalls after step
+                await this.syscalls.processSyscalls();
+
                 const pcbs = await this.kernel.readPCBs();
                 this._updateProcessStates(pcbs);
 
