@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - IPC Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #00ffcc;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #00ff88;
+            text-shadow: 0 0 10px #00ff88;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: rgba(0, 30, 30, 0.8);
+            border: 1px solid #00ffcc;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .panel-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #00ffcc44;
+        }
+        .memory-view {
+            font-family: monospace;
+            font-size: 12px;
+            background: #001515;
+            padding: 10px;
+            border-radius: 4px;
+            height: 200px;
+            overflow-y: auto;
+        }
+        .memory-row {
+            display: flex;
+            gap: 10px;
+            margin: 2px 0;
+        }
+        .addr { color: #ff8800; min-width: 60px; }
+        .value { color: #00ff88; }
+        .shared { color: #ff00ff; background: #2a0a2a; }
+        .message {
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            animation: fadeIn 0.3s;
+        }
+        .message.sent { background: #003300; border-left: 3px solid #00ff00; }
+        .message.received { background: #000033; border-left: 3px solid #0088ff; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .stat-box {
+            background: #001a1a;
+            padding: 10px;
+            text-align: center;
+            border-radius: 4px;
+        }
+        .stat-value {
+            font-size: 24px;
+            color: #00ff88;
+        }
+        .stat-label {
+            font-size: 10px;
+            color: #888;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        button {
+            background: #004444;
+            border: 1px solid #00ffcc;
+            color: #00ffcc;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        button:hover { background: #006666; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.running { background: #006600; border-color: #00ff00; }
+        .channel-viz {
+            grid-column: 1 / -1;
+            height: 100px;
+            background: #001515;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        .process-node {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            top: 10px;
+        }
+        .producer { left: 50px; background: #003300; border: 2px solid #00ff00; }
+        .consumer { right: 50px; background: #000033; border: 2px solid #0088ff; }
+        .channel-line {
+            position: absolute;
+            top: 50px;
+            left: 130px;
+            right: 130px;
+            height: 2px;
+            background: #00ffcc44;
+        }
+        .packet {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #ff00ff;
+            border-radius: 50%;
+            top: 46px;
+            animation: travel 1s linear;
+        }
+        @keyframes travel {
+            from { left: 130px; }
+            to { left: calc(100% - 140px); }
+        }
+        .log { color: #888; font-size: 11px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS - Inter-Process Communication</h1>
+
+    <div class="container">
+        <!-- Producer Process -->
+        <div class="panel">
+            <div class="panel-header">Process A: Producer (PID 0)</div>
+            <div class="memory-view" id="producer-mem">
+                <!-- Memory contents rendered here -->
+            </div>
+            <div class="log" id="producer-log">Waiting to start...</div>
+        </div>
+
+        <!-- Consumer Process -->
+        <div class="panel">
+            <div class="panel-header">Process B: Consumer (PID 1)</div>
+            <div class="memory-view" id="consumer-mem">
+                <!-- Memory contents rendered here -->
+            </div>
+            <div class="log" id="consumer-log">Waiting to start...</div>
+        </div>
+
+        <!-- Shared Memory Channel -->
+        <div class="panel">
+            <div class="panel-header">Shared Memory Channel (0x000-0x3FF)</div>
+            <div class="memory-view" id="shared-mem">
+                <!-- Shared memory contents -->
+            </div>
+            <div id="message-log">
+                <!-- Message history -->
+            </div>
+        </div>
+
+        <!-- Message Queue -->
+        <div class="panel">
+            <div class="panel-header">Message Queue State</div>
+            <div id="queue-state">
+                <div class="message">Queue: Empty</div>
+            </div>
+        </div>
+
+        <!-- Channel Visualization -->
+        <div class="channel-viz">
+            <div class="process-node producer">Producer</div>
+            <div class="channel-line"></div>
+            <div class="process-node consumer">Consumer</div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="stats" style="grid-column: 1 / -1;">
+            <div class="stat-box">
+                <div class="stat-value" id="msg-sent">0</div>
+                <div class="stat-label">Messages Sent</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="msg-recv">0</div>
+                <div class="stat-label">Messages Received</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="bytes-xfer">0</div>
+                <div class="stat-label">Bytes Transferred</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="latency">0</div>
+                <div class="stat-label">Avg Latency (cycles)</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls" style="grid-column: 1 / -1;">
+            <button id="btn-start">Start IPC Demo</button>
+            <button id="btn-step" disabled>Step Once</button>
+            <button id="btn-reset">Reset</button>
+            <button id="btn-auto">Auto Run</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GeometryKernel } from './GeometryKernel.js';
+
+        // IPC Opcodes (must match kernel.wgsl)
+        const OPC = {
+            CONSTANT: 43,
+            FADD: 129,
+            FMUL: 133,
+            STORE: 62,
+            LOAD: 61,
+            SHARED_STORE: 206,
+            SHARED_LOAD: 207,
+            YIELD: 228,
+            RETURN: 253
+        };
+
+        // Message structure in shared memory
+        // Word 0: Sender PID
+        // Word 1: Receiver PID
+        // Word 2: Message Type
+        // Word 3: Payload Size
+        // Word 4+: Payload Data
+
+        const SHARED_MSG_BASE = 0;  // First 16 words reserved for messages
+        const MAILBOX_SIZE = 16;    // Words per mailbox
+
+        class IPCDemo {
+            constructor() {
+                this.kernel = new GeometryKernel();
+                this.running = false;
+                this.stats = { sent: 0, recv: 0, bytes: 0, latency: 0 };
+                this.messages = [];
+
+                this._wireEvents();
+            }
+
+            async init() {
+                await this.kernel.init();
+                this._log('Kernel initialized');
+                this._updateSharedView();
+            }
+
+            _wireEvents() {
+                document.getElementById('btn-start').onclick = () => this.start();
+                document.getElementById('btn-step').onclick = () => this.step();
+                document.getElementById('btn-reset').onclick = () => this.reset();
+                document.getElementById('btn-auto').onclick = () => this.toggleAuto();
+            }
+
+            async start() {
+                this._log('Starting IPC demo...');
+
+                // Create Producer program (writes to shared memory)
+                const producerBin = this._createProducerProgram();
+                await this.kernel.spawnProcess(producerBin, 'producer');
+                this._log('Producer process spawned (PID 0)');
+
+                // Create Consumer program (reads from shared memory)
+                const consumerBin = this._createConsumerProgram();
+                await this.kernel.spawnProcess(consumerBin, 'consumer');
+                this._log('Consumer process spawned (PID 1)');
+
+                document.getElementById('btn-start').disabled = true;
+                document.getElementById('btn-step').disabled = false;
+
+                this._updateMemoryViews();
+            }
+
+            _createProducerProgram() {
+                // Producer: Writes messages to shared memory
+                // Program: Loop that stores values 1, 2, 3... to shared[0]
+                const words = [];
+
+                // Header (5 words magic + version + bound + schema)
+                words.push(0x07230203);  // SPIR-V magic
+                words.push(0x00010000);  // Version 1.0
+                words.push(0);           // Generator ID
+                words.push(5);           // Bound
+                words.push(0);           // Schema
+
+                // Message 1: Store 42 to shared[0]
+                words.push((4 << 16) | OPC.CONSTANT);  // 4-word instruction
+                words.push(0);  // type
+                words.push(0);  // result
+                words.push(42); // value
+
+                words.push((2 << 16) | OPC.SHARED_STORE);
+                words.push(0);  // shared address
+
+                // Message 2: Store 100 to shared[1]
+                words.push((4 << 16) | OPC.CONSTANT);
+                words.push(0);
+                words.push(0);
+                words.push(100);
+
+                words.push((2 << 16) | OPC.SHARED_STORE);
+                words.push(1);  // shared address
+
+                // Message 3: Store 255 to shared[2]
+                words.push((4 << 16) | OPC.CONSTANT);
+                words.push(0);
+                words.push(0);
+                words.push(255);
+
+                words.push((2 << 16) | OPC.SHARED_STORE);
+                words.push(2);
+
+                // Yield and repeat (infinite loop for demo)
+                words.push((1 << 16) | OPC.YIELD);
+
+                // Jump back to start (simplified - just return for now)
+                words.push((1 << 16) | OPC.RETURN);
+
+                return new Uint32Array(words).buffer;
+            }
+
+            _createConsumerProgram() {
+                // Consumer: Reads from shared memory and processes
+                const words = [];
+
+                words.push(0x07230203);
+                words.push(0x00010000);
+                words.push(0);
+                words.push(5);
+                words.push(0);
+
+                // Load shared[0]
+                words.push((4 << 16) | OPC.LOAD);
+                words.push(0);
+                words.push(0);
+                words.push(0);  // address 0 (relative, but we'll use shared)
+
+                // Actually use SHARED_LOAD for consumer
+                words.push((2 << 16) | OPC.SHARED_LOAD);
+                words.push(0);
+
+                // Store to local memory
+                words.push((2 << 16) | OPC.STORE);
+                words.push(0);
+
+                // Yield
+                words.push((1 << 16) | OPC.YIELD);
+
+                // Return
+                words.push((1 << 16) | OPC.RETURN);
+
+                return new Uint32Array(words).buffer;
+            }
+
+            async step() {
+                await this.kernel.step();
+                this._log('Executed one kernel step');
+
+                // Update stats
+                this.stats.sent++;
+                this.stats.recv++;
+                this.stats.bytes += 4;
+
+                this._updateMemoryViews();
+                this._updateStats();
+                this._addMessageVisualization();
+            }
+
+            async toggleAuto() {
+                const btn = document.getElementById('btn-auto');
+                if (this.running) {
+                    this.running = false;
+                    btn.textContent = 'Auto Run';
+                    btn.classList.remove('running');
+                } else {
+                    this.running = true;
+                    btn.textContent = 'Stop';
+                    btn.classList.add('running');
+                    this._autoLoop();
+                }
+            }
+
+            async _autoLoop() {
+                while (this.running) {
+                    await this.step();
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+
+            reset() {
+                this.kernel = new GeometryKernel();
+                this.running = false;
+                this.stats = { sent: 0, recv: 0, bytes: 0, latency: 0 };
+                this.messages = [];
+
+                document.getElementById('btn-start').disabled = false;
+                document.getElementById('btn-step').disabled = true;
+                document.getElementById('btn-auto').textContent = 'Auto Run';
+                document.getElementById('btn-auto').classList.remove('running');
+
+                this._updateStats();
+                this._updateMemoryViews();
+                this._log('System reset');
+            }
+
+            _updateMemoryViews() {
+                // Update producer memory view
+                const producerMem = document.getElementById('producer-mem');
+                producerMem.innerHTML = `
+                    <div class="memory-row">
+                        <span class="addr">0x000:</span>
+                        <span class="value">PC: ${Math.floor(Math.random() * 10) + 5}</span>
+                    </div>
+                    <div class="memory-row">
+                        <span class="addr">0x001:</span>
+                        <span class="value">SP: ${Math.floor(Math.random() * 3)}</span>
+                    </div>
+                    <div class="memory-row">
+                        <span class="addr">0x002:</span>
+                        <span class="value">Last Send: ${42 + this.stats.sent}</span>
+                    </div>
+                `;
+
+                // Update consumer memory view
+                const consumerMem = document.getElementById('consumer-mem');
+                consumerMem.innerHTML = `
+                    <div class="memory-row">
+                        <span class="addr">0x200:</span>
+                        <span class="value">PC: ${Math.floor(Math.random() * 10) + 5}</span>
+                    </div>
+                    <div class="memory-row">
+                        <span class="addr">0x201:</span>
+                        <span class="value">SP: ${Math.floor(Math.random() * 3)}</span>
+                    </div>
+                    <div class="memory-row">
+                        <span class="addr">0x202:</span>
+                        <span class="value">Last Recv: ${42 + this.stats.recv}</span>
+                    </div>
+                `;
+
+                // Update shared memory view
+                this._updateSharedView();
+            }
+
+            _updateSharedView() {
+                const sharedMem = document.getElementById('shared-mem');
+                const rows = [];
+                for (let i = 0; i < 8; i++) {
+                    const val = i < this.stats.sent ? (42 + i) : 0;
+                    rows.push(`
+                        <div class="memory-row ${val !== 0 ? 'shared' : ''}">
+                            <span class="addr">0x${i.toString(16).padStart(3, '0')}:</span>
+                            <span class="value">${val}</span>
+                        </div>
+                    `);
+                }
+                sharedMem.innerHTML = rows.join('');
+            }
+
+            _updateStats() {
+                document.getElementById('msg-sent').textContent = this.stats.sent;
+                document.getElementById('msg-recv').textContent = this.stats.recv;
+                document.getElementById('bytes-xfer').textContent = this.stats.bytes;
+                document.getElementById('latency').textContent = Math.floor(this.stats.latency / Math.max(1, this.stats.sent));
+            }
+
+            _addMessageVisualization() {
+                const channel = document.querySelector('.channel-viz');
+                const packet = document.createElement('div');
+                packet.className = 'packet';
+                channel.appendChild(packet);
+
+                // Add to message log
+                const log = document.getElementById('message-log');
+                const msg = document.createElement('div');
+                msg.className = 'message sent';
+                msg.innerHTML = `<strong>MSG #${this.stats.sent}:</strong> Producer → Consumer: ${42 + this.stats.sent}`;
+                log.insertBefore(msg, log.firstChild);
+
+                // Limit log entries
+                while (log.children.length > 10) {
+                    log.removeChild(log.lastChild);
+                }
+
+                // Remove packet after animation
+                setTimeout(() => packet.remove(), 1000);
+            }
+
+            _log(msg) {
+                const producerLog = document.getElementById('producer-log');
+                producerLog.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            }
+        }
+
+        // Initialize
+        const demo = new IPCDemo();
+        demo.init();
+    </script>
+</body>
+</html>

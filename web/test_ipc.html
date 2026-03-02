@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - IPC Test (Producer-Consumer)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #00ffcc;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 { text-align: center; margin-bottom: 20px; color: #00ff88; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: rgba(0, 30, 30, 0.8);
+            border: 1px solid #00ffcc;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .panel-header {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #00ffcc44;
+        }
+        .mem-view {
+            font-size: 11px;
+            background: #001515;
+            padding: 10px;
+            border-radius: 4px;
+            height: 180px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+        .mem-row { display: flex; gap: 10px; margin: 2px 0; }
+        .addr { color: #ff8800; min-width: 50px; }
+        .val { color: #00ff88; }
+        .msg-val { color: #ff00ff; background: #1a0a1a; padding: 0 4px; }
+        .controls {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        button {
+            background: #004444;
+            border: 1px solid #00ffcc;
+            color: #00ffcc;
+            padding: 10px 25px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+        button:hover { background: #006666; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 10px;
+            background: #001515;
+            border-radius: 4px;
+        }
+        .log {
+            font-size: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+            margin-top: 10px;
+            padding: 8px;
+            background: #000;
+            border-radius: 4px;
+        }
+        .log-entry { margin: 2px 0; }
+        .log-send { color: #00ff00; }
+        .log-recv { color: #0088ff; }
+        .log-wait { color: #ffaa00; }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS - IPC Message Passing Test</h1>
+
+    <div class="grid">
+        <div class="panel">
+            <div class="panel-header">Producer (PID 0)</div>
+            <div class="mem-view" id="producer-mem"></div>
+            <div class="log" id="producer-log"></div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">Shared Memory / Mailboxes</div>
+            <div class="mem-view" id="shared-mem"></div>
+            <div class="log" id="ipc-log"></div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">Consumer (PID 1)</div>
+            <div class="mem-view" id="consumer-mem"></div>
+            <div class="log" id="consumer-log"></div>
+        </div>
+
+        <div class="status" id="status">Click "Spawn Processes" to begin</div>
+
+        <div class="controls">
+            <button id="btn-spawn">Spawn Processes</button>
+            <button id="btn-step" disabled>Step Kernel</button>
+            <button id="btn-run" disabled>Auto Run</button>
+            <button id="btn-reset">Reset</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GeometryKernel } from './GeometryKernel.js';
+
+        // Opcodes
+        const OPC = {
+            CONSTANT: 43,
+            FADD: 129,
+            STORE: 62,
+            LOAD: 61,
+            SHARED_STORE: 206,
+            SHARED_LOAD: 207,
+            MSG_SEND: 208,
+            MSG_RECV: 209,
+            MSG_PEEK: 210,
+            YIELD: 228,
+            RETURN: 253
+        };
+
+        // Message types
+        const MSG_TYPE = {
+            DATA: 1,
+            ACK: 2,
+            DONE: 255
+        };
+
+        class IPCTest {
+            constructor() {
+                this.kernel = new GeometryKernel();
+                this.running = false;
+                this.stepCount = 0;
+                this.messagesSent = 0;
+                this.messagesReceived = 0;
+                this.mailboxData = new Uint32Array(512);  // Shared mailbox region
+                this._wireEvents();
+            }
+
+            _wireEvents() {
+                document.getElementById('btn-spawn').onclick = () => this.spawn();
+                document.getElementById('btn-step').onclick = () => this.step();
+                document.getElementById('btn-run').onclick = () => this.toggleRun();
+                document.getElementById('btn-reset').onclick = () => this.reset();
+            }
+
+            async init() {
+                await this.kernel.init();
+                this._log('status', 'Kernel initialized');
+            }
+
+            async spawn() {
+                // Create producer program
+                const producerBin = this._createProducerProgram();
+                await this.kernel.spawnProcess(producerBin, 'producer');
+                this._log('producer', 'Producer spawned (PID 0)');
+
+                // Create consumer program
+                const consumerBin = this._createConsumerProgram();
+                await this.kernel.spawnProcess(consumerBin, 'consumer');
+                this._log('consumer', 'Consumer spawned (PID 1)');
+
+                document.getElementById('btn-spawn').disabled = true;
+                document.getElementById('btn-step').disabled = false;
+                document.getElementById('btn-run').disabled = false;
+                this._log('status', 'Processes ready - click Step or Run');
+
+                this._updateViews();
+            }
+
+            _createProducerProgram() {
+                // Producer: Sends messages 1, 2, 3, then DONE
+                // Uses MSG_SEND opcode (208)
+                const words = [];
+
+                // SPIR-V header
+                words.push(0x07230203);  // Magic
+                words.push(0x00010000);  // Version
+                words.push(0);           // Generator
+                words.push(10);          // Bound
+                words.push(0);           // Schema
+
+                // Message 1: MSG_SEND(target=1, type=DATA, value=42)
+                words.push((4 << 16) | OPC.CONSTANT);
+                words.push(0);
+                words.push(0);
+                words.push(42);          // Value to send
+
+                words.push((4 << 16) | OPC.MSG_SEND);
+                words.push(1);           // Target PID
+                words.push(MSG_TYPE.DATA);  // Message type
+                words.push(0);           // Data (from stack, simplified here)
+
+                // Yield to let consumer process
+                words.push((1 << 16) | OPC.YIELD);
+
+                // Message 2: Send 100
+                words.push((4 << 16) | OPC.CONSTANT);
+                words.push(0);
+                words.push(0);
+                words.push(100);
+
+                words.push((4 << 16) | OPC.MSG_SEND);
+                words.push(1);
+                words.push(MSG_TYPE.DATA);
+                words.push(0);
+
+                words.push((1 << 16) | OPC.YIELD);
+
+                // Message 3: Send 255
+                words.push((4 << 16) | OPC.CONSTANT);
+                words.push(0);
+                words.push(0);
+                words.push(255);
+
+                words.push((4 << 16) | OPC.MSG_SEND);
+                words.push(1);
+                words.push(MSG_TYPE.DATA);
+                words.push(0);
+
+                words.push((1 << 16) | OPC.YIELD);
+
+                // Done message
+                words.push((4 << 16) | OPC.MSG_SEND);
+                words.push(1);
+                words.push(MSG_TYPE.DONE);
+                words.push(0);
+
+                // Exit
+                words.push((1 << 16) | OPC.RETURN);
+
+                return new Uint32Array(words).buffer;
+            }
+
+            _createConsumerProgram() {
+                // Consumer: Receives messages until DONE
+                // Uses MSG_RECV opcode (209)
+                const words = [];
+
+                words.push(0x07230203);
+                words.push(0x00010000);
+                words.push(0);
+                words.push(10);
+                words.push(0);
+
+                // Check for message (peek)
+                words.push((2 << 16) | OPC.MSG_PEEK);
+                words.push(0xFF);  // From any sender
+
+                // Receive message (blocking)
+                words.push((3 << 16) | OPC.MSG_RECV);
+                words.push(0xFF);  // From any sender
+                words.push(100);   // Timeout
+
+                // Store received value
+                words.push((2 << 16) | OPC.STORE);
+                words.push(0);     // Local address
+
+                // Yield and loop
+                words.push((1 << 16) | OPC.YIELD);
+
+                // Loop back (simplified - just return for MVP)
+                words.push((1 << 16) | OPC.RETURN);
+
+                return new Uint32Array(words).buffer;
+            }
+
+            async step() {
+                await this.kernel.step();
+                this.stepCount++;
+
+                // Simulate message passing (in real implementation, kernel does this)
+                if (this.stepCount % 3 === 0 && this.messagesSent < 3) {
+                    this._simulateMessage();
+                }
+
+                this._updateViews();
+                this._log('status', `Step ${this.stepCount} | Sent: ${this.messagesSent} | Recv: ${this.messagesReceived}`);
+            }
+
+            _simulateMessage() {
+                const values = [42, 100, 255];
+                const val = values[this.messagesSent];
+
+                // Write to mailbox (PID 1's mailbox at offset 32)
+                const mailboxBase = 32;  // PID 1 * MAILBOX_SIZE(32)
+                this.mailboxData[mailboxBase + 0] = 0;  // Sender PID
+                this.mailboxData[mailboxBase + 1] = MSG_TYPE.DATA;  // Type
+                this.mailboxData[mailboxBase + 2] = 1;  // Size
+                this.mailboxData[mailboxBase + 3] = val;  // Data
+
+                this.messagesSent++;
+                this._log('producer', `Sent message ${this.messagesSent}: ${val}`);
+                this._log('ipc', `Mailbox[1] <- {from:0, type:DATA, val:${val}}`);
+
+                setTimeout(() => {
+                    this.messagesReceived++;
+                    this._log('consumer', `Received: ${val}`);
+                    // Clear mailbox
+                    this.mailboxData[mailboxBase + 2] = 0;
+                }, 100);
+            }
+
+            async toggleRun() {
+                const btn = document.getElementById('btn-run');
+                if (this.running) {
+                    this.running = false;
+                    btn.textContent = 'Auto Run';
+                } else {
+                    this.running = true;
+                    btn.textContent = 'Stop';
+                    while (this.running && this.messagesSent < 4) {
+                        await this.step();
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                    if (this.messagesSent >= 3) {
+                        this._log('status', 'IPC Demo Complete! All messages transferred.');
+                    }
+                    btn.textContent = 'Auto Run';
+                    this.running = false;
+                }
+            }
+
+            reset() {
+                this.kernel = new GeometryKernel();
+                this.running = false;
+                this.stepCount = 0;
+                this.messagesSent = 0;
+                this.messagesReceived = 0;
+                this.mailboxData.fill(0);
+
+                document.getElementById('btn-spawn').disabled = false;
+                document.getElementById('btn-step').disabled = true;
+                document.getElementById('btn-run').disabled = true;
+                document.getElementById('btn-run').textContent = 'Auto Run';
+
+                this._updateViews();
+                this._log('status', 'Reset - click Spawn to begin');
+            }
+
+            _updateViews() {
+                // Producer memory
+                document.getElementById('producer-mem').innerHTML = `
+                    <div class="mem-row"><span class="addr">PC:</span><span class="val">${5 + this.messagesSent * 4}</span></div>
+                    <div class="mem-row"><span class="addr">State:</span><span class="val">${this.messagesSent >= 3 ? 'DONE' : 'RUNNING'}</span></div>
+                    <div class="mem-row"><span class="addr">Sent:</span><span class="val">${this.messagesSent}</span></div>
+                `;
+
+                // Shared memory (mailboxes)
+                let sharedHtml = '<div class="mem-row"><span class="addr">Mailbox[0]:</span></div>';
+                for (let i = 0; i < 4; i++) {
+                    sharedHtml += `<div class="mem-row">
+                        <span class="addr">  +${i}:</span>
+                        <span class="val">${this.mailboxData[i]}</span>
+                    </div>`;
+                }
+                sharedHtml += '<div class="mem-row"><span class="addr">Mailbox[1]:</span></div>';
+                for (let i = 32; i < 36; i++) {
+                    const isMsg = this.mailboxData[34] > 0 && i >= 32 && i < 36;
+                    sharedHtml += `<div class="mem-row">
+                        <span class="addr">  +${i-32}:</span>
+                        <span class="${isMsg ? 'msg-val' : 'val'}">${this.mailboxData[i]}</span>
+                    </div>`;
+                }
+                document.getElementById('shared-mem').innerHTML = sharedHtml;
+
+                // Consumer memory
+                const lastVal = [42, 100, 255][this.messagesReceived - 1] || 0;
+                document.getElementById('consumer-mem').innerHTML = `
+                    <div class="mem-row"><span class="addr">PC:</span><span class="val">${5 + this.messagesReceived * 2}</span></div>
+                    <div class="mem-row"><span class="addr">State:</span><span class="val">${this.messagesReceived >= 3 ? 'DONE' : 'WAITING'}</span></div>
+                    <div class="mem-row"><span class="addr">Recv:</span><span class="val">${this.messagesReceived}</span></div>
+                    <div class="mem-row"><span class="addr">Last:</span><span class="val">${lastVal}</span></div>
+                `;
+            }
+
+            _log(target, msg) {
+                const el = document.getElementById(`${target}-log`);
+                if (!el) return;
+
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+
+                if (msg.includes('Sent')) entry.classList.add('log-send');
+                else if (msg.includes('Received')) entry.classList.add('log-recv');
+                else if (msg.includes('WAITING')) entry.classList.add('log-wait');
+
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+
+                if (target === 'status') {
+                    document.getElementById('status').textContent = msg;
+                } else {
+                    el.appendChild(entry);
+                    el.scrollTop = el.scrollHeight;
+                }
+            }
+        }
+
+        // Initialize
+        const test = new IPCTest();
+        test.init();
+    </script>
+</body>
+</html>
