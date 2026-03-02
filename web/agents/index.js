@@ -7,6 +7,8 @@
 export {
     AGENTS,
     IPC,
+    SYS,
+    IO,
     PROC_STATE,
     AgentGenerator,
     generateCompositorAgent,
