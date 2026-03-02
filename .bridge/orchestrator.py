@@ -5,8 +5,19 @@ import signal
 import threading
 import requests
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Neural Loopback: Import Open Brain integration
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+try:
+    from open_brain.agent_bridge import store_bridge_fragment, refresh_substrate
+    OPEN_BRAIN_ENABLED = True
+except ImportError as e:
+    print(f"[Orchestrator] Open Brain integration disabled: {e}")
+    OPEN_BRAIN_ENABLED = False
 
 # ═════════════════════════════════════════════════════════════════
 # PATHS AND CONFIGURATION
@@ -131,6 +142,18 @@ def update_system_state(state, last_agent=None):
 
     SYSTEM_FILE.write_text(content)
     print(f"[Orchestrator] Transitioned to state: {state}")
+
+    # Neural Loopback: Store state transition in Open Brain
+    if OPEN_BRAIN_ENABLED:
+        try:
+            store_bridge_fragment(
+                fragment_type="system",
+                agent=last_agent or "Orchestrator",
+                content=f"State transition: {state}",
+                state_transition=state
+            )
+        except Exception as e:
+            print(f"[Orchestrator] Warning: Failed to store in Open Brain: {e}", file=sys.stderr)
 
 
 def update_watchdog_heartbeat():
@@ -323,6 +346,13 @@ def _write_plan_from_cli(content, agent_name):
     PLAN_FILE.write_text(plan_content)
     update_system_state("WAITING_FOR_EXECUTION", agent_name)
     print(f"[Orchestrator] Plan written to plan.ascii by {agent_name}")
+
+    # Neural Loopback: Store plan in Open Brain
+    if OPEN_BRAIN_ENABLED:
+        try:
+            store_bridge_fragment("plan", agent_name, content[:2000])
+        except Exception as e:
+            print(f"[Orchestrator] Warning: Failed to store plan in Open Brain: {e}", file=sys.stderr)
 
 
 def _write_plan_from_lm_studio(content):
