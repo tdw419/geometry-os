@@ -487,3 +487,6 @@ export function generateAllAgents() {
         ['network', generateNetworkAgent()]
     ]);
 }
+
+// Export syscall and I/O constants
+export { SYS, IO };
