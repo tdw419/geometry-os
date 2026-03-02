@@ -1,12 +1,10 @@
+import { Process } from './Process.js';
+import { Scheduler } from './Scheduler.js';
+
 /**
  * Geometry OS Process Manager
  *
  * Manages multi-process execution with memory isolation and IPC.
- * Memory Layout:
- *   - Shared Memory: RAM[0-1023] - Inter-process communication
- *   - Process 0: RAM[1024-2047]
- *   - Process 1: RAM[2048-3071]
- *   - Process N: RAM[1024 + N*1024 - 1024 + (N+1)*1024]
  */
 
 export class ProcessManager {
@@ -14,7 +12,9 @@ export class ProcessManager {
         this.device = null;
         this.pipeline = null;
         this.processes = new Map();
+        this.scheduler = new Scheduler();
         this.maxProcesses = 16;
+        this.tickCount = 0;
 
         // Memory configuration
         this.SHARED_MEM_BASE = 0;
@@ -130,12 +130,16 @@ export class ProcessManager {
         const memBase = this.PROCESS_MEM_BASE + (pid * this.PROCESS_MEM_SIZE);
 
         console.log(`[ProcessManager] Spawning PID ${pid}`);
-        console.log(`  Program offset: ${programOffset}`);
-        console.log(`  Memory region: [${memBase}-${memBase + this.PROCESS_MEM_SIZE - 1}]`);
 
         // Load binary into program buffer at dedicated offset
         const binary = new Uint32Array(spirvBinary);
         this.device.queue.writeBuffer(this.programBuffer, programOffset, binary);
+
+        const proc = new Process(pid, options.name || `pid_${pid}`, {
+            priority: options.priority || 5,
+            memBase,
+            memLimit: this.PROCESS_MEM_SIZE
+        });
 
         // Create PCB entry
         // Layout: pid, pc, sp, mem_base, mem_limit, status, priority, waiting_on, msg_count, reserved[7]
@@ -147,20 +151,13 @@ export class ProcessManager {
         pcb[3] = memBase;             // Memory base
         pcb[4] = this.PROCESS_MEM_SIZE; // Memory limit
         pcb[5] = 1;                   // Status: Running
-        pcb[6] = options.priority || 5; // Priority
+        pcb[6] = proc.priority;       // Priority/Cycles
         pcb[7] = 0xFF;                // waiting_on (0xFF = none/any)
         pcb[8] = 0;                   // msg_count
         pcb[15] = programOffset;      // Store program offset in last reserved word
 
         this.device.queue.writeBuffer(this.pcbBuffer, pid * 16 * 4, pcb);
-
-        this.processes.set(pid, {
-            pid,
-            status: 'running',
-            memBase,
-            memLimit: this.PROCESS_MEM_SIZE,
-            programOffset
-        });
+        this.processes.set(pid, proc);
     }
 
     /**
@@ -246,8 +243,8 @@ export class ProcessManager {
     }
 
     /**
-     * Read PCB table to get process states
-     * @returns {Promise<Object[]>}
+     * Read PCB table to get process states and update local Process objects
+     * @returns {Promise<Process[]>}
      */
     async readProcessStates() {
         const encoder = this.device.createCommandEncoder();
@@ -262,20 +259,45 @@ export class ProcessManager {
         for (let i = 0; i < 16; i++) {
             const base = i * 16;
             const pid = pcbData[base + 0];
-            const pc = pcbData[base + 1];
-            const sp = pcbData[base + 2];
             const status = pcbData[base + 5];
 
             if (pid !== 0 || status !== 0) {
-                states.push({
-                    pid,
-                    pc,
-                    sp,
-                    status: ['idle', 'running', 'waiting', 'exit'][status] || 'unknown'
+                let proc = this.processes.get(pid);
+                if (!proc) {
+                    proc = new Process(pid, `pid_${pid}`);
+                    this.processes.set(pid, proc);
+                }
+
+                proc.update({
+                    pc: pcbData[base + 1],
+                    sp: pcbData[base + 2],
+                    status: ['idle', 'running', 'waiting', 'exit'][status] || 'unknown',
+                    cycles: pcbData[base + 6]
                 });
+                states.push(proc);
             }
         }
+
+        this.tickCount++;
+        if (this.tickCount % 10 === 0) {
+            this.scheduler.boostPriorities(this.processes);
+            this._syncPriorities();
+        }
+
         return states;
+    }
+
+    /**
+     * Sync CPU-side priorities back to GPU
+     */
+    _syncPriorities() {
+        for (const [pid, proc] of this.processes) {
+            if (proc.status !== 'exit') {
+                const data = new Uint32Array([proc.priority]);
+                // Priority is at offset 6 in the PCB (6 * 4 bytes)
+                this.device.queue.writeBuffer(this.pcbBuffer, (pid * 16 * 4) + (6 * 4), data);
+            }
+        }
     }
 
     /**
