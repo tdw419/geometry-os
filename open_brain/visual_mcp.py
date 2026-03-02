@@ -7,14 +7,16 @@ from io import BytesIO
 from .db import Database
 from .memory_glyph import MemoryGlyphEncoder
 from .embeddings import EmbeddingGenerator
+from .spirv_encoder import MemorySpirvEncoder
 
 
 class VisualMCPServer:
-    """MCP server exposing visual memory tools.
+    """MCP server exposing visual and executable memory tools.
 
     Tools provided:
     - query_memory: Retrieve memories as TSV (token-efficient)
     - query_visual_memory: Retrieve memories as glyph atlas
+    - query_spirv_memory: Retrieve memories as raw SPIR-V binary (executable)
     - store_memory: Store new memory entry
     - search_memory: Semantic search using embeddings
     """
@@ -27,6 +29,7 @@ class VisualMCPServer:
     ):
         self.db = Database(connection_string)
         self.encoder = MemoryGlyphEncoder()
+        self.spirv_encoder = MemorySpirvEncoder()
         self.embedding_gen = EmbeddingGenerator(
             backend=embedding_backend,
             lm_studio_url=lm_studio_url
@@ -76,6 +79,20 @@ class VisualMCPServer:
                             "type": "integer",
                             "description": "Output atlas size in pixels",
                             "default": 512
+                        }
+                    }
+                }
+            },
+            {
+                "name": "query_spirv_memory",
+                "description": "Query memories as raw SPIR-V binary (executable module). This provides memory data for GPU-native processes in Geometry OS.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum memories to encode",
+                            "default": 100
                         }
                     }
                 }
@@ -138,6 +155,8 @@ class VisualMCPServer:
             return await self._query_memory(arguments)
         elif name == "query_visual_memory":
             return await self._query_visual_memory(arguments)
+        elif name == "query_spirv_memory":
+            return await self._query_spirv_memory(arguments)
         elif name == "store_memory":
             return await self._store_memory(arguments)
         elif name == "search_memory":
@@ -153,6 +172,29 @@ class VisualMCPServer:
             "format": "tsv",
             "content": tsv_content,
             "row_count": len(tsv_content.split("\n")) - 1 if tsv_content else 0
+        }
+
+    async def _query_spirv_memory(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Query memories as raw SPIR-V binary."""
+        limit = args.get("limit", 100)
+        memories = await self.db.get_visual_memories(limit=limit)
+
+        if not memories:
+            return {
+                "format": "spirv",
+                "binary_base64": "",
+                "message": "No memories found"
+            }
+
+        # Encode to SPIR-V
+        binary_data = self.spirv_encoder.encode_memories(memories)
+        binary_base64 = base64.b64encode(binary_data).decode("utf-8")
+
+        return {
+            "format": "spirv",
+            "binary_base64": binary_base64,
+            "memory_count": len(memories),
+            "binary_size": len(binary_data)
         }
 
     async def _query_visual_memory(self, args: Dict[str, Any]) -> Dict[str, Any]:

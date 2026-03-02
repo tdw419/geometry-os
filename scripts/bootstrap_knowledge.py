@@ -279,6 +279,20 @@ async def main():
         logger.error(f"Bootstrap failed: {e}")
         raise
     finally:
+        # Final Step: Export to SPIR-V substrate
+        try:
+            from open_brain.spirv_encoder import MemorySpirvEncoder
+            memories = await db.get_visual_memories(limit=1000)
+            if memories:
+                encoder = MemorySpirvEncoder()
+                spv_data = encoder.encode_memories(memories)
+                output_path = Path(__file__).parent.parent / "web" / "assets" / "memory_substrate.spv"
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(spv_data)
+                logger.info(f"Exported memory substrate to SPIR-V: {output_path} ({len(spv_data)} bytes)")
+        except Exception as se:
+            logger.error(f"Failed to export SPIR-V substrate: {se}")
+
         await db.disconnect()
         logger.info("Disconnected from database")
 
