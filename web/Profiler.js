@@ -1,6 +1,6 @@
 /**
  * Geometry OS Performance Profiler
- * 
+ *
  * GPU-native performance profiling with detailed timing metrics.
  * Identifies hot paths and provides optimization suggestions.
  */
@@ -25,58 +25,67 @@ const TimingCategory = {
     COGNITIVE: 'cognitive'
 };
 
-// Profiler state
+// Profiler state template
 const profilerState = {
     enabled: false,
-    samples: new Map(),
-    averages: new Map(),
-    hotPaths: [],
-    recommendations: [],
+    samples: null,  // Map
+    averages: null, // Map
+    hotPaths: null, // Array
+    recommendations: null, // Map
     startTime: 0
 };
 
 export class Profiler {
     constructor(kernel) {
         this.kernel = kernel;
-        this.device = kernel.device;
-        
-        this.state = { ...profilerState };
+        this.device = kernel ? kernel.device : null;
+
+        this.state = {
+            enabled: false,
+            samples: new Map(),
+            averages: new Map(),
+            hotPaths: [],
+            recommendations: new Map(),
+            startTime: 0
+        };
         this.sampleInterval = null;
-        
+
         // GPU resources
         this.timingBuffer = null;
         this.statsBuffer = null;
     }
-    
+
     /**
      * Initialize the profiler.
      */
     async init() {
-        // Create timing buffer for GPU timestamps
-        this.timingBuffer = this.device.createBuffer({
+        if (this.device) {
+            // Create timing buffer for GPU timestamps
+            this.timingBuffer = this.device.createBuffer({
                 size: 256,  // 256 timing entries
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
             });
-        
-        // Create stats buffer
-        this.statsBuffer = this.device.createBuffer({
+
+            // Create stats buffer
+            this.statsBuffer = this.device.createBuffer({
                 size: 1024,  // Profiling stats
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
             });
-        
-        // Enable GPU timestamp queries
-        if (!this.device.features.hasTimestampQuery) {
-            console.warn('[Profiler] GPU timestamps not supported - using CPU timing');
-        } else {
-            console.log('[Profiler] GPU timestamps enabled');
+
+            // Enable GPU timestamp queries
+            if (this.device.features && this.device.features.hasTimestampQuery) {
+                console.log('[Profiler] GPU timestamps enabled');
+            } else {
+                console.warn('[Profiler] GPU timestamps not supported - using CPU timing');
+            }
         }
-        
+
         this.state.enabled = true;
         this.state.startTime = performance.now();
-        
+
         console.log('[Profiler] Initialized');
     }
-    
+
     /**
      * Start profiling session.
      */
@@ -85,20 +94,24 @@ export class Profiler {
             console.warn('[Profiler] Not enabled');
             return;
         }
-        
+
         this.state.samples = new Map();
-        Object.values(TimingCategory).forEach(cat => cat) {
+        this.state.averages = new Map();
+        this.state.hotPaths = [];
+        this.state.recommendations = new Map();
+
+        Object.values(TimingCategory).forEach(cat => {
             this.state.samples.set(cat, []);
         });
-        
+
         // Start sample interval
         this.sampleInterval = setInterval(() => {
             this._analyzeSamples();
         }, 1000 / PROFILER_CONSTANTS.SampleRate);
-        
+
         console.log('[Profiler] Profiling started');
     }
-    
+
     /**
      * Stop profiling session.
      */
@@ -107,22 +120,25 @@ export class Profiler {
             clearInterval(this.sampleInterval);
             this.sampleInterval = null;
         }
-        
+
         // Generate report
-        this._generateReport();
-        
+        const report = this._generateReport();
+
         console.log('[Profiler] Profiling stopped');
+        return report;
     }
-    
+
     /**
      * Mark the start of a timing region.
      */
     begin(category, label) {
         if (!this.state.enabled) return;
-        
-        const samples = this.state.samples.get(category) || [];
+
+        const samples = this.state.samples.get(category);
+        if (!samples) return;
+
         const start = performance.now();
-        
+
         samples.push({
             category,
             label,
@@ -130,16 +146,17 @@ export class Profiler {
             endTime: null
         });
     }
-    
+
     /**
      * Mark the end of a timing region.
      */
     end(category, label) {
         if (!this.state.enabled) return;
-        
-        const samples = this.state.samples.get(category) || [];
-        
-        for (let i = samples.length - 1; i >= 0) {
+
+        const samples = this.state.samples.get(category);
+        if (!samples) return;
+
+        for (let i = samples.length - 1; i >= 0; i--) {
             const sample = samples[i];
             if (!sample.endTime && sample.label === label && sample.category === category) {
                 sample.endTime = performance.now();
@@ -148,26 +165,26 @@ export class Profiler {
             }
         }
     }
-    
+
     /**
      * Update running averages.
      */
     _updateAverages(sample) {
         const category = sample.category;
-        const duration = sample.endTime - sample.startTime;
-        
+        const label = sample.label;
+
         const samples = this.state.samples.get(category);
-        if (!samples) return;
-        
-        const totalDuration = samples.reduce((sum, s) => sum + (s.endTime - s.startTime), 0);
+        if (!samples || samples.length === 0) return;
+
+        const totalDuration = samples.reduce((sum, s) => sum + (s.endTime ? s.endTime - s.startTime : 0), 0);
         const avgDuration = totalDuration / samples.length;
-        
+
         this.state.averages.set(category, {
             avgDuration,
             sampleCount: samples.length,
             lastUpdate: Date.now()
         });
-        
+
         // Check for hot paths
         if (avgDuration > 16) { // More than 16ms average
             const hotPath = this.state.hotPaths.find(p => p.category === category && p.label === label);
@@ -189,7 +206,7 @@ export class Profiler {
             }
         }
     }
-    
+
     /**
      * Generate optimization recommendation.
      */
@@ -250,41 +267,44 @@ export class Profiler {
                 '  - Consider lazy evaluation'
             ]
         };
-        
-        const rec = recommendations[category]?. recommendations[category] : [
+
+        const rec = recommendations[category] || [
             'No specific recommendations available for this category yet'
         ];
-        
+
         this.state.recommendations.set(category, rec);
+        return rec;
     }
-    
+
     /**
      * Analyze collected samples.
      */
     _analyzeSamples() {
         // Group by category
         const byCategory = new Map();
-        
+
         for (const [category, samples] of this.state.samples) {
             if (!byCategory.has(category)) {
                 byCategory.set(category, []);
             }
-            
+
             for (const sample of samples) {
                 if (sample.endTime) {
                     byCategory.get(category).push(sample);
                 }
+            }
         }
-        
+
         // Calculate statistics
         for (const [category, categorySamples] of byCategory) {
+            if (categorySamples.length === 0) continue;
             const totalDuration = categorySamples.reduce((sum, s) => sum + (s.endTime - s.startTime), 0);
             const avgDuration = totalDuration / categorySamples.length;
-            
+
             console.log(`[Profiler] ${category}: avg=${avgDuration.toFixed(2)}ms (${categorySamples.length} samples)`);
         }
     }
-    
+
     /**
      * Generate profiling report.
      */
@@ -294,53 +314,62 @@ export class Profiler {
             enabled: this.state.enabled,
             categories: {},
             hotPaths: [],
-            recommendations: []
+            recommendations: {}
         };
-        
+
         for (const category of Object.values(TimingCategory)) {
             const samples = this.state.samples.get(category) || [];
             const avg = this.state.averages.get(category);
-            
+
             if (samples && samples.length > 0) {
-                report.categories[category] = {
-                    sampleCount: samples.length,
-                    avgDuration: avg?.avgDuration || 0,
-                    minDuration: samples.reduce((min, s) => min + (s.endTime - s.startTime), 0),
-                    maxDuration: samples.reduce((max, s) => Math.max(max, s.endTime - s.startTime), 0)
-                avgMs: avg.avgDuration.toFixed(2),
-                    maxMs: avg.maxDuration.toFixed(2),
-                    p95: avgMs
-                };
+                const durations = samples.filter(s => s.endTime).map(s => s.endTime - s.startTime);
+                if (durations.length > 0) {
+                    const avgMs = (avg?.avgDuration || 0).toFixed(2);
+                    const maxMs = Math.max(...durations).toFixed(2);
+
+                    report.categories[category] = {
+                        sampleCount: samples.length,
+                        avgDuration: avg?.avgDuration || 0,
+                        minDuration: Math.min(...durations),
+                        maxDuration: Math.max(...durations),
+                        avgMs: avgMs,
+                        maxMs: maxMs,
+                        p95: avgMs
+                    };
+                }
             }
         }
-        
+
         report.hotPaths = this.state.hotPaths.map(p => ({
-            ...p,
+            category: p.category,
+            label: p.label,
+            avgDuration: p.avgDuration,
+            occurrences: p.occurrences,
             recommendation: p.recommendation
         }));
-        
-        report.recommendations = {};
+
         for (const [category, recs] of this.state.recommendations) {
             report.recommendations[category] = recs;
         }
-        
+
         // Save report
         this._saveReport(report);
-        
+
         return report;
     }
-    
+
     /**
      * Save report to disk.
      */
     _saveReport(report) {
         const reportPath = '/tmp/geometry_os_profile.json';
         const data = JSON.stringify(report, null, 2);
-        
-        // In a real implementation, you would write to a file or database
-        console.log('[Profiler] Report saved to', reportPath);
+
+        // In browser context, just log
+        console.log('[Profiler] Report generated:', reportPath);
+        console.log('[Profiler] Summary:', JSON.stringify(report, null, 2));
     }
-    
+
     /**
      * Get profiling summary.
      */
@@ -352,114 +381,59 @@ export class Profiler {
             categories: {},
             hotPaths: []
         };
-        
+
         for (const category of Object.values(TimingCategory)) {
             const samples = this.state.samples.get(category) || [];
             const avg = this.state.averages.get(category);
-            
+
             summary.totalSamples += samples?.length || 0;
-            
+
             if (samples && samples.length > 0) {
-                summary.categories[category] = {
-                    count: samples.length,
-                    avgDuration: avg?.avgDuration || 0,
-                    maxDuration: Math.max(...samples.map(s => s.endTime - s.startTime))
-                };
+                const completedSamples = samples.filter(s => s.endTime);
+                if (completedSamples.length > 0) {
+                    summary.categories[category] = {
+                        count: samples.length,
+                        avgDuration: avg?.avgDuration || 0,
+                        maxDuration: Math.max(...completedSamples.map(s => s.endTime - s.startTime))
+                    };
+                }
             }
         }
-        
+
         summary.hotPaths = this.state.hotPaths.map(p => ({
             category: p.category,
             label: p.label,
             avgDuration: p.avgDuration,
             occurrences: p.occurrences
         }));
-        
+
         return summary;
     }
-    
+
     /**
-     * Decorator for timing functions.
+     * Time a synchronous function execution.
      */
-    static profile(category, label) {
-        return function(target, propertyKey, descriptor) {
-            const original = target[label];
-            target[label] = function(...args) {
-                // Start timing
-                const sampleId = Profiler.instance.begin(category, label);
-                
-                try {
-                    // Call original function
-                    const result = original.apply(this, ...args);
-                    
-                    // End timing
-                    Profiler.instance.end(category, label);
-                    
-                    return result;
-                } catch (error) {
-                    // End timing even on error
-                    Profiler.instance.end(category, label);
-                    throw error;
-                }
-            };
-            
-            descriptor.value = original;
-            descriptor.writable = true;
-            descriptor.configurable = true;
-            
-            return descriptor;
-        };
+    timeSync(category, label, fn) {
+        this.begin(category, label);
+        try {
+            return fn();
+        } finally {
+            this.end(category, label);
+        }
     }
-    
+
     /**
-     * Decorator for async timing functions.
+     * Time an async function execution.
      */
-    static asyncProfile(category, label) {
-        return function(target, propertyKey, descriptor) {
-            const original = target[label];
-            target[label] = async function(...args) {
-                const sampleId = Profiler.instance.begin(category, label);
-                
-                try {
-                    const result = await original.apply(this, ...args);
-                    Profiler.instance.end(category, label);
-                    return result;
-                } catch (error) {
-                    Profiler.instance.end(category, label);
-                    throw error;
-                }
-            };
-            
-            descriptor.value = original;
-            descriptor.writable = true;
-            descriptor.configurable = true;
-            
-            return descriptor;
-        };
-    }
-    
-    /**
-     * Decorator for getter timing (no function call overhead).
-     */
-    static getterProfile(category, label) {
-        return function(target, propertyKey, descriptor) {
-            const original = target[propertyKey];
-            descriptor.get = function() {
-                const samples = Profiler.instance.state.samples.get(category) || [];
-                const avg = Profiler.instance.state.averages.get(category);
-                
-                return {
-                    samples: samples.length,
-                    avgDuration: avg?.avgDuration || 0,
-                    lastSample: samples[samples.length - 1]
-                    recentSamples: samples.slice(-10)
-                    p95Duration: avg.avgDuration,
-                    p95: avgMs
-                };
-            };
-        };
+    async timeAsync(category, label, fn) {
+        this.begin(category, label);
+        try {
+            return await fn();
+        } finally {
+            this.end(category, label);
+        }
     }
 }
 
-// Export singleton
-export const Profiler = new Profiler();
+// Export class and constants
+export { TimingCategory, PROFILER_CONSTANTS };
