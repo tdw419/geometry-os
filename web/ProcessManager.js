@@ -303,7 +303,8 @@ export class ProcessManager {
 
         this.tickCount++;
         if (this.tickCount % 10 === 0) {
-            this.scheduler.boostPriorities(this.processes);
+            // Run scheduler tick for priority aging and decay
+            this.scheduler.tick(this.processes);
             this._syncPriorities();
         }
 

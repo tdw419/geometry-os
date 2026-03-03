@@ -7,7 +7,7 @@ export class Process {
     constructor(pid, name, options = {}) {
         this.pid = pid;
         this.name = name;
-        this.status = 'idle'; // idle, running, waiting, exit
+        this.status = 'idle'; // idle, running, waiting, ready, exit, error
         this.priority = options.priority || 5;
         
         // Memory metrics
@@ -35,6 +35,8 @@ export class Process {
      * Is the process currently runnable?
      */
     isRunnable() {
-        return this.status === 'running' || this.status === 'idle';
+        return this.status === 'running' ||
+               this.status === 'idle' ||
+               this.status === 'ready';
     }
 }

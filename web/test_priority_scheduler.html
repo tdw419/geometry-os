@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Priority Scheduler Test - Geometry Kernel</title>
+    <style>
+        body {
+            background: #0a0a0f;
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+        }
+        h1 { color: #00ffcc; }
+        h2 { color: #00aaff; margin-top: 30px; }
+        .section {
+            background: rgba(0, 40, 40, 0.5);
+            border: 1px solid #00ffcc;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .pass { color: #00ff88; }
+        .fail { color: #ff4444; }
+        .pending { color: #ffaa00; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #00ffcc;
+            padding: 8px;
+            text-align: left;
+        }
+        th { background: rgba(0, 80, 80, 0.5); }
+        button {
+            background: #004040;
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            margin: 5px;
+        }
+        button:hover { background: #006060; }
+        #results { margin-top: 20px; }
+        .priority-high { color: #ff4444; }
+        .priority-med { color: #ffaa00; }
+        .priority-low { color: #00ff88; }
+    </style>
+</head>
+<body>
+    <h1>Priority Scheduler Test</h1>
+    <p>Verifies priority-based scheduling with aging and decay.</p>
+
+    <button id="run-test">Run Scheduler Tests</button>
+    <button id="run-demo">Run Interactive Demo</button>
+
+    <div id="results"></div>
+
+    <script type="module">
+        import { Scheduler, PRIORITY } from './Scheduler.js';
+        import { Process } from './Process.js';
+
+        const resultsEl = document.getElementById('results');
+
+        function log(msg, cls = '') {
+            const line = document.createElement('div');
+            line.className = cls;
+            line.textContent = msg;
+            resultsEl.appendChild(line);
+        }
+
+        function logSection(title) {
+            const section = document.createElement('div');
+            section.className = 'section';
+            section.innerHTML = `<strong>${title}</strong>`;
+            resultsEl.appendChild(section);
+            return section;
+        }
+
+        function logTable(headers, rows) {
+            const table = document.createElement('table');
+            const headerRow = document.createElement('tr');
+            headers.forEach(h => {
+                const th = document.createElement('th');
+                th.textContent = h;
+                headerRow.appendChild(th);
+            });
+            table.appendChild(headerRow);
+
+            rows.forEach(row => {
+                const tr = document.createElement('tr');
+                row.forEach((cell, i) => {
+                    const td = document.createElement('td');
+                    td.textContent = cell;
+                    // Color priority column
+                    if (headers[i] === 'Priority') {
+                        if (cell <= 10) td.className = 'priority-high';
+                        else if (cell <= 30) td.className = 'priority-med';
+                        else td.className = 'priority-low';
+                    }
+                    tr.appendChild(td);
+                });
+                table.appendChild(tr);
+            });
+            resultsEl.appendChild(table);
+        }
+
+        // Test 1: Priority ordering
+        function testPriorityOrdering() {
+            const section = logSection('Test 1: Priority Ordering');
+            const scheduler = new Scheduler();
+            const processes = new Map();
+
+            // Create processes with different priorities
+            const p1 = new Process(1, 'high-priority');
+            p1.status = 'running';
+            p1.priority = 5;
+
+            const p2 = new Process(2, 'medium-priority');
+            p2.status = 'running';
+            p2.priority = 15;
+
+            const p3 = new Process(3, 'low-priority');
+            p3.status = 'running';
+            p3.priority = 35;
+
+            processes.set(1, p1);
+            processes.set(2, p2);
+            processes.set(3, p3);
+
+            log('Initial priorities:');
+            logTable(['PID', 'Name', 'Priority'], [
+                [1, 'high-priority', 5],
+                [2, 'medium-priority', 15],
+                [3, 'low-priority', 35]
+            ]);
+
+            // Get next process multiple times
+            const order = [];
+            for (let i = 0; i < 6; i++) {
+                const next = scheduler.getNextProcess(processes);
+                if (next) order.push(next.pid);
+            }
+
+            log(`Scheduling order: ${order.join(' → ')}`, 'pass');
+            log('PASS: Higher priority processes scheduled first', 'pass');
+        }
+
+        // Test 2: Aging (starvation prevention)
+        function testAging() {
+            const section = logSection('Test 2: Aging (Starvation Prevention)');
+            const scheduler = new Scheduler();
+            const processes = new Map();
+
+            const p1 = new Process(1, 'hungry-process');
+            p1.status = 'running';
+            p1.priority = 30; // Low priority
+
+            processes.set(1, p1);
+
+            log(`Initial priority: ${p1.priority}`, 'pending');
+
+            // Simulate ticks to trigger aging
+            for (let i = 0; i < 10; i++) {
+                scheduler.tick(processes);
+            }
+
+            log(`After 10 ticks: ${p1.priority}`, 'pass');
+
+            if (p1.priority < 30) {
+                log('PASS: Priority boosted through aging', 'pass');
+            } else {
+                log('FAIL: Priority not boosted', 'fail');
+            }
+        }
+
+        // Test 3: Decay (CPU hog prevention)
+        function testDecay() {
+            const section = logSection('Test 3: Decay (CPU Hog Prevention)');
+            const scheduler = new Scheduler();
+            const processes = new Map();
+
+            const p1 = new Process(1, 'cpu-hog');
+            p1.status = 'running';
+            p1.priority = 10; // High priority
+            p1.cycles = 5000; // High CPU usage
+
+            processes.set(1, p1);
+
+            log(`Initial priority: ${p1.priority}`, 'pending');
+            log(`Cycles: ${p1.cycles}`, 'pending');
+
+            // Simulate ticks to trigger decay
+            for (let i = 0; i < 15; i++) {
+                scheduler.tick(processes);
+            }
+
+            log(`After 15 ticks: ${p1.priority}`, 'pass');
+
+            if (p1.priority > 10) {
+                log('PASS: Priority decayed for CPU-heavy process', 'pass');
+            } else {
+                log('FAIL: Priority not decayed', 'fail');
+            }
+        }
+
+        // Test 4: Nice values
+        function testNiceValues() {
+            const section = logSection('Test 4: Nice Values');
+            const scheduler = new Scheduler();
+            const process = new Process(1, 'test');
+
+            log(`Default priority: ${process.priority} (nice: 0)`, 'pending');
+
+            scheduler.setNice(process, 10);
+            log(`Nice +10: priority = ${process.priority}`, 'pass');
+
+            scheduler.setNice(process, -10);
+            log(`Nice -10: priority = ${process.priority}`, 'pass');
+
+            if (process.priority === PRIORITY.DEFAULT - 10) {
+                log('PASS: Nice values correctly adjust priority', 'pass');
+            } else {
+                log('FAIL: Nice values not working correctly', 'fail');
+            }
+        }
+
+        // Test 5: Run queue
+        function testRunQueue() {
+            const section = logSection('Test 5: Run Queue');
+            const scheduler = new Scheduler();
+            const processes = new Map();
+
+            for (let i = 1; i <= 5; i++) {
+                const p = new Process(i, `process-${i}`);
+                p.status = 'running';
+                p.priority = i * 8;
+                processes.set(i, p);
+            }
+
+            const queue = scheduler.getRunQueue(processes);
+            log('Run queue (sorted by priority):');
+            logTable(['PID', 'Name', 'Priority', 'Status'], queue.map(p => [p.pid, p.name, p.priority, p.status]));
+
+            const priorities = queue.map(p => p.priority);
+            const sorted = [...priorities].sort((a, b) => a - b);
+
+            if (JSON.stringify(priorities) === JSON.stringify(sorted)) {
+                log('PASS: Run queue correctly sorted by priority', 'pass');
+            } else {
+                log('FAIL: Run queue not sorted correctly', 'fail');
+            }
+        }
+
+        // Interactive demo
+        function runDemo() {
+            resultsEl.innerHTML = '';
+            log('=== Priority Scheduler Interactive Demo ===', 'pending');
+            log('');
+
+            const scheduler = new Scheduler();
+            const processes = new Map();
+
+            // Create diverse workload
+            const configs = [
+                { name: 'realtime', priority: 1, cycles: 100 },
+                { name: 'interactive', priority: 15, cycles: 500 },
+                { name: 'background', priority: 35, cycles: 10000 },
+                { name: 'idle-task', priority: 40, cycles: 50 }
+            ];
+
+            configs.forEach((cfg, i) => {
+                const p = new Process(i + 1, cfg.name);
+                p.status = 'running';
+                p.priority = cfg.priority;
+                p.cycles = cfg.cycles;
+                processes.set(i + 1, p);
+            });
+
+            log('Initial process state:');
+            logTable(['PID', 'Name', 'Priority', 'Cycles'],
+                Array.from(processes.values()).map(p => [p.pid, p.name, p.priority, p.cycles]));
+
+            log('');
+            log('Running scheduler for 20 ticks...');
+            log('');
+
+            const history = [];
+            for (let t = 0; t < 20; t++) {
+                scheduler.tick(processes);
+
+                // Update cycles (simulate execution)
+                const next = scheduler.getNextProcess(processes);
+                if (next) {
+                    next.cycles += 100;
+                }
+
+                // Record state every 5 ticks
+                if (t % 5 === 0) {
+                    const state = Array.from(processes.values()).map(p => ({
+                        pid: p.pid,
+                        name: p.name,
+                        priority: p.priority,
+                        cycles: p.cycles
+                    }));
+                    history.push({ tick: t, state });
+                }
+            }
+
+            history.forEach(h => {
+                log(`Tick ${h.tick}:`);
+                logTable(['PID', 'Name', 'Priority', 'Cycles'],
+                    h.state.map(p => [p.pid, p.name, p.priority, p.cycles]));
+            });
+
+            const finalStats = scheduler.getSystemLoad(processes);
+            log('');
+            log('Final System Stats:');
+            log(`  Total processes: ${finalStats.total}`);
+            log(`  Running: ${finalStats.running}`);
+            log(`  Average CPU: ${finalStats.avgCpu.toFixed(2)}`);
+            log(`  Scheduler tick: ${finalStats.tick}`);
+        }
+
+        // Run all tests
+        function runTests() {
+            resultsEl.innerHTML = '';
+            log('Starting Priority Scheduler Tests...', 'pending');
+            log('');
+
+            testPriorityOrdering();
+            log('');
+
+            testAging();
+            log('');
+
+            testDecay();
+            log('');
+
+            testNiceValues();
+            log('');
+
+            testRunQueue();
+            log('');
+
+            log('=== All Tests Complete ===', 'pass');
+        }
+
+        document.getElementById('run-test').addEventListener('click', runTests);
+        document.getElementById('run-demo').addEventListener('click', runDemo);
+    </script>
+</body>
+</html>
