@@ -67,6 +67,73 @@ def register_glyphs():
     add_glyph('clr', 144, g=0x81, is_instruction=True, sym_type=SYM_GRID)
     add_glyph('=', 133, g=0x21, is_instruction=True, sym_type=SYM_GRID)
 
+    # ========================================
+    # MORPHOLOGICAL VISUAL LANGUAGE (160-199)
+    # Self-hosting compiler glyphs
+    # ========================================
+
+    # Arithmetic Operations (FADD, FSUB, FMUL, FDIV)
+    add_glyph('⊕', 160, r=255, g=100, b=100, is_instruction=True, sym_type=SYM_ROT_90)   # Circle-Plus = FADD
+    add_glyph('⊖', 161, r=255, g=100, b=100, is_instruction=True, sym_type=SYM_ROT_90)   # Circle-Minus = FSUB
+    add_glyph('⊗', 162, r=255, g=100, b=100, is_instruction=True, sym_type=SYM_ROT_90)   # Circle-Times = FMUL
+    add_glyph('⊘', 163, r=255, g=100, b=100, is_instruction=True, sym_type=SYM_ROT_90)   # Circle-Div = FDIV
+
+    # Memory Operations (STORE, LOAD, SHARED_STORE, SHARED_LOAD)
+    add_glyph('→', 164, r=100, g=255, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Arrow-Right = STORE
+    add_glyph('←', 165, r=100, g=255, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Arrow-Left = LOAD
+    add_glyph('⇒', 166, r=100, g=255, b=255, is_instruction=True, sym_type=SYM_ASYMMETRIC)  # Double-Arrow-R = SHARED_STORE
+    add_glyph('⇐', 167, r=100, g=255, b=255, is_instruction=True, sym_type=SYM_ASYMMETRIC)  # Double-Arrow-L = SHARED_LOAD
+
+    # Control Flow (JMP, JZ, JNZ, LABEL, RETURN)
+    add_glyph('↻', 168, r=255, g=200, b=100, is_instruction=True, sym_type=SYM_ROT_90)     # Loop = JMP
+    add_glyph('∅', 169, r=255, g=150, b=50, is_instruction=True, sym_type=SYM_INV_POINT)   # Empty = JZ
+    add_glyph('◉', 170, r=255, g=200, b=50, is_instruction=True, sym_type=SYM_ROT_90)     # Diamond = JNZ
+    add_glyph('█', 171, r=150, g=150, b=255, is_instruction=True, sym_type=SYM_GRID)       # Block = LABEL
+    add_glyph('▣', 172, r=255, g=100, b=100, is_instruction=True, sym_type=SYM_GRID)       # End-Block = RETURN
+
+    # IPC Operations (MSG_SEND, MSG_RECV, MSG_PEEK)
+    add_glyph('✉', 173, r=255, g=255, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)  # Envelope = MSG_SEND
+    add_glyph('📥', 174, r=100, g=255, b=255, is_instruction=True, sym_type=SYM_ASYMMETRIC)  # Inbox = MSG_RECV
+    add_glyph('👁', 175, r=255, g=200, b=200, is_instruction=True, sym_type=SYM_INV_POINT)  # Eye = MSG_PEEK
+
+    # System Operations (SYSCALL, YIELD, CONSTANT)
+    add_glyph('⚡', 176, r=255, g=255, b=50, is_instruction=True, sym_type=SYM_ROT_90)       # Lightning = SYSCALL
+    add_glyph('⏸', 177, r=200, g=200, b=255, is_instruction=True, sym_type=SYM_ROT_90)       # Pause = YIELD
+    add_glyph('◇', 178, r=255, g=255, b=255, is_instruction=True, sym_type=SYM_ROT_90)       # Diamond = CONSTANT
+
+    # Comparison Operations
+    add_glyph('≟', 179, r=255, g=200, b=100, is_instruction=True, sym_type=SYM_INV_POINT)    # Question = CMP_EQ
+    add_glyph('≠', 180, r=255, g=100, b=100, is_instruction=True, sym_type=SYM_ROT_90)       # Not-Equal = CMP_NE
+    add_glyph('≤', 181, r=100, g=255, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Less-Equal = CMP_LE
+    add_glyph('≥', 182, r=100, g=255, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Greater-Equal = CMP_GE
+
+    # Stack Operations
+    add_glyph('⬆', 183, r=100, g=255, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Up-Arrow = PUSH
+    add_glyph('⬇', 184, r=100, g=255, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Down-Arrow = POP
+    add_glyph('⇄', 185, r=100, g=255, b=255, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Swap-Arrow = SWAP
+    add_glyph('⊗', 186, r=255, g=150, b=50, is_instruction=True, sym_type=SYM_ROT_90)        # Overlap = DUP
+
+    # Process/Agent Glyphs
+    add_glyph('▶', 187, r=100, g=255, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Play = SPAWN
+    add_glyph('⏹', 188, r=255, g=100, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Stop = KILL
+    add_glyph('🔄', 189, r=100, g=200, b=255, is_instruction=True, sym_type=SYM_ROT_90)      # Refresh = RESTART
+
+    # Semantic/Memory Glyphs
+    add_glyph('💠', 190, r=100, g=200, b=255, is_instruction=True, sym_type=SYM_ROT_90)      # Crystal = EMBED
+    add_glyph('🔮', 191, r=200, g=100, b=255, is_instruction=True, sym_type=SYM_ROT_90)      # Crystal-Ball = PREDICT
+    add_glyph('🧠', 192, r=255, g=200, b=200, is_instruction=True, sym_type=SYM_ROT_90)      # Brain = THINK
+
+    # Hilbert/Spatial Glyphs
+    add_glyph('🌀', 193, r=100, g=255, b=200, is_instruction=True, sym_type=SYM_ROT_90)      # Spiral = HILBERT_ENCODE
+    add_glyph('📍', 194, r=255, g=100, b=100, is_instruction=True, sym_type=SYM_INV_POINT)   # Pin = HILBERT_DECODE
+    add_glyph('🗺', 195, r=100, g=200, b=255, is_instruction=True, sym_type=SYM_GRID)        # Map = NAVIGATE
+
+    # Compiler Glyphs
+    add_glyph('📝', 196, r=255, g=200, b=100, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Memo = PARSE
+    add_glyph('🔨', 197, r=150, g=150, b=255, is_instruction=True, sym_type=SYM_ASYMMETRIC)   # Hammer = COMPILE
+    add_glyph('✅', 198, r=100, g=255, b=100, is_instruction=True, sym_type=SYM_ROT_90)       # Check = VERIFY
+    add_glyph('❌', 199, r=255, g=100, b=100, is_instruction=True, sym_type=SYM_ROT_90)       # X = ERROR
+
 def find_font():
     """Find a suitable monospace font."""
     font_paths = [
