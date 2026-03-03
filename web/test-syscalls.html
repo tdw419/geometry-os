@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Syscall Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #00ff88;
+        }
+        #canvas-container {
+            position: relative;
+            border: 2px solid #00ff88;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #gpu-canvas {
+            width: 800px;
+            height: 500px;
+            background: #111;
+            cursor: crosshair;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+            width: 800px;
+        }
+        .panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .panel h3 {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        .value {
+            font-size: 18px;
+            color: #00ff88;
+        }
+        .mouse-pos { color: #ff8800; }
+        .key-state { color: #00aaff; }
+        .syscall-log {
+            grid-column: span 2;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #222;
+        }
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+        .error { color: #ff4444; }
+        .success { color: #00ff88; }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS - Syscall Test</h1>
+
+    <div id="canvas-container">
+        <canvas id="gpu-canvas" width="800" height="500"></canvas>
+    </div>
+
+    <div class="dashboard">
+        <div class="panel">
+            <h3>Mouse Position</h3>
+            <div class="value mouse-pos" id="mouse-pos">X: 0, Y: 0</div>
+        </div>
+        <div class="panel">
+            <h3>Mouse Buttons</h3>
+            <div class="value" id="mouse-btns">None</div>
+        </div>
+        <div class="panel">
+            <h3>Last Key</h3>
+            <div class="value key-state" id="last-key">None</div>
+        </div>
+        <div class="panel">
+            <h3>I/O Agent Heartbeat</h3>
+            <div class="value" id="io-heartbeat">0</div>
+        </div>
+        <div class="panel syscall-log">
+            <h3>Syscall Log</h3>
+            <div id="syscall-log"></div>
+        </div>
+    </div>
+
+    <div id="status">Initializing...</div>
+
+    <script type="module">
+        import { GeometryKernel } from './GeometryKernel.js';
+        import { SyscallManager, IO, SYS } from './SyscallManager.js';
+        import { generateIOAgent, AGENTS } from './agents/AgentGenerator.js';
+
+        const canvas = document.getElementById('gpu-canvas');
+        const statusEl = document.getElementById('status');
+        const mousePosEl = document.getElementById('mouse-pos');
+        const mouseBtnsEl = document.getElementById('mouse-btns');
+        const lastKeyEl = document.getElementById('last-key');
+        const ioHeartbeatEl = document.getElementById('io-heartbeat');
+        const syscallLogEl = document.getElementById('syscall-log');
+
+        function log(msg) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            syscallLogEl.prepend(entry);
+        }
+
+        async function init() {
+            try {
+                // Initialize kernel
+                const kernel = new GeometryKernel();
+                await kernel.init();
+                statusEl.innerHTML = '<span class="success">Kernel initialized</span>';
+                log('Kernel ready');
+
+                // Initialize syscall manager
+                const syscalls = new SyscallManager(kernel);
+                syscalls.attach(canvas);
+                log('Syscall manager attached');
+
+                // Spawn I/O agent
+                const ioBinary = generateIOAgent();
+                const pid = await kernel.spawnProcess(ioBinary, 'I/O Agent');
+                log(`Spawned I/O Agent (PID ${pid})`);
+
+                // Main loop
+                let frameCount = 0;
+                async function step() {
+                    // Sync I/O to GPU
+                    await syscalls.syncToGPU();
+
+                    // Run kernel step
+                    await kernel.step();
+
+                    // Process any pending syscalls
+                    await syscalls.processSyscalls();
+
+                    // Read shared memory for display
+                    const shared = await kernel.readSharedMemory(0, 60);
+
+                    // Update dashboard
+                    const heartbeat = Math.floor(shared[AGENTS.IO.heartbeat] || 0);
+                    ioHeartbeatEl.textContent = heartbeat;
+
+                    const mousePacked = Math.floor(shared[56] || 0);
+                    const mouseX = (mousePacked >> 16) & 0xFFFF;
+                    const mouseY = mousePacked & 0xFFFF;
+                    mousePosEl.textContent = `X: ${mouseX}, Y: ${mouseY}`;
+
+                    const btns = Math.floor(shared[IO.MOUSE_BTN] || 0);
+                    const btnNames = [];
+                    if (btns & 1) btnNames.push('Left');
+                    if (btns & 2) btnNames.push('Right');
+                    if (btns & 4) btnNames.push('Middle');
+                    mouseBtnsEl.textContent = btnNames.length ? btnNames.join(', ') : 'None';
+
+                    frameCount++;
+                    if (frameCount % 60 === 0) {
+                        log(`Frame ${frameCount}: Mouse(${mouseX}, ${mouseY}) HB=${heartbeat}`);
+                    }
+
+                    requestAnimationFrame(step);
+                }
+
+                step();
+                log('Main loop started');
+
+            } catch (err) {
+                statusEl.innerHTML = `<span class="error">Error: ${err.message}</span>`;
+                console.error(err);
+            }
+        }
+
+        // Track last key
+        window.addEventListener('keydown', (e) => {
+            lastKeyEl.textContent = `${e.key} (code: ${e.keyCode})`;
+        });
+
+        init();
+    </script>
+</body>
+</html>

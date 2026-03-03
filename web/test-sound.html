@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sound System Test - Geometry OS</title>
+    <style>
+        body {
+            background: #0a0a14;
+            color: #00ffcc;
+            font-family: monospace;
+            padding: 20px;
+        }
+        button {
+            background: #001a1a;
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            padding: 15px 30px;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+        button:hover { background: #00ffcc; color: #000; }
+        #log {
+            background: #000;
+            border: 1px solid #333;
+            padding: 10px;
+            margin-top: 20px;
+            min-height: 200px;
+            font-family: monospace;
+        }
+        .success { color: #00ff00; }
+        .error { color: #ff3366; }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS Sound System Test</h1>
+    <p>Testing 440Hz tone for 500ms</p>
+    <button id="testBtn">Play 440Hz Tone (500ms)</button>
+    <div id="log"></div>
+
+    <script type="module">
+        import { SoundSystem } from './SoundSystem.js';
+
+        const log = document.getElementById('log');
+        const testBtn = document.getElementById('testBtn');
+
+        function addLog(msg, type = '') {
+            const line = document.createElement('div');
+            line.className = type;
+            line.textContent = `[${new Date().toISOString()}] ${msg}`;
+            log.appendChild(line);
+            console.log(msg);
+        }
+
+        const soundSystem = new SoundSystem();
+
+        testBtn.addEventListener('click', async () => {
+            try {
+                addLog('Starting Sound System test...', '');
+                addLog('Creating AudioContext...', '');
+
+                // Test parameters
+                const frequency = 440;  // 440Hz (A4 note)
+                const duration = 0.5;   // 500ms
+                const volume = 1.0;     // Full volume
+
+                addLog(`Playing tone: ${frequency}Hz for ${duration * 1000}ms at volume ${volume}`);
+
+                // Play the tone
+                const osc = soundSystem.playTone(frequency, duration, volume);
+
+                addLog('Oscillator started successfully', 'success');
+                addLog(`Oscillator type: ${osc.type}`, 'success');
+                addLog(`Frequency: ${osc.frequency.value}Hz`, 'success');
+
+                // Verify AudioContext state
+                addLog(`AudioContext state: ${soundSystem.context.state}`, 'success');
+
+                addLog('TEST PASSED: Sound System working correctly!', 'success');
+                addLog('');
+                addLog('You should hear a 440Hz tone for 500ms.', 'success');
+
+            } catch (err) {
+                addLog(`ERROR: ${err.message}`, 'error');
+                console.error(err);
+            }
+        });
+
+        addLog('Sound System Test Ready');
+        addLog('Click the button to test 440Hz tone for 500ms');
+    </script>
+</body>
+</html>

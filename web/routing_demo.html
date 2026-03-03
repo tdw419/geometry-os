@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GOS-RP Visual Routing Dashboard</title>
+    <style>
+        body {
+            background: #050510;
+            color: #00ffcc;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-shadow: 0 0 15px #00ffcc;
+            border-bottom: 2px solid #00ffcc44;
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: rgba(10, 10, 30, 0.8);
+            border: 1px solid #00ffcc44;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        .panel h2 {
+            margin-top: 0;
+            font-size: 1.2rem;
+            color: #00ccff;
+            border-left: 4px solid #00ccff;
+            padding-left: 10px;
+        }
+        canvas {
+            background: #000;
+            border: 1px solid #333;
+            image-rendering: pixelated;
+            width: 100%;
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            flex: 1;
+            background: #111;
+            padding: 10px;
+            border-radius: 4px;
+            border-bottom: 2px solid #00ffcc;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: block;
+        }
+        .stat-label {
+            font-size: 0.7rem;
+            color: #888;
+            text-transform: uppercase;
+        }
+        .log {
+            background: #000;
+            color: #0f0;
+            font-size: 0.8rem;
+            height: 150px;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #333;
+            margin-top: 10px;
+        }
+        .node-list {
+            list-style: none;
+            padding: 0;
+        }
+        .node-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #222;
+        }
+        .node-addr { color: #ffcc00; }
+        .node-region { color: #cc00ff; }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            background: #002222;
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #00ffcc;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            <span>GOS-RP :: Visual Routing Dashboard</span>
+            <small style="font-size: 0.5em; opacity: 0.7;">v2.0.1 - GEOMETRY OS</small>
+        </h1>
+
+        <div class="stats">
+            <div class="stat-card">
+                <span class="stat-label">Local Address</span>
+                <span id="localAddr" class="stat-value">0x00000000</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Hilbert Region</span>
+                <span id="localRegion" class="stat-value">--</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Active Peers</span>
+                <span id="peerCount" class="stat-value">0</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Packets Routed</span>
+                <span id="packetCount" class="stat-value">0</span>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="panel">
+                <h2>Network Topology (Hilbert Space)</h2>
+                <canvas id="topologyCanvas" width="512" height="512"></canvas>
+                <div class="controls">
+                    <button id="discoverBtn">Discover Neighbors</button>
+                    <button id="advertiseBtn">Advertise Route</button>
+                </div>
+            </div>
+            <div class="panel">
+                <h2>Routing Table</h2>
+                <div style="height: 300px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="text-align: left; border-bottom: 1px solid #444;">
+                                <th style="padding: 5px;">Region</th>
+                                <th style="padding: 5px;">Gateway</th>
+                                <th style="padding: 5px;">Metric</th>
+                                <th style="padding: 5px;">Trust</th>
+                            </tr>
+                        </thead>
+                        <tbody id="routeTableBody">
+                            <!-- Routes added here -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h2>Visual Packet Stream</h2>
+                <div id="packetStream" style="display: flex; gap: 5px; flex-wrap: wrap; height: 100px; padding: 10px; background: #000; border: 1px solid #333; overflow: hidden;"></div>
+                
+                <h2>Protocol Logs</h2>
+                <div id="protocolLog" class="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GeometryKernel } from './GeometryKernel.js';
+        import { GOSRouter } from './GOSRouter.js';
+        import { GeometryFont } from './GeometryFont.js';
+        import { VisualPacket } from './VisualPacket.js';
+
+        const font = new GeometryFont();
+        const kernel = new GeometryKernel();
+        const router = new GOSRouter(kernel);
+        const packetEncoder = new VisualPacket(font);
+        
+        const topologyCanvas = document.getElementById('topologyCanvas');
+        const ctx = topologyCanvas.getContext('2d');
+        const logEl = document.getElementById('protocolLog');
+        const packetStreamEl = document.getElementById('packetStream');
+        
+        const localAddrEl = document.getElementById('localAddr');
+        const localRegionEl = document.getElementById('localRegion');
+        const peerCountEl = document.getElementById('peerCount');
+        const packetCountEl = document.getElementById('packetCount');
+        const routeTableBody = document.getElementById('routeTableBody');
+
+        let packetsRouted = 0;
+
+        function log(msg) {
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function showVisualPacket(grid) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            canvas.style.border = '1px solid #00ffcc44';
+            packetEncoder.render(grid, canvas);
+            packetStreamEl.prepend(canvas);
+            
+            if (packetStreamEl.children.length > 10) {
+                packetStreamEl.removeChild(packetStreamEl.lastChild);
+            }
+        }
+
+        async function init() {
+            await font.load();
+            log("Initializing Geometry Kernel...");
+            await kernel.init();
+            
+            // Assign a random address in a random region
+            const myRegion = Math.floor(Math.random() * 256);
+            const myAddr = (myRegion << 24) | Math.floor(Math.random() * 0xFFFFFF);
+            
+            log(`Initializing GOS-RP Router at 0x${myAddr.toString(16)}...`);
+            await router.init(myAddr);
+            
+            localAddrEl.textContent = `0x${myAddr.toString(16).padStart(8, '0')}`;
+            localRegionEl.textContent = `0x${myRegion.toString(16).padStart(2, '0')}`;
+            
+            renderTopology();
+            
+            // Simulation Loop
+            setInterval(() => {
+                router.updateTrustScores();
+                updateUI();
+                renderTopology();
+            }, 1000);
+        }
+
+        function updateUI() {
+            peerCountEl.textContent = router.peers.size;
+            packetCountEl.textContent = packetsRouted;
+            
+            // Update Route Table
+            routeTableBody.innerHTML = '';
+            for (const [region, info] of router.routeTable) {
+                const row = document.createElement('tr');
+                const trustColor = `rgb(${255 * (1 - info.trust)}, ${255 * info.trust}, 0)`;
+                row.innerHTML = `
+                    <td style="padding: 5px; color: #cc00ff;">0x${region.toString(16)}</td>
+                    <td style="padding: 5px; color: #ffcc00;">0x${info.address.toString(16)}</td>
+                    <td style="padding: 5px;">${info.distance} hops</td>
+                    <td style="padding: 5px; color: ${trustColor}">${(info.trust * 100).toFixed(0)}%</td>
+                `;
+                routeTableBody.appendChild(row);
+            }
+        }
+
+        function renderTopology() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, topologyCanvas.width, topologyCanvas.height);
+            
+            // Draw Hilbert Grid
+            ctx.strokeStyle = '#111';
+            for (let i = 0; i < 16; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * 32, 0);
+                ctx.lineTo(i * 32, 512);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * 32);
+                ctx.lineTo(512, i * 32);
+                ctx.stroke();
+            }
+            
+            // Draw Nodes
+            const myRegion = (router.myAddress >> 24) & 0xFF;
+            drawNode(myRegion, '#00ffcc', true, 1.0); // Local node
+            
+            for (const [addr, info] of router.peers) {
+                drawNode(info.region, '#ffcc00', false, info.trust);
+                // Draw connection
+                drawConnection(myRegion, info.region, info.trust);
+            }
+        }
+
+        function drawNode(region, color, isLocal, trust) {
+            const x = (region % 16) * 32 + 16;
+            const y = Math.floor(region / 16) * 32 + 16;
+            
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.3 + trust * 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, isLocal ? 8 : 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            if (isLocal) {
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            ctx.globalAlpha = 1.0;
+            ctx.font = '8px monospace';
+            ctx.fillText(`0x${region.toString(16)}`, x - 10, y + 15);
+        }
+
+        function drawConnection(r1, r2, trust) {
+            const x1 = (r1 % 16) * 32 + 16;
+            const y1 = Math.floor(r1 / 16) * 32 + 16;
+            const x2 = (r2 % 16) * 32 + 16;
+            const y2 = Math.floor(r2 / 16) * 32 + 16;
+            
+            ctx.strokeStyle = `rgba(0, 255, 204, ${trust * 0.5})`;
+            ctx.lineWidth = trust * 2;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        document.getElementById('discoverBtn').onclick = () => {
+            log("Running Hilbert Proximity Discovery...");
+            router.discoverPeers();
+            
+            // Visual feedback: show PING packets
+            const grid = packetEncoder.encodePing(router.myAddress);
+            showVisualPacket(grid);
+            
+            updateUI();
+        };
+
+        document.getElementById('advertiseBtn').onclick = () => {
+            const myRegion = (router.myAddress >> 24) & 0xFF;
+            const targetRegion = (myRegion + Math.floor(Math.random() * 10) - 5) & 0xFF;
+            const target = (targetRegion << 24) | Math.floor(Math.random() * 0xFFFFFF);
+            
+            log(`Advertising visual route to 0x${target.toString(16)}`);
+            
+            // Simulate receiving advertisement from a random neighbor
+            if (router.peers.size > 0) {
+                const peerAddrs = Array.from(router.peers.keys());
+                const randomPeer = peerAddrs[Math.floor(Math.random() * peerAddrs.length)];
+                
+                router.receiveAdvertisement(target, 1, randomPeer);
+                
+                // Visual feedback: show Advertisement packet
+                const grid = packetEncoder.encodeRouteAd(target, 1, randomPeer);
+                showVisualPacket(grid);
+                packetsRouted++;
+            } else {
+                log("No peers to advertise to!");
+            }
+            
+            updateUI();
+        };
+
+        init().catch(console.error);
+    </script>
+</body>
+</html>

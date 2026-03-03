@@ -294,7 +294,7 @@ export class ProcessManager {
                 proc.update({
                     pc: pcbData[base + 1],
                     sp: pcbData[base + 2],
-                    status: ['idle', 'running', 'waiting', 'exit'][status] || 'unknown',
+                    status: ['idle', 'running', 'waiting', 'exit', 'error'][status] || 'unknown',
                     cycles: pcbData[base + 6]
                 });
                 states.push(proc);
@@ -303,7 +303,8 @@ export class ProcessManager {
 
         this.tickCount++;
         if (this.tickCount % 10 === 0) {
-            this.scheduler.boostPriorities(this.processes);
+            // Run scheduler tick for priority aging and decay
+            this.scheduler.tick(this.processes);
             this._syncPriorities();
         }
 

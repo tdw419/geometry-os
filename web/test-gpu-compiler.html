@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - GPU-Native Compiler</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #ccc;
+            font-family: monospace;
+            padding: 20px;
+        }
+        h1 { color: #00ffcc; margin-bottom: 10px; }
+        h2 { color: #ffaa00; font-size: 14px; margin: 20px 0 10px 0; }
+        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .panel {
+            background: rgba(0, 20, 30, 0.8);
+            border: 1px solid rgba(0, 255, 200, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .panel-header {
+            color: #00ffcc;
+            font-size: 12px;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(0, 255, 200, 0.2);
+        }
+        #grid-canvas {
+            background: #000;
+            border: 1px solid #333;
+            cursor: crosshair;
+        }
+        #output {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .btn {
+            background: linear-gradient(180deg, #1a3a2a 0%, #0a2a1a 100%);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            margin: 5px;
+        }
+        .btn:hover { background: linear-gradient(180deg, #2a4a3a 0%, #1a3a2a 100%); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .toolbar { margin-bottom: 15px; }
+        .status {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        .status-item {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 12px;
+            border-radius: 4px;
+        }
+        .status-label { color: #888; font-size: 10px; }
+        .status-value { font-size: 14px; color: #00ffcc; }
+        #status-idle { color: #888; }
+        #status-compiling { color: #ffaa00; }
+        #status-success { color: #00ff88; }
+        #status-error { color: #ff4444; }
+        .glyph-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .glyph-btn {
+            width: 40px;
+            height: 40px;
+            background: #1a1a2f;
+            border: 1px solid #333;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .glyph-btn:hover { border-color: #00ffcc; }
+        .glyph-btn.active { border-color: #00ffcc; background: rgba(0, 255, 200, 0.1); }
+        .errors { color: #ff4444; font-size: 11px; margin-top: 10px; }
+        .hex-output {
+            font-family: monospace;
+            font-size: 10px;
+            color: #00ff88;
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>⚙ GPU-Native Visual Compiler</h1>
+    <p style="color: #888; margin-bottom: 20px;">
+        Self-hosting compiler that runs on the GPU. Draw glyphs → Generate SPIR-V.
+    </p>
+    
+    <div class="status">
+        <div class="status-item">
+            <div class="status-label">STATUS</div>
+            <div class="status-value" id="compiler-status">IDLE</div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">OUTPUT SIZE</div>
+            <div class="status-value" id="output-size">0 bytes</div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">ERRORS</div>
+            <div class="status-value" id="error-count">0</div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="panel">
+            <div class="panel-header">Visual Grid (64x64)</div>
+            
+            <div class="glyph-palette">
+                <button class="glyph-btn" data-g="0x00" title="NOP">·</button>
+                <button class="glyph-btn" data-g="0x6A" title="ADD">⊕</button>
+                <button class="glyph-btn" data-g="0x6B" title="SUB">⊖</button>
+                <button class="glyph-btn" data-g="0x6C" title="MUL">⊗</button>
+                <button class="glyph-btn" data-g="0x6D" title="DIV">⊘</button>
+                <button class="glyph-btn" data-g="0x10" title="STORE">→</button>
+                <button class="glyph-btn" data-g="0x11" title="LOAD">←</button>
+                <button class="glyph-btn" data-g="0x70" title="SIN">∿</button>
+                <button class="glyph-btn" data-g="0x71" title="COS">∿</button>
+                <button class="glyph-btn" data-g="0xFF" title="HALT">■</button>
+            </div>
+            
+            <canvas id="grid-canvas" width="256" height="256"></canvas>
+            
+            <div class="toolbar">
+                <button class="btn" id="clear-btn">Clear</button>
+                <button class="btn" id="test-btn">Load Test</button>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-header">Compiler Output</div>
+            
+            <div class="toolbar">
+                <button class="btn" id="compile-btn">▶ Compile</button>
+                <button class="btn" id="download-btn" disabled>⬇ Download .spv</button>
+                <button class="btn" id="run-btn" disabled>▶ Run</button>
+            </div>
+            
+            <h2>SPIR-V Bytecode</h2>
+            <div id="output" class="hex-output">Waiting for compilation...</div>
+            
+            <h2>Compilation Log</h2>
+            <div id="log" class="output"></div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { CompilerAgent, COMPILER_STATUS, GLYPH_TO_OPCODE } from './CompilerAgent.js';
+        
+        // Canvas setup
+        const canvas = document.getElementById('grid-canvas');
+        const ctx = canvas.getContext('2d');
+        const GRID_SIZE = 64;
+        const CELL_SIZE = canvas.width / GRID_SIZE;
+        
+        // Grid state
+        let grid = new Uint32Array(GRID_SIZE * GRID_SIZE * 4);
+        let selectedGlyph = 0x6A;  // Default to ADD
+        let isDrawing = false;
+        
+        // Compiler
+        let compiler = null;
+        let lastSPIRV = null;
+        
+        // Color mapping for glyphs
+        function glyphToColor(g) {
+            const colors = {
+                0x00: '#000000',
+                0x6A: '#00ff88',  // ADD - green
+                0x6B: '#ff8888',  // SUB - red
+                0x6C: '#8888ff',  // MUL - blue
+                0x6D: '#ffff88',  // DIV - yellow
+                0x10: '#88ffff',  // STORE - cyan
+                0x11: '#ff88ff',  // LOAD - magenta
+                0x70: '#88ff88',  // SIN
+                0x71: '#88ff88',  // COS
+                0xFF: '#ff4444'   // HALT
+            };
+            return colors[g] || '#ffffff';
+        }
+        
+        // Draw grid
+        function drawGrid() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid lines
+            ctx.strokeStyle = '#1a1a2f';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= GRID_SIZE; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * CELL_SIZE, 0);
+                ctx.lineTo(i * CELL_SIZE, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * CELL_SIZE);
+                ctx.lineTo(canvas.width, i * CELL_SIZE);
+                ctx.stroke();
+            }
+            
+            // Draw pixels
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const idx = (y * GRID_SIZE + x) * 4;
+                    const g = grid[idx + 1];
+                    
+                    if (g !== 0) {
+                        ctx.fillStyle = glyphToColor(g);
+                        ctx.fillRect(
+                            x * CELL_SIZE + 1,
+                            y * CELL_SIZE + 1,
+                            CELL_SIZE - 2,
+                            CELL_SIZE - 2
+                        );
+                    }
+                }
+            }
+        }
+        
+        // Set pixel
+        function setPixel(x, y) {
+            const gridX = Math.floor(x / CELL_SIZE);
+            const gridY = Math.floor(y / CELL_SIZE);
+            
+            if (gridX >= 0 && gridX < GRID_SIZE && gridY >= 0 && gridY < GRID_SIZE) {
+                const idx = (gridY * GRID_SIZE + gridX) * 4;
+                grid[idx + 0] = 0;              // R
+                grid[idx + 1] = selectedGlyph;  // G (opcode)
+                grid[idx + 2] = 0;              // B
+                grid[idx + 3] = 255;            // A
+                
+                drawGrid();
+            }
+        }
+        
+        // Canvas events
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            setPixel(e.clientX - rect.left, e.clientY - rect.top);
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDrawing) {
+                const rect = canvas.getBoundingClientRect();
+                setPixel(e.clientX - rect.left, e.clientY - rect.top);
+            }
+        });
+        
+        canvas.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('mouseleave', () => isDrawing = false);
+        
+        // Glyph palette
+        document.querySelectorAll('.glyph-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.glyph-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedGlyph = parseInt(btn.dataset.g);
+            });
+        });
+        
+        // Clear button
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            grid.fill(0);
+            drawGrid();
+            document.getElementById('output').textContent = 'Grid cleared.';
+        });
+        
+        // Test button
+        document.getElementById('test-btn').addEventListener('click', () => {
+            // Create a test program: 2 + 3
+            grid.fill(0);
+            
+            // Pixel 0: Push 2.0
+            const two = new Float32Array([2.0]);
+            const twoBits = new Uint32Array(two.buffer);
+            grid[0] = 0;
+            grid[1] = 0;  // 0 = constant
+            grid[2] = twoBits[0];
+            grid[3] = 255;
+            
+            // Pixel 1: Push 3.0
+            const three = new Float32Array([3.0]);
+            const threeBits = new Uint32Array(three.buffer);
+            grid[4] = 0;
+            grid[5] = 0;
+            grid[6] = threeBits[0];
+            grid[7] = 255;
+            
+            // Pixel 2: ADD
+            grid[8] = 0;
+            grid[9] = 0x6A;
+            grid[10] = 0;
+            grid[11] = 255;
+            
+            // Pixel 3: HALT
+            grid[12] = 0;
+            grid[13] = 0xFF;
+            grid[14] = 0;
+            grid[15] = 255;
+            
+            drawGrid();
+            document.getElementById('output').textContent = 'Test program loaded: 2 + 3';
+        });
+        
+        // Compile button
+        document.getElementById('compile-btn').addEventListener('click', async () => {
+            if (!compiler) {
+                log('Compiler not initialized', 'error');
+                return;
+            }
+            
+            updateStatus('COMPILING');
+            log('Starting GPU compilation...');
+            
+            try {
+                compiler.loadGrid(grid);
+                const result = await compiler.compile();
+                
+                if (result.success) {
+                    updateStatus('SUCCESS');
+                    document.getElementById('output-size').textContent = `${result.size} bytes`;
+                    document.getElementById('error-count').textContent = '0';
+                    
+                    lastSPIRV = result.spirv;
+                    
+                    // Display hex dump
+                    const hex = hexDump(new Uint8Array(result.spirv));
+                    document.getElementById('output').textContent = hex;
+                    
+                    document.getElementById('download-btn').disabled = false;
+                    document.getElementById('run-btn').disabled = false;
+                    
+                    log(`Compilation successful! Generated ${result.size} bytes of SPIR-V`);
+                } else {
+                    updateStatus('ERROR');
+                    document.getElementById('error-count').textContent = result.errors.length;
+                    
+                    let errorMsg = 'Compilation failed:\n';
+                    result.errors.forEach(e => {
+                        errorMsg += `  Line ${e.line}, Col ${e.column}: ${e.message} (opcode ${e.opcode})\n`;
+                    });
+                    document.getElementById('output').textContent = errorMsg;
+                    
+                    log(`Compilation failed with ${result.errors.length} errors`, 'error');
+                }
+            } catch (e) {
+                updateStatus('ERROR');
+                log(`Compilation error: ${e.message}`, 'error');
+            }
+        });
+        
+        // Download button
+        document.getElementById('download-btn').addEventListener('click', () => {
+            if (!lastSPIRV) return;
+            
+            const blob = new Blob([lastSPIRV], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'compiled.spv';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            log('Downloaded compiled.spv');
+        });
+        
+        // Helper functions
+        function updateStatus(status) {
+            const el = document.getElementById('compiler-status');
+            el.textContent = status;
+            el.className = 'status-value';
+            
+            const colors = {
+                'IDLE': '#888',
+                'COMPILING': '#ffaa00',
+                'SUCCESS': '#00ff88',
+                'ERROR': '#ff4444'
+            };
+            el.style.color = colors[status] || '#888';
+        }
+        
+        function log(message, type = 'info') {
+            const logEl = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        function hexDump(data) {
+            let result = '';
+            for (let i = 0; i < Math.min(data.length, 512); i += 16) {
+                let line = i.toString(16).padStart(4, '0') + ': ';
+                for (let j = 0; j < 16 && i + j < data.length; j++) {
+                    line += data[i + j].toString(16).padStart(2, '0') + ' ';
+                }
+                result += line + '\n';
+            }
+            if (data.length > 512) {
+                result += `... (${data.length - 512} more bytes)`;
+            }
+            return result;
+        }
+        
+        // Initialize
+        async function init() {
+            if (!navigator.gpu) {
+                log('WebGPU not supported', 'error');
+                return;
+            }
+            
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                const device = await adapter.requestDevice();
+                
+                compiler = new CompilerAgent(device, {
+                    gridWidth: GRID_SIZE,
+                    gridHeight: GRID_SIZE
+                });
+                
+                await compiler.init();
+                
+                log('GPU compiler initialized');
+                updateStatus('IDLE');
+                
+                // Draw initial grid
+                drawGrid();
+                
+            } catch (e) {
+                log(`Initialization failed: ${e.message}`, 'error');
+            }
+        }
+        
+        init();
+        
+        // Expose for debugging
+        window.compiler = compiler;
+        window.grid = grid;
+    </script>
+</body>
+</html>

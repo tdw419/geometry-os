@@ -311,6 +311,15 @@ GEO_NOP = 0xE2         # No operation
 GEO_DEBUG = 0xE3       # Debug breakpoint
 GEO_YIELD = 0xE4       # Yield to scheduler
 
+# --- GOS-RP Routing Operations (0xB0 - 0xBF) ---
+GEO_ROUTE = 0xB0       # Register route to target_addr
+GEO_FWD = 0xB1         # Forward packet to target_addr
+GEO_DROP = 0xB2        # Drop current packet
+GEO_BCAST = 0xB3       # Broadcast to Hilbert region
+GEO_PEER = 0xB4        # Query peer table
+GEO_PING = 0xB5        # Probe peer connectivity
+GEO_PONG = 0xB6        # Respond to ping
+
 # --- I/O Operations (0xF0 - 0xFF) ---
 GEO_READ = 0xF0        # Read from I/O port
 GEO_WRITE = 0xF1       # Write to I/O port

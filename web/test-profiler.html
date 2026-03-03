@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Performance Profiler</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #00ff88;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #1a1a1a;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #00ff88;
+            color: #0a0a0a;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .panel h3 {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        .panel .value {
+            font-size: 24px;
+            color: #00ff88;
+        }
+        .panel .unit {
+            font-size: 12px;
+            color: #666;
+        }
+        .hot-path {
+            color: #ff8800;
+        }
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .category-item {
+            background: #111;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .category-item.slow {
+            border-left: 3px solid #ff4444;
+        }
+        .category-item.ok {
+            border-left: 3px solid #00ff88;
+        }
+        .category-name {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .category-value {
+            font-size: 14px;
+        }
+        .recommendations {
+            grid-column: span 3;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .recommendation {
+            background: #111;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 3px solid #ff8800;
+        }
+        .recommendation h4 {
+            color: #ff8800;
+            margin-bottom: 5px;
+        }
+        .recommendation pre {
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        #status {
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .running { color: #00aaff; }
+        .stopped { color: #888; }
+        .error { color: #ff4444; }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS - Performance Profiler</h1>
+
+    <div id="status" class="stopped">Status: Idle</div>
+
+    <div class="controls">
+        <button id="btn-start">Start Profiling</button>
+        <button id="btn-stop" disabled>Stop Profiling</button>
+        <button id="btn-run-benchmark">Run Benchmark</button>
+        <button id="btn-export">Export Report</button>
+    </div>
+
+    <div class="dashboard">
+        <div class="panel">
+            <h3>Total Samples</h3>
+            <div class="value" id="total-samples">0</div>
+        </div>
+        <div class="panel">
+            <h3>Uptime</h3>
+            <div class="value" id="uptime">0<span class="unit">ms</span></div>
+        </div>
+        <div class="panel">
+            <h3>Hot Paths</h3>
+            <div class="value hot-path" id="hot-paths-count">0</div>
+        </div>
+
+        <div class="panel" style="grid-column: span 2;">
+            <h3>Category Performance</h3>
+            <div class="category-grid" id="categories"></div>
+        </div>
+
+        <div class="panel">
+            <h3>Hot Paths</h3>
+            <div id="hot-paths-list"></div>
+        </div>
+
+        <div class="panel recommendations">
+            <h3>Recommendations</h3>
+            <div id="recommendations"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Profiler, TimingCategory } from './Profiler.js';
+
+        // Create profiler instance (no kernel needed for standalone profiling)
+        const profiler = new Profiler(null);
+
+        const statusEl = document.getElementById('status');
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const btnBenchmark = document.getElementById('btn-run-benchmark');
+        const btnExport = document.getElementById('btn-export');
+        const totalSamplesEl = document.getElementById('total-samples');
+        const uptimeEl = document.getElementById('uptime');
+        const hotPathsCountEl = document.getElementById('hot-paths-count');
+        const categoriesEl = document.getElementById('categories');
+        const hotPathsListEl = document.getElementById('hot-paths-list');
+        const recommendationsEl = document.getElementById('recommendations');
+
+        let updateInterval = null;
+
+        function updateUI() {
+            const summary = profiler.getSummary();
+
+            totalSamplesEl.textContent = summary.totalSamples;
+            uptimeEl.innerHTML = `${Math.round(summary.uptime)}<span class="unit">ms</span>`;
+            hotPathsCountEl.textContent = summary.hotPaths.length;
+
+            // Update categories
+            categoriesEl.innerHTML = '';
+            for (const [name, data] of Object.entries(summary.categories)) {
+                const isSlow = data.avgDuration > 16;
+                const div = document.createElement('div');
+                div.className = `category-item ${isSlow ? 'slow' : 'ok'}`;
+                div.innerHTML = `
+                    <div class="category-name">${name}</div>
+                    <div class="category-value">${data.avgDuration.toFixed(2)}ms (${data.count})</div>
+                `;
+                categoriesEl.appendChild(div);
+            }
+
+            // Update hot paths
+            hotPathsListEl.innerHTML = '';
+            for (const path of summary.hotPaths) {
+                const div = document.createElement('div');
+                div.className = 'category-item slow';
+                div.innerHTML = `
+                    <div class="category-name">${path.category} / ${path.label}</div>
+                    <div class="category-value">${path.avgDuration.toFixed(2)}ms (${path.occurrences}x)</div>
+                `;
+                hotPathsListEl.appendChild(div);
+            }
+        }
+
+        btnStart.addEventListener('click', async () => {
+            await profiler.init();
+            profiler.startProfiling();
+
+            statusEl.textContent = 'Status: Profiling...';
+            statusEl.className = 'running';
+
+            btnStart.disabled = true;
+            btnStop.disabled = false;
+
+            updateInterval = setInterval(updateUI, 100);
+        });
+
+        btnStop.addEventListener('click', () => {
+            const report = profiler.stopProfiling();
+
+            statusEl.textContent = 'Status: Stopped';
+            statusEl.className = 'stopped';
+
+            btnStart.disabled = false;
+            btnStop.disabled = true;
+
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+
+            updateUI();
+            displayReport(report);
+        });
+
+        btnBenchmark.addEventListener('click', async () => {
+            await profiler.init();
+            profiler.startProfiling();
+
+            statusEl.textContent = 'Status: Running Benchmark...';
+            statusEl.className = 'running';
+
+            btnStart.disabled = true;
+            btnStop.disabled = true;
+            btnBenchmark.disabled = true;
+
+            // Simulate various operations
+            const iterations = 1000;
+
+            // Kernel step simulation
+            for (let i = 0; i < iterations; i++) {
+                profiler.timeSync(TimingCategory.KERNEL_STEP, 'step', () => {
+                    // Simulate work
+                    let sum = 0;
+                    for (let j = 0; j < 100; j++) sum += j;
+                });
+            }
+
+            // Memory operations
+            for (let i = 0; i < iterations; i++) {
+                profiler.timeSync(TimingCategory.MEMORY_OP, 'malloc', () => {
+                    const arr = new Float32Array(1024);
+                    arr[0] = Math.random();
+                });
+            }
+
+            // Filesystem operations
+            for (let i = 0; i < iterations / 10; i++) {
+                await profiler.timeAsync(TimingCategory.FILESYSTEM_OP, 'read', async () => {
+                    await new Promise(r => setTimeout(r, 1));
+                });
+            }
+
+            // Network operations
+            for (let i = 0; i < iterations / 10; i++) {
+                await profiler.timeAsync(TimingCategory.NETWORK_OP, 'send', async () => {
+                    await new Promise(r => setTimeout(r, 2));
+                });
+            }
+
+            // Render operations
+            for (let i = 0; i < iterations; i++) {
+                profiler.timeSync(TimingCategory.RENDER, 'draw', () => {
+                    // Simulate render work
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillRect(0, 0, 10, 10);
+                });
+            }
+
+            // IPC operations
+            for (let i = 0; i < iterations; i++) {
+                profiler.timeSync(TimingCategory.IPC, 'message', () => {
+                    const msg = { type: 'test', data: new Array(100).fill(0) };
+                    JSON.stringify(msg);
+                });
+            }
+
+            // Compiler operations
+            for (let i = 0; i < iterations / 10; i++) {
+                profiler.timeSync(TimingCategory.COMPILER, 'compile', () => {
+                    // Simulate compilation
+                    let code = '';
+                    for (let j = 0; j < 1000; j++) code += `x${j} = ${j};\n`;
+                });
+            }
+
+            // Watchdog operations
+            for (let i = 0; i < iterations; i++) {
+                profiler.timeSync(TimingCategory.WATCHDOG, 'scan', () => {
+                    // Simulate health check
+                    let count = 0;
+                    for (let j = 0; j < 50; j++) count++;
+                });
+            }
+
+            // Cognitive operations
+            for (let i = 0; i < iterations / 10; i++) {
+                await profiler.timeAsync(TimingCategory.COGNITIVE, 'analyze', async () => {
+                    await new Promise(r => setTimeout(r, 5));
+                });
+            }
+
+            const report = profiler.stopProfiling();
+
+            statusEl.textContent = 'Status: Benchmark Complete';
+            statusEl.className = 'stopped';
+
+            btnStart.disabled = false;
+            btnStop.disabled = true;
+            btnBenchmark.disabled = false;
+
+            updateUI();
+            displayReport(report);
+        });
+
+        function displayReport(report) {
+            recommendationsEl.innerHTML = '';
+
+            // Display categories
+            for (const [name, data] of Object.entries(report.categories)) {
+                if (data.avgDuration > 16) {
+                    const div = document.createElement('div');
+                    div.className = 'recommendation';
+                    div.innerHTML = `
+                        <h4>${name}</h4>
+                        <p>Average: ${data.avgMs}ms, Max: ${data.maxMs}ms</p>
+                        <p>Slow operation detected - consider optimization</p>
+                    `;
+                    recommendationsEl.appendChild(div);
+                }
+            }
+
+            // Display hot paths
+            for (const path of report.hotPaths) {
+                const div = document.createElement('div');
+                div.className = 'recommendation';
+                div.innerHTML = `
+                    <h4>Hot Path: ${path.category} / ${path.label}</h4>
+                    <pre>${Array.isArray(path.recommendation) ? path.recommendation.join('\n') : 'No recommendation'}</pre>
+                `;
+                recommendationsEl.appendChild(div);
+            }
+
+            if (recommendationsEl.children.length === 0) {
+                recommendationsEl.innerHTML = '<div class="category-item ok">All operations are within acceptable thresholds</div>';
+            }
+        }
+
+        btnExport.addEventListener('click', () => {
+            const report = profiler._generateReport();
+            const data = JSON.stringify(report, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `geometry_os_profile_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // Initial UI update
+        updateUI();
+    </script>
+</body>
+</html>

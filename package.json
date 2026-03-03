@@ -1,0 +1,49 @@
+{
+  "name": "geometry-os",
+  "version": "1.0.0",
+  "description": "GPU-Native Operating System with Morphological Glyphs",
+  "type": "module",
+  "main": "web/GeometryKernel.js",
+  "exports": {
+    ".": "./web/GeometryKernel.js",
+    "./kernel": "./web/GeometryKernel.js",
+    "./memory": "./web/GPUMemoryManager.js",
+    "./shell": "./web/Shell.js",
+    "./router": "./web/GOSRouter.js",
+    "./desktop": "./web/VisualDesktop.js",
+    "./compiler": "./web/CompilerAgent.js",
+    "./watchdog": "./web/WatchdogAgent.js",
+    "./cognitive": "./web/CognitiveAgent.js",
+    "./profiler": "./web/Profiler.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:integration": "python3 tests/test_integration.py",
+    "test:selfhost": "python3 tests/verify_selfhosting.py",
+    "test:all": "npm run test && npm run test:integration && npm run test:selfhost",
+    "serve": "python3 -m http.server 8770 -d web",
+    "build": "node scripts/build.js",
+    "lint": "node --check web/*.js"
+  },
+  "keywords": [
+    "gpu",
+    "operating-system",
+    "webgpu",
+    "spirv",
+    "morphological",
+    "glyphs",
+    "self-hosting"
+  ],
+  "author": "Geometry OS Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/geometry-os/geometry-os"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.2.0"
+  }
+}

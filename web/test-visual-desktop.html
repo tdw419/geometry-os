@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Visual Desktop</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a0f;
+            overflow: hidden;
+            font-family: monospace;
+        }
+        
+        #desktop-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 255, 200, 0.3);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 255, 200, 0.5);
+        }
+        
+        /* Button hover effects */
+        .win-btn:hover {
+            transform: scale(1.1);
+        }
+        
+        .start-button:hover {
+            background: linear-gradient(180deg, #2a3a4a 0%, #1a2530 100%) !important;
+            box-shadow: 0 0 10px rgba(0, 255, 200, 0.3);
+        }
+        
+        /* Desktop icon hover */
+        .desktop-icon:hover {
+            background: rgba(0, 255, 200, 0.15) !important;
+        }
+        
+        /* Taskbar item hover */
+        .taskbar-item:hover {
+            background: rgba(0, 255, 200, 0.15) !important;
+        }
+        
+        /* File item hover */
+        .file-item:hover {
+            background: rgba(0, 255, 200, 0.1);
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        
+        /* Info panel */
+        #info-panel {
+            position: fixed;
+            bottom: 50px;
+            right: 10px;
+            background: rgba(10, 20, 30, 0.9);
+            border: 1px solid rgba(0, 255, 200, 0.3);
+            border-radius: 6px;
+            padding: 10px;
+            color: #00ffcc;
+            font-size: 11px;
+            z-index: 10000;
+        }
+        
+        #info-panel h4 {
+            color: #ffff88;
+            margin-bottom: 8px;
+        }
+        
+        #info-panel kbd {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid rgba(0, 255, 200, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="desktop-container"></div>
+    
+    <div id="info-panel">
+        <h4>Keyboard Shortcuts</h4>
+        <div><kbd>Alt</kbd>+<kbd>F4</kbd> Close window</div>
+        <div><kbd>Alt</kbd>+<kbd>Tab</kbd> Cycle windows</div>
+        <div><kbd>Win</kbd> App launcher</div>
+        <div><kbd>Esc</kbd> Close launcher</div>
+        <hr style="border-color: rgba(0,255,200,0.2); margin: 8px 0;">
+        <div style="color: #888;">Double-click icons to launch</div>
+    </div>
+    
+    <script type="module">
+        import { VisualDesktop } from './VisualDesktop.js';
+        
+        // Initialize desktop
+        const container = document.getElementById('desktop-container');
+        const desktop = new VisualDesktop(container, {
+            onAppLaunch: (appId, window) => {
+                console.log(`[Desktop] App launched: ${appId}`);
+            }
+        });
+        
+        desktop.init();
+        
+        // Open a terminal by default
+        setTimeout(() => {
+            desktop.launchApp('terminal');
+        }, 500);
+        
+        // Expose for debugging
+        window.desktop = desktop;
+        
+        console.log('%c[Geometry OS] Visual Desktop loaded', 'color: #00ffcc; font-weight: bold;');
+        console.log('Access desktop via: window.desktop');
+    </script>
+</body>
+</html>

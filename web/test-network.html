@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Network Stack</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 { font-size: 24px; margin-bottom: 5px; text-shadow: 0 0 10px #00ff88; }
+        .subtitle { color: #666; margin-bottom: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .panel h3 {
+            color: #888;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; }
+        .stat-item { background: #0a0a0a; padding: 10px; border-radius: 4px; text-align: center; }
+        .stat-label { color: #666; font-size: 10px; text-transform: uppercase; }
+        .stat-value { font-size: 24px; color: #00ff88; }
+        .packet-list { max-height: 300px; overflow-y: auto; font-size: 12px; }
+        .packet-item {
+            display: grid;
+            grid-template-columns: 60px 60px 80px 60px 1fr;
+            padding: 5px;
+            border-bottom: 1px solid #222;
+            gap: 10px;
+        }
+        .packet-item:hover { background: #2a2a2a; }
+        .packet-header { color: #888; font-size: 10px; margin-bottom: 10px; }
+        .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
+        button {
+            background: #1a1a1a;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        button:hover { background: #00ff88; color: #0a0a0a; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .log {
+            background: #0a0a0a;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        .log-line { margin: 2px 0; }
+        .log-time { color: #666; }
+        .log-info { color: #00aaff; }
+        .log-success { color: #00ff88; }
+        .log-error { color: #ff4444; }
+        .port-status {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .port-box {
+            background: #0a0a0a;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .port-name { font-size: 14px; color: #00ff88; }
+        .port-queue { font-size: 11px; color: #666; }
+        .connections {
+            margin-top: 15px;
+        }
+        .connection-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px;
+            border-bottom: 1px solid #222;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Geometry OS - Network Stack</h1>
+        <p class="subtitle">GPU-side TCP/IP-like packet routing with reliable transport</p>
+
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-label">Packets Sent</div>
+                <div class="stat-value" id="packets-sent">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Packets Recv</div>
+                <div class="stat-value" id="packets-recv">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Dropped</div>
+                <div class="stat-value" id="packets-drop">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Unacked</div>
+                <div class="stat-value" id="unacked">0</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="panel">
+                <h3>🔌 Port Status</h3>
+                <div class="port-status">
+                    <div class="port-box">
+                        <div class="port-name">IPC</div>
+                        <div class="port-queue" id="port-ipc">Queue: 0</div>
+                    </div>
+                    <div class="port-box">
+                        <div class="port-name">FS</div>
+                        <div class="port-queue" id="port-fs">Queue: 0</div>
+                    </div>
+                    <div class="port-box">
+                        <div class="port-name">KERNEL</div>
+                        <div class="port-queue" id="port-kernel">Queue: 0</div>
+                    </div>
+                    <div class="port-box">
+                        <div class="port-name">SHELL</div>
+                        <div class="port-queue" id="port-shell">Queue: 0</div>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button id="btn-send-ipc">Send IPC</button>
+                    <button id="btn-broadcast">Broadcast</button>
+                    <button id="btn-stress">Stress Test</button>
+                    <button id="btn-clear">Clear Stats</button>
+                </div>
+
+                <div class="log" id="log">
+                    <div class="log-line log-info">Network stack initialized</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>📦 Packet Queue</h3>
+                <div class="packet-header">
+                    <span>Src</span>
+                    <span>Dst</span>
+                    <span>Type</span>
+                    <span>Seq</span>
+                    <span>Size</span>
+                </div>
+                <div class="packet-list" id="packet-list">
+                    <div style="color: #666; padding: 20px; text-align: center;">No packets</div>
+                </div>
+            </div>
+
+            <div class="panel" style="grid-column: span 2;">
+                <h3>🔗 Active Connections</h3>
+                <div class="connections" id="connections">
+                    <div style="color: #666; padding: 20px; text-align: center;">No active connections</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GOSRouter, PORTS, PACKET_TYPES } from './GOSRouter.js';
+
+        let router = null;
+        let packetId = 0;
+
+        const logEl = document.getElementById('log');
+        const packetListEl = document.getElementById('packet-list');
+        const connectionsEl = document.getElementById('connections');
+
+        function log(msg, type = 'info') {
+            const line = document.createElement('div');
+            line.className = `log-line log-${type}`;
+            const time = new Date().toLocaleTimeString();
+            line.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
+            logEl.appendChild(line);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateStats() {
+            if (!router) return;
+            const stats = router.getStats();
+            document.getElementById('packets-sent').textContent = stats.packetsSent;
+            document.getElementById('packets-recv').textContent = stats.packetsReceived;
+            document.getElementById('packets-drop').textContent = stats.packetsDropped;
+            document.getElementById('unacked').textContent = stats.unacked;
+
+            // Update port queues
+            document.getElementById('port-ipc').textContent = `Queue: ${stats.queues[PORTS.IPC]?.size || 0}`;
+            document.getElementById('port-fs').textContent = `Queue: ${stats.queues[PORTS.FS]?.size || 0}`;
+            document.getElementById('port-kernel').textContent = `Queue: ${stats.queues[PORTS.KERNEL]?.size || 0}`;
+            document.getElementById('port-shell').textContent = `Queue: ${stats.queues[PORTS.SHELL]?.size || 0}`;
+        }
+
+        function renderPackets() {
+            if (!router) return;
+
+            const packets = [];
+            // Collect packets from all queues
+            for (const [port, queue] of router.queues) {
+                for (let i = 0; i < Math.min(queue.size, 10); i++) {
+                    const pkt = queue.queue[i];
+                    if (pkt) {
+                        packets.push(pkt);
+                    }
+                }
+            }
+
+            if (packets.length === 0) {
+                packetListEl.innerHTML = '<div style="color: #666; padding: 20px; text-align: center;">No packets</div>';
+                return;
+            }
+
+            packetListEl.innerHTML = packets.map(p => `
+                <div class="packet-item">
+                    <span>${p.header.srcPort}</span>
+                    <span>${p.header.dstPort}</span>
+                    <span>${Object.keys(PACKET_TYPES).find(k => PACKET_TYPES[k] === p.header.type) || '???'}</span>
+                    <span>${p.header.seqNum}</span>
+                    <span>${p.header.length}B</span>
+                </div>
+            `).join('');
+        }
+
+        function init() {
+            router = new GOSRouter();
+
+            // Register handlers for each port
+            router.on(PORTS.IPC, (pkt) => {
+                log(`IPC packet received: seq=${pkt.header.seqNum}`, size=${pkt.header.length}B`);
+            });
+
+            router.on(PORTS.FS, (pkt) => {
+                log(`FS packet received: seq=${pkt.header.seqNum}`);
+            });
+
+            router.on(PORTS.KERNEL, (pkt) => {
+                log(`KERNEL packet received: seq=${pkt.header.seqNum}`);
+            });
+
+            router.on(PORTS.SHELL, (pkt) => {
+                log(`SHELL packet received: seq=${pkt.header.seqNum}`);
+            });
+
+            log('Router initialized', 'success');
+            updateStats();
+        }
+
+        function sendIPC() {
+            if (!router) return;
+            const payload = new Uint8Array(64);
+            for (let i = 0; i < 64; i++) payload[i] = i;
+            router.send(PORTS.SHELL, PORTS.IPC, PACKET_TYPES.DATA, payload);
+            log(`Sent IPC packet #${packetId++}`);
+            updateStats();
+            renderPackets();
+        }
+
+        function broadcast() {
+            if (!router) return;
+            const payload = new Uint8Array(32);
+            const msg = 'Hello from broadcast!';
+            for (let i = 0; i < msg.length; i++) payload[i] = msg.charCodeAt(i);
+            router.broadcast(PORTS.KERNEL, PACKET_TYPES.DATA, payload);
+            log('Broadcasted to all ports');
+            updateStats();
+            renderPackets();
+        }
+
+        async function stressTest() {
+            if (!router) return;
+            log('Starting stress test...');
+            for (let i = 0; i < 50; i++) {
+                const payload = new Uint8Array(Math.floor(Math.random() * 100) + 10);
+                crypto.getRandomValues(payload);
+                const ports = [PORTS.IPC, PORTS.FS, PORTS.KERNEL, PORTS.SHELL];
+                const src = ports[Math.floor(Math.random() * ports.length)];
+                const dst = ports[Math.floor(Math.random() * ports.length)];
+                router.send(src, dst, PACKET_TYPES.DATA, payload);
+            }
+            log('Stress test complete: 50 packets sent', 'success');
+            updateStats();
+            renderPackets();
+        }
+
+        function clearStats() {
+            if (!router) return;
+            router.stats.packetsSent = 0;
+            router.stats.packetsReceived = 0;
+            router.stats.packetsDropped = 0;
+            router.stats.bytesTransferred = 0;
+            log('Stats cleared');
+            updateStats();
+        }
+
+        document.getElementById('btn-send-ipc').addEventListener('click', sendIPC);
+        document.getElementById('btn-broadcast').addEventListener('click', broadcast);
+        document.getElementById('btn-stress').addEventListener('click', stressTest);
+        document.getElementById('btn-clear').addEventListener('click', clearStats);
+
+        init();
+    </script>
+</body>
+</html>

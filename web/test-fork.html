@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Fork Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #00ff88;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            width: 800px;
+        }
+        .panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 20px;
+        }
+        .panel h3 {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+        .process-info {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .pid { color: #ff8800; font-weight: bold; }
+        .status { color: #00ff88; }
+        .heartbeat { color: #00aaff; font-size: 24px; font-weight: bold; }
+        
+        #status-msg {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            width: 800px;
+            text-align: center;
+            border: 1px dashed #333;
+        }
+        .pulse {
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS - Process Fork Test</h1>
+
+    <div class="dashboard">
+        <div class="panel" id="parent-panel">
+            <h3>Parent Process (PID 0)</h3>
+            <div class="process-info">Status: <span class="status" id="parent-status">Idle</span></div>
+            <div class="process-info">Child Spawned: <span id="child-pid-val">None</span></div>
+            <div class="heartbeat" id="parent-heartbeat">0</div>
+        </div>
+
+        <div class="panel" id="child-panel">
+            <h3>Child Process (Dynamic PID)</h3>
+            <div class="process-info">Status: <span class="status" id="child-status">Idle</span></div>
+            <div class="process-info">Identity: <span id="child-identity">Waiting...</span></div>
+            <div class="heartbeat" id="child-heartbeat">0</div>
+        </div>
+    </div>
+
+    <div id="status-msg">Initializing GPU Kernel...</div>
+
+    <script type="module">
+        import { ProcessManager } from './ProcessManager.js';
+        import { AgentGenerator, PROC_STATE, AGENTS } from './agents/AgentGenerator.js';
+
+        const statusEl = document.getElementById('status-msg');
+        const parentHeartbeatEl = document.getElementById('parent-heartbeat');
+        const childHeartbeatEl = document.getElementById('child-heartbeat');
+        const childPidValEl = document.getElementById('child-pid-val');
+        const parentStatusEl = document.getElementById('parent-status');
+        const childStatusEl = document.getElementById('child-status');
+        const childIdentityEl = document.getElementById('child-identity');
+
+        async function start() {
+            try {
+                const pm = new ProcessManager();
+                await pm.init();
+                statusEl.textContent = "GPU Kernel Ready. Generating Fork Program...";
+
+                // Create a program that forks itself
+                const gen = new AgentGenerator();
+                const startLabel = gen.nextId();
+                const childLabel = gen.nextId();
+                const parentLabel = gen.nextId();
+                const loopLabel = gen.nextId();
+
+                gen.pushConstant(0); // Initial heartbeat index
+                
+                // --- FORK HERE ---
+                gen.fork(); 
+                // Stack now contains: [index, result]
+                // result is child_pid in parent, 0 in child
+                
+                gen.pushConstant(0);
+                gen.fadd(); // Compare result with 0 (simplified JZ logic)
+                gen.jz(childLabel);
+                
+                // --- PARENT BRANCH ---
+                gen.label(parentLabel);
+                // Result is child_pid. Store it in shared memory 50
+                gen.sharedStore(50); 
+                
+                // Parent loop
+                gen.label(loopLabel);
+                gen.sharedLoad(0); // Parent heartbeat addr
+                gen.pushConstant(1.0);
+                gen.fadd();
+                gen.sharedStore(0);
+                gen.yield();
+                gen.jmp(loopLabel);
+
+                // --- CHILD BRANCH ---
+                gen.label(childLabel);
+                // Pop the 0 from fork result
+                gen.pushConstant(0); 
+                
+                // Child loop
+                const childLoop = gen.nextId();
+                gen.label(childLoop);
+                gen.sharedLoad(1); // Child heartbeat addr
+                gen.pushConstant(1.0);
+                gen.fadd();
+                gen.sharedStore(1);
+                gen.yield();
+                gen.jmp(childLoop);
+
+                const binary = gen.build();
+                await pm.spawn(0, binary, { name: 'Parent' });
+                
+                statusEl.innerHTML = '<span class="success">Parent Process Started. Monitoring for fork...</span>';
+
+                // Monitor loop
+                setInterval(async () => {
+                    const ram = await pm.readSharedMemory();
+                    const states = await pm.readProcessStates();
+
+                    // Update Parent UI
+                    parentHeartbeatEl.textContent = Math.floor(ram[0]);
+                    parentStatusEl.textContent = states[0]?.status || 'Unknown';
+                    
+                    const spawnedPid = Math.floor(ram[50]);
+                    if (spawnedPid > 0) {
+                        childPidValEl.textContent = `PID ${spawnedPid}`;
+                        childPidValEl.className = 'pid';
+                        
+                        // Update Child UI
+                        childHeartbeatEl.textContent = Math.floor(ram[1]);
+                        const childProc = states.find(p => p.pid === spawnedPid);
+                        childStatusEl.textContent = childProc?.status || 'Active';
+                        childIdentityEl.textContent = "I am the child process";
+                        childIdentityEl.className = 'status';
+                        
+                        statusEl.innerHTML = '<span class="success pulse">FORK SUCCESSFUL: Two independent processes running.</span>';
+                    }
+
+                    pm.step();
+                }, 100);
+
+            } catch (err) {
+                console.error(err);
+                statusEl.innerHTML = `<span class="error">Error: ${err.message}</span>`;
+            }
+        }
+
+        start();
+    </script>
+</body>
+</html>
