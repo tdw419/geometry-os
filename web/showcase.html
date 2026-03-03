@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - GPU-Native Operating System</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding: 40px;
+            background: rgba(0, 255, 136, 0.05);
+            border-radius: 20px;
+            border: 1px solid rgba(0, 255, 136, 0.2);
+        }
+        h1 {
+            font-size: 48px;
+            background: linear-gradient(90deg, #00ff88, #00aaff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 15px;
+        }
+        .tagline {
+            font-size: 20px;
+            color: #888;
+            margin-bottom: 30px;
+        }
+        .badges {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .badge {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid #00ff88;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #00ff88;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 60px;
+        }
+        .stat-card {
+            background: #1a1a1a;
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            border: 1px solid #333;
+        }
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .features {
+            margin-bottom: 60px;
+        }
+        .section-title {
+            font-size: 32px;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #333;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+        }
+        .feature-card {
+            background: #1a1a1a;
+            border-radius: 16px;
+            padding: 30px;
+            border: 1px solid #333;
+            transition: transform 0.3s, border-color 0.3s;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: #00ff88;
+        }
+        .feature-icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+        }
+        .feature-title {
+            font-size: 22px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+        .feature-desc {
+            color: #aaa;
+            margin-bottom: 15px;
+        }
+        .feature-tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .tag {
+            background: rgba(0, 170, 255, 0.1);
+            border: 1px solid #00aaff;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: #00aaff;
+        }
+
+        .architecture {
+            margin-bottom: 60px;
+        }
+        .arch-diagram {
+            background: #0a0a0a;
+            border-radius: 16px;
+            padding: 40px;
+            border: 1px solid #333;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+        }
+        .arch-layer {
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .layer-apps { background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; }
+        .layer-services { background: rgba(0, 170, 255, 0.1); border-left: 4px solid #00aaff; }
+        .layer-kernel { background: rgba(255, 136, 0, 0.1); border-left: 4px solid #ff8800; }
+        .layer-hardware { background: rgba(255, 68, 68, 0.1); border-left: 4px solid #ff4444; }
+
+        .test-pages {
+            margin-bottom: 60px;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        .test-link {
+            display: block;
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #333;
+            text-decoration: none;
+            color: #e0e0e0;
+            transition: all 0.3s;
+        }
+        .test-link:hover {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.05);
+        }
+        .test-link h4 {
+            color: #00ff88;
+            margin-bottom: 5px;
+        }
+        .test-link p {
+            font-size: 13px;
+            color: #888;
+        }
+
+        .code-example {
+            margin-bottom: 60px;
+        }
+        .code-block {
+            background: #0a0a0a;
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid #333;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+        }
+        .code-block .comment { color: #666; }
+        .code-block .keyword { color: #00aaff; }
+        .code-block .string { color: #00ff88; }
+        .code-block .number { color: #ff8800; }
+
+        footer {
+            text-align: center;
+            padding: 40px;
+            border-top: 1px solid #333;
+            margin-top: 40px;
+        }
+        footer p {
+            color: #666;
+        }
+        .links {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .links a {
+            color: #00ff88;
+            text-decoration: none;
+        }
+        .links a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .feature-grid { grid-template-columns: 1fr; }
+            .test-grid { grid-template-columns: repeat(2, 1fr); }
+            h1 { font-size: 32px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Geometry OS</h1>
+            <p class="tagline">GPU-Native Operating System with Morphological Glyphs</p>
+            <div class="badges">
+                <span class="badge">Self-Hosting</span>
+                <span class="badge">WebGPU</span>
+                <span class="badge">SPIR-V</span>
+                <span class="badge">100% GPU-Native</span>
+            </div>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value">256MB</div>
+                <div class="stat-label">GPU Memory</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">100%</div>
+                <div class="stat-label">Self-Hosting</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">21</div>
+                <div class="stat-label">Integration Tests</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">9</div>
+                <div class="stat-label">System Agents</div>
+            </div>
+        </div>
+
+        <section class="features">
+            <h2 class="section-title">Core Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🔷</div>
+                    <h3 class="feature-title">GPU-Native Kernel</h3>
+                    <p class="feature-desc">The entire kernel runs on the GPU using WebGPU compute shaders. No CPU bottleneck - direct GPU execution for all operations.</p>
+                    <div class="feature-tags">
+                        <span class="tag">WGSL</span>
+                        <span class="tag">Compute Shaders</span>
+                        <span class="tag">Zero-Copy</span>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📜</div>
+                    <h3 class="feature-title">Morphological Glyphs</h3>
+                    <p class="feature-desc">Programs are encoded as visual glyphs in a custom font. Each glyph represents an instruction - code you can see and read.</p>
+                    <div class="feature-tags">
+                        <span class="tag">Visual Programming</span>
+                        <span class="tag">Font-Based ISA</span>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <h3 class="feature-title">Self-Hosting Compiler</h3>
+                    <p class="feature-desc">The GPU-native compiler can compile itself - the ultimate test of completeness. Achieved 100% self-hosting verification.</p>
+                    <div class="feature-tags">
+                        <span class="tag">compiler.wgsl</span>
+                        <span class="tag">SPIR-V Output</span>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">💾</div>
+                    <h3 class="feature-title">Hilbert Curve Storage</h3>
+                    <p class="feature-desc">Files are stored using Hilbert curve spatial addressing - preserving locality and enabling efficient visual rendering of memory.</p>
+                    <div class="feature-tags">
+                        <span class="tag">192MB Filesystem</span>
+                        <span class="tag">Spatial Indexing</span>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🖥️</div>
+                    <h3 class="feature-title">Visual Desktop</h3>
+                    <p class="feature-desc">Window management with drag-drop, minimize, maximize. The screen IS the hard drive - visualize your data directly.</p>
+                    <div class="feature-tags">
+                        <span class="tag">Window Manager</span>
+                        <span class="tag">Visual Shell</span>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3 class="feature-title">Cognitive Debug Agent</h3>
+                    <p class="feature-desc">When processes crash, the cognitive agent analyzes errors and can prompt for fixes. Self-debugging system infrastructure.</p>
+                    <div class="feature-tags">
+                        <span class="tag">Auto-Analysis</span>
+                        <span class="tag">Error Recovery</span>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📡</div>
+                    <h3 class="feature-title">GPU Networking</h3>
+                    <p class="feature-desc">Packet routing and network operations happen entirely on GPU. GOSRouter enables inter-process communication and external networking.</p>
+                    <div class="feature-tags">
+                        <span class="tag">GOSRouter</span>
+                        <span class="tag">Packet Routing</span>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3 class="feature-title">Performance Profiler</h3>
+                    <p class="feature-desc">Built-in profiling with hot path detection, timing categories, and optimization recommendations for continuous improvement.</p>
+                    <div class="feature-tags">
+                        <span class="tag">9 Categories</span>
+                        <span class="tag">Hot Path Detection</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="architecture">
+            <h2 class="section-title">System Architecture</h2>
+            <div class="arch-diagram">
+                <div class="arch-layer layer-apps">
+                    <span>Applications</span>
+                    <span>Shell | Visual Desktop | Editor | Terminal</span>
+                </div>
+                <div class="arch-layer layer-services">
+                    <span>System Services</span>
+                    <span>Watchdog | Compiler | Cognitive Agent | Profiler</span>
+                </div>
+                <div class="arch-layer layer-kernel">
+                    <span>GPU Kernel</span>
+                    <span>Process Scheduler | Memory Manager | IPC Router</span>
+                </div>
+                <div class="arch-layer layer-hardware">
+                    <span>GPU Hardware</span>
+                    <span>WebGPU | Compute Shaders | 256MB VRAM</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="code-example">
+            <h2 class="section-title">Example: GPU Process</h2>
+            <div class="code-block">
+<span class="comment">// Morphological glyph program (encoded in font)</span>
+<span class="keyword">let</span> program = [
+    <span class="number">0x6A</span>, <span class="comment">// OP_FADD (glyph 'j')</span>
+    <span class="number">0x6B</span>, <span class="comment">// OP_FSUB (glyph 'k')</span>
+    <span class="number">0x6C</span>, <span class="comment">// OP_FMUL (glyph 'l')</span>
+    <span class="number">0x6D</span>, <span class="comment">// OP_FDIV (glyph 'm')</span>
+];
+
+<span class="comment">// Spawn process on GPU</span>
+<span class="keyword">const</span> pid = <span class="keyword">await</span> kernel.<span class="string">spawnProcess</span>(program, <span class="string">'compute'</span>);
+
+<span class="comment">// Execute on GPU</span>
+<span class="keyword">await</span> kernel.<span class="string">step</span>();
+
+<span class="comment">// Read results from GPU memory</span>
+<span class="keyword">const</span> result = <span class="keyword">await</span> kernel.<span class="string">readMemory</span>(baseAddr, <span class="number">256</span>);
+            </div>
+        </section>
+
+        <section class="test-pages">
+            <h2 class="section-title">Interactive Test Pages</h2>
+            <div class="test-grid">
+                <a href="test-memory.html" class="test-link">
+                    <h4>Memory Management</h4>
+                    <p>256MB GPU memory with paging</p>
+                </a>
+                <a href="test-filesystem.html" class="test-link">
+                    <h4>Morphological Filesystem</h4>
+                    <p>Hilbert curve storage</p>
+                </a>
+                <a href="test-shell.html" class="test-link">
+                    <h4>Visual Shell</h4>
+                    <p>15+ built-in commands</p>
+                </a>
+                <a href="test-network.html" class="test-link">
+                    <h4>GPU Networking</h4>
+                    <p>Packet routing</p>
+                </a>
+                <a href="test-visual-desktop.html" class="test-link">
+                    <h4>Visual Desktop</h4>
+                    <p>Window management</p>
+                </a>
+                <a href="test-integration.html" class="test-link">
+                    <h4>Integration Tests</h4>
+                    <p>21 automated tests</p>
+                </a>
+                <a href="test-selfhost-compiler.html" class="test-link">
+                    <h4>Self-Hosting Compiler</h4>
+                    <p>100% verification</p>
+                </a>
+                <a href="test-watchdog.html" class="test-link">
+                    <h4>Watchdog Service</h4>
+                    <p>Process monitoring</p>
+                </a>
+                <a href="test-profiler.html" class="test-link">
+                    <h4>Performance Profiler</h4>
+                    <p>Benchmarks & analysis</p>
+                </a>
+            </div>
+        </section>
+
+        <footer>
+            <p>Geometry OS - A GPU-native operating system where the screen IS the hard drive.</p>
+            <div class="links">
+                <a href="docs/API_REFERENCE.md">API Reference</a>
+                <a href="https://github.com/geometry-os/geometry-os">GitHub</a>
+                <a href="LICENSE">MIT License</a>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
