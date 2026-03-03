@@ -68,8 +68,27 @@ All test pages available at http://localhost:8770/
 ## Next Steps
 1. ✅ Documentation - docs/API_REFERENCE.md created
 2. ✅ Performance profiling - Profiler.js + test-profiler.html
-3. Deploy to production - Package for distribution
+3. ✅ Deploy to production - Build script (npm run build)
 4. Create demo video - Showcase capabilities
+
+## Distribution
+
+```bash
+# Build distribution
+npm run build
+
+# Serve locally
+npm run serve
+
+# Run all tests
+npm run test:all
+```
+
+Distribution includes:
+- 15 core files (JS + WGSL)
+- 11 test pages
+- 10 documentation files
+- manifest.json with file hashes
 
 ---
 *Last updated: 2026-03-03*
