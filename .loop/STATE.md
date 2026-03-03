@@ -69,7 +69,7 @@ All test pages available at http://localhost:8770/
 1. ✅ Documentation - docs/API_REFERENCE.md created
 2. ✅ Performance profiling - Profiler.js + test-profiler.html
 3. ✅ Deploy to production - Build script (npm run build)
-4. Create demo video - Showcase capabilities
+4. ✅ Demo showcase - showcase.html created
 
 ## Distribution
 
@@ -86,9 +86,13 @@ npm run test:all
 
 Distribution includes:
 - 15 core files (JS + WGSL)
-- 11 test pages
+- 12 test/demo pages
 - 10 documentation files
 - manifest.json with file hashes
+
+## Main Entry Point
+
+Open `web/showcase.html` for the comprehensive feature demo.
 
 ---
 *Last updated: 2026-03-03*
