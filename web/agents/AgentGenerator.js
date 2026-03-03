@@ -33,7 +33,8 @@ const SYS = {
     GET_MOUSE: 1,
     GET_KEY: 2,
     WRITE_LOG: 3,
-    GET_TIME: 4
+    GET_TIME: 4,
+    DRAW_PIXEL: 5
 };
 
 // I/O Memory Map (extends IPC)
