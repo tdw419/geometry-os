@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Memory Management Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #00ff88;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .panel h3 {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        .value {
+            font-size: 24px;
+            color: #00ff88;
+        }
+        .value.warning { color: #ffaa00; }
+        .value.error { color: #ff4444; }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #1a1a1a;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        button:hover {
+            background: #00ff88;
+            color: #0a0a0a;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .page-table {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+        }
+        .page-grid {
+            display: grid;
+            grid-template-columns: repeat(64, 12px);
+            gap: 2px;
+        }
+        .page-cell {
+            width: 12px;
+            height: 12px;
+            background: #333;
+            border-radius: 2px;
+        }
+        .page-cell.free { background: #00ff88; }
+        .page-cell.used { background: #ff4444; }
+        .page-cell.kernel { background: #666; }
+        .page-cell.shared { background: #00aaff; }
+        .log {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #222;
+        }
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Geometry OS - Memory Management Test</h1>
+
+        <div id="status">Initializing...</div>
+
+        <div class="dashboard">
+            <div class="panel">
+                <h3>Total Pages</h3>
+                <div class="value" id="total-pages">0</div>
+            </div>
+            <div class="panel">
+                <h3>Free Pages</h3>
+                <div class="value" id="free-pages">0</div>
+            </div>
+            <div class="panel">
+                <h3>Allocations</h3>
+                <div class="value" id="alloc-count">0</div>
+            </div>
+            <div class="panel">
+                <h3>Active Processes</h3>
+                <div class="value" id="process-count">0</div>
+            </div>
+            <div class="panel">
+                <h3>Memory Used</h3>
+                <div class="value" id="memory-used">0 KB</div>
+            </div>
+            <div class="panel">
+                <h3>Page Size</h3>
+                <div class="value">4 KB</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="btn-alloc" disabled>Allocate 16KB</button>
+            <button id="btn-alloc-large" disabled>Allocate 64KB</button>
+            <button id="btn-free" disabled>Free Last Process</button>
+            <button id="btn-stress" disabled>Stress Test</button>
+            <button id="btn-refresh" disabled>Refresh Stats</button>
+        </div>
+
+        <div class="page-table">
+            <h3>Page Table Visualization (First 512 Pages)</h3>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #666;"></div>
+                    <span>Kernel</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #00ff88;"></div>
+                    <span>Free</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff4444;"></div>
+                    <span>Used</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #00aaff;"></div>
+                    <span>Shared</span>
+                </div>
+            </div>
+            <div class="page-grid" id="page-grid"></div>
+        </div>
+
+        <div class="log" id="log" style="margin-top: 20px;">
+            <h3>Event Log</h3>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GeometryKernel } from './GeometryKernel.js';
+        import { PAGE_FLAGS, PAGE_SIZE_FLOATS } from './GPUMemoryManager.js';
+
+        const statusEl = document.getElementById('status');
+        const totalPagesEl = document.getElementById('total-pages');
+        const freePagesEl = document.getElementById('free-pages');
+        const allocCountEl = document.getElementById('alloc-count');
+        const processCountEl = document.getElementById('process-count');
+        const memoryUsedEl = document.getElementById('memory-used');
+        const pageGridEl = document.getElementById('page-grid');
+        const logEl = document.getElementById('log');
+
+        const btnAlloc = document.getElementById('btn-alloc');
+        const btnAllocLarge = document.getElementById('btn-alloc-large');
+        const btnFree = document.getElementById('btn-free');
+        const btnStress = document.getElementById('btn-stress');
+        const btnRefresh = document.getElementById('btn-refresh');
+
+        let kernel = null;
+        let processCounter = 0;
+
+        function log(msg) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateStats() {
+            if (!kernel) return;
+
+            const stats = kernel.getMemoryStats();
+            totalPagesEl.textContent = stats.totalPages.toLocaleString();
+            freePagesEl.textContent = stats.freePages.toLocaleString();
+            allocCountEl.textContent = stats.allocations;
+            processCountEl.textContent = kernel.processes.filter(p => p.status === 'running').length;
+
+            const usedKB = ((stats.totalPages - stats.freePages) * 4);
+            memoryUsedEl.textContent = `${usedKB.toLocaleString()} KB`;
+        }
+
+        function renderPageGrid(freeBitmap) {
+            pageGridEl.innerHTML = '';
+
+            // Render first 512 pages (8 x 64 grid)
+            for (let i = 0; i < 512; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'page-cell';
+
+                const wordIdx = Math.floor(i / 32);
+                const bitIdx = i % 32;
+                const isFree = (freeBitmap[wordIdx] & (1 << bitIdx)) !== 0;
+
+                if (i < 256) {
+                    cell.classList.add('kernel');
+                    cell.title = `Page ${i}: Kernel`;
+                } else if (i >= 8192 && i < 12288) {
+                    cell.classList.add('shared');
+                    cell.title = `Page ${i}: Shared`;
+                } else if (isFree) {
+                    cell.classList.add('free');
+                    cell.title = `Page ${i}: Free`;
+                } else {
+                    cell.classList.add('used');
+                    cell.title = `Page ${i}: Allocated`;
+                }
+
+                pageGridEl.appendChild(cell);
+            }
+        }
+
+        async function allocateMemory(size) {
+            if (!kernel) return;
+
+            const pid = processCounter++;
+            try {
+                // Create a minimal SPIR-V binary (just header)
+                const binary = new Uint32Array([
+                    0x07230203, // Magic
+                    0x00010000, // Version
+                    0, // Generator
+                    0, // Bound
+                    0, // Schema
+                ]);
+
+                await kernel.spawnProcess(binary.buffer, `Process ${pid}`, size);
+                log(`Allocated ${size} bytes for PID ${pid}`);
+                updateStats();
+
+                // Refresh page grid
+                const pageTable = await kernel.readPageTable(0, 512);
+                // We'd need to read free bitmap too for accurate display
+            } catch (err) {
+                log(`Allocation failed: ${err.message}`);
+            }
+        }
+
+        function freeLastProcess() {
+            if (!kernel) return;
+
+            const processes = kernel.processes.filter(p => p.status === 'running');
+            if (processes.length === 0) {
+                log('No processes to free');
+                return;
+            }
+
+            const lastPid = processes[processes.length - 1].pid;
+            kernel.killProcess(lastPid);
+            log(`Freed PID ${lastPid}`);
+            updateStats();
+        }
+
+        async function stressTest() {
+            log('Starting stress test...');
+
+            for (let i = 0; i < 10; i++) {
+                await allocateMemory(16384);
+                await new Promise(r => setTimeout(r, 100));
+            }
+
+            log('Stress test complete');
+        }
+
+        async function init() {
+            try {
+                kernel = new GeometryKernel();
+                await kernel.init();
+
+                statusEl.innerHTML = '<span style="color: #00ff88;">Kernel initialized with Memory Manager</span>';
+                log('GPU Memory Manager initialized');
+                log('Total memory: 256MB');
+                log('Page size: 4KB');
+                log('Total pages: 65,536');
+
+                // Enable buttons
+                btnAlloc.disabled = false;
+                btnAllocLarge.disabled = false;
+                btnFree.disabled = false;
+                btnStress.disabled = false;
+                btnRefresh.disabled = false;
+
+                // Initial stats
+                updateStats();
+
+                // Initialize page grid
+                const freeBitmap = new Uint32Array(2048);
+                freeBitmap.fill(0xFFFFFFFF);
+                for (let i = 0; i < 8; i++) {
+                    freeBitmap[i] = 0x00000000;
+                }
+                renderPageGrid(freeBitmap);
+
+            } catch (err) {
+                statusEl.innerHTML = `<span style="color: #ff4444;">Error: ${err.message}</span>`;
+                console.error(err);
+            }
+        }
+
+        // Event listeners
+        btnAlloc.addEventListener('click', () => allocateMemory(16384));
+        btnAllocLarge.addEventListener('click', () => allocateMemory(65536));
+        btnFree.addEventListener('click', freeLastProcess);
+        btnStress.addEventListener('click', stressTest);
+        btnRefresh.addEventListener('click', updateStats);
+
+        init();
+    </script>
+</body>
+</html>

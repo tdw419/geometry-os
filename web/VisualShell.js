@@ -210,8 +210,11 @@ export class VisualShell extends MemoryBrowser {
         item.id = `process-${pid}`;
         item.innerHTML = `
             <span class="pid">#${pid}</span>
-            <span class="pname">${name}</span>
-            <span class="pstate" style="color: ${STATE_COLORS[PROC_STATE.IDLE]}">IDLE</span>
+            <div class="pinfo" style="flex: 1; display: flex; flex-direction: column; margin-left: 10px;">
+                <span class="pname" style="font-size: 11px;">${name}</span>
+                <span class="pmetrics" style="font-size: 9px; opacity: 0.6;">PRI: 20 | CYC: 0 | FLT: 0</span>
+            </div>
+            <span class="pstate" style="color: ${STATE_COLORS[PROC_STATE.IDLE]}; font-size: 10px;">IDLE</span>
         `;
         item.addEventListener('click', () => this._focusProcess(pid));
         list.appendChild(item);
@@ -221,7 +224,9 @@ export class VisualShell extends MemoryBrowser {
             state: PROC_STATE.IDLE,
             pc: 0,
             sp: 0,
-            cycles: 0
+            totalCycles: 0,
+            priority: 20,
+            faultCount: 0
         });
     }
 
@@ -288,10 +293,10 @@ export class VisualShell extends MemoryBrowser {
                 this._updateProcessStates(pcbs);
 
                 // Update neural pulse rate
-                const totalCycles = Array.from(this.processes.values())
-                    .reduce((sum, p) => sum + p.cycles, 0);
-                this.pulseRate = totalCycles - this.lastIterationCount;
-                this.lastIterationCount = totalCycles;
+                const currentTotalCycles = Array.from(this.processes.values())
+                    .reduce((sum, p) => sum + (p.totalCycles || 0), 0);
+                this.pulseRate = currentTotalCycles - this.lastIterationCount;
+                this.lastIterationCount = currentTotalCycles;
 
                 this._updateDashboard();
 
@@ -311,21 +316,40 @@ export class VisualShell extends MemoryBrowser {
 
     _updateProcessStates(pcbs) {
         for (const pcb of pcbs) {
-            const { pid, pc, sp, state, cycles } = pcb;
+            const { pid, pc, sp, status, dynamicPriority, totalCycles, faultCount } = pcb;
             const proc = this.processes.get(pid);
 
             if (proc) {
                 proc.pc = pc;
                 proc.sp = sp;
-                proc.state = state;
-                proc.cycles = cycles;
+                
+                // status from readPCBs is already a string ('idle', 'running', etc.)
+                const statusNum = {
+                    'idle': PROC_STATE.IDLE,
+                    'running': PROC_STATE.RUNNING,
+                    'waiting': PROC_STATE.WAITING,
+                    'exit': PROC_STATE.DONE,
+                    'error': PROC_STATE.ERROR
+                }[status] || PROC_STATE.IDLE;
+                
+                proc.state = statusNum;
+                proc.totalCycles = totalCycles;
+                proc.priority = dynamicPriority;
+                proc.faultCount = faultCount;
 
                 // Update process list item
                 const item = document.getElementById(`process-${pid}`);
                 if (item) {
                     const stateEl = item.querySelector('.pstate');
-                    stateEl.textContent = Object.keys(PROC_STATE).find(k => PROC_STATE[k] === state);
-                    stateEl.style.color = STATE_COLORS[state];
+                    if (stateEl) {
+                        stateEl.textContent = status.toUpperCase();
+                        stateEl.style.color = STATE_COLORS[statusNum];
+                    }
+                    
+                    const metricsEl = item.querySelector('.pmetrics');
+                    if (metricsEl) {
+                        metricsEl.textContent = `PRI: ${dynamicPriority} | CYC: ${totalCycles} | FLT: ${faultCount}`;
+                    }
                 }
             }
         }
@@ -334,16 +358,16 @@ export class VisualShell extends MemoryBrowser {
     _applySaccade() {
         // Find most active process
         let maxCycles = 0;
-        let activePID = 0;
+        let activePID = -1;
 
         for (const [pid, proc] of this.processes) {
-            if (proc.state === PROC_STATE.RUNNING && proc.cycles > maxCycles) {
-                maxCycles = proc.cycles;
+            if (proc.state === PROC_STATE.RUNNING && proc.totalCycles > maxCycles) {
+                maxCycles = proc.totalCycles;
                 activePID = pid;
             }
         }
 
-        if (activePID !== this.activePID && activePID > 0) {
+        if (activePID !== this.activePID && activePID >= 0) {
             this._focusProcess(activePID);
         }
     }

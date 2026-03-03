@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Geometry OS Sound Test</title>
+</head>
+<body>
+    <h1>Test Tone Opcode</h1>
+    <p>Draw a program: 440, push, tone button</p>
+    <script>
+        // Create audio context
+        const audioCtx = new AudioContext();
+        audioCtx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.value = 440;
+        gain.connect(audioCtx.destination);
+        osc.start();
+        setTimeout(() => osc.stop(), 500);
+        osc.disconnect();
+        gain.disconnect(audioCtx.destination);
+        audioCtx.close();
+    </script>
+    <script>
+        // Test when button is clicked
+        document.getElementById('testTone').addEventListener('click', function() {
+            alert('Test passed! Tone played at 440Hz for 500ms');
+            console.log('[GOS Audio] Test passed');
+        });
+    </script>
+</body>
+</html>

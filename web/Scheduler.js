@@ -39,12 +39,12 @@ export class Scheduler {
     /**
      * Get the next process to run based on priority.
      * Lower priority value = higher scheduling priority.
-     * @param {Map<number, Process>} processes
+     * @param {Array<Process>} processes
      * @returns {Process|null} Next process to run, or null if none runnable
      */
     getNextProcess(processes) {
-        const runnable = Array.from(processes.values())
-            .filter(p => this.isRunnable(p));
+        const runnable = processes
+            .filter(p => p && this.isRunnable(p));
 
         if (runnable.length === 0) {
             return null;
@@ -53,8 +53,8 @@ export class Scheduler {
         // Sort by priority (ascending - lower is better)
         // Tie-breaker: oldest lastRunTick (starving processes first)
         runnable.sort((a, b) => {
-            if (a.priority !== b.priority) {
-                return a.priority - b.priority;
+            if (a.dynamicPriority !== b.dynamicPriority) {
+                return a.dynamicPriority - b.dynamicPriority;
             }
             const aLastRun = this.lastRunTick.get(a.pid) || 0;
             const bLastRun = this.lastRunTick.get(b.pid) || 0;
@@ -79,13 +79,13 @@ export class Scheduler {
     /**
      * Called each scheduler tick to update priorities.
      * Implements aging (boost starving) and decay (penalize heavy).
-     * @param {Map<number, Process>} processes
+     * @param {Array<Process>} processes
      */
     tick(processes) {
         this.tickCount++;
 
-        for (const process of processes.values()) {
-            if (process.status === 'exit' || process.status === 'error') {
+        for (const process of processes) {
+            if (!process || process.status === 'exit' || process.status === 'error') {
                 continue;
             }
 
@@ -113,7 +113,7 @@ export class Scheduler {
         }
 
         const history = this.cpuHistory.get(process.pid);
-        history.push(process.cycles);
+        history.push(process.totalCycles);
 
         // Keep only recent history
         if (history.length > CPU_USAGE_WINDOW) {
@@ -128,11 +128,12 @@ export class Scheduler {
      */
     getCpuUsage(pid) {
         const history = this.cpuHistory.get(pid);
-        if (!history || history.length === 0) {
+        if (!history || history.length < 2) {
             return 0;
         }
-        const sum = history.reduce((a, b) => a + b, 0);
-        return sum / history.length;
+        // Calculate delta cycles
+        const delta = history[history.length - 1] - history[0];
+        return delta / (history.length - 1);
     }
 
     /**
@@ -146,9 +147,9 @@ export class Scheduler {
 
         if (waitingTicks >= AGING_THRESHOLD && this.isRunnable(process)) {
             // Boost priority (decrease value)
-            process.priority = Math.max(
+            process.dynamicPriority = Math.max(
                 PRIORITY.MIN,
-                process.priority - AGING_BOOST
+                process.dynamicPriority - AGING_BOOST
             );
             // Reset timer to prevent continuous boosting
             this.lastRunTick.set(process.pid, this.tickCount - AGING_THRESHOLD + 1);
@@ -165,9 +166,9 @@ export class Scheduler {
 
         if (avgCpu > DECAY_THRESHOLD) {
             // Decay priority (increase value)
-            process.priority = Math.min(
+            process.dynamicPriority = Math.min(
                 PRIORITY.MAX,
-                process.priority + DECAY_AMOUNT
+                process.dynamicPriority + DECAY_AMOUNT
             );
         }
     }
@@ -175,28 +176,28 @@ export class Scheduler {
     /**
      * Normalize priorities to keep them in reasonable range.
      * Prevents extreme values from accumulating over time.
-     * @param {Map<number, Process>} processes
+     * @param {Array<Process>} processes
      */
     _normalizePriorities(processes) {
         // Calculate average priority
-        const priorities = Array.from(processes.values())
-            .filter(p => p.status !== 'exit')
-            .map(p => p.priority);
+        const priorities = processes
+            .filter(p => p && p.status !== 'exit')
+            .map(p => p.dynamicPriority);
 
         if (priorities.length === 0) return;
 
         const avgPriority = priorities.reduce((a, b) => a + b, 0) / priorities.length;
 
         // Gradually pull extreme values toward average
-        for (const process of processes.values()) {
-            if (process.status === 'exit') continue;
+        for (const process of processes) {
+            if (!process || process.status === 'exit') continue;
 
-            const diff = process.priority - avgPriority;
+            const diff = process.dynamicPriority - avgPriority;
             if (Math.abs(diff) > 10) {
                 // Move 10% toward average
-                process.priority = Math.round(process.priority - diff * 0.1);
+                process.dynamicPriority = Math.round(process.dynamicPriority - diff * 0.1);
                 // Clamp to valid range
-                process.priority = Math.max(PRIORITY.MIN, Math.min(PRIORITY.MAX, process.priority));
+                process.dynamicPriority = Math.max(PRIORITY.MIN, Math.min(PRIORITY.MAX, process.dynamicPriority));
             }
         }
     }
@@ -223,17 +224,18 @@ export class Scheduler {
         // Clamp nice to valid range
         nice = Math.max(-20, Math.min(19, nice));
         // Convert nice to priority (20 + nice)
-        process.priority = PRIORITY.DEFAULT + nice;
-        process.priority = Math.max(PRIORITY.MIN, Math.min(PRIORITY.MAX, process.priority));
+        process.staticPriority = PRIORITY.DEFAULT + nice;
+        process.staticPriority = Math.max(PRIORITY.MIN, Math.min(PRIORITY.MAX, process.staticPriority));
+        process.dynamicPriority = process.staticPriority;
     }
 
     /**
      * Get system load summary.
-     * @param {Map<number, Process>} processes
+     * @param {Array<Process>} processes
      */
     getSystemLoad(processes) {
         const stats = {
-            total: processes.size,
+            total: processes.filter(p => p).length,
             running: 0,
             waiting: 0,
             exit: 0,
@@ -246,7 +248,8 @@ export class Scheduler {
         let totalCpu = 0;
         let activeCount = 0;
 
-        for (const p of processes.values()) {
+        for (const p of processes) {
+            if (!p) continue;
             if (stats.hasOwnProperty(p.status)) {
                 stats[p.status]++;
             }
@@ -262,10 +265,10 @@ export class Scheduler {
 
     /**
      * Get processes that have terminated.
-     * @param {Map<number, Process>} processes
+     * @param {Array<Process>} processes
      */
     getTerminated(processes) {
-        return Array.from(processes.values()).filter(p => p.status === 'exit');
+        return processes.filter(p => p && p.status === 'exit');
     }
 
     /**
@@ -277,8 +280,8 @@ export class Scheduler {
             pid: process.pid,
             name: process.name,
             status: process.status,
-            priority: process.priority,
-            nice: process.priority - PRIORITY.DEFAULT,
+            priority: process.dynamicPriority,
+            nice: process.staticPriority - PRIORITY.DEFAULT,
             cpuUsage: this.getCpuUsage(process.pid).toFixed(2),
             lastRun: this.lastRunTick.get(process.pid) || 0,
             waitingTicks: this.tickCount - (this.lastRunTick.get(process.pid) || 0)
@@ -287,16 +290,16 @@ export class Scheduler {
 
     /**
      * Get ordered list of processes by scheduling priority.
-     * @param {Map<number, Process>} processes
+     * @param {Array<Process>} processes
      */
     getRunQueue(processes) {
-        return Array.from(processes.values())
-            .filter(p => this.isRunnable(p))
-            .sort((a, b) => a.priority - b.priority)
+        return processes
+            .filter(p => p && this.isRunnable(p))
+            .sort((a, b) => a.dynamicPriority - b.dynamicPriority)
             .map(p => ({
                 pid: p.pid,
                 name: p.name,
-                priority: p.priority,
+                priority: p.dynamicPriority,
                 status: p.status
             }));
     }

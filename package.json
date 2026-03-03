@@ -1,0 +1,11 @@
+{
+  "name": "geometry-os-font-toolkit",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^1.2.0"
+  }
+}

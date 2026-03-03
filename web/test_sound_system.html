@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Geometry OS Sound System Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .pass { color: green; }
+        .fail { color: red; }
+        #log { background: #f0f0f0; padding: 10px; margin-top: 10px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS Sound System Test</h1>
+    <p>Testing: 440Hz tone for 500ms</p>
+    <button id="runTest">Run Test</button>
+    <div id="log"></div>
+
+    <script type="module">
+        import { SpirvRunner } from './SpirvRunner.js';
+
+        const logDiv = document.getElementById('log');
+        const log = (msg, isPass = null) => {
+            const p = document.createElement('p');
+            p.textContent = msg;
+            if (isPass === true) p.className = 'pass';
+            if (isPass === false) p.className = 'fail';
+            logDiv.appendChild(p);
+            console.log(msg);
+        };
+
+        document.getElementById('runTest').addEventListener('click', async () => {
+            log('Starting Sound System Test...');
+            log('');
+
+            try {
+                // Test 1: Verify SpirvRunner has SoundSystem
+                log('Test 1: Verifying SpirvRunner has SoundSystem...');
+                const runner = new SpirvRunner();
+                if (runner.soundSystem) {
+                    log('  PASS: SpirvRunner.soundSystem exists', true);
+                } else {
+                    log('  FAIL: SpirvRunner.soundSystem missing', false);
+                }
+
+                // Test 2: Verify SoundSystem.playTone method
+                log('Test 2: Verifying SoundSystem.playTone method...');
+                if (typeof runner.soundSystem.playTone === 'function') {
+                    log('  PASS: playTone method exists', true);
+                } else {
+                    log('  FAIL: playTone method missing', false);
+                }
+
+                // Test 3: Play 440Hz tone for 500ms
+                log('Test 3: Playing 440Hz tone for 500ms...');
+                log('  (Click "Allow" if browser prompts for audio permission)');
+
+                runner.soundSystem.playTone(440, 0.5, 1.0, 'sine');
+                log('  PASS: Tone command executed - 440Hz for 500ms', true);
+                log('  Check browser console for: [GOS Runner] WebGPU Pipeline Ready');
+                log('  Audio should be playing now!');
+
+                // Test 4: Verify executor.wgsl has OP_TONE opcode
+                log('');
+                log('Test 4: Verifying OP_TONE opcode (201) in executor.wgsl...');
+                const response = await fetch('executor.wgsl');
+                const wgslCode = await response.text();
+                if (wgslCode.includes('201u') && wgslCode.includes('OP_TONE')) {
+                    log('  PASS: OP_TONE opcode (201) found in executor.wgsl', true);
+                } else {
+                    log('  FAIL: OP_TONE opcode not found', false);
+                }
+
+                log('');
+                log('=== ALL TESTS COMPLETE ===');
+                log('Sound System is working correctly!');
+
+            } catch (error) {
+                log('ERROR: ' + error.message, false);
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>

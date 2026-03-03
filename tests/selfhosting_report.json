@@ -1,0 +1,220 @@
+{
+  "timestamp": "2026-03-03T10:29:36.135982",
+  "steps": [
+    {
+      "message": "Calculating self-hosting score...",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.135995"
+    },
+    {
+      "message": "Step 1: Verifying bootstrap compiler...",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.135998"
+    },
+    {
+      "message": "  compiler.wgsl exists (11392 bytes)",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136026"
+    },
+    {
+      "message": "  CompilerAgent.js exists (15258 bytes)",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136038"
+    },
+    {
+      "message": "  Bootstrap compiler hash: d8260e8757481dbc...",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136066"
+    },
+    {
+      "message": "Step 2: Verifying glyph-to-opcode mapping...",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136069"
+    },
+    {
+      "message": "  Found OP_FADD",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136109"
+    },
+    {
+      "message": "  Found OP_FSUB",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136112"
+    },
+    {
+      "message": "  Found OP_FMUL",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136114"
+    },
+    {
+      "message": "  Found OP_FDIV",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136115"
+    },
+    {
+      "message": "  Found OP_LOAD",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136117"
+    },
+    {
+      "message": "  Found OP_STORE",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136118"
+    },
+    {
+      "message": "  Found OP_JMP",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136120"
+    },
+    {
+      "message": "  Found OP_RET",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136121"
+    },
+    {
+      "message": "  Opcode coverage: 100%",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136128"
+    },
+    {
+      "message": "Step 3: Verifying compiler pipeline structure...",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136130"
+    },
+    {
+      "message": "  Found emit_header()",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136166"
+    },
+    {
+      "message": "  Found emit_capability()",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136169"
+    },
+    {
+      "message": "  Found emit_memory_model()",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136171"
+    },
+    {
+      "message": "  Found emit_entry_point()",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136174"
+    },
+    {
+      "message": "  Found emit_types()",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136177"
+    },
+    {
+      "message": "  Found emit_function_start()",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136180"
+    },
+    {
+      "message": "  Found emit_function_end()",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136184"
+    },
+    {
+      "message": "  Pipeline coverage: 100%",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136186"
+    },
+    {
+      "message": "Step 4: Verifying Hilbert curve encoding...",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136188"
+    },
+    {
+      "message": "  Found hilbert_encode() function",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136212"
+    },
+    {
+      "message": "Step 5: Verifying test page...",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136214"
+    },
+    {
+      "message": "  test-selfhost-compiler.html exists (21867 bytes)",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136227"
+    },
+    {
+      "message": "Step 6: Verifying cognitive agent...",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136228"
+    },
+    {
+      "message": "  CognitiveAgent.js exists (17575 bytes)",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136239"
+    },
+    {
+      "message": "  Error types and debug states defined",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136254"
+    },
+    {
+      "message": "Step 7: Verifying watchdog agent...",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136260"
+    },
+    {
+      "message": "  watchdog.wgsl exists (8871 bytes)",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136273"
+    },
+    {
+      "message": "  WatchdogAgent.js exists (10509 bytes)",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136282"
+    },
+    {
+      "message": "  Bootstrap Compiler: PASS",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136289"
+    },
+    {
+      "message": "  Glyph Mapping: PASS",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136291"
+    },
+    {
+      "message": "  Compiler Pipeline: PASS",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136292"
+    },
+    {
+      "message": "  Hilbert Encoding: PASS",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136293"
+    },
+    {
+      "message": "  Test Page: PASS",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136294"
+    },
+    {
+      "message": "  Cognitive Agent: PASS",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136295"
+    },
+    {
+      "message": "  Watchdog Agent: PASS",
+      "status": "success",
+      "timestamp": "2026-03-03T10:29:36.136296"
+    },
+    {
+      "message": "\n  Self-Hosting Score: 100% (7/7)",
+      "status": "info",
+      "timestamp": "2026-03-03T10:29:36.136301"
+    }
+  ],
+  "success": true,
+  "match_rate": 100.0,
+  "compiler_v1_hash": "d8260e8757481dbc588ba6a0997d2930502e5290194701c7fa1e39e0ae6cbd32",
+  "compiler_v2_hash": null,
+  "compiler_v3_hash": null
+}

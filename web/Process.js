@@ -8,12 +8,15 @@ export class Process {
         this.pid = pid;
         this.name = name;
         this.status = 'idle'; // idle, running, waiting, ready, exit, error
-        this.priority = options.priority || 5;
+        this.staticPriority = options.priority || 20; // Default priority (Linux-style)
+        this.dynamicPriority = this.staticPriority;
         
-        // Memory metrics
-        this.cycles = 0;
+        // Performance metrics
+        this.totalCycles = 0;
+        this.faultCount = 0;
         this.pc = 0;
         this.sp = 0;
+        this.lastRunTimestamp = 0;
         
         // Configuration
         this.memBase = options.memBase || 0;
@@ -28,7 +31,10 @@ export class Process {
         this.pc = gpuState.pc;
         this.sp = gpuState.sp;
         this.status = gpuState.status;
-        this.cycles = gpuState.cycles || 0;
+        this.totalCycles = gpuState.totalCycles || 0;
+        this.faultCount = gpuState.faultCount || 0;
+        this.dynamicPriority = gpuState.dynamicPriority || this.staticPriority;
+        this.lastRunTimestamp = gpuState.lastRunTimestamp || 0;
     }
 
     /**

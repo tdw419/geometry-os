@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Geometry OS Font Demo</title>
+    <style>
+        body {
+            background: #0a0a14;
+            color: #00ffcc;
+            font-family: monospace;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { text-shadow: 0 0 10px #00ffcc; }
+        canvas {
+            border: 1px solid #333;
+            background: #000;
+            display: block;
+            margin: 10px 0;
+        }
+        .panel {
+            background: #111122;
+            border: 1px solid #00ffcc44;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        input, button {
+            background: #001a1a;
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        button { cursor: pointer; }
+        button:hover { background: #00ffcc; color: #000; }
+        
+        .ram-grid {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 2px;
+            margin-top: 10px;
+            background: #000;
+            padding: 5px;
+            border: 1px solid #333;
+        }
+        .ram-cell {
+            width: 45px;
+            height: 25px;
+            background: #001a1a;
+            border: 1px solid #00ffcc22;
+            font-size: 9px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #00ffccaa;
+            position: relative;
+        }
+        .ram-cell span.addr { font-size: 7px; color: #666; position: absolute; top: 1px; left: 1px; }
+        .ram-cell.active {
+            background: #00ffcc22;
+            color: #fff;
+            border-color: #00ffcc;
+        }
+        .palette-item {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #00ffcc;
+            background: #000;
+            color: #00ffcc;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .palette-item:hover { background: #00ffcc22; }
+        .palette-item.selected { border-color: #fff; box-shadow: 0 0 5px #fff; }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS Font Toolkit</h1>
+    <p>Holographic Computing Substrate - Universal Morphological Font</p>
+
+    <div class="panel">
+        <h3>OS Visual Shell (Multitasking)</h3>
+        <p>Active processes sharing the same display and keyboard. Mount IDE drawings to slots.</p>
+        <div id="processSlots" style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <!-- Process Slots (0-3) -->
+        </div>
+        <button id="schedulerBtn" style="border-color: #00ffcc; color: #00ffcc;">Start OS Scheduler</button>
+    </div>
+
+    <div class="panel">
+        <h3>OS Hardware Abstraction</h3>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div>
+                <h4>Virtual Screen (RAM 128-255)</h4>
+                <canvas id="displayCanvas" width="128" height="64" style="background: #000; border: 2px solid #00ffcc; image-rendering: pixelated;"></canvas>
+            </div>
+            <div>
+                <h4>Input Status</h4>
+                <div id="inputInfo">Last Key: --</div>
+                <div style="font-size: 0.8em; color: #666; margin-top: 10px;">
+                    Focus this window and type to send input to RAM[127].<br>
+                    Draw 'ld(127)' to read key in your program.
+                </div>
+            </div>
+            <div style="width: 100%;">
+                <h4>RAM Monitor (0-255)</h4>
+                <div id="ramMonitor" class="ram-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Visual IDE</h3>
+        <p>Draw programs directly on the grid. Select a glyph from the palette below.</p>
+        <div id="palette" style="display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; padding: 10px; background: #000; border: 1px solid #333;"></div>
+        <div style="display: flex; gap: 20px;">
+            <canvas id="ideCanvas" width="256" height="256" style="cursor: crosshair;"></canvas>
+            <div id="ideControls">
+                <button id="compileRunBtn">Compile & Run IDE Program</button>
+                <div id="ideResult" style="margin-top: 10px; font-size: 1.2em; color: #00ffcc;">Result: --</div>
+                <button id="clearIdeBtn" style="margin-top: 10px; border-color: #ff3366; color: #ff3366;">Clear Grid</button>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <button id="savePngBtn" style="border-color: #ffcc00; color: #ffcc00;">Save PNG</button>
+                    <button id="loadPngBtn" style="border-color: #ffcc00; color: #ffcc00;">Load PNG</button>
+                    <input type="file" id="fileInput" style="display: none;" accept="image/png">
+                </div>
+                <div style="margin-top: 10px;">
+                    <label><input type="checkbox" id="showPathToggle"> Show Execution Path</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Text Preview</h3>
+        <input type="text" id="textInput" value="Hello GOS!" style="width: 300px;">
+        <canvas id="textCanvas" width="600" height="48"></canvas>
+        <label>Size: <input type="range" id="sizeSlider" min="8" max="32" value="16"></label>
+        <span id="sizeVal">16px</span>
+    </div>
+
+    <div class="panel">
+        <h3>Glyph Atlas</h3>
+        <canvas id="atlasCanvas" width="512" height="512"></canvas>
+    </div>
+
+    <script type="module">
+        import { GeometryFont } from './GeometryFont.js';
+        import { SpirvRunner } from './SpirvRunner.js';
+        import { VisualIDE } from './VisualIDE.js';
+        import { VisualCompiler } from './VisualCompiler.js';
+
+        const font = new GeometryFont();
+        const runner = new SpirvRunner();
+        const compiler = new VisualCompiler();
+        let ide = null;
+
+        const schedulerBtn = document.getElementById('schedulerBtn');
+        const processSlots = document.getElementById('processSlots');
+        const textCanvas = document.getElementById('textCanvas');
+        const atlasCanvas = document.getElementById('atlasCanvas');
+        const textInput = document.getElementById('textInput');
+        const sizeSlider = document.getElementById('sizeSlider');
+        const displayCanvas = document.getElementById('displayCanvas');
+        const displayCtx = displayCanvas.getContext('2d');
+        const inputInfo = document.getElementById('inputInfo');
+        const ramMonitor = document.getElementById('ramMonitor');
+        const compileRunBtn = document.getElementById('compileRunBtn');
+        const ideResult = document.getElementById('ideResult');
+        const clearIdeBtn = document.getElementById('clearIdeBtn');
+        const savePngBtn = document.getElementById('savePngBtn');
+        const loadPngBtn = document.getElementById('loadPngBtn');
+        const fileInput = document.getElementById('fileInput');
+        const showPathToggle = document.getElementById('showPathToggle');
+        const palette = document.getElementById('palette');
+
+        let lastKey = 0;
+        const ramCells = [];
+        const slots = [null, null, null, null];
+        let isScheduling = false;
+
+        async function init() {
+            await font.load();
+            await runner.init();
+
+            // Initialize IDE
+            ide = new VisualIDE('ideCanvas', { gridSize: 16 });
+            await ide.init();
+
+            // Setup RAM Monitor
+            setupRamMonitor();
+
+            // Setup Palette
+            setupPalette();
+
+            // Draw atlas
+            const atlasCtx = atlasCanvas.getContext('2d');
+            atlasCtx.drawImage(font.atlasTexture, 0, 0);
+
+            // Initial text render
+            renderText();
+
+            // Keyboard listener
+            window.addEventListener('keydown', (e) => {
+                lastKey = e.keyCode;
+                inputInfo.textContent = `Last Key: ${e.key} (${lastKey})`;
+            });
+
+            // Initialize Slots
+            setupProcessSlots();
+        }
+
+        function setupProcessSlots() {
+            for (let i = 0; i < 4; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'palette-item';
+                slot.style.width = '100px';
+                slot.style.height = '60px';
+                slot.style.fontSize = '10px';
+                slot.style.flexDirection = 'column';
+                slot.innerHTML = `Slot ${i}<br><span id="slotName${i}" style="color:#666">Empty</span>`;
+                slot.onclick = () => {
+                    const name = prompt('Process Name?');
+                    if (name) {
+                        slots[i] = { 
+                            name, 
+                            binary: compiler.compile(ide.program, 16)
+                        };
+                        document.getElementById(`slotName${i}`).textContent = name;
+                        document.getElementById(`slotName${i}`).style.color = '#00ffcc';
+                        slot.style.borderColor = '#fff';
+                    }
+                };
+                processSlots.appendChild(slot);
+            }
+        }
+
+        async function schedulerLoop() {
+            if (!isScheduling) return;
+
+            const sharedInput = { 
+                127: lastKey,
+                126: Date.now() % 10000 
+            };
+
+            for (let i = 0; i < 4; i++) {
+                const proc = slots[i];
+                if (proc) {
+                    const { ram } = await runner.execute(`slot${i}`, proc.binary.binary, proc.binary.labelMap, sharedInput);
+                    renderDisplay(ram);
+                    updateRamMonitor(ram);
+                }
+            }
+
+            requestAnimationFrame(schedulerLoop);
+        }
+
+        schedulerBtn.onclick = () => {
+            isScheduling = !isScheduling;
+            schedulerBtn.textContent = isScheduling ? 'Stop OS Scheduler' : 'Start OS Scheduler';
+            if (isScheduling) schedulerLoop();
+        };
+
+            // Initial text render
+            renderText();
+
+            // Keyboard listener
+            window.addEventListener('keydown', (e) => {
+                lastKey = e.keyCode;
+                inputInfo.textContent = `Last Key: ${e.key} (${lastKey})`;
+            });
+        }
+
+        function setupRamMonitor() {
+            for (let i = 0; i < 256; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'ram-cell';
+                cell.innerHTML = `<span class="addr">${i}</span><span class="val">0</span>`;
+                ramMonitor.appendChild(cell);
+                ramCells.push(cell);
+            }
+        }
+
+        function updateRamMonitor(ram) {
+            for (let i = 0; i < 256; i++) {
+                const val = ram[i];
+                const cell = ramCells[i];
+                cell.querySelector('.val').textContent = val.toFixed(1);
+                if (val !== 0) {
+                    cell.classList.add('active');
+                } else {
+                    cell.classList.remove('active');
+                }
+            }
+        }
+
+        function setupPalette() {
+            // Add instructions
+            const instructions = ['+', '-', '*', '/', '>', '<', 'sin', 'cos', 'st', 'ld', '?', ':', 'rect', 'clr', 'tone'];
+            instructions.forEach(char => {
+                // Tone has no glyph in atlas, use manual info
+                if (char === 'tone') {
+                    createPaletteItem('tone', { g: 0x82, b: 0 });
+                    return;
+                }
+                let label = char;
+                if (char === '?') label = 'jnz';
+                if (char === ':') label = 'lbl';
+                const info = font.getGlyphInfo(char);
+                createPaletteItem(label, info);
+            });
+            // Add some constants
+            [0, 1, 10, 20, 50, 100, 127, 128, 440, 880, 0.5, 1.0].forEach(val => {
+                const info = { g: 0, b: val };
+                createPaletteItem(val.toString(), info);
+            });
+        }
+
+        function createPaletteItem(label, info) {
+            const btn = document.createElement('button');
+            btn.textContent = label;
+            btn.className = 'palette-item';
+            btn.onclick = () => {
+                ide.selectGlyph(label.length === 1 ? label : null, info);
+                document.querySelectorAll('.palette-item').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+            };
+            palette.appendChild(btn);
+        }
+
+        async function runIdeProgram() {
+            try {
+                ideResult.textContent = 'Compiling...';
+                const grid = ide.program;
+                const { binary, labelMap } = compiler.compile(grid, 16);
+
+                ideResult.textContent = 'Running...';
+                const { result, ram } = await runner.execute(binary, labelMap, { 127: lastKey });
+                ideResult.textContent = `Result: ${result}`;
+
+                // Sync Display
+                renderDisplay(ram);
+                // Sync RAM Monitor
+                updateRamMonitor(ram);
+            } catch (err) {
+                console.error(err);
+                ideResult.textContent = `Error: ${err.message}`;
+            }
+        }
+
+        function renderDisplay(ram) {
+            const pixelSize = 8;
+            displayCtx.fillStyle = '#000';
+            displayCtx.fillRect(0, 0, displayCanvas.width, displayCanvas.height);
+
+            for (let i = 0; i < 128; i++) {
+                const val = ram[128 + i];
+                if (val > 0) {
+                    const x = (i % 16) * pixelSize;
+                    const y = Math.floor(i / 16) * pixelSize;
+                    const brightness = Math.min(255, val * 25.5);
+                    displayCtx.fillStyle = `rgb(0, ${brightness}, ${brightness * 0.8})`;
+                    displayCtx.fillRect(x, y, pixelSize - 1, pixelSize - 1);
+                }
+            }
+        }
+
+        function renderText() {
+            const ctx = textCanvas.getContext('2d');
+            const text = textInput.value;
+            const scale = sizeSlider.value / 16;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, textCanvas.width, textCanvas.height);
+            font.drawText(ctx, text, 10, 10, { scale, tint: '#00ffcc' });
+        }
+
+        compileRunBtn.addEventListener('click', runIdeProgram);
+        clearIdeBtn.addEventListener('click', () => {
+            ide.program.fill(null);
+            ide.render();
+            ideResult.textContent = 'Result: --';
+        });
+
+        savePngBtn.addEventListener('click', async () => {
+            const dataUrl = await ide.exportToPNG();
+            const link = document.createElement('a');
+            link.download = 'gos_program.png';
+            link.href = dataUrl;
+            link.click();
+        });
+
+        loadPngBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => ide.loadFromPNG(img);
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        showPathToggle.addEventListener('change', (e) => {
+            ide.setShowHilbertPath(e.target.checked);
+        });
+        textInput.addEventListener('input', renderText);
+        sizeSlider.addEventListener('input', () => {
+            document.getElementById('sizeVal').textContent = sizeSlider.value + 'px';
+            renderText();
+        });
+
+        init().catch(err => {
+            console.error('Failed to load font:', err);
+            document.body.innerHTML = '<h1>Error Loading Font</h1><p>Run install.py first to generate assets.</p>';
+        });
+    </script>
+</body>
+</html>

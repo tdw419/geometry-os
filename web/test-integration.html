@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Integration Tests</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #ccc;
+            font-family: monospace;
+            padding: 20px;
+        }
+        h1 { color: #00ffcc; margin-bottom: 20px; }
+        h2 { color: #ffaa00; margin: 20px 0 10px 0; font-size: 14px; }
+        .test-suite {
+            background: rgba(0, 20, 30, 0.8);
+            border: 1px solid rgba(0, 255, 200, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .test-result {
+            display: flex;
+            align-items: center;
+            padding: 6px 10px;
+            margin: 4px 0;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+        .test-result.pass { border-left: 3px solid #00ff88; }
+        .test-result.fail { border-left: 3px solid #ff4444; }
+        .test-result.pending { border-left: 3px solid #ffaa00; }
+        .test-result.skip { border-left: 3px solid #888; }
+        .icon { margin-right: 10px; font-size: 14px; }
+        .pass .icon { color: #00ff88; }
+        .fail .icon { color: #ff4444; }
+        .pending .icon { color: #ffaa00; }
+        .skip .icon { color: #888; }
+        .name { flex: 1; }
+        .duration { color: #888; font-size: 11px; margin-left: 10px; }
+        .summary {
+            display: flex;
+            gap: 20px;
+            padding: 15px;
+            background: rgba(0, 255, 200, 0.1);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .summary-item { text-align: center; }
+        .summary-value { font-size: 24px; font-weight: bold; }
+        .summary-label { font-size: 11px; color: #888; }
+        #pass-count { color: #00ff88; }
+        #fail-count { color: #ff4444; }
+        #skip-count { color: #888; }
+        .progress-bar {
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00ffcc);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        #run-btn {
+            background: linear-gradient(180deg, #1a3a2a 0%, #0a2a1a 100%);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 10px 30px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        #run-btn:hover { background: linear-gradient(180deg, #2a4a3a 0%, #1a3a2a 100%); }
+        #run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 11px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .log-entry { margin: 2px 0; }
+        .log-info { color: #888; }
+        .log-success { color: #00ff88; }
+        .log-error { color: #ff4444; }
+    </style>
+</head>
+<body>
+    <h1>◈ Geometry OS Integration Tests</h1>
+    
+    <div class="summary">
+        <div class="summary-item">
+            <div class="summary-value" id="pass-count">0</div>
+            <div class="summary-label">PASSED</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value" id="fail-count">0</div>
+            <div class="summary-label">FAILED</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value" id="skip-count">0</div>
+            <div class="summary-label">SKIPPED</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value" id="total-count">0</div>
+            <div class="summary-label">TOTAL</div>
+        </div>
+    </div>
+    
+    <div class="progress-bar">
+        <div class="progress-fill" id="progress"></div>
+    </div>
+    
+    <button id="run-btn">▶ Run All Tests</button>
+    
+    <div id="test-results"></div>
+    <div id="log" class="log"></div>
+    
+    <script type="module">
+        import { GeometryKernel } from './GeometryKernel.js';
+        import { GPUMemoryManager } from './GPUMemoryManager.js';
+        import { Shell } from './Shell.js';
+        import { GOSRouter } from './GOSRouter.js';
+        import { VisualDesktop } from './VisualDesktop.js';
+        
+        // Test framework
+        class TestRunner {
+            constructor() {
+                this.results = [];
+                this.suites = new Map();
+                this.passed = 0;
+                this.failed = 0;
+                this.skipped = 0;
+                this.currentSuite = null;
+            }
+            
+            suite(name, fn) {
+                this.currentSuite = name;
+                this.suites.set(name, { tests: [], fn });
+            }
+            
+            test(name, fn) {
+                if (this.currentSuite) {
+                    this.suites.get(this.currentSuite).tests.push({ name, fn });
+                }
+            }
+            
+            async runAll() {
+                const startTime = performance.now();
+                this.log('Starting integration tests...', 'info');
+                
+                for (const [suiteName, suite] of this.suites) {
+                    this.renderSuiteHeader(suiteName);
+                    
+                    for (const test of suite.tests) {
+                        await this.runTest(suiteName, test);
+                    }
+                }
+                
+                const duration = (performance.now() - startTime).toFixed(0);
+                this.log(`Tests completed in ${duration}ms`, 'success');
+                this.updateSummary();
+            }
+            
+            async runTest(suiteName, test) {
+                const startTime = performance.now();
+                let status = 'pending';
+                let error = null;
+                
+                try {
+                    await test.fn();
+                    status = 'pass';
+                    this.passed++;
+                    this.log(`✓ ${test.name}`, 'success');
+                } catch (e) {
+                    status = 'fail';
+                    this.failed++;
+                    error = e.message;
+                    this.log(`✗ ${test.name}: ${e.message}`, 'error');
+                }
+                
+                const duration = (performance.now() - startTime).toFixed(0);
+                this.renderResult(suiteName, test.name, status, duration, error);
+                this.updateProgress();
+            }
+            
+            renderSuiteHeader(name) {
+                const container = document.getElementById('test-results');
+                const suite = document.createElement('div');
+                suite.className = 'test-suite';
+                suite.id = `suite-${name.replace(/\s+/g, '-')}`;
+                suite.innerHTML = `<h2>${name}</h2>`;
+                container.appendChild(suite);
+            }
+            
+            renderResult(suiteName, testName, status, duration, error) {
+                const suite = document.getElementById(`suite-${suiteName.replace(/\s+/g, '-')}`);
+                const result = document.createElement('div');
+                result.className = `test-result ${status}`;
+                
+                const icons = { pass: '✓', fail: '✗', pending: '○', skip: '−' };
+                
+                result.innerHTML = `
+                    <span class="icon">${icons[status]}</span>
+                    <span class="name">${testName}</span>
+                    <span class="duration">${duration}ms</span>
+                `;
+                
+                if (error) {
+                    result.title = error;
+                }
+                
+                suite.appendChild(result);
+            }
+            
+            updateProgress() {
+                const total = this.passed + this.failed + this.skipped;
+                const done = this.suites.size;
+                const progress = (total / 30) * 100; // Approximate total tests
+                document.getElementById('progress').style.width = `${Math.min(100, progress)}%`;
+            }
+            
+            updateSummary() {
+                document.getElementById('pass-count').textContent = this.passed;
+                document.getElementById('fail-count').textContent = this.failed;
+                document.getElementById('skip-count').textContent = this.skipped;
+                document.getElementById('total-count').textContent = this.passed + this.failed + this.skipped;
+            }
+            
+            log(message, type = 'info') {
+                const log = document.getElementById('log');
+                const entry = document.createElement('div');
+                entry.className = `log-entry log-${type}`;
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                log.appendChild(entry);
+                log.scrollTop = log.scrollHeight;
+            }
+        }
+        
+        const runner = new TestRunner();
+        
+        // ============================================
+        // TEST SUITES
+        // ============================================
+        
+        // Suite 1: WebGPU Initialization
+        runner.suite('WebGPU Initialization', () => {
+            runner.test('WebGPU adapter available', async () => {
+                if (!navigator.gpu) throw new Error('WebGPU not supported');
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) throw new Error('No GPU adapter found');
+            });
+            
+            runner.test('WebGPU device can be requested', async () => {
+                const adapter = await navigator.gpu.requestAdapter();
+                const device = await adapter.requestDevice();
+                if (!device) throw new Error('Failed to get GPU device');
+            });
+            
+            runner.test('GPU buffer creation works', async () => {
+                const adapter = await navigator.gpu.requestAdapter();
+                const device = await adapter.requestDevice();
+                const buffer = device.createBuffer({
+                    size: 1024,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
+                if (!buffer) throw new Error('Failed to create buffer');
+            });
+        });
+        
+        // Suite 2: Memory Management
+        runner.suite('GPU Memory Management', () => {
+            runner.test('GPUMemoryManager initializes', async () => {
+                const adapter = await navigator.gpu.requestAdapter();
+                const device = await adapter.requestDevice();
+                const manager = new GPUMemoryManager(device);
+                await manager.init();
+                if (!manager.pageTable) throw new Error('Page table not initialized');
+            });
+            
+            runner.test('malloc allocates pages', async () => {
+                const adapter = await navigator.gpu.requestAdapter();
+                const device = await adapter.requestDevice();
+                const manager = new GPUMemoryManager(device);
+                await manager.init();
+                
+                const ptr = manager.malloc(1, 8192, 0); // 2 pages
+                if (ptr === 0) throw new Error('malloc returned null');
+            });
+            
+            runner.test('free deallocates pages', async () => {
+                const adapter = await navigator.gpu.requestAdapter();
+                const device = await adapter.requestDevice();
+                const manager = new GPUMemoryManager(device);
+                await manager.init();
+                
+                const ptr = manager.malloc(2, 4096, 0);
+                manager.free(2);
+                // Try to allocate again - should succeed
+                const ptr2 = manager.malloc(3, 4096, 0);
+                if (ptr2 === 0) throw new Error('Failed to allocate after free');
+            });
+            
+            runner.test('translate converts virtual to physical', async () => {
+                const adapter = await navigator.gpu.requestAdapter();
+                const device = await adapter.requestDevice();
+                const manager = new GPUMemoryManager(device);
+                await manager.init();
+                
+                const ptr = manager.malloc(4, 4096, 0);
+                const phys = manager.translate(4, 0);
+                if (phys < 0) throw new Error('Translation failed');
+            });
+        });
+        
+        // Suite 3: Process Model
+        runner.suite('Process Model', () => {
+            runner.test('GeometryKernel initializes', async () => {
+                const kernel = new GeometryKernel();
+                await kernel.init();
+                if (!kernel.device) throw new Error('Kernel device not initialized');
+            });
+            
+            runner.test('Process can be spawned', async () => {
+                const kernel = new GeometryKernel();
+                await kernel.init();
+                
+                // Create minimal SPIR-V header
+                const spirv = new Uint32Array([
+                    0x07230203, // Magic
+                    0x00010000, // Version
+                    0x00000000, // Generator
+                    0x00000001, // Bound
+                    0x00000000  // Schema
+                ]);
+                
+                const pid = await kernel.spawnProcess(spirv.buffer, 'test.spv');
+                if (pid < 0) throw new Error('Failed to spawn process');
+            });
+            
+            runner.test('Multiple processes can coexist', async () => {
+                const kernel = new GeometryKernel();
+                await kernel.init();
+                
+                const spirv = new Uint32Array([0x07230203, 0x00010000, 0, 1, 0]);
+                
+                const pid1 = await kernel.spawnProcess(spirv.buffer, 'test1.spv');
+                const pid2 = await kernel.spawnProcess(spirv.buffer, 'test2.spv');
+                
+                if (pid1 === pid2) throw new Error('PIDs should be unique');
+            });
+        });
+        
+        // Suite 4: Shell Commands
+        runner.suite('Shell Commands', () => {
+            runner.test('Shell initializes', () => {
+                const shell = new Shell(null, null);
+                if (!shell.env) throw new Error('Shell environment not initialized');
+            });
+            
+            runner.test('echo command works', async () => {
+                const shell = new Shell(null, null);
+                const result = await shell.execute('echo hello world');
+                if (result !== 'hello world') throw new Error(`Expected 'hello world', got '${result}'`);
+            });
+            
+            runner.test('pwd command works', async () => {
+                const shell = new Shell(null, null);
+                const result = await shell.execute('pwd');
+                if (result !== '/') throw new Error(`Expected '/', got '${result}'`);
+            });
+            
+            runner.test('help command works', async () => {
+                const shell = new Shell(null, null);
+                const result = await shell.execute('help');
+                if (!result.includes('Available Commands')) throw new Error('Help output missing expected text');
+            });
+            
+            runner.test('env command works', async () => {
+                const shell = new Shell(null, null);
+                const result = await shell.execute('env');
+                if (!result.includes('USER=geometer')) throw new Error('Environment not showing USER');
+            });
+            
+            runner.test('export sets variable', async () => {
+                const shell = new Shell(null, null);
+                await shell.execute('export TEST=value');
+                if (shell.env.TEST !== 'value') throw new Error('Export failed');
+            });
+        });
+        
+        // Suite 5: Networking
+        runner.suite('GPU Networking', () => {
+            runner.test('GOSRouter initializes', () => {
+                const router = new GOSRouter();
+                if (!router.ports) throw new Error('Router ports not initialized');
+            });
+            
+            runner.test('Can bind to port', () => {
+                const router = new GOSRouter();
+                router.bind(5000, (packet) => {});
+                if (!router.ports.has(5000)) throw new Error('Port not bound');
+            });
+            
+            runner.test('Can send packet', () => {
+                const router = new GOSRouter();
+                let received = false;
+                router.bind(5001, (packet) => { received = true; });
+                router.send(5000, 5001, 0x01, new Uint8Array([1, 2, 3]));
+                router.route();
+                if (!received) throw new Error('Packet not received');
+            });
+            
+            runner.test('Broadcast works', () => {
+                const router = new GOSRouter();
+                let count = 0;
+                router.bind(5000, () => { count++; });
+                router.bind(5001, () => { count++; });
+                router.broadcast(5002, 0x01, new Uint8Array([1]));
+                router.route();
+                if (count !== 2) throw new Error('Broadcast failed');
+            });
+        });
+        
+        // Suite 6: Visual Desktop
+        runner.suite('Visual Desktop', () => {
+            runner.test('DesktopWindow creation', () => {
+                const container = document.createElement('div');
+                const desktop = new VisualDesktop(container);
+                if (!desktop.windows) throw new Error('Desktop not initialized');
+            });
+            
+            runner.test('createWindow works', () => {
+                const container = document.createElement('div');
+                container.style.cssText = 'position: relative; width: 800px; height: 600px;';
+                document.body.appendChild(container);
+                
+                const desktop = new VisualDesktop(container);
+                desktop.init();
+                
+                const win = desktop.createWindow({ title: 'Test' });
+                if (!win || !win.element) throw new Error('Window not created');
+                
+                container.remove();
+            });
+            
+            runner.test('launchApp creates window', () => {
+                const container = document.createElement('div');
+                container.style.cssText = 'position: relative; width: 800px; height: 600px;';
+                document.body.appendChild(container);
+                
+                const desktop = new VisualDesktop(container);
+                desktop.init();
+                
+                const win = desktop.launchApp('terminal');
+                if (!win) throw new Error('App not launched');
+                
+                container.remove();
+            });
+            
+            runner.test('keyboard shortcuts registered', () => {
+                const container = document.createElement('div');
+                const desktop = new VisualDesktop(container);
+                desktop.init();
+                
+                if (!desktop.shortcuts.has('Alt+F4')) throw new Error('Alt+F4 not registered');
+                if (!desktop.shortcuts.has('Alt+Tab')) throw new Error('Alt+Tab not registered');
+            });
+        });
+        
+        // Suite 7: Integration Tests
+        runner.suite('End-to-End Integration', () => {
+            runner.test('Shell + Filesystem integration', async () => {
+                // This would require a real filesystem - skipping for now
+                throw new Error('SKIP: Requires MorphologicalFS GPU initialization');
+            });
+            
+            runner.test('Kernel + Memory integration', async () => {
+                const kernel = new GeometryKernel();
+                await kernel.init();
+                
+                if (!kernel.memoryManager) throw new Error('Memory manager not attached');
+            });
+            
+            runner.test('Process isolation enforced', async () => {
+                const adapter = await navigator.gpu.requestAdapter();
+                const device = await adapter.requestDevice();
+                const manager = new GPUMemoryManager(device);
+                await manager.init();
+                
+                // Allocate for PID 1 and PID 2
+                const ptr1 = manager.malloc(1, 4096, 0);
+                const ptr2 = manager.malloc(2, 4096, 0);
+                
+                // PID 1 should not be able to access PID 2's memory
+                const phys1 = manager.translate(1, 0);
+                const phys2 = manager.translate(2, 0);
+                
+                if (phys1 === phys2) throw new Error('Processes share physical memory');
+            });
+        });
+        
+        // Run button
+        document.getElementById('run-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('run-btn');
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+            
+            document.getElementById('test-results').innerHTML = '';
+            document.getElementById('log').innerHTML = '';
+            runner.passed = 0;
+            runner.failed = 0;
+            runner.skipped = 0;
+            
+            await runner.runAll();
+            
+            btn.disabled = false;
+            btn.textContent = '▶ Run All Tests';
+        });
+        
+        console.log('%c[Integration Tests] Ready. Click "Run All Tests" to start.', 'color: #00ffcc;');
+    </script>
+</body>
+</html>

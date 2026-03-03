@@ -100,7 +100,7 @@ GLYPH_OPCODES = {
 
     # IPC glyphs
     '✉': 'MSG_SEND',  # Envelope = send
-    '📭': 'MSG_RECV', # Open mailbox = receive
+    '📥': 'MSG_RECV',  # Inbox = receive
     '👁': 'MSG_PEEK',  # Eye = peek
 
     # System glyphs

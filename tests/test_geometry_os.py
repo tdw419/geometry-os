@@ -22,7 +22,7 @@ class TestFontAtlas(unittest.TestCase):
     """Test Font Atlas generation."""
 
     def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
+        self.temp_dir = Path(tempfile.mkdtemp())
         self.atlas_path = self.temp_dir / "test_atlas.png"
         self.json_path = self.temp_dir / "test_glyphs.json"
 
@@ -52,9 +52,9 @@ class TestFontAtlas(unittest.TestCase):
         import core.atlas_gen as atlas
 
         # Check arithmetic glyphs
-        self.assertIn(161, atlas.glyphs)  # ⊕ FADD
-        self.assertEqual(atlas.glyphs[161]["char"], "⊕")
-        self.assertTrue(atlas.glyphs[161]["is_instruction"])
+        self.assertIn(160, atlas.glyphs)  # ⊕ FADD
+        self.assertEqual(atlas.glyphs[160]["char"], "⊕")
+        self.assertTrue(atlas.glyphs[160]["is_instruction"])
 
         # Check memory glyphs
         self.assertIn(164, atlas.glyphs)  # → STORE

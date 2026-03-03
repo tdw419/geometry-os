@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Morphological Filesystem</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 { font-size: 24px; margin-bottom: 10px; text-shadow: 0 0 10px #00ff88; }
+        .subtitle { color: #666; margin-bottom: 20px; font-size: 14px; }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
+            gap: 20px;
+        }
+        .panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .panel h3 {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .stat-item { background: #0a0a0a; padding: 10px; border-radius: 4px; }
+        .stat-label { color: #666; font-size: 10px; text-transform: uppercase; }
+        .stat-value { font-size: 18px; color: #00ff88; }
+        .file-list { list-style: none; }
+        .file-item {
+            display: flex; align-items: center; padding: 8px;
+            border-radius: 4px; cursor: pointer; transition: background 0.2s;
+        }
+        .file-item:hover { background: #2a2a2a; }
+        .file-item.selected { background: #00ff8833; border: 1px solid #00ff88; }
+        .file-icon { width: 24px; height: 24px; margin-right: 10px; text-align: center; }
+        .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-size { color: #666; font-size: 12px; }
+        .block-grid {
+            display: grid; grid-template-columns: repeat(32, 1fr); gap: 1px;
+            background: #0a0a0a; padding: 10px; border-radius: 4px;
+        }
+        .block-cell {
+            aspect-ratio: 1; background: #1a1a1a; border-radius: 2px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .block-cell:hover { transform: scale(1.5); z-index: 10; }
+        .block-cell.free { background: #00ff8844; }
+        .block-cell.used { background: #ff444488; }
+        .block-cell.system { background: #666; }
+        .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        button {
+            background: #1a1a1a; border: 1px solid #00ff88; color: #00ff88;
+            padding: 8px 16px; border-radius: 4px; cursor: pointer;
+            font-family: inherit; font-size: 12px;
+        }
+        button:hover { background: #00ff88; color: #0a0a0a; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        input[type="text"] {
+            background: #0a0a0a; border: 1px solid #333; color: #00ff88;
+            padding: 8px; border-radius: 4px; font-family: inherit; width: 100%; margin-bottom: 10px;
+        }
+        .terminal {
+            background: #0a0a0a; padding: 10px; border-radius: 4px;
+            font-size: 12px; height: 150px; overflow-y: auto;
+        }
+        .terminal-line { margin: 2px 0; }
+        .terminal-output { color: #888; }
+        .terminal-error { color: #ff4444; }
+        .legend { display: flex; gap: 15px; margin-top: 10px; font-size: 11px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+        #status {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            padding: 10px 20px; background: #1a1a1a; border: 1px solid #333;
+            border-radius: 4px; font-size: 12px;
+        }
+        .content-preview {
+            background: #0a0a0a; padding: 10px; border-radius: 4px;
+            min-height: 80px; font-size: 12px; white-space: pre-wrap; word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <h1>Geometry OS - Morphological Filesystem</h1>
+    <p class="subtitle">"The Screen IS the Hard Drive" - Files mapped via Hilbert curves</p>
+
+    <div class="container">
+        <div class="panel">
+            <h3>📁 File Browser</h3>
+            <input type="text" id="new-filename" placeholder="newfile.txt">
+            <div class="controls">
+                <button id="btn-create">Create</button>
+                <button id="btn-delete">Delete</button>
+            </div>
+            <ul class="file-list" id="file-list" style="margin-top: 15px; max-height: 400px; overflow-y: auto;"></ul>
+        </div>
+
+        <div class="panel">
+            <h3>🗺️ Spatial Block Map</h3>
+            <div class="stats-grid" style="margin-bottom: 15px;">
+                <div class="stat-item">
+                    <div class="stat-label">Total Blocks</div>
+                    <div class="stat-value" id="total-blocks">49,152</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Free Blocks</div>
+                    <div class="stat-value" id="free-blocks">48,896</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Used</div>
+                    <div class="stat-value" id="used-blocks">256</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Storage</div>
+                    <div class="stat-value" id="storage-size">192 MB</div>
+                </div>
+            </div>
+            <div class="block-grid" id="block-grid"></div>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background: #666;"></div><span>System</span></div>
+                <div class="legend-item"><div class="legend-color" style="background: #00ff8844;"></div><span>Free</span></div>
+                <div class="legend-item"><div class="legend-color" style="background: #ff444488;"></div><span>Used</span></div>
+            </div>
+            <div class="controls" style="margin-top: 15px;">
+                <button id="btn-stress">Stress Test</button>
+            </div>
+        </div>
+
+        <div>
+            <div class="panel">
+                <h3>📊 File Details</h3>
+                <div id="file-details"><p style="color: #666;">Select a file</p></div>
+            </div>
+            <div class="panel" style="margin-top: 15px;">
+                <h3>💻 Terminal</h3>
+                <div class="terminal" id="terminal">
+                    <div class="terminal-line terminal-output">MorphologicalFS v1.0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="status">Initializing...</div>
+
+    <script type="module">
+        import { MorphologicalFS, BLOCK_SIZE } from './MorphologicalFS.js';
+
+        const fileListEl = document.getElementById('file-list');
+        const blockGridEl = document.getElementById('block-grid');
+        const terminalEl = document.getElementById('terminal');
+        const statusEl = document.getElementById('status');
+        const fileDetailsEl = document.getElementById('file-details');
+        const newFilenameInput = document.getElementById('new-filename');
+
+        let fs = null;
+        let selectedFile = null;
+
+        function log(msg, type = 'output') {
+            const line = document.createElement('div');
+            line.className = `terminal-line terminal-${type}`;
+            line.textContent = msg;
+            terminalEl.appendChild(line);
+            terminalEl.scrollTop = terminalEl.scrollHeight;
+        }
+
+        function updateStats() {
+            if (!fs) return;
+            const stats = fs.getStats();
+            document.getElementById('total-blocks').textContent = stats.totalBlocks.toLocaleString();
+            document.getElementById('free-blocks').textContent = stats.freeBlocks.toLocaleString();
+            document.getElementById('used-blocks').textContent = stats.usedBlocks.toLocaleString();
+        }
+
+        function renderFileList() {
+            if (!fs) return;
+            fileListEl.innerHTML = '';
+            const files = fs.listdir('/');
+            if (files.length === 0) {
+                fileListEl.innerHTML = '<li style="padding: 10px; color: #666;">No files</li>';
+                return;
+            }
+            for (const file of files) {
+                const li = document.createElement('li');
+                li.className = 'file-item' + (selectedFile === file.name ? ' selected' : '');
+                li.innerHTML = `<span class="file-icon">📄</span><span class="file-name">${file.name}</span><span class="file-size">${file.size}B</span>`;
+                li.addEventListener('click', () => selectFile(file.name));
+                fileListEl.appendChild(li);
+            }
+        }
+
+        function renderBlockGrid() {
+            if (!fs) return;
+            blockGridEl.innerHTML = '';
+            for (let i = 0; i < 1024; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'block-cell';
+                if (i < 256) cell.classList.add('system');
+                else if (fs._isBlockFree(i)) cell.classList.add('free');
+                else cell.classList.add('used');
+                cell.title = `Block ${i}`;
+                blockGridEl.appendChild(cell);
+            }
+        }
+
+        function selectFile(filename) {
+            selectedFile = filename;
+            renderFileList();
+            const stat = fs.stat(filename);
+            if (stat) {
+                fileDetailsEl.innerHTML = `
+                    <div class="stat-item" style="margin-bottom: 5px;">
+                        <div class="stat-label">Name</div>
+                        <div class="stat-value" style="font-size: 14px;">${stat.name}</div>
+                    </div>
+                    <div class="stat-item" style="margin-bottom: 5px;">
+                        <div class="stat-label">Size</div>
+                        <div class="stat-value" style="font-size: 14px;">${stat.size} bytes</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Blocks</div>
+                        <div class="stat-value" style="font-size: 14px;">${stat.blocks}</div>
+                    </div>
+                `;
+            }
+        }
+
+        function createFile() {
+            const name = newFilenameInput.value.trim();
+            if (!name) { log('Error: Enter a filename', 'error'); return; }
+            const fd = fs.open(name, 4);
+            if (fd < 0) { log(`Error: Could not create "${name}"`, 'error'); return; }
+            const content = `Created: ${new Date().toISOString()}\n`;
+            fs.write(fd, new TextEncoder().encode(content), 0, content.length);
+            fs.close(fd);
+            log(`Created: ${name}`);
+            newFilenameInput.value = '';
+            renderFileList();
+            renderBlockGrid();
+            updateStats();
+        }
+
+        function deleteFile() {
+            if (!selectedFile) { log('Error: No file selected', 'error'); return; }
+            if (fs.unlink(selectedFile)) {
+                log(`Deleted: ${selectedFile}`);
+                selectedFile = null;
+                renderFileList();
+                renderBlockGrid();
+                updateStats();
+            }
+        }
+
+        async function stressTest() {
+            log('Stress test: creating 10 files...');
+            for (let i = 0; i < 10; i++) {
+                const name = `test_${i}.dat`;
+                const fd = fs.open(name, 4);
+                if (fd >= 0) {
+                    const size = Math.floor(Math.random() * 8000) + 1000;
+                    const data = new Uint8Array(size);
+                    fs.write(fd, data, 0, size);
+                    fs.close(fd);
+                    log(`  Created: ${name} (${size}B)`);
+                }
+                renderFileList();
+                renderBlockGrid();
+                updateStats();
+            }
+            log('Done.');
+        }
+
+        async function init() {
+            try {
+                const mockDevice = {
+                    createBuffer: (desc) => ({ size: desc.size, _data: new ArrayBuffer(desc.size) }),
+                    queue: { writeBuffer: () => {} }
+                };
+                fs = new MorphologicalFS({ device: mockDevice });
+                await fs.init();
+                statusEl.innerHTML = '<span style="color: #00ff88;">✓ Filesystem ready</span>';
+                log(`Mounted: ${fs.stats.totalBlocks} blocks`);
+                renderFileList();
+                renderBlockGrid();
+                updateStats();
+                document.getElementById('btn-create').disabled = false;
+                document.getElementById('btn-delete').disabled = false;
+                document.getElementById('btn-stress').disabled = false;
+            } catch (err) {
+                statusEl.innerHTML = `<span style="color: #ff4444;">Error: ${err.message}</span>`;
+                log(`Error: ${err.message}`, 'error');
+            }
+        }
+
+        document.getElementById('btn-create').addEventListener('click', createFile);
+        document.getElementById('btn-delete').addEventListener('click', deleteFile);
+        document.getElementById('btn-stress').addEventListener('click', stressTest);
+        newFilenameInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') createFile(); });
+        init();
+    </script>
+</body>
+</html>

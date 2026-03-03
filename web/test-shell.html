@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS Shell</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: #1a1a1a;
+            padding: 10px 20px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 16px;
+            color: #00ff88;
+        }
+        .header-info {
+            font-size: 12px;
+            color: #666;
+        }
+        .terminal-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        .terminal {
+            flex: 1;
+            background: #0a0a0a;
+            padding: 20px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .terminal-line {
+            margin: 2px 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .prompt { color: #00ff88; }
+        .command { color: #ffffff; }
+        .output { color: #888; }
+        .error { color: #ff4444; }
+        .success { color: #00ff88; }
+        .directory { color: #00aaff; }
+        .file { color: #888; }
+        .glyph { color: #ffaa00; }
+        .input-line {
+            display: flex;
+            align-items: center;
+            padding: 10px 20px;
+            background: #1a1a1a;
+            border-top: 1px solid #333;
+        }
+        .input-prompt {
+            color: #00ff88;
+            margin-right: 10px;
+            white-space: pre;
+        }
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+        #command-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        }
+        .cursor {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background: #00ff88;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        .sidebar {
+            width: 250px;
+            background: #1a1a1a;
+            border-left: 1px solid #333;
+            padding: 15px;
+            overflow-y: auto;
+        }
+        .sidebar h3 {
+            color: #888;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+        .command-list {
+            list-style: none;
+        }
+        .command-list li {
+            padding: 5px 0;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .command-list .glyph {
+            width: 20px;
+            text-align: center;
+        }
+        .main-content {
+            flex: 1;
+            display: flex;
+        }
+        .status-bar {
+            background: #1a1a1a;
+            padding: 5px 20px;
+            border-top: 1px solid #333;
+            font-size: 11px;
+            color: #666;
+            display: flex;
+            justify-content: space-between;
+        }
+        .quick-commands {
+            display: flex;
+            gap: 5px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .quick-cmd {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            color: #888;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: inherit;
+        }
+        .quick-cmd:hover {
+            border-color: #00ff88;
+            color: #00ff88;
+        }
+        .env-vars {
+            margin-top: 15px;
+            font-size: 11px;
+        }
+        .env-vars dt {
+            color: #666;
+        }
+        .env-vars dd {
+            color: #00ff88;
+            margin-left: 0;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>◆ Geometry OS Shell</h1>
+        <div class="header-info">
+            <span id="user-info">geometer@geometry</span> | 
+            <span id="time-info"></span>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="terminal-container">
+            <div class="terminal" id="terminal">
+                <div class="terminal-line output">Geometry OS Shell v1.0</div>
+                <div class="terminal-line output">Type 'help' for available commands</div>
+                <div class="terminal-line output"></div>
+            </div>
+            <div class="input-line">
+                <span class="input-prompt" id="prompt">geometer@geometry:~$ </span>
+                <div class="input-wrapper">
+                    <input type="text" id="command-input" autofocus autocomplete="off" spellcheck="false">
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <h3>⚡ Quick Commands</h3>
+            <ul class="command-list">
+                <li><span class="glyph">▣</span> ls - List files</li>
+                <li><span class="glyph">◈</span> cd - Change dir</li>
+                <li><span class="glyph">◆</span> cat - View file</li>
+                <li><span class="glyph">▶</span> run - Execute</li>
+                <li><span class="glyph">☰</span> ps - Processes</li>
+                <li><span class="glyph">✖</span> kill - Terminate</li>
+                <li><span class="glyph">?</span> help - Help</li>
+                <li><span class="glyph">✕</span> clear - Clear</li>
+            </ul>
+            <div class="quick-commands">
+                <button class="quick-cmd" data-cmd="ls">ls</button>
+                <button class="quick-cmd" data-cmd="ps">ps</button>
+                <button class="quick-cmd" data-cmd="help">help</button>
+                <button class="quick-cmd" data-cmd="clear">clear</button>
+            </div>
+
+            <h3 style="margin-top: 20px;">📊 Environment</h3>
+            <dl class="env-vars">
+                <dt>USER</dt>
+                <dd id="env-user">geometer</dd>
+                <dt>HOME</dt>
+                <dd id="env-home">/home/geometer</dd>
+                <dt>SHELL</dt>
+                <dd>/bin/gsh</dd>
+                <dt>CWD</dt>
+                <dd id="env-cwd">/home/geometer</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="status-left">Ready</span>
+        <span id="status-right">History: 0 commands</span>
+    </div>
+
+    <script type="module">
+        import { Shell, GLYPHS } from './Shell.js';
+        import { MorphologicalFS } from './MorphologicalFS.js';
+
+        const terminalEl = document.getElementById('terminal');
+        const inputEl = document.getElementById('command-input');
+        const promptEl = document.getElementById('prompt');
+        const statusLeftEl = document.getElementById('status-left');
+        const statusRightEl = document.getElementById('status-right');
+        const envCwdEl = document.getElementById('env-cwd');
+
+        let shell = null;
+        let historyIndex = -1;
+        let currentInput = '';
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('time-info').textContent = now.toLocaleTimeString();
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        function log(text, className = 'output') {
+            const line = document.createElement('div');
+            line.className = `terminal-line ${className}`;
+            line.textContent = text;
+            terminalEl.appendChild(line);
+            terminalEl.scrollTop = terminalEl.scrollHeight;
+        }
+
+        function logHTML(html) {
+            const line = document.createElement('div');
+            line.className = 'terminal-line';
+            line.innerHTML = html;
+            terminalEl.appendChild(line);
+            terminalEl.scrollTop = terminalEl.scrollHeight;
+        }
+
+        function updatePrompt() {
+            promptEl.textContent = shell.getPrompt();
+            envCwdEl.textContent = shell.cwd;
+        }
+
+        async function executeCommand(cmd) {
+            if (!cmd.trim()) return;
+
+            // Show command in terminal
+            logHTML(`<span class="prompt">${shell.getPrompt()}</span><span class="command">${cmd}</span>`);
+
+            // Execute
+            const result = await shell.execute(cmd);
+
+            // Handle special commands
+            if (result === 'exit') {
+                log('Goodbye!', 'success');
+                inputEl.disabled = true;
+                return;
+            }
+
+            // Handle clear screen
+            if (result === '\x1b[2J\x1b[H') {
+                terminalEl.innerHTML = '';
+                return;
+            }
+
+            // Show output
+            if (result) {
+                // Format output with colors
+                const lines = result.split('\n');
+                for (const line of lines) {
+                    if (line.includes('📁') || line.includes('📄')) {
+                        logHTML(`<span class="output">${line}</span>`);
+                    } else if (line.startsWith('Error') || line.includes(': cannot ') || line.includes(': No such')) {
+                        log(line, 'error');
+                    } else {
+                        log(line, 'output');
+                    }
+                }
+            }
+
+            // Update prompt
+            updatePrompt();
+
+            // Update status
+            statusRightEl.textContent = `History: ${shell.history.length} commands`;
+        }
+
+        // Handle input
+        inputEl.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                const cmd = inputEl.value;
+                inputEl.value = '';
+                historyIndex = -1;
+                currentInput = '';
+                await executeCommand(cmd);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex === -1) {
+                    currentInput = inputEl.value;
+                }
+                if (shell.history.length > 0 && historyIndex < shell.history.length - 1) {
+                    historyIndex++;
+                    inputEl.value = shell.history[shell.history.length - 1 - historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    inputEl.value = shell.history[shell.history.length - 1 - historyIndex];
+                } else if (historyIndex === 0) {
+                    historyIndex = -1;
+                    inputEl.value = currentInput;
+                }
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                // Basic tab completion
+                const partial = inputEl.value.split(' ').pop();
+                const commands = Object.keys(GLYPHS);
+                const matches = commands.filter(c => c.startsWith(partial));
+                if (matches.length === 1) {
+                    const parts = inputEl.value.split(' ');
+                    parts[parts.length - 1] = matches[0];
+                    inputEl.value = parts.join(' ');
+                }
+            } else if (e.key === 'c' && e.ctrlKey) {
+                e.preventDefault();
+                log('^C', 'error');
+                inputEl.value = '';
+                historyIndex = -1;
+            } else if (e.key === 'l' && e.ctrlKey) {
+                e.preventDefault();
+                terminalEl.innerHTML = '';
+            }
+        });
+
+        // Quick command buttons
+        document.querySelectorAll('.quick-cmd').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const cmd = btn.dataset.cmd;
+                inputEl.value = cmd;
+                inputEl.focus();
+            });
+        });
+
+        // Initialize
+        async function init() {
+            try {
+                // Create mock filesystem
+                const mockDevice = {
+                    createBuffer: (desc) => ({ size: desc.size, _data: new ArrayBuffer(desc.size) }),
+                    queue: { writeBuffer: () => {} }
+                };
+
+                const fs = new MorphologicalFS({ device: mockDevice });
+                await fs.init();
+
+                // Create some test files
+                const testFiles = ['readme.txt', 'hello.spv', 'config.json'];
+                for (const name of testFiles) {
+                    const fd = fs.open(name, 4);
+                    if (fd >= 0) {
+                        const content = `Content of ${name}\nCreated: ${new Date().toISOString()}`;
+                        fs.write(fd, new TextEncoder().encode(content), 0, content.length);
+                        fs.close(fd);
+                    }
+                }
+
+                // Create shell
+                shell = new Shell(null, fs);
+
+                updatePrompt();
+                statusLeftEl.textContent = '✓ Shell ready';
+                log('Shell initialized with test filesystem', 'success');
+                log('');
+
+            } catch (err) {
+                statusLeftEl.textContent = '✗ Error';
+                log(`Error: ${err.message}`, 'error');
+                console.error(err);
+            }
+        }
+
+        init();
+        inputEl.focus();
+    </script>
+</body>
+</html>

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Health Watchdog</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #ccc;
+            font-family: monospace;
+            padding: 20px;
+        }
+        h1 { color: #00ffcc; margin-bottom: 10px; }
+        .dashboard {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: rgba(0, 20, 30, 0.8);
+            border: 1px solid rgba(0, 255, 200, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .panel-header {
+            color: #00ffcc;
+            font-size: 12px;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(0, 255, 200, 0.2);
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+        }
+        .stat-label { color: #888; }
+        .stat-value { font-weight: bold; }
+        .stat-value.healthy { color: #00ff88; }
+        .stat-value.warning { color: #ffaa00; }
+        .stat-value.critical { color: #ff4444; }
+        .process-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .process-item {
+            display: grid;
+            grid-template-columns: 60px 1fr 80px 60px;
+            padding: 8px;
+            margin: 4px 0;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            align-items: center;
+        }
+        .process-item:hover {
+            background: rgba(0, 255, 200, 0.1);
+        }
+        .process-item.unhealthy {
+            border-left: 3px solid #ff4444;
+        }
+        .process-item.healthy {
+            border-left: 3px solid #00ff88;
+        }
+        .pid { color: #00aaff; }
+        .state-running { color: #00ff88; }
+        .state-waiting { color: #ffaa00; }
+        .state-exit { color: #888; }
+        .state-error { color: #ff4444; }
+        .health-bar {
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            margin-top: 4px;
+        }
+        .health-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s, background 0.3s;
+        }
+        .btn {
+            background: linear-gradient(180deg, #1a3a2a 0%, #0a2a1a 100%);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            margin: 5px;
+        }
+        .btn:hover { background: linear-gradient(180deg, #2a4a3a 0%, #1a3a2a 100%); }
+        .btn.danger {
+            border-color: #ff4444;
+            color: #ff4444;
+        }
+        .log {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .log-entry { margin: 2px 0; }
+        .log-info { color: #888; }
+        .log-warning { color: #ffaa00; }
+        .log-error { color: #ff4444; }
+        .log-success { color: #00ff88; }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-indicator.active { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+        .status-indicator.inactive { background: #888; }
+        .toolbar { margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <h1>◈ Health Watchdog</h1>
+    <p style="color: #888; margin-bottom: 20px;">
+        GPU-native process monitor running as PID 1 (System Service)
+    </p>
+    
+    <div class="toolbar">
+        <span class="status-indicator" id="status-light"></span>
+        <span id="watchdog-status">Initializing...</span>
+        <button class="btn" id="start-btn">▶ Start Watchdog</button>
+        <button class="btn" id="stop-btn">■ Stop</button>
+        <button class="btn" id="scan-btn">↻ Scan Now</button>
+        <button class="btn danger" id="kill-unhealthy-btn">✖ Kill Unhealthy</button>
+    </div>
+    
+    <div class="dashboard">
+        <div class="panel">
+            <div class="panel-header">System Statistics</div>
+            
+            <div class="stat-row">
+                <span class="stat-label">Total Scans</span>
+                <span class="stat-value" id="total-scans">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Active Processes</span>
+                <span class="stat-value healthy" id="active-processes">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Zombies Found</span>
+                <span class="stat-value" id="zombies-found">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Cycle Hogs</span>
+                <span class="stat-value" id="hogs-found">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Deadlocks</span>
+                <span class="stat-value" id="deadlocks-found">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Memory Leaks</span>
+                <span class="stat-value" id="memory-leaks">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Processes Killed</span>
+                <span class="stat-value critical" id="processes-killed">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Processes Warned</span>
+                <span class="stat-value warning" id="processes-warned">0</span>
+            </div>
+            
+            <div class="panel-header" style="margin-top: 20px;">Activity Log</div>
+            <div id="log" class="log"></div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-header">Process Monitor</div>
+            <div id="process-list" class="process-list">
+                <div style="color: #888; text-align: center; padding: 20px;">
+                    No processes running
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { GeometryKernel } from './GeometryKernel.js';
+        import { WatchdogAgent, WDOG_COMMAND, ISSUE_TYPE, WDOG_ACTION, PROC_STATE } from './WatchdogAgent.js';
+        
+        let kernel = null;
+        let watchdog = null;
+        
+        // Logging
+        function log(message, type = 'info') {
+            const logEl = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        // Update UI
+        function updateUI() {
+            const stats = watchdog ? watchdog.getStats() : {};
+            const isHealthy = watchdog ? watchdog.isHealthy() : false;
+            
+            // Status indicator
+            const light = document.getElementById('status-light');
+            light.className = `status-indicator ${watchdog && watchdog.isRunning ? 'active' : 'inactive'}`;
+            
+            document.getElementById('watchdog-status').textContent = 
+                watchdog && watchdog.isRunning ? `Running (Last scan: ${stats.lastScan || 0}ms ago)` : 'Stopped';
+            
+            // Stats
+            document.getElementById('total-scans').textContent = stats.totalScans || 0;
+            document.getElementById('active-processes').textContent = stats.activeProcesses || 0;
+            document.getElementById('zombies-found').textContent = stats.zombiesFound || 0;
+            document.getElementById('hogs-found').textContent = stats.hogsFound || 0;
+            document.getElementById('deadlocks-found').textContent = stats.deadlocksFound || 0;
+            document.getElementById('memory-leaks').textContent = stats.memoryLeaksFound || 0;
+            document.getElementById('processes-killed').textContent = stats.processesKilled || 0;
+            document.getElementById('processes-warned').textContent = stats.processesWarned || 0;
+            
+            // Color coding
+            const zombies = document.getElementById('zombies-found');
+            const hogs = document.getElementById('hogs-found');
+            const deadlocks = document.getElementById('deadlocks-found');
+            
+            zombies.className = `stat-value ${(stats.zombiesFound || 0) > 0 ? 'critical' : ''}`;
+            hogs.className = `stat-value ${(stats.hogsFound || 0) > 0 ? 'warning' : ''}`;
+            deadlocks.className = `stat-value ${(stats.deadlocksFound || 0) > 0 ? 'critical' : ''}`;
+        }
+        
+        // Update process list
+        async function updateProcessList() {
+            const listEl = document.getElementById('process-list');
+            
+            if (!kernel) {
+                listEl.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">Kernel not initialized</div>';
+                return;
+            }
+            
+            try {
+                const pcbs = await kernel.readPCBs();
+                
+                if (!pcbs || pcbs.length === 0) {
+                    listEl.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">No processes running</div>';
+                    return;
+                }
+                
+                listEl.innerHTML = pcbs.map(pcb => {
+                    const stateClass = {
+                        'idle': 'state-waiting',
+                        'running': 'state-running',
+                        'waiting': 'state-waiting',
+                        'exit': 'state-exit',
+                        'error': 'state-error'
+                    }[pcb.status] || '';
+                    
+                    const healthScore = Math.max(0, 100 - (pcb.faultCount * 10));
+                    const healthClass = healthScore > 70 ? 'healthy' : healthScore > 30 ? 'warning' : 'critical';
+                    
+                    return `
+                        <div class="process-item ${healthClass}">
+                            <span class="pid">#${pcb.pid}</span>
+                            <span>Process ${pcb.pid}</span>
+                            <span class="${stateClass}">${pcb.status.toUpperCase()}</span>
+                            <span class="${healthClass}">${healthScore}%</span>
+                        </div>
+                        <div class="health-bar">
+                            <div class="health-fill" style="width: ${healthScore}%; background: ${healthScore > 70 ? '#00ff88' : healthScore > 30 ? '#ffaa00' : '#ff4444'}"></div>
+                        </div>
+                    `;
+                }).join('');
+                
+            } catch (e) {
+                listEl.innerHTML = `<div style="color: #ff4444; text-align: center; padding: 20px;">Error: ${e.message}</div>`;
+            }
+        }
+        
+        // Initialize
+        async function init() {
+            log('Initializing Health Watchdog...', 'info');
+            
+            if (!navigator.gpu) {
+                log('WebGPU not supported', 'error');
+                return;
+            }
+            
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                const device = await adapter.requestDevice();
+                
+                // Create kernel
+                kernel = new GeometryKernel();
+                await kernel.init();
+                log('Kernel initialized', 'success');
+                
+                // Create watchdog
+                watchdog = new WatchdogAgent(kernel, {
+                    scanInterval: 1000,
+                    autoRemediate: true,
+                    cycleQuota: 1000000,
+                    onIssue: (pid, type, action) => {
+                        log(`Issue detected: PID ${pid} - ${type}`, 'warning');
+                    },
+                    onAction: (action, pid, signal) => {
+                        log(`Action taken: ${action} on PID ${pid}`, action === 'kill' ? 'error' : 'warning');
+                    }
+                });
+                
+                await watchdog.init();
+                log('Watchdog agent initialized', 'success');
+                
+                // Start UI updates
+                setInterval(updateUI, 500);
+                setInterval(updateProcessList, 1000);
+                
+                document.getElementById('start-btn').disabled = false;
+                
+            } catch (e) {
+                log(`Initialization failed: ${e.message}`, 'error');
+            }
+        }
+        
+        // Event handlers
+        document.getElementById('start-btn').addEventListener('click', async () => {
+            if (watchdog) {
+                watchdog.start();
+                log('Watchdog started', 'success');
+            }
+        });
+        
+        document.getElementById('stop-btn').addEventListener('click', () => {
+            if (watchdog) {
+                watchdog.stop();
+                log('Watchdog stopped', 'info');
+            }
+        });
+        
+        document.getElementById('scan-btn').addEventListener('click', async () => {
+            if (watchdog) {
+                await watchdog.scanNow();
+                log('Manual scan completed', 'info');
+            }
+        });
+        
+        document.getElementById('kill-unhealthy-btn').addEventListener('click', () => {
+            if (watchdog && kernel) {
+                log('Killing all unhealthy processes...', 'warning');
+                // This would trigger the watchdog to kill all unhealthy processes
+            }
+        });
+        
+        // Start
+        init();
+        
+        // Expose for debugging
+        window.kernel = () => kernel;
+        window.watchdog = () => watchdog;
+    </script>
+</body>
+</html>

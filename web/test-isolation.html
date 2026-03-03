@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry OS - Memory Isolation Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #00ff88;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .panel h3 {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        .process-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #222;
+            padding-bottom: 5px;
+        }
+        .value {
+            font-size: 18px;
+            color: #00ff88;
+        }
+        .value.error { color: #ff4444; }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #1a1a1a;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        button:hover {
+            background: #00ff88;
+            color: #0a0a0a;
+        }
+        .log {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #222;
+        }
+        .log-entry.error { color: #ff4444; }
+        .log-entry.success { color: #00ff88; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Geometry OS - Memory Isolation Test</h1>
+
+        <div class="dashboard">
+            <div class="panel" id="proc-0">
+                <h3>Process #0 (Victim)</h3>
+                <div class="process-info">
+                    <span>Status:</span>
+                    <span class="status">IDLE</span>
+                </div>
+                <div class="process-info">
+                    <span>Memory Base:</span>
+                    <span class="mem-base">0x0</span>
+                </div>
+                <div class="process-info">
+                    <span>Shared Val:</span>
+                    <span class="shared-val">0.0</span>
+                </div>
+            </div>
+            <div class="panel" id="proc-1">
+                <h3>Process #1 (Attacker)</h3>
+                <div class="process-info">
+                    <span>Status:</span>
+                    <span class="status">IDLE</span>
+                </div>
+                <div class="process-info">
+                    <span>Faults:</span>
+                    <span class="faults">0</span>
+                </div>
+                <div class="process-info">
+                    <span>Target Addr:</span>
+                    <span class="target-addr">N/A</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="btn-run-test">Run Isolation Test</button>
+            <button id="btn-reset">Reset Kernel</button>
+        </div>
+
+        <div class="log" id="log">
+            <h3>Test Log</h3>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GeometryKernel } from './GeometryKernel.js';
+
+        const logEl = document.getElementById('log');
+        const btnRun = document.getElementById('btn-run-test');
+        const btnReset = document.getElementById('btn-reset');
+
+        let kernel = null;
+
+        function log(msg, type = '') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        async function initKernel() {
+            kernel = new GeometryKernel();
+            await kernel.init();
+            log('Kernel initialized');
+        }
+
+        async function runIsolationTest() {
+            btnRun.disabled = true;
+            log('Starting memory isolation test...');
+
+            try {
+                // 1. Spawn Victim Process (#0)
+                // Minimal binary that just stays alive
+                const victimBinary = new Uint32Array([
+                    0x07230203, 0x00010000, 0, 100, 0, // Header
+                    228 | (1 << 16), // YIELD
+                    202 | (2 << 16), 5, // JMP to itself (label at offset 5)
+                    253 | (1 << 16) // RETURN
+                ]);
+                const pid0 = await kernel.spawnProcess(victimBinary.buffer, 'Victim', 4096);
+                log(`Spawned Victim PID ${pid0} at virtual base 0x${kernel.processes[pid0].memMap.base.toString(16)}`);
+
+                // 2. Write a secret value to Victim's memory from CPU
+                const secretVal = 123.456;
+                kernel.writeSharedMemory(kernel.processes[pid0].memMap.base, new Float32Array([secretVal]));
+                log(`Wrote secret value ${secretVal} to PID ${pid0}'s memory base`);
+
+                // 3. Spawn Attacker Process (#1)
+                // Binary that tries to read from Victim's memory range
+                // Victim's virtual base is at (USER_START + 0*1024) * 1024 = 256 * 1024 = 262144
+                // Attacker is at (USER_START + 1*1024) * 1024 = (256+1024) * 1024 = 1310720
+                // Attacker tries to LOAD from 262144
+                
+                const victimBase = kernel.processes[pid0].memMap.base;
+                const attackerBase = (256 + 1024) * 1024; // Expected base for PID 1
+                
+                // Attacker code:
+                // Try to LOAD from victimBase
+                const attackerBinary = new Uint32Array([
+                    0x07230203, 0x00010000, 0, 100, 0, // Header
+                    // Opcode 61 is OP_LOAD (Relative to p.mem_base)
+                    // We need to pass an offset that, when added to p.mem_base, 
+                    // points to victimBase.
+                    // offset = victimBase - p.mem_base
+                    61 | (4 << 16), 1, 10, victimBase - attackerBase, 
+                    253 | (1 << 16) // RETURN
+                ]);
+                
+                const pid1 = await kernel.spawnProcess(attackerBinary.buffer, 'Attacker', 4096);
+                log(`Spawned Attacker PID ${pid1} at virtual base 0x${kernel.processes[pid1].memMap.base.toString(16)}`);
+                log(`Attacker will attempt to LOAD from virtual address 0x${victimBase.toString(16)}`);
+
+                // 4. Run kernel steps and monitor
+                for (let i = 0; i < 5; i++) {
+                    await kernel.step();
+                    const pcbs = await kernel.readPCBs();
+                    
+                    const v = pcbs[pid0];
+                    const a = pcbs[pid1];
+
+                    document.querySelector('#proc-0 .status').textContent = v.status.toUpperCase();
+                    document.querySelector('#proc-1 .status').textContent = a.status.toUpperCase();
+                    document.querySelector('#proc-1 .faults').textContent = a.faultCount;
+
+                    if (a.status === 'error') {
+                        log(`SUCCESS: Attacker PID ${pid1} caught by MMU (Status: ERROR, Faults: ${a.faultCount})`, 'success');
+                        break;
+                    }
+                    
+                    await new Promise(r => setTimeout(r, 100));
+                }
+
+                // 5. Verify victim memory is still intact
+                const victimMem = await kernel.readSharedMemory(victimBase, 1);
+                if (victimMem[0] === secretVal) {
+                    log(`VERIFIED: Victim memory at 0x${victimBase.toString(16)} remains ${victimMem[0]}`, 'success');
+                } else {
+                    log(`FAILURE: Victim memory was corrupted! Current value: ${victimMem[0]}`, 'error');
+                }
+
+            } catch (err) {
+                log(`Test Error: ${err.message}`, 'error');
+                console.error(err);
+            }
+
+            btnRun.disabled = false;
+        }
+
+        btnRun.addEventListener('click', runIsolationTest);
+        btnReset.addEventListener('click', () => {
+            window.location.reload();
+        });
+
+        initKernel();
+    </script>
+</body>
+</html>
