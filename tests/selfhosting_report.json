@@ -1,215 +1,215 @@
 {
-  "timestamp": "2026-03-03T10:29:36.135982",
+  "timestamp": "2026-03-03T10:38:41.245824",
   "steps": [
     {
       "message": "Calculating self-hosting score...",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.135995"
+      "timestamp": "2026-03-03T10:38:41.245838"
     },
     {
       "message": "Step 1: Verifying bootstrap compiler...",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.135998"
+      "timestamp": "2026-03-03T10:38:41.245841"
     },
     {
       "message": "  compiler.wgsl exists (11392 bytes)",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136026"
+      "timestamp": "2026-03-03T10:38:41.245869"
     },
     {
       "message": "  CompilerAgent.js exists (15258 bytes)",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136038"
+      "timestamp": "2026-03-03T10:38:41.245882"
     },
     {
       "message": "  Bootstrap compiler hash: d8260e8757481dbc...",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136066"
+      "timestamp": "2026-03-03T10:38:41.245910"
     },
     {
       "message": "Step 2: Verifying glyph-to-opcode mapping...",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136069"
+      "timestamp": "2026-03-03T10:38:41.245913"
     },
     {
       "message": "  Found OP_FADD",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136109"
+      "timestamp": "2026-03-03T10:38:41.245954"
     },
     {
       "message": "  Found OP_FSUB",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136112"
+      "timestamp": "2026-03-03T10:38:41.245957"
     },
     {
       "message": "  Found OP_FMUL",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136114"
+      "timestamp": "2026-03-03T10:38:41.245958"
     },
     {
       "message": "  Found OP_FDIV",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136115"
+      "timestamp": "2026-03-03T10:38:41.245960"
     },
     {
       "message": "  Found OP_LOAD",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136117"
+      "timestamp": "2026-03-03T10:38:41.245961"
     },
     {
       "message": "  Found OP_STORE",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136118"
+      "timestamp": "2026-03-03T10:38:41.245963"
     },
     {
       "message": "  Found OP_JMP",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136120"
+      "timestamp": "2026-03-03T10:38:41.245964"
     },
     {
       "message": "  Found OP_RET",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136121"
+      "timestamp": "2026-03-03T10:38:41.245968"
     },
     {
       "message": "  Opcode coverage: 100%",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136128"
+      "timestamp": "2026-03-03T10:38:41.245974"
     },
     {
       "message": "Step 3: Verifying compiler pipeline structure...",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136130"
+      "timestamp": "2026-03-03T10:38:41.245976"
     },
     {
       "message": "  Found emit_header()",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136166"
+      "timestamp": "2026-03-03T10:38:41.246011"
     },
     {
       "message": "  Found emit_capability()",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136169"
+      "timestamp": "2026-03-03T10:38:41.246014"
     },
     {
       "message": "  Found emit_memory_model()",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136171"
+      "timestamp": "2026-03-03T10:38:41.246017"
     },
     {
       "message": "  Found emit_entry_point()",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136174"
+      "timestamp": "2026-03-03T10:38:41.246019"
     },
     {
       "message": "  Found emit_types()",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136177"
+      "timestamp": "2026-03-03T10:38:41.246022"
     },
     {
       "message": "  Found emit_function_start()",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136180"
+      "timestamp": "2026-03-03T10:38:41.246026"
     },
     {
       "message": "  Found emit_function_end()",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136184"
+      "timestamp": "2026-03-03T10:38:41.246029"
     },
     {
       "message": "  Pipeline coverage: 100%",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136186"
+      "timestamp": "2026-03-03T10:38:41.246031"
     },
     {
       "message": "Step 4: Verifying Hilbert curve encoding...",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136188"
+      "timestamp": "2026-03-03T10:38:41.246033"
     },
     {
       "message": "  Found hilbert_encode() function",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136212"
+      "timestamp": "2026-03-03T10:38:41.246057"
     },
     {
       "message": "Step 5: Verifying test page...",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136214"
+      "timestamp": "2026-03-03T10:38:41.246059"
     },
     {
       "message": "  test-selfhost-compiler.html exists (21867 bytes)",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136227"
+      "timestamp": "2026-03-03T10:38:41.246071"
     },
     {
       "message": "Step 6: Verifying cognitive agent...",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136228"
+      "timestamp": "2026-03-03T10:38:41.246073"
     },
     {
       "message": "  CognitiveAgent.js exists (17575 bytes)",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136239"
+      "timestamp": "2026-03-03T10:38:41.246083"
     },
     {
       "message": "  Error types and debug states defined",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136254"
+      "timestamp": "2026-03-03T10:38:41.246098"
     },
     {
       "message": "Step 7: Verifying watchdog agent...",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136260"
+      "timestamp": "2026-03-03T10:38:41.246104"
     },
     {
       "message": "  watchdog.wgsl exists (8871 bytes)",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136273"
+      "timestamp": "2026-03-03T10:38:41.246117"
     },
     {
       "message": "  WatchdogAgent.js exists (10509 bytes)",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136282"
+      "timestamp": "2026-03-03T10:38:41.246125"
     },
     {
       "message": "  Bootstrap Compiler: PASS",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136289"
+      "timestamp": "2026-03-03T10:38:41.246132"
     },
     {
       "message": "  Glyph Mapping: PASS",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136291"
+      "timestamp": "2026-03-03T10:38:41.246134"
     },
     {
       "message": "  Compiler Pipeline: PASS",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136292"
+      "timestamp": "2026-03-03T10:38:41.246135"
     },
     {
       "message": "  Hilbert Encoding: PASS",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136293"
+      "timestamp": "2026-03-03T10:38:41.246136"
     },
     {
       "message": "  Test Page: PASS",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136294"
+      "timestamp": "2026-03-03T10:38:41.246137"
     },
     {
       "message": "  Cognitive Agent: PASS",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136295"
+      "timestamp": "2026-03-03T10:38:41.246138"
     },
     {
       "message": "  Watchdog Agent: PASS",
       "status": "success",
-      "timestamp": "2026-03-03T10:29:36.136296"
+      "timestamp": "2026-03-03T10:38:41.246139"
     },
     {
       "message": "\n  Self-Hosting Score: 100% (7/7)",
       "status": "info",
-      "timestamp": "2026-03-03T10:29:36.136301"
+      "timestamp": "2026-03-03T10:38:41.246144"
     }
   ],
   "success": true,
