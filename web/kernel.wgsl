@@ -21,7 +21,15 @@ struct Process {
     priority: u32,
     waiting_on: u32, // PID we're waiting for message from (0xFF = any)
     msg_count: u32,  // Messages received this session
-    reserved: array<u32, 6>,
+    // Signal system fields (formerly part of reserved array)
+    saved_pc: u32,       // PC saved during signal handler execution
+    saved_sp: u32,       // SP saved during signal handler execution
+    pending_signals: u32, // Bitmask of pending signals
+    signal_mask: u32,    // Bitmask of blocked signals
+    signal_handlers_base: u32, // RAM address of signal handler table (32 entries)
+    // Remaining reserved field
+    // reserved[0]: program base offset (used by OP_EXEC)
+    reserved: array<u32, 1>,
 }
 
 // Message header offsets
@@ -222,6 +230,73 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 p.waiting_on = 0xFEu;  // Special: waiting for syscall
                 pc = pc + count;
                 break;  // Yield until syscall completes
+            } else if (opcode == 220u) { // OP_FORK - Clone current process
+                var child_pid: u32 = 0u;
+                var found_slot: bool = false;
+                
+                // Find first idle PCB (skip parent pid)
+                for (var i: u32 = 0u; i < process_count; i = i + 1u) {
+                    if (i != p_idx && pcb_table[i].status == 0u) {
+                        child_pid = i;
+                        found_slot = true;
+                        break;
+                    }
+                }
+                
+                if (found_slot) {
+                    // Clone parent to child PCB
+                    var child = p;
+                    child.pid = child_pid;
+                    child.status = 1u; // Running
+                    child.pc = pc + count; // Start after FORK instruction
+                    child.sp = sp + 1u; // Add result to child stack
+                    child.mem_base = KERNEL_MEM_BASE + (child_pid * 1024u); // Offset by pid
+                    
+                    // Clone parent stack to child stack
+                    let child_stack_base = child_pid * 1024u;
+                    for (var s: u32 = 0u; s < 1024u; s = s + 1u) {
+                        stack[child_stack_base + s] = stack[stack_base + s];
+                    }
+                    
+                    // Child gets 0 on stack
+                    stack[child_stack_base + sp] = 0.0;
+                    
+                    // Parent gets child_pid on stack
+                    stack[stack_base + sp] = f32(child_pid);
+                    sp = sp + 1u;
+                    
+                    pcb_table[child_pid] = child;
+                } else {
+                    // No slots: push -1
+                    stack[stack_base + sp] = -1.0;
+                    sp = sp + 1u;
+                }
+            } else if (opcode == 221u) { // OP_EXEC - Load new program from RAM
+                // Format: [count|221], [ram_addr], [size]
+                let ram_addr = program[pc + 1];
+                let prog_size = program[pc + 2];
+                let prog_offset = pcb_table[p_idx].reserved[0]; // Program base offset
+
+                // Copy new program from RAM to dedicated program space
+                for (var i: u32 = 0u; i < prog_size; i = i + 1u) {
+                    program[prog_offset + i] = bitcast<u32>(ram[ram_base + ram_addr + i]);
+                }
+
+                // Reset Process State
+                pc = prog_offset + 5u; // Start at new program entry (after header)
+                sp = 0u; // Reset stack
+                continue; // Restart execution with new program
+            } else if (opcode == 223u) { // OP_SIGRET - Return from signal handler
+                // Format: [count|223]
+                // Restores PC and SP from saved state to resume after signal handler
+                if (p.saved_pc != 0u) {
+                    pc = p.saved_pc;
+                    sp = p.saved_sp;
+                    p.saved_pc = 0u;  // Clear saved state
+                    p.saved_sp = 0u;
+                    continue;  // Resume at saved location immediately
+                }
+                // If no saved state, just advance PC (no-op)
             } else if (opcode == 253u) { // OP_RETURN (Exit Process)
                 p.status = 3u;
                 break;
