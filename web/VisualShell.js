@@ -27,6 +27,8 @@ export class VisualShell extends MemoryBrowser {
         this.kernel = options.kernel || new GeometryKernel();
         this.processes = new Map();  // PID -> ProcessInfo
         this.syscalls = new SyscallManager(this.kernel);
+        this.overlayCanvas = options.overlayCanvas || null;
+        this.overlayCtx = this.overlayCanvas ? this.overlayCanvas.getContext("2d") : null;
         this.activePID = 0;
         this.saccadeEnabled = false;
         this.cameraTarget = { x: 0, y: 0, z: 0 };
@@ -52,7 +54,7 @@ export class VisualShell extends MemoryBrowser {
         // Initialize parent MemoryBrowser (shares device if compatible)
         await super.init();
         // Attach syscall manager to capture events
-        this.syscalls.attach(this.canvas);
+        this.syscalls.attach(this.canvas, this.overlayCtx);
 
         // Build UI
         this._initUI();
