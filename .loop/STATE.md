@@ -44,6 +44,7 @@ Integration Report: tests/integration_report.json
 | **Self-Building** | GPU-native compiler (compiler.wgsl) |
 | **Self-Monitoring** | GPU-native watchdog (watchdog.wgsl) |
 | **Self-Debugging** | Cognitive debug agent (CognitiveAgent.js) |
+| **Performance** | Profiler with hot path detection (Profiler.js) |
 | **Visual Desktop** | Window management, animations |
 | **Networking** | GOSRouter, packet routing |
 | **Filesystem** | MorphologicalFS, Hilbert curve storage |
@@ -62,10 +63,11 @@ All test pages available at http://localhost:8770/
 - test-watchdog.html
 - test-cognitive.html
 - test-selfhost-compiler.html
+- test-profiler.html
 
 ## Next Steps
 1. ✅ Documentation - docs/API_REFERENCE.md created
-2. Performance profiling - Optimize hot paths
+2. ✅ Performance profiling - Profiler.js + test-profiler.html
 3. Deploy to production - Package for distribution
 4. Create demo video - Showcase capabilities
 
