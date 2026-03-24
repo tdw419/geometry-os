@@ -74,5 +74,9 @@ path = "src/bin/fb-riscv.rs"
 name = "fb-ascii"
 path = "src/bin/fb-ascii.rs"
 
+[[bin]]
+name = "sovereign-shell"
+path = "src/bin/sovereign_shell.rs"
+
 [build-dependencies]
 regex = "1"
