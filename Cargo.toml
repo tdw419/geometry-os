@@ -50,4 +50,8 @@ path = "src/bin/circuit-runner.rs"
 name = "pixelvm"
 path = "src/bin/pixelvm.rs"
 
+[[bin]]
+name = "gpu-vm"
+path = "src/bin/gpu-vm.rs"
+
 [build-dependencies]
