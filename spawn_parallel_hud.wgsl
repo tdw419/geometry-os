@@ -1,7 +1,7 @@
 // ============================================================================
-// Agent Messaging HUD Shader — SEND/RECV Visual Telemetry
+// SPAWN Parallel HUD Shader — Multi-Agent Visual Telemetry
 // ============================================================================
-// Renders HUD for each active thread with mailbox state
+// Renders HUD for each active thread at its designated row offset
 // ============================================================================
 
 struct Pixel {
@@ -16,12 +16,9 @@ struct ThreadState {
     ip: u32,
     sp: u32,
     row_offset: u32,
-    message_waiting: u32,
-    last_sent: u32,
-    last_received: u32,
     _padding: u32,
     registers: array<u32, 26>,
-    mailbox: array<u32, 10>,
+    stack: array<u32, 32>,
 }
 
 struct Config {
@@ -36,7 +33,7 @@ struct Config {
 @group(0) @binding(1) var<storage, read> threads: array<ThreadState>;
 @group(0) @binding(2) var<uniform> config: Config;
 
-// 5x7 bitmap font
+// 5x7 bitmap font (same as gpu_native_hud.wgsl)
 fn get_font_column(char_code: u32, col: u32) -> u32 {
     // Digits 0-9
     if (char_code == 48u) {  // '0'
@@ -99,7 +96,7 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 3u) { return 0x49u; }
         if (col == 4u) { return 0x3Eu; }
     }
-    // Letters
+    // Letters A-Z
     else if (char_code == 65u) {  // 'A'
         if (col == 0u) { return 0x7Eu; }
         if (col == 1u) { return 0x11u; }
@@ -147,24 +144,6 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 1u) { return 0x7Fu; }
         if (col == 2u) { return 0x41u; }
         return 0u;
-    } else if (char_code == 77u) {  // 'M'
-        if (col == 0u) { return 0x7Fu; }
-        if (col == 1u) { return 0x02u; }
-        if (col == 2u) { return 0x0Cu; }
-        if (col == 3u) { return 0x02u; }
-        if (col == 4u) { return 0x7Fu; }
-    } else if (char_code == 78u) {  // 'N'
-        if (col == 0u) { return 0x7Fu; }
-        if (col == 1u) { return 0x04u; }
-        if (col == 2u) { return 0x08u; }
-        if (col == 3u) { return 0x10u; }
-        if (col == 4u) { return 0x7Fu; }
-    } else if (char_code == 80u) {  // 'P'
-        if (col == 0u) { return 0x7Fu; }
-        if (col == 1u) { return 0x09u; }
-        if (col == 2u) { return 0x09u; }
-        if (col == 3u) { return 0x09u; }
-        if (col == 4u) { return 0x06u; }
     } else if (char_code == 82u) {  // 'R'
         if (col == 0u) { return 0x7Fu; }
         if (col == 1u) { return 0x09u; }
@@ -183,18 +162,6 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 2u) { return 0x7Fu; }
         if (col == 3u) { return 0x01u; }
         if (col == 4u) { return 0x01u; }
-    } else if (char_code == 86u) {  // 'V'
-        if (col == 0u) { return 0x07u; }
-        if (col == 1u) { return 0x08u; }
-        if (col == 2u) { return 0x70u; }
-        if (col == 3u) { return 0x08u; }
-        if (col == 4u) { return 0x07u; }
-    } else if (char_code == 87u) {  // 'W'
-        if (col == 0u) { return 0x07u; }
-        if (col == 1u) { return 0x78u; }
-        if (col == 2u) { return 0x07u; }
-        if (col == 3u) { return 0x78u; }
-        if (col == 4u) { return 0x07u; }
     }
     // Special characters
     else if (char_code == 58u) {  // ':'
@@ -211,23 +178,6 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 2u) { return 0x14u; }
         if (col == 3u) { return 0x7Fu; }
         if (col == 4u) { return 0x14u; }
-    } else if (char_code == 33u) {  // '!'
-        if (col == 0u) { return 0x41u; }
-        if (col == 1u) { return 0x7Fu; }
-        if (col == 2u) { return 0x41u; }
-        return 0u;
-    } else if (char_code == 63u) {  // '?'
-        if (col == 0u) { return 0x22u; }
-        if (col == 1u) { return 0x49u; }
-        if (col == 2u) { return 0x05u; }
-        if (col == 3u) { return 0x01u; }
-        if (col == 4u) { return 0x02u; }
-    } else if (char_code == 85u) {  // 'U' for SENT/RECV
-        if (col == 0u) { return 0x3Eu; }
-        if (col == 1u) { return 0x41u; }
-        if (col == 2u) { return 0x41u; }
-        if (col == 3u) { return 0x41u; }
-        if (col == 4u) { return 0x3Eu; }
     }
     
     return 0u;
@@ -262,28 +212,16 @@ fn draw_char(char_code: u32, x: u32, y: u32, color: Pixel) -> u32 {
 }
 
 fn draw_number(value: u32, x: u32, y: u32, color: Pixel) -> u32 {
-    if (value >= 1000u) {
-        var cursor_x = x;
-        let thousands = value / 1000u;
-        cursor_x = draw_char(48u + (thousands % 10u), cursor_x, y, color);
-        cursor_x = draw_char(48u + ((value / 100u) % 10u), cursor_x, y, color);
-        cursor_x = draw_char(48u + ((value / 10u) % 10u), cursor_x, y, color);
-        cursor_x = draw_char(48u + (value % 10u), cursor_x, y, color);
-        return cursor_x;
-    } else if (value >= 100u) {
-        var cursor_x = x;
-        cursor_x = draw_char(48u + ((value / 100u) % 10u), cursor_x, y, color);
-        cursor_x = draw_char(48u + ((value / 10u) % 10u), cursor_x, y, color);
-        cursor_x = draw_char(48u + (value % 10u), cursor_x, y, color);
-        return cursor_x;
-    } else if (value >= 10u) {
-        var cursor_x = x;
-        cursor_x = draw_char(48u + ((value / 10u) % 10u), cursor_x, y, color);
-        cursor_x = draw_char(48u + (value % 10u), cursor_x, y, color);
-        return cursor_x;
-    } else {
-        return draw_char(48u + value, x, y, color);
-    }
+    let hundreds = (value / 100u) % 10u;
+    let tens = (value / 10u) % 10u;
+    let ones = value % 10u;
+    
+    var cursor_x = x;
+    cursor_x = draw_char(48u + hundreds, cursor_x, y, color);
+    cursor_x = draw_char(48u + tens, cursor_x, y, color);
+    cursor_x = draw_char(48u + ones, cursor_x, y, color);
+    
+    return cursor_x;
 }
 
 // Render HUD for a single thread
@@ -300,18 +238,6 @@ fn render_thread_hud(thread_idx: u32, thread: ThreadState) {
     value_color.b = 255u;
     value_color.a = 255u;
     
-    var sent_color: Pixel;
-    sent_color.r = 100u;
-    sent_color.g = 255u;
-    sent_color.b = 100u;
-    sent_color.a = 255u;
-    
-    var recv_color: Pixel;
-    recv_color.r = 255u;
-    recv_color.g = 200u;
-    recv_color.b = 100u;
-    recv_color.a = 255u;
-    
     var thread_color: Pixel;
     if (thread_idx == 0u) {
         thread_color.r = 100u;
@@ -325,12 +251,6 @@ fn render_thread_hud(thread_idx: u32, thread: ThreadState) {
         thread_color.a = 255u;
     }
     
-    var msg_color: Pixel;
-    msg_color.r = 255u;
-    msg_color.g = 100u;
-    msg_color.b = 100u;
-    msg_color.a = 255u;
-    
     let base_y = thread.row_offset;
     
     // Draw thread header: "#0:" or "#1:"
@@ -339,7 +259,7 @@ fn render_thread_hud(thread_idx: u32, thread: ThreadState) {
     cursor_x = draw_char(48u + thread_idx, cursor_x, base_y + 2u, thread_color);  // thread number
     cursor_x = draw_char(58u, cursor_x, base_y + 2u, thread_color);  // ':'
     
-    // Draw first few registers
+    // Draw registers A-J (unrolled to avoid dynamic indexing)
     cursor_x = 60u;
     
     // A
@@ -360,6 +280,18 @@ fn render_thread_hud(thread_idx: u32, thread: ThreadState) {
     cursor_x = draw_number(thread.registers[2u], cursor_x, base_y + 2u, value_color);
     cursor_x += 8u;
     
+    // D
+    cursor_x = draw_char(68u, cursor_x, base_y + 2u, header_color);
+    cursor_x = draw_char(58u, cursor_x, base_y + 2u, header_color);
+    cursor_x = draw_number(thread.registers[3u], cursor_x, base_y + 2u, value_color);
+    cursor_x += 8u;
+    
+    // E
+    cursor_x = draw_char(69u, cursor_x, base_y + 2u, header_color);
+    cursor_x = draw_char(58u, cursor_x, base_y + 2u, header_color);
+    cursor_x = draw_number(thread.registers[4u], cursor_x, base_y + 2u, value_color);
+    cursor_x += 8u;
+    
     // Draw IP and SP on second line
     cursor_x = 20u;
     cursor_x = draw_char(73u, cursor_x, base_y + 12u, header_color);  // I
@@ -372,96 +304,35 @@ fn render_thread_hud(thread_idx: u32, thread: ThreadState) {
     cursor_x = draw_char(80u, cursor_x, base_y + 12u, header_color);  // P
     cursor_x = draw_char(58u, cursor_x, base_y + 12u, header_color);  // :
     cursor_x = draw_number(thread.sp, cursor_x + 5u, base_y + 12u, value_color);
-    
-    // Draw messaging status on third line
-    cursor_x = 20u;
-    
-    // SEND indicator with last sent value
-    cursor_x = draw_char(83u, cursor_x, base_y + 22u, sent_color);  // S
-    cursor_x = draw_char(69u, cursor_x, base_y + 22u, sent_color);  // E
-    cursor_x = draw_char(78u, cursor_x, base_y + 22u, sent_color);  // N
-    cursor_x = draw_char(68u, cursor_x, base_y + 22u, sent_color);  // D
-    cursor_x = draw_char(58u, cursor_x, base_y + 22u, sent_color);  // :
-    cursor_x = draw_number(thread.last_sent, cursor_x, base_y + 22u, value_color);
-    cursor_x += 10u;
-    
-    // RECV indicator with last received value
-    cursor_x = draw_char(82u, cursor_x, base_y + 22u, recv_color);  // R
-    cursor_x = draw_char(69u, cursor_x, base_y + 22u, recv_color);  // E
-    cursor_x = draw_char(67u, cursor_x, base_y + 22u, recv_color);  // C
-    cursor_x = draw_char(86u, cursor_x, base_y + 22u, recv_color);  // V
-    cursor_x = draw_char(58u, cursor_x, base_y + 22u, recv_color);  // :
-    cursor_x = draw_number(thread.last_received, cursor_x, base_y + 22u, value_color);
-    cursor_x += 10u;
-    
-    // Message waiting indicator
-    if (thread.message_waiting == 1u) {
-        cursor_x = draw_char(77u, cursor_x, base_y + 22u, msg_color);  // M
-        cursor_x = draw_char(83u, cursor_x, base_y + 22u, msg_color);  // S
-        cursor_x = draw_char(71u, cursor_x, base_y + 22u, msg_color);  // G
-        cursor_x = draw_char(33u, cursor_x, base_y + 22u, msg_color);  // !
-    }
-    
-    // Draw mailbox contents on fourth line (first 5 slots)
-    cursor_x = 20u;
-    cursor_x = draw_char(77u, cursor_x, base_y + 32u, header_color);  // M
-    cursor_x = draw_char(66u, cursor_x, base_y + 32u, header_color);  // B
-    cursor_x = draw_char(58u, cursor_x, base_y + 32u, header_color);  // :
-    cursor_x += 5u;
-    
-    // Unrolled loop for mailbox (WGSL requires constant indexing)
-    // Slot 0
-    if (thread.mailbox[0] > 0u) {
-        cursor_x = draw_number(thread.mailbox[0], cursor_x, base_y + 32u, recv_color);
-    } else {
-        cursor_x = draw_char(45u, cursor_x, base_y + 32u, header_color);
-    }
-    cursor_x += 3u;
-    // Slot 1
-    if (thread.mailbox[1] > 0u) {
-        cursor_x = draw_number(thread.mailbox[1], cursor_x, base_y + 32u, recv_color);
-    } else {
-        cursor_x = draw_char(45u, cursor_x, base_y + 32u, header_color);
-    }
-    cursor_x += 3u;
-    // Slot 2
-    if (thread.mailbox[2] > 0u) {
-        cursor_x = draw_number(thread.mailbox[2], cursor_x, base_y + 32u, recv_color);
-    } else {
-        cursor_x = draw_char(45u, cursor_x, base_y + 32u, header_color);
-    }
-    cursor_x += 3u;
-    // Slot 3
-    if (thread.mailbox[3] > 0u) {
-        cursor_x = draw_number(thread.mailbox[3], cursor_x, base_y + 32u, recv_color);
-    } else {
-        cursor_x = draw_char(45u, cursor_x, base_y + 32u, header_color);
-    }
-    cursor_x += 3u;
-    // Slot 4
-    if (thread.mailbox[4] > 0u) {
-        cursor_x = draw_number(thread.mailbox[4], cursor_x, base_y + 32u, recv_color);
-    } else {
-        cursor_x = draw_char(45u, cursor_x, base_y + 32u, header_color);
-    }
-    cursor_x += 3u;
 }
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let idx = global_id.x;
-    let total_pixels = config.width * config.height;
     
-    // Each thread clears one pixel
-    if (idx < total_pixels) {
-        buffer_out[idx].r = 15u;
-        buffer_out[idx].g = 25u;
-        buffer_out[idx].b = 35u;
-        buffer_out[idx].a = 255u;
-    }
-    
-    // Only first invocation renders HUDs (after barrier implied by separate dispatch)
-    if (idx == 0u) {
+    // First 64 threads render HUDs
+    if (idx < 64u) {
+        // Clear background
+        var y = 0u;
+        loop {
+            if (y >= config.height) { break; }
+            
+            var x = 0u;
+            loop {
+                if (x >= config.width) { break; }
+                
+                let i = y * config.width + x;
+                buffer_out[i].r = 15u;
+                buffer_out[i].g = 25u;
+                buffer_out[i].b = 35u;
+                buffer_out[i].a = 255u;
+                
+                x += 1u;
+            }
+            
+            y += 1u;
+        }
+        
         // Render HUD for each active thread
         var thread_idx = 0u;
         loop {

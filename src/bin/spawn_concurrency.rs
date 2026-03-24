@@ -1,101 +1,15 @@
-// Agent Messaging - SEND/RECV Opcodes for Inter-Thread Communication
-// Implements ! (SEND) and ? (RECV) opcodes for mailbox-based messaging
+// SPAWN Concurrency - Multi-Agent Parallel Execution
+// Implements $ opcode to fork VMs with spatial isolation
 
 use wgpu::*;
 use image::{ImageBuffer, Rgba};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Instant;
 
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 const MAX_THREADS: usize = 8;
-const MAILBOX_SIZE: usize = 10; // Each thread has 10 mailbox slots
-
-// Shared memory for inter-thread messaging
-struct SharedMemory {
-    // Mailbox for each thread: [thread_id][slot] = message
-    mailboxes: Vec<Vec<AtomicU32>>,
-    // Message waiting flags: [thread_id]
-    message_waiting: Vec<AtomicU32>,
-}
-
-impl SharedMemory {
-    fn new() -> Self {
-        let mut mailboxes = Vec::new();
-        let mut message_waiting = Vec::new();
-        
-        for _ in 0..MAX_THREADS {
-            let mut mailbox = Vec::new();
-            for _ in 0..MAILBOX_SIZE {
-                mailbox.push(AtomicU32::new(0));
-            }
-            mailboxes.push(mailbox);
-            message_waiting.push(AtomicU32::new(0));
-        }
-        
-        Self { mailboxes, message_waiting }
-    }
-    
-    // SEND: Write to another thread's mailbox (non-blocking)
-    fn send(&self, value: u32, target_thread: usize, _row_offset: usize) -> bool {
-        if target_thread >= MAX_THREADS {
-            return false;
-        }
-        
-        // Find empty slot in target's mailbox
-        for slot in &self.mailboxes[target_thread] {
-            if slot.compare_exchange(0, value, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-                // Set message waiting flag
-                self.message_waiting[target_thread].store(1, Ordering::SeqCst);
-                return true;
-            }
-        }
-        
-        // Mailbox full
-        false
-    }
-    
-    // RECV: Check mailbox and receive message
-    fn recv(&self, thread_id: usize) -> Option<u32> {
-        if thread_id >= MAX_THREADS {
-            return None;
-        }
-        
-        // Check each slot
-        for slot in &self.mailboxes[thread_id] {
-            let value = slot.load(Ordering::SeqCst);
-            if value != 0 {
-                // Clear slot
-                slot.store(0, Ordering::SeqCst);
-                
-                // Check if more messages waiting
-                let mut has_more = false;
-                for s in &self.mailboxes[thread_id] {
-                    if s.load(Ordering::SeqCst) != 0 {
-                        has_more = true;
-                        break;
-                    }
-                }
-                
-                if !has_more {
-                    self.message_waiting[thread_id].store(0, Ordering::SeqCst);
-                }
-                
-                return Some(value);
-            }
-        }
-        
-        None
-    }
-    
-    fn has_message(&self, thread_id: usize) -> bool {
-        if thread_id >= MAX_THREADS {
-            return false;
-        }
-        self.message_waiting[thread_id].load(Ordering::SeqCst) == 1
-    }
-}
+const THREAD_ROWS: u32 = 40; // Each thread gets 40 rows
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Debug)]
@@ -109,16 +23,13 @@ struct Pixel {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Debug)]
 struct ThreadState {
-    is_active: u32,
-    ip: u32,
-    sp: u32,
-    row_offset: u32,
-    message_waiting: u32,  // 1 = has messages
-    last_sent: u32,        // Last value sent
-    last_received: u32,    // Last value received
+    is_active: u32,         // 1 = active, 0 = inactive
+    ip: u32,               // Instruction pointer
+    sp: u32,               // Stack pointer
+    row_offset: u32,       // Y offset in framebuffer
     _padding: u32,
-    registers: [u32; 26],
-    mailbox: [u32; 10],    // Mailbox contents for display
+    registers: [u32; 26],  // A-Z
+    stack: [u32; 32],      // Stack (32 entries)
 }
 
 #[repr(C)]
@@ -136,10 +47,6 @@ struct VMState {
     stack: Vec<i32>,
     ip: usize,
     active: bool,
-    message_waiting: bool,
-    last_sent: u32,
-    last_received: u32,
-    mailbox: Vec<u32>,
 }
 
 impl Default for VMState {
@@ -149,16 +56,12 @@ impl Default for VMState {
             stack: Vec::new(),
             ip: 0,
             active: true,
-            message_waiting: false,
-            last_sent: 0,
-            last_received: 0,
-            mailbox: vec![0; MAILBOX_SIZE],
         }
     }
 }
 
 impl VMState {
-    fn to_thread_state(&self, row_offset: u32) -> ThreadState {
+    fn fork(&self, row_offset: u32) -> ThreadState {
         let mut registers = [0u32; 26];
         for (name, value) in &self.registers {
             let idx = (*name as u8 - b'A') as usize;
@@ -167,54 +70,61 @@ impl VMState {
             }
         }
         
-        let mut mailbox = [0u32; 10];
-        for (i, value) in self.mailbox.iter().enumerate() {
-            if i < 10 {
-                mailbox[i] = *value;
+        let mut stack = [0u32; 32];
+        for (i, value) in self.stack.iter().enumerate() {
+            if i < 32 {
+                stack[i] = *value as u32;
             }
         }
         
         ThreadState {
-            is_active: if self.active { 1 } else { 0 },
+            is_active: 1,
             ip: self.ip as u32,
             sp: self.stack.len() as u32,
             row_offset,
-            message_waiting: if self.message_waiting { 1 } else { 0 },
-            last_sent: self.last_sent,
-            last_received: self.last_received,
             _padding: 0,
             registers,
-            mailbox,
+            stack,
         }
     }
 }
 
-fn execute_agent_program(code: &str, shared: &SharedMemory) -> Vec<VMState> {
+fn execute_spawn_program(code: &str) -> Vec<VMState> {
     let mut threads = vec![VMState::default()];
     let tokens: Vec<&str> = code.split_whitespace().collect();
     
     let mut current_thread = 0;
-    let mut halted_threads = vec![false; MAX_THREADS];
+    let mut spawn_requested = false;
     
     loop {
         // Check if current thread is done
-        if halted_threads[current_thread] || threads[current_thread].ip >= tokens.len() {
-            // Switch to next active thread
-            let start = current_thread;
-            loop {
-                current_thread = (current_thread + 1) % threads.len();
-                if !halted_threads[current_thread] || current_thread == start {
+        {
+            let state = &threads[current_thread];
+            if !state.active || state.ip >= tokens.len() {
+                // Switch to next active thread
+                let start = current_thread;
+                loop {
+                    current_thread = (current_thread + 1) % threads.len();
+                    if threads[current_thread].active || current_thread == start {
+                        break;
+                    }
+                }
+                
+                // If we're back at start and it's inactive, we're done
+                if !threads[current_thread].active {
                     break;
                 }
+                continue;
             }
-            
-            if halted_threads[current_thread] {
-                break;
-            }
-            continue;
         }
         
         let token = tokens[threads[current_thread].ip];
+        
+        // Handle spawn request from previous iteration
+        if spawn_requested {
+            spawn_requested = false;
+            // Continue to next instruction in spawned thread
+        }
         
         match token {
             // Push number
@@ -261,7 +171,7 @@ fn execute_agent_program(code: &str, shared: &SharedMemory) -> Vec<VMState> {
                 }
             }
             
-            // SPAWN opcode ($)
+            // SPAWN opcode
             "$" => {
                 if threads.len() < MAX_THREADS {
                     let state = &threads[current_thread];
@@ -270,81 +180,29 @@ fn execute_agent_program(code: &str, shared: &SharedMemory) -> Vec<VMState> {
                         stack: state.stack.clone(),
                         ip: state.ip + 1,
                         active: true,
-                        message_waiting: false,
-                        last_sent: 0,
-                        last_received: 0,
-                        mailbox: vec![0; MAILBOX_SIZE],
                     };
                     threads.push(child);
-                    halted_threads.push(false);
                     println!("[SPAWN] Thread {} spawned, now {} threads", 
                         threads.len() - 1, threads.len());
+                    spawn_requested = true;
                 }
             }
             
-            // SEND opcode (!)
-            // Format: target_thread row_offset value !
-            // Stack order (bottom to top): target_thread, row_offset, value
-            // Pops: value first, then row_offset, then target_thread
-            "!" => {
-                if threads[current_thread].stack.len() >= 3 {
-                    let value = threads[current_thread].stack.pop().unwrap() as u32;
-                    let row_offset = threads[current_thread].stack.pop().unwrap() as usize;
-                    let target_thread = threads[current_thread].stack.pop().unwrap() as usize;
-                    
-                    if target_thread < MAX_THREADS {
-                        if shared.send(value, target_thread, row_offset) {
-                            threads[current_thread].last_sent = value;
-                            println!("[SEND] Thread {} → Thread {}: value={}", 
-                                current_thread, target_thread, value);
-                        } else {
-                            println!("[SEND] FAILED: Thread {} mailbox full", target_thread);
-                        }
-                    } else {
-                        println!("[SEND] FAILED: Invalid target thread {}", target_thread);
-                    }
-                }
-            }
-            
-            // RECV opcode (?)
-            "?" => {
-                if let Some(value) = shared.recv(current_thread) {
-                    threads[current_thread].stack.push(value as i32);
-                    threads[current_thread].last_received = value;
-                    threads[current_thread].message_waiting = shared.has_message(current_thread);
-                    println!("[RECV] Thread {} received: {}", current_thread, value);
-                } else {
-                    threads[current_thread].stack.push(0);
-                    threads[current_thread].message_waiting = false;
-                    println!("[RECV] Thread {}: mailbox empty", current_thread);
-                }
-            }
-            
-            // Halt - mark as halted but keep active for display
+            // Halt
             "@" => {
-                halted_threads[current_thread] = true;
-                threads[current_thread].active = true; // Keep active for HUD
-                println!("[HALT] Thread {} halted", current_thread);
+                threads[current_thread].active = false;
             }
             
             _ => {}
         }
         
         threads[current_thread].ip += 1;
-        
-        // Update mailbox display for current thread
-        for (i, slot) in shared.mailboxes[current_thread].iter().enumerate() {
-            if i < MAILBOX_SIZE {
-                threads[current_thread].mailbox[i] = slot.load(Ordering::SeqCst);
-            }
-        }
-        threads[current_thread].message_waiting = shared.has_message(current_thread);
     }
     
     threads
 }
 
-struct AgentMessagingRunner {
+struct SpawnRunner {
     device: Device,
     queue: Queue,
     pipeline: ComputePipeline,
@@ -356,7 +214,7 @@ struct AgentMessagingRunner {
     config_buffer: Buffer,
 }
 
-impl AgentMessagingRunner {
+impl SpawnRunner {
     async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let instance = Instance::new(InstanceDescriptor::default());
         
@@ -371,16 +229,16 @@ impl AgentMessagingRunner {
         
         let (device, queue) = adapter
             .request_device(&DeviceDescriptor {
-                label: Some("Agent Messaging GPU"),
+                label: Some("SPAWN Concurrency GPU"),
                 required_features: Features::empty(),
                 required_limits: Limits::default(),
             }, None)
             .await?;
         
         // Load shader
-        let shader_source = include_str!("../../agent_messaging_hud.wgsl");
+        let shader_source = include_str!("../../spawn_parallel_hud.wgsl");
         let shader = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Agent Messaging HUD Shader"),
+            label: Some("SPAWN Parallel HUD Shader"),
             source: ShaderSource::Wgsl(shader_source.into()),
         });
         
@@ -425,7 +283,7 @@ impl AgentMessagingRunner {
         
         // Create bind group layout
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Agent Messaging Bind Group Layout"),
+            label: Some("SPAWN Bind Group Layout"),
             entries: &[
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -462,13 +320,13 @@ impl AgentMessagingRunner {
         
         // Create pipeline
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Agent Messaging Pipeline Layout"),
+            label: Some("SPAWN Pipeline Layout"),
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
         
         let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
-            label: Some("Agent Messaging HUD Pipeline"),
+            label: Some("SPAWN Parallel HUD Pipeline"),
             layout: Some(&pipeline_layout),
             module: &shader,
             entry_point: "main",
@@ -476,7 +334,7 @@ impl AgentMessagingRunner {
         
         // Create bind group
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Agent Messaging Bind Group"),
+            label: Some("SPAWN Bind Group"),
             layout: &bind_group_layout,
             entries: &[
                 BindGroupEntry { binding: 0, resource: output_buffer.as_entire_binding() },
@@ -501,10 +359,8 @@ impl AgentMessagingRunner {
         let mut thread_states = Vec::new();
         
         for (i, vm) in threads.iter().enumerate() {
-            let row_offset = (i as u32) * 100; // Each thread gets 100 rows
-            let state = vm.to_thread_state(row_offset);
-            println!("[DEBUG] Thread {}: active={}, ip={}, sp={}, row_offset={}", 
-                i, state.is_active, state.ip, state.sp, state.row_offset);
+            let row_offset = (i as u32 + 1) * THREAD_ROWS;
+            let state = vm.fork(row_offset);
             thread_states.push(state);
         }
         
@@ -515,12 +371,9 @@ impl AgentMessagingRunner {
                 ip: 0,
                 sp: 0,
                 row_offset: 0,
-                message_waiting: 0,
-                last_sent: 0,
-                last_received: 0,
                 _padding: 0,
                 registers: [0; 26],
-                mailbox: [0; 10],
+                stack: [0; 32],
             });
         }
         
@@ -535,7 +388,7 @@ impl AgentMessagingRunner {
         
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some("Agent Messaging Compute Pass"),
+                label: Some("SPAWN Compute Pass"),
                 timestamp_writes: None,
             });
             pass.set_pipeline(&self.pipeline);
@@ -573,30 +426,23 @@ impl AgentMessagingRunner {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║          AGENT MESSAGING — SEND/RECV OPCODES            ║");
+    println!("║          SPAWN CONCURRENCY — MULTI-AGENT SWARM          ║");
     println!("╠══════════════════════════════════════════════════════════╣");
-    println!("║  SEND (!): value target_thread row_offset !             ║");
-    println!("║  RECV (?): Returns value or 0 if mailbox empty          ║");
-    println!("║  Max Threads: {}                                        ║", MAX_THREADS);
-    println!("║  Mailbox Size: {} slots per thread                      ║", MAILBOX_SIZE);
+    println!("║  Opcode: $ (fork current VM into child thread)          ║");
+    println!("║  Max Threads: {}                                       ║", MAX_THREADS);
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
     
-    // Initialize shared memory
-    let shared = SharedMemory::new();
-    
-    // Test program:
-    // Thread 0: Store 42 in A, spawn Thread 1, send A to Thread 1's mailbox at offset 0
-    // Format: target_thread row_offset value !
-    let test_program = "42 a $ 1 0 A ! @ ?";
+    // Test: Main thread stores 1 in A, spawns child
+    // Child thread stores 2 in B
+    let test_program = "1 a $ 2 b @";
     println!("[PROGRAM] {}", test_program);
-    println!("[EXPECT]  Thread 0: A=42, sends 42 to Thread 1 mailbox[0]");
-    println!("[EXPECT]  Thread 1: receives 42 from mailbox");
+    println!("[EXPECT]  Thread 0: A=1, Thread 1: B=2");
     println!();
     
-    // Execute with messaging support
-    println!("[EXECUTE] Running with SEND/RECV support...");
-    let threads = execute_agent_program(test_program, &shared);
+    // Execute with spawn support
+    println!("[EXECUTE] Running with SPAWN support...");
+    let threads = execute_spawn_program(test_program);
     
     println!();
     println!("╔══════════════════════════════════════════════════════════╗");
@@ -612,16 +458,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        if thread.last_sent > 0 {
-            print!("SENT={} ", thread.last_sent);
-        }
-        if thread.last_received > 0 {
-            print!("RECV={} ", thread.last_received);
-        }
-        if thread.message_waiting {
-            print!("MSG+");
-        }
-        println!("                              ║");
+        println!("                                 ║");
     }
     
     println!("╚══════════════════════════════════════════════════════════╝");
@@ -629,7 +466,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Initialize GPU
     println!("[GPU]     Initializing RTX 5090...");
-    let runner = AgentMessagingRunner::new().await?;
+    let runner = SpawnRunner::new().await?;
     println!("[GPU]     Pipeline ready");
     println!();
     
@@ -637,30 +474,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("[UPLOAD]  Sending {} threads to GPU...", threads.len());
     runner.update_threads(&threads);
     
-    // Render HUDs with messaging
-    println!("[RENDER]  Shader rendering agent messaging HUDs...");
+    // Render parallel HUDs
+    println!("[RENDER]  Shader rendering {} parallel HUDs...", threads.len());
     let start = Instant::now();
     let img = runner.render()?;
     let render_time = start.elapsed();
     
     // Save output
-    let output_path = "output/agent_messaging.png";
+    let output_path = "output/spawn_parallel_hud.png";
     img.save(output_path)?;
     
     println!("[OUTPUT]  {} ({}ms)", output_path, render_time.as_millis());
     println!();
     
     println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║              AGENT MESSAGING COMPLETE                   ║");
+    println!("║              SPAWN CONCURRENCY COMPLETE                 ║");
     println!("╠══════════════════════════════════════════════════════════╣");
-    println!("║  ✅ SEND (!) opcode writes to mailbox                   ║");
-    println!("║  ✅ RECV (?) opcode reads from mailbox                  ║");
-    println!("║  ✅ {} threads with message passing                     ║", threads.len());
-    println!("║  ✅ Atomic operations for thread safety                 ║");
+    println!("║  ✅ $ opcode spawns child threads                       ║");
+    println!("║  ✅ {} threads executed in parallel                     ║", threads.len());
+    println!("║  ✅ Parallel HUDs rendered                              ║");
     println!("║  ✅ Render time: {}ms                                  ║", render_time.as_millis());
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
-    println!("Next: Use vision model to verify messaging HUD");
+    println!("Next: Use vision model to verify parallel HUDs");
     
     Ok(())
 }

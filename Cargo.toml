@@ -28,6 +28,7 @@ name = "bridge"
 path = "src/bridge.rs"
 
 [dependencies]
+base64 = "0.22"
 wgpu = "0.19"
 image = "0.24"
 bytemuck = { version = "1.14", features = ["derive"] }
@@ -37,6 +38,13 @@ memmap2 = "0.9"
 clap = { version = "4.5", features = ["derive"] }
 serde_json = "1.0"
 chrono = "0.4"
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+regex = "1"
+
+[[bin]]
+name = "neural-pipe"
+path = "src/bin/neural_pipe.rs"
 
 [[bin]]
 name = "siphon-demo"
@@ -67,3 +75,4 @@ name = "fb-ascii"
 path = "src/bin/fb-ascii.rs"
 
 [build-dependencies]
+regex = "1"

@@ -35,17 +35,31 @@ const OP_WIRE: u32 = 0x22u;        // Propagate signal from west to east
 const OP_CLOCK: u32 = 0x23u;       // Toggle signal based on frame counter
 const OP_SIGNAL_SOURCE: u32 = 0x24u; // Constant signal source (always high)
 
-// Logic opcodes (for building circuits) - check signal strength (g > 128)
-const OP_AND: u32 = 0x30u;        // Output high if N AND W have signal
-const OP_XOR: u32 = 0x31u;        // Output high if N XOR W have signal
-const OP_OR: u32 = 0x32u;         // Output high if N OR W have signal
-const OP_NOT: u32 = 0x33u;        // Output high if W does NOT have signal
+// Logic opcodes (for building circuits) - REMAPPED to symbols to avoid digit collision
+// Digits 0-9 (0x30-0x39) are now PASS-THROUGH for text display
+const OP_AND: u32 = 0x26u;        // '&' - Output high if N AND W have signal
+const OP_XOR: u32 = 0x5Eu;        // '^' - Output high if N XOR W have signal
+const OP_OR: u32 = 0x7Cu;         // '|' - Output high if N OR W have signal
+const OP_NOT: u32 = 0x7Eu;        // '~' - Output high if W does NOT have signal
 const OP_RANDOM: u32 = 0x40u;     // Randomly choose action
+
+// Digit range (0x30-0x39) - Pass through as text, don't execute as opcodes
+const DIGIT_MIN: u32 = 0x30u;     // '0'
+const DIGIT_MAX: u32 = 0x39u;     // '9'
 
 // Portal opcodes (cross-zone signal teleportation)
 const OP_PORTAL_IN: u32 = 0x50u;  // Teleport signal: g=target_x, b=target_y
 const OP_PORTAL_OUT: u32 = 0x51u; // Receive teleported signal (becomes active)
 const OP_PORTAL_BIDIR: u32 = 0x52u; // Bidirectional portal
+
+// Neural Pipe opcodes (LLM integration)
+const OP_GENERATE: u32 = 0x53u;   // Request LLM generation
+const OP_PROMPT: u32 = 0x54u;     // Mark pixel as part of prompt zone
+const OP_RESPONSE: u32 = 0x55u;   // Mark pixel as part of response zone
+
+// Execution handover opcodes
+const OP_JMP_RESPONSE: u32 = 0x56u;  // Jump IP to response zone (row 20)
+const OP_RETURN: u32 = 0x57u;        // Return from response zone to caller
 
 // Agent type flags (stored in pixel.a)
 const TYPE_EMPTY: u32 = 0u;       // Empty cell
@@ -77,6 +91,9 @@ struct Config {
 
 // Config
 @group(0) @binding(4) var<uniform> config: Config;
+
+// Stats buffer (for neural pipe signaling)
+@group(0) @binding(5) var<storage, read_write> stats: array<u32>;
 
 // Helper: Check if coordinates are in bounds
 fn in_bounds(x: u32, y: u32) -> bool {
@@ -721,6 +738,82 @@ fn execute_agent(px: u32, py: u32, cell: Pixel) {
             write_pixel(x, y, cell);
         }
         
+        // ===== NEURAL PIPE OPCODES (LLM Integration) =====
+        case OP_GENERATE: {
+            // Request LLM generation - only if not already pending
+            // This prevents continuous triggering while host processes
+            
+            // Only set signal if currently idle (stats[0] == 0)
+            if (stats[0] == 0u) {
+                stats[0] = 1u;  // NEURAL_PIPE_REQUEST
+                stats[1] = cell.g;  // prompt_start_row (or default 10)
+                stats[2] = cell.b;  // response_start_row (or default 20)
+            }
+            
+            // Mark this pixel as waiting for generation
+            var gen = copy_pixel(cell);
+            gen.a = TYPE_AGENT;
+            gen.g = 255u;  // Signal: waiting for response
+            write_pixel(x, y, gen);
+        }
+        case OP_PROMPT: {
+            // Mark pixel as part of prompt zone
+            // Just renders with a special color to show it's prompt area
+            var prompt = copy_pixel(cell);
+            prompt.a = TYPE_AGENT;
+            prompt.g = 100u;  // Dim green = prompt zone
+            prompt.b = 200u;  // Blue tint
+            write_pixel(x, y, prompt);
+        }
+        case OP_RESPONSE: {
+            // Mark pixel as part of response zone
+            // Host writes LLM output here
+            var resp = copy_pixel(cell);
+            resp.a = TYPE_AGENT;
+            resp.g = 200u;  // Brighter green = response zone
+            resp.b = 100u;  // Less blue
+            write_pixel(x, y, resp);
+        }
+        case OP_JMP_RESPONSE: {
+            // Jump to response zone (row 20) - Execution Handover
+            // This creates an "agent" at (0, 20) that will execute LLM code
+            // The agent's r channel holds the instruction pointer offset
+            
+            // Create execution agent at start of response zone
+            let response_start_x = 0u;
+            let response_start_y = 20u;  // RESPONSE_START_ROW
+            
+            var exec_agent = copy_pixel(cell);
+            exec_agent.r = OP_IDLE;  // Will execute whatever is there
+            exec_agent.g = 255u;     // Bright = executing
+            exec_agent.b = 0u;       // No blue
+            exec_agent.a = TYPE_AGENT;
+            
+            write_pixel(response_start_x, response_start_y, exec_agent);
+            
+            // Remove the JMP instruction (one-shot)
+            // Don't write ourselves back - we've handed over
+        }
+        case OP_RETURN: {
+            // Return from response zone to caller
+            // For now, just die (halt execution)
+            // In future, could restore previous IP from stack
+        }
+
+        // ===== DIGIT PASS-THROUGH (0-9) =====
+        // Digits are text literals, not opcodes
+        // This allows code like "0a 1b 10i" to display without being executed
+        case 0x30u: { write_pixel(x, y, cell); }  // '0'
+        case 0x31u: { write_pixel(x, y, cell); }  // '1'
+        case 0x32u: { write_pixel(x, y, cell); }  // '2'
+        case 0x33u: { write_pixel(x, y, cell); }  // '3'
+        case 0x34u: { write_pixel(x, y, cell); }  // '4'
+        case 0x35u: { write_pixel(x, y, cell); }  // '5'
+        case 0x36u: { write_pixel(x, y, cell); }  // '6'
+        case 0x37u: { write_pixel(x, y, cell); }  // '7'
+        case 0x38u: { write_pixel(x, y, cell); }  // '8'
+        case 0x39u: { write_pixel(x, y, cell); }  // '9'
+
         default: {
             // Unknown opcode, just pass through
             write_pixel(x, y, cell);
@@ -883,6 +976,17 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let py = global_id.y;
     
     if (px >= config.width || py >= config.height) {
+        return;
+    }
+    
+    // NEURAL PIPE: Freeze execution while LLM is processing
+    // stats[0] = 0 (READY): execute normally
+    // stats[0] = 1 (REQUEST): GPU requested, waiting for host
+    // stats[0] = 2 (WRITING): Host writing response
+    if (stats[0] != 0u) {
+        // Frozen - just copy input to output unchanged
+        let idx = py * config.width + px;
+        buffer_out[idx] = buffer_in[idx];
         return;
     }
     
