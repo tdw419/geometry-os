@@ -31,10 +31,15 @@ const OP_IF_AGENT: u32 = 0x13u;   // If reg == TYPE_AGENT
 // Signal opcodes
 const OP_EMIT_SIGNAL: u32 = 0x20u; // Wake up all neighbors
 const OP_SLEEP: u32 = 0x21u;       // Become dormant (a=TYPE_EMPTY)
+const OP_WIRE: u32 = 0x22u;        // Propagate signal from west to east
+const OP_CLOCK: u32 = 0x23u;       // Toggle signal based on frame counter
+const OP_SIGNAL_SOURCE: u32 = 0x24u; // Constant signal source (always high)
 
-// Logic opcodes (for building circuits)
-const OP_AND: u32 = 0x30u;        // Only replicate if N AND W are agents
-const OP_XOR: u32 = 0x31u;        // Only replicate if N XOR W are agents
+// Logic opcodes (for building circuits) - check signal strength (g > 128)
+const OP_AND: u32 = 0x30u;        // Output high if N AND W have signal
+const OP_XOR: u32 = 0x31u;        // Output high if N XOR W have signal
+const OP_OR: u32 = 0x32u;         // Output high if N OR W have signal
+const OP_NOT: u32 = 0x33u;        // Output high if W does NOT have signal
 const OP_RANDOM: u32 = 0x40u;     // Randomly choose action
 
 // Portal opcodes (cross-zone signal teleportation)
@@ -437,69 +442,138 @@ fn execute_agent(px: u32, py: u32, cell: Pixel) {
             dormant.a = TYPE_EMPTY;
             write_pixel(x, y, dormant);
         }
-        
-        // ===== LOGIC OPCODES =====
-        case OP_AND: {
-            // Only replicate if BOTH north AND west neighbors are agents
-            write_pixel(x, y, cell);
+        case OP_WIRE: {
+            // Propagate signal through wire
+            // b=0: horizontal wire (reads west neighbor)
+            // b=1: vertical wire (reads north neighbor)
+            // Signal is stored in green channel (g > 128 = high)
+            var wire = copy_pixel(cell);
+            wire.a = TYPE_AGENT;
             
-            var north_is_agent = false;
-            var west_is_agent = false;
+            var signal_high = false;
+            if (cell.b == 1u) {
+                // Vertical wire: read from north
+                if (y > 0u) {
+                    let n = read_neighbor(x, y, 0, -1);
+                    signal_high = (n.g > 128u);
+                }
+            } else {
+                // Horizontal wire: read from west
+                if (x > 0u) {
+                    let w = read_neighbor(x, y, -1, 0);
+                    signal_high = (w.g > 128u);
+                }
+            }
+            
+            wire.g = select(0u, 255u, signal_high);
+            // b stays as direction flag (copy_pixel preserves it)
+            write_pixel(x, y, wire);
+        }
+        case OP_CLOCK: {
+            // Toggle signal based on frame counter
+            // b = period (half-cycle length in frames), stored permanently
+            // g = output signal (0 or 255)
+            // Period is stored in b and NEVER overwritten
+            let period = max(1u, cell.b);
+            let tick = config.frame % (period * 2u);
+            let signal_high = tick < period;
+
+            var clock = copy_pixel(cell);
+            clock.a = TYPE_AGENT;
+            clock.g = select(0u, 255u, signal_high);
+            // b stays as period (copy_pixel preserves it)
+            write_pixel(x, y, clock);
+        }
+        case OP_SIGNAL_SOURCE: {
+            // Constant high signal source
+            var source = copy_pixel(cell);
+            source.a = TYPE_AGENT;
+            source.g = 255u; // Always high
+            source.b = 50u;  // Slight blue tint
+            write_pixel(x, y, source);
+        }
+        
+        // ===== LOGIC OPCODES (check signal strength g > 128) =====
+        case OP_AND: {
+            // Output high if BOTH north AND west have signal (g > 128)
+            var gate = copy_pixel(cell);
+            gate.a = TYPE_AGENT;
+            
+            var north_high = false;
+            var west_high = false;
             
             if (y > 0u) {
                 let n = read_neighbor(x, y, 0, -1);
-                north_is_agent = (n.a == TYPE_AGENT);
+                north_high = (n.g > 128u);
             }
             if (x > 0u) {
                 let w = read_neighbor(x, y, -1, 0);
-                west_is_agent = (w.a == TYPE_AGENT);
+                west_high = (w.g > 128u);
             }
             
-            // AND gate: replicate only if both true
-            if (north_is_agent && west_is_agent) {
-                var child = copy_pixel(cell);
-                child.r = OP_REPLICATE;
-                if (x + 1u < config.width) {
-                    let e = read_neighbor(x, y, 1, 0);
-                    if (e.a == TYPE_EMPTY) {
-                        write_pixel(x + 1u, y, child);
-                    }
-                }
-                if (y + 1u < config.height) {
-                    let s = read_neighbor(x, y, 0, 1);
-                    if (s.a == TYPE_EMPTY) {
-                        write_pixel(x, y + 1u, child);
-                    }
-                }
-            }
+            // AND: output high only if both inputs high
+            gate.g = select(0u, 255u, north_high && west_high);
+            gate.b = 255u; // Green gates render with blue tint
+            write_pixel(x, y, gate);
         }
         case OP_XOR: {
-            // Only replicate if exactly one neighbor is an agent
-            write_pixel(x, y, cell);
+            // Output high if exactly one input has signal
+            var gate = copy_pixel(cell);
+            gate.a = TYPE_AGENT;
             
-            var north_is_agent = false;
-            var west_is_agent = false;
+            var north_high = false;
+            var west_high = false;
             
             if (y > 0u) {
                 let n = read_neighbor(x, y, 0, -1);
-                north_is_agent = (n.a == TYPE_AGENT);
+                north_high = (n.g > 128u);
             }
             if (x > 0u) {
                 let w = read_neighbor(x, y, -1, 0);
-                west_is_agent = (w.a == TYPE_AGENT);
+                west_high = (w.g > 128u);
             }
             
-            // XOR gate: replicate only if exactly one is true
-            if (north_is_agent != west_is_agent) {
-                var child = copy_pixel(cell);
-                child.r = OP_MOVE_RIGHT;
-                if (x + 1u < config.width) {
-                    let e = read_neighbor(x, y, 1, 0);
-                    if (e.a == TYPE_EMPTY) {
-                        write_pixel(x + 1u, y, child);
-                    }
-                }
+            // XOR: output high if exactly one input high
+            gate.g = select(0u, 255u, north_high != west_high);
+            gate.b = 200u;
+            write_pixel(x, y, gate);
+        }
+        case OP_OR: {
+            // Output high if EITHER north OR west has signal
+            var gate = copy_pixel(cell);
+            gate.a = TYPE_AGENT;
+            
+            var north_high = false;
+            var west_high = false;
+            
+            if (y > 0u) {
+                let n = read_neighbor(x, y, 0, -1);
+                north_high = (n.g > 128u);
             }
+            if (x > 0u) {
+                let w = read_neighbor(x, y, -1, 0);
+                west_high = (w.g > 128u);
+            }
+            
+            gate.g = select(0u, 255u, north_high || west_high);
+            gate.b = 150u;
+            write_pixel(x, y, gate);
+        }
+        case OP_NOT: {
+            // Output high if west input is LOW (inverter)
+            var gate = copy_pixel(cell);
+            gate.a = TYPE_AGENT;
+            
+            var west_high = false;
+            if (x > 0u) {
+                let w = read_neighbor(x, y, -1, 0);
+                west_high = (w.g > 128u);
+            }
+            
+            // NOT: output is inverse of input
+            gate.g = select(255u, 0u, west_high);
+            gate.b = 100u;
+            write_pixel(x, y, gate);
         }
         case OP_RANDOM: {
             // Randomly choose to move or replicate

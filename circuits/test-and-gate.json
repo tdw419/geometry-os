@@ -1,0 +1,58 @@
+{
+  "name": "AND Gate Test",
+  "description": "Two clocks feeding an AND gate. Output should only be HIGH when both clocks are HIGH.",
+  "width": 480,
+  "height": 240,
+  "components": [
+    {
+      "id": "clock_a",
+      "type": "clock",
+      "x": 10, "y": 10,
+      "period": 30,
+      "phase": 0,
+      "comment": "Clock A: toggles every 30 frames"
+    },
+    {
+      "id": "clock_b",
+      "type": "clock",
+      "x": 20, "y": 5,
+      "period": 20,
+      "phase": 0,
+      "comment": "Clock B: toggles every 20 frames (different period)"
+    },
+    {
+      "id": "wire_a",
+      "type": "wire",
+      "from": [11, 10],
+      "to": [19, 10],
+      "comment": "Wire from clock A east to AND gate"
+    },
+    {
+      "id": "wire_b",
+      "type": "wire",
+      "from": [20, 6],
+      "to": [20, 9],
+      "direction": "south",
+      "comment": "Wire from clock B south to AND gate"
+    },
+    {
+      "id": "and_gate",
+      "type": "and",
+      "x": 20, "y": 10,
+      "comment": "AND gate: inputs from W (clock_a wire) and N (clock_b wire)"
+    },
+    {
+      "id": "output_wire",
+      "type": "wire",
+      "from": [21, 10],
+      "to": [30, 10],
+      "comment": "Output wire from AND gate going east"
+    }
+  ],
+  "probes": [
+    {"id": "clock_a_out", "x": 10, "y": 10, "label": "Clock A"},
+    {"id": "clock_b_out", "x": 20, "y": 5, "label": "Clock B"},
+    {"id": "and_output", "x": 20, "y": 10, "label": "AND Output"},
+    {"id": "wire_end", "x": 30, "y": 10, "label": "Wire End"}
+  ]
+}

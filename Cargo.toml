@@ -42,4 +42,8 @@ chrono = "0.4"
 name = "siphon-demo"
 path = "src/bin/siphon-demo.rs"
 
+[[bin]]
+name = "circuit-runner"
+path = "src/bin/circuit-runner.rs"
+
 [build-dependencies]

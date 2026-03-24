@@ -34,10 +34,15 @@ const OP_IF_AGENT: u32 = 0x13;
 // Signal opcodes
 const OP_EMIT_SIGNAL: u32 = 0x20;
 const OP_SLEEP: u32 = 0x21;
+const OP_WIRE: u32 = 0x22;         // Propagate signal from west to east
+const OP_CLOCK: u32 = 0x23;        // Toggle signal based on frame counter
+const OP_SIGNAL_SOURCE: u32 = 0x24; // Constant signal source (always high)
 
-// Logic opcodes
-const OP_AND: u32 = 0x30;
-const OP_XOR: u32 = 0x31;
+// Logic opcodes - check signal strength (g > 128)
+const OP_AND: u32 = 0x30;          // Output high if N AND W have signal
+const OP_XOR: u32 = 0x31;          // Output high if N XOR W have signal
+const OP_OR: u32 = 0x32;           // Output high if N OR W have signal
+const OP_NOT: u32 = 0x33;          // Output high if W does NOT have signal
 const OP_RANDOM: u32 = 0x40;
 
 // Portal opcodes (cross-zone signal teleportation)
@@ -455,7 +460,22 @@ impl PixelUniverse {
         self.staging_buffer.unmap();
         
         self.frame += 1;
-        
+
+        // Debug: print first few pixel values every 10 frames
+        if self.frame % 10 == 0 {
+            let p0_offset = 0 * 16;
+            let p0_r = u32::from_le_bytes([data[p0_offset], data[p0_offset+1], data[p0_offset+2], data[p0_offset+3]]);
+            let p0_g = u32::from_le_bytes([data[p0_offset+4], data[p0_offset+5], data[p0_offset+6], data[p0_offset+7]]);
+
+            // Clock at (10, 10) = index 10*480 + 10 = 4810
+            let clock_idx = (10 * self.width as usize + 10);
+            let clock_offset = clock_idx * 16;
+            let clock_r = u32::from_le_bytes([data[clock_offset], data[clock_offset+1], data[clock_offset+2], data[clock_offset+3]]);
+            let clock_g = u32::from_le_bytes([data[clock_offset+4], data[clock_offset+5], data[clock_offset+6], data[clock_offset+7]]);
+
+            eprintln!("Frame {}: clock(10,20) r=0x{:02x} g={} (should toggle)", self.frame, clock_r, clock_g);
+        }
+
         // Write current state to shared memory for external tools
         self.write_to_shared_memory(&data);
         
@@ -588,184 +608,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut universe = futures::executor::block_on(
         PixelUniverse::new(width, height, 0, fb_path)
     )?;
-    
-    // Initialize with logic gate pattern
-    println!("Building logic circuits...");
+
+    // Initialize with REAL logic circuits
+    println!("Building REAL logic circuits (signal-based, not flood-fill)...\n");
     let mut pixels = vec![Pixel::empty(); (width * height) as usize];
-    
-    // Circuit 1: AND Gate
-    // Input A (left wire)
-    let input_a_x = 50;
-    let input_a_y = 50;
-    pixels[(input_a_y * width + input_a_x) as usize] = Pixel::agent(OP_REPLICATE, 255, 0, 0);
-    
-    // Input B (top wire)
-    let input_b_x = 100;
-    let input_b_y = 30;
-    pixels[(input_b_y * width + input_b_x) as usize] = Pixel::agent(OP_MOVE_DOWN, 0, 255, 0);
-    
-    // AND gate (center)
-    let gate_x = 100;
-    let gate_y = 50;
-    pixels[(gate_y * width + gate_x) as usize] = Pixel::agent(OP_AND, 255, 255, 255);
-    
-    // Circuit 2: XOR Gate
-    let xor_x = 200;
-    let xor_y = 100;
-    pixels[(xor_y * width + xor_x) as usize] = Pixel::agent(OP_XOR, 255, 0, 255);
-    
-    // Inputs for XOR
-    pixels[((xor_y - 20) * width + xor_x) as usize] = Pixel::agent(OP_MOVE_DOWN, 0, 255, 0);
-    pixels[(xor_y * width + xor_x - 20) as usize] = Pixel::agent(OP_MOVE_RIGHT, 255, 0, 0);
-    
-    // Circuit 3: Random walkers
-    for i in 0..5 {
-        let rx = 300 + i * 30;
-        let ry = 120;
-        pixels[(ry * width + rx) as usize] = Pixel::agent(OP_RANDOM, 255, 255, 0);
-    }
-    
-    // Circuit 4: Signal emitter
-    let emitter_x = 400;
-    let emitter_y = 180;
-    pixels[(emitter_y * width + emitter_x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 255, 255);
-    
-    // Circuit 5: Portal Test - Visible cross-zone pattern
-    // Clock source at (10, 10) - stays in place, emits signal
-    pixels[(10 * width + 10) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 255, 0);  // Green = clock
-    
-    // Horizontal wire from clock to right edge (foundry zone)
-    for x in 11..238 {
-        pixels[(10 * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 100, 0);  // Yellow = wire
-    }
-    
-    // Portal entry at (238, 10) - right edge of foundry
-    pixels[(10 * width + 238) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 0, 0);  // Red = portal IN
-    
-    // Portal exit at architect zone (362, 10) - left edge of architect
-    pixels[(10 * width + 362) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 255, 255);  // Cyan = portal OUT
-    
-    // Wire in architect zone
-    for x in 363..470 {
-        pixels[(10 * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 200, 200);  // Cyan = architect wire
-    }
-    
-    // Zone divider lines (visual markers)
-    for y in 0..200 {
-        pixels[(y * width + 239) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 50, 50, 50);  // Dark = foundry/typist divider
-        pixels[(y * width + 359) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 50, 50, 50);  // Dark = typist/architect divider
-    }
-    
-    // Circuit 6: Portal test with actual OP_PORTAL opcodes
-    // Clock source in foundry (10, 15)
-    pixels[(15 * width + 10) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 255, 0);  // Green clock
-    
-    // Wire to portal IN at foundry edge (238, 15)
-    for x in 11..238 {
-        pixels[(15 * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 100, 0);  // Yellow wire
-    }
-    
-    // Portal IN at (238, 15) - targets architect zone (362, 15)
-    // OP_PORTAL_IN: g=target_x, b=target_y
-    pixels[(15 * width + 238) as usize] = Pixel::agent(OP_PORTAL_IN, 0, 362, 15);  // Teleport to (362, 15)
-    
-    // Portal OUT at architect zone (362, 15)
-    pixels[(15 * width + 362) as usize] = Pixel::agent(OP_PORTAL_OUT, 0, 0, 0);  // Receiver
-    
-    // Wire from portal OUT in architect zone
-    for x in 363..470 {
-        pixels[(15 * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 200, 200);  // Cyan wire
-    }
-    
-    // Circuit 7: CPU in architect zone (scaled 4x from macro placement)
-    // Clock module at (8, 8) in foundry = architect (2, 2) * 4
-    // Shows clock oscillator pattern
-    for x in 32..56 {
-        pixels[(12 * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 200, 255);
-        pixels[(13 * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 200, 255);
-        pixels[(14 * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 200, 255);
-        pixels[(15 * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 200, 255);
-    }
-    // Clock loop closure
-    pixels[(12 * width + 32) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 255, 0);
-    pixels[(12 * width + 55) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 255, 0);
-    pixels[(15 * width + 32) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 255, 0);
-    pixels[(15 * width + 55) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 0, 255, 0);
-    
-    // PC module at (8, 32) in foundry = architect (2, 8) * 4
-    // Shows 2-bit counter pattern
-    for x in 32..128 {
-        for y_offset in 0..72 {
-            let y = 32 + y_offset;
-            if y < 200 {
-                pixels[(y * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 80, 150, 200);
-            }
-        }
-    }
-    // XOR gates (red)
-    for x_off in &[16, 32, 48, 64] {
-        pixels[(48 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 100, 100);
-        pixels[(49 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 100, 100);
-        pixels[(50 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 100, 100);
-        pixels[(51 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 100, 100);
-    }
-    // AND gates (green)
-    for x_off in &[20, 40, 60] {
-        pixels[(64 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 255, 100);
-        pixels[(65 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 255, 100);
-        pixels[(66 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 255, 100);
-        pixels[(67 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 255, 100);
-    }
-    // Flip-flops (yellow)
-    for x_off in &[24, 48, 72, 96] {
-        pixels[(80 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 255, 100);
-        pixels[(81 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 255, 100);
-        pixels[(82 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 255, 100);
-        pixels[(83 * width + 32 + x_off) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 255, 100);
-    }
-    
-    // ALU module at (8, 120) in foundry = architect (2, 30) * 4
-    // Shows ALU pattern
-    for x in 32..120 {
-        for y_offset in 0..48 {
-            let y = 120 + y_offset;
-            if y < 200 {
-                pixels[(y * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 60, 120, 180);
-            }
-        }
-    }
-    // ALU XOR gates
-    pixels[(140 * width + 48) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 100, 100);
-    pixels[(140 * width + 52) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 100, 100);
-    pixels[(140 * width + 56) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 100, 100);
-    pixels[(140 * width + 60) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 255, 100, 100);
-    // ALU AND gates
-    pixels[(150 * width + 48) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 255, 100);
-    pixels[(150 * width + 52) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 255, 100);
-    pixels[(150 * width + 56) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 255, 100);
-    pixels[(150 * width + 60) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 255, 100);
-    // Output indicator
-    for x in 80..120 {
-        pixels[(160 * width + x) as usize] = Pixel::agent(OP_EMIT_SIGNAL, 100, 200, 255);
-    }
-    
+
+    // MINIMAL TEST: Just one clock pixel
+    let clock_a = Pixel::agent(OP_CLOCK, 30, 0, 0);
+    eprintln!("DEBUG: Clock A pixel: r={} (OP_CLOCK={}), g={}, b={}, a={}", clock_a.r, OP_CLOCK, clock_a.g, clock_a.b, clock_a.a);
+    pixels[(10 + 10 * width) as usize] = clock_a;  // Position (10, 10)
+
+    // Nothing else - just the clock
+
     universe.init_buffer(&pixels);
-    
+
     // Create output directory
     std::fs::create_dir_all("output")?;
-    
-    println!("Running simulation (100 frames at 30 fps)...\n");
-    println!("Logic circuits:");
-    println!("  - AND gate at ({}, {})", gate_x, gate_y);
-    println!("  - XOR gate at ({}, {})", xor_x, xor_y);
-    println!("  - Random walkers at x=300-420");
-    println!("  - Signal emitter at ({}, {})", emitter_x, emitter_y);
-    println!("  - Portal test: clock (10,10) → wire → portal IN (238,10) → portal OUT (362,10)");
-    println!("  - Zone dividers at x=239 (foundry/typist) and x=359 (typist/architect)");
-    println!();
-    
+
+    println!("\nRunning minimal test: single clock pixel at (10, 10)");
+    println!("Expected: g toggles between 0 and 255 every 30 frames\n");
+
     universe.run(30, 100)?;
-    
-    println!("\n✓ Done!");
+
+    println!("\n✓ Done! Check output/frame_*.png for results.");
     Ok(())
 }
