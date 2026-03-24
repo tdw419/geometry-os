@@ -10,8 +10,8 @@
 use std::time::{Duration, Instant};
 use std::env;
 
-mod siphon;
-use siphon::FramebufferSiphon;
+// siphon module is included inline since bin targets can't use mod
+include!("../siphon/mod.rs");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
