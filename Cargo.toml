@@ -46,4 +46,8 @@ path = "src/bin/siphon-demo.rs"
 name = "circuit-runner"
 path = "src/bin/circuit-runner.rs"
 
+[[bin]]
+name = "pixelvm"
+path = "src/bin/pixelvm.rs"
+
 [build-dependencies]
