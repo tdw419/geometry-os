@@ -1,0 +1,35 @@
+{
+  "name": "Half Adder",
+  "description": "Adds two single-bit numbers, outputs sum and carry",
+  "author": "pxOS",
+  "version": "1.0",
+  "size": { "width": 20, "height": 15 },
+  "inputs": [
+    { "name": "A", "x": 0, "y": 5, "description": "First input bit" },
+    { "name": "B", "x": 0, "y": 10, "description": "Second input bit" }
+  ],
+  "outputs": [
+    { "name": "SUM", "x": 19, "y": 5, "description": "XOR of inputs" },
+    { "name": "CARRY", "x": 19, "y": 10, "description": "AND of inputs" }
+  ],
+  "pixels": [
+    { "x": 0, "y": 5, "opcode": "MOVE_RIGHT", "r": 0, "g": 255, "b": 0, "comment": "Input A wire" },
+    { "x": 0, "y": 10, "opcode": "MOVE_RIGHT", "r": 0, "g": 255, "b": 0, "comment": "Input B wire" },
+    
+    { "x": 5, "y": 5, "opcode": "MOVE_RIGHT", "r": 0, "g": 255, "b": 0 },
+    { "x": 5, "y": 10, "opcode": "MOVE_RIGHT", "r": 0, "g": 255, "b": 0 },
+    
+    { "x": 10, "y": 7, "opcode": "XOR", "r": 255, "g": 0, "b": 255, "comment": "XOR gate for SUM" },
+    { "x": 10, "y": 12, "opcode": "AND", "r": 0, "g": 255, "b": 255, "comment": "AND gate for CARRY" },
+    
+    { "x": 10, "y": 5, "opcode": "MOVE_DOWN", "r": 0, "g": 255, "b": 0 },
+    { "x": 10, "y": 6, "opcode": "MOVE_DOWN", "r": 0, "g": 255, "b": 0 },
+    { "x": 10, "y": 8, "opcode": "MOVE_DOWN", "r": 0, "g": 255, "b": 0 },
+    { "x": 10, "y": 9, "opcode": "MOVE_DOWN", "r": 0, "g": 255, "b": 0 },
+    { "x": 10, "y": 10, "opcode": "MOVE_DOWN", "r": 0, "g": 255, "b": 0 },
+    { "x": 10, "y": 11, "opcode": "MOVE_DOWN", "r": 0, "g": 255, "b": 0 },
+    
+    { "x": 11, "y": 7, "opcode": "MOVE_RIGHT", "r": 255, "g": 0, "b": 255 },
+    { "x": 11, "y": 12, "opcode": "MOVE_RIGHT", "r": 0, "g": 255, "b": 255 }
+  ]
+}

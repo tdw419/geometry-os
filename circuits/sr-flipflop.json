@@ -1,0 +1,38 @@
+{
+  "name": "SR Flip-Flop",
+  "description": "Set-Reset latch - basic 1-bit memory",
+  "author": "pxOS",
+  "version": "1.0",
+  "size": { "width": 25, "height": 20 },
+  "inputs": [
+    { "name": "S", "x": 0, "y": 5, "description": "Set input" },
+    { "name": "R", "x": 0, "y": 15, "description": "Reset input" }
+  ],
+  "outputs": [
+    { "name": "Q", "x": 24, "y": 7, "description": "Output Q" },
+    { "name": "Q'", "x": 24, "y": 13, "description": "Inverted output" }
+  ],
+  "pixels": [
+    { "x": 0, "y": 5, "opcode": "MOVE_RIGHT", "r": 255, "g": 100, "b": 0, "comment": "Set wire" },
+    { "x": 0, "y": 15, "opcode": "MOVE_RIGHT", "r": 100, "g": 0, "b": 255, "comment": "Reset wire" },
+    
+    { "x": 5, "y": 5, "opcode": "MOVE_RIGHT", "r": 255, "g": 100, "b": 0 },
+    { "x": 5, "y": 15, "opcode": "MOVE_RIGHT", "r": 100, "g": 0, "b": 255 },
+    
+    { "x": 10, "y": 8, "opcode": "NOR", "r": 255, "g": 255, "b": 0, "comment": "NOR gate 1" },
+    { "x": 10, "y": 12, "opcode": "NOR", "r": 255, "g": 255, "b": 0, "comment": "NOR gate 2" },
+    
+    { "x": 5, "y": 8, "opcode": "MOVE_DOWN", "r": 255, "g": 100, "b": 0 },
+    { "x": 5, "y": 12, "opcode": "MOVE_UP", "r": 100, "g": 0, "b": 255 },
+    
+    { "x": 11, "y": 8, "opcode": "MOVE_RIGHT", "r": 255, "g": 255, "b": 0 },
+    { "x": 11, "y": 12, "opcode": "MOVE_RIGHT", "r": 255, "g": 255, "b": 0 },
+    
+    { "x": 12, "y": 9, "opcode": "MOVE_DOWN", "r": 255, "g": 255, "b": 0, "comment": "Cross-coupling" },
+    { "x": 12, "y": 10, "opcode": "MOVE_DOWN", "r": 255, "g": 255, "b": 0 },
+    { "x": 12, "y": 11, "opcode": "MOVE_DOWN", "r": 255, "g": 255, "b": 0 },
+    
+    { "x": 15, "y": 8, "opcode": "MOVE_RIGHT", "r": 255, "g": 255, "b": 0 },
+    { "x": 15, "y": 12, "opcode": "MOVE_RIGHT", "r": 255, "g": 255, "b": 0 }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "bus-universal": { "x": 0, "y": 100, "width": 480, "height": 4 },
+  "half-adder": { "x": 100, "y": 50 },
+  "replicator-field": { "x": 200, "y": 100 },
+  "clock": { "x": 300, "y": 50 },
+  "memory-cell": { "x": 400, "y": 100 },
+  "alu": { "x": 100, "y": 150 },
+  "cpu": { "x": 200, "y": 150 },
+  "bus-tap": { "x": 120, "y": 90 },
+  "4bit-ripple-adder": { "x": 50, "y": 180, "width": 200, "height": 40 },
+  "simple-alu": { "x": 50, "y": 220, "width": 150, "height": 60 },
+  "alu-mux-design": { "x": 250, "y": 180, "width": 200, "height": 100 },
+  "clock-simple": { "x": 50, "y": 20, "width": 10, "height": 10 },
+  "clock-ring": { "x": 200, "y": 20, "width": 20, "height": 20 },
+  "clock-5pixel": { "x": 50, "y": 10, "width": 25, "height": 20 }
+}

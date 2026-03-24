@@ -1,0 +1,29 @@
+{
+  "name": "Clock Oscillator",
+  "description": "Generates a periodic pulse signal",
+  "author": "pxOS",
+  "version": "1.0",
+  "size": { "width": 30, "height": 10 },
+  "inputs": [],
+  "outputs": [
+    { "name": "CLK", "x": 29, "y": 5, "description": "Clock output" }
+  ],
+  "pixels": [
+    { "x": 0, "y": 5, "opcode": "REPLICATE", "r": 255, "g": 255, "b": 0, "comment": "Pulse source" },
+    { "x": 5, "y": 5, "opcode": "MOVE_RIGHT", "r": 255, "g": 255, "b": 0 },
+    { "x": 10, "y": 5, "opcode": "MOVE_RIGHT", "r": 255, "g": 255, "b": 0 },
+    { "x": 15, "y": 5, "opcode": "MOVE_RIGHT", "r": 255, "g": 255, "b": 0 },
+    { "x": 20, "y": 5, "opcode": "MOVE_RIGHT", "r": 255, "g": 255, "b": 0 },
+    { "x": 25, "y": 5, "opcode": "MOVE_RIGHT", "r": 255, "g": 255, "b": 0 },
+    
+    { "x": 29, "y": 4, "opcode": "EMIT_SIGNAL", "r": 255, "g": 0, "b": 0, "comment": "Feedback loop" },
+    { "x": 29, "y": 3, "opcode": "MOVE_UP", "r": 255, "g": 0, "b": 0 },
+    { "x": 29, "y": 2, "opcode": "MOVE_LEFT", "r": 255, "g": 0, "b": 0 },
+    { "x": 28, "y": 2, "opcode": "MOVE_LEFT", "r": 255, "g": 0, "b": 0 },
+    { "x": 27, "y": 2, "opcode": "MOVE_LEFT", "r": 255, "g": 0, "b": 0 },
+    { "x": 26, "y": 2, "opcode": "MOVE_DOWN", "r": 255, "g": 0, "b": 0 },
+    { "x": 26, "y": 3, "opcode": "MOVE_DOWN", "r": 255, "g": 0, "b": 0 },
+    { "x": 26, "y": 4, "opcode": "MOVE_DOWN", "r": 255, "g": 0, "b": 0 },
+    { "x": 26, "y": 5, "opcode": "MOVE_DOWN", "r": 255, "g": 0, "b": 0 }
+  ]
+}

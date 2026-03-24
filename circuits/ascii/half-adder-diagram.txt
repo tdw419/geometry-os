@@ -1,0 +1,12 @@
+
+  A ---+---&--- CARRY
+       |
+  B ---+
+       |
+       +---X--- SUM
+       
+Legend:
+  - = wire
+  & = AND gate
+  X = XOR gate
+  + = junction

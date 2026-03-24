@@ -1,0 +1,24 @@
+# Build artifacts
+/target/
+*.o
+*.rlib
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Output
+/output/
+*.png
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+*.log

@@ -1,0 +1,42 @@
+# Clock Oscillator - Ring Oscillator Design
+#
+# A 3-stage ring oscillator that pulses continuously
+# Based on real CPU clock design (3 inverters in a loop)
+#
+# How it works:
+#   Signal travels around the ring
+#   Each "gate" adds delay
+#   Signal oscillates forever
+#
+# ASCII Layout (15x15):
+
+        ┌──────────┐
+        │          │
+        │    *──────┤
+        │    │      │
+        │    │      │
+        │    ▼      │
+        │    &──────┤
+        │    │      │
+        │    │      │
+        │    ▼      │
+        │    X──────┤
+        │           │
+        └───────────┘
+             │
+             ▼
+           OUT
+
+# Legend:
+#   * = Emitter (starts pulse)
+#   & = AND gate (delay element)
+#   X = XOR gate (inverter)
+#   ─ = Wire
+#   │ = Wire
+#   ▼ = Output to ALU
+#   ┌└┐ = Corners
+
+# Ring path: * → & → X → back to *
+# This creates continuous oscillation
+
+# Frequency: ~30 frames per cycle (1 Hz at 30 FPS)

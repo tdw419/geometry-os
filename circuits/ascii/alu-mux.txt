@@ -1,0 +1,84 @@
+# ALU Multiplexer - Spatial Logic Switcher
+# 
+# Mode 0: ADD (A + B)
+# Mode 1: AND (A & B)
+#
+# Architecture:
+#   ┌─────────────────────────────────┐
+#   │         CONTROL (M)             │
+#   │            │                     │
+#   │     ┌──────┴──────┐              │
+#   │     │             │              │
+#   │   ADDER         ANDER            │
+#   │     │             │              │
+#   │     └──────┬──────┘              │
+#   │            │                     │
+#   │         OUTPUT                   │
+#   └─────────────────────────────────┘
+
+## Control Signal (M)
+# M=0: Route to ADDER (vertical wire down-left)
+# M=1: Route to ANDER (vertical wire down-right)
+
+## Layout (160x60 pixels)
+
+# Input A (4 bits)
+A3 A2 A1 A0
+│  │  │  │
+└──┴──┴──┴──┐
+            │
+         ┌──┴──┐
+         │     │
+    ┌────┘     └────┐
+    │               │
+  ADDER           ANDER
+    │               │
+    └────┬─────┬────┘
+         │     │
+       S0-S3  Z0-Z3
+         │     │
+         └──┬──┘
+            │
+          OUTPUT
+            │
+         RESULT
+
+## Signal Flow
+
+# When M=0 (ADD):
+#   A, B → ADDER → SUM
+#   ANDER outputs blocked
+
+# When M=1 (AND):
+#   A, B → ANDER → RESULT
+#   ADDER outputs blocked
+
+## Spatial Implementation
+
+# Control Line (horizontal)
+────────────────────────────────────────
+
+# Splitter (at control point)
+         *
+       ┌─┼─┐
+       │   │
+    M=0   M=1
+
+# Adder Path (left branch)
+    │
+    &───X  (half-adder logic)
+    │   │
+   SUM CARRY
+
+# Ander Path (right branch)
+    │
+    &─────  (AND gates)
+    │
+   RESULT
+
+# Output Multiplexer (collects both)
+         ┌─────┐
+    ADD──┤     │
+         │  *  ├──→ OUTPUT
+    AND──┤     │
+         └─────┘

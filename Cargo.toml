@@ -1,0 +1,41 @@
+[package]
+name = "pixel-formula-gpu"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "formula"
+path = "src/main.rs"
+
+[[bin]]
+name = "agent"
+path = "src/agent_main.rs"
+
+[[bin]]
+name = "injector"
+path = "src/injector.rs"
+
+[[bin]]
+name = "scanner"
+path = "src/scanner.rs"
+
+[[bin]]
+name = "heatmap"
+path = "src/heatmap.rs"
+
+[[bin]]
+name = "bridge"
+path = "src/bridge.rs"
+
+[dependencies]
+wgpu = "0.19"
+image = "0.24"
+bytemuck = { version = "1.14", features = ["derive"] }
+env_logger = "0.10"
+futures = "0.3"
+memmap2 = "0.9"
+clap = { version = "4.5", features = ["derive"] }
+serde_json = "1.0"
+chrono = "0.4"
+
+[build-dependencies]

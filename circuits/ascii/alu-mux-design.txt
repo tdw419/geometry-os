@@ -1,0 +1,41 @@
+# ALU Multiplexer - Switches between ADD and AND operations
+# 
+# Inputs: A (4 bits), B (4 bits), M (mode)
+# Outputs: RESULT (4 bits)
+#
+# M = 0: ADD (A + B)
+# M = 1: AND (A & B)
+
+          A3 A2 A1 A0    B3 B2 B1 B0    M
+           │  │  │  │     │  │  │  │    │
+           └──┴──┴──┴─────┴──┴──┴──┴────┤
+                                         │
+                    ┌────────────────────┤
+                    │                    │
+              ┌─────┴─────┐              │
+              │           │              │
+           ADDER        ANDER            │
+              │           │              │
+    ┌─────────┤           ├─────────┐    │
+    │         │           │         │    │
+    │  S3 S2 S1 S0      Z3 Z2 Z1 Z0 │    │
+    │     │  │  │  │     │  │  │  │    │
+    │     └──┴──┴──┴─────┴──┴──┴──┘    │
+    │              │                    │
+    │         ┌────┴────┐               │
+    │         │         │               │
+    │      ───┼─────────┼───            │
+    │         │    *    │               │
+    │      ───┼─────────┼───            │
+    │         │         │               │
+    │         └────┬────┘               │
+    │              │                    │
+    │         R3 R2 R1 R0               │
+    │              │                    │
+    └──────────────┴────────────────────┘
+
+# Legend:
+#   ADDER = 4-bit ripple-carry adder
+#   ANDER = 4-bit bitwise AND
+#   * = multiplexer (controlled by M)
+#   R0-R3 = result bits

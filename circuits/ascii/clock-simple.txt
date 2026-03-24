@@ -1,0 +1,25 @@
+# Example Circuit: Simple Clock
+# 
+# A 5-pixel ring oscillator that generates a ~3 Hz clock signal
+#
+# Layout:
+#   (10,10) ──► (11,10) ──► (12,10) ──► (13,10) ──► (14,10)
+#      ↑                                              ↓
+#   (10,11) ◄── (11,11) ◄── (12,11) ◄── (13,11) ◄── (14,11)
+#
+# Signal flows clockwise through the loop
+
+SET (10,10) OP_MOVE_RIGHT
+SET (11,10) OP_MOVE_RIGHT
+SET (12,10) OP_MOVE_RIGHT
+SET (13,10) OP_MOVE_RIGHT
+SET (14,10) OP_MOVE_RIGHT
+
+SET (14,11) OP_MOVE_DOWN
+SET (13,11) OP_MOVE_LEFT
+SET (12,11) OP_MOVE_LEFT
+SET (11,11) OP_MOVE_LEFT
+SET (10,11) OP_MOVE_UP
+
+# Seed the oscillator
+INJECT (10,10) HIGH
