@@ -255,6 +255,15 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
         return text_color;
     }
     return vec3<u32>(0u, 0u, 0u);
+}c3<u32>(0u, 0u, 0u); }
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - local_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return text_color;
+    }
+    return vec3<u32>(0u, 0u, 0u);
 } - INPUT_ZONE_MARGIN) {
             return vec3<u32>(10u, 15u, 25u);
         }
