@@ -74,6 +74,29 @@ fn render_input_zone_text(row: u32, col: u32) -> u32 {
 
     let local_row = row - INPUT_ZONE_TOP;
     let char_row = local_row % 8u;  // 0-6 for glyph, 7 for spacing
+    if (char_row == 7u) { return 0u; }  // Skip spacing row
+
+    let line = local_row / 8u;  // Which text line (0-2)
+    let char_col = col / 6u;    // Character column (5px wide + 1px spacing)
+    if (char_col >= 20u) { return 0u; }  // Only render up to 20 characters per line
+
+    let buffer_idx = line * 20u + char_col;
+    if (buffer_idx >= 64u) { return 0u; }
+
+    let char_code = input_buffer[buffer_idx];
+    if (char_code == 0u) { return 0u; }
+
+    // Use a more efficient way to access the font bitmap
+    let font_bits = get_font_column(char_code, col % 6u);
+    let bit_pos = 6u - char_row;
+
+    return select(0u, 255u, ((font_bits >> bit_pos) & 1u) != 0u);
+}
+    // Only render in INPUT ZONE text area (rows 450-474, leaving 475-479 for status)
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return 0u; }
+
+    let local_row = row - INPUT_ZONE_TOP;
+    let char_row = local_row % 8u;  // 0-6 for glyph, 7 for spacing
     if (char_row >= 7u) { return 0u; }  // Skip spacing row
 
     let line = local_row / 8u;  // Which text line (0-2)
