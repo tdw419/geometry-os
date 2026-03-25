@@ -158,42 +158,30 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 2u) { return 0x40u; }
         if (col == 3u) { return 0x40u; }
         if (col == 4u) { return 0x40u; }
-    } else if (char_code == 50u) {  // '2'
+    } else if (c == 50u) {  // '2'
         if (col == 0u) { return 0x62u; }
         if (col == 1u) { return 0x51u; }
         if (col == 2u) { return 0x49u; }
         if (col == 3u) { return 0x49u; }
         if (col == 4u) { return 0x46u; }
-    } else if (char_code == 51u) {  // '3'
+    } else if (c == 51u) {  // '3'
         if (col == 0u) { return 0x22u; }
         if (col == 1u) { return 0x49u; }
         if (col == 2u) { return 0x49u; }
         if (col == 3u) { return 0x49u; }
         if (col == 4u) { return 0x36u; }
-    } else if (char_code == 52u) {  // '4'
+    } else if (c == 52u) {  // '4'
         if (col == 0u) { return 0x18u; }
         if (col == 1u) { return 0x14u; }
         if (col == 2u) { return 0x12u; }
         if (col == 3u) { return 0x7Fu; }
         if (col == 4u) { return 0x10u; }
-    } else if (char_code == 53u) {  // '5'
+    } else if (c == 53u) {  // '5'
         if (col == 0u) { return 0x27u; }
         if (col == 1u) { return 0x45u; }
         if (col == 2u) { return 0x45u; }
         if (col == 3u) { return 0x45u; }
-        if (col == 4u) { return 0x39u; }
-    } else if (char_code == 54u) {  // '6'
-        if (col == 0u) { return 0x3Eu; }
-        if (col == 1u) { return 0x49u; }
-        if (col == 2u) { return 0x49u; }
-        if (col == 3u) { return 0x49u; }
-        if (col == 4u) { return 0x32u; }
-    } else if (char_code == 55u) {  // '7'
-        if (col == 0u) { return 0x01u; }
-        if (col == 1u) { return 0x71u; }
-        if (col == 2u) { return 0x09u; }
-        if (col == 3u) { return 0x05u; }
-        if (col == 4u) { return 0x03u; }
+        if (col == 4u) { return 0col == 4u) { return 0x03u; }
     } else if (char_code == 56u) {  // '8'
         if (col == 0u) { return 0x36u; }
         if (col == 1u) { return 0x49u; }

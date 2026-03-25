@@ -284,15 +284,52 @@ fn draw_char(start_x: u32, start_y: u32, char_code: u32, color_r: u32, color_g: 
     let col3 = get_font_column(char_code, 3u);
     let col4 = get_font_column(char_code, 4u);
     
-    let columns = array<u32, 5>(col0, col1, col2, col3, col4);
+    // Column 0
+    for r in 0u..7u {
+        if ((col0 >> r) & 1u) != 0u {
+            let idx = (start_y + r) * config.width + start_x;
+            if (idx < arrayLength(&buffer_out)) {
+                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
+            }
+        }
+    }
     
-    for (c, bits) in columns {
-        for r in 0u..7u {
-            if ((bits >> r) & 1u) != 0u {
-                let idx = (start_y + r) * config.width + start_x + c;
-                if (idx < arrayLength(&buffer_out)) {
-                    buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
-                }
+    // Column 1
+    for r in 0u..7u {
+        if ((col1 >> r) & 1u) != 0u {
+            let idx = (start_y + r) * config.width + start_x + 1u;
+            if (idx < arrayLength(&buffer_out)) {
+                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
+            }
+        }
+    }
+    
+    // Column 2
+    for r in 0u..7u {
+        if ((col2 >> r) & 1u) != 0u {
+            let idx = (start_y + r) * config.width + start_x + 2u;
+            if (idx < arrayLength(&buffer_out)) {
+                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
+            }
+        }
+    }
+    
+    // Column 3
+    for r in 0u..7u {
+        if ((col3 >> r) & 1u) != 0u {
+            let idx = (start_y + r) * config.width + start_x + 3u;
+            if (idx < arrayLength(&buffer_out)) {
+                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
+            }
+        }
+    }
+    
+    // Column 4
+    for r in 0u..7u {
+        if ((col4 >> r) & 1u) != 0u {
+            let idx = (start_y + r) * config.width + start_x + 4u;
+            if (idx < arrayLength(&buffer_out)) {
+                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
             }
         }
     }

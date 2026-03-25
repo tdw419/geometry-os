@@ -20,7 +20,6 @@
 
 use wgpu::*;
 use image::{ImageBuffer, Rgba};
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Instant;
 use std::fs;
@@ -269,7 +268,7 @@ impl SwarmAgent {
         }
     }
     
-    fn swarm_behavior(&mut self, all_agents: &[SwarmAgent]) {
+    fn swarm_behavior(&mut self, _all_agents: &[SwarmAgent]) {
         // Circular movement around global center
         let global_center_x = WIDTH / 2;
         let global_center_y = (HEIGHT + 100) / 2;
@@ -299,7 +298,7 @@ impl SwarmAgent {
             for dy in -search_radius..=search_radius {
                 for dx in -search_radius..=search_radius {
                     let sx = (self.pos_x as i32 + dx) as u32;
-                    let sy = (self.pos_y as i32 + dy) as i32;
+                    let sy = (self.pos_y as i32 + dy) as u32;
                     
                     if sx < WIDTH && sy >= 100 && sy < HEIGHT {
                         let idx = (sy * WIDTH + sx) as usize;
