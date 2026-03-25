@@ -181,6 +181,50 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
 
 // Character code arrays for PATCH_STATUS display (WGSL-safe, no string type)
 const PATCH_SUCCESS_CHARS: array<u32, 13> = array<u32, 13>(
+    80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u  // PATCH_SUCCESS
+);
+const PATCH_FAIL_CHARS: array<u32, 10> = array<u32, 10>(
+    80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u  // PATCH_FAIL
+);
+
+fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // PATCH_STATUS zone: rows 475-479 (5 rows for 7px font + padding)
+    if (row < 475u || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let status = patch_status[0];
+    if (status == 0u) { return vec3<u32>(0u, 0u, 0u); }  // No status to display
+    
+    let local_row = row - 475u;
+    if (local_row >= 7u) { return vec3<u32>(0u, 0u, 0u); }  // Only 7 font rows
+    
+    // Center text horizontally
+    let text_width = select(13u * 6u, 10u * 6u, status == 1u);  // 6px per char
+    let start_col = (width - text_width) / 2u;
+    let end_col = start_col + text_width;
+    
+    if (col < start_col || col >= end_col) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let rel_col = col - start_col;
+    let char_idx = rel_col / 6u;
+    let pixel_col = rel_col % 6u;
+    
+    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }  // 1px gap
+    
+    let char_code = select(
+        PATCH_FAIL_CHARS[min(char_idx, 9u)],
+        PATCH_SUCCESS_CHARS[min(char_idx, 12u)],
+        status == 1u
+    );
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - local_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        // Green for success, red for fail - high contrast for vision model
+        return select(vec3<u32>(255u, 80u, 80u), vec3<u32>(80u, 255u, 80u), status == 1u);
+    }
+    return vec3<u32>(0u, 0u, 0u);
+}CESS_CHARS: array<u32, 13> = array<u32, 13>(
     80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u  // "PATCH_SUCCESS"
 );
 
