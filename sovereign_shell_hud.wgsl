@@ -90,18 +90,7 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 // Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // OCR-optimized for qwen3-vl-8b vision model extraction
-fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
-    // Extract text from INPUT ZONE using vision model (qwen3-vl-8b)
-    let input_text = extract_text_from_input_zone();
-
-    // Generate VM opcodes from extracted text using LLM (tinyllama)
-    let opcodes = generate_opcodes(input_text);
-
-    // Update agent's memory atomically with generated opcodes
-    update_memory_atomically(opcodes);
-
-    // Render cyan boundary markers for OCR detection (rows 448-449 and 480-481)
-    let boundary = get_input_zone_boundary(row, col, width);
+fn render_input_zone_text
     if (boundary > 0u) {
         return vec3<u32>(0u, 255u, 255u);  // Cyan markers for qwen3-vl-8b alignment
     }
