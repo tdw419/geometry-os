@@ -181,16 +181,7 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     }
     return vec3<u32>(10u, 15u, 25u);
 }
-eturn vec3<u32>(10u, 15u, 25u)u, 83u, 32u, 32u, 32u  // "PATCH_SUCCESS"
-        );
-    } else if (status == 2u) {
-        text_color = vec3<u32>(255u, 80u, 80u);  // Red for failure
-        msg = array<u32, 16u>(
-            80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 32u, 32u, 32u, 32u, 32u, 32u  // "PATCH_FAIL"
-        );
-    }
-    
-    let char_code = msg[char_col];
+];
     if (char_code == 0u || char_code == 32u) { return vec3<u32>(10u, 15u, 25u); }
     
     let font_bits = get_font_column(char_code, pixel_col);
