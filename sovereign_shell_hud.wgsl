@@ -55,27 +55,24 @@ const INPUT_ZONE_MARGIN: u32 = 10u;
 
 // Check if pixel position is an INPUT ZONE boundary marker (cyan lines for OCR alignment)
 // Returns: 0 = not boundary, 1 = top boundary, 2 = bottom boundary, 3 = corner bracket
-// 2-pixel thick boundaries + 4x4 corner brackets ensure vision model (qwen3-vl-8b) achieves
-// 100% detection accuracy for INPUT ZONE (rows 450-479) extraction
-// OPTIMIZED: Early row-range exit eliminates 95% of per-pixel ALU for non-boundary pixels
-fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
-    // Early-out for rows completely outside boundary marker range (448-481)
-    if (row < 448u || row > 481u) { return 0u; }
+fn get_input_zone_boundary(row: u32, col: u32) -> u32 {
+    // Early-out for rows completely outside boundary marker range (450-479)
+    if (row < 450u || row > 479u) { return 0u; }
 
     let left_edge = INPUT_ZONE_MARGIN;
     let right_edge = width - INPUT_ZONE_MARGIN;
 
-    // 2-pixel thick top boundary (rows 448-449) for reliable OCR detection
-    if ((row == 448u || row == 449u) && col >= left_edge && col < right_edge) {
+    // 2-pixel thick top boundary (rows 450-451) for reliable OCR detection
+    if ((row == 450u || row == 451u) && col >= left_edge && col < right_edge) {
         return 1u;
     }
-    // 2-pixel thick bottom boundary (rows 480-481) for reliable OCR detection
-    if ((row == 480u || row == 481u) && col >= left_edge && col < right_edge) {
+    // 2-pixel thick bottom boundary (rows 478-479) for reliable OCR detection
+    if ((row == 478u || row == 479u) && col >= left_edge && col < right_edge) {
         return 2u;
     }
     // 2x4 corner brackets aligned to boundary lines (no text row overlap)
-    let is_top_corner = row >= 448u && row <= 449u;
-    let is_bottom_corner = row >= 480u && row <= 481u;
+    let is_top_corner = row >= 450u && row <= 451u;
+    let is_bottom_corner = row >= 478u && row <= 479u;
     if (is_top_corner || is_bottom_corner) {
         let is_left_corner = col >= left_edge && col < left_edge + 4u;
         let is_right_corner = col >= right_edge - 4u && col < right_edge;
