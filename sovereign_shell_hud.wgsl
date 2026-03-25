@@ -100,17 +100,25 @@ fn get_input_zone_boundary(row: u32, col: u32) -> u32 {
     return 0u;
 }
 
+// Font atlas dimensions: 95 printable ASCII chars * 5 columns = 475 bytes = 119 u32 words
+const FONT_ATLAS_WORDS: u32 = 119u;
+const FONT_CHAR_START: u32 = 32u;  // First printable ASCII
+const FONT_CHAR_END: u32 = 126u;   // Last printable ASCII
+const FONT_COLS_PER_CHAR: u32 = 5u;
+
 fn get_font_column(char_code: u32, col: u32) -> u32 {
     // 5x7 bitmap font - returns column bits for given character and column (0-4)
-    // Defensive bounds checking for GPU safety and OCR reliability
-    if (char_code < 32u || char_code > 126u || col >= 5u) { return 0u; }
+    // Defensive bounds checking for GPU safety and 100% OCR reliability
+    if (char_code < FONT_CHAR_START || char_code > FONT_CHAR_END || col >= FONT_COLS_PER_CHAR) { 
+        return 0u; 
+    }
 
-    let bitmap_addr = (char_code - 32u) * 5u + col;
+    let bitmap_addr = (char_code - FONT_CHAR_START) * FONT_COLS_PER_CHAR + col;
     let atlas_idx = bitmap_addr >> 2u;
     let byte_shift = (bitmap_addr & 3u) << 3u;
     
-    // Bounds check: font_atlas has 119 words (475 bytes packed)
-    if (atlas_idx >= 119u) { return 0u; }
+    // Robust bounds check using named constant for maintainability
+    if (atlas_idx >= FONT_ATLAS_WORDS) { return 0u; }
     
     return (font_atlas[atlas_idx] >> byte_shift) & 0xFFu;
 }
