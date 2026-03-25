@@ -89,6 +89,54 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (boundary > 0u) {
         return vec3<u32>(0u, 255u, 255u);  // Cyan markers for qwen3-vl-8b alignment
     }
+
+    // Early exit outside input zone text area
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
+
+    let local_row = row - INPUT_ZONE_TOP;
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+
+    // 5x7 font: 5 pixels wide, 7 pixels tall, 1 pixel spacing
+    if (pixel_col >= 5u) {
+        return vec3<u32>(0u, 0u, 0u);
+    }
+
+    let global_char_idx = line_index * 64u + char_col;
+    let word_idx = global_char_idx / 4u;
+    let byte_idx = global_char_idx % 4u;
+
+    if (word_idx >= 48u) { return vec3<u32>(0u, 0u, 0u); }
+
+    let packed = input_buffer[word_idx];
+    let char_code = (packed >> (byte_idx * 8u)) & 0xFFu;
+
+    // Blinking cursor at end of input (32-frame cycle = ~500ms at 60fps)
+    let input_len = input_buffer[15u] >> 24u;
+    if (global_char_idx == input_len && (config.frame & 32u) != 0u) {
+        if (pixel_col < 2u && char_row >= 1u && char_row <= 5u) {
+            return vec3<u32>(255u, 255u, 0u);  // Yellow cursor
+        }
+    }
+
+    // Dark background for null chars or invalid rows
+    if (char_code == 0u || char_row >= 7u) {
+        return vec3<u32>(0u, 0u, 0u);
+    }
+
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return vec3<u32>(0u, 255u, 255u);  // Cyan text for OCR contrast
+    }
+    return vec3<u32>(0u, 0u, 0u);
+}
+    // Priority 1: Render cyan boundary markers for OCR detection (rows 449 and 480)
+    let boundary = get_input_zone_boundary(row, col, width);
+    if (boundary > 0u) {
+        return vec3<u32>(0u, 255u, 255u);  // Cyan markers for qwen3-vl-8b alignment
+    }
     
     // Early exit outside input zone text area
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
