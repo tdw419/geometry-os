@@ -54,16 +54,9 @@ const INPUT_ZONE_BOTTOM: u32 = 479u;
 const INPUT_ZONE_MARGIN: u32 = 10u;
 
 // Check if pixel position is an INPUT ZONE boundary marker (cyan lines for OCR alignment)
-// Returns: 0 = not boundary, 1 = top boundary, 2 = bottom boundary
+// Returns: 0 = not boundary, 1 = top boundary (row 449), 2 = bottom boundary (row 480)
 // Full-width markers ensure vision model (qwen3-vl-8b) can reliably detect INPUT ZONE (rows 450-479)
 fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
-    if (row >= INPUT_ZONE_TOP && row <= INPUT_ZONE_BOTTOM) {
-        if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
-            return 1u;
-        }
-    }
-    return 0u;
-}
     if (row == 449u || row == 480u) {
         if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
             return row == 449u ? 1u : 2u;
