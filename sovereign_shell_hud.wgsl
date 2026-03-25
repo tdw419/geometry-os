@@ -180,14 +180,7 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
         return text_color;
     }
     return vec3<u32>(10u, 15u, 25u);
-}0u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u, 32u, 32u, 32u  // "PATCH_SUCCESS   "
-        );
-    } else if (status == 2u) {
-        text_color = vec3<u32>(255u, 80u, 80u);  // Red for failure
-        msg = array<u32, 16u>(
-            80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 32u, 32u, 32u, 32u, 32u, 32u  // "PATCH_FAIL      "
-        );
-    }
+}
     
     // Render status text using 5x7 bitmap font
     let char_code = msg[char_col];
