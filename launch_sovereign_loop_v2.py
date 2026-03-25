@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Sovereign Shell Autonomous Loop v2.5 - Stable Triple-Brain 🐍🧠🛡️✨
+Sovereign Shell Autonomous Loop v2.6 - Fixed Multi-Brain 🐍🧠🛡️✨
 
 Hierarchy:
 1. ZAI (Primary) - GLM-5 with Thinking
-2. Gemini (Secondary) - Gemini 1.5 Pro
+2. Gemini (Secondary) - Gemini 1.5 Flash
 3. LM Studio (Fallback) - Qwen 2.5 Coder
 """
 
@@ -103,7 +103,6 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
                 if resp.status_code == 200:
                     data = resp.json()
                     content_resp = data["choices"][0]["message"]["content"]
-                    # If thinking is returned in content, try to strip it
                     if "<thought>" in content_resp:
                         content_resp = content_resp.split("</thought>")[-1]
                     
@@ -120,10 +119,9 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
         # 2. Gemini Secondary
         gemini_key = os.environ.get("GEMINI_API_KEY")
         if gemini_key:
-            print("\n[2] 🧠 Generating patch using Gemini (Secondary: 1.5 Pro)...")
+            print("\n[2] 🧠 Generating patch using Gemini (Secondary: 1.5 Flash)...")
             try:
-                # Use stable Gemini 1.5 Pro to avoid 404s
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={gemini_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
                 resp = self.lm_client.post(url, json={
                     "systemInstruction": {"parts": [{"text": system_prompt}]},
                     "contents": [{"parts": [{"text": user_prompt}]}],
@@ -140,7 +138,6 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
                     return json.loads(content_resp.strip())
                 else:
                     print(f"⚠️ Gemini Failed ({resp.status_code}). Trying LM Studio...")
-                    # print(resp.text)
             except Exception as e:
                 print(f"⚠️ Gemini Exception: {e}. Trying LM Studio...")
 
@@ -252,7 +249,7 @@ def main():
         delay_seconds=15.0
     )
 
-    print(f"🚀 Launching v2.5 Stable Triple-Brain Ouroboros Loop...")
+    print(f"🚀 Launching v2.6 Fixed Multi-Brain Ouroboros Loop...")
     try: loop.run()
     except KeyboardInterrupt: print("\n🛑 Stopped.")
     finally: loop.lm_client.close()
