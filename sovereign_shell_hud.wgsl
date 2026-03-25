@@ -78,6 +78,14 @@ fn get_input_zone_boundary(row: u32, col: u32) -> u32 {
     let left_edge = INPUT_ZONE_MARGIN;
     let right_edge = config.width - INPUT_ZONE_MARGIN;
 
+    // 2x4 corner brackets - check FIRST before horizontal boundaries for proper rendering
+    let is_top_corner_row = row >= 450u && row <= 451u;
+    let is_bottom_corner_row = row >= 478u && row <= 479u;
+    if (is_top_corner_row || is_bottom_corner_row) {
+        let is_left_corner = col >= left_edge && col < left_edge + 4u;
+        let is_right_corner = col >= right_edge - 4u && col < right_edge;
+        if (is_left_corner || is_right_corner) { return 3u; }
+    }
     // 2-pixel thick top boundary (rows 450-451) for reliable OCR detection
     if ((row == 450u || row == 451u) && col >= left_edge && col < right_edge) {
         return 1u;
@@ -85,14 +93,6 @@ fn get_input_zone_boundary(row: u32, col: u32) -> u32 {
     // 2-pixel thick bottom boundary (rows 478-479) for reliable OCR detection
     if ((row == 478u || row == 479u) && col >= left_edge && col < right_edge) {
         return 2u;
-    }
-    // 2x4 corner brackets aligned to boundary lines (no text row overlap)
-    let is_top_corner = row >= 450u && row <= 451u;
-    let is_bottom_corner = row >= 478u && row <= 479u;
-    if (is_top_corner || is_bottom_corner) {
-        let is_left_corner = col >= left_edge && col < left_edge + 4u;
-        let is_right_corner = col >= right_edge - 4u && col < right_edge;
-        if (is_left_corner || is_right_corner) { return 3u; }
     }
     // 2-pixel thick vertical edge markers for TEXT AREA ONLY (rows 450-479)
     // Covers all 4 text lines for consistent OCR boundary detection
