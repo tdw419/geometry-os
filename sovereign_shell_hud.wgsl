@@ -131,10 +131,17 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
 
     let local_row = row - INPUT_ZONE_TOP;
-    var char_row: u32 = 255u;
-    var line_offset: u32 = 0u;
-
+    
     // Compact 3-line layout with 1px gaps: fits rows 452-474
+    // Each line: 7px char height + 1px gap = 8px per line
+    let line_height = 8u;
+    let line = min(local_row / line_height, 2u);  // Clamp to 3 lines (0-2)
+    let char_row = local_row % line_height;       // Row within character (0-7)
+    
+    // Skip gap rows (row 7 within each 8px line slot)
+    if (char_row >= 7u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    var line_offset: u32 = line * 32u;  // 32 chars per line for text wrapping
 
     let char_col = col / 6u;
     let pixel_col = col % 6u;
