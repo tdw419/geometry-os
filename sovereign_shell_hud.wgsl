@@ -91,10 +91,17 @@ fn get_input_zone_boundary(row: u32, col: u32) -> u32 {
 
 fn get_font_column(char_code: u32, col: u32) -> u32 {
     // 5x7 bitmap font - returns column bits for given character and column (0-4)
+    // Defensive bounds checking for GPU safety and OCR reliability
     if (char_code < 32u || char_code > 126u || col >= 5u) { return 0u; }
 
     let bitmap_addr = (char_code - 32u) * 5u + col;
-    return font_atlas[bitmap_addr >> 2u] >> ((bitmap_addr & 3u) << 3u);
+    let atlas_idx = bitmap_addr >> 2u;
+    let byte_shift = (bitmap_addr & 3u) << 3u;
+    
+    // Bounds check: font_atlas has 119 words (475 bytes packed)
+    if (atlas_idx >= 119u) { return 0u; }
+    
+    return (font_atlas[atlas_idx] >> byte_shift) & 0xFFu;
 }
 
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
