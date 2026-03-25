@@ -10,6 +10,9 @@
 
 use wgpu::*;
 use wgpu::util::DeviceExt;
+mod glyph_atlas;
+use glyph_atlas::GlyphAtlas;
+
 use image::{ImageBuffer, Rgba};
 use std::time::Instant;
 
@@ -101,6 +104,7 @@ struct CourierAgent {
     tribe: u32,
     color: u32,
     cargo: f32,  // 0.0 = Empty, 1.0 = Green, 2.0 = Blue
+    cargo_glyph: u32,  // Glyph ID to drop (0-8)
     distance_traveled: f32,
     deliveries: u32,
 }
@@ -110,7 +114,16 @@ impl CourierAgent {
         let col = (id % 8) as f32;
         let row = (id / 8) as f32;
         let tribe = id as u32 % 8;
-        
+
+        // Assign glyph based on tribe
+        let cargo_glyph = match tribe {
+            0 | 1 => 1,  // File
+            2 | 3 => 2,  // Folder
+            4 | 5 => 3,  // Exec
+            6 | 7 => 4,  // Data
+            _ => 0,
+        };
+
         Self {
             id,
             pos_x: 100.0 + col * 140.0 + (id as f32 * 13.0 % 30.0),
@@ -120,6 +133,7 @@ impl CourierAgent {
             tribe,
             color: tribe_color(tribe),
             cargo: 0.0,
+            cargo_glyph,
             distance_traveled: 0.0,
             deliveries: 0,
         }
@@ -178,6 +192,29 @@ impl CourierAgent {
         }
     }
     
+    /// PUNCH GLYPH: Drop a 3x3 pattern instead of single pixel
+    fn punch_glyph(&self, x: usize, y: usize, glyph_id: u32, data_field: &mut [(f32, f32, f32, f32)]) {
+        let pixels = GlyphAtlas::get_pixels(glyph_id);
+
+        for (dx, dy) in pixels {
+            let px = (x as i32 + dx) as usize;
+            let py = (y as i32 + dy) as usize;
+
+            if px < WIDTH as usize && py < HEIGHT as usize && py >= 100 {
+                let idx = py * WIDTH as usize + px;
+
+                // Color based on cargo type
+                let color = if self.cargo == 1.0 {
+                    (0.2, 1.0, 0.2, 1.0)  // Green (Core data)
+                } else {
+                    (0.2, 0.2, 1.0, 1.0)  // Blue (Archive data)
+                };
+
+                data_field[idx] = color;
+            }
+        }
+    }
+
     /// COURIER LOGIC: SENSE → PICKUP → TRANSPORT → DROP
     fn courier_update(&mut self, data_field: &mut [(f32, f32, f32, f32)]) {
         // Try to pick up data if empty
@@ -206,24 +243,14 @@ impl CourierAgent {
                 self.vel_y += (dy / dist) * 0.5;
             }
             
-            // DROP LOGIC: If close to target, deposit cargo
+            // DROP LOGIC: If close to target, deposit cargo as glyph
             if dist < 50.0 {
                 let drop_x = self.pos_x as usize;
                 let drop_y = self.pos_y as usize;
-                
-                if drop_x < WIDTH as usize && drop_y < HEIGHT as usize {
-                    let idx = drop_y * WIDTH as usize + drop_x;
-                    
-                    // PUNCH the sorted data into the data field
-                    if self.cargo == 1.0 {
-                        // Deposit Green (Core data)
-                        data_field[idx] = (0.2, 1.0, 0.2, 1.0);
-                    } else if self.cargo == 2.0 {
-                        // Deposit Blue (Archive data)
-                        data_field[idx] = (0.2, 0.2, 1.0, 1.0);
-                    }
-                }
-                
+
+                // PUNCH the glyph pattern
+                self.punch_glyph(drop_x, drop_y, self.cargo_glyph, data_field);
+
                 self.cargo = 0.0;  // Empty cargo bay
                 self.deliveries += 1;
                 self.vel_x *= 1.5;  // Speed boost after delivery

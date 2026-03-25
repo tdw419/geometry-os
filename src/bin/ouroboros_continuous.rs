@@ -22,9 +22,21 @@ const ITERATION_DELAY_SECS: u64 = 2;
 // ============================================================================
 
 #[derive(Debug, Serialize, Deserialize)]
+struct LegibilityScore {
+    #[serde(default)]
+    clarity: f32,       // 0.0-1.0: Are glyphs distinct?
+    #[serde(default)]
+    spacing: f32,       // 0.0-1.0: Is spacing adequate?
+    #[serde(default)]
+    completeness: f32,  // 0.0-1.0: Are patterns complete?
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct VisionResponse {
     description: String,
     zones: ZoneAnalysis,
+    #[serde(default)]
+    legibility: LegibilityScore,
     issues: Vec<String>,
 }
 
@@ -144,13 +156,22 @@ impl OuroborosContinuous {
         use base64::{Engine as _, engine::general_purpose};
         let base64_image = general_purpose::STANDARD.encode(&image_data);
 
-        let prompt = r#"Analyze this 64-agent swarm framebuffer.
-Count agents in each zone (core, inner, periphery).
-Identify any issues.
+        let prompt = r#"Analyze this 64-agent swarm framebuffer with glyphs.
+
+Count:
+- Agents in each zone (core, inner, periphery)
+- Glyph visibility score (0.0-1.0)
+
+Check:
+- Are glyphs clearly separated? (no overlap)
+- Are glyph patterns complete? (not truncated)
+- Is spacing adequate? (readable, not crowded)
+
 Output JSON only:
 {
   "description": "brief description",
   "zones": {"core_agents": N, "inner_agents": N, "periphery_agents": N, "avg_velocity": X.X},
+  "legibility": {"clarity": 0.X, "spacing": 0.X, "completeness": 0.X},
   "issues": ["issue1", "issue2"]
 }"#;
 
@@ -185,6 +206,11 @@ Output JSON only:
                     periphery_agents: 0,
                     avg_velocity: 0.0,
                 },
+                legibility: LegibilityScore {
+                    clarity: 0.5,
+                    spacing: 0.5,
+                    completeness: 0.5,
+                },
                 issues: vec![],
             });
 
@@ -205,11 +231,13 @@ Output JSON only."#;
 - Core agents: {}
 - Inner agents: {}
 - Periphery agents: {}
+- Legibility: clarity={:.2} spacing={:.2} completeness={:.2}
 - Issues: {:?}
 - Previous score: {:?}
 - Current parameters: {:?}
 
-Assess and recommend changes. Output JSON:
+Assess and recommend changes. Consider legibility in scoring.
+Output JSON:
 {{
   "score": 0.X,
   "recommendations": ["rec1", "rec2"],
@@ -221,6 +249,9 @@ Assess and recommend changes. Output JSON:
             vision.zones.core_agents,
             vision.zones.inner_agents,
             vision.zones.periphery_agents,
+            vision.legibility.clarity,
+            vision.legibility.spacing,
+            vision.legibility.completeness,
             vision.issues,
             last_score,
             self.params,
@@ -288,6 +319,10 @@ Assess and recommend changes. Output JSON:
         println!("\n[VISION] Analyzing courier swarm...");
         let vision = self.vision("output/courier_swarm.png").await?;
         println!("  Description: {}", vision.description.chars().take(80).collect::<String>());
+        println!("  Legibility: clarity={:.2} spacing={:.2} completeness={:.2}",
+            vision.legibility.clarity,
+            vision.legibility.spacing,
+            vision.legibility.completeness);
         println!("  Issues: {:?}", vision.issues.iter().take(2).collect::<Vec<_>>());
 
         // 3. Reason

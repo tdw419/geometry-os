@@ -190,7 +190,7 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     // Status: 0=none (gray), 1=success (green), 2=fail (red)
     var text_color = vec3<u32>(128u, 128u, 128u);
     var msg: array<u32, 16u> = array<u32, 16u>(
-        78u, 47u, 78u, 69u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u  // "N/A"
+        78u, 47u, 65u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u  // "N/A"
     );
     
     if (status == 1u) {
