@@ -186,6 +186,44 @@ const PATCH_STATUS_TOP: u32 = 475u;
 const PATCH_STATUS_HEIGHT: u32 = 5u;
 
 fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // PATCH_STATUS zone: rows 475-479 (5 rows for 5x7 font with 2px padding)
+    if (row < PATCH_STATUS_TOP || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let status = patch_status[0];
+    if (status == 0u) { return vec3<u32>(0u, 0u, 0u); }  // No patch pending
+    
+    let local_row = row - PATCH_STATUS_TOP;
+    let char_row = local_row % 7u;
+    
+    // Center 13-char status text horizontally
+    let text_len = 13u;
+    let text_start = (width - text_len * 6u) / 2u;
+    
+    if (col < text_start || col >= text_start + text_len * 6u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let rel_col = col - text_start;
+    let char_col = rel_col / 6u;
+    let pixel_col = rel_col % 6u;
+    
+    // 1-pixel gap between chars
+    if (pixel_col >= 5u || char_col >= text_len) { return vec3<u32>(0u, 0u, 0u); }
+    
+    // Select character array based on status (1=success, 2=fail)
+    let char_code = select(
+        select(32u, PATCH_FAIL_CHARS[char_col], status == 2u),
+        PATCH_SUCCESS_CHARS[char_col],
+        status == 1u
+    );
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        // Green for success (0, 255, 100), Red for fail (255, 80, 80)
+        return select(vec3<u32>(255u, 80u, 80u), vec3<u32>(0u, 255u, 100u), status == 1u);
+    }
+    return vec3<u32>(0u, 0u, 0u);
+} {
     // Only render in PATCH_STATUS zone (rows 475-479)
     if (row < PATCH_STATUS_TOP || row >= INPUT_ZONE_BOTTOM) {
         return vec3<u32>(0u, 0u, 0u);
