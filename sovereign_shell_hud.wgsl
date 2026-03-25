@@ -92,6 +92,39 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
     }
     return 0u;
 }
+    // Early-out for rows completely outside boundary + text edge range (448-481)
+    // This single comparison skips all subsequent ALU for ~95% of screen pixels
+    if (row < 448u || row > 481u) { return 0u; }
+
+    let left_edge = INPUT_ZONE_MARGIN;
+    let right_edge = width - INPUT_ZONE_MARGIN;
+
+    // 2-pixel thick top boundary (rows 448-449) for reliable OCR detection
+    if ((row == 448u || row == 449u) && col >= left_edge && col < right_edge) {
+        return 1u;
+    }
+    // 2-pixel thick bottom boundary (rows 480-481) for reliable OCR detection
+    if ((row == 480u || row == 481u) && col >= left_edge && col < right_edge) {
+        return 2u;
+    }
+    // 2x4 corner brackets aligned to boundary lines (no text row overlap)
+    let is_top_corner = row >= 448u && row <= 449u;
+    let is_bottom_corner = row >= 480u && row <= 481u;
+    if (is_top_corner || is_bottom_corner) {
+        let is_left_corner = col >= left_edge && col < left_edge + 4u;
+        let is_right_corner = col >= right_edge - 4u && col < right_edge;
+        if (is_left_corner || is_right_corner) { return 3u; }
+    }
+    // 2-pixel thick vertical edge markers for TEXT AREA ONLY (rows 450-474)
+    // PATCH_STATUS zone (475-479) has its own styling - no edge markers there
+    // This separation improves OCR accuracy by avoiding color conflicts
+    if (row >= INPUT_ZONE_TOP && row < 475u) {
+        let is_left_edge = col >= left_edge && col < left_edge + 2u;
+        let is_right_edge = col >= right_edge - 2u && col < right_edge;
+        if (is_left_edge || is_right_edge) { return 4u; }
+    }
+    return 0u;
+}
 
 fn get_font_column(char_code: u32, col: u32) -> u32 {
     // 5x7 bitmap font - returns column bits for given character and column (0-4)
