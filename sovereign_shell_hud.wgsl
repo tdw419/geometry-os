@@ -176,7 +176,16 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     }
 
     // OCR-optimized dark background for null chars or invalid rows
-    if (char_code == 0u || char_row >= 7u) {
+    if (char_code == 0u || char_row >= 7u) { return vec3<u32>(5u, 10u, 20u); }
+
+    // Get font bitmap column and render character pixel
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return vec3<u32>(200u, 255u, 200u);  // High-contrast green for OCR
+    }
+    return vec3<u32>(5u, 10u, 20u);  // OCR-optimized dark background
+}7u) {
         return vec3<u32>(5u, 10u, 20u);  // Darker blue for better cyan contrast
     }
 
