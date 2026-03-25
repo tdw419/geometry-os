@@ -135,7 +135,7 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let char_row = local_row & 7u;
     if (char_row >= 7u || local_row >= 24u) { return vec3<u32>(0u, 0u, 0u); }
 
-    var line_offset: u32 = line * 32u;
+    var line_offset: u32 = line * 64u;  // 64 chars per line (192 total / 3 lines)
     let char_col = col / 6u;
     let pixel_col = col % 6u;
     if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }
