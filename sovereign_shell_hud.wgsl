@@ -159,6 +159,10 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     return vec3<u32>(0u, 0u, 0u);  // Pure black for qwen3-vl-8b extraction
 }
 
+// Character code arrays for PATCH_STATUS display (WGSL-safe, no string type)
+const PATCH_SUCCESS_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);
+const PATCH_FAIL_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 32u, 32u, 32u);
+
 // PATCH_STATUS zone renderer (rows 475-479) - displays opcode generation results
 fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < 475u || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
@@ -166,14 +170,13 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     let status = patch_status[0u];
     if (status == 0u) { return vec3<u32>(0u, 0u, 0u); }  // No patch pending
     
-    // Display PATCH_SUCCESS or PATCH_FAIL message
-    let status_text = select("PATCH_SUCCESS ", "PATCH_FAIL    ", status == 1u);
     let char_idx = col / 6u;
     let pixel_col = col % 6u;
     
     if (pixel_col >= 5u || char_idx >= 13u) { return vec3<u32>(0u, 0u, 0u); }
     
-    let char_code = u32(status_text[char_idx]);
+    // Select character from precomputed arrays (WGSL-safe)
+    let char_code = select(PATCH_FAIL_CHARS[char_idx], PATCH_SUCCESS_CHARS[char_idx], status == 1u);
     let local_row = row - 475u;
     let font_bits = get_font_column(char_code, pixel_col);
     
