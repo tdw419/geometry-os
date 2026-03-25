@@ -203,6 +203,27 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
         if (status == 2u) { return vec3<u32>(255u, 0u, 0u); }   // Red fail
     }
     return vec3<u32>(0u, 0u, 0u);
+}
+
+// Render INPUT ZONE label at row 447 for OCR targeting
+fn render_input_label(row: u32, col: u32, width: u32) -> vec3<u32> {
+    if (row != 447u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let label = array<u32, 11>(73u, 78u, 80u, 85u, 84u, 58u, 32u, 62u, 62u, 62u, 32u); // "INPUT: >>> "
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+    
+    if (char_col >= 11u || pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let char_code = label[char_col];
+    let font_bits = get_font_column(char_code, pixel_col);
+    
+    if (((font_bits >> 6u) & 1u) != 0u) {
+        return vec3<u32>(255u, 200u, 0u);  // Orange label for visibility
+    }
+    return vec3<u32>(0u, 0u, 0u);<u32>(255u, 0u, 0u); }   // Red fail
+    }
+    return vec3<u32>(0u, 0u, 0u);
 }<u32>(255u, 0u, 0u); }   // Red failure
     }
     return vec3<u32>(5u, 8u, 15u);  // Dark blue background for status area<u32>(255u, 0u, 0u); }   // Red failure
