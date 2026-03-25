@@ -169,44 +169,48 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     return vec3<u32>(10u, 15u, 25u);  // Dark background
 }
 
-    // Priority 1: Render cyan boundary markers for OCR detection (rows 448-449 and 480-481)
-    let boundary = get_input_zone_boundary(row, col, width);
-    if (boundary > 0u) {
-        return vec3<u32>(0u, 255u, 255u);  // Cyan markers for qwen3-vl-8b alignment
-    }
+// End of render_input_zone_text function - duplicate orphaned block removed
+
+// PATCH_STATUS display zone (rows 475-479) - shows atomic patch results
+fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
+    if (row < 475u || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
     
-    // Early exit outside input zone text area
-    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
-
-    let local_row = row - INPUT_ZONE_TOP;
-
-    // Multi-line layout: 3 lines of 7-pixel text with 2-row gaps
-    // Line 0: rows 0-6, Line 1: rows 9-15, Line 2: rows 18-24
-    var line_index: u32 = 255u;
-    var char_row: u32 = local_row;
-
-    if (local_row < 7u) {
-        line_index = 0u;
-    } else if (local_row >= 9u && local_row < 16u) {
-        line_index = 1u;
-        char_row = local_row - 9u;
-    } else if (local_row >= 18u && local_row < 25u) {
-        line_index = 2u;
-        char_row = local_row - 18u;
-    } else {
-        // Gap rows: render dark background for OCR contrast
-        if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
-            return vec3<u32>(10u, 15u, 25u);
-        }
-        return vec3<u32>(0u, 0u, 0u);
-    }
-
+    let status = patch_status[0u];
+    let local_row = row - 475u;
     let char_col = col / 6u;
     let pixel_col = col % 6u;
-
-    // 5x7 font: 5 pixels wide, 7 pixels tall, 1 pixel spacing
-    if (pixel_col >= 5u) {
-        if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
+    
+    if (pixel_col >= 5u || char_col >= 16u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    // Status: 0=none (gray), 1=success (green), 2=fail (red)
+    var text_color = vec3<u32>(128u, 128u, 128u);
+    var msg: array<u32, 16u> = array<u32, 16u>(
+        78u, 47u, 78u, 69u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u  // "N/A"
+    );
+    
+    if (status == 1u) {
+        text_color = vec3<u32>(0u, 255u, 100u);  // Green for success
+        msg = array<u32, 16u>(
+            80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u, 32u, 32u, 32u  // "PATCH_SUCCESS"
+        );
+    } else if (status == 2u) {
+        text_color = vec3<u32>(255u, 80u, 80u);  // Red for fail
+        msg = array<u32, 16u>(
+            80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 32u, 32u, 32u, 32u, 32u, 32u  // "PATCH_FAIL"
+        );
+    }
+    
+    let char_code = msg[char_col];
+    if (char_code == 0u || local_row >= 7u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - local_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return text_color;
+    }
+    return vec3<u32>(0u, 0u, 0u);
+} - INPUT_ZONE_MARGIN) {
             return vec3<u32>(10u, 15u, 25u);
         }
         return vec3<u32>(0u, 0u, 0u);
