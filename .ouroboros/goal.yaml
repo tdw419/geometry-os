@@ -1,0 +1,36 @@
+# Sovereign Shell Goal Configuration
+# Define what this project should achieve
+
+name: "Sovereign Shell (Geometry OS)"
+description: "Implement a natural language control interface for the GPU-native VM using 5x7 WGSL fonts and Vision-to-Opcode patching."
+
+# Target metrics (customize these)
+metrics:
+  loop_latency:
+    current: 0
+    target: 1.0
+    unit: "s"
+  
+  vision_accuracy:
+    current: 0
+    target: 100
+    unit: "%"
+  
+  patch_success_rate:
+    current: 0
+    target: 95
+    unit: "%"
+
+# Success criteria
+success_criteria:
+  - "User can type commands in English (e.g., 'add 5 and 3') in the framebuffer."
+  - "Vision model (qwen3-vl-8b) extracts text from INPUT ZONE (rows 450-479) with 100% accuracy."
+  - "LLM (tinyllama) generates valid VM opcodes (e.g., '5 3 + @') from the extracted text."
+  - "Host system patches the agent's memory atomically and displays PATCH_SUCCESS."
+  - "Total loop latency from input to result is < 1 second."
+
+# Constraints
+  - "Must maintain 60 FPS in the GPU render loop."
+  - "Must use existing 5x7 WGSL bitmap font for text rendering."
+  - "All changes must pass existing VM tests."
+  - "Do not break existing agent isolation rows (0-399)."

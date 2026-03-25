@@ -66,23 +66,6 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         _ => return 0u,
     }
 }
-    const font_table: array<u32, 10> = array<48u, 49u, 50u, 51u, 52u, 53u, 54u, 55u, 56u, 57u, 65u, 66u, 67u, 68u, 69u, 70u, 71u, 72u, 73u, 74u, 75u, 76u, 77u, 78u, 79u, 80u>;
-    const font_data: array<u32, 10> = array<0x3Eu, 0x51u, 0x49u, 0x45u, 0x3Eu, 0x42u, 0x7Fu, 0x40u, 0x62u, 0x51u, 0x49u, 0x49u, 0x49u, 0x46u, 0x22u, 0x49u, 0x49u, 0x49u, 0x36u, 0x18u, 0x14u, 0x12u, 0x7Fu, 0x10u, 0x27u, 0x45u, 0x45u, 0x45u, 0x39u, 0x3Eu, 0x49u, 0x49u, 0x49u, 0x32u, 0x01u, 0x71u, 0x09u, 0x05u, 0x03u, 0x36u, 0x49u, 0x49u, 0x49u, 0x36u, 0x26u, 0x49u, 0x49u, 0x49u, 0x3Eu>;
-    let index = match char_code {
-        48..=57 => font_table[char_code - 48] as usize,
-        65..=90 => font_table[char_code - 65 + 10] as usize,
-        _ => return 0u,
-    };
-    let column_data = font_data[index];
-    match col {
-        0 => (column_data & 0x3F) >> 0,
-        1 => (column_data & 0xC0) >> 6,
-        2 => (column_data & 0x300) >> 8,
-        3 => (column_data & 0xC00) >> 10,
-        4 => (column_data & 0x3F000) >> 12,
-        _ => return 0u,
-    }
-}
     // Digits 0-9 (char codes 48-57)
     if (char_code == 48u) {  // '0'
         if (col == 0u) { return 0x3Eu; }

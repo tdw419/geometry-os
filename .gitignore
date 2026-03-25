@@ -22,3 +22,7 @@ Thumbs.db
 # Temp
 *.tmp
 *.log
+
+# Ouroboros
+.ouroboros/queue/
+.ouroboros/*.log

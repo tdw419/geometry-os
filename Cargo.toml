@@ -28,6 +28,7 @@ name = "bridge"
 path = "src/bridge.rs"
 
 [dependencies]
+rand = "0.8"
 base64 = "0.22"
 wgpu = "0.19"
 image = "0.24"
@@ -78,5 +79,21 @@ path = "src/bin/fb-ascii.rs"
 name = "sovereign-shell"
 path = "src/bin/sovereign_shell.rs"
 
+[[bin]]
+name = "agent-messaging"
+path = "src/bin/agent_messaging.rs"
+
+[[bin]]
+name = "spatial-physics"
+path = "src/bin/spatial_physics.rs"
+
 [build-dependencies]
 regex = "1"
+
+[[bin]]
+name = "spatial-swarm"
+path = "src/bin/spatial_swarm.rs"
+
+[[bin]]
+name = "spatial-swarm-test"
+path = "src/bin/spatial_swarm_test.rs"

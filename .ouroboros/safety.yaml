@@ -1,0 +1,29 @@
+# Ouroboros Safety Configuration
+# Define safety boundaries for self-modification
+
+# Protected files (never modify)
+protected_files:
+  - ".ouroboros/safety.yaml"
+  - ".git/"
+
+# Protected patterns
+protected_patterns:
+  - "*.env"
+  - "*credentials*"
+  - "*secret*"
+  - "*key*.pem"
+
+# Max changes per iteration
+max_file_changes: 5
+max_line_changes: 100
+
+# Require tests before commit
+require_tests: true
+
+# Auto-rollback on failure
+auto_rollback: true
+
+# Commands to run before accepting changes
+validation_commands:
+  - "npm test"
+  - "npm run lint"
