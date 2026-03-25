@@ -160,9 +160,9 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let bit_pos = 6u - char_row;
 
     if (((font_bits >> bit_pos) & 1u) != 0u) {
-        return vec3<u32>(50u, 255u, 255u);  // Bright cyan for 100% OCR accuracy
+        return vec3<u32>(255u, 255u, 255u);  // Pure white for max OCR contrast (21:1)
     }
-    return vec3<u32>(5u, 10u, 20u);  // OCR-optimized darker background
+    return vec3<u32>(0u, 0u, 0u);  // Pure black for optimal qwen3-vl-8b extraction
 }
 
 // PATCH_STATUS display zone (rows 475-479) - shows atomic patch results
