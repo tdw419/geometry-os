@@ -185,7 +185,33 @@ const PATCH_FAIL_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u,
 fn process_input_text() -> array<u32, 192> {
     var opcodes: array<u32, 192> = array<u32, 192>(0u);
     let input_len = min(get_input_length(), 191u);
-    
+
+    // Extract text from input buffer
+    var text: array<u8, 192> = array<u8, 192>(0u);
+    for (var i: u32 = 0; i < input_len; i++) {
+        let word_idx = i >> 2u;
+        let byte_shift = (i & 3u) << 3u;
+        text[i] = u8((input_buffer[word_idx] >> byte_shift) & 0xFFu);
+    }
+
+    // Process the extracted text and generate opcodes
+    var opcode_index: u32 = 0;
+    for (var i: u32 = 0; i < input_len; i++) {
+        let char_code = text[i];
+        if (char_code == 32u) { continue; } // Skip spaces
+
+        // Example opcode generation logic (simplified)
+        if (char_code == 43u) { // '+'
+            opcodes[opcode_index] = 1u; // Assuming '1' is the opcode for addition
+            opcode_index += 1u;
+        } else if (char_code >= 48u && char_code <= 57u) { // Digits
+            opcodes[opcode_index] = char_code - 48u; // Convert digit to number
+            opcode_index += 1u;
+        }
+    }
+
+    return opcodes;
+}    
     // Copy input text to opcode buffer for host-side LLM processing
     // Host vision model extracts from INPUT ZONE, LLM generates opcodes
     for (var i: u32 = 0u; i < input_len; i++) {
