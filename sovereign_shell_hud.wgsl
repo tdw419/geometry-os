@@ -71,6 +71,62 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 fn render_input_zone_text(row: u32, col: u32) -> u32 {
     // Only render in INPUT ZONE text area (rows 450-474, leaving 475-479 for status)
     if (row < INPUT_ZONE_TOP || row >= 475u) { return 0u; }
+
+    let local_row = row - INPUT_ZONE_TOP;
+    let char_row = local_row % 8u;  // 0-6 for glyph, 7 for spacing
+    if (char_row >= 7u) { return 0u; }  // Skip spacing row
+
+    let line = local_row / 8u;  // Which text line (0-2)
+    let char_col = col / 6u;    // Character column (5px wide + 1px spacing)
+    let pixel_col = col % 6u;
+    if (pixel_col >= 5u) { return 0u; }  // Skip spacing column
+
+    // Calculate buffer index (up to 64 chars, 20 per line)
+    let buffer_idx = line * 20u + char_col;
+    if (buffer_idx >= 64u) { return 0u; }
+
+    let char_code = input_buffer[buffer_idx];
+    if (char_code == 0u) { return 0u; }
+
+    // Use a more efficient way to access the font bitmap
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+
+    return select(0u, 255u, ((font_bits >> bit_pos) & 1u) != 0u);
+}
+
+// Optimized function to access font bitmap
+fn get_font_column(char_code: u32, col: u32) -> u32 {
+    if (col > 4u) { return 0u; }
+
+    // Normalize lowercase a-z (97-122) to uppercase A-Z (65-90) for natural language support
+    var c = char_code;
+    if (c >= 97u && c <= 122u) { c -= 32u; }
+
+    // Digits 0-9 (char codes 48-57) - all use normalized 'c' for consistency
+    if (c == 48u) {  // '0'
+        return 0x3Eu;
+    } else if (c == 49u) {  // '1'
+        return 0x51u;
+    } else if (c == 50u) {  // '2'
+        return 0x49u;
+    } else if (c == 51u) {  // '3'
+        return 0x49u;
+    } else if (c == 52u) {  // '4'
+        return 0x49u;
+    } else if (c == 53u) {  // '5'
+        return 0x49u;
+    } else if (c == 54u) {  // '6'
+        return 0x49u;
+    } else if (c == 55u) {  // '7'
+        return 0x49u;
+    }
+
+    // Add more characters as needed
+    return 0u;
+}
+    // Only render in INPUT ZONE text area (rows 450-474, leaving 475-479 for status)
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return 0u; }
     
     let local_row = row - INPUT_ZONE_TOP;
     let char_row = local_row % 8u;  // 0-6 for glyph, 7 for spacing
