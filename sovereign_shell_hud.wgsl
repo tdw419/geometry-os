@@ -155,25 +155,6 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
         return vec3<u32>(0u, 0u, 0u);
     }
 
-    let char_byte_pos = adjusted_col + 1u;
-    let word_idx = char_byte_pos >> 2u;
-    let byte_shift = (char_byte_pos & 3u) << 3u;
-    let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
-
-    let font_bits = get_font_column(char_code, pixel_col);
-    let bit_pos = 6u - char_row;
-
-    if (((font_bits >> bit_pos) & 1u) != 0u) {
-        return vec3<u32>(font_bits, font_bits, font_bits);
-    }
-
-    return vec3<u32>(0u, 0u, 0u);
-}
-
-    if (adjusted_col >= input_len || adjusted_col >= 192u) {
-        return vec3<u32>(0u, 0u, 0u);
-    }
-
     // Extract char from packed input_buffer (4 chars per u32, little-endian)
     // IMPORTANT: Text starts at byte 1 (length byte at position 0)
     let char_byte_pos = adjusted_col + 1u;  // Skip length byte for correct text offset
@@ -187,6 +168,9 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (((font_bits >> bit_pos) & 1u) != 0u) {
         return vec3<u32>(255u, 255u, 255u);  // Pure white for 21:1 OCR contrast
     }
+
+    return vec3<u32>(0u, 0u, 0u);
+}
     return vec3<u32>(0u, 0u, 0u);  // Background for non-font pixels
 }u32>(0u, 0u, 0u);  // Background pixel - transparent black
 }
