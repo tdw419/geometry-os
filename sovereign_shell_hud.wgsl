@@ -177,12 +177,24 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 3u) { return 0x7Fu; }
         if (col == 4u) { return 0x10u; }
     } else if (c == 53u) {  // '5'
-        if (col == 0u) { return 0x27u; }
+        if (col == 0u) { return 0x3Fu; }
         if (col == 1u) { return 0x45u; }
         if (col == 2u) { return 0x45u; }
         if (col == 3u) { return 0x45u; }
-        if (col == 4u) { return 0col == 4u) { return 0x03u; }
-    } else if (char_code == 56u) {  // '8'
+        if (col == 4u) { return 0x21u; }
+    } else if (c == 54u) {  // '6'
+        if (col == 0u) { return 0x3Eu; }
+        if (col == 1u) { return 0x49u; }
+        if (col == 2u) { return 0x49u; }
+        if (col == 3u) { return 0x49u; }
+        if (col == 4u) { return 0x32u; }
+    } else if (c == 55u) {  // '7'
+        if (col == 0u) { return 0x01u; }
+        if (col == 1u) { return 0x71u; }
+        if (col == 2u) { return 0x09u; }
+        if (col == 3u) { return 0x09u; }
+        if (col == 4u) { return 0x07u; }
+    } else if (c == 56u) {  // '8'
         if (col == 0u) { return 0x36u; }
         if (col == 1u) { return 0x49u; }
         if (col == 2u) { return 0x49u; }

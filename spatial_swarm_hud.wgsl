@@ -439,7 +439,7 @@ fn draw_agent_tile(tile_x: u32, tile_y: u32, agent: AgentState) {
 // Calculate collective stats
 fn calculate_total_messages() -> u32 {
     var total = 0u;
-    for (i = 0u; i < 64u; i++) {
+    for (i in 0u..64u) {
         total += agents[i].message_count;
     }
     return total;
@@ -447,7 +447,7 @@ fn calculate_total_messages() -> u32 {
 
 fn calculate_total_collisions() -> u32 {
     var total = 0u;
-    for (i = 0u; i < 64u; i++) {
+    for (i in 0u..64u) {
         total += agents[i].collision_count;
     }
     return total;
@@ -555,7 +555,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let grid_start_y = 22u;
         
         // Draw all 64 agent tiles
-        for (agent_idx = 0u; agent_idx < 64u; agent_idx++) {
+        for (agent_idx in 0u..64u) {
             let row = agent_idx / 16u;
             let col = agent_idx % 16u;
             
