@@ -284,54 +284,154 @@ fn draw_char(start_x: u32, start_y: u32, char_code: u32, color_r: u32, color_g: 
     let col3 = get_font_column(char_code, 3u);
     let col4 = get_font_column(char_code, 4u);
     
-    // Column 0
-    for r in 0u..7u {
-        if ((col0 >> r) & 1u) != 0u {
-            let idx = (start_y + r) * config.width + start_x;
-            if (idx < arrayLength(&buffer_out)) {
-                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
-            }
-        }
+    // Column 0 - unrolled
+    if ((col0 & 1u) != 0u) {
+        let idx = start_y * config.width + start_x;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col0 & 2u) != 0u) {
+        let idx = (start_y + 1u) * config.width + start_x;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col0 & 4u) != 0u) {
+        let idx = (start_y + 2u) * config.width + start_x;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col0 & 8u) != 0u) {
+        let idx = (start_y + 3u) * config.width + start_x;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col0 & 16u) != 0u) {
+        let idx = (start_y + 4u) * config.width + start_x;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col0 & 32u) != 0u) {
+        let idx = (start_y + 5u) * config.width + start_x;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col0 & 64u) != 0u) {
+        let idx = (start_y + 6u) * config.width + start_x;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
     }
     
-    // Column 1
-    for r in 0u..7u {
-        if ((col1 >> r) & 1u) != 0u {
-            let idx = (start_y + r) * config.width + start_x + 1u;
-            if (idx < arrayLength(&buffer_out)) {
-                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
-            }
-        }
+    // Column 1 - unrolled
+    if ((col1 & 1u) != 0u) {
+        let idx = start_y * config.width + start_x + 1u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col1 & 2u) != 0u) {
+        let idx = (start_y + 1u) * config.width + start_x + 1u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col1 & 4u) != 0u) {
+        let idx = (start_y + 2u) * config.width + start_x + 1u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col1 & 8u) != 0u) {
+        let idx = (start_y + 3u) * config.width + start_x + 1u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col1 & 16u) != 0u) {
+        let idx = (start_y + 4u) * config.width + start_x + 1u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col1 & 32u) != 0u) {
+        let idx = (start_y + 5u) * config.width + start_x + 1u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col1 & 64u) != 0u) {
+        let idx = (start_y + 6u) * config.width + start_x + 1u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
     }
     
-    // Column 2
-    for r in 0u..7u {
-        if ((col2 >> r) & 1u) != 0u {
-            let idx = (start_y + r) * config.width + start_x + 2u;
-            if (idx < arrayLength(&buffer_out)) {
-                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
-            }
-        }
+    // Column 2 - unrolled
+    if ((col2 & 1u) != 0u) {
+        let idx = start_y * config.width + start_x + 2u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col2 & 2u) != 0u) {
+        let idx = (start_y + 1u) * config.width + start_x + 2u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col2 & 4u) != 0u) {
+        let idx = (start_y + 2u) * config.width + start_x + 2u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col2 & 8u) != 0u) {
+        let idx = (start_y + 3u) * config.width + start_x + 2u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col2 & 16u) != 0u) {
+        let idx = (start_y + 4u) * config.width + start_x + 2u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col2 & 32u) != 0u) {
+        let idx = (start_y + 5u) * config.width + start_x + 2u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col2 & 64u) != 0u) {
+        let idx = (start_y + 6u) * config.width + start_x + 2u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
     }
     
-    // Column 3
-    for r in 0u..7u {
-        if ((col3 >> r) & 1u) != 0u {
-            let idx = (start_y + r) * config.width + start_x + 3u;
-            if (idx < arrayLength(&buffer_out)) {
-                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
-            }
-        }
+    // Column 3 - unrolled
+    if ((col3 & 1u) != 0u) {
+        let idx = start_y * config.width + start_x + 3u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col3 & 2u) != 0u) {
+        let idx = (start_y + 1u) * config.width + start_x + 3u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col3 & 4u) != 0u) {
+        let idx = (start_y + 2u) * config.width + start_x + 3u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col3 & 8u) != 0u) {
+        let idx = (start_y + 3u) * config.width + start_x + 3u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col3 & 16u) != 0u) {
+        let idx = (start_y + 4u) * config.width + start_x + 3u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col3 & 32u) != 0u) {
+        let idx = (start_y + 5u) * config.width + start_x + 3u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col3 & 64u) != 0u) {
+        let idx = (start_y + 6u) * config.width + start_x + 3u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
     }
     
-    // Column 4
-    for r in 0u..7u {
-        if ((col4 >> r) & 1u) != 0u {
-            let idx = (start_y + r) * config.width + start_x + 4u;
-            if (idx < arrayLength(&buffer_out)) {
-                buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
-            }
-        }
+    // Column 4 - unrolled
+    if ((col4 & 1u) != 0u) {
+        let idx = start_y * config.width + start_x + 4u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col4 & 2u) != 0u) {
+        let idx = (start_y + 1u) * config.width + start_x + 4u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col4 & 4u) != 0u) {
+        let idx = (start_y + 2u) * config.width + start_x + 4u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col4 & 8u) != 0u) {
+        let idx = (start_y + 3u) * config.width + start_x + 4u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col4 & 16u) != 0u) {
+        let idx = (start_y + 4u) * config.width + start_x + 4u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col4 & 32u) != 0u) {
+        let idx = (start_y + 5u) * config.width + start_x + 4u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    }
+    if ((col4 & 64u) != 0u) {
+        let idx = (start_y + 6u) * config.width + start_x + 4u;
+        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
     }
 }
 
@@ -363,17 +463,23 @@ fn draw_signed_number(x: u32, y: u32, num: i32, color_r: u32, color_g: u32, colo
 
 // Get tribe color from tribe ID (0-7)
 fn get_tribe_color(tribe: u32) -> vec3<u32> {
-    let tribe_colors = array<vec3<u32>, 8>(
-        vec3<u32>(255u, 64u, 64u),    // Tribe 0: Red
-        vec3<u32>(64u, 255u, 64u),    // Tribe 1: Green
-        vec3<u32>(64u, 64u, 255u),    // Tribe 2: Blue
-        vec3<u32>(255u, 255u, 64u),   // Tribe 3: Yellow
-        vec3<u32>(255u, 64u, 255u),   // Tribe 4: Magenta
-        vec3<u32>(64u, 255u, 255u),   // Tribe 5: Cyan
-        vec3<u32>(255u, 128u, 64u),   // Tribe 6: Orange
-        vec3<u32>(128u, 64u, 255u),   // Tribe 7: Purple
-    );
-    return tribe_colors[tribe % 8u];
+    if (tribe == 0u) {
+        return vec3<u32>(255u, 64u, 64u);    // Tribe 0: Red
+    } else if (tribe == 1u) {
+        return vec3<u32>(64u, 255u, 64u);    // Tribe 1: Green
+    } else if (tribe == 2u) {
+        return vec3<u32>(64u, 64u, 255u);    // Tribe 2: Blue
+    } else if (tribe == 3u) {
+        return vec3<u32>(255u, 255u, 64u);   // Tribe 3: Yellow
+    } else if (tribe == 4u) {
+        return vec3<u32>(255u, 64u, 255u);   // Tribe 4: Magenta
+    } else if (tribe == 5u) {
+        return vec3<u32>(64u, 255u, 255u);   // Tribe 5: Cyan
+    } else if (tribe == 6u) {
+        return vec3<u32>(255u, 128u, 64u);   // Tribe 6: Orange
+    } else {
+        return vec3<u32>(128u, 64u, 255u);   // Tribe 7: Purple
+    }
 }
 
 // Draw mini tile for agent (compact 30x35)
@@ -386,14 +492,15 @@ fn draw_agent_tile(tile_x: u32, tile_y: u32, agent: AgentState) {
     // Tile border (tribe color)
     let border_color = Pixel(tr, tg, tb, 255u);
     
-    // Draw border
-    for dx in 0u..30u {
+    // Draw border - top and bottom
+    for (var dx = 0u; dx < 30u; dx++) {
         let top_idx = tile_y * config.width + tile_x + dx;
         let bot_idx = (tile_y + 34u) * config.width + tile_x + dx;
         if (top_idx < arrayLength(&buffer_out)) { buffer_out[top_idx] = border_color; }
         if (bot_idx < arrayLength(&buffer_out)) { buffer_out[bot_idx] = border_color; }
     }
-    for dy in 0u..35u {
+    // Draw border - left and right
+    for (var dy = 0u; dy < 35u; dy++) {
         let left_idx = (tile_y + dy) * config.width + tile_x;
         let right_idx = (tile_y + dy) * config.width + tile_x + 29u;
         if (left_idx < arrayLength(&buffer_out)) { buffer_out[left_idx] = border_color; }
@@ -415,7 +522,7 @@ fn draw_agent_tile(tile_x: u32, tile_y: u32, agent: AgentState) {
     }
     
     // Tribe indicator (colored bar)
-    for dx in 0u..24u {
+    for (var dx = 0u; dx < 24u; dx++) {
         let idx = (tile_y + 22u) * config.width + tile_x + 3u + dx;
         if (idx < arrayLength(&buffer_out)) {
             buffer_out[idx] = Pixel(tr, tg, tb, 255u);
@@ -439,7 +546,7 @@ fn draw_agent_tile(tile_x: u32, tile_y: u32, agent: AgentState) {
 // Calculate collective stats
 fn calculate_total_messages() -> u32 {
     var total = 0u;
-    for (i = 0u; i < 64u; i++) {
+    for (var i = 0u; i < 64u; i++) {
         total += agents[i].message_count;
     }
     return total;
@@ -447,7 +554,7 @@ fn calculate_total_messages() -> u32 {
 
 fn calculate_total_collisions() -> u32 {
     var total = 0u;
-    for (i = 0u; i < 64u; i++) {
+    for (var i = 0u; i < 64u; i++) {
         total += agents[i].collision_count;
     }
     return total;
@@ -539,23 +646,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
         
         // 8×8 Agent tile grid
-        // Each tile: 30x35 pixels
-        // Grid: 8 cols × 2 rows (wrapping)
-        // Actually: single row of 8 columns, each containing 8 agents stacked
-        
         // Layout: 4 rows of 16 agents each
-        // Row 0: agents 0-15
-        // Row 1: agents 16-31
-        // Row 2: agents 32-47
-        // Row 3: agents 48-63
-        
         let tile_width = 32u;
         let tile_height = 36u;
         let grid_start_x = 10u;
         let grid_start_y = 22u;
         
         // Draw all 64 agent tiles
-        for (agent_idx = 0u; agent_idx < 64u; agent_idx++) {
+        for (var agent_idx = 0u; agent_idx < 64u; agent_idx++) {
             let row = agent_idx / 16u;
             let col = agent_idx % 16u;
             
@@ -571,7 +669,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // Tribe legend (right side)
         if (x >= 1150u && x < 1270u && y >= 40u && y < 95u) {
             let legend_y = 45u;
-            for (tribe in 0u..8u) {
+            for (var tribe = 0u; tribe < 8u; tribe++) {
                 let tc = get_tribe_color(tribe);
                 let ly = legend_y + tribe * 6u;
                 
@@ -605,7 +703,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
         
         // Draw all 64 agents (with trails)
-        for (agent_idx in 0u..64u) {
+        for (var agent_idx = 0u; agent_idx < 64u; agent_idx++) {
             let agent = agents[agent_idx];
             let acolor = agent.color;
             let ar = (acolor >> 24u) & 0xFFu;
