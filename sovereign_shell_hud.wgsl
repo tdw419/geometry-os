@@ -70,6 +70,12 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 // Multi-line: 3 lines (rows 0-6, 9-15, 18-24), 2-row spacing between lines
 // Returns: pixel color (cyan text on dark blue background for OCR contrast)
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // Render cyan boundary markers for OCR detection (rows 449 and 480)
+    let boundary = get_input_zone_boundary(row, col, width);
+    if (boundary > 0u) {
+        return vec3<u32>(0u, 255u, 255u);  // Cyan markers for qwen3-vl-8b alignment
+    }
+    
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
     
     let local_row = row - INPUT_ZONE_TOP;
