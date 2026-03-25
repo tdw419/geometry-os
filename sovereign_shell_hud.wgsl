@@ -169,10 +169,7 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
         return vec3<u32>(255u, 255u, 255u);  // Pure white for 21:1 OCR contrast
     }
 
-    return vec3<u32>(0u, 0u, 0u);
-}
     return vec3<u32>(0u, 0u, 0u);  // Background for non-font pixels
-}u32>(0u, 0u, 0u);  // Background pixel - transparent black
 }
 
 // Render PATCH_STATUS zone (rows 475-479) with success/fail overlay
