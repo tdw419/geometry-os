@@ -64,9 +64,10 @@ fn get_input_length() -> u32 {
 }
 
 fn cursor_blink_active() -> bool {
-    // 20-frame blink cycle (333ms at 60fps) for reliable vision model detection
-    // Ensures cursor visible in at least 2 frames per second during OCR capture
-    return (config.frame % 20u) < 10u;
+    // 20-frame blink cycle with 70% ON duty (233ms ON, 100ms OFF at 60fps)
+    // Ensures cursor visible in 4+ frames/second for reliable qwen3-vl-8b OCR
+    // Higher ON ratio critical for 1-second latency vision-to-opcode pipeline
+    return (config.frame % 20u) < 14u;
 }
 
 // Check if pixel position is an INPUT ZONE boundary marker (cyan lines for OCR alignment)
