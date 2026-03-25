@@ -145,19 +145,9 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     return vec3<u32>(0u, 0u, 0u);  // Pure black for optimal qwen3-vl-8b extraction
 }
 
-// 5x7 bitmap font column lookup - returns pixel bits for character rendering
-// MUST be declared BEFORE render_input_zone_text to avoid WGSL forward reference errors
-@group(0) @binding(9) var<storage, read> font_atlas: array<u32>;mn(char_code: u32, col: u32) -> u32 {
-    // 5x7 bitmap font - returns column bits for given character and column (0-4)
-    // 95 printable ASCII (32-126), 5 cols each = 475 bytes packed in 119 words
-    // Optimized: validate FIRST to avoid wasted ALU on invalid lookups
-    // Precomputed addressing reduces instruction count by 3 ops per call
-    if (char_code < 32u || char_code > 126u || col >= 5u) { return 0u; }
-    
-    let bitmap_addr = (char_code - 32u) * 5u + col;
-    let byte_offset = bitmap_addr & 3u;
-    return (font_atlas[bitmap_addr >> 2u] >> (byte_offset << 3u)) & 0xFFu;
-}
+// 5x7 bitmap font atlas storage - 475 bytes packed in 119 words (95 chars × 5 cols)
+// Declared at module scope for WGSL compliance - used by get_font_column() above
+@group(0) @binding(9) var<storage, read> font_atlas: array<u32>;
 
 // Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
