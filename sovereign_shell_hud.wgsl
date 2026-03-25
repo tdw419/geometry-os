@@ -65,6 +65,73 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
     return 0u;
 }
 
+// Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
+// Supports commands like 'add 5 and 3' for LLM-to-opcode translation
+// Returns: pixel brightness (0 or 255) for text rendering
+fn render_input_zone_text(row: u32, col: u32) -> u32 {
+    // Only render in INPUT ZONE text area (rows 450-474, leaving 475-479 for status)
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return 0u; }
+    
+    let local_row = row - INPUT_ZONE_TOP;
+    let char_row = local_row % 8u;  // 0-6 for glyph, 7 for spacing
+    if (char_row >= 7u) { return 0u; }  // Skip spacing row
+    
+    let line = local_row / 8u;  // Which text line (0-2)
+    let char_col = col / 6u;    // Character column (5px wide + 1px spacing)
+    let pixel_col = col % 6u;
+    if (pixel_col >= 5u) { return 0u; }  // Skip spacing column
+    
+    // Calculate buffer index (up to 64 chars, 20 per line)
+    let buffer_idx = line * 20u + char_col;
+    if (buffer_idx >= 64u) { return 0u; }
+    
+    let char_code = input_buffer[buffer_idx];
+    if (char_code == 0u) { return 0u; }
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+    
+    return select(0u, 255u, (font_bits >> bit_pos) & 1u) != 0u);
+}
+
+// Render PATCH_SUCCESS/FAIL status in rows 475-479
+// Green = success (patch_status[0] == 1), Red = fail (patch_status[0] == 2)
+fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
+    if (row < 475u || row >= INPUT_ZONE_BOTTOM) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let status = patch_status[0u];
+    if (status == 0u) { return vec3<u32>(0u, 0u, 0u); }  // No status
+    
+    // Status text rendering area
+    let local_row = row - 475u;
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+    if (pixel_col >= 5u || local_row >= 7u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    // "PATCH_SUCCESS" or "PATCH_FAIL" based on status
+    var char_code: u32 = 0u;
+    let status_text_success = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);
+    let status_text_fail = array<u32, 10>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u);
+    
+    if (status == 1u && char_col < 13u) {
+        char_code = status_text_success[char_col];
+    } else if (status == 2u && char_col < 10u) {
+        char_code = status_text_fail[char_col];
+    }
+    
+    if (char_code == 0u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - local_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        // Green for success, Red for fail
+        if (status == 1u) { return vec3<u32>(0u, 255u, 0u); }
+        if (status == 2u) { return vec3<u32>(255u, 0u, 0u); }
+    }
+    return vec3<u32>(0u, 0u, 0u);
+}
+
 // 5x7 bitmap font - each char is 5 columns x 7 rows, packed into 35 bits
 // Supports: 0-9, A-Z, space, +, -, *, /, =, @, (input zone commands)
 fn get_font_column(char_code: u32, col: u32) -> u32 {
