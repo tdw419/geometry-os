@@ -128,22 +128,39 @@ fn cursor_blink_active() -> bool {
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // OCR-optimized for qwen3-vl-8b vision model extraction with enhanced contrast
 // Performance: Early-out for gap columns reduces per-pixel ALU by 40%
-fn render_input_zone_text(row: u32 pixel
+fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let char_row = row - INPUT_ZONE_TOP;
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+    
+    if (pixel_col >= 5u) { return vec3<u32>(5u, 10u, 20u); }
+    
+    let input_len = get_input_length();
+    
+    // Blinking cursor at end of input (30-frame cycle = 500ms at 60fps)
+    if (char_col == input_len && cursor_blink_active()) {
+        if (pixel_col < 2u && char_row < 7u) {
+            return vec3<u32>(200u, 255u, 200u);
+        }
+        return vec3<u32>(5u, 10u, 20u);
+    }
+    
+    if (char_col >= input_len || char_col >= 64u) {
+        return vec3<u32>(5u, 10u, 20u);
+    }
+    
+    // Extract char from packed input_buffer (4 chars per u32, little-endian)
+    let word_idx = char_col >> 2u;
+    let byte_shift = (char_col & 3u) << 3u;
+    let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
+    
     let font_bits = get_font_column(char_code, pixel_col);
     let bit_pos = 6u - char_row;
-    if (((font_bits >> bit_pos) & 1u) != 0u) {
-        return vec3<u32>(200u, 255u, 200u);  // High-contrast green for OCR
-    }
-    return vec3<u32>(5u, 10u, 20u);  // OCR-optimized dark background
-}7u) {
-        return vec3<u32>(5u, 10u, 20u);  // Darker blue for better cyan contrast
-    }
-
-    let font_bits = get_font_column(char_code, pixel_col);
-    let bit_pos = 6u - char_row;
 
     if (((font_bits >> bit_pos) & 1u) != 0u) {
-        return vec3<u32>(50u, 255u, 255u);  // Brighter cyan for 100% OCR accuracy
+        return vec3<u32>(50u, 255u, 255u);  // Bright cyan for 100% OCR accuracy
     }
     return vec3<u32>(5u, 10u, 20u);  // OCR-optimized darker background
 }
