@@ -199,6 +199,20 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 0u) { return 0x01u; }
         if (col == 1u) { return 0x71u; }
         if (col == 2u) { return 0x09u; }
+        if (col == 3u) { return 0x05u; }
+        if (col == 4u) { return 0x03u; }
+    } else if (c == 56u) {  // '8'
+        if (col == 0u) { return 0x36u; }
+        if (col == 1u) { return 0x49u; }
+        if (col == 2u) { return 0x49u; }
+        if (col == 3u) { return 0x49u; }
+        if (col == 4u) { return 0x36u; }
+    } else if (c == 57u) {  // '9'
+        if (col == 0u) { return 0x26u; }
+        if (col == 1u) { return 0x49u; }
+        if (col == 2u) { return 0x49u; }
+        if (col == 3u) { return 0x49u; }
+        if (col == 4u) { return 0x3Eu; }
         if (col == 3u) { return 0x09u; }
         if (col == 4u) { return 0x07u; }
     } else if (c == 56u) {  // '8'
