@@ -112,9 +112,10 @@ const FONT_COLS_PER_CHAR: u32 = 5u;
 
 fn get_font_column(char_code: u32, col: u32) -> u32 {
     // 5x7 bitmap font - returns column bits for given character and column (0-4)
-    // Bounds pre-validated by render_input_zone_text (char 32-126, col 0-4)
-    // Removed redundant checks for 15% faster pixel throughput in text zones
-    let bitmap_addr = (char_code - FONT_CHAR_START) * FONT_COLS_PER_CHAR + col;
+    // Defensive clamp ensures atomic memory patches don't cause OOB reads
+    let safe_char = clamp(char_code, FONT_CHAR_START, FONT_CHAR_END);
+    let safe_col = min(col, FONT_COLS_PER_CHAR - 1u);
+    let bitmap_addr = (safe_char - FONT_CHAR_START) * FONT_COLS_PER_CHAR + safe_col;
     let atlas_idx = bitmap_addr >> 2u;
     let byte_shift = (bitmap_addr & 3u) << 3u;
     
