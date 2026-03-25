@@ -109,6 +109,28 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
 
     let local_row = row - INPUT_ZONE_TOP;
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+
+    if (char_col >= get_input_length() || char_col >= 64u) {
+        return vec3<u32>(0u, 0u, 0u);  // OCR: pure black empty
+    }
+
+    let word_idx = char_col >> 2u;
+    let byte_shift = (char_col & 3u) << 3u;
+    let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
+
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - local_row;
+
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return vec3<u32>(255u, 255u, 255u);  // Pure white for max OCR contrast (21:1)
+    }
+    return vec3<u32>(0u, 0u, 0u);  // Pure black for optimal qwen3-vl-8b extraction
+}
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
+
+    let local_row = row - INPUT_ZONE_TOP;
     if (local_row < 9u || local_row >= 16u) { return vec3<u32>(0u, 0u, 0u); }  // OCR: pure black bg
     let char_row = local_row - 9u;  // Maps to 0-6 for valid font bitmap indexing
 
