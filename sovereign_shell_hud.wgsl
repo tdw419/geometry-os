@@ -168,25 +168,7 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     }
 
     return vec3<u32>(0u, 0u, 0u);
-}ars per line for text wrapping
-
-    let char_col = col / 6u;
-    let pixel_col = col % 6u;
-
-    // 1-pixel gap between chars improves OCR segmentation accuracy
-    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }
-
-    let input_len = get_input_length();
-    let adjusted_col = char_col + line_offset;
-
-    // Merged cursor logic: only show cursor at end of input where no char exists
-    // Full 5px width cursor for reliable qwen3-vl-8b OCR detection in INPUT ZONE
-    if (adjusted_col == input_len) {
-        if (cursor_blink_active() && pixel_col < 5u && char_row < 7u) {
-            return vec3<u32>(0u, 255u, 255u);  // Cyan cursor - high contrast for vision model
-        }
-        return vec3<u32>(0u, 0u, 0u);
-    }
+}
 
     if (adjusted_col >= input_len || adjusted_col >= 192u) {
         return vec3<u32>(0u, 0u, 0u);
