@@ -180,7 +180,58 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
 }
 
 // Character code arrays for PATCH_STATUS display (WGSL-safe, no string type)
-const PATCH_SUCCESS_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);  // PATCH_SUCCESS
+const PATCH_SUCCESS_CHARS: array<u32, 13> = array<u32, 13>(
+    80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u  // "PATCH_SUCCESS"
+);
+
+const PATCH_FAIL_CHARS: array<u32, 10> = array<u32, 10>(
+    80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u  // "PATCH_FAIL"
+);
+
+// Render PATCH_STATUS overlay at rows 475-479 with high-contrast color coding
+// Optimized for <1s loop latency with minimal ALU ops
+fn render_patch_status(row: u32, col: u32) -> vec3<u32> {
+    // Early-out for rows outside PATCH_STATUS zone
+    if (row < 475u || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let status = patch_status[0];
+    if (status == 0u) { return vec3<u32>(0u, 0u, 0u); }  // No patch pending
+    
+    let local_row = row - 475u;
+    let char_row = local_row % 7u;
+    if (local_row >= 7u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+    
+    // 1-pixel gap between chars for OCR segmentation
+    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    // Select text based on status (1=success, 2=fail)
+    var char_code: u32 = 32u;  // Space default
+    var text_len: u32 = 0u;
+    
+    if (status == 1u) {
+        text_len = 13u;
+        if (char_col < 13u) { char_code = PATCH_SUCCESS_CHARS[char_col]; }
+    } else if (status == 2u) {
+        text_len = 10u;
+        if (char_col < 10u) { char_code = PATCH_FAIL_CHARS[char_col]; }
+    }
+    
+    if (char_col >= text_len) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        // Success=green (#50FF50), Fail=red (#FF5050) for instant visual feedback
+        // High contrast for reliable vision model detection
+        if (status == 1u) { return vec3<u32>(80u, 255u, 80u); }
+        return vec3<u32>(255u, 80u, 80u);
+    }
+    return vec3<u32>(0u, 0u, 0u);
+}CESS_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);  // PATCH_SUCCESS
 const PATCH_FAIL_CHARS: array<u32, 12> = array<u32, 12>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 69u, 68u);  // PATCH_FAILED
 
 fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
