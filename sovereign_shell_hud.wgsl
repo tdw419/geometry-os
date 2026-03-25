@@ -135,66 +135,66 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 2u) { return 0x49u; }
         if (col == 3u) { return 0x49u; }
         if (col == 4u) { return 0x36u; }
-    } else if (char_code == 67u) {  // 'C'
+    } else if (c == 67u) {  // 'C' (normalized for lowercase support)
         if (col == 0u) { return 0x3Eu; }
         if (col == 1u) { return 0x41u; }
         if (col == 2u) { return 0x41u; }
         if (col == 3u) { return 0x41u; }
         if (col == 4u) { return 0x22u; }
-    } else if (char_code == 68u) {  // 'D'
+    } else if (c == 68u) {  // 'D' (normalized for lowercase support)
         if (col == 0u) { return 0x7Fu; }
         if (col == 1u) { return 0x41u; }
         if (col == 2u) { return 0x41u; }
         if (col == 3u) { return 0x22u; }
         if (col == 4u) { return 0x1Cu; }
-    } else if (char_code == 69u) {  // 'E'
+    } else if (c == 69u) {  // 'E' (normalized for lowercase support)
         if (col == 0u) { return 0x7Fu; }
         if (col == 1u) { return 0x49u; }
         if (col == 2u) { return 0x49u; }
         if (col == 3u) { return 0x49u; }
         if (col == 4u) { return 0x41u; }
-    } else if (char_code == 70u) {  // 'F'
+    } else if (c == 70u) {  // 'F' (normalized for lowercase support)
         if (col == 0u) { return 0x7Fu; }
         if (col == 1u) { return 0x09u; }
         if (col == 2u) { return 0x09u; }
         if (col == 3u) { return 0x09u; }
         if (col == 4u) { return 0x01u; }
-    } else if (char_code == 71u) {  // 'G'
+    } else if (c == 71u) {  // 'G' (normalized for lowercase support)
         if (col == 0u) { return 0x3Eu; }
         if (col == 1u) { return 0x41u; }
         if (col == 2u) { return 0x49u; }
         if (col == 3u) { return 0x49u; }
         if (col == 4u) { return 0x7Au; }
-    } else if (char_code == 72u) {  // 'H'
+    } else if (c == 72u) {  // 'H' (normalized for lowercase support)
         if (col == 0u) { return 0x7Fu; }
         if (col == 1u) { return 0x08u; }
         if (col == 2u) { return 0x08u; }
         if (col == 3u) { return 0x08u; }
         if (col == 4u) { return 0x7Fu; }
-    } else if (char_code == 73u) {  // 'I'
+    } else if (c == 73u) {  // 'I' (normalized for lowercase support)
         if (col == 0u) { return 0x41u; }
         if (col == 1u) { return 0x7Fu; }
         if (col == 2u) { return 0x41u; }
         return 0u;
-    } else if (char_code == 74u) {  // 'J'
+    } else if (c == 74u) {  // 'J' (normalized for lowercase support)
         if (col == 0u) { return 0x20u; }
         if (col == 1u) { return 0x40u; }
         if (col == 2u) { return 0x41u; }
         if (col == 3u) { return 0x3Fu; }
         if (col == 4u) { return 0x01u; }
-    } else if (char_code == 75u) {  // 'K'
+    } else if (c == 75u) {  // 'K' (normalized for lowercase support)
         if (col == 0u) { return 0x7Fu; }
         if (col == 1u) { return 0x08u; }
         if (col == 2u) { return 0x14u; }
         if (col == 3u) { return 0x22u; }
         if (col == 4u) { return 0x41u; }
-    } else if (char_code == 76u) {  // 'L'
+    } else if (c == 76u) {  // 'L' (normalized for lowercase support)
         if (col == 0u) { return 0x7Fu; }
         if (col == 1u) { return 0x40u; }
         if (col == 2u) { return 0x40u; }
         if (col == 3u) { return 0x40u; }
         if (col == 4u) { return 0x40u; }
-    } else if (char_code == 77u) {  // 'M'
+    } else if (c == 77u) {  // 'M' (normalized for lowercase support)
         if (col == 0u) { return 0x7Fu; }
         if (col == 1u) { return 0x02u; }
         if (col == 2u) { return 0x0Cu; }
