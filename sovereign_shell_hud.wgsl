@@ -134,19 +134,7 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     var char_row: u32 = 255u;
     var line_offset: u32 = 0u;
 
-    // Direct row-to-line mapping for 3 lines of 5x7 text (9px line + 2px gap = 11px per line)
-    if (local_row >= 2u && local_row < 9u) {
-        char_row = local_row - 2u;
-        line_offset = 0u;
-    } else if (local_row >= 11u && local_row < 18u) {
-        char_row = local_row - 11u;
-        line_offset = 64u;
-    } else if (local_row >= 20u && local_row < 27u) {
-        char_row = local_row - 20u;
-        line_offset = 128u;
-    } else {
-        return vec3<u32>(0u, 0u, 0u);  // Pure black gap for OCR line segmentation
-    }
+    // Compact 3-line layout with 1px gaps: fits rows 452-474
 
     let char_col = col / 6u;
     let pixel_col = col % 6u;
