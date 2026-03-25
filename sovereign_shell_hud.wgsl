@@ -138,15 +138,33 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
 
     // Calculate char index with bounds clamping for OCR reliability
     // Max 21 chars per line visible in INPUT ZONE (640px / 6px char width - margins)
+    // Column 0: Reserved for prompt '>' character (OCR anchor point)
     let raw_char_idx = line_index * 64u + char_col;
     let global_char_idx = min(raw_char_idx, 191u);  // Clamp to max 192 chars (48 words × 4)
     let word_idx = global_char_idx / 4u;
     let byte_idx = global_char_idx % 4u;
 
-    if (word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }
+    // Render prompt '>' at column 0 of line 0 (bright white for OCR detection)
+    if (line_index == 0u && char_col == 0u) {
+        let prompt_bits = get_font_column(62u, pixel_col);  // 62 = '>' ASCII
+        let bit_pos = 6u - char_row;
+        if (((prompt_bits >> bit_pos) & 1u) != 0u) {
+            return vec3<u32>(255u, 255u, 255u);  // White prompt for OCR anchor
+        }
+        return vec3<u32>(10u, 15u, 25u);
+    }
 
-    let packed = input_buffer[word_idx];
-    let char_code = (packed >> (byte_idx * 8u)) & 0xFFu;
+    // User text starts at column 1 (offset by prompt)
+    let user_char_col = char_col - 1u;
+    if (user_char_col >= 64u || word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }
+    
+    let adjusted_word_idx = (line_index * 64u + user_char_col) / 4u;
+    let adjusted_byte_idx = (line_index * 64u + user_char_col) % 4u;
+    
+    if (adjusted_word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }
+
+    let packed = input_buffer[adjusted_word_idx];
+    let char_code = (packed >> (adjusted_byte_idx * 8u)) & 0xFFu;
 
     // Blinking cursor at end of input (32-frame cycle = ~500ms at 60fps)
     // Input length stored in dedicated metadata word 47 upper byte (avoids chars 188-191)
