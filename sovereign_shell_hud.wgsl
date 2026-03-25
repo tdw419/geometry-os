@@ -159,6 +159,42 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
 // PATCH_STATUS display zone (rows 475-479) - shows atomic patch results
 fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < 475u || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
+
+    let status = patch_status[0u];
+    let local_row = row - 475u;
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+
+    if (pixel_col >= 5u || char_col >= 16u) { return vec3<u32>(10u, 15u, 25u); }
+
+    // Status: 0=none (gray), 1=success (green), 2=fail (red)
+    var text_color = vec3<u32>(128u, 128u, 128u);
+    var char_code: u32 = 32u;  // Default space
+
+    // Status messages: "N/A" (none), "PATCH_SUCCESS" (success), "PATCH_FAILED" (fail)
+    // Char codes for status text
+    let none_msg = array<u32, 16u>(78u, 47u, 65u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u);
+    let success_msg = array<u32, 16u>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u, 32u, 32u, 32u);
+    let fail_msg = array<u32, 16u>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 69u, 68u, 32u, 32u, 32u, 32u);
+
+    if (status == 1u) {
+        text_color = vec3<u32>(0u, 255u, 100u);
+        char_code = success_msg[char_col];
+    } else if (status == 2u) {
+        text_color = vec3<u32>(255u, 0u, 0u);
+        char_code = fail_msg[char_col];
+    }
+
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - local_row;
+
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return vec3<u32>(text_color.r, text_color.g, text_color.b);  // Colored text for status display
+    }
+    return vec3<u32>(10u, 15u, 25u);  // Dark background
+}
+
+    if (row < 475u || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
     
     let status = patch_status[0u];
     let local_row = row - 475u;
