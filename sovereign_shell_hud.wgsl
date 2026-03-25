@@ -198,8 +198,10 @@ fn get_input_length() -> u32 {
 }
 
 // Cursor blink state - 32-frame cycle (~533ms at 60fps) for visual feedback
+// Blink ON for frames 0-15, OFF for frames 16-31 (50% duty cycle)
 fn cursor_blink_active() -> bool {
-    return (config.frame & 16u) != 0u;
+    return (config.frame & 16u) == 0u;
+} & 16u) != 0u;
 }
 
 // Input validation helper - returns true if input buffer has valid natural language command
