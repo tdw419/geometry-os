@@ -128,54 +128,7 @@ fn cursor_blink_active() -> bool {
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // OCR-optimized for qwen3-vl-8b vision model extraction with enhanced contrast
 // Performance: Early-out for gap columns reduces per-pixel ALU by 40%
-fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
-    // Validate INPUT ZONE bounds for natural language commands (rows 450-474)
-    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
-    if (col < INPUT_ZONE_MARGIN || col >= width - INPUT_ZONE_MARGIN) { return vec3<u32>(0u, 0u, 0u); }
-
-    let local_row = row - INPUT_ZONE_TOP;
-    let char_row = local_row % 7u;
-    let line_index = local_row / 7u;
-    let char_col = (col - INPUT_ZONE_MARGIN) / 6u;
-    let pixel_col = (col - INPUT_ZONE_MARGIN) % 6u;
-    let global_char_idx = line_index * 32u + char_col;
-    
-    // Early-out for gap columns (pixel_col == 5) - saves 40% ALU, maintains 60 FPS
-    if (pixel_col >= 5u) { return vec3<u32>(5u, 10u, 20u); }
-    
-    // Render prompt '>' at column 0 (offsets user text by 1 char)
-    if (global_char_idx == 0u && line_index == 0u) {
-        let prompt_bits = get_font_column(62u, pixel_col);  // '>' = ASCII 62
-        let bit_pos = 6u - char_row;
-        if (((prompt_bits >> bit_pos) & 1u) != 0u) {
-            return vec3<u32>(0u, 200u, 255u);  // Bright cyan prompt
-        }
-        return vec3<u32>(5u, 10u, 20u);  // OCR-optimized darker background
-    }
-    
-    // Adjust char index for prompt offset (user text starts at column 1)
-    let adjusted_char_idx = global_char_idx - 1u;
-    let word_idx = adjusted_char_idx >> 2u;  // Optimized: /4 via bit shift
-    let byte_idx = adjusted_char_idx & 3u;   // Optimized: %4 via bitwise AND
-
-    if (word_idx >= 48u || adjusted_char_idx >= 191u) { return vec3<u32>(5u, 10u, 20u); }
-
-    let packed = input_buffer[word_idx];
-    let char_code = (packed >> (byte_idx << 3u)) & 0xFFu;  // Optimized: *8 via bit shift
-
-    // Blinking cursor at end of input (30-frame cycle = 500ms at 60fps)
-    // Input length stored in dedicated metadata word 47 upper byte
-    let input_len = min(input_buffer[47u] >> 24u, 191u);
-    if (adjusted_char_idx == input_len && (config.frame & 31u) < 16u) {
-        if (pixel_col < 5u && char_row < 7u) {
-            return vec3<u32>(255u, 220u, 0u);  // High-visibility yellow cursor
-        }
-    }
-
-    // OCR-optimized dark background for null chars or invalid rows
-    if (char_code == 0u || char_row >= 7u) { return vec3<u32>(5u, 10u, 20u); }
-
-    // Get font bitmap column and render character pixel
+fn render_input_zone_text(row: u32 pixel
     let font_bits = get_font_column(char_code, pixel_col);
     let bit_pos = 6u - char_row;
     if (((font_bits >> bit_pos) & 1u) != 0u) {
