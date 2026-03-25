@@ -185,6 +185,25 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     let none_msg = array<u32, 16u>(78u, 47u, 65u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u);
     let success_msg = array<u32, 16u>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u, 32u, 32u, 32u);
     let fail_msg = array<u32, 16u>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 69u, 68u, 32u, 32u, 32u, 32u);
+    
+    // Select message and color based on status
+    if (status == 1u) {
+        text_color = vec3<u32>(80u, 255u, 80u);  // Green for success
+        char_code = success_msg[char_col];
+    } else if (status == 2u) {
+        text_color = vec3<u32>(255u, 80u, 80u);  // Red for fail
+        char_code = fail_msg[char_col];
+    } else {
+        char_code = none_msg[char_col];
+    }
+    
+    // Render character using 5x7 font
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - local_row;
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return text_color;
+    }
+    return vec3<u32>(10u, 15u, 25u); 76u, 69u, 68u, 32u, 32u, 32u, 32u);
 
     if (status == 1u) {
         text_color = vec3<u32>(0u, 255u, 100u);
