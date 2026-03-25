@@ -96,8 +96,9 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
     // 5x7 bitmap font - returns column bits for given character and column (0-4)
     // Optimized: bit shifts replace division/modulo, single bounds check reduces ALU
     // 95 printable ASCII (32-126), 5 cols each = 475 bytes packed in 119 words
+    // Input validation prevents underflow for control chars (< 32) and overflow (> 126)
+    if (char_code < 32u || char_code > 126u || col >= 5u) { return 0u; }
     let char_idx = char_code - 32u;
-    if (char_idx >= 95u || col >= 5u) { return 0u; }
     
     let bitmap_addr = char_idx * 5u + col;
     let word_idx = bitmap_addr >> 2u;  // /4 via bit shift (faster than div)
