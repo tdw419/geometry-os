@@ -48,6 +48,23 @@ struct Config {
 // 5x7 BITMAP FONT — Full ASCII support
 // ============================================================================
 
+// INPUT ZONE boundaries for vision model OCR extraction (rows 450-479)
+const INPUT_ZONE_TOP: u32 = 450u;
+const INPUT_ZONE_BOTTOM: u32 = 479u;
+const INPUT_ZONE_MARGIN: u32 = 10u;
+
+// Check if pixel position is an INPUT ZONE boundary marker (cyan lines for OCR alignment)
+// Returns: 0 = not boundary, 1 = top boundary, 2 = bottom boundary
+fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
+    let right_bound = width - INPUT_ZONE_MARGIN;
+    if (col < INPUT_ZONE_MARGIN || col >= right_bound) { return 0u; }
+    // Top boundary marker at row 449 (cyan line just above INPUT ZONE)
+    if (row == 449u) { return 1u; }
+    // Bottom boundary marker at row 480 (cyan line just below INPUT ZONE)
+    if (row == 480u) { return 2u; }
+    return 0u;
+}
+
 // 5x7 bitmap font - each char is 5 columns x 7 rows, packed into 35 bits
 // Supports: 0-9, A-Z, space, +, -, *, /, =, @, (input zone commands)
 fn get_font_column(char_code: u32, col: u32) -> u32 {
