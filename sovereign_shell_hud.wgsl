@@ -132,8 +132,9 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let line = min(local_row / line_height, 2u);  // Clamp to 3 lines (0-2)
     let char_row = local_row % line_height;       // Row within character (0-7)
     
-    // Skip gap rows (row 7 within each 8px line slot)
-    if (char_row >= 7u) { return vec3<u32>(0u, 0u, 0u); }
+    // Skip gap rows (row 7 within each 8px line slot) and overflow past 3-line content
+    // 3 lines × 8px = 24 rows (local_row 0-23); row 24 would wrap char_row incorrectly
+    if (char_row >= 7u || local_row >= 24u) { return vec3<u32>(0u, 0u, 0u); }
     
     var line_offset: u32 = line * 32u;  // 32 chars per line for text wrapping
 
