@@ -147,47 +147,6 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     return vec3<u32>(0u, 0u, 0u);  // Pure black for qwen3-vl-8b extraction
 }
 
-    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
-
-    let local_row = row - INPUT_ZONE_TOP;
-    // Vertically center 5x7 font in 25-row zone: font rows 0-6 map to zone rows 9-15
-    if (local_row < 9u || local_row >= 16u) { return vec3<u32>(0u, 0u, 0u); }
-    let char_row = local_row - 9u;
-
-    let char_col = col / 6u;
-    let pixel_col = col % 6u;
-
-    // 1-pixel gap between chars improves OCR segmentation accuracy
-    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }
-
-    let input_len = get_input_length();
-
-    // Blinking cursor at end of input (32-frame cycle = 533ms at 60fps)
-    if (char_col == input_len && cursor_blink_active()) {
-        if (pixel_col < 2u && char_row < 7u) {
-            return vec3<u32>(200u, 255u, 200u);  // Green cursor for visibility
-        }
-        return vec3<u32>(0u, 0u, 0u);
-    }
-
-    if (char_col >= input_len || char_col >= 64u) {
-        return vec3<u32>(0u, 0u, 0u);
-    }
-
-    // Extract char from packed input_buffer (4 chars per u32, little-endian)
-    let word_idx = char_col >> 2u;
-    let byte_shift = (char_col & 3u) << 3u;
-    let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
-
-    let font_bits = get_font_column(char_code, pixel_col);
-    let bit_pos = 6u - char_row;
-
-    if (((font_bits >> bit_pos) & 1u) != 0u) {
-        return vec3<u32>(255u, 255u, 255u);  // Pure white for 21:1 OCR contrast
-    }
-    return vec3<u32>(0u, 0u, 0u);  // Pure black for qwen3-vl-8b extraction
-}
-
 // 5x7 bitmap font atlas storage - 475 bytes packed in 119 words (95 chars × 5 cols)
 // Declared at module scope for WGSL compliance - used by get_font_column() above
 @group(0) @binding(9) var<storage, read> font_atlas: array<u32>;
