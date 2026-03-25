@@ -163,6 +163,59 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
 const PATCH_SUCCESS_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);
 const PATCH_FAIL_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 32u, 32u, 32u);
 
+// Function to process input text and generate VM opcodes
+fn process_input_text() -> array<u32, 192> {
+    var opcodes: array<u32, 192> = array<u32, 192>(0u);
+    // Extract text from input buffer
+    let input_len = get_input_length();
+    for i in 0..input_len {
+        let word_idx = i >> 2u;
+        let byte_shift = (i & 3u) << 3u;
+        let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
+        // Convert text to VM opcodes using a language model
+        // This is a placeholder for the actual LLM call
+        let opcode = convert_text_to_opcode(char_code);
+        opcodes[i] = opcode;
+    }
+    return opcodes;
+}
+
+// Function to atomically patch agent's memory with generated opcodes
+fn atomic_patch_memory(opcodes: array<u32, 192>) {
+    // This is a placeholder for the actual atomic memory patching code
+    // It should use atomic operations to update the buffer_out array
+}
+
+// Main function to handle input processing and rendering
+fn main() {
+    let opcodes = process_input_text();
+    atomic_patch_memory(opcodes);
+    // Render text in INPUT ZONE
+    for row in 450..=479 {
+        for col in 0..width {
+            if (get_input_zone_boundary(row, col) == 0u) {
+                let color = render_input_zone_text(row, col, width);
+                buffer_out[row * width + col] = Pixel { r: color.x, g: color.y, b: color.z, a: 255u };
+            }
+        }
+    }
+    // Render PATCH STATUS
+    for row in 475..=479 {
+        for col in 0..width {
+            if (get_input_zone_boundary(row, col) == 0u) {
+                let color = render_patch_status(row, col, width);
+                buffer_out[row * width + col] = Pixel { r: color.x, g: color.y, b: color.z, a: 255u };
+            }
+        }
+    }
+}
+
+// Placeholder function to convert text to VM opcodes using a language model
+fn convert_text_to_opcode(char_code: u32) -> u32 {
+    // This should be replaced with actual LLM call
+    return 0u;
+}
+
 // PATCH_STATUS zone renderer (rows 475-479) - displays opcode generation results
 fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < 475u || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
