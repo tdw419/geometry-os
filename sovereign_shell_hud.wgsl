@@ -91,7 +91,19 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 // Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // OCR-optimized for qwen3-vl-8b vision model extraction
-fn render_input_zone_text(row: u32col) / 4u;
+fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // Validate INPUT ZONE bounds for natural language commands (rows 450-474)
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
+    if (col < INPUT_ZONE_MARGIN || col >= width - INPUT_ZONE_MARGIN) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let local_row = row - INPUT_ZONE_TOP;
+    let char_row = local_row % 7u;
+    let line_index = local_row / 7u;
+    let char_col = (col - INPUT_ZONE_MARGIN) / 6u;
+    let pixel_col = (col - INPUT_ZONE_MARGIN) % 6u;
+    let global_char_idx = line_index * 32u + char_col;
+    let user_char_col = char_col;
+    let adjusted_word_idx = global_char_idx / 4u;
     let adjusted_byte_idx = (line_index * 64u + user_char_col) % 4u;
     
     if (adjusted_word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }
