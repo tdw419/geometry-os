@@ -59,9 +59,9 @@ const INPUT_ZONE_MARGIN: u32 = 10u;
 // 100% detection accuracy for INPUT ZONE (rows 450-479) extraction
 // OPTIMIZED: Early row-range exit eliminates 95% of per-pixel ALU for non-boundary pixels
 fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
-    // Early-out for rows completely outside boundary + text edge range (448-481)
-    // This single comparison skips all subsequent ALU for ~95% of screen pixels
-    if (row < INPUT_ZONE_TOP || row >= INPUT_ZONE_BOTTOM) { return 0u; }
+    // Early-out for rows completely outside boundary marker range (448-481)
+    // FIXED: Include boundary marker rows in range check for proper OCR detection
+    if (row < 448u || row > 481u) { return 0u; }
 
     let left_edge = INPUT_ZONE_MARGIN;
     let right_edge = width - INPUT_ZONE_MARGIN;
