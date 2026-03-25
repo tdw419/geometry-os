@@ -132,6 +132,44 @@ fn cursor_blink_active() -> bool {
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
 
+    let local_row = row - INPUT_ZONE_TOP;
+    if (local_row < 9u || local_row >= 16u) { return vec3<u32>(0u, 0u, 0u); }  // OCR: pure black bg
+    let char_row = local_row - 9u;  // Maps to 0-6 for valid font bitmap indexing
+
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+
+    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }  // OCR: pure black gap
+
+    let input_len = get_input_length();
+
+    // Blinking cursor at end of input (32-frame cycle for 500ms at 60fps)
+    if (char_col == input_len && cursor_blink_active()) {
+        if (pixel_col < 2u && char_row < 7u) {
+            return vec3<u32>(200u, 255u, 200u);  // Green cursor
+        }
+        return vec3<u32>(0u, 0u, 0u);  // OCR: pure black cursor off
+    }
+
+    if (char_col >= input_len || char_col >= 64u) {
+        return vec3<u32>(0u, 0u, 0u);  // OCR: pure black empty
+    }
+
+    // Extract char from packed input_buffer (4 chars per u32, little-endian)
+    let word_idx = char_col >> 2u;
+    let byte_shift = (char_col & 3u) << 3u;
+    let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
+
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return vec3<u32>(255u, 255u, 255u);  // Pure white for max OCR contrast (21:1)
+    }
+    return vec3<u32>(0u, 0u, 0u);  // Pure black for optimal qwen3-vl-8b extraction
+}
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
+
     // Center 7-pixel text vertically in 25-row INPUT ZONE: padding = (25-7)/2 = 9
     let local_row = row - INPUT_ZONE_TOP;
     if (local_row < 9u || local_row >= 16u) { return vec3<u32>(0u, 0u, 0u); }  // OCR: pure black bg
