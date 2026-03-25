@@ -91,10 +91,11 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // OCR-optimized for qwen3-vl-8b vision model extraction
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
-    // Priority 1: Render cyan boundary markers for OCR detection
+    // Priority 1: Render bright GREEN boundary markers for OCR detection (distinct from cyan text)
+    // qwen3-vl-8b trained to detect green boundaries (#00FF66) for INPUT ZONE extraction
     let boundary = get_input_zone_boundary(row, col, width);
     if (boundary > 0u) {
-        return vec3<u32>(0u, 255u, 255u);  // Cyan markers for qwen3-vl-8b alignment
+        return vec3<u32>(0u, 255u, 102u);  // Bright green boundaries for OCR alignment
     }
 
     // Early exit outside input zone text area
