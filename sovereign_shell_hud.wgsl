@@ -109,9 +109,25 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
 
     let local_row = row - INPUT_ZONE_TOP;
-    // Vertically center 5x7 font in 25-row zone: font rows 0-6 map to zone rows 9-15
-    if (local_row < 9u || local_row >= 16u) { return vec3<u32>(0u, 0u, 0u); }
-    let char_row = local_row - 9u;
+    
+    // Multi-line layout: 3 lines of 5x7 font for natural language commands
+    // Lines at rows 2-8, 11-17, 20-26 (7px font + 3px spacing for OCR gaps)
+    // Each line displays ~106 chars at 6px/char on 640px width
+    var char_row: u32 = 255u;
+    var line_offset: u32 = 0u;
+    
+    if (local_row >= 2u && local_row < 9u) {
+        char_row = local_row - 2u;
+        line_offset = 0u;
+    } else if (local_row >= 11u && local_row < 18u) {
+        char_row = local_row - 11u;
+        line_offset = 64u;
+    } else if (local_row >= 20u && local_row < 27u) {
+        char_row = local_row - 20u;
+        line_offset = 128u;
+    } else {
+        return vec3<u32>(0u, 0u, 0u);  // Pure black gap for OCR line segmentation
+    }
 
     let char_col = col / 6u;
     let pixel_col = col % 6u;
@@ -120,22 +136,23 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }
 
     let input_len = get_input_length();
+    let adjusted_col = char_col + line_offset;
 
     // Blinking cursor at end of input (32-frame cycle = 533ms at 60fps)
-    if (char_col == input_len && cursor_blink_active()) {
+    if (adjusted_col == input_len && cursor_blink_active()) {
         if (pixel_col < 2u && char_row < 7u) {
-            return vec3<u32>(200u, 255u, 200u);  // Green cursor for visibility
+            return vec3<u32>(200u, 255u, 200u);  // Green cursor
         }
         return vec3<u32>(0u, 0u, 0u);
     }
 
-    if (char_col >= input_len || char_col >= 64u) {
+    if (adjusted_col >= input_len || adjusted_col >= 192u) {
         return vec3<u32>(0u, 0u, 0u);
     }
 
     // Extract char from packed input_buffer (4 chars per u32, little-endian)
-    let word_idx = char_col >> 2u;
-    let byte_shift = (char_col & 3u) << 3u;
+    let word_idx = adjusted_col >> 2u;
+    let byte_shift = (adjusted_col & 3u) << 3u;
     let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
 
     let font_bits = get_font_column(char_code, pixel_col);
