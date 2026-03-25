@@ -88,6 +88,24 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
     return 0u;
 }
 
+// 5x7 bitmap font column lookup - returns pixel bits for character rendering
+// MUST be declared BEFORE render_input_zone_text to avoid WGSL forward reference errors
+@group(0) @binding(9) var<storage, read> font_atlas: array<u32>;
+
+fn get_font_column(char_code: u32, col: u32) -> u32 {
+    // 5x7 bitmap font - returns column bits for given character and column (0-4)
+    // Optimized: bit shifts replace division/modulo, single bounds check reduces ALU
+    // 95 printable ASCII (32-126), 5 cols each = 475 bytes packed in 119 words
+    let char_idx = char_code - 32u;
+    if (char_idx >= 95u || col >= 5u) { return 0u; }
+    
+    let bitmap_addr = char_idx * 5u + col;
+    let word_idx = bitmap_addr >> 2u;  // /4 via bit shift (faster than div)
+    let byte_shift = (bitmap_addr & 3u) << 3u;  // %4 * 8 via bitwise (faster than mul)
+    
+    return (font_atlas[word_idx] >> byte_shift) & 0xFFu;
+}
+
 // Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // OCR-optimized for qwen3-vl-8b vision model extraction with enhanced contrast
@@ -145,26 +163,6 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     }
     return vec3<u32>(5u, 10u, 20u);  // OCR-optimized darker background
 }
-
-// 5x7 bitmap font column lookup - returns pixel bits for character rendering
-// Used by render_input_zone_text for OCR-optimized natural language display
-@group(0) @binding(9) var<storage, read> font_atlas: array<u32>;
-
-fn get_font_column(char_code: u32, col: u32) -> u32 {
-    // 5x7 bitmap font - returns column bits for given character and column (0-4)
-    // Optimized: bit shifts replace division/modulo, single bounds check reduces ALU
-    // 95 printable ASCII (32-126), 5 cols each = 475 bytes packed in 119 words
-    let char_idx = char_code - 32u;
-    if (char_idx >= 95u || col >= 5u) { return 0u; }
-    
-    let bitmap_addr = char_idx * 5u + col;
-    let word_idx = bitmap_addr >> 2u;  // /4 via bit shift (faster than div)
-    let byte_shift = (bitmap_addr & 3u) << 3u;  // %4 * 8 via bitwise (faster than mul)
-    
-    return (font_atlas[word_idx] >> byte_shift) & 0xFFu;
-}
-
-// End of render_input_zone_text function - duplicate orphaned block removed
 
 // PATCH_STATUS display zone (rows 475-479) - shows atomic patch results
 fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
