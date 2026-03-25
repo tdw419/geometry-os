@@ -241,6 +241,166 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 3u) { return 0x40u; }
         if (col == 4u) { return 0x3Fu; }
     } else if (char_code == 86u) {  // 'V'
+        if (col == 0u) { return 0x07u; }
+        if (col == 1u) { return 0x18u; }
+        if (col == 2u) { return 0x60u; }
+        if (col == 3u) { return 0x18u; }
+        if (col == 4u) { return 0x07u; }
+    } else if (char_code == 87u) {  // 'W'
+        if (col == 0u) { return 0x3Fu; }
+        if (col == 1u) { return 0x40u; }
+        if (col == 2u) { return 0x38u; }
+        if (col == 3u) { return 0x40u; }
+        if (col == 4u) { return 0x3Fu; }
+    } else if (char_code == 88u) {  // 'X'
+        if (col == 0u) { return 0x63u; }
+        if (col == 1u) { return 0x14u; }
+        if (col == 2u) { return 0x08u; }
+        if (col == 3u) { return 0x14u; }
+        if (col == 4u) { return 0x63u; }
+    } else if (char_code == 89u) {  // 'Y'
+        if (col == 0u) { return 0x07u; }
+        if (col == 1u) { return 0x08u; }
+        if (col == 2u) { return 0x70u; }
+        if (col == 3u) { return 0x08u; }
+        if (col == 4u) { return 0x07u; }
+    } else if (char_code == 90u) {  // 'Z'
+        if (col == 0u) { return 0x61u; }
+        if (col == 1u) { return 0x51u; }
+        if (col == 2u) { return 0x49u; }
+        if (col == 3u) { return 0x45u; }
+        if (col == 4u) { return 0x43u; }
+    }
+    // Operators and symbols for VM opcodes
+    else if (char_code == 32u) {  // ' ' (space)
+        return 0u;
+    } else if (char_code == 43u) {  // '+'
+        if (col == 0u) { return 0x08u; }
+        if (col == 1u) { return 0x08u; }
+        if (col == 2u) { return 0x3Eu; }
+        if (col == 3u) { return 0x08u; }
+        if (col == 4u) { return 0x08u; }
+    } else if (char_code == 45u) {  // '-'
+        if (col == 0u) { return 0x08u; }
+        if (col == 1u) { return 0x08u; }
+        if (col == 2u) { return 0x08u; }
+        if (col == 3u) { return 0x08u; }
+        if (col == 4u) { return 0x08u; }
+    } else if (char_code == 42u) {  // '*'
+        if (col == 0u) { return 0x14u; }
+        if (col == 1u) { return 0x22u; }
+        if (col == 2u) { return 0x7Fu; }
+        if (col == 3u) { return 0x22u; }
+        if (col == 4u) { return 0x14u; }
+    } else if (char_code == 47u) {  // '/'
+        if (col == 0u) { return 0x20u; }
+        if (col == 1u) { return 0x10u; }
+        if (col == 2u) { return 0x08u; }
+        if (col == 3u) { return 0x04u; }
+        if (col == 4u) { return 0x02u; }
+    } else if (char_code == 61u) {  // '='
+        if (col == 0u) { return 0x14u; }
+        if (col == 1u) { return 0x14u; }
+        if (col == 2u) { return 0x14u; }
+        if (col == 3u) { return 0x14u; }
+        if (col == 4u) { return 0x14u; }
+    } else if (char_code == 64u) {  // '@' (execute)
+        if (col == 0u) { return 0x3Eu; }
+        if (col == 1u) { return 0x55u; }
+        if (col == 2u) { return 0x5Du; }
+        if (col == 3u) { return 0x55u; }
+        if (col == 4u) { return 0x1Cu; }
+    }
+    // Lowercase a-z for natural language input
+    else if (char_code == 97u) {  // 'a'
+        if (col == 0u) { return 0x20u; }
+        if (col == 1u) { return 0x54u; }
+        if (col == 2u) { return 0x54u; }
+        if (col == 3u) { return 0x54u; }
+        if (col == 4u) { return 0x78u; }
+    } else if (char_code == 98u) {  // 'b'
+        if (col == 0u) { return 0x7Fu; }
+        if (col == 1u) { return 0x48u; }
+        if (col == 2u) { return 0x44u; }
+        if (col == 3u) { return 0x44u; }
+        if (col == 4u) { return 0x38u; }
+    } else if (char_code == 99u) {  // 'c'
+        if (col == 0u) { return 0x38u; }
+        if (col == 1u) { return 0x44u; }
+        if (col == 2u) { return 0x44u; }
+        if (col == 3u) { return 0x44u; }
+        if (col == 4u) { return 0x28u; }
+    } else if (char_code == 100u) {  // 'd'
+        if (col == 0u) { return 0x38u; }
+        if (col == 1u) { return 0x44u; }
+        if (col == 2u) { return 0x44u; }
+        if (col == 3u) { return 0x48u; }
+        if (col == 4u) { return 0x7Fu; }
+    } else if (char_code == 101u) {  // 'e'
+        if (col == 0u) { return 0x38u; }
+        if (col == 1u) { return 0x54u; }
+        if (col == 2u) { return 0x54u; }
+        if (col == 3u) { return 0x54u; }
+        if (col == 4u) { return 0x18u; }
+    } else if (char_code == 110u) {  // 'n'
+        if (col == 0u) { return 0x78u; }
+        if (col == 1u) { return 0x14u; }
+        if (col == 2u) { return 0x14u; }
+        if (col == 3u) { return 0x14u; }
+        if (col == 4u) { return 0x08u; }
+    } else if (char_code == 100u) {  // 'd'
+        if (col == 0u) { return 0x38u; }
+        if (col == 1u) { return 0x44u; }
+        if (col == 2u) { return 0x44u; }
+        if (col == 3u) { return 0x48u; }
+        if (col == 4u) { return 0x7Fu; }
+    } else if (char_code == 116u) {  // 't'
+        if (col == 0u) { return 0x08u; }
+        if (col == 1u) { return 0x3Eu; }
+        if (col == 2u) { return 0x28u; }
+        if (col == 3u) { return 0x28u; }
+        if (col == 4u) { return 0x20u; }
+    }
+    return 0u;
+} == 3u) { return 0x41u; }
+        if (col == 4u) { return 0x3Eu; }
+    } else if (char_code == 80u) {  // 'P'
+        if (col == 0u) { return 0x7Fu; }
+        if (col == 1u) { return 0x09u; }
+        if (col == 2u) { return 0x09u; }
+        if (col == 3u) { return 0x09u; }
+        if (col == 4u) { return 0x06u; }
+    } else if (char_code == 81u) {  // 'Q'
+        if (col == 0u) { return 0x3Eu; }
+        if (col == 1u) { return 0x41u; }
+        if (col == 2u) { return 0x51u; }
+        if (col == 3u) { return 0x41u; }
+        if (col == 4u) { return 0x3Eu; }
+    } else if (char_code == 82u) {  // 'R'
+        if (col == 0u) { return 0x7Fu; }
+        if (col == 1u) { return 0x09u; }
+        if (col == 2u) { return 0x19u; }
+        if (col == 3u) { return 0x29u; }
+        if (col == 4u) { return 0x46u; }
+    } else if (char_code == 83u) {  // 'S'
+        if (col == 0u) { return 0x26u; }
+        if (col == 1u) { return 0x49u; }
+        if (col == 2u) { return 0x49u; }
+        if (col == 3u) { return 0x49u; }
+        if (col == 4u) { return 0x32u; }
+    } else if (char_code == 84u) {  // 'T'
+        if (col == 0u) { return 0x01u; }
+        if (col == 1u) { return 0x01u; }
+        if (col == 2u) { return 0x7Fu; }
+        if (col == 3u) { return 0x01u; }
+        if (col == 4u) { return 0x01u; }
+    } else if (char_code == 85u) {  // 'U'
+        if (col == 0u) { return 0x3Fu; }
+        if (col == 1u) { return 0x40u; }
+        if (col == 2u) { return 0x40u; }
+        if (col == 3u) { return 0x40u; }
+        if (col == 4u) { return 0x3Fu; }
+    } else if (char_code == 86u) {  // 'V'
         if (col == 0u) { return 0x1Fu; }
         if (col == 1u) { return 0x20u; }
         if (col == 2u) { return 0x40u; }
