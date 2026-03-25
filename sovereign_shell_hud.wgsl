@@ -153,9 +153,10 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let adjusted_col = char_col + line_offset;
 
     // Merged cursor logic: only show cursor at end of input where no char exists
+    // Full 5px width cursor for reliable qwen3-vl-8b OCR detection in INPUT ZONE
     if (adjusted_col == input_len) {
-        if (cursor_blink_active() && pixel_col < 2u && char_row < 7u) {
-            return vec3<u32>(200u, 255u, 200u);  // Green cursor at input end
+        if (cursor_blink_active() && pixel_col < 5u && char_row < 7u) {
+            return vec3<u32>(0u, 255u, 255u);  // Cyan cursor - high contrast for vision model
         }
         return vec3<u32>(0u, 0u, 0u);
     }
@@ -177,7 +178,8 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (((font_bits >> bit_pos) & 1u) != 0u) {
         return vec3<u32>(255u, 255u, 255u);  // Pure white for 21:1 OCR contrast
     }
-    return vec3<u32>(0u, 0u, 0u);  // Background pixel - transparent black
+    return vec3<u32>(0u, 0u, 0u);  // Background for non-font pixels
+}u32>(0u, 0u, 0u);  // Background pixel - transparent black
 }
 
 // Render PATCH_STATUS zone (rows 475-479) with success/fail overlay
