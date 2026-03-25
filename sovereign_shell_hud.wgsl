@@ -91,7 +91,7 @@ fn render_input_zone_text(row: u32, col: u32) -> u32 {
     let font_bits = get_font_column(char_code, pixel_col);
     let bit_pos = 6u - char_row;
     
-    return select(0u, 255u, (font_bits >> bit_pos) & 1u) != 0u);
+    return select(0u, 255u, ((font_bits >> bit_pos) & 1u) != 0u);
 }
 
 // Render PATCH_SUCCESS/FAIL status in rows 475-479
