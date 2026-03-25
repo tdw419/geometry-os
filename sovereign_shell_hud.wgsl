@@ -202,6 +202,9 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
         if (status == 1u) { return vec3<u32>(0u, 255u, 0u); }   // Green success
         if (status == 2u) { return vec3<u32>(255u, 0u, 0u); }   // Red failure
     }
+    return vec3<u32>(0u, 0u, 0u);  // Background
+}<u32>(255u, 0u, 0u); }   // Red failure
+    }
     return vec3<u32>(0u, 0u, 0u);
 }
 
