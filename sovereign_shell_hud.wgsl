@@ -53,6 +53,17 @@ const INPUT_ZONE_TOP: u32 = 450u;
 const INPUT_ZONE_BOTTOM: u32 = 479u;
 const INPUT_ZONE_MARGIN: u32 = 10u;
 
+// Helper functions for INPUT ZONE text processing and cursor rendering
+fn get_input_length() -> u32 {
+    // Length stored in first byte of input_buffer, clamped to max 192 chars
+    return min(input_buffer[0] & 0xFFu, 192u);
+}
+
+fn cursor_blink_active() -> bool {
+    // 32-frame blink cycle (533ms at 60fps) for visible cursor feedback
+    return (config.frame & 16u) != 0u;
+}
+
 // Check if pixel position is an INPUT ZONE boundary marker (cyan lines for OCR alignment)
 // Returns: 0 = not boundary, 1 = top boundary, 2 = bottom boundary, 3 = corner bracket
 fn get_input_zone_boundary(row: u32, col: u32) -> u32 {
@@ -60,7 +71,7 @@ fn get_input_zone_boundary(row: u32, col: u32) -> u32 {
     if (row < 450u || row > 479u) { return 0u; }
 
     let left_edge = INPUT_ZONE_MARGIN;
-    let right_edge = width - INPUT_ZONE_MARGIN;
+    let right_edge = config.width - INPUT_ZONE_MARGIN;
 
     // 2-pixel thick top boundary (rows 450-451) for reliable OCR detection
     if ((row == 450u || row == 451u) && col >= left_edge && col < right_edge) {
