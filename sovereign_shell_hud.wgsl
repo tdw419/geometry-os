@@ -206,7 +206,60 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 3u) { return 0x45u; }
         if (col == 4u) { return 0x3Eu; }
     } else if (c == 49u) {  // '1'
-        if (col == 0u) { return 0x42u; }
+        if (col == 0u) { return 0x00u; }
+        if (col == 1u) { return 0x22u; }
+        if (col == 2u) { return 0x7Fu; }
+        if (col == 3u) { return 0x01u; }
+        if (col == 4u) { return 0x00u; }
+    } else if (c == 50u) {  // '2'
+        if (col == 0u) { return 0x3Eu; }
+        if (col == 1u) { return 0x41u; }
+        if (col == 2u) { return 0x05u; }
+        if (col == 3u) { return 0x09u; }
+        if (col == 4u) { return 0x7Fu; }
+    } else if (c == 51u) {  // '3'
+        if (col == 0u) { return 0x3Eu; }
+        if (col == 1u) { return 0x41u; }
+        if (col == 2u) { return 0x1Du; }
+        if (col == 3u) { return 0x41u; }
+        if (col == 4u) { return 0x3Eu; }
+    } else if (c == 52u) {  // '4'
+        if (col == 0u) { return 0x04u; }
+        if (col == 1u) { return 0x0Cu; }
+        if (col == 2u) { return 0x14u; }
+        if (col == 3u) { return 0x7Fu; }
+        if (col == 4u) { return 0x04u; }
+    } else if (c == 53u) {  // '5'
+        if (col == 0u) { return 0x7Fu; }
+        if (col == 1u) { return 0x49u; }
+        if (col == 2u) { return 0x49u; }
+        if (col == 3u) { return 0x49u; }
+        if (col == 4u) { return 0x31u; }
+    } else if (c == 54u) {  // '6'
+        if (col == 0u) { return 0x3Eu; }
+        if (col == 1u) { return 0x49u; }
+        if (col == 2u) { return 0x49u; }
+        if (col == 3u) { return 0x49u; }
+        if (col == 4u) { return 0x32u; }
+    } else if (c == 55u) {  // '7'
+        if (col == 0u) { return 0x40u; }
+        if (col == 1u) { return 0x47u; }
+        if (col == 2u) { return 0x48u; }
+        if (col == 3u) { return 0x50u; }
+        if (col == 4u) { return 0x60u; }
+    } else if (c == 56u) {  // '8'
+        if (col == 0u) { return 0x36u; }
+        if (col == 1u) { return 0x49u; }
+        if (col == 2u) { return 0x49u; }
+        if (col == 3u) { return 0x49u; }
+        if (col == 4u) { return 0x36u; }
+    } else if (c == 57u) {  // '9'
+        if (col == 0u) { return 0x26u; }
+        if (col == 1u) { return 0x49u; }
+        if (col == 2u) { return 0x49u; }
+        if (col == 3u) { return 0x49u; }
+        if (col == 4u) { return 0x3Eu; }
+    } else if (c == 65u0u) { return 0x42u; }
         if (col == 1u) { return 0x7Fu; }
         if (col == 2u) { return 0x40u; }
         if (col == 3u) { return 0x40u; }
