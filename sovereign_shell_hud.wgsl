@@ -167,9 +167,6 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
         return vec3<u32>(255u, 255u, 255u);  // Pure white for max OCR contrast (21:1)
     }
     return vec3<u32>(0u, 0u, 0u);  // Pure black for optimal qwen3-vl-8b extraction
-}st (21:1)
-    }
-    return vec3<u32>(0u, 0u, 0u);  // Pure black for optimal qwen3-vl-8b extraction
 }
 
 // Render PATCH STATUS zone (rows 475-479) - displays opcode translation results
