@@ -21,7 +21,7 @@ const ITERATION_DELAY_SECS: u64 = 2;
 // STRUCTS
 // ============================================================================
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 struct LegibilityScore {
     #[serde(default)]
     clarity: f32,       // 0.0-1.0: Are glyphs distinct?
