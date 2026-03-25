@@ -145,14 +145,14 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
     var c = char_code;
     if (c >= 97u && c <= 122u) { c -= 32u; }
     
-    // Digits 0-9 (char codes 48-57)
+    // Digits 0-9 (char codes 48-57) - all use normalized 'c' for consistency
     if (c == 48u) {  // '0'
         if (col == 0u) { return 0x3Eu; }
         if (col == 1u) { return 0x51u; }
         if (col == 2u) { return 0x49u; }
         if (col == 3u) { return 0x45u; }
         if (col == 4u) { return 0x3Eu; }
-    } else if (char_code == 49u) {  // '1'
+    } else if (c == 49u) {  // '1'
         if (col == 0u) { return 0x42u; }
         if (col == 1u) { return 0x7Fu; }
         if (col == 2u) { return 0x40u; }
