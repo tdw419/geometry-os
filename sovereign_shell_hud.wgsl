@@ -113,7 +113,7 @@ const FONT_COLS_PER_CHAR: u32 = 5u;
 
 fn get_font_column(char_code: u32, col: u32) -> u32 {
     // 5x7 bitmap font - returns column bits for given character and column (0-4)
-    // Optimized: 4 ALU ops instead of 6, critical for 60 FPS with full INPUT ZONE rendering
+    // Optimized: 3 ALU ops for bit extraction, critical for 60 FPS with full INPUT ZONE rendering
     // Pre-clamped char ensures atomic memory patches don't cause OOB reads
     let safe_char = clamp(char_code, FONT_CHAR_START, FONT_CHAR_END);
     let safe_col = min(col, 4u);  // FONT_COLS_PER_CHAR - 1 = 4, literal is faster
@@ -121,8 +121,9 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
     let atlas_idx = bitmap_addr >> 2u;
     let byte_offset = (bitmap_addr & 3u) << 3u;  // byte position within u32 word
     
-    // extractField is 1 ALU op vs 2 for shift+and, improves OCR frame consistency
-    return extractBits(font_atlas[atlas_idx], byte_offset, 8u);
+    // Standard WGSL bit extraction: shift-right + mask (portable across all GPU vendors)
+    // 2 ALU ops: SHR + AND - guaranteed stable for OCR frame consistency
+    return (font_atlas[atlas_idx] >> byte_offset) & 0xFFu;
 }
 
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
