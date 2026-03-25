@@ -131,9 +131,10 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
 
     let local_row = row - INPUT_ZONE_TOP;
-    var char_row: u32 = 255u;  // Sentinel for invalid
+    var char_row: u32 = 255u;
     var line_offset: u32 = 0u;
 
+    // Direct row-to-line mapping for 3 lines of 5x7 text (9px line + 2px gap = 11px per line)
     if (local_row >= 2u && local_row < 9u) {
         char_row = local_row - 2u;
         line_offset = 0u;
@@ -156,10 +157,10 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let input_len = get_input_length();
     let adjusted_col = char_col + line_offset;
 
-    // Blinking cursor at end of input (32-frame cycle = 533ms at 60fps)
-    if (adjusted_col == input_len && cursor_blink_active()) {
-        if (pixel_col < 2u && char_row < 7u) {
-            return vec3<u32>(200u, 255u, 200u);  // Green cursor
+    // Merged cursor logic: only show cursor at end of input where no char exists
+    if (adjusted_col == input_len) {
+        if (cursor_blink_active() && pixel_col < 2u && char_row < 7u) {
+            return vec3<u32>(200u, 255u, 200u);  // Green cursor at input end
         }
         return vec3<u32>(0u, 0u, 0u);
     }
