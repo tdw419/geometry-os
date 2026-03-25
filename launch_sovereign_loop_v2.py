@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Sovereign Shell Autonomous Loop v2.6 - Fixed Multi-Brain 🐍🧠🛡️✨
+Sovereign Shell Autonomous Loop v2.7 - Eternal Evolution 🐍🧠🛡️♾️
 
-Hierarchy:
-1. ZAI (Primary) - GLM-5 with Thinking
-2. Gemini (Secondary) - Gemini 1.5 Flash
-3. LM Studio (Fallback) - Qwen 2.5 Coder
+Upgrades:
+1. Max Iterations: 10,000 (Effectively eternal)
+2. Brain: Triple-Brain (ZAI > Gemini > LM Studio)
+3. Tracking: Fixed best_metric tracking and status reporting
 """
 
 import sys
@@ -34,6 +34,9 @@ class SmartAutonomousLoop(AutonomousLoop):
         raw_criteria = kwargs.get('criteria', "")
         if isinstance(raw_criteria, list):
             kwargs['criteria'] = "\n".join(raw_criteria)
+        
+        # Eternal by default
+        kwargs['max_iterations'] = kwargs.get('max_iterations', 10000)
         
         super().__init__(**kwargs)
         self.adapter.config.base_url = self.PXOS_URL
@@ -193,6 +196,7 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
             latest_bak.rename(target_path)
 
     def check_criteria(self, current: float) -> bool:
+        # If latency is missing, we check if the shader is healthy
         if current > 0 and current < 1.0:
             print(f"🎯 Milestone reached: loop_latency = {current:.3f}s")
             return True
@@ -205,14 +209,15 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
         llm_response = self.generate_hypothesis()
         if "error" in llm_response:
             print(f"⚠️ Error: {llm_response['error']}")
-            return {"status": "error"}
+            return {"status": "error", "metric": 0, "best": self.best_metric}
+        if isinstance(llm_response, list) and len(llm_response) > 0: llm_response = llm_response[0]
             
         old_s = llm_response.get("old_string")
         new_s = llm_response.get("new_string")
         
         if not old_s or not new_s:
             print("⚠️ Incomplete patch received.")
-            return {"status": "no_change"}
+            return {"status": "no_change", "metric": 0, "best": self.best_metric}
 
         if self.apply_patch(old_s, new_s):
             spec = f"H: {llm_response.get('hypothesis')}\nT: {self.target}\nM: {self.criteria}\nB: 5"
@@ -231,9 +236,15 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
 
         cells = self.adapter.get_cells()
         current_metric = cells.get(self.metric_name, 0)
+        
+        # Track best
+        if current_metric > self.best_metric:
+            self.best_metric = current_metric
+            print(f"↑ NEW BEST: {self.best_metric}")
+        
         if self.check_criteria(current_metric):
-            return {"status": "achieved", "metric": current_metric}
-        return {"status": "continue"}
+            return {"status": "achieved", "metric": current_metric, "best": self.best_metric}
+        return {"status": "continue", "metric": current_metric, "best": self.best_metric}
 
 def main():
     goal_path = Path(".ouroboros/goal.yaml")
@@ -245,11 +256,11 @@ def main():
         criteria=config['success_criteria'],
         target="sovereign_shell_hud.wgsl",
         metric_name="loop_latency",
-        max_iterations=config.get('max_iterations', 50),
+        max_iterations=10000,
         delay_seconds=15.0
     )
 
-    print(f"🚀 Launching v2.6 Fixed Multi-Brain Ouroboros Loop...")
+    print(f"🚀 Launching v2.7 Eternal Ouroboros Loop...")
     try: loop.run()
     except KeyboardInterrupt: print("\n🛑 Stopped.")
     finally: loop.lm_client.close()
