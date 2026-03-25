@@ -67,48 +67,15 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 
 // Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
+// OCR-optimized for qwen3-vl-8b vision model extraction
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
-    // Early exit for non-input zone boundaries
-    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
-
-    let local_row = row - INPUT_ZONE_TOP;
-    let char_col = col / 6u;
-    let pixel_col = col % 6u;
-
-    // Calculate char index: line 0 = chars 0-63, line 1 = 64-127, line 2 = 128-191
-    let global_char_idx = local_row * 64u + char_col;
-    if (global_char_idx >= 192u) { return vec3<u32>(0u, 0u, 0u); } // Extended buffer support
-
-    let word_idx = global_char_idx / 4u;
-    let byte_idx = global_char_idx % 4u;
-
-    let packed = input_buffer[word_idx];
-    let char_code = (packed >> (byte_idx * 8u)) & 0xFFu;
-
-    // Blinking cursor at end of input (uses frame for 500ms blink)
-    let input_len = input_buffer[15u] >> 24u;  // Store length in high byte of last word
-    if (global_char_idx == input_len && (config.frame & 32u) != 0u) {
-        if (pixel_col < 2u && local_row >= 1u && local_row <= 5u) {
-            return vec3<u32>(255u, 255u, 0u);  // Yellow cursor
-        }
-    }
-
-    let font_bits = get_font_column(char_code, pixel_col);
-    let bit_pos = 6u - local_row;
-
-    if (((font_bits >> bit_pos) & 1u) != 0u) {
-        // Cyan text for visibility and OCR contrast (qwen3-vl-8b optimized)
-        return vec3<u32>(0u, 255u, 255u);
-    }
-    // Dark background behind characters
-    return vec3<u32>(10u, 15u, 25u);
-}
-    // Render cyan boundary markers for OCR detection (rows 449 and 480)
+    // Priority 1: Render cyan boundary markers for OCR detection (rows 449 and 480)
     let boundary = get_input_zone_boundary(row, col, width);
     if (boundary > 0u) {
         return vec3<u32>(0u, 255u, 255u);  // Cyan markers for qwen3-vl-8b alignment
     }
     
+    // Early exit outside input zone text area
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
     
     let local_row = row - INPUT_ZONE_TOP;
@@ -129,7 +96,7 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     } else {
         // Gap rows: render dark background for OCR contrast
         if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
-            return vec3<u32>(10u, 15u, 25u);  // Dark blue gap
+            return vec3<u32>(10u, 15u, 25u);
         }
         return vec3<u32>(0u, 0u, 0u);
     }
@@ -139,7 +106,6 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     
     // 5x7 font: 5 pixels wide, 7 pixels tall, 1 pixel spacing
     if (pixel_col >= 5u) {
-        // Inter-character gap: dark background
         if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
             return vec3<u32>(10u, 15u, 25u);
         }
@@ -151,20 +117,20 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let word_idx = global_char_idx / 4u;
     let byte_idx = global_char_idx % 4u;
     
-    if (word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }  // Extended buffer support
+    if (word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }
     
     let packed = input_buffer[word_idx];
     let char_code = (packed >> (byte_idx * 8u)) & 0xFFu;
     
-    // Blinking cursor at end of input (uses frame for 500ms blink)
-    let input_len = input_buffer[15u] >> 24u;  // Store length in high byte of last word
+    // Blinking cursor at end of input (32-frame cycle = ~500ms at 60fps)
+    let input_len = input_buffer[15u] >> 24u;
     if (global_char_idx == input_len && (config.frame & 32u) != 0u) {
         if (pixel_col < 2u && char_row >= 1u && char_row <= 5u) {
             return vec3<u32>(255u, 255u, 0u);  // Yellow cursor
         }
     }
     
-    // Dark background for OCR contrast
+    // Dark background for null chars or invalid rows
     if (char_code == 0u || char_row >= 7u) {
         if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
             return vec3<u32>(10u, 15u, 25u);
@@ -176,14 +142,10 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let bit_pos = 6u - char_row;
     
     if (((font_bits >> bit_pos) & 1u) != 0u) {
-        // Cyan text for visibility and OCR contrast (qwen3-vl-8b optimized)
-        return vec3<u32>(0u, 255u, 255u);
+        return vec3<u32>(0u, 255u, 255u);  // Cyan text for OCR contrast
     }
-    // Dark background behind characters
-    return vec3<u32>(10u, 15u, 25u);
+    return vec3<u32>(10u, 15u, 25u);  // Dark background
 }
-
-// Font rendering handled by complete get_font_column implementation below
 
 // Render PATCH_SUCCESS/FAIL status in rows 475-479
 // Green = success (patch_status[0] == 1), Red = fail (patch_status[0] == 2)
