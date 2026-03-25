@@ -143,9 +143,10 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let input_len = get_input_length();
     let adjusted_col = char_col + line_offset;
 
+    // Cursor rendering - char_row < 7u guaranteed by early return above
     if (adjusted_col == input_len) {
-        if (cursor_blink_active() && pixel_col < 5u && char_row < 7u) {
-            return vec3<u32>(0u, 255u, 255u);
+        if (cursor_blink_active() && pixel_col < 5u) {
+            return vec3<u32>(0u, 255u, 255u);  // Cyan cursor for OCR visibility
         }
         return vec3<u32>(0u, 0u, 0u);
     }
