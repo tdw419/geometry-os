@@ -100,7 +100,8 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
     if (char_code < 32u || char_code > 126u || col >= 5u) { return 0u; }
     
     let bitmap_addr = (char_code - 32u) * 5u + col;
-    return (font_atlas[bitmap_addr >> 2u] >> ((bitmap_addr & 3u) << 3u)) & 0xFFu;
+    let byte_offset = bitmap_addr & 3u;
+    return (font_atlas[bitmap_addr >> 2u] >> (byte_offset << 3u)) & 0xFFu;
 }
 
 // Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
