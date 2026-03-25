@@ -177,7 +177,50 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (((font_bits >> bit_pos) & 1u) != 0u) {
         return vec3<u32>(255u, 255u, 255u);  // Pure white for 21:1 OCR contrast
     }
-    return vec3<u32>(0u, 0u, 0u);  // Pure black for qwen3-vl-8b extraction
+    return vec3<u32>(0u, 0u, 0u);  // Background pixel - transparent black
+}
+
+// Render PATCH_STATUS zone (rows 475-479) with success/fail overlay
+fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
+    if (row < 475u || row > 479u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let status = patch_status[0];
+    if (status == 0u) { return vec3<u32>(0u, 0u, 0u); }  // No patch pending
+    
+    // Status text rendering: PATCH_SUCCESS (green) or PATCH_FAIL (red)
+    let local_row = row - 475u;
+    if (local_row >= 5u) { return vec3<u32>(0u, 0u, 0u); }  // Only 5 rows for status
+    
+    let char_row = local_row;
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+    
+    if (pixel_col >= 5u || char_col >= 16u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    // Status message: "PATCH_SUCCESS" or "PATCH_FAIL"
+    var status_chars: array<u32, 16> = array<u32, 16>(
+        80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u, 0u, 0u, 0u  // PATCH_SUCCESS
+    );
+    
+    if (status == 2u) {  // FAIL
+        status_chars[5] = 70u; status_chars[6] = 65u; status_chars[7] = 73u;
+        status_chars[8] = 76u; status_chars[9] = 0u;
+    }
+    
+    let char_code = status_chars[char_col];
+    if (char_code == 0u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 4u - char_row;  // 5x5 status font
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        if (status == 1u) {
+            return vec3<u32>(0u, 255u, 100u);  // Green for SUCCESS
+        } else {
+            return vec3<u32>(255u, 80u, 80u);   // Red for FAIL
+        }
+    }
+    return vec3<u32>(0u, 0u, 0u);u32>(0u, 0u, 0u);  // Pure black for qwen3-vl-8b extraction
 }
 
 // Character code arrays for PATCH_STATUS display (WGSL-safe, no string type)
