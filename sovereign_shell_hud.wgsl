@@ -181,20 +181,6 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     return vec3<u32>(0u, 0u, 0u);
 }
 
-// packed input_buffer (4 chars per u32, little-endian)
-    let word_idx = adjusted_col >> 2u;
-    let byte_shift = (adjusted_col & 3u) << 3u;
-    let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
-
-    let font_bits = get_font_column(char_code, pixel_col);
-    let bit_pos = 6u - char_row;
-
-    if (((font_bits >> bit_pos) & 1u) != 0u) {
-        return vec3<u32>(255u, 255u, 255u);  // Pure white for 21:1 OCR contrast
-    }
-    return vec3<u32>(0u, 0u, 0u);  // Pure black for qwen3-vl-8b extraction
-}
-
 // 5x7 bitmap font atlas storage - 475 bytes packed in 119 words (95 chars × 5 cols)
 // Declared at module scope for WGSL compliance - used by get_font_column() above
 @group(0) @binding(9) var<storage, read> font_atlas: array<u32>;
