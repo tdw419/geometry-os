@@ -190,12 +190,18 @@ const PATCH_FAIL_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u,
 // Function to process input text and generate VM opcodes
 fn process_input_text() -> array<u32, 192> {
     var opcodes: array<u32, 192> = array<u32, 192>(0u);
-    // Extract text from input buffer
-    let input_len = get_input_length();
-    for i in 0..input_len {
-        let word_idx = i >> 2u;
-        let byte_shift = (i & 3u) << 3u;
+    let input_len = min(get_input_length(), 191u);
+    
+    // Copy input text to opcode buffer for host-side LLM processing
+    // Host vision model extracts from INPUT ZONE, LLM generates opcodes
+    for (var i: u32 = 0u; i < input_len; i++) {
+        let word_idx = (i + 1u) >> 2u;  // Length in word 0, text starts at word 1
+        let byte_shift = ((i + 1u) & 3u) << 3u;
         let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
+        opcodes[i] = char_code;
+    }
+    opcodes[input_len] = 0u;  // Null terminator for host string parsing
+    return opcodes;t) & 0xFFu;
         // Convert text to VM opcodes using a language model
         // This is a placeholder for the actual LLM call
         let opcode = convert_text_to_opcode(char_code);
