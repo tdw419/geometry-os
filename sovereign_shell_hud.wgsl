@@ -44,6 +44,10 @@ struct Config {
 // Execution result (displayed in HUD)
 @group(0) @binding(8) var<storage, read> exec_result: array<u32>;
 
+// 5x7 bitmap font atlas: 119 u32 words packing 475 bytes (95 printable ASCII * 5 columns)
+// Critical for INPUT ZONE text rendering - required by get_font_column() for OCR-ready display
+@group(0) @binding(9) var<storage, read> font_atlas: array<u32>;
+
 // ============================================================================
 // 5x7 BITMAP FONT — Full ASCII support
 // ============================================================================
