@@ -131,6 +131,46 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
 
     let local_row = row - INPUT_ZONE_TOP;
+    let line = min(local_row >> 3u, 2u);
+    let char_row = local_row & 7u;
+    if (char_row >= 7u || local_row >= 24u) { return vec3<u32>(0u, 0u, 0u); }
+
+    var line_offset: u32 = line * 32u;
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }
+
+    let input_len = get_input_length();
+    let adjusted_col = char_col + line_offset;
+
+    if (adjusted_col == input_len) {
+        if (cursor_blink_active() && pixel_col < 5u && char_row < 7u) {
+            return vec3<u32>(0u, 255u, 255u);
+        }
+        return vec3<u32>(0u, 0u, 0u);
+    }
+
+    if (adjusted_col >= input_len || adjusted_col >= 192u) {
+        return vec3<u32>(0u, 0u, 0u);
+    }
+
+    let char_byte_pos = adjusted_col + 1u;
+    let word_idx = char_byte_pos >> 2u;
+    let byte_shift = (char_byte_pos & 3u) << 3u;
+    let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
+
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return vec3<u32>(font_bits, font_bits, font_bits);
+    }
+
+    return vec3<u32>(0u, 0u, 0u);
+}
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
+
+    let local_row = row - INPUT_ZONE_TOP;
     
     // OPTIMIZED: Bit-shift/AND for power-of-2 divisions (~8x faster on GPU)
     // Compact 3-line layout: 7px char height + 1px gap = 8px per line
