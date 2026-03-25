@@ -181,6 +181,53 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
 const PATCH_SUCCESS_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);
 const PATCH_FAIL_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 32u, 32u, 32u);
 
+// PATCH_STATUS zone boundaries (rows 475-479)
+const PATCH_STATUS_TOP: u32 = 475u;
+const PATCH_STATUS_HEIGHT: u32 = 5u;
+
+fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // Only render in PATCH_STATUS zone (rows 475-479)
+    if (row < PATCH_STATUS_TOP || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    // Check patch status: 0=none, 1=success, 2=fail
+    let status = patch_status[0];
+    if (status == 0u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let local_row = row - PATCH_STATUS_TOP;
+    let status_chars = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);
+    let fail_chars = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 32u, 32u, 32u);
+    
+    // Center text horizontally: 13 chars * 6px = 78px
+    let text_width = 78u;
+    let start_col = (width - text_width) / 2u;
+    let end_col = start_col + text_width;
+    
+    if (col < start_col || col >= end_col) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let char_idx = (col - start_col) / 6u;
+    let pixel_col = (col - start_col) % 6u;
+    
+    // 1px gap between chars
+    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }
+    if (char_idx >= 13u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    // Select character based on status
+    let char_code = select(fail_chars[char_idx], status_chars[char_idx], status == 1u);
+    let font_bits = get_font_column(char_code, pixel_col);
+    
+    // 5x7 font centered vertically in 5-row zone
+    let font_v_start = (PATCH_STATUS_HEIGHT - 7u) / 2u;
+    let char_row = i32(local_row) - i32(font_v_start);
+    if (char_row < 0 || char_row >= 7) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let bit_pos = 6u - u32(char_row);
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        // Green for success, red for fail - high contrast for vision model
+        return select(vec3<u32>(255u, 80u, 80u), vec3<u32>(80u, 255u, 80u), status == 1u);
+    }
+    return vec3<u32>(0u, 0u, 0u);
+}
+
 // Function to process input text and generate VM opcodes
 fn process_input_text() -> array<u32, 192> {
     var opcodes: array<u32, 192> = array<u32, 192>(0u);
