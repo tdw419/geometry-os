@@ -57,6 +57,13 @@ const INPUT_ZONE_MARGIN: u32 = 10u;
 // Returns: 0 = not boundary, 1 = top boundary, 2 = bottom boundary
 // Full-width markers ensure vision model (qwen3-vl-8b) can reliably detect INPUT ZONE (rows 450-479)
 fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
+    if (row >= INPUT_ZONE_TOP && row <= INPUT_ZONE_BOTTOM) {
+        if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
+            return 1u;
+        }
+    }
+    return 0u;
+}
     if (row == 449u || row == 480u) {
         if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
             return row == 449u ? 1u : 2u;
