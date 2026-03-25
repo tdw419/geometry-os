@@ -164,26 +164,22 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     return vec3<u32>(5u, 10u, 20u);  // OCR-optimized darker background
 }
 
-// New function to handle input processing and memory patching
-fn process_input_and_patch() -> void {
-    // Extract text from INPUT ZONE using vision model (qwen3-vl-8b)
-    let input_text = extract_text_from_zone(450u, 479u);
-
-    // Generate VM opcodes from extracted text using LLM (tinyllama)
-    let opcodes = generate_opcodes(input_text);
-
-    // Atomically patch agent's memory with generated opcodes
-    atomic_patch_memory(opcodes);
+// Input validation helper - returns true if input buffer has valid natural language command
+// Host system reads input_buffer directly for vision-to-opcode pipeline
+fn has_valid_input() -> bool {
+    let input_len = input_buffer[47u] >> 24u;
+    return input_len > 0u && input_len <= 191u;
 }
 
-// Function to extract text from a given zone using OCR model
-fn extract_text_from_zone(top: u32, bottom: u32) -> string {
-    // Placeholder for OCR extraction logic
-    return "add 5 and 3";
+// Get input character count for host-side OCR extraction
+fn get_input_length() -> u32 {
+    return min(input_buffer[47u] >> 24u, 191u);
 }
 
-// Function to generate VM opcodes from input text using LLM
-fn generate_opcodes(input_text: string) -> array<u32> {
+// Check if cursor should blink (30-frame cycle for 500ms at 60fps)
+fn cursor_blink_active() -> bool {
+    return (config.frame & 31u) < 16u;
+}pcodes(input_text: string) -> array<u32> {
     // Placeholder for LLM opcode generation logic
     let mut opcodes = array<u32>[0u; 10];
     opcodes[0] = 5u;
