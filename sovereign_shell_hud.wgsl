@@ -143,16 +143,16 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
 
 fn get_font_column(char_code: u32, col: u32) -> u32 {
     // 5x7 bitmap font - returns column bits for given character and column (0-4)
-    // Each byte represents one column, bits 0-6 map to rows 0-6
-    if (char_code < 32u || char_code > 126u || col >= 5u) { return 0u; }
-    
+    // Optimized: bit shifts replace division/modulo, single bounds check reduces ALU
+    // 95 printable ASCII (32-126), 5 cols each = 475 bytes packed in 119 words
     let char_idx = char_code - 32u;
-    let bitmap_addr = char_idx * 5u + col;
-    let font_data = font_atlas[bitmap_addr / 4u];
-    let byte_offset = bitmap_addr % 4u;
-    let column_bits = (font_data >> (byte_offset * 8u)) & 0xFFu;
+    if (char_idx >= 95u || col >= 5u) { return 0u; }
     
-    return column_bits;
+    let bitmap_addr = char_idx * 5u + col;
+    let word_idx = bitmap_addr >> 2u;  // /4 via bit shift (faster than div)
+    let byte_shift = (bitmap_addr & 3u) << 3u;  // %4 * 8 via bitwise (faster than mul)
+    
+    return (font_atlas[word_idx] >> byte_shift) & 0xFFu;
 }
 
 // End of render_input_zone_text function - duplicate orphaned block removed
