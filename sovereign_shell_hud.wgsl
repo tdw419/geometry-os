@@ -156,7 +156,8 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 0u) { return 0x42u; }
         if (col == 1u) { return 0x7Fu; }
         if (col == 2u) { return 0x40u; }
-        return 0u;
+        if (col == 3u) { return 0x40u; }
+        if (col == 4u) { return 0x40u; }
     } else if (char_code == 50u) {  // '2'
         if (col == 0u) { return 0x62u; }
         if (col == 1u) { return 0x51u; }

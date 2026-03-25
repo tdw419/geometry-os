@@ -1,13 +1,11 @@
 // ============================================================================
-// SPATIAL SWARM HUD SHADER
+// SPATIAL SWARM HUD SHADER — 64-AGENT COLLECTIVE
 // ============================================================================
-// Displays 8 agents with:
-//   - Agent ID (0-7) with color coding
-//   - POS (x, y) coordinates
-//   - VEL (dx, dy) velocity
-//   - Status: IT / RUNNER / HALTED
-//   - Mailbox indicator (MSG+ if pending)
-//   - Trail visualization
+// Phase 7 Gamma: Hive Mind HUD
+//   - 8×8 grid of mini-status tiles (one per agent)
+//   - Each tile: ID, status (IT/RUN), tribe color, MSG flag
+//   - Collective statistics: total messages, collisions, avg velocity
+//   - Tribe clustering visualization
 // ============================================================================
 
 struct Pixel {
@@ -24,10 +22,13 @@ struct AgentState {
     vel_x: i32,
     vel_y: i32,
     color: u32,
+    tribe: u32,
     is_it: u32,
     message_waiting: u32,
     trail_len: u32,
-    _padding: vec2<u32>,
+    collision_count: u32,
+    message_count: u32,
+    _padding: u32,
     trail: array<u32, 32>,
     mailbox: array<u32, 10>,
 }
@@ -45,7 +46,7 @@ struct Config {
 @group(0) @binding(2) var<uniform> config: Config;
 
 // ============================================================================
-// 5x7 BITMAP FONT
+// 5x7 BITMAP FONT (compact)
 // ============================================================================
 
 fn get_font_column(char_code: u32, col: u32) -> u32 {
@@ -146,6 +147,12 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
         if (col == 1u) { return 0x7Fu; }
         if (col == 2u) { return 0x41u; }
         return 0u;
+    } else if (char_code == 76u) {  // 'L'
+        if (col == 0u) { return 0x7Fu; }
+        if (col == 1u) { return 0x40u; }
+        if (col == 2u) { return 0x40u; }
+        if (col == 3u) { return 0x40u; }
+        if (col == 4u) { return 0x40u; }
     } else if (char_code == 77u) {  // 'M'
         if (col == 0u) { return 0x7Fu; }
         if (col == 1u) { return 0x04u; }
@@ -271,161 +278,23 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
 // ============================================================================
 
 fn draw_char(start_x: u32, start_y: u32, char_code: u32, color_r: u32, color_g: u32, color_b: u32) {
-    // Unrolled 5x7 character
     let col0 = get_font_column(char_code, 0u);
     let col1 = get_font_column(char_code, 1u);
     let col2 = get_font_column(char_code, 2u);
     let col3 = get_font_column(char_code, 3u);
     let col4 = get_font_column(char_code, 4u);
     
-    // Column 0
-    if ((col0 & 1u) != 0u) {
-        let idx = start_y * config.width + start_x;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col0 & 2u) != 0u) {
-        let idx = (start_y + 1u) * config.width + start_x;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col0 & 4u) != 0u) {
-        let idx = (start_y + 2u) * config.width + start_x;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col0 & 8u) != 0u) {
-        let idx = (start_y + 3u) * config.width + start_x;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col0 & 16u) != 0u) {
-        let idx = (start_y + 4u) * config.width + start_x;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col0 & 32u) != 0u) {
-        let idx = (start_y + 5u) * config.width + start_x;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col0 & 64u) != 0u) {
-        let idx = (start_y + 6u) * config.width + start_x;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
+    let columns = array<u32, 5>(col0, col1, col2, col3, col4);
     
-    // Column 1
-    if ((col1 & 1u) != 0u) {
-        let idx = start_y * config.width + start_x + 1u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col1 & 2u) != 0u) {
-        let idx = (start_y + 1u) * config.width + start_x + 1u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col1 & 4u) != 0u) {
-        let idx = (start_y + 2u) * config.width + start_x + 1u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col1 & 8u) != 0u) {
-        let idx = (start_y + 3u) * config.width + start_x + 1u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col1 & 16u) != 0u) {
-        let idx = (start_y + 4u) * config.width + start_x + 1u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col1 & 32u) != 0u) {
-        let idx = (start_y + 5u) * config.width + start_x + 1u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col1 & 64u) != 0u) {
-        let idx = (start_y + 6u) * config.width + start_x + 1u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    
-    // Column 2
-    if ((col2 & 1u) != 0u) {
-        let idx = start_y * config.width + start_x + 2u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col2 & 2u) != 0u) {
-        let idx = (start_y + 1u) * config.width + start_x + 2u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col2 & 4u) != 0u) {
-        let idx = (start_y + 2u) * config.width + start_x + 2u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col2 & 8u) != 0u) {
-        let idx = (start_y + 3u) * config.width + start_x + 2u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col2 & 16u) != 0u) {
-        let idx = (start_y + 4u) * config.width + start_x + 2u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col2 & 32u) != 0u) {
-        let idx = (start_y + 5u) * config.width + start_x + 2u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col2 & 64u) != 0u) {
-        let idx = (start_y + 6u) * config.width + start_x + 2u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    
-    // Column 3
-    if ((col3 & 1u) != 0u) {
-        let idx = start_y * config.width + start_x + 3u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col3 & 2u) != 0u) {
-        let idx = (start_y + 1u) * config.width + start_x + 3u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col3 & 4u) != 0u) {
-        let idx = (start_y + 2u) * config.width + start_x + 3u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col3 & 8u) != 0u) {
-        let idx = (start_y + 3u) * config.width + start_x + 3u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col3 & 16u) != 0u) {
-        let idx = (start_y + 4u) * config.width + start_x + 3u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col3 & 32u) != 0u) {
-        let idx = (start_y + 5u) * config.width + start_x + 3u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col3 & 64u) != 0u) {
-        let idx = (start_y + 6u) * config.width + start_x + 3u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    
-    // Column 4
-    if ((col4 & 1u) != 0u) {
-        let idx = start_y * config.width + start_x + 4u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col4 & 2u) != 0u) {
-        let idx = (start_y + 1u) * config.width + start_x + 4u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col4 & 4u) != 0u) {
-        let idx = (start_y + 2u) * config.width + start_x + 4u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col4 & 8u) != 0u) {
-        let idx = (start_y + 3u) * config.width + start_x + 4u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col4 & 16u) != 0u) {
-        let idx = (start_y + 4u) * config.width + start_x + 4u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col4 & 32u) != 0u) {
-        let idx = (start_y + 5u) * config.width + start_x + 4u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
-    }
-    if ((col4 & 64u) != 0u) {
-        let idx = (start_y + 6u) * config.width + start_x + 4u;
-        if (idx < arrayLength(&buffer_out)) { buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u); }
+    for (c, bits) in columns {
+        for r in 0u..7u {
+            if ((bits >> r) & 1u) != 0u {
+                let idx = (start_y + r) * config.width + start_x + c;
+                if (idx < arrayLength(&buffer_out)) {
+                    buffer_out[idx] = Pixel(color_r, color_g, color_b, 255u);
+                }
+            }
+        }
     }
 }
 
@@ -437,17 +306,11 @@ fn draw_number(x: u32, y: u32, num: u32, color_r: u32, color_g: u32, color_b: u3
         draw_char(x, y, 48u + num / 10u, color_r, color_g, color_b);
         draw_char(x + 6u, y, 48u + num % 10u, color_r, color_g, color_b);
         return x + 12u;
-    } else if (num < 1000u) {
+    } else {
         draw_char(x, y, 48u + num / 100u, color_r, color_g, color_b);
         draw_char(x + 6u, y, 48u + (num / 10u) % 10u, color_r, color_g, color_b);
         draw_char(x + 12u, y, 48u + num % 10u, color_r, color_g, color_b);
         return x + 18u;
-    } else {
-        draw_char(x, y, 48u + num / 1000u, color_r, color_g, color_b);
-        draw_char(x + 6u, y, 48u + (num / 100u) % 10u, color_r, color_g, color_b);
-        draw_char(x + 12u, y, 48u + (num / 10u) % 10u, color_r, color_g, color_b);
-        draw_char(x + 18u, y, 48u + num % 10u, color_r, color_g, color_b);
-        return x + 24u;
     }
 }
 
@@ -459,6 +322,98 @@ fn draw_signed_number(x: u32, y: u32, num: i32, color_r: u32, color_g: u32, colo
         draw_char(x, y, 45u, color_r, color_g, color_b);  // -
         return draw_number(x + 6u, y, u32(-num), color_r, color_g, color_b);
     }
+}
+
+// Get tribe color from tribe ID (0-7)
+fn get_tribe_color(tribe: u32) -> vec3<u32> {
+    let tribe_colors = array<vec3<u32>, 8>(
+        vec3<u32>(255u, 64u, 64u),    // Tribe 0: Red
+        vec3<u32>(64u, 255u, 64u),    // Tribe 1: Green
+        vec3<u32>(64u, 64u, 255u),    // Tribe 2: Blue
+        vec3<u32>(255u, 255u, 64u),   // Tribe 3: Yellow
+        vec3<u32>(255u, 64u, 255u),   // Tribe 4: Magenta
+        vec3<u32>(64u, 255u, 255u),   // Tribe 5: Cyan
+        vec3<u32>(255u, 128u, 64u),   // Tribe 6: Orange
+        vec3<u32>(128u, 64u, 255u),   // Tribe 7: Purple
+    );
+    return tribe_colors[tribe % 8u];
+}
+
+// Draw mini tile for agent (compact 30x35)
+fn draw_agent_tile(tile_x: u32, tile_y: u32, agent: AgentState) {
+    let tribe_color = get_tribe_color(agent.tribe);
+    let tr = tribe_color.x;
+    let tg = tribe_color.y;
+    let tb = tribe_color.z;
+    
+    // Tile border (tribe color)
+    let border_color = Pixel(tr, tg, tb, 255u);
+    
+    // Draw border
+    for dx in 0u..30u {
+        let top_idx = tile_y * config.width + tile_x + dx;
+        let bot_idx = (tile_y + 34u) * config.width + tile_x + dx;
+        if (top_idx < arrayLength(&buffer_out)) { buffer_out[top_idx] = border_color; }
+        if (bot_idx < arrayLength(&buffer_out)) { buffer_out[bot_idx] = border_color; }
+    }
+    for dy in 0u..35u {
+        let left_idx = (tile_y + dy) * config.width + tile_x;
+        let right_idx = (tile_y + dy) * config.width + tile_x + 29u;
+        if (left_idx < arrayLength(&buffer_out)) { buffer_out[left_idx] = border_color; }
+        if (right_idx < arrayLength(&buffer_out)) { buffer_out[right_idx] = border_color; }
+    }
+    
+    // Agent ID (2 digits)
+    let id_tens = agent.id / 10u;
+    let id_ones = agent.id % 10u;
+    draw_char(tile_x + 3u, tile_y + 3u, 48u + id_tens, 255u, 255u, 255u);
+    draw_char(tile_x + 9u, tile_y + 3u, 48u + id_ones, 255u, 255u, 255u);
+    
+    // Status indicator (IT/RUN)
+    if (agent.is_it == 1u) {
+        draw_char(tile_x + 3u, tile_y + 12u, 73u, 255u, 100u, 100u);  // I
+        draw_char(tile_x + 9u, tile_y + 12u, 84u, 255u, 100u, 100u);  // T
+    } else {
+        draw_char(tile_x + 3u, tile_y + 12u, 82u, 100u, 255u, 100u);  // R
+    }
+    
+    // Tribe indicator (colored bar)
+    for dx in 0u..24u {
+        let idx = (tile_y + 22u) * config.width + tile_x + 3u + dx;
+        if (idx < arrayLength(&buffer_out)) {
+            buffer_out[idx] = Pixel(tr, tg, tb, 255u);
+        }
+    }
+    
+    // Message waiting indicator
+    if (agent.message_waiting == 1u) {
+        draw_char(tile_x + 20u, tile_y + 3u, 77u, 255u, 255u, 0u);  // M (yellow)
+    }
+    
+    // Collision indicator (small dot if recent collision)
+    if (agent.collision_count > 0u) {
+        let dot_idx = (tile_y + 27u) * config.width + tile_x + 3u;
+        if (dot_idx < arrayLength(&buffer_out)) {
+            buffer_out[dot_idx] = Pixel(255u, 128u, 0u, 255u);
+        }
+    }
+}
+
+// Calculate collective stats
+fn calculate_total_messages() -> u32 {
+    var total = 0u;
+    for (i = 0u; i < 64u; i++) {
+        total += agents[i].message_count;
+    }
+    return total;
+}
+
+fn calculate_total_collisions() -> u32 {
+    var total = 0u;
+    for (i = 0u; i < 64u; i++) {
+        total += agents[i].collision_count;
+    }
+    return total;
 }
 
 // ============================================================================
@@ -481,14 +436,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     buffer_out[idx] = Pixel(0u, 0u, 0u, 255u);
     
     // ========================================
-    // HUD Zone (top 55 rows)
+    // HUD Zone (top 95 rows)
     // ========================================
-    if (y < 55u) {
+    if (y < 95u) {
         // Background
         buffer_out[idx] = Pixel(10u, 10u, 20u, 255u);
         
         // Title
-        if (y >= 2u && y < 10u && x < 200u) {
+        if (y >= 2u && y < 10u && x < 350u) {
             draw_char(10u, 2u, 83u, 0u, 255u, 200u);  // S
             draw_char(16u, 2u, 80u, 0u, 255u, 200u);  // P
             draw_char(22u, 2u, 65u, 0u, 255u, 200u);  // A
@@ -502,576 +457,138 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             draw_char(70u, 2u, 65u, 0u, 255u, 200u);  // A
             draw_char(76u, 2u, 82u, 0u, 255u, 200u);  // R
             draw_char(82u, 2u, 77u, 0u, 255u, 200u);  // M
-        }
-        
-        // Frame counter
-        if (y >= 2u && y < 10u && x >= 540u) {
-            draw_char(540u, 2u, 70u, 150u, 150u, 150u);  // F
-            draw_char(546u, 2u, 82u, 150u, 150u, 150u);  // R
-            draw_char(552u, 2u, 65u, 150u, 150u, 150u);  // A
-            draw_char(558u, 2u, 77u, 150u, 150u, 150u);  // M
-            draw_char(564u, 2u, 69u, 150u, 150u, 150u);  // E
-            draw_char(570u, 2u, 58u, 150u, 150u, 150u);  // :
-            draw_number(580u, 2u, config.frame, 150u, 150u, 150u);
-        }
-        
-        // Agent panels - draw status for all 8 agents
-        // Row 1: Agents 0-3 (y: 15-42)
-        // Row 2: Agents 4-7 (y: 15-42, second column)
-        
-        // Agent 0
-        if (y >= 15u && y < 42u && x >= 2u && x < 78u) {
-            let agent = agents[0u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
             
-            // Border
-            if (y == 15u || y == 41u || x == 2u || x == 77u) {
-                buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-            } else {
-                // ID and status
-                if (y >= 18u && y < 26u) {
-                    draw_char(6u, 18u, 48u, 255u, 255u, 255u);  // 0
-                    draw_char(12u, 18u, 58u, 150u, 150u, 150u);  // :
-                    if (agent.is_it == 1u) {
-                        draw_char(18u, 18u, 73u, 255u, 100u, 100u);  // I
-                        draw_char(24u, 18u, 84u, 255u, 100u, 100u);  // T
-                    } else {
-                        draw_char(18u, 18u, 82u, 100u, 255u, 100u);  // R
-                        draw_char(24u, 18u, 85u, 100u, 255u, 100u);  // U
-                        draw_char(30u, 18u, 78u, 100u, 255u, 100u);  // N
-                    }
-                }
-                // POS
-                if (y >= 26u && y < 34u) {
-                    draw_char(6u, 26u, 80u, 200u, 200u, 200u);  // P
-                    draw_char(12u, 26u, 58u, 200u, 200u, 200u);  // :
-                    let cx = draw_number(18u, 26u, agent.pos_x, 200u, 200u, 200u);
-                    draw_char(cx, 26u, 44u, 200u, 200u, 200u);  // ,
-                    draw_number(cx + 6u, 26u, agent.pos_y, 200u, 200u, 200u);
-                }
-                // VEL
-                if (y >= 34u && y < 42u) {
-                    draw_char(6u, 34u, 86u, 100u, 255u, 100u);  // V
-                    draw_char(12u, 34u, 58u, 100u, 255u, 100u);  // :
-                    let cx = draw_signed_number(18u, 34u, agent.vel_x, 100u, 255u, 100u);
-                    draw_char(cx, 34u, 44u, 100u, 255u, 100u);  // ,
-                    draw_signed_number(cx + 6u, 34u, agent.vel_y, 100u, 255u, 100u);
-                }
+            draw_char(94u, 2u, 45u, 150u, 150u, 150u);  // -
+            
+            draw_char(100u, 2u, 54u, 0u, 255u, 200u);  // 6
+            draw_char(106u, 2u, 52u, 0u, 255u, 200u);  // 4
+            
+            draw_char(118u, 2u, 65u, 255u, 200u, 0u);  // A
+            draw_char(124u, 2u, 71u, 255u, 200u, 0u);  // G
+            draw_char(130u, 2u, 69u, 255u, 200u, 0u);  // E
+            draw_char(136u, 2u, 78u, 255u, 200u, 0u);  // N
+            draw_char(142u, 2u, 84u, 255u, 200u, 0u);  // T
+            draw_char(148u, 2u, 83u, 255u, 200u, 0u);  // S
+        }
+        
+        // Frame counter (top right)
+        if (y >= 2u && y < 10u && x >= 1180u) {
+            draw_char(1180u, 2u, 70u, 150u, 150u, 150u);  // F
+            draw_char(1186u, 2u, 82u, 150u, 150u, 150u);  // R
+            draw_char(1192u, 2u, 65u, 150u, 150u, 150u);  // A
+            draw_char(1198u, 2u, 77u, 150u, 150u, 150u);  // M
+            draw_char(1204u, 2u, 69u, 150u, 150u, 150u);  // E
+            draw_char(1210u, 2u, 58u, 150u, 150u, 150u);  // :
+            draw_number(1220u, 2u, config.frame, 150u, 150u, 150u);
+        }
+        
+        // Collective stats (top right, row 2)
+        if (y >= 12u && y < 20u && x >= 1050u) {
+            let total_msgs = calculate_total_messages();
+            let total_colls = calculate_total_collisions();
+            
+            draw_char(1050u, 12u, 77u, 255u, 255u, 0u);  // M
+            draw_char(1056u, 12u, 83u, 255u, 255u, 0u);  // S
+            draw_char(1062u, 12u, 71u, 255u, 255u, 0u);  // G
+            draw_char(1068u, 12u, 58u, 255u, 255u, 0u);  // :
+            draw_number(1078u, 12u, total_msgs, 255u, 255u, 0u);
+            
+            draw_char(1120u, 12u, 67u, 255u, 128u, 0u);  // C
+            draw_char(1126u, 12u, 79u, 255u, 128u, 0u);  // O
+            draw_char(1132u, 12u, 76u, 255u, 128u, 0u);  // L
+            draw_char(1138u, 12u, 76u, 255u, 128u, 0u);  // L
+            draw_char(1144u, 12u, 58u, 255u, 128u, 0u);  // :
+            draw_number(1154u, 12u, total_colls, 255u, 128u, 0u);
+        }
+        
+        // 8×8 Agent tile grid
+        // Each tile: 30x35 pixels
+        // Grid: 8 cols × 2 rows (wrapping)
+        // Actually: single row of 8 columns, each containing 8 agents stacked
+        
+        // Layout: 4 rows of 16 agents each
+        // Row 0: agents 0-15
+        // Row 1: agents 16-31
+        // Row 2: agents 32-47
+        // Row 3: agents 48-63
+        
+        let tile_width = 32u;
+        let tile_height = 36u;
+        let grid_start_x = 10u;
+        let grid_start_y = 22u;
+        
+        // Draw all 64 agent tiles
+        for (agent_idx = 0u; agent_idx < 64u; agent_idx++) {
+            let row = agent_idx / 16u;
+            let col = agent_idx % 16u;
+            
+            let tile_x = grid_start_x + col * tile_width;
+            let tile_y = grid_start_y + row * tile_height;
+            
+            // Check if current pixel is in this tile
+            if (x >= tile_x && x < tile_x + 30u && y >= tile_y && y < tile_y + 35u) {
+                draw_agent_tile(tile_x, tile_y, agents[agent_idx]);
             }
         }
         
-        // Agent 1
-        if (y >= 15u && y < 42u && x >= 82u && x < 158u) {
-            let agent = agents[1u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (y == 15u || y == 41u || x == 82u || x == 157u) {
-                buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-            } else if (y >= 18u && y < 26u) {
-                draw_char(86u, 18u, 49u, 255u, 255u, 255u);
-                draw_char(92u, 18u, 58u, 150u, 150u, 150u);
-                if (agent.is_it == 1u) {
-                    draw_char(98u, 18u, 73u, 255u, 100u, 100u);
-                    draw_char(104u, 18u, 84u, 255u, 100u, 100u);
-                } else {
-                    draw_char(98u, 18u, 82u, 100u, 255u, 100u);
-                    draw_char(104u, 18u, 85u, 100u, 255u, 100u);
-                    draw_char(110u, 18u, 78u, 100u, 255u, 100u);
+        // Tribe legend (right side)
+        if (x >= 1150u && x < 1270u && y >= 40u && y < 95u) {
+            let legend_y = 45u;
+            for (tribe in 0u..8u) {
+                let tc = get_tribe_color(tribe);
+                let ly = legend_y + tribe * 6u;
+                
+                // Color swatch
+                if (y >= ly && y < ly + 5u && x >= 1150u && x < 1160u) {
+                    buffer_out[idx] = Pixel(tc.x, tc.y, tc.z, 255u);
                 }
-            } else if (y >= 26u && y < 34u) {
-                draw_char(86u, 26u, 80u, 200u, 200u, 200u);
-                draw_char(92u, 26u, 58u, 200u, 200u, 200u);
-                let cx = draw_number(98u, 26u, agent.pos_x, 200u, 200u, 200u);
-                draw_char(cx, 26u, 44u, 200u, 200u, 200u);
-                draw_number(cx + 6u, 26u, agent.pos_y, 200u, 200u, 200u);
-            } else if (y >= 34u && y < 42u) {
-                draw_char(86u, 34u, 86u, 100u, 255u, 100u);
-                draw_char(92u, 34u, 58u, 100u, 255u, 100u);
-                let cx = draw_signed_number(98u, 34u, agent.vel_x, 100u, 255u, 100u);
-                draw_char(cx, 34u, 44u, 100u, 255u, 100u);
-                draw_signed_number(cx + 6u, 34u, agent.vel_y, 100u, 255u, 100u);
-            }
-        }
-        
-        // Agent 2
-        if (y >= 15u && y < 42u && x >= 162u && x < 238u) {
-            let agent = agents[2u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (y == 15u || y == 41u || x == 162u || x == 237u) {
-                buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-            } else if (y >= 18u && y < 26u) {
-                draw_char(166u, 18u, 50u, 255u, 255u, 255u);
-                draw_char(172u, 18u, 58u, 150u, 150u, 150u);
-                if (agent.is_it == 1u) {
-                    draw_char(178u, 18u, 73u, 255u, 100u, 100u);
-                    draw_char(184u, 18u, 84u, 255u, 100u, 100u);
-                } else {
-                    draw_char(178u, 18u, 82u, 100u, 255u, 100u);
-                    draw_char(184u, 18u, 85u, 100u, 255u, 100u);
-                    draw_char(190u, 18u, 78u, 100u, 255u, 100u);
+                
+                // Tribe label
+                if (y >= ly && y < ly + 5u && x >= 1165u) {
+                    draw_char(1165u, ly, 84u, tc.x, tc.y, tc.z);  // T
+                    draw_char(1171u, ly, 58u, tc.x, tc.y, tc.z);  // :
+                    draw_number(1177u, ly, tribe, tc.x, tc.y, tc.z);
                 }
-            } else if (y >= 26u && y < 34u) {
-                draw_char(166u, 26u, 80u, 200u, 200u, 200u);
-                draw_char(172u, 26u, 58u, 200u, 200u, 200u);
-                let cx = draw_number(178u, 26u, agent.pos_x, 200u, 200u, 200u);
-                draw_char(cx, 26u, 44u, 200u, 200u, 200u);
-                draw_number(cx + 6u, 26u, agent.pos_y, 200u, 200u, 200u);
-            } else if (y >= 34u && y < 42u) {
-                draw_char(166u, 34u, 86u, 100u, 255u, 100u);
-                draw_char(172u, 34u, 58u, 100u, 255u, 100u);
-                let cx = draw_signed_number(178u, 34u, agent.vel_x, 100u, 255u, 100u);
-                draw_char(cx, 34u, 44u, 100u, 255u, 100u);
-                draw_signed_number(cx + 6u, 34u, agent.vel_y, 100u, 255u, 100u);
-            }
-        }
-        
-        // Agent 3
-        if (y >= 15u && y < 42u && x >= 242u && x < 318u) {
-            let agent = agents[3u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (y == 15u || y == 41u || x == 242u || x == 317u) {
-                buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-            } else if (y >= 18u && y < 26u) {
-                draw_char(246u, 18u, 51u, 255u, 255u, 255u);
-                draw_char(252u, 18u, 58u, 150u, 150u, 150u);
-                if (agent.is_it == 1u) {
-                    draw_char(258u, 18u, 73u, 255u, 100u, 100u);
-                    draw_char(264u, 18u, 84u, 255u, 100u, 100u);
-                } else {
-                    draw_char(258u, 18u, 82u, 100u, 255u, 100u);
-                    draw_char(264u, 18u, 85u, 100u, 255u, 100u);
-                    draw_char(270u, 18u, 78u, 100u, 255u, 100u);
-                }
-            } else if (y >= 26u && y < 34u) {
-                draw_char(246u, 26u, 80u, 200u, 200u, 200u);
-                draw_char(252u, 26u, 58u, 200u, 200u, 200u);
-                let cx = draw_number(258u, 26u, agent.pos_x, 200u, 200u, 200u);
-                draw_char(cx, 26u, 44u, 200u, 200u, 200u);
-                draw_number(cx + 6u, 26u, agent.pos_y, 200u, 200u, 200u);
-            } else if (y >= 34u && y < 42u) {
-                draw_char(246u, 34u, 86u, 100u, 255u, 100u);
-                draw_char(252u, 34u, 58u, 100u, 255u, 100u);
-                let cx = draw_signed_number(258u, 34u, agent.vel_x, 100u, 255u, 100u);
-                draw_char(cx, 34u, 44u, 100u, 255u, 100u);
-                draw_signed_number(cx + 6u, 34u, agent.vel_y, 100u, 255u, 100u);
-            }
-        }
-        
-        // Agent 4
-        if (y >= 15u && y < 42u && x >= 322u && x < 398u) {
-            let agent = agents[4u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (y == 15u || y == 41u || x == 322u || x == 397u) {
-                buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-            } else if (y >= 18u && y < 26u) {
-                draw_char(326u, 18u, 52u, 255u, 255u, 255u);
-                draw_char(332u, 18u, 58u, 150u, 150u, 150u);
-                if (agent.is_it == 1u) {
-                    draw_char(338u, 18u, 73u, 255u, 100u, 100u);
-                    draw_char(344u, 18u, 84u, 255u, 100u, 100u);
-                } else {
-                    draw_char(338u, 18u, 82u, 100u, 255u, 100u);
-                    draw_char(344u, 18u, 85u, 100u, 255u, 100u);
-                    draw_char(350u, 18u, 78u, 100u, 255u, 100u);
-                }
-            } else if (y >= 26u && y < 34u) {
-                draw_char(326u, 26u, 80u, 200u, 200u, 200u);
-                draw_char(332u, 26u, 58u, 200u, 200u, 200u);
-                let cx = draw_number(338u, 26u, agent.pos_x, 200u, 200u, 200u);
-                draw_char(cx, 26u, 44u, 200u, 200u, 200u);
-                draw_number(cx + 6u, 26u, agent.pos_y, 200u, 200u, 200u);
-            } else if (y >= 34u && y < 42u) {
-                draw_char(326u, 34u, 86u, 100u, 255u, 100u);
-                draw_char(332u, 34u, 58u, 100u, 255u, 100u);
-                let cx = draw_signed_number(338u, 34u, agent.vel_x, 100u, 255u, 100u);
-                draw_char(cx, 34u, 44u, 100u, 255u, 100u);
-                draw_signed_number(cx + 6u, 34u, agent.vel_y, 100u, 255u, 100u);
-            }
-        }
-        
-        // Agent 5
-        if (y >= 15u && y < 42u && x >= 402u && x < 478u) {
-            let agent = agents[5u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (y == 15u || y == 41u || x == 402u || x == 477u) {
-                buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-            } else if (y >= 18u && y < 26u) {
-                draw_char(406u, 18u, 53u, 255u, 255u, 255u);
-                draw_char(412u, 18u, 58u, 150u, 150u, 150u);
-                if (agent.is_it == 1u) {
-                    draw_char(418u, 18u, 73u, 255u, 100u, 100u);
-                    draw_char(424u, 18u, 84u, 255u, 100u, 100u);
-                } else {
-                    draw_char(418u, 18u, 82u, 100u, 255u, 100u);
-                    draw_char(424u, 18u, 85u, 100u, 255u, 100u);
-                    draw_char(430u, 18u, 78u, 100u, 255u, 100u);
-                }
-            } else if (y >= 26u && y < 34u) {
-                draw_char(406u, 26u, 80u, 200u, 200u, 200u);
-                draw_char(412u, 26u, 58u, 200u, 200u, 200u);
-                let cx = draw_number(418u, 26u, agent.pos_x, 200u, 200u, 200u);
-                draw_char(cx, 26u, 44u, 200u, 200u, 200u);
-                draw_number(cx + 6u, 26u, agent.pos_y, 200u, 200u, 200u);
-            } else if (y >= 34u && y < 42u) {
-                draw_char(406u, 34u, 86u, 100u, 255u, 100u);
-                draw_char(412u, 34u, 58u, 100u, 255u, 100u);
-                let cx = draw_signed_number(418u, 34u, agent.vel_x, 100u, 255u, 100u);
-                draw_char(cx, 34u, 44u, 100u, 255u, 100u);
-                draw_signed_number(cx + 6u, 34u, agent.vel_y, 100u, 255u, 100u);
-            }
-        }
-        
-        // Agent 6
-        if (y >= 15u && y < 42u && x >= 482u && x < 558u) {
-            let agent = agents[6u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (y == 15u || y == 41u || x == 482u || x == 557u) {
-                buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-            } else if (y >= 18u && y < 26u) {
-                draw_char(486u, 18u, 54u, 255u, 255u, 255u);
-                draw_char(492u, 18u, 58u, 150u, 150u, 150u);
-                if (agent.is_it == 1u) {
-                    draw_char(498u, 18u, 73u, 255u, 100u, 100u);
-                    draw_char(504u, 18u, 84u, 255u, 100u, 100u);
-                } else {
-                    draw_char(498u, 18u, 82u, 100u, 255u, 100u);
-                    draw_char(504u, 18u, 85u, 100u, 255u, 100u);
-                    draw_char(510u, 18u, 78u, 100u, 255u, 100u);
-                }
-            } else if (y >= 26u && y < 34u) {
-                draw_char(486u, 26u, 80u, 200u, 200u, 200u);
-                draw_char(492u, 26u, 58u, 200u, 200u, 200u);
-                let cx = draw_number(498u, 26u, agent.pos_x, 200u, 200u, 200u);
-                draw_char(cx, 26u, 44u, 200u, 200u, 200u);
-                draw_number(cx + 6u, 26u, agent.pos_y, 200u, 200u, 200u);
-            } else if (y >= 34u && y < 42u) {
-                draw_char(486u, 34u, 86u, 100u, 255u, 100u);
-                draw_char(492u, 34u, 58u, 100u, 255u, 100u);
-                let cx = draw_signed_number(498u, 34u, agent.vel_x, 100u, 255u, 100u);
-                draw_char(cx, 34u, 44u, 100u, 255u, 100u);
-                draw_signed_number(cx + 6u, 34u, agent.vel_y, 100u, 255u, 100u);
-            }
-        }
-        
-        // Agent 7
-        if (y >= 15u && y < 42u && x >= 562u && x < 638u) {
-            let agent = agents[7u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (y == 15u || y == 41u || x == 562u || x == 637u) {
-                buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-            } else if (y >= 18u && y < 26u) {
-                draw_char(566u, 18u, 55u, 255u, 255u, 255u);
-                draw_char(572u, 18u, 58u, 150u, 150u, 150u);
-                if (agent.is_it == 1u) {
-                    draw_char(578u, 18u, 73u, 255u, 100u, 100u);
-                    draw_char(584u, 18u, 84u, 255u, 100u, 100u);
-                } else {
-                    draw_char(578u, 18u, 82u, 100u, 255u, 100u);
-                    draw_char(584u, 18u, 85u, 100u, 255u, 100u);
-                    draw_char(590u, 18u, 78u, 100u, 255u, 100u);
-                }
-            } else if (y >= 26u && y < 34u) {
-                draw_char(566u, 26u, 80u, 200u, 200u, 200u);
-                draw_char(572u, 26u, 58u, 200u, 200u, 200u);
-                let cx = draw_number(578u, 26u, agent.pos_x, 200u, 200u, 200u);
-                draw_char(cx, 26u, 44u, 200u, 200u, 200u);
-                draw_number(cx + 6u, 26u, agent.pos_y, 200u, 200u, 200u);
-            } else if (y >= 34u && y < 42u) {
-                draw_char(566u, 34u, 86u, 100u, 255u, 100u);
-                draw_char(572u, 34u, 58u, 100u, 255u, 100u);
-                let cx = draw_signed_number(578u, 34u, agent.vel_x, 100u, 255u, 100u);
-                draw_char(cx, 34u, 44u, 100u, 255u, 100u);
-                draw_signed_number(cx + 6u, 34u, agent.vel_y, 100u, 255u, 100u);
             }
         }
     }
     
     // ========================================
-    // Main Framebuffer Area (rows 60+)
+    // Main Framebuffer Area (rows 100+)
     // ========================================
-    if (y >= 60u) {
+    if (y >= 100u) {
         // Draw grid
         if (x % 50u == 0u || y % 50u == 0u) {
             buffer_out[idx] = Pixel(15u, 15u, 25u, 255u);
         }
         
         // Draw boundary
-        if (x == 10u || x == config.width - 11u || y == 60u || y == config.height - 11u) {
+        if (x == 10u || x == config.width - 11u || y == 100u || y == config.height - 11u) {
             buffer_out[idx] = Pixel(50u, 50u, 100u, 255u);
         }
         
-        // Draw agent trails and positions (unrolled for 8 agents)
-        // Agent 0
-        {
-            let agent = agents[0u];
+        // Draw all 64 agents (with trails)
+        for (agent_idx in 0u..64u) {
+            let agent = agents[agent_idx];
             let acolor = agent.color;
             let ar = (acolor >> 24u) & 0xFFu;
             let ag = (acolor >> 16u) & 0xFFu;
             let ab = (acolor >> 8u) & 0xFFu;
             
-            // Trail points (check first 8)
+            // Trail (first point only for performance)
             if (agent.trail_len > 0u) {
                 let packed = agent.trail[0u];
                 let tx = packed >> 16u;
                 let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
-                    buffer_out[idx] = Pixel(ar/4u, ag/4u, ab/4u, 255u);
-                }
-            }
-            if (agent.trail_len > 4u) {
-                let packed = agent.trail[4u];
-                let tx = packed >> 16u;
-                let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
-                    buffer_out[idx] = Pixel(ar/2u, ag/2u, ab/2u, 255u);
-                }
-            }
-            if (agent.trail_len > 8u) {
-                let packed = agent.trail[8u];
-                let tx = packed >> 16u;
-                let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
-                    buffer_out[idx] = Pixel(ar*3u/4u, ag*3u/4u, ab*3u/4u, 255u);
-                }
-            }
-            
-            // Agent position (5x5)
-            let ax = agent.pos_x;
-            let ay = agent.pos_y;
-            if (ay >= 60u && x >= ax && x < ax + 5u && y >= ay && y < ay + 5u) {
-                if (agent.is_it == 1u) {
-                    let pulse = 200u + ((config.frame % 30u) * 2u);
-                    buffer_out[idx] = Pixel(pulse, pulse, pulse, 255u);
-                } else {
-                    buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-                }
-            }
-        }
-        
-        // Agent 1
-        {
-            let agent = agents[1u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (agent.trail_len > 0u) {
-                let packed = agent.trail[0u];
-                let tx = packed >> 16u;
-                let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
+                if (ty >= 100u && x == tx && y == ty) {
                     buffer_out[idx] = Pixel(ar/4u, ag/4u, ab/4u, 255u);
                 }
             }
             
+            // Agent position (3x3 for compactness with 64 agents)
             let ax = agent.pos_x;
             let ay = agent.pos_y;
-            if (ay >= 60u && x >= ax && x < ax + 5u && y >= ay && y < ay + 5u) {
-                if (agent.is_it == 1u) {
-                    let pulse = 200u + ((config.frame % 30u) * 2u);
-                    buffer_out[idx] = Pixel(pulse, pulse, pulse, 255u);
-                } else {
-                    buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-                }
-            }
-        }
-        
-        // Agent 2
-        {
-            let agent = agents[2u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (agent.trail_len > 0u) {
-                let packed = agent.trail[0u];
-                let tx = packed >> 16u;
-                let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
-                    buffer_out[idx] = Pixel(ar/4u, ag/4u, ab/4u, 255u);
-                }
-            }
-            
-            let ax = agent.pos_x;
-            let ay = agent.pos_y;
-            if (ay >= 60u && x >= ax && x < ax + 5u && y >= ay && y < ay + 5u) {
-                if (agent.is_it == 1u) {
-                    let pulse = 200u + ((config.frame % 30u) * 2u);
-                    buffer_out[idx] = Pixel(pulse, pulse, pulse, 255u);
-                } else {
-                    buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-                }
-            }
-        }
-        
-        // Agent 3
-        {
-            let agent = agents[3u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (agent.trail_len > 0u) {
-                let packed = agent.trail[0u];
-                let tx = packed >> 16u;
-                let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
-                    buffer_out[idx] = Pixel(ar/4u, ag/4u, ab/4u, 255u);
-                }
-            }
-            
-            let ax = agent.pos_x;
-            let ay = agent.pos_y;
-            if (ay >= 60u && x >= ax && x < ax + 5u && y >= ay && y < ay + 5u) {
-                if (agent.is_it == 1u) {
-                    let pulse = 200u + ((config.frame % 30u) * 2u);
-                    buffer_out[idx] = Pixel(pulse, pulse, pulse, 255u);
-                } else {
-                    buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-                }
-            }
-        }
-        
-        // Agent 4
-        {
-            let agent = agents[4u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (agent.trail_len > 0u) {
-                let packed = agent.trail[0u];
-                let tx = packed >> 16u;
-                let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
-                    buffer_out[idx] = Pixel(ar/4u, ag/4u, ab/4u, 255u);
-                }
-            }
-            
-            let ax = agent.pos_x;
-            let ay = agent.pos_y;
-            if (ay >= 60u && x >= ax && x < ax + 5u && y >= ay && y < ay + 5u) {
-                if (agent.is_it == 1u) {
-                    let pulse = 200u + ((config.frame % 30u) * 2u);
-                    buffer_out[idx] = Pixel(pulse, pulse, pulse, 255u);
-                } else {
-                    buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-                }
-            }
-        }
-        
-        // Agent 5
-        {
-            let agent = agents[5u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (agent.trail_len > 0u) {
-                let packed = agent.trail[0u];
-                let tx = packed >> 16u;
-                let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
-                    buffer_out[idx] = Pixel(ar/4u, ag/4u, ab/4u, 255u);
-                }
-            }
-            
-            let ax = agent.pos_x;
-            let ay = agent.pos_y;
-            if (ay >= 60u && x >= ax && x < ax + 5u && y >= ay && y < ay + 5u) {
-                if (agent.is_it == 1u) {
-                    let pulse = 200u + ((config.frame % 30u) * 2u);
-                    buffer_out[idx] = Pixel(pulse, pulse, pulse, 255u);
-                } else {
-                    buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-                }
-            }
-        }
-        
-        // Agent 6
-        {
-            let agent = agents[6u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (agent.trail_len > 0u) {
-                let packed = agent.trail[0u];
-                let tx = packed >> 16u;
-                let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
-                    buffer_out[idx] = Pixel(ar/4u, ag/4u, ab/4u, 255u);
-                }
-            }
-            
-            let ax = agent.pos_x;
-            let ay = agent.pos_y;
-            if (ay >= 60u && x >= ax && x < ax + 5u && y >= ay && y < ay + 5u) {
-                if (agent.is_it == 1u) {
-                    let pulse = 200u + ((config.frame % 30u) * 2u);
-                    buffer_out[idx] = Pixel(pulse, pulse, pulse, 255u);
-                } else {
-                    buffer_out[idx] = Pixel(ar, ag, ab, 255u);
-                }
-            }
-        }
-        
-        // Agent 7
-        {
-            let agent = agents[7u];
-            let acolor = agent.color;
-            let ar = (acolor >> 24u) & 0xFFu;
-            let ag = (acolor >> 16u) & 0xFFu;
-            let ab = (acolor >> 8u) & 0xFFu;
-            
-            if (agent.trail_len > 0u) {
-                let packed = agent.trail[0u];
-                let tx = packed >> 16u;
-                let ty = packed & 0xFFFFu;
-                if (ty >= 60u && x == tx && y == ty) {
-                    buffer_out[idx] = Pixel(ar/4u, ag/4u, ab/4u, 255u);
-                }
-            }
-            
-            let ax = agent.pos_x;
-            let ay = agent.pos_y;
-            if (ay >= 60u && x >= ax && x < ax + 5u && y >= ay && y < ay + 5u) {
+            if (ay >= 100u && x >= ax && x < ax + 3u && y >= ay && y < ay + 3u) {
                 if (agent.is_it == 1u) {
                     let pulse = 200u + ((config.frame % 30u) * 2u);
                     buffer_out[idx] = Pixel(pulse, pulse, pulse, 255u);
@@ -1089,36 +606,21 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         buffer_out[idx] = Pixel(10u, 10u, 20u, 255u);
         
         if (y >= config.height - 8u && y < config.height - 2u) {
-            // Opcodes: $ SPAWN | p POS | > MOVE | x SENSE | ! PUNCH | ^ SEND | ? RECV
             let ref_y = config.height - 8u;
             
+            // Compact opcode display
             draw_char(10u, ref_y, 36u, 100u, 150u, 200u);  // $
-            draw_char(16u, ref_y, 80u, 80u, 80u, 80u);  // P
-            draw_char(22u, ref_y, 58u, 80u, 80u, 80u);  // :
-            
-            draw_char(60u, ref_y, 112u, 100u, 150u, 200u);  // p
-            draw_char(66u, ref_y, 80u, 80u, 80u, 80u);  // P
-            draw_char(72u, ref_y, 58u, 80u, 80u, 80u);  // :
-            
-            draw_char(110u, ref_y, 62u, 100u, 150u, 200u);  // >
-            draw_char(116u, ref_y, 77u, 80u, 80u, 80u);  // M
-            draw_char(122u, ref_y, 58u, 80u, 80u, 80u);  // :
-            
-            draw_char(160u, ref_y, 120u, 100u, 150u, 200u);  // x
-            draw_char(166u, ref_y, 83u, 80u, 80u, 80u);  // S
-            draw_char(172u, ref_y, 58u, 80u, 80u, 80u);  // :
-            
-            draw_char(210u, ref_y, 33u, 100u, 150u, 200u);  // !
-            draw_char(216u, ref_y, 67u, 80u, 80u, 80u);  // C
-            draw_char(222u, ref_y, 58u, 80u, 80u, 80u);  // :
-            
-            draw_char(260u, ref_y, 94u, 100u, 150u, 200u);  // ^
-            draw_char(266u, ref_y, 84u, 80u, 80u, 80u);  // T
-            draw_char(272u, ref_y, 58u, 80u, 80u, 80u);  // :
-            
-            draw_char(310u, ref_y, 63u, 100u, 150u, 200u);  // ?
-            draw_char(316u, ref_y, 82u, 80u, 80u, 80u);  // R
-            draw_char(322u, ref_y, 58u, 80u, 80u, 80u);  // :
+            draw_char(16u, ref_y, 112u, 80u, 80u, 80u);    // p
+            draw_char(28u, ref_y, 62u, 100u, 150u, 200u);  // >
+            draw_char(34u, ref_y, 109u, 80u, 80u, 80u);    // m
+            draw_char(46u, ref_y, 120u, 100u, 150u, 200u); // x
+            draw_char(52u, ref_y, 115u, 80u, 80u, 80u);    // s
+            draw_char(64u, ref_y, 33u, 100u, 150u, 200u);  // !
+            draw_char(70u, ref_y, 99u, 80u, 80u, 80u);     // c
+            draw_char(82u, ref_y, 94u, 100u, 150u, 200u);  // ^
+            draw_char(88u, ref_y, 116u, 80u, 80u, 80u);    // t
+            draw_char(100u, ref_y, 63u, 100u, 150u, 200u); // ?
+            draw_char(106u, ref_y, 114u, 80u, 80u, 80u);   // r
         }
     }
 }
