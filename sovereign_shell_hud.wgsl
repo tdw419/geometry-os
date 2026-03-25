@@ -102,14 +102,13 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let char_col = (col - INPUT_ZONE_MARGIN) / 6u;
     let pixel_col = (col - INPUT_ZONE_MARGIN) % 6u;
     let global_char_idx = line_index * 32u + char_col;
-    let user_char_col = char_col;
-    let adjusted_word_idx = global_char_idx / 4u;
-    let adjusted_byte_idx = (line_index * 64u + user_char_col) % 4u;
+    let word_idx = global_char_idx >> 2u;  // Optimized: /4 via bit shift (faster than div)
+    let byte_idx = global_char_idx & 3u;   // Optimized: %4 via bitwise AND (fixes char mapping)
     
-    if (adjusted_word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }
+    if (word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }
 
-    let packed = input_buffer[adjusted_word_idx];
-    let char_code = (packed >> (adjusted_byte_idx * 8u)) & 0xFFu;
+    let packed = input_buffer[word_idx];
+    let char_code = (packed >> (byte_idx << 3u)) & 0xFFu;  // Optimized: *8 via bit shift
 
     // Blinking cursor at end of input (32-frame cycle = ~500ms at 60fps)
     // Input length stored in dedicated metadata word 47 upper byte (avoids chars 188-191)
