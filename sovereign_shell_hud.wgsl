@@ -69,27 +69,6 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // OCR-optimized for qwen3-vl-8b vision model extraction
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
-    // Simplified text rendering logic
-    let boundary = get_input_zone_boundary(row, col, width);
-    if (boundary > 0u) { return vec3<u32>(0u, 255u, 255u); }
-    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
-    let local_row = row - INPUT_ZONE_TOP;
-    let char_col = col / 6u;
-    let pixel_col = col % 6u;
-    if (pixel_col >= 5u) { return vec3<u32>(10u, 15u, 25u); }
-    let global_char_idx = line_index * 64u + char_col;
-    let word_idx = global_char_idx / 4u;
-    let byte_idx = global_char_idx % 4u;
-    if (word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }
-    let packed = input_buffer[word_idx];
-    let char_code = (packed >> (byte_idx * 8u)) & 0xFFu;
-    if (global_char_idx == input_len && (config.frame & 32u) != 0u) { return vec3<u32>(255u, 255u, 0u); }
-    if (char_code == 0u || char_row >= 7u) { return vec3<u32>(10u, 15u, 25u); }
-    let font_bits = get_font_column(char_code, pixel_col);
-    let bit_pos = 6u - char_row;
-    if (((font_bits >> bit_pos) & 1u) != 0u) { return vec3<u32>(0u, 255u, 255u); }
-    return vec3<u32>(10u, 15u, 25u);
-}
     // Priority 1: Render cyan boundary markers for OCR detection (rows 449 and 480)
     let boundary = get_input_zone_boundary(row, col, width);
     if (boundary > 0u) {
