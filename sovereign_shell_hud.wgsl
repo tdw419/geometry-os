@@ -200,10 +200,7 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     return vec3<u32>(0u, 0u, 0u);
 }
 
-// 5x7 bitmap font - each char is 5 columns x 7 rows, packed into 35 bits
-// Supports: 0-9, A-Z, space, +, -, *, /, =, @, (input zone commands)
-fn get_font_column(char_code: u32, col: u32) -> u32 {
-    if (col > 4u) { return 0u; }
+// 5x7 bitmap font - each char is 5 columns x 7 rows return 0u; }
     
     // Space character (char code 32) - essential for natural language word separation
     if (char_code == 32u) { return 0u; }
