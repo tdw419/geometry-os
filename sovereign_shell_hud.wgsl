@@ -94,14 +94,10 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 
 fn get_font_column(char_code: u32, col: u32) -> u32 {
     // 5x7 bitmap font - returns column bits for given character and column (0-4)
-    // 95 printable ASCII (32-126), 5 cols each = 475 bytes packed in 119 words
-    // Optimized: validate FIRST to avoid wasted ALU on invalid lookups
-    // Precomputed addressing reduces instruction count by 3 ops per call
     if (char_code < 32u || char_code > 126u || col >= 5u) { return 0u; }
 
     let bitmap_addr = (char_code - 32u) * 5u + col;
-    let byte_offset = bitmap_addr & 3u;
-    return (font_atlas[bitmap_addr >> 2u] >> (byte_offset << 3u)) & 0xFFu;
+    return font_atlas[bitmap_addr >> 2u] >> ((bitmap_addr & 3u) << 3u);
 }
 
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
