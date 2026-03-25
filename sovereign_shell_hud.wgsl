@@ -53,8 +53,16 @@ struct Config {
 fn get_font_column(char_code: u32, col: u32) -> u32 {
     if (col > 4u) { return 0u; }
     
+    // Space character (char code 32) - essential for natural language word separation
+    if (char_code == 32u) { return 0u; }
+    
+    // Normalize lowercase a-z (97-122) to uppercase A-Z (65-90) for natural language support
+    // This allows 'add 5 and 3' to render correctly using existing uppercase bitmaps
+    var c = char_code;
+    if (c >= 97u && c <= 122u) { c -= 32u; }
+    
     // Digits 0-9 (char codes 48-57)
-    if (char_code == 48u) {  // '0'
+    if (c == 48u) {  // '0'
         if (col == 0u) { return 0x3Eu; }
         if (col == 1u) { return 0x51u; }
         if (col == 2u) { return 0x49u; }
