@@ -181,7 +181,63 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
 }
 
 // Character code arrays for PATCH_STATUS display (WGSL-safe, no string type)
-const PATCH_SUCCESS_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);
+const PATCH_SUCCESS_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);  // PATCH_SUCCESS
+const PATCH_FAIL_CHARS: array<u32, 12> = array<u32, 12>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 69u, 68u);  // PATCH_FAILED
+
+fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // PATCH_STATUS overlay zone: rows 475-479 (5 rows for status message)
+    if (row < 475u || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let status_val = patch_status[0];
+    if (status_val == 0u) { return vec3<u32>(0u, 0u, 0u); }  // No patch pending
+    
+    let local_row = row - 475u;
+    let char_row = local_row % 8u;
+    if (char_row >= 7u) { return vec3<u32>(0u, 0u, 0u); }  // Skip gap row
+    
+    // Select message and color based on status
+    var msg_len: u32;
+    var text_color: vec3<u32>;
+    if (status_val == 1u) {
+        msg_len = 13u;  // PATCH_SUCCESS
+        text_color = vec3<u32>(0u, 255u, 128u);  // Green for success
+    } else {
+        msg_len = 12u;  // PATCH_FAILED
+        text_color = vec3<u32>(255u, 64u, 64u);  // Red for fail
+    }
+    
+    // Center the message
+    let total_width = msg_len * 6u;
+    let start_col = (width - total_width) / 2u;
+    let end_col = start_col + total_width;
+    
+    if (col < start_col || col >= end_col) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let rel_col = col - start_col;
+    let char_idx = rel_col / 6u;
+    let pixel_col = rel_col % 6u;
+    
+    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }  // 1px char gap
+    if (char_idx >= msg_len) { return vec3<u32>(0u, 0u, 0u); }
+    
+    // Get character code from appropriate array
+    var char_code: u32;
+    if (status_val == 1u) {
+        char_code = PATCH_SUCCESS_CHARS[char_idx];
+    } else {
+        char_code = PATCH_FAIL_CHARS[char_idx];
+    }
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return text_color;
+    }
+    return vec3<u32>(0u, 0u, 0u);
+}
+
+// 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);
 const PATCH_FAIL_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 32u, 32u, 32u);
 
 // PATCH_STATUS zone boundaries (rows 475-479)
