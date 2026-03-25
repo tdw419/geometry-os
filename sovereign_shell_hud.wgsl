@@ -69,7 +69,7 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // Multi-line: 3 lines (rows 0-6, 9-15, 18-24), 2-row spacing between lines
 // Returns: pixel color (cyan text on dark blue background for OCR contrast)
-fn render_input_zone_text(row: u32
+fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
     
     let local_row = row - INPUT_ZONE_TOP;
