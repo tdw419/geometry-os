@@ -64,8 +64,9 @@ fn get_input_length() -> u32 {
 }
 
 fn cursor_blink_active() -> bool {
-    // 32-frame blink cycle (533ms at 60fps) for visible cursor feedback
-    return (config.frame & 16u) != 0u;
+    // 20-frame blink cycle (333ms at 60fps) for reliable vision model detection
+    // Ensures cursor visible in at least 2 frames per second during OCR capture
+    return (config.frame % 20u) < 10u;
 }
 
 // Check if pixel position is an INPUT ZONE boundary marker (cyan lines for OCR alignment)
