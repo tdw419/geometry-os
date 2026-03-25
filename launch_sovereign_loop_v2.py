@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Sovereign Shell Autonomous Loop v2.2 - Production Edition 🐍🧠🛡️✨
+Sovereign Shell Autonomous Loop v2.5 - Stable Triple-Brain 🐍🧠🛡️✨
 
-Fixes:
-1. Model ID: Corrected to 'qwen2.5-coder-7b-instruct'.
-2. Criteria Logic: Fixed to properly check for completion of goals.
-3. Type Safety: Ensured criteria is handled consistently.
-4. API Signature: Fixed run_experiment call with coordinates.
+Hierarchy:
+1. ZAI (Primary) - GLM-5 with Thinking
+2. Gemini (Secondary) - Gemini 1.5 Pro
+3. LM Studio (Fallback) - Qwen 2.5 Coder
 """
 
 import sys
+import os
 import yaml
 import httpx
 import json
@@ -26,22 +26,16 @@ sys.path.insert(0, str(OUROBOROS_PATH))
 from autonomous_loop import AutonomousLoop
 
 class SmartAutonomousLoop(AutonomousLoop):
-    """
-    Autonomous loop with LLM-powered patch generation and robust safety.
-    """
-    
     LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
-    MODEL = "qwen2.5-coder-7b-instruct" # Confirmed model ID
-    PXOS_URL = "http://localhost:3841"   # pxOS on dedicated port (3839 is OpenClaw)
+    MODEL = "qwen2.5-coder-7b-instruct"
+    PXOS_URL = "http://localhost:3841"
     
     def __init__(self, **kwargs):
-        # Ensure criteria is a string for parent compatibility
         raw_criteria = kwargs.get('criteria', "")
         if isinstance(raw_criteria, list):
             kwargs['criteria'] = "\n".join(raw_criteria)
         
         super().__init__(**kwargs)
-        # Override the adapter's base URL to our actual pxOS port
         self.adapter.config.base_url = self.PXOS_URL
         self.adapter.client = httpx.Client(base_url=self.PXOS_URL, timeout=30.0)
         self.lm_client = httpx.Client(timeout=180.0)
@@ -53,9 +47,6 @@ class SmartAutonomousLoop(AutonomousLoop):
         return ""
 
     def generate_hypothesis(self) -> dict:
-        """
-        Use LM Studio to generate a targeted PATCH instead of a full rewrite.
-        """
         current_shader = self._read_target_content()
         cells = self.adapter.get_cells()
         
@@ -87,44 +78,103 @@ Current Shader Content (Partial):
 
 Propose a surgical patch to improve the INPUT ZONE or font rendering."""
 
-        print(f"\n[1] 🧠 Generating patch using {self.MODEL}...")
-        
-        try:
-            resp = self.lm_client.post(
-                self.LM_STUDIO_URL,
-                json={
-                    "model": self.MODEL,
+        # 1. ZAI Primary
+        zai_key = os.environ.get("ZAI_API_KEY")
+        zai_url = os.environ.get("ZAI_BASE_URL", "https://api.z.ai/api/coding/paas/v4")
+        if zai_key:
+            print("\n[1] 🧠 Generating patch using ZAI (Primary: GLM-5)...")
+            try:
+                resp = self.lm_client.post(f"{zai_url}/chat/completions", headers={
+                    "Authorization": f"Bearer {zai_key}",
+                    "Content-Type": "application/json"
+                }, json={
+                    "model": "glm-5",
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
+                    "thinking": { "type": "enabled" },
+                    "response_format": { "type": "json_object" },
                     "temperature": 0.2,
-                    "max_tokens": 2048
-                }
-            )
-            
+                    "max_tokens": 4096,
+                    "stream": False
+                }, timeout=180.0)
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content_resp = data["choices"][0]["message"]["content"]
+                    # If thinking is returned in content, try to strip it
+                    if "<thought>" in content_resp:
+                        content_resp = content_resp.split("</thought>")[-1]
+                    
+                    if "```json" in content_resp:
+                        content_resp = content_resp.split("```json")[1].split("```")[0]
+                    elif "```" in content_resp:
+                        content_resp = content_resp.split("```")[1].split("```")[0]
+                    return json.loads(content_resp.strip())
+                else:
+                    print(f"⚠️ ZAI Failed ({resp.status_code}). Trying Gemini...")
+            except Exception as e:
+                print(f"⚠️ ZAI Exception: {e}. Trying Gemini...")
+
+        # 2. Gemini Secondary
+        gemini_key = os.environ.get("GEMINI_API_KEY")
+        if gemini_key:
+            print("\n[2] 🧠 Generating patch using Gemini (Secondary: 1.5 Pro)...")
+            try:
+                # Use stable Gemini 1.5 Pro to avoid 404s
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={gemini_key}"
+                resp = self.lm_client.post(url, json={
+                    "systemInstruction": {"parts": [{"text": system_prompt}]},
+                    "contents": [{"parts": [{"text": user_prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "maxOutputTokens": 4096,
+                        "responseMimeType": "application/json"
+                    }
+                }, timeout=180.0)
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content_resp = data["candidates"][0]["content"]["parts"][0]["text"]
+                    return json.loads(content_resp.strip())
+                else:
+                    print(f"⚠️ Gemini Failed ({resp.status_code}). Trying LM Studio...")
+                    # print(resp.text)
+            except Exception as e:
+                print(f"⚠️ Gemini Exception: {e}. Trying LM Studio...")
+
+        # 3. LM Studio Fallback
+        print(f"\n[3] 🧠 Generating patch using LM Studio ({self.MODEL})...")
+        try:
+            resp = self.lm_client.post(self.LM_STUDIO_URL, json={
+                "model": self.MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.2,
+                "max_tokens": 2048
+            })
             if resp.status_code == 200:
                 data = resp.json()
-                content = data["choices"][0]["message"]["content"]
-                if "```json" in content:
-                    content = content.split("```json")[1].split("```")[0]
-                elif "```" in content:
-                    content = content.split("```")[1].split("```")[0]
-                return json.loads(content.strip())
+                content_resp = data["choices"][0]["message"]["content"]
+                if "```json" in content_resp:
+                    content_resp = content_resp.split("```json")[1].split("```")[0]
+                elif "```" in content_resp:
+                    content_resp = content_resp.split("```")[1].split("```")[0]
+                return json.loads(content_resp.strip())
             return {"error": f"LM Studio Error: {resp.status_code}"}
         except Exception as e:
             return {"error": str(e)}
 
     def apply_patch(self, old_str: str, new_str: str):
-        """Apply a surgical patch with versioned backups."""
         target_path = Path(self.target)
         content = target_path.read_text()
-        
         if old_str not in content:
             print(f"❌ Error: old_string not found in {self.target}. Match failed.")
             return False
 
-        # Versioned Backup (e.g., .v1.bak, .v2.bak)
         version = 1
         while target_path.with_suffix(f".v{version}.bak").exists():
             version += 1
@@ -132,12 +182,11 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
         target_path.rename(backup_path)
         
         print(f"💾 Created backup: {backup_path.name}")
-        new_content = content.replace(old_str, new_str, 1) # Only replace first occurrence
+        new_content = content.replace(old_str, new_str, 1)
         target_path.write_text(new_content)
         return True
 
     def revert_patch(self):
-        """Revert to the MOST RECENT versioned backup."""
         target_path = Path(self.target)
         backups = sorted(target_path.parent.glob(f"{target_path.name}.v*.bak"))
         if backups:
@@ -147,9 +196,6 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
             latest_bak.rename(target_path)
 
     def check_criteria(self, current: float) -> bool:
-        """Robust criteria check for multi-line goals."""
-        # Check against target metric from goal.yaml logic
-        # For Sovereign Shell, we target latency < 1.0s
         if current > 0 and current < 1.0:
             print(f"🎯 Milestone reached: loop_latency = {current:.3f}s")
             return True
@@ -174,7 +220,6 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
         if self.apply_patch(old_s, new_s):
             spec = f"H: {llm_response.get('hypothesis')}\nT: {self.target}\nM: {self.criteria}\nB: 5"
             print(f"🚀 Running experiment...")
-            # Fixed call signature with coordinates
             result = self.adapter.run_experiment(spec, x=0, y=100 + (self.iteration % 10) * 20)
             status = result.get("status", "unknown").upper()
             
@@ -191,7 +236,6 @@ Propose a surgical patch to improve the INPUT ZONE or font rendering."""
         current_metric = cells.get(self.metric_name, 0)
         if self.check_criteria(current_metric):
             return {"status": "achieved", "metric": current_metric}
-            
         return {"status": "continue"}
 
 def main():
@@ -205,10 +249,10 @@ def main():
         target="sovereign_shell_hud.wgsl",
         metric_name="loop_latency",
         max_iterations=config.get('max_iterations', 50),
-        delay_seconds=15.0 # Responsive iterations
+        delay_seconds=15.0
     )
 
-    print(f"🚀 Launching v2.2 Production Ouroboros Loop...")
+    print(f"🚀 Launching v2.5 Stable Triple-Brain Ouroboros Loop...")
     try: loop.run()
     except KeyboardInterrupt: print("\n🛑 Stopped.")
     finally: loop.lm_client.close()

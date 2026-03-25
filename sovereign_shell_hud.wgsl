@@ -48,41 +48,33 @@ struct Config {
 // 5x7 BITMAP FONT — Full ASCII support
 // ============================================================================
 
+// 5x7 bitmap font - each char is 5 columns x 7 rows, packed into 35 bits
+// Supports: 0-9, A-Z, space, +, -, *, /, =, @, (input zone commands)
 fn get_font_column(char_code: u32, col: u32) -> u32 {
-    const font_table: array<u32, 10> = array<48u, 49u, 50u, 51u, 52u, 53u, 54u, 55u, 56u, 57u, 65u, 66u, 67u, 68u, 69u, 70u, 71u, 72u, 73u, 74u, 75u, 76u, 77u, 78u, 79u, 80u>;
-    const font_data: array<u32, 10> = array<0x3Eu, 0x51u, 0x49u, 0x45u, 0x3Eu, 0x42u, 0x7Fu, 0x40u, 0x62u, 0x51u, 0x49u, 0x49u, 0x49u, 0x46u, 0x22u, 0x49u, 0x49u, 0x49u, 0x36u, 0x18u, 0x14u, 0x12u, 0x7Fu, 0x10u, 0x27u, 0x45u, 0x45u, 0x45u, 0x39u, 0x3Eu, 0x49u, 0x49u, 0x49u, 0x32u, 0x01u, 0x71u, 0x09u, 0x05u, 0x03u, 0x36u, 0x49u, 0x49u, 0x49u, 0x36u, 0x26u, 0x49u, 0x49u, 0x49u, 0x3Eu>;
-    let index = match char_code {
-        48..=57 => font_table[char_code - 48] as usize,
-        65..=90 => font_table[char_code - 65 + 10] as usize,
-        _ => return 0u,
-    };
-    let column_data = font_data[index];
-    match col {
-        0 => (column_data & 0x3F) >> 0,
-        1 => (column_data & 0xC0) >> 6,
-        2 => (column_data & 0x300) >> 8,
-        3 => (column_data & 0xC00) >> 10,
-        4 => (column_data & 0x3F000) >> 12,
-        _ => return 0u,
-    }
-}
-
-    const font_table: array<u32, 10> = array<48u, 49u, 50u, 51u, 52u, 53u, 54u, 55u, 56u, 57u, 65u, 66u, 67u, 68u, 69u, 70u, 71u, 72u, 73u, 74u, 75u, 76u, 77u, 78u, 79u, 80u>;
-    const font_data: array<u32, 10> = array<0x3Eu, 0x51u, 0x49u, 0x45u, 0x3Eu, 0x42u, 0x7Fu, 0x40u, 0x62u, 0x51u, 0x49u, 0x49u, 0x49u, 0x46u, 0x22u, 0x49u, 0x49u, 0x49u, 0x36u, 0x18u, 0x14u, 0x12u, 0x7Fu, 0x10u, 0x27u, 0x45u, 0x45u, 0x45u, 0x39u, 0x3Eu, 0x49u, 0x49u, 0x49u, 0x32u, 0x01u, 0x71u, 0x09u, 0x05u, 0x03u, 0x36u, 0x49u, 0x49u, 0x49u, 0x36u, 0x26u, 0x49u, 0x49u, 0x49u, 0x3Eu>;
-    let index = match char_code {
-        48..=57 => font_table[char_code - 48] as usize,
-        65..=90 => font_table[char_code - 65 + 10] as usize,
-        _ => return 0u,
-    };
-    let column_data = font_data[index];
-    match col {
-        0 => (column_data & 0x3F) >> 0,
-        1 => (column_data & 0xC0) >> 6,
-        2 => (column_data & 0x300) >> 8,
-        3 => (column_data & 0xC00) >> 10,
-        4 => (column_data & 0x3F000) >> 12,
-        _ => return 0u,
-    }
+    // Glyph bitmaps: 5 columns packed as [col0|col1|col2|col3|col4] each 7 bits
+    // Index: char_code - 32 (space=0, digits=16-25, uppercase=33-58)
+    let glyphs = array<u32, 59u>(
+        // Space ! " # $ % & ' ( ) * + , - . /
+        0x0000000u, 0x0004000u, 0x0A0A000u, 0x0A3E0A0u, 0x1E2A3E2A0u, 0x2328102820u, 0x1C24272418u, 0x0802000u, 0x040A0400u, 0x00100A04u,
+        0x0A040A000u, 0x040E0400u, 0x00040800u, 0x04040400u, 0x0008000u, 0x08100800u,
+        // 0 1 2 3 4 5 6 7 8 9
+        0x1E2121211Eu, 0x104040100Eu, 0x2224180602u, 0x2220182222u, 0x2428302020u, 0x41401E210E0u, 0x1E21201E1Eu, 0x02040810u, 0x1E221E2221Eu, 0x1E22221C20u,
+        // : ; < = > ? @
+        0x0A000A000u, 0x04000408u, 0x0810201008u, 0x0E000E000u, 0x1008100820u, 0x0204080000u, 0x1C221C1C00u,
+        // A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+        0x0E111E110Eu, 0x1F110E111Fu, 0x1E21010101u, 0x0E11111F11u, 0x1F21040401u, 0x1F21040404u, 0x1E21090E06u, 0x11111F1111u, 0x0E0404040Eu, 0x1F11020418u,
+        0x110A041A11u, 0x110E0E1111u, 0x1F0408041Fu, 0x110E0E1111u, 0x0E1111110Eu, 0x1F110E0404u, 0x0E1111221Cu, 0x1F110E1A11u, 0x221C08071Cu, 0x1F04040404u,
+        0x111111111Eu, 0x11110A0A040u, 0x11111115150Au, 0x110A040A11u, 0x110A040404u, 0x1E0810201Eu
+    );
+    
+    if (col > 4u) { return 0u; }
+    
+    let idx = select(0u, char_code - 32u, char_code >= 32u && char_code < 91u);
+    if (idx >= 59u) { return 0u; }
+    
+    let glyph = glyphs[idx];
+    let shift = col * 7u;
+    return (glyph >> shift) & 0x7Fu;
 }
     // Digits 0-9 (char codes 48-57)
     if (char_code == 48u) {  // '0'
