@@ -172,6 +172,17 @@ fn cursor_blink_active() -> bool {
 // Performance: Early-out for gap columns reduces per-pixel ALU by 40%
 // Multi-line support: 3 lines of 64 chars each for complex natural language commands
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // Extract text from INPUT ZONE using vision model
+    let input_text = extract_text_from_input_zone();
+
+    // Convert natural language command to VM opcodes using LLM
+    let vm_opcodes = convert_to_vm_opcodes(input_text);
+
+    // Patch agent's memory atomically to display result in HUD zone
+    patch_memory_with_vm_opcodes(vm_opcodes);
+
+    return vec3<u32>(0u, 0u, 0u);  // Placeholder for actual rendering logic
+}
     // Early-out for rows outside INPUT ZONE text area
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
 
