@@ -187,6 +187,52 @@ const PATCH_STATUS_HEIGHT: u32 = 5u;
 
 fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     // Only render in PATCH_STATUS zone (rows 475-479)
+    if (row < PATCH_STATUS_TOP || row >= INPUT_ZONE_BOTTOM) {
+        return vec3<u32>(0u, 0u, 0u);
+    }
+    
+    let status = patch_status[0];
+    if (status == 0u) {
+        return vec3<u32>(0u, 0u, 0u);  // No patch pending
+    }
+    
+    let local_row = row - PATCH_STATUS_TOP;  // 0-4 for 5-row zone
+    
+    // Center the 13-character status text
+    let text_chars = 13u;
+    let text_width = text_chars * 6u;  // 5px char + 1px gap
+    let start_col = (width - text_width) / 2u;
+    
+    if (col < start_col) { return vec3<u32>(0u, 0u, 0u); }
+    
+    let rel_col = col - start_col;
+    let char_idx = rel_col / 6u;
+    let pixel_col = rel_col % 6u;
+    
+    // 1px gap between chars for OCR segmentation
+    if (pixel_col >= 5u || char_idx >= text_chars) {
+        return vec3<u32>(0u, 0u, 0u);
+    }
+    
+    // Select character from status-specific array
+    var char_code: u32 = 32u;  // Space default
+    if (status == 1u) {
+        char_code = PATCH_SUCCESS_CHARS[char_idx];
+    } else if (status == 2u) {
+        char_code = PATCH_FAIL_CHARS[char_idx];
+    }
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    // Map 5 display rows to top 5 bits of 7-bit font (bits 6,5,4,3,2)
+    let bit_pos = 6u - local_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        if (status == 1u) {
+            return vec3<u32>(50u, 255u, 100u);   // Bright green for SUCCESS
+        }
+        return vec3<u32>(255u, 80u, 80u);  // Bright red for FAIL
+    }
+    return vec3<u32>(0u, 0u, 0u)TATUS zone (rows 475-479)
     if (row < PATCH_STATUS_TOP || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
     
     // Check patch status: 0=none, 1=success, 2=fail
