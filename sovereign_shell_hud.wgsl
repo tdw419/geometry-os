@@ -180,7 +180,7 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     let char_col = col / 6u;
     let pixel_col = col % 6u;
     
-    if (pixel_col >= 5u || char_col >= 16u) { return vec3<u32>(0u, 0u, 0u); }
+    if (pixel_col >= 5u || char_col >= 16u) { return vec3<u32>(10u, 15u, 25u); }
     
     // Status: 0=none (gray), 1=success (green), 2=fail (red)
     var text_color = vec3<u32>(128u, 128u, 128u);
@@ -202,7 +202,17 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     
     let char_code = msg[char_col];
     if (char_code == 0u || local_row >= 7u) {
-        return vec3<u32>(15u, 20u, 30u);  // Dark blue-gray background
+        return vec3<u32>(10u, 15u, 25u);  // Dark background for spaces
+    }
+    
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - local_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return text_color;
+    }
+    return vec3<u32>(10u, 15u, 25u);  // Dark background
+}eturn vec3<u32>(15u, 20u, 30u);  // Dark blue-gray background
     }
     
     let font_bits = get_font_column(char_code, pixel_col);
