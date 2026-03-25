@@ -134,8 +134,10 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
         return vec3<u32>(0u, 0u, 0u);
     }
 
-    // Calculate char index: line 0 = chars 0-63, line 1 = 64-127, line 2 = 128-191
-    let global_char_idx = line_index * 64u + char_col;
+    // Calculate char index with bounds clamping for OCR reliability
+    // Max 21 chars per line visible in INPUT ZONE (640px / 6px char width - margins)
+    let raw_char_idx = line_index * 64u + char_col;
+    let global_char_idx = min(raw_char_idx, 191u);  // Clamp to max 192 chars (48 words × 4)
     let word_idx = global_char_idx / 4u;
     let byte_idx = global_char_idx % 4u;
 
@@ -145,7 +147,8 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let char_code = (packed >> (byte_idx * 8u)) & 0xFFu;
 
     // Blinking cursor at end of input (32-frame cycle = ~500ms at 60fps)
-    let input_len = input_buffer[15u] >> 24u;
+    // Input length stored in dedicated metadata word 47 upper byte (avoids chars 188-191)
+    let input_len = min(input_buffer[47u] >> 24u, 192u);
     if (global_char_idx == input_len && (config.frame & 32u) != 0u) {
         if (pixel_col < 2u && char_row >= 1u && char_row <= 5u) {
             return vec3<u32>(255u, 255u, 0u);  // Yellow cursor
