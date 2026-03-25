@@ -98,35 +98,6 @@ fn render_input_zone_text(row: u32, col: u32) -> u32 {
 
     return select(0u, 255u, ((font_bits >> bit_pos) & 1u) != 0u);
 }
-    // Only render in INPUT ZONE text area (rows 450-474, leaving 475-479 for status)
-    if (row < INPUT_ZONE_TOP || row >= 475u) { return 0u; }
-
-    let local_row = row - INPUT_ZONE_TOP;
-    let line = local_row / 8u;  // Which text line (0-3, each line is 7px + 1px spacing)
-    if (line >= 3u) { return 0u; }  // Max 3 lines of text
-    
-    let char_row = local_row % 8u;  // 0-6 for glyph rows, 7 for line spacing
-    if (char_row >= 7u) { return 0u; }  // Skip line spacing row
-
-    let char_col = col / 6u;    // Character column (5px wide + 1px spacing)
-    if (char_col >= 20u) { return 0u; }  // Only render up to 20 characters per line
-
-    let pixel_col = col % 6u;
-    if (pixel_col >= 5u) { return 0u; }  // Skip inter-character spacing column
-
-    // Calculate buffer index (up to 64 chars, 20 per line)
-    let buffer_idx = line * 20u + char_col;
-    if (buffer_idx >= 64u) { return 0u; }
-
-    let char_code = input_buffer[buffer_idx];
-    if (char_code == 0u) { return 0u; }
-
-    // Render font pixel using 5x7 bitmap (7 rows, bits 6 down to 0)
-    let font_bits = get_font_column(char_code, pixel_col);
-    let bit_pos = 6u - char_row;
-
-    return select(0u, 255u, ((font_bits >> bit_pos) & 1u) != 0u);
-}
 
 // Font rendering handled by complete get_font_column implementation below
 
