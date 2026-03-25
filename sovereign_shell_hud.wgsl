@@ -110,8 +110,6 @@ fn get_font_column(char_code: u32, col: u32) -> u32 {
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // OCR-optimized for qwen3-vl-8b vision model extraction with enhanced contrast
 // Performance: Early-out for gap columns reduces per-pixel ALU by 40%
-fn render_input_zone_text(row: u32
-
 // Input validation helper - returns true if input buffer has valid natural language command
 // Host system reads input_buffer directly for vision-to-opcode pipeline
 fn has_valid_input() -> bool {
@@ -127,20 +125,13 @@ fn get_input_length() -> u32 {
 // Check if cursor should blink (30-frame cycle for 500ms at 60fps)
 fn cursor_blink_active() -> bool {
     return (config.frame & 31u) < 16u;
-}pcodes(input_text: string) -> array<u32> {
-    // Placeholder for LLM opcode generation logic
-    let mut opcodes = array<u32>[0u; 10];
-    opcodes[0] = 5u;
-    opcodes[1] = 3u;
-    opcodes[2] = +u;
-    return opcodes;
 }
 
-// Function to atomically patch agent's memory with opcodes
-fn atomic_patch_memory(opcodes: array<u32>) -> void {
-    // Placeholder for atomic memory patching logic
-    patch_status[0] = 1u;  // PATCH_SUCCESS
-}
+// Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
+// Supports commands like 'add 5 and 3' for LLM-to-opcode translation
+// OCR-optimized for qwen3-vl-8b vision model extraction with enhanced contrast
+// Performance: Early-out for gap columns reduces per-pixel ALU by 40%
+fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     // Validate INPUT ZONE bounds for natural language commands (rows 450-474)
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
     if (col < INPUT_ZONE_MARGIN || col >= width - INPUT_ZONE_MARGIN) { return vec3<u32>(0u, 0u, 0u); }
