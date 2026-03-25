@@ -67,8 +67,6 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 
 // Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
-// Multi-line: 3 lines (rows 0-6, 9-15, 18-24), 2-row spacing between lines
-// Returns: pixel color (cyan text on dark blue background for OCR contrast)
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     // Early exit for non-input zone boundaries
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
@@ -78,7 +76,7 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let pixel_col = col % 6u;
 
     // Calculate char index: line 0 = chars 0-63, line 1 = 64-127, line 2 = 128-191
-    let global_char_idx = (local_row / 7u) * 64u + char_col;
+    let global_char_idx = local_row * 64u + char_col;
     if (global_char_idx >= 192u) { return vec3<u32>(0u, 0u, 0u); } // Extended buffer support
 
     let word_idx = global_char_idx / 4u;
@@ -96,7 +94,7 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     }
 
     let font_bits = get_font_column(char_code, pixel_col);
-    let bit_pos = 6u - (local_row % 7u);
+    let bit_pos = 6u - local_row;
 
     if (((font_bits >> bit_pos) & 1u) != 0u) {
         // Cyan text for visibility and OCR contrast (qwen3-vl-8b optimized)
