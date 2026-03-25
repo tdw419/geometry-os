@@ -149,10 +149,6 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
 // Declared at module scope for WGSL compliance - used by get_font_column() above
 @group(0) @binding(9) var<storage, read> font_atlas: array<u32>;
 
-// Render natural language input text from input_buffer in INPUT ZONE (rows 450-474)
-// Supports commands like 'add 5 and 3' for LLM-to-opcode translation
-// OCR-optimized for qwen3-vl-8b vision model extraction with enhanced contrast
-// Performance: Early-out for gap columns reduces per-pixel ALU by 40%
 // Input validation helper - returns true if input buffer has valid natural language command
 // Host system reads input_buffer directly for vision-to-opcode pipeline
 fn has_valid_input() -> bool {
@@ -165,7 +161,7 @@ fn get_input_length() -> u32 {
     return min(input_buffer[47u] >> 24u, 191u);
 }
 
-// Check if cursor should blink (30-frame cycle for 500ms at 60fps)
+// Check if cursor should blink (32-frame cycle for 500ms at 60fps)
 fn cursor_blink_active() -> bool {
     return (config.frame & 31u) < 16u;
 }
@@ -174,12 +170,30 @@ fn cursor_blink_active() -> bool {
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // OCR-optimized for qwen3-vl-8b vision model extraction with enhanced contrast
 // Performance: Early-out for gap columns reduces per-pixel ALU by 40%
+// Multi-line support: 3 lines of 64 chars each for complex natural language commands
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // Early-out for rows outside INPUT ZONE text area
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
 
     let local_row = row - INPUT_ZONE_TOP;
-    if (local_row < 9u || local_row >= 16u) { return vec3<u32>(0u, 0u, 0u); }  // OCR: pure black bg
-    let char_row = local_row - 9u;  // Maps to 0-6 for valid font bitmap indexing
+    
+    // Multi-line layout: lines at rows 2-8, 11-17, 20-26 (7px font + 3px spacing)
+    // Each line can display ~106 chars at 6px/char on 640px width
+    var char_row: u32 = 255u;  // Sentinel for invalid
+    var line_offset: u32 = 0u;
+    
+    if (local_row >= 2u && local_row < 9u) {
+        char_row = local_row - 2u;
+        line_offset = 0u;
+    } else if (local_row >= 11u && local_row < 18u) {
+        char_row = local_row - 11u;
+        line_offset = 64u;
+    } else if (local_row >= 20u && local_row < 27u) {
+        char_row = local_row - 20u;
+        line_offset = 128u;
+    } else {
+        return vec3<u32>(0u, 0u, 0u);  // OCR: pure black gap between lines
+    }
 
     let char_col = col / 6u;
     let pixel_col = col % 6u;
