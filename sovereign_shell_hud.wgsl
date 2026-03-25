@@ -200,7 +200,26 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     
     if (((font_bits >> bit_pos) & 1u) != 0u) {
         if (status == 1u) { return vec3<u32>(0u, 255u, 0u); }   // Green success
-        if (status == 2u) { return vec3<u32>(255u, 0u, 0u); }   // Red failure
+        if (status == 2u) { return vec3<u32>(255u, 0u, 0u); }   // Red fail
+    }
+    return vec3<u32>(0u, 0u, 0u);
+}
+
+// Main render dispatch for HUD zones
+fn render_hud_pixel(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // INPUT ZONE (rows 450-479): Natural language input + patch status
+    if (row >= 448u && row <= 481u) {
+        let input_color = render_input_zone_text(row, col, width);
+        if (input_color.r != 0u || input_color.g != 0u || input_color.b != 0u) {
+            return input_color;
+        }
+        let status_color = render_patch_status(row, col, width);
+        if (status_color.r != 0u || status_color.g != 0u || status_color.b != 0u) {
+            return status_color;
+        }
+    }
+    return vec3<u32>(0u, 0u, 0u);
+}<u32>(255u, 0u, 0u); }   // Red failure
     }
     return vec3<u32>(0u, 0u, 0u);  // Black background for off-pixels
 }<u32>(255u, 0u, 0u); }   // Red fail
