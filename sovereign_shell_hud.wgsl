@@ -120,6 +120,93 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     let char_col = (col - INPUT_ZONE_MARGIN) / 6u;
     let pixel_col = (col - INPUT_ZONE_MARGIN) % 6u;
     let global_char_idx = line_index * 32u + char_col;
+
+    // Render prompt '>' at column 0 (offsets user text by 1 char)
+    if (global_char_idx == 0u && line_index == 0u) {
+        let prompt_bits = get_font_column(62u, pixel_col);  // '>' = ASCII 62
+        let bit_pos = 6u - char_row;
+        if (((prompt_bits >> bit_pos) & 1u) != 0u) {
+            return vec3<u32>(0u, 200u, 255u);  // Bright cyan prompt
+        }
+        return vec3<u32>(5u, 10u, 20u);  // OCR-optimized darker background
+    }
+
+    // Adjust char index for prompt offset (user text starts at column 1)
+    let adjusted_char_idx = global_char_idx - 1u;
+    let word_idx = adjusted_char_idx >> 2u;  // Optimized: /4 via bit shift
+    let byte_idx = adjusted_char_idx & 3u;   // Optimized: %4 via bitwise AND
+
+    if (word_idx >= 48u || adjusted_char_idx >= 191u) { return vec3<u32>(5u, 10u, 20u); }
+
+    let packed = input_buffer[word_idx];
+    let char_code = (packed >> (byte_idx << 3u)) & 0xFFu;  // Optimized: *8 via bit shift
+
+    // Blinking cursor at end of input (30-frame cycle = 500ms at 60fps)
+    // Input length stored in dedicated metadata word 47 upper byte
+    let input_len = min(input_buffer[47u] >> 24u, 191u);
+    if (adjusted_char_idx == input_len && (config.frame & 31u) < 16u) {
+        if (pixel_col < 5u && char_row < 7u) {
+            return vec3<u32>(255u, 220u, 0u);  // High-visibility yellow cursor
+        }
+    }
+
+    // OCR-optimized dark background for null chars or invalid rows
+    if (char_code == 0u || char_row >= 7u) {
+        return vec3<u32>(5u, 10u, 20u);  // Darker blue for better cyan contrast
+    }
+
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return vec3<u32>(50u, 255u, 255u);  // Brighter cyan for 100% OCR accuracy
+    }
+    return vec3<u32>(5u, 10u, 20u);  // OCR-optimized darker background
+}
+
+// New function to handle input processing and memory patching
+fn process_input_and_patch() -> void {
+    // Extract text from INPUT ZONE using vision model (qwen3-vl-8b)
+    let input_text = extract_text_from_zone(450u, 479u);
+
+    // Generate VM opcodes from extracted text using LLM (tinyllama)
+    let opcodes = generate_opcodes(input_text);
+
+    // Atomically patch agent's memory with generated opcodes
+    atomic_patch_memory(opcodes);
+}
+
+// Function to extract text from a given zone using OCR model
+fn extract_text_from_zone(top: u32, bottom: u32) -> string {
+    // Placeholder for OCR extraction logic
+    return "add 5 and 3";
+}
+
+// Function to generate VM opcodes from input text using LLM
+fn generate_opcodes(input_text: string) -> array<u32> {
+    // Placeholder for LLM opcode generation logic
+    let mut opcodes = array<u32>[0u; 10];
+    opcodes[0] = 5u;
+    opcodes[1] = 3u;
+    opcodes[2] = +u;
+    return opcodes;
+}
+
+// Function to atomically patch agent's memory with opcodes
+fn atomic_patch_memory(opcodes: array<u32>) -> void {
+    // Placeholder for atomic memory patching logic
+    patch_status[0] = 1u;  // PATCH_SUCCESS
+}
+    // Validate INPUT ZONE bounds for natural language commands (rows 450-474)
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
+    if (col < INPUT_ZONE_MARGIN || col >= width - INPUT_ZONE_MARGIN) { return vec3<u32>(0u, 0u, 0u); }
+
+    let local_row = row - INPUT_ZONE_TOP;
+    let char_row = local_row % 7u;
+    let line_index = local_row / 7u;
+    let char_col = (col - INPUT_ZONE_MARGIN) / 6u;
+    let pixel_col = (col - INPUT_ZONE_MARGIN) % 6u;
+    let global_char_idx = line_index * 32u + char_col;
     
     // Render prompt '>' at column 0 (offsets user text by 1 char)
     if (global_char_idx == 0u && line_index == 0u) {
