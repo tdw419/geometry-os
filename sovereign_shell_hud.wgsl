@@ -161,55 +161,75 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     }
     return vec3<u32>(10u, 15u, 25u);  // Dark background
 }
-    // Priority 1: Render cyan boundary markers for OCR detection (rows 449 and 480)
-    let boundary = get_input_zone_boundary(row, col, width);
-    if (boundary > 0u) {
-        return vec3<u32>(0u, 255u, 255u);  // Cyan markers for qwen3-vl-8b alignment
-    }
+
+// Render patch status in rows 475-479 (success=green, fail=red)
+// Host patches memory atomically and sets patch_status[0]
+fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
+    if (row < 475u || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
     
-    // Early exit outside input zone text area
-    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
-    
-    let local_row = row - INPUT_ZONE_TOP;
-    
-    // Multi-line layout: 3 lines of 7-pixel text with 2-row gaps
-    // Line 0: rows 0-6, Line 1: rows 9-15, Line 2: rows 18-24
-    var line_index: u32 = 255u;
-    var char_row: u32 = local_row;
-    
-    if (local_row < 7u) {
-        line_index = 0u;
-    } else if (local_row >= 9u && local_row < 16u) {
-        line_index = 1u;
-        char_row = local_row - 9u;
-    } else if (local_row >= 18u && local_row < 25u) {
-        line_index = 2u;
-        char_row = local_row - 18u;
-    } else {
-        // Gap rows: render dark background for OCR contrast
-        if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
-            return vec3<u32>(10u, 15u, 25u);
-        }
-        return vec3<u32>(0u, 0u, 0u);
-    }
-    
+    let status = patch_status[0u];
+    let local_row = row - 475u;
     let char_col = col / 6u;
     let pixel_col = col % 6u;
     
-    // 5x7 font: 5 pixels wide, 7 pixels tall, 1 pixel spacing
-    if (pixel_col >= 5u) {
-        if (col >= INPUT_ZONE_MARGIN && col < width - INPUT_ZONE_MARGIN) {
-            return vec3<u32>(10u, 15u, 25u);
-        }
-        return vec3<u32>(0u, 0u, 0u);
+    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }
+    
+    // Status messages: "PATCH_SUCCESS" or "PATCH_FAILED"
+    var char_code: u32 = 0u;
+    if (status == 1u) {
+        // Green PATCH_SUCCESS
+        let success_msg = array<u32, 13>(80u, 65u, 84u, 67u, 72u, 95u, 83u, 85u, 67u, 67u, 69u, 83u, 83u);
+        if (char_col < 13u) { char_code = success_msg[char_col]; }
+    } else if (status == 2u) {
+        // Red PATCH_FAILED
+        let fail_msg = array<u32, 12>(80u, 65u, 84u, 67u, 72u, 95u, 70u, 65u, 73u, 76u, 69u, 68u);
+        if (char_col < 12u) { char_code = fail_msg[char_col]; }
     }
     
-    // Calculate char index: line 0 = chars 0-63, line 1 = 64-127, line 2 = 128-191
-    let global_char_idx = line_index * 64u + char_col;
-    let word_idx = global_char_idx / 4u;
-    let byte_idx = global_char_idx % 4u;
+    if (char_code == 0u) { return vec3<u32>(0u, 0u, 0u); }
     
-    if (word_idx >= 48u) { return vec3<u32>(10u, 15u, 25u); }
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - local_row;
+    
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        if (status == 1u) { return vec3<u32>(0u, 255u, 0u); }   // Green success
+        if (status == 2u) { return vec3<u32>(255u, 0u, 0u); }   // Red failure
+    }
+    return vec3<u32>(0u, 0u, 0u);
+}
+
+// Main HUD composition function
+fn compose_hud_pixel(row: u32, col: u32, width: u32) -> vec3<u32> {
+    // Try input zone rendering first
+    let input_color = render_input_zone_text(row, col, width);
+    if (input_color.r != 0u || input_color.g != 0u || input_color.b != 0u) {
+        return input_color;
+    }
+    
+    // Try patch status rendering
+    let status_color = render_patch_status(row, col, width);
+    if (status_color.r != 0u || status_color.g != 0u || status_color.b != 0u) {
+        return status_color;
+    }
+    
+    return vec3<u32>(0u, 0u, 0u);
+}
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.x;
+    if (idx >= config.width * config.height) { return; }
+    
+    let col = idx % config.width;
+    let row = idx / config.width;
+    
+    // Agent isolation: rows 0-399 are agent execution space
+    if (row < 400u) { return; }
+    
+    // Compose HUD for rows 400+
+    let hud_color = compose_hud_pixel(row, col, config.width);
+    buffer_out[idx] = Pixel(hud_color.r, hud_color.g, hud_color.b, 255u);
+}<u32>(10u, 15u, 25u); }
     
     let packed = input_buffer[word_idx];
     let char_code = (packed >> (byte_idx * 8u)) & 0xFFu;
