@@ -95,13 +95,14 @@ fn get_input_zone_boundary(row: u32, col: u32) -> u32 {
     if ((row == 478u || row == 479u) && col >= left_edge && col < right_edge) {
         return 2u;
     }
-    // 2-pixel thick vertical edge markers for TEXT AREA ONLY (rows 450-474)
+    // 2-pixel thick vertical edge markers for TEXT AREA ONLY (rows 452-474)
     // Covers 3 text lines (24px = 3 lines x 8px) for consistent OCR boundary detection
     // PATCH_STATUS overlay at rows 475-479 rendered separately with priority blending
-    // Optimized: precompute edge booleans to reduce branch divergence for 60 FPS target
+    // Optimized: precompute edge booleans, restrict to text rows only, early-out for corners
     let is_left_edge = col >= left_edge && col < left_edge + 2u;
     let is_right_edge = col >= right_edge - 2u && col < right_edge;
-    if ((is_left_edge || is_right_edge) && row >= INPUT_ZONE_TOP && row < 475u) { return 4u; }
+    // Rows 450-451 already handled by top boundary; 478-479 by bottom; skip 475-477 for PATCH_STATUS
+    if ((is_left_edge || is_right_edge) && row > 451u && row < 475u) { return 4u; }
     return 0u;
 }
 
