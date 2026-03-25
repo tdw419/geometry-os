@@ -69,9 +69,9 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
     if ((row == 480u || row == 481u) && col >= left_edge && col < right_edge) {
         return 2u;
     }
-    // 4x4 corner brackets for precise OCR region alignment
-    let is_top_corner = row >= 448u && row <= 451u;
-    let is_bottom_corner = row >= 478u && row <= 481u;
+    // 2x4 corner brackets aligned to boundary lines (no text row overlap)
+    let is_top_corner = row >= 448u && row <= 449u;
+    let is_bottom_corner = row >= 480u && row <= 481u;
     if (is_top_corner || is_bottom_corner) {
         let is_left_corner = col >= left_edge && col < left_edge + 4u;
         let is_right_corner = col >= right_edge - 4u && col < right_edge;
