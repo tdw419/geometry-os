@@ -99,8 +99,8 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
         return vec3<u32>(0u, 255u, 102u);  // Bright green boundaries for OCR alignment
     }
 
-    // Early exit outside input zone text area
-    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
+    // PATCH_STATUS zone (rows 475-479): Display atomic patch confirmation for vision-to-opcode loop
+    // Status: 0=none (dark)
 
     let local_row = row - INPUT_ZONE_TOP;
 
