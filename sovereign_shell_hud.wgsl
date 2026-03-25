@@ -137,6 +137,24 @@ fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     return vec3<u32>(10u, 15u, 25u);  // Dark background
 }
 
+// 5x7 bitmap font column lookup - returns pixel bits for character rendering
+// Used by render_input_zone_text for OCR-optimized natural language display
+@group(0) @binding(9) var<storage, read> font_atlas: array<u32>;
+
+fn get_font_column(char_code: u32, col: u32) -> u32 {
+    // 5x7 bitmap font - returns column bits for given character and column (0-4)
+    // Each byte represents one column, bits 0-6 map to rows 0-6
+    if (char_code < 32u || char_code > 126u || col >= 5u) { return 0u; }
+    
+    let char_idx = char_code - 32u;
+    let bitmap_addr = char_idx * 5u + col;
+    let font_data = font_atlas[bitmap_addr / 4u];
+    let byte_offset = bitmap_addr % 4u;
+    let column_bits = (font_data >> (byte_offset * 8u)) & 0xFFu;
+    
+    return column_bits;
+}
+
 // End of render_input_zone_text function - duplicate orphaned block removed
 
 // PATCH_STATUS display zone (rows 475-479) - shows atomic patch results
