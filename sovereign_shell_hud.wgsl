@@ -171,7 +171,7 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     }
     
     // Render character using 5x7 font
-    if (char_code == 32u || char_row >= 7u) { return vec3<u32>(10u, 15u, 25u); }
+    if (char_code == 32u || local_row >= 7u) { return vec3<u32>(10u, 15u, 25u); }
     
     let font_bits = get_font_column(char_code, pixel_col);
     let bit_pos = 6u - local_row;
@@ -181,18 +181,7 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     }
     return vec3<u32>(10u, 15u, 25u);
 }
-    
-    // Render status text using 5x7 bitmap font
-    let char_code = msg[char_col];
-    if (char_code == 0u || char_code == 32u) { return vec3<u32>(10u, 15u, 25u); }
-    
-    let font_bits = get_font_column(char_code, pixel_col);
-    let bit_pos = 6u - local_row;
-    
-    if (local_row < 7u && ((font_bits >> bit_pos) & 1u) != 0u) {
-        return text_color;
-    }
-    return vec3<u32>(10u, 15u, 25u)u, 83u, 32u, 32u, 32u  // "PATCH_SUCCESS"
+eturn vec3<u32>(10u, 15u, 25u)u, 83u, 32u, 32u, 32u  // "PATCH_SUCCESS"
         );
     } else if (status == 2u) {
         text_color = vec3<u32>(255u, 80u, 80u);  // Red for failure
