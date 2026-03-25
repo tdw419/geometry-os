@@ -69,21 +69,6 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
 // Supports commands like 'add 5 and 3' for LLM-to-opcode translation
 // Returns: pixel brightness (0 or 255) for text rendering
 fn render_input_zone_text(row: u32, col: u32) -> u32 {
-    // Parallelize text rendering by using atomic operations
-    let local_row = row - INPUT_ZONE_TOP;
-    if (local_row >= 8u || col >= 6u) { return 0u; }
-
-    let buffer_idx = row * 10u + col / 6u;
-    if (buffer_idx >= 480u) { return 0u; }
-
-    let char_code = input_buffer[buffer_idx];
-    if (char_code == 0u) { return 0u; }
-
-    let font_bits = get_font_column(char_code, col % 6u);
-    let bit_pos = 6u - local_row;
-
-    return select(0u, 255u, ((font_bits >> bit_pos) & 1u) != 0u);
-}
     // Only render in INPUT ZONE text area (rows 450-474, leaving 475-479 for status)
     if (row < INPUT_ZONE_TOP || row >= 475u) { return 0u; }
     

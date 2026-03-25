@@ -29,7 +29,7 @@ use std::time::Instant;
 
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 400;
-const MAX_AGENTS: usize = 8;
+const MAX_AGENTS: usize = 64;  // Phase 7 Gamma: 64-Agent Collective (8x8 grid)
 const MAILBOX_SIZE: usize = 10;
 const TRAIL_LENGTH: usize = 50;
 
