@@ -62,6 +62,92 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
     // Early-out for rows completely outside boundary + text edge range (448-481)
     // This single comparison skips all subsequent ALU for ~95% of screen pixels
     if (row < 448u || row > 481u) { return 0u; }
+
+    let left_edge = INPUT_ZONE_MARGIN;
+    let right_edge = width - INPUT_ZONE_MARGIN;
+
+    // 2-pixel thick top boundary (rows 448-449) for reliable OCR detection
+    if ((row == 448u || row == 449u) && col >= left_edge && col < right_edge) {
+        return 1u;
+    }
+    // 2-pixel thick bottom boundary (rows 480-481) for reliable OCR detection
+    if ((row == 480u || row == 481u) && col >= left_edge && col < right_edge) {
+        return 2u;
+    }
+    // 2x4 corner brackets aligned to boundary lines (no text row overlap)
+    let is_top_corner = row >= 448u && row <= 449u;
+    let is_bottom_corner = row >= 480u && row <= 481u;
+    if (is_top_corner || is_bottom_corner) {
+        let is_left_corner = col >= left_edge && col < left_edge + 4u;
+        let is_right_corner = col >= right_edge - 4u && col < right_edge;
+        if (is_left_corner || is_right_corner) { return 3u; }
+    }
+    // 2-pixel thick vertical edge markers for TEXT AREA ONLY (rows 450-474)
+    // PATCH_STATUS zone (475-479) has its own styling - no edge markers there
+    // This separation improves OCR accuracy by avoiding color conflicts
+    if (row >= INPUT_ZONE_TOP && row < 475u) {
+        let is_left_edge = col >= left_edge && col < left_edge + 2u;
+        let is_right_edge = col >= right_edge - 2u && col < right_edge;
+        if (is_left_edge || is_right_edge) { return 4u; }
+    }
+    return 0u;
+}
+
+fn get_font_column(char_code: u32, col: u32) -> u32 {
+    // 5x7 bitmap font - returns column bits for given character and column (0-4)
+    // 95 printable ASCII (32-126), 5 cols each = 475 bytes packed in 119 words
+    // Optimized: validate FIRST to avoid wasted ALU on invalid lookups
+    // Precomputed addressing reduces instruction count by 3 ops per call
+    if (char_code < 32u || char_code > 126u || col >= 5u) { return 0u; }
+
+    let bitmap_addr = (char_code - 32u) * 5u + col;
+    let byte_offset = bitmap_addr & 3u;
+    return (font_atlas[bitmap_addr >> 2u] >> (byte_offset << 3u)) & 0xFFu;
+}
+
+fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
+    if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
+
+    let local_row = row - INPUT_ZONE_TOP;
+    if (local_row < 9u || local_row >= 16u) { return vec3<u32>(0u, 0u, 0u); }  // OCR: pure black bg
+    let char_row = local_row - 9u;  // Maps to 0-6 for valid font bitmap indexing
+
+    let char_col = col / 6u;
+    let pixel_col = col % 6u;
+
+    if (pixel_col >= 5u) { return vec3<u32>(0u, 0u, 0u); }  // OCR: pure black gap
+
+    let input_len = get_input_length();
+
+    // Blinking cursor at end of input (32-frame cycle for 500ms at 60fps)
+    if (char_col == input_len && cursor_blink_active()) {
+        if (pixel_col < 2u && char_row < 7u) {
+            return vec3<u32>(200u, 255u, 200u);  // Green cursor
+        }
+        return vec3<u32>(0u, 0u, 0u);  // OCR: pure black cursor off
+    }
+
+    if (char_col >= input_len || char_col >= 64u) {
+        return vec3<u32>(0u, 0u, 0u);  // OCR: pure black empty
+    }
+
+    // Extract char from packed input_buffer (4 chars per u32, little-endian)
+    let word_idx = char_col >> 2u;
+    let byte_shift = (char_col & 3u) << 3u;
+    let char_code = (input_buffer[word_idx] >> byte_shift) & 0xFFu;
+
+    let font_bits = get_font_column(char_code, pixel_col);
+    let bit_pos = 6u - char_row;
+
+    if (((font_bits >> bit_pos) & 1u) != 0u) {
+        return vec3<u32>(255u, 255u, 255u);  // Pure white for max OCR contrast (21:1)
+    }
+    return vec3<u32>(0u, 0u, 0u);  // Pure black for optimal qwen3-vl-8b extraction
+}
+
+    // Early-out for rows completely outside boundary + text edge range (448-481)
+    // This single comparison skips all subsequent ALU for ~95% of screen pixels
+    if (row < 448u || row > 481u) { return 0u; }
     
     let left_edge = INPUT_ZONE_MARGIN;
     let right_edge = width - INPUT_ZONE_MARGIN;
