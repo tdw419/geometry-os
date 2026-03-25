@@ -131,7 +131,11 @@ fn cursor_blink_active() -> bool {
 fn render_input_zone_text(row: u32, col: u32, width: u32) -> vec3<u32> {
     if (row < INPUT_ZONE_TOP || row >= 475u) { return vec3<u32>(0u, 0u, 0u); }
     
-    let char_row = row - INPUT_ZONE_TOP;
+    // Center 7-pixel text vertically in 25-row INPUT ZONE: padding = (25-7)/2 = 9
+    let local_row = row - INPUT_ZONE_TOP;
+    if (local_row < 9u || local_row >= 16u) { return vec3<u32>(5u, 10u, 20u); }
+    let char_row = local_row - 9u;  // Maps to 0-6 for valid font bitmap indexing
+    
     let char_col = col / 6u;
     let pixel_col = col % 6u;
     
