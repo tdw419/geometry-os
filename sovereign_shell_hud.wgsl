@@ -185,6 +185,46 @@ const PATCH_FAIL_CHARS: array<u32, 13> = array<u32, 13>(80u, 65u, 84u, 67u, 72u,
 const PATCH_STATUS_TOP: u32 = 475u;
 const PATCH_STATUS_HEIGHT: u32 = 5u;
 
+// Function to convert natural language commands to VM opcodes
+fn natural_language_to_vm(command: array<u32, 64>) -> array<u32, 10> {
+    // Placeholder for actual implementation
+    return array<u32, 10>(0u);
+}
+
+// Function to render VM opcodes in the HUD
+fn render_vm_opcodes(row: u32, col: u32, width: u32) -> vec3<u32> {
+    if (row < PATCH_STATUS_TOP || row >= PATCH_STATUS_TOP + PATCH_STATUS_HEIGHT) { return vec3<u32>(0u, 0u, 0u); }
+
+    let local_row = row - PATCH_STATUS_TOP;
+    let opcode_col = col / 10u;
+    let pixel_col = col % 10u;
+
+    if (opcode_col >= 10u) { return vec3<u32>(0u, 0u, 0u); }
+
+    // Extract opcode from packed buffer (10 opcodes per u32)
+    let word_idx = opcode_col >> 2u;
+    let byte_shift = (opcode_col & 3u) << 3u;
+    let opcode_code = (vm_opcodes[word_idx] >> byte_shift) & 0xFFu;
+
+    // Render opcode as text using the font atlas
+    return render_font_text(row, col, opcode_code);
+}
+
+// Helper function to render text using the font atlas
+fn render_font_text(row: u32, col: u32, char_code: u32) -> vec3<u32> {
+    // Placeholder for actual implementation
+    return vec3<u32>(0u, 0u, 0u);
+}
+
+// Main render function to handle all rendering
+fn render(row: u32, col: u32, width: u32) -> vec3<u32> {
+    let input_zone_text = render_input_zone_text(row, col, width);
+    let vm_opcodes = natural_language_to_vm(input_buffer);
+    let patch_status_text = render_patch_status(row, col, width);
+
+    return input_zone_text + vm_opcodes + patch_status_text;
+}
+
 fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
     // PATCH_STATUS zone: rows 475-479 (5 rows for 5x7 font with 2px padding)
     if (row < PATCH_STATUS_TOP || row >= 480u) { return vec3<u32>(0u, 0u, 0u); }
