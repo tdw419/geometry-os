@@ -77,9 +77,10 @@ fn get_input_zone_boundary(row: u32, col: u32, width: u32) -> u32 {
         let is_right_corner = col >= right_edge - 4u && col < right_edge;
         if (is_left_corner || is_right_corner) { return 3u; }
     }
-    // 2-pixel thick vertical edge markers for full INPUT ZONE (rows 450-479)
-    // Covers both text area and PATCH_STATUS zone for consistent OCR boundaries
-    if (row >= INPUT_ZONE_TOP && row <= INPUT_ZONE_BOTTOM) {
+    // 2-pixel thick vertical edge markers for TEXT AREA ONLY (rows 450-474)
+    // PATCH_STATUS zone (475-479) has its own styling - no edge markers there
+    // This separation improves OCR accuracy by avoiding color conflicts
+    if (row >= INPUT_ZONE_TOP && row < 475u) {
         let is_left_edge = col >= left_edge && col < left_edge + 2u;
         let is_right_edge = col >= right_edge - 2u && col < right_edge;
         if (is_left_edge || is_right_edge) { return 4u; }
