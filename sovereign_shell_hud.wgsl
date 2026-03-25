@@ -192,11 +192,22 @@ fn render_patch_status(row: u32, col: u32, width: u32) -> vec3<u32> {
 // Declared at module scope for WGSL compliance - used by get_font_column() above
 @group(0) @binding(9) var<storage, read> font_atlas: array<u32>;
 
+// Get current input length from buffer (stored in high byte of word 47)
+fn get_input_length() -> u32 {
+    return input_buffer[47u] >> 24u;
+}
+
+// Cursor blink state - 32-frame cycle (~533ms at 60fps) for visual feedback
+fn cursor_blink_active() -> bool {
+    return (config.frame & 16u) != 0u;
+}
+
 // Input validation helper - returns true if input buffer has valid natural language command
 // Host system reads input_buffer directly for vision-to-opcode pipeline
 fn has_valid_input() -> bool {
-    let input_len = input_buffer[47u] >> 24u;
-    return input_len > 0u && input_len <= 191u;
+    let input_len = get_input_length();
+    return input_len > 0u && input_len <= 192u;
+}n <= 191u;
 }
 
 // Get input character count for host-side OCR extraction
