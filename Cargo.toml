@@ -117,6 +117,14 @@ name = "z-order"
 path = "src/bin/z_order.rs"
 
 [[bin]]
+name = "executive-commander"
+path = "src/bin/executive_commander.rs"
+
+[[bin]]
+name = "multi-tile-ignition"
+path = "src/bin/multi_tile_ignition.rs"
+
+[[bin]]
 name = "resize-handles"
 path = "src/bin/resize_handles.rs"
 

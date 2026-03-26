@@ -2156,13 +2156,13 @@ fn draw_number(value: u32, x: u32, y: u32, color: Pixel) -> u32 {
     var cursor_x = x;
     
     // Skip leading zeros for thousands/hundreds
-    if value >= 1000u {
+    if (value >= 1000u) {
         cursor_x = draw_char(48u + thousands, cursor_x, y, color);
     }
-    if value >= 100u {
+    if (value >= 100u) {
         cursor_x = draw_char(48u + hundreds, cursor_x, y, color);
     }
-    if value >= 10u {
+    if (value >= 10u) {
         cursor_x = draw_char(48u + tens, cursor_x, y, color);
     }
     cursor_x = draw_char(48u + ones, cursor_x, y, color);
@@ -2457,11 +2457,16 @@ fn render_patch_status() {
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let idx = global_id.x;
     
-    // First 64 threads render UI layers
-    if (idx < 64u) {
+    // Thread 0 renders UI layers (single-threaded for clean output)
+    if (idx == 0u) {
         render_hud();
         render_input_zone();
         render_patch_status();
+        return;
+    }
+    
+    // Threads 1-63 early exit (UI handled by thread 0)
+    if (idx < 64u) {
         return;
     }
     
