@@ -2233,6 +2233,39 @@ fn render_hud() {
     cursor_x = draw_char(76u, cursor_x, cursor_y, header_color);   // L
     cursor_x = draw_char(76u, cursor_x, cursor_y, header_color);   // L
     
+    // Draw GPU status indicator on right side of header (row 405)
+    var gpu_status_color: Pixel;
+    let gpu_online = vm_stats[0u] == 1u;
+    if (gpu_online) {
+        gpu_status_color.r = 0u; gpu_status_color.g = 255u; gpu_status_color.b = 100u; gpu_status_color.a = 255u;
+    } else {
+        gpu_status_color.r = 255u; gpu_status_color.g = 50u; gpu_status_color.b = 50u; gpu_status_color.a = 255u;
+    }
+    
+    cursor_x = 550u;
+    cursor_x = draw_char(71u, cursor_x, 405u, gpu_status_color);   // G
+    cursor_x = draw_char(80u, cursor_x, 405u, gpu_status_color);   // P
+    cursor_x = draw_char(85u, cursor_x, 405u, gpu_status_color);   // U
+    cursor_x = draw_char(58u, cursor_x, 405u, gpu_status_color);   // :
+    cursor_x += 5u;
+    
+    if (gpu_online) {
+        cursor_x = draw_char(79u, cursor_x, 405u, gpu_status_color);   // O
+        cursor_x = draw_char(78u, cursor_x, 405u, gpu_status_color);   // N
+        cursor_x = draw_char(76u, cursor_x, 405u, gpu_status_color);   // L
+        cursor_x = draw_char(73u, cursor_x, 405u, gpu_status_color);   // I
+        cursor_x = draw_char(78u, cursor_x, 405u, gpu_status_color);   // N
+        cursor_x = draw_char(69u, cursor_x, 405u, gpu_status_color);   // E
+    } else {
+        cursor_x = draw_char(79u, cursor_x, 405u, gpu_status_color);   // O
+        cursor_x = draw_char(70u, cursor_x, 405u, gpu_status_color);   // F
+        cursor_x = draw_char(70u, cursor_x, 405u, gpu_status_color);   // F
+        cursor_x = draw_char(76u, cursor_x, 405u, gpu_status_color);   // L
+        cursor_x = draw_char(73u, cursor_x, 405u, gpu_status_color);   // I
+        cursor_x = draw_char(78u, cursor_x, 405u, gpu_status_color);   // N
+        cursor_x = draw_char(69u, cursor_x, 405u, gpu_status_color);   // E
+    }
+    
     // Draw register values (A-J) in row 420
     cursor_x = 20u;
     cursor_y = 420u;
