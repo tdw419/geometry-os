@@ -85,22 +85,22 @@ fn set_gpu_offline() {
 fn track_latency(latency_ms: f32) {
     // Fixed-point encoding: ms * 10 for 0.1ms precision
     let fixed_point = u32(latency_ms * 10.0);
-    
+
     // Atomic compare-exchange loop for rolling average
     // 90% old, 10% new: new = (old * 9 + sample) / 10
     var done = false;
     var attempts = 0u;
     let max_attempts = 10u;  // Prevent infinite loop
-    
+
     loop {
         if (done || attempts >= max_attempts) { break; }
-        
+
         let current = atomicLoad(&atomic_telemetry.stats[5]);
         let updated = (current * 9u + fixed_point) / 10u;
-        
+
         // Try to update; if another thread modified it between load and store, retry
         let old_val = atomicCompareExchangeWeak(&atomic_telemetry.stats[5], current, updated);
-        if (old_val == current) {
+        if (old_val.old_value == current) {
             done = true;
         }
         attempts += 1u;
@@ -191,11 +191,11 @@ fn count_bits(bits: u32) -> u32 {
 // ============================================================================
 
 // Example VM dispatch integration:
-// 
+//
 // fn dispatch_opcode(opcode: u32, pc: u32, sp: u32) {
 //     // Update execution state every cycle
 //     update_execution_state(pc, sp);
-//     
+//
 //     if (opcode == 0x40) {  // @ (PROMPT/entry point)
 //         track_request();
 //     } else if (opcode == 0xFF) {  // Unknown opcode
