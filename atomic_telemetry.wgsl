@@ -21,8 +21,8 @@ struct AtomicTelemetry {
     stats: array<atomic<u32>, 11>,
 }
 
-// Global atomic telemetry buffer
-@group(0) @binding(10) var<storage, read_write> atomic_telemetry: AtomicTelemetry;
+// Global atomic telemetry buffer (shares binding 5 with vm_stats)
+@group(0) @binding(5) var<storage, read_write> atomic_telemetry: array<atomic<u32>, 11>;
 
 // Error codes (GlyphLang standard)
 const ERR_UNKNOWN_OP: u32 = 0x01u;
