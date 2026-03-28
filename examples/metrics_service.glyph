@@ -1,0 +1,154 @@
+# metrics_service.glyph
+# GlyphLang Telemetry Module - Zero-Copy Observability
+#
+# Demonstrates writing metrics directly to the Sovereign Shell telemetry plane
+# via shared GPU memory (vm_stats buffer, binding 5)
+#
+# Architecture:
+#   - This service runs as a GPU compute shader
+#   - Writes to vm_stats[3-5] using atomic operations
+#   - Sovereign Shell HUD reads and renders at Rows 410-419
+#   - AI sees summary via GET /view (18 tokens vs 2400+ JSON logs)
+
+@ SERVICE metrics_api {
+  # HTTP-style route definition
+  @ ROUTE GET /health {
+    -> { "status": "ok", "uptime_s": @uptime, "requests": @req_count }
+  }
+  
+  @ ROUTE GET /metrics {
+    -> {
+      "requests": @req_count,
+      "errors": @err_count,
+      "latency_ms": @latency_avg,
+      "routes_active": @routes_bitmap
+    }
+  }
+  
+  # Middleware: Track every request
+  @ BEFORE_REQUEST {
+    track_request()
+    @timer_start = @timestamp
+  }
+  
+  # Middleware: Track response
+  @ AFTER_RESPONSE {
+    @timer_end = @timestamp
+    @elapsed = @timer_end - @timer_start
+    update_latency(@elapsed)
+    
+    # Track errors (4xx, 5xx)
+    ? @response.status >= 400 {
+      track_error()
+    }
+  }
+}
+
+# ============================================================
+# SPATIAL OPCODES - Write to Telemetry Plane
+# ============================================================
+# These opcodes write directly to the GPU buffer that the HUD reads.
+# Zero-copy, zero-HTTP, zero-latency observability.
+
+@ METRIC_UPDATE {
+  % req: Int, err: Int, lat: Int
+  
+  # Row 410: Request Counter
+  # Spatial opcode: position (3,0), fetch ($), add (+), commit (!)
+  # Atomic increment vm_stats[3]
+  3 0 p $ 1 + !
+  
+  # Row 411: Error Counter (conditional)
+  ? err > 0 {
+    4 0 p $ 1 + !
+  }
+  
+  # Row 412: Rolling Latency
+  # Fixed-point encoding (ms * 10)
+  5 0 p lat !
+}
+
+# Track a single request (atomic increment)
+@ track_request() {
+  3 0 p $ 1 + !   # vm_stats[3] += 1
+}
+
+# Track an error (atomic increment)
+@ track_error() {
+  4 0 p $ 1 + !   # vm_stats[4] += 1
+}
+
+# Update rolling latency average
+# Uses 90/10 weighted average for smoothing
+@ update_latency(elapsed_ms: Int) {
+  # Read current average
+  5 0 p $         # Fetch vm_stats[5] to stack
+  
+  # Calculate: new_avg = (old * 9 + elapsed * 10) / 10
+  # (fixed-point: elapsed * 10 for 0.1ms precision)
+  9 *             # old * 9
+  elapsed 10 *   # elapsed * 10
+  +             # sum
+  10 /          # divide by 10
+  
+  # Store back
+  5 0 p !        # Commit to vm_stats[5]
+}
+
+# Set route active in bitmask
+@ set_route_active(route_id: Int) {
+  6 0 p           # Position to vm_stats[6]
+  $               # Fetch current bitmask
+  1 route_id <<   # Create mask: 1 << route_id
+  |              # OR with current
+  !              # Commit
+}
+
+# Clear route from bitmask
+@ set_route_inactive(route_id: Int) {
+  6 0 p           # Position to vm_stats[6]
+  $               # Fetch current bitmask
+  1 route_id <<   # Create mask: 1 << route_id
+  ~              # Invert mask
+  &              # AND with current
+  !              # Commit
+}
+
+# ============================================================
+# EXAMPLE: Full request lifecycle
+# ============================================================
+
+@ EXAMPLE full_lifecycle {
+  # Simulate 10 requests with varying latencies
+  
+  1 10 L           # Loop from 1 to 10
+    track_request()
+    @latency = @random * 50 + 10   # 10-60ms random latency
+    update_latency(@latency)
+    
+    # Simulate 5% error rate
+    ? @random < 0.05 {
+      track_error()
+    }
+  .
+  
+  # Result after 10 requests:
+  # vm_stats[3] = 10 (requests)
+  # vm_stats[4] = ~1 (errors, probabilistic)
+  # vm_stats[5] = ~30 (average latency)
+}
+
+# ============================================================
+# AI VIEW - What the AI sees via GET /view
+# ============================================================
+#
+# ┌─ SOVEREIGN SHELL v2.0 ────────────────────[ GPU: ONLINE ]──┐
+# │ G-LANG: 0010 ERR: 0001 LAT: 35ms ROUTES: 3            │
+# │ HEALTH: [████████████████████████░] 90%                │
+# │                                                         │
+# │ > _                                                     │
+# └─────────────────────────────────────────────────────────┘
+#
+# Token count: ~18 tokens for full backend health
+# vs 2400+ tokens for equivalent JSON logs
+# Efficiency: 133x faster context processing

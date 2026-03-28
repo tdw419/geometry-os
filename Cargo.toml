@@ -131,3 +131,7 @@ path = "src/bin/resize_handles.rs"
 [[bin]]
 name = "minimize-maximize"
 path = "src/bin/minimize_maximize.rs"
+
+[[bin]]
+name = "phase31-demo"
+path = "src/bin/phase31_demo.rs"

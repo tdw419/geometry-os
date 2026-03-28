@@ -31,17 +31,21 @@
 - [ ] Run `executive-commander -- --cmd ping`, verify "PONG"
 - [ ] Document actual throughput numbers (not projected)
 
-### 1.2 Fix the ISA bugs
-- [ ] Fix signed comparison (BLT/BGE) with XOR-flip trick
-- [ ] Fix `select()` argument order for SLT/SLTI/SLTU/SLTIU
-- [ ] Implement SRAI (check funct7 bit 5, arithmetic right shift)
-- [ ] Implement LB/LH sign extension
-- [ ] Implement SB/SH (byte/halfword store with read-modify-write)
+### 1.2 Fix the ISA bugs ✅ (2026-03-24)
+- [x] Fix signed comparison (BLT/BGE) with XOR-flip trick
+- [x] Fix `select()` argument order for SLT/SLTI/SLTU/SLTIU
+- [x] Implement SRAI (check funct7 bit 30, arithmetic right shift)
+- [x] Implement LB/LH sign extension
+- [x] Implement SB/SH (byte/halfword store with read-modify-write)
+- [x] Proper signed DIV/REM (absolute value + sign correction)
+- [x] MULHU via 16-bit split multiplication
+- [x] Naga validation passes
 
-### 1.3 Unify the shaders
-- [ ] Extract shared ISA decoder into a single source of truth
-- [ ] Single-core = multicore with `num_tiles=1, max_steps=1`
-- [ ] Delete `riscv-shader.wgsl`, update `riscv.rs` host to use multicore shader
+### 1.3 Unify the shaders (partial)
+- [x] `riscv-multicore.wgsl` is the canonical shader with all fixes
+- [x] `riscv-shader.wgsl` marked DEPRECATED
+- [ ] Update `riscv.rs` host to use multicore shader
+- [ ] Delete `riscv-shader.wgsl` once migration complete
 
 ### 1.4 Add a test suite
 - [ ] CPU-side reference RISC-V interpreter in Rust (~200 lines)

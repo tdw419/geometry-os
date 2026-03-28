@@ -39,6 +39,9 @@ struct VMState {
     halted: bool,
     waiting_for_input: bool,
     last_result: i32,
+    instruction_memory: Vec<String>,  // For self-modification
+    spawned_agents: Vec<Box<VMState>>, // For parallel execution (mitosis)
+    agent_id: i32, // Unique identifier for this agent
 }
 
 impl VMState {
@@ -117,10 +120,146 @@ impl VMState {
                 }
             }
             
+            // Comparison operators for conditional branching
+            ">" => {
+                if self.stack.len() >= 2 {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    let result = if a > b { 1 } else { 0 };
+                    self.stack.push(result);
+                    self.last_result = result;
+                    println!("[EXEC] {} > {} = {}", a, b, result);
+                }
+            }
+            "<" => {
+                if self.stack.len() >= 2 {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    let result = if a < b { 1 } else { 0 };
+                    self.stack.push(result);
+                    self.last_result = result;
+                    println!("[EXEC] {} < {} = {}", a, b, result);
+                }
+            }
+            "=" | "==" => {
+                if self.stack.len() >= 2 {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    let result = if a == b { 1 } else { 0 };
+                    self.stack.push(result);
+                    self.last_result = result;
+                    println!("[EXEC] {} = {} = {}", a, b, result);
+                }
+            }
+            
+            // Conditional: cond true_val false_val ? → result
+            // If cond != 0, push true_val, else push false_val
+            "?" => {
+                if self.stack.len() >= 3 {
+                    let false_val = self.stack.pop().unwrap();
+                    let true_val = self.stack.pop().unwrap();
+                    let condition = self.stack.pop().unwrap();
+                    let result = if condition != 0 { true_val } else { false_val };
+                    self.stack.push(result);
+                    self.last_result = result;
+                    println!("[COND] {} ? {} : {} = {}", condition, true_val, false_val, result);
+                } else {
+                    println!("[COND ERROR] Need 3 values on stack (cond true false)");
+                }
+            }
+            
+            // Self-Modification: value offset M → writes value to instruction_memory[IP + offset]
+            // Enables the agent to rewrite its own future code
+            // Safety: offset must be > 0 and <= 256
+            "M" | "modify" | "patch" => {
+                if self.stack.len() >= 2 {
+                    let offset = self.stack.pop().unwrap() as usize;
+                    let value = self.stack.pop().unwrap();
+                    
+                    // Safety constraints
+                    if offset == 0 {
+                        println!("[MODIFY ERROR] Offset must be > 0 (cannot modify past instructions)");
+                    } else if offset > 256 {
+                        println!("[MODIFY ERROR] Offset must be <= 256 (max modification range)");
+                    } else {
+                        let target_ip = self.ip + offset;
+                        if target_ip < self.instruction_memory.len() {
+                            let new_token = value.to_string();
+                            let old_token = self.instruction_memory[target_ip].clone();
+                            self.instruction_memory[target_ip] = new_token.clone();
+                            println!("[MODIFY] IP+{}: '{}' → '{}' (value={})", offset, old_token, new_token, value);
+                        } else {
+                            println!("[MODIFY ERROR] Target IP+{} out of bounds (memory len={})", offset, self.instruction_memory.len());
+                        }
+                    }
+                } else {
+                    println!("[MODIFY ERROR] Need 2 values on stack (value offset)");
+                }
+            }
+            
+            // Spawn Parallel Agent: offset S → spawns clone at IP + offset
+            // MITOSIS - The agent learns to reproduce
+            "S" | "spawn" => {
+                if self.stack.len() >= 1 {
+                    let offset = self.stack.pop().unwrap();
+                    
+                    if offset <= 0 {
+                        println!("[SPAWN ERROR] Offset must be > 0");
+                        self.stack.push(-1); // Error code
+                    } else if self.spawned_agents.len() >= 16 {
+                        println!("[SPAWN ERROR] Max agents reached (16)");
+                        self.stack.push(-2); // Error code
+                    } else {
+                        let target_ip = self.ip + offset as usize;
+                        if target_ip < self.instruction_memory.len() {
+                            // Clone current agent
+                            let mut new_agent = Box::new(VMState {
+                                registers: self.registers.clone(),
+                                stack: Vec::new(), // Fresh stack for new agent
+                                ip: target_ip,
+                                halted: false,
+                                waiting_for_input: false,
+                                last_result: 0,
+                                instruction_memory: self.instruction_memory.clone(),
+                                spawned_agents: Vec::new(),
+                                agent_id: self.spawned_agents.len() as i32,
+                            });
+                            
+                            let agent_id = new_agent.agent_id;
+                            self.spawned_agents.push(new_agent);
+                            self.stack.push(agent_id);
+                            println!("[SPAWN] Agent {} spawned at IP+{} (parallel execution)", agent_id, offset);
+                        } else {
+                            println!("[SPAWN ERROR] Target IP+{} out of bounds", offset);
+                            self.stack.push(-3); // Error code
+                        }
+                    }
+                } else {
+                    println!("[SPAWN ERROR] Need 1 value on stack (offset)");
+                }
+            }
+            
             // Duplicate top of stack
             "dup" => {
                 if let Some(&top) = self.stack.last() {
                     self.stack.push(top);
+                }
+            }
+            
+            // Loop construct: X Y L → pushes X, X+1, ..., Y to stack
+            // Example: 1 5 L → stack has [1, 2, 3, 4, 5]
+            "L" | "loop" => {
+                if self.stack.len() >= 2 {
+                    let end = self.stack.pop().unwrap();
+                    let start = self.stack.pop().unwrap();
+                    let mut values = Vec::new();
+                    for value in start..=end {
+                        values.push(value);
+                        self.stack.push(value);
+                    }
+                    println!("[LOOP] {} to {} → {:?}", start, end, values);
+                } else {
+                    println!("[LOOP ERROR] Need 2 values on stack (start end)");
                 }
             }
             
@@ -154,14 +293,34 @@ impl VMState {
         true
     }
     
-    fn run_program(&mut self, code: &str, _patch: Option<Vec<String>>) {
-        let tokens: Vec<&str> = code.split_whitespace().collect();
+    fn step_all(&mut self, patch_injector: &mut Option<Vec<String>>) -> bool {
+        let mut any_active = false;
         
-        while self.ip < tokens.len() && !self.halted {
-            let token = tokens[self.ip];
-            if !self.execute_token(token, &mut None) {
-                break;
+        // Advance the main agent
+        if self.ip < self.instruction_memory.len() && !self.halted && !self.waiting_for_input {
+            let token = self.instruction_memory[self.ip].clone();
+            self.execute_token(&token, patch_injector);
+            any_active = true;
+        }
+        
+        // Advance all parallel spawned agents (Mitosis)
+        for child in &mut self.spawned_agents {
+            if child.step_all(&mut None) {
+                any_active = true;
             }
+        }
+        
+        any_active
+    }
+
+    fn run_program(&mut self, code: &str, mut patch: Option<Vec<String>>) {
+        // Load tokens into instruction_memory for self-modification
+        if !code.is_empty() {
+            self.instruction_memory = code.split_whitespace().map(|s| s.to_string()).collect();
+        }
+        
+        // True Mitosis execution: recursive round-robin evaluation
+        while self.step_all(&mut patch) {
         }
     }
 }
@@ -328,6 +487,7 @@ impl SovereignShellRenderer {
             .await?;
         
         // Load shader
+        // Load shader
         let shader_source = include_str!("../../sovereign_shell_hud.wgsl");
         let shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Sovereign Shell HUD Shader"),
@@ -383,10 +543,10 @@ impl SovereignShellRenderer {
             mapped_at_creation: false,
         });
         
-        // VM stats buffer (SP, IP, stack depth)
+        // VM stats buffer (GPU status, IP, SP, telemetry plane)
         let vm_stats_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("VM Stats Buffer"),
-            size: 3 * 4,
+            size: 11 * 4,  // Expanded for GlyphLang telemetry (indices 3-10)
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -593,11 +753,16 @@ impl SovereignShellRenderer {
         }
         self.queue.write_buffer(&self.stack_buffer, 0, bytemuck::cast_slice(&stack));
         
-        // Update VM stats
+        // Update VM stats (now with telemetry support)
         let vm_stats = [
-            vm.stack.len() as u32,  // SP
-            vm.ip as u32,           // IP
-            vm.stack.len() as u32,  // Stack depth
+            1u32,                   // [0] GPU Status: 1 = ONLINE
+            vm.ip as u32,           // [1] IP
+            vm.stack.len() as u32,  // [2] SP / Stack depth
+            0u32,                   // [3] Requests (atomic)
+            0u32,                   // [4] Errors (atomic)
+            0u32,                   // [5] Latency (fixed-point ms*10)
+            0u32,                   // [6] Active Routes bitmask
+            0u32, 0u32, 0u32, 0u32, // [7-10] Reserved
         ];
         self.queue.write_buffer(&self.vm_stats_buffer, 0, bytemuck::cast_slice(&vm_stats));
         
@@ -733,7 +898,7 @@ impl SovereignShell {
         // Step 3: LLM generates opcodes
         println!("[STEP 3] LLM generating opcodes...");
         let start = Instant::now();
-        let raw_code = call_text_llm(input).await?;
+        let raw_code = call_text_llm(&vision_result).await?;
         let code = clean_vm_code(&raw_code);
         let gen_time = start.elapsed();
         println!("[STEP 3] Generated: {} ({}ms)", code, gen_time.as_millis());

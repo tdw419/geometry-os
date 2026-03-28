@@ -1,0 +1,1 @@
+/home/jericho/zion/projects/ascii_world/gpu/riscv-cartridges/executive_commander/target/riscv32im-unknown-none-elf/release/executive-commander: /home/jericho/zion/projects/ascii_world/gpu/riscv-cartridges/executive_commander/src/main.rs

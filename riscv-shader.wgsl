@@ -1,3 +1,7 @@
+// DEPRECATED: Use riscv-multicore.wgsl instead.
+// This file has known ISA bugs (signed comparison, SB/SH, SRAI, select() order).
+// Kept for backwards compatibility with riscv.rs single-core host.
+//
 // RISC-V CPU in the Framebuffer
 // The GPU executes RISC-V instructions stored as pixels.
 //
