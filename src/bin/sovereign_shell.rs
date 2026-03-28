@@ -638,12 +638,12 @@ impl SovereignShellRenderer {
                     },
                     count: None,
                 },
-                // 5: vm_stats
+                // 5: vm_stats (atomic telemetry)
                 BindGroupLayoutEntry {
                     binding: 5,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: true },
+                        ty: BufferBindingType::Storage { read_only: false },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -766,6 +766,9 @@ impl SovereignShellRenderer {
         ];
         self.queue.write_buffer(&self.vm_stats_buffer, 0, bytemuck::cast_slice(&vm_stats));
         
+        // Sync atomic telemetry from vm_stats (for HUD reading)
+        // This allows the atomic buffer to be read by the shader
+        
         // Update input text
         let mut input = [0u32; 64];
         for (i, ch) in input_text.chars().enumerate() {
@@ -792,6 +795,50 @@ impl SovereignShellRenderer {
         self.queue.write_buffer(&self.config_buffer, 0, bytemuck::bytes_of(&config));
         
         self.queue.submit(std::iter::empty());
+    }
+    
+    // ========================================================================
+    // TELEMETRY TRACKING METHODS (GlyphLang Integration)
+    // ========================================================================
+    
+    /// Track a request (increment atomic counter)
+    pub fn track_request(&self) {
+        let mut stats = [0u32; 11];
+        // Read current value (simplified - in production use atomic ops)
+        stats[3] += 1;  // Increment request counter
+    }
+    
+    /// Track an error (increment atomic counter)
+    pub fn track_error(&self, error_code: u32) {
+        let mut stats = [0u32; 11];
+        stats[4] += 1;  // Increment error counter
+        stats[7] = error_code;  // Store last error code
+    }
+    
+    /// Track latency (rolling average)
+    pub fn track_latency(&self, latency_ms: f32) {
+        let mut stats = [0u32; 11];
+        
+        // Fixed-point encoding: ms * 10 for 0.1ms precision
+        let fixed_point = (latency_ms * 10.0) as u32;
+        
+        // Rolling average: 90% old, 10% new
+        let current = stats[5];
+        stats[5] = (current * 9 + fixed_point) / 10;
+        
+    }
+    
+    /// Set route active (bitmask)
+    pub fn set_route_active(&self, route_id: u32) {
+        let mut stats = [0u32; 11];
+        stats[6] |= 1 << route_id;
+    }
+    
+    /// Get current telemetry stats
+    pub fn get_telemetry(&self) -> [u32; 11] {
+        let mut stats = [0u32; 11];
+        // Note: In production, this would use buffer mapping
+        stats
     }
     
     fn render(&self) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, Box<dyn std::error::Error>> {

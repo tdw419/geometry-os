@@ -38,8 +38,8 @@ struct Config {
 @group(0) @binding(3) var<storage, read> stack: array<u32>;
 @group(0) @binding(4) var<uniform> config: Config;
 
-// Stats (SP, IP, stack depth)
-@group(0) @binding(5) var<storage, read> vm_stats: array<u32>;
+// Stats (GPU status, IP, SP, telemetry)
+@group(0) @binding(5) var<storage, read_write> vm_stats: array<atomic<u32>, 11>;
 
 // Input buffer (64 chars max for text input)
 @group(0) @binding(6) var<storage, read> input_buffer: array<u32>;
