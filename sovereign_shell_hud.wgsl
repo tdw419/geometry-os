@@ -3,10 +3,16 @@
 // ============================================================================
 // Architecture:
 //   Row 0-399:   Agent execution space
-//   Row 400-449: HUD zone (registers, messages)
-//   Row 450-479: INPUT ZONE (user types here)
+//   Row 400-409: HUD header (SOVEREIGN SHELL)
+//   Row 410-419: TELEMETRY ZONE (vm_stats readout)
+//   Row 420-449: HUD zone (registers, messages)
+//   Row 450-474: INPUT ZONE (user types here)
 //   Row 475-479: PATCH STATUS (success/fail display)
 // ============================================================================
+
+// Telemetry zone constants
+const TELEMETRY_ZONE_TOP: u32 = 410u;
+const TELEMETRY_ZONE_BOTTOM: u32 = 420u;
 
 struct Pixel {
     r: u32,
@@ -875,6 +881,282 @@ fn render_patch_status() {
 }
 
 // ============================================================================
+// TELEMETRY HUD — Rows 410-419 (GlyphLang Metrics)
+// ============================================================================
+// vm_stats layout:
+//   [0] GPU Status (1=ONLINE)
+//   [1] IP (instruction pointer)
+//   [2] SP (stack pointer)
+//   [3] Requests (atomic)
+//   [4] Errors (atomic)
+//   [5] Latency (fixed-point ms*10)
+//   [6] Active Routes bitmask
+//   [7-10] Reserved
+// ============================================================================
+
+fn render_telemetry_hud() {
+    var label_color: Pixel;
+    label_color.r = 100u;
+    label_color.g = 180u;
+    label_color.b = 255u;
+    label_color.a = 255u;
+
+    var value_color: Pixel;
+    value_color.r = 0u;
+    value_color.g = 255u;
+    value_color.b = 100u;
+    value_color.a = 255u;
+
+    var error_color: Pixel;
+    error_color.r = 255u;
+    error_color.g = 80u;
+    error_color.b = 80u;
+    error_color.a = 255u;
+
+    var dim_color: Pixel;
+    dim_color.r = 80u;
+    dim_color.g = 80u;
+    dim_color.b = 100u;
+    dim_color.a = 255u;
+
+    var bg_color: Pixel;
+    bg_color.r = 10u;
+    bg_color.g = 15u;
+    bg_color.b = 25u;
+    bg_color.a = 255u;
+
+    // Clear telemetry zone (rows 410-419)
+    var y = TELEMETRY_ZONE_TOP;
+    loop {
+        if (y >= TELEMETRY_ZONE_BOTTOM) { break; }
+        var x = 0u;
+        loop {
+            if (x >= config.width) { break; }
+            let i = y * config.width + x;
+            buffer_out[i] = bg_color;
+            x += 1u;
+        }
+        y += 1u;
+    }
+
+    var cursor_x: u32;
+    var cursor_y: u32;
+
+    // Row 410: GPU Status indicator
+    cursor_x = 10u;
+    cursor_y = TELEMETRY_ZONE_TOP;
+    cursor_x = draw_char(91u, cursor_x, cursor_y, label_color);   // [
+    cursor_x = draw_char(71u, cursor_x, cursor_y, label_color);   // G
+    cursor_x = draw_char(80u, cursor_x, cursor_y, label_color);   // P
+    cursor_x = draw_char(85u, cursor_x, cursor_y, label_color);   // U
+    cursor_x = draw_char(58u, cursor_x, cursor_y, label_color);   // :
+
+    let gpu_status = vm_stats[0];
+    if (gpu_status == 1u) {
+        cursor_x = draw_char(32u, cursor_x, cursor_y, value_color);  // space
+        cursor_x = draw_char(79u, cursor_x, cursor_y, value_color);  // O
+        cursor_x = draw_char(78u, cursor_x, cursor_y, value_color);  // N
+        cursor_x = draw_char(76u, cursor_x, cursor_y, value_color);  // L
+        cursor_x = draw_char(73u, cursor_x, cursor_y, value_color);  // I
+        cursor_x = draw_char(78u, cursor_x, cursor_y, value_color);  // N
+        cursor_x = draw_char(69u, cursor_x, cursor_y, value_color);  // E
+    } else {
+        cursor_x = draw_char(32u, cursor_x, cursor_y, error_color);  // space
+        cursor_x = draw_char(79u, cursor_x, cursor_y, error_color);  // O
+        cursor_x = draw_char(70u, cursor_x, cursor_y, error_color);  // F
+        cursor_x = draw_char(70u, cursor_x, cursor_y, error_color);  // F
+        cursor_x = draw_char(76u, cursor_x, cursor_y, error_color);  // L
+        cursor_x = draw_char(73u, cursor_x, cursor_y, error_color);  // I
+        cursor_x = draw_char(78u, cursor_x, cursor_y, error_color);  // N
+        cursor_x = draw_char(69u, cursor_x, cursor_y, error_color);  // E
+    }
+    cursor_x = draw_char(32u, cursor_x, cursor_y, label_color);   // space
+    cursor_x = draw_char(93u, cursor_x, cursor_y, label_color);   // ]
+
+    // Row 411: IP and SP
+    cursor_x = 10u;
+    cursor_y = TELEMETRY_ZONE_TOP + 1u;
+    cursor_x = draw_char(73u, cursor_x, cursor_y, label_color);   // I
+    cursor_x = draw_char(80u, cursor_x, cursor_y, label_color);   // P
+    cursor_x = draw_char(58u, cursor_x, cursor_y, label_color);   // :
+    cursor_x = draw_char(32u, cursor_x, cursor_y, label_color);   // space
+    cursor_x = draw_char(48u, cursor_x, cursor_y, dim_color);     // 0
+    cursor_x = draw_char(120u, cursor_x, cursor_y, dim_color);    // x
+    cursor_x = draw_hex_u32(vm_stats[1], cursor_x, cursor_y, value_color);
+
+    cursor_x += 10u;  // Gap
+    cursor_x = draw_char(83u, cursor_x, cursor_y, label_color);   // S
+    cursor_x = draw_char(80u, cursor_x, cursor_y, label_color);   // P
+    cursor_x = draw_char(58u, cursor_x, cursor_y, label_color);   // :
+    cursor_x = draw_char(32u, cursor_x, cursor_y, label_color);   // space
+    cursor_x = draw_char(48u, cursor_x, cursor_y, dim_color);     // 0
+    cursor_x = draw_char(120u, cursor_x, cursor_y, dim_color);    // x
+    cursor_x = draw_hex_u32(vm_stats[2], cursor_x, cursor_y, value_color);
+
+    // Row 412: Request counter with bar
+    cursor_x = 10u;
+    cursor_y = TELEMETRY_ZONE_TOP + 2u;
+    cursor_x = draw_char(82u, cursor_x, cursor_y, label_color);   // R
+    cursor_x = draw_char(69u, cursor_x, cursor_y, label_color);   // E
+    cursor_x = draw_char(81u, cursor_x, cursor_y, label_color);   // Q
+    cursor_x = draw_char(58u, cursor_x, cursor_y, label_color);   // :
+    cursor_x = draw_char(32u, cursor_x, cursor_y, label_color);   // space
+    cursor_x = draw_char(91u, cursor_x, cursor_y, dim_color);     // [
+
+    // Draw request bar (max 10 chars)
+    let req_count = vm_stats[3];
+    let req_bar_len = min(req_count, 10u);
+    var bar_i = 0u;
+    loop {
+        if (bar_i >= 10u) { break; }
+        if (bar_i < req_bar_len) {
+            cursor_x = draw_char(124u, cursor_x, cursor_y, value_color);  // |
+        } else {
+            cursor_x = draw_char(46u, cursor_x, cursor_y, dim_color);     // .
+        }
+        bar_i += 1u;
+    }
+    cursor_x = draw_char(93u, cursor_x, cursor_y, dim_color);     // ]
+    cursor_x = draw_char(32u, cursor_x, cursor_y, label_color);   // space
+    cursor_x = draw_decimal_u32(req_count, cursor_x, cursor_y, value_color);
+
+    // Row 413: Error counter with indicator
+    cursor_x = 10u;
+    cursor_y = TELEMETRY_ZONE_TOP + 3u;
+    cursor_x = draw_char(69u, cursor_x, cursor_y, label_color);   // E
+    cursor_x = draw_char(82u, cursor_x, cursor_y, label_color);   // R
+    cursor_x = draw_char(82u, cursor_x, cursor_y, label_color);   // R
+    cursor_x = draw_char(58u, cursor_x, cursor_y, label_color);   // :
+    cursor_x = draw_char(32u, cursor_x, cursor_y, label_color);   // space
+    cursor_x = draw_char(91u, cursor_x, cursor_y, dim_color);     // [
+
+    let err_count = vm_stats[4];
+    if (err_count > 0u) {
+        cursor_x = draw_char(33u, cursor_x, cursor_y, error_color);   // !
+    } else {
+        cursor_x = draw_char(32u, cursor_x, cursor_y, value_color);   // space
+    }
+
+    var err_i = 0u;
+    loop {
+        if (err_i >= 10u) { break; }
+        cursor_x = draw_char(46u, cursor_x, cursor_y, dim_color);  // .
+        err_i += 1u;
+    }
+    cursor_x = draw_char(93u, cursor_x, cursor_y, dim_color);     // ]
+    cursor_x = draw_char(32u, cursor_x, cursor_y, label_color);   // space
+    cursor_x = draw_decimal_u32(err_count, cursor_x, cursor_y, error_color);
+
+    // Row 414: Latency (fixed-point ms*10)
+    cursor_x = 10u;
+    cursor_y = TELEMETRY_ZONE_TOP + 4u;
+    cursor_x = draw_char(76u, cursor_x, cursor_y, label_color);   // L
+    cursor_x = draw_char(65u, cursor_x, cursor_y, label_color);   // A
+    cursor_x = draw_char(84u, cursor_x, cursor_y, label_color);   // T
+    cursor_x = draw_char(58u, cursor_x, cursor_y, label_color);   // :
+    cursor_x = draw_char(32u, cursor_x, cursor_y, label_color);   // space
+
+    let latency_raw = vm_stats[5];
+    let latency_ms = latency_raw / 10u;
+    let latency_frac = latency_raw % 10u;
+    cursor_x = draw_decimal_u32(latency_ms, cursor_x, cursor_y, value_color);
+    cursor_x = draw_char(46u, cursor_x, cursor_y, value_color);   // .
+    cursor_x = draw_decimal_u32(latency_frac, cursor_x, cursor_y, value_color);
+    cursor_x = draw_char(109u, cursor_x, cursor_y, label_color);  // m
+    cursor_x = draw_char(115u, cursor_x, cursor_y, label_color);  // s
+
+    // Row 415: Route bitmask (binary)
+    cursor_x = 10u;
+    cursor_y = TELEMETRY_ZONE_TOP + 5u;
+    cursor_x = draw_char(82u, cursor_x, cursor_y, label_color);   // R
+    cursor_x = draw_char(84u, cursor_x, cursor_y, label_color);   // T
+    cursor_x = draw_char(95u, cursor_x, cursor_y, label_color);   // _
+    cursor_x = draw_char(77u, cursor_x, cursor_y, label_color);   // M
+    cursor_x = draw_char(65u, cursor_x, cursor_y, label_color);   // A
+    cursor_x = draw_char(83u, cursor_x, cursor_y, label_color);   // S
+    cursor_x = draw_char(75u, cursor_x, cursor_y, label_color);   // K
+    cursor_x = draw_char(58u, cursor_x, cursor_y, label_color);   // :
+    cursor_x = draw_char(32u, cursor_x, cursor_y, label_color);   // space
+
+    let route_mask = vm_stats[6];
+    cursor_x = draw_binary_u8(route_mask & 255u, cursor_x, cursor_y, value_color);
+
+    // Rows 416-419: Reserved (clear only)
+    // Already cleared by the initial loop
+}
+
+// Helper: Draw 4-digit hex
+fn draw_hex_u32(val: u32, x: u32, y: u32, color: Pixel) -> u32 {
+    var cursor_x = x;
+    cursor_x = draw_hex_digit((val >> 12u) & 15u, cursor_x, y, color);
+    cursor_x = draw_hex_digit((val >> 8u) & 15u, cursor_x, y, color);
+    cursor_x = draw_hex_digit((val >> 4u) & 15u, cursor_x, y, color);
+    cursor_x = draw_hex_digit(val & 15u, cursor_x, y, color);
+    return cursor_x;
+}
+
+// Helper: Draw single hex digit
+fn draw_hex_digit(digit: u32, x: u32, y: u32, color: Pixel) -> u32 {
+    let char_code = select(digit + 48u, digit + 55u, digit > 9u);  // 0-9 or A-F
+    return draw_char(char_code, x, y, color);
+}
+
+// Helper: Draw decimal number (max 10 digits)
+fn draw_decimal_u32(val: u32, x: u32, y: u32, color: Pixel) -> u32 {
+    var cursor_x = x;
+
+    if (val == 0u) {
+        return draw_char(48u, cursor_x, y, color);
+    }
+
+    var num = val;
+    var digit_count = 0u;
+
+    // Count digits first
+    var temp = num;
+    loop {
+        if (temp == 0u) { break; }
+        temp /= 10u;
+        digit_count += 1u;
+    }
+
+    // Draw digits from most significant
+    var divisor = 1u;
+    var j = 1u;
+    loop {
+        if (j >= digit_count) { break; }
+        divisor *= 10u;
+        j += 1u;
+    }
+
+    loop {
+        if (divisor == 0u) { break; }
+        let digit = (num / divisor) % 10u;
+        cursor_x = draw_char(48u + digit, cursor_x, y, color);
+        divisor /= 10u;
+    }
+
+    return cursor_x;
+}
+
+// Helper: Draw 8-bit binary from u32 (uses low byte)
+fn draw_binary_u8(val: u32, x: u32, y: u32, color: Pixel) -> u32 {
+    var cursor_x = x;
+    var i = 0u;
+    loop {
+        if (i >= 8u) { break; }
+        let bit = (val >> (7u - i)) & 1u;
+        if (bit == 1u) {
+            cursor_x = draw_char(49u, cursor_x, y, color);  // 1
+        } else {
+            cursor_x = draw_char(48u, cursor_x, y, color);  // 0
+        }
+        i += 1u;
+    }
+    return cursor_x;
+}
+
+// ============================================================================
 // MAIN COMPUTE SHADER
 // ============================================================================
 
@@ -885,6 +1167,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // First 64 threads render UI layers
     if (idx < 64u) {
         render_hud();
+        render_telemetry_hud();
         render_input_zone();
         render_patch_status();
         return;
