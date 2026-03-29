@@ -460,9 +460,14 @@ struct SovereignShellRenderer {
     stack_buffer: Buffer,
     config_buffer: Buffer,
     vm_stats_buffer: Buffer,
-    input_buffer: Buffer,
-    patch_status_buffer: Buffer,
-    exec_result_buffer: Buffer,
+    // Consolidated I/O state buffer
+    io_state_buffer: Buffer,
+    
+    // Telemetry Bridge - single consolidated buffer
+    // Layout: prev_vm_stats[11] + particle_counter[1] + particles[256*12]
+    telemetry_bridge_buffer: Buffer,
+    
+    test_mode: bool,
 }
 
 impl SovereignShellRenderer {
@@ -551,29 +556,35 @@ impl SovereignShellRenderer {
             mapped_at_creation: false,
         });
         
-        // Input buffer (64 chars)
-        let input_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Input Buffer"),
-            size: 64 * 4,
+        // ===== CONSOLIDATED I/O STATE BUFFER =====
+        // Layout: input_text[64 u32s] | patch_status[1] | exec_result[1] | _pad[2] = 272 bytes
+        let io_state_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("IO State Buffer"),
+            size: 272,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         
-        // Patch status buffer (0=none, 1=success, 2=fail)
-        let patch_status_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Patch Status Buffer"),
-            size: 4,
+        // Initialize to zero
+        let zero_io = [0u32; 68];
+        queue.write_buffer(&io_state_buffer, 0, bytemuck::cast_slice(&zero_io));
+        
+        // ===== TELEMETRY BRIDGE - SINGLE CONSOLIDATED BUFFER =====
+        // Layout:
+        //   [0..44]    prev_vm_stats (11 u32s)
+        //   [48..52]   particle_counter (1 u32)
+        //   [64..12352] particles (256 * 48 bytes each)
+        
+        let telemetry_bridge_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("Telemetry Bridge Buffer"),
+            size: 64 + 256 * 48,  // 12,352 bytes
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         
-        // Execution result buffer
-        let exec_result_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Exec Result Buffer"),
-            size: 4,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        // Initialize prev_vm_stats (offset 0) and particle_counter (offset 48) to zero
+        let zero_init = [0u32; 16];  // 64 bytes of zeros
+        queue.write_buffer(&telemetry_bridge_buffer, 0, bytemuck::cast_slice(&zero_init));
         
         // Initialize config
         let config = Config { width: WIDTH, height: HEIGHT, time: 0.0, frame: 0, mode: 0 };
@@ -649,7 +660,8 @@ impl SovereignShellRenderer {
                     },
                     count: None,
                 },
-                // 6: input_text
+                // 6: CONSOLIDATED I/O STATE BUFFER
+                // Layout: input_text[64 u32s] | patch_status[1] | exec_result[1]
                 BindGroupLayoutEntry {
                     binding: 6,
                     visibility: ShaderStages::COMPUTE,
@@ -660,23 +672,13 @@ impl SovereignShellRenderer {
                     },
                     count: None,
                 },
-                // 7: patch_status
+                // 7: TELEMETRY BRIDGE - consolidated buffer
+                // Layout: prev_vm_stats[11] + counter[1] + particles[256*12]
                 BindGroupLayoutEntry {
                     binding: 7,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                // 8: exec_result
-                BindGroupLayoutEntry {
-                    binding: 8,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: true },
+                        ty: BufferBindingType::Storage { read_only: false },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -710,9 +712,8 @@ impl SovereignShellRenderer {
                 BindGroupEntry { binding: 3, resource: stack_buffer.as_entire_binding() },
                 BindGroupEntry { binding: 4, resource: config_buffer.as_entire_binding() },
                 BindGroupEntry { binding: 5, resource: vm_stats_buffer.as_entire_binding() },
-                BindGroupEntry { binding: 6, resource: input_buffer.as_entire_binding() },
-                BindGroupEntry { binding: 7, resource: patch_status_buffer.as_entire_binding() },
-                BindGroupEntry { binding: 8, resource: exec_result_buffer.as_entire_binding() },
+                BindGroupEntry { binding: 6, resource: io_state_buffer.as_entire_binding() },
+                BindGroupEntry { binding: 7, resource: telemetry_bridge_buffer.as_entire_binding() },
             ],
         });
         
@@ -727,10 +728,14 @@ impl SovereignShellRenderer {
             stack_buffer,
             config_buffer,
             vm_stats_buffer,
-            input_buffer,
-            patch_status_buffer,
-            exec_result_buffer,
+            io_state_buffer,
+            telemetry_bridge_buffer,
+            test_mode: false,
         })
+    }
+    
+    fn set_test_mode(&mut self, enabled: bool) {
+        self.test_mode = enabled;
     }
     
     fn update_state(&self, vm: &VMState, input_text: &str, patch_status: u32, frame: u32) {
@@ -769,20 +774,20 @@ impl SovereignShellRenderer {
         // Sync atomic telemetry from vm_stats (for HUD reading)
         // This allows the atomic buffer to be read by the shader
         
-        // Update input text
+        // Update input text into consolidated IO state buffer
         let mut input = [0u32; 64];
         for (i, ch) in input_text.chars().enumerate() {
             if i < 64 {
                 input[i] = ch as u32;
             }
         }
-        self.queue.write_buffer(&self.input_buffer, 0, bytemuck::cast_slice(&input));
+        self.queue.write_buffer(&self.io_state_buffer, 0, bytemuck::cast_slice(&input));
         
-        // Update patch status
-        self.queue.write_buffer(&self.patch_status_buffer, 0, bytemuck::cast_slice(&[patch_status]));
+        // Update patch status (offset 256 = 64 * 4 bytes)
+        self.queue.write_buffer(&self.io_state_buffer, 256, bytemuck::cast_slice(&[patch_status]));
         
-        // Update execution result
-        self.queue.write_buffer(&self.exec_result_buffer, 0, bytemuck::cast_slice(&[vm.last_result as u32]));
+        // Update execution result (offset 260)
+        self.queue.write_buffer(&self.io_state_buffer, 260, bytemuck::cast_slice(&[vm.last_result as u32]));
         
         // Update config with frame number for cursor blink
         let config = Config { 
@@ -790,7 +795,7 @@ impl SovereignShellRenderer {
             height: HEIGHT, 
             time: frame as f32 / 60.0, 
             frame, 
-            mode: 0 
+            mode: if self.test_mode { 1 } else { 0 }
         };
         self.queue.write_buffer(&self.config_buffer, 0, bytemuck::bytes_of(&config));
         
@@ -913,6 +918,10 @@ impl SovereignShell {
         self.renderer.update_state(&self.vm, &self.input_text, self.patch_status, self.frame);
         self.frame += 1;
         self.renderer.render()
+    }
+    
+    fn set_test_mode(&mut self, enabled: bool) {
+        self.renderer.set_test_mode(enabled);
     }
     
     async fn process_natural_language(&mut self, input: &str) -> Result<String, String> {
@@ -1070,14 +1079,54 @@ impl SovereignShell {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     
-    // Check for test mode
-    if args.len() > 1 && args[1] == "--test" {
-        run_test_mode().await?;
+    // Check for modes
+    if args.len() > 1 {
+        if args[1] == "--test" {
+            run_test_mode().await?;
+        } else if args[1] == "--particles" {
+            run_particle_test().await?;
+        }
     } else {
         // Interactive mode
         let mut shell = SovereignShell::new().await?;
         shell.run_interactive().await?;
     }
+    
+    Ok(())
+}
+
+async fn run_particle_test() -> Result<(), Box<dyn std::error::Error>> {
+    println!();
+    println!("╔══════════════════════════════════════════════════════════╗");
+    println!("║      TELEMETRY BRIDGE - PARTICLE TEST MODE              ║");
+    println!("╠══════════════════════════════════════════════════════════╣");
+    println!("║  Testing particle spawning on vm_stats changes          ║");
+    println!("║  Watch rows 410-419 for white pulses                    ║");
+    println!("╚══════════════════════════════════════════════════════════╝");
+    println!();
+    
+    let mut shell = SovereignShell::new().await?;
+    shell.set_test_mode(true);
+    
+    // Run for 300 frames (5 seconds at 60fps)
+    for frame in 0..300u32 {
+        // Render frame
+        let _image = shell.render_frame()?;
+        
+        if frame % 60 == 0 {
+            println!("[Frame {}] Particles spawning...", frame);
+        }
+    }
+    
+    // Save final frame
+    let final_image = shell.render_frame()?;
+    final_image.save("output/sovereign_shell_particles.png")?;
+    
+    println!();
+    println!("╔══════════════════════════════════════════════════════════╗");
+    println!("║         PARTICLE TEST COMPLETE                          ║");
+    println!("║  Check output/sovereign_shell_particles.png             ║");
+    println!("╚══════════════════════════════════════════════════════════╝");
     
     Ok(())
 }

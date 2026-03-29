@@ -41,14 +41,51 @@ struct Config {
 // Stats (GPU status, IP, SP, telemetry)
 @group(0) @binding(5) var<storage, read_write> vm_stats: array<atomic<u32>, 11>;
 
-// Input buffer (64 chars max for text input)
-@group(0) @binding(6) var<storage, read> input_buffer: array<u32>;
+// ============================================================================
+// CONSOLIDATED I/O STATE BUFFER (binding 6)
+// Layout: input_text[64] | patch_status[1] | exec_result[1] | _pad[2]
+// ============================================================================
+struct IOState {
+    input_text: array<u32, 64>,   // 256 bytes
+    patch_status: u32,            // offset 256
+    exec_result: u32,             // offset 260
+    _pad: array<u32, 2>,          // align to 264 bytes
+}
 
-// Patch status (0=none, 1=success, 2=fail)
-@group(0) @binding(7) var<storage, read> patch_status: array<u32>;
+@group(0) @binding(6) var<storage, read> io_state: IOState;
 
-// Execution result (displayed in HUD)
-@group(0) @binding(8) var<storage, read> exec_result: array<u32>;
+// ============================================================================
+// TELEMETRY BRIDGE (binding 7) - Particle System for Route Visualization
+// ============================================================================
+const MAX_PARTICLES: u32 = 256u;
+const PARTICLE_LIFETIME: f32 = 300.0;  // 5 seconds at 60fps
+const PARTICLE_BASE_SPEED: f32 = 0.5;  // Slower for visibility
+const PARTICLE_MAX_SPEED: f32 = 3.0;
+
+struct Particle {
+    pos: vec2<f32>,
+    vel: vec2<f32>,
+    color: vec4<f32>,
+    life: f32,
+    route_id: u32,
+    result_val: u32,
+}
+
+// Layout:
+//   [0..44]   prev_vm_stats (11 u32s)
+//   [48..52]  particle_counter (1 u32, atomic)
+//   [64+]     particles (256 * 48 bytes each)
+struct TelemetryBridge {
+    prev_vm_stats: array<u32, 11>,
+    _pad1: u32,  // offset 44
+    _pad2: u32,  // offset 48 - will use this for counter
+    _pad3: u32,  // offset 52
+    particle_counter: atomic<u32>,  // offset 56
+    _pad4: array<u32, 1>,  // align to 64 bytes
+    particles: array<Particle, 256>,
+}
+
+@group(0) @binding(7) var<storage, read_write> telemetry_bridge: TelemetryBridge;
 
 // ============================================================================
 // 5x7 BITMAP FONT — Full ASCII support
@@ -711,7 +748,7 @@ fn render_hud() {
     cursor_x = draw_char(61u, cursor_x, cursor_y, header_color);   // =
     cursor_x = draw_char(62u, cursor_x, cursor_y, header_color);   // >
     cursor_x += 5u;
-    let result = exec_result[0u];
+    let result = io_state.exec_result;
     cursor_x = draw_number(result, cursor_x, cursor_y, value_color);
 }
 
@@ -778,7 +815,7 @@ fn render_input_zone() {
     var i = 0u;
     loop {
         if (i >= 64u) { break; }
-        let ch = input_buffer[i];
+        let ch = io_state.input_text[i];
         if (ch == 0u) { break; }  // Null terminator
         cursor_x = draw_char(ch, cursor_x, cursor_y, input_color);
         i += 1u;
@@ -838,7 +875,7 @@ fn render_patch_status() {
     }
     
     // Get patch status
-    let status = patch_status[0u];
+    let status = io_state.patch_status;
     
     var cursor_x = 20u;
     let cursor_y = 476u;
@@ -925,15 +962,25 @@ fn render_telemetry_hud() {
     bg_color.b = 25u;
     bg_color.a = 255u;
 
-    // Clear telemetry zone (rows 410-419)
+    // Clear telemetry zone (rows 410-419) but skip particle lanes
+    // Particles spawn at y = 410 + route_id*2 for routes 3-6
+    // So skip rows: 416 (route 3), 418 (route 4), 420 (route 5), 422 (route 6)
     var y = TELEMETRY_ZONE_TOP;
     loop {
         if (y >= TELEMETRY_ZONE_BOTTOM) { break; }
+        
+        // Skip particle lanes (rows 416, 418, 420, 422)
+        let is_particle_lane = (y >= 416u && y <= 422u && y % 2u == 0u);
+        
         var x = 0u;
         loop {
             if (x >= config.width) { break; }
-            let i = y * config.width + x;
-            buffer_out[i] = bg_color;
+            
+            if (!is_particle_lane) {
+                let i = y * config.width + x;
+                buffer_out[i] = bg_color;
+            }
+            
             x += 1u;
         }
         y += 1u;
@@ -1157,6 +1204,118 @@ fn draw_binary_u8(val: u32, x: u32, y: u32, color: Pixel) -> u32 {
 }
 
 // ============================================================================
+// TELEMETRY BRIDGE HELPER FUNCTIONS
+// ============================================================================
+
+// Route color palette - each route gets distinct color
+fn get_route_color(route_id: u32) -> vec4<f32> {
+    let r = f32((route_id * 73u) % 256u) / 255.0;
+    let g = f32((route_id * 151u) % 256u) / 255.0;
+    let b = f32((route_id * 199u) % 256u) / 255.0;
+    return vec4<f32>(r, g, b, 1.0);
+}
+
+// Spawn a particle when vm_stats change
+fn spawn_telemetry_particle(route_id: u32, val: u32) {
+    let p_idx = atomicAdd(&telemetry_bridge.particle_counter, 1u) % MAX_PARTICLES;
+    
+    // Spawn at telemetry row for this route
+    let spawn_y = f32(TELEMETRY_ZONE_TOP) + f32(route_id) * 2.0;
+    
+    telemetry_bridge.particles[p_idx].pos = vec2<f32>(10.0, spawn_y);
+    
+    // Velocity based on result value
+    let speed = clamp(PARTICLE_BASE_SPEED + f32(val % 10u), PARTICLE_BASE_SPEED, PARTICLE_MAX_SPEED);
+    telemetry_bridge.particles[p_idx].vel = vec2<f32>(speed, 0.0);
+    
+    // Color from route ID
+    telemetry_bridge.particles[p_idx].color = get_route_color(route_id);
+    telemetry_bridge.particles[p_idx].life = PARTICLE_LIFETIME;
+    telemetry_bridge.particles[p_idx].route_id = route_id;
+    telemetry_bridge.particles[p_idx].result_val = val;
+}
+
+// Check for vm_stats changes and spawn particles
+fn check_telemetry_pulses() {
+    // TEST MODE: Spawn particles every 20 frames when mode == 1
+    if (config.mode == 1u && config.frame % 20u == 0u) {
+        let test_route = (config.frame / 20u) % 4u + 3u;  // Cycle through routes 3-6
+        spawn_telemetry_particle(test_route, config.frame);
+    }
+    
+    // Check indices 3-6 (Requests, Errors, Latency, Routes)
+    var i = 3u;
+    loop {
+        if (i >= 7u) { break; }
+        
+        let current_val = atomicLoad(&vm_stats[i]);
+        let prev_val = telemetry_bridge.prev_vm_stats[i];
+        
+        if (current_val != prev_val) {
+            // Spawn particle for this change
+            spawn_telemetry_particle(i, current_val);
+            
+            // Update prev for next frame
+            telemetry_bridge.prev_vm_stats[i] = current_val;
+        }
+        
+        i += 1u;
+    }
+}
+
+// Update particle physics and render
+fn update_particles() {
+    var i = 0u;
+    loop {
+        if (i >= MAX_PARTICLES) { break; }
+        
+        var p = telemetry_bridge.particles[i];
+        
+        // Skip dead particles
+        if (p.life <= 0.0) {
+            i += 1u;
+            continue;
+        }
+        
+        // Update position
+        p.pos = p.pos + p.vel;
+        telemetry_bridge.particles[i].pos = p.pos;
+        
+        // Decay life
+        p.life = p.life - 1.0;
+        telemetry_bridge.particles[i].life = p.life;
+        
+        // Render particle as 3-pixel wide streak
+        let px = u32(p.pos.x);
+        let py = u32(p.pos.y);
+        
+        if (py < config.height) {
+            let alpha = p.life / PARTICLE_LIFETIME;
+            let particle_pixel = Pixel(
+                u32(p.color.r * 255.0),
+                u32(p.color.g * 255.0),
+                u32(p.color.b * 255.0),
+                u32(alpha * 255.0)
+            );
+            
+            // Draw 3 pixels horizontally
+            var dx = 0u;
+            loop {
+                if (dx >= 3u) { break; }
+                let x = px + dx;
+                if (x < config.width) {
+                    let idx = py * config.width + x;
+                    buffer_out[idx] = particle_pixel;
+                }
+                dx += 1u;
+            }
+        }
+        
+        i += 1u;
+    }
+}
+
+// ============================================================================
 // MAIN COMPUTE SHADER
 // ============================================================================
 
@@ -1164,17 +1323,31 @@ fn draw_binary_u8(val: u32, x: u32, y: u32, color: Pixel) -> u32 {
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let idx = global_id.x;
     
-    // First 64 threads render UI layers
-    if (idx < 64u) {
+    // Thread 0: Check telemetry pulses and spawn particles
+    if (idx == 0u) {
+        check_telemetry_pulses();
+    }
+    
+    // Threads 1-63: Render UI layers to buffer_out
+    // Only use a single thread to avoid race conditions
+    if (idx == 1u) {
         render_hud();
         render_telemetry_hud();
         render_input_zone();
         render_patch_status();
-        return;
     }
     
-    // Rest of threads copy input to output (pass-through for agent execution space)
-    if (idx < config.width * config.height) {
-        buffer_out[idx] = buffer_in[idx];
+    // Thread 2: Render particles ON TOP of HUD (after HUD is done)
+    if (idx == 2u) {
+        update_particles();
+    }
+    
+    // Threads 64+: Copy input to output (base layer)
+    // Skip rows 400-480 (HUD zone) to preserve HUD and particle rendering
+    if (idx >= 64u && idx < config.width * config.height) {
+        let y = idx / config.width;
+        if (y < 400u || y >= 480u) {
+            buffer_out[idx] = buffer_in[idx];
+        }
     }
 }
