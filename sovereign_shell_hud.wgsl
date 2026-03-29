@@ -1285,27 +1285,34 @@ fn update_particles() {
         p.life = p.life - 1.0;
         telemetry_bridge.particles[i].life = p.life;
         
-        // Render particle as 3-pixel wide streak
+        // Render particle as 3-pixel wide streak with ADDITIVE BLENDING
         let px = u32(p.pos.x);
         let py = u32(p.pos.y);
         
         if (py < config.height) {
             let alpha = p.life / PARTICLE_LIFETIME;
-            let particle_pixel = Pixel(
-                u32(p.color.r * 255.0),
-                u32(p.color.g * 255.0),
-                u32(p.color.b * 255.0),
-                u32(alpha * 255.0)
-            );
             
-            // Draw 3 pixels horizontally
+            // Draw 3 pixels horizontally with additive blend
             var dx = 0u;
             loop {
                 if (dx >= 3u) { break; }
                 let x = px + dx;
                 if (x < config.width) {
                     let idx = py * config.width + x;
-                    buffer_out[idx] = particle_pixel;
+                    
+                    // ADDITIVE BLEND: Add particle color to existing pixel
+                    var existing = buffer_out[idx];
+                    var pr = u32(p.color.r * 255.0 * alpha);
+                    var pg = u32(p.color.g * 255.0 * alpha);
+                    var pb = u32(p.color.b * 255.0 * alpha);
+                    
+                    // Blend and clamp
+                    existing.r = min(255u, existing.r + pr);
+                    existing.g = min(255u, existing.g + pg);
+                    existing.b = min(255u, existing.b + pb);
+                    existing.a = 255u;
+                    
+                    buffer_out[idx] = existing;
                 }
                 dx += 1u;
             }
@@ -1316,38 +1323,49 @@ fn update_particles() {
 }
 
 // ============================================================================
-// MAIN COMPUTE SHADER
+// MAIN COMPUTE SHADER - Layered Rendering with Sequential Execution
 // ============================================================================
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let idx = global_id.x;
+    let total_pixels = config.width * config.height;
     
-    // Thread 0: Check telemetry pulses and spawn particles
-    if (idx == 0u) {
-        check_telemetry_pulses();
+    // ═════════════════════════════════════════════════════════════════
+    // LAYER 1: Copy base layer (protect HUD zone) - PARALLEL
+    // ═════════════════════════════════════════════════════════════════
+    if (idx < total_pixels) {
+        let row = idx / config.width;
+        if (row < 400u || row >= 480u) {
+            buffer_out[idx] = buffer_in[idx];
+        } else {
+            // Clear HUD zone background
+            var bg: Pixel;
+            bg.r = 10u; bg.g = 15u; bg.b = 25u; bg.a = 255u;
+            buffer_out[idx] = bg;
+        }
     }
     
-    // Threads 1-63: Render UI layers to buffer_out
-    // Only use a single thread to avoid race conditions
-    if (idx == 1u) {
+    // ENSURE base layer is complete before HUD renders
+    storageBarrier();
+    workgroupBarrier();
+    
+    // ═════════════════════════════════════════════════════════════════
+    // LAYER 2+3: HUD + Particles (SINGLE THREAD for sequential execution)
+    // ═════════════════════════════════════════════════════════════════
+    // Barriers don't serialize different thread IDs within a workgroup!
+    // We must use the SAME thread ID for sequential operations.
+    if (idx == 0u) {
+        // Step 1: Spawn particles based on vm_stats
+        check_telemetry_pulses();
+        
+        // Step 2: Render HUD text
         render_hud();
         render_telemetry_hud();
         render_input_zone();
         render_patch_status();
-    }
-    
-    // Thread 2: Render particles ON TOP of HUD (after HUD is done)
-    if (idx == 2u) {
+        
+        // Step 3: Overlay particles with additive blending (AFTER HUD)
         update_particles();
-    }
-    
-    // Threads 64+: Copy input to output (base layer)
-    // Skip rows 400-480 (HUD zone) to preserve HUD and particle rendering
-    if (idx >= 64u && idx < config.width * config.height) {
-        let y = idx / config.width;
-        if (y < 400u || y >= 480u) {
-            buffer_out[idx] = buffer_in[idx];
-        }
     }
 }
