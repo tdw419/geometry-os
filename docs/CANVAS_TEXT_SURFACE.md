@@ -11,8 +11,13 @@ PIXELC_GUIDE.md (the Python-to-bytecode compiler).
 ## What It Is
 
 The canvas grid IS a text editor. Each cell holds one ASCII character. You type
-assembly source code directly onto the 32x32 grid, press F8 to assemble it, and
-F5 to run it. The grid reads like a text file rendered in colored pixels.
+assembly source code directly onto the 32-column grid, press F8 to assemble it,
+and F5 to run it. The grid reads like a text file rendered in colored pixels.
+
+The canvas supports **scrolling**: the logical grid is 32 columns × 128 rows
+(4096 characters), but only 32 rows are visible at a time. Programs larger
+than 32 lines scroll automatically as you type, and PageUp/PageDown scroll
+manually. A scrollbar on the right edge shows scroll position.
 
 The VM does not change. The assembler does not change. Only the canvas input
 and display model changed.
@@ -106,6 +111,19 @@ access fails.
 
 Uses the `arboard` crate for cross-platform clipboard access (X11 on Linux,
 Win32 on Windows, NSPasteboard on macOS).
+
+### Scrolling
+
+The canvas is 32 columns wide but 128 rows tall. Only 32 rows are visible at
+once. The view scrolls automatically when the cursor moves out of the visible
+area (typing, arrow keys, paste). Manual scroll controls:
+
+- **PageUp**: Scroll up one page (32 rows). Cursor moves to center of new view.
+- **PageDown**: Scroll down one page (32 rows). Cursor moves to center of new view.
+- **Arrow Up/Down**: Moves cursor; auto-scrolls if cursor leaves visible area.
+
+A 2-pixel-wide scrollbar on the right edge of the canvas shows the current
+position. The thumb size is proportional to the visible/total ratio.
 
 ---
 
@@ -210,9 +228,8 @@ and see opcodes, registers, and numbers as different color groups.
 ```
 Address        Size    Purpose
 ---------------------------------------------------------------
-0x000-0x3FF   1024    Canvas grid (source text in TEXT mode)
-                       Each cell = one ASCII character as u32
-                       Visible on the 32x32 grid
+0x000-0x3FF   1024    Canvas grid region (legacy; see note below)
+                       Visible source text is in a separate buffer
 0x400-0x7FF   1024    Text input buffer (micro-asm)
 0x800-0xBFF   1024    VM-resident micro-assembler
 0xC00-0xFFF   1024    Label table
@@ -225,6 +242,13 @@ Address        Size    Purpose
 ---------------------------------------------------------------
 Total: 65536 (0x10000) u32 cells
 ```
+
+**Note on canvas storage:** The canvas text editor uses a separate backing buffer
+(`canvas_buffer` in main.rs) with 128 rows × 32 columns = 4096 cells. This buffer
+is NOT in VM RAM. It's a separate `Vec<u32>` that allows programs larger than 32
+rows without overlapping the bytecode region at 0x1000. The first 1024 cells of
+VM RAM (0x000-0x3FF) are unused by the canvas in TEXT mode but remain accessible
+for programs that read/write them directly.
 
 The source text and the assembled bytecode live in different memory regions.
 Source at 0x000 stays visible on the grid. Bytecode at 0x1000 is invisible but
@@ -296,18 +320,20 @@ exactly as if it came from a file.
 1. Use standard assembly mnemonics (LDI, ADD, HALT, etc.) -- NOT single-char
    codes (I, A, H). TEXT mode reads full assembly text.
 
-2. Each cell holds one character. A line like `LDI r0, 10` takes 10 cells.
+3. The canvas has 32 columns per row. A line like `LDI r0, 10` takes 10 cells.
 
-3. The 32x32 grid has 32 cells per row, 32 rows = 1024 characters max.
-   That's about 30-40 lines of average assembly, depending on line length.
+4. The visible grid shows 32 rows at a time, but the logical grid extends to
+   128 rows (4096 characters total). The view auto-scrolls when typing past
+   the bottom edge. PageUp/PageDown scroll by one page. A scrollbar on the
+   right edge shows position.
 
-4. Enter newlines explicitly (press Enter / write 0x0A). The assembler reads
+5. Enter newlines explicitly (press Enter / write 0x0A). The assembler reads
    the grid as one big text string with embedded newlines.
 
-5. Null cells (value 0) are treated as newlines during assembly. Unwritten
+6. Null cells (value 0) are treated as newlines during assembly. Unwritten
    cells at the end of a line don't matter.
 
-6. Source text stays at 0x000-0x3FF. Bytecode assembles to 0x1000. They
+7. Source text is stored in a separate backing buffer, not VM RAM. Bytecode
    never overlap.
 
 ### If you're modifying the codebase:
@@ -330,8 +356,9 @@ exactly as if it came from a file.
 ### Key constants:
 
 ```rust
-const CANVAS_COLS: usize = 32;           // grid width
-const CANVAS_ROWS: usize = 32;           // grid height
+const CANVAS_COLS: usize = 32;           // grid width (fixed)
+const CANVAS_ROWS: usize = 32;           // visible rows on screen
+const CANVAS_MAX_ROWS: usize = 128;      // total logical rows (scrollable)
 const CANVAS_SCALE: usize = 16;          // pixels per cell on screen
 const CANVAS_BYTECODE_ADDR: usize = 0x1000; // where assembled bytecode goes
 ```

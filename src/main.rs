@@ -20,7 +20,8 @@ const HEIGHT: usize = 768;
 // Canvas grid
 const CANVAS_SCALE: usize = 16; // 16x16 screen pixels per cell
 const CANVAS_COLS: usize = 32;
-const CANVAS_ROWS: usize = 32;
+const CANVAS_ROWS: usize = 32; // visible rows on screen
+const CANVAS_MAX_ROWS: usize = 128; // total logical rows (scrollable)
 
 // VM screen (256x256, positioned to the right of the canvas)
 const VM_SCREEN_X: usize = 640;
@@ -43,6 +44,8 @@ const GRID_BG: u32 = 0x0A0A14;
 const GRID_LINE: u32 = 0x141420;
 const CURSOR_COL: u32 = 0x00FFFF;
 const STATUS_FG: u32 = 0x888899;
+const SCROLLBAR_BG: u32 = 0x181828;
+const SCROLLBAR_FG: u32 = 0x334466;
 
 fn main() {
     let mut window = Window::new(
@@ -65,9 +68,16 @@ fn main() {
     let mut is_running = false;
     let mut canvas_assembled = false;
 
-    // Cursor position on canvas
+    // Cursor position on canvas (logical coordinates, can exceed visible area)
     let mut cursor_row: usize = 0;
     let mut cursor_col: usize = 0;
+
+    // Scroll offset: which logical row is at the top of the visible window
+    let mut scroll_offset: usize = 0;
+
+    // Canvas backing buffer (separate from VM RAM to allow > 32 rows
+    // without overlapping bytecode at 0x1000)
+    let mut canvas_buffer: Vec<u32> = vec![0; CANVAS_MAX_ROWS * CANVAS_COLS];
 
     // Status bar message
     let mut status_msg = String::from("[TEXT mode: type assembly, F8=assemble, F5=run]");
@@ -85,7 +95,13 @@ fn main() {
     if let Some(path_str) = std::env::args().nth(1) {
         let path = PathBuf::from(&path_str);
         if let Ok(source) = std::fs::read_to_string(&path) {
-            load_source_to_canvas(&mut vm, &source, &mut cursor_row, &mut cursor_col);
+            load_source_to_canvas(
+                &mut canvas_buffer,
+                &source,
+                &mut cursor_row,
+                &mut cursor_col,
+            );
+            scroll_offset = 0;
             status_msg = format!("[loaded: {}]", path.display());
             loaded_file = Some(path);
         } else {
@@ -111,18 +127,20 @@ fn main() {
                     Key::Escape => {
                         file_input_mode = false;
                         file_input_buf.clear();
-                        status_msg = String::from("[TEXT mode: type assembly, F8=assemble, F5=run]");
+                        status_msg =
+                            String::from("[TEXT mode: type assembly, F8=assemble, F5=run]");
                     }
                     Key::Enter => {
                         // Attempt to load the file
                         let path = Path::new(&file_input_buf);
                         if let Ok(source) = std::fs::read_to_string(path) {
                             load_source_to_canvas(
-                                &mut vm,
+                                &mut canvas_buffer,
                                 &source,
                                 &mut cursor_row,
                                 &mut cursor_col,
                             );
+                            scroll_offset = 0;
                             loaded_file = Some(path.to_path_buf());
                             status_msg = format!("[loaded: {}]", file_input_buf);
                         } else {
@@ -141,7 +159,8 @@ fn main() {
                     Key::Tab => {
                         // Cycle through completions from programs/*.asm
                         if !file_completions.is_empty() {
-                            file_completion_idx = (file_completion_idx + 1) % file_completions.len();
+                            file_completion_idx =
+                                (file_completion_idx + 1) % file_completions.len();
                             file_input_buf = file_completions[file_completion_idx].clone();
                             status_msg = format!(
                                 "[load file: {} | Tab=complete, Enter=load, Esc=cancel]",
@@ -171,17 +190,23 @@ fn main() {
             match key {
                 Key::Enter => {
                     let idx = cursor_row * CANVAS_COLS + cursor_col;
-                    vm.ram[idx] = '\n' as u32;
+                    canvas_buffer[idx] = '\n' as u32;
                     cursor_col = 0;
                     cursor_row += 1;
-                    if cursor_row >= CANVAS_ROWS {
-                        cursor_row = 0;
+                    if cursor_row >= CANVAS_MAX_ROWS {
+                        cursor_row = CANVAS_MAX_ROWS - 1;
                     }
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
                 }
                 Key::Space => {
                     let idx = cursor_row * CANVAS_COLS + cursor_col;
-                    vm.ram[idx] = 0x20;
-                    advance_cursor(&mut cursor_row, &mut cursor_col);
+                    canvas_buffer[idx] = 0x20;
+                    advance_cursor(
+                        &mut canvas_buffer,
+                        &mut cursor_row,
+                        &mut cursor_col,
+                        &mut scroll_offset,
+                    );
                 }
                 Key::Backspace => {
                     if cursor_col > 0 {
@@ -190,7 +215,9 @@ fn main() {
                         cursor_row -= 1;
                         cursor_col = CANVAS_COLS - 1;
                     }
-                    vm.ram[cursor_row * CANVAS_COLS + cursor_col] = 0;
+                    let idx = cursor_row * CANVAS_COLS + cursor_col;
+                    canvas_buffer[idx] = 0;
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
                 }
                 Key::F5 => {
                     if vm.halted {
@@ -204,8 +231,8 @@ fn main() {
                     is_running = !is_running;
                 }
                 Key::F8 => {
-                    let ctrl = window.is_key_down(Key::LeftCtrl)
-                        || window.is_key_down(Key::RightCtrl);
+                    let ctrl =
+                        window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl);
                     if ctrl {
                         // Ctrl+F8: enter file input mode
                         file_input_mode = true;
@@ -221,7 +248,12 @@ fn main() {
                             file_input_buf
                         );
                     } else {
-                        canvas_assemble(&mut vm, &mut canvas_assembled, &mut status_msg);
+                        canvas_assemble(
+                            &canvas_buffer,
+                            &mut vm,
+                            &mut canvas_assembled,
+                            &mut status_msg,
+                        );
                     }
                 }
                 Key::Left => {
@@ -238,25 +270,51 @@ fn main() {
                     if cursor_row > 0 {
                         cursor_row -= 1;
                     }
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
                 }
                 Key::Down => {
-                    if cursor_row < CANVAS_ROWS - 1 {
+                    if cursor_row < CANVAS_MAX_ROWS - 1 {
                         cursor_row += 1;
+                    }
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                }
+                Key::PageUp => {
+                    if scroll_offset > 0 {
+                        scroll_offset = scroll_offset.saturating_sub(CANVAS_ROWS);
+                        // Move cursor to center of visible area
+                        let new_cursor = scroll_offset + CANVAS_ROWS / 2;
+                        if new_cursor < cursor_row || cursor_row < scroll_offset {
+                            cursor_row = new_cursor.min(CANVAS_MAX_ROWS - 1);
+                        }
+                    }
+                }
+                Key::PageDown => {
+                    let max_scroll = CANVAS_MAX_ROWS.saturating_sub(CANVAS_ROWS);
+                    if scroll_offset < max_scroll {
+                        scroll_offset = (scroll_offset + CANVAS_ROWS).min(max_scroll);
+                        // Move cursor to center of visible area
+                        let new_cursor = scroll_offset + CANVAS_ROWS / 2;
+                        if new_cursor > cursor_row
+                            || cursor_row >= scroll_offset + CANVAS_ROWS
+                        {
+                            cursor_row = new_cursor.min(CANVAS_MAX_ROWS - 1);
+                        }
                     }
                 }
                 Key::V => {
-                    let ctrl = window.is_key_down(Key::LeftCtrl)
-                        || window.is_key_down(Key::RightCtrl);
+                    let ctrl =
+                        window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl);
                     if ctrl {
                         match arboard::Clipboard::new() {
                             Ok(mut clipboard) => match clipboard.get_text() {
                                 Ok(text) => {
                                     let pasted = paste_text_to_canvas(
-                                        &mut vm,
+                                        &mut canvas_buffer,
                                         &text,
                                         &mut cursor_row,
                                         &mut cursor_col,
                                     );
+                                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
                                     status_msg = format!("[pasted {} chars]", pasted);
                                 }
                                 Err(e) => {
@@ -272,18 +330,28 @@ fn main() {
                             || window.is_key_down(Key::RightShift);
                         if let Some(ch) = key_to_ascii_shifted(Key::V, shift) {
                             let idx = cursor_row * CANVAS_COLS + cursor_col;
-                            vm.ram[idx] = ch as u32;
-                            advance_cursor(&mut cursor_row, &mut cursor_col);
+                            canvas_buffer[idx] = ch as u32;
+                            advance_cursor(
+                                &mut canvas_buffer,
+                                &mut cursor_row,
+                                &mut cursor_col,
+                                &mut scroll_offset,
+                            );
                         }
                     }
                 }
                 _ => {
-                    let shift = window.is_key_down(Key::LeftShift)
-                        || window.is_key_down(Key::RightShift);
+                    let shift =
+                        window.is_key_down(Key::LeftShift) || window.is_key_down(Key::RightShift);
                     if let Some(ch) = key_to_ascii_shifted(key, shift) {
                         let idx = cursor_row * CANVAS_COLS + cursor_col;
-                        vm.ram[idx] = ch as u32;
-                        advance_cursor(&mut cursor_row, &mut cursor_col);
+                        canvas_buffer[idx] = ch as u32;
+                        advance_cursor(
+                            &mut canvas_buffer,
+                            &mut cursor_row,
+                            &mut cursor_col,
+                            &mut scroll_offset,
+                        );
                     }
                 }
             }
@@ -300,20 +368,38 @@ fn main() {
         }
 
         // ── Render ───────────────────────────────────────────────
-        render(&mut buffer, &vm, cursor_row, cursor_col, is_running, &status_msg);
+        render(
+            &mut buffer,
+            &vm,
+            &canvas_buffer,
+            cursor_row,
+            cursor_col,
+            scroll_offset,
+            is_running,
+            &status_msg,
+        );
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+    }
+}
+
+// ── Ensure cursor is visible (adjust scroll_offset if needed) ───
+fn ensure_cursor_visible(cursor_row: &usize, scroll_offset: &mut usize) {
+    if *cursor_row < *scroll_offset {
+        *scroll_offset = *cursor_row;
+    } else if *cursor_row >= *scroll_offset + CANVAS_ROWS {
+        *scroll_offset = *cursor_row - CANVAS_ROWS + 1;
     }
 }
 
 // ── Load source text from a string onto the canvas grid ──────────
 fn load_source_to_canvas(
-    vm: &mut vm::Vm,
+    canvas_buffer: &mut Vec<u32>,
     source: &str,
     cursor_row: &mut usize,
     cursor_col: &mut usize,
 ) {
-    // Clear canvas grid
-    for cell in vm.ram[..CANVAS_COLS * CANVAS_ROWS].iter_mut() {
+    // Clear canvas buffer
+    for cell in canvas_buffer.iter_mut() {
         *cell = 0;
     }
 
@@ -321,14 +407,14 @@ fn load_source_to_canvas(
     let mut col = 0usize;
 
     for ch in source.chars() {
-        if row >= CANVAS_ROWS {
+        if row >= CANVAS_MAX_ROWS {
             break;
         }
         if ch == '\n' {
             row += 1;
             col = 0;
         } else if col < CANVAS_COLS {
-            vm.ram[row * CANVAS_COLS + col] = ch as u32;
+            canvas_buffer[row * CANVAS_COLS + col] = ch as u32;
             col += 1;
         }
         // characters beyond column 32 on a single line are dropped
@@ -340,7 +426,7 @@ fn load_source_to_canvas(
 
 // ── Paste text from clipboard onto the canvas grid at cursor position ──
 fn paste_text_to_canvas(
-    vm: &mut vm::Vm,
+    canvas_buffer: &mut Vec<u32>,
     text: &str,
     cursor_row: &mut usize,
     cursor_col: &mut usize,
@@ -350,7 +436,7 @@ fn paste_text_to_canvas(
     let mut count = 0usize;
 
     for ch in text.chars() {
-        if row >= CANVAS_ROWS {
+        if row >= CANVAS_MAX_ROWS {
             break;
         }
         if ch == '\n' {
@@ -360,7 +446,7 @@ fn paste_text_to_canvas(
             // Skip carriage returns
             continue;
         } else if col < CANVAS_COLS {
-            vm.ram[row * CANVAS_COLS + col] = ch as u32;
+            canvas_buffer[row * CANVAS_COLS + col] = ch as u32;
             col += 1;
             if col >= CANVAS_COLS {
                 row += 1;
@@ -370,15 +456,20 @@ fn paste_text_to_canvas(
         }
     }
 
-    *cursor_row = row.min(CANVAS_ROWS - 1);
+    *cursor_row = row.min(CANVAS_MAX_ROWS - 1);
     *cursor_col = col.min(CANVAS_COLS - 1);
     count
 }
 
 // ── Canvas assembly: read grid as text, assemble, store bytecode ──
-fn canvas_assemble(vm: &mut vm::Vm, canvas_assembled: &mut bool, status_msg: &mut String) {
-    let canvas_size = CANVAS_COLS * CANVAS_ROWS;
-    let source: String = vm.ram[..canvas_size]
+fn canvas_assemble(
+    canvas_buffer: &[u32],
+    vm: &mut vm::Vm,
+    canvas_assembled: &mut bool,
+    status_msg: &mut String,
+) {
+    let buffer_size = CANVAS_MAX_ROWS * CANVAS_COLS;
+    let source: String = canvas_buffer[..buffer_size]
         .iter()
         .map(|&cell| {
             let val = cell & 0xFF;
@@ -424,8 +515,10 @@ fn canvas_assemble(vm: &mut vm::Vm, canvas_assembled: &mut bool, status_msg: &mu
 fn render(
     buffer: &mut [u32],
     vm: &vm::Vm,
+    canvas_buffer: &[u32],
     cursor_row: usize,
     cursor_col: usize,
+    scroll_offset: usize,
     is_running: bool,
     status_msg: &str,
 ) {
@@ -433,13 +526,14 @@ fn render(
         *pixel = BG;
     }
 
-    // ── Canvas grid ──────────────────────────────────────────────
-    for row in 0..CANVAS_ROWS {
+    // ── Canvas grid (with scroll offset) ─────────────────────────
+    for vis_row in 0..CANVAS_ROWS {
+        let log_row = vis_row + scroll_offset;
         for col in 0..CANVAS_COLS {
-            let val = vm.ram[row * CANVAS_COLS + col];
+            let val = canvas_buffer[log_row * CANVAS_COLS + col];
             let x0 = col * CANVAS_SCALE;
-            let y0 = row * CANVAS_SCALE;
-            let is_cursor = row == cursor_row && col == cursor_col && !is_running;
+            let y0 = vis_row * CANVAS_SCALE;
+            let is_cursor = log_row == cursor_row && col == cursor_col && !is_running;
             let ascii_byte = (val & 0xFF) as u8;
 
             let use_pixel_font = val != 0 && ascii_byte >= 0x20 && ascii_byte < 0x80;
@@ -456,7 +550,8 @@ fn render(
 
                         let gc = dx / 2;
                         let gr = dy / 2;
-                        let glyph_on = gc < font::GLYPH_W && gr < font::GLYPH_H
+                        let glyph_on = gc < font::GLYPH_W
+                            && gr < font::GLYPH_H
                             && glyph[gr] & (1 << (7 - gc)) != 0;
 
                         let mut color = if glyph_on {
@@ -496,6 +591,34 @@ fn render(
         }
     }
 
+    // ── Scrollbar (right edge of canvas) ─────────────────────────
+    if CANVAS_MAX_ROWS > CANVAS_ROWS {
+        let sb_x = CANVAS_COLS * CANVAS_SCALE - 3; // 3px wide bar at right edge
+        let sb_height = CANVAS_ROWS * CANVAS_SCALE;
+        let max_scroll = CANVAS_MAX_ROWS - CANVAS_ROWS;
+
+        // Background track
+        for y in 0..sb_height {
+            buffer[y * WIDTH + sb_x] = SCROLLBAR_BG;
+            buffer[y * WIDTH + sb_x + 1] = SCROLLBAR_BG;
+        }
+
+        // Thumb (proportional to visible/total ratio, minimum 8px)
+        let thumb_ratio = (CANVAS_ROWS * CANVAS_SCALE) as f32 / (CANVAS_MAX_ROWS * CANVAS_SCALE) as f32;
+        let thumb_height = ((sb_height as f32 * thumb_ratio).max(8.0)) as usize;
+        let thumb_max_travel = sb_height - thumb_height;
+        let thumb_y = if max_scroll > 0 {
+            (scroll_offset * thumb_max_travel) / max_scroll
+        } else {
+            0
+        };
+
+        for y in thumb_y..(thumb_y + thumb_height).min(sb_height) {
+            buffer[y * WIDTH + sb_x] = SCROLLBAR_FG;
+            buffer[y * WIDTH + sb_x + 1] = SCROLLBAR_FG;
+        }
+    }
+
     // ── VM screen ────────────────────────────────────────────────
     for y in 0..256 {
         for x in 0..256 {
@@ -515,11 +638,23 @@ fn render(
     }
     for i in 16..32 {
         let text = format!("r{:02}={:08X}", i, vm.regs[i]);
-        render_text(buffer, REGS_X + 200, REGS_Y + (i - 16) * 14, &text, STATUS_FG);
+        render_text(
+            buffer,
+            REGS_X + 200,
+            REGS_Y + (i - 16) * 14,
+            &text,
+            STATUS_FG,
+        );
     }
 
     // ── Status bar ───────────────────────────────────────────────
-    let pc_text = format!("PC={:04X} {}", vm.pc, status_msg);
+    let row_info = format!("row {}/{} ", cursor_row + 1, CANVAS_MAX_ROWS);
+    let scroll_info = if scroll_offset > 0 || cursor_row >= CANVAS_ROWS {
+        format!("[scroll {}-{}] ", scroll_offset + 1, scroll_offset + CANVAS_ROWS)
+    } else {
+        String::new()
+    };
+    let pc_text = format!("PC={:04X} {}{}{}", vm.pc, scroll_info, row_info, status_msg);
     render_text(buffer, 8, HEIGHT - 20, &pc_text, STATUS_FG);
 
     let state_label = if is_running {
@@ -529,7 +664,13 @@ fn render(
     } else {
         ("PAUSED", 0xFFAA00)
     };
-    render_text(buffer, WIDTH - 80, HEIGHT - 20, state_label.0, state_label.1);
+    render_text(
+        buffer,
+        WIDTH - 80,
+        HEIGHT - 20,
+        state_label.0,
+        state_label.1,
+    );
 }
 
 /// Render a text string into the framebuffer using the 8x8 font
@@ -585,15 +726,21 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> u32 {
     ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }
 
-fn advance_cursor(row: &mut usize, col: &mut usize) {
+fn advance_cursor(
+    _canvas_buffer: &mut Vec<u32>,
+    row: &mut usize,
+    col: &mut usize,
+    scroll_offset: &mut usize,
+) {
     *col += 1;
     if *col >= CANVAS_COLS {
         *col = 0;
         *row += 1;
-        if *row >= CANVAS_ROWS {
-            *row = 0;
+        if *row >= CANVAS_MAX_ROWS {
+            *row = CANVAS_MAX_ROWS - 1;
         }
     }
+    ensure_cursor_visible(row, scroll_offset);
 }
 
 // ── File listing for Tab completion ────────────────────────────
