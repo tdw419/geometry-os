@@ -24,6 +24,8 @@ pub struct Vm {
     pub frame_ready: bool,
     /// LCG state for RAND opcode
     pub rand_state: u32,
+    /// Incremented each time FRAME fires; mirrored to RAM[TICKS_PORT]
+    pub frame_count: u32,
 }
 
 impl Vm {
@@ -36,6 +38,7 @@ impl Vm {
             halted: false,
             frame_ready: false,
             rand_state: 0xDEADBEEF,
+            frame_count: 0,
         }
     }
 
@@ -48,6 +51,7 @@ impl Vm {
         self.halted = false;
         self.frame_ready = false;
         self.rand_state = 0xDEADBEEF;
+        self.frame_count = 0;
     }
 
     /// Execute one instruction. Returns false if halted.
@@ -70,6 +74,8 @@ impl Vm {
 
             // FRAME -- signal host to display current screen; execution continues
             0x02 => {
+                self.frame_count = self.frame_count.wrapping_add(1);
+                self.ram[0xFFE] = self.frame_count;
                 self.frame_ready = true;
                 return true; // keep running (host checks frame_ready to pace rendering)
             }
@@ -718,6 +724,7 @@ impl Vm {
             halted,
             frame_ready: false,
             rand_state: 0xDEADBEEF,
+            frame_count: 0,
         })
     }
 }

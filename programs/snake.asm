@@ -99,6 +99,17 @@ game_loop:
   JZ r0, try_left
 
 after_input:
+  ; throttle: only move snake every 8 frames (~7.5 moves/sec at 60fps)
+  LDI r4, 0xFFE
+  LOAD r8, r4           ; r8 = TICKS
+  LDI r9, 7
+  AND r8, r9            ; r8 = TICKS & 7
+  JZ r8, do_move        ; move on frame 0, 8, 16, ...
+  CALL draw_frame
+  FRAME
+  JMP game_loop
+
+do_move:
   CALL move_snake
   CALL draw_frame
   FRAME

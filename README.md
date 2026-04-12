@@ -4,11 +4,11 @@ A pixel-art VM with a built-in assembler, debugger, and live GUI.
 
 ## What It Does
 
-Geometry OS is a 256x256 pixel virtual machine with 32 registers, 31 opcodes,
+Geometry OS is a 256x256 pixel virtual machine with 32 registers, 32 opcodes,
 memory-mapped I/O, and a real-time animation loop. You write assembly programs
 in a text editor built into the GUI, hit run, and watch them execute live.
 
-## Opcodes (31)
+## Opcodes (32)
 
 ### Control
 | Opcode | Args | Description |
@@ -75,6 +75,13 @@ in a text editor built into the GUI, hit run, and watch them execute live.
 | PUSH   | reg   | Push to stack |
 | POP    | reg   | Pop from stack |
 
+## Memory-Mapped I/O
+
+| Port | Address | Description |
+|------|---------|-------------|
+| TICKS | 0xFFE | Frame counter (read-only, incremented each FRAME) |
+| KEY | 0xFFF | Keyboard input (read via IKEY) |
+
 ## Quick Start
 
 ```bash
@@ -131,6 +138,29 @@ loop:
   JMP loop
 ```
 
+## Throttling Pattern
+
+Use the TICKS port (0xFFE) to control game speed independently of frame rate:
+
+```
+loop:
+  FILL r_black
+  IKEY r10
+  ; ... handle input ...
+
+  ; Throttle: only move every 8 frames (~7.5 moves/sec at 60fps)
+  LDI r4, 0xFFE
+  LOAD r8, r4           ; r8 = TICKS
+  LDI r9, 7
+  AND r8, r9            ; r8 = TICKS & 7
+  JNZ r8, skip_move     ; skip if not a move frame
+  ; ... update game state ...
+skip_move:
+  ; ... draw ...
+  FRAME
+  JMP loop
+```
+
 ## GUI Controls
 
 | Key | Action |
@@ -147,13 +177,13 @@ loop:
 - **Assembler**: Two-pass with labels, hex/dec/bin literals
 - **GUI**: minifb window with canvas text editor, VM screen, register display, disassembly panel
 - **CLI**: Headless mode for testing and scripting
-- **Memory map**: 0x0000-0x0FFF bytecode, 0x1000-0x1FFF canvas text, 0xFFF keyboard port
+- **Memory map**: 0x0000-0x0FFF bytecode, 0x1000-0x1FFF canvas text, 0xFFE TICKS port (frame counter), 0xFFF keyboard port
 
 ## Stats
 
-- ~4,900 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
+- ~5,100 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
 - 32 opcodes
-- 22 test programs
+- 23 demo programs
 - 24 unit tests
 
 ## License

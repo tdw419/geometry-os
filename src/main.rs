@@ -36,9 +36,12 @@ const REGS_Y: usize = 340;
 // ── Memory map ───────────────────────────────────────────────────
 // 0x000-0x3FF   Canvas grid (source text, 1024 cells visible on 32x32 grid)
 // 0x1000-0x1FFF Assembled bytecode output (F8 writes here)
+// 0xFFE         TICKS port (frame counter, incremented each FRAME opcode, read-only)
 // 0xFFF         Keyboard port (memory-mapped I/O)
 const CANVAS_BYTECODE_ADDR: usize = 0x1000;
 const KEY_PORT: usize = 0xFFF;
+#[allow(dead_code)]
+const TICKS_PORT: usize = 0xFFE;
 
 // ── Save file ───────────────────────────────────────────────────
 const SAVE_FILE: &str = "geometry_os.sav";
@@ -2605,6 +2608,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         halted,
         frame_ready: false,
         rand_state: 0xDEADBEEF,
+        frame_count: 0,
     };
 
     // Parse canvas trailer
