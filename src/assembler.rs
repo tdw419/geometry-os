@@ -404,6 +404,14 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[1])? as u32);
         }
 
+        "RAND" => {
+            if tokens.len() < 2 {
+                return Err(format!("RAND requires 1 argument: RAND rd"));
+            }
+            bytecode.push(0x49);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
         "LINE" => {
             if tokens.len() < 6 {
                 return Err(format!("LINE requires 5 arguments: LINE x0r, y0r, x1r, y1r, cr"));

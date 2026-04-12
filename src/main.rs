@@ -519,7 +519,7 @@ fn cli_main(extra_args: &[String]) {
     }
 
     println!("Geometry OS v0.3.0 CLI");
-    println!("31 opcodes | 32 regs | 256x256");
+    println!("32 opcodes | 32 regs | 256x256");
     println!("Type 'help' for commands.");
     println!();
 
@@ -1434,7 +1434,7 @@ fn main() {
     // Boot: write welcome banner + first prompt into canvas
     {
         term_output_row = write_line_to_canvas(&mut canvas_buffer, 0, "Geometry OS v0.3.0");
-        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "31 opcodes | 32 regs | 256x256");
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "32 opcodes | 32 regs | 256x256");
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "Type 'help' for commands.");
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "");
         term_prompt_row = term_output_row;
@@ -2294,7 +2294,7 @@ const OPCODES: &[&str] = &[
     "HALT", "NOP", "FRAME", "LDI", "LOAD", "STORE", "ADD", "SUB", "MUL", "DIV",
     "AND", "OR", "XOR", "SHL", "SHR", "MOD", "JMP", "JZ", "JNZ",
     "CALL", "RET", "BLT", "BGE", "PSET", "PSETI", "FILL", "RECTF",
-    "TEXT", "LINE", "CIRCLE", "SCROLL", "IKEY", "NEG", "CMP", "PUSH", "POP",
+    "TEXT", "LINE", "CIRCLE", "SCROLL", "IKEY", "RAND", "NEG", "CMP", "PUSH", "POP",
 ];
 
 /// Token types produced by the syntax highlighter.
@@ -2604,6 +2604,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         screen,
         halted,
         frame_ready: false,
+        rand_state: 0xDEADBEEF,
     };
 
     // Parse canvas trailer

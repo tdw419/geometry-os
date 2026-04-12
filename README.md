@@ -70,6 +70,7 @@ in a text editor built into the GUI, hit run, and watch them execute live.
 | Opcode | Args | Description |
 |--------|------|-------------|
 | IKEY   | reg   | Read keyboard port (RAM[0xFFF]), clear it |
+| RAND   | reg   | Pseudo-random u32 (LCG) into reg |
 | CMP    | rd, rs | Compare: r0 = -1/0/1 (lt/eq/gt) |
 | PUSH   | reg   | Push to stack |
 | POP    | reg   | Pop from stack |
@@ -97,6 +98,7 @@ geo> run
 | circles.asm | Concentric circles with cycling colors |
 | fire.asm | Scrolling fire animation (FRAME + SCROLL) |
 | ball.asm | Bouncing ball with WASD keyboard control |
+| snake.asm | Snake game -- WASD control, random apples, growing tail |
 | scroll_demo.asm | Horizontal bar that scrolls upward |
 | checkerboard.asm | Checkerboard pattern |
 | rainbow.asm | Rainbow stripes |
@@ -150,9 +152,9 @@ loop:
 ## Stats
 
 - ~4,900 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
-- 31 opcodes
+- 32 opcodes
 - 22 test programs
-- 22 unit tests
+- 24 unit tests
 
 ## License
 

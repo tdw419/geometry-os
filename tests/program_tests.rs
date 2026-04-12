@@ -707,3 +707,28 @@ fn test_ikey_opcode() {
     assert_eq!(vm.regs[1], 65, "IKEY should read key code 65 into r1");
     assert_eq!(vm.ram[0xFFF], 0, "IKEY should clear the keyboard port");
 }
+
+// ── RAND ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_rand_opcode() {
+    let source = "RAND r1\nRAND r2\nRAND r3\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // all three should be non-zero and different from each other
+    assert_ne!(vm.regs[1], 0, "RAND should produce non-zero values");
+    assert_ne!(vm.regs[1], vm.regs[2], "consecutive RAND values should differ");
+    assert_ne!(vm.regs[2], vm.regs[3], "consecutive RAND values should differ");
+}
+
+#[test]
+fn test_snake_assembles() {
+    // Smoke test: snake.asm must assemble without errors
+    let source = std::fs::read_to_string("programs/snake.asm")
+        .expect("snake.asm not found");
+    let asm = assemble(&source, 0x1000).expect("snake.asm failed to assemble");
+    assert!(asm.pixels.len() > 100, "snake should be more than 100 words");
+}

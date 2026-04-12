@@ -22,6 +22,8 @@ pub struct Vm {
     pub halted: bool,
     /// Set by FRAME opcode; cleared by the host after rendering
     pub frame_ready: bool,
+    /// LCG state for RAND opcode
+    pub rand_state: u32,
 }
 
 impl Vm {
@@ -33,6 +35,7 @@ impl Vm {
             screen: vec![0; SCREEN_SIZE],
             halted: false,
             frame_ready: false,
+            rand_state: 0xDEADBEEF,
         }
     }
 
@@ -44,6 +47,7 @@ impl Vm {
         self.pc = 0;
         self.halted = false;
         self.frame_ready = false;
+        self.rand_state = 0xDEADBEEF;
     }
 
     /// Execute one instruction. Returns false if halted.
@@ -399,6 +403,17 @@ impl Vm {
                 }
             }
 
+            // RAND rd  -- rd = next pseudo-random u32 (LCG: state = state*1664525 + 1013904223)
+            0x49 => {
+                let rd = self.fetch() as usize;
+                if rd < NUM_REGS {
+                    self.rand_state = self.rand_state
+                        .wrapping_mul(1_664_525)
+                        .wrapping_add(1_013_904_223);
+                    self.regs[rd] = self.rand_state;
+                }
+            }
+
             // IKEY reg  -- read keyboard port (RAM[0xFFF]) into reg, then clear port
             0x48 => {
                 let rd = self.fetch() as usize;
@@ -559,6 +574,7 @@ impl Vm {
             0x46 => { let xr = ram(a+1); let yr = ram(a+2); let rr = ram(a+3); let cr = ram(a+4); (format!("CIRCLE {},{},{},{}", reg(xr), reg(yr), reg(rr), reg(cr)), 5) }
             0x47 => { let nr = ram(a+1); (format!("SCROLL {}", reg(nr)), 2) }
             0x48 => { let rd = ram(a+1); (format!("IKEY {}", reg(rd)), 2) }
+            0x49 => { let rd = ram(a+1); (format!("RAND {}", reg(rd)), 2) }
             0x50 => { let rd = ram(a+1); let rs = ram(a+2); (format!("CMP {}, {}", reg(rd), reg(rs)), 3) }
             0x60 => { let r = ram(a+1); (format!("PUSH {}", reg(r)), 2) }
             0x61 => { let r = ram(a+1); (format!("POP {}", reg(r)), 2) }
@@ -701,6 +717,7 @@ impl Vm {
             screen,
             halted,
             frame_ready: false,
+            rand_state: 0xDEADBEEF,
         })
     }
 }
