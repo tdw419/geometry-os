@@ -28,6 +28,7 @@ impl Vm {
         }
     }
 
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         for r in self.ram.iter_mut() { *r = 0; }
         for s in self.screen.iter_mut() { *s = 0; }

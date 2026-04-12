@@ -24,7 +24,6 @@ const CANVAS_ROWS: usize = 32;
 // VM screen (256x256, positioned to the right of the canvas)
 const VM_SCREEN_X: usize = 640;
 const VM_SCREEN_Y: usize = 64;
-const VM_SCREEN_SCALE: usize = 1;
 
 // Register display
 const REGS_X: usize = 640;
@@ -87,7 +86,6 @@ fn main() {
             // Canvas editing (VM paused)
             match key {
                 Key::Enter => {
-                    // Newline: advance to start of next row
                     let idx = cursor_row * CANVAS_COLS + cursor_col;
                     vm.ram[idx] = '\n' as u32;
                     cursor_col = 0;
@@ -98,7 +96,7 @@ fn main() {
                 }
                 Key::Space => {
                     let idx = cursor_row * CANVAS_COLS + cursor_col;
-                    vm.ram[idx] = 0x20; // space
+                    vm.ram[idx] = 0x20;
                     advance_cursor(&mut cursor_row, &mut cursor_col);
                 }
                 Key::Backspace => {
@@ -111,25 +109,20 @@ fn main() {
                     vm.ram[cursor_row * CANVAS_COLS + cursor_col] = 0;
                 }
                 Key::F5 => {
-                    if !is_running {
-                        if vm.halted {
-                            vm.pc = if canvas_assembled {
-                                CANVAS_BYTECODE_ADDR as u32
-                            } else {
-                                0
-                            };
-                            vm.halted = false;
-                        }
-                        is_running = true;
-                    } else {
-                        is_running = false;
+                    if vm.halted {
+                        vm.pc = if canvas_assembled {
+                            CANVAS_BYTECODE_ADDR as u32
+                        } else {
+                            0
+                        };
+                        vm.halted = false;
                     }
+                    is_running = !is_running;
                 }
                 Key::F8 => {
                     let ctrl = window.is_key_down(Key::LeftCtrl)
                         || window.is_key_down(Key::RightCtrl);
                     if !ctrl {
-                        // Assemble canvas text to bytecode
                         canvas_assemble(&mut vm, &mut canvas_assembled, &mut status_msg);
                     }
                 }
@@ -154,7 +147,6 @@ fn main() {
                     }
                 }
                 _ => {
-                    // Printable character input
                     let shift = window.is_key_down(Key::LeftShift)
                         || window.is_key_down(Key::RightShift);
                     if let Some(ch) = key_to_ascii_shifted(key, shift) {
@@ -189,9 +181,7 @@ fn canvas_assemble(vm: &mut vm::Vm, canvas_assembled: &mut bool, status_msg: &mu
         .iter()
         .map(|&cell| {
             let val = cell & 0xFF;
-            if val == 0 {
-                '\n'
-            } else if val == 0x0A {
+            if val == 0 || val == 0x0A {
                 '\n'
             } else {
                 (val as u8) as char
@@ -199,18 +189,15 @@ fn canvas_assemble(vm: &mut vm::Vm, canvas_assembled: &mut bool, status_msg: &mu
         })
         .collect();
 
-    // Collapse consecutive newlines
     let source = source.replace("\n\n", "\n");
 
     match assembler::assemble(&source) {
         Ok(asm_result) => {
-            // Clear bytecode region
             let ram_len = vm.ram.len();
             for v in vm.ram[CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 4096)].iter_mut()
             {
                 *v = 0;
             }
-            // Write bytecode
             for (i, &pixel) in asm_result.pixels.iter().enumerate() {
                 let addr = CANVAS_BYTECODE_ADDR + i;
                 if addr < ram_len {
@@ -241,7 +228,6 @@ fn render(
     is_running: bool,
     status_msg: &str,
 ) {
-    // Clear background
     for pixel in buffer.iter_mut() {
         *pixel = BG;
     }
@@ -258,7 +244,6 @@ fn render(
             let use_pixel_font = val != 0 && ascii_byte >= 0x20 && ascii_byte < 0x80;
 
             if use_pixel_font {
-                // Pixel font mode: glyph bits = fg color, gaps = bg color
                 let fg = palette_color(val);
                 let glyph = &font::GLYPHS[ascii_byte as usize];
 
@@ -268,14 +253,10 @@ fn render(
                         let py = y0 + dy;
                         let is_border = dx == CANVAS_SCALE - 1 || dy == CANVAS_SCALE - 1;
 
-                        // Map to glyph coordinates at 2x scale
                         let gc = dx / 2;
                         let gr = dy / 2;
-                        let glyph_on = if gc < font::GLYPH_W && gr < font::GLYPH_H {
-                            glyph[gr] & (1 << (7 - gc)) != 0
-                        } else {
-                            false
-                        };
+                        let glyph_on = gc < font::GLYPH_W && gr < font::GLYPH_H
+                            && glyph[gr] & (1 << (7 - gc)) != 0;
 
                         let mut color = if glyph_on {
                             fg
@@ -295,7 +276,7 @@ fn render(
                     }
                 }
             } else {
-                // Empty cell or non-printable
+                // Empty cell
                 for dy in 0..CANVAS_SCALE {
                     for dx in 0..CANVAS_SCALE {
                         let px = x0 + dx;
@@ -328,13 +309,11 @@ fn render(
 
     // ── Registers ────────────────────────────────────────────────
     for i in 0..16 {
-        let val = vm.regs[i];
-        let text = format!("r{:02}={:08X}", i, val);
+        let text = format!("r{:02}={:08X}", i, vm.regs[i]);
         render_text(buffer, REGS_X, REGS_Y + i * 14, &text, STATUS_FG);
     }
     for i in 16..32 {
-        let val = vm.regs[i];
-        let text = format!("r{:02}={:08X}", i, val);
+        let text = format!("r{:02}={:08X}", i, vm.regs[i]);
         render_text(buffer, REGS_X + 200, REGS_Y + (i - 16) * 14, &text, STATUS_FG);
     }
 
@@ -342,13 +321,14 @@ fn render(
     let pc_text = format!("PC={:04X} {}", vm.pc, status_msg);
     render_text(buffer, 8, HEIGHT - 20, &pc_text, STATUS_FG);
 
-    if is_running {
-        render_text(buffer, WIDTH - 80, HEIGHT - 20, "RUNNING", 0x00FF00);
+    let state_label = if is_running {
+        ("RUNNING", 0x00FF00)
     } else if vm.halted {
-        render_text(buffer, WIDTH - 60, HEIGHT - 20, "HALTED", 0xFF4444);
+        ("HALTED", 0xFF4444)
     } else {
-        render_text(buffer, WIDTH - 60, HEIGHT - 20, "PAUSED", 0xFFAA00);
-    }
+        ("PAUSED", 0xFFAA00)
+    };
+    render_text(buffer, WIDTH - 80, HEIGHT - 20, state_label.0, state_label.1);
 }
 
 /// Render a text string into the framebuffer using the 8x8 font
@@ -370,12 +350,11 @@ fn render_text(buffer: &mut [u32], x0: usize, y0: usize, text: &str, color: u32)
                 }
             }
         }
-        cx += font::GLYPH_W + 1; // 8 wide + 1 gap
+        cx += font::GLYPH_W + 1;
     }
 }
 
 /// Map an ASCII value to an HSV-derived color.
-/// t = (val - 32) / 94 maps printable ASCII 0x20-0x7E to hue 0-360.
 fn palette_color(val: u32) -> u32 {
     let v = (val & 0xFF) as f32;
     let t = if v >= 32.0 && v <= 126.0 {
@@ -457,7 +436,6 @@ fn key_to_ascii(key: Key) -> Option<u8> {
         Key::Key8 => Some(b'8'),
         Key::Key9 => Some(b'9'),
         Key::Space => Some(b' '),
-        Key::Enter => Some(b'\n'),
         Key::Comma => Some(b','),
         Key::Period => Some(b'.'),
         Key::Slash => Some(b'/'),
@@ -473,69 +451,60 @@ fn key_to_ascii(key: Key) -> Option<u8> {
 }
 
 fn key_to_ascii_shifted(key: Key, shift: bool) -> Option<u8> {
-    // Letters: shift -> uppercase, no shift -> lowercase
-    let letter = match key {
-        Key::A => Some((b'a', b'A')),
-        Key::B => Some((b'b', b'B')),
-        Key::C => Some((b'c', b'C')),
-        Key::D => Some((b'd', b'D')),
-        Key::E => Some((b'e', b'E')),
-        Key::F => Some((b'f', b'F')),
-        Key::G => Some((b'g', b'G')),
-        Key::H => Some((b'h', b'H')),
-        Key::I => Some((b'i', b'I')),
-        Key::J => Some((b'j', b'J')),
-        Key::K => Some((b'k', b'K')),
-        Key::L => Some((b'l', b'L')),
-        Key::M => Some((b'm', b'M')),
-        Key::N => Some((b'n', b'N')),
-        Key::O => Some((b'o', b'O')),
-        Key::P => Some((b'p', b'P')),
-        Key::Q => Some((b'q', b'Q')),
-        Key::R => Some((b'r', b'R')),
-        Key::S => Some((b's', b'S')),
-        Key::T => Some((b't', b'T')),
-        Key::U => Some((b'u', b'U')),
-        Key::V => Some((b'v', b'V')),
-        Key::W => Some((b'w', b'W')),
-        Key::X => Some((b'x', b'X')),
-        Key::Y => Some((b'y', b'Y')),
-        Key::Z => Some((b'z', b'Z')),
-        _ => None,
-    };
-    if let Some((lower, upper)) = letter {
-        return Some(if shift { upper } else { lower });
+    // Letters
+    match key {
+        Key::A => return Some(if shift { b'A' } else { b'a' }),
+        Key::B => return Some(if shift { b'B' } else { b'b' }),
+        Key::C => return Some(if shift { b'C' } else { b'c' }),
+        Key::D => return Some(if shift { b'D' } else { b'd' }),
+        Key::E => return Some(if shift { b'E' } else { b'e' }),
+        Key::F => return Some(if shift { b'F' } else { b'f' }),
+        Key::G => return Some(if shift { b'G' } else { b'g' }),
+        Key::H => return Some(if shift { b'H' } else { b'h' }),
+        Key::I => return Some(if shift { b'I' } else { b'i' }),
+        Key::J => return Some(if shift { b'J' } else { b'j' }),
+        Key::K => return Some(if shift { b'K' } else { b'k' }),
+        Key::L => return Some(if shift { b'L' } else { b'l' }),
+        Key::M => return Some(if shift { b'M' } else { b'm' }),
+        Key::N => return Some(if shift { b'N' } else { b'n' }),
+        Key::O => return Some(if shift { b'O' } else { b'o' }),
+        Key::P => return Some(if shift { b'P' } else { b'p' }),
+        Key::Q => return Some(if shift { b'Q' } else { b'q' }),
+        Key::R => return Some(if shift { b'R' } else { b'r' }),
+        Key::S => return Some(if shift { b'S' } else { b's' }),
+        Key::T => return Some(if shift { b'T' } else { b't' }),
+        Key::U => return Some(if shift { b'U' } else { b'u' }),
+        Key::V => return Some(if shift { b'V' } else { b'v' }),
+        Key::W => return Some(if shift { b'W' } else { b'w' }),
+        Key::X => return Some(if shift { b'X' } else { b'x' }),
+        Key::Y => return Some(if shift { b'Y' } else { b'y' }),
+        Key::Z => return Some(if shift { b'Z' } else { b'z' }),
+        _ => {}
     }
 
-    // Numbers and symbols (all as (normal, shifted) tuples)
-    let symbol = match key {
-        Key::Key0 => Some((b'0', b')')),
-        Key::Key1 => Some((b'1', b'!')),
-        Key::Key2 => Some((b'2', b'@')),
-        Key::Key3 => Some((b'3', b'#')),
-        Key::Key4 => Some((b'4', b'$')),
-        Key::Key5 => Some((b'5', b'%')),
-        Key::Key6 => Some((b'6', b'^')),
-        Key::Key7 => Some((b'7', b'&')),
-        Key::Key8 => Some((b'8', b'*')),
-        Key::Key9 => Some((b'9', b'(')),
-        Key::Minus => Some((b'-', b'_')),
-        Key::Equal => Some((b'=', b'+')),
-        Key::Comma => Some((b',', b'<')),
-        Key::Period => Some((b'.', b'>')),
-        Key::Slash => Some((b'/', b'?')),
-        Key::Semicolon => Some((b';', b':')),
-        Key::Apostrophe => Some((b'\'', b'"')),
-        Key::LeftBracket => Some((b'[', b'{')),
-        Key::RightBracket => Some((b']', b'}')),
-        Key::Backslash => Some((b'\\', b'|')),
-        Key::Backquote => Some((b'`', b'~')),
+    // Numbers and symbols
+    match key {
+        Key::Key0 => Some(if shift { b')' } else { b'0' }),
+        Key::Key1 => Some(if shift { b'!' } else { b'1' }),
+        Key::Key2 => Some(if shift { b'@' } else { b'2' }),
+        Key::Key3 => Some(if shift { b'#' } else { b'3' }),
+        Key::Key4 => Some(if shift { b'$' } else { b'4' }),
+        Key::Key5 => Some(if shift { b'%' } else { b'5' }),
+        Key::Key6 => Some(if shift { b'^' } else { b'6' }),
+        Key::Key7 => Some(if shift { b'&' } else { b'7' }),
+        Key::Key8 => Some(if shift { b'*' } else { b'8' }),
+        Key::Key9 => Some(if shift { b'(' } else { b'9' }),
+        Key::Comma => Some(if shift { b'<' } else { b',' }),
+        Key::Period => Some(if shift { b'>' } else { b'.' }),
+        Key::Slash => Some(if shift { b'?' } else { b'/' }),
+        Key::Semicolon => Some(if shift { b':' } else { b';' }),
+        Key::Apostrophe => Some(if shift { b'"' } else { b'\'' }),
+        Key::Minus => Some(if shift { b'_' } else { b'-' }),
+        Key::Equal => Some(if shift { b'+' } else { b'=' }),
+        Key::LeftBracket => Some(if shift { b'{' } else { b'[' }),
+        Key::RightBracket => Some(if shift { b'}' } else { b']' }),
+        Key::Backslash => Some(if shift { b'|' } else { b'\\' }),
+        Key::Backquote => Some(if shift { b'~' } else { b'`' }),
         _ => None,
-    };
-
-    if let Some((normal, shifted)) = symbol {
-        return Some(if shift { shifted } else { normal });
     }
-
-    None
 }
