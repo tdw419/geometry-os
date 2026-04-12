@@ -1,17 +1,17 @@
-; PUSH/POP test: stack operations with r30 as stack pointer
+; PUSH/POP test - stack operations with r30 as stack pointer
 ; Tests: LIFO order, SP tracking, multiple values, register reuse
 ; Results stored at RAM[0x0200..0x0208]
 
-; ── Setup: point SP at top of RAM ──
+; -- Setup - point SP at top of RAM --
   LDI r30, 0xFF00
 
-; ── Test 1: Basic LIFO -- push 3 values, pop in reverse ──
+; -- Test 1 - Basic LIFO - push 3 values, pop in reverse --
   LDI r0, 100
   LDI r1, 200
   LDI r2, 300
-  PUSH r0           ; stack: [100]
-  PUSH r1           ; stack: [100, 200]
-  PUSH r2           ; stack: [100, 200, 300]
+  PUSH r0           ; push 100
+  PUSH r1           ; push 200
+  PUSH r2           ; push 300
   POP r5            ; r5 = 300 (top)
   POP r6            ; r6 = 200
   POP r7            ; r7 = 100
@@ -22,7 +22,7 @@
   LDI r10, 0x0202
   STORE r10, r7     ; RAM[0x0202] = 100
 
-; ── Test 2: Push same register multiple times ──
+; -- Test 2 - Push same register multiple times --
   LDI r0, 0
   PUSH r0           ; push 0
   LDI r0, 1
@@ -39,7 +39,7 @@
   LDI r10, 0x0205
   STORE r10, r7     ; RAM[0x0205] = 0
 
-; ── Test 3: SP restored after balanced push/pop ──
+; -- Test 3 - SP restored after balanced push/pop --
 ; After all above operations, SP should be back at 0xFF00
 ; We test this by pushing a known value and popping it
   LDI r0, 42
@@ -48,7 +48,7 @@
   LDI r10, 0x0206
   STORE r10, r5     ; RAM[0x0206] = 42
 
-; ── Test 4: PUSH preserves values across register reuse ──
+; -- Test 4 - PUSH preserves values across register reuse --
   LDI r0, 777
   PUSH r0           ; save 777
   LDI r0, 0         ; clobber r0
@@ -59,7 +59,7 @@
   LDI r10, 0x0207
   STORE r10, r5     ; RAM[0x0207] = 777
 
-; ── Test 5: Push 5 values, pop all 5 ──
+; -- Test 5 - Push 5 values, pop all 5 --
   LDI r0, 10
   PUSH r0
   LDI r0, 20

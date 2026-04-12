@@ -9,7 +9,7 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 
 ## Architecture
 - **VM**: 32 registers (r0-r31), 64K RAM, 256x256 screen buffer
-- **Opcodes**: 0x00-0x50, simple fetch-decode-execute loop
+- **Opcodes**: 0x00-0x61, simple fetch-decode-execute loop
 - **Assembler**: Two-pass, labels, comments, hex/binary immediates
 - **Canvas**: 32x32 text surface with 8x8 VGA pixel font rendering
 - **Screen**: 256x256 framebuffer, rendered to the right of the canvas
@@ -63,7 +63,7 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 
 ## Sprint C: VM Extensions (done)
 - [x] SHL/SHR: Shift left/right opcodes (need vm.rs + assembler.rs)
-- [x] PUSH/POP: Stack operations using r30 as stack pointer
+- [x] PUSH/POP: Stack operations using a stack pointer register
 - [x] BLT/BGE: Conditional branch opcodes (less than, greater or equal)
 - [x] MOD: Modulo opcode
 
