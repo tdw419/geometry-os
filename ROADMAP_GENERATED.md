@@ -1,13 +1,13 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-39 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+40 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 11/12 phases complete, 0 in progress
+**Progress:** 12/12 phases complete, 0 in progress
 
-**Deliverables:** 64/66 complete
+**Deliverables:** 66/66 complete
 
 ## Scope Summary
 
@@ -24,7 +24,7 @@ the built-in text editor, press F5, watch it run.
 | phase-9 Debug Tools | COMPLETE | 5/5 | 4,500 | 48 |
 | phase-10 Extended Graphics | COMPLETE | 2/2 | 4,700 | 50 |
 | phase-11 Advanced Games | COMPLETE | 3/3 | 5,100 | 56 |
-| phase-12 Self-Hosting | FUTURE | 0/2 | 5,500 | 54 |
+| phase-12 Self-Hosting | COMPLETE | 2/2 | 5,500 | 54 |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
 
@@ -187,7 +187,7 @@ Instruction set extensions
   - [x] test_maze_assembles passes
   - [x] test_maze_initializes passes
 
-## [?] phase-12: Self-Hosting (FUTURE)
+## [x] phase-12: Self-Hosting (COMPLETE)
 
 **Goal:** VM can assemble and run its own programs from within
 
@@ -197,13 +197,21 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 
 ### Deliverables
 
-- [ ] **Assembler syscall** -- VM opcode that triggers the assembler on canvas text
+- [x] **Assembler syscall** -- VM opcode that triggers the assembler on canvas text
+  - [x] ASM opcode (0x4B) reads null-terminated source from RAM
+  - [x] ASM writes bytecode to RAM at destination address
+  - [x] RAM[0xFFD] holds result (word count or 0xFFFFFFFF on error)
+  - [x] test_asm_opcode_basic passes
+  - [x] test_asm_opcode_error passes
   _~150 LOC_
-- [ ] **Self-hosting demo** -- Program that writes assembly, assembles it, runs the output
+- [x] **Self-hosting demo** -- Program that writes assembly, assembles it, runs the output
+  - [x] self_host.asm compiles and runs
+  - [x] Generated code executes (screen filled with green)
+  _~80 LOC_
 
 ## Global Risks
 
-- Opcode space filling up (39 of ~256 slots used, but gaps in hex space)
+- Opcode space filling up (40 of ~256 slots used, but gaps in hex space)
 - Scope creep -- adding opcodes is easy, keeping the VM simple is hard
 - BEEP spawning aplay processes without rate limiting could exhaust FDs
 

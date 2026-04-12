@@ -386,7 +386,7 @@ phases:
     test_target: 54
 
 global_risks:
-  - "Opcode space filling up (39 of ~256 slots used, but gaps in hex space)"
+  - "Opcode space filling up (40 of ~256 slots used, but gaps in hex space)"
   - "Scope creep -- adding opcodes is easy, keeping the VM simple is hard"
   - "BEEP spawning aplay processes without rate limiting could exhaust FDs"
 
