@@ -4,11 +4,11 @@ A pixel-art VM with a built-in assembler, debugger, and live GUI.
 
 ## What It Does
 
-Geometry OS is a 256x256 pixel virtual machine with 32 registers, 33 opcodes,
+Geometry OS is a 256x256 pixel virtual machine with 32 registers, 38 opcodes,
 memory-mapped I/O, and a real-time animation loop. You write assembly programs
 in a text editor built into the GUI, hit run, and watch them execute live.
 
-## Opcodes (33)
+## Opcodes (38)
 
 ### Control
 | Opcode | Args | Description |
@@ -183,7 +183,7 @@ skip_move:
 ## Stats
 
 - ~5,100 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
-- 33 opcodes
+- 38 opcodes
 - 23 demo programs
 - 24 unit tests
 
