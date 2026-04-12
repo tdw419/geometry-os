@@ -13,7 +13,7 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 39
-  tests: 36
+  tests: 47
   programs: 26
   loc: 4462
 
@@ -328,7 +328,7 @@ phases:
 
   - id: "phase-11"
     title: "Advanced Games"
-    status: "in_progress"
+    status: "complete"
     goal: "Richer games using sprites and extended features"
     deliverables:
       - name: "breakout.asm"

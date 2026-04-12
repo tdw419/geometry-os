@@ -5,7 +5,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 10/12 phases complete, 1 in progress
+**Progress:** 11/12 phases complete, 0 in progress
 
 **Deliverables:** 64/66 complete
 
@@ -23,7 +23,7 @@ the built-in text editor, press F5, watch it run.
 | phase-8 TICKS & Sound | COMPLETE | 5/5 | 4,322 | 46 |
 | phase-9 Debug Tools | COMPLETE | 5/5 | 4,500 | 48 |
 | phase-10 Extended Graphics | COMPLETE | 2/2 | 4,700 | 50 |
-| phase-11 Advanced Games | IN PROGRESS | 3/3 | 5,100 | 56 |
+| phase-11 Advanced Games | COMPLETE | 3/3 | 5,100 | 56 |
 | phase-12 Self-Hosting | FUTURE | 0/2 | 5,500 | 54 |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
@@ -175,7 +175,7 @@ Instruction set extensions
   - [x] F9 or CLI command saves PNG
   _~40 LOC_
 
-## [~] phase-11: Advanced Games (IN PROGRESS)
+## [x] phase-11: Advanced Games (COMPLETE)
 
 **Goal:** Richer games using sprites and extended features
 
