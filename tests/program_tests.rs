@@ -267,6 +267,7 @@ fn test_all_programs_assemble() {
         "programs/nested_rects.asm",
         "programs/blink.asm",
         "programs/painter.asm",
+        "programs/calculator.asm",
     ];
     for path in programs {
         let source = std::fs::read_to_string(path)
@@ -370,4 +371,113 @@ fn test_painter() {
     // The pixel at (128, 128) should be nonzero (painted)
     assert_ne!(vm.screen[center_pixel], 0,
         "pixel at cursor should be painted after space key");
+}
+
+// ── CALCULATOR ──────────────────────────────────────────────────
+
+#[test]
+fn test_calculator_add() {
+    let source = std::fs::read_to_string("programs/calculator.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let key_port = 0xFFFFusize;
+
+    // Run setup (constants + state init)
+    for _ in 0..200 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Enter "12+5=": '1'=49, '2'=50, '+'=43, '5'=53, '='=61
+    for &key in &[49u32, 50, 43, 53, 61] {
+        vm.ram[key_port] = key;
+        for _ in 0..500 {
+            if !vm.step() {
+                break;
+            }
+        }
+    }
+
+    // Extra cycles for compute + display build + TEXT render
+    for _ in 0..10000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "VM should halt after calculation");
+
+    // Verify display string in RAM at 0x0300: "12+5=17\0"
+    assert_eq!(vm.ram[0x0300], 49, "expect '1'");
+    assert_eq!(vm.ram[0x0301], 50, "expect '2'");
+    assert_eq!(vm.ram[0x0302], 43, "expect '+'");
+    assert_eq!(vm.ram[0x0303], 53, "expect '5'");
+    assert_eq!(vm.ram[0x0304], 61, "expect '='");
+    assert_eq!(vm.ram[0x0305], 49, "expect '1'");
+    assert_eq!(vm.ram[0x0306], 55, "expect '7'");
+    assert_eq!(vm.ram[0x0307], 0, "expect null terminator");
+}
+
+#[test]
+fn test_calculator_subtract() {
+    let source = std::fs::read_to_string("programs/calculator.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let key_port = 0xFFFFusize;
+
+    // Run setup
+    for _ in 0..200 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Enter "20-8=": '2'=50, '0'=48, '-'=45, '8'=56, '='=61
+    for &key in &[50u32, 48, 45, 56, 61] {
+        vm.ram[key_port] = key;
+        for _ in 0..500 {
+            if !vm.step() {
+                break;
+            }
+        }
+    }
+
+    for _ in 0..10000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "VM should halt after subtraction");
+
+    // Verify display string: "20-8=12\0"
+    assert_eq!(vm.ram[0x0300], 50, "expect '2'");
+    assert_eq!(vm.ram[0x0301], 48, "expect '0'");
+    assert_eq!(vm.ram[0x0302], 45, "expect '-'");
+    assert_eq!(vm.ram[0x0303], 56, "expect '8'");
+    assert_eq!(vm.ram[0x0304], 61, "expect '='");
+    assert_eq!(vm.ram[0x0305], 49, "expect '1'");
+    assert_eq!(vm.ram[0x0306], 50, "expect '2'");
+    assert_eq!(vm.ram[0x0307], 0, "expect null terminator");
 }

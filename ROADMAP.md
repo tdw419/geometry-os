@@ -52,7 +52,7 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 
 ## Sprint B: Interactive Programs
 - [x] BLINK: Toggle a pixel on/off using keyboard input and CMP
-- [ ] CALCULATOR: Simple add/subtract calculator with text display -- difficulty: hard
+- [x] CALCULATOR: Simple add/subtract calculator with text display -- difficulty: hard
 
 ## Sprint C: VM Extensions
 - [ ] SHL/SHR: Shift left/right opcodes (need vm.rs + assembler.rs)
