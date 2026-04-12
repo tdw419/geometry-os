@@ -69,7 +69,7 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 
 ## Sprint D: Canvas Improvements
 - [x] Clipboard paste: Ctrl+V to paste text onto the grid
-- [ ] File load: Ctrl+F8 to load .asm file contents onto the grid
+- [x] File load: Ctrl+F8 to load .asm file contents onto the grid
 - [ ] Scroll/pan: support programs larger than 32x32 characters
 - [ ] Syntax highlighting: color opcodes, registers, numbers differently
 

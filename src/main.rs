@@ -11,7 +11,7 @@ mod font;
 mod vm;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ── Layout constants ─────────────────────────────────────────────
 const WIDTH: usize = 1024;
@@ -75,6 +75,12 @@ fn main() {
     // Last loaded file (for Ctrl+F8 reload)
     let mut loaded_file: Option<PathBuf> = None;
 
+    // File input mode (Ctrl+F8 activates this)
+    let mut file_input_mode = false;
+    let mut file_input_buf = String::new();
+    let mut file_completions: Vec<String> = Vec::new();
+    let mut file_completion_idx: usize = 0;
+
     // Load file from command-line argument at startup
     if let Some(path_str) = std::env::args().nth(1) {
         let path = PathBuf::from(&path_str);
@@ -95,6 +101,68 @@ fn main() {
                 // Runtime: send keys to VM keyboard port
                 if let Some(ch) = key_to_ascii(key) {
                     vm.ram[KEY_PORT] = ch as u32;
+                }
+                continue;
+            }
+
+            // File input mode: Ctrl+F8 activates, handles typing a path
+            if file_input_mode {
+                match key {
+                    Key::Escape => {
+                        file_input_mode = false;
+                        file_input_buf.clear();
+                        status_msg = String::from("[TEXT mode: type assembly, F8=assemble, F5=run]");
+                    }
+                    Key::Enter => {
+                        // Attempt to load the file
+                        let path = Path::new(&file_input_buf);
+                        if let Ok(source) = std::fs::read_to_string(path) {
+                            load_source_to_canvas(
+                                &mut vm,
+                                &source,
+                                &mut cursor_row,
+                                &mut cursor_col,
+                            );
+                            loaded_file = Some(path.to_path_buf());
+                            status_msg = format!("[loaded: {}]", file_input_buf);
+                        } else {
+                            status_msg = format!("[error: cannot read {}]", file_input_buf);
+                        }
+                        file_input_mode = false;
+                        file_input_buf.clear();
+                    }
+                    Key::Backspace => {
+                        file_input_buf.pop();
+                        status_msg = format!(
+                            "[load file: {} | Tab=complete, Enter=load, Esc=cancel]",
+                            file_input_buf
+                        );
+                    }
+                    Key::Tab => {
+                        // Cycle through completions from programs/*.asm
+                        if !file_completions.is_empty() {
+                            file_completion_idx = (file_completion_idx + 1) % file_completions.len();
+                            file_input_buf = file_completions[file_completion_idx].clone();
+                            status_msg = format!(
+                                "[load file: {} | Tab=complete, Enter=load, Esc=cancel]",
+                                file_input_buf
+                            );
+                        }
+                    }
+                    _ => {
+                        // Type characters into the path buffer
+                        let shift = window.is_key_down(Key::LeftShift)
+                            || window.is_key_down(Key::RightShift);
+                        if let Some(ch) = key_to_ascii_shifted(key, shift) {
+                            file_input_buf.push(ch as char);
+                            // Reset completion index when user types manually
+                            file_completion_idx = 0;
+                            status_msg = format!(
+                                "[load file: {} | Tab=complete, Enter=load, Esc=cancel]",
+                                file_input_buf
+                            );
+                        }
+                    }
                 }
                 continue;
             }
@@ -139,17 +207,19 @@ fn main() {
                     let ctrl = window.is_key_down(Key::LeftCtrl)
                         || window.is_key_down(Key::RightCtrl);
                     if ctrl {
-                        // Ctrl+F8: reload the last loaded file onto the canvas
-                        if let Some(ref path) = loaded_file.clone() {
-                            if let Ok(source) = std::fs::read_to_string(path) {
-                                load_source_to_canvas(&mut vm, &source, &mut cursor_row, &mut cursor_col);
-                                status_msg = format!("[reloaded: {}]", path.display());
-                            } else {
-                                status_msg = format!("[error: could not reload {}]", path.display());
-                            }
-                        } else {
-                            status_msg = String::from("[no file loaded -- run with: cargo run -- path/to/file.asm]");
+                        // Ctrl+F8: enter file input mode
+                        file_input_mode = true;
+                        file_input_buf.clear();
+                        file_completions = list_asm_files("programs");
+                        file_completion_idx = 0;
+                        // Pre-populate with last loaded file path if available
+                        if let Some(ref path) = loaded_file {
+                            file_input_buf = path.to_string_lossy().to_string();
                         }
+                        status_msg = format!(
+                            "[load file: {} | Tab=complete, Enter=load, Esc=cancel]",
+                            file_input_buf
+                        );
                     } else {
                         canvas_assemble(&mut vm, &mut canvas_assembled, &mut status_msg);
                     }
@@ -524,6 +594,27 @@ fn advance_cursor(row: &mut usize, col: &mut usize) {
             *row = 0;
         }
     }
+}
+
+// ── File listing for Tab completion ────────────────────────────
+
+/// List .asm files in the given directory, returning sorted full paths.
+fn list_asm_files(dir: &str) -> Vec<String> {
+    let mut files = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(ext) = path.extension() {
+                if ext == "asm" {
+                    if let Some(name) = path.to_str() {
+                        files.push(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    files.sort();
+    files
 }
 
 // ── Key mapping ──────────────────────────────────────────────────

@@ -135,8 +135,19 @@ at 0x1000+. They don't overlap. You can always see what you wrote.
 
 ### Ctrl+F8 in TEXT Mode
 
-Holding Ctrl while pressing F8 loads `programs/boot.asm` from disk instead of
-reading the grid. This is the fallback for loading external files.
+Holding Ctrl while pressing F8 enters **file input mode**. A prompt appears in the
+status bar: `[load file: | Tab=complete, Enter=load, Esc=cancel]`.
+
+Type a file path (absolute or relative). Press **Tab** to cycle through `.asm`
+files in the `programs/` directory. Press **Enter** to load the file onto the
+grid (clears the grid first, like the command-line argument). Press **Escape** to
+cancel.
+
+If a file was previously loaded (via command-line or Ctrl+F8), the path is
+pre-populated so you can just press Enter to reload it.
+
+After loading, the file path is remembered so the next Ctrl+F8 starts with it
+pre-filled. The source text appears on the grid ready for F8 assembly.
 
 ---
 
@@ -264,8 +275,10 @@ F8 -> F5. After running, r0 = 30.
 ### Example 2: Loading an Existing Program
 
 To load an .asm file from disk onto the grid:
-- Press Ctrl+F8 to load `programs/boot.asm`
-- Or use the editor (F9) to write/edit, then Ctrl+L to load a file
+- Press Ctrl+F8 to enter file input mode
+- Type a path or press Tab to cycle through `programs/*.asm` files
+- Press Enter to load it onto the grid
+- Then F8 to assemble, F5 to run
 
 ### Example 3: Converting Existing Code
 
