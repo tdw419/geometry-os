@@ -1,5 +1,5 @@
 title: "Geometry OS Roadmap"
-version: "0.4.0"
+version: "1.0.0"
 description: |
   Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
   39 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in

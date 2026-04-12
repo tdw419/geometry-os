@@ -1,14 +1,45 @@
-# Geometry OS v0.4.0
+# Geometry OS
 
-A pixel-art VM with a built-in assembler, debugger, and live GUI.
+A pixel-art virtual machine with a built-in assembler, text editor, debugger, and live GUI.
 
-## What It Does
+Write assembly. Press F5. Watch it run.
 
-Geometry OS is a 256x256 pixel virtual machine with 32 registers, 39 opcodes,
-memory-mapped I/O, and a real-time animation loop. You write assembly programs
-in a text editor built into the GUI, hit run, and watch them execute live.
+## What Is This?
 
-## Opcodes (39)
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 39 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
+
+There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
+
+## Programs
+
+27 programs included -- static art, animations, interactive games:
+
+**Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes
+
+**Animations:** fire (scrolling fire effect), scroll_demo
+
+**Interactive:** blink, painter (freehand drawing), calculator (4-function)
+
+**Games:** snake, ball (bouncing ball), breakout (4 rows of bricks, 3 lives), tetris (7 tetrominoes, rotation, line clearing), maze (randomly generated, WASD to navigate)
+
+## Build & Run
+
+**Prerequisites:** Rust (1.70+), Linux with `libasound2-dev` for sound
+
+```bash
+git clone https://github.com/tdw419/geometry-os.git
+cd geometry-os
+cargo run --release
+```
+
+**CLI mode** (headless, no GUI):
+```bash
+cargo run --release -- --cli
+geo> load hello
+geo> run
+```
+
+## The Instruction Set (39 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -21,9 +52,9 @@ in a text editor built into the GUI, hit run, and watch them execute live.
 ### Data
 | Opcode | Args | Description |
 |--------|------|-------------|
-| LDI    | reg, imm | Load immediate |
-| LOAD   | reg, [reg] | Load from memory |
-| STORE  | [reg], reg | Store to memory |
+| LDI    | reg, imm | Load immediate value into register |
+| LOAD   | reg, [reg] | Load from memory address |
+| STORE  | [reg], reg | Store to memory address |
 
 ### Arithmetic
 | Opcode | Args | Description |
@@ -52,117 +83,71 @@ in a text editor built into the GUI, hit run, and watch them execute live.
 | JNZ    | reg, addr | Jump if not zero |
 | BLT    | reg, addr | Branch if r0 < 0 (after CMP) |
 | BGE    | reg, addr | Branch if r0 >= 0 (after CMP) |
-| CALL   | addr  | Call subroutine |
+| CALL   | addr  | Call subroutine (return address in r31) |
 | RET    |       | Return from subroutine |
 
 ### Graphics
 | Opcode | Args | Description |
 |--------|------|-------------|
-| PSET   | xr, yr, cr | Pixel set (registers) |
-| PSETI  | x, y, c | Pixel set (immediates) |
-| FILL   | cr     | Fill screen with color |
+| PSET   | xr, yr, cr | Set pixel (from registers) |
+| PSETI  | x, y, c | Set pixel (immediates) |
+| FILL   | cr     | Fill entire screen with color |
 | RECTF  | xr,yr,wr,hr,cr | Filled rectangle |
-| TEXT   | xr, yr, ar | Draw null-terminated string from RAM[ar] |
+| TEXT   | xr, yr, ar | Draw null-terminated string from RAM |
 | LINE   | x0r,y0r,x1r,y1r,cr | Bresenham line |
 | CIRCLE | xr, yr, rr, cr | Midpoint circle |
-| SCROLL | nr     | Scroll screen up by regs[nr] pixels |
-| SPRITE | xr,yr,ar,wr,hr | Blit NxM pixels from RAM to screen (0=transparent) |
+| SCROLL | nr     | Scroll screen up by N pixels |
+| SPRITE | xr,yr,ar,wr,hr | Blit NxM sprite from RAM (0=transparent) |
 
-### I/O
+### Stack & I/O
 | Opcode | Args | Description |
 |--------|------|-------------|
-| IKEY   | reg   | Read keyboard port (RAM[0xFFF]), clear it |
-| RAND   | reg   | Pseudo-random u32 (LCG) into reg |
-| CMP    | rd, rs | Compare: r0 = -1/0/1 (lt/eq/gt) |
-| PUSH   | reg   | Push to stack |
+| PUSH   | reg   | Push to stack (r30 = SP) |
 | POP    | reg   | Pop from stack |
+| CMP    | rd, rs | Compare: r0 = -1/0/1 (lt/eq/gt) |
+| IKEY   | reg   | Read keyboard port, clear it |
+| RAND   | reg   | Pseudo-random u32 into register |
 
 ## Memory-Mapped I/O
 
-| Port | Address | Description |
-|------|---------|-------------|
-| TICKS | 0xFFE | Frame counter (read-only, incremented each FRAME) |
-| KEY | 0xFFF | Keyboard input (read via IKEY) |
+| Port  | Address | Description |
+|-------|---------|-------------|
+| TICKS | 0xFFE   | Frame counter (read-only, incremented each FRAME) |
+| KEY   | 0xFFF   | Keyboard input (read via IKEY) |
 
-## Quick Start
+## Writing Programs
 
-```bash
-cargo run --release
-```
-
-### CLI Mode
-```bash
-cargo run --release -- --cli
-geo> load hello
-geo> run
-```
-
-## Demo Programs
-
-| Program | Description |
-|---------|-------------|
-| hello.asm | Hello world text |
-| gradient.asm | Color gradient via nested loops |
-| lines.asm | Star burst using LINE opcode |
-| circles.asm | Concentric circles with cycling colors |
-| fire.asm | Scrolling fire animation (FRAME + SCROLL) |
-| ball.asm | Bouncing ball with WASD keyboard control |
-| snake.asm | Snake game -- WASD control, random apples, growing tail |
-| breakout.asm | Breakout -- paddle (A/D), 4 rows of colored bricks, score, 3 lives |
-| sprite_demo.asm | SPRITE opcode demo -- blits 4x3 red rectangle |
-| scroll_demo.asm | Horizontal bar that scrolls upward |
-| checkerboard.asm | Checkerboard pattern |
-| rainbow.asm | Rainbow stripes |
-| rings.asm | Concentric rings |
-| painter.asm | Paint program (cursor keys) |
-| calculator.asm | Simple 4-function calculator |
-| tetris.asm | Tetris -- rotate (W), move (A/D), soft drop (S), hard drop (Space) |
-| maze.asm | Randomly generated maze -- WASD to navigate, R to restart |
-
-## Animation Pattern
-
-Any program can be an animation by replacing HALT with a loop:
+**Animation loop** -- any program can animate by replacing HALT with a FRAME loop:
 
 ```
 loop:
   FILL r_black       ; clear screen
   ; ... draw scene ...
-  FRAME              ; display + yield to renderer
+  FRAME              ; display + yield
   JMP loop
 ```
 
-## Interactive Pattern
-
-Read keyboard input with IKEY inside the animation loop:
+**Keyboard input** -- read keys with IKEY inside the loop:
 
 ```
 loop:
   FILL r_black
   IKEY r10           ; read key press
-  ; ... handle input + physics + draw ...
+  ; ... handle input ...
   FRAME
   JMP loop
 ```
 
-## Throttling Pattern
-
-Use the TICKS port (0xFFE) to control game speed independently of frame rate:
+**Throttle game speed** with the TICKS port:
 
 ```
-loop:
-  FILL r_black
-  IKEY r10
-  ; ... handle input ...
-
-  ; Throttle: only move every 8 frames (~7.5 moves/sec at 60fps)
   LDI r4, 0xFFE
-  LOAD r8, r4           ; r8 = TICKS
+  LOAD r8, r4        ; r8 = current frame count
   LDI r9, 7
-  AND r8, r9            ; r8 = TICKS & 7
-  JNZ r8, skip_move     ; skip if not a move frame
+  AND r8, r9         ; r8 = TICKS & 7
+  JNZ r8, skip_move  ; only move every 8th frame
   ; ... update game state ...
 skip_move:
-  ; ... draw ...
   FRAME
   JMP loop
 ```
@@ -171,26 +156,41 @@ skip_move:
 
 | Key | Action |
 |-----|--------|
-| F5 | Run program |
-| F6 | Single-step |
-| F7 | Save state |
-| F8 | Load .asm file |
-| Escape | Toggle editor/terminal |
+| F5  | Run / resume program |
+| F6  | Single-step (when paused) |
+| F7  | Save VM state |
+| F8  | Load .asm file |
+| F9  | Screenshot (PNG) |
+| Escape | Toggle editor / terminal |
+
+**Terminal commands:** `help`, `load <name>`, `run`, `step`, `regs`, `peek <addr>`, `poke <addr> <val>`, `bp [addr]`, `bpc`, `trace [n]`, `screenshot`, `reset`, `quit`
 
 ## Architecture
 
-- **VM**: 32 registers (r0-r31), 65536-word RAM, 256x256x32bit screen buffer
-- **Assembler**: Two-pass with labels, hex/dec/bin literals
-- **GUI**: minifb window with canvas text editor, VM screen, register display, disassembly panel
-- **CLI**: Headless mode for testing and scripting
-- **Memory map**: 0x0000-0x0FFF bytecode, 0x1000-0x1FFF canvas text, 0xFFE TICKS port (frame counter), 0xFFF keyboard port
+```
+┌─────────────────────────────────────────┐
+│                 GUI Window              │
+│  ┌──────────────┐  ┌────────────────┐  │
+│  │ Text Editor  │  │   256x256      │  │
+│  │ (32x32 grid) │  │   Screen       │  │
+│  │              │  │                │  │
+│  └──────────────┘  └────────────────┘  │
+│  ┌──────────────┐  ┌────────────────┐  │
+│  │ Registers    │  │  Disassembly   │  │
+│  │ r0-r31       │  │  Panel         │  │
+│  └──────────────┘  └────────────────┘  │
+└─────────────────────────────────────────┘
+
+VM: 32 registers, 65536-word RAM, 39 opcodes
+Memory: 0x0000 bytecode | 0x1000 canvas text | 0xFFE TICKS | 0xFFF KEY
+```
 
 ## Stats
 
-- ~5,100 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
+- 4,500 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
 - 39 opcodes
-- 25 demo programs
-- 30 unit tests
+- 27 demo programs (visual demos, animations, interactive games)
+- 47 tests
 
 ## License
 

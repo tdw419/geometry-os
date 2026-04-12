@@ -1,1 +1,4 @@
 /target
+*.sav
+*.png
+Cargo.lock
