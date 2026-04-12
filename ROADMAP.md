@@ -1,14 +1,19 @@
 # Geometry OS Roadmap
 
 ## Overview
-Clean-slate rebuild of the Geometry OS pixel-composition VM. The VM executes bytecode assembled from text typed on a 32x32 canvas grid. This is a simplified architecture with clean opcode encoding.
+Clean-slate rebuild of the Geometry OS pixel-composition VM. The VM executes
+bytecode assembled from text typed on a 32x32 canvas grid. The canvas IS a
+text editor -- type assembly, F8 to assemble, F5 to run.
+
+**Founding document:** `docs/CANVAS_TEXT_SURFACE.md`
 
 ## Architecture
 - **VM**: 32 registers (r0-r31), 64K RAM, 256x256 screen buffer
 - **Opcodes**: 0x00-0x50, simple fetch-decode-execute loop
 - **Assembler**: Two-pass, labels, comments, hex/binary immediates
-- **Canvas**: 32x32 text surface, type assembly, F8 to assemble, F5 to run
+- **Canvas**: 32x32 text surface with 8x8 VGA pixel font rendering
 - **Screen**: 256x256 framebuffer, rendered to the right of the canvas
+- **Source at 0x000, bytecode at 0x1000** -- they never overlap
 
 ## Valid Opcodes
 | Opcode | Hex | Args | Description |
@@ -23,7 +28,7 @@ Clean-slate rebuild of the Geometry OS pixel-composition VM. The VM executes byt
 | MUL rd, rs | 0x22 | 2 | rd *= rs (wrapping) |
 | DIV rd, rs | 0x23 | 2 | rd /= rs |
 | AND rd, rs | 0x24 | 2 | rd &= rs |
-| OR rd, rs | 0x25 | 2 | rd \|= rs |
+| OR rd, rs | 0x25 | 2 | rd |= rs |
 | XOR rd, rs | 0x26 | 2 | rd ^= rs |
 | JMP addr | 0x30 | 1 | Unconditional jump |
 | JZ reg, addr | 0x31 | 2 | Jump if reg == 0 |
@@ -37,21 +42,32 @@ Clean-slate rebuild of the Geometry OS pixel-composition VM. The VM executes byt
 | TEXT xr, yr, addr_reg | 0x44 | 3 | Render text from RAM |
 | CMP rd, rs | 0x50 | 2 | Compare: r0 = -1/0/1 |
 
-## Sprint A: Visual Programs (Easy .asm)
-- [x] FILL_SCREEN: Fill the screen with a solid color using FILL -- difficulty: easy
-- [x] CHECKERBOARD: Draw a checkerboard pattern using nested loops and PSET -- difficulty: easy (deferred: no SHL opcode)
-- [x] DIAGONAL_LINE: Draw a diagonal line from (0,0) to (255,255) using a loop -- difficulty: easy
-- [x] BORDER: Draw a colored border around the screen edges using RECTF -- difficulty: easy
-- [x] GRADIENT: Draw a horizontal color gradient across the screen using PSET in a loop -- difficulty: easy
-- [x] HORIZONTAL_STRIPES: Draw alternating red/blue horizontal stripes using loops -- difficulty: easy
-- [x] NESTED_RECTS: Draw concentric colored rectangles using RECTF -- difficulty: easy
+## Sprint A: Visual Programs (done)
+- [x] FILL_SCREEN: Fill the screen with a solid color using FILL
+- [x] DIAGONAL_LINE: Draw a diagonal line from (0,0) to (255,255) using a loop
+- [x] BORDER: Draw a colored border around the screen edges using RECTF
+- [x] GRADIENT: Draw a horizontal color gradient across the screen using PSET
+- [x] HORIZONTAL_STRIPES: Draw alternating red/blue horizontal stripes
+- [x] NESTED_RECTS: Draw concentric colored rectangles using RECTF
 
-## Sprint B: Interactive Programs (Moderate)
-- [x] BLINK: Toggle a pixel on/off using keyboard input and CMP -- difficulty: moderate
-- [x] PAINTER: Read keyboard port, draw colored pixels where cursor is -- difficulty: moderate
+## Sprint B: Interactive Programs
+- [x] BLINK: Toggle a pixel on/off using keyboard input and CMP
 - [ ] CALCULATOR: Simple add/subtract calculator with text display -- difficulty: hard
 
-## Sprint C: VM Extensions (BLOCKED: needs Rust changes)
-- [ ] BLOCKED: SHIFT/ROTATE opcodes (SHL, SHR, ROL, ROR) -- needs Rust
-- [ ] BLOCKED: PUSH/POP stack operations -- needs Rust
-- [ ] BLOCKED: Conditional branches (BLT, BGE, etc.) -- needs Rust
+## Sprint C: VM Extensions
+- [ ] SHL/SHR: Shift left/right opcodes (need vm.rs + assembler.rs)
+- [ ] PUSH/POP: Stack operations using a stack pointer register
+- [ ] BLT/BGE: Conditional branch opcodes (less than, greater or equal)
+- [ ] MOD: Modulo opcode
+
+## Sprint D: Canvas Improvements
+- [ ] Clipboard paste: Ctrl+V to paste text onto the grid
+- [ ] File load: Ctrl+F8 to load .asm file contents onto the grid
+- [ ] Scroll/pan: support programs larger than 32x32 characters
+- [ ] Syntax highlighting: color opcodes, registers, numbers differently
+
+## Sprint E: Polish
+- [ ] Save/load: F7 to save RAM, restore on startup
+- [ ] Disassembly panel: show bytecode alongside source text
+- [ ] Single-step: Space to step one instruction when paused
+- [ ] Breakpoints: mark addresses to pause at
