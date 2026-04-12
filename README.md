@@ -108,6 +108,7 @@ geo> run
 | fire.asm | Scrolling fire animation (FRAME + SCROLL) |
 | ball.asm | Bouncing ball with WASD keyboard control |
 | snake.asm | Snake game -- WASD control, random apples, growing tail |
+| breakout.asm | Breakout -- paddle (A/D), 4 rows of colored bricks, score, 3 lives |
 | sprite_demo.asm | SPRITE opcode demo -- blits 4x3 red rectangle |
 | scroll_demo.asm | Horizontal bar that scrolls upward |
 | checkerboard.asm | Checkerboard pattern |

@@ -13,9 +13,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 38
-  tests: 50
-  programs: 23
-  loc: 4366
+  tests: 32
+  programs: 24
+  loc: 4462
 
 phases:
   # ===================================================================
@@ -332,8 +332,8 @@ phases:
     goal: "Richer games using sprites and extended features"
     deliverables:
       - name: "breakout.asm"
-        description: "Breakout with paddle, ball, and brick rows"
-        status: "todo"
+        description: "Breakout with paddle, ball, 4 rows of colored bricks, score, lives"
+        status: "done"
       - name: "tetris.asm"
         description: "Tetris with piece rotation and line clearing"
         status: "todo"

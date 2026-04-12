@@ -977,3 +977,57 @@ fn test_sprite_transparent_skips_zero() {
     // (7, 6) should still be white (transparent)
     assert_eq!(vm.screen[6 * 256 + 7], 0xFFFFFF, "(7,6) should be white (transparent)");
 }
+
+// ── BREAKOUT ──────────────────────────────────────────────────
+
+#[test]
+fn test_breakout_initializes() {
+    let source = std::fs::read_to_string("programs/breakout.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+
+    // Run until first FRAME (init complete, entered game loop)
+    for _ in 0..50_000 {
+        if !vm.step() { break; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Bricks should be initialized with colors
+    assert_eq!(vm.ram[0x3000], 0xFF0000, "brick 0 should be red (row 0)");
+    assert_eq!(vm.ram[0x3007], 0xFF0000, "brick 7 should be red (row 0)");
+    assert_eq!(vm.ram[0x3008], 0xFF8800, "brick 8 should be orange (row 1)");
+    assert_eq!(vm.ram[0x300F], 0xFF8800, "brick 15 should be orange (row 1)");
+    assert_eq!(vm.ram[0x3010], 0xFFDD00, "brick 16 should be yellow (row 2)");
+    assert_eq!(vm.ram[0x3017], 0xFFDD00, "brick 23 should be yellow (row 2)");
+    assert_eq!(vm.ram[0x3018], 0x00CC44, "brick 24 should be green (row 3)");
+    assert_eq!(vm.ram[0x301F], 0x00CC44, "brick 31 should be green (row 3)");
+
+    // Game state
+    assert_eq!(vm.ram[0x3020], 104, "paddle_x should be centered at 104");
+    assert_eq!(vm.ram[0x3025], 0, "score should start at 0");
+    assert_eq!(vm.ram[0x3026], 3, "lives should start at 3");
+    assert_eq!(vm.ram[0x3027], 0, "game_over should be 0");
+    assert_eq!(vm.ram[0x3028], 0, "ball should not be launched");
+    assert_eq!(vm.ram[0x3029], 32, "bricks_left should be 32");
+}
+
+#[test]
+fn test_breakout_assembles() {
+    // Smoke test: breakout.asm must assemble without errors
+    let source = std::fs::read_to_string("programs/breakout.asm")
+        .expect("breakout.asm not found");
+    let asm = assemble(&source, 0x1000).expect("breakout.asm failed to assemble");
+    assert!(asm.pixels.len() > 200, "breakout should be more than 200 words");
+}
