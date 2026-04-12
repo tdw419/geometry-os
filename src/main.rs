@@ -47,6 +47,14 @@ const STATUS_FG: u32 = 0x888899;
 const SCROLLBAR_BG: u32 = 0x181828;
 const SCROLLBAR_FG: u32 = 0x334466;
 
+// ── Syntax highlighting colors ──────────────────────────────────
+const SYN_OPCODE: u32 = 0x00CCFF;  // cyan -- opcodes (LDI, ADD, HALT, etc.)
+const SYN_REGISTER: u32 = 0x44FF88; // green -- registers (r0-r31)
+const SYN_NUMBER: u32 = 0xFFAA33;   // orange -- immediate values
+const SYN_LABEL: u32 = 0xFFDD44;    // yellow -- label definitions and refs
+const SYN_COMMENT: u32 = 0x555566;  // gray -- comments (; ...)
+const SYN_DEFAULT: u32 = 0xAAAA88;  // default text color
+
 fn main() {
     let mut window = Window::new(
         "Geometry OS -- Canvas Text Surface",
@@ -539,7 +547,7 @@ fn render(
             let use_pixel_font = val != 0 && ascii_byte >= 0x20 && ascii_byte < 0x80;
 
             if use_pixel_font {
-                let fg = palette_color(val);
+                let fg = syntax_highlight_color(canvas_buffer, log_row, col);
                 let glyph = &font::GLYPHS[ascii_byte as usize];
 
                 for dy in 0..CANVAS_SCALE {
@@ -696,34 +704,193 @@ fn render_text(buffer: &mut [u32], x0: usize, y0: usize, text: &str, color: u32)
     }
 }
 
-/// Map an ASCII value to an HSV-derived color.
-fn palette_color(val: u32) -> u32 {
-    let v = (val & 0xFF) as f32;
-    let t = if v >= 32.0 && v <= 126.0 {
-        (v - 32.0) / 94.0
-    } else {
-        v / 255.0
-    };
-    let hue = t * 360.0;
-    hsv_to_rgb(hue, 0.8, 1.0)
+/// Valid opcodes for syntax highlighting (same set as assembler.rs)
+const OPCODES: &[&str] = &[
+    "HALT", "NOP", "LDI", "LOAD", "STORE", "ADD", "SUB", "MUL", "DIV",
+    "AND", "OR", "XOR", "SHL", "SHR", "MOD", "JMP", "JZ", "JNZ",
+    "CALL", "RET", "BLT", "BGE", "PSET", "PSETI", "FILL", "RECTF",
+    "TEXT", "CMP", "PUSH", "POP",
+];
+
+/// Token types produced by the syntax highlighter.
+#[derive(Clone, Copy, PartialEq)]
+enum SynTok {
+    Opcode,
+    Register,
+    Number,
+    Label,
+    Comment,
+    Default,
 }
 
-fn hsv_to_rgb(h: f32, s: f32, v: f32) -> u32 {
-    let c = v * s;
-    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
-    let m = v - c;
-    let (r, g, b) = match h as i32 {
-        0..=59 => (c, x, 0.0),
-        60..=119 => (x, c, 0.0),
-        120..=179 => (0.0, c, x),
-        180..=239 => (0.0, x, c),
-        240..=299 => (x, 0.0, c),
-        _ => (c, 0.0, x),
+/// A single token with its start column and length.
+struct SynSpan {
+    kind: SynTok,
+    start: usize,
+    len: usize,
+}
+
+/// Parse a line of assembly text into syntax spans for highlighting.
+/// Returns spans covering the line -- characters not in any span get SYN_DEFAULT.
+fn parse_syntax_line(line: &str) -> Vec<SynSpan> {
+    let mut spans: Vec<SynSpan> = Vec::new();
+    let trimmed = line.trim();
+
+    if trimmed.is_empty() {
+        return spans;
+    }
+
+    // Check if entire line (after trim) is a comment
+    if trimmed.starts_with(';') {
+        spans.push(SynSpan { kind: SynTok::Comment, start: 0, len: line.len() });
+        return spans;
+    }
+
+    // Check for label definition: word followed by ':'
+    // The assembler does label.find(':') before stripping comments, so
+    // we need to handle "label: instruction ; comment" style lines.
+    let first_start = line.len() - trimmed.len();
+    let mut pos = first_start;
+
+    // Check if line starts with a label (identifier followed by ':')
+    if let Some(colon_pos) = line[pos..].find(':') {
+        let label_end = pos + colon_pos;
+        // Make sure it's not inside a comment
+        if line[pos..label_end].chars().all(|c| c.is_alphanumeric() || c == '_') {
+            spans.push(SynSpan { kind: SynTok::Label, start: pos, len: colon_pos });
+            pos = label_end + 1; // skip the colon
+            // skip whitespace after colon
+            while pos < line.len() && line.as_bytes()[pos] == b' ' {
+                pos += 1;
+            }
+        }
+    }
+
+    // Now parse instruction tokens from current position
+    // First check for inline comment
+    let comment_start = line[pos..].find(';').map(|i| pos + i);
+    let code_end = comment_start.unwrap_or(line.len());
+
+    // Extract the code portion (without comment)
+    let code = &line[pos..code_end];
+    let code_offset = pos; // offset of code start from line start
+
+    if code.is_empty() {
+        // Only whitespace before comment
+        if let Some(cs) = comment_start {
+            spans.push(SynSpan { kind: SynTok::Comment, start: cs, len: line.len() - cs });
+        }
+        return spans;
+    }
+
+    // Tokenize the code portion by splitting on commas and whitespace
+    let mut token_pos = 0;
+    let mut is_first_token = true;
+    let tokens_str: Vec<&str> = code.split(|c: char| c == ',' || c == ' ' || c == '\t')
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    for token in &tokens_str {
+        // Find the actual position of this token in the code string
+        let actual_start = code[token_pos..].find(*token).unwrap_or(token_pos);
+        let abs_start = code_offset + actual_start;
+
+        // Determine token type
+        if is_first_token {
+            // First token: check if it's an opcode
+            let upper: String = token.chars().map(|c| c.to_ascii_uppercase()).collect();
+            if OPCODES.contains(&upper.as_str()) {
+                spans.push(SynSpan { kind: SynTok::Opcode, start: abs_start, len: token.len() });
+            } else {
+                spans.push(SynSpan { kind: SynTok::Default, start: abs_start, len: token.len() });
+            }
+            is_first_token = false;
+        } else {
+            // Subsequent tokens: register, number, or label reference
+            if token.starts_with('r') || token.starts_with('R') {
+                // Could be a register: r0-r31
+                let reg_part = &token[1..];
+                if reg_part.parse::<u32>().is_ok() {
+                    spans.push(SynSpan { kind: SynTok::Register, start: abs_start, len: token.len() });
+                    token_pos = actual_start + token.len();
+                    continue;
+                }
+            }
+            // Check if it's a number (decimal, hex 0x, binary 0b)
+            let is_number = token.chars().next().map_or(false, |c| c.is_ascii_digit())
+                || token.starts_with("0x") || token.starts_with("0X")
+                || token.starts_with("0b") || token.starts_with("0B")
+                || (token.starts_with('-') && token.len() > 1 && token[1..].chars().next().map_or(false, |c| c.is_ascii_digit()));
+            if is_number {
+                spans.push(SynSpan { kind: SynTok::Number, start: abs_start, len: token.len() });
+            } else {
+                // Label reference (e.g. JMP loop)
+                spans.push(SynSpan { kind: SynTok::Label, start: abs_start, len: token.len() });
+            }
+        }
+
+        token_pos = actual_start + token.len();
+    }
+
+    // Add comment span
+    if let Some(cs) = comment_start {
+        spans.push(SynSpan { kind: SynTok::Comment, start: cs, len: line.len() - cs });
+    }
+
+    spans
+}
+
+/// Get the syntax highlighting color for a character at (row, col) in the canvas.
+fn syntax_highlight_color(canvas_buffer: &[u32], row: usize, col: usize) -> u32 {
+    // Extract the full line as a string
+    let mut line_chars: String = String::with_capacity(CANVAS_COLS);
+    for c in 0..CANVAS_COLS {
+        let val = canvas_buffer[row * CANVAS_COLS + c];
+        if val == 0 {
+            // null = newline or end of line
+            break;
+        }
+        let byte = (val & 0xFF) as u8;
+        if byte == 0x0A {
+            // explicit newline
+            break;
+        }
+        if byte >= 0x20 && byte < 0x80 {
+            line_chars.push(byte as char);
+        }
+    }
+
+    let line = line_chars.trim();
+    if line.is_empty() {
+        return SYN_DEFAULT;
+    }
+
+    // Find the offset of col within the trimmed line
+    let trimmed_start = CANVAS_COLS - line_chars.trim_start().len();
+    let col_in_trimmed = if col >= trimmed_start {
+        col - trimmed_start
+    } else {
+        return SYN_DEFAULT;
     };
-    let r = ((r + m) * 255.0) as u8;
-    let g = ((g + m) * 255.0) as u8;
-    let b = ((b + m) * 255.0) as u8;
-    ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
+
+    // Parse the line into syntax spans
+    let spans = parse_syntax_line(line);
+
+    // Find which span contains this column
+    for span in &spans {
+        if col_in_trimmed >= span.start && col_in_trimmed < span.start + span.len {
+            return match span.kind {
+                SynTok::Opcode => SYN_OPCODE,
+                SynTok::Register => SYN_REGISTER,
+                SynTok::Number => SYN_NUMBER,
+                SynTok::Label => SYN_LABEL,
+                SynTok::Comment => SYN_COMMENT,
+                SynTok::Default => SYN_DEFAULT,
+            };
+        }
+    }
+
+    SYN_DEFAULT
 }
 
 fn advance_cursor(

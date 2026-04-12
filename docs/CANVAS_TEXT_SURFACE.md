@@ -188,9 +188,9 @@ rendered using the pixel font method. The rendering pipeline:
 
 ```
 For cell at (row, col):
-  1. val = vm.ram[row * 32 + col]
+  1. val = canvas_buffer[row * 32 + col]
   2. ascii_byte = val & 0xFF
-  3. fg = palette_color(val)           // HSV hue from the byte value
+  3. fg = syntax_highlight_color(canvas_buffer, row, col)  // token-aware color
   4. glyph = font::GLYPHS[ascii_byte]  // 8x8 bitmap from font.rs
   5. For each pixel (dx, dy) in the 16x16 cell:
        a. Map to glyph coordinates (gx, gy) at 2x scale
@@ -201,22 +201,26 @@ For cell at (row, col):
 ```
 
 The result: each character appears as its letter shape built from colored
-pixels. Adjacent characters with different byte values have different colors.
-The color is NOT arbitrary -- it derives directly from the ASCII value:
+pixels. Adjacent characters with different token types have different colors.
+The color is determined by syntax highlighting, not by raw ASCII value:
 
 ```
-palette_color(val):
-  t = (val - 32) / 94            // normalize printable ASCII to 0..1
-  hue = t * 360                   // spread across full color wheel
-  saturation = 0.8, value = 1.0
-  return HSV(hue, 0.8, 1.0) as RGB u32
-```
+syntax_highlight_color(canvas_buffer, row, col):
+  1. Extract the full line text from canvas_buffer[row]
+  2. Parse tokens: opcode, register, number, label, comment
+  3. Return the color for the token type at (row, col)
 
-This means:
-- Uppercase letters (opcodes: A-Z) cluster in the green-blue hue range
-- Lowercase letters cluster in the blue-magenta range
-- Digits (0-9) cluster in the yellow-green range
-- Symbols are scattered across the rest
+Color scheme:
+  Opcode   (LDI, ADD, HALT, etc.) -> SYN_OPCODE   = 0x00CCFF (cyan)
+  Register (r0-r31)              -> SYN_REGISTER = 0x44FF88 (green)
+  Number   (10, 0xFF, etc.)      -> SYN_NUMBER   = 0xFFAA33 (orange)
+  Label    (loop:, JMP start)    -> SYN_LABEL    = 0xFFDD44 (yellow)
+  Comment  (; this is a comment) -> SYN_COMMENT  = 0x555566 (gray)
+  Default  (everything else)     -> SYN_DEFAULT  = 0xAAAA88 (muted)
+
+The highlighter recognizes all 28 opcodes from assembler.rs, registers
+(r0-r31), decimal/hex/binary numbers, label definitions (word followed
+by ':'), label references (e.g. JMP target), and inline comments.
 
 The color gives you structural information at a glance. You can scan a grid
 and see opcodes, registers, and numbers as different color groups.
@@ -370,7 +374,8 @@ const CANVAS_BYTECODE_ADDR: usize = 0x1000; // where assembled bytecode goes
 | `key_to_ascii_shifted(key, shift)` | TEXT mode input: key -> ASCII with shift awareness |
 | `key_to_pixel(key, hex_mode)` | DIRECT mode input: key -> raw byte value |
 | `key_to_ascii(key)` | Runtime input: key -> ASCII (no shift) |
-| `palette_color(val)` | ASCII value -> HSV -> RGB u32 color |
+| `palette_color(val)` | (removed) Replaced by syntax_highlight_color |
+| `syntax_highlight_color(buf, row, col)` | Syntax-aware color for assembly text on canvas |
 | `font::GLYPHS[byte]` | 8x8 bitmap for the character |
 | `assembler::assemble(&text)` | Text -> bytecode (shared by all modes) |
 

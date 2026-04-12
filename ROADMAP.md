@@ -71,7 +71,7 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 - [x] Clipboard paste: Ctrl+V to paste text onto the grid
 - [x] File load: Ctrl+F8 to load .asm file contents onto the grid
 - [x] Scroll/pan: support programs larger than 32x32 characters
-- [ ] Syntax highlighting: color opcodes, registers, numbers differently
+- [x] Syntax highlighting: color opcodes, registers, numbers differently
 
 ## Sprint E: Polish
 - [ ] Save/load: F7 to save RAM, restore on startup
