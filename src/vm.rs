@@ -11,7 +11,7 @@ pub const NUM_REGS: usize = 32;
 /// Magic bytes for save files
 pub const SAVE_MAGIC: &[u8; 4] = b"GEOS";
 /// Save file format version
-pub const SAVE_VERSION: u32 = 1;
+pub const SAVE_VERSION: u32 = 2;
 
 #[derive(Debug, Clone)]
 pub struct Vm {
@@ -715,6 +715,7 @@ impl Vm {
     /// Save VM state to a binary file.
     /// Format: GEOS magic (4) + version u32 (4) + halted u8 (1) + pc u32 (4)
     ///         + regs [u32; 32] (128) + ram [u32; RAM_SIZE] + screen [u32; SCREEN_SIZE]
+    ///         + rand_state u32 (4) + frame_count u32 (4)   [version >= 2]
     pub fn save_to_file(&self, path: &std::path::Path) -> std::io::Result<()> {
         use std::io::Write;
         let mut f = std::fs::File::create(path)?;
@@ -731,6 +732,9 @@ impl Vm {
         for &v in &self.screen {
             f.write_all(&v.to_le_bytes())?;
         }
+        // v2 fields: persist RNG state and frame counter
+        f.write_all(&self.rand_state.to_le_bytes())?;
+        f.write_all(&self.frame_count.to_le_bytes())?;
         Ok(())
     }
 
@@ -757,10 +761,11 @@ impl Vm {
             ));
         }
         let version = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-        if version != SAVE_VERSION {
+        // Accept v1 saves (missing rand_state/frame_count) and v2
+        if version < 1 || version > SAVE_VERSION {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("unsupported save version: {} (need {})", version, SAVE_VERSION),
+                format!("unsupported save version: {} (need 1-{})", version, SAVE_VERSION),
             ));
         }
 
@@ -808,6 +813,27 @@ impl Vm {
             offset += 4;
         }
 
+        // v2 fields: rand_state + frame_count (default if v1 save)
+        let (rand_state, frame_count) = if version >= 2
+            && offset + 8 <= data.len()
+        {
+            let rs = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]);
+            let fc = u32::from_le_bytes([
+                data[offset + 4],
+                data[offset + 5],
+                data[offset + 6],
+                data[offset + 7],
+            ]);
+            (rs, fc)
+        } else {
+            (0xDEADBEEF, 0) // v1 defaults
+        };
+
         Ok(Vm {
             ram,
             regs,
@@ -815,8 +841,8 @@ impl Vm {
             screen,
             halted,
             frame_ready: false,
-            rand_state: 0xDEADBEEF,
-            frame_count: 0,
+            rand_state,
+            frame_count,
             beep: None,
         })
     }

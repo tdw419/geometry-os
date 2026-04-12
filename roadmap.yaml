@@ -13,9 +13,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 40
-  tests: 62
+  tests: 41
   programs: 28
-  loc: 4510
+  loc: 4536
 
 phases:
   # ===================================================================

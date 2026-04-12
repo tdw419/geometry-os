@@ -574,6 +574,51 @@ fn test_vm_save_load_roundtrip() {
 }
 
 #[test]
+fn test_vm_save_load_preserves_rand_state_and_frame_count() {
+    let mut vm = Vm::new();
+    // Advance RNG by calling RAND twice (RAND rd is a 2-byte instruction)
+    vm.ram[0] = 0x49; // RAND r0
+    vm.ram[1] = 0;    // reg arg
+    vm.ram[2] = 0x49; // RAND r0 (second call)
+    vm.ram[3] = 0;    // reg arg
+    vm.pc = 0;
+    vm.step(); // first RAND -> pc=2
+    vm.step(); // second RAND -> pc=4
+    assert!(!vm.halted, "VM should not be halted after RAND");
+    let rng_state_before = vm.rand_state;
+
+    // Simulate some frame ticks (reset pc, lay down FRAME opcodes)
+    vm.halted = false;
+    vm.ram[0] = 0x02; // FRAME
+    vm.ram[1] = 0x02; // FRAME
+    vm.pc = 0;
+    vm.step(); // first FRAME -> pc=1, frame_count=1
+    vm.step(); // second FRAME -> pc=2, frame_count=2
+    let frame_count_before = vm.frame_count;
+    assert_eq!(frame_count_before, 2, "should have 2 frames");
+    assert_ne!(rng_state_before, 0xDEADBEEF, "RNG should have advanced");
+
+    let tmp = std::env::temp_dir().join("geometry_os_test_v2_save.sav");
+    vm.save_to_file(&tmp).unwrap();
+
+    let loaded = Vm::load_from_file(&tmp).unwrap();
+    assert_eq!(loaded.rand_state, rng_state_before, "rand_state should be preserved");
+    assert_eq!(loaded.frame_count, frame_count_before, "frame_count should be preserved");
+
+    // Verify the loaded RNG produces the same next value as the original would
+    // Call RAND on both and compare
+    let mut vm2 = vm;
+    let mut loaded2 = loaded;
+    vm2.ram[0] = 0x49; vm2.ram[1] = 0; vm2.pc = 0;
+    loaded2.ram[0] = 0x49; loaded2.ram[1] = 0; loaded2.pc = 0;
+    vm2.step();
+    loaded2.step();
+    assert_eq!(vm2.regs[0], loaded2.regs[0], "next RAND value should match after load");
+
+    std::fs::remove_file(tmp).ok();
+}
+
+#[test]
 fn test_vm_save_load_invalid_magic() {
     let tmp = std::env::temp_dir().join("geometry_os_test_bad_magic.sav");
     std::fs::write(&tmp, b"BAD!\x00\x00\x00\x01").unwrap();
