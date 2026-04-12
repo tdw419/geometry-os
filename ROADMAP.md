@@ -48,7 +48,7 @@ Clean-slate rebuild of the Geometry OS pixel-composition VM. The VM executes byt
 
 ## Sprint B: Interactive Programs (Moderate)
 - [x] BLINK: Toggle a pixel on/off using keyboard input and CMP -- difficulty: moderate
-- [ ] PAINTER: Read keyboard port, draw colored pixels where cursor is -- difficulty: moderate
+- [x] PAINTER: Read keyboard port, draw colored pixels where cursor is -- difficulty: moderate
 - [ ] CALCULATOR: Simple add/subtract calculator with text display -- difficulty: hard
 
 ## Sprint C: VM Extensions (BLOCKED: needs Rust changes)

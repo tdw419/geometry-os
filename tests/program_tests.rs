@@ -266,6 +266,7 @@ fn test_all_programs_assemble() {
         "programs/stripes.asm",
         "programs/nested_rects.asm",
         "programs/blink.asm",
+        "programs/painter.asm",
     ];
     for path in programs {
         let source = std::fs::read_to_string(path)
@@ -273,4 +274,100 @@ fn test_all_programs_assemble() {
         let result = assemble(&source);
         assert!(result.is_ok(), "{} should assemble: {:?}", path, result.err());
     }
+}
+
+// ── PAINTER ────────────────────────────────────────────────────
+
+#[test]
+fn test_painter() {
+    let source = std::fs::read_to_string("programs/painter.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source)
+        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    // Load program at address 0
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let key_port = 0xFFFFusize;
+    let cyan = 0x00FFFFu32;
+    let center_pixel = 128 * 256 + 128;
+
+    // Run setup (~50 instructions: constants + signature + initial PSET)
+    for _ in 0..200 {
+        if !vm.step() { break; }
+    }
+
+    // After setup, cursor should be at (128, 128) drawn in cyan
+    assert_eq!(vm.screen[center_pixel], cyan, "initial cursor should be cyan at center");
+    assert_eq!(vm.ram[0x0200], 80, "P");
+    assert_eq!(vm.ram[0x0201], 65, "A");
+    assert_eq!(vm.ram[0x0202], 73, "I");
+    assert_eq!(vm.ram[0x0203], 78, "N");
+    assert_eq!(vm.ram[0x0204], 84, "T");
+    assert_eq!(vm.ram[0x0205], 69, "E");
+    assert_eq!(vm.ram[0x0206], 82, "R");
+
+    // Inject 'D' key (68) to move cursor right by 4
+    vm.ram[key_port] = 68;
+    for _ in 0..300 {
+        if !vm.step() { break; }
+    }
+    assert_eq!(vm.ram[key_port], 0, "port should be cleared after D key");
+
+    // Cursor should have moved to (132, 128) and drawn cyan there
+    let moved_pixel = 128 * 256 + 132;
+    assert_eq!(vm.screen[moved_pixel], cyan,
+        "cursor should be at (132, 128) after D key");
+
+    // Inject 'S' key (83) to move cursor down by 4
+    vm.ram[key_port] = 83;
+    for _ in 0..300 {
+        if !vm.step() { break; }
+    }
+    assert_eq!(vm.ram[key_port], 0, "port should be cleared after S key");
+
+    // Cursor should be at (132, 132)
+    let moved_pixel2 = 132 * 256 + 132;
+    assert_eq!(vm.screen[moved_pixel2], cyan,
+        "cursor should be at (132, 132) after S key");
+
+    // Inject 'W' key (87) to move cursor up by 4 (back to 128)
+    vm.ram[key_port] = 87;
+    for _ in 0..300 {
+        if !vm.step() { break; }
+    }
+
+    // Inject 'A' key (65) to move cursor left by 4 (back to 128)
+    vm.ram[key_port] = 65;
+    for _ in 0..300 {
+        if !vm.step() { break; }
+    }
+
+    // Cursor should be back at (128, 128)
+    assert_eq!(vm.screen[center_pixel], cyan,
+        "cursor should be back at (128, 128) after W+A");
+
+    // Now paint 5 pixels with Space (32)
+    for paint_num in 0..5 {
+        vm.ram[key_port] = 32; // Space
+        for _ in 0..300 {
+            if !vm.step() { break; }
+        }
+        assert_eq!(vm.ram[key_port], 0,
+            "port should be cleared after paint {}", paint_num + 1);
+    }
+
+    // After 5 paints, program should have halted
+    assert!(vm.halted, "VM should halt after 5 paint operations");
+
+    // The pixel at (128, 128) should be nonzero (painted)
+    assert_ne!(vm.screen[center_pixel], 0,
+        "pixel at cursor should be painted after space key");
 }
