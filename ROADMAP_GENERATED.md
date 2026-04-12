@@ -1,13 +1,13 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-38 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+39 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 9/12 phases complete, 1 in progress
+**Progress:** 10/12 phases complete, 1 in progress
 
-**Deliverables:** 59/66 complete
+**Deliverables:** 63/66 complete
 
 ## Scope Summary
 
@@ -22,8 +22,8 @@ the built-in text editor, press F5, watch it run.
 | phase-7 Random & Games | COMPLETE | 3/3 | 4,300 | 24 |
 | phase-8 TICKS & Sound | COMPLETE | 5/5 | 4,322 | 46 |
 | phase-9 Debug Tools | COMPLETE | 5/5 | 4,500 | 48 |
-| phase-10 Extended Graphics | IN PROGRESS | 0/2 | 4,700 | 50 |
-| phase-11 Advanced Games | PLANNED | 0/3 | 5,100 | 52 |
+| phase-10 Extended Graphics | COMPLETE | 2/2 | 4,700 | 50 |
+| phase-11 Advanced Games | IN PROGRESS | 2/3 | 5,100 | 52 |
 | phase-12 Self-Hosting | FUTURE | 0/2 | 5,500 | 54 |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
@@ -160,27 +160,29 @@ Instruction set extensions
   - [x] CLI mode logs each instruction with register state
   _~60 LOC_
 
-## [~] phase-10: Extended Graphics (IN PROGRESS)
+## [x] phase-10: Extended Graphics (COMPLETE)
 
 **Goal:** Sprite blitting and screenshot export
 
 ### Deliverables
 
-- [ ] **SPRITE opcode** -- Copy a block of RAM to screen at (x,y) -- sprite blit
-  - [ ] Copy NxM pixels from RAM to screen buffer
+- [x] **SPRITE opcode** -- Copy a block of RAM to screen at (x,y) -- sprite blit
+  - [x] Copy NxM pixels from RAM to screen buffer
+  - [x] Color 0 pixels are transparent (skip)
+  - [x] test_sprite_transparent_skips_zero passes
   _~120 LOC_
-- [ ] **Screenshot export** -- Dump 256x256 canvas to PNG file
-  - [ ] F9 or CLI command saves PNG
+- [x] **Screenshot export** -- Dump 256x256 canvas to PNG file
+  - [x] F9 or CLI command saves PNG
   _~40 LOC_
 
-## [ ] phase-11: Advanced Games (PLANNED)
+## [~] phase-11: Advanced Games (IN PROGRESS)
 
 **Goal:** Richer games using sprites and extended features
 
 ### Deliverables
 
-- [ ] **breakout.asm** -- Breakout with paddle, ball, and brick rows
-- [ ] **tetris.asm** -- Tetris with piece rotation and line clearing
+- [x] **breakout.asm** -- Breakout with paddle, ball, 4 rows of colored bricks, score, lives
+- [x] **tetris.asm** -- Tetris with piece rotation and line clearing
 - [ ] **maze.asm** -- Randomly generated maze with player navigation
 
 ## [?] phase-12: Self-Hosting (FUTURE)
@@ -199,7 +201,7 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 
 ## Global Risks
 
-- Opcode space filling up (38 of ~256 slots used, but gaps in hex space)
+- Opcode space filling up (39 of ~256 slots used, but gaps in hex space)
 - Scope creep -- adding opcodes is easy, keeping the VM simple is hard
 - BEEP spawning aplay processes without rate limiting could exhaust FDs
 

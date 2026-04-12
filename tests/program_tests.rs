@@ -1031,3 +1031,70 @@ fn test_breakout_assembles() {
     let asm = assemble(&source, 0x1000).expect("breakout.asm failed to assemble");
     assert!(asm.pixels.len() > 200, "breakout should be more than 200 words");
 }
+
+#[test]
+fn test_tetris_assembles() {
+    // Smoke test: tetris.asm must assemble without errors
+    let source = std::fs::read_to_string("programs/tetris.asm")
+        .expect("tetris.asm not found");
+    let asm = assemble(&source, 0).expect("tetris.asm failed to assemble");
+    assert!(asm.pixels.len() > 500, "tetris should be more than 500 words");
+}
+
+#[test]
+fn test_tetris_initializes() {
+    let source = std::fs::read_to_string("programs/tetris.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+
+    // Run until first FRAME (init complete)
+    for _ in 0..200_000 {
+        if !vm.step() { break; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Board should be cleared (all 200 cells = 0)
+    for i in 0..200 {
+        assert_eq!(vm.ram[0x4000 + i], 0, "board cell {} should be empty", i);
+    }
+
+    // Game state initialized
+    assert_eq!(vm.ram[0x40D4], 0, "score should start at 0");
+    assert_eq!(vm.ram[0x40D5], 0, "lines_cleared should start at 0");
+    assert_eq!(vm.ram[0x40D6], 0, "game_over should be 0");
+    assert_eq!(vm.ram[0x40D8], 0, "soft_drop should be 0");
+
+    // Piece should be spawned: current_piece and next_piece should be 0-6
+    assert!(vm.ram[0x40D0] < 7, "current_piece should be 0-6");
+    assert!(vm.ram[0x40D7] < 7, "next_piece should be 0-6");
+
+    // Piece position
+    assert_eq!(vm.ram[0x40D1], 3, "piece_x should start at 3 (centered)");
+    assert_eq!(vm.ram[0x40D2], 0, "piece_y should start at 0 (top)");
+    assert_eq!(vm.ram[0x40D3], 0, "piece_rot should start at 0");
+
+    // Piece colors should be initialized
+    assert_eq!(vm.ram[0x42C0], 0x00CCCC, "I-piece color should be cyan");
+    assert_eq!(vm.ram[0x42C1], 0xCCCC00, "O-piece color should be yellow");
+    assert_eq!(vm.ram[0x42C2], 0xAA00CC, "T-piece color should be purple");
+    assert_eq!(vm.ram[0x42C3], 0x00CC44, "S-piece color should be green");
+    assert_eq!(vm.ram[0x42C4], 0xCC2200, "Z-piece color should be red");
+    assert_eq!(vm.ram[0x42C5], 0xFF8800, "L-piece color should be orange");
+    assert_eq!(vm.ram[0x42C6], 0x2244CC, "J-piece color should be blue");
+
+    // I-piece rotation data
+    assert_eq!(vm.ram[0x4102], 15, "I-piece rot0 row2 should be 0b1111");
+    assert_eq!(vm.ram[0x4104], 4, "I-piece rot1 row0 should be 0b0100");
+}

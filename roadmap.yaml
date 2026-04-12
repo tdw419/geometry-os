@@ -2,7 +2,7 @@ title: "Geometry OS Roadmap"
 version: "0.4.0"
 description: |
   Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  38 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  39 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 project_url: "https://github.com/tdw419/geometry-os"
 
@@ -12,9 +12,9 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 38
-  tests: 32
-  programs: 24
+  opcodes: 39
+  tests: 54
+  programs: 25
   loc: 4462
 
 phases:
@@ -328,7 +328,7 @@ phases:
 
   - id: "phase-11"
     title: "Advanced Games"
-    status: "planned"
+    status: "in_progress"
     goal: "Richer games using sprites and extended features"
     deliverables:
       - name: "breakout.asm"
@@ -336,7 +336,7 @@ phases:
         status: "done"
       - name: "tetris.asm"
         description: "Tetris with piece rotation and line clearing"
-        status: "todo"
+        status: "done"
       - name: "maze.asm"
         description: "Randomly generated maze with player navigation"
         status: "todo"
@@ -362,7 +362,7 @@ phases:
     test_target: 54
 
 global_risks:
-  - "Opcode space filling up (38 of ~256 slots used, but gaps in hex space)"
+  - "Opcode space filling up (39 of ~256 slots used, but gaps in hex space)"
   - "Scope creep -- adding opcodes is easy, keeping the VM simple is hard"
   - "BEEP spawning aplay processes without rate limiting could exhaust FDs"
 
