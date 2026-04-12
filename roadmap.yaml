@@ -14,8 +14,8 @@ meta:
   ram: 65536 words
   opcodes: 40
   tests: 40
-  programs: 27
-  loc: 4316
+  programs: 28
+  loc: 4510
 
 phases:
   # ===================================================================

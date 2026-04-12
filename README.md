@@ -6,13 +6,13 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 39 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 40 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
 ## Programs
 
-27 programs included -- static art, animations, interactive games:
+28 programs included -- static art, animations, interactive games:
 
 **Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes
 
@@ -21,6 +21,12 @@ There is no compiler. No runtime. No garbage collector. You write the opcodes, t
 **Interactive:** blink, painter (freehand drawing), calculator (4-function)
 
 **Games:** snake, ball (bouncing ball), breakout (4 rows of bricks, 3 lives), tetris (7 tetrominoes, rotation, line clearing), maze (randomly generated, WASD to navigate)
+
+**Self-hosting:** self_host (writes assembly, assembles it, runs the output)
+
+**Test helpers:** push_pop_test, shift_test, sprint_c_test (opcode verification)
+
+**Demos:** sprite_demo (sprite blitting)
 
 ## Build & Run
 
