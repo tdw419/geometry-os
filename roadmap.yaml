@@ -1,0 +1,361 @@
+title: "Geometry OS Roadmap"
+version: "0.4.0"
+description: |
+  Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
+  33 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  the built-in text editor, press F5, watch it run.
+project_url: "https://github.com/tdw419/geometry-os"
+
+meta:
+  language: Rust
+  gui: minifb
+  screen: 256x256 pixels
+  registers: 32
+  ram: 65536 words
+  opcodes: 33
+  tests: 24
+  programs: 23
+
+phases:
+  # ===================================================================
+  # COMPLETE PHASES
+  # ===================================================================
+
+  - id: "phase-1"
+    title: "Visual Programs"
+    status: "complete"
+    goal: "Draw static images on the 256x256 screen using pixel opcodes"
+    description: "Sprint A: programs that produce static visual output"
+    deliverables:
+      - name: "fill_screen.asm"
+        description: "Fill screen with a solid color"
+        status: "done"
+        acceptance_criteria:
+          - description: "Fills entire 256x256 canvas"
+            validation: "cargo test test_fill_screen"
+            met: true
+      - name: "diagonal.asm"
+        description: "Diagonal line from (0,0) to (255,255)"
+        status: "done"
+        acceptance_criteria:
+          - description: "Draws pixel-by-pixel diagonal"
+            met: true
+      - name: "border.asm"
+        description: "Colored border around screen edges"
+        status: "done"
+        acceptance_criteria:
+          - description: "Uses RECTF for 4 edges"
+            met: true
+      - name: "gradient.asm"
+        description: "Horizontal color gradient via nested loops"
+        status: "done"
+        acceptance_criteria:
+          - description: "Smooth gradient across full width"
+            met: true
+      - name: "stripes.asm"
+        description: "Alternating horizontal stripes"
+        status: "done"
+        acceptance_criteria:
+          - description: "Red and blue stripes"
+            met: true
+      - name: "nested_rects.asm"
+        description: "Concentric colored rectangles"
+        status: "done"
+        acceptance_criteria:
+          - description: "Multiple RECTF calls with different colors"
+            met: true
+      - name: "checkerboard.asm"
+        description: "Checkerboard pattern"
+        status: "done"
+      - name: "colors.asm"
+        description: "Color palette display"
+        status: "done"
+      - name: "lines.asm"
+        description: "Star burst using LINE opcode"
+        status: "done"
+      - name: "circles.asm"
+        description: "Concentric circles with cycling colors"
+        status: "done"
+      - name: "rings.asm"
+        description: "Concentric rings"
+        status: "done"
+      - name: "rainbow.asm"
+        description: "Rainbow stripes"
+        status: "done"
+    scope_lines_total: 500
+    test_target: 12
+
+  - id: "phase-2"
+    title: "Interactive Programs"
+    status: "complete"
+    goal: "Programs that respond to keyboard input via IKEY"
+    description: "Sprint B: keyboard-driven programs"
+    deliverables:
+      - name: "blink.asm"
+        description: "Toggle a pixel on/off with keyboard"
+        status: "done"
+      - name: "calculator.asm"
+        description: "4-function calculator with text display"
+        status: "done"
+    scope_lines_total: 1500
+    test_target: 14
+
+  - id: "phase-3"
+    title: "VM Extensions"
+    status: "complete"
+    goal: "Shift ops, stack ops, branch comparisons, modulo"
+    description: "Sprint C: extended instruction set"
+    deliverables:
+      - name: "SHL/SHR opcodes"
+        description: "Bit-shift left and right"
+        status: "done"
+        acceptance_criteria:
+          - description: "shift_test.asm passes"
+            met: true
+      - name: "PUSH/POP opcodes"
+        description: "Stack operations via r30 (SP)"
+        status: "done"
+        acceptance_criteria:
+          - description: "push_pop_test.asm passes"
+            met: true
+      - name: "BLT/BGE opcodes"
+        description: "Branch on less-than / greater-or-equal after CMP"
+        status: "done"
+      - name: "MOD opcode"
+        description: "Modulo operation"
+        status: "done"
+    scope_lines_total: 2500
+    test_target: 16
+
+  - id: "phase-4"
+    title: "Canvas & Editor"
+    status: "complete"
+    goal: "Clipboard paste, file loading, scroll/pan, syntax highlighting"
+    description: "Sprint D: text editor improvements"
+    deliverables:
+      - name: "Clipboard paste"
+        description: "Ctrl+V to paste text onto the grid"
+        status: "done"
+      - name: "File load"
+        description: "Ctrl+F8 to load .asm files with Tab completion"
+        status: "done"
+      - name: "Scroll/pan"
+        description: "Support programs larger than 32x32 characters"
+        status: "done"
+      - name: "Syntax highlighting"
+        description: "Color opcodes, registers, numbers differently on canvas"
+        status: "done"
+    scope_lines_total: 3000
+    test_target: 18
+
+  - id: "phase-5"
+    title: "Terminal Mode"
+    status: "complete"
+    goal: "CLI mode with geo> prompt and 11 commands"
+    description: "Sprint E: headless operation mode"
+    deliverables:
+      - name: "Terminal mode"
+        description: "geo> prompt with help, list, load, run, edit, regs, peek, poke, reset, clear, quit"
+        status: "done"
+      - name: "Mode switching"
+        description: "Escape toggles Editor/Terminal"
+        status: "done"
+    scope_lines_total: 3500
+    test_target: 20
+
+  - id: "phase-6"
+    title: "Animation & Games"
+    status: "complete"
+    goal: "FRAME opcode for 60fps animation loop, plus interactive games"
+    description: "v0.3.0: animation, keyboard input, real games"
+    deliverables:
+      - name: "FRAME opcode"
+        description: "Yield to renderer, enable animation loops at 60fps"
+        status: "done"
+      - name: "IKEY opcode"
+        description: "Read keyboard port RAM[0xFFF] and clear it"
+        status: "done"
+      - name: "fire.asm"
+        description: "Scrolling fire animation using FRAME + SCROLL"
+        status: "done"
+      - name: "ball.asm"
+        description: "Bouncing ball with WASD control"
+        status: "done"
+      - name: "scroll_demo.asm"
+        description: "Horizontal bar scrolling upward"
+        status: "done"
+    scope_lines_total: 4200
+    test_target: 22
+
+  - id: "phase-7"
+    title: "Random & Snake"
+    status: "complete"
+    goal: "RAND opcode for procedural content, full Snake game"
+    description: "v0.3.0 continuation: randomness and the flagship game"
+    deliverables:
+      - name: "RAND opcode"
+        description: "LCG pseudo-random u32 (seed 0xDEADBEEF)"
+        status: "done"
+        acceptance_criteria:
+          - description: "test_rand_opcode passes"
+            met: true
+      - name: "snake.asm"
+        description: "Snake game with WASD, random apples, growing tail, self-collision"
+        status: "done"
+    scope_lines_total: 4600
+    test_target: 24
+
+  - id: "phase-8"
+    title: "TICKS & Throttling"
+    status: "complete"
+    goal: "Frame counter register for game speed control"
+    description: "v0.3.1: TICKS port at 0xFFE"
+    deliverables:
+      - name: "TICKS register"
+        description: "RAM[0xFFE] frame counter, incremented each FRAME opcode, wraps at u32 max"
+        status: "done"
+        acceptance_criteria:
+          - description: "frame_count field in Vm struct"
+            met: true
+          - description: "Snake throttled via TICKS & 7 (~7.5 moves/sec)"
+            met: true
+    scope_lines_total: 4800
+    test_target: 24
+
+  - id: "phase-9"
+    title: "Sound"
+    status: "complete"
+    goal: "BEEP opcode for audio feedback in games"
+    description: "v0.4.0: sine-wave tones via aplay, zero new deps"
+    deliverables:
+      - name: "BEEP opcode"
+        description: "BEEP freq_reg, dur_reg -- sine-wave via aplay (20-20000 Hz, 1-5000 ms)"
+        status: "done"
+        acceptance_criteria:
+          - description: "Generates 16-bit mono WAV, pipes to aplay"
+            met: true
+      - name: "Snake sounds"
+        description: "880Hz ping on apple eat, 110Hz thud on death"
+        status: "done"
+      - name: "Ball sounds"
+        description: "330Hz click on wall bounce"
+        status: "done"
+      - name: "painter.asm"
+        description: "Freehand drawing program with cursor keys"
+        status: "done"
+    scope_lines_total: 5100
+    test_target: 24
+
+  # ===================================================================
+  # IN PROGRESS / NEXT
+  # ===================================================================
+
+  - id: "phase-10"
+    title: "Debug Tools"
+    status: "in_progress"
+    goal: "Breakpoints, instruction trace, and save/load improvements"
+    deliverables:
+      - name: "Save/load state"
+        description: "F7 saves full RAM to geometry_os.sav, restore on startup"
+        status: "done"
+        acceptance_criteria:
+          - description: "test_vm_save_load_roundtrip passes"
+            met: true
+      - name: "Disassembly panel"
+        description: "Show bytecode alongside source text in GUI"
+        status: "done"
+      - name: "Single-step mode"
+        description: "F6 steps one instruction when paused"
+        status: "done"
+      - name: "Breakpoints"
+        description: "Mark PC addresses to pause at during execution"
+        status: "todo"
+        scope_lines: 80
+        scope_files: ["src/vm.rs", "src/main.rs"]
+        acceptance_criteria:
+          - description: "User can set breakpoint at an address"
+            met: false
+          - description: "VM halts when PC hits breakpoint address"
+            met: false
+      - name: "Instruction trace"
+        description: "Log PC + decoded instruction for first N steps"
+        status: "todo"
+        scope_lines: 60
+        scope_files: ["src/vm.rs", "src/main.rs"]
+        acceptance_criteria:
+          - description: "CLI mode logs each instruction with register state"
+            met: false
+    scope_lines_total: 5500
+    test_target: 26
+
+  - id: "phase-11"
+    title: "Extended Graphics"
+    status: "planned"
+    goal: "Sprite blitting and screenshot export"
+    deliverables:
+      - name: "SPRITE opcode"
+        description: "Copy a block of RAM to screen at (x,y) -- sprite blit"
+        status: "todo"
+        scope_lines: 120
+        scope_files: ["src/vm.rs", "src/assembler.rs"]
+        acceptance_criteria:
+          - description: "Copy NxM pixels from RAM to screen buffer"
+            met: false
+      - name: "Screenshot export"
+        description: "Dump 256x256 canvas to PNG file"
+        status: "todo"
+        scope_lines: 40
+        scope_files: ["src/main.rs"]
+        acceptance_criteria:
+          - description: "F9 or CLI command saves PNG"
+            met: false
+    scope_lines_total: 5800
+    test_target: 28
+
+  - id: "phase-12"
+    title: "Advanced Games"
+    status: "planned"
+    goal: " richer games using sprites and extended features"
+    deliverables:
+      - name: "breakout.asm"
+        description: "Breakout game with paddle, ball, and brick rows"
+        status: "todo"
+      - name: "tetris.asm"
+        description: "Tetris with piece rotation and line clearing"
+        status: "todo"
+      - name: "maze.asm"
+        description: "Randomly generated maze with player navigation"
+        status: "todo"
+    scope_lines_total: 6200
+    test_target: 30
+
+  - id: "phase-13"
+    title: "Self-Hosting"
+    status: "future"
+    goal: "VM can assemble and run its own programs from within the VM"
+    description: |
+      The ultimate goal: the text editor types assembly, the assembler built
+      into the VM compiles it, and the VM runs it. Already partially there
+      (F8 assembles canvas text). The missing piece is making the assembler
+      callable as a subroutine from within VM bytecode.
+    deliverables:
+      - name: "Assembler syscall"
+        description: "VM opcode that triggers the assembler on canvas text, loading bytecode at 0x1000"
+        status: "todo"
+        scope_lines: 150
+      - name: "Self-hosting demo"
+        description: "Program that writes assembly to canvas, assembles it, then runs the output"
+        status: "todo"
+    scope_lines_total: 6800
+    test_target: 32
+
+global_risks:
+  - "Opcode space collision (0x00-0x61 used, gaps filling up)"
+  - "Scope creep -- adding opcodes is easy, keeping the VM simple is hard"
+  - "Performance -- WAV generation per BEEP could stack up if misused"
+
+conventions:
+  - "Every new opcode gets a test in tests/program_tests.rs"
+  - "Every new program gets assembled by test_all_programs_assemble"
+  - "README.md updated when opcodes or features change"
+  - "Semantic versioning: minor bump for new opcodes, patch for fixes"
