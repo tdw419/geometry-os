@@ -45,7 +45,7 @@ geo> load hello
 geo> run
 ```
 
-## The Instruction Set (39 opcodes)
+## The Instruction Set (40 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -113,11 +113,13 @@ geo> run
 | CMP    | rd, rs | Compare: r0 = -1/0/1 (lt/eq/gt) |
 | IKEY   | reg   | Read keyboard port, clear it |
 | RAND   | reg   | Pseudo-random u32 into register |
+| ASM    | sr, dr | Assemble source text at RAM[sr], write bytecode to RAM[dr] |
 
 ## Memory-Mapped I/O
 
 | Port  | Address | Description |
 |-------|---------|-------------|
+| ASM_RESULT | 0xFFD | Assembler output (word count or 0xFFFFFFFF on error) |
 | TICKS | 0xFFE   | Frame counter (read-only, incremented each FRAME) |
 | KEY   | 0xFFF   | Keyboard input (read via IKEY) |
 
@@ -187,16 +189,16 @@ skip_move:
 │  └──────────────┘  └────────────────┘  │
 └─────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 39 opcodes
-Memory: 0x0000 bytecode | 0x1000 canvas text | 0xFFE TICKS | 0xFFF KEY
+VM: 32 registers, 65536-word RAM, 40 opcodes
+Memory: 0x0000 bytecode | 0x1000 canvas text | 0xFFD ASM result | 0xFFE TICKS | 0xFFF KEY
 ```
 
 ## Stats
 
-- 4,500 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
-- 39 opcodes
-- 27 demo programs (visual demos, animations, interactive games)
-- 47 tests
+- 4,510 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
+- 40 opcodes
+- 28 demo programs (visual demos, animations, interactive games)
+- 40 tests
 
 ## License
 
