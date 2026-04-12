@@ -80,8 +80,8 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 - [x] Escape returns from Editor to Terminal, quits from Terminal
 - [x] Canvas text I/O helpers: write_line_to_canvas, read_canvas_line, ensure_scroll
 
-## Sprint F: Polish
-- [ ] Save/load: F7 to save RAM, restore on startup
-- [ ] Disassembly panel: show bytecode alongside source text
-- [ ] Single-step: Space to step one instruction when paused
-- [ ] Breakpoints: mark addresses to pause at
+## Sprint F: Polish (done)
+- [x] Save/load: F7 to save RAM, restore on startup
+- [x] Disassembly panel: show bytecode alongside source text
+- [x] Single-step: F6 to step one instruction when paused
+- [x] Breakpoints: mark addresses to pause at

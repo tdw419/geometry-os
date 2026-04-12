@@ -13,8 +13,8 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 39
-  tests: 54
-  programs: 25
+  tests: 36
+  programs: 26
   loc: 4462
 
 phases:
@@ -339,9 +339,14 @@ phases:
         status: "done"
       - name: "maze.asm"
         description: "Randomly generated maze with player navigation"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "test_maze_assembles passes"
+            met: true
+          - description: "test_maze_initializes passes"
+            met: true
     scope_lines_total: 5100
-    test_target: 52
+    test_target: 56
 
   - id: "phase-12"
     title: "Self-Hosting"

@@ -116,6 +116,8 @@ geo> run
 | rings.asm | Concentric rings |
 | painter.asm | Paint program (cursor keys) |
 | calculator.asm | Simple 4-function calculator |
+| tetris.asm | Tetris -- rotate (W), move (A/D), soft drop (S), hard drop (Space) |
+| maze.asm | Randomly generated maze -- WASD to navigate, R to restart |
 
 ## Animation Pattern
 

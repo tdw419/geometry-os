@@ -1098,3 +1098,65 @@ fn test_tetris_initializes() {
     assert_eq!(vm.ram[0x4102], 15, "I-piece rot0 row2 should be 0b1111");
     assert_eq!(vm.ram[0x4104], 4, "I-piece rot1 row0 should be 0b0100");
 }
+
+// ── MAZE ───────────────────────────────────────────────────────
+
+#[test]
+fn test_maze_assembles() {
+    let source = std::fs::read_to_string("programs/maze.asm")
+        .expect("maze.asm not found");
+    let asm = assemble(&source, 0).expect("maze.asm failed to assemble");
+    assert!(asm.pixels.len() > 300, "maze should be more than 300 words");
+}
+
+#[test]
+fn test_maze_initializes() {
+    let source = std::fs::read_to_string("programs/maze.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+
+    // Run until first FRAME (init + generate + render complete)
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Top border (row 0) should be all walls
+    assert_eq!(
+        vm.ram[0x5000], 0xFFFFFFFF,
+        "top border row should be all walls"
+    );
+
+    // Row 1 should have passages carved (not all walls)
+    assert_ne!(
+        vm.ram[0x5004], 0xFFFFFFFF,
+        "row 1 should have carved passages"
+    );
+
+    // Starting cell (0,0) should be visited
+    assert_eq!(vm.ram[0x5100], 1, "cell (0,0) should be visited");
+
+    // Player at (0,0)
+    assert_eq!(vm.ram[0x5310], 0, "player_x should be 0");
+    assert_eq!(vm.ram[0x5311], 0, "player_y should be 0");
+
+    // Not won
+    assert_eq!(vm.ram[0x5312], 0, "won should be 0");
+
+    // Win text stored in RAM
+    assert_eq!(vm.ram[0x5320], 89, "first char should be 'Y' (89)");
+    assert_eq!(vm.ram[0x5327], 33, "last char should be '!' (33)");
+    assert_eq!(vm.ram[0x5328], 0, "null terminator after text");
+}

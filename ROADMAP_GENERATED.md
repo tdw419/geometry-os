@@ -7,7 +7,7 @@ the built-in text editor, press F5, watch it run.
 
 **Progress:** 10/12 phases complete, 1 in progress
 
-**Deliverables:** 63/66 complete
+**Deliverables:** 64/66 complete
 
 ## Scope Summary
 
@@ -23,7 +23,7 @@ the built-in text editor, press F5, watch it run.
 | phase-8 TICKS & Sound | COMPLETE | 5/5 | 4,322 | 46 |
 | phase-9 Debug Tools | COMPLETE | 5/5 | 4,500 | 48 |
 | phase-10 Extended Graphics | COMPLETE | 2/2 | 4,700 | 50 |
-| phase-11 Advanced Games | IN PROGRESS | 2/3 | 5,100 | 52 |
+| phase-11 Advanced Games | IN PROGRESS | 3/3 | 5,100 | 56 |
 | phase-12 Self-Hosting | FUTURE | 0/2 | 5,500 | 54 |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
@@ -183,7 +183,9 @@ Instruction set extensions
 
 - [x] **breakout.asm** -- Breakout with paddle, ball, 4 rows of colored bricks, score, lives
 - [x] **tetris.asm** -- Tetris with piece rotation and line clearing
-- [ ] **maze.asm** -- Randomly generated maze with player navigation
+- [x] **maze.asm** -- Randomly generated maze with player navigation
+  - [x] test_maze_assembles passes
+  - [x] test_maze_initializes passes
 
 ## [?] phase-12: Self-Hosting (FUTURE)
 
