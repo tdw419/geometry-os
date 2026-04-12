@@ -13,9 +13,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 38
-  tests: 46
+  tests: 50
   programs: 23
-  loc: 4322
+  loc: 4366
 
 phases:
   # ===================================================================
@@ -262,7 +262,7 @@ phases:
 
   - id: "phase-9"
     title: "Debug Tools"
-    status: "in_progress"
+    status: "complete"
     goal: "Breakpoints, instruction trace, and save/load improvements"
     deliverables:
       - name: "Save/load state"
@@ -279,28 +279,28 @@ phases:
         status: "done"
       - name: "Breakpoints"
         description: "Mark PC addresses to pause at during execution"
-        status: "todo"
+        status: "done"
         scope_lines: 80
         scope_files: ["src/vm.rs", "src/main.rs"]
         acceptance_criteria:
           - description: "User can set breakpoint at an address"
-            met: false
+            met: true
           - description: "VM halts when PC hits breakpoint address"
-            met: false
+            met: true
       - name: "Instruction trace"
         description: "Log PC + decoded instruction for first N steps"
-        status: "todo"
+        status: "done"
         scope_lines: 60
         scope_files: ["src/vm.rs", "src/main.rs"]
         acceptance_criteria:
           - description: "CLI mode logs each instruction with register state"
-            met: false
+            met: true
     scope_lines_total: 4500
     test_target: 48
 
   - id: "phase-10"
     title: "Extended Graphics"
-    status: "planned"
+    status: "in_progress"
     goal: "Sprite blitting and screenshot export"
     deliverables:
       - name: "SPRITE opcode"

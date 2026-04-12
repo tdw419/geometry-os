@@ -5,9 +5,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 8/12 phases complete, 1 in progress
+**Progress:** 9/12 phases complete, 1 in progress
 
-**Deliverables:** 57/66 complete
+**Deliverables:** 59/66 complete
 
 ## Scope Summary
 
@@ -21,8 +21,8 @@ the built-in text editor, press F5, watch it run.
 | phase-6 Animation | COMPLETE | 3/3 | 4,000 | 24 |
 | phase-7 Random & Games | COMPLETE | 3/3 | 4,300 | 24 |
 | phase-8 TICKS & Sound | COMPLETE | 5/5 | 4,322 | 46 |
-| phase-9 Debug Tools | IN PROGRESS | 3/5 | 4,500 | 48 |
-| phase-10 Extended Graphics | PLANNED | 0/2 | 4,700 | 50 |
+| phase-9 Debug Tools | COMPLETE | 5/5 | 4,500 | 48 |
+| phase-10 Extended Graphics | IN PROGRESS | 0/2 | 4,700 | 50 |
 | phase-11 Advanced Games | PLANNED | 0/3 | 5,100 | 52 |
 | phase-12 Self-Hosting | FUTURE | 0/2 | 5,500 | 54 |
 
@@ -142,7 +142,7 @@ Instruction set extensions
 - [x] **Snake sounds** -- 880Hz ping on apple eat, 110Hz thud on death
 - [x] **Ball sounds** -- 330Hz click on wall bounce
 
-## [~] phase-9: Debug Tools (IN PROGRESS)
+## [x] phase-9: Debug Tools (COMPLETE)
 
 **Goal:** Breakpoints, instruction trace, and save/load improvements
 
@@ -152,15 +152,15 @@ Instruction set extensions
   - [x] test_vm_save_load_roundtrip passes
 - [x] **Disassembly panel** -- Show bytecode alongside source text in GUI
 - [x] **Single-step mode** -- F6 steps one instruction when paused
-- [ ] **Breakpoints** -- Mark PC addresses to pause at during execution
-  - [ ] User can set breakpoint at an address
-  - [ ] VM halts when PC hits breakpoint address
+- [x] **Breakpoints** -- Mark PC addresses to pause at during execution
+  - [x] User can set breakpoint at an address
+  - [x] VM halts when PC hits breakpoint address
   _~80 LOC_
-- [ ] **Instruction trace** -- Log PC + decoded instruction for first N steps
-  - [ ] CLI mode logs each instruction with register state
+- [x] **Instruction trace** -- Log PC + decoded instruction for first N steps
+  - [x] CLI mode logs each instruction with register state
   _~60 LOC_
 
-## [ ] phase-10: Extended Graphics (PLANNED)
+## [~] phase-10: Extended Graphics (IN PROGRESS)
 
 **Goal:** Sprite blitting and screenshot export
 
