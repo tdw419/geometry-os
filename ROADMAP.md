@@ -47,7 +47,7 @@ Clean-slate rebuild of the Geometry OS pixel-composition VM. The VM executes byt
 - [x] NESTED_RECTS: Draw concentric colored rectangles using RECTF -- difficulty: easy
 
 ## Sprint B: Interactive Programs (Moderate)
-- [ ] BLINK: Toggle a pixel on/off using keyboard input and CMP -- difficulty: moderate
+- [x] BLINK: Toggle a pixel on/off using keyboard input and CMP -- difficulty: moderate
 - [ ] PAINTER: Read keyboard port, draw colored pixels where cursor is -- difficulty: moderate
 - [ ] CALCULATOR: Simple add/subtract calculator with text display -- difficulty: hard
 

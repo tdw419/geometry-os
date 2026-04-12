@@ -184,6 +184,76 @@ fn test_nested_rects() {
     assert_eq!(vm.screen[128 * 256 + 128], 0xFFFFFF, "center should be white");
 }
 
+// ── BLINK ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_blink_with_keys() {
+    let source = std::fs::read_to_string("programs/blink.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source)
+        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    // Load program at address 0
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let green = 0x00FF00u32;
+    let black = 0u32;
+    let key_port = 0xFFFFusize;
+    let center_pixel = 128 * 256 + 128;
+
+    // Run until first poll cycle (need enough cycles for setup code)
+    // Setup: ~30 instructions (constants + signature + initial PSET)
+    for _ in 0..100 {
+        if !vm.step() { break; }
+    }
+
+    // After setup, pixel should be green
+    assert_eq!(vm.screen[center_pixel], green, "initial pixel should be green");
+
+    // Simulate 3 keypresses, each followed by enough cycles to process
+    for toggle_num in 0..3 {
+        // Inject key into keyboard port
+        vm.ram[key_port] = 65; // 'A'
+
+        // Run enough cycles for the program to:
+        // - LOAD the key, CMP against 0, detect key pressed
+        // - Clear port, check toggle state, toggle pixel, increment counter
+        // - Check if done, either loop back or halt
+        for _ in 0..200 {
+            if !vm.step() { break; }
+        }
+
+        // Verify port was cleared (program acknowledges the key)
+        assert_eq!(vm.ram[key_port], 0, "port should be cleared after toggle {}", toggle_num + 1);
+
+        // After each toggle, pixel alternates: green -> black -> green -> black
+        let expected = if toggle_num % 2 == 0 { black } else { green };
+        assert_eq!(
+            vm.screen[center_pixel], expected,
+            "after toggle {}, pixel should be {}",
+            toggle_num + 1,
+            if toggle_num % 2 == 0 { "black" } else { "green" }
+        );
+    }
+
+    // After 3 toggles, program should have halted
+    assert!(vm.halted, "VM should halt after 3 toggles");
+
+    // Verify the "BLINK" signature was written
+    assert_eq!(vm.ram[0x0200], 66, "B");
+    assert_eq!(vm.ram[0x0201], 76, "L");
+    assert_eq!(vm.ram[0x0202], 73, "I");
+    assert_eq!(vm.ram[0x0203], 78, "N");
+    assert_eq!(vm.ram[0x0204], 75, "K");
+}
+
 // ── ASSEMBLER TESTS ──────────────────────────────────────────────
 
 #[test]
@@ -195,6 +265,7 @@ fn test_all_programs_assemble() {
         "programs/gradient.asm",
         "programs/stripes.asm",
         "programs/nested_rects.asm",
+        "programs/blink.asm",
     ];
     for path in programs {
         let source = std::fs::read_to_string(path)
