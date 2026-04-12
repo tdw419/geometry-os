@@ -295,6 +295,7 @@ fn test_all_programs_assemble() {
         "programs/painter.asm",
         "programs/calculator.asm",
         "programs/shift_test.asm",
+        "programs/push_pop_test.asm",
     ];
     for path in programs {
         let source = std::fs::read_to_string(path)
@@ -302,6 +303,33 @@ fn test_all_programs_assemble() {
         let result = assemble(&source);
         assert!(result.is_ok(), "{} should assemble: {:?}", path, result.err());
     }
+}
+
+// ── PUSH/POP ──────────────────────────────────────────────────────
+
+#[test]
+fn test_push_pop() {
+    let vm = compile_run("programs/push_pop_test.asm");
+    assert!(vm.halted, "VM should halt");
+
+    // Test 1: LIFO order -- push 100, 200, 300 -> pop 300, 200, 100
+    assert_eq!(vm.ram[0x0200], 300, "first pop should be 300");
+    assert_eq!(vm.ram[0x0201], 200, "second pop should be 200");
+    assert_eq!(vm.ram[0x0202], 100, "third pop should be 100");
+
+    // Test 2: Same register pushed multiple times
+    assert_eq!(vm.ram[0x0203], 2, "first pop of same-reg test = 2");
+    assert_eq!(vm.ram[0x0204], 1, "second pop of same-reg test = 1");
+    assert_eq!(vm.ram[0x0205], 0, "third pop of same-reg test = 0");
+
+    // Test 3: SP balanced after push/pop -- push 42 then pop gives 42
+    assert_eq!(vm.ram[0x0206], 42, "SP should be balanced, push/pop 42");
+
+    // Test 4: PUSH preserves value across register reuse
+    assert_eq!(vm.ram[0x0207], 777, "pushed value preserved after register clobber");
+
+    // Test 5: Push 5 values (10,20,30,40,50), pop and sum = 150
+    assert_eq!(vm.ram[0x0208], 150, "sum of 5 pushed values should be 150");
 }
 
 // ── PAINTER ────────────────────────────────────────────────────

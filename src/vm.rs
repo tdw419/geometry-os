@@ -171,6 +171,15 @@ impl Vm {
                 }
             }
 
+            // MOD rd, rs  -- rd = rd % rs
+            0x29 => {
+                let rd = self.fetch() as usize;
+                let rs = self.fetch() as usize;
+                if rd < NUM_REGS && rs < NUM_REGS && self.regs[rs] != 0 {
+                    self.regs[rd] = self.regs[rd] % self.regs[rs];
+                }
+            }
+
             // JMP addr
             0x30 => {
                 let addr = self.fetch();
@@ -213,6 +222,52 @@ impl Vm {
             0x34 => {
                 self.pc = self.regs[31];
                 return true;
+            }
+
+            // BLT reg, addr  -- branch if CMP result < 0 (r0 == 0xFFFFFFFF)
+            0x35 => {
+                let _reg = self.fetch() as usize;
+                let addr = self.fetch();
+                if self.regs[0] == 0xFFFFFFFF {
+                    self.pc = addr;
+                    return true;
+                }
+            }
+
+            // BGE reg, addr  -- branch if CMP result >= 0 (r0 != 0xFFFFFFFF)
+            0x36 => {
+                let _reg = self.fetch() as usize;
+                let addr = self.fetch();
+                if self.regs[0] != 0xFFFFFFFF {
+                    self.pc = addr;
+                    return true;
+                }
+            }
+
+            // PUSH reg  -- push register onto stack (r30 is SP, grows down)
+            0x60 => {
+                let reg = self.fetch() as usize;
+                if reg < NUM_REGS {
+                    // Decrement SP (r30)
+                    let sp = self.regs[30] as usize;
+                    if sp > 0 && sp <= self.ram.len() {
+                        let new_sp = sp - 1;
+                        self.ram[new_sp] = self.regs[reg];
+                        self.regs[30] = new_sp as u32;
+                    }
+                }
+            }
+
+            // POP reg  -- pop from stack into register (r30 is SP)
+            0x61 => {
+                let reg = self.fetch() as usize;
+                if reg < NUM_REGS {
+                    let sp = self.regs[30] as usize;
+                    if sp < self.ram.len() {
+                        self.regs[reg] = self.ram[sp];
+                        self.regs[30] = (sp + 1) as u32;
+                    }
+                }
             }
 
             // PSET x_reg, y_reg, color_reg  -- set pixel on screen

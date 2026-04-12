@@ -11,6 +11,7 @@ mod font;
 mod vm;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
+use std::path::PathBuf;
 
 // ── Layout constants ─────────────────────────────────────────────
 const WIDTH: usize = 1024;
@@ -71,6 +72,21 @@ fn main() {
     // Status bar message
     let mut status_msg = String::from("[TEXT mode: type assembly, F8=assemble, F5=run]");
 
+    // Last loaded file (for Ctrl+F8 reload)
+    let mut loaded_file: Option<PathBuf> = None;
+
+    // Load file from command-line argument at startup
+    if let Some(path_str) = std::env::args().nth(1) {
+        let path = PathBuf::from(&path_str);
+        if let Ok(source) = std::fs::read_to_string(&path) {
+            load_source_to_canvas(&mut vm, &source, &mut cursor_row, &mut cursor_col);
+            status_msg = format!("[loaded: {}]", path.display());
+            loaded_file = Some(path);
+        } else {
+            status_msg = format!("[error: could not read {}]", path_str);
+        }
+    }
+
     // ── Main loop ────────────────────────────────────────────────
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // ── Handle input ─────────────────────────────────────────
@@ -122,7 +138,19 @@ fn main() {
                 Key::F8 => {
                     let ctrl = window.is_key_down(Key::LeftCtrl)
                         || window.is_key_down(Key::RightCtrl);
-                    if !ctrl {
+                    if ctrl {
+                        // Ctrl+F8: reload the last loaded file onto the canvas
+                        if let Some(ref path) = loaded_file.clone() {
+                            if let Ok(source) = std::fs::read_to_string(path) {
+                                load_source_to_canvas(&mut vm, &source, &mut cursor_row, &mut cursor_col);
+                                status_msg = format!("[reloaded: {}]", path.display());
+                            } else {
+                                status_msg = format!("[error: could not reload {}]", path.display());
+                            }
+                        } else {
+                            status_msg = String::from("[no file loaded -- run with: cargo run -- path/to/file.asm]");
+                        }
+                    } else {
                         canvas_assemble(&mut vm, &mut canvas_assembled, &mut status_msg);
                     }
                 }
@@ -172,6 +200,39 @@ fn main() {
         render(&mut buffer, &vm, cursor_row, cursor_col, is_running, &status_msg);
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
     }
+}
+
+// ── Load source text from a string onto the canvas grid ──────────
+fn load_source_to_canvas(
+    vm: &mut vm::Vm,
+    source: &str,
+    cursor_row: &mut usize,
+    cursor_col: &mut usize,
+) {
+    // Clear canvas grid
+    for cell in vm.ram[..CANVAS_COLS * CANVAS_ROWS].iter_mut() {
+        *cell = 0;
+    }
+
+    let mut row = 0usize;
+    let mut col = 0usize;
+
+    for ch in source.chars() {
+        if row >= CANVAS_ROWS {
+            break;
+        }
+        if ch == '\n' {
+            row += 1;
+            col = 0;
+        } else if col < CANVAS_COLS {
+            vm.ram[row * CANVAS_COLS + col] = ch as u32;
+            col += 1;
+        }
+        // characters beyond column 32 on a single line are dropped
+    }
+
+    *cursor_row = 0;
+    *cursor_col = 0;
 }
 
 // ── Canvas assembly: read grid as text, assemble, store bytecode ──

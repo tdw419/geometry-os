@@ -212,6 +212,15 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[2])? as u32);
         }
 
+        "MOD" => {
+            if tokens.len() < 3 {
+                return Err(format!("MOD requires 2 arguments: MOD rd, rs"));
+            }
+            bytecode.push(0x29);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
         "JMP" => {
             if tokens.len() < 2 {
                 return Err(format!("JMP requires 1 argument: JMP addr"));
@@ -272,6 +281,52 @@ fn parse_instruction(
         }
 
         "RET" => bytecode.push(0x34),
+
+        "BLT" => {
+            if tokens.len() < 3 {
+                return Err(format!("BLT requires 2 arguments: BLT reg, addr"));
+            }
+            bytecode.push(0x35);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            let pos = bytecode.len();
+            if let Ok(addr) = parse_imm(tokens[2]) {
+                bytecode.push(addr);
+            } else {
+                bytecode.push(0);
+                label_refs.push((pos, tokens[2].to_lowercase(), line_num));
+            }
+        }
+
+        "BGE" => {
+            if tokens.len() < 3 {
+                return Err(format!("BGE requires 2 arguments: BGE reg, addr"));
+            }
+            bytecode.push(0x36);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            let pos = bytecode.len();
+            if let Ok(addr) = parse_imm(tokens[2]) {
+                bytecode.push(addr);
+            } else {
+                bytecode.push(0);
+                label_refs.push((pos, tokens[2].to_lowercase(), line_num));
+            }
+        }
+
+        "PUSH" => {
+            if tokens.len() < 2 {
+                return Err(format!("PUSH requires 1 argument: PUSH reg"));
+            }
+            bytecode.push(0x60);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
+        "POP" => {
+            if tokens.len() < 2 {
+                return Err(format!("POP requires 1 argument: POP reg"));
+            }
+            bytecode.push(0x61);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
 
         "PSET" => {
             if tokens.len() < 4 {
