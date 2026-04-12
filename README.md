@@ -4,11 +4,11 @@ A pixel-art VM with a built-in assembler, debugger, and live GUI.
 
 ## What It Does
 
-Geometry OS is a 256x256 pixel virtual machine with 32 registers, 38 opcodes,
+Geometry OS is a 256x256 pixel virtual machine with 32 registers, 39 opcodes,
 memory-mapped I/O, and a real-time animation loop. You write assembly programs
 in a text editor built into the GUI, hit run, and watch them execute live.
 
-## Opcodes (38)
+## Opcodes (39)
 
 ### Control
 | Opcode | Args | Description |
@@ -66,6 +66,7 @@ in a text editor built into the GUI, hit run, and watch them execute live.
 | LINE   | x0r,y0r,x1r,y1r,cr | Bresenham line |
 | CIRCLE | xr, yr, rr, cr | Midpoint circle |
 | SCROLL | nr     | Scroll screen up by regs[nr] pixels |
+| SPRITE | xr,yr,ar,wr,hr | Blit NxM pixels from RAM to screen (0=transparent) |
 
 ### I/O
 | Opcode | Args | Description |
@@ -107,6 +108,7 @@ geo> run
 | fire.asm | Scrolling fire animation (FRAME + SCROLL) |
 | ball.asm | Bouncing ball with WASD keyboard control |
 | snake.asm | Snake game -- WASD control, random apples, growing tail |
+| sprite_demo.asm | SPRITE opcode demo -- blits 4x3 red rectangle |
 | scroll_demo.asm | Horizontal bar that scrolls upward |
 | checkerboard.asm | Checkerboard pattern |
 | rainbow.asm | Rainbow stripes |
@@ -183,9 +185,9 @@ skip_move:
 ## Stats
 
 - ~5,100 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
-- 38 opcodes
-- 23 demo programs
-- 24 unit tests
+- 39 opcodes
+- 25 demo programs
+- 30 unit tests
 
 ## License
 

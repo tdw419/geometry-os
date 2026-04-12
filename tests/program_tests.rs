@@ -732,3 +732,248 @@ fn test_snake_assembles() {
     let asm = assemble(&source, 0x1000).expect("snake.asm failed to assemble");
     assert!(asm.pixels.len() > 100, "snake should be more than 100 words");
 }
+
+// ── BREAKPOINTS ───────────────────────────────────────────────────
+
+use std::collections::HashSet;
+
+#[test]
+fn test_breakpoint_halts_at_correct_address() {
+    // Assemble a simple program: LDI r1, 42 / LDI r2, 99 / HALT
+    // Set breakpoint at address of LDI r2, 99 (second instruction)
+    let source = "LDI r1, 42\nLDI r2, 99\nHALT";
+    let asm = assemble(source, 0x1000).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
+    vm.pc = 0x1000;
+
+    // Figure out where LDI r2 starts by checking instruction sizes
+    let (_, first_len) = vm.disassemble_at(0x1000);
+    let bp_addr = 0x1000 + first_len as u32;
+
+    let mut breakpoints: HashSet<u32> = HashSet::new();
+    breakpoints.insert(bp_addr);
+
+    // Run with breakpoint check
+    let mut hit = false;
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+        if breakpoints.contains(&vm.pc) {
+            hit = true;
+            break;
+        }
+    }
+
+    assert!(hit, "should have hit breakpoint at 0x{:04X}", bp_addr);
+    assert_eq!(vm.pc, bp_addr, "PC should be at breakpoint address");
+    assert_eq!(vm.regs[1], 42, "r1 should be set before breakpoint");
+    assert_ne!(vm.regs[2], 99, "r2 should NOT be set yet (breakpoint before it)");
+}
+
+#[test]
+fn test_breakpoint_can_be_toggled() {
+    // Set breakpoint, verify it fires, remove it, verify it doesn't fire again
+    let source = "LDI r1, 1\nLDI r2, 2\nLDI r3, 3\nHALT";
+    let asm = assemble(source, 0x1000).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
+    vm.pc = 0x1000;
+
+    let (_, first_len) = vm.disassemble_at(0x1000);
+    let bp_addr = 0x1000 + first_len as u32;
+
+    let mut breakpoints: HashSet<u32> = HashSet::new();
+    breakpoints.insert(bp_addr);
+
+    // Run: should hit breakpoint
+    let mut hit_count = 0;
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+        if breakpoints.contains(&vm.pc) {
+            hit_count += 1;
+            break;
+        }
+    }
+    assert_eq!(hit_count, 1, "should hit breakpoint once");
+
+    // Remove breakpoint and continue to halt
+    breakpoints.remove(&bp_addr);
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+        if breakpoints.contains(&vm.pc) {
+            hit_count += 1;
+        }
+    }
+    assert!(vm.halted, "VM should have halted");
+    assert_eq!(hit_count, 1, "should not hit breakpoint after removal");
+}
+
+#[test]
+fn test_breakpoint_not_hit_if_address_skipped() {
+    // Set breakpoint at an address that the program never reaches
+    let source = "LDI r1, 10\nHALT";
+    let asm = assemble(source, 0x1000).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
+    vm.pc = 0x1000;
+
+    let mut breakpoints: HashSet<u32> = HashSet::new();
+    breakpoints.insert(0x2000); // unreachable address
+
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+        assert!(!breakpoints.contains(&vm.pc), "should never hit BP at 0x2000");
+    }
+    assert!(vm.halted);
+}
+
+#[test]
+fn test_multiple_breakpoints() {
+    // Set breakpoints at multiple addresses, verify each fires
+    let source = "LDI r1, 1\nLDI r2, 2\nLDI r3, 3\nLDI r4, 4\nHALT";
+    let asm = assemble(source, 0x1000).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
+    vm.pc = 0x1000;
+
+    // Calculate addresses of each LDI instruction
+    let mut addrs = Vec::new();
+    let mut addr = 0x1000u32;
+    for _ in 0..4 {
+        let (_, len) = vm.disassemble_at(addr);
+        addrs.push(addr);
+        addr += len as u32;
+    }
+
+    let mut breakpoints: HashSet<u32> = HashSet::new();
+    breakpoints.insert(addrs[1]); // LDI r2, 2
+    breakpoints.insert(addrs[3]); // LDI r4, 4
+
+    let mut hits: Vec<u32> = Vec::new();
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+        if breakpoints.contains(&vm.pc) {
+            hits.push(vm.pc);
+            break;
+        }
+    }
+
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0], addrs[1], "first hit should be at LDI r2");
+
+    // Continue after first breakpoint
+    hits.clear();
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+        if breakpoints.contains(&vm.pc) {
+            hits.push(vm.pc);
+            break;
+        }
+    }
+
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0], addrs[3], "second hit should be at LDI r4");
+}
+
+// ── SPRITE OPCODE ───────────────────────────────────────────────
+
+#[test]
+fn test_sprite_opcode() {
+    let source = std::fs::read_to_string("programs/sprite_demo.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "VM should halt");
+
+    // sprite_demo.asm draws a 4x3 red sprite at (10, 10)
+    // Pixel (10, 10) should be red
+    assert_eq!(vm.screen[10 * 256 + 10], 0xFF0000, "(10,10) should be red");
+    // Pixel (11, 10) should be red
+    assert_eq!(vm.screen[10 * 256 + 11], 0xFF0000, "(11,10) should be red");
+    // Pixel (13, 12) should be red
+    assert_eq!(vm.screen[12 * 256 + 13], 0xFF0000, "(13,12) should be red");
+    // Transparent pixel at (0, 0) should remain 0
+    assert_eq!(vm.screen[0], 0, "(0,0) should remain 0");
+}
+
+#[test]
+fn test_sprite_transparent_skips_zero() {
+    // Directly test SPRITE with transparent pixels
+    let mut vm = Vm::new();
+
+    // Set up: r1=5 (x), r2=5 (y), r3=0x100 (sprite data addr), r4=3 (w), r5=2 (h)
+    vm.ram[0] = 0x10; // LDI r1, 5
+    vm.ram[1] = 1;
+    vm.ram[2] = 5;
+    vm.ram[3] = 0x10; // LDI r2, 5
+    vm.ram[4] = 2;
+    vm.ram[5] = 5;
+    vm.ram[6] = 0x10; // LDI r3, 256 (0x100)
+    vm.ram[7] = 3;
+    vm.ram[8] = 256;
+    vm.ram[9] = 0x10; // LDI r4, 3
+    vm.ram[10] = 4;
+    vm.ram[11] = 3;
+    vm.ram[12] = 0x10; // LDI r5, 2
+    vm.ram[13] = 5;
+    vm.ram[14] = 2;
+    // SPRITE r1, r2, r3, r4, r5 (opcode 0x4A)
+    vm.ram[15] = 0x4A;
+    vm.ram[16] = 1; // r1
+    vm.ram[17] = 2; // r2
+    vm.ram[18] = 3; // r3
+    vm.ram[19] = 4; // r4
+    vm.ram[20] = 5; // r5
+    vm.ram[21] = 0x00; // HALT
+
+    // Sprite data at 0x100: 3x2 pixels
+    // Row 0: [0x00FF00, 0x000000, 0x0000FF]  (green, transparent, blue)
+    // Row 1: [0x000000, 0xFF0000, 0x000000]  (transparent, red, transparent)
+    vm.ram[256] = 0x00FF00; // green
+    vm.ram[257] = 0x000000; // transparent (skip)
+    vm.ram[258] = 0x0000FF; // blue
+    vm.ram[259] = 0x000000; // transparent (skip)
+    vm.ram[260] = 0xFF0000; // red
+    vm.ram[261] = 0x000000; // transparent (skip)
+
+    // Fill screen with white first to detect transparency
+    for pixel in vm.screen.iter_mut() {
+        *pixel = 0xFFFFFF;
+    }
+
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+
+    // (5, 5) should be green
+    assert_eq!(vm.screen[5 * 256 + 5], 0x00FF00, "(5,5) should be green");
+    // (6, 5) should still be white (transparent)
+    assert_eq!(vm.screen[5 * 256 + 6], 0xFFFFFF, "(6,5) should be white (transparent)");
+    // (7, 5) should be blue
+    assert_eq!(vm.screen[5 * 256 + 7], 0x0000FF, "(7,5) should be blue");
+    // (5, 6) should still be white (transparent)
+    assert_eq!(vm.screen[6 * 256 + 5], 0xFFFFFF, "(5,6) should be white (transparent)");
+    // (6, 6) should be red
+    assert_eq!(vm.screen[6 * 256 + 6], 0xFF0000, "(6,6) should be red");
+    // (7, 6) should still be white (transparent)
+    assert_eq!(vm.screen[6 * 256 + 7], 0xFFFFFF, "(7,6) should be white (transparent)");
+}

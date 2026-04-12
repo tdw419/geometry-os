@@ -209,6 +209,7 @@ fn handle_terminal_command(
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  step              Step one instruction");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  bp [addr]         Toggle/list breakpoints");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  bpc               Clear all breakpoints");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  trace [n]         Execute n steps with log");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  disasm [addr] [n] Disassemble n instrs");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  reset             Reset VM state");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  clear             Clear terminal");
@@ -609,6 +610,11 @@ fn cli_main(extra_args: &[String]) {
                 println!("  poke <addr> <val> Write RAM[addr]");
                 println!("  screen <addr>     Dump 16 pixels from screen buffer");
                 println!("  reset             Reset VM state");
+                println!("  step              Step one instruction");
+                println!("  trace [n]         Execute n instructions with log");
+                println!("  bp [addr]         Toggle/list breakpoints");
+                println!("  bpc               Clear all breakpoints");
+                println!("  disasm [addr] [n] Disassemble n instrs");
                 println!("  quit              Exit");
             }
             "list" | "ls" => {
@@ -854,6 +860,44 @@ fn cli_main(extra_args: &[String]) {
                 cli_breakpoints.clear();
                 println!("Breakpoints cleared");
             }
+            "trace" => {
+                // trace [count] — execute N instructions, logging each one
+                let count = if parts.len() >= 2 {
+                    parts[1].parse::<usize>().unwrap_or(20)
+                } else {
+                    20
+                };
+                if vm.halted {
+                    println!("VM halted. Use reset to restart.");
+                } else {
+                    for i in 0..count {
+                        let addr_before = vm.pc;
+                        let (mnemonic, _len) = vm.disassemble_at(vm.pc);
+                        if !vm.step() {
+                            println!("{:04} {:04X} {:30} -> HALTED", i, addr_before, mnemonic);
+                            break;
+                        }
+                        // Show non-zero registers (up to 4 most interesting)
+                        let mut reg_info = String::new();
+                        let mut shown = 0;
+                        // Always show PC and any regs that were likely modified
+                        for r in 0..8 {
+                            if vm.regs[r] != 0 && shown < 4 {
+                                reg_info.push_str(&format!(" r{}={:X}", r, vm.regs[r]));
+                                shown += 1;
+                            }
+                        }
+                        if reg_info.is_empty() {
+                            reg_info = " (no regs changed)".to_string();
+                        }
+                        println!("{:04} {:04X} {:30} -> {:04X}{}", i, addr_before, mnemonic, vm.pc, reg_info);
+                        if cli_breakpoints.contains(&vm.pc) {
+                            println!("BREAK @ PC=0x{:04X}", vm.pc);
+                            break;
+                        }
+                    }
+                }
+            }
             "disasm" => {
                 // disasm [addr] [count] — defaults to PC, 10 lines
                 let start_addr = if parts.len() >= 2 {
@@ -914,6 +958,7 @@ const HERMES_SYSTEM_PROMPT: &str = r#"You are an agent inside the Geometry OS te
 - poke <hex_addr> <hex_val>  Write RAM[addr]
 - screen [addr]     Dump 16 pixels from screen buffer
 - save [file.ppm]   Save screen as PPM image
+- png [file.png]    Save screen as PNG image
 - reset             Reset VM state
 - help              Show commands
 
@@ -1181,7 +1226,7 @@ fn run_hermes_loop(
 
             // Only execute known geo> commands
             match cmd_word.as_str() {
-                "load" | "run" | "regs" | "peek" | "poke" | "screen" | "save" | "reset" | "list" | "ls" => {
+                "load" | "run" | "regs" | "peek" | "poke" | "screen" | "save" | "reset" | "list" | "ls" | "png" => {
                     println!("geo> {}", cmd_line);
                     // Capture output by redirecting through a helper
                     execute_cli_command(
@@ -1415,6 +1460,19 @@ fn execute_cli_command(
                 }
                 Err(e) => {
                     let msg = format!("Error saving: {}", e);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+            }
+        }
+        "png" => {
+            let filename = if parts.len() >= 2 { parts[1].to_string() } else { "screenshot.png".to_string() };
+            match save_screen_png(&filename, &vm.screen) {
+                Ok(()) => {
+                    let msg = format!("Saved screenshot to {}", filename);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+                Err(e) => {
+                    let msg = format!("Error saving PNG: {}", e);
                     println!("{}", msg); output.push_str(&msg); output.push('\n');
                 }
             }
@@ -1812,6 +1870,25 @@ fn main() {
                         }
                         Err(e) => {
                             status_msg = format!("[save error: {}]", e);
+                        }
+                    }
+                }
+                Key::F9 => {
+                    // Screenshot: save screen as PNG
+                    let png_path = "screenshot.png";
+                    match save_screen_png(png_path, &vm.screen) {
+                        Ok(()) => {
+                            let file_size = std::fs::metadata(png_path)
+                                .map(|m| m.len())
+                                .unwrap_or(0);
+                            status_msg = format!(
+                                "[screenshot: {} ({:.0}KB)]",
+                                png_path,
+                                file_size as f64 / 1024.0
+                            );
+                        }
+                        Err(e) => {
+                            status_msg = format!("[screenshot error: {}]", e);
                         }
                     }
                 }
@@ -2577,6 +2654,24 @@ fn list_asm_files(dir: &str) -> Vec<String> {
 }
 
 // ── Save / Load state ──────────────────────────────────────────
+
+/// Save screen buffer as a PNG file (256x256, RGB).
+fn save_screen_png(path: &str, screen: &[u32]) -> std::io::Result<()> {
+    let file = std::fs::File::create(path)?;
+    let ref mut w = std::io::BufWriter::new(file);
+    let mut encoder = png::Encoder::new(w, 256, 256);
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header()?;
+    let mut raw_data = Vec::with_capacity(256 * 256 * 3);
+    for pixel in screen {
+        raw_data.push((pixel >> 16) as u8); // R
+        raw_data.push((pixel >> 8) as u8);  // G
+        raw_data.push(*pixel as u8);         // B
+    }
+    writer.write_image_data(&raw_data)?;
+    Ok(())
+}
 
 /// Save full application state (VM + canvas) to a binary file.
 /// Format: VM save (see vm.rs) + canvas_len u32 + canvas_buffer + canvas_assembled u8

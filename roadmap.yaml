@@ -300,25 +300,29 @@ phases:
 
   - id: "phase-10"
     title: "Extended Graphics"
-    status: "in_progress"
+    status: "complete"
     goal: "Sprite blitting and screenshot export"
     deliverables:
       - name: "SPRITE opcode"
         description: "Copy a block of RAM to screen at (x,y) -- sprite blit"
-        status: "todo"
+        status: "done"
         scope_lines: 120
         scope_files: ["src/vm.rs", "src/assembler.rs"]
         acceptance_criteria:
           - description: "Copy NxM pixels from RAM to screen buffer"
-            met: false
+            met: true
+          - description: "Color 0 pixels are transparent (skip)"
+            met: true
+          - description: "test_sprite_transparent_skips_zero passes"
+            met: true
       - name: "Screenshot export"
         description: "Dump 256x256 canvas to PNG file"
-        status: "todo"
+        status: "done"
         scope_lines: 40
         scope_files: ["src/main.rs"]
         acceptance_criteria:
           - description: "F9 or CLI command saves PNG"
-            met: false
+            met: true
     scope_lines_total: 4700
     test_target: 50
 

@@ -452,6 +452,18 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[1])? as u32);
         }
 
+        "SPRITE" => {
+            if tokens.len() < 6 {
+                return Err(format!("SPRITE requires 5 arguments: SPRITE x_reg, y_reg, addr_reg, w_reg, h_reg"));
+            }
+            bytecode.push(0x4A);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            bytecode.push(parse_reg(tokens[5])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

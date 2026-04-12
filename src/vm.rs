@@ -424,6 +424,38 @@ impl Vm {
                 }
             }
 
+            // SPRITE x_reg, y_reg, addr_reg, w_reg, h_reg -- blit NxM pixels from RAM to screen
+            // Color 0 in RAM means transparent (skip pixel)
+            0x4A => {
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                let ar = self.fetch() as usize;
+                let wr = self.fetch() as usize;
+                let hr = self.fetch() as usize;
+                if xr < NUM_REGS && yr < NUM_REGS && ar < NUM_REGS
+                    && wr < NUM_REGS && hr < NUM_REGS
+                {
+                    let sx = self.regs[xr] as usize;
+                    let sy = self.regs[yr] as usize;
+                    let mut addr = self.regs[ar] as usize;
+                    let w = self.regs[wr] as usize;
+                    let h = self.regs[hr] as usize;
+                    for dy in 0..h {
+                        for dx in 0..w {
+                            if addr >= self.ram.len() { break; }
+                            let color = self.ram[addr];
+                            addr += 1;
+                            if color == 0 { continue; } // transparent
+                            let px = sx + dx;
+                            let py = sy + dy;
+                            if px < 256 && py < 256 {
+                                self.screen[py * 256 + px] = color;
+                            }
+                        }
+                    }
+                }
+            }
+
             // RAND rd  -- rd = next pseudo-random u32 (LCG: state = state*1664525 + 1013904223)
             0x49 => {
                 let rd = self.fetch() as usize;
@@ -601,6 +633,7 @@ impl Vm {
             0x47 => { let nr = ram(a+1); (format!("SCROLL {}", reg(nr)), 2) }
             0x48 => { let rd = ram(a+1); (format!("IKEY {}", reg(rd)), 2) }
             0x49 => { let rd = ram(a+1); (format!("RAND {}", reg(rd)), 2) }
+            0x4A => { let xr = ram(a+1); let yr = ram(a+2); let ar = ram(a+3); let wr = ram(a+4); let hr = ram(a+5); (format!("SPRITE {},{},{},{},{}", reg(xr), reg(yr), reg(ar), reg(wr), reg(hr)), 6) }
             0x50 => { let rd = ram(a+1); let rs = ram(a+2); (format!("CMP {}, {}", reg(rd), reg(rs)), 3) }
             0x60 => { let r = ram(a+1); (format!("PUSH {}", reg(r)), 2) }
             0x61 => { let r = ram(a+1); (format!("POP {}", reg(r)), 2) }
