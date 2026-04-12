@@ -73,7 +73,14 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 - [x] Scroll/pan: support programs larger than 32x32 characters
 - [x] Syntax highlighting: color opcodes, registers, numbers differently
 
-## Sprint E: Polish
+## Sprint E: Terminal Mode (done)
+- [x] Mode enum (Terminal/Editor) with mode-aware key handling
+- [x] Terminal boots with welcome banner + "geo> " prompt
+- [x] Commands: help, list/ls, load, run, edit, regs, peek, poke, reset, clear/cls, quit/exit
+- [x] Escape returns from Editor to Terminal, quits from Terminal
+- [x] Canvas text I/O helpers: write_line_to_canvas, read_canvas_line, ensure_scroll
+
+## Sprint F: Polish
 - [ ] Save/load: F7 to save RAM, restore on startup
 - [ ] Disassembly panel: show bytecode alongside source text
 - [ ] Single-step: Space to step one instruction when paused

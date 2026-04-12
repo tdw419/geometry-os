@@ -536,3 +536,74 @@ fn test_calculator_subtract() {
     assert_eq!(vm.ram[0x0306], 50, "expect '2'");
     assert_eq!(vm.ram[0x0307], 0, "expect null terminator");
 }
+
+// ── SAVE / LOAD ─────────────────────────────────────────────────
+
+#[test]
+fn test_vm_save_load_roundtrip() {
+    let mut vm = Vm::new();
+    // Set up some state
+    vm.regs[0] = 42;
+    vm.regs[1] = 0xDEADBEEF;
+    vm.pc = 0x1000;
+    vm.halted = true;
+    vm.ram[0x1000] = 0x10; // LDI opcode
+    vm.ram[0x1001] = 0;
+    vm.ram[0x1002] = 99;
+    vm.screen[128 * 256 + 128] = 0xFF0000; // red pixel at center
+
+    let tmp = std::env::temp_dir().join("geometry_os_test_save.sav");
+    vm.save_to_file(&tmp).unwrap();
+
+    let loaded = Vm::load_from_file(&tmp).unwrap();
+
+    assert_eq!(loaded.regs[0], 42, "r0 should be 42");
+    assert_eq!(loaded.regs[1], 0xDEADBEEF, "r1 should be 0xDEADBEEF");
+    assert_eq!(loaded.pc, 0x1000, "PC should be 0x1000");
+    assert!(loaded.halted, "VM should be halted");
+    assert_eq!(loaded.ram[0x1000], 0x10, "RAM at 0x1000 should be 0x10");
+    assert_eq!(loaded.ram[0x1002], 99, "RAM at 0x1002 should be 99");
+    assert_eq!(
+        loaded.screen[128 * 256 + 128],
+        0xFF0000,
+        "center pixel should be red"
+    );
+
+    // Clean up
+    std::fs::remove_file(tmp).ok();
+}
+
+#[test]
+fn test_vm_save_load_invalid_magic() {
+    let tmp = std::env::temp_dir().join("geometry_os_test_bad_magic.sav");
+    std::fs::write(&tmp, b"BAD!\x00\x00\x00\x01").unwrap();
+
+    let result = Vm::load_from_file(&tmp);
+    assert!(result.is_err(), "should reject invalid magic");
+
+    std::fs::remove_file(tmp).ok();
+}
+
+#[test]
+fn test_vm_save_load_preserves_program_execution() {
+    // Run a program, save, load, verify the VM state is preserved
+    let vm = compile_run("programs/fill_screen.asm");
+    assert!(vm.halted);
+    assert_eq!(vm.screen[0], 0x0000FF); // blue fill
+
+    let tmp = std::env::temp_dir().join("geometry_os_test_program.sav");
+    vm.save_to_file(&tmp).unwrap();
+
+    let loaded = Vm::load_from_file(&tmp).unwrap();
+    assert!(loaded.halted);
+    // Spot-check a few screen pixels
+    assert_eq!(loaded.screen[0], 0x0000FF, "top-left should be blue");
+    assert_eq!(loaded.screen[128 * 256 + 128], 0x0000FF, "center should be blue");
+    assert_eq!(
+        loaded.screen[255 * 256 + 255],
+        0x0000FF,
+        "bottom-right should be blue"
+    );
+
+    std::fs::remove_file(tmp).ok();
+}

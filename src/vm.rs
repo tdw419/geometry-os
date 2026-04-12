@@ -8,6 +8,11 @@ pub const RAM_SIZE: usize = 0x10000; // 65536 u32 cells
 pub const SCREEN_SIZE: usize = 256 * 256;
 pub const NUM_REGS: usize = 32;
 
+/// Magic bytes for save files
+pub const SAVE_MAGIC: &[u8; 4] = b"GEOS";
+/// Save file format version
+pub const SAVE_VERSION: u32 = 1;
+
 #[derive(Debug, Clone)]
 pub struct Vm {
     pub ram: Vec<u32>,
@@ -400,7 +405,9 @@ impl Vm {
         // Simple 5x7 font for printable ASCII
         const MINI_FONT: [[u8; 7]; 96] = include!("mini_font.in");
         let idx = ch as usize;
-        if idx < 32 || idx > 127 { return; }
+        if idx < 32 || idx > 127 {
+            return;
+        }
         let glyph = &MINI_FONT[idx - 32];
         for row in 0..7usize {
             for col in 0..5usize {
@@ -413,5 +420,110 @@ impl Vm {
                 }
             }
         }
+    }
+
+    /// Save VM state to a binary file.
+    /// Format: GEOS magic (4) + version u32 (4) + halted u8 (1) + pc u32 (4)
+    ///         + regs [u32; 32] (128) + ram [u32; RAM_SIZE] + screen [u32; SCREEN_SIZE]
+    pub fn save_to_file(&self, path: &std::path::Path) -> std::io::Result<()> {
+        use std::io::Write;
+        let mut f = std::fs::File::create(path)?;
+        f.write_all(SAVE_MAGIC)?;
+        f.write_all(&SAVE_VERSION.to_le_bytes())?;
+        f.write_all(&[if self.halted { 1 } else { 0 }])?;
+        f.write_all(&self.pc.to_le_bytes())?;
+        for &r in &self.regs {
+            f.write_all(&r.to_le_bytes())?;
+        }
+        for &v in &self.ram {
+            f.write_all(&v.to_le_bytes())?;
+        }
+        for &v in &self.screen {
+            f.write_all(&v.to_le_bytes())?;
+        }
+        Ok(())
+    }
+
+    /// Load VM state from a binary file. Returns None if file doesn't exist
+    /// or has invalid format.
+    pub fn load_from_file(path: &std::path::Path) -> std::io::Result<Self> {
+        use std::io::Read;
+        let mut data = Vec::new();
+        let mut f = std::fs::File::open(path)?;
+        f.read_to_end(&mut data)?;
+
+        // Minimum size: magic(4) + version(4) + halted(1) + pc(4) + regs(128) = 141
+        let min_size = 4 + 4 + 1 + 4 + NUM_REGS * 4 + RAM_SIZE * 4 + SCREEN_SIZE * 4;
+        if data.len() < min_size {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("save file too small: {} bytes (need {})", data.len(), min_size),
+            ));
+        }
+        if &data[0..4] != SAVE_MAGIC {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid magic bytes",
+            ));
+        }
+        let version = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+        if version != SAVE_VERSION {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unsupported save version: {} (need {})", version, SAVE_VERSION),
+            ));
+        }
+
+        let mut offset = 8usize;
+        let halted = data[offset] != 0;
+        offset += 1;
+        let pc = u32::from_le_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]);
+        offset += 4;
+
+        let mut regs = [0u32; NUM_REGS];
+        for r in regs.iter_mut() {
+            *r = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]);
+            offset += 4;
+        }
+
+        let mut ram = vec![0u32; RAM_SIZE];
+        for v in ram.iter_mut() {
+            *v = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]);
+            offset += 4;
+        }
+
+        let mut screen = vec![0u32; SCREEN_SIZE];
+        for v in screen.iter_mut() {
+            *v = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]);
+            offset += 4;
+        }
+
+        Ok(Vm {
+            ram,
+            regs,
+            pc,
+            screen,
+            halted,
+        })
     }
 }

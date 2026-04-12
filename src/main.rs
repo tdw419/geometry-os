@@ -38,6 +38,9 @@ const REGS_Y: usize = 340;
 const CANVAS_BYTECODE_ADDR: usize = 0x1000;
 const KEY_PORT: usize = 0xFFF;
 
+// ── Save file ───────────────────────────────────────────────────
+const SAVE_FILE: &str = "geometry_os.sav";
+
 // ── Colors ───────────────────────────────────────────────────────
 const BG: u32 = 0x050508;
 const GRID_BG: u32 = 0x0A0A14;
@@ -48,12 +51,372 @@ const SCROLLBAR_BG: u32 = 0x181828;
 const SCROLLBAR_FG: u32 = 0x334466;
 
 // ── Syntax highlighting colors ──────────────────────────────────
-const SYN_OPCODE: u32 = 0x00CCFF;  // cyan -- opcodes (LDI, ADD, HALT, etc.)
+const SYN_OPCODE: u32 = 0x00CCFF; // cyan -- opcodes (LDI, ADD, HALT, etc.)
 const SYN_REGISTER: u32 = 0x44FF88; // green -- registers (r0-r31)
-const SYN_NUMBER: u32 = 0xFFAA33;   // orange -- immediate values
-const SYN_LABEL: u32 = 0xFFDD44;    // yellow -- label definitions and refs
-const SYN_COMMENT: u32 = 0x555566;  // gray -- comments (; ...)
-const SYN_DEFAULT: u32 = 0xAAAA88;  // default text color
+const SYN_NUMBER: u32 = 0xFFAA33; // orange -- immediate values
+const SYN_LABEL: u32 = 0xFFDD44; // yellow -- label definitions and refs
+const SYN_COMMENT: u32 = 0x555566; // gray -- comments (; ...)
+const SYN_DEFAULT: u32 = 0xAAAA88; // default text color
+
+// ── Terminal mode ──────────────────────────────────────────────────
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Terminal,
+    Editor,
+}
+
+/// Write a text string into the canvas buffer at the given row.
+/// Returns the next row index after the written line(s).
+fn write_line_to_canvas(canvas_buffer: &mut [u32], row: usize, text: &str) -> usize {
+    let mut r = row;
+    if r >= CANVAS_MAX_ROWS {
+        return r;
+    }
+    let bytes = text.as_bytes();
+    let mut col = 0usize;
+    for &b in bytes {
+        if b == b'\n' || col >= CANVAS_COLS {
+            // Pad rest of row with zeros
+            while col < CANVAS_COLS {
+                canvas_buffer[r * CANVAS_COLS + col] = 0;
+                col += 1;
+            }
+            r += 1;
+            if r >= CANVAS_MAX_ROWS {
+                return r;
+            }
+            col = 0;
+            if b == b'\n' {
+                continue;
+            }
+            // b didn't fit, write it on new line
+            canvas_buffer[r * CANVAS_COLS + col] = b as u32;
+            col += 1;
+        } else {
+            canvas_buffer[r * CANVAS_COLS + col] = b as u32;
+            col += 1;
+        }
+    }
+    // Pad rest of this row
+    while col < CANVAS_COLS {
+        canvas_buffer[r * CANVAS_COLS + col] = 0;
+        col += 1;
+    }
+    r + 1
+}
+
+/// Read text from a canvas buffer row (up to first null/newline).
+fn read_canvas_line(canvas_buffer: &[u32], row: usize) -> String {
+    let mut s = String::new();
+    for col in 0..CANVAS_COLS {
+        let val = canvas_buffer[row * CANVAS_COLS + col];
+        let byte = (val & 0xFF) as u8;
+        if byte == 0 || byte == 0x0A {
+            break;
+        }
+        s.push(byte as char);
+    }
+    s
+}
+
+/// Handle a terminal command. Returns (switch_to_editor, should_quit).
+fn handle_terminal_command(
+    cmd: &str,
+    vm: &mut vm::Vm,
+    canvas_buffer: &mut Vec<u32>,
+    output_row: &mut usize,
+    scroll_offset: &mut usize,
+    loaded_file: &mut Option<PathBuf>,
+    canvas_assembled: &mut bool,
+) -> (bool, bool) {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if parts.is_empty() {
+        // Write a new "geo> " prompt
+        *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+        ensure_scroll(*output_row, scroll_offset);
+        return (false, false);
+    }
+
+    let command = parts[0].to_lowercase();
+    match command.as_str() {
+        "help" | "?" => {
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Commands:");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  list              List .asm programs");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  load <file>       Load .asm onto canvas");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  run               Assemble canvas & run");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  edit              Switch to canvas editor");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  regs              Show register dump");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  peek <addr>       Read RAM[addr]");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  poke <addr> <val> Write RAM[addr]");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  reset             Reset VM state");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  clear             Clear terminal");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  quit              Exit Geometry OS");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "list" | "ls" => {
+            let files = list_asm_files("programs");
+            if files.is_empty() {
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  (no .asm files in programs/)");
+            } else {
+                for f in &files {
+                    let name = Path::new(f)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| f.clone());
+                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("  {}", name));
+                }
+                *output_row = write_line_to_canvas(
+                    canvas_buffer,
+                    *output_row,
+                    &format!("  {} programs", files.len()),
+                );
+            }
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "load" => {
+            if parts.len() < 2 {
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: load <file>");
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+                ensure_scroll(*output_row, scroll_offset);
+                return (false, false);
+            }
+            let mut filename = parts[1..].join(" ");
+            if !filename.ends_with(".asm") {
+                filename.push_str(".asm");
+            }
+            let path = Path::new(&filename);
+            let path = if path.exists() {
+                path.to_path_buf()
+            } else {
+                let prefixed = Path::new("programs").join(&filename);
+                if prefixed.exists() {
+                    prefixed
+                } else {
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("File not found: {}", filename),
+                    );
+                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+                    ensure_scroll(*output_row, scroll_offset);
+                    return (false, false);
+                }
+            };
+
+            match std::fs::read_to_string(&path) {
+                Ok(source) => {
+                    let mut cr = 0usize;
+                    let mut cc = 0usize;
+                    load_source_to_canvas(canvas_buffer, &source, &mut cr, &mut cc);
+                    *loaded_file = Some(path.clone());
+                    let name = path.file_name().unwrap().to_string_lossy();
+                    let lines = source.lines().count();
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("Loaded {} ({} lines)", name, lines),
+                    );
+                }
+                Err(e) => {
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("Error: {}", e),
+                    );
+                }
+            }
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "run" => {
+            let buffer_size = CANVAS_MAX_ROWS * CANVAS_COLS;
+            let source: String = canvas_buffer[..buffer_size]
+                .iter()
+                .map(|&cell| {
+                    let val = cell & 0xFF;
+                    if val == 0 || val == 0x0A {
+                        '\n'
+                    } else {
+                        (val as u8) as char
+                    }
+                })
+                .collect();
+            let source = source.replace("\n\n", "\n");
+
+            match assembler::assemble(&source) {
+                Ok(asm_result) => {
+                    let ram_len = vm.ram.len();
+                    for v in vm.ram
+                        [CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 4096)]
+                        .iter_mut()
+                    {
+                        *v = 0;
+                    }
+                    for (i, &pixel) in asm_result.pixels.iter().enumerate() {
+                        let addr = CANVAS_BYTECODE_ADDR + i;
+                        if addr < ram_len {
+                            vm.ram[addr] = pixel;
+                        }
+                    }
+                    vm.pc = CANVAS_BYTECODE_ADDR as u32;
+                    vm.halted = false;
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("Assembled {} bytes at 0x1000", asm_result.pixels.len()),
+                    );
+                    // Run the VM
+                    for _ in 0..10_000_000 {
+                        if !vm.step() {
+                            break;
+                        }
+                    }
+                    if vm.halted {
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            &format!("Halted at PC=0x{:04X}", vm.pc),
+                        );
+                    } else {
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            &format!("Running... PC=0x{:04X}", vm.pc),
+                        );
+                    }
+                    *canvas_assembled = true;
+                }
+                Err(e) => {
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("ASM ERROR line {}: {}", e.line, e.message),
+                    );
+                }
+            }
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "edit" => {
+            (true, false)
+        }
+        "regs" => {
+            for row_group in 0..4 {
+                let mut line = String::new();
+                for col in 0..8 {
+                    let i = row_group * 8 + col;
+                    line.push_str(&format!("r{:02}={:08X} ", i, vm.regs[i]));
+                }
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, &line);
+            }
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                &format!("PC={:04X} SP={:04X} LR={:04X}", vm.pc, vm.regs[30], vm.regs[31]),
+            );
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "peek" => {
+            if parts.len() < 2 {
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: peek <addr>");
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+                ensure_scroll(*output_row, scroll_offset);
+                return (false, false);
+            }
+            match u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+                Ok(addr) if (addr as usize) < vm.ram.len() => {
+                    let val = vm.ram[addr as usize];
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("RAM[0x{:04X}] = 0x{:08X}", addr, val),
+                    );
+                }
+                Ok(addr) => {
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("Address 0x{:04X} out of range", addr),
+                    );
+                }
+                Err(_) => {
+                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Invalid address");
+                }
+            }
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "poke" => {
+            if parts.len() < 3 {
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: poke <addr> <val>");
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+                ensure_scroll(*output_row, scroll_offset);
+                return (false, false);
+            }
+            let addr_str = parts[1].trim_start_matches("0x").trim_start_matches("0X");
+            let val_str = parts[2].trim_start_matches("0x").trim_start_matches("0X");
+            match (u32::from_str_radix(addr_str, 16), u32::from_str_radix(val_str, 16)) {
+                (Ok(addr), Ok(val)) if (addr as usize) < vm.ram.len() => {
+                    vm.ram[addr as usize] = val;
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("RAM[0x{:04X}] <- 0x{:08X}", addr, val),
+                    );
+                }
+                _ => {
+                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: poke <hex_addr> <hex_val>");
+                }
+            }
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "reset" => {
+            vm.reset();
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "VM reset");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "clear" | "cls" => {
+            for cell in canvas_buffer.iter_mut() {
+                *cell = 0;
+            }
+            *output_row = 0;
+            *output_row = write_line_to_canvas(canvas_buffer, 0, "geo> ");
+            *scroll_offset = 0;
+            (false, false)
+        }
+        "quit" | "exit" => (false, true),
+        _ => {
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                &format!("Unknown: {} (try help)", command),
+            );
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+    }
+}
+
+/// Ensure scroll offset keeps the output row visible.
+fn ensure_scroll(output_row: usize, scroll_offset: &mut usize) {
+    if output_row >= *scroll_offset + CANVAS_ROWS {
+        *scroll_offset = output_row - CANVAS_ROWS + 1;
+    }
+}
 
 fn main() {
     let mut window = Window::new(
@@ -88,10 +451,31 @@ fn main() {
     let mut canvas_buffer: Vec<u32> = vec![0; CANVAS_MAX_ROWS * CANVAS_COLS];
 
     // Status bar message
-    let mut status_msg = String::from("[TEXT mode: type assembly, F8=assemble, F5=run]");
+    let mut status_msg = String::from("[TERM: type commands, Enter=run]");
 
     // Last loaded file (for Ctrl+F8 reload)
     let mut loaded_file: Option<PathBuf> = None;
+
+    // ── Mode state ──────────────────────────────────────────────
+    let mut mode = Mode::Terminal;
+    // In terminal mode, track which row the prompt is on
+    let mut term_prompt_row: usize = 0;
+    // The "output row" for terminal -- where next line goes
+    let mut term_output_row: usize = 0;
+
+    // Boot: write welcome banner + first prompt into canvas
+    {
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, 0, "Geometry OS v0.2.0");
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "25 opcodes | 32 regs | 256x256");
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "Type 'help' for commands.");
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "");
+        term_prompt_row = term_output_row;
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "geo> ");
+        // Position cursor after "geo> "
+        cursor_row = term_prompt_row;
+        cursor_col = 5; // after "geo> "
+        scroll_offset = 0;
+    }
 
     // File input mode (Ctrl+F8 activates this)
     let mut file_input_mode = false;
@@ -117,8 +501,19 @@ fn main() {
         }
     }
 
+    // Restore saved state on startup (only if no command-line arg)
+    if std::env::args().nth(1).is_none() {
+        if let Ok((saved_vm, saved_canvas, saved_assembled)) = load_state(SAVE_FILE) {
+            vm = saved_vm;
+            canvas_buffer = saved_canvas;
+            canvas_assembled = saved_assembled;
+            status_msg = String::from("[state restored from geometry_os.sav]");
+        }
+    }
+
     // ── Main loop ────────────────────────────────────────────────
-    while window.is_open() && !window.is_key_down(Key::Escape) {
+    let mut should_quit = false;
+    while window.is_open() && !should_quit {
         // ── Handle input ─────────────────────────────────────────
         for key in window.get_keys_pressed(KeyRepeat::No) {
             if is_running {
@@ -127,6 +522,22 @@ fn main() {
                     vm.ram[KEY_PORT] = ch as u32;
                 }
                 continue;
+            }
+
+            // Escape: in editor mode, switch back to terminal. In terminal, quit.
+            if key == Key::Escape {
+                if mode == Mode::Editor {
+                    mode = Mode::Terminal;
+                    status_msg = String::from("[TERM: type commands, Enter=run]");
+                    // Set cursor to after the last "geo> " prompt
+                    cursor_row = term_prompt_row;
+                    cursor_col = 5;
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                    continue;
+                } else {
+                    should_quit = true;
+                    break;
+                }
             }
 
             // File input mode: Ctrl+F8 activates, handles typing a path
@@ -194,7 +605,93 @@ fn main() {
                 continue;
             }
 
-            // Canvas editing (VM paused)
+            // ── Mode-aware key handling ───────────────────────────
+            if mode == Mode::Terminal {
+                // Terminal mode: type into prompt line, Enter = execute
+                match key {
+                    Key::Enter => {
+                        // Read command text from prompt row (skip "geo> " prefix)
+                        let raw = read_canvas_line(&canvas_buffer, term_prompt_row);
+                        let cmd = if raw.starts_with("geo> ") {
+                            &raw[5..]
+                        } else {
+                            &raw
+                        };
+                        let cmd = cmd.trim();
+
+                        // Output goes on the line after the prompt
+                        term_output_row = term_prompt_row + 1;
+
+                        let (go_edit, quit) = handle_terminal_command(
+                            cmd,
+                            &mut vm,
+                            &mut canvas_buffer,
+                            &mut term_output_row,
+                            &mut scroll_offset,
+                            &mut loaded_file,
+                            &mut canvas_assembled,
+                        );
+
+                        if quit {
+                            should_quit = true;
+                            break;
+                        }
+
+                        if go_edit {
+                            mode = Mode::Editor;
+                            status_msg = String::from(
+                                "[EDIT mode: type assembly, F8=assemble, F5=run, Esc=terminal]",
+                            );
+                            // Position cursor at start of canvas
+                            cursor_row = 0;
+                            cursor_col = 0;
+                            scroll_offset = 0;
+                        } else {
+                            // Track the new prompt position
+                            term_prompt_row = term_output_row - 1; // write_line left us after the "geo> " line
+                            cursor_row = term_prompt_row;
+                            cursor_col = 5; // after "geo> "
+                            ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                            // Update term_output_row for next command
+                            // (it's already set past the "geo> " prompt)
+                        }
+                    }
+                    Key::Backspace => {
+                        if cursor_col > 5 {
+                            cursor_col -= 1;
+                            let idx = cursor_row * CANVAS_COLS + cursor_col;
+                            canvas_buffer[idx] = 0;
+                        }
+                    }
+                    Key::Up => {
+                        if cursor_row > 0 {
+                            cursor_row -= 1;
+                            ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                        }
+                    }
+                    Key::Down => {
+                        if cursor_row < CANVAS_MAX_ROWS - 1 {
+                            cursor_row += 1;
+                            ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                        }
+                    }
+                    _ => {
+                        // Type characters into prompt line
+                        let shift = window.is_key_down(Key::LeftShift)
+                            || window.is_key_down(Key::RightShift);
+                        if let Some(ch) = key_to_ascii_shifted(key, shift) {
+                            if cursor_col < CANVAS_COLS - 1 {
+                                let idx = cursor_row * CANVAS_COLS + cursor_col;
+                                canvas_buffer[idx] = ch as u32;
+                                cursor_col += 1;
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // ── Editor mode: canvas editing (VM paused) ──────────
             match key {
                 Key::Enter => {
                     let idx = cursor_row * CANVAS_COLS + cursor_col;
@@ -262,6 +759,24 @@ fn main() {
                             &mut canvas_assembled,
                             &mut status_msg,
                         );
+                    }
+                }
+                Key::F7 => {
+                    // Save state to file
+                    match save_state(SAVE_FILE, &vm, &canvas_buffer, canvas_assembled) {
+                        Ok(()) => {
+                            let file_size = std::fs::metadata(SAVE_FILE)
+                                .map(|m| m.len())
+                                .unwrap_or(0);
+                            status_msg = format!(
+                                "[saved: {} ({:.0}KB)]",
+                                SAVE_FILE,
+                                file_size as f64 / 1024.0
+                            );
+                        }
+                        Err(e) => {
+                            status_msg = format!("[save error: {}]", e);
+                        }
                     }
                 }
                 Key::Left => {
@@ -929,6 +1444,114 @@ fn list_asm_files(dir: &str) -> Vec<String> {
     }
     files.sort();
     files
+}
+
+// ── Save / Load state ──────────────────────────────────────────
+
+/// Save full application state (VM + canvas) to a binary file.
+/// Format: VM save (see vm.rs) + canvas_len u32 + canvas_buffer + canvas_assembled u8
+fn save_state(
+    path: &str,
+    vm: &vm::Vm,
+    canvas_buffer: &[u32],
+    canvas_assembled: bool,
+) -> std::io::Result<()> {
+    use std::io::Write;
+    // Save VM state first
+    vm.save_to_file(Path::new(path))?;
+    // Append canvas data
+    let mut f = std::fs::OpenOptions::new().append(true).open(path)?;
+    let canvas_len = canvas_buffer.len() as u32;
+    f.write_all(&canvas_len.to_le_bytes())?;
+    for &v in canvas_buffer {
+        f.write_all(&v.to_le_bytes())?;
+    }
+    f.write_all(&[if canvas_assembled { 1 } else { 0 }])?;
+    Ok(())
+}
+
+/// Load full application state from a binary file.
+/// Returns (vm, canvas_buffer, canvas_assembled) on success.
+fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
+    use std::io::Read;
+    let mut data = Vec::new();
+    let mut f = std::fs::File::open(path)?;
+    f.read_to_end(&mut data)?;
+
+    // Read VM portion
+    let vm_min = 4 + 4 + 1 + 4
+        + vm::NUM_REGS * 4
+        + vm::RAM_SIZE * 4
+        + vm::SCREEN_SIZE * 4;
+    if data.len() < vm_min + 4 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "save file too small for canvas trailer",
+        ));
+    }
+
+    // Parse VM from the raw bytes (same logic as Vm::load_from_file)
+    if &data[0..4] != vm::SAVE_MAGIC {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "invalid magic bytes",
+        ));
+    }
+    let version = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+    if version != vm::SAVE_VERSION {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unsupported save version: {}", version),
+        ));
+    }
+
+    let mut off = 8usize;
+    let halted = data[off] != 0;
+    off += 1;
+    let pc = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+    off += 4;
+
+    let mut regs = [0u32; vm::NUM_REGS];
+    for r in regs.iter_mut() {
+        *r = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+        off += 4;
+    }
+    let mut ram = vec![0u32; vm::RAM_SIZE];
+    for v in ram.iter_mut() {
+        *v = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+        off += 4;
+    }
+    let mut screen = vec![0u32; vm::SCREEN_SIZE];
+    for v in screen.iter_mut() {
+        *v = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+        off += 4;
+    }
+
+    let vm = vm::Vm {
+        ram,
+        regs,
+        pc,
+        screen,
+        halted,
+    };
+
+    // Parse canvas trailer
+    let canvas_len = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
+    off += 4;
+    if off + canvas_len * 4 + 1 > data.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "save file truncated in canvas data",
+        ));
+    }
+    let mut canvas_buffer = vec![0u32; canvas_len];
+    for v in canvas_buffer.iter_mut() {
+        *v = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+        off += 4;
+    }
+    let canvas_assembled = data[off] != 0;
+
+    Ok((vm, canvas_buffer, canvas_assembled))
 }
 
 // ── Key mapping ──────────────────────────────────────────────────
