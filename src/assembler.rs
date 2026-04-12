@@ -194,6 +194,24 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[2])? as u32);
         }
 
+        "SHL" => {
+            if tokens.len() < 3 {
+                return Err(format!("SHL requires 2 arguments: SHL rd, rs"));
+            }
+            bytecode.push(0x27);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
+        "SHR" => {
+            if tokens.len() < 3 {
+                return Err(format!("SHR requires 2 arguments: SHR rd, rs"));
+            }
+            bytecode.push(0x28);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
         "JMP" => {
             if tokens.len() < 2 {
                 return Err(format!("JMP requires 1 argument: JMP addr"));

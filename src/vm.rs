@@ -151,6 +151,26 @@ impl Vm {
                 }
             }
 
+            // SHL rd, rs  -- rd = rd << rs (logical shift left)
+            0x27 => {
+                let rd = self.fetch() as usize;
+                let rs = self.fetch() as usize;
+                if rd < NUM_REGS && rs < NUM_REGS {
+                    let shift = self.regs[rs] % 32;
+                    self.regs[rd] = self.regs[rd].wrapping_shl(shift);
+                }
+            }
+
+            // SHR rd, rs  -- rd = rd >> rs (logical shift right)
+            0x28 => {
+                let rd = self.fetch() as usize;
+                let rs = self.fetch() as usize;
+                if rd < NUM_REGS && rs < NUM_REGS {
+                    let shift = self.regs[rs] % 32;
+                    self.regs[rd] = self.regs[rd].wrapping_shr(shift);
+                }
+            }
+
             // JMP addr
             0x30 => {
                 let addr = self.fetch();

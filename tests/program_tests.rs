@@ -254,6 +254,32 @@ fn test_blink_with_keys() {
     assert_eq!(vm.ram[0x0204], 75, "K");
 }
 
+// ── SHIFT (SHL/SHR) ──────────────────────────────────────────────
+
+#[test]
+fn test_shift_operations() {
+    let vm = compile_run("programs/shift_test.asm");
+    assert!(vm.halted, "VM should halt");
+
+    // Test 1: 1 << 4 = 16
+    assert_eq!(vm.ram[0x0200], 16, "1 SHL 4 should be 16");
+
+    // Test 2: 16 >> 2 = 4
+    assert_eq!(vm.ram[0x0201], 4, "16 SHR 2 should be 4");
+
+    // Test 3: 5 << 0 = 5
+    assert_eq!(vm.ram[0x0202], 5, "5 SHL 0 should be 5");
+
+    // Test 4: 1 << (36 % 32) = 1 << 4 = 16
+    assert_eq!(vm.ram[0x0203], 16, "1 SHL 36 should be 16 (mod 32)");
+
+    // Test 5: 0xFFFF >> 1 = 0x7FFF (logical shift, no sign extension)
+    assert_eq!(vm.ram[0x0204], 0x7FFF, "0xFFFF SHR 1 should be 0x7FFF");
+
+    // Test 6: (1 << 8) >> 4 = 16
+    assert_eq!(vm.ram[0x0205], 16, "(1 SHL 8) SHR 4 should be 16");
+}
+
 // ── ASSEMBLER TESTS ──────────────────────────────────────────────
 
 #[test]
@@ -268,6 +294,7 @@ fn test_all_programs_assemble() {
         "programs/blink.asm",
         "programs/painter.asm",
         "programs/calculator.asm",
+        "programs/shift_test.asm",
     ];
     for path in programs {
         let source = std::fs::read_to_string(path)

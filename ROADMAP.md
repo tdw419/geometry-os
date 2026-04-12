@@ -30,6 +30,8 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 | AND rd, rs | 0x24 | 2 | rd &= rs |
 | OR rd, rs | 0x25 | 2 | rd |= rs |
 | XOR rd, rs | 0x26 | 2 | rd ^= rs |
+| SHL rd, rs | 0x27 | 2 | rd <<= rs (mod 32) |
+| SHR rd, rs | 0x28 | 2 | rd >>= rs (logical, mod 32) |
 | JMP addr | 0x30 | 1 | Unconditional jump |
 | JZ reg, addr | 0x31 | 2 | Jump if reg == 0 |
 | JNZ reg, addr | 0x32 | 2 | Jump if reg != 0 |
@@ -55,7 +57,7 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 - [x] CALCULATOR: Simple add/subtract calculator with text display -- difficulty: hard
 
 ## Sprint C: VM Extensions
-- [ ] SHL/SHR: Shift left/right opcodes (need vm.rs + assembler.rs)
+- [x] SHL/SHR: Shift left/right opcodes (need vm.rs + assembler.rs)
 - [ ] PUSH/POP: Stack operations using a stack pointer register
 - [ ] BLT/BGE: Conditional branch opcodes (less than, greater or equal)
 - [ ] MOD: Modulo opcode
