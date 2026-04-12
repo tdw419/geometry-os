@@ -68,7 +68,7 @@ text editor -- type assembly, F8 to assemble, F5 to run.
 - [x] MOD: Modulo opcode
 
 ## Sprint D: Canvas Improvements
-- [ ] Clipboard paste: Ctrl+V to paste text onto the grid
+- [x] Clipboard paste: Ctrl+V to paste text onto the grid
 - [ ] File load: Ctrl+F8 to load .asm file contents onto the grid
 - [ ] Scroll/pan: support programs larger than 32x32 characters
 - [ ] Syntax highlighting: color opcodes, registers, numbers differently

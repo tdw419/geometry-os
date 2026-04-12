@@ -94,9 +94,18 @@ Is it Enter?
 
 The cursor wraps at column 32 (next row) and at row 32 (back to row 0).
 
-Backspace clears the current cell and moves the cursor back one position.
+- Backspace clears the current cell and moves the cursor back one position.
 
 Arrow keys move the cursor without modifying cells.
+
+**Ctrl+V** pastes text from the system clipboard onto the grid at the cursor
+position. Newlines advance to the next row. Text wraps at column 32 and stops
+at the bottom of the grid (row 32). Carriage returns (`\r`) are stripped. The
+status bar shows how many characters were pasted, or an error if clipboard
+access fails.
+
+Uses the `arboard` crate for cross-platform clipboard access (X11 on Linux,
+Win32 on Windows, NSPasteboard on macOS).
 
 ---
 

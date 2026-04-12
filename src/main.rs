@@ -174,6 +174,39 @@ fn main() {
                         cursor_row += 1;
                     }
                 }
+                Key::V => {
+                    let ctrl = window.is_key_down(Key::LeftCtrl)
+                        || window.is_key_down(Key::RightCtrl);
+                    if ctrl {
+                        match arboard::Clipboard::new() {
+                            Ok(mut clipboard) => match clipboard.get_text() {
+                                Ok(text) => {
+                                    let pasted = paste_text_to_canvas(
+                                        &mut vm,
+                                        &text,
+                                        &mut cursor_row,
+                                        &mut cursor_col,
+                                    );
+                                    status_msg = format!("[pasted {} chars]", pasted);
+                                }
+                                Err(e) => {
+                                    status_msg = format!("[paste error: {}]", e);
+                                }
+                            },
+                            Err(e) => {
+                                status_msg = format!("[clipboard error: {}]", e);
+                            }
+                        }
+                    } else {
+                        let shift = window.is_key_down(Key::LeftShift)
+                            || window.is_key_down(Key::RightShift);
+                        if let Some(ch) = key_to_ascii_shifted(Key::V, shift) {
+                            let idx = cursor_row * CANVAS_COLS + cursor_col;
+                            vm.ram[idx] = ch as u32;
+                            advance_cursor(&mut cursor_row, &mut cursor_col);
+                        }
+                    }
+                }
                 _ => {
                     let shift = window.is_key_down(Key::LeftShift)
                         || window.is_key_down(Key::RightShift);
@@ -233,6 +266,43 @@ fn load_source_to_canvas(
 
     *cursor_row = 0;
     *cursor_col = 0;
+}
+
+// ── Paste text from clipboard onto the canvas grid at cursor position ──
+fn paste_text_to_canvas(
+    vm: &mut vm::Vm,
+    text: &str,
+    cursor_row: &mut usize,
+    cursor_col: &mut usize,
+) -> usize {
+    let mut row = *cursor_row;
+    let mut col = *cursor_col;
+    let mut count = 0usize;
+
+    for ch in text.chars() {
+        if row >= CANVAS_ROWS {
+            break;
+        }
+        if ch == '\n' {
+            row += 1;
+            col = 0;
+        } else if ch == '\r' {
+            // Skip carriage returns
+            continue;
+        } else if col < CANVAS_COLS {
+            vm.ram[row * CANVAS_COLS + col] = ch as u32;
+            col += 1;
+            if col >= CANVAS_COLS {
+                row += 1;
+                col = 0;
+            }
+            count += 1;
+        }
+    }
+
+    *cursor_row = row.min(CANVAS_ROWS - 1);
+    *cursor_col = col.min(CANVAS_COLS - 1);
+    count
 }
 
 // ── Canvas assembly: read grid as text, assemble, store bytecode ──
