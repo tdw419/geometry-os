@@ -70,6 +70,58 @@ enum Mode {
     Editor,
 }
 
+/// Play a sine-wave tone by generating a PCM WAV and piping it to aplay.
+/// Spawns a detached child process so the VM does not block.
+fn play_beep(freq: u32, dur_ms: u32) {
+    use std::f32::consts::PI;
+    use std::io::Write as _;
+    use std::process::{Command, Stdio};
+
+    const SAMPLE_RATE: u32 = 22050;
+    let num_samples = (SAMPLE_RATE * dur_ms / 1000).max(1) as usize;
+
+    // Build a minimal 16-bit mono WAV in memory.
+    let data_bytes = (num_samples * 2) as u32;
+    let mut wav: Vec<u8> = Vec::with_capacity(44 + data_bytes as usize);
+    let write_u32 = |v: u32| v.to_le_bytes();
+    let write_u16 = |v: u16| v.to_le_bytes();
+
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&write_u32(36 + data_bytes));
+    wav.extend_from_slice(b"WAVE");
+    wav.extend_from_slice(b"fmt ");
+    wav.extend_from_slice(&write_u32(16));           // chunk size
+    wav.extend_from_slice(&write_u16(1));            // PCM
+    wav.extend_from_slice(&write_u16(1));            // mono
+    wav.extend_from_slice(&write_u32(SAMPLE_RATE));
+    wav.extend_from_slice(&write_u32(SAMPLE_RATE * 2)); // byte rate
+    wav.extend_from_slice(&write_u16(2));            // block align
+    wav.extend_from_slice(&write_u16(16));           // bits per sample
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&write_u32(data_bytes));
+
+    let amplitude = i16::MAX as f32 * 0.25;
+    for i in 0..num_samples {
+        let t = i as f32 / SAMPLE_RATE as f32;
+        let sample = (amplitude * (2.0 * PI * freq as f32 * t).sin()) as i16;
+        wav.extend_from_slice(&sample.to_le_bytes());
+    }
+
+    if let Ok(mut child) = Command::new("aplay")
+        .args(["-q", "-t", "wav", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        if let Some(stdin) = child.stdin.take() {
+            let _ = { let mut s = stdin; s.write_all(&wav) };
+        }
+        // detach — don't wait for aplay to finish
+        std::thread::spawn(move || { let _ = child.wait(); });
+    }
+}
+
 /// Write a text string into the canvas buffer at the given row.
 /// Returns the next row index after the written line(s).
 fn write_line_to_canvas(canvas_buffer: &mut [u32], row: usize, text: &str) -> usize {
@@ -1886,6 +1938,11 @@ fn main() {
             }
         }
 
+        // ── Audio dispatch ───────────────────────────────────────
+        if let Some((freq, dur)) = vm.beep.take() {
+            play_beep(freq, dur);
+        }
+
         // ── Render ───────────────────────────────────────────────
         render(
             &mut buffer,
@@ -2609,6 +2666,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         frame_ready: false,
         rand_state: 0xDEADBEEF,
         frame_count: 0,
+        beep: None,
     };
 
     // Parse canvas trailer

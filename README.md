@@ -1,14 +1,14 @@
-# Geometry OS v0.3.0
+# Geometry OS v0.4.0
 
 A pixel-art VM with a built-in assembler, debugger, and live GUI.
 
 ## What It Does
 
-Geometry OS is a 256x256 pixel virtual machine with 32 registers, 32 opcodes,
+Geometry OS is a 256x256 pixel virtual machine with 32 registers, 33 opcodes,
 memory-mapped I/O, and a real-time animation loop. You write assembly programs
 in a text editor built into the GUI, hit run, and watch them execute live.
 
-## Opcodes (32)
+## Opcodes (33)
 
 ### Control
 | Opcode | Args | Description |
@@ -16,6 +16,7 @@ in a text editor built into the GUI, hit run, and watch them execute live.
 | HALT   |      | Stop execution |
 | NOP    |      | No operation |
 | FRAME  |      | Yield to renderer (animation tick) |
+| BEEP   | freq_reg, dur_reg | Play sine-wave tone (20-20000 Hz, 1-5000 ms) |
 
 ### Data
 | Opcode | Args | Description |
@@ -182,7 +183,7 @@ skip_move:
 ## Stats
 
 - ~5,100 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
-- 32 opcodes
+- 33 opcodes
 - 23 demo programs
 - 24 unit tests
 

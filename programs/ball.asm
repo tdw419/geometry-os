@@ -28,6 +28,8 @@ LDI r4, 3       ; dy = 3
 LDI r5, 0xFFFFFF ; white
 LDI r8, 8       ; radius 8
 LDI r9, 0       ; black
+LDI r20, 330    ; bounce freq (Hz)
+LDI r21, 40     ; bounce dur  (ms)
 
 ; ── main loop ────────────────────────────────────────────────────
 loop:
@@ -89,6 +91,7 @@ after_input:
   BLT r0, check_x_low
   LDI r1, 248
   NEG r3
+  BEEP r20, r21
   JMP check_y
 
 check_x_low:
@@ -98,6 +101,7 @@ check_x_low:
   BGE r0, check_y
   LDI r1, 8
   NEG r3
+  BEEP r20, r21
 
   ; ── bounce y walls ──────────────────────────────────────────
 check_y:
@@ -106,6 +110,7 @@ check_y:
   BLT r0, check_y_low
   LDI r2, 248
   NEG r4
+  BEEP r20, r21
   JMP draw_ball
 
 check_y_low:
@@ -114,6 +119,7 @@ check_y_low:
   BGE r0, draw_ball
   LDI r2, 8
   NEG r4
+  BEEP r20, r21
 
   ; ── draw ball ───────────────────────────────────────────────
 draw_ball:

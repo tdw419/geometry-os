@@ -26,6 +26,8 @@ pub struct Vm {
     pub rand_state: u32,
     /// Incremented each time FRAME fires; mirrored to RAM[TICKS_PORT]
     pub frame_count: u32,
+    /// Set by BEEP opcode: (freq_hz, duration_ms). Consumed and cleared by host.
+    pub beep: Option<(u32, u32)>,
 }
 
 impl Vm {
@@ -39,6 +41,7 @@ impl Vm {
             frame_ready: false,
             rand_state: 0xDEADBEEF,
             frame_count: 0,
+            beep: None,
         }
     }
 
@@ -52,6 +55,7 @@ impl Vm {
         self.frame_ready = false;
         self.rand_state = 0xDEADBEEF;
         self.frame_count = 0;
+        self.beep = None;
     }
 
     /// Execute one instruction. Returns false if halted.
@@ -78,6 +82,17 @@ impl Vm {
                 self.ram[0xFFE] = self.frame_count;
                 self.frame_ready = true;
                 return true; // keep running (host checks frame_ready to pace rendering)
+            }
+
+            // BEEP freq_reg, dur_reg  -- play a sine-wave tone (freq Hz, dur ms)
+            0x03 => {
+                let fr = self.fetch() as usize;
+                let dr = self.fetch() as usize;
+                if fr < NUM_REGS && dr < NUM_REGS {
+                    let freq = self.regs[fr].max(20).min(20000);
+                    let dur  = self.regs[dr].max(1).min(5000);
+                    self.beep = Some((freq, dur));
+                }
             }
 
             // LDI reg, imm  -- load immediate
@@ -538,6 +553,11 @@ impl Vm {
             0x00 => ("HALT".into(), 1),
             0x01 => ("NOP".into(), 1),
             0x02 => ("FRAME".into(), 1),
+            0x03 => {
+                let fr = ram(a + 1);
+                let dr = ram(a + 2);
+                (format!("BEEP {}, {}", reg(fr), reg(dr)), 3)
+            }
             0x10 => {
                 let r = ram(a + 1);
                 let imm = ram(a + 2);
@@ -725,6 +745,7 @@ impl Vm {
             frame_ready: false,
             rand_state: 0xDEADBEEF,
             frame_count: 0,
+            beep: None,
         })
     }
 }

@@ -293,6 +293,10 @@ do_eat_apple:
   ADD r9, r20
   STORE r4, r9
   CALL place_apple
+  ; eat sound: 880 Hz, 60 ms
+  LDI r5, 880
+  LDI r6, 60
+  BEEP r5, r6
   POP r31
   RET
 
@@ -300,6 +304,10 @@ do_wall_hit:
   LDI r1, 1
   LDI r4, 0x2206
   STORE r4, r1
+  ; death sound: 110 Hz, 300 ms
+  LDI r5, 110
+  LDI r6, 300
+  BEEP r5, r6
   POP r31
   RET
 

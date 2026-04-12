@@ -105,6 +105,15 @@ fn parse_instruction(
         "NOP" => bytecode.push(0x01),
         "FRAME" => bytecode.push(0x02),
 
+        "BEEP" => {
+            if tokens.len() < 3 {
+                return Err(format!("BEEP requires 2 arguments: BEEP freq_reg, dur_reg"));
+            }
+            bytecode.push(0x03);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
         "LDI" => {
             if tokens.len() < 3 {
                 return Err(format!("LDI requires 2 arguments: LDI reg, imm"));
