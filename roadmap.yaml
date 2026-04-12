@@ -2,7 +2,7 @@ title: "Geometry OS Roadmap"
 version: "1.0.0"
 description: |
   Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  39 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  40 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 project_url: "https://github.com/tdw419/geometry-os"
 
@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 39
-  tests: 47
-  programs: 26
-  loc: 4462
+  opcodes: 40
+  tests: 40
+  programs: 27
+  loc: 4316
 
 phases:
   # ===================================================================
@@ -350,7 +350,7 @@ phases:
 
   - id: "phase-12"
     title: "Self-Hosting"
-    status: "future"
+    status: "complete"
     goal: "VM can assemble and run its own programs from within"
     description: |
       The text editor types assembly, the assembler compiles it, and
@@ -358,11 +358,30 @@ phases:
     deliverables:
       - name: "Assembler syscall"
         description: "VM opcode that triggers the assembler on canvas text"
-        status: "todo"
+        status: "done"
         scope_lines: 150
+        scope_files: ["src/vm.rs", "src/assembler.rs"]
+        acceptance_criteria:
+          - description: "ASM opcode (0x4B) reads null-terminated source from RAM"
+            met: true
+          - description: "ASM writes bytecode to RAM at destination address"
+            met: true
+          - description: "RAM[0xFFD] holds result (word count or 0xFFFFFFFF on error)"
+            met: true
+          - description: "test_asm_opcode_basic passes"
+            met: true
+          - description: "test_asm_opcode_error passes"
+            met: true
       - name: "Self-hosting demo"
         description: "Program that writes assembly, assembles it, runs the output"
-        status: "todo"
+        status: "done"
+        scope_lines: 80
+        scope_files: ["programs/self_host.asm"]
+        acceptance_criteria:
+          - description: "self_host.asm compiles and runs"
+            met: true
+          - description: "Generated code executes (screen filled with green)"
+            met: true
     scope_lines_total: 5500
     test_target: 54
 

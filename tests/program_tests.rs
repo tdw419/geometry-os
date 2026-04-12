@@ -1160,3 +1160,62 @@ fn test_maze_initializes() {
     assert_eq!(vm.ram[0x5327], 33, "last char should be '!' (33)");
     assert_eq!(vm.ram[0x5328], 0, "null terminator after text");
 }
+
+// ── ASM OPCODE ──────────────────────────────────────────────────
+
+#[test]
+fn test_asm_opcode_basic() {
+    let mut vm = Vm::new();
+    let source = "LDI r0, 42\nHALT\n";
+    for (i, &byte) in source.as_bytes().iter().enumerate() {
+        vm.ram[0x0800 + i] = byte as u32;
+    }
+    vm.ram[0x0800 + source.len()] = 0;
+    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0).unwrap();
+    for (i, &word) in prog.pixels.iter().enumerate() {
+        vm.ram[i] = word;
+    }
+    vm.pc = 0;
+    for _ in 0..100_000 {
+        if !vm.step() { break; }
+    }
+    assert_eq!(vm.ram[0x1000], 0x10, "LDI opcode at dest");
+    assert_eq!(vm.ram[0x1001], 0, "r0 register");
+    assert_eq!(vm.ram[0x1002], 42, "immediate 42");
+    assert_eq!(vm.ram[0x1003], 0x00, "HALT at dest+3");
+    assert_eq!(vm.ram[0xFFD], 4, "ASM result should be 4");
+    assert!(vm.halted);
+}
+
+#[test]
+fn test_asm_opcode_error() {
+    let mut vm = Vm::new();
+    let source = "BOGUS r0\n";
+    for (i, &byte) in source.as_bytes().iter().enumerate() {
+        vm.ram[0x0800 + i] = byte as u32;
+    }
+    vm.ram[0x0800 + source.len()] = 0;
+    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0).unwrap();
+    for (i, &word) in prog.pixels.iter().enumerate() {
+        vm.ram[i] = word;
+    }
+    vm.pc = 0;
+    for _ in 0..100_000 {
+        if !vm.step() { break; }
+    }
+    assert_eq!(vm.ram[0xFFD], 0xFFFFFFFF, "ASM error indicator");
+}
+
+#[test]
+fn test_self_host_assembles() {
+    let vm = compile_run("programs/self_host.asm");
+    assert!(vm.halted, "self_host should halt");
+}
+
+#[test]
+fn test_self_host_runs() {
+    let vm = compile_run("programs/self_host.asm");
+    assert_eq!(vm.screen[0], 3, "top-left should be green");
+    assert_eq!(vm.screen[128 * 256 + 128], 3, "center should be green");
+    assert_eq!(vm.screen[255 * 256 + 255], 3, "bottom-right should be green");
+}

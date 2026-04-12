@@ -559,6 +559,44 @@ impl Vm {
                 }
             }
 
+            // ASM src_reg, dest_reg -- assemble source text from RAM, write bytecode to RAM
+            // Source: null-terminated ASCII string at ram[regs[src_reg]]
+            // Dest: bytecode written starting at ram[regs[dest_reg]]
+            // Result: ram[0xFFD] = bytecode word count (success) or 0xFFFFFFFF (error)
+            0x4B => {
+                let sr = self.fetch() as usize;
+                let dr = self.fetch() as usize;
+                if sr < NUM_REGS && dr < NUM_REGS {
+                    let src_addr = self.regs[sr] as usize;
+                    let dest_addr = self.regs[dr] as usize;
+                    // Read null-terminated ASCII string from RAM
+                    let mut chars = Vec::new();
+                    let mut a = src_addr;
+                    while a < self.ram.len() {
+                        let byte = (self.ram[a] & 0xFF) as u8;
+                        if byte == 0 { break; }
+                        chars.push(byte as char);
+                        a += 1;
+                    }
+                    let source: String = chars.into_iter().collect();
+                    // Call the assembler (base_addr = dest_addr for correct label resolution)
+                    match crate::assembler::assemble(&source, dest_addr) {
+                        Ok(result) => {
+                            for (i, &word) in result.pixels.iter().enumerate() {
+                                let idx = dest_addr + i;
+                                if idx < self.ram.len() {
+                                    self.ram[idx] = word;
+                                }
+                            }
+                            self.ram[0xFFD] = result.pixels.len() as u32;
+                        }
+                        Err(_) => {
+                            self.ram[0xFFD] = 0xFFFFFFFF;
+                        }
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -634,6 +672,7 @@ impl Vm {
             0x48 => { let rd = ram(a+1); (format!("IKEY {}", reg(rd)), 2) }
             0x49 => { let rd = ram(a+1); (format!("RAND {}", reg(rd)), 2) }
             0x4A => { let xr = ram(a+1); let yr = ram(a+2); let ar = ram(a+3); let wr = ram(a+4); let hr = ram(a+5); (format!("SPRITE {},{},{},{},{}", reg(xr), reg(yr), reg(ar), reg(wr), reg(hr)), 6) }
+            0x4B => { let sr = ram(a+1); let dr = ram(a+2); (format!("ASM {}, {}", reg(sr), reg(dr)), 3) }
             0x50 => { let rd = ram(a+1); let rs = ram(a+2); (format!("CMP {}, {}", reg(rd), reg(rs)), 3) }
             0x60 => { let r = ram(a+1); (format!("PUSH {}", reg(r)), 2) }
             0x61 => { let r = ram(a+1); (format!("POP {}", reg(r)), 2) }

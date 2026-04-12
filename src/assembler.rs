@@ -464,6 +464,15 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[5])? as u32);
         }
 
+        "ASM" => {
+            if tokens.len() < 3 {
+                return Err(format!("ASM requires 2 arguments: ASM src_addr_reg, dest_addr_reg"));
+            }
+            bytecode.push(0x4B);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 
