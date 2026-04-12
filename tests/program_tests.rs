@@ -10,7 +10,7 @@ use geometry_os::vm::Vm;
 fn compile_run(asm_path: &str) -> Vm {
     let source = std::fs::read_to_string(asm_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", asm_path, e));
-    let asm = assemble(&source)
+    let asm = assemble(&source, 0)
         .unwrap_or_else(|e| panic!("assembly failed for {}: line {} {}", asm_path, e.line, e.message));
     let mut vm = Vm::new();
     // Load bytecode at address 0
@@ -190,7 +190,7 @@ fn test_nested_rects() {
 fn test_blink_with_keys() {
     let source = std::fs::read_to_string("programs/blink.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source)
+    let asm = assemble(&source, 0)
         .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
@@ -300,7 +300,7 @@ fn test_all_programs_assemble() {
     for path in programs {
         let source = std::fs::read_to_string(path)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", path, e));
-        let result = assemble(&source);
+        let result = assemble(&source, 0);
         assert!(result.is_ok(), "{} should assemble: {:?}", path, result.err());
     }
 }
@@ -338,7 +338,7 @@ fn test_push_pop() {
 fn test_painter() {
     let source = std::fs::read_to_string("programs/painter.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source)
+    let asm = assemble(&source, 0)
         .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
@@ -434,7 +434,7 @@ fn test_painter() {
 fn test_calculator_add() {
     let source = std::fs::read_to_string("programs/calculator.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -488,7 +488,7 @@ fn test_calculator_add() {
 fn test_calculator_subtract() {
     let source = std::fs::read_to_string("programs/calculator.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -606,4 +606,104 @@ fn test_vm_save_load_preserves_program_execution() {
     );
 
     std::fs::remove_file(tmp).ok();
+}
+
+// ── LINE / CIRCLE / SCROLL ─────────────────────────────────────
+
+#[test]
+fn test_line_opcode() {
+    let source = "LDI r0, 0\nLDI r1, 0\nLDI r2, 255\nLDI r3, 255\nLDI r4, 0xFFFFFF\nLINE r0,r1,r2,r3,r4\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100_000 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // diagonal should have pixels set at corners
+    assert_eq!(vm.screen[0], 0xFFFFFF, "top-left pixel should be white");
+    assert_eq!(vm.screen[255 * 256 + 255], 0xFFFFFF, "bottom-right pixel should be white");
+}
+
+#[test]
+fn test_circle_opcode() {
+    let source = "LDI r0, 128\nLDI r1, 128\nLDI r2, 50\nLDI r3, 0xFF0000\nCIRCLE r0,r1,r2,r3\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100_000 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // top of circle: (128, 78) should be red
+    assert_eq!(vm.screen[78 * 256 + 128], 0xFF0000, "top of circle should be red");
+    // bottom: (128, 178)
+    assert_eq!(vm.screen[178 * 256 + 128], 0xFF0000, "bottom of circle should be red");
+}
+
+#[test]
+fn test_scroll_opcode() {
+    let source = "LDI r0, 0\nLDI r1, 10\nLDI r2, 0xFFFFFF\nPSET r0,r1,r2\nLDI r3, 5\nSCROLL r3\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100_000 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // pixel was at (0, 10), scroll 5 up -> should now be at (0, 5)
+    assert_eq!(vm.screen[5 * 256 + 0], 0xFFFFFF, "pixel should have scrolled to y=5");
+    // original location (0, 10) should still be white too (scrolled copy)
+    // actually after scroll by 5, y=10 maps to y=5, and y=5 is now the pixel
+    assert_eq!(vm.screen[10 * 256 + 0], 0, "original y=10 should be 0 after scroll");
+}
+
+// ── FRAME ──────────────────────────────────────────────────────
+
+#[test]
+fn test_frame_opcode() {
+    // Program: fill red, FRAME, fill blue, HALT
+    // After FRAME, frame_ready should be set; after running to HALT, screen is blue
+    let source = "LDI r1, 0xFF0000\nFILL r1\nFRAME\nLDI r1, 0x0000FF\nFILL r1\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    vm.pc = 0;
+    // Run until first FRAME
+    for _ in 0..10_000 {
+        if !vm.step() || vm.frame_ready { break; }
+    }
+    assert!(vm.frame_ready, "FRAME should set frame_ready");
+    // Screen should be red at this point
+    assert_eq!(vm.screen[0], 0xFF0000, "screen should be red after FRAME");
+    // Clear flag and run to halt
+    vm.frame_ready = false;
+    for _ in 0..10_000 {
+        if !vm.step() { break; }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.screen[0], 0x0000FF, "screen should be blue after HALT");
+}
+
+// ── NEG / IKEY ──────────────────────────────────────────────────
+
+#[test]
+fn test_neg_opcode() {
+    let source = "LDI r1, 5\nNEG r1\nLDI r2, 3\nADD r2, r1\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..10_000 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // r1 = -5 (0xFFFFFFFB), r2 = 3 + (-5) = -2 (0xFFFFFFFE)
+    assert_eq!(vm.regs[1], 0xFFFFFFFB, "NEG 5 should give 0xFFFFFFFB");
+    assert_eq!(vm.regs[2], 0xFFFFFFFE, "3 + (-5) should give 0xFFFFFFFE");
+}
+
+#[test]
+fn test_ikey_opcode() {
+    let source = "IKEY r1\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    // Simulate key press: write ASCII 'A' (65) to keyboard port
+    vm.ram[0xFFF] = 65;
+    for _ in 0..10_000 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[1], 65, "IKEY should read key code 65 into r1");
+    assert_eq!(vm.ram[0xFFF], 0, "IKEY should clear the keyboard port");
 }

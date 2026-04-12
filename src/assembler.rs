@@ -22,7 +22,7 @@ pub struct AsmResult {
     pub pixels: Vec<u32>,
 }
 
-pub fn assemble(source: &str) -> Result<AsmResult, AsmError> {
+pub fn assemble(source: &str, base_addr: usize) -> Result<AsmResult, AsmError> {
     let mut bytecode: Vec<u32> = Vec::new();
     let mut labels: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut label_refs: Vec<(usize, String, usize)> = Vec::new(); // (bytecode_pos, label_name, source_line)
@@ -54,10 +54,10 @@ pub fn assemble(source: &str) -> Result<AsmResult, AsmError> {
         }
     }
 
-    // Pass 2: resolve label references
+    // Pass 2: resolve label references (add base_addr so jumps target correct RAM address)
     for (pos, label_name, line) in &label_refs {
         if let Some(&target) = labels.get(label_name) {
-            bytecode[*pos] = target as u32;
+            bytecode[*pos] = (base_addr + target) as u32;
         } else {
             return Err(AsmError {
                 line: *line,
@@ -103,6 +103,7 @@ fn parse_instruction(
     match opcode.as_str() {
         "HALT" => bytecode.push(0x00),
         "NOP" => bytecode.push(0x01),
+        "FRAME" => bytecode.push(0x02),
 
         "LDI" => {
             if tokens.len() < 3 {
@@ -387,6 +388,53 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[2])? as u32);
         }
 
+        "NEG" => {
+            if tokens.len() < 2 {
+                return Err(format!("NEG requires 1 argument: NEG rd"));
+            }
+            bytecode.push(0x2A);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
+        "IKEY" => {
+            if tokens.len() < 2 {
+                return Err(format!("IKEY requires 1 argument: IKEY reg"));
+            }
+            bytecode.push(0x48);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
+        "LINE" => {
+            if tokens.len() < 6 {
+                return Err(format!("LINE requires 5 arguments: LINE x0r, y0r, x1r, y1r, cr"));
+            }
+            bytecode.push(0x45);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            bytecode.push(parse_reg(tokens[5])? as u32);
+        }
+
+        "CIRCLE" => {
+            if tokens.len() < 5 {
+                return Err(format!("CIRCLE requires 4 arguments: CIRCLE xr, yr, rr, cr"));
+            }
+            bytecode.push(0x46);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+        }
+
+        "SCROLL" => {
+            if tokens.len() < 2 {
+                return Err(format!("SCROLL requires 1 argument: SCROLL nr"));
+            }
+            bytecode.push(0x47);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 
@@ -425,40 +473,40 @@ mod tests {
 
     #[test]
     fn test_halt() {
-        let result = assemble("HALT").unwrap();
+        let result = assemble("HALT", 0).unwrap();
         assert_eq!(result.pixels, vec![0x00]);
     }
 
     #[test]
     fn test_ldi() {
-        let result = assemble("LDI r0, 42").unwrap();
+        let result = assemble("LDI r0, 42", 0).unwrap();
         assert_eq!(result.pixels, vec![0x10, 0, 42]);
     }
 
     #[test]
     fn test_add() {
-        let result = assemble("ADD r0, r1").unwrap();
+        let result = assemble("ADD r0, r1", 0).unwrap();
         assert_eq!(result.pixels, vec![0x20, 0, 1]);
     }
 
     #[test]
     fn test_multiple_lines() {
         let src = "LDI r0, 10\nLDI r1, 20\nADD r0, r1\nHALT";
-        let result = assemble(src).unwrap();
+        let result = assemble(src, 0).unwrap();
         assert_eq!(result.pixels, vec![0x10, 0, 10, 0x10, 1, 20, 0x20, 0, 1, 0x00]);
     }
 
     #[test]
     fn test_comments() {
         let src = "; this is a comment\nLDI r0, 5 ; inline comment\nHALT";
-        let result = assemble(src).unwrap();
+        let result = assemble(src, 0).unwrap();
         assert_eq!(result.pixels, vec![0x10, 0, 5, 0x00]);
     }
 
     #[test]
     fn test_labels() {
         let src = "start:\n  LDI r0, 1\n  JZ r0, start\n  HALT";
-        let result = assemble(src).unwrap();
+        let result = assemble(src, 0).unwrap();
         assert_eq!(result.pixels[0..3], vec![0x10, 0, 1]); // LDI r0, 1
         assert_eq!(result.pixels[3], 0x31); // JZ
         assert_eq!(result.pixels[4], 0);    // r0
@@ -467,26 +515,26 @@ mod tests {
 
     #[test]
     fn test_hex_immediate() {
-        let result = assemble("LDI r0, 0xFF").unwrap();
+        let result = assemble("LDI r0, 0xFF", 0).unwrap();
         assert_eq!(result.pixels, vec![0x10, 0, 255]);
     }
 
     #[test]
     fn test_unknown_opcode() {
-        let result = assemble("BLAH r0");
+        let result = assemble("BLAH r0", 0);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_undefined_label() {
-        let result = assemble("JMP nowhere");
+        let result = assemble("JMP nowhere", 0);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_sub_mul_div() {
         let src = "SUB r1, r2\nMUL r3, r4\nDIV r5, r6";
-        let result = assemble(src).unwrap();
+        let result = assemble(src, 0).unwrap();
         assert_eq!(result.pixels[0], 0x21);
         assert_eq!(result.pixels[3], 0x22);
         assert_eq!(result.pixels[6], 0x23);
@@ -495,7 +543,7 @@ mod tests {
     #[test]
     fn test_jump_with_label() {
         let src = "  LDI r0, 0\nloop:\n  ADD r0, r1\n  JNZ r1, loop\n  HALT";
-        let result = assemble(src).unwrap();
+        let result = assemble(src, 0).unwrap();
         // LDI r0, 0 -> 3 bytes at addr 0
         // ADD r0, r1 -> 3 bytes at addr 3
         // JNZ r1, loop -> 3 bytes at addr 6, target should be 3

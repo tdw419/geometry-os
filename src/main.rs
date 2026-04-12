@@ -11,6 +11,8 @@ mod font;
 mod vm;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
+use std::collections::HashSet;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 // ── Layout constants ─────────────────────────────────────────────
@@ -128,6 +130,7 @@ fn handle_terminal_command(
     scroll_offset: &mut usize,
     loaded_file: &mut Option<PathBuf>,
     canvas_assembled: &mut bool,
+    breakpoints: &mut HashSet<u32>,
 ) -> (bool, bool) {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     if parts.is_empty() {
@@ -148,6 +151,10 @@ fn handle_terminal_command(
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  regs              Show register dump");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  peek <addr>       Read RAM[addr]");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  poke <addr> <val> Write RAM[addr]");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  step              Step one instruction");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  bp [addr]         Toggle/list breakpoints");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  bpc               Clear all breakpoints");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  disasm [addr] [n] Disassemble n instrs");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  reset             Reset VM state");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  clear             Clear terminal");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  quit              Exit Geometry OS");
@@ -248,7 +255,7 @@ fn handle_terminal_command(
                 .collect();
             let source = source.replace("\n\n", "\n");
 
-            match assembler::assemble(&source) {
+            match assembler::assemble(&source, CANVAS_BYTECODE_ADDR) {
                 Ok(asm_result) => {
                     let ram_len = vm.ram.len();
                     for v in vm.ram
@@ -381,6 +388,77 @@ fn handle_terminal_command(
             ensure_scroll(*output_row, scroll_offset);
             (false, false)
         }
+        "step" => {
+            if vm.halted {
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "VM halted. Use reset to restart.");
+            } else {
+                vm.step();
+                *output_row = write_line_to_canvas(
+                    canvas_buffer,
+                    *output_row,
+                    &format!("step -> PC=0x{:04X}", vm.pc),
+                );
+            }
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "bp" => {
+            if parts.len() < 2 {
+                // List breakpoints
+                if breakpoints.is_empty() {
+                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  No breakpoints set");
+                } else {
+                    let mut sorted: Vec<u32> = breakpoints.iter().copied().collect();
+                    sorted.sort();
+                    for addr in sorted {
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            &format!("  BP @ 0x{:04X}", addr),
+                        );
+                    }
+                }
+            } else {
+                match u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+                    Ok(addr) => {
+                        if breakpoints.contains(&addr) {
+                            breakpoints.remove(&addr);
+                            *output_row = write_line_to_canvas(
+                                canvas_buffer,
+                                *output_row,
+                                &format!("Cleared BP @ 0x{:04X}", addr),
+                            );
+                        } else {
+                            breakpoints.insert(addr);
+                            *output_row = write_line_to_canvas(
+                                canvas_buffer,
+                                *output_row,
+                                &format!("Set BP @ 0x{:04X}", addr),
+                            );
+                        }
+                    }
+                    Err(_) => {
+                        *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: bp <hex_addr>");
+                    }
+                }
+            }
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+        "bpc" => {
+            let n = breakpoints.len();
+            breakpoints.clear();
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                &format!("Cleared {} breakpoint(s)", n),
+            );
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
         "reset" => {
             vm.reset();
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "VM reset");
@@ -418,7 +496,895 @@ fn ensure_scroll(output_row: usize, scroll_offset: &mut usize) {
     }
 }
 
+// ── CLI mode: headless geo> prompt on stdin/stdout ────────────────
+fn cli_main(extra_args: &[String]) {
+    let mut vm = vm::Vm::new();
+    let mut canvas_assembled = false;
+    let mut loaded_file: Option<PathBuf> = None;
+    let mut source_text = String::new(); // holds the currently loaded source
+    let mut cli_breakpoints: Vec<u32> = Vec::new();
+
+    // If extra args given, treat first as a file to load
+    if !extra_args.is_empty() {
+        let path = PathBuf::from(&extra_args[0]);
+        match std::fs::read_to_string(&path) {
+            Ok(src) => {
+                source_text = src;
+                loaded_file = Some(path);
+            }
+            Err(e) => {
+                eprintln!("Error reading {}: {}", extra_args[0], e);
+            }
+        }
+    }
+
+    println!("Geometry OS v0.3.0 CLI");
+    println!("31 opcodes | 32 regs | 256x256");
+    println!("Type 'help' for commands.");
+    println!();
+
+    let stdin = io::stdin();
+    loop {
+        print!("geo> ");
+        io::stdout().flush().unwrap();
+
+        let mut line = String::new();
+        if stdin.read_line(&mut line).unwrap() == 0 {
+            break; // EOF
+        }
+        let cmd = line.trim();
+        if cmd.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        if parts.is_empty() {
+            continue;
+        }
+
+        let command = parts[0].to_lowercase();
+        match command.as_str() {
+            "help" | "?" => {
+                println!("Commands:");
+                println!("  list              List .asm programs");
+                println!("  load <file>       Load .asm source");
+                println!("  run               Assemble source & run VM");
+                println!("  regs              Show register dump");
+                println!("  peek <addr>       Read RAM[addr]");
+                println!("  poke <addr> <val> Write RAM[addr]");
+                println!("  screen <addr>     Dump 16 pixels from screen buffer");
+                println!("  reset             Reset VM state");
+                println!("  quit              Exit");
+            }
+            "list" | "ls" => {
+                let files = list_asm_files("programs");
+                if files.is_empty() {
+                    println!("  (no .asm files in programs/)");
+                } else {
+                    for f in &files {
+                        let name = Path::new(f)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| f.clone());
+                        println!("  {}", name);
+                    }
+                    println!("  {} programs", files.len());
+                }
+            }
+            "load" => {
+                if parts.len() < 2 {
+                    println!("Usage: load <file>");
+                    continue;
+                }
+                let mut filename = parts[1..].join(" ");
+                if !filename.ends_with(".asm") {
+                    filename.push_str(".asm");
+                }
+                let path = Path::new(&filename);
+                let path = if path.exists() {
+                    path.to_path_buf()
+                } else {
+                    let prefixed = Path::new("programs").join(&filename);
+                    if prefixed.exists() {
+                        prefixed
+                    } else {
+                        println!("File not found: {}", filename);
+                        continue;
+                    }
+                };
+                match std::fs::read_to_string(&path) {
+                    Ok(src) => {
+                        let lines = src.lines().count();
+                        source_text = src;
+                        loaded_file = Some(path.clone());
+                        println!(
+                            "Loaded {} ({} lines)",
+                            path.file_name().unwrap().to_string_lossy(),
+                            lines
+                        );
+                    }
+                    Err(e) => {
+                        println!("Error: {}", e);
+                    }
+                }
+            }
+            "run" => {
+                if source_text.is_empty() {
+                    println!("No source loaded. Use 'load <file>' first.");
+                    continue;
+                }
+                match assembler::assemble(&source_text, 0) {
+                    Ok(asm_result) => {
+                        // Clear bytecode region (load at 0 so labels resolve correctly)
+                        let ram_len = vm.ram.len();
+                        let load_addr = 0usize;
+                        for v in vm.ram[load_addr..ram_len.min(load_addr + 4096)].iter_mut() {
+                            *v = 0;
+                        }
+                        for (i, &pixel) in asm_result.pixels.iter().enumerate() {
+                            let addr = load_addr + i;
+                            if addr < ram_len {
+                                vm.ram[addr] = pixel;
+                            }
+                        }
+                        vm.pc = load_addr as u32;
+                        vm.halted = false;
+
+                        println!(
+                            "Assembled {} bytes at 0x{:04X}",
+                            asm_result.pixels.len(),
+                            load_addr
+                        );
+
+                        // Run the VM
+                        let mut hit_bp = false;
+                        for _ in 0..10_000_000 {
+                            if !vm.step() {
+                                break;
+                            }
+                            if cli_breakpoints.contains(&vm.pc) {
+                                hit_bp = true;
+                                break;
+                            }
+                        }
+                        if hit_bp {
+                            println!("BREAK @ PC=0x{:04X}", vm.pc);
+                        } else if vm.halted {
+                            println!("Halted at PC=0x{:04X}", vm.pc);
+                        } else {
+                            println!("Running... PC=0x{:04X}", vm.pc);
+                        }
+                        canvas_assembled = true;
+                    }
+                    Err(e) => {
+                        println!("ASM ERROR line {}: {}", e.line, e.message);
+                    }
+                }
+            }
+            "regs" => {
+                for row_group in 0..4 {
+                    let mut line = String::new();
+                    for col in 0..8 {
+                        let i = row_group * 8 + col;
+                        line.push_str(&format!("r{:02}={:08X} ", i, vm.regs[i]));
+                    }
+                    println!("{}", line);
+                }
+                println!(
+                    "PC={:04X} SP={:04X} LR={:04X}",
+                    vm.pc, vm.regs[30], vm.regs[31]
+                );
+            }
+            "peek" => {
+                if parts.len() < 2 {
+                    println!("Usage: peek <addr>");
+                    continue;
+                }
+                match u32::from_str_radix(
+                    parts[1].trim_start_matches("0x").trim_start_matches("0X"),
+                    16,
+                ) {
+                    Ok(addr) if (addr as usize) < vm.ram.len() => {
+                        let val = vm.ram[addr as usize];
+                        println!("RAM[0x{:04X}] = 0x{:08X}", addr, val);
+                    }
+                    Ok(addr) => {
+                        println!("Address 0x{:04X} out of range", addr);
+                    }
+                    Err(_) => {
+                        println!("Invalid address");
+                    }
+                }
+            }
+            "poke" => {
+                if parts.len() < 3 {
+                    println!("Usage: poke <addr> <val>");
+                    continue;
+                }
+                let addr_str = parts[1].trim_start_matches("0x").trim_start_matches("0X");
+                let val_str = parts[2].trim_start_matches("0x").trim_start_matches("0X");
+                match (
+                    u32::from_str_radix(addr_str, 16),
+                    u32::from_str_radix(val_str, 16),
+                ) {
+                    (Ok(addr), Ok(val)) if (addr as usize) < vm.ram.len() => {
+                        vm.ram[addr as usize] = val;
+                        println!("RAM[0x{:04X}] <- 0x{:08X}", addr, val);
+                    }
+                    _ => {
+                        println!("Usage: poke <hex_addr> <hex_val>");
+                    }
+                }
+            }
+            "screen" => {
+                // Dump 16 pixels from the screen buffer starting at addr
+                let start = if parts.len() >= 2 {
+                    u32::from_str_radix(
+                        parts[1].trim_start_matches("0x").trim_start_matches("0X"),
+                        16,
+                    )
+                    .unwrap_or(0) as usize
+                } else {
+                    0
+                };
+                for row in 0..4 {
+                    let mut line = String::new();
+                    for col in 0..4 {
+                        let idx = start + row * 4 + col;
+                        if idx < vm::SCREEN_SIZE {
+                            line.push_str(&format!("{:06X} ", vm.screen[idx] & 0xFFFFFF));
+                        } else {
+                            line.push_str("------ ");
+                        }
+                    }
+                    println!("{}", line);
+                }
+            }
+            "save" => {
+                let filename = if parts.len() >= 2 {
+                    parts[1].to_string()
+                } else {
+                    "output.ppm".to_string()
+                };
+                match std::fs::File::create(&filename) {
+                    Ok(mut f) => {
+                        // PPM P6 format
+                        let header = format!("P6\n256 256\n255\n");
+                        use std::io::Write;
+                        f.write_all(header.as_bytes()).unwrap();
+                        for pixel in &vm.screen {
+                            let r = (pixel >> 16) & 0xFF;
+                            let g = (pixel >> 8) & 0xFF;
+                            let b = pixel & 0xFF;
+                            f.write_all(&[r as u8, g as u8, b as u8]).unwrap();
+                        }
+                        println!("Saved screen to {}", filename);
+                    }
+                    Err(e) => println!("Error saving: {}", e),
+                }
+            }
+            "step" => {
+                if vm.halted {
+                    println!("VM halted. Use reset to restart.");
+                } else {
+                    vm.step();
+                    println!("step -> PC=0x{:04X}", vm.pc);
+                }
+            }
+            "bp" => {
+                if parts.len() < 2 {
+                    if cli_breakpoints.is_empty() {
+                        println!("  No breakpoints set");
+                    } else {
+                        for &addr in &cli_breakpoints {
+                            println!("  BP @ 0x{:04X}", addr);
+                        }
+                    }
+                } else {
+                    match u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+                        Ok(addr) => {
+                            if let Some(pos) = cli_breakpoints.iter().position(|&a| a == addr) {
+                                cli_breakpoints.remove(pos);
+                                println!("Cleared BP @ 0x{:04X}", addr);
+                            } else {
+                                cli_breakpoints.push(addr);
+                                println!("Set BP @ 0x{:04X}", addr);
+                            }
+                        }
+                        Err(_) => println!("Invalid address"),
+                    }
+                }
+            }
+            "bpc" => {
+                cli_breakpoints.clear();
+                println!("Breakpoints cleared");
+            }
+            "disasm" => {
+                // disasm [addr] [count] — defaults to PC, 10 lines
+                let start_addr = if parts.len() >= 2 {
+                    u32::from_str_radix(parts[1].trim_start_matches("0x"), 16)
+                        .unwrap_or(vm.pc)
+                } else {
+                    vm.pc
+                };
+                let count = if parts.len() >= 3 {
+                    parts[2].parse::<usize>().unwrap_or(10)
+                } else {
+                    10
+                };
+                let mut addr = start_addr;
+                for _ in 0..count {
+                    if addr as usize >= vm.ram.len() { break; }
+                    let (mnemonic, len) = vm.disassemble_at(addr);
+                    let marker = if addr == vm.pc { ">" } else { " " };
+                    println!(" {}{:04X} {}", marker, addr, mnemonic);
+                    addr += len as u32;
+                }
+            }
+            "reset" => {
+                vm.reset();
+                canvas_assembled = false;
+                println!("VM reset");
+            }
+            "hermes" => {
+                if parts.len() < 2 {
+                    println!("Usage: hermes <prompt>");
+                    println!("  Starts an agent loop driven by a local LLM.");
+                    println!("  The LLM can run geo> commands to accomplish tasks.");
+                    println!("  Requires Ollama running locally (qwen3.5-tools).");
+                    continue;
+                }
+                let user_prompt = parts[1..].join(" ");
+                run_hermes_loop(&user_prompt, &mut vm, &mut source_text, &mut loaded_file, &mut canvas_assembled);
+            }
+            "quit" | "exit" => {
+                break;
+            }
+            _ => {
+                println!("Unknown: {} (try help)", command);
+            }
+        }
+    }
+}
+
+// ── Hermes: local LLM agent loop ──────────────────────────────────
+
+const HERMES_SYSTEM_PROMPT: &str = r#"You are an agent inside the Geometry OS terminal. You drive a bytecode VM by issuing geo> commands.
+
+## Available commands
+- load <file>       Load .asm source (from programs/ dir or absolute path)
+- run               Assemble source & run VM
+- regs              Show register dump (r0-r31, PC, SP, LR)
+- peek <hex_addr>   Read RAM[addr]
+- poke <hex_addr> <hex_val>  Write RAM[addr]
+- screen [addr]     Dump 16 pixels from screen buffer
+- save [file.ppm]   Save screen as PPM image
+- reset             Reset VM state
+- help              Show commands
+
+## Instruction set (assembly mnemonics)
+- LDI reg, imm      Load immediate (hex: 0x10)
+- LOAD reg, addr_r  Load from RAM (0x11)
+- STORE addr_r, reg Store to RAM (0x12)
+- ADD/SUB/MUL/DIV rd, rs  Arithmetic (0x20-0x23)
+- AND/OR/XOR rd, rs  Bitwise (0x24-0x26)
+- SHL/SHR rd, rs    Shift (0x27-0x28)
+- MOD rd, rs        Modulo (0x29)
+- JMP addr          Unconditional jump (0x30)
+- JZ/JNZ reg, addr  Conditional jump (0x31-0x32)
+- CALL addr / RET   Subroutine (0x33-0x34)
+- BLT/BGE reg, addr Branch on CMP (0x35-0x36)
+- PUSH reg / POP reg Stack (0x60-0x61), SP=r30
+- PSET xr,yr,cr     Set pixel (0x40)
+- PSETI x,y,color   Set pixel immediate (0x41)
+- FILL cr            Fill screen (0x42)
+- RECTF xr,yr,wr,hr,cr  Filled rect (0x43)
+- TEXT xr,yr,ar      Render text (0x44)
+- CMP rd, rs         Compare, sets r0 (0x50)
+- HALT (0x00), NOP (0x01)
+
+## Response format
+Respond with one geo> command per line. No explanation, no markdown, no backticks.
+Just the commands you want executed. You can also write new .asm programs by using
+the write command:
+  write <filename.asm>  (then subsequent lines are the file content, end with ENDWRITE on its own line)
+
+After your commands run, you'll see the output and can issue more commands.
+Think step by step but only output commands."#;
+
+fn build_hermes_context(vm: &vm::Vm, source_text: &str, loaded_file: &Option<PathBuf>) -> String {
+    let mut ctx = String::new();
+
+    // VM state
+    ctx.push_str("## Current VM State\n");
+    for row_group in 0..4 {
+        let mut line = String::new();
+        for col in 0..8 {
+            let i = row_group * 8 + col;
+            line.push_str(&format!("r{:02}={:08X} ", i, vm.regs[i]));
+        }
+        ctx.push_str(&line);
+        ctx.push('\n');
+    }
+    ctx.push_str(&format!(
+        "PC={:04X} SP={:04X} LR={:04X}\n",
+        vm.pc, vm.regs[30], vm.regs[31]
+    ));
+    ctx.push_str(&format!("Halted: {}\n", vm.halted));
+
+    // Loaded file
+    if let Some(ref f) = loaded_file {
+        ctx.push_str(&format!("\n## Loaded file: {}\n", f.display()));
+    }
+
+    // Source text (first 100 lines)
+    if !source_text.is_empty() {
+        ctx.push_str("\n## Current source (first 100 lines)\n");
+        for (i, line) in source_text.lines().take(100).enumerate() {
+            ctx.push_str(&format!("{:3}: {}\n", i + 1, line));
+        }
+        let total = source_text.lines().count();
+        if total > 100 {
+            ctx.push_str(&format!("... ({} more lines)\n", total - 100));
+        }
+    }
+
+    ctx
+}
+
+fn call_ollama(system_prompt: &str, user_message: &str) -> Option<String> {
+
+    // Build the JSON payload
+    // Escape strings for JSON
+    let esc_sys = system_prompt
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\t', "\\t");
+    let esc_user = user_message
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\t', "\\t");
+
+    let payload = format!(
+        r#"{{"model":"qwen3.5-tools","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false}}"#,
+        esc_sys, esc_user
+    );
+
+    // Write payload to temp file to avoid shell escaping issues
+    let tmp_path = "/tmp/geo_hermes_payload.json";
+    match std::fs::write(tmp_path, &payload) {
+        Ok(()) => {}
+        Err(e) => {
+            println!("[hermes] Error writing payload: {}", e);
+            return None;
+        }
+    }
+
+    let output = match std::process::Command::new("curl")
+        .args([
+            "-s",
+            "-X",
+            "POST",
+            "http://localhost:11434/api/chat",
+            "-d",
+            &format!("@{}", tmp_path),
+            "-H",
+            "Content-Type: application/json",
+        ])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            println!("[hermes] curl failed: {}", e);
+            return None;
+        }
+    };
+
+    // Parse response -- extract message.content
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Simple JSON extraction: find "content":"..."`
+    // Look for the content field in the response
+    if let Some(start) = stdout.find(r#""content":""#) {
+        let content_start = start + r#""content":""#.len();
+        // Find the closing quote (handle escaped quotes)
+        let mut i = content_start;
+        let mut result = String::new();
+        let bytes = stdout.as_bytes();
+        while i < bytes.len() {
+            if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                // Escaped character
+                match bytes[i + 1] {
+                    b'n' => result.push('\n'),
+                    b't' => result.push('\t'),
+                    b'"' => result.push('"'),
+                    b'\\' => result.push('\\'),
+                    _ => {
+                        result.push(bytes[i] as char);
+                        result.push(bytes[i + 1] as char);
+                    }
+                }
+                i += 2;
+            } else if bytes[i] == b'"' {
+                break;
+            } else {
+                result.push(bytes[i] as char);
+                i += 1;
+            }
+        }
+        Some(result)
+    } else {
+        println!("[hermes] Could not parse LLM response");
+        None
+    }
+}
+
+fn run_hermes_loop(
+    initial_prompt: &str,
+    vm: &mut vm::Vm,
+    source_text: &mut String,
+    loaded_file: &mut Option<PathBuf>,
+    canvas_assembled: &mut bool,
+) {
+    println!("[hermes] Starting agent loop (qwen3.5-tools via Ollama)");
+    println!("[hermes] Type 'stop' to end the loop, or just press Enter to continue.");
+
+    let mut conversation_history = initial_prompt.to_string();
+
+    for iteration in 0..10 {
+        // Build context
+        let ctx = build_hermes_context(vm, source_text, loaded_file);
+        let full_system = format!("{}\n\n{}", HERMES_SYSTEM_PROMPT, ctx);
+
+        println!("[hermes] --- iteration {} ---", iteration + 1);
+
+        // Call LLM
+        let response = match call_ollama(&full_system, &conversation_history) {
+            Some(r) => r,
+            None => {
+                println!("[hermes] LLM call failed. Stopping.");
+                break;
+            }
+        };
+
+        // Strip <think/> blocks (qwen3.5 includes reasoning)
+        // Also handle unicode-escaped versions: \u003cthink\u003e
+        let response_clean = response
+            .replace("\\u003cthink\\u003e", "<think")
+            .replace("\\u003c/think\\u003e", "</think");
+        let mut commands = String::new();
+        let mut in_think = false;
+        for line in response_clean.lines() {
+            if line.contains("<think") {
+                in_think = true;
+            }
+            if !in_think {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with("//") {
+                    commands.push_str(trimmed);
+                    commands.push('\n');
+                }
+            }
+            if line.contains("</think") {
+                in_think = false;
+            }
+        }
+
+        if commands.trim().is_empty() {
+            println!("[hermes] LLM returned no commands. Stopping.");
+            break;
+        }
+
+        println!("[hermes] LLM commands:\n{}", commands);
+
+        // Track any write buffers
+        let mut write_buffer: Option<(String, String)> = None;
+
+        // Execute each command
+        let mut output_capture = String::new();
+        for cmd_line in commands.lines() {
+            let cmd_line = cmd_line.trim();
+            if cmd_line.is_empty() { continue; }
+
+            // Handle write command for creating .asm files
+            if let Some(ref mut wb) = write_buffer {
+                if cmd_line == "ENDWRITE" {
+                    // Write the file
+                    match std::fs::write(&wb.0, &wb.1) {
+                        Ok(()) => {
+                            let msg = format!("Wrote {}", wb.0);
+                            println!("{}", msg);
+                            output_capture.push_str(&msg);
+                            output_capture.push('\n');
+                        }
+                        Err(e) => {
+                            let msg = format!("Write error: {}", e);
+                            println!("{}", msg);
+                            output_capture.push_str(&msg);
+                            output_capture.push('\n');
+                        }
+                    }
+                    write_buffer = None;
+                } else {
+                    wb.1.push_str(cmd_line);
+                    wb.1.push('\n');
+                }
+                continue;
+            }
+
+            if cmd_line.starts_with("write ") {
+                let filename = cmd_line.strip_prefix("write ").unwrap().trim();
+                write_buffer = Some((filename.to_string(), String::new()));
+                continue;
+            }
+
+            // Skip non-geo commands
+            let cmd_parts: Vec<&str> = cmd_line.split_whitespace().collect();
+            if cmd_parts.is_empty() { continue; }
+            let cmd_word = cmd_parts[0].to_lowercase();
+
+            // Only execute known geo> commands
+            match cmd_word.as_str() {
+                "load" | "run" | "regs" | "peek" | "poke" | "screen" | "save" | "reset" | "list" | "ls" => {
+                    println!("geo> {}", cmd_line);
+                    // Capture output by redirecting through a helper
+                    execute_cli_command(
+                        cmd_line, vm, source_text, loaded_file, canvas_assembled,
+                        &mut output_capture,
+                    );
+                }
+                _ => {
+                    // Skip unknown commands silently
+                }
+            }
+        }
+
+        // Handle unclosed write buffer
+        if let Some(wb) = write_buffer {
+            match std::fs::write(&wb.0, &wb.1) {
+                Ok(()) => println!("Wrote {}", wb.0),
+                Err(e) => println!("Write error: {}", e),
+            }
+        }
+
+        // Ask if user wants to continue
+        print!("[hermes] Continue? (Enter=continue, stop=quit): ");
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input).unwrap() == 0 {
+            break;
+        }
+        let answer = input.trim().to_lowercase();
+        if answer == "stop" || answer == "quit" || answer == "exit" || answer == "q" {
+            println!("[hermes] Stopped.");
+            break;
+        }
+
+        // Feed output back as context for next iteration
+        conversation_history = format!(
+            "Previous commands output:\n{}\n\nUser instruction: {}",
+            output_capture,
+            if answer.is_empty() { "continue" } else { &answer }
+        );
+    }
+
+    println!("[hermes] Agent loop ended.");
+}
+
+/// Execute a single CLI command and capture output.
+fn execute_cli_command(
+    cmd: &str,
+    vm: &mut vm::Vm,
+    source_text: &mut String,
+    loaded_file: &mut Option<PathBuf>,
+    canvas_assembled: &mut bool,
+    output: &mut String,
+) {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if parts.is_empty() { return; }
+    let command = parts[0].to_lowercase();
+
+    match command.as_str() {
+        "list" | "ls" => {
+            let files = list_asm_files("programs");
+            if files.is_empty() {
+                let msg = "  (no .asm files in programs/)".to_string();
+                println!("{}", msg); output.push_str(&msg); output.push('\n');
+            } else {
+                for f in &files {
+                    let name = Path::new(f).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| f.clone());
+                    let msg = format!("  {}", name);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+                let msg = format!("  {} programs", files.len());
+                println!("{}", msg); output.push_str(&msg); output.push('\n');
+            }
+        }
+        "load" => {
+            if parts.len() < 2 {
+                let msg = "Usage: load <file>".to_string();
+                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                return;
+            }
+            let mut filename = parts[1..].join(" ");
+            if !filename.ends_with(".asm") { filename.push_str(".asm"); }
+            let path = Path::new(&filename);
+            let path = if path.exists() {
+                path.to_path_buf()
+            } else {
+                let prefixed = Path::new("programs").join(&filename);
+                if prefixed.exists() { prefixed } else {
+                    let msg = format!("File not found: {}", filename);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    return;
+                }
+            };
+            match std::fs::read_to_string(&path) {
+                Ok(src) => {
+                    let lines = src.lines().count();
+                    *source_text = src;
+                    *loaded_file = Some(path.clone());
+                    let msg = format!("Loaded {} ({} lines)", path.file_name().unwrap().to_string_lossy(), lines);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+                Err(e) => {
+                    let msg = format!("Error: {}", e);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+            }
+        }
+        "run" => {
+            if source_text.is_empty() {
+                let msg = "No source loaded.".to_string();
+                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                return;
+            }
+            match assembler::assemble(source_text, 0) {
+                Ok(asm_result) => {
+                    let ram_len = vm.ram.len();
+                    let load_addr = 0usize;
+                    for v in vm.ram[load_addr..ram_len.min(load_addr + 4096)].iter_mut() { *v = 0; }
+                    for (i, &pixel) in asm_result.pixels.iter().enumerate() {
+                        let addr = load_addr + i;
+                        if addr < ram_len { vm.ram[addr] = pixel; }
+                    }
+                    vm.pc = load_addr as u32;
+                    vm.halted = false;
+                    let msg = format!("Assembled {} bytes at 0x{:04X}", asm_result.pixels.len(), load_addr);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    for _ in 0..10_000_000 {
+                        if !vm.step() { break; }
+                    }
+                    let msg = if vm.halted {
+                        format!("Halted at PC=0x{:04X}", vm.pc)
+                    } else {
+                        format!("Running... PC=0x{:04X}", vm.pc)
+                    };
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    *canvas_assembled = true;
+                }
+                Err(e) => {
+                    let msg = format!("ASM ERROR line {}: {}", e.line, e.message);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+            }
+        }
+        "regs" => {
+            for row_group in 0..4 {
+                let mut line = String::new();
+                for col in 0..8 {
+                    let i = row_group * 8 + col;
+                    line.push_str(&format!("r{:02}={:08X} ", i, vm.regs[i]));
+                }
+                println!("{}", line); output.push_str(&line); output.push('\n');
+            }
+            let line = format!("PC={:04X} SP={:04X} LR={:04X}", vm.pc, vm.regs[30], vm.regs[31]);
+            println!("{}", line); output.push_str(&line); output.push('\n');
+        }
+        "peek" => {
+            if parts.len() < 2 {
+                let msg = "Usage: peek <addr>".to_string();
+                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                return;
+            }
+            match u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+                Ok(addr) if (addr as usize) < vm.ram.len() => {
+                    let val = vm.ram[addr as usize];
+                    let msg = format!("RAM[0x{:04X}] = 0x{:08X}", addr, val);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+                Ok(addr) => {
+                    let msg = format!("Address 0x{:04X} out of range", addr);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+                Err(_) => {
+                    let msg = "Invalid address".to_string();
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+            }
+        }
+        "poke" => {
+            if parts.len() < 3 {
+                let msg = "Usage: poke <addr> <val>".to_string();
+                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                return;
+            }
+            let addr_str = parts[1].trim_start_matches("0x").trim_start_matches("0X");
+            let val_str = parts[2].trim_start_matches("0x").trim_start_matches("0X");
+            match (u32::from_str_radix(addr_str, 16), u32::from_str_radix(val_str, 16)) {
+                (Ok(addr), Ok(val)) if (addr as usize) < vm.ram.len() => {
+                    vm.ram[addr as usize] = val;
+                    let msg = format!("RAM[0x{:04X}] <- 0x{:08X}", addr, val);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+                _ => {
+                    let msg = "Usage: poke <hex_addr> <hex_val>".to_string();
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+            }
+        }
+        "screen" => {
+            let start = if parts.len() >= 2 {
+                u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16)
+                    .unwrap_or(0) as usize
+            } else { 0 };
+            for row in 0..4 {
+                let mut line = String::new();
+                for col in 0..4 {
+                    let idx = start + row * 4 + col;
+                    if idx < vm::SCREEN_SIZE {
+                        line.push_str(&format!("{:06X} ", vm.screen[idx] & 0xFFFFFF));
+                    } else {
+                        line.push_str("------ ");
+                    }
+                }
+                println!("{}", line); output.push_str(&line); output.push('\n');
+            }
+        }
+        "save" => {
+            let filename = if parts.len() >= 2 { parts[1].to_string() } else { "output.ppm".to_string() };
+            match std::fs::File::create(&filename) {
+                Ok(mut f) => {
+                    let header = format!("P6\n256 256\n255\n");
+                    use std::io::Write;
+                    let _ = f.write_all(header.as_bytes());
+                    for pixel in &vm.screen {
+                        let r = (pixel >> 16) & 0xFF;
+                        let g = (pixel >> 8) & 0xFF;
+                        let b = pixel & 0xFF;
+                        let _ = f.write_all(&[r as u8, g as u8, b as u8]);
+                    }
+                    let msg = format!("Saved screen to {}", filename);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+                Err(e) => {
+                    let msg = format!("Error saving: {}", e);
+                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                }
+            }
+        }
+        "reset" => {
+            vm.reset();
+            *canvas_assembled = false;
+            let msg = "VM reset".to_string();
+            println!("{}", msg); output.push_str(&msg); output.push('\n');
+        }
+        _ => {
+            let msg = format!("Unknown: {} (skipped)", command);
+            println!("{}", msg); output.push_str(&msg); output.push('\n');
+        }
+    }
+}
+
 fn main() {
+    // ── CLI mode: headless geo> prompt on stdin/stdout ─────────────
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && args[1] == "--cli" {
+        cli_main(&args[2..]);
+        return;
+    }
+
     let mut window = Window::new(
         "Geometry OS -- Canvas Text Surface",
         WIDTH,
@@ -438,6 +1404,8 @@ fn main() {
     let mut vm = vm::Vm::new();
     let mut is_running = false;
     let mut canvas_assembled = false;
+    let mut breakpoints: HashSet<u32> = HashSet::new();
+    let mut hit_breakpoint = false;
 
     // Cursor position on canvas (logical coordinates, can exceed visible area)
     let mut cursor_row: usize = 0;
@@ -465,8 +1433,8 @@ fn main() {
 
     // Boot: write welcome banner + first prompt into canvas
     {
-        term_output_row = write_line_to_canvas(&mut canvas_buffer, 0, "Geometry OS v0.2.0");
-        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "25 opcodes | 32 regs | 256x256");
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, 0, "Geometry OS v0.3.0");
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "31 opcodes | 32 regs | 256x256");
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "Type 'help' for commands.");
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "");
         term_prompt_row = term_output_row;
@@ -630,6 +1598,7 @@ fn main() {
                             &mut scroll_offset,
                             &mut loaded_file,
                             &mut canvas_assembled,
+                            &mut breakpoints,
                         );
 
                         if quit {
@@ -733,7 +1702,19 @@ fn main() {
                         };
                         vm.halted = false;
                     }
+                    hit_breakpoint = false;
                     is_running = !is_running;
+                }
+                Key::F6 => {
+                    // Single-step: execute one instruction when paused
+                    if !is_running && !vm.halted && canvas_assembled {
+                        hit_breakpoint = false;
+                        vm.step();
+                        if breakpoints.contains(&vm.pc) {
+                            hit_breakpoint = true;
+                        }
+                        status_msg = format!("[step] PC=0x{:04X}", vm.pc);
+                    }
                 }
                 Key::F8 => {
                     let ctrl =
@@ -882,9 +1863,21 @@ fn main() {
 
         // ── VM execution ─────────────────────────────────────────
         if is_running && !vm.halted {
-            for _ in 0..4096 {
+            // Run until FRAME, breakpoint, halt, or 1M steps (safety cap)
+            vm.frame_ready = false;
+            for _ in 0..1_000_000 {
                 if !vm.step() {
                     is_running = false;
+                    break;
+                }
+                if vm.frame_ready {
+                    // FRAME opcode hit: stop here, let the host render this tick
+                    break;
+                }
+                if breakpoints.contains(&vm.pc) {
+                    is_running = false;
+                    hit_breakpoint = true;
+                    status_msg = format!("[BREAK] PC=0x{:04X}", vm.pc);
                     break;
                 }
             }
@@ -899,6 +1892,7 @@ fn main() {
             cursor_col,
             scroll_offset,
             is_running,
+            hit_breakpoint,
             &status_msg,
         );
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
@@ -1006,7 +2000,7 @@ fn canvas_assemble(
 
     let source = source.replace("\n\n", "\n");
 
-    match assembler::assemble(&source) {
+    match assembler::assemble(&source, CANVAS_BYTECODE_ADDR) {
         Ok(asm_result) => {
             let ram_len = vm.ram.len();
             for v in vm.ram[CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 4096)].iter_mut()
@@ -1043,6 +2037,7 @@ fn render(
     cursor_col: usize,
     scroll_offset: usize,
     is_running: bool,
+    hit_breakpoint: bool,
     status_msg: &str,
 ) {
     for pixel in buffer.iter_mut() {
@@ -1155,6 +2150,7 @@ fn render(
     }
 
     // ── Registers ────────────────────────────────────────────────
+    let regs_end_y = REGS_Y + 16 * 14;
     for i in 0..16 {
         let text = format!("r{:02}={:08X}", i, vm.regs[i]);
         render_text(buffer, REGS_X, REGS_Y + i * 14, &text, STATUS_FG);
@@ -1168,6 +2164,78 @@ fn render(
             &text,
             STATUS_FG,
         );
+    }
+
+    // ── Disassembly panel ────────────────────────────────────────
+    // Show 10 decoded instructions centered on PC
+    let disasm_y = regs_end_y + 12;
+    let disasm_label_color = 0x888899;
+    let disasm_color = 0xBBBBDD;
+    let disasm_pc_color = 0x00FF88; // bright green for current instruction
+    render_text(buffer, REGS_X, disasm_y, "DISASM", disasm_label_color);
+
+    // Figure out where to start disassembly: scan backwards from PC
+    // by trying to decode instruction boundaries. Simple approach:
+    // start from a known-good boundary (bytecode base) and walk forward.
+    let base = CANVAS_BYTECODE_ADDR as u32;
+    let pc = vm.pc;
+
+    // Build a map of instruction starts from base to PC+some
+    let mut inst_starts: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    {
+        let mut addr = base;
+        while addr <= pc + 30 {
+            if addr as usize >= vm.ram.len() { break; }
+            let op = vm.ram[addr as usize];
+            // If we hit a zero opcode (empty RAM) past the program, stop
+            if op == 0 && addr > pc + 20 { break; }
+            inst_starts.insert(addr);
+            let (_, len) = vm.disassemble_at(addr);
+            if len == 0 { break; }
+            addr += len as u32;
+        }
+    }
+
+    // Find the 4 instructions before PC and 5 after
+    let mut display_addrs: Vec<u32> = Vec::new();
+    let mut before: Vec<u32> = Vec::new();
+    let mut after: Vec<u32> = Vec::new();
+    let mut found_pc = false;
+    for &a in &inst_starts {
+        if a < pc {
+            before.push(a);
+            if before.len() > 4 { before.remove(0); }
+        } else if a == pc {
+            found_pc = true;
+        } else {
+            after.push(a);
+            if after.len() >= 5 { break; }
+        }
+    }
+    display_addrs.extend_from_slice(&before);
+    if found_pc || inst_starts.contains(&pc) {
+        display_addrs.push(pc);
+    }
+    display_addrs.extend_from_slice(&after);
+    // Trim to 10 lines
+    let total = display_addrs.len();
+    if total > 10 {
+        // Keep PC visible: if PC is in the list, center around it
+        let pc_idx = display_addrs.iter().position(|&a| a == pc).unwrap_or(4);
+        let start = if pc_idx > 4 { pc_idx - 4 } else { 0 };
+        display_addrs = display_addrs[start..(start + 10).min(total)].to_vec();
+    }
+
+    for (i, &addr) in display_addrs.iter().enumerate() {
+        let (mnemonic, _) = vm.disassemble_at(addr);
+        let is_pc = addr == pc;
+        let marker = if is_pc { ">" } else { " " };
+        let line = format!("{}{:04X} {}", marker, addr, mnemonic);
+        let color = if is_pc { disasm_pc_color } else { disasm_color };
+        let line_y = disasm_y + 14 + i as usize * 12;
+        if line_y + 12 < HEIGHT - 24 {
+            render_text(buffer, REGS_X, line_y, &line, color);
+        }
     }
 
     // ── Status bar ───────────────────────────────────────────────
@@ -1184,6 +2252,8 @@ fn render(
         ("RUNNING", 0x00FF00)
     } else if vm.halted {
         ("HALTED", 0xFF4444)
+    } else if hit_breakpoint {
+        ("BREAK", 0xFF6600)
     } else {
         ("PAUSED", 0xFFAA00)
     };
@@ -1221,10 +2291,10 @@ fn render_text(buffer: &mut [u32], x0: usize, y0: usize, text: &str, color: u32)
 
 /// Valid opcodes for syntax highlighting (same set as assembler.rs)
 const OPCODES: &[&str] = &[
-    "HALT", "NOP", "LDI", "LOAD", "STORE", "ADD", "SUB", "MUL", "DIV",
+    "HALT", "NOP", "FRAME", "LDI", "LOAD", "STORE", "ADD", "SUB", "MUL", "DIV",
     "AND", "OR", "XOR", "SHL", "SHR", "MOD", "JMP", "JZ", "JNZ",
     "CALL", "RET", "BLT", "BGE", "PSET", "PSETI", "FILL", "RECTF",
-    "TEXT", "CMP", "PUSH", "POP",
+    "TEXT", "LINE", "CIRCLE", "SCROLL", "IKEY", "NEG", "CMP", "PUSH", "POP",
 ];
 
 /// Token types produced by the syntax highlighter.
@@ -1533,6 +2603,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         pc,
         screen,
         halted,
+        frame_ready: false,
     };
 
     // Parse canvas trailer

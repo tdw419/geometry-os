@@ -20,6 +20,8 @@ pub struct Vm {
     pub pc: u32,
     pub screen: Vec<u32>,
     pub halted: bool,
+    /// Set by FRAME opcode; cleared by the host after rendering
+    pub frame_ready: bool,
 }
 
 impl Vm {
@@ -30,6 +32,7 @@ impl Vm {
             pc: 0,
             screen: vec![0; SCREEN_SIZE],
             halted: false,
+            frame_ready: false,
         }
     }
 
@@ -40,6 +43,7 @@ impl Vm {
         self.regs = [0; NUM_REGS];
         self.pc = 0;
         self.halted = false;
+        self.frame_ready = false;
     }
 
     /// Execute one instruction. Returns false if halted.
@@ -59,6 +63,12 @@ impl Vm {
 
             // NOP
             0x01 => {}
+
+            // FRAME -- signal host to display current screen; execution continues
+            0x02 => {
+                self.frame_ready = true;
+                return true; // keep running (host checks frame_ready to pace rendering)
+            }
 
             // LDI reg, imm  -- load immediate
             0x10 => {
@@ -182,6 +192,14 @@ impl Vm {
                 let rs = self.fetch() as usize;
                 if rd < NUM_REGS && rs < NUM_REGS && self.regs[rs] != 0 {
                     self.regs[rd] = self.regs[rd] % self.regs[rs];
+                }
+            }
+
+            // NEG rd  -- rd = -rd (two's complement)
+            0x2A => {
+                let rd = self.fetch() as usize;
+                if rd < NUM_REGS {
+                    self.regs[rd] = self.regs[rd].wrapping_neg();
                 }
             }
 
@@ -381,6 +399,98 @@ impl Vm {
                 }
             }
 
+            // IKEY reg  -- read keyboard port (RAM[0xFFF]) into reg, then clear port
+            0x48 => {
+                let rd = self.fetch() as usize;
+                if rd < NUM_REGS {
+                    self.regs[rd] = self.ram[0xFFF];
+                    self.ram[0xFFF] = 0;
+                }
+            }
+
+            // LINE x0r, y0r, x1r, y1r, cr  -- Bresenham line
+            0x45 => {
+                let x0r = self.fetch() as usize;
+                let y0r = self.fetch() as usize;
+                let x1r = self.fetch() as usize;
+                let y1r = self.fetch() as usize;
+                let cr  = self.fetch() as usize;
+                if x0r < NUM_REGS && y0r < NUM_REGS && x1r < NUM_REGS
+                    && y1r < NUM_REGS && cr < NUM_REGS
+                {
+                    let color = self.regs[cr];
+                    let mut x0 = self.regs[x0r] as i32;
+                    let mut y0 = self.regs[y0r] as i32;
+                    let x1 = self.regs[x1r] as i32;
+                    let y1 = self.regs[y1r] as i32;
+                    let dx = (x1 - x0).abs();
+                    let dy = -(y1 - y0).abs();
+                    let sx: i32 = if x0 < x1 { 1 } else { -1 };
+                    let sy: i32 = if y0 < y1 { 1 } else { -1 };
+                    let mut err = dx + dy;
+                    loop {
+                        if x0 >= 0 && x0 < 256 && y0 >= 0 && y0 < 256 {
+                            self.screen[y0 as usize * 256 + x0 as usize] = color;
+                        }
+                        if x0 == x1 && y0 == y1 { break; }
+                        let e2 = 2 * err;
+                        if e2 >= dy { err += dy; x0 += sx; }
+                        if e2 <= dx { err += dx; y0 += sy; }
+                    }
+                }
+            }
+
+            // CIRCLE xr, yr, rr, cr  -- midpoint circle
+            0x46 => {
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                let rr = self.fetch() as usize;
+                let cr = self.fetch() as usize;
+                if xr < NUM_REGS && yr < NUM_REGS && rr < NUM_REGS && cr < NUM_REGS {
+                    let cx = self.regs[xr] as i32;
+                    let cy = self.regs[yr] as i32;
+                    let radius = self.regs[rr] as i32;
+                    let color = self.regs[cr];
+                    let mut x = radius;
+                    let mut y = 0i32;
+                    let mut err = 1 - radius;
+                    while x >= y {
+                        let pts: [(i32, i32); 8] = [
+                            (cx + x, cy + y), (cx - x, cy + y),
+                            (cx + x, cy - y), (cx - x, cy - y),
+                            (cx + y, cy + x), (cx - y, cy + x),
+                            (cx + y, cy - x), (cx - y, cy - x),
+                        ];
+                        for (px, py) in pts {
+                            if px >= 0 && px < 256 && py >= 0 && py < 256 {
+                                self.screen[py as usize * 256 + px as usize] = color;
+                            }
+                        }
+                        y += 1;
+                        if err < 0 {
+                            err += 2 * y + 1;
+                        } else {
+                            x -= 1;
+                            err += 2 * (y - x) + 1;
+                        }
+                    }
+                }
+            }
+
+            // SCROLL nr  -- scroll screen up by regs[nr] pixels (wraps 0 in at bottom)
+            0x47 => {
+                let nr = self.fetch() as usize;
+                if nr < NUM_REGS {
+                    let n = (self.regs[nr] as usize).min(256);
+                    if n > 0 {
+                        self.screen.copy_within(n * 256.., 0);
+                        for v in self.screen[(256 - n) * 256..].iter_mut() {
+                            *v = 0;
+                        }
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -388,6 +498,72 @@ impl Vm {
             }
         }
         true
+    }
+
+    /// Disassemble one instruction starting at `addr` in RAM.
+    /// Returns (mnemonic_string, instruction_length_in_words).
+    /// Does not mutate VM state.
+    pub fn disassemble_at(&self, addr: u32) -> (String, usize) {
+        let a = addr as usize;
+        if a >= self.ram.len() {
+            return (format!("???"), 1);
+        }
+        let op = self.ram[a];
+        let ram = |i: usize| -> u32 {
+            if i < self.ram.len() { self.ram[i] } else { 0 }
+        };
+        let reg = |v: u32| -> String { format!("r{}", v) };
+        match op {
+            0x00 => ("HALT".into(), 1),
+            0x01 => ("NOP".into(), 1),
+            0x02 => ("FRAME".into(), 1),
+            0x10 => {
+                let r = ram(a + 1);
+                let imm = ram(a + 2);
+                (format!("LDI {}, 0x{:X}", reg(r), imm), 3)
+            }
+            0x11 => {
+                let r = ram(a + 1);
+                let ar = ram(a + 2);
+                (format!("LOAD {}, [{}]", reg(r), reg(ar)), 3)
+            }
+            0x12 => {
+                let ar = ram(a + 1);
+                let r = ram(a + 2);
+                (format!("STORE [{}], {}", reg(ar), reg(r)), 3)
+            }
+            0x20 => { let rd = ram(a+1); let rs = ram(a+2); (format!("ADD {}, {}", reg(rd), reg(rs)), 3) }
+            0x21 => { let rd = ram(a+1); let rs = ram(a+2); (format!("SUB {}, {}", reg(rd), reg(rs)), 3) }
+            0x22 => { let rd = ram(a+1); let rs = ram(a+2); (format!("MUL {}, {}", reg(rd), reg(rs)), 3) }
+            0x23 => { let rd = ram(a+1); let rs = ram(a+2); (format!("DIV {}, {}", reg(rd), reg(rs)), 3) }
+            0x24 => { let rd = ram(a+1); let rs = ram(a+2); (format!("AND {}, {}", reg(rd), reg(rs)), 3) }
+            0x25 => { let rd = ram(a+1); let rs = ram(a+2); (format!("OR {}, {}", reg(rd), reg(rs)), 3) }
+            0x26 => { let rd = ram(a+1); let rs = ram(a+2); (format!("XOR {}, {}", reg(rd), reg(rs)), 3) }
+            0x27 => { let rd = ram(a+1); let rs = ram(a+2); (format!("SHL {}, {}", reg(rd), reg(rs)), 3) }
+            0x28 => { let rd = ram(a+1); let rs = ram(a+2); (format!("SHR {}, {}", reg(rd), reg(rs)), 3) }
+            0x29 => { let rd = ram(a+1); let rs = ram(a+2); (format!("MOD {}, {}", reg(rd), reg(rs)), 3) }
+            0x2A => { let rd = ram(a+1); (format!("NEG {}", reg(rd)), 2) }
+            0x30 => { let addr2 = ram(a+1); (format!("JMP 0x{:04X}", addr2), 2) }
+            0x31 => { let r = ram(a+1); let addr2 = ram(a+2); (format!("JZ {}, 0x{:04X}", reg(r), addr2), 3) }
+            0x32 => { let r = ram(a+1); let addr2 = ram(a+2); (format!("JNZ {}, 0x{:04X}", reg(r), addr2), 3) }
+            0x33 => { let addr2 = ram(a+1); (format!("CALL 0x{:04X}", addr2), 2) }
+            0x34 => ("RET".into(), 1),
+            0x35 => { let r = ram(a+1); let addr2 = ram(a+2); (format!("BLT {}, 0x{:04X}", reg(r), addr2), 3) }
+            0x36 => { let r = ram(a+1); let addr2 = ram(a+2); (format!("BGE {}, 0x{:04X}", reg(r), addr2), 3) }
+            0x40 => { let xr = ram(a+1); let yr = ram(a+2); let cr = ram(a+3); (format!("PSET {}, {}, {}", reg(xr), reg(yr), reg(cr)), 4) }
+            0x41 => { let x = ram(a+1); let y = ram(a+2); let c = ram(a+3); (format!("PSETI {}, {}, 0x{:X}", x, y, c), 4) }
+            0x42 => { let cr = ram(a+1); (format!("FILL {}", reg(cr)), 2) }
+            0x43 => { let xr = ram(a+1); let yr = ram(a+2); let wr = ram(a+3); let hr = ram(a+4); let cr = ram(a+5); (format!("RECTF {},{},{},{},{}", reg(xr), reg(yr), reg(wr), reg(hr), reg(cr)), 6) }
+            0x44 => { let xr = ram(a+1); let yr = ram(a+2); let ar = ram(a+3); (format!("TEXT {},{},[{}]", reg(xr), reg(yr), reg(ar)), 4) }
+            0x45 => { let x0r = ram(a+1); let y0r = ram(a+2); let x1r = ram(a+3); let y1r = ram(a+4); let cr = ram(a+5); (format!("LINE {},{},{},{},{}", reg(x0r), reg(y0r), reg(x1r), reg(y1r), reg(cr)), 6) }
+            0x46 => { let xr = ram(a+1); let yr = ram(a+2); let rr = ram(a+3); let cr = ram(a+4); (format!("CIRCLE {},{},{},{}", reg(xr), reg(yr), reg(rr), reg(cr)), 5) }
+            0x47 => { let nr = ram(a+1); (format!("SCROLL {}", reg(nr)), 2) }
+            0x48 => { let rd = ram(a+1); (format!("IKEY {}", reg(rd)), 2) }
+            0x50 => { let rd = ram(a+1); let rs = ram(a+2); (format!("CMP {}, {}", reg(rd), reg(rs)), 3) }
+            0x60 => { let r = ram(a+1); (format!("PUSH {}", reg(r)), 2) }
+            0x61 => { let r = ram(a+1); (format!("POP {}", reg(r)), 2) }
+            _ => (format!("??? (0x{:02X})", op), 1),
+        }
     }
 
     fn fetch(&mut self) -> u32 {
@@ -524,6 +700,7 @@ impl Vm {
             pc,
             screen,
             halted,
+            frame_ready: false,
         })
     }
 }
