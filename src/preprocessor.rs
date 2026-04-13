@@ -16,6 +16,7 @@ pub const OPCODES: &[&str] = &[
     "IKEY", "RAND", "NEG", "CMP", "PUSH", "POP", "BEEP", "ASM",
     "SPAWN", "KILL", "PEEK", "SPRITE", "TILEMAP",
     "SYSCALL", "RETK", "OPEN", "READ", "WRITE", "CLOSE", "SEEK", "LS",
+    "YIELD", "SLEEP", "SETPRIORITY",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR", "SET", "GET", "INC", "DEC",
 ];

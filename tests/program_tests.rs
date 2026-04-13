@@ -1794,11 +1794,13 @@ fn test_active_process_count() {
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0, regs: [0; 32], halted: false, pid: 1, mode: geometry_os::vm::CpuMode::Kernel,
         page_dir: None, segfaulted: false,
+        priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
     });
     assert_eq!(vm.active_process_count(), 1);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0, regs: [0; 32], halted: true, pid: 2, mode: geometry_os::vm::CpuMode::Kernel,
         page_dir: None, segfaulted: false,
+        priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
     });
     assert_eq!(vm.active_process_count(), 1);
 }

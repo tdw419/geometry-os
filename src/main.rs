@@ -3047,6 +3047,11 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         segfault: false,
         vfs: vfs::Vfs::new(),
         current_pid: 0,
+        sched_tick: 0,
+        default_time_slice: vm::DEFAULT_TIME_SLICE,
+        yielded: false,
+        sleep_frames: 0,
+        new_priority: 0,
     };
 
 

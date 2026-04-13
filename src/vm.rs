@@ -37,6 +37,12 @@ impl Default for CpuMode {
     }
 }
 
+/// Process priority levels for the preemptive scheduler (Phase 26).
+/// Higher priority = more CPU time slices per round.
+pub const PRIORITY_LEVELS: u8 = 4;
+/// Default base time slice length (in VM steps) for priority-1 processes.
+pub const DEFAULT_TIME_SLICE: u32 = 100;
+
 /// A secondary execution context spawned by SPAWN.
 /// Shares RAM and screen with the primary process.
 #[derive(Debug, Clone)]
@@ -52,6 +58,14 @@ pub struct SpawnedProcess {
     pub page_dir: Option<Vec<u32>>,
     /// True when process segfaulted on unmapped access.
     pub segfaulted: bool,
+    /// Scheduler priority (0 = lowest, 3 = highest). Default: 1.
+    pub priority: u8,
+    /// Ticks remaining in current time slice (managed by scheduler).
+    pub slice_remaining: u32,
+    /// If > 0, process is sleeping until sched_tick reaches this value.
+    pub sleep_until: u64,
+    /// Set by YIELD opcode; scheduler checks mid-slice and preempts.
+    pub yielded: bool,
 }
 
 /// Magic bytes for save files
@@ -106,6 +120,16 @@ pub struct Vm {
     pub vfs: crate::vfs::Vfs,
     /// PID of currently executing context (0 = main, 1+ = children)
     pub current_pid: u32,
+    /// Monotonically increasing scheduler tick (incremented each step)
+    pub sched_tick: u64,
+    /// Base time slice length for priority-1 processes
+    pub default_time_slice: u32,
+    /// Per-step scheduler flag: process yielded voluntarily
+    pub yielded: bool,
+    /// Per-step scheduler value: sleep for this many sched_ticks
+    pub sleep_frames: u32,
+    /// Per-step scheduler value: new priority requested by SETPRIORITY
+    pub new_priority: u8,
 }
 
 impl Vm {
@@ -130,6 +154,11 @@ impl Vm {
             segfault: false,
             vfs: crate::vfs::Vfs::new(),
             current_pid: 0,
+            sched_tick: 0,
+            default_time_slice: DEFAULT_TIME_SLICE,
+            yielded: false,
+            sleep_frames: 0,
+            new_priority: 0,
         }
     }
 
@@ -913,6 +942,10 @@ impl Vm {
                                 mode: CpuMode::User,
                                 page_dir,
                                 segfaulted: false,
+                                priority: 1,
+                                slice_remaining: 0,
+                                sleep_until: 0,
+                                yielded: false,
                             });
                             self.ram[0xFFA] = pid;
                         }
@@ -1090,6 +1123,27 @@ impl Vm {
                 }
             }
 
+            // YIELD -- cooperative yield, give up remaining time slice
+            0x5A => {
+                self.yielded = true;
+            }
+
+            // SLEEP ticks_reg -- sleep for N scheduler ticks
+            0x5B => {
+                let tr = self.fetch() as usize;
+                if tr < NUM_REGS {
+                    self.sleep_frames = self.regs[tr];
+                }
+            }
+
+            // SETPRIORITY priority_reg -- set current process priority (0-3)
+            0x5C => {
+                let pr = self.fetch() as usize;
+                if pr < NUM_REGS {
+                    self.new_priority = self.regs[pr].min(3) as u8;
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -1099,9 +1153,13 @@ impl Vm {
         true
     }
 
-    /// Step all non-halted child processes. Called by the host after stepping
-    /// the main process. Each child gets one instruction per call.
+    /// Run preemptive scheduler for all child processes.
+    /// Each process gets a time slice proportional to its priority level.
+    /// Sleeping processes (sleep_until > sched_tick) are skipped.
+    /// Yielded processes lose their remaining slice.
     pub fn step_all_processes(&mut self) {
+        self.sched_tick += 1;
+
         let mut procs = std::mem::take(&mut self.processes);
 
         let saved_pc = self.pc;
@@ -1114,8 +1172,31 @@ impl Vm {
         let saved_segfault_pid = self.segfault_pid;
         let saved_current_pid = self.current_pid;
 
-        for proc in procs.iter_mut() {
+        // Sort by priority descending (highest priority runs first)
+        let mut indices: Vec<usize> = (0..procs.len()).collect();
+        indices.sort_by_key(|&i| std::cmp::Reverse(procs[i].priority));
+
+        for idx in indices {
+            let proc = &mut procs[idx];
             if proc.halted { continue; }
+
+            // Skip sleeping processes whose sleep hasnt expired
+            if proc.sleep_until > 0 && self.sched_tick < proc.sleep_until {
+                continue;
+            }
+            // Wake up: clear sleep flag
+            if proc.sleep_until > 0 && self.sched_tick >= proc.sleep_until {
+                proc.sleep_until = 0;
+                proc.slice_remaining = 0;
+            }
+
+            // Allocate time slice if exhausted: priority-based quantum
+            // priority 0 = 1x, 1 = 2x, 2 = 4x, 3 = 8x
+            if proc.slice_remaining == 0 {
+                let multiplier = 1u32 << proc.priority;
+                proc.slice_remaining = self.default_time_slice * multiplier;
+                proc.yielded = false;
+            }
 
             self.pc = proc.pc;
             self.regs = proc.regs;
@@ -1126,8 +1207,16 @@ impl Vm {
             self.segfault = false;
             self.current_pid = proc.pid;
 
-            let still_running = self.step();
+            // Reset per-step scheduler flags
+            self.yielded = false;
+            self.sleep_frames = 0;
+            self.new_priority = proc.priority;
 
+            // Execute one instruction within the time slice
+            let still_running = self.step();
+            self.sched_tick += 1;
+
+            // Save process state back
             proc.pc = self.pc;
             proc.regs = self.regs;
             proc.halted = !still_running || self.halted || self.segfault;
@@ -1137,6 +1226,27 @@ impl Vm {
             if self.segfault {
                 self.segfault_pid = proc.pid;
                 self.ram[0xFF9] = proc.pid;
+            }
+
+            // Apply SETPRIORITY if requested
+            if self.new_priority != proc.priority && self.new_priority <= 3 {
+                proc.priority = self.new_priority;
+            }
+
+            // Handle YIELD: forfeit remaining time slice
+            if self.yielded {
+                proc.slice_remaining = 0;
+                proc.yielded = true;
+            } else {
+                if proc.slice_remaining > 0 {
+                    proc.slice_remaining -= 1;
+                }
+            }
+
+            // Handle SLEEP: mark process as sleeping
+            if self.sleep_frames > 0 {
+                proc.sleep_until = self.sched_tick.wrapping_add(self.sleep_frames as u64);
+                proc.slice_remaining = 0;
             }
         }
 
@@ -1149,12 +1259,15 @@ impl Vm {
         self.segfault = saved_segfault;
         self.segfault_pid = saved_segfault_pid;
         self.current_pid = saved_current_pid;
+        self.yielded = false;
+        self.sleep_frames = 0;
+        self.new_priority = 0;
 
         procs.extend(std::mem::take(&mut self.processes));
         self.processes = procs;
     }
 
-    /// Count active (non-halted) child processes
+        /// Count active (non-halted) child processes
     #[allow(dead_code)]
     pub fn active_process_count(&self) -> usize {
         self.processes.iter().filter(|p| !p.halted).count()
@@ -1287,6 +1400,16 @@ impl Vm {
             0x59 => {
                 let br = ram(a + 1);
                 (format!("LS {}", reg(br)), 2)
+            }
+
+            0x5A => ("YIELD".into(), 1),
+            0x5B => {
+                let r = ram(a + 1);
+                (format!("SLEEP {}", reg(r)), 2)
+            }
+            0x5C => {
+                let r = ram(a + 1);
+                (format!("SETPRIORITY {}", reg(r)), 2)
             }
 
             _ => (format!("??? (0x{:02X})", op), 1),
@@ -1470,6 +1593,11 @@ impl Vm {
             segfault: false,
             vfs: crate::vfs::Vfs::new(),
             current_pid: 0,
+            sched_tick: 0,
+            default_time_slice: DEFAULT_TIME_SLICE,
+            yielded: false,
+            sleep_frames: 0,
+            new_priority: 0,
         })
     }
 }

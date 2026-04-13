@@ -658,6 +658,26 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[1])? as u32);
         }
 
+        "YIELD" => {
+            bytecode.push(0x5A);
+        }
+
+        "SLEEP" => {
+            if tokens.len() < 2 {
+                return Err(format!("SLEEP requires 1 argument: SLEEP ticks_reg"));
+            }
+            bytecode.push(0x5B);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
+        "SETPRIORITY" => {
+            if tokens.len() < 2 {
+                return Err(format!("SETPRIORITY requires 1 argument: SETPRIORITY priority_reg"));
+            }
+            bytecode.push(0x5C);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 
