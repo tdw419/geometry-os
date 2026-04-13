@@ -332,4 +332,15 @@ mod tests {
         let w = encode_b(imm_raw, 2, 1, 0);
         assert_eq!(decode(w), Operation::Beq{rs1:1,rs2:2,imm:-16});
     }
+
+    // CSR instructions
+    fn encode_csr(funct3: u32, rd: u8, rs1_uimm: u8, csr: u32) -> u32 {
+        ((csr & 0xFFF) << 20) | ((rs1_uimm as u32) << 15) | (funct3 << 12) | ((rd as u32) << 7) | 0x73
+    }
+    #[test] fn decode_csrrw() { assert_eq!(decode(encode_csr(0b001, 3, 5, 0x300)), Operation::Csrrw{rd:3,rs1:5,csr:0x300}); }
+    #[test] fn decode_csrrs() { assert_eq!(decode(encode_csr(0b010, 3, 5, 0x305)), Operation::Csrrs{rd:3,rs1:5,csr:0x305}); }
+    #[test] fn decode_csrrc() { assert_eq!(decode(encode_csr(0b011, 3, 5, 0x341)), Operation::Csrrc{rd:3,rs1:5,csr:0x341}); }
+    #[test] fn decode_csrrwi() { assert_eq!(decode(encode_csr(0b101, 3, 7, 0x342)), Operation::Csrrwi{rd:3,uimm:7,csr:0x342}); }
+    #[test] fn decode_csrrsi() { assert_eq!(decode(encode_csr(0b110, 3, 15, 0x100)), Operation::Csrrsi{rd:3,uimm:15,csr:0x100}); }
+    #[test] fn decode_csrrci() { assert_eq!(decode(encode_csr(0b111, 3, 31, 0x180)), Operation::Csrrci{rd:3,uimm:31,csr:0x180}); }
 }

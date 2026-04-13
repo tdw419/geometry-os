@@ -662,4 +662,155 @@ mod tests {
         assert!(csr.write(SATP, 0x80000000)); // MODE=SV32, PPN=0
         assert_eq!(csr.read(SATP), 0x80000000);
     }
+
+    #[test]
+    fn new_csr_bank_includes_interrupt_regs() {
+        let csr = CsrBank::new();
+        assert_eq!(csr.mie, 0);
+        assert_eq!(csr.mip, 0);
+        assert_eq!(csr.medeleg, 0);
+        assert_eq!(csr.mideleg, 0);
+    }
+
+    #[test]
+    fn read_write_mie() {
+        let mut csr = CsrBank::new();
+        assert!(csr.write(MIE, 1 << INT_MTI)); // Enable machine timer interrupt
+        assert_eq!(csr.read(MIE), 1 << INT_MTI);
+    }
+
+    #[test]
+    fn read_write_mip() {
+        let mut csr = CsrBank::new();
+        assert!(csr.write(MIP, 1 << INT_MTI)); // Machine timer interrupt pending
+        assert_eq!(csr.read(MIP), 1 << INT_MTI);
+    }
+
+    #[test]
+    fn sie_is_view_of_mie() {
+        let mut csr = CsrBank::new();
+        // Write to MIE with both M-mode and S-mode bits
+        csr.mie = (1 << INT_MTI) | (1 << INT_STI);
+        // SIE should only show S-mode bits (STI at bit 5)
+        assert_eq!(csr.read(SIE), 1 << INT_STI);
+
+        // Write to SIE should only affect S-mode bits
+        assert!(csr.write(SIE, 1 << INT_SSI)); // Enable SSIE
+        // MIE should now have STI cleared and SSI set, MTI unchanged
+        assert_eq!(csr.mie, (1 << INT_MTI) | (1 << INT_SSI));
+    }
+
+    #[test]
+    fn sip_is_view_of_mip() {
+        let mut csr = CsrBank::new();
+        csr.mip = (1 << INT_MSI) | (1 << INT_SSI);
+        // SIP should only show S-mode bits (SSI at bit 1)
+        assert_eq!(csr.read(SIP), 1 << INT_SSI);
+
+        // Write to SIP should only affect S-mode bits
+        assert!(csr.write(SIP, 1 << INT_STI)); // Set STIP
+        // MIP should now have MSI unchanged, SSI cleared, STI set
+        assert_eq!(csr.mip, (1 << INT_MSI) | (1 << INT_STI));
+    }
+
+    #[test]
+    fn read_write_medeleg() {
+        let mut csr = CsrBank::new();
+        // Delegate ECALL-U (cause 8) to S-mode
+        assert!(csr.write(MEDELEG, 1 << CAUSE_ECALL_U));
+        assert_eq!(csr.read(MEDELEG), 1 << CAUSE_ECALL_U);
+    }
+
+    #[test]
+    fn read_write_mideleg() {
+        let mut csr = CsrBank::new();
+        // Delegate supervisor timer interrupt to S-mode
+        assert!(csr.write(MIDELEG, 1 << INT_STI));
+        assert_eq!(csr.read(MIDELEG), 1 << INT_STI);
+    }
+
+    #[test]
+    fn trap_target_priv_no_delegation() {
+        let csr = CsrBank::new(); // No delegation set
+        // ECALL from U goes to M (no delegation)
+        assert_eq!(
+            csr.trap_target_priv(CAUSE_ECALL_U, Privilege::User),
+            Privilege::Machine
+        );
+    }
+
+    #[test]
+    fn trap_target_priv_delegated_exception() {
+        let mut csr = CsrBank::new();
+        // Delegate ECALL-U to S-mode
+        csr.medeleg = 1 << CAUSE_ECALL_U;
+        // ECALL from U goes to S (delegated)
+        assert_eq!(
+            csr.trap_target_priv(CAUSE_ECALL_U, Privilege::User),
+            Privilege::Supervisor
+        );
+        // ECALL from S still goes to M (not delegated for S-mode)
+        assert_eq!(
+            csr.trap_target_priv(CAUSE_ECALL_S, Privilege::Supervisor),
+            Privilege::Machine
+        );
+    }
+
+    #[test]
+    fn trap_target_priv_delegated_interrupt() {
+        let mut csr = CsrBank::new();
+        csr.mideleg = 1 << INT_STI;
+        let cause = MCAUSE_INTERRUPT_BIT | INT_STI;
+        // Timer interrupt from U delegated to S
+        assert_eq!(
+            csr.trap_target_priv(cause, Privilege::User),
+            Privilege::Supervisor
+        );
+    }
+
+    #[test]
+    fn trap_target_priv_m_mode_always_traps_to_m() {
+        let mut csr = CsrBank::new();
+        csr.medeleg = 0xFFFF; // Delegate everything
+        // M-mode exception still goes to M
+        assert_eq!(
+            csr.trap_target_priv(CAUSE_ECALL_U, Privilege::Machine),
+            Privilege::Machine
+        );
+    }
+
+    #[test]
+    fn pending_interrupt_none_when_disabled() {
+        let mut csr = CsrBank::new();
+        csr.mip = 1 << INT_MTI; // Timer pending
+        csr.mie = 1 << INT_MTI; // Timer enabled
+        // But MIE bit in mstatus is 0
+        assert!(csr.pending_interrupt(Privilege::Machine).is_none());
+    }
+
+    #[test]
+    fn pending_interrupt_timer_fires() {
+        let mut csr = CsrBank::new();
+        csr.mip = 1 << INT_MTI; // Timer pending
+        csr.mie = 1 << INT_MTI; // Timer enabled
+        csr.mstatus = 1 << MSTATUS_MIE; // Global MIE enabled
+        let cause = csr.pending_interrupt(Privilege::Machine).unwrap();
+        assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_MTI);
+    }
+
+    #[test]
+    fn pending_interrupt_software_fires() {
+        let mut csr = CsrBank::new();
+        csr.mip = 1 << INT_SSI; // Software pending
+        csr.mie = 1 << INT_SSI; // Software enabled
+        csr.mstatus = 1 << MSTATUS_SIE; // SIE enabled
+        let cause = csr.pending_interrupt(Privilege::User).unwrap();
+        assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_SSI);
+    }
+
+    #[test]
+    fn pending_interrupt_nothing_pending() {
+        let csr = CsrBank::new();
+        assert!(csr.pending_interrupt(Privilege::Machine).is_none());
+    }
 }
