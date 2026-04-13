@@ -591,6 +591,18 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[3])? as u32);
         }
 
+        "SYSCALL" => {
+            if tokens.len() < 2 {
+                return Err(format!("SYSCALL requires 1 argument: SYSCALL num"));
+            }
+            bytecode.push(0x52);
+            bytecode.push(parse_imm(tokens[1], constants)?);
+        }
+
+        "RETK" => {
+            bytecode.push(0x53);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

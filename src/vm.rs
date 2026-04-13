@@ -9,6 +9,23 @@ pub const SCREEN_SIZE: usize = 256 * 256;
 pub const NUM_REGS: usize = 32;
 /// Maximum number of concurrently spawned child processes
 pub const MAX_PROCESSES: usize = 8;
+/// Syscall dispatch table base address in RAM.
+/// RAM[SYSCALL_TABLE + N] = handler address for syscall number N.
+pub const SYSCALL_TABLE: usize = 0xFE00;
+
+/// CPU privilege mode: Kernel (full access) or User (restricted).
+/// VM starts in Kernel mode for backward compatibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CpuMode {
+    Kernel,
+    User,
+}
+
+impl Default for CpuMode {
+    fn default() -> Self {
+        CpuMode::Kernel
+    }
+}
 
 /// A secondary execution context spawned by SPAWN.
 /// Shares RAM and screen with the primary process.
@@ -19,6 +36,8 @@ pub struct SpawnedProcess {
     pub halted: bool,
     /// Process ID assigned at spawn time (1-based)
     pub pid: u32,
+    /// CPU mode for this process
+    pub mode: CpuMode,
 }
 
 /// Magic bytes for save files
@@ -57,6 +76,10 @@ pub struct Vm {
     pub access_log: Vec<MemAccess>,
     /// Secondary execution contexts spawned by SPATIAL_SPAWN
     pub processes: Vec<SpawnedProcess>,
+    /// CPU privilege mode -- kernel can do anything, user is restricted
+    pub mode: CpuMode,
+    /// Kernel stack: saves (return_pc, saved_mode) on SYSCALL, restored by RETK
+    pub kernel_stack: Vec<(u32, CpuMode)>,
 }
 
 impl Vm {
@@ -73,6 +96,8 @@ impl Vm {
             beep: None,
             access_log: Vec::with_capacity(4096),
             processes: Vec::new(),
+            mode: CpuMode::Kernel,
+            kernel_stack: Vec::new(),
         }
     }
 
@@ -89,6 +114,8 @@ impl Vm {
         self.beep = None;
         self.access_log.clear();
         self.processes.clear();
+        self.mode = CpuMode::Kernel;
+        self.kernel_stack.clear();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -169,6 +196,11 @@ impl Vm {
                 if addr_reg < NUM_REGS && reg < NUM_REGS {
                     let addr = self.regs[addr_reg] as usize;
                     if addr < self.ram.len() {
+                        // User mode: block writes to hardware register region (0xFF00+)
+                        if self.mode == CpuMode::User && addr >= 0xFF00 {
+                            self.halted = true;
+                            return false;
+                        }
                         self.ram[addr] = self.regs[reg];
                         self.log_access(addr, MemAccessKind::Write);
                     }
@@ -534,6 +566,11 @@ impl Vm {
             // IKEY reg  -- read keyboard port (RAM[0xFFF]) into reg, then clear port
             0x48 => {
                 let rd = self.fetch() as usize;
+                // Blocked in User mode (hardware port access requires syscall)
+                if self.mode == CpuMode::User {
+                    self.halted = true;
+                    return false;
+                }
                 if rd < NUM_REGS {
                     self.regs[rd] = self.ram[0xFFF];
                     self.ram[0xFFF] = 0;
@@ -736,6 +773,7 @@ impl Vm {
                             regs: [0; NUM_REGS],
                             halted: false,
                             pid,
+                            mode: CpuMode::User, // spawned processes start in user mode
                         });
                         self.ram[0xFFA] = pid;
                     }
@@ -775,6 +813,41 @@ impl Vm {
                 }
             }
 
+            // SYSCALL num  -- trap into kernel mode
+            // Reads handler address from RAM[SYSCALL_TABLE + num]
+            // Saves return PC on kernel_stack, switches to Kernel, jumps to handler
+            0x52 => {
+                let num = self.fetch() as usize;
+                let table_idx = SYSCALL_TABLE + num;
+                if table_idx < self.ram.len() {
+                    let handler = self.ram[table_idx];
+                    if handler != 0 {
+                        // Save return address and current mode
+                        self.kernel_stack.push((self.pc, self.mode));
+                        self.mode = CpuMode::Kernel;
+                        self.pc = handler;
+                    } else {
+                        // No handler registered: set r0 = 0xFFFFFFFF (error)
+                        self.regs[0] = 0xFFFFFFFF;
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // RETK  -- return from kernel mode to user mode
+            // Pops return PC and saved mode from kernel_stack
+            0x53 => {
+                if let Some((ret_pc, saved_mode)) = self.kernel_stack.pop() {
+                    self.pc = ret_pc;
+                    self.mode = saved_mode;
+                } else {
+                    // Empty kernel stack: halt (protection fault)
+                    self.halted = true;
+                    return false;
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -795,6 +868,8 @@ impl Vm {
         let saved_pc = self.pc;
         let saved_regs = self.regs;
         let saved_halted = self.halted;
+        let saved_mode = self.mode;
+        let saved_kernel_stack = std::mem::take(&mut self.kernel_stack);
 
         for proc in procs.iter_mut() {
             if proc.halted { continue; }
@@ -803,6 +878,8 @@ impl Vm {
             self.pc = proc.pc;
             self.regs = proc.regs;
             self.halted = false;
+            self.mode = proc.mode;
+            self.kernel_stack.clear();
 
             let still_running = self.step();
 
@@ -810,12 +887,15 @@ impl Vm {
             proc.pc = self.pc;
             proc.regs = self.regs;
             proc.halted = !still_running || self.halted;
+            proc.mode = self.mode;
         }
 
         // Restore main process state
         self.pc = saved_pc;
         self.regs = saved_regs;
         self.halted = saved_halted;
+        self.mode = saved_mode;
+        self.kernel_stack = saved_kernel_stack;
 
         // Merge back: append any grandchildren spawned during this round.
         // Halted processes are kept so callers can inspect their final state.
@@ -921,6 +1001,12 @@ impl Vm {
 
             0x60 => { let r = ram(a+1); (format!("PUSH {}", reg(r)), 2) }
             0x61 => { let r = ram(a+1); (format!("POP {}", reg(r)), 2) }
+            0x52 => {
+                let n = ram(a + 1);
+                (format!("SYSCALL {}", n), 2)
+            }
+            0x53 => ("RETK".into(), 1),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }
@@ -1094,6 +1180,8 @@ impl Vm {
             beep: None,
             access_log: Vec::with_capacity(4096),
             processes: Vec::new(),
+            mode: CpuMode::Kernel,
+            kernel_stack: Vec::new(),
         })
     }
 }

@@ -688,25 +688,30 @@ phases:
 
   - id: "phase-23"
     title: "Kernel Boundary (Syscall Mode)"
-    status: "todo"
+    status: "complete"
     goal: "Establish user mode vs kernel mode. Programs can't directly access hardware."
     priority: 11
     deliverables:
       - name: "CPU mode flag"
         description: "vm.mode: User/Kernel bit in VM state"
-        status: "todo"
+        status: "done"
+        acceptance_criteria_met: true
       - name: "SYSCALL opcode (0x52)"
         description: "Trap into kernel mode, dispatch by syscall number"
-        status: "todo"
+        status: "done"
+        acceptance_criteria_met: true
       - name: "RETK opcode (0x53)"
         description: "Return from kernel mode to user mode"
-        status: "todo"
+        status: "done"
+        acceptance_criteria_met: true
       - name: "Syscall dispatch table"
         description: "RAM region 0xFE00..0xFEFF mapping syscall numbers to kernel handlers"
-        status: "todo"
+        status: "done"
+        acceptance_criteria_met: true
       - name: "Restricted opcodes in user mode"
         description: "IKEY, hardware STORE blocked in user mode"
-        status: "todo"
+        status: "done"
+        acceptance_criteria_met: true
 
   - id: "phase-24"
     title: "Memory Protection"

@@ -1791,11 +1791,11 @@ fn test_active_process_count() {
     let mut vm = Vm::new();
     assert_eq!(vm.active_process_count(), 0);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0, regs: [0; 32], halted: false, pid: 1,
+        pc: 0, regs: [0; 32], halted: false, pid: 1, mode: geometry_os::vm::CpuMode::Kernel,
     });
     assert_eq!(vm.active_process_count(), 1);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0, regs: [0; 32], halted: true, pid: 2,
+        pc: 0, regs: [0; 32], halted: true, pid: 2, mode: geometry_os::vm::CpuMode::Kernel,
     });
     assert_eq!(vm.active_process_count(), 1);
 }
@@ -2039,4 +2039,319 @@ fn test_peek_bounce_bounces_off_walls() {
     // Ball must be within the playable area (inside the 4px border walls)
     assert!(ball_x >= 4 && ball_x <= 251, "ball x={} should be inside borders", ball_x);
     assert!(ball_y >= 4 && ball_y <= 251, "ball y={} should be inside borders", ball_y);
+}
+
+// ── PHASE 23: KERNEL BOUNDARY ──────────────────────────────────
+
+#[test]
+fn test_vm_starts_in_kernel_mode() {
+    let vm = Vm::new();
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel, "VM should start in Kernel mode");
+}
+
+#[test]
+fn test_cpu_mode_flag_user_and_kernel() {
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::User;
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::User);
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel);
+}
+
+#[test]
+fn test_syscall_assembles() {
+    let source = "SYSCALL 0\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    assert_eq!(asm.pixels[0], 0x52, "SYSCALL opcode should be 0x52");
+    assert_eq!(asm.pixels[1], 0, "syscall number should be 0");
+}
+
+#[test]
+fn test_retk_assembles() {
+    let source = "RETK\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    assert_eq!(asm.pixels[0], 0x53, "RETK opcode should be 0x53");
+}
+
+#[test]
+fn test_syscall_dispatches_to_handler() {
+    // Set up syscall table: syscall 0 -> handler at address 100
+    // SYSCALL 0 should jump to RAM[0xFE00] = 100
+    let mut vm = Vm::new();
+    vm.ram[0xFE00] = 100; // handler for syscall 0
+
+    // Write SYSCALL 0 at address 0
+    vm.ram[0] = 0x52; // SYSCALL
+    vm.ram[1] = 0;    // syscall number 0
+    vm.pc = 0;
+
+    vm.step(); // execute SYSCALL 0
+
+    assert_eq!(vm.pc, 100, "SYSCALL should jump to handler address");
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel, "SYSCALL should switch to Kernel mode");
+    assert_eq!(vm.kernel_stack.len(), 1, "SYSCALL should push to kernel stack");
+    assert_eq!(vm.kernel_stack[0].0, 2, "return PC should be 2 (after SYSCALL instruction)");
+}
+
+#[test]
+fn test_syscall_no_handler_returns_error() {
+    // Syscall 5 has no handler (RAM[0xFE05] = 0)
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x52; // SYSCALL
+    vm.ram[1] = 5;    // syscall number 5
+    vm.pc = 0;
+
+    vm.step(); // execute SYSCALL 5
+
+    // Should set r0 = 0xFFFFFFFF (error) and NOT jump
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "SYSCALL with no handler should set r0 to error");
+    assert_eq!(vm.pc, 2, "PC should advance past SYSCALL instruction");
+}
+
+#[test]
+fn test_retk_returns_to_user_mode() {
+    // Simulate a complete syscall -> handler -> RETK cycle
+    let mut vm = Vm::new();
+    vm.ram[0xFE00] = 50; // handler for syscall 0 at address 50
+
+    // At address 0: SYSCALL 0
+    vm.ram[0] = 0x52; // SYSCALL
+    vm.ram[1] = 0;    // syscall number 0
+
+    // At address 50 (handler): RETK
+    vm.ram[50] = 0x53; // RETK
+
+    vm.mode = geometry_os::vm::CpuMode::User;
+    vm.pc = 0;
+
+    vm.step(); // execute SYSCALL 0 -> jumps to 50, saves return PC=2, saves mode=User
+    assert_eq!(vm.pc, 50);
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel);
+
+    vm.step(); // execute RETK -> returns to PC=2, restores User mode
+    assert_eq!(vm.pc, 2, "RETK should restore return PC");
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::User, "RETK should restore User mode");
+    assert_eq!(vm.kernel_stack.len(), 0, "RETK should pop from kernel stack");
+}
+
+#[test]
+fn test_retk_empty_stack_halts() {
+    // RETK with empty kernel stack should halt (protection fault)
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x53; // RETK with no saved state
+    vm.pc = 0;
+
+    let result = vm.step();
+    assert!(!result, "RETK with empty stack should return false");
+    assert!(vm.halted, "RETK with empty stack should halt the VM");
+}
+
+#[test]
+fn test_user_mode_store_to_hardware_region_halts() {
+    // User mode STORE to address >= 0xFF00 should halt
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::User;
+
+    // LDI r0, 0xFFF0  -- address in hardware region
+    vm.ram[0] = 0x10; vm.ram[1] = 0; vm.ram[2] = 0xFFF0;
+    // LDI r1, 42      -- value to store
+    vm.ram[3] = 0x10; vm.ram[4] = 1; vm.ram[5] = 42;
+    // STORE r0, r1    -- attempt to write to hardware region
+    vm.ram[6] = 0x12; vm.ram[7] = 0; vm.ram[8] = 1;
+    vm.pc = 0;
+
+    // Run LDI r0
+    vm.step();
+    // Run LDI r1
+    vm.step();
+    // Run STORE (should halt in user mode)
+    let result = vm.step();
+    assert!(!result, "STORE to hardware region in user mode should fail");
+    assert!(vm.halted, "STORE to hardware region in user mode should halt");
+}
+
+#[test]
+fn test_kernel_mode_store_to_hardware_region_works() {
+    // Kernel mode can write to hardware region
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+
+    // LDI r0, 0xFFF0
+    vm.ram[0] = 0x10; vm.ram[1] = 0; vm.ram[2] = 0xFFF0;
+    // LDI r1, 42
+    vm.ram[3] = 0x10; vm.ram[4] = 1; vm.ram[5] = 42;
+    // STORE r0, r1
+    vm.ram[6] = 0x12; vm.ram[7] = 0; vm.ram[8] = 1;
+    // HALT
+    vm.ram[9] = 0x00;
+    vm.pc = 0;
+
+    for _ in 0..10 { if !vm.step() { break; } }
+    assert!(vm.halted, "VM should halt after STORE + HALT");
+    assert_eq!(vm.ram[0xFFF0], 42, "Kernel mode should write to hardware region");
+}
+
+#[test]
+fn test_user_mode_store_to_normal_ram_allowed() {
+    // STORE to regular RAM in user mode should work fine
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x10; // LDI r1, 100
+    vm.ram[1] = 1;
+    vm.ram[2] = 100;
+    vm.ram[3] = 0x10; // LDI r2, 42
+    vm.ram[4] = 2;
+    vm.ram[5] = 42;
+    vm.ram[6] = 0x12; // STORE r1, r2
+    vm.ram[7] = 1;
+    vm.ram[8] = 2;
+    vm.ram[9] = 0x00; // HALT
+    vm.pc = 0;
+    vm.mode = geometry_os::vm::CpuMode::User;
+
+    for _ in 0..100 {
+        if !vm.step() { break; }
+    }
+    assert!(vm.halted, "VM should halt normally");
+    assert_eq!(vm.ram[100], 42, "regular RAM write should work in user mode");
+}
+
+#[test]
+fn test_user_mode_ikey_halts() {
+    // User mode IKEY should halt
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::User;
+    vm.ram[0xFFF] = 65; // keyboard has a key
+
+    // IKEY r0
+    vm.ram[0] = 0x48; vm.ram[1] = 0;
+    vm.pc = 0;
+
+    let result = vm.step();
+    assert!(!result, "IKEY in user mode should fail");
+    assert!(vm.halted, "IKEY in user mode should halt");
+    assert_eq!(vm.regs[0], 0, "IKEY should not have read the key in user mode");
+}
+
+#[test]
+fn test_kernel_mode_ikey_works() {
+    // Kernel mode IKEY should work normally
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+    vm.ram[0xFFF] = 65;
+
+    // IKEY r0
+    vm.ram[0] = 0x48; vm.ram[1] = 0;
+    vm.pc = 0;
+
+    vm.step();
+    assert_eq!(vm.regs[0], 65, "Kernel mode IKEY should read key");
+    assert_eq!(vm.ram[0xFFF], 0, "Kernel mode IKEY should clear port");
+}
+
+#[test]
+fn test_nested_syscalls() {
+    // SYSCALL from kernel mode -> handler -> SYSCALL again -> RETK -> RETK
+    let mut vm = Vm::new();
+    // Syscall 0 -> address 10
+    vm.ram[0xFE00] = 10;
+    // Syscall 1 -> address 20
+    vm.ram[0xFE01] = 20;
+
+    // Address 0: SYSCALL 0 (in kernel mode, should still work)
+    vm.ram[0] = 0x52;
+    vm.ram[1] = 0;
+    // Address 2: HALT (where outer RETK returns to)
+    vm.ram[2] = 0x00;
+
+    // Address 10: LDI r0, 10; SYSCALL 1; RETK
+    vm.ram[10] = 0x10; vm.ram[11] = 0; vm.ram[12] = 10; // LDI r0, 10
+    vm.ram[13] = 0x52; vm.ram[14] = 1; // SYSCALL 1
+    vm.ram[15] = 0x53; // RETK
+
+    // Address 20: LDI r0, 20; RETK
+    vm.ram[20] = 0x10; vm.ram[21] = 0; vm.ram[22] = 20; // LDI r0, 20
+    vm.ram[23] = 0x53; // RETK
+
+    vm.pc = 0;
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+
+    for _ in 0..100 {
+        if !vm.step() { break; }
+    }
+    assert!(vm.halted, "VM should halt");
+    assert_eq!(vm.regs[0], 20, "r0 should be 20 (innermost handler sets r0, no register save/restore)");
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel, "should return to kernel mode");
+    assert_eq!(vm.pc, 3, "should end at instruction after outer SYSCALL");
+}
+
+#[test]
+fn test_spawned_process_inherits_user_mode() {
+    // SPAWN creates process in user mode
+    let source = "
+    LDI r1, 100
+    SPAWN r1
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    vm.pc = 0;
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+
+    for _ in 0..100 {
+        if !vm.step() { break; }
+    }
+    assert!(vm.processes.len() > 0, "should have spawned a process");
+    assert_eq!(vm.processes[0].mode, geometry_os::vm::CpuMode::User,
+        "spawned process should be in user mode");
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel,
+        "parent should stay in kernel mode");
+}
+
+#[test]
+fn test_syscall_preserves_mode_for_nested_calls() {
+    // User mode -> SYSCALL -> kernel mode -> RETK -> back to user mode
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::User;
+
+    // Syscall 0 handler at address 200
+    vm.ram[0xFE00] = 200;
+
+    // At 0: SYSCALL 0
+    vm.ram[0] = 0x52; vm.ram[1] = 0;
+    // At 2: LDI r1, 42 (after return from syscall)
+    vm.ram[2] = 0x10; vm.ram[3] = 1; vm.ram[4] = 42;
+    // At 5: HALT
+    vm.ram[5] = 0x00;
+
+    // At 200 (handler): RETK
+    vm.ram[200] = 0x53;
+
+    vm.pc = 0;
+
+    // SYSCALL 0 -> jumps to 200, saves (PC=2, User)
+    vm.step();
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel);
+    assert_eq!(vm.pc, 200);
+
+    // RETK -> returns to PC=2, restores User
+    vm.step();
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::User);
+    assert_eq!(vm.pc, 2);
+
+    // LDI r1, 42 should work in user mode (LDI is not restricted)
+    vm.step();
+    assert_eq!(vm.regs[1], 42, "LDI should work after returning from syscall");
+}
+
+#[test]
+fn test_reset_clears_kernel_state() {
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::User;
+    vm.kernel_stack.push((100, geometry_os::vm::CpuMode::User));
+    vm.reset();
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel, "reset should restore Kernel mode");
+    assert!(vm.kernel_stack.is_empty(), "reset should clear kernel stack");
 }

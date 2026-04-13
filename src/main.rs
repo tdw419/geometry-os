@@ -1110,6 +1110,8 @@ const HERMES_SYSTEM_PROMPT: &str = r#"You are an agent inside the Geometry OS te
 - TEXT xr,yr,ar      Render text (0x44)
 - CMP rd, rs         Compare, sets r0 (0x50)
 - PEEK rx,ry,rd      Read screen pixel (0x4F)
+- SYSCALL num        Trap into kernel mode (0x52)
+- RETK               Return from kernel to user mode (0x53)
 - HALT (0x00), NOP (0x01)
 
 ## Response format
@@ -3036,6 +3038,8 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         beep: None,
         access_log: Vec::new(),
         processes: Vec::new(),
+        mode: vm::CpuMode::Kernel,
+        kernel_stack: Vec::new(),
     };
 
 
