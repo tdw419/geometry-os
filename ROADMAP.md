@@ -221,6 +221,21 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 
 ---
 
+## Priority Order for Automated Development
+
+- [ ] Phase 23: Kernel Boundary -- CPU mode flag, SYSCALL opcode (0x52), RETK opcode (0x53), syscall dispatch table, restricted opcodes in user mode
+- [ ] Phase 24: Memory Protection -- page tables, address space per process, SEGFAULT on illegal access
+- [ ] Phase 25: Filesystem -- VFS layer, OPEN/READ/WRITE/CLOSE/SEEK syscalls, LS syscall, per-process fd table, cat.asm
+- [ ] Phase 26: Preemptive Scheduler -- timer interrupt, priority levels, yield/sleep syscalls
+- [ ] Phase 27: IPC -- PIPE syscall, MSGSND/MSGRCV syscalls, blocking I/O
+- [ ] Phase 28: Device Drivers -- device file convention, IOCTL syscall, screen/keyboard/audio/net drivers
+- [ ] Phase 29: Shell -- shell.asm, pipe operator, redirection, built-in commands (ls, cd, cat, echo, ps, kill, help)
+- [ ] Phase 30: Boot Sequence -- boot ROM, init process (PID 1), graceful shutdown
+- [ ] Phase 31: Standard Library -- lib/stdlib.asm, lib/math.asm, heap allocator, linking convention
+- [ ] Phase 32: Signals & Lifecycle -- SIGNAL syscall, signal handlers, EXIT/WAIT syscalls, zombie cleanup
+
+---
+
 ## Design Principles
 
 - **Pixels are the truth.** Everything visual should be expressible as pixel operations. The screen isn't an afterthought -- it's the primary interface.
