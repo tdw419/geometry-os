@@ -4,7 +4,7 @@
 // and verifies the output (screen pixels, register values, etc.)
 
 use geometry_os::assembler::assemble;
-use geometry_os::vm::Vm;
+use geometry_os::vm::{Vm, CpuMode, SYSCALL_TABLE, HW_REGS_START};
 
 /// Helper: assemble a .asm file and run it in the VM
 fn compile_run(asm_path: &str) -> Vm {
@@ -2039,4 +2039,437 @@ fn test_peek_bounce_bounces_off_walls() {
     // Ball must be within the playable area (inside the 4px border walls)
     assert!(ball_x >= 4 && ball_x <= 251, "ball x={} should be inside borders", ball_x);
     assert!(ball_y >= 4 && ball_y <= 251, "ball y={} should be inside borders", ball_y);
+}
+
+
+// == Phase 23: Kernel Boundary Tests ==
+
+#[test]
+fn test_vm_starts_in_kernel_mode() {
+    let vm = Vm::new();
+    assert_eq!(vm.cpu_mode, CpuMode::Kernel, "VM should start in Kernel mode (backward compatible)");
+}
+
+#[test]
+fn test_vm_reset_returns_to_kernel_mode() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.syscall_return_pc = 42;
+    vm.reset();
+    assert_eq!(vm.cpu_mode, CpuMode::Kernel, "reset() should restore Kernel mode");
+    assert_eq!(vm.syscall_return_pc, 0, "reset() should clear syscall_return_pc");
+}
+
+#[test]
+fn test_syscall_assembles() {
+    let source = "SYSCALL 1\nHALT";
+    let result = assemble(source, 0);
+    assert!(result.is_ok(), "SYSCALL should assemble");
+    let pixels = &result.unwrap().pixels;
+    assert_eq!(pixels[0], 0x52, "SYSCALL opcode should be 0x52");
+    assert_eq!(pixels[1], 1, "SYSCALL argument should be the syscall number");
+}
+
+#[test]
+fn test_retk_assembles() {
+    let source = "RETK\nHALT";
+    let result = assemble(source, 0);
+    assert!(result.is_ok(), "RETK should assemble");
+    let pixels = &result.unwrap().pixels;
+    assert_eq!(pixels[0], 0x53, "RETK opcode should be 0x53");
+}
+
+#[test]
+fn test_syscall_dispatches_to_handler() {
+    let mut vm = Vm::new();
+    vm.ram[SYSCALL_TABLE] = 100;
+    vm.ram[0] = 0x52;
+    vm.ram[1] = 0;
+    vm.ram[2] = 0x00;
+    vm.ram[100] = 0x00;
+    vm.pc = 0;
+    vm.cpu_mode = CpuMode::User;
+
+    vm.step();
+
+    assert_eq!(vm.cpu_mode, CpuMode::Kernel, "SYSCALL should switch to Kernel mode");
+    assert_eq!(vm.pc, 100, "SYSCALL should jump to handler address");
+    assert_eq!(vm.syscall_return_pc, 2, "SYSCALL should save return PC");
+}
+
+#[test]
+fn test_retk_returns_to_user_mode() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::Kernel;
+    vm.syscall_return_pc = 50;
+    vm.ram[0] = 0x53;
+    vm.pc = 0;
+
+    vm.step();
+
+    assert_eq!(vm.cpu_mode, CpuMode::User, "RETK should switch to User mode");
+    assert_eq!(vm.pc, 50, "RETK should jump to saved return PC");
+}
+
+#[test]
+fn test_syscall_retk_roundtrip() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.ram[SYSCALL_TABLE + 5] = 200;
+    vm.ram[0] = 0x52;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x00;
+    vm.ram[200] = 0x53;
+    vm.pc = 0;
+
+    vm.step();
+    assert_eq!(vm.cpu_mode, CpuMode::Kernel);
+    assert_eq!(vm.pc, 200);
+
+    vm.step();
+    assert_eq!(vm.cpu_mode, CpuMode::User);
+    assert_eq!(vm.pc, 2);
+}
+
+#[test]
+fn test_syscall_unregistered_returns_error() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.ram[SYSCALL_TABLE + 10] = 0;
+    vm.ram[0] = 0x52;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "Unregistered syscall should return error in r0");
+    assert_eq!(vm.cpu_mode, CpuMode::User, "Should stay in user mode");
+    assert_eq!(vm.pc, 2, "Should continue to next instruction");
+}
+
+#[test]
+fn test_syscall_out_of_bounds_returns_error() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.ram[0] = 0x52;
+    vm.ram[1] = 300;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "Out-of-bounds syscall should return error");
+    assert_eq!(vm.cpu_mode, CpuMode::User);
+}
+
+#[test]
+fn test_ikey_blocked_in_user_mode() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.ram[0xFFF] = 65;
+    vm.ram[0] = 0x48;
+    vm.ram[1] = 1;
+    vm.pc = 0;
+
+    vm.step();
+
+    assert!(vm.halted, "IKEY in user mode should cause protection fault");
+    assert_eq!(vm.regs[1], 0, "Should NOT read the key");
+}
+
+#[test]
+fn test_ikey_allowed_in_kernel_mode() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::Kernel;
+    vm.ram[0xFFF] = 65;
+    vm.ram[0] = 0x48;
+    vm.ram[1] = 1;
+    vm.pc = 0;
+
+    vm.step();
+
+    assert!(!vm.halted, "IKEY in kernel mode should not halt");
+    assert_eq!(vm.regs[1], 65, "Should read the key");
+}
+
+#[test]
+fn test_store_to_hw_regs_blocked_in_user_mode() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.regs[0] = 0xFFA;
+    vm.regs[1] = 42;
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 0;
+    vm.ram[2] = 1;
+    vm.pc = 0;
+
+    vm.step();
+
+    assert!(vm.halted, "STORE to HW regs in user mode should cause protection fault");
+    assert_ne!(vm.ram[0xFFA], 42, "Should NOT write");
+}
+
+#[test]
+fn test_store_to_normal_ram_allowed_in_user_mode() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.regs[0] = 100;
+    vm.regs[1] = 42;
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 0;
+    vm.ram[2] = 1;
+    vm.pc = 0;
+
+    vm.step();
+
+    assert!(!vm.halted, "STORE to normal RAM in user mode should work");
+    assert_eq!(vm.ram[100], 42);
+}
+
+#[test]
+fn test_store_to_hw_regs_allowed_in_kernel_mode() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::Kernel;
+    vm.regs[0] = 0xFFA;
+    vm.regs[1] = 42;
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 0;
+    vm.ram[2] = 1;
+    vm.pc = 0;
+
+    vm.step();
+
+    assert!(!vm.halted, "STORE to HW regs in kernel mode should work");
+    assert_eq!(vm.ram[0xFFA], 42);
+}
+
+#[test]
+fn test_syscall_handler_can_use_restricted_opcodes() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.ram[0xFFF] = 72;
+    vm.ram[SYSCALL_TABLE] = 100;
+    vm.ram[0] = 0x52;
+    vm.ram[1] = 0;
+    vm.ram[2] = 0x00;
+    vm.ram[100] = 0x48;
+    vm.ram[101] = 1;
+    vm.ram[102] = 0x53;
+    vm.pc = 0;
+
+    vm.step(); // SYSCALL -> kernel
+    assert_eq!(vm.cpu_mode, CpuMode::Kernel);
+
+    vm.step(); // IKEY r1 (allowed in kernel)
+    assert_eq!(vm.regs[1], 72, "Handler should read keyboard");
+    assert_eq!(vm.ram[0xFFF], 0, "IKEY should clear port");
+
+    vm.step(); // RETK -> user
+    assert_eq!(vm.cpu_mode, CpuMode::User);
+    assert_eq!(vm.pc, 2);
+}
+
+#[test]
+fn test_syscall_passes_arguments_via_registers() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.regs[1] = 100;
+    vm.regs[2] = 200;
+    vm.regs[3] = 300;
+    vm.ram[SYSCALL_TABLE + 1] = 50;
+    vm.ram[0] = 0x52;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00;
+    vm.ram[50] = 0x20; vm.ram[51] = 0; vm.ram[52] = 1; // ADD r0, r1
+    vm.ram[53] = 0x20; vm.ram[54] = 0; vm.ram[55] = 2; // ADD r0, r2
+    vm.ram[56] = 0x20; vm.ram[57] = 0; vm.ram[58] = 3; // ADD r0, r3
+    vm.ram[59] = 0x53; // RETK
+    vm.pc = 0;
+
+    for _ in 0..20 {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.regs[0], 600, "r0 = 100+200+300");
+    assert_eq!(vm.cpu_mode, CpuMode::User);
+}
+
+#[test]
+fn test_disassemble_syscall_and_retk() {
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x52;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x53;
+
+    let (mnemonic, len) = vm.disassemble_at(0);
+    assert_eq!(len, 2, "SYSCALL should be 2 words");
+    assert!(mnemonic.contains("SYSCALL"), "got: {}", mnemonic);
+
+    let (mnemonic2, len2) = vm.disassemble_at(2);
+    assert_eq!(len2, 1, "RETK should be 1 word");
+    assert!(mnemonic2.contains("RETK"), "got: {}", mnemonic2);
+}
+
+// ── SYSCALL / RETK / CPU MODE ──────────────────────────────────
+
+#[test]
+fn test_vm_starts_in_kernel_mode() {
+    let vm = Vm::new();
+    assert_eq!(vm.cpu_mode, CpuMode::Kernel, "VM should start in Kernel mode");
+}
+
+#[test]
+fn test_syscall_assembles() {
+    let source = "SYSCALL 0\nSYSCALL 5\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    assert_eq!(asm.pixels[0], 0x52, "SYSCALL opcode");
+    assert_eq!(asm.pixels[1], 0, "syscall number 0");
+    assert_eq!(asm.pixels[2], 0x52, "SYSCALL opcode");
+    assert_eq!(asm.pixels[3], 5, "syscall number 5");
+    assert_eq!(asm.pixels[4], 0x00, "HALT opcode");
+}
+
+#[test]
+fn test_retk_assembles() {
+    let source = "RETK\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    assert_eq!(asm.pixels[0], 0x53, "RETK opcode");
+    assert_eq!(asm.pixels[1], 0x00, "HALT opcode");
+}
+
+#[test]
+fn test_syscall_unregistered_returns_error() {
+    let source = "SYSCALL 42\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "unregistered syscall should set r0 = error");
+    assert_eq!(vm.cpu_mode, CpuMode::Kernel, "mode should remain kernel");
+}
+
+#[test]
+fn test_syscall_dispatches_to_handler() {
+    let mut vm = Vm::new();
+    vm.ram[SYSCALL_TABLE + 1] = 20; // handler at addr 20
+    // Code at 0: SYSCALL 1, LDI r2, 0xBAD, HALT
+    vm.ram[0] = 0x52; vm.ram[1] = 1;
+    vm.ram[2] = 0x10; vm.ram[3] = 2; vm.ram[4] = 0xBAD;
+    vm.ram[5] = 0x00; // HALT
+    // Handler at 20: LDI r0, 99, RETK
+    vm.ram[20] = 0x10; vm.ram[21] = 0; vm.ram[22] = 99;
+    vm.ram[23] = 0x53; // RETK
+    vm.pc = 0;
+    vm.step(); // SYSCALL 1
+    assert_eq!(vm.cpu_mode, CpuMode::Kernel, "should be in kernel after SYSCALL");
+    assert_eq!(vm.pc, 20, "should jump to handler");
+    vm.step(); // LDI r0, 99
+    assert_eq!(vm.regs[0], 99, "handler should set r0=99");
+    vm.step(); // RETK
+    assert_eq!(vm.cpu_mode, CpuMode::User, "should be in user mode after RETK");
+    assert_eq!(vm.pc, 2, "should return to instruction after SYSCALL");
+    vm.step(); // LDI r2, 0xBAD
+    assert_eq!(vm.regs[2], 0xBAD, "LDI should work in user mode");
+    vm.step(); // HALT
+    assert!(vm.halted);
+}
+
+#[test]
+fn test_retk_returns_to_saved_pc() {
+    let mut vm = Vm::new();
+    vm.syscall_return_pc = 50;
+    vm.cpu_mode = CpuMode::Kernel;
+    vm.ram[200] = 0x53;
+    vm.pc = 200;
+    vm.step();
+    assert_eq!(vm.cpu_mode, CpuMode::User, "RETK should switch to user mode");
+    assert_eq!(vm.pc, 50, "RETK should jump to saved return PC");
+}
+
+#[test]
+fn test_ikey_blocked_in_user_mode() {
+    let source = "IKEY r1\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    vm.cpu_mode = CpuMode::User;
+    vm.ram[0xFFF] = 65;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted, "IKEY in user mode should cause protection fault halt");
+    assert_eq!(vm.regs[1], 0, "IKEY should not have executed in user mode");
+}
+
+#[test]
+fn test_store_to_hw_regs_blocked_in_user_mode() {
+    let source = "LDI r1, 0xFF01\nLDI r2, 42\nSTORE r1, r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    vm.cpu_mode = CpuMode::User;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted, "STORE to hw regs in user mode should fault");
+    assert_eq!(vm.ram[0xFF01], 0, "STORE should not have written");
+}
+
+#[test]
+fn test_store_to_normal_ram_ok_in_user_mode() {
+    let source = "LDI r1, 0x0200\nLDI r2, 42\nSTORE r1, r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    vm.cpu_mode = CpuMode::User;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.ram[0x0200], 42, "STORE to normal RAM should work in user mode");
+}
+
+#[test]
+fn test_ikey_works_in_kernel_mode() {
+    let source = "IKEY r1\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    vm.cpu_mode = CpuMode::Kernel;
+    vm.ram[0xFFF] = 65;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[1], 65, "IKEY should work in kernel mode");
+    assert_eq!(vm.ram[0xFFF], 0, "IKEY should clear port");
+}
+
+#[test]
+fn test_disassemble_syscall() {
+    let mut vm = Vm::new();
+    vm.ram[500] = 0x52; vm.ram[501] = 7;
+    let (mnem, length) = vm.disassemble_at(500);
+    assert_eq!(mnem, "SYSCALL 7");
+    assert_eq!(length, 2);
+}
+
+#[test]
+fn test_disassemble_retk() {
+    let mut vm = Vm::new();
+    vm.ram[600] = 0x53;
+    let (mnem, length) = vm.disassemble_at(600);
+    assert_eq!(mnem, "RETK");
+    assert_eq!(length, 1);
+}
+
+#[test]
+fn test_syscall_table_constants() {
+    assert_eq!(SYSCALL_TABLE, 0xFE00);
+    assert_eq!(HW_REGS_START, 0xFF00);
+    assert_eq!(HW_REGS_START - SYSCALL_TABLE, 256, "256 syscall slots");
+}
+
+#[test]
+fn test_vm_reset_clears_cpu_mode() {
+    let mut vm = Vm::new();
+    vm.cpu_mode = CpuMode::User;
+    vm.syscall_return_pc = 999;
+    vm.reset();
+    assert_eq!(vm.cpu_mode, CpuMode::Kernel);
+    assert_eq!(vm.syscall_return_pc, 0);
 }
