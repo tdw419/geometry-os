@@ -1360,7 +1360,7 @@ phases:
   - Non-blocking pipe reads may miss data on fast output -- buffer management
 - id: phase-34
   title: RISC-V RV32I Core
-  status: future
+  status: in_progress
   goal: Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
   priority: 40
   description: 'QEMU proved what works. Now rebuild it owned -- pure Rust, no subprocess,
@@ -1371,12 +1371,12 @@ phases:
   deliverables:
   - name: riscv/ module
     description: src/riscv/ with mod.rs, cpu.rs, memory.rs, decode.rs
-    status: todo
+    status: done
     scope_lines: 50
     tasks:
     - id: p34.d1.t1
       title: Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs
-      status: todo
+      status: done
       acceptance_criteria:
       - Files compile
       - mod.rs exports public structs
@@ -1387,12 +1387,12 @@ phases:
       - src/riscv/decode.rs
   - name: Register file
     description: x[0..32] (x0=zero), PC, 32-bit registers
-    status: todo
+    status: done
     scope_lines: 30
     tasks:
     - id: p34.d2.t1
       title: Define RiscvCpu struct with x[32], pc, privilege fields
-      status: todo
+      status: done
       acceptance_criteria:
       - 'RiscvCpu struct with x: [u32; 32], pc: u32, privilege: u8'
       - x[0] always reads as 0 (enforced on write)
@@ -1401,12 +1401,12 @@ phases:
       - src/riscv/cpu.rs
   - name: Guest RAM
     description: Vec<u8> separate from host RAM, configurable size (default 128MB)
-    status: todo
+    status: done
     scope_lines: 60
     tasks:
     - id: p34.d3.t1
       title: Implement GuestMemory with read_byte/half/word and write_byte/half/word
-      status: todo
+      status: done
       acceptance_criteria:
       - 'GuestMemory with ram: Vec<u8>, ram_base: u64'
       - read_word at 0x80000000 reads first 4 bytes little-endian
@@ -1416,12 +1416,12 @@ phases:
       - src/riscv/memory.rs
   - name: Instruction decode
     description: Decode all RV32I opcodes from 32-bit instruction words
-    status: todo
+    status: done
     scope_lines: 200
     tasks:
     - id: p34.d4.t1
       title: Implement decode() returning Operation enum for all RV32I opcodes
-      status: todo
+      status: done
       acceptance_criteria:
       - 'R-type: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND'
       - 'I-type: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI'
