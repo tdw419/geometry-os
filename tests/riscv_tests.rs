@@ -1186,6 +1186,265 @@ fn test_rv32_privilege_u_ecall_sret_roundtrip() {
     assert_eq!(vm.cpu.privilege, geometry_os::riscv::cpu::Privilege::User);
 }
 
+/// Test full privilege chain: U -> ECALL -> S -> ECALL -> M -> MRET -> S -> SRET -> U
+///
+/// Memory layout:
+///   0x80000000: ECALL (U-mode entry, traps to S via medeleg)
+///   0x80000004: addi x1, x0, 42 (U-mode resume point)
+///   0x80000008: EBREAK
+///
+///   0x80000200: S-mode handler
+///     ECALL (S->M)
+///     csrrs x5, x0, SEPC  (read sepc)
+///     addi x5, x5, 4      (sepc += 4 to skip original ECALL)
+///     csrrw x0, x5, SEPC  (write back)
+///     SRET                 (return to U at sepc+4)
+///
+///   0x80000400: M-mode handler
+///     csrrs x6, x0, MEPC  (read mepc)
+///     addi x6, x6, 4      (mepc += 4 to skip S-mode ECALL)
+///     csrrw x0, x6, MEPC  (write back)
+///     MRET                 (return to S at mepc+4)
+#[test]
+fn test_rv32_privilege_full_chain_u_s_m_s_u() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+    use geometry_os::riscv::cpu::Privilege;
+
+    // ---- U-mode code at base ----
+    vm.bus.write_word(base, ecall()).unwrap();              // 0x00: ECALL (U->S)
+    vm.bus.write_word(base + 4, addi(1, 0, 42)).unwrap();  // 0x04: x1 = 42 (after return)
+    vm.bus.write_word(base + 8, ebreak()).unwrap();         // 0x08: stop
+
+    // ---- S-mode handler at base+0x200 ----
+    vm.bus.write_word(base + 0x200, ecall()).unwrap();               // ECALL (S->M)
+    vm.bus.write_word(base + 0x204, csrrs(5, 0, CSR_SEPC)).unwrap(); // x5 = sepc
+    vm.bus.write_word(base + 0x208, addi(5, 5, 4)).unwrap();         // x5 = sepc + 4
+    vm.bus.write_word(base + 0x20C, csrrw(0, 5, CSR_SEPC)).unwrap(); // sepc = x5
+    vm.bus.write_word(base + 0x210, sret()).unwrap();                 // return to U
+
+    // ---- M-mode handler at base+0x400 ----
+    vm.bus.write_word(base + 0x400, csrrs(6, 0, CSR_MEPC)).unwrap(); // x6 = mepc
+    vm.bus.write_word(base + 0x404, addi(6, 6, 4)).unwrap();         // x6 = mepc + 4
+    vm.bus.write_word(base + 0x408, csrrw(0, 6, CSR_MEPC)).unwrap(); // mepc = x6
+    vm.bus.write_word(base + 0x40C, mret()).unwrap();                 // return to S
+
+    // ---- CPU setup ----
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = Privilege::User;
+    vm.cpu.csr.medeleg = 1 << 8;  // Delegate ECALL-U to S
+    vm.cpu.csr.stvec = (base as u32) + 0x200;
+    vm.cpu.csr.mtvec = (base as u32) + 0x400;
+
+    // Step 1: U-mode ECALL -> traps to S (delegated via medeleg)
+    let r = vm.cpu.step(&mut vm.bus);
+    assert_eq!(r, StepResult::Ok);
+    assert_eq!(vm.cpu.privilege, Privilege::Supervisor, "after U ECALL -> S");
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x200, "S handler entry");
+    assert_eq!(vm.cpu.csr.scause, 8, "scause = ECALL-U (8)");
+    assert_eq!(vm.cpu.csr.sepc, base as u32, "sepc = ECALL PC");
+    // SPP should be 0 (came from U), SPIE should hold old SIE
+    let spp = (vm.cpu.csr.mstatus >> MSTATUS_SPP_BIT) & 1;
+    assert_eq!(spp, 0, "SPP = 0 (came from U)");
+
+    // Step 2: S-mode ECALL -> traps to M (not delegated)
+    let r = vm.cpu.step(&mut vm.bus);
+    assert_eq!(r, StepResult::Ok);
+    assert_eq!(vm.cpu.privilege, Privilege::Machine, "after S ECALL -> M");
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x400, "M handler entry");
+    assert_eq!(vm.cpu.csr.mcause, 9, "mcause = ECALL-S (9)");
+    assert_eq!(vm.cpu.csr.mepc, (base as u32) + 0x200, "mepc = S-mode ECALL PC");
+    // MPP should be 1 (came from S)
+    let mpp = (vm.cpu.csr.mstatus >> MSTATUS_MPP_LSB_BIT) & 0x3;
+    assert_eq!(mpp, 1, "MPP = 1 (came from S)");
+
+    // Step 3: M-mode reads mepc, adds 4, writes back, then MRET -> returns to S
+    vm.cpu.step(&mut vm.bus); // csrrs x6, x0, mepc
+    vm.cpu.step(&mut vm.bus); // addi x6, x6, 4
+    vm.cpu.step(&mut vm.bus); // csrrw x0, x6, mepc
+    let r = vm.cpu.step(&mut vm.bus); // MRET
+    assert_eq!(r, StepResult::Ok);
+    assert_eq!(vm.cpu.privilege, Privilege::Supervisor, "after MRET -> S");
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x204, "S resumes after its ECALL");
+    // Verify mepc was advanced
+    assert_eq!(vm.cpu.csr.mepc, (base as u32) + 0x204, "mepc advanced past S ECALL");
+
+    // Step 4: S-mode advances sepc and SRET -> returns to U
+    vm.cpu.step(&mut vm.bus); // csrrs x5, x0, sepc
+    assert_eq!(vm.cpu.x[5], base as u32, "sepc should be original ECALL PC");
+    vm.cpu.step(&mut vm.bus); // addi x5, x5, 4
+    vm.cpu.step(&mut vm.bus); // csrrw x0, x5, sepc
+    let r = vm.cpu.step(&mut vm.bus); // SRET
+    assert_eq!(r, StepResult::Ok);
+    assert_eq!(vm.cpu.privilege, Privilege::User, "after SRET -> U");
+    assert_eq!(vm.cpu.pc, (base as u32) + 4, "U resumes at addi");
+
+    // Step 5: U-mode executes addi x1, x0, 42
+    vm.cpu.step(&mut vm.bus);
+    assert_eq!(vm.cpu.x[1], 42, "U-mode code runs after full chain");
+
+    // Step 6: EBREAK stops
+    let r = vm.cpu.step(&mut vm.bus);
+    assert_eq!(r, StepResult::Ebreak, "should stop at EBREAK");
+}
+
+/// Test mstatus state preservation across U->S ECALL trap.
+/// Verifies SPP, SPIE, SIE bits are set correctly.
+#[test]
+fn test_rv32_privilege_ecall_u_to_s_mstatus() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+    use geometry_os::riscv::cpu::Privilege;
+
+    vm.bus.write_word(base, ecall()).unwrap();
+    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = Privilege::User;
+    vm.cpu.csr.medeleg = 1 << 8;
+    vm.cpu.csr.stvec = (base as u32) + 0x200;
+
+    // Set SIE=1 before trap so we can verify it saves to SPIE
+    vm.cpu.csr.mstatus = 1 << MSTATUS_SIE_BIT;
+
+    vm.cpu.step(&mut vm.bus);
+
+    // SPP = 0 (came from U)
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_SPP_BIT) & 1, 0,
+        "SPP should be 0 (came from U)");
+    // SPIE = old SIE (1)
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_SPIE_BIT) & 1, 1,
+        "SPIE should be old SIE (1)");
+    // SIE = 0 (disabled during trap)
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_SIE_BIT) & 1, 0,
+        "SIE should be 0 (disabled during trap handler)");
+}
+
+/// Test mstatus state preservation across S->M ECALL trap.
+/// Verifies MPP, MPIE, MIE bits are set correctly.
+#[test]
+fn test_rv32_privilege_ecall_s_to_m_mstatus() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+    use geometry_os::riscv::cpu::Privilege;
+
+    vm.bus.write_word(base, ecall()).unwrap();
+    vm.bus.write_word(base + 0x400, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = Privilege::Supervisor;
+    vm.cpu.csr.mtvec = (base as u32) + 0x400;
+
+    // Set MIE=1 before trap
+    vm.cpu.csr.mstatus = 1 << MSTATUS_MIE_BIT;
+
+    vm.cpu.step(&mut vm.bus);
+
+    // MPP = 01 (came from S)
+    let mpp = (vm.cpu.csr.mstatus >> MSTATUS_MPP_LSB_BIT) & 0x3;
+    assert_eq!(mpp, 1, "MPP should be 01 (came from S)");
+    // MPIE = old MIE (1)
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_MPIE_BIT) & 1, 1,
+        "MPIE should be old MIE (1)");
+    // MIE = 0 (disabled during trap)
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_MIE_BIT) & 1, 0,
+        "MIE should be 0 (disabled during trap handler)");
+}
+
+/// Test MRET restores mstatus: MIE from MPIE, MPP to privilege, MPIE=1.
+#[test]
+fn test_rv32_privilege_mret_mstatus_restore() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+    use geometry_os::riscv::cpu::Privilege;
+
+    vm.bus.write_word(base, mret()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = Privilege::Machine;
+    vm.cpu.csr.mepc = (base as u32) + 0x100;
+
+    // Simulate trap from S: MPP=S(01), MPIE=1, MIE=0
+    vm.cpu.csr.mstatus = 0;
+    vm.cpu.csr.mstatus |= (1u32 << MSTATUS_MPP_LSB_BIT); // MPP = S (01)
+    vm.cpu.csr.mstatus |= (1u32 << MSTATUS_MPIE_BIT);     // MPIE = 1
+    // MIE = 0 (cleared during trap)
+
+    vm.cpu.step(&mut vm.bus);
+
+    assert_eq!(vm.cpu.privilege, Privilege::Supervisor);
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x100);
+    // MIE restored from MPIE (1)
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_MIE_BIT) & 1, 1,
+        "MIE should be restored from MPIE");
+    // MPIE set to 1
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_MPIE_BIT) & 1, 1,
+        "MPIE should be 1 after MRET");
+    // MPP cleared to U (00)
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_MPP_LSB_BIT) & 0x3, 0,
+        "MPP should be 0 (U) after MRET");
+}
+
+/// Test SRET restores mstatus: SIE from SPIE, SPP to privilege, SPIE=1.
+#[test]
+fn test_rv32_privilege_sret_mstatus_restore() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+    use geometry_os::riscv::cpu::Privilege;
+
+    vm.bus.write_word(base, sret()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = Privilege::Supervisor;
+    vm.cpu.csr.sepc = (base as u32) + 0x100;
+
+    // Simulate trap from U: SPP=0 (U), SPIE=1, SIE=0
+    vm.cpu.csr.mstatus = 0;
+    vm.cpu.csr.mstatus |= (1u32 << MSTATUS_SPIE_BIT); // SPIE = 1
+    // SPP = 0 (U), SIE = 0
+
+    vm.cpu.step(&mut vm.bus);
+
+    assert_eq!(vm.cpu.privilege, Privilege::User);
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x100);
+    // SIE restored from SPIE (1)
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_SIE_BIT) & 1, 1,
+        "SIE should be restored from SPIE");
+    // SPIE set to 1
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_SPIE_BIT) & 1, 1,
+        "SPIE should be 1 after SRET");
+    // SPP cleared to 0 (U)
+    assert_eq!((vm.cpu.csr.mstatus >> MSTATUS_SPP_BIT) & 1, 0,
+        "SPP should be 0 (U) after SRET");
+}
+
+/// Test that ECALL from U without delegation goes directly to M-mode.
+#[test]
+fn test_rv32_privilege_ecall_u_to_m_no_delegation() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+    use geometry_os::riscv::cpu::Privilege;
+
+    vm.bus.write_word(base, ecall()).unwrap();
+    vm.bus.write_word(base + 0x400, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = Privilege::User;
+    vm.cpu.csr.mtvec = (base as u32) + 0x400;
+    // No medeleg: all exceptions go to M
+
+    vm.cpu.step(&mut vm.bus);
+
+    assert_eq!(vm.cpu.privilege, Privilege::Machine,
+        "ECALL from U should trap to M when not delegated");
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x400);
+    assert_eq!(vm.cpu.csr.mcause, 8, "mcause = ECALL-U (8)");
+    assert_eq!(vm.cpu.csr.mepc, base as u32);
+    // MPP should be 0 (came from U)
+    let mpp = (vm.cpu.csr.mstatus >> MSTATUS_MPP_LSB_BIT) & 0x3;
+    assert_eq!(mpp, 0, "MPP = 0 (came from U)");
+}
+
 /// Test timer interrupt delivery: set MTIP in MIP, enable MTIE in MIE,
 /// enable MIE in mstatus. Next step should deliver interrupt to mtvec.
 #[test]
