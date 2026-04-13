@@ -1795,12 +1795,16 @@ fn test_active_process_count() {
         pc: 0, regs: [0; 32], halted: false, pid: 1, mode: geometry_os::vm::CpuMode::Kernel,
         page_dir: None, segfaulted: false,
         priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
+                blocked: false,
+                msg_queue: Vec::new(),
     });
     assert_eq!(vm.active_process_count(), 1);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0, regs: [0; 32], halted: true, pid: 2, mode: geometry_os::vm::CpuMode::Kernel,
         page_dir: None, segfaulted: false,
         priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
+                blocked: false,
+                msg_queue: Vec::new(),
     });
     assert_eq!(vm.active_process_count(), 1);
 }
@@ -3067,6 +3071,8 @@ fn test_scheduler_basic_child_execution() {
         slice_remaining: 0,
         sleep_until: 0,
         yielded: false,
+                blocked: false,
+                msg_queue: Vec::new(),
     });
     for _ in 0..10 {
         vm.step_all_processes();
@@ -3104,6 +3110,7 @@ fn test_yield_forfeits_time_slice() {
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
     for _ in 0..100 {
         vm.step_all_processes();
@@ -3142,6 +3149,7 @@ fn test_sleep_skips_process_until_wake() {
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
     for _ in 0..20 {
         vm.step_all_processes();
@@ -3196,6 +3204,7 @@ fn test_priority_quantum_allocation() {
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 3, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
     // Process B: priority 0 (quantum = 100 * 1 = 100)
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -3203,6 +3212,7 @@ fn test_priority_quantum_allocation() {
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
 
     // Run one scheduling round to allocate quantums
@@ -3250,6 +3260,7 @@ fn test_setpriority_changes_priority() {
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
     for _ in 0..100 { vm.step_all_processes(); }
     assert_eq!(vm.processes[0].priority, 3, "priority should be upgraded to 3");
@@ -3268,6 +3279,7 @@ fn test_scheduler_tick_increments() {
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
     vm.step_all_processes();
     assert!(vm.sched_tick > initial_tick, "sched_tick should increment");
@@ -3293,6 +3305,7 @@ fn test_sleep_wakes_and_halts() {
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
     vm.step_all_processes(); // LDI r5, 5
     vm.step_all_processes(); // SLEEP r5
@@ -3334,18 +3347,21 @@ fn test_priority_execution_order() {
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 2, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x300, regs: [0; 32], halted: false, pid: 2,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x400, regs: [0; 32], halted: false, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
     });
     for _ in 0..50 {
         vm.step_all_processes();
@@ -3355,4 +3371,64 @@ fn test_priority_execution_order() {
     assert_eq!(vm.ram[0x1500], 3, "priority-2 process should have written PID 3");
     assert_eq!(vm.ram[0x1501], 2, "priority-1 process should have written PID 2");
     assert_eq!(vm.ram[0x1502], 1, "priority-0 process should have written PID 1");
+}
+
+#[test]
+fn test_priority_higher_gets_more_instructions() {
+    // Two processes with different priorities running counting loops.
+    // With round-based scheduling: priority 0 gets 100 instructions per round,
+    // priority 3 gets 800 instructions per round. Over 200 rounds the
+    // priority-3 process should execute significantly more instructions.
+    let source = "
+    .org 0x200
+    LDI r1, 0x1200
+    LOAD r2, r1
+    LDI r3, 1
+    ADD r2, r3
+    STORE r1, r2
+    JMP 0x200
+
+    .org 0x300
+    LDI r1, 0x1300
+    LOAD r2, r1
+    LDI r3, 1
+    ADD r2, r3
+    STORE r1, r2
+    JMP 0x300
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    // Process A: priority 3 (high) -- gets 800 instructions per round
+    vm.processes.push(geometry_os::vm::SpawnedProcess {
+        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
+        segfaulted: false, priority: 3, slice_remaining: 0,
+        sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
+    });
+    // Process B: priority 0 (low) -- gets 100 instructions per round
+    vm.processes.push(geometry_os::vm::SpawnedProcess {
+        pc: 0x300, regs: [0; 32], halted: false, pid: 2,
+        mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
+        segfaulted: false, priority: 0, slice_remaining: 0,
+        sleep_until: 0, yielded: false,
+        blocked: false, msg_queue: Vec::new(),
+    });
+    // Run enough rounds for priority-0 to exhaust twice (200 calls)
+    for _ in 0..200 {
+        vm.step_all_processes();
+    }
+    let count_a = vm.ram[0x1200];
+    let count_b = vm.ram[0x1300];
+    assert!(count_a > 0, "high-priority process should have run");
+    assert!(count_b > 0, "low-priority process should have run");
+    assert!(
+        count_a > count_b,
+        "high-priority (count={}, pri=3) should exceed low-priority (count={}, pri=0)",
+        count_a,
+        count_b
+    );
 }

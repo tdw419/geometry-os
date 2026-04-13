@@ -43,6 +43,95 @@ pub const PRIORITY_LEVELS: u8 = 4;
 /// Default base time slice length (in VM steps) for priority-1 processes.
 pub const DEFAULT_TIME_SLICE: u32 = 100;
 
+/// IPC constants (Phase 27: Inter-Process Communication).
+/// Pipe buffer size in u32 words.
+pub const PIPE_BUFFER_SIZE: usize = 256;
+/// Maximum number of pipes system-wide.
+pub const MAX_PIPES: usize = 16;
+/// Maximum messages per-process message queue.
+pub const MAX_MESSAGES: usize = 16;
+/// Message payload size in u32 words.
+pub const MSG_WORDS: usize = 4;
+
+/// A unidirectional pipe with a circular buffer.
+/// Created by PIPE syscall. Two fd slots are allocated: read_fd and write_fd.
+#[derive(Debug, Clone)]
+pub struct Pipe {
+    /// Circular buffer data
+    pub buffer: [u32; PIPE_BUFFER_SIZE],
+    /// Index of next read position
+    pub read_pos: usize,
+    /// Index of next write position
+    pub write_pos: usize,
+    /// Number of words currently in the buffer
+    pub count: usize,
+    /// PID of the process that has the read end open (0 = main)
+    pub read_pid: u32,
+    /// PID of the process that has the write end open (0 = main)
+    pub write_pid: u32,
+    /// Whether the pipe is still alive (false if write end closed)
+    pub alive: bool,
+}
+
+impl Pipe {
+    pub fn new(read_pid: u32, write_pid: u32) -> Self {
+        Pipe {
+            buffer: [0; PIPE_BUFFER_SIZE],
+            read_pos: 0,
+            write_pos: 0,
+            count: 0,
+            read_pid,
+            write_pid,
+            alive: true,
+        }
+    }
+
+    /// Write one word to the pipe. Returns true on success, false if full.
+    pub fn write_word(&mut self, val: u32) -> bool {
+        if self.count >= PIPE_BUFFER_SIZE {
+            return false;
+        }
+        self.buffer[self.write_pos] = val;
+        self.write_pos = (self.write_pos + 1) % PIPE_BUFFER_SIZE;
+        self.count += 1;
+        true
+    }
+
+    /// Read one word from the pipe. Returns Some(word) or None if empty.
+    pub fn read_word(&mut self) -> Option<u32> {
+        if self.count == 0 {
+            return None;
+        }
+        let val = self.buffer[self.read_pos];
+        self.read_pos = (self.read_pos + 1) % PIPE_BUFFER_SIZE;
+        self.count -= 1;
+        Some(val)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.count >= PIPE_BUFFER_SIZE
+    }
+}
+
+/// A fixed-size message sent between processes.
+#[derive(Debug, Clone, Copy)]
+pub struct Message {
+    /// Sender PID
+    pub sender: u32,
+    /// Payload: 4 u32 words
+    pub data: [u32; MSG_WORDS],
+}
+
+impl Message {
+    pub fn new(sender: u32, data: [u32; MSG_WORDS]) -> Self {
+        Message { sender, data }
+    }
+}
+
 /// A secondary execution context spawned by SPAWN.
 /// Shares RAM and screen with the primary process.
 #[derive(Debug, Clone)]
@@ -66,6 +155,11 @@ pub struct SpawnedProcess {
     pub sleep_until: u64,
     /// Set by YIELD opcode; scheduler checks mid-slice and preempts.
     pub yielded: bool,
+    /// True when process is blocked waiting for I/O (pipe read, message receive).
+    /// Scheduler skips blocked processes until I/O completes.
+    pub blocked: bool,
+    /// Per-process message queue (max MAX_MESSAGES entries).
+    pub msg_queue: Vec<Message>,
 }
 
 /// Magic bytes for save files
@@ -130,6 +224,16 @@ pub struct Vm {
     pub sleep_frames: u32,
     /// Per-step scheduler value: new priority requested by SETPRIORITY
     pub new_priority: u8,
+    /// System-wide pipe table (Phase 27: IPC)
+    pub pipes: Vec<Pipe>,
+    /// Per-step IPC flag: set by PIPE opcode to signal pipe creation
+    pub pipe_created: bool,
+    /// Per-step IPC value: sender PID for MSGSND
+    pub msg_sender: u32,
+    /// Per-step IPC value: message data for MSGSND
+    pub msg_data: [u32; MSG_WORDS],
+    /// Per-step IPC flag: MSGRCV requested
+    pub msg_recv_requested: bool,
 }
 
 impl Vm {
@@ -159,13 +263,22 @@ impl Vm {
             yielded: false,
             sleep_frames: 0,
             new_priority: 0,
+            pipes: Vec::new(),
+            pipe_created: false,
+            msg_sender: 0,
+            msg_data: [0; MSG_WORDS],
+            msg_recv_requested: false,
         }
     }
 
     #[allow(dead_code)]
     pub fn reset(&mut self) {
-        for r in self.ram.iter_mut() { *r = 0; }
-        for s in self.screen.iter_mut() { *s = 0; }
+        for r in self.ram.iter_mut() {
+            *r = 0;
+        }
+        for s in self.screen.iter_mut() {
+            *s = 0;
+        }
         self.regs = [0; NUM_REGS];
         self.pc = 0;
         self.halted = false;
@@ -181,6 +294,11 @@ impl Vm {
         self.current_page_dir = None;
         self.segfault_pid = 0;
         self.segfault = false;
+        self.pipes.clear();
+        self.pipe_created = false;
+        self.msg_sender = 0;
+        self.msg_data = [0; MSG_WORDS];
+        self.msg_recv_requested = false;
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -946,6 +1064,8 @@ impl Vm {
                                 slice_remaining: 0,
                                 sleep_until: 0,
                                 yielded: false,
+                                blocked: false,
+                                msg_queue: Vec::new(),
                             });
                             self.ram[0xFFA] = pid;
                         }
@@ -1617,6 +1737,11 @@ impl Vm {
             yielded: false,
             sleep_frames: 0,
             new_priority: 0,
+            pipes: Vec::new(),
+            pipe_created: false,
+            msg_sender: 0,
+            msg_data: [0; MSG_WORDS],
+            msg_recv_requested: false,
         })
     }
 }

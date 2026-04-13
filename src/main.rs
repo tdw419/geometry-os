@@ -3052,6 +3052,11 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         yielded: false,
         sleep_frames: 0,
         new_priority: 0,
+        pipes: Vec::new(),
+        pipe_created: false,
+        msg_sender: 0,
+        msg_data: [0; vm::MSG_WORDS],
+        msg_recv_requested: false,
     };
 
 
