@@ -191,7 +191,7 @@ Two ways to run guest OSes, same canvas interface. The QEMU bridge taught us wha
 - [x] Phase 30: Boot Sequence -- boot ROM, init process (PID 1), graceful shutdown
 - [ ] Phase 31: Standard Library -- lib/stdlib.asm, lib/math.asm, heap allocator, linking convention
 - [ ] Phase 32: Signals & Lifecycle -- SIGNAL syscall, signal handlers, EXIT/WAIT syscalls, zombie cleanup
-- [ ] Phase 33: QEMU Bridge -- QEMU subprocess, serial I/O to canvas, ANSI parsing, HYPERVISOR opcode (0x54), keyboard forwarding, multi-arch support
+- [x] Phase 33: QEMU Bridge -- QEMU subprocess, serial I/O to canvas, ANSI parsing, HYPERVISOR opcode (0x72), keyboard forwarding, multi-arch support
 - [ ] Phase 34: RISC-V RV32I Core -- instruction decode, register file, ALU ops, branches, LUI/AUIPC/JAL/JALR, memory load/store, test suite for all 40 base instructions
 - [ ] Phase 35: RISC-V Privilege Modes -- M/S/U modes, CSR registers, ECALL/MRET/SRET, trap entry/return, privilege transitions, TIMER/SOFTWARE interrupts
 - [ ] Phase 36: RISC-V Virtual Memory & Devices -- SV32 page table walk, satp, TLB cache, page fault traps, UART 16550, CLINT, PLIC, virtio-blk, DTB generation

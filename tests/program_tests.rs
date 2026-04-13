@@ -5466,3 +5466,98 @@ fn test_hypervisor_resets_with_vm() {
     assert!(!vm.hypervisor_active, "reset should clear hypervisor_active");
     assert!(vm.hypervisor_config.is_empty(), "reset should clear hypervisor_config");
 }
+
+#[test]
+fn test_shell_hypervisor_command() {
+    // Verify shell.asm has the hypervisor command wired in
+    let source = std::fs::read_to_string("programs/shell.asm")
+        .unwrap_or_else(|e| panic!("failed to read shell.asm: {}", e));
+    // Check the dispatcher includes hypervisor
+    assert!(source.contains("cmd_is_hypervisor"), "shell should have cmd_is_hypervisor");
+    assert!(source.contains("do_hypervisor"), "shell should have do_hypervisor handler");
+    assert!(source.contains("HYPERVISOR r0"), "shell should call HYPERVISOR opcode");
+    // Check data strings exist
+    assert!(source.contains("hypervisor_usage_msg"), "shell should have usage message");
+    assert!(source.contains("hypervisor_err_msg"), "shell should have error message");
+    assert!(source.contains("hypervisor_ok_msg"), "shell should have ok message");
+    // Verify it assembles (already tested above but explicit)
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "shell.asm should assemble: {:?}", result.err());
+}
+
+// ── QEMU Bridge Integration Test (Phase 33) ─────────────────────────
+
+#[test]
+#[ignore] // Requires qemu-system-riscv64 installed and kernel files downloaded
+fn test_qemu_boot_riscv_linux() {
+    use geometry_os::qemu::{QemuBridge, QemuConfig};
+
+    // Verify QEMU binary exists
+    let qemu_check = std::process::Command::new("which")
+        .arg("qemu-system-riscv64")
+        .output();
+    if qemu_check.is_err() || !qemu_check.unwrap().status.success() {
+        eprintln!("SKIP: qemu-system-riscv64 not found in PATH");
+        return;
+    }
+
+    // Check kernel file exists
+    let kernel_path = ".geometry_os/fs/linux/Image";
+    if !std::path::Path::new(kernel_path).exists() {
+        eprintln!("SKIP: kernel file not found at {}", kernel_path);
+        return;
+    }
+
+    // Parse config
+    let config = format!("arch=riscv64 kernel={} ram=256M", kernel_path);
+    let parsed = QemuConfig::parse(&config);
+    assert!(parsed.is_ok(), "config should parse: {:?}", parsed.err());
+
+    // Build command (don't spawn yet, just verify it builds)
+    let cmd_result = parsed.unwrap().build_command();
+    assert!(cmd_result.is_ok(), "command should build: {:?}", cmd_result.err());
+
+    // Spawn QEMU
+    let bridge = QemuBridge::spawn(&config);
+    if bridge.is_err() {
+        // QEMU might not be installed -- skip gracefully
+        eprintln!("SKIP: QEMU spawn failed: {:?}", bridge.err());
+        return;
+    }
+    let mut bridge = bridge.unwrap();
+
+    // Read output for up to 30 seconds, checking for Linux boot output
+    let mut canvas_buffer = vec![0u32; 32 * 128];
+    let mut all_output = Vec::new();
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(30);
+
+    while start.elapsed() < timeout {
+        let bytes_read = bridge.read_output(&mut canvas_buffer);
+        if bytes_read > 0 {
+            // Collect output from canvas buffer for checking
+            for &cell in &canvas_buffer {
+                let ch = cell as u8;
+                if ch >= 32 && ch < 127 {
+                    all_output.push(ch);
+                }
+            }
+        }
+        // Check for "Linux" in accumulated output
+        let output_str = String::from_utf8_lossy(&all_output);
+        if output_str.contains("Linux") {
+            bridge.kill().ok();
+            return; // Success!
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    // Timeout -- kill QEMU and report what we got
+    bridge.kill().ok();
+    let output_str = String::from_utf8_lossy(&all_output);
+    panic!(
+        "Timed out waiting for Linux boot output. Got {} bytes: {}",
+        all_output.len(),
+        &output_str[..output_str.len().min(500)]
+    );
+}

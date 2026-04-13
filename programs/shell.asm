@@ -431,6 +431,10 @@ execute_command:
     CALL cmd_is_clear
     JNZ r0, do_clear
 
+    ; hypervisor
+    CALL cmd_is_hypervisor
+    JNZ r0, do_hypervisor
+
     ; Not a built-in -- try EXEC
     JMP do_exec
 
@@ -668,6 +672,65 @@ cmd_is_clear:
     LDI r0, 1
     RET
 
+cmd_is_hypervisor:
+    LDI r9, 0x0400
+    LDI r0, 104       ; h
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0401
+    LDI r0, 121       ; y
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0402
+    LDI r0, 112       ; p
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0403
+    LDI r0, 101       ; e
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0404
+    LDI r0, 114       ; r
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0405
+    LDI r0, 118       ; v
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0406
+    LDI r0, 105       ; i
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0407
+    LDI r0, 115       ; s
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0408
+    LDI r0, 111       ; o
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0409
+    LDI r0, 114       ; r
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x040A
+    LDI r0, 0
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r0, 1
+    RET
+
 cno:
     LDI r0, 0
     RET
@@ -821,6 +884,81 @@ do_clear:
     LDI r9, 0x1201
     LDI r0, 20
     STORE r9, r0
+    JMP exec_done
+
+do_hypervisor:
+    PUSH r14
+    PUSH r13
+    ; Check if argument exists
+    LDI r9, 0x0600
+    LOAD r0, r9
+    JZ r0, hypervisor_usage
+
+    ; Copy argument (0x0600) to config buffer (0x1B00)
+    LDI r13, 0x0600       ; src
+    LDI r14, 0x1B00       ; dst
+hypervisor_copy:
+    LOAD r0, r13
+    JZ r0, hypervisor_copy_done
+    STORE r14, r0
+    LDI r0, 1
+    ADD r13, r0
+    ADD r14, r0
+    JMP hypervisor_copy
+hypervisor_copy_done:
+    LDI r0, 0
+    STORE r14, r0         ; null terminate
+
+    ; Call HYPERVISOR with config buffer address
+    LDI r0, 0x1B00
+    HYPERVISOR r0
+
+    ; Check result: 0 = success, 0xFFFFFFFF = error, 0xFFFFFFFD = missing arch
+    JZ r0, hypervisor_ok
+    LDI r1, 0xFFFFFFFF
+    CMP r0, r1
+    JZ r0, hypervisor_err
+    ; Missing arch or other error
+    JMP hypervisor_err
+
+hypervisor_ok:
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    ; Display "hypervisor started" message
+    LDI r2, 4
+    LDI r3, hypervisor_ok_msg
+    TEXT r2, r1, r3
+    JMP hypervisor_done
+
+hypervisor_usage:
+    ; No argument -- show usage
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    LDI r2, 4
+    LDI r3, hypervisor_usage_msg
+    TEXT r2, r1, r3
+    JMP hypervisor_done
+
+hypervisor_err:
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    LDI r2, 4
+    LDI r3, hypervisor_err_msg
+    TEXT r2, r1, r3
+    JMP hypervisor_done
+
+hypervisor_done:
+    POP r13
+    POP r14
     JMP exec_done
 
 do_exec:
@@ -1075,6 +1213,35 @@ hypervisor_err_msg:
     .byte 97  ; a
     .byte 105 ; i
     .byte 108 ; l
+    .byte 101 ; e
+    .byte 100 ; d
+    .byte 0
+
+.org 0x1B00
+
+; Config buffer for hypervisor arguments (256 bytes: 0x1B00 - 0x1BFF)
+; Written by do_hypervisor, read by HYPERVISOR opcode
+
+.org 0x1C00
+
+hypervisor_ok_msg:
+    .byte 104 ; h
+    .byte 121 ; y
+    .byte 112 ; p
+    .byte 101 ; e
+    .byte 114 ; r
+    .byte 118 ; v
+    .byte 105 ; i
+    .byte 115 ; s
+    .byte 111 ; o
+    .byte 114 ; r
+    .byte 58  ; :
+    .byte 32  ; space
+    .byte 115 ; s
+    .byte 116 ; t
+    .byte 97  ; a
+    .byte 114 ; r
+    .byte 116 ; t
     .byte 101 ; e
     .byte 100 ; d
     .byte 0

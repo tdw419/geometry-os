@@ -1,1637 +1,1638 @@
-title: Geometry OS Roadmap
-version: 1.0.0
-description: "Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  77 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,\
-  \ watch it run."
-project_url: https://github.com/tdw419/geometry-os
-meta:
-  language: Rust
-  gui: minifb
-  screen: 256x256 pixels
-  registers: 32
-  ram: 65536 words
-  opcodes: 77
-  tests: 329
-  programs: 40
-  loc: 10013
-phases:
-- id: phase-1
-  title: Core VM + Visual Programs
-  status: complete
-  goal: Working VM with pixel opcodes, static visual output
-  description: Foundational VM + programs that produce static images
-  deliverables:
-  - name: HALT/NOP/FRAME opcodes
-    description: 'Control flow: stop, no-op, yield to renderer'
-    status: done
-  - name: LDI/LOAD/STORE opcodes
-    description: 'Data movement: load immediate, load/store from RAM'
-    status: done
-  - name: ADD/SUB/MUL/DIV opcodes
-    description: Arithmetic on registers
-    status: done
-  - name: AND/OR/XOR opcodes
-    description: Bitwise logic on registers
-    status: done
-  - name: JMP/JZ/JNZ opcodes
-    description: Unconditional and conditional branching
-    status: done
-  - name: CALL/RET opcodes
-    description: Subroutine call/return via r31
-    status: done
-  - name: PSET/PSETI opcodes
-    description: Pixel set from registers or immediates
-    status: done
-  - name: FILL opcode
-    description: Fill entire screen with a color
-    status: done
-  - name: RECTF opcode
-    description: Filled rectangle
-    status: done
-  - name: Two-pass assembler
-    description: Labels, comments, hex/dec/bin literals, .db directive
-    status: done
-  - name: hello.asm
-    description: Hello world text display
-    status: done
-  - name: fill_screen.asm
-    description: Fill screen with solid color
-    status: done
-  - name: diagonal.asm
-    description: Diagonal line from (0,0) to (255,255)
-    status: done
-  - name: border.asm
-    description: Colored border around screen edges
-    status: done
-  - name: gradient.asm
-    description: Horizontal color gradient via nested loops
-    status: done
-  - name: stripes.asm
-    description: Alternating horizontal stripes
-    status: done
-  - name: nested_rects.asm
-    description: Concentric colored rectangles
-    status: done
-  - name: checkerboard.asm
-    description: Checkerboard pattern
-    status: done
-  - name: colors.asm
-    description: Color palette display
-    status: done
-  - name: rainbow.asm
-    description: Rainbow stripes
-    status: done
-  - name: rings.asm
-    description: Concentric rings
-    status: done
-  - name: lines.asm
-    description: Star burst using LINE opcode
-    status: done
-  - name: circles.asm
-    description: Concentric circles using CIRCLE opcode
-    status: done
-  scope_lines_total: 2000
-  test_target: 10
-- id: phase-2
-  title: Extended Opcodes
-  status: complete
-  goal: Shift, modulo, compare, stack, and signed negation opcodes
-  description: Instruction set extensions
-  deliverables:
-  - name: SHL/SHR opcodes
-    description: Bit-shift left and right
-    status: done
-    acceptance_criteria:
-    - description: shift_test.asm passes
-      met: true
-  - name: MOD opcode
-    description: Modulo operation
-    status: done
-  - name: NEG opcode
-    description: Two's complement negation
-    status: done
-  - name: CMP opcode
-    description: 'Compare: r0 = -1/0/1 (lt/eq/gt)'
-    status: done
-  - name: BLT/BGE opcodes
-    description: Branch on CMP result (less-than, greater-or-equal)
-    status: done
-  - name: PUSH/POP opcodes
-    description: Stack operations via r30 (SP)
-    status: done
-    acceptance_criteria:
-    - description: push_pop_test.asm passes
-      met: true
-  - name: TEXT opcode
-    description: Render null-terminated string from RAM at (x,y)
-    status: done
-  - name: LINE opcode
-    description: Bresenham line between two points
-    status: done
-  - name: CIRCLE opcode
-    description: Midpoint circle algorithm
-    status: done
-  - name: SCROLL opcode
-    description: Scroll screen up by N pixels
-    status: done
-  scope_lines_total: 2800
-  test_target: 16
-- id: phase-3
-  title: Interactive Programs
-  status: complete
-  goal: Keyboard input via IKEY and interactive programs
-  deliverables:
-  - name: IKEY opcode
-    description: Read keyboard port RAM[0xFFF], clear it
-    status: done
-  - name: blink.asm
-    description: Toggle a pixel on/off with keyboard
-    status: done
-  - name: calculator.asm
-    description: 4-function calculator with text display
-    status: done
-  - name: painter.asm
-    description: Freehand drawing with cursor keys
-    status: done
-  scope_lines_total: 3200
-  test_target: 20
-- id: phase-4
-  title: Canvas & Editor
-  status: complete
-  goal: 'Text editor improvements: paste, load, scroll, syntax highlighting'
-  deliverables:
-  - name: Clipboard paste
-    description: Ctrl+V to paste text onto the grid
-    status: done
-  - name: File load
-    description: Ctrl+F8 to load .asm files with Tab completion
-    status: done
-  - name: Scroll/pan
-    description: Support programs larger than 32x32 characters
-    status: done
-  - name: Syntax highlighting
-    description: Color opcodes, registers, numbers differently on canvas
-    status: done
-  scope_lines_total: 3500
-  test_target: 22
-- id: phase-5
-  title: Terminal Mode
-  status: complete
-  goal: CLI mode with geo> prompt
-  deliverables:
-  - name: Terminal mode
-    description: geo> prompt with help, list, load, run, edit, regs, peek, poke, reset, clear, quit
-    status: done
-  - name: Mode switching
-    description: Escape toggles Editor/Terminal
-    status: done
-  scope_lines_total: 3800
-  test_target: 24
-- id: phase-6
-  title: Animation
-  status: complete
-  goal: FRAME opcode for 60fps animation loop
-  deliverables:
-  - name: FRAME opcode
-    description: Yield to renderer, enable animation loops
-    status: done
-  - name: fire.asm
-    description: Scrolling fire animation using FRAME + SCROLL
-    status: done
-  - name: scroll_demo.asm
-    description: Horizontal bar scrolling upward
-    status: done
-  scope_lines_total: 4000
-  test_target: 24
-- id: phase-7
-  title: Random & Games
-  status: complete
-  goal: RAND opcode, Snake and Ball games
-  deliverables:
-  - name: RAND opcode
-    description: LCG pseudo-random u32 (seed 0xDEADBEEF)
-    status: done
-  - name: snake.asm
-    description: 'Snake: WASD, random apples, growing tail, self-collision'
-    status: done
-  - name: ball.asm
-    description: Bouncing ball with WASD control
-    status: done
-  scope_lines_total: 4300
-  test_target: 24
-- id: phase-8
-  title: TICKS & Sound
-  status: complete
-  goal: Frame counter for throttling, BEEP opcode for audio
-  deliverables:
-  - name: TICKS register
-    description: RAM[0xFFE] frame counter, incremented each FRAME, wraps at u32 max
-    status: done
-  - name: Snake throttle
-    description: Snake throttled via TICKS & 7 (~7.5 moves/sec)
-    status: done
-  - name: BEEP opcode
-    description: BEEP freq_reg, dur_reg -- sine-wave via aplay (20-20000 Hz, 1-5000 ms)
-    status: done
-  - name: Snake sounds
-    description: 880Hz ping on apple eat, 110Hz thud on death
-    status: done
-  - name: Ball sounds
-    description: 330Hz click on wall bounce
-    status: done
-  scope_lines_total: 4322
-  test_target: 46
-- id: phase-9
-  title: Debug Tools
-  status: complete
-  goal: Breakpoints, instruction trace, and save/load improvements
-  deliverables:
-  - name: Save/load state
-    description: F7 saves full RAM to geometry_os.sav, restore on startup
-    status: done
-    acceptance_criteria:
-    - description: test_vm_save_load_roundtrip passes
-      met: true
-  - name: Disassembly panel
-    description: Show bytecode alongside source text in GUI
-    status: done
-  - name: Single-step mode
-    description: F6 steps one instruction when paused
-    status: done
-  - name: Breakpoints
-    description: Mark PC addresses to pause at during execution
-    status: done
-    scope_lines: 80
-    scope_files:
-    - src/vm.rs
-    - src/main.rs
-    acceptance_criteria:
-    - description: User can set breakpoint at an address
-      met: true
-    - description: VM halts when PC hits breakpoint address
-      met: true
-  - name: Instruction trace
-    description: Log PC + decoded instruction for first N steps
-    status: done
-    scope_lines: 60
-    scope_files:
-    - src/vm.rs
-    - src/main.rs
-    acceptance_criteria:
-    - description: CLI mode logs each instruction with register state
-      met: true
-  scope_lines_total: 4500
-  test_target: 48
-- id: phase-10
-  title: Extended Graphics
-  status: complete
-  goal: Sprite blitting and screenshot export
-  deliverables:
-  - name: SPRITE opcode
-    description: Copy a block of RAM to screen at (x,y) -- sprite blit
-    status: done
-    scope_lines: 120
-    scope_files:
-    - src/vm.rs
-    - src/assembler.rs
-    acceptance_criteria:
-    - description: Copy NxM pixels from RAM to screen buffer
-      met: true
-    - description: Color 0 pixels are transparent (skip)
-      met: true
-    - description: test_sprite_transparent_skips_zero passes
-      met: true
-  - name: Screenshot export
-    description: Dump 256x256 canvas to PNG file
-    status: done
-    scope_lines: 40
-    scope_files:
-    - src/main.rs
-    acceptance_criteria:
-    - description: F9 or CLI command saves PNG
-      met: true
-  scope_lines_total: 4700
-  test_target: 50
-- id: phase-11
-  title: Advanced Games
-  status: complete
-  goal: Richer games using sprites and extended features
-  deliverables:
-  - name: breakout.asm
-    description: Breakout with paddle, ball, 4 rows of colored bricks, score, lives
-    status: done
-  - name: tetris.asm
-    description: Tetris with piece rotation and line clearing
-    status: done
-  - name: maze.asm
-    description: Randomly generated maze with player navigation
-    status: done
-    acceptance_criteria:
-    - description: test_maze_assembles passes
-      met: true
-    - description: test_maze_initializes passes
-      met: true
-  scope_lines_total: 5100
-  test_target: 56
-- id: phase-12
-  title: Self-Hosting
-  status: complete
-  goal: VM can assemble and run its own programs from within
-  description: 'The text editor types assembly, the assembler compiles it, and
-
-    the VM runs it. Missing piece: assembler callable as VM subroutine.
-
-    '
-  deliverables:
-  - name: Assembler syscall
-    description: VM opcode that triggers the assembler on canvas text
-    status: done
-    scope_lines: 150
-    scope_files:
-    - src/vm.rs
-    - src/assembler.rs
-    acceptance_criteria:
-    - description: ASM opcode (0x4B) reads null-terminated source from RAM
-      met: true
-    - description: ASM writes bytecode to RAM at destination address
-      met: true
-    - description: RAM[0xFFD] holds result (word count or 0xFFFFFFFF on error)
-      met: true
-    - description: test_asm_opcode_basic passes
-      met: true
-    - description: test_asm_opcode_error passes
-      met: true
-  - name: Self-hosting demo
-    description: Program that writes assembly, assembles it, runs the output
-    status: done
-    scope_lines: 80
-    scope_files:
-    - programs/self_host.asm
-    acceptance_criteria:
-    - description: self_host.asm compiles and runs
-      met: true
-    - description: Generated code executes (screen filled with green)
-      met: true
-  scope_lines_total: 5500
-  test_target: 54
-- id: phase-13
-  title: Close the Gaps
-  status: complete
-  goal: Every program tested, every error traceable, no regressions
-  priority: 1
-  deliverables:
-  - name: Tests for untested programs
-    description: ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity
-    status: done
-    scope_lines: 220
-    scope_files:
-    - tests/program_tests.rs
-    acceptance_criteria:
-    - description: cargo test all green
-    - description: Each untested program has at least one test
-  - name: Assembler error line numbers
-    description: Error messages include source line number
-    status: done
-    scope_lines: 30
-    scope_files:
-    - src/assembler.rs
-    acceptance_criteria:
-    - description: 'Error message format: ''line N: unknown opcode: XYZ'''
-  - name: Version string audit
-    description: Single source of truth for version across banner, CLI, Cargo.toml
-    status: done
-    scope_lines: 10
-    scope_files:
-    - src/main.rs
-    - Cargo.toml
-- id: phase-14
-  title: Developer Experience
-  status: complete
-  goal: Make the VM pleasant to program
-  priority: 2
-  deliverables:
-  - name: 'Assembler #define constants'
-    description: '#define NAME value -- eliminates magic numbers'
-    status: done
-    scope_lines: 80
-    scope_files:
-    - src/assembler.rs
-    acceptance_criteria:
-    - description: '#define TILE 8 resolves in LDI and other immediate contexts'
-      met: true
-  - name: programs/README.md
-    description: One-line description + controls + opcodes per program
-    status: done
-    scope_lines: 60
-    scope_files:
-    - programs/README.md
-  - name: Disassembler panel in GUI
-    description: Shows PC +/- 10 instructions, updates each step
-    status: done
-    scope_lines: 50
-    scope_files:
-    - src/main.rs
-  - name: GIF/video capture
-    description: F10 toggle writes numbered PNGs, ffmpeg command documented
-    status: done
-    scope_lines: 20
-    scope_files:
-    - src/main.rs
-- id: phase-15
-  title: VM Capability Gaps
-  status: complete
-  goal: Fix rough edges in game programming
-  priority: 4
-  deliverables:
-  - name: SAR opcode (arithmetic shift right, 0x2B)
-    description: Two's-complement division for negative numbers
-    status: done
-    scope_lines: 10
-    scope_files:
-    - src/vm.rs
-    - src/assembler.rs
-    acceptance_criteria:
-    - description: Two's-complement division works for negative numbers
-      met: true
-  - name: Multi-key input (bitmask at 0xFFB)
-    description: Two simultaneous keys in same frame
-    status: done
-    scope_lines: 20
-    scope_files:
-    - src/vm.rs
-    - src/main.rs
-    acceptance_criteria:
-    - description: Two simultaneous keys register in same frame
-      met: true
-  - name: BEEP in more programs
-    description: Sound effects for tetris, breakout, maze, sprite_demo
-    status: done
-    scope_lines: 20
-    scope_files:
-    - programs/*.asm
-    acceptance_criteria:
-    - description: Sound effects on game events
-      met: true
-  - name: Signed arithmetic audit
-    description: Document SUB/ADD/MUL sign contract, CMP semantics
-    status: done
-    scope_lines: 30
-    scope_files:
-    - ROADMAP.md
-    - docs/
-- id: phase-16
-  title: Showcase Shipping
-  status: complete
-  goal: Complete game, presentable repo, public release
-  priority: 3
-  deliverables:
-  - name: Complete tetris
-    description: Scoring, levels, sound, game-over screen
-    status: done
-    scope_lines: 100
-    scope_files:
-    - programs/tetris.asm
-    acceptance_criteria:
-    - description: Playable start-to-finish with visible score
-      met: true
-  - name: TILEMAP opcode
-    description: Grid blit from tile index array -- makes grid games 3x shorter
-    status: done
-    scope_lines: 60
-    scope_files:
-    - src/vm.rs
-    - src/assembler.rs
-    acceptance_criteria:
-    - description: snake, tetris, maze each 3x shorter
-      met: true
-  - name: Persistent save slots
-    description: 4 named save slots accessible from terminal
-    status: done
-    scope_lines: 30
-    scope_files:
-    - src/vm.rs
-    - src/main.rs
-    acceptance_criteria:
-    - description: save/load slot1 works
-      met: true
-  - name: GitHub release v1.0.1
-    description: Tag, release notes, prebuilt binary
-    status: done
-    acceptance_criteria:
-    - description: Release notes prepared
-      met: true
-- id: phase-17
-  title: Platform Growth
-  status: complete
-  goal: Geometry OS as a target platform
-  priority: 5
-  deliverables:
-  - name: GlyphLang compiler backend
-    description: Emit .geo bytecode from GlyphLang source
-    status: done
-    scope_lines: 200
-    scope_files:
-    - src/glyph_backend.rs
-  - name: Browser port via WASM
-    description: VM runs in browser with canvas rendering
-    status: done
-    scope_lines: 200
-    scope_files:
-    - wasm/
-    acceptance_criteria:
-    - description: wasm-pack build succeeds
-      met: true
-    - description: Demo page with built-in programs runs in browser
-      met: true
-    - description: Full opcode set works in WASM
-      met: true
-  - name: Network port (0xFFC UDP)
-    description: Two VM instances exchange messages
-    status: done
-    scope_lines: 40
-    scope_files:
-    - src/main.rs
-- id: phase-18
-  title: VM Instrumentation
-  status: complete
-  goal: Telemetry for memory access and execution flow
-  priority: 6
-  deliverables:
-  - name: Access log buffer
-    description: Track LOAD/STORE/SPRITE/TILEMAP RAM hits per frame
-    status: done
-    scope_lines: 50
-    scope_files:
-    - src/vm.rs
-  - name: Instruction fetch logging
-    description: Track PC addresses for execution trail
-    status: done
-    scope_lines: 10
-    scope_files:
-    - src/vm.rs
-- id: phase-19
-  title: Visual Debugger
-  status: complete
-  goal: Live heat-map and PC trail overlays on canvas
-  priority: 7
-  deliverables:
-  - name: Intensity decay buffer
-    description: Fade memory highlights over ~10 frames
-    status: done
-    scope_lines: 30
-    scope_files:
-    - src/main.rs
-  - name: Canvas cell tinting
-    description: Cyan (Read) and Magenta (Write) flashes on active RAM addresses
-    status: done
-    scope_lines: 40
-    scope_files:
-    - src/main.rs
-  - name: PC trail visualization
-    description: Fading white glow follows the execution pointer
-    status: done
-    scope_lines: 20
-    scope_files:
-    - src/main.rs
-- id: phase-20
-  title: High RAM Visualization
-  status: complete
-  goal: Deep observability into game state and sprite memory
-  priority: 8
-  deliverables:
-  - name: RAM inspector panel
-    description: Second 32x32 grid visualizing 0x2000-0x23FF or scrollable range
-    status: done
-    scope_lines: 60
-    scope_files:
-    - src/main.rs
-    acceptance_criteria:
-    - description: 32x32 grid renders at bottom of window
-      met: true
-    - description: PageUp/PageDown scrolls through RAM in Terminal mode
-      met: true
-    - description: Access intensities shown as color tints
-      met: true
-  - name: Global heatmap
-    description: Compact 256x256 view of entire 64K RAM access patterns
-    status: done
-    scope_lines: 80
-    scope_files:
-    - src/main.rs
-    acceptance_criteria:
-    - description: 256x256 pixel grid shows all 64K words
-      met: true
-    - description: Read/Write access shown as cyan/magenta pulses
-      met: true
-    - description: PC position highlighted in white
-      met: true
-- id: phase-21
-  title: Spatial Program Coordinator (Native Windowing)
-  status: complete
-  goal: Eliminate CPU-side compositor dependency by running multiple autonomous Glyph programs concurrently within the GPU/WGPU substrate.
-  priority: 9
-  deliverables:
-  - name: Multi-Process VM Scheduler
-    description: Modify the core VM to support multiple concurrent execution contexts (window instances) within the same 64K RAM.
-    status: done
-    acceptance_criteria:
-    - description: SpawnedProcess struct with isolated registers and PC
-      met: true
-    - description: step_all_processes() with swap-in/step/swap-out pattern
-      met: true
-    - description: MAX_PROCESSES = 8 cap
-      met: true
-  - name: SPAWN/KILL Opcodes (0x4D/0x4E)
-    description: SPAWN addr_reg creates child process; KILL pid_reg halts it. PID stored in RAM[0xFFA].
-    status: done
-    acceptance_criteria:
-    - description: test_spawn_creates_child_process passes
-      met: true
-    - description: test_spawn_max_processes passes
-      met: true
-    - description: test_kill_halts_child_process passes
-      met: true
-  - name: Window Manager Demo
-    description: window_manager.asm -- primary draws animated window border, child bounces ball inside via shared RAM bounds protocol.
-    status: done
-    acceptance_criteria:
-    - description: window_manager.asm assembles and runs
-      met: true
-    - description: test_window_manager_spawns_child passes
-      met: true
-    - description: Ball stays within window bounds
-      met: true
-- id: phase-22
-  title: Screen Readback & Collision Detection
-  status: complete
-  goal: Let programs read pixel values from the framebuffer for collision detection, pick-color, and window compositing.
-  priority: 10
-  deliverables:
-  - name: PEEK opcode (0x4F)
-    description: PEEK rx, ry, rd -- read screen pixel at (rx,ry) into rd. Enables collision detection.
-    status: done
-    scope_lines: 20
-    scope_files:
-    - src/vm.rs
-    - src/assembler.rs
-    acceptance_criteria:
-    - description: PEEK reads screen buffer value into destination register
-      met: true
-    - description: Out-of-bounds returns 0
-      met: true
-    - description: test_peek_reads_screen_pixel passes
-      met: true
-  - name: Collision detection demo
-    description: peek_bounce.asm -- white ball bounces off drawn obstacles using PEEK. No RAM collision map.
-    status: done
-    scope_lines: 100
-    scope_files:
-    - programs/peek_bounce.asm
-  - name: MOV instruction everywhere
-    description: MOV rd, rs documented and used across programs
-    status: done
-- id: phase-23
-  title: Kernel Boundary (Syscall Mode)
-  status: complete
-  goal: Establish user mode vs kernel mode. Programs can't directly access hardware.
-  priority: 11
-  deliverables:
-  - name: CPU mode flag
-    description: 'vm.mode: User/Kernel bit in VM state'
-    status: done
-    acceptance_criteria_met: true
-  - name: SYSCALL opcode (0x52)
-    description: Trap into kernel mode, dispatch by syscall number
-    status: done
-    acceptance_criteria_met: true
-  - name: RETK opcode (0x53)
-    description: Return from kernel mode to user mode
-    status: done
-    acceptance_criteria_met: true
-  - name: Syscall dispatch table
-    description: RAM region 0xFE00..0xFEFF mapping syscall numbers to kernel handlers
-    status: done
-    acceptance_criteria_met: true
-  - name: Restricted opcodes in user mode
-    description: IKEY, hardware STORE blocked in user mode
-    status: done
-    acceptance_criteria_met: true
-- id: phase-24
-  title: Memory Protection
-  status: complete
-  goal: Each process gets its own address space. Processes can't trash each other.
-  priority: 12
-  deliverables:
-  - name: Page tables
-    description: 'Simple 1-level paging: page_dir per process, maps virtual to physical'
-    status: done
-    acceptance_criteria:
-    - description: translate_va maps virtual to physical via page directory
-      met: true
-    - description: Kernel mode uses identity mapping (no page directory)
-      met: true
-  - name: Address space per process
-    description: SPAWN creates new page table, not just new registers
-    status: done
-    acceptance_criteria:
-    - description: Each child gets 4 private physical pages
-      met: true
-    - description: Shared regions (page 3, page 63) identity-mapped
-      met: true
-  - name: SEGFAULT on illegal access
-    description: LOAD/STORE/fetch to unmapped page halts the process
-    status: done
-    acceptance_criteria:
-    - description: test_child_segfaults_on_unmapped_store passes
-      met: true
-    - description: test_child_segfaults_on_unmapped_load passes
-      met: true
-    - description: test_child_segfaults_on_unmapped_fetch passes
-      met: true
-    - description: RAM[0xFF9] tracks segfaulted PID
-      met: true
-  - name: Process memory isolation
-    description: Two processes can't corrupt each other's memory
-    status: done
-    acceptance_criteria:
-    - description: test_process_memory_isolation passes
-      met: true
-    - description: test_child_user_mode_blocks_hardware_port_write passes
-      met: true
-    - description: test_child_can_access_shared_window_bounds passes
-      met: true
-  - name: Memory protection tests
-    description: 9 tests covering segfault, isolation, page tables, kernel mode
-    status: done
-    acceptance_criteria:
-    - description: test_child_page_directory_has_shared_regions_mapped passes
-      met: true
-    - description: test_kernel_mode_identity_mapping passes
-      met: true
-    - description: test_kill_frees_physical_pages passes
-      met: true
-    - description: test_segfault_pid_tracking passes
-      met: true
-  - name: Process memory regions documentation
-    description: docs/MEMORY_PROTECTION.md -- code/heap/stack/shared segments
-    status: done
-- id: phase-25
-  title: Filesystem
-  status: complete
-  goal: Programs can create, read, write, and delete named files. Persistent storage.
-  priority: 13
-  deliverables:
-  - name: Virtual filesystem layer
-    description: Abstract FS interface backed by host filesystem in .geometry_os/fs/
-    status: done
-  - name: OPEN/READ/WRITE/CLOSE/SEEK syscalls
-    description: Full file I/O through syscall interface
-    status: done
-  - name: LS syscall
-    description: Directory listing into RAM buffer
-    status: done
-  - name: Per-process fd table
-    description: Max 16 open files per process
-    status: done
-  - name: cat.asm
-    description: Test program that reads a file and displays it
-    status: done
-- id: phase-26
-  title: Preemptive Scheduler
-  status: complete
-  goal: Replace round-robin single-step with time-sliced priority scheduler.
-  priority: 14
-  deliverables:
-  - name: Timer interrupt
-    description: VM fires tick every N instructions, triggers context switch
-    status: done
-  - name: Priority levels
-    description: Each process has priority 0-3, higher gets more slices
-    status: done
-  - name: Yield/Sleep syscalls
-    description: Voluntary yield and timed sleep
-    status: done
-- id: phase-27
-  title: Inter-Process Communication
-  status: complete
-  goal: Processes communicate through pipes and messages, not raw shared RAM.
-  priority: 15
-  deliverables:
-  - name: PIPE syscall
-    description: Create unidirectional pipe with circular buffer (0x5D)
-    status: done
-    acceptance_criteria:
-    - description: PIPE r5, r6 creates read FD (0x8000|idx) and write FD (0xC000|idx)
-      met: true
-    - description: Pipe buffer holds 256 words
-      met: true
-  - name: MSGSND/MSGRCV syscalls
-    description: Send and receive fixed-size messages by PID (0x5E, 0x5F)
-    status: done
-    acceptance_criteria:
-    - description: MSGSND sends 4-word message to target PID
-      met: true
-    - description: MSGRCV receives message, returns sender PID in r0
-      met: true
-    - description: Per-process message queue holds 16 messages
-      met: true
-  - name: Blocking I/O
-    description: READ on empty pipe blocks until data arrives
-    status: done
-    acceptance_criteria:
-    - description: READ on empty pipe sets proc.blocked = true
-      met: true
-    - description: Scheduler skips blocked processes
-      met: true
-    - description: MSGRCV blocks if no message queued
-      met: true
-  - name: pipe_test.asm
-    description: Program demonstrating parent-child pipe communication
-    status: done
-- id: phase-28
-  title: Device Driver Abstraction
-  status: complete
-  goal: All hardware access through a uniform driver interface. Everything is a file.
-  priority: 16
-  deliverables:
-  - name: Device file convention
-    description: /dev/screen, /dev/keyboard, /dev/audio, /dev/net
-    status: done
-    acceptance_criteria:
-    - description: OPEN /dev/screen returns fd 0xE000
-      met: true
-    - description: OPEN /dev/keyboard returns fd 0xE001
-      met: true
-    - description: OPEN /dev/audio returns fd 0xE002
-      met: true
-    - description: OPEN /dev/net returns fd 0xE003
-      met: true
-  - name: IOCTL syscall
-    description: Device-specific control operations
-    status: done
-    acceptance_criteria:
-    - description: IOCTL assembles to opcode 0x62
-      met: true
-    - description: 'Screen: get width/height via cmd 0/1'
-      met: true
-    - description: 'Keyboard: get/set echo mode via cmd 0/1'
-      met: true
-    - description: 'Audio: get/set volume via cmd 0/1'
-      met: true
-    - description: 'Net: get status via cmd 0'
-      met: true
-  - name: Screen/keyboard/audio/net drivers
-    description: Wrap existing hardware ports as device files
-    status: done
-    acceptance_criteria:
-    - description: WRITE to /dev/screen draws pixels from (x,y,color) triplets
-      met: true
-    - description: READ from /dev/keyboard reads RAM[0xFFF] and clears it
-      met: true
-    - description: WRITE to /dev/audio sets beep from (freq,dur) pair
-      met: true
-    - description: READ/WRITE to /dev/net uses RAM[0xFFC]
-      met: true
-    - description: device_test.asm demo program
-      met: true
-- id: phase-29
-  title: Shell
-  status: complete
-  goal: Proper command shell with pipes, redirection, environment variables.
-  priority: 17
-  deliverables:
-  - name: shell.asm
-    description: Interactive command interpreter as user process
-    status: done
-    acceptance_criteria:
-    - description: shell.asm assembles without errors
-      met: true
-    - description: 'Built-in commands: ls, cd, cat, echo, ps, kill, help, pwd, clear, exit'
-      met: true
-  - name: Pipe operator
-    description: prog1 | prog2 connects stdout to stdin
-    status: done
-    acceptance_criteria:
-    - description: EXECP opcode (0x6A) spawns with fd redirection
-      met: true
-    - description: shell.asm parses | operator and creates pipes
-      met: true
-  - name: Redirection
-    description: prog > file, prog < file, prog >> file
-    status: done
-    acceptance_criteria:
-    - description: shell.asm parses > operator and opens file for output
-      met: true
-  - name: Built-in commands
-    description: ls, cd, cat, echo, ps, kill, help
-    status: done
-    acceptance_criteria:
-    - description: ls lists VFS directory entries
-      met: true
-    - description: cd changes CWD via CHDIR opcode
-      met: true
-    - description: cat reads file and displays content
-      met: true
-    - description: echo prints arguments to screen
-      met: true
-    - description: ps lists process IDs
-      met: true
-    - description: kill terminates a process by PID
-      met: true
-    - description: help displays command list
-      met: true
-  - name: New opcodes
-    description: READLN, WAITPID, EXECP, CHDIR, GETCWD
-    status: done
-    acceptance_criteria:
-    - description: READLN (0x68) reads keyboard chars into line buffer
-      met: true
-    - description: WAITPID (0x69) waits for child process to halt
-      met: true
-    - description: EXECP (0x6A) spawns program with stdin/stdout fd redirection
-      met: true
-    - description: CHDIR (0x6B) changes current working directory
-      met: true
-    - description: GETCWD (0x6C) reads current working directory
-      met: true
-  - name: VFS dup_fd
-    description: Duplicate file descriptors across PID tables for pipe/redir
-    status: done
-- id: phase-30
-  title: Boot Sequence & Init
-  status: complete
-  goal: OS boots into known state, starts init, manages services.
-  priority: 18
-  deliverables:
-  - name: Boot ROM
-    description: Fixed bytecode at 0x0000, initializes hardware, jumps to init
-    status: done
-    acceptance_criteria:
-    - description: boot() method assembles init.asm and spawns PID 1
-      met: true
-    - description: boot.cfg created with default configuration
-      met: true
-  - name: Init process
-    description: PID 1, reads boot.cfg, starts shell
-    status: done
-    acceptance_criteria:
-    - description: init.asm assembles without errors
-      met: true
-    - description: init process spawned with priority 2
-      met: true
-    - description: supervisor loop monitors shell and respawns if it dies
-      met: true
-    - description: environment variables set (SHELL, HOME, CWD, USER)
-      met: true
-  - name: Graceful shutdown
-    description: SHUTDOWN syscall stops all processes, flushes FS
-    status: done
-    acceptance_criteria:
-    - description: SHUTDOWN opcode 0x6E in kernel mode halts VM
-      met: true
-    - description: SHUTDOWN in user mode returns error (r0=0xFFFFFFFF)
-      met: true
-    - description: SHUTDOWN kills all child processes and frees pages
-      met: true
-    - description: SHUTDOWN clears pipes and closes file descriptors
-      met: true
-    - description: shutdown_requested flag set for host to check
-      met: true
-- id: phase-31
-  title: Standard Library
-  status: complete
-  goal: Reusable library of common operations for all programs.
-  priority: 19
-  deliverables:
-  - name: lib/stdlib.asm
-    description: String ops, memory ops, formatted I/O
-    status: done
-  - name: lib/math.asm
-    description: sin, cos, sqrt via lookup tables
-    status: done
-  - name: Heap allocator
-    description: malloc/free for dynamic memory
-    status: done
-    acceptance_criteria:
-    - description: lib/heap.asm implements _lib_heap_alloc and _lib_heap_free
-      met: true
-  - name: Linking convention
-    description: .include or .lib directive in assembler
-    status: done
-    acceptance_criteria:
-    - description: .include directive resolves and inlines lib/*.asm files
-      met: true
-- id: phase-32
-  title: Signals & Process Lifecycle
-  status: complete
-  goal: Signals, exit codes, wait, and proper process lifecycle management.
-  priority: 20
-  deliverables:
-  - name: SIGNAL opcode
-    description: Send signal to process by PID (SIGTERM=0, SIGKILL=1, SIGUSR=2, SIGALRM=3)
-    status: done
-    acceptance_criteria:
-    - description: SIGNAL opcode sends signal to target process
-      met: true
-  - name: Signal handlers (SIGSET)
-    description: Process sets handler address for each signal type via SIGSET opcode
-    status: done
-    acceptance_criteria:
-    - description: SIGSET registers handler address, signal delivery jumps to it
-      met: true
-  - name: EXIT/WAITPID opcodes
-    description: Exit with status code, parent waits for child via WAITPID
-    status: done
-    acceptance_criteria:
-    - description: EXIT opcode halts process with status code, sets zombie flag
-      met: true
-    - description: WAITPID reaps zombie and returns exit code
-      met: true
-  - name: Zombie cleanup
-    description: Exited processes cleaned up after parent WAITPID
-    status: done
-    acceptance_criteria:
-    - description: Zombie process freed after WAITPID, pages reclaimed
-      met: true
-- id: phase-33
-  title: QEMU Bridge
-  status: in_progress
-  goal: Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one.
-  priority: 30
-  description: 'QEMU gives us a working hypervisor in days. Every architecture QEMU supports
-
-    (x86, ARM, RISC-V, MIPS) works immediately. We learn what the canvas text
-
-    surface needs to handle (ANSI sequences, scroll speed, buffer size).
-
-    '
-  deliverables:
-  - name: qemu.rs module
-    description: QEMU subprocess management with stdin/stdout pipes
-    status: done
-    scope_lines: 60
-    scope_files:
-    - src/qemu.rs
-    tasks:
-    - id: p33.d1.t1
-      title: Create src/qemu.rs with QemuBridge struct
-      status: done
-      description: 'Create QemuBridge struct with fields for Child process, stdin/stdout pipes,
-
-        and an output buffer. Implement Drop to kill child on cleanup.
-
-        '
-      acceptance_criteria:
-      - QemuBridge struct compiles
-      - Drop trait kills child process
-      files:
-      - src/qemu.rs
-  - name: QEMU spawn
-    description: Launch qemu-system-* with -nographic -serial mon:stdio, capture stdin/stdout
-    status: done
-    scope_lines: 80
-    tasks:
-    - id: p33.d2.t1
-      title: Implement QemuBridge::spawn(config_str) -> Result
-      status: done
-      description: 'Parse config string "arch=riscv64 kernel=linux.img ram=256M disk=rootfs.ext4"
-
-        into QEMU command. Construct qemu-system-{arch} with appropriate flags.
-
-        Use std::process::Command with stdin/stdout piped.
-
-        '
-      acceptance_criteria:
-      - Config string parsed into arch, kernel, ram, disk fields
-      - Correct qemu-system-{arch} binary selected
-      - -nographic -serial mon:stdio flags always present
-      - -machine virt for riscv/aarch64
-      - -kernel, -m, -drive flags constructed from config
-      dependencies:
-      - p33.d1.t1
-      files:
-      - src/qemu.rs
-    - id: p33.d2.t2
-      title: Implement architecture mapping (riscv64, riscv32, x86_64, aarch64, mipsel)
-      status: done
-      description: Map arch config values to qemu-system binary names and machine types.
-      acceptance_criteria:
-      - riscv64 -> qemu-system-riscv64 -machine virt
-      - x86_64 -> qemu-system-x86_64
-      - aarch64 -> qemu-system-aarch64 -machine virt
-      - mipsel -> qemu-system-mipsel -machine malta
-      - Unknown arch returns error
-      dependencies:
-      - p33.d2.t1
-      files:
-      - src/qemu.rs
-    - id: p33.d2.t3
-      title: 'Test: spawn QEMU with --version, verify process starts and exits clean'
-      status: done
-      description: Unit test that spawns qemu-system-riscv64 --version and captures version string from stdout.
-      acceptance_criteria:
-      - QEMU process starts and exits with code 0
-      - Version string captured from stdout
-      dependencies:
-      - p33.d2.t1
-      files:
-      - src/qemu.rs
-  - name: Output to canvas
-    description: Read QEMU stdout bytes, write to canvas_buffer as u32 chars, auto-scroll
-    status: done
-    scope_lines: 60
-    tasks:
-    - id: p33.d3.t1
-      title: Implement non-blocking stdout reader
-      status: done
-      description: 'Set QEMU stdout to non-blocking mode. Each frame tick, read available
-
-        bytes into a Vec<u8> buffer. Return the bytes for processing.
-
-        '
-      acceptance_criteria:
-      - Non-blocking read returns immediately even if no data
-      - Bytes read are valid QEMU output
-      dependencies:
-      - p33.d1.t1
-      files:
-      - src/qemu.rs
-    - id: p33.d3.t2
-      title: Implement stdout bytes -> canvas_buffer writer
-      status: done
-      description: 'For each printable byte: write as u32 to canvas_buffer at cursor position.
-
-        Track virtual cursor (row, col). Auto-scroll when row >= 128.
-
-        '
-      acceptance_criteria:
-      - Printable ASCII chars appear in canvas_buffer
-      - Cursor advances correctly
-      - Scrolling works when row exceeds 128
-      dependencies:
-      - p33.d3.t1
-      files:
-      - src/qemu.rs
-      - src/main.rs
-    - id: p33.d3.t3
-      title: 'Test: feed known bytes, verify canvas_buffer contents'
-      status: done
-      description: 'Unit test: write ''Hello\nWorld'' bytes, verify canvas_buffer has correct chars at correct positions.'
-      acceptance_criteria:
-      - '''H'' at position [0][0], ''e'' at [0][1], etc.'
-      - '''W'' starts at row 1 after newline'
-      dependencies:
-      - p33.d3.t2
-      files:
-      - src/qemu.rs
-  - name: Input from keyboard
-    description: Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin
-    status: done
-    scope_lines: 40
-    tasks:
-    - id: p33.d4.t1
-      title: Implement keyboard event -> QEMU stdin writer
-      status: done
-      description: 'When hypervisor is active and a key is pressed, call key_to_ascii_shifted()
-
-        and write the resulting byte to QEMU''s stdin pipe. Map Enter to \\r,
-
-        Backspace to 0x7F, Ctrl+C to 0x03.
-
-        '
-      acceptance_criteria:
-      - Regular keys forwarded as ASCII bytes
-      - Enter sends \r (carriage return)
-      - Backspace sends 0x7F
-      - Ctrl+C sends 0x03
-      dependencies:
-      - p33.d1.t1
-      files:
-      - src/qemu.rs
-      - src/main.rs
-  - name: ANSI escape handling
-    description: Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering
-    status: done
-    scope_lines: 100
-    tasks:
-    - id: p33.d5.t1
-      title: Implement ANSI escape state machine
-      status: done
-      description: 'State machine: Normal -> Escape (0x1B) -> Csi (''['') -> params.
-
-        Handle: CSI A/B/C/D (cursor), CSI H (home), CSI 2J (clear),
-
-        CSI K (clear line), CSI m (color, can ignore), CSI ? 25 h/l (cursor show/hide).
-
-        '
-      acceptance_criteria:
-      - ESC [ A moves cursor up
-      - ESC [ B moves cursor down
-      - ESC [ C moves cursor right
-      - ESC [ D moves cursor left
-      - ESC [ H moves cursor to 0,0
-      - ESC [ 2 J clears canvas_buffer
-      - ESC [ K clears from cursor to end of row
-      - Unknown sequences ignored gracefully
-      dependencies:
-      - p33.d3.t2
-      files:
-      - src/qemu.rs
-    - id: p33.d5.t2
-      title: 'Test: feed ANSI sequences, verify cursor state'
-      status: done
-      description: Unit tests for each supported ANSI sequence. Verify cursor position and buffer state.
-      acceptance_criteria:
-      - Test for each cursor movement sequence
-      - Test for clear screen
-      - Test for clear line
-      - Test for mixed text + escape sequences
-      dependencies:
-      - p33.d5.t1
-      files:
-      - src/qemu.rs
-  - name: HYPERVISOR opcode (0x72)
-    description: New opcode that reads config string from RAM and spawns QEMU
-    status: done
-    scope_lines: 60
-    tasks:
-    - id: p33.d6.t1
-      title: Add HYPERVISOR opcode 0x72 to vm.rs execute
-      status: done
-      description: 'Read config string from RAM at address in r0. Parse config.
-
-        Spawn QemuBridge. Store in VM state. F5 while active kills QEMU.
-
-        '
-      acceptance_criteria:
-      - HYPERVISOR opcode triggers QEMU spawn
-      - Config string read from VM RAM
-      - VM state tracks active hypervisor
-      dependencies:
-      - p33.d2.t1
-      - p33.d3.t2
-      - p33.d4.t1
-      files:
-      - src/vm.rs
-    - id: p33.d6.t2
-      title: Add HYPERVISOR to assembler mnemonic list
-      status: done
-      description: Register HYPERVISOR in assembler.rs so it can be used in .asm programs.
-      acceptance_criteria:
-      - '''HYPERVISOR r0'' assembles to opcode 0x54'
-      - Disassembler outputs HYPERVISOR for 0x54
-      dependencies:
-      - p33.d6.t1
-      files:
-      - src/assembler.rs
-  - name: Shell command
-    description: hypervisor arch=riscv64 kernel=linux.img command in shell.asm
-    status: todo
-    tasks:
-    - id: p33.d7.t1
-      title: Add hypervisor command to shell.asm
-      status: todo
-      description: Parse 'hypervisor <config>' from shell input, construct config string in RAM, execute HYPERVISOR opcode.
-      acceptance_criteria:
-      - '''hypervisor arch=riscv64 kernel=linux.img'' spawns QEMU'
-      - Error message on missing kernel file
-      dependencies:
-      - p33.d6.t1
-      files:
-      - programs/shell.asm
-  - name: Download helper
-    description: Script to fetch pre-built RISC-V Linux kernel + rootfs for testing
-    status: done
-    tasks:
-    - id: p33.d8.t1
-      title: Create scripts/download_riscv_linux.sh
-      status: done
-      description: 'Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal rootfs
-
-        from a known URL. Place in .geometry_os/fs/linux/ directory.
-
-        '
-      acceptance_criteria:
-      - Script downloads kernel Image and rootfs
-      - Files placed in correct directory
-      - QEMU can boot the downloaded kernel
-      files:
-      - scripts/download_riscv_linux.sh
-  - name: Integration test
-    description: Spawn QEMU with known kernel, verify Linux version appears in output
-    status: todo
-    scope_lines: 60
-    tasks:
-    - id: p33.d9.t1
-      title: 'Test: boot RISC-V Linux, verify console output'
-      status: todo
-      description: 'Integration test (marked #[ignore] for CI without QEMU).
-
-        Spawn QEMU with RISC-V kernel, read stdout for 30 seconds,
-
-        verify "Linux version" string appears.
-
-        '
-      acceptance_criteria:
-      - QEMU spawns and produces output
-      - '''Linux version'' detected in output within 30 seconds'
-      - QEMU process cleaned up after test
-      dependencies:
-      - p33.d2.t1
-      - p33.d3.t1
-      - p33.d5.t1
-      files:
-      - src/qemu.rs
-  dependencies:
-  - source: phase-32
-    target: phase-33
-    type: soft
-    reason: Signals not required for QEMU bridge, but nice to have
-  technical_notes: 'QEMU subprocess uses std::process::Command with piped stdin/stdout.
-
-    Non-blocking reads via set_nonblocking() on the ChildStdout.
-
-    Canvas rendering reuses existing pixel font pipeline from CANVAS_TEXT_SURFACE.md.
-
-    '
-  risks:
-  - QEMU not installed on host -- need clear error message
-  - ANSI parsing incomplete -- Linux boot output may use obscure sequences
-  - Non-blocking pipe reads may miss data on fast output -- buffer management
-- id: phase-34
-  title: RISC-V RV32I Core
-  status: future
-  goal: Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
-  priority: 40
-  description: 'QEMU proved what works. Now rebuild it owned -- pure Rust, no subprocess,
-
-    portable to WASM and embedded. RV32I is the foundation.
-
-    '
-  deliverables:
-  - name: riscv/ module
-    description: src/riscv/ with mod.rs, cpu.rs, memory.rs, decode.rs
-    status: todo
-    scope_lines: 50
-    tasks:
-    - id: p34.d1.t1
-      title: Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs
-      status: todo
-      acceptance_criteria:
-      - Files compile
-      - mod.rs exports public structs
-      files:
-      - src/riscv/mod.rs
-      - src/riscv/cpu.rs
-      - src/riscv/memory.rs
-      - src/riscv/decode.rs
-  - name: Register file
-    description: x[0..32] (x0=zero), PC, 32-bit registers
-    status: todo
-    scope_lines: 30
-    tasks:
-    - id: p34.d2.t1
-      title: Define RiscvCpu struct with x[32], pc, privilege fields
-      status: todo
-      acceptance_criteria:
-      - 'RiscvCpu struct with x: [u32; 32], pc: u32, privilege: u8'
-      - x[0] always reads as 0 (enforced on write)
-      - new() initializes pc=0x80000000, privilege=3 (M-mode)
-      files:
-      - src/riscv/cpu.rs
-  - name: Guest RAM
-    description: Vec<u8> separate from host RAM, configurable size (default 128MB)
-    status: todo
-    scope_lines: 60
-    tasks:
-    - id: p34.d3.t1
-      title: Implement GuestMemory with read_byte/half/word and write_byte/half/word
-      status: todo
-      acceptance_criteria:
-      - 'GuestMemory with ram: Vec<u8>, ram_base: u64'
-      - read_word at 0x80000000 reads first 4 bytes little-endian
-      - write_word followed by read_word returns same value
-      - Out-of-range access returns error
-      files:
-      - src/riscv/memory.rs
-  - name: Instruction decode
-    description: Decode all RV32I opcodes from 32-bit instruction words
-    status: todo
-    scope_lines: 200
-    tasks:
-    - id: p34.d4.t1
-      title: Implement decode() returning Operation enum for all RV32I opcodes
-      status: todo
-      acceptance_criteria:
-      - 'R-type: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND'
-      - 'I-type: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI'
-      - 'Load: LB, LH, LW, LBU, LHU'
-      - 'Store: SB, SH, SW'
-      - 'Branch: BEQ, BNE, BLT, BGE, BLTU, BGEU'
-      - 'Upper: LUI, AUIPC'
-      - 'Jump: JAL, JALR'
-      - 'System: ECALL, EBREAK, FENCE'
-      dependencies:
-      - p34.d1.t1
-      files:
-      - src/riscv/decode.rs
-  - name: Execute loop
-    description: CPU step() fetches, decodes, executes one instruction
-    status: todo
-    scope_lines: 200
-    tasks:
-    - id: p34.d5.t1
-      title: Implement RiscvCpu::step() and execute() for all RV32I instructions
-      status: todo
-      acceptance_criteria:
-      - step() fetches word at PC, decodes, executes, advances PC by 4
-      - JAL/JALR update PC to target and store return address
-      - Branches conditionally update PC
-      - x[0] always reads as 0 after any write
-      dependencies:
-      - p34.d2.t1
-      - p34.d3.t1
-      - p34.d4.t1
-      files:
-      - src/riscv/cpu.rs
-  - name: Test suite
-    description: One test per instruction, verification against known encodings
-    status: todo
-    scope_lines: 300
-    tasks:
-    - id: p34.d6.t1
-      title: Write tests for all R-type ALU operations
-      status: todo
-      acceptance_criteria:
-      - 'ADD: 10 + 20 = 30'
-      - 'SUB: 30 - 10 = 20'
-      - 'SLL: 1 << 5 = 32'
-      - 'SLT: 5 < 10 = 1'
-      - 'SLTU: unsigned comparison'
-      - 'XOR, OR, AND: bitwise ops'
-      - 'SRL: logical right shift'
-      - 'SRA: arithmetic right shift (sign-preserving)'
-      dependencies:
-      - p34.d5.t1
-      files:
-      - src/riscv/cpu.rs
-    - id: p34.d6.t2
-      title: Write tests for I-type, load, store, branch, jump instructions
-      status: todo
-      acceptance_criteria:
-      - 'ADDI: x1 = x2 + 100'
-      - 'LW/SW: store word, load same address, verify equal'
-      - 'LB/LBU: signed vs unsigned byte load'
-      - 'BEQ: branch taken when equal, not taken when not'
-      - 'JAL: jump and link, verify return address saved'
-      - 'JALR: indirect jump with register base'
-      dependencies:
-      - p34.d5.t1
-      files:
-      - src/riscv/cpu.rs
-    - id: p34.d6.t3
-      title: Write fibonacci test program that runs 20 iterations in RISC-V
-      status: todo
-      acceptance_criteria:
-      - Fibonacci(10) = 55 computed by RISC-V code
-      - Result stored in a register, verified by test
-      dependencies:
-      - p34.d5.t1
-      files:
-      - src/riscv/cpu.rs
-  dependencies:
-  - source: phase-33
-    target: phase-34
-    type: informs
-    reason: QEMU bridge teaches us what the interpreter needs to reimplement
-- id: phase-35
-  title: RISC-V Privilege Modes
-  status: future
-  goal: M/S/U privilege levels, CSR registers, trap handling. Linux needs this to manage its own processes.
-  priority: 50
-  deliverables:
-  - name: Privilege enum + CSR bank
-    description: M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp
-    status: todo
-    scope_lines: 80
-  - name: CSR read/write
-    description: CSRRW, CSRRS, CSRRC and immediate variants
-    status: todo
-    scope_lines: 100
-  - name: ECALL/MRET/SRET
-    description: Trap entry saves PC, jumps to vector. MRET/SRET restore PC.
-    status: todo
-    scope_lines: 120
-  - name: Timer + software interrupts
-    description: mtime/mtimecmp, msip/ssip, interrupt pending/enable
-    status: todo
-    scope_lines: 80
-  - name: Privilege transition tests
-    description: U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
-    status: todo
-    scope_lines: 150
-  dependencies:
-  - source: phase-34
-    target: phase-35
-    type: hard
-    reason: Privilege modes layer on top of the base RV32I interpreter
-- id: phase-36
-  title: RISC-V Virtual Memory & Devices
-  status: future
-  goal: SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot.
-  priority: 60
-  deliverables:
-  - name: SV32 page table walk
-    description: 2-level lookup, PTE flags, address translation
-    status: todo
-    scope_lines: 120
-  - name: TLB cache
-    description: 64-entry TLB with ASID-aware invalidation
-    status: todo
-    scope_lines: 80
-  - name: Page fault traps
-    description: Instruction/Load/Store page faults with stval/mtval
-    status: todo
-    scope_lines: 40
-  - name: UART 16550
-    description: Serial port emulation, reuses Phase 33 bridge pattern to canvas
-    status: todo
-    scope_lines: 150
-  - name: CLINT + PLIC
-    description: Timer interrupt controller + platform interrupt controller
-    status: todo
-    scope_lines: 200
-  - name: Virtio block device
-    description: Virtio MMIO transport, disk image from VFS
-    status: todo
-    scope_lines: 200
-  - name: Device Tree Blob
-    description: Generate DTB describing memory, UART, virtio devices
-    status: todo
-    scope_lines: 150
-  - name: MMU + device integration test
-    description: Guest sets up page tables, writes to UART, verify output on canvas
-    status: todo
-    scope_lines: 150
-  dependencies:
-  - source: phase-35
-    target: phase-36
-    type: hard
-    reason: SV32 and devices need privilege modes for trap handling
-  - source: phase-33
-    target: phase-36
-    type: informs
-    reason: QEMU bridge proved which devices are the minimum needed
-- id: phase-37
-  title: Guest OS Boot (Native RISC-V)
-  status: future
-  goal: 'Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes: QEMU and native.'
-  priority: 70
-  deliverables:
-  - name: ELF + binary loader
-    description: Parse ELF64 RISC-V kernel images, load segments into guest RAM
-    status: todo
-    scope_lines: 160
-  - name: DTB passthrough
-    description: Pass device tree blob to kernel in a1 register at boot
-    status: todo
-    scope_lines: 30
-  - name: Boot console
-    description: Guest UART output to canvas (same bridge as Phase 33)
-    status: todo
-    scope_lines: 80
-  - name: HYPERVISOR mode flag
-    description: Opcode detects 'native' vs 'qemu' from config string
-    status: todo
-    scope_lines: 30
-  - name: Verified boot
-    description: Boot OpenSBI + Linux tinyconfig, verify 'Linux version' on canvas
-    status: todo
-    scope_lines: 100
-  - name: Performance benchmark
-    description: Measure MIPS, compare interpreter vs QEMU, document results
-    status: todo
-    scope_lines: 40
-  dependencies:
-  - source: phase-36
-    target: phase-37
-    type: hard
-    reason: Need MMU + devices before booting a kernel
-  - source: phase-33
-    target: phase-37
-    type: informs
-    reason: QEMU boot experience guides native boot requirements
-global_risks:
-- 'Opcode space: 76 of ~256 slots used, plenty of room'
-- Scope creep -- adding features is easy, keeping the OS coherent is hard
-- Kernel boundary breaks existing programs -- need a compatibility mode
-- Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
-- Filesystem persistence needs host directory -- WASM port needs different backing
-- 'Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces shared-RAM for multiprocess'
-- 'Phase 28 device drivers: IOCTL opcode 0x62, 4 device files at fds 0xE000-0xE003'
-conventions:
-- Every new opcode gets a test in tests/program_tests.rs
-- Every new program gets assembled by test_all_programs_assemble
-- README.md updated when opcodes or features change
-- roadmap.yaml is the single source of truth for project state
-- 'Semantic versioning: minor bump for new opcodes, patch for fixes'
-- New opcodes need a program that needs them (no speculative opcodes)
+     1|title: Geometry OS Roadmap
+     2|version: 1.0.0
+     3|description: "Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  77 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,\
+     4|  \ watch it run."
+     5|project_url: https://github.com/tdw419/geometry-os
+     6|meta:
+     7|  language: Rust
+     8|  gui: minifb
+     9|  screen: 256x256 pixels
+    10|  registers: 32
+    11|  ram: 65536 words
+    12|  opcodes: 77
+    13|  tests: 336
+    14|  programs: 40
+    15|  loc: 10013
+    16|phases:
+    17|- id: phase-1
+    18|  title: Core VM + Visual Programs
+    19|  status: complete
+    20|  goal: Working VM with pixel opcodes, static visual output
+    21|  description: Foundational VM + programs that produce static images
+    22|  deliverables:
+    23|  - name: HALT/NOP/FRAME opcodes
+    24|    description: 'Control flow: stop, no-op, yield to renderer'
+    25|    status: done
+    26|  - name: LDI/LOAD/STORE opcodes
+    27|    description: 'Data movement: load immediate, load/store from RAM'
+    28|    status: done
+    29|  - name: ADD/SUB/MUL/DIV opcodes
+    30|    description: Arithmetic on registers
+    31|    status: done
+    32|  - name: AND/OR/XOR opcodes
+    33|    description: Bitwise logic on registers
+    34|    status: done
+    35|  - name: JMP/JZ/JNZ opcodes
+    36|    description: Unconditional and conditional branching
+    37|    status: done
+    38|  - name: CALL/RET opcodes
+    39|    description: Subroutine call/return via r31
+    40|    status: done
+    41|  - name: PSET/PSETI opcodes
+    42|    description: Pixel set from registers or immediates
+    43|    status: done
+    44|  - name: FILL opcode
+    45|    description: Fill entire screen with a color
+    46|    status: done
+    47|  - name: RECTF opcode
+    48|    description: Filled rectangle
+    49|    status: done
+    50|  - name: Two-pass assembler
+    51|    description: Labels, comments, hex/dec/bin literals, .db directive
+    52|    status: done
+    53|  - name: hello.asm
+    54|    description: Hello world text display
+    55|    status: done
+    56|  - name: fill_screen.asm
+    57|    description: Fill screen with solid color
+    58|    status: done
+    59|  - name: diagonal.asm
+    60|    description: Diagonal line from (0,0) to (255,255)
+    61|    status: done
+    62|  - name: border.asm
+    63|    description: Colored border around screen edges
+    64|    status: done
+    65|  - name: gradient.asm
+    66|    description: Horizontal color gradient via nested loops
+    67|    status: done
+    68|  - name: stripes.asm
+    69|    description: Alternating horizontal stripes
+    70|    status: done
+    71|  - name: nested_rects.asm
+    72|    description: Concentric colored rectangles
+    73|    status: done
+    74|  - name: checkerboard.asm
+    75|    description: Checkerboard pattern
+    76|    status: done
+    77|  - name: colors.asm
+    78|    description: Color palette display
+    79|    status: done
+    80|  - name: rainbow.asm
+    81|    description: Rainbow stripes
+    82|    status: done
+    83|  - name: rings.asm
+    84|    description: Concentric rings
+    85|    status: done
+    86|  - name: lines.asm
+    87|    description: Star burst using LINE opcode
+    88|    status: done
+    89|  - name: circles.asm
+    90|    description: Concentric circles using CIRCLE opcode
+    91|    status: done
+    92|  scope_lines_total: 2000
+    93|  test_target: 10
+    94|- id: phase-2
+    95|  title: Extended Opcodes
+    96|  status: complete
+    97|  goal: Shift, modulo, compare, stack, and signed negation opcodes
+    98|  description: Instruction set extensions
+    99|  deliverables:
+   100|  - name: SHL/SHR opcodes
+   101|    description: Bit-shift left and right
+   102|    status: done
+   103|    acceptance_criteria:
+   104|    - description: shift_test.asm passes
+   105|      met: true
+   106|  - name: MOD opcode
+   107|    description: Modulo operation
+   108|    status: done
+   109|  - name: NEG opcode
+   110|    description: Two's complement negation
+   111|    status: done
+   112|  - name: CMP opcode
+   113|    description: 'Compare: r0 = -1/0/1 (lt/eq/gt)'
+   114|    status: done
+   115|  - name: BLT/BGE opcodes
+   116|    description: Branch on CMP result (less-than, greater-or-equal)
+   117|    status: done
+   118|  - name: PUSH/POP opcodes
+   119|    description: Stack operations via r30 (SP)
+   120|    status: done
+   121|    acceptance_criteria:
+   122|    - description: push_pop_test.asm passes
+   123|      met: true
+   124|  - name: TEXT opcode
+   125|    description: Render null-terminated string from RAM at (x,y)
+   126|    status: done
+   127|  - name: LINE opcode
+   128|    description: Bresenham line between two points
+   129|    status: done
+   130|  - name: CIRCLE opcode
+   131|    description: Midpoint circle algorithm
+   132|    status: done
+   133|  - name: SCROLL opcode
+   134|    description: Scroll screen up by N pixels
+   135|    status: done
+   136|  scope_lines_total: 2800
+   137|  test_target: 16
+   138|- id: phase-3
+   139|  title: Interactive Programs
+   140|  status: complete
+   141|  goal: Keyboard input via IKEY and interactive programs
+   142|  deliverables:
+   143|  - name: IKEY opcode
+   144|    description: Read keyboard port RAM[0xFFF], clear it
+   145|    status: done
+   146|  - name: blink.asm
+   147|    description: Toggle a pixel on/off with keyboard
+   148|    status: done
+   149|  - name: calculator.asm
+   150|    description: 4-function calculator with text display
+   151|    status: done
+   152|  - name: painter.asm
+   153|    description: Freehand drawing with cursor keys
+   154|    status: done
+   155|  scope_lines_total: 3200
+   156|  test_target: 20
+   157|- id: phase-4
+   158|  title: Canvas & Editor
+   159|  status: complete
+   160|  goal: 'Text editor improvements: paste, load, scroll, syntax highlighting'
+   161|  deliverables:
+   162|  - name: Clipboard paste
+   163|    description: Ctrl+V to paste text onto the grid
+   164|    status: done
+   165|  - name: File load
+   166|    description: Ctrl+F8 to load .asm files with Tab completion
+   167|    status: done
+   168|  - name: Scroll/pan
+   169|    description: Support programs larger than 32x32 characters
+   170|    status: done
+   171|  - name: Syntax highlighting
+   172|    description: Color opcodes, registers, numbers differently on canvas
+   173|    status: done
+   174|  scope_lines_total: 3500
+   175|  test_target: 22
+   176|- id: phase-5
+   177|  title: Terminal Mode
+   178|  status: complete
+   179|  goal: CLI mode with geo> prompt
+   180|  deliverables:
+   181|  - name: Terminal mode
+   182|    description: geo> prompt with help, list, load, run, edit, regs, peek, poke, reset, clear, quit
+   183|    status: done
+   184|  - name: Mode switching
+   185|    description: Escape toggles Editor/Terminal
+   186|    status: done
+   187|  scope_lines_total: 3800
+   188|  test_target: 24
+   189|- id: phase-6
+   190|  title: Animation
+   191|  status: complete
+   192|  goal: FRAME opcode for 60fps animation loop
+   193|  deliverables:
+   194|  - name: FRAME opcode
+   195|    description: Yield to renderer, enable animation loops
+   196|    status: done
+   197|  - name: fire.asm
+   198|    description: Scrolling fire animation using FRAME + SCROLL
+   199|    status: done
+   200|  - name: scroll_demo.asm
+   201|    description: Horizontal bar scrolling upward
+   202|    status: done
+   203|  scope_lines_total: 4000
+   204|  test_target: 24
+   205|- id: phase-7
+   206|  title: Random & Games
+   207|  status: complete
+   208|  goal: RAND opcode, Snake and Ball games
+   209|  deliverables:
+   210|  - name: RAND opcode
+   211|    description: LCG pseudo-random u32 (seed 0xDEADBEEF)
+   212|    status: done
+   213|  - name: snake.asm
+   214|    description: 'Snake: WASD, random apples, growing tail, self-collision'
+   215|    status: done
+   216|  - name: ball.asm
+   217|    description: Bouncing ball with WASD control
+   218|    status: done
+   219|  scope_lines_total: 4300
+   220|  test_target: 24
+   221|- id: phase-8
+   222|  title: TICKS & Sound
+   223|  status: complete
+   224|  goal: Frame counter for throttling, BEEP opcode for audio
+   225|  deliverables:
+   226|  - name: TICKS register
+   227|    description: RAM[0xFFE] frame counter, incremented each FRAME, wraps at u32 max
+   228|    status: done
+   229|  - name: Snake throttle
+   230|    description: Snake throttled via TICKS & 7 (~7.5 moves/sec)
+   231|    status: done
+   232|  - name: BEEP opcode
+   233|    description: BEEP freq_reg, dur_reg -- sine-wave via aplay (20-20000 Hz, 1-5000 ms)
+   234|    status: done
+   235|  - name: Snake sounds
+   236|    description: 880Hz ping on apple eat, 110Hz thud on death
+   237|    status: done
+   238|  - name: Ball sounds
+   239|    description: 330Hz click on wall bounce
+   240|    status: done
+   241|  scope_lines_total: 4322
+   242|  test_target: 46
+   243|- id: phase-9
+   244|  title: Debug Tools
+   245|  status: complete
+   246|  goal: Breakpoints, instruction trace, and save/load improvements
+   247|  deliverables:
+   248|  - name: Save/load state
+   249|    description: F7 saves full RAM to geometry_os.sav, restore on startup
+   250|    status: done
+   251|    acceptance_criteria:
+   252|    - description: test_vm_save_load_roundtrip passes
+   253|      met: true
+   254|  - name: Disassembly panel
+   255|    description: Show bytecode alongside source text in GUI
+   256|    status: done
+   257|  - name: Single-step mode
+   258|    description: F6 steps one instruction when paused
+   259|    status: done
+   260|  - name: Breakpoints
+   261|    description: Mark PC addresses to pause at during execution
+   262|    status: done
+   263|    scope_lines: 80
+   264|    scope_files:
+   265|    - src/vm.rs
+   266|    - src/main.rs
+   267|    acceptance_criteria:
+   268|    - description: User can set breakpoint at an address
+   269|      met: true
+   270|    - description: VM halts when PC hits breakpoint address
+   271|      met: true
+   272|  - name: Instruction trace
+   273|    description: Log PC + decoded instruction for first N steps
+   274|    status: done
+   275|    scope_lines: 60
+   276|    scope_files:
+   277|    - src/vm.rs
+   278|    - src/main.rs
+   279|    acceptance_criteria:
+   280|    - description: CLI mode logs each instruction with register state
+   281|      met: true
+   282|  scope_lines_total: 4500
+   283|  test_target: 48
+   284|- id: phase-10
+   285|  title: Extended Graphics
+   286|  status: complete
+   287|  goal: Sprite blitting and screenshot export
+   288|  deliverables:
+   289|  - name: SPRITE opcode
+   290|    description: Copy a block of RAM to screen at (x,y) -- sprite blit
+   291|    status: done
+   292|    scope_lines: 120
+   293|    scope_files:
+   294|    - src/vm.rs
+   295|    - src/assembler.rs
+   296|    acceptance_criteria:
+   297|    - description: Copy NxM pixels from RAM to screen buffer
+   298|      met: true
+   299|    - description: Color 0 pixels are transparent (skip)
+   300|      met: true
+   301|    - description: test_sprite_transparent_skips_zero passes
+   302|      met: true
+   303|  - name: Screenshot export
+   304|    description: Dump 256x256 canvas to PNG file
+   305|    status: done
+   306|    scope_lines: 40
+   307|    scope_files:
+   308|    - src/main.rs
+   309|    acceptance_criteria:
+   310|    - description: F9 or CLI command saves PNG
+   311|      met: true
+   312|  scope_lines_total: 4700
+   313|  test_target: 50
+   314|- id: phase-11
+   315|  title: Advanced Games
+   316|  status: complete
+   317|  goal: Richer games using sprites and extended features
+   318|  deliverables:
+   319|  - name: breakout.asm
+   320|    description: Breakout with paddle, ball, 4 rows of colored bricks, score, lives
+   321|    status: done
+   322|  - name: tetris.asm
+   323|    description: Tetris with piece rotation and line clearing
+   324|    status: done
+   325|  - name: maze.asm
+   326|    description: Randomly generated maze with player navigation
+   327|    status: done
+   328|    acceptance_criteria:
+   329|    - description: test_maze_assembles passes
+   330|      met: true
+   331|    - description: test_maze_initializes passes
+   332|      met: true
+   333|  scope_lines_total: 5100
+   334|  test_target: 56
+   335|- id: phase-12
+   336|  title: Self-Hosting
+   337|  status: complete
+   338|  goal: VM can assemble and run its own programs from within
+   339|  description: 'The text editor types assembly, the assembler compiles it, and
+   340|
+   341|    the VM runs it. Missing piece: assembler callable as VM subroutine.
+   342|
+   343|    '
+   344|  deliverables:
+   345|  - name: Assembler syscall
+   346|    description: VM opcode that triggers the assembler on canvas text
+   347|    status: done
+   348|    scope_lines: 150
+   349|    scope_files:
+   350|    - src/vm.rs
+   351|    - src/assembler.rs
+   352|    acceptance_criteria:
+   353|    - description: ASM opcode (0x4B) reads null-terminated source from RAM
+   354|      met: true
+   355|    - description: ASM writes bytecode to RAM at destination address
+   356|      met: true
+   357|    - description: RAM[0xFFD] holds result (word count or 0xFFFFFFFF on error)
+   358|      met: true
+   359|    - description: test_asm_opcode_basic passes
+   360|      met: true
+   361|    - description: test_asm_opcode_error passes
+   362|      met: true
+   363|  - name: Self-hosting demo
+   364|    description: Program that writes assembly, assembles it, runs the output
+   365|    status: done
+   366|    scope_lines: 80
+   367|    scope_files:
+   368|    - programs/self_host.asm
+   369|    acceptance_criteria:
+   370|    - description: self_host.asm compiles and runs
+   371|      met: true
+   372|    - description: Generated code executes (screen filled with green)
+   373|      met: true
+   374|  scope_lines_total: 5500
+   375|  test_target: 54
+   376|- id: phase-13
+   377|  title: Close the Gaps
+   378|  status: complete
+   379|  goal: Every program tested, every error traceable, no regressions
+   380|  priority: 1
+   381|  deliverables:
+   382|  - name: Tests for untested programs
+   383|    description: ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity
+   384|    status: done
+   385|    scope_lines: 220
+   386|    scope_files:
+   387|    - tests/program_tests.rs
+   388|    acceptance_criteria:
+   389|    - description: cargo test all green
+   390|    - description: Each untested program has at least one test
+   391|  - name: Assembler error line numbers
+   392|    description: Error messages include source line number
+   393|    status: done
+   394|    scope_lines: 30
+   395|    scope_files:
+   396|    - src/assembler.rs
+   397|    acceptance_criteria:
+   398|    - description: 'Error message format: ''line N: unknown opcode: XYZ'''
+   399|  - name: Version string audit
+   400|    description: Single source of truth for version across banner, CLI, Cargo.toml
+   401|    status: done
+   402|    scope_lines: 10
+   403|    scope_files:
+   404|    - src/main.rs
+   405|    - Cargo.toml
+   406|- id: phase-14
+   407|  title: Developer Experience
+   408|  status: complete
+   409|  goal: Make the VM pleasant to program
+   410|  priority: 2
+   411|  deliverables:
+   412|  - name: 'Assembler #define constants'
+   413|    description: '#define NAME value -- eliminates magic numbers'
+   414|    status: done
+   415|    scope_lines: 80
+   416|    scope_files:
+   417|    - src/assembler.rs
+   418|    acceptance_criteria:
+   419|    - description: '#define TILE 8 resolves in LDI and other immediate contexts'
+   420|      met: true
+   421|  - name: programs/README.md
+   422|    description: One-line description + controls + opcodes per program
+   423|    status: done
+   424|    scope_lines: 60
+   425|    scope_files:
+   426|    - programs/README.md
+   427|  - name: Disassembler panel in GUI
+   428|    description: Shows PC +/- 10 instructions, updates each step
+   429|    status: done
+   430|    scope_lines: 50
+   431|    scope_files:
+   432|    - src/main.rs
+   433|  - name: GIF/video capture
+   434|    description: F10 toggle writes numbered PNGs, ffmpeg command documented
+   435|    status: done
+   436|    scope_lines: 20
+   437|    scope_files:
+   438|    - src/main.rs
+   439|- id: phase-15
+   440|  title: VM Capability Gaps
+   441|  status: complete
+   442|  goal: Fix rough edges in game programming
+   443|  priority: 4
+   444|  deliverables:
+   445|  - name: SAR opcode (arithmetic shift right, 0x2B)
+   446|    description: Two's-complement division for negative numbers
+   447|    status: done
+   448|    scope_lines: 10
+   449|    scope_files:
+   450|    - src/vm.rs
+   451|    - src/assembler.rs
+   452|    acceptance_criteria:
+   453|    - description: Two's-complement division works for negative numbers
+   454|      met: true
+   455|  - name: Multi-key input (bitmask at 0xFFB)
+   456|    description: Two simultaneous keys in same frame
+   457|    status: done
+   458|    scope_lines: 20
+   459|    scope_files:
+   460|    - src/vm.rs
+   461|    - src/main.rs
+   462|    acceptance_criteria:
+   463|    - description: Two simultaneous keys register in same frame
+   464|      met: true
+   465|  - name: BEEP in more programs
+   466|    description: Sound effects for tetris, breakout, maze, sprite_demo
+   467|    status: done
+   468|    scope_lines: 20
+   469|    scope_files:
+   470|    - programs/*.asm
+   471|    acceptance_criteria:
+   472|    - description: Sound effects on game events
+   473|      met: true
+   474|  - name: Signed arithmetic audit
+   475|    description: Document SUB/ADD/MUL sign contract, CMP semantics
+   476|    status: done
+   477|    scope_lines: 30
+   478|    scope_files:
+   479|    - ROADMAP.md
+   480|    - docs/
+   481|- id: phase-16
+   482|  title: Showcase Shipping
+   483|  status: complete
+   484|  goal: Complete game, presentable repo, public release
+   485|  priority: 3
+   486|  deliverables:
+   487|  - name: Complete tetris
+   488|    description: Scoring, levels, sound, game-over screen
+   489|    status: done
+   490|    scope_lines: 100
+   491|    scope_files:
+   492|    - programs/tetris.asm
+   493|    acceptance_criteria:
+   494|    - description: Playable start-to-finish with visible score
+   495|      met: true
+   496|  - name: TILEMAP opcode
+   497|    description: Grid blit from tile index array -- makes grid games 3x shorter
+   498|    status: done
+   499|    scope_lines: 60
+   500|    scope_files:
+   501|    - src/vm.rs
+   502|    - src/assembler.rs
+   503|    acceptance_criteria:
+   504|    - description: snake, tetris, maze each 3x shorter
+   505|      met: true
+   506|  - name: Persistent save slots
+   507|    description: 4 named save slots accessible from terminal
+   508|    status: done
+   509|    scope_lines: 30
+   510|    scope_files:
+   511|    - src/vm.rs
+   512|    - src/main.rs
+   513|    acceptance_criteria:
+   514|    - description: save/load slot1 works
+   515|      met: true
+   516|  - name: GitHub release v1.0.1
+   517|    description: Tag, release notes, prebuilt binary
+   518|    status: done
+   519|    acceptance_criteria:
+   520|    - description: Release notes prepared
+   521|      met: true
+   522|- id: phase-17
+   523|  title: Platform Growth
+   524|  status: complete
+   525|  goal: Geometry OS as a target platform
+   526|  priority: 5
+   527|  deliverables:
+   528|  - name: GlyphLang compiler backend
+   529|    description: Emit .geo bytecode from GlyphLang source
+   530|    status: done
+   531|    scope_lines: 200
+   532|    scope_files:
+   533|    - src/glyph_backend.rs
+   534|  - name: Browser port via WASM
+   535|    description: VM runs in browser with canvas rendering
+   536|    status: done
+   537|    scope_lines: 200
+   538|    scope_files:
+   539|    - wasm/
+   540|    acceptance_criteria:
+   541|    - description: wasm-pack build succeeds
+   542|      met: true
+   543|    - description: Demo page with built-in programs runs in browser
+   544|      met: true
+   545|    - description: Full opcode set works in WASM
+   546|      met: true
+   547|  - name: Network port (0xFFC UDP)
+   548|    description: Two VM instances exchange messages
+   549|    status: done
+   550|    scope_lines: 40
+   551|    scope_files:
+   552|    - src/main.rs
+   553|- id: phase-18
+   554|  title: VM Instrumentation
+   555|  status: complete
+   556|  goal: Telemetry for memory access and execution flow
+   557|  priority: 6
+   558|  deliverables:
+   559|  - name: Access log buffer
+   560|    description: Track LOAD/STORE/SPRITE/TILEMAP RAM hits per frame
+   561|    status: done
+   562|    scope_lines: 50
+   563|    scope_files:
+   564|    - src/vm.rs
+   565|  - name: Instruction fetch logging
+   566|    description: Track PC addresses for execution trail
+   567|    status: done
+   568|    scope_lines: 10
+   569|    scope_files:
+   570|    - src/vm.rs
+   571|- id: phase-19
+   572|  title: Visual Debugger
+   573|  status: complete
+   574|  goal: Live heat-map and PC trail overlays on canvas
+   575|  priority: 7
+   576|  deliverables:
+   577|  - name: Intensity decay buffer
+   578|    description: Fade memory highlights over ~10 frames
+   579|    status: done
+   580|    scope_lines: 30
+   581|    scope_files:
+   582|    - src/main.rs
+   583|  - name: Canvas cell tinting
+   584|    description: Cyan (Read) and Magenta (Write) flashes on active RAM addresses
+   585|    status: done
+   586|    scope_lines: 40
+   587|    scope_files:
+   588|    - src/main.rs
+   589|  - name: PC trail visualization
+   590|    description: Fading white glow follows the execution pointer
+   591|    status: done
+   592|    scope_lines: 20
+   593|    scope_files:
+   594|    - src/main.rs
+   595|- id: phase-20
+   596|  title: High RAM Visualization
+   597|  status: complete
+   598|  goal: Deep observability into game state and sprite memory
+   599|  priority: 8
+   600|  deliverables:
+   601|  - name: RAM inspector panel
+   602|    description: Second 32x32 grid visualizing 0x2000-0x23FF or scrollable range
+   603|    status: done
+   604|    scope_lines: 60
+   605|    scope_files:
+   606|    - src/main.rs
+   607|    acceptance_criteria:
+   608|    - description: 32x32 grid renders at bottom of window
+   609|      met: true
+   610|    - description: PageUp/PageDown scrolls through RAM in Terminal mode
+   611|      met: true
+   612|    - description: Access intensities shown as color tints
+   613|      met: true
+   614|  - name: Global heatmap
+   615|    description: Compact 256x256 view of entire 64K RAM access patterns
+   616|    status: done
+   617|    scope_lines: 80
+   618|    scope_files:
+   619|    - src/main.rs
+   620|    acceptance_criteria:
+   621|    - description: 256x256 pixel grid shows all 64K words
+   622|      met: true
+   623|    - description: Read/Write access shown as cyan/magenta pulses
+   624|      met: true
+   625|    - description: PC position highlighted in white
+   626|      met: true
+   627|- id: phase-21
+   628|  title: Spatial Program Coordinator (Native Windowing)
+   629|  status: complete
+   630|  goal: Eliminate CPU-side compositor dependency by running multiple autonomous Glyph programs concurrently within the GPU/WGPU substrate.
+   631|  priority: 9
+   632|  deliverables:
+   633|  - name: Multi-Process VM Scheduler
+   634|    description: Modify the core VM to support multiple concurrent execution contexts (window instances) within the same 64K RAM.
+   635|    status: done
+   636|    acceptance_criteria:
+   637|    - description: SpawnedProcess struct with isolated registers and PC
+   638|      met: true
+   639|    - description: step_all_processes() with swap-in/step/swap-out pattern
+   640|      met: true
+   641|    - description: MAX_PROCESSES = 8 cap
+   642|      met: true
+   643|  - name: SPAWN/KILL Opcodes (0x4D/0x4E)
+   644|    description: SPAWN addr_reg creates child process; KILL pid_reg halts it. PID stored in RAM[0xFFA].
+   645|    status: done
+   646|    acceptance_criteria:
+   647|    - description: test_spawn_creates_child_process passes
+   648|      met: true
+   649|    - description: test_spawn_max_processes passes
+   650|      met: true
+   651|    - description: test_kill_halts_child_process passes
+   652|      met: true
+   653|  - name: Window Manager Demo
+   654|    description: window_manager.asm -- primary draws animated window border, child bounces ball inside via shared RAM bounds protocol.
+   655|    status: done
+   656|    acceptance_criteria:
+   657|    - description: window_manager.asm assembles and runs
+   658|      met: true
+   659|    - description: test_window_manager_spawns_child passes
+   660|      met: true
+   661|    - description: Ball stays within window bounds
+   662|      met: true
+   663|- id: phase-22
+   664|  title: Screen Readback & Collision Detection
+   665|  status: complete
+   666|  goal: Let programs read pixel values from the framebuffer for collision detection, pick-color, and window compositing.
+   667|  priority: 10
+   668|  deliverables:
+   669|  - name: PEEK opcode (0x4F)
+   670|    description: PEEK rx, ry, rd -- read screen pixel at (rx,ry) into rd. Enables collision detection.
+   671|    status: done
+   672|    scope_lines: 20
+   673|    scope_files:
+   674|    - src/vm.rs
+   675|    - src/assembler.rs
+   676|    acceptance_criteria:
+   677|    - description: PEEK reads screen buffer value into destination register
+   678|      met: true
+   679|    - description: Out-of-bounds returns 0
+   680|      met: true
+   681|    - description: test_peek_reads_screen_pixel passes
+   682|      met: true
+   683|  - name: Collision detection demo
+   684|    description: peek_bounce.asm -- white ball bounces off drawn obstacles using PEEK. No RAM collision map.
+   685|    status: done
+   686|    scope_lines: 100
+   687|    scope_files:
+   688|    - programs/peek_bounce.asm
+   689|  - name: MOV instruction everywhere
+   690|    description: MOV rd, rs documented and used across programs
+   691|    status: done
+   692|- id: phase-23
+   693|  title: Kernel Boundary (Syscall Mode)
+   694|  status: complete
+   695|  goal: Establish user mode vs kernel mode. Programs can't directly access hardware.
+   696|  priority: 11
+   697|  deliverables:
+   698|  - name: CPU mode flag
+   699|    description: 'vm.mode: User/Kernel bit in VM state'
+   700|    status: done
+   701|    acceptance_criteria_met: true
+   702|  - name: SYSCALL opcode (0x52)
+   703|    description: Trap into kernel mode, dispatch by syscall number
+   704|    status: done
+   705|    acceptance_criteria_met: true
+   706|  - name: RETK opcode (0x53)
+   707|    description: Return from kernel mode to user mode
+   708|    status: done
+   709|    acceptance_criteria_met: true
+   710|  - name: Syscall dispatch table
+   711|    description: RAM region 0xFE00..0xFEFF mapping syscall numbers to kernel handlers
+   712|    status: done
+   713|    acceptance_criteria_met: true
+   714|  - name: Restricted opcodes in user mode
+   715|    description: IKEY, hardware STORE blocked in user mode
+   716|    status: done
+   717|    acceptance_criteria_met: true
+   718|- id: phase-24
+   719|  title: Memory Protection
+   720|  status: complete
+   721|  goal: Each process gets its own address space. Processes can't trash each other.
+   722|  priority: 12
+   723|  deliverables:
+   724|  - name: Page tables
+   725|    description: 'Simple 1-level paging: page_dir per process, maps virtual to physical'
+   726|    status: done
+   727|    acceptance_criteria:
+   728|    - description: translate_va maps virtual to physical via page directory
+   729|      met: true
+   730|    - description: Kernel mode uses identity mapping (no page directory)
+   731|      met: true
+   732|  - name: Address space per process
+   733|    description: SPAWN creates new page table, not just new registers
+   734|    status: done
+   735|    acceptance_criteria:
+   736|    - description: Each child gets 4 private physical pages
+   737|      met: true
+   738|    - description: Shared regions (page 3, page 63) identity-mapped
+   739|      met: true
+   740|  - name: SEGFAULT on illegal access
+   741|    description: LOAD/STORE/fetch to unmapped page halts the process
+   742|    status: done
+   743|    acceptance_criteria:
+   744|    - description: test_child_segfaults_on_unmapped_store passes
+   745|      met: true
+   746|    - description: test_child_segfaults_on_unmapped_load passes
+   747|      met: true
+   748|    - description: test_child_segfaults_on_unmapped_fetch passes
+   749|      met: true
+   750|    - description: RAM[0xFF9] tracks segfaulted PID
+   751|      met: true
+   752|  - name: Process memory isolation
+   753|    description: Two processes can't corrupt each other's memory
+   754|    status: done
+   755|    acceptance_criteria:
+   756|    - description: test_process_memory_isolation passes
+   757|      met: true
+   758|    - description: test_child_user_mode_blocks_hardware_port_write passes
+   759|      met: true
+   760|    - description: test_child_can_access_shared_window_bounds passes
+   761|      met: true
+   762|  - name: Memory protection tests
+   763|    description: 9 tests covering segfault, isolation, page tables, kernel mode
+   764|    status: done
+   765|    acceptance_criteria:
+   766|    - description: test_child_page_directory_has_shared_regions_mapped passes
+   767|      met: true
+   768|    - description: test_kernel_mode_identity_mapping passes
+   769|      met: true
+   770|    - description: test_kill_frees_physical_pages passes
+   771|      met: true
+   772|    - description: test_segfault_pid_tracking passes
+   773|      met: true
+   774|  - name: Process memory regions documentation
+   775|    description: docs/MEMORY_PROTECTION.md -- code/heap/stack/shared segments
+   776|    status: done
+   777|- id: phase-25
+   778|  title: Filesystem
+   779|  status: complete
+   780|  goal: Programs can create, read, write, and delete named files. Persistent storage.
+   781|  priority: 13
+   782|  deliverables:
+   783|  - name: Virtual filesystem layer
+   784|    description: Abstract FS interface backed by host filesystem in .geometry_os/fs/
+   785|    status: done
+   786|  - name: OPEN/READ/WRITE/CLOSE/SEEK syscalls
+   787|    description: Full file I/O through syscall interface
+   788|    status: done
+   789|  - name: LS syscall
+   790|    description: Directory listing into RAM buffer
+   791|    status: done
+   792|  - name: Per-process fd table
+   793|    description: Max 16 open files per process
+   794|    status: done
+   795|  - name: cat.asm
+   796|    description: Test program that reads a file and displays it
+   797|    status: done
+   798|- id: phase-26
+   799|  title: Preemptive Scheduler
+   800|  status: complete
+   801|  goal: Replace round-robin single-step with time-sliced priority scheduler.
+   802|  priority: 14
+   803|  deliverables:
+   804|  - name: Timer interrupt
+   805|    description: VM fires tick every N instructions, triggers context switch
+   806|    status: done
+   807|  - name: Priority levels
+   808|    description: Each process has priority 0-3, higher gets more slices
+   809|    status: done
+   810|  - name: Yield/Sleep syscalls
+   811|    description: Voluntary yield and timed sleep
+   812|    status: done
+   813|- id: phase-27
+   814|  title: Inter-Process Communication
+   815|  status: complete
+   816|  goal: Processes communicate through pipes and messages, not raw shared RAM.
+   817|  priority: 15
+   818|  deliverables:
+   819|  - name: PIPE syscall
+   820|    description: Create unidirectional pipe with circular buffer (0x5D)
+   821|    status: done
+   822|    acceptance_criteria:
+   823|    - description: PIPE r5, r6 creates read FD (0x8000|idx) and write FD (0xC000|idx)
+   824|      met: true
+   825|    - description: Pipe buffer holds 256 words
+   826|      met: true
+   827|  - name: MSGSND/MSGRCV syscalls
+   828|    description: Send and receive fixed-size messages by PID (0x5E, 0x5F)
+   829|    status: done
+   830|    acceptance_criteria:
+   831|    - description: MSGSND sends 4-word message to target PID
+   832|      met: true
+   833|    - description: MSGRCV receives message, returns sender PID in r0
+   834|      met: true
+   835|    - description: Per-process message queue holds 16 messages
+   836|      met: true
+   837|  - name: Blocking I/O
+   838|    description: READ on empty pipe blocks until data arrives
+   839|    status: done
+   840|    acceptance_criteria:
+   841|    - description: READ on empty pipe sets proc.blocked = true
+   842|      met: true
+   843|    - description: Scheduler skips blocked processes
+   844|      met: true
+   845|    - description: MSGRCV blocks if no message queued
+   846|      met: true
+   847|  - name: pipe_test.asm
+   848|    description: Program demonstrating parent-child pipe communication
+   849|    status: done
+   850|- id: phase-28
+   851|  title: Device Driver Abstraction
+   852|  status: complete
+   853|  goal: All hardware access through a uniform driver interface. Everything is a file.
+   854|  priority: 16
+   855|  deliverables:
+   856|  - name: Device file convention
+   857|    description: /dev/screen, /dev/keyboard, /dev/audio, /dev/net
+   858|    status: done
+   859|    acceptance_criteria:
+   860|    - description: OPEN /dev/screen returns fd 0xE000
+   861|      met: true
+   862|    - description: OPEN /dev/keyboard returns fd 0xE001
+   863|      met: true
+   864|    - description: OPEN /dev/audio returns fd 0xE002
+   865|      met: true
+   866|    - description: OPEN /dev/net returns fd 0xE003
+   867|      met: true
+   868|  - name: IOCTL syscall
+   869|    description: Device-specific control operations
+   870|    status: done
+   871|    acceptance_criteria:
+   872|    - description: IOCTL assembles to opcode 0x62
+   873|      met: true
+   874|    - description: 'Screen: get width/height via cmd 0/1'
+   875|      met: true
+   876|    - description: 'Keyboard: get/set echo mode via cmd 0/1'
+   877|      met: true
+   878|    - description: 'Audio: get/set volume via cmd 0/1'
+   879|      met: true
+   880|    - description: 'Net: get status via cmd 0'
+   881|      met: true
+   882|  - name: Screen/keyboard/audio/net drivers
+   883|    description: Wrap existing hardware ports as device files
+   884|    status: done
+   885|    acceptance_criteria:
+   886|    - description: WRITE to /dev/screen draws pixels from (x,y,color) triplets
+   887|      met: true
+   888|    - description: READ from /dev/keyboard reads RAM[0xFFF] and clears it
+   889|      met: true
+   890|    - description: WRITE to /dev/audio sets beep from (freq,dur) pair
+   891|      met: true
+   892|    - description: READ/WRITE to /dev/net uses RAM[0xFFC]
+   893|      met: true
+   894|    - description: device_test.asm demo program
+   895|      met: true
+   896|- id: phase-29
+   897|  title: Shell
+   898|  status: complete
+   899|  goal: Proper command shell with pipes, redirection, environment variables.
+   900|  priority: 17
+   901|  deliverables:
+   902|  - name: shell.asm
+   903|    description: Interactive command interpreter as user process
+   904|    status: done
+   905|    acceptance_criteria:
+   906|    - description: shell.asm assembles without errors
+   907|      met: true
+   908|    - description: 'Built-in commands: ls, cd, cat, echo, ps, kill, help, pwd, clear, exit'
+   909|      met: true
+   910|  - name: Pipe operator
+   911|    description: prog1 | prog2 connects stdout to stdin
+   912|    status: done
+   913|    acceptance_criteria:
+   914|    - description: EXECP opcode (0x6A) spawns with fd redirection
+   915|      met: true
+   916|    - description: shell.asm parses | operator and creates pipes
+   917|      met: true
+   918|  - name: Redirection
+   919|    description: prog > file, prog < file, prog >> file
+   920|    status: done
+   921|    acceptance_criteria:
+   922|    - description: shell.asm parses > operator and opens file for output
+   923|      met: true
+   924|  - name: Built-in commands
+   925|    description: ls, cd, cat, echo, ps, kill, help
+   926|    status: done
+   927|    acceptance_criteria:
+   928|    - description: ls lists VFS directory entries
+   929|      met: true
+   930|    - description: cd changes CWD via CHDIR opcode
+   931|      met: true
+   932|    - description: cat reads file and displays content
+   933|      met: true
+   934|    - description: echo prints arguments to screen
+   935|      met: true
+   936|    - description: ps lists process IDs
+   937|      met: true
+   938|    - description: kill terminates a process by PID
+   939|      met: true
+   940|    - description: help displays command list
+   941|      met: true
+   942|  - name: New opcodes
+   943|    description: READLN, WAITPID, EXECP, CHDIR, GETCWD
+   944|    status: done
+   945|    acceptance_criteria:
+   946|    - description: READLN (0x68) reads keyboard chars into line buffer
+   947|      met: true
+   948|    - description: WAITPID (0x69) waits for child process to halt
+   949|      met: true
+   950|    - description: EXECP (0x6A) spawns program with stdin/stdout fd redirection
+   951|      met: true
+   952|    - description: CHDIR (0x6B) changes current working directory
+   953|      met: true
+   954|    - description: GETCWD (0x6C) reads current working directory
+   955|      met: true
+   956|  - name: VFS dup_fd
+   957|    description: Duplicate file descriptors across PID tables for pipe/redir
+   958|    status: done
+   959|- id: phase-30
+   960|  title: Boot Sequence & Init
+   961|  status: complete
+   962|  goal: OS boots into known state, starts init, manages services.
+   963|  priority: 18
+   964|  deliverables:
+   965|  - name: Boot ROM
+   966|    description: Fixed bytecode at 0x0000, initializes hardware, jumps to init
+   967|    status: done
+   968|    acceptance_criteria:
+   969|    - description: boot() method assembles init.asm and spawns PID 1
+   970|      met: true
+   971|    - description: boot.cfg created with default configuration
+   972|      met: true
+   973|  - name: Init process
+   974|    description: PID 1, reads boot.cfg, starts shell
+   975|    status: done
+   976|    acceptance_criteria:
+   977|    - description: init.asm assembles without errors
+   978|      met: true
+   979|    - description: init process spawned with priority 2
+   980|      met: true
+   981|    - description: supervisor loop monitors shell and respawns if it dies
+   982|      met: true
+   983|    - description: environment variables set (SHELL, HOME, CWD, USER)
+   984|      met: true
+   985|  - name: Graceful shutdown
+   986|    description: SHUTDOWN syscall stops all processes, flushes FS
+   987|    status: done
+   988|    acceptance_criteria:
+   989|    - description: SHUTDOWN opcode 0x6E in kernel mode halts VM
+   990|      met: true
+   991|    - description: SHUTDOWN in user mode returns error (r0=0xFFFFFFFF)
+   992|      met: true
+   993|    - description: SHUTDOWN kills all child processes and frees pages
+   994|      met: true
+   995|    - description: SHUTDOWN clears pipes and closes file descriptors
+   996|      met: true
+   997|    - description: shutdown_requested flag set for host to check
+   998|      met: true
+   999|- id: phase-31
+  1000|  title: Standard Library
+  1001|  status: complete
+  1002|  goal: Reusable library of common operations for all programs.
+  1003|  priority: 19
+  1004|  deliverables:
+  1005|  - name: lib/stdlib.asm
+  1006|    description: String ops, memory ops, formatted I/O
+  1007|    status: done
+  1008|  - name: lib/math.asm
+  1009|    description: sin, cos, sqrt via lookup tables
+  1010|    status: done
+  1011|  - name: Heap allocator
+  1012|    description: malloc/free for dynamic memory
+  1013|    status: done
+  1014|    acceptance_criteria:
+  1015|    - description: lib/heap.asm implements _lib_heap_alloc and _lib_heap_free
+  1016|      met: true
+  1017|  - name: Linking convention
+  1018|    description: .include or .lib directive in assembler
+  1019|    status: done
+  1020|    acceptance_criteria:
+  1021|    - description: .include directive resolves and inlines lib/*.asm files
+  1022|      met: true
+  1023|- id: phase-32
+  1024|  title: Signals & Process Lifecycle
+  1025|  status: complete
+  1026|  goal: Signals, exit codes, wait, and proper process lifecycle management.
+  1027|  priority: 20
+  1028|  deliverables:
+  1029|  - name: SIGNAL opcode
+  1030|    description: Send signal to process by PID (SIGTERM=0, SIGKILL=1, SIGUSR=2, SIGALRM=3)
+  1031|    status: done
+  1032|    acceptance_criteria:
+  1033|    - description: SIGNAL opcode sends signal to target process
+  1034|      met: true
+  1035|  - name: Signal handlers (SIGSET)
+  1036|    description: Process sets handler address for each signal type via SIGSET opcode
+  1037|    status: done
+  1038|    acceptance_criteria:
+  1039|    - description: SIGSET registers handler address, signal delivery jumps to it
+  1040|      met: true
+  1041|  - name: EXIT/WAITPID opcodes
+  1042|    description: Exit with status code, parent waits for child via WAITPID
+  1043|    status: done
+  1044|    acceptance_criteria:
+  1045|    - description: EXIT opcode halts process with status code, sets zombie flag
+  1046|      met: true
+  1047|    - description: WAITPID reaps zombie and returns exit code
+  1048|      met: true
+  1049|  - name: Zombie cleanup
+  1050|    description: Exited processes cleaned up after parent WAITPID
+  1051|    status: done
+  1052|    acceptance_criteria:
+  1053|    - description: Zombie process freed after WAITPID, pages reclaimed
+  1054|      met: true
+  1055|- id: phase-33
+  1056|  title: QEMU Bridge
+  1057|  status: in_progress
+  1058|  goal: Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one.
+  1059|  priority: 30
+  1060|  description: 'QEMU gives us a working hypervisor in days. Every architecture QEMU supports
+  1061|
+  1062|    (x86, ARM, RISC-V, MIPS) works immediately. We learn what the canvas text
+  1063|
+  1064|    surface needs to handle (ANSI sequences, scroll speed, buffer size).
+  1065|
+  1066|    '
+  1067|  deliverables:
+  1068|  - name: qemu.rs module
+  1069|    description: QEMU subprocess management with stdin/stdout pipes
+  1070|    status: done
+  1071|    scope_lines: 60
+  1072|    scope_files:
+  1073|    - src/qemu.rs
+  1074|    tasks:
+  1075|    - id: p33.d1.t1
+  1076|      title: Create src/qemu.rs with QemuBridge struct
+  1077|      status: done
+  1078|      description: 'Create QemuBridge struct with fields for Child process, stdin/stdout pipes,
+  1079|
+  1080|        and an output buffer. Implement Drop to kill child on cleanup.
+  1081|
+  1082|        '
+  1083|      acceptance_criteria:
+  1084|      - QemuBridge struct compiles
+  1085|      - Drop trait kills child process
+  1086|      files:
+  1087|      - src/qemu.rs
+  1088|  - name: QEMU spawn
+  1089|    description: Launch qemu-system-* with -nographic -serial mon:stdio, capture stdin/stdout
+  1090|    status: done
+  1091|    scope_lines: 80
+  1092|    tasks:
+  1093|    - id: p33.d2.t1
+  1094|      title: Implement QemuBridge::spawn(config_str) -> Result
+  1095|      status: done
+  1096|      description: 'Parse config string "arch=riscv64 kernel=linux.img ram=256M disk=rootfs.ext4"
+  1097|
+  1098|        into QEMU command. Construct qemu-system-{arch} with appropriate flags.
+  1099|
+  1100|        Use std::process::Command with stdin/stdout piped.
+  1101|
+  1102|        '
+  1103|      acceptance_criteria:
+  1104|      - Config string parsed into arch, kernel, ram, disk fields
+  1105|      - Correct qemu-system-{arch} binary selected
+  1106|      - -nographic -serial mon:stdio flags always present
+  1107|      - -machine virt for riscv/aarch64
+  1108|      - -kernel, -m, -drive flags constructed from config
+  1109|      dependencies:
+  1110|      - p33.d1.t1
+  1111|      files:
+  1112|      - src/qemu.rs
+  1113|    - id: p33.d2.t2
+  1114|      title: Implement architecture mapping (riscv64, riscv32, x86_64, aarch64, mipsel)
+  1115|      status: done
+  1116|      description: Map arch config values to qemu-system binary names and machine types.
+  1117|      acceptance_criteria:
+  1118|      - riscv64 -> qemu-system-riscv64 -machine virt
+  1119|      - x86_64 -> qemu-system-x86_64
+  1120|      - aarch64 -> qemu-system-aarch64 -machine virt
+  1121|      - mipsel -> qemu-system-mipsel -machine malta
+  1122|      - Unknown arch returns error
+  1123|      dependencies:
+  1124|      - p33.d2.t1
+  1125|      files:
+  1126|      - src/qemu.rs
+  1127|    - id: p33.d2.t3
+  1128|      title: 'Test: spawn QEMU with --version, verify process starts and exits clean'
+  1129|      status: done
+  1130|      description: Unit test that spawns qemu-system-riscv64 --version and captures version string from stdout.
+  1131|      acceptance_criteria:
+  1132|      - QEMU process starts and exits with code 0
+  1133|      - Version string captured from stdout
+  1134|      dependencies:
+  1135|      - p33.d2.t1
+  1136|      files:
+  1137|      - src/qemu.rs
+  1138|  - name: Output to canvas
+  1139|    description: Read QEMU stdout bytes, write to canvas_buffer as u32 chars, auto-scroll
+  1140|    status: done
+  1141|    scope_lines: 60
+  1142|    tasks:
+  1143|    - id: p33.d3.t1
+  1144|      title: Implement non-blocking stdout reader
+  1145|      status: done
+  1146|      description: 'Set QEMU stdout to non-blocking mode. Each frame tick, read available
+  1147|
+  1148|        bytes into a Vec<u8> buffer. Return the bytes for processing.
+  1149|
+  1150|        '
+  1151|      acceptance_criteria:
+  1152|      - Non-blocking read returns immediately even if no data
+  1153|      - Bytes read are valid QEMU output
+  1154|      dependencies:
+  1155|      - p33.d1.t1
+  1156|      files:
+  1157|      - src/qemu.rs
+  1158|    - id: p33.d3.t2
+  1159|      title: Implement stdout bytes -> canvas_buffer writer
+  1160|      status: done
+  1161|      description: 'For each printable byte: write as u32 to canvas_buffer at cursor position.
+  1162|
+  1163|        Track virtual cursor (row, col). Auto-scroll when row >= 128.
+  1164|
+  1165|        '
+  1166|      acceptance_criteria:
+  1167|      - Printable ASCII chars appear in canvas_buffer
+  1168|      - Cursor advances correctly
+  1169|      - Scrolling works when row exceeds 128
+  1170|      dependencies:
+  1171|      - p33.d3.t1
+  1172|      files:
+  1173|      - src/qemu.rs
+  1174|      - src/main.rs
+  1175|    - id: p33.d3.t3
+  1176|      title: 'Test: feed known bytes, verify canvas_buffer contents'
+  1177|      status: done
+  1178|      description: 'Unit test: write ''Hello\nWorld'' bytes, verify canvas_buffer has correct chars at correct positions.'
+  1179|      acceptance_criteria:
+  1180|      - '''H'' at position [0][0], ''e'' at [0][1], etc.'
+  1181|      - '''W'' starts at row 1 after newline'
+  1182|      dependencies:
+  1183|      - p33.d3.t2
+  1184|      files:
+  1185|      - src/qemu.rs
+  1186|  - name: Input from keyboard
+  1187|    description: Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin
+  1188|    status: done
+  1189|    scope_lines: 40
+  1190|    tasks:
+  1191|    - id: p33.d4.t1
+  1192|      title: Implement keyboard event -> QEMU stdin writer
+  1193|      status: done
+  1194|      description: 'When hypervisor is active and a key is pressed, call key_to_ascii_shifted()
+  1195|
+  1196|        and write the resulting byte to QEMU''s stdin pipe. Map Enter to \\r,
+  1197|
+  1198|        Backspace to 0x7F, Ctrl+C to 0x03.
+  1199|
+  1200|        '
+  1201|      acceptance_criteria:
+  1202|      - Regular keys forwarded as ASCII bytes
+  1203|      - Enter sends \r (carriage return)
+  1204|      - Backspace sends 0x7F
+  1205|      - Ctrl+C sends 0x03
+  1206|      dependencies:
+  1207|      - p33.d1.t1
+  1208|      files:
+  1209|      - src/qemu.rs
+  1210|      - src/main.rs
+  1211|  - name: ANSI escape handling
+  1212|    description: Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering
+  1213|    status: done
+  1214|    scope_lines: 100
+  1215|    tasks:
+  1216|    - id: p33.d5.t1
+  1217|      title: Implement ANSI escape state machine
+  1218|      status: done
+  1219|      description: 'State machine: Normal -> Escape (0x1B) -> Csi (''['') -> params.
+  1220|
+  1221|        Handle: CSI A/B/C/D (cursor), CSI H (home), CSI 2J (clear),
+  1222|
+  1223|        CSI K (clear line), CSI m (color, can ignore), CSI ? 25 h/l (cursor show/hide).
+  1224|
+  1225|        '
+  1226|      acceptance_criteria:
+  1227|      - ESC [ A moves cursor up
+  1228|      - ESC [ B moves cursor down
+  1229|      - ESC [ C moves cursor right
+  1230|      - ESC [ D moves cursor left
+  1231|      - ESC [ H moves cursor to 0,0
+  1232|      - ESC [ 2 J clears canvas_buffer
+  1233|      - ESC [ K clears from cursor to end of row
+  1234|      - Unknown sequences ignored gracefully
+  1235|      dependencies:
+  1236|      - p33.d3.t2
+  1237|      files:
+  1238|      - src/qemu.rs
+  1239|    - id: p33.d5.t2
+  1240|      title: 'Test: feed ANSI sequences, verify cursor state'
+  1241|      status: done
+  1242|      description: Unit tests for each supported ANSI sequence. Verify cursor position and buffer state.
+  1243|      acceptance_criteria:
+  1244|      - Test for each cursor movement sequence
+  1245|      - Test for clear screen
+  1246|      - Test for clear line
+  1247|      - Test for mixed text + escape sequences
+  1248|      dependencies:
+  1249|      - p33.d5.t1
+  1250|      files:
+  1251|      - src/qemu.rs
+  1252|  - name: HYPERVISOR opcode (0x72)
+  1253|    description: New opcode that reads config string from RAM and spawns QEMU
+  1254|    status: done
+  1255|    scope_lines: 60
+  1256|    tasks:
+  1257|    - id: p33.d6.t1
+  1258|      title: Add HYPERVISOR opcode 0x72 to vm.rs execute
+  1259|      status: done
+  1260|      description: 'Read config string from RAM at address in r0. Parse config.
+  1261|
+  1262|        Spawn QemuBridge. Store in VM state. F5 while active kills QEMU.
+  1263|
+  1264|        '
+  1265|      acceptance_criteria:
+  1266|      - HYPERVISOR opcode triggers QEMU spawn
+  1267|      - Config string read from VM RAM
+  1268|      - VM state tracks active hypervisor
+  1269|      dependencies:
+  1270|      - p33.d2.t1
+  1271|      - p33.d3.t2
+  1272|      - p33.d4.t1
+  1273|      files:
+  1274|      - src/vm.rs
+  1275|    - id: p33.d6.t2
+  1276|      title: Add HYPERVISOR to assembler mnemonic list
+  1277|      status: done
+  1278|      description: Register HYPERVISOR in assembler.rs so it can be used in .asm programs.
+  1279|      acceptance_criteria:
+  1280|      - '''HYPERVISOR r0'' assembles to opcode 0x54'
+  1281|      - Disassembler outputs HYPERVISOR for 0x54
+  1282|      dependencies:
+  1283|      - p33.d6.t1
+  1284|      files:
+  1285|      - src/assembler.rs
+  1286|  - name: Shell command
+  1287|    description: hypervisor arch=riscv64 kernel=linux.img command in shell.asm
+  1288|    status: todo
+  1289|    tasks:
+  1290|    - id: p33.d7.t1
+  1291|      title: Add hypervisor command to shell.asm
+  1292|      status: done
+  1293|      description: Parse 'hypervisor <config>' from shell input, construct config string in RAM, execute HYPERVISOR opcode.
+  1294|      acceptance_criteria:
+  1295|      - '''hypervisor arch=riscv64 kernel=linux.img'' spawns QEMU'
+  1296|      - Error message on missing kernel file
+  1297|      dependencies:
+  1298|      - p33.d6.t1
+  1299|      files:
+  1300|      - programs/shell.asm
+  1301|  - name: Download helper
+  1302|    description: Script to fetch pre-built RISC-V Linux kernel + rootfs for testing
+  1303|    status: done
+  1304|    tasks:
+  1305|    - id: p33.d8.t1
+  1306|      title: Create scripts/download_riscv_linux.sh
+  1307|      status: done
+  1308|      description: 'Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal rootfs
+  1309|
+  1310|        from a known URL. Place in .geometry_os/fs/linux/ directory.
+  1311|
+  1312|        '
+  1313|      acceptance_criteria:
+  1314|      - Script downloads kernel Image and rootfs
+  1315|      - Files placed in correct directory
+  1316|      - QEMU can boot the downloaded kernel
+  1317|      files:
+  1318|      - scripts/download_riscv_linux.sh
+  1319|  - name: Integration test
+  1320|    description: Spawn QEMU with known kernel, verify Linux version appears in output
+  1321|    status: todo
+  1322|    scope_lines: 60
+  1323|    tasks:
+  1324|    - id: p33.d9.t1
+  1325|      title: 'Test: boot RISC-V Linux, verify console output'
+  1326|      status: todo
+  1327|      description: 'Integration test (marked #[ignore] for CI without QEMU).
+  1328|
+  1329|        Spawn QEMU with RISC-V kernel, read stdout for 30 seconds,
+  1330|
+  1331|        verify "Linux version" string appears.
+  1332|
+  1333|        '
+  1334|      acceptance_criteria:
+  1335|      - QEMU spawns and produces output
+  1336|      - '''Linux version'' detected in output within 30 seconds'
+  1337|      - QEMU process cleaned up after test
+  1338|      dependencies:
+  1339|      - p33.d2.t1
+  1340|      - p33.d3.t1
+  1341|      - p33.d5.t1
+  1342|      files:
+  1343|      - src/qemu.rs
+  1344|  dependencies:
+  1345|  - source: phase-32
+  1346|    target: phase-33
+  1347|    type: soft
+  1348|    reason: Signals not required for QEMU bridge, but nice to have
+  1349|  technical_notes: 'QEMU subprocess uses std::process::Command with piped stdin/stdout.
+  1350|
+  1351|    Non-blocking reads via set_nonblocking() on the ChildStdout.
+  1352|
+  1353|    Canvas rendering reuses existing pixel font pipeline from CANVAS_TEXT_SURFACE.md.
+  1354|
+  1355|    '
+  1356|  risks:
+  1357|  - QEMU not installed on host -- need clear error message
+  1358|  - ANSI parsing incomplete -- Linux boot output may use obscure sequences
+  1359|  - Non-blocking pipe reads may miss data on fast output -- buffer management
+  1360|- id: phase-34
+  1361|  title: RISC-V RV32I Core
+  1362|  status: future
+  1363|  goal: Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
+  1364|  priority: 40
+  1365|  description: 'QEMU proved what works. Now rebuild it owned -- pure Rust, no subprocess,
+  1366|
+  1367|    portable to WASM and embedded. RV32I is the foundation.
+  1368|
+  1369|    '
+  1370|  deliverables:
+  1371|  - name: riscv/ module
+  1372|    description: src/riscv/ with mod.rs, cpu.rs, memory.rs, decode.rs
+  1373|    status: todo
+  1374|    scope_lines: 50
+  1375|    tasks:
+  1376|    - id: p34.d1.t1
+  1377|      title: Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs
+  1378|      status: todo
+  1379|      acceptance_criteria:
+  1380|      - Files compile
+  1381|      - mod.rs exports public structs
+  1382|      files:
+  1383|      - src/riscv/mod.rs
+  1384|      - src/riscv/cpu.rs
+  1385|      - src/riscv/memory.rs
+  1386|      - src/riscv/decode.rs
+  1387|  - name: Register file
+  1388|    description: x[0..32] (x0=zero), PC, 32-bit registers
+  1389|    status: todo
+  1390|    scope_lines: 30
+  1391|    tasks:
+  1392|    - id: p34.d2.t1
+  1393|      title: Define RiscvCpu struct with x[32], pc, privilege fields
+  1394|      status: todo
+  1395|      acceptance_criteria:
+  1396|      - 'RiscvCpu struct with x: [u32; 32], pc: u32, privilege: u8'
+  1397|      - x[0] always reads as 0 (enforced on write)
+  1398|      - new() initializes pc=0x80000000, privilege=3 (M-mode)
+  1399|      files:
+  1400|      - src/riscv/cpu.rs
+  1401|  - name: Guest RAM
+  1402|    description: Vec<u8> separate from host RAM, configurable size (default 128MB)
+  1403|    status: todo
+  1404|    scope_lines: 60
+  1405|    tasks:
+  1406|    - id: p34.d3.t1
+  1407|      title: Implement GuestMemory with read_byte/half/word and write_byte/half/word
+  1408|      status: todo
+  1409|      acceptance_criteria:
+  1410|      - 'GuestMemory with ram: Vec<u8>, ram_base: u64'
+  1411|      - read_word at 0x80000000 reads first 4 bytes little-endian
+  1412|      - write_word followed by read_word returns same value
+  1413|      - Out-of-range access returns error
+  1414|      files:
+  1415|      - src/riscv/memory.rs
+  1416|  - name: Instruction decode
+  1417|    description: Decode all RV32I opcodes from 32-bit instruction words
+  1418|    status: todo
+  1419|    scope_lines: 200
+  1420|    tasks:
+  1421|    - id: p34.d4.t1
+  1422|      title: Implement decode() returning Operation enum for all RV32I opcodes
+  1423|      status: todo
+  1424|      acceptance_criteria:
+  1425|      - 'R-type: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND'
+  1426|      - 'I-type: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI'
+  1427|      - 'Load: LB, LH, LW, LBU, LHU'
+  1428|      - 'Store: SB, SH, SW'
+  1429|      - 'Branch: BEQ, BNE, BLT, BGE, BLTU, BGEU'
+  1430|      - 'Upper: LUI, AUIPC'
+  1431|      - 'Jump: JAL, JALR'
+  1432|      - 'System: ECALL, EBREAK, FENCE'
+  1433|      dependencies:
+  1434|      - p34.d1.t1
+  1435|      files:
+  1436|      - src/riscv/decode.rs
+  1437|  - name: Execute loop
+  1438|    description: CPU step() fetches, decodes, executes one instruction
+  1439|    status: todo
+  1440|    scope_lines: 200
+  1441|    tasks:
+  1442|    - id: p34.d5.t1
+  1443|      title: Implement RiscvCpu::step() and execute() for all RV32I instructions
+  1444|      status: todo
+  1445|      acceptance_criteria:
+  1446|      - step() fetches word at PC, decodes, executes, advances PC by 4
+  1447|      - JAL/JALR update PC to target and store return address
+  1448|      - Branches conditionally update PC
+  1449|      - x[0] always reads as 0 after any write
+  1450|      dependencies:
+  1451|      - p34.d2.t1
+  1452|      - p34.d3.t1
+  1453|      - p34.d4.t1
+  1454|      files:
+  1455|      - src/riscv/cpu.rs
+  1456|  - name: Test suite
+  1457|    description: One test per instruction, verification against known encodings
+  1458|    status: todo
+  1459|    scope_lines: 300
+  1460|    tasks:
+  1461|    - id: p34.d6.t1
+  1462|      title: Write tests for all R-type ALU operations
+  1463|      status: todo
+  1464|      acceptance_criteria:
+  1465|      - 'ADD: 10 + 20 = 30'
+  1466|      - 'SUB: 30 - 10 = 20'
+  1467|      - 'SLL: 1 << 5 = 32'
+  1468|      - 'SLT: 5 < 10 = 1'
+  1469|      - 'SLTU: unsigned comparison'
+  1470|      - 'XOR, OR, AND: bitwise ops'
+  1471|      - 'SRL: logical right shift'
+  1472|      - 'SRA: arithmetic right shift (sign-preserving)'
+  1473|      dependencies:
+  1474|      - p34.d5.t1
+  1475|      files:
+  1476|      - src/riscv/cpu.rs
+  1477|    - id: p34.d6.t2
+  1478|      title: Write tests for I-type, load, store, branch, jump instructions
+  1479|      status: todo
+  1480|      acceptance_criteria:
+  1481|      - 'ADDI: x1 = x2 + 100'
+  1482|      - 'LW/SW: store word, load same address, verify equal'
+  1483|      - 'LB/LBU: signed vs unsigned byte load'
+  1484|      - 'BEQ: branch taken when equal, not taken when not'
+  1485|      - 'JAL: jump and link, verify return address saved'
+  1486|      - 'JALR: indirect jump with register base'
+  1487|      dependencies:
+  1488|      - p34.d5.t1
+  1489|      files:
+  1490|      - src/riscv/cpu.rs
+  1491|    - id: p34.d6.t3
+  1492|      title: Write fibonacci test program that runs 20 iterations in RISC-V
+  1493|      status: todo
+  1494|      acceptance_criteria:
+  1495|      - Fibonacci(10) = 55 computed by RISC-V code
+  1496|      - Result stored in a register, verified by test
+  1497|      dependencies:
+  1498|      - p34.d5.t1
+  1499|      files:
+  1500|      - src/riscv/cpu.rs
+  1501|  dependencies:
+  1502|  - source: phase-33
+  1503|    target: phase-34
+  1504|    type: informs
+  1505|    reason: QEMU bridge teaches us what the interpreter needs to reimplement
+  1506|- id: phase-35
+  1507|  title: RISC-V Privilege Modes
+  1508|  status: future
+  1509|  goal: M/S/U privilege levels, CSR registers, trap handling. Linux needs this to manage its own processes.
+  1510|  priority: 50
+  1511|  deliverables:
+  1512|  - name: Privilege enum + CSR bank
+  1513|    description: M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp
+  1514|    status: todo
+  1515|    scope_lines: 80
+  1516|  - name: CSR read/write
+  1517|    description: CSRRW, CSRRS, CSRRC and immediate variants
+  1518|    status: todo
+  1519|    scope_lines: 100
+  1520|  - name: ECALL/MRET/SRET
+  1521|    description: Trap entry saves PC, jumps to vector. MRET/SRET restore PC.
+  1522|    status: todo
+  1523|    scope_lines: 120
+  1524|  - name: Timer + software interrupts
+  1525|    description: mtime/mtimecmp, msip/ssip, interrupt pending/enable
+  1526|    status: todo
+  1527|    scope_lines: 80
+  1528|  - name: Privilege transition tests
+  1529|    description: U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
+  1530|    status: todo
+  1531|    scope_lines: 150
+  1532|  dependencies:
+  1533|  - source: phase-34
+  1534|    target: phase-35
+  1535|    type: hard
+  1536|    reason: Privilege modes layer on top of the base RV32I interpreter
+  1537|- id: phase-36
+  1538|  title: RISC-V Virtual Memory & Devices
+  1539|  status: future
+  1540|  goal: SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot.
+  1541|  priority: 60
+  1542|  deliverables:
+  1543|  - name: SV32 page table walk
+  1544|    description: 2-level lookup, PTE flags, address translation
+  1545|    status: todo
+  1546|    scope_lines: 120
+  1547|  - name: TLB cache
+  1548|    description: 64-entry TLB with ASID-aware invalidation
+  1549|    status: todo
+  1550|    scope_lines: 80
+  1551|  - name: Page fault traps
+  1552|    description: Instruction/Load/Store page faults with stval/mtval
+  1553|    status: todo
+  1554|    scope_lines: 40
+  1555|  - name: UART 16550
+  1556|    description: Serial port emulation, reuses Phase 33 bridge pattern to canvas
+  1557|    status: todo
+  1558|    scope_lines: 150
+  1559|  - name: CLINT + PLIC
+  1560|    description: Timer interrupt controller + platform interrupt controller
+  1561|    status: todo
+  1562|    scope_lines: 200
+  1563|  - name: Virtio block device
+  1564|    description: Virtio MMIO transport, disk image from VFS
+  1565|    status: todo
+  1566|    scope_lines: 200
+  1567|  - name: Device Tree Blob
+  1568|    description: Generate DTB describing memory, UART, virtio devices
+  1569|    status: todo
+  1570|    scope_lines: 150
+  1571|  - name: MMU + device integration test
+  1572|    description: Guest sets up page tables, writes to UART, verify output on canvas
+  1573|    status: todo
+  1574|    scope_lines: 150
+  1575|  dependencies:
+  1576|  - source: phase-35
+  1577|    target: phase-36
+  1578|    type: hard
+  1579|    reason: SV32 and devices need privilege modes for trap handling
+  1580|  - source: phase-33
+  1581|    target: phase-36
+  1582|    type: informs
+  1583|    reason: QEMU bridge proved which devices are the minimum needed
+  1584|- id: phase-37
+  1585|  title: Guest OS Boot (Native RISC-V)
+  1586|  status: future
+  1587|  goal: 'Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes: QEMU and native.'
+  1588|  priority: 70
+  1589|  deliverables:
+  1590|  - name: ELF + binary loader
+  1591|    description: Parse ELF64 RISC-V kernel images, load segments into guest RAM
+  1592|    status: todo
+  1593|    scope_lines: 160
+  1594|  - name: DTB passthrough
+  1595|    description: Pass device tree blob to kernel in a1 register at boot
+  1596|    status: todo
+  1597|    scope_lines: 30
+  1598|  - name: Boot console
+  1599|    description: Guest UART output to canvas (same bridge as Phase 33)
+  1600|    status: todo
+  1601|    scope_lines: 80
+  1602|  - name: HYPERVISOR mode flag
+  1603|    description: Opcode detects 'native' vs 'qemu' from config string
+  1604|    status: todo
+  1605|    scope_lines: 30
+  1606|  - name: Verified boot
+  1607|    description: Boot OpenSBI + Linux tinyconfig, verify 'Linux version' on canvas
+  1608|    status: todo
+  1609|    scope_lines: 100
+  1610|  - name: Performance benchmark
+  1611|    description: Measure MIPS, compare interpreter vs QEMU, document results
+  1612|    status: todo
+  1613|    scope_lines: 40
+  1614|  dependencies:
+  1615|  - source: phase-36
+  1616|    target: phase-37
+  1617|    type: hard
+  1618|    reason: Need MMU + devices before booting a kernel
+  1619|  - source: phase-33
+  1620|    target: phase-37
+  1621|    type: informs
+  1622|    reason: QEMU boot experience guides native boot requirements
+  1623|global_risks:
+  1624|- 'Opcode space: 76 of ~256 slots used, plenty of room'
+  1625|- Scope creep -- adding features is easy, keeping the OS coherent is hard
+  1626|- Kernel boundary breaks existing programs -- need a compatibility mode
+  1627|- Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
+  1628|- Filesystem persistence needs host directory -- WASM port needs different backing
+  1629|- 'Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces shared-RAM for multiprocess'
+  1630|- 'Phase 28 device drivers: IOCTL opcode 0x62, 4 device files at fds 0xE000-0xE003'
+  1631|conventions:
+  1632|- Every new opcode gets a test in tests/program_tests.rs
+  1633|- Every new program gets assembled by test_all_programs_assemble
+  1634|- README.md updated when opcodes or features change
+  1635|- roadmap.yaml is the single source of truth for project state
+  1636|- 'Semantic versioning: minor bump for new opcodes, patch for fixes'
+  1637|- New opcodes need a program that needs them (no speculative opcodes)
+  1638|
