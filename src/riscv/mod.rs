@@ -368,11 +368,21 @@ mod tests {
 
         // Performance gate: interpreter should exceed 1 MIPS on any modern CPU.
         // This is a very conservative floor -- real performance should be 10-50+ MIPS.
+        // Only enforce in release builds -- debug mode is too slow for this threshold.
+        #[cfg(not(debug_assertions))]
         assert!(
             mips > 1.0,
             "Interpreter should exceed 1 MIPS, got {:.2} MIPS",
             mips
         );
+        #[cfg(debug_assertions)]
+        {
+            // In debug mode just log; the release build gate catches real regressions.
+            eprintln!(
+                "  (debug mode: skipping 1 MIPS gate, got {:.2} MIPS)",
+                mips
+            );
+        }
     }
 
     #[test]
