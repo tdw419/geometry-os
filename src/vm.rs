@@ -7,6 +7,19 @@
 pub const RAM_SIZE: usize = 0x10000; // 65536 u32 cells
 pub const SCREEN_SIZE: usize = 256 * 256;
 pub const NUM_REGS: usize = 32;
+/// Maximum number of concurrently spawned child processes
+pub const MAX_PROCESSES: usize = 8;
+
+/// A secondary execution context spawned by SPAWN.
+/// Shares RAM and screen with the primary process.
+#[derive(Debug, Clone)]
+pub struct SpawnedProcess {
+    pub pc: u32,
+    pub regs: [u32; NUM_REGS],
+    pub halted: bool,
+    /// Process ID assigned at spawn time (1-based)
+    pub pid: u32,
+}
 
 /// Magic bytes for save files
 pub const SAVE_MAGIC: &[u8; 4] = b"GEOS";
@@ -42,6 +55,8 @@ pub struct Vm {
     pub beep: Option<(u32, u32)>,
     /// Frame-scoped log of RAM accesses for the visual debugger
     pub access_log: Vec<MemAccess>,
+    /// Secondary execution contexts spawned by SPATIAL_SPAWN
+    pub processes: Vec<SpawnedProcess>,
 }
 
 impl Vm {
@@ -57,6 +72,7 @@ impl Vm {
             frame_count: 0,
             beep: None,
             access_log: Vec::with_capacity(4096),
+            processes: Vec::new(),
         }
     }
 
@@ -72,6 +88,7 @@ impl Vm {
         self.frame_count = 0;
         self.beep = None;
         self.access_log.clear();
+        self.processes.clear();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -696,6 +713,46 @@ impl Vm {
                 }
             }
 
+            // SPAWN addr_reg  -- create a child process at address in register
+            // Returns process ID (1-based) in RAM[0xFFA], or 0xFFFFFFFF on error
+            0x4D => {
+                let ar = self.fetch() as usize;
+                if ar < NUM_REGS {
+                    let active_count = self.processes.iter().filter(|p| !p.halted).count();
+                    if active_count >= MAX_PROCESSES {
+                        self.ram[0xFFA] = 0xFFFFFFFF; // too many processes
+                    } else {
+                        let start_addr = self.regs[ar];
+                        let pid = (self.processes.len() + 1) as u32;
+                        self.processes.push(SpawnedProcess {
+                            pc: start_addr,
+                            regs: [0; NUM_REGS],
+                            halted: false,
+                            pid,
+                        });
+                        self.ram[0xFFA] = pid;
+                    }
+                }
+            }
+
+            // KILL pid_reg  -- halt a child process by its ID
+            // Returns 1 in RAM[0xFFA] on success, 0 if not found
+            0x4E => {
+                let pr = self.fetch() as usize;
+                if pr < NUM_REGS {
+                    let target_pid = self.regs[pr];
+                    let mut found = false;
+                    for proc in &mut self.processes {
+                        if proc.pid == target_pid {
+                            proc.halted = true;
+                            found = true;
+                            break;
+                        }
+                    }
+                    self.ram[0xFFA] = if found { 1 } else { 0 };
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -703,6 +760,51 @@ impl Vm {
             }
         }
         true
+    }
+
+    /// Step all non-halted child processes. Called by the host after stepping
+    /// the main process. Each child gets one instruction per call.
+    pub fn step_all_processes(&mut self) {
+        // Move processes out so we can call self.step() without borrow conflicts.
+        // Any new children spawned during this round go into self.processes (empty
+        // while we iterate), and are merged back in below.
+        let mut procs = std::mem::take(&mut self.processes);
+
+        let saved_pc = self.pc;
+        let saved_regs = self.regs;
+        let saved_halted = self.halted;
+
+        for proc in procs.iter_mut() {
+            if proc.halted { continue; }
+
+            // Swap in child state
+            self.pc = proc.pc;
+            self.regs = proc.regs;
+            self.halted = false;
+
+            let still_running = self.step();
+
+            // Save child state back
+            proc.pc = self.pc;
+            proc.regs = self.regs;
+            proc.halted = !still_running || self.halted;
+        }
+
+        // Restore main process state
+        self.pc = saved_pc;
+        self.regs = saved_regs;
+        self.halted = saved_halted;
+
+        // Merge back: append any grandchildren spawned during this round.
+        // Halted processes are kept so callers can inspect their final state.
+        procs.extend(std::mem::take(&mut self.processes));
+        self.processes = procs;
+    }
+
+    /// Count active (non-halted) child processes
+    #[allow(dead_code)]
+    pub fn active_process_count(&self) -> usize {
+        self.processes.iter().filter(|p| !p.halted).count()
     }
 
     /// Disassemble one instruction starting at `addr` in RAM.
@@ -777,6 +879,14 @@ impl Vm {
                 let xr = ram(a+1); let yr = ram(a+2); let mr = ram(a+3); let tr = ram(a+4);
                 let gwr = ram(a+5); let ghr = ram(a+6); let twr = ram(a+7); let thr = ram(a+8);
                 (format!("TILEMAP {}, {}, {}, {}, {}, {}, {}, {}", reg(xr), reg(yr), reg(mr), reg(tr), reg(gwr), reg(ghr), reg(twr), reg(thr)), 9)
+            }
+            0x4D => {
+                let ar = ram(a + 1);
+                (format!("SPAWN {}", reg(ar)), 2)
+            }
+            0x4E => {
+                let pr = ram(a + 1);
+                (format!("KILL {}", reg(pr)), 2)
             }
             0x50 => { let rd = ram(a+1); let rs = ram(a+2); (format!("CMP {}, {}", reg(rd), reg(rs)), 3) }
 
@@ -954,6 +1064,7 @@ impl Vm {
             frame_count,
             beep: None,
             access_log: Vec::with_capacity(4096),
+            processes: Vec::new(),
         })
     }
 }

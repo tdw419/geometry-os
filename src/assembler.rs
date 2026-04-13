@@ -61,6 +61,25 @@ pub fn assemble(source: &str, base_addr: usize) -> Result<AsmResult, AsmError> {
             continue;
         }
 
+        // .org addr -- advance bytecode position (pad with zeros)
+        if line.to_lowercase().starts_with(".org") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            if tokens.len() < 2 {
+                return Err(AsmError { line: line_num + 1, message: ".org requires an address".into() });
+            }
+            match parse_imm(tokens[1], &constants) {
+                Ok(addr) => {
+                    let target = addr as usize;
+                    if target < bytecode.len() {
+                        return Err(AsmError { line: line_num + 1, message: format!(".org 0x{:X} is behind current position 0x{:X}", target, bytecode.len()) });
+                    }
+                    while bytecode.len() < target { bytecode.push(0); }
+                }
+                Err(e) => return Err(AsmError { line: line_num + 1, message: format!("invalid .org address: {}", e) }),
+            }
+            continue;
+        }
+
         // Check for label
         if let Some(label_end) = line.find(':') {
             let label_name = line[..label_end].trim().to_lowercase();
@@ -525,12 +544,27 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[8])? as u32);
         }
 
+        "SPAWN" => {
+            if tokens.len() < 2 {
+                return Err(format!("SPAWN requires 1 argument: SPAWN addr_reg"));
+            }
+            bytecode.push(0x4D);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
+        "KILL" => {
+            if tokens.len() < 2 {
+                return Err(format!("KILL requires 1 argument: KILL pid_reg"));
+            }
+            bytecode.push(0x4E);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 
     Ok(())
 }
-
 /// Parse register: "r0" -> 0, "r31" -> 31, "R5" -> 5
 fn parse_reg(s: &str) -> Result<usize, String> {
     let s = s.trim();

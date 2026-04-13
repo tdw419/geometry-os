@@ -2198,6 +2198,8 @@ fn main() {
                     is_running = false;
                     break;
                 }
+                // Step all spawned child processes in lock-step with the primary
+                vm.step_all_processes();
                 if vm.frame_ready {
                     // FRAME opcode hit: stop here, let the host render this tick
                     break;
@@ -2802,6 +2804,7 @@ const OPCODES: &[&str] = &[
     "AND", "OR", "XOR", "SHL", "SHR", "MOD", "JMP", "JZ", "JNZ",
     "CALL", "RET", "BLT", "BGE", "PSET", "PSETI", "FILL", "RECTF",
     "TEXT", "LINE", "CIRCLE", "SCROLL", "IKEY", "RAND", "NEG", "CMP", "PUSH", "POP",
+    "SPAWN", "KILL",
 ];
 
 /// Token types produced by the syntax highlighter.
@@ -3155,6 +3158,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         frame_count,
         beep: None,
         access_log: Vec::new(),
+        processes: Vec::new(),
     };
 
 

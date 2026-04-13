@@ -1610,3 +1610,159 @@ fn test_tilemap_opcode() {
         }
     }
 }
+
+// === SPAWN/KILL opcode tests ===
+
+#[test]
+fn test_spawn_creates_child_process() {
+    // SPAWN r1 creates a child at address in r1
+    // The child code at 0x200 is: LDI r0, 42, HALT
+    // Main: set r1=0x200, SPAWN r1, HALT
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    LDI r0, 42
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // RAM[0xFFA] should contain the process ID (1)
+    assert_eq!(vm.ram[0xFFA], 1, "SPAWN should return PID 1");
+    // One process should exist
+    assert_eq!(vm.processes.len(), 1);
+    assert_eq!(vm.processes[0].pid, 1);
+    assert_eq!(vm.processes[0].pc, 0x200);
+}
+
+#[test]
+fn test_spawn_max_processes() {
+    // Spawn 8 processes, the 9th should fail
+    let mut source = String::new();
+    // Each child is at 0x200 + i*4: LDI r0, <i> (3 words) + HALT (1 word) = 4 words
+    for i in 0..8 {
+        let addr = 0x200 + (i as u32) * 4;
+        source.push_str(&format!("LDI r1, 0x{:X}\nSPAWN r1\n", addr));
+    }
+    // Try to spawn 9th
+    source.push_str("LDI r1, 0x300\nSPAWN r1\nHALT\n");
+    for i in 0..8 {
+        let addr = 0x200 + (i as u32) * 4;
+        source.push_str(&format!(".org 0x{:X}\nLDI r0, {}\nHALT\n", addr, i));
+    }
+    source.push_str(".org 0x300\nHALT\n");
+
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..1000 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // Should have 8 processes, 9th spawn should have returned 0xFFFFFFFF
+    assert_eq!(vm.processes.len(), 8);
+    assert_eq!(vm.ram[0xFFA], 0xFFFFFFFF, "9th SPAWN should fail");
+}
+
+#[test]
+fn test_kill_halts_child_process() {
+    // Spawn a child, then kill it by PID
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    LDI r3, 0xFFA
+    LOAD r2, r3
+    KILL r2
+    HALT
+
+    .org 0x200
+    FRAME
+    JMP 0x200
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // KILL should have returned 1 (success)
+    assert_eq!(vm.ram[0xFFA], 1, "KILL should return 1 on success");
+    // Child should be halted
+    assert!(vm.processes[0].halted);
+}
+
+#[test]
+fn test_step_all_processes() {
+    // Spawn two children that each set a pixel, then step them
+    // Child 1 at 0x200: PSETI 10, 10, 0xFF0000, HALT
+    // Child 2 at 0x300: PSETI 20, 20, 0x00FF00, HALT
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    LDI r1, 0x300
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    PSETI 10, 10, 0xFF0000
+    HALT
+
+    .org 0x300
+    PSETI 20, 20, 0x00FF00
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    // Run main process to completion
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.processes.len(), 2);
+
+    // Step child processes
+    for _ in 0..100 {
+        vm.step_all_processes();
+        if vm.processes.iter().all(|p| p.halted) {
+            break;
+        }
+    }
+
+    // Both children should be halted
+    assert!(vm.processes[0].halted);
+    assert!(vm.processes[1].halted);
+
+    // Child 1 should have set pixel at (10,10) to red
+    assert_eq!(vm.screen[10 * 256 + 10], 0xFF0000);
+    // Child 2 should have set pixel at (20,20) to green
+    assert_eq!(vm.screen[20 * 256 + 20], 0x00FF00);
+}
+
+#[test]
+fn test_active_process_count() {
+    let mut vm = Vm::new();
+    assert_eq!(vm.active_process_count(), 0);
+    vm.processes.push(geometry_os::vm::SpawnedProcess {
+        pc: 0, regs: [0; 32], halted: false, pid: 1,
+    });
+    assert_eq!(vm.active_process_count(), 1);
+    vm.processes.push(geometry_os::vm::SpawnedProcess {
+        pc: 0, regs: [0; 32], halted: true, pid: 2,
+    });
+    assert_eq!(vm.active_process_count(), 1);
+}
+
+#[test]
+fn test_spawn_assembles() {
+    let source = "SPAWN r1\nKILL r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    // SPAWN r1 = 0x4D, r1
+    assert_eq!(asm.pixels[0], 0x4D);
+    assert_eq!(asm.pixels[1], 1); // r1
+    // KILL r2 = 0x4E, r2
+    assert_eq!(asm.pixels[2], 0x4E);
+    assert_eq!(asm.pixels[3], 2); // r2
+    // HALT
+    assert_eq!(asm.pixels[4], 0x00);
+}
