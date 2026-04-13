@@ -154,13 +154,6 @@ const CSR_MIDELEG: u32 = 0x303;
 const CSR_SEPC: u32 = 0x141;
 const CSR_SCAUSE: u32 = 0x142;
 const CSR_STVAL: u32 = 0x143;
-const CSR_SIE: u32 = 0x104;
-const CSR_SIP: u32 = 0x144;
-const CSR_MEDELEG: u32 = 0x302;
-const CSR_MIDELEG: u32 = 0x303;
-const CSR_SCAUSE: u32 = 0x142;
-const CSR_SEPC: u32 = 0x141;
-const CSR_STVAL: u32 = 0x143;
 
 // ============================================================
 // R-type ALU
