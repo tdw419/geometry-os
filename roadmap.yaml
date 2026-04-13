@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 57
-  tests: 123
-  programs: 34
-  loc: 6907
+  opcodes: 60
+  tests: 185
+  programs: 36
+  loc: 7115
 
 phases:
   # ===================================================================
@@ -813,19 +813,41 @@ phases:
 
   - id: "phase-27"
     title: "Inter-Process Communication"
-    status: "todo"
+    status: "complete"
     goal: "Processes communicate through pipes and messages, not raw shared RAM."
     priority: 15
     deliverables:
       - name: "PIPE syscall"
-        description: "Create unidirectional pipe with circular buffer"
-        status: "todo"
+        description: "Create unidirectional pipe with circular buffer (0x5D)"
+        status: "done"
+        acceptance_criteria:
+          - description: "PIPE r5, r6 creates read FD (0x8000|idx) and write FD (0xC000|idx)"
+            met: true
+          - description: "Pipe buffer holds 256 words"
+            met: true
       - name: "MSGSND/MSGRCV syscalls"
-        description: "Send and receive fixed-size messages by PID"
-        status: "todo"
+        description: "Send and receive fixed-size messages by PID (0x5E, 0x5F)"
+        status: "done"
+        acceptance_criteria:
+          - description: "MSGSND sends 4-word message to target PID"
+            met: true
+          - description: "MSGRCV receives message, returns sender PID in r0"
+            met: true
+          - description: "Per-process message queue holds 16 messages"
+            met: true
       - name: "Blocking I/O"
         description: "READ on empty pipe blocks until data arrives"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "READ on empty pipe sets proc.blocked = true"
+            met: true
+          - description: "Scheduler skips blocked processes"
+            met: true
+          - description: "MSGRCV blocks if no message queued"
+            met: true
+      - name: "pipe_test.asm"
+        description: "Program demonstrating parent-child pipe communication"
+        status: "done"
 
   - id: "phase-28"
     title: "Device Driver Abstraction"

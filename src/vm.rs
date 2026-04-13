@@ -39,6 +39,7 @@ impl Default for CpuMode {
 
 /// Process priority levels for the preemptive scheduler (Phase 26).
 /// Higher priority = more CPU time slices per round.
+#[allow(dead_code)]
 pub const PRIORITY_LEVELS: u8 = 4;
 /// Default base time slice length (in VM steps) for priority-1 processes.
 pub const DEFAULT_TIME_SLICE: u32 = 100;
@@ -56,6 +57,7 @@ pub const MSG_WORDS: usize = 4;
 /// A unidirectional pipe with a circular buffer.
 /// Created by PIPE syscall. Two fd slots are allocated: read_fd and write_fd.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Pipe {
     /// Circular buffer data
     pub buffer: [u32; PIPE_BUFFER_SIZE],
@@ -1171,17 +1173,59 @@ impl Vm {
                 let len_reg = self.fetch() as usize;
                 if fd_reg < NUM_REGS && buf_reg < NUM_REGS && len_reg < NUM_REGS {
                     let fd = self.regs[fd_reg];
-                    let buf_addr = self.regs[buf_reg];
-                    let len = self.regs[len_reg];
-                    let pid = self.current_pid;
-                    let n = self.vfs.fread(&mut self.ram, fd, buf_addr, len, pid);
-                    self.regs[0] = n;
+                    // Check if this is a pipe read fd (0x8000+idx)
+                    if fd >= 0x8000 && fd < 0xC000 {
+                        let pipe_idx = (fd & 0x0FFF) as usize;
+                        let buf_addr = self.regs[buf_reg] as usize;
+                        let len = self.regs[len_reg] as usize;
+                        if pipe_idx < self.pipes.len() && self.pipes[pipe_idx].alive {
+                            if self.pipes[pipe_idx].is_empty() {
+                                // Blocking read: block this process and rewind PC
+                                let pid = self.current_pid;
+                                if pid > 0 {
+                                    if let Some(proc) =
+                                        self.processes.iter_mut().find(|p| p.pid == pid)
+                                    {
+                                        proc.blocked = true;
+                                        // Rewind PC past the READ opcode (4 words: opcode + 3 args)
+                                        self.pc -= 4;
+                                    }
+                                }
+                                self.regs[0] = 0; // 0 bytes read (will retry)
+                            } else {
+                                // Read available words from pipe into RAM
+                                let mut count = 0usize;
+                                for i in 0..len {
+                                    if let Some(word) = self.pipes[pipe_idx].read_word() {
+                                        let addr = buf_addr + i;
+                                        if addr < self.ram.len() {
+                                            self.ram[addr] = word;
+                                            count += 1;
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                self.regs[0] = count as u32;
+                                // Unblock any process blocked on write to this pipe
+                                // (writer may have been blocked if pipe was full)
+                            }
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF; // bad pipe fd
+                        }
+                    } else {
+                        let buf_addr = self.regs[buf_reg];
+                        let len = self.regs[len_reg];
+                        let pid = self.current_pid;
+                        let n = self.vfs.fread(&mut self.ram, fd, buf_addr, len, pid);
+                        self.regs[0] = n;
+                    }
                 } else {
                     self.regs[0] = 0xFFFFFFFF;
                 }
             }
 
-            // WRITE fd_reg, buf_addr_reg, len_reg  -- write from RAM to file
+            // WRITE fd_reg, buf_addr_reg, len_reg  -- write from RAM to file or pipe
             // Returns bytes written in r0
             0x56 => {
                 let fd_reg = self.fetch() as usize;
@@ -1189,24 +1233,70 @@ impl Vm {
                 let len_reg = self.fetch() as usize;
                 if fd_reg < NUM_REGS && buf_reg < NUM_REGS && len_reg < NUM_REGS {
                     let fd = self.regs[fd_reg];
-                    let buf_addr = self.regs[buf_reg];
-                    let len = self.regs[len_reg];
-                    let pid = self.current_pid;
-                    let n = self.vfs.fwrite(&self.ram, fd, buf_addr, len, pid);
-                    self.regs[0] = n;
+                    // Check if this is a pipe write fd (0xC000+idx)
+                    if fd >= 0xC000 {
+                        let pipe_idx = (fd & 0x0FFF) as usize;
+                        let buf_addr = self.regs[buf_reg] as usize;
+                        let len = self.regs[len_reg] as usize;
+                        if pipe_idx < self.pipes.len() && self.pipes[pipe_idx].alive {
+                            let mut count = 0usize;
+                            for i in 0..len {
+                                let addr = buf_addr + i;
+                                if addr >= self.ram.len() {
+                                    break;
+                                }
+                                if self.pipes[pipe_idx].write_word(self.ram[addr]) {
+                                    count += 1;
+                                } else {
+                                    break; // pipe full
+                                }
+                            }
+                            self.regs[0] = count as u32;
+                            // Unblock any process blocked on read from this pipe
+                            for proc in &mut self.processes {
+                                if proc.blocked && !proc.halted {
+                                    // Check if this process is blocked reading from this pipe
+                                    // (heuristic: unblock all blocked processes -- they'll
+                                    // re-block if their pipe is still empty)
+                                    proc.blocked = false;
+                                }
+                            }
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF; // bad pipe fd or pipe closed
+                        }
+                    } else {
+                        let buf_addr = self.regs[buf_reg];
+                        let len = self.regs[len_reg];
+                        let pid = self.current_pid;
+                        let n = self.vfs.fwrite(&self.ram, fd, buf_addr, len, pid);
+                        self.regs[0] = n;
+                    }
                 } else {
                     self.regs[0] = 0xFFFFFFFF;
                 }
             }
 
             // CLOSE fd_reg  -- close file descriptor, returns 0 in r0 on success
+            // Also handles pipe fds (0x8000 read, 0xC000 write)
             0x57 => {
                 let fd_reg = self.fetch() as usize;
                 if fd_reg < NUM_REGS {
                     let fd = self.regs[fd_reg];
                     let pid = self.current_pid;
-                    let result = self.vfs.fclose(fd, pid);
-                    self.regs[0] = result;
+                    // Check if this is a pipe fd
+                    if (fd >= 0x8000 && fd < 0xC000) || fd >= 0xC000 {
+                        let pipe_idx = (fd & 0x0FFF) as usize;
+                        if pipe_idx < self.pipes.len() {
+                            // Mark pipe as dead (both read and write ends closed)
+                            self.pipes[pipe_idx].alive = false;
+                            self.regs[0] = 0;
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    } else {
+                        let result = self.vfs.fclose(fd, pid);
+                        self.regs[0] = result;
+                    }
                 } else {
                     self.regs[0] = 0xFFFFFFFF;
                 }
@@ -1261,6 +1351,91 @@ impl Vm {
                 let pr = self.fetch() as usize;
                 if pr < NUM_REGS {
                     self.new_priority = self.regs[pr].min(3) as u8;
+                }
+            }
+
+            // PIPE rd_read, rd_write -- create a unidirectional pipe
+            // r0 = read_fd (0x8000+idx) or 0xFFFFFFFF on error, r1 = write_fd (0xC000+idx)
+            0x5D => {
+                let rr = self.fetch() as usize;
+                let rw = self.fetch() as usize;
+                if rr < NUM_REGS && rw < NUM_REGS {
+                    if self.pipes.len() < MAX_PIPES {
+                        let pid = self.current_pid;
+                        let idx = self.pipes.len() as u32;
+                        self.pipes.push(Pipe::new(pid, pid));
+                        self.regs[rr] = 0x8000 | idx;
+                        self.regs[rw] = 0xC000 | idx;
+                        self.regs[0] = 0; // success
+                    } else {
+                        self.regs[0] = 0xFFFFFFFF; // too many pipes
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // MSGSND pid_reg -- send r1..r4 as a 4-word message to target PID
+            // r0 = 0 on success, 0xFFFFFFFF on error
+            0x5E => {
+                let pid_reg = self.fetch() as usize;
+                if pid_reg < NUM_REGS {
+                    let target_pid = self.regs[pid_reg];
+                    let sender_pid = self.current_pid;
+                    let data = [
+                        self.regs[1], self.regs[2],
+                        self.regs[3], self.regs[4],
+                    ];
+                    // Find target process and deliver message
+                    let mut delivered = false;
+                    for proc in &mut self.processes {
+                        if proc.pid == target_pid && !proc.halted {
+                            if proc.msg_queue.len() < MAX_MESSAGES {
+                                proc.msg_queue.push(Message::new(sender_pid, data));
+                                delivered = true;
+                                // If process is blocked waiting for a message, unblock it
+                                if proc.blocked {
+                                    proc.blocked = false;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    if delivered {
+                        self.regs[0] = 0;
+                    } else {
+                        self.regs[0] = 0xFFFFFFFF;
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // MSGRCV -- receive a message (blocks if none pending)
+            // On success: r0 = sender PID, r1..r4 = message data
+            // If no message: process blocks (scheduler will retry)
+            0x5F => {
+                let pid = self.current_pid;
+                // Check if this is a child process
+                if pid > 0 {
+                    if let Some(proc) = self.processes.iter_mut().find(|p| p.pid == pid) {
+                        if let Some(msg) = proc.msg_queue.first().cloned() {
+                            proc.msg_queue.remove(0);
+                            self.regs[0] = msg.sender;
+                            self.regs[1] = msg.data[0];
+                            self.regs[2] = msg.data[1];
+                            self.regs[3] = msg.data[2];
+                            self.regs[4] = msg.data[3];
+                        } else {
+                            // No message: block this process
+                            proc.blocked = true;
+                            // Rewind PC so MSGRCV retries after unblock
+                            self.pc -= 1;
+                        }
+                    }
+                } else {
+                    // Main process: check msg queue on VM (non-blocking for simplicity)
+                    self.regs[0] = 0xFFFFFFFF; // main process has no msg queue in current design
                 }
             }
 
@@ -1321,6 +1496,9 @@ impl Vm {
         for idx in indices {
             let proc = &mut procs[idx];
             if proc.halted { continue; }
+
+            // Skip blocked processes (waiting for pipe data or message)
+            if proc.blocked { continue; }
 
             // Skip sleeping processes whose sleep hasnt expired
             if proc.sleep_until > 0 && self.sched_tick < proc.sleep_until {
@@ -1550,6 +1728,16 @@ impl Vm {
                 let r = ram(a + 1);
                 (format!("SETPRIORITY {}", reg(r)), 2)
             }
+            0x5D => {
+                let rr = ram(a + 1);
+                let rw = ram(a + 2);
+                (format!("PIPE {}, {}", reg(rr), reg(rw)), 3)
+            }
+            0x5E => {
+                let r = ram(a + 1);
+                (format!("MSGSND {}", reg(r)), 2)
+            }
+            0x5F => ("MSGRCV".into(), 1),
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

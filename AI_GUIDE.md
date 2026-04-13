@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Geometry OS is a pixel-art virtual machine evolving into a real operating system. It's written in Rust with a minifb GUI, a custom assembler, and 34 programs. 122 tests, all green.
+Geometry OS is a pixel-art virtual machine evolving into a real operating system. It's written in Rust with a minifb GUI, a custom assembler, and 36 programs. 185 tests (183 passing, 2 ignored), all green.
 
 The goal: build toward modern OS standards (kernel boundary, memory protection, filesystem, scheduler, IPC, device drivers, shell).
 
@@ -11,15 +11,15 @@ The goal: build toward modern OS standards (kernel boundary, memory protection, 
 ```
 src/
   main.rs       -- GUI (minifb), input handling, rendering (1024x768 host window)
-  vm.rs         -- VM core: 57 opcodes, 32 registers, 64K RAM, 256x256 screen, multi-process
+  vm.rs         -- VM core: 60 opcodes, 32 registers, 64K RAM, 256x256 screen, multi-process
   assembler.rs  -- Two-pass assembler: labels, #define, .org, .db, .asciz
   preprocessor.rs -- Abstraction layer: VAR/SET/GET/INC/DEC macros, shared tokenizer
   font.rs       -- 8x8 VGA bitmap font for text rendering
   lib.rs        -- Re-exports
 tests/
-  program_tests.rs -- 78 tests: assembly, execution, opcode behavior, multi-process
+  program_tests.rs -- 140 tests: assembly, execution, opcode behavior, multi-process, IPC
 programs/
-  *.asm         -- 33 programs: games, demos, self-hosting assembler, window manager
+  *.asm         -- 36 programs: games, demos, self-hosting assembler, window manager
 docs/
   NORTH_STAR.md -- Read this FIRST. Defines what work matters.
   CANVAS_TEXT_SURFACE.md -- How the text editor/assembler pipeline works
@@ -67,6 +67,6 @@ cargo build 2>&1 | grep -E "^error|^warning\["  # check for errors/warnings
 7. Update `roadmap.yaml` deliverable status
 8. Write a program that uses it
 
-## Current Phase: 23 (Kernel Boundary)
+## Current Phase: 28 (Device Driver Abstraction)
 
-Building the syscall mechanism. Read docs/NORTH_STAR.md before starting.
+Building the device driver model. Read docs/NORTH_STAR.md before starting.

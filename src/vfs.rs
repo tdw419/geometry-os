@@ -33,6 +33,7 @@ const FS_DIR: &str = ".geometry_os/fs";
 #[derive(Debug)]
 pub struct OpenFile {
     pub file: fs::File,
+    #[allow(dead_code)]
     pub name: String,
     pub mode: u32,
 }
@@ -41,6 +42,7 @@ pub struct OpenFile {
 /// Maps fd number (0-based) to open file handle.
 /// fd 0 = stdin (reserved), fd 1 = stdout (reserved), fd 2 = stderr (reserved).
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct FdTable {
     fds: Vec<Option<OpenFile>>,
 }
@@ -69,6 +71,7 @@ impl FdTable {
     }
 
     /// Get a mutable reference to the open file at the given fd.
+    #[allow(dead_code)]
     pub fn get(&mut self, fd: u32) -> Option<&mut OpenFile> {
         let idx = fd as usize;
         if idx < self.fds.len() {
@@ -90,6 +93,7 @@ impl FdTable {
     }
 
     /// Count open file descriptors.
+    #[allow(dead_code)]
     pub fn open_count(&self) -> usize {
         self.fds.iter().filter(|f| f.is_some()).count()
     }
@@ -344,6 +348,7 @@ impl Vfs {
     }
 
     /// Close all file descriptors for a given PID.
+    #[allow(dead_code)]
     pub fn close_all(&mut self, pid: u32) {
         self.fd_tables.remove(&pid);
     }

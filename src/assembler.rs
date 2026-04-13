@@ -678,6 +678,27 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[1])? as u32);
         }
 
+        "PIPE" => {
+            if tokens.len() < 3 {
+                return Err(format!("PIPE requires 2 arguments: PIPE read_fd_reg, write_fd_reg"));
+            }
+            bytecode.push(0x5D);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
+        "MSGSND" => {
+            if tokens.len() < 2 {
+                return Err(format!("MSGSND requires 1 argument: MSGSND pid_reg"));
+            }
+            bytecode.push(0x5E);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
+        "MSGRCV" => {
+            bytecode.push(0x5F);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 
