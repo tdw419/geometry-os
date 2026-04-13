@@ -4,9 +4,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
   78 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 
-**Progress:** 34/37 phases complete, 0 in progress
+**Progress:** 35/37 phases complete, 0 in progress
 
-**Deliverables:** 155/174 complete
+**Deliverables:** 160/174 complete
 
 **Tasks:** 23/23 complete
 
@@ -48,7 +48,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 | phase-32 Signals & Process Lifecycle | COMPLETE | 4/4 | - | - |
 | phase-33 QEMU Bridge | COMPLETE | 9/9 | - | - |
 | phase-34 RISC-V RV32I Core | COMPLETE | 6/6 | - | - |
-| phase-35 RISC-V Privilege Modes | FUTURE | 0/5 | - | - |
+| phase-35 RISC-V Privilege Modes | COMPLETE | 5/5 | - | - |
 | phase-36 RISC-V Virtual Memory & Devices | FUTURE | 0/8 | - | - |
 | phase-37 Guest OS Boot (Native RISC-V) | FUTURE | 0/6 | - | - |
 
@@ -816,21 +816,21 @@ portable to WASM and embedded. RV32I is the foundation.
     _Files: src/riscv/cpu.rs_
   _~300 LOC_
 
-## [?] phase-35: RISC-V Privilege Modes (FUTURE)
+## [x] phase-35: RISC-V Privilege Modes (COMPLETE)
 
 **Goal:** M/S/U privilege levels, CSR registers, trap handling. Linux needs this to manage its own processes.
 
 ### Deliverables
 
-- [ ] **Privilege enum + CSR bank** -- M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp
+- [x] **Privilege enum + CSR bank** -- M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp
   _~80 LOC_
-- [ ] **CSR read/write** -- CSRRW, CSRRS, CSRRC and immediate variants
+- [x] **CSR read/write** -- CSRRW, CSRRS, CSRRC and immediate variants
   _~100 LOC_
-- [ ] **ECALL/MRET/SRET** -- Trap entry saves PC, jumps to vector. MRET/SRET restore PC.
+- [x] **ECALL/MRET/SRET** -- Trap entry saves PC, jumps to vector. MRET/SRET restore PC.
   _~120 LOC_
-- [ ] **Timer + software interrupts** -- mtime/mtimecmp, msip/ssip, interrupt pending/enable
+- [x] **Timer + software interrupts** -- mtime/mtimecmp, msip/ssip, interrupt pending/enable
   _~80 LOC_
-- [ ] **Privilege transition tests** -- U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
+- [x] **Privilege transition tests** -- U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
   _~150 LOC_
 
 ## [?] phase-36: RISC-V Virtual Memory & Devices (FUTURE)

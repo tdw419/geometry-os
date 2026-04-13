@@ -10,9 +10,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 77
-  tests: 378
+  tests: 543
   programs: 40
-  loc: 10026
+  loc: 12551
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1506,29 +1506,29 @@ phases:
     reason: QEMU bridge teaches us what the interpreter needs to reimplement
 - id: phase-35
   title: RISC-V Privilege Modes
-  status: future
+  status: complete
   goal: M/S/U privilege levels, CSR registers, trap handling. Linux needs this to manage its own processes.
   priority: 50
   deliverables:
   - name: Privilege enum + CSR bank
     description: M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp
-    status: todo
+    status: done
     scope_lines: 80
   - name: CSR read/write
     description: CSRRW, CSRRS, CSRRC and immediate variants
-    status: todo
+    status: done
     scope_lines: 100
   - name: ECALL/MRET/SRET
     description: Trap entry saves PC, jumps to vector. MRET/SRET restore PC.
-    status: todo
+    status: done
     scope_lines: 120
   - name: Timer + software interrupts
     description: mtime/mtimecmp, msip/ssip, interrupt pending/enable
-    status: todo
+    status: done
     scope_lines: 80
   - name: Privilege transition tests
     description: U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
-    status: todo
+    status: done
     scope_lines: 150
   dependencies:
   - source: phase-34
