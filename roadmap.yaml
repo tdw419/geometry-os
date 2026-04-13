@@ -1,6 +1,6 @@
 title: Geometry OS Roadmap
 version: 1.0.0
-description: "Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,\
+description: "Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\\n  the built-in text editor, press F5,
   \ watch it run."
 project_url: https://github.com/tdw419/geometry-os
 meta:
@@ -10,9 +10,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 114
-  tests: 713
+  tests: 694
   programs: 40
-  loc: 15524
+  loc: 15741
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
