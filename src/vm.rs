@@ -252,6 +252,9 @@ pub struct Vm {
     pub msg_data: [u32; MSG_WORDS],
     /// Per-step IPC flag: MSGRCV requested
     pub msg_recv_requested: bool,
+    /// Environment variables for shell support (Phase 29).
+    /// Shared across all processes; SETENV by any process is visible to all.
+    pub env_vars: std::collections::HashMap<String, String>,
 }
 
 impl Vm {
@@ -286,6 +289,7 @@ impl Vm {
             msg_sender: 0,
             msg_data: [0; MSG_WORDS],
             msg_recv_requested: false,
+            env_vars: std::collections::HashMap::new(),
         }
     }
 
@@ -317,6 +321,7 @@ impl Vm {
         self.msg_sender = 0;
         self.msg_data = [0; MSG_WORDS];
         self.msg_recv_requested = false;
+        self.env_vars.clear();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -334,6 +339,25 @@ impl Vm {
             let ch = (ram[a] & 0xFF) as u8;
             if ch == 0 {
                 return Some(s);
+            }
+            s.push(ch as char);
+            a += 1;
+        }
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
+    }
+
+    /// Read a null-terminated string from self.ram with max length cap.
+    fn read_ram_string(&self, addr: usize, max_len: usize) -> Option<String> {
+        let mut s = String::new();
+        let mut a = addr;
+        while a < self.ram.len() && s.len() < max_len {
+            let ch = (self.ram[a] & 0xFF) as u8;
+            if ch == 0 {
+                break;
             }
             s.push(ch as char);
             a += 1;
@@ -1634,6 +1658,73 @@ impl Vm {
                 }
             }
 
+            // GETENV key_addr_reg, val_addr_reg  -- read environment variable
+            // Reads null-terminated key from RAM[key_addr], writes value to RAM[val_addr].
+            // r0 = value string length, or 0xFFFFFFFF if not found.
+            // Max key/value length: 64 chars.
+            0x63 => {
+                let kr = self.fetch() as usize;
+                let vr = self.fetch() as usize;
+                if kr < NUM_REGS && vr < NUM_REGS {
+                    let key_addr = self.regs[kr] as usize;
+                    let val_addr = self.regs[vr] as usize;
+                    let key = self.read_ram_string(key_addr, 64);
+                    if let Some(k) = &key {
+                        if let Some(val) = self.env_vars.get(k) {
+                            let bytes = val.as_bytes();
+                            let len = bytes.len().min(64);
+                            for i in 0..len {
+                                let addr = val_addr + i;
+                                if addr < self.ram.len() {
+                                    self.ram[addr] = bytes[i] as u32;
+                                }
+                            }
+                            // Null terminate
+                            if val_addr + len < self.ram.len() {
+                                self.ram[val_addr + len] = 0;
+                            }
+                            self.regs[0] = len as u32;
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    } else {
+                        self.regs[0] = 0xFFFFFFFF;
+                    }
+                }
+            }
+
+            // SETENV key_addr_reg, val_addr_reg  -- set environment variable
+            // Reads null-terminated key and value from RAM.
+            // r0 = 0 on success, 0xFFFFFFFF on error.
+            // Max key/value length: 64 chars. Max 32 env vars.
+            0x64 => {
+                let kr = self.fetch() as usize;
+                let vr = self.fetch() as usize;
+                if kr < NUM_REGS && vr < NUM_REGS {
+                    let key_addr = self.regs[kr] as usize;
+                    let val_addr = self.regs[vr] as usize;
+                    let key = self.read_ram_string(key_addr, 64);
+                    let val = self.read_ram_string(val_addr, 64);
+                    match (key, val) {
+                        (Some(k), Some(v)) => {
+                            if self.env_vars.len() < 32 || self.env_vars.contains_key(&k) {
+                                self.env_vars.insert(k, v);
+                                self.regs[0] = 0;
+                            } else {
+                                self.regs[0] = 0xFFFFFFFF; // too many env vars
+                            }
+                        }
+                        _ => self.regs[0] = 0xFFFFFFFF,
+                    }
+                }
+            }
+
+            // GETPID -- get current process ID
+            // r0 = PID (0 = main/kernel context, 1+ = spawned child)
+            0x65 => {
+                self.regs[0] = self.current_pid;
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -1939,6 +2030,17 @@ impl Vm {
                 let arg = ram(a + 3);
                 (format!("IOCTL {}, {}, {}", reg(fd), reg(cmd), reg(arg)), 4)
             }
+            0x63 => {
+                let kr = ram(a + 1);
+                let vr = ram(a + 2);
+                (format!("GETENV {}, {}", reg(kr), reg(vr)), 3)
+            }
+            0x64 => {
+                let kr = ram(a + 1);
+                let vr = ram(a + 2);
+                (format!("SETENV {}, {}", reg(kr), reg(vr)), 3)
+            }
+            0x65 => ("GETPID".into(), 1),
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
@@ -2131,6 +2233,7 @@ impl Vm {
             msg_sender: 0,
             msg_data: [0; MSG_WORDS],
             msg_recv_requested: false,
+            env_vars: std::collections::HashMap::new(),
         })
     }
 }

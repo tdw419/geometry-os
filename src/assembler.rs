@@ -709,6 +709,28 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[3])? as u32);
         }
 
+        "GETENV" => {
+            if tokens.len() < 3 {
+                return Err(format!("GETENV requires 2 arguments: GETENV key_addr_reg, val_addr_reg"));
+            }
+            bytecode.push(0x63);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
+        "SETENV" => {
+            if tokens.len() < 3 {
+                return Err(format!("SETENV requires 2 arguments: SETENV key_addr_reg, val_addr_reg"));
+            }
+            bytecode.push(0x64);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
+        "GETPID" => {
+            bytecode.push(0x65);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

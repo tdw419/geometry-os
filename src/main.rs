@@ -3057,6 +3057,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         msg_sender: 0,
         msg_data: [0; vm::MSG_WORDS],
         msg_recv_requested: false,
+        env_vars: std::collections::HashMap::new(),
     };
 
 

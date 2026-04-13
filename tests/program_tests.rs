@@ -4412,3 +4412,293 @@ fn test_ioctl_net_status() {
     vm.step();
     assert_eq!(vm.regs[0], 1, "Net status should be 1 (up)");
 }
+
+// ============================================================
+// Phase 29: Shell opcodes -- GETPID, GETENV, SETENV
+// ============================================================
+
+#[test]
+fn test_getpid_assembles() {
+    let source = "
+    GETPID
+    HALT
+    ";
+    let result = assemble(source, 0);
+    assert!(result.is_ok(), "GETPID should assemble: {:?}", result.err());
+    let bc = &result.unwrap().pixels;
+    assert_eq!(bc[0], 0x65, "GETPID opcode should be 0x65");
+}
+
+#[test]
+fn test_getpid_returns_zero_in_kernel_mode() {
+    // In kernel mode (no spawned process), PID should be 0
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x65; // GETPID
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "GETPID should return 0 in kernel context");
+}
+
+#[test]
+fn test_getpid_returns_pid_in_spawned_process() {
+    // SPAWN a child process, then GETPID inside it should return its PID
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+
+    // Write a small program at address 0x200: GETPID, HALT
+    vm.ram[0x200] = 0x65; // GETPID
+    vm.ram[0x201] = 0x00; // HALT
+
+    // At address 0: LDI r1, 0x200; SPAWN r1; HALT
+    vm.ram[0] = 0x10;    // LDI r1, imm16
+    vm.ram[1] = 1;       // r1
+    vm.ram[2] = 0x200;   // address
+    vm.ram[3] = 0x4D;    // SPAWN
+    vm.ram[4] = 1;       // r1
+    vm.ram[5] = 0x00;    // HALT
+
+    // Run main process to completion
+    for _ in 0..20 { if !vm.step() { break; } }
+
+    let child_pid = vm.ram[0xFFA];
+    assert!(child_pid > 0 && child_pid != 0xFFFFFFFF, "SPAWN should set RAM[0xFFA] to a valid PID, got {}", child_pid);
+    assert_eq!(vm.processes.len(), 1);
+
+    // Run the child process through the scheduler
+    for _ in 0..20 {
+        vm.step_all_processes();
+        if vm.processes[0].halted { break; }
+    }
+
+    let child = &vm.processes[0];
+    assert_eq!(child.regs[0], child_pid, "Child GETPID should return its spawned PID");
+}
+
+#[test]
+fn test_getenv_assembles() {
+    let source = "
+    GETENV r1, r2
+    HALT
+    ";
+    let result = assemble(source, 0);
+    assert!(result.is_ok(), "GETENV should assemble: {:?}", result.err());
+    let bc = &result.unwrap().pixels;
+    assert_eq!(bc[0], 0x63, "GETENV opcode should be 0x63");
+    assert_eq!(bc[1], 1, "key_reg");
+    assert_eq!(bc[2], 2, "val_reg");
+}
+
+#[test]
+fn test_setenv_assembles() {
+    let source = "
+    SETENV r1, r2
+    HALT
+    ";
+    let result = assemble(source, 0);
+    assert!(result.is_ok(), "SETENV should assemble: {:?}", result.err());
+    let bc = &result.unwrap().pixels;
+    assert_eq!(bc[0], 0x64, "SETENV opcode should be 0x64");
+    assert_eq!(bc[1], 1, "key_reg");
+    assert_eq!(bc[2], 2, "val_reg");
+}
+
+#[test]
+fn test_setenv_and_getenv_roundtrip() {
+    let mut vm = Vm::new();
+
+    // Set PATH=/bin
+    write_string(&mut vm.ram, 0x1000, "PATH");
+    write_string(&mut vm.ram, 0x1100, "/bin");
+    vm.regs[1] = 0x1000; // key addr
+    vm.regs[2] = 0x1100; // val addr
+
+    vm.ram[0] = 0x64; // SETENV
+    vm.ram[1] = 1;    // key_reg
+    vm.ram[2] = 2;    // val_reg
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "SETENV should return 0 on success");
+
+    // Now GETENV
+    write_string(&mut vm.ram, 0x1200, "PATH"); // key to look up
+    vm.regs[1] = 0x1200; // key addr
+    vm.regs[3] = 0x2000; // output buffer
+    vm.pc = 10;
+    vm.ram[10] = 0x63; // GETENV
+    vm.ram[11] = 1;    // key_reg
+    vm.ram[12] = 3;    // val_reg
+    vm.step();
+    assert_eq!(vm.regs[0], 4, "GETENV should return length 4 for '/bin'");
+
+    // Read back the value from RAM
+    let mut result = String::new();
+    for i in 0..4 {
+        result.push((vm.ram[0x2000 + i] & 0xFF) as u8 as char);
+    }
+    assert_eq!(result, "/bin", "GETENV should write '/bin' to output buffer");
+}
+
+#[test]
+fn test_getenv_not_found() {
+    let mut vm = Vm::new();
+    write_string(&mut vm.ram, 0x1000, "NONEXISTENT");
+    vm.regs[1] = 0x1000;
+    vm.regs[2] = 0x2000;
+
+    vm.ram[0] = 0x63; // GETENV
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.step();
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "GETENV should return 0xFFFFFFFF when key not found");
+}
+
+#[test]
+fn test_setenv_overwrite() {
+    let mut vm = Vm::new();
+
+    // Set HOME=/root
+    write_string(&mut vm.ram, 0x1000, "HOME");
+    write_string(&mut vm.ram, 0x1100, "/root");
+    vm.regs[1] = 0x1000;
+    vm.regs[2] = 0x1100;
+    vm.ram[0] = 0x64; // SETENV
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.step();
+
+    // Overwrite HOME=/home/user
+    write_string(&mut vm.ram, 0x1100, "/home/user");
+    vm.regs[1] = 0x1000;
+    vm.regs[2] = 0x1100;
+    vm.pc = 10;
+    vm.ram[10] = 0x64;
+    vm.ram[11] = 1;
+    vm.ram[12] = 2;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "SETENV overwrite should succeed");
+
+    // Verify GETENV returns new value
+    write_string(&mut vm.ram, 0x1200, "HOME");
+    vm.regs[1] = 0x1200;
+    vm.regs[3] = 0x2000;
+    vm.pc = 20;
+    vm.ram[20] = 0x63;
+    vm.ram[21] = 1;
+    vm.ram[22] = 3;
+    vm.step();
+    assert_eq!(vm.regs[0], 10, "GETENV should return length 10 for '/home/user'");
+
+    let mut result = String::new();
+    for i in 0..10 {
+        result.push((vm.ram[0x2000 + i] & 0xFF) as u8 as char);
+    }
+    assert_eq!(result, "/home/user");
+}
+
+#[test]
+fn test_getenv_null_terminates_output() {
+    let mut vm = Vm::new();
+
+    // Set SHELL=/sh
+    write_string(&mut vm.ram, 0x1000, "SHELL");
+    write_string(&mut vm.ram, 0x1100, "/sh");
+    vm.regs[1] = 0x1000;
+    vm.regs[2] = 0x1100;
+    vm.ram[0] = 0x64; // SETENV
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.step();
+
+    // GETENV
+    write_string(&mut vm.ram, 0x1200, "SHELL");
+    vm.regs[1] = 0x1200;
+    vm.regs[3] = 0x2000;
+    vm.pc = 10;
+    vm.ram[10] = 0x63;
+    vm.ram[11] = 1;
+    vm.ram[12] = 3;
+    vm.step();
+
+    assert_eq!(vm.ram[0x2000 + 3], 0, "GETENV should null-terminate output");
+}
+
+#[test]
+fn test_setenv_max_32_vars() {
+    let mut vm = Vm::new();
+
+    // Set 32 different env vars -- should all succeed
+    for i in 0..32 {
+        let key = format!("VAR{}", i);
+        let val = format!("val{}", i);
+        write_string(&mut vm.ram, 0x1000, &key);
+        write_string(&mut vm.ram, 0x1100, &val);
+        vm.regs[1] = 0x1000;
+        vm.regs[2] = 0x1100;
+        vm.pc = 10;
+        vm.ram[10] = 0x64;
+        vm.ram[11] = 1;
+        vm.ram[12] = 2;
+        vm.step();
+        assert_eq!(vm.regs[0], 0, "SETENV #{} should succeed", i);
+    }
+
+    // 33rd unique var should fail
+    write_string(&mut vm.ram, 0x1000, "TOO_MANY");
+    write_string(&mut vm.ram, 0x1100, "nope");
+    vm.regs[1] = 0x1000;
+    vm.regs[2] = 0x1100;
+    vm.pc = 10;
+    vm.ram[10] = 0x64;
+    vm.ram[11] = 1;
+    vm.ram[12] = 2;
+    vm.step();
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "33rd SETENV should fail (max 32)");
+}
+
+#[test]
+fn test_env_vars_persist_across_processes() {
+    // SETENV in main process, GETENV in spawned child
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+
+    // Set USER=alice in main
+    write_string(&mut vm.ram, 0x1000, "USER");
+    write_string(&mut vm.ram, 0x1100, "alice");
+    vm.regs[1] = 0x1000;
+    vm.regs[2] = 0x1100;
+    vm.ram[0] = 0x64; // SETENV
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.step();
+
+    // Child at 0x200: GETENV r1, r2; HALT
+    write_string(&mut vm.ram, 0x300, "USER"); // key for child to look up
+    vm.ram[0x200] = 0x63; // GETENV
+    vm.ram[0x201] = 1;    // key_reg (r1)
+    vm.ram[0x202] = 2;    // val_reg (r2)
+    vm.ram[0x203] = 0x00; // HALT
+
+    // SPAWN at address 5
+    vm.regs[1] = 0x200;
+    vm.pc = 5;
+    vm.ram[5] = 0x4D;  // SPAWN
+    vm.ram[6] = 1;     // r1 = child addr
+    vm.ram[7] = 0x00;  // HALT
+    vm.step(); // SPAWN
+
+    // Set child's r1 to key addr, r2 to output buffer
+    vm.processes[0].regs[1] = 0x300; // key addr
+    vm.processes[0].regs[2] = 0x400; // output buffer
+
+    for _ in 0..20 {
+        vm.step_all_processes();
+        if vm.processes[0].halted { break; }
+    }
+
+    let child = &vm.processes[0];
+    assert_eq!(child.regs[0], 5, "Child should see USER=value of length 5");
+
+    let mut result = String::new();
+    for i in 0..5 {
+        result.push((vm.ram[0x400 + i] & 0xFF) as u8 as char);
+    }
+    assert_eq!(result, "alice", "Child should read 'alice' from parent's env");
+}
