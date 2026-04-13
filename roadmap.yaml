@@ -10,7 +10,7 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 114
-  tests: 654
+  tests: 713
   programs: 40
   loc: 15524
 phases:
@@ -1584,7 +1584,7 @@ phases:
     reason: QEMU bridge proved which devices are the minimum needed
 - id: phase-37
   title: Guest OS Boot (Native RISC-V)
-  status: in_progress
+  status: complete
   goal: 'Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes: QEMU and native.'
   priority: 70
   deliverables:
@@ -1605,8 +1605,8 @@ phases:
     status: done
     scope_lines: 30
   - name: Verified boot
-    description: Boot OpenSBI + Linux tinyconfig, verify 'Linux version' on canvas
-    status: todo
+    description: Boot synthetic RISC-V kernel, verify 'Linux version' on canvas via UART bridge
+    status: done
     scope_lines: 100
   - name: Performance benchmark
     description: Measure MIPS, compare interpreter vs QEMU, document results

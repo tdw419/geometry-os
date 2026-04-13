@@ -59,7 +59,7 @@ impl std::fmt::Display for LoadError {
 impl std::error::Error for LoadError {}
 
 /// Result of a successful image load.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct LoadInfo {
     /// Entry point address (where PC should start).
     pub entry: u32,
@@ -350,26 +350,30 @@ mod tests {
         // Segment 2: data at 0x8000_1000.
         let data: &[u8] = &[0xDE, 0xAD, 0xBE, 0xEF];
 
+        // ELF layout: header(52) + phdr1(32) + phdr2(32) = 116 bytes before data.
+        // Code data starts at offset 116, data segment at offset 120.
+        let code_offset = 52 + 32 + 32; // = 116
+        let data_offset = code_offset + code.len(); // = 120
+
         let mut phdr1 = [0u8; 32];
         phdr1[0..4].copy_from_slice(&PT_LOAD.to_le_bytes());
-        phdr1[4..8].copy_from_slice(&(84u32).to_le_bytes());
+        phdr1[4..8].copy_from_slice(&(code_offset as u32).to_le_bytes());
         phdr1[8..12].copy_from_slice(&0x8000_0000u32.to_le_bytes());
         phdr1[12..16].copy_from_slice(&0x8000_0000u32.to_le_bytes());
         phdr1[16..20].copy_from_slice(&4u32.to_le_bytes());
         phdr1[20..24].copy_from_slice(&4u32.to_le_bytes());
 
-        let seg2_offset = 84 + 32 + code.len();
         let mut phdr2 = [0u8; 32];
         phdr2[0..4].copy_from_slice(&PT_LOAD.to_le_bytes());
-        phdr2[4..8].copy_from_slice(&(seg2_offset as u32).to_le_bytes());
+        phdr2[4..8].copy_from_slice(&(data_offset as u32).to_le_bytes());
         phdr2[8..12].copy_from_slice(&0x8000_1000u32.to_le_bytes());
         phdr2[12..16].copy_from_slice(&0x8000_1000u32.to_le_bytes());
         phdr2[16..20].copy_from_slice(&4u32.to_le_bytes());
         phdr2[20..24].copy_from_slice(&4u32.to_le_bytes());
 
         img.extend_from_slice(&phdr1);
-        img.extend_from_slice(code);
         img.extend_from_slice(&phdr2);
+        img.extend_from_slice(code);
         img.extend_from_slice(data);
 
         let info = load_elf(&mut bus, &img).unwrap();
@@ -434,8 +438,9 @@ mod tests {
         phdr_null[0..4].copy_from_slice(&0u32.to_le_bytes()); // PT_NULL
 
         // Segment 2: PT_LOAD with actual data.
+        // ELF layout: header(52) + phdr_null(32) + phdr_load(32) = 116 bytes.
         let data: &[u8] = &[0xAB, 0xCD, 0xEF, 0x01];
-        let data_offset = 84 + 32 + 32; // after header + 2 phdrs
+        let data_offset = 52 + 32 + 32; // = 116
         let mut phdr_load = [0u8; 32];
         phdr_load[0..4].copy_from_slice(&PT_LOAD.to_le_bytes());
         phdr_load[4..8].copy_from_slice(&(data_offset as u32).to_le_bytes());
