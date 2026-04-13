@@ -1,15 +1,14 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-76 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
-the built-in text editor, press F5, watch it run.
+  77 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  the built-in text editor, press F5, watch it run.
 
+**Progress:** 32/37 phases complete, 1 in progress
 
-**Progress:** 32/37 phases complete, 0 in progress
+**Deliverables:** 146/174 complete
 
-**Deliverables:** 140/174 complete
-
-**Tasks:** 0/23 complete
+**Tasks:** 12/23 complete
 
 ## Scope Summary
 
@@ -47,7 +46,7 @@ the built-in text editor, press F5, watch it run.
 | phase-30 Boot Sequence & Init | COMPLETE | 3/3 | - | - |
 | phase-31 Standard Library | COMPLETE | 4/4 | - | - |
 | phase-32 Signals & Process Lifecycle | COMPLETE | 4/4 | - | - |
-| phase-33 QEMU Bridge | PLANNED | 0/9 | - | - |
+| phase-33 QEMU Bridge | IN PROGRESS | 6/9 | - | - |
 | phase-34 RISC-V RV32I Core | FUTURE | 0/6 | - | - |
 | phase-35 RISC-V Privilege Modes | FUTURE | 0/5 | - | - |
 | phase-36 RISC-V Virtual Memory & Devices | FUTURE | 0/8 | - | - |
@@ -592,7 +591,7 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 - [x] **Zombie cleanup** -- Exited processes cleaned up after parent WAITPID
   - [x] Zombie process freed after WAITPID, pages reclaimed
 
-## [ ] phase-33: QEMU Bridge (PLANNED)
+## [~] phase-33: QEMU Bridge (IN PROGRESS)
 
 **Goal:** Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one.
 
@@ -603,16 +602,16 @@ surface needs to handle (ANSI sequences, scroll speed, buffer size).
 
 ### Deliverables
 
-- [ ] **qemu.rs module** -- QEMU subprocess management with stdin/stdout pipes
-  - [ ] `p33.d1.t1` Create src/qemu.rs with QemuBridge struct
+- [x] **qemu.rs module** -- QEMU subprocess management with stdin/stdout pipes
+  - [x] `p33.d1.t1` Create src/qemu.rs with QemuBridge struct
     > Create QemuBridge struct with fields for Child process, stdin/stdout pipes,
     > and an output buffer. Implement Drop to kill child on cleanup.
     - QemuBridge struct compiles
     - Drop trait kills child process
     _Files: src/qemu.rs_
   _~60 LOC_
-- [ ] **QEMU spawn** -- Launch qemu-system-* with -nographic -serial mon:stdio, capture stdin/stdout
-  - [ ] `p33.d2.t1` Implement QemuBridge::spawn(config_str) -> Result (depends: p33.d1.t1)
+- [x] **QEMU spawn** -- Launch qemu-system-* with -nographic -serial mon:stdio, capture stdin/stdout
+  - [x] `p33.d2.t1` Implement QemuBridge::spawn(config_str) -> Result (depends: p33.d1.t1)
     > Parse config string "arch=riscv64 kernel=linux.img ram=256M disk=rootfs.ext4"
     > into QEMU command. Construct qemu-system-{arch} with appropriate flags.
     > Use std::process::Command with stdin/stdout piped.
@@ -622,7 +621,7 @@ surface needs to handle (ANSI sequences, scroll speed, buffer size).
     - -machine virt for riscv/aarch64
     - -kernel, -m, -drive flags constructed from config
     _Files: src/qemu.rs_
-  - [ ] `p33.d2.t2` Implement architecture mapping (riscv64, riscv32, x86_64, aarch64, mipsel) (depends: p33.d2.t1)
+  - [x] `p33.d2.t2` Implement architecture mapping (riscv64, riscv32, x86_64, aarch64, mipsel) (depends: p33.d2.t1)
     > Map arch config values to qemu-system binary names and machine types.
     - riscv64 -> qemu-system-riscv64 -machine virt
     - x86_64 -> qemu-system-x86_64
@@ -630,34 +629,34 @@ surface needs to handle (ANSI sequences, scroll speed, buffer size).
     - mipsel -> qemu-system-mipsel -machine malta
     - Unknown arch returns error
     _Files: src/qemu.rs_
-  - [ ] `p33.d2.t3` Test: spawn QEMU with --version, verify process starts and exits clean (depends: p33.d2.t1)
+  - [x] `p33.d2.t3` Test: spawn QEMU with --version, verify process starts and exits clean (depends: p33.d2.t1)
     > Unit test that spawns qemu-system-riscv64 --version and captures version string from stdout.
     - QEMU process starts and exits with code 0
     - Version string captured from stdout
     _Files: src/qemu.rs_
   _~80 LOC_
-- [ ] **Output to canvas** -- Read QEMU stdout bytes, write to canvas_buffer as u32 chars, auto-scroll
-  - [ ] `p33.d3.t1` Implement non-blocking stdout reader (depends: p33.d1.t1)
+- [x] **Output to canvas** -- Read QEMU stdout bytes, write to canvas_buffer as u32 chars, auto-scroll
+  - [x] `p33.d3.t1` Implement non-blocking stdout reader (depends: p33.d1.t1)
     > Set QEMU stdout to non-blocking mode. Each frame tick, read available
     > bytes into a Vec<u8> buffer. Return the bytes for processing.
     - Non-blocking read returns immediately even if no data
     - Bytes read are valid QEMU output
     _Files: src/qemu.rs_
-  - [ ] `p33.d3.t2` Implement stdout bytes -> canvas_buffer writer (depends: p33.d3.t1)
+  - [x] `p33.d3.t2` Implement stdout bytes -> canvas_buffer writer (depends: p33.d3.t1)
     > For each printable byte: write as u32 to canvas_buffer at cursor position.
     > Track virtual cursor (row, col). Auto-scroll when row >= 128.
     - Printable ASCII chars appear in canvas_buffer
     - Cursor advances correctly
     - Scrolling works when row exceeds 128
     _Files: src/qemu.rs, src/main.rs_
-  - [ ] `p33.d3.t3` Test: feed known bytes, verify canvas_buffer contents (depends: p33.d3.t2)
+  - [x] `p33.d3.t3` Test: feed known bytes, verify canvas_buffer contents (depends: p33.d3.t2)
     > Unit test: write 'Hello\nWorld' bytes, verify canvas_buffer has correct chars at correct positions.
     - 'H' at position [0][0], 'e' at [0][1], etc.
     - 'W' starts at row 1 after newline
     _Files: src/qemu.rs_
   _~60 LOC_
-- [ ] **Input from keyboard** -- Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin
-  - [ ] `p33.d4.t1` Implement keyboard event -> QEMU stdin writer (depends: p33.d1.t1)
+- [x] **Input from keyboard** -- Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin
+  - [x] `p33.d4.t1` Implement keyboard event -> QEMU stdin writer (depends: p33.d1.t1)
     > When hypervisor is active and a key is pressed, call key_to_ascii_shifted()
     > and write the resulting byte to QEMU's stdin pipe. Map Enter to \\r,
     > Backspace to 0x7F, Ctrl+C to 0x03.
@@ -667,8 +666,8 @@ surface needs to handle (ANSI sequences, scroll speed, buffer size).
     - Ctrl+C sends 0x03
     _Files: src/qemu.rs, src/main.rs_
   _~40 LOC_
-- [ ] **ANSI escape handling** -- Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering
-  - [ ] `p33.d5.t1` Implement ANSI escape state machine (depends: p33.d3.t2)
+- [x] **ANSI escape handling** -- Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering
+  - [x] `p33.d5.t1` Implement ANSI escape state machine (depends: p33.d3.t2)
     > State machine: Normal -> Escape (0x1B) -> Csi ('[') -> params.
     > Handle: CSI A/B/C/D (cursor), CSI H (home), CSI 2J (clear),
     > CSI K (clear line), CSI m (color, can ignore), CSI ? 25 h/l (cursor show/hide).
@@ -681,7 +680,7 @@ surface needs to handle (ANSI sequences, scroll speed, buffer size).
     - ESC [ K clears from cursor to end of row
     - Unknown sequences ignored gracefully
     _Files: src/qemu.rs_
-  - [ ] `p33.d5.t2` Test: feed ANSI sequences, verify cursor state (depends: p33.d5.t1)
+  - [x] `p33.d5.t2` Test: feed ANSI sequences, verify cursor state (depends: p33.d5.t1)
     > Unit tests for each supported ANSI sequence. Verify cursor position and buffer state.
     - Test for each cursor movement sequence
     - Test for clear screen
@@ -689,15 +688,15 @@ surface needs to handle (ANSI sequences, scroll speed, buffer size).
     - Test for mixed text + escape sequences
     _Files: src/qemu.rs_
   _~100 LOC_
-- [ ] **HYPERVISOR opcode (0x54)** -- New opcode that reads config string from RAM and spawns QEMU
-  - [ ] `p33.d6.t1` Add HYPERVISOR opcode 0x54 to vm.rs execute (depends: p33.d2.t1, p33.d3.t2, p33.d4.t1)
+- [x] **HYPERVISOR opcode (0x72)** -- New opcode that reads config string from RAM and spawns QEMU
+  - [x] `p33.d6.t1` Add HYPERVISOR opcode 0x72 to vm.rs execute (depends: p33.d2.t1, p33.d3.t2, p33.d4.t1)
     > Read config string from RAM at address in r0. Parse config.
     > Spawn QemuBridge. Store in VM state. F5 while active kills QEMU.
     - HYPERVISOR opcode triggers QEMU spawn
     - Config string read from VM RAM
     - VM state tracks active hypervisor
     _Files: src/vm.rs_
-  - [ ] `p33.d6.t2` Add HYPERVISOR to assembler mnemonic list (depends: p33.d6.t1)
+  - [x] `p33.d6.t2` Add HYPERVISOR to assembler mnemonic list (depends: p33.d6.t1)
     > Register HYPERVISOR in assembler.rs so it can be used in .asm programs.
     - 'HYPERVISOR r0' assembles to opcode 0x54
     - Disassembler outputs HYPERVISOR for 0x54

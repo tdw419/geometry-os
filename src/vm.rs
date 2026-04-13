@@ -301,6 +301,11 @@ pub struct Vm {
     pub step_exit_code: Option<u32>,
     /// Per-step transient: zombie flag from EXIT opcode.
     pub step_zombie: bool,
+    /// Hypervisor active flag (Phase 33: QEMU Bridge).
+    /// Set by HYPERVISOR opcode, checked by host to pipe I/O.
+    pub hypervisor_active: bool,
+    /// Hypervisor config string read from RAM (Phase 33).
+    pub hypervisor_config: String,
 }
 
 impl Vm {
@@ -340,6 +345,8 @@ impl Vm {
             shutdown_requested: false,
             step_exit_code: None,
             step_zombie: false,
+            hypervisor_active: false,
+            hypervisor_config: String::new(),
         }
     }
 
@@ -374,6 +381,8 @@ impl Vm {
         self.env_vars.clear();
         self.booted = false;
         self.shutdown_requested = false;
+        self.hypervisor_active = false;
+        self.hypervisor_config.clear();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -2294,6 +2303,25 @@ impl Vm {
                 }
             }
 
+            0x72 => {
+                // HYPERVISOR: read config string from RAM at address in r0
+                let addr_reg = self.fetch() as usize;
+                if addr_reg < NUM_REGS {
+                    let addr = self.regs[addr_reg] as usize;
+                    let config = Self::read_string_static(&self.ram, addr);
+                    match config {
+                        Some(cfg) => {
+                            self.hypervisor_config = cfg.to_string();
+                            self.hypervisor_active = true;
+                            self.regs[0] = 0; // success
+                        }
+                        None => {
+                            self.regs[0] = 0xFFFFFFFF; // error
+                        }
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -2781,6 +2809,11 @@ impl Vm {
                 (format!("SIGSET {}, {}", reg(sr), reg(hr)), 3)
             }
 
+            0x72 => {
+                let ar = ram(a + 1);
+                (format!("HYPERVISOR {}", reg(ar)), 2)
+            }
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }
@@ -2977,6 +3010,8 @@ impl Vm {
             step_exit_code: None,
             step_zombie: false,
             booted: false,
+            hypervisor_active: false,
+            hypervisor_config: String::new(),
         })
     }
 }

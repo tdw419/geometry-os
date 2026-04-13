@@ -1000,6 +1000,16 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[2])? as u32);
         }
 
+        "HYPERVISOR" => {
+            if tokens.len() < 2 {
+                return Err(format!(
+                    "HYPERVISOR requires 1 argument: HYPERVISOR addr_reg"
+                ));
+            }
+            bytecode.push(0x72);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

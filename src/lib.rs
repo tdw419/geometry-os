@@ -7,3 +7,4 @@ pub mod vm;
 pub mod glyph_backend;
 pub mod preprocessor;
 pub mod font;
+pub mod qemu;
