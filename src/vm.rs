@@ -228,6 +228,16 @@ impl Vm {
                 }
             }
 
+            // SAR rd, rs  -- rd = rd >> rs (arithmetic shift right)
+            0x2B => {
+                let rd = self.fetch() as usize;
+                let rs = self.fetch() as usize;
+                if rd < NUM_REGS && rs < NUM_REGS {
+                    let shift = self.regs[rs] % 32;
+                    self.regs[rd] = ((self.regs[rd] as i32) >> shift) as u32;
+                }
+            }
+
             // JMP addr
             0x30 => {
                 let addr = self.fetch();
@@ -654,6 +664,7 @@ impl Vm {
             0x28 => { let rd = ram(a+1); let rs = ram(a+2); (format!("SHR {}, {}", reg(rd), reg(rs)), 3) }
             0x29 => { let rd = ram(a+1); let rs = ram(a+2); (format!("MOD {}, {}", reg(rd), reg(rs)), 3) }
             0x2A => { let rd = ram(a+1); (format!("NEG {}", reg(rd)), 2) }
+            0x2B => { let rd = ram(a+1); let rs = ram(a+2); (format!("SAR {}, {}", reg(rd), reg(rs)), 3) }
             0x30 => { let addr2 = ram(a+1); (format!("JMP 0x{:04X}", addr2), 2) }
             0x31 => { let r = ram(a+1); let addr2 = ram(a+2); (format!("JZ {}, 0x{:04X}", reg(r), addr2), 3) }
             0x32 => { let r = ram(a+1); let addr2 = ram(a+2); (format!("JNZ {}, 0x{:04X}", reg(r), addr2), 3) }

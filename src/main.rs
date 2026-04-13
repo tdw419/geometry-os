@@ -36,13 +36,15 @@ const REGS_Y: usize = 340;
 // ── Memory map ───────────────────────────────────────────────────
 // 0x000-0x3FF   Canvas grid (source text, 1024 cells visible on 32x32 grid)
 // 0x1000-0x1FFF Assembled bytecode output (F8 writes here)
+// 0xFFB         Key bitmask port (bits 0-5: up/down/left/right/space/enter, read-only)
 // 0xFFD         ASM result port (bytecode word count on success, 0xFFFFFFFF on error)
 // 0xFFE         TICKS port (frame counter, incremented each FRAME opcode, read-only)
-// 0xFFF         Keyboard port (memory-mapped I/O)
+// 0xFFF         Keyboard port (memory-mapped I/O, cleared on IKEY read)
 const CANVAS_BYTECODE_ADDR: usize = 0x1000;
-const KEY_PORT: usize = 0xFFF;
+const KEYS_BITMASK_PORT: usize = 0xFFB;
 #[allow(dead_code)]
 const TICKS_PORT: usize = 0xFFE;
+const KEY_PORT: usize = 0xFFF;
 
 // ── Save file ───────────────────────────────────────────────────
 const SAVE_FILE: &str = "geometry_os.sav";
@@ -359,7 +361,7 @@ fn handle_terminal_command(
                     *output_row = write_line_to_canvas(
                         canvas_buffer,
                         *output_row,
-                        &format!("ASM ERROR line {}: {}", e.line, e.message),
+                        &format!("{}", e),
                     );
                 }
             }
@@ -719,7 +721,7 @@ fn cli_main(extra_args: &[String]) {
                         canvas_assembled = true;
                     }
                     Err(e) => {
-                        println!("ASM ERROR line {}: {}", e.line, e.message);
+                        println!("{}", e);
                     }
                 }
             }
@@ -1366,7 +1368,7 @@ fn execute_cli_command(
                     *canvas_assembled = true;
                 }
                 Err(e) => {
-                    let msg = format!("ASM ERROR line {}: {}", e.line, e.message);
+                    let msg = format!("{}", e);
                     println!("{}", msg); output.push_str(&msg); output.push('\n');
                 }
             }
@@ -1520,6 +1522,8 @@ fn main() {
     let mut canvas_assembled = false;
     let mut breakpoints: HashSet<u32> = HashSet::new();
     let mut hit_breakpoint = false;
+    let mut recording = false;
+    let mut frame_id = 0;
 
     // Cursor position on canvas (logical coordinates, can exceed visible area)
     let mut cursor_row: usize = 0;
@@ -1597,6 +1601,17 @@ fn main() {
     let mut should_quit = false;
     while window.is_open() && !should_quit {
         // ── Handle input ─────────────────────────────────────────
+        if is_running {
+            let mut mask: u32 = 0;
+            if window.is_key_down(Key::Up)    || window.is_key_down(Key::W) { mask |= 1 << 0; }
+            if window.is_key_down(Key::Down)  || window.is_key_down(Key::S) { mask |= 1 << 1; }
+            if window.is_key_down(Key::Left)  || window.is_key_down(Key::A) { mask |= 1 << 2; }
+            if window.is_key_down(Key::Right) || window.is_key_down(Key::D) { mask |= 1 << 3; }
+            if window.is_key_down(Key::Space) { mask |= 1 << 4; }
+            if window.is_key_down(Key::Enter) { mask |= 1 << 5; }
+            vm.ram[KEYS_BITMASK_PORT] = mask;
+        }
+
         for key in window.get_keys_pressed(KeyRepeat::No) {
             if is_running {
                 // Runtime: send keys to VM keyboard port
@@ -1893,6 +1908,16 @@ fn main() {
                         }
                     }
                 }
+                Key::F10 => {
+                    recording = !recording;
+                    if recording {
+                        frame_id = 0;
+                        let _ = std::fs::create_dir_all("/tmp/geo_frames");
+                        status_msg = String::from("[RECORDING STARTED: /tmp/geo_frames/]");
+                    } else {
+                        status_msg = format!("[RECORDING STOPPED: {} frames saved. Use ffmpeg to compile GIF]", frame_id);
+                    }
+                }
                 Key::Left => {
                     if cursor_col > 0 {
                         cursor_col -= 1;
@@ -2034,6 +2059,16 @@ fn main() {
             &status_msg,
         );
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+
+        if recording {
+            let path = format!("/tmp/geo_frames/frame_{:05}.png", frame_id);
+            if let Err(e) = save_full_buffer_png(&path, &buffer, WIDTH, HEIGHT) {
+                status_msg = format!("[rec error: {}]", e);
+                recording = false;
+            } else {
+                frame_id += 1;
+            }
+        }
     }
 }
 
@@ -2315,22 +2350,34 @@ fn render(
     // Figure out where to start disassembly: scan backwards from PC
     // by trying to decode instruction boundaries. Simple approach:
     // start from a known-good boundary (bytecode base) and walk forward.
-    let base = CANVAS_BYTECODE_ADDR as u32;
     let pc = vm.pc;
 
     // Build a map of instruction starts from base to PC+some
     let mut inst_starts: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
     {
-        let mut addr = base;
-        while addr <= pc + 30 {
-            if addr as usize >= vm.ram.len() { break; }
-            let op = vm.ram[addr as usize];
-            // If we hit a zero opcode (empty RAM) past the program, stop
-            if op == 0 && addr > pc + 20 { break; }
-            inst_starts.insert(addr);
-            let (_, len) = vm.disassemble_at(addr);
-            if len == 0 { break; }
-            addr += len as u32;
+        // Programs are usually at 0 (CLI) or 0x1000 (Canvas)
+        let bases = [0u32, CANVAS_BYTECODE_ADDR as u32];
+        for &base in &bases {
+            // Only scan if PC is in a reasonable range of this base
+            if pc >= base && pc < base + 0x1000 {
+                let mut addr = base;
+                while addr <= pc + 30 {
+                    if addr as usize >= vm.ram.len() {
+                        break;
+                    }
+                    let op = vm.ram[addr as usize];
+                    // If we hit a zero opcode (empty RAM) past the program, stop
+                    if op == 0 && addr > pc + 20 {
+                        break;
+                    }
+                    inst_starts.insert(addr);
+                    let (_, len) = vm.disassemble_at(addr);
+                    if len == 0 {
+                        break;
+                    }
+                    addr += len as u32;
+                }
+            }
         }
     }
 
@@ -2669,6 +2716,23 @@ fn save_screen_png(path: &str, screen: &[u32]) -> std::io::Result<()> {
         raw_data.push((pixel >> 16) as u8); // R
         raw_data.push((pixel >> 8) as u8);  // G
         raw_data.push(*pixel as u8);         // B
+    }
+    writer.write_image_data(&raw_data)?;
+    Ok(())
+}
+
+fn save_full_buffer_png(path: &str, buffer: &[u32], w: usize, h: usize) -> std::io::Result<()> {
+    let file = std::fs::File::create(path)?;
+    let ref mut writer = std::io::BufWriter::new(file);
+    let mut encoder = png::Encoder::new(writer, w as u32, h as u32);
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header()?;
+    let mut raw_data = Vec::with_capacity(w * h * 3);
+    for &pixel in buffer {
+        raw_data.push((pixel >> 16) as u8); // R
+        raw_data.push((pixel >> 8) as u8);  // G
+        raw_data.push(pixel as u8);         // B
     }
     writer.write_image_data(&raw_data)?;
     Ok(())

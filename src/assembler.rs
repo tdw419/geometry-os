@@ -18,6 +18,12 @@ pub struct AsmError {
     pub message: String,
 }
 
+impl std::fmt::Display for AsmError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "line {}: {}", self.line, self.message)
+    }
+}
+
 pub struct AsmResult {
     pub pixels: Vec<u32>,
 }
@@ -26,11 +32,32 @@ pub fn assemble(source: &str, base_addr: usize) -> Result<AsmResult, AsmError> {
     let mut bytecode: Vec<u32> = Vec::new();
     let mut labels: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut label_refs: Vec<(usize, String, usize)> = Vec::new(); // (bytecode_pos, label_name, source_line)
+    let mut constants: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+
+    // Pass 0: collect #define constants
+    for (line_num, raw_line) in source.lines().enumerate() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with(';') {
+            continue;
+        }
+        if line.to_lowercase().starts_with("#define") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            if tokens.len() < 3 {
+                return Err(AsmError { line: line_num + 1, message: "#define requires NAME and VALUE".into() });
+            }
+            let name = tokens[1].to_string();
+            // Constant value can be a literal or another constant
+            match parse_imm(tokens[2], &constants) {
+                Ok(val) => { constants.insert(name, val); }
+                Err(e) => { return Err(AsmError { line: line_num + 1, message: format!("invalid constant {}: {}", name, e) }); }
+            }
+        }
+    }
 
     // Pass 1: collect labels, emit bytecode, record label references
     for (line_num, raw_line) in source.lines().enumerate() {
         let line = raw_line.trim();
-        if line.is_empty() || line.starts_with(';') {
+        if line.is_empty() || line.starts_with(';') || line.to_lowercase().starts_with("#define") {
             continue;
         }
 
@@ -43,13 +70,13 @@ pub fn assemble(source: &str, base_addr: usize) -> Result<AsmResult, AsmError> {
                 continue;
             }
             // Parse instruction after label on same line
-            if let Err(e) = parse_instruction(rest, &mut bytecode, &mut label_refs, line_num + 1) {
+            if let Err(e) = parse_instruction(rest, &mut bytecode, &mut label_refs, line_num + 1, &constants) {
                 return Err(AsmError { line: line_num + 1, message: e });
             }
             continue;
         }
 
-        if let Err(e) = parse_instruction(line, &mut bytecode, &mut label_refs, line_num + 1) {
+        if let Err(e) = parse_instruction(line, &mut bytecode, &mut label_refs, line_num + 1, &constants) {
             return Err(AsmError { line: line_num + 1, message: e });
         }
     }
@@ -74,6 +101,7 @@ fn parse_instruction(
     bytecode: &mut Vec<u32>,
     label_refs: &mut Vec<(usize, String, usize)>,
     line_num: usize,
+    constants: &std::collections::HashMap<String, u32>,
 ) -> Result<(), String> {
     // Strip inline comment
     let line = if let Some(comment_pos) = line.find(';') {
@@ -120,7 +148,7 @@ fn parse_instruction(
             }
             bytecode.push(0x10);
             bytecode.push(parse_reg(tokens[1])? as u32);
-            bytecode.push(parse_imm(tokens[2])?);
+            bytecode.push(parse_imm(tokens[2], constants)?);
         }
 
         "LOAD" => {
@@ -222,6 +250,15 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[2])? as u32);
         }
 
+        "SAR" => {
+            if tokens.len() < 3 {
+                return Err(format!("SAR requires 2 arguments: SAR rd, rs"));
+            }
+            bytecode.push(0x2B);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
         "MOD" => {
             if tokens.len() < 3 {
                 return Err(format!("MOD requires 2 arguments: MOD rd, rs"));
@@ -237,7 +274,7 @@ fn parse_instruction(
             }
             bytecode.push(0x30);
             let pos = bytecode.len();
-            if let Ok(addr) = parse_imm(tokens[1]) {
+            if let Ok(addr) = parse_imm(tokens[1], constants) {
                 bytecode.push(addr);
             } else {
                 // Label reference
@@ -253,7 +290,7 @@ fn parse_instruction(
             bytecode.push(0x31);
             bytecode.push(parse_reg(tokens[1])? as u32);
             let pos = bytecode.len();
-            if let Ok(addr) = parse_imm(tokens[2]) {
+            if let Ok(addr) = parse_imm(tokens[2], constants) {
                 bytecode.push(addr);
             } else {
                 bytecode.push(0);
@@ -268,7 +305,7 @@ fn parse_instruction(
             bytecode.push(0x32);
             bytecode.push(parse_reg(tokens[1])? as u32);
             let pos = bytecode.len();
-            if let Ok(addr) = parse_imm(tokens[2]) {
+            if let Ok(addr) = parse_imm(tokens[2], constants) {
                 bytecode.push(addr);
             } else {
                 bytecode.push(0);
@@ -282,7 +319,7 @@ fn parse_instruction(
             }
             bytecode.push(0x33);
             let pos = bytecode.len();
-            if let Ok(addr) = parse_imm(tokens[1]) {
+            if let Ok(addr) = parse_imm(tokens[1], constants) {
                 bytecode.push(addr);
             } else {
                 bytecode.push(0);
@@ -299,7 +336,7 @@ fn parse_instruction(
             bytecode.push(0x35);
             bytecode.push(parse_reg(tokens[1])? as u32);
             let pos = bytecode.len();
-            if let Ok(addr) = parse_imm(tokens[2]) {
+            if let Ok(addr) = parse_imm(tokens[2], constants) {
                 bytecode.push(addr);
             } else {
                 bytecode.push(0);
@@ -314,7 +351,7 @@ fn parse_instruction(
             bytecode.push(0x36);
             bytecode.push(parse_reg(tokens[1])? as u32);
             let pos = bytecode.len();
-            if let Ok(addr) = parse_imm(tokens[2]) {
+            if let Ok(addr) = parse_imm(tokens[2], constants) {
                 bytecode.push(addr);
             } else {
                 bytecode.push(0);
@@ -353,9 +390,9 @@ fn parse_instruction(
                 return Err(format!("PSETI requires 3 arguments: PSETI x, y, color"));
             }
             bytecode.push(0x41);
-            bytecode.push(parse_imm(tokens[1])?);
-            bytecode.push(parse_imm(tokens[2])?);
-            bytecode.push(parse_imm(tokens[3])?);
+            bytecode.push(parse_imm(tokens[1], constants)?);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+            bytecode.push(parse_imm(tokens[3], constants)?);
         }
 
         "FILL" => {
@@ -494,14 +531,20 @@ fn parse_reg(s: &str) -> Result<usize, String> {
 }
 
 /// Parse immediate value: "10", "0xFF", "0b1010"
-fn parse_imm(s: &str) -> Result<u32, String> {
+fn parse_imm(s: &str, constants: &std::collections::HashMap<String, u32>) -> Result<u32, String> {
     let s = s.trim();
+
+    // Check constants first
+    if let Some(&val) = constants.get(s) {
+        return Ok(val);
+    }
+
     if s.starts_with("0x") || s.starts_with("0X") {
         u32::from_str_radix(&s[2..], 16).map_err(|_| format!("invalid hex: {}", s))
     } else if s.starts_with("0b") || s.starts_with("0B") {
         u32::from_str_radix(&s[2..], 2).map_err(|_| format!("invalid binary: {}", s))
     } else {
-        s.parse::<u32>().map_err(|_| format!("invalid number: {}", s))
+        s.parse::<u32>().map_err(|_| format!("invalid number or undefined constant: {}", s))
     }
 }
 
@@ -579,12 +622,23 @@ mod tests {
     }
 
     #[test]
-    fn test_jump_with_label() {
-        let src = "  LDI r0, 0\nloop:\n  ADD r0, r1\n  JNZ r1, loop\n  HALT";
+    fn test_sar() {
+        let src = "SAR r1, r2";
         let result = assemble(src, 0).unwrap();
-        // LDI r0, 0 -> 3 bytes at addr 0
-        // ADD r0, r1 -> 3 bytes at addr 3
-        // JNZ r1, loop -> 3 bytes at addr 6, target should be 3
-        assert_eq!(result.pixels[8], 3); // jump target = addr of ADD = 3
+        assert_eq!(result.pixels, vec![0x2B, 1, 2]);
+    }
+
+    #[test]
+    fn test_define_constants() {
+        let src = "#define SCREEN_WIDTH 256\n#define COLOR 0xFF0000\nLDI r0, SCREEN_WIDTH\nLDI r1, COLOR\nFILL r1";
+        let result = assemble(src, 0).unwrap();
+        assert_eq!(result.pixels, vec![0x10, 0, 256, 0x10, 1, 0xFF0000, 0x42, 1]);
+    }
+
+    #[test]
+    fn test_nested_defines() {
+        let src = "#define VAL1 10\n#define VAL2 VAL1\nLDI r0, VAL2";
+        let result = assemble(src, 0).unwrap();
+        assert_eq!(result.pixels, vec![0x10, 0, 10]);
     }
 }

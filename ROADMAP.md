@@ -1,87 +1,124 @@
 # Geometry OS Roadmap
 
-## Overview
-Clean-slate rebuild of the Geometry OS pixel-composition VM. The VM executes
-bytecode assembled from text typed on a 32x32 canvas grid. The canvas IS a
-text editor -- type assembly, F8 to assemble, F5 to run.
+v1.0.0 -- 41 opcodes, 32 registers, 64K RAM, 256x256 framebuffer, 61 tests, 28 programs.
 
-**Founding document:** `docs/CANVAS_TEXT_SURFACE.md`
+Phases 1-15 are **complete**. This document covers what comes next.
 
-## Architecture
-- **VM**: 32 registers (r0-r31), 64K RAM, 256x256 screen buffer
-- **Opcodes**: 0x00-0x61, simple fetch-decode-execute loop
-- **Assembler**: Two-pass, labels, comments, hex/binary immediates
-- **Canvas**: 32x32 text surface with 8x8 VGA pixel font rendering
-- **Screen**: 256x256 framebuffer, rendered to the right of the canvas
-- **Source at 0x000, bytecode at 0x1000** -- they never overlap
+## Current State
 
-## Valid Opcodes
-| Opcode | Hex | Args | Description |
-|--------|-----|------|-------------|
-| HALT | 0x00 | 0 | Stop execution |
-| NOP | 0x01 | 0 | No operation |
-| LDI reg, imm | 0x10 | 2 | Load immediate into register |
-| LOAD reg, addr_reg | 0x11 | 2 | Load from RAM[regs[addr_reg]] |
-| STORE addr_reg, reg | 0x12 | 2 | Store to RAM[regs[addr_reg]] |
-| ADD rd, rs | 0x20 | 2 | rd += rs (wrapping) |
-| SUB rd, rs | 0x21 | 2 | rd -= rs (wrapping) |
-| MUL rd, rs | 0x22 | 2 | rd *= rs (wrapping) |
-| DIV rd, rs | 0x23 | 2 | rd /= rs |
-| AND rd, rs | 0x24 | 2 | rd &= rs |
-| OR rd, rs | 0x25 | 2 | rd |= rs |
-| XOR rd, rs | 0x26 | 2 | rd ^= rs |
-| SHL rd, rs | 0x27 | 2 | rd <<= rs (mod 32) |
-| SHR rd, rs | 0x28 | 2 | rd >>= rs (logical, mod 32) |
-| MOD rd, rs | 0x29 | 2 | rd %= rs |
-| JMP addr | 0x30 | 1 | Unconditional jump |
-| JZ reg, addr | 0x31 | 2 | Jump if reg == 0 |
-| JNZ reg, addr | 0x32 | 2 | Jump if reg != 0 |
-| CALL addr | 0x33 | 1 | Call (saves PC to r31) |
-| RET | 0x34 | 0 | Return (jumps to r31) |
-| BLT reg, addr | 0x35 | 2 | Branch if CMP < (r0==0xFFFFFFFF) |
-| BGE reg, addr | 0x36 | 2 | Branch if CMP >= (r0!=0xFFFFFFFF) |
-| PSET xr, yr, cr | 0x40 | 3 | Set pixel from registers |
-| PSETI x, y, color | 0x41 | 3 | Set pixel with immediates |
-| FILL cr | 0x42 | 1 | Fill entire screen |
-| RECTF xr,yr,wr,hr,cr | 0x43 | 5 | Filled rectangle |
-| TEXT xr, yr, addr_reg | 0x44 | 3 | Render text from RAM |
-| CMP rd, rs | 0x50 | 2 | Compare: r0 = -1/0/1 |
-| PUSH reg | 0x60 | 1 | Push reg onto stack (r30=SP) |
-| POP reg | 0x61 | 1 | Pop from stack into reg (r30=SP) |
+**What works:**
+- Full VM with arithmetic, control flow, graphics, audio, sprites, self-hosting ASM
+- GUI (minifb) + CLI mode + Hermes agent loop
+- 28 programs: static art, animations, interactive games, self-hosting demo
+- 61 tests all green
+- Breakpoints, single-step, save/load, PNG screenshot (F9), GIF recording (F10)
+- TICKS throttle, BEEP audio, SPRITE blit, ASM self-hosting
+- Assembler constants (#define), signed arithmetic (SAR), multi-key input (0xFFB bitmask)
 
-## Sprint A: Visual Programs (done)
-- [x] FILL_SCREEN: Fill the screen with a solid color using FILL
-- [x] DIAGONAL_LINE: Draw a diagonal line from (0,0) to (255,255) using a loop
-- [x] BORDER: Draw a colored border around the screen edges using RECTF
-- [x] GRADIENT: Draw a horizontal color gradient across the screen using PSET
-- [x] HORIZONTAL_STRIPES: Draw alternating red/blue horizontal stripes
-- [x] NESTED_RECTS: Draw concentric colored rectangles using RECTF
+**What's rough:**
+- GitHub issues #29-54 are all GPU-tile parallelism work (separate track)
 
-## Sprint B: Interactive Programs
-- [x] BLINK: Toggle a pixel on/off using keyboard input and CMP
-- [x] CALCULATOR: Simple add/subtract calculator with text display -- difficulty: hard
+---
 
-## Sprint C: VM Extensions (done)
-- [x] SHL/SHR: Shift left/right opcodes (need vm.rs + assembler.rs)
-- [x] PUSH/POP: Stack operations using a stack pointer register
-- [x] BLT/BGE: Conditional branch opcodes (less than, greater or equal)
-- [x] MOD: Modulo opcode
+## Phase 13: Close the Gaps (done)
 
-## Sprint D: Canvas Improvements
-- [x] Clipboard paste: Ctrl+V to paste text onto the grid
-- [x] File load: Ctrl+F8 to load .asm file contents onto the grid
-- [x] Scroll/pan: support programs larger than 32x32 characters
-- [x] Syntax highlighting: color opcodes, registers, numbers differently
+Goal: Every program tested, every error traceable, no regressions.
 
-## Sprint E: Terminal Mode (done)
-- [x] Mode enum (Terminal/Editor) with mode-aware key handling
-- [x] Terminal boots with welcome banner + "geo> " prompt
-- [x] Commands: help, list/ls, load, run, edit, regs, peek, poke, reset, clear/cls, quit/exit
-- [x] Escape returns from Editor to Terminal, quits from Terminal
-- [x] Canvas text I/O helpers: write_line_to_canvas, read_canvas_line, ensure_scroll
+| Deliverable | Scope | Acceptance |
+|---|---|---|
+| Tests for untested programs (ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter) | ~220 lines in tests/program_tests.rs | `cargo test` all green, each test: assembles + first-frame sanity |
+| Assembler error line numbers | ~30 lines in assembler.rs | Error message says `line N: unknown opcode: XYZ` |
+| Version string audit | 3 places: banner, CLI, Cargo.toml | All say same version, single source of truth |
 
-## Sprint F: Polish (done)
-- [x] Save/load: F7 to save RAM, restore on startup
-- [x] Disassembly panel: show bytecode alongside source text
-- [x] Single-step: F6 to step one instruction when paused
-- [x] Breakpoints: mark addresses to pause at
+
+**Why first:** Without test coverage, any future change is a coin flip. The assembler error improvement is tiny and disproportionately helpful.
+
+---
+
+## Phase 14: Developer Experience (done)
+
+Goal: Make the VM pleasant to program.
+
+| Deliverable | Scope | Acceptance |
+|---|---|---|
+| Assembler constants (`#define NAME value`) | ~80 lines in assembler.rs | `#define TILE 8` resolves in LDI and other immediate contexts |
+| programs/README.md | ~60 lines | One-line description + controls + opcodes demonstrated per program |
+| Disassembler panel in GUI | ~50 lines in main.rs | Pane shows current PC ± 10 instructions, updates each step |
+| GIF/video capture (F10 record toggle) | ~20 lines in main.rs | Writes numbered PNGs to /tmp/geo_frames/, documented ffmpeg command |
+
+**Why next:** The assembler is the main interface. Constants eliminate half the magic numbers. The disassembler panel makes single-step actually usable.
+
+---
+
+## Phase 15: VM Capability Gaps (done)
+
+Goal: Fix the rough edges that make game programming harder than it needs to be.
+
+| Deliverable | Scope | Acceptance |
+|---|---|---|
+| SAR opcode (arithmetic shift right, 0x2B) | ~10 lines in vm.rs | Two's-complement division works for negative numbers |
+| Multi-key input (bitmask port at 0xFFB) | ~20 lines in vm.rs + main.rs | Two simultaneous keys register in same frame |
+| BEEP in more programs | ~5 lines each in tetris, breakout, maze, sprite_demo | Sound effects on game events |
+| Signed arithmetic audit | Documentation | SUB/ADD/MUL sign contract documented, CMP semantics clear |
+
+**Why here:** Physics games (gravity, velocity) silently break with unsigned-only shifts. Multi-key enables diagonal movement. These are small VM changes that unlock better programs.
+
+---
+
+## Phase 16: Showcase Shipping
+
+Goal: Make tetris a complete game, make the repo presentable.
+
+| Deliverable | Scope | Acceptance |
+|---|---|---|
+| Complete tetris: scoring, levels, sound, game-over | ~100 lines in tetris.asm | Playable start-to-finish with visible score |
+| TILEMAP opcode (grid blit from tile index array) | ~60 lines in vm.rs | snake, tetris, maze each 3x shorter |
+| Persistent save slots (4 named) | ~30 lines in vm.rs/main.rs | `save slot1` / `load slot1` from terminal |
+| GitHub release v1.0.1 | Tag + release notes | Prebuilt binary attached, Substack link |
+
+**Why here:** A complete game is worth more than 10 half-working ones. TILEMAP makes grid games competitive with hand-drawn loops. Shipping something public creates momentum.
+
+---
+
+## Phase 17: Platform Growth
+
+Goal: Geometry OS as a target platform, not just a toy VM.
+
+| Deliverable | Scope | Acceptance |
+|---|---|---|
+| GlyphLang compiler backend (emit .geo bytecode) | ~200 lines in glyphlang | `glyphlang compile --target geo program.gl` runs in VM |
+| Browser port via WASM | ~200 lines new crate | VM runs in browser with canvas rendering |
+| Network port (0xFFB UDP send/recv) | ~40 lines in vm.rs | Two VM instances exchange messages |
+
+**Why last:** These are speculative and large. They depend on Phases 13-16 being solid. The WASM port is the highest-leverage (instant cross-platform, no install) but requires the most design work.
+
+---
+
+## Priority Order
+
+1. Phase 13 (tests + error lines) -- defensive, low risk
+2. Phase 14 (constants + README + disassembler) -- developer joy
+3. Phase 16 (tetris completion + TILEMAP + ship) -- public momentum
+4. Phase 15 (SAR + multi-key + sound) -- quality of life
+5. Phase 17 (WASM + GlyphLang + network) -- ambitious, optional
+
+Phase 15 and 16 can be parallelized. Phase 13 should land before anything else touches vm.rs.
+
+---
+
+## Risks
+
+- **Opcode space:** 38 of ~256 slots used, plenty of room, but the hex layout has gaps. New opcodes should fill gaps sequentially.
+- **Scope creep:** Every opcode is easy to add. The VM's value is its simplicity. New opcodes need a program that needs them.
+- **BEEP subprocess:** spawns `aplay` per beep. Rapid beeps could exhaust FDs. Consider a ring buffer or direct ALSA.
+- **GPU tile issues (#29-54):** Parallel compute work is a separate track. Don't let it block the core VM.
+
+---
+
+## Not Planned (Explicitly)
+
+These came up and were deliberately deferred:
+
+- **Self-hosting ASM opcode (phase-12 revisited):** test_self_host_runs was reverted. The ASM opcode works for simple programs but the self-hosting demo proved fragile. Revisit when there's a concrete use case.
+- **RISC-V cartridge system:** Issues #29-54. Interesting but orthogonal to core VM improvements.
+- **Mobile port:** No current path. WASM port (Phase 17) would cover this indirectly.

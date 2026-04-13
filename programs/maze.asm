@@ -221,6 +221,10 @@ after_move:
   LDI r1, 1
   LDI r4, 0x5312
   STORE r4, r1
+  ; Play victory sound -- ascending tone
+  LDI r5, 440
+  LDI r6, 200
+  BEEP r5, r6
 
 idle:
   FRAME

@@ -11,7 +11,7 @@ fn compile_run(asm_path: &str) -> Vm {
     let source = std::fs::read_to_string(asm_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", asm_path, e));
     let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed for {}: line {} {}", asm_path, e.line, e.message));
+        .unwrap_or_else(|e| panic!("assembly failed for {}: {}", asm_path, e));
     let mut vm = Vm::new();
     // Load bytecode at address 0
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -1369,4 +1369,151 @@ fn test_beep_opcode() {
     for _ in 0..100 { if !vm.step() { break; } }
     assert!(vm.halted);
     assert_eq!(vm.regs[3], 1, "VM should execute past BEEP and set r3");
+}
+
+// ── Additional Program Tests (Sprint 1) ─────────────────────────
+
+#[test]
+fn test_hello_program() {
+    let vm = compile_run("programs/hello.asm");
+    assert!(vm.halted, "hello.asm should halt");
+    // RAM[0x2000] should be 'H' (72)
+    assert_eq!(vm.ram[0x2000], 72);
+    // Screen at (90, 120) should have some pixels set from TEXT
+    let mut pixels_found = false;
+    for y in 120..130 {
+        for x in 90..150 {
+            if vm.screen[y * 256 + x] != 0 {
+                pixels_found = true;
+                break;
+            }
+        }
+    }
+    assert!(pixels_found, "hello.asm should draw text on screen");
+}
+
+#[test]
+fn test_circles_program() {
+    let vm = compile_run("programs/circles.asm");
+    assert!(vm.halted, "circles.asm should halt");
+    // Center at (128, 128) should have some pixels set
+    assert!(vm.screen.iter().any(|&p| p != 0), "circles.asm should draw something");
+}
+
+#[test]
+fn test_lines_program() {
+    let vm = compile_run("programs/lines.asm");
+    assert!(vm.halted, "lines.asm should halt");
+    // Center at (128, 128) should be white (0xFFFFFF)
+    assert_eq!(vm.screen[128 * 256 + 128], 0xFFFFFF);
+}
+
+#[test]
+fn test_colors_program() {
+    let vm = compile_run("programs/colors.asm");
+    assert!(vm.halted, "colors.asm should halt");
+    // Last FILL was yellow (0xFFFF00)
+    assert_eq!(vm.screen[0], 0xFFFF00);
+}
+
+#[test]
+fn test_checkerboard_program() {
+    let vm = compile_run("programs/checkerboard.asm");
+    assert!(vm.halted, "checkerboard.asm should halt");
+    // (0,0) is white, (8,0) is black
+    assert_eq!(vm.screen[0], 0xFFFFFF);
+    assert_eq!(vm.screen[8], 0x000000);
+}
+
+#[test]
+fn test_rainbow_program() {
+    let vm = compile_run("programs/rainbow.asm");
+    assert!(vm.halted, "rainbow.asm should halt");
+    // (0,0) is (0+0)%6 = index 0 = red (0xFF0000)
+    assert_eq!(vm.screen[0], 0xFF0000);
+}
+
+#[test]
+fn test_rings_program() {
+    let vm = compile_run("programs/rings.asm");
+    assert!(vm.halted, "rings.asm should halt");
+    // Center (128,128) distance 0 -> ring index 0 -> red
+    assert_eq!(vm.screen[128 * 256 + 128], 0xFF0000);
+}
+
+#[test]
+fn test_scroll_demo_program() {
+    let vm = compile_run("programs/scroll_demo.asm");
+    assert!(vm.halted, "scroll_demo.asm should halt");
+    // Bar was drawn at 240, scrolled up 240 times -> should be at 0
+    // Check pixel at (0,0)
+    assert_eq!(vm.screen[0], 0x00FF88);
+}
+
+#[test]
+fn test_painter_program() {
+    // Painter writes a signature to RAM
+    let source = std::fs::read_to_string("programs/painter.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    // Run for enough steps to do initial RAM writes
+    for _ in 0..1000 { vm.step(); }
+    // RAM[0x0200] should be 'P' (80)
+    assert_eq!(vm.ram[0x0200], 80, "painter.asm should write signature to RAM");
+}
+
+fn compile_run_interactive(asm_path: &str, steps: usize) -> Vm {
+    let source = std::fs::read_to_string(asm_path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", asm_path, e));
+    let asm = assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("assembly failed for {}: {}", asm_path, e));
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..steps {
+        if !vm.step() { break; }
+        if vm.frame_ready { break; }
+    }
+    vm
+}
+
+#[test]
+fn test_ball_program() {
+    let vm = compile_run_interactive("programs/ball.asm", 1_000_000);
+    // Screen should not be all black
+    assert!(vm.screen.iter().any(|&p| p != 0), "ball.asm should render frames");
+}
+
+#[test]
+fn test_fire_program() {
+    let vm = compile_run_interactive("programs/fire.asm", 1_000_000);
+    assert!(vm.screen.iter().any(|&p| p != 0), "fire.asm should render frames");
+}
+
+#[test]
+fn test_sar_opcode() {
+    // SAR rd, rs
+    // Test negative: -4 (0xFFFFFFFC) >> 1 = -2 (0xFFFFFFFE)
+    let source = "LDI r1, 0xFFFFFFFC\nLDI r2, 1\nSAR r1, r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[1], 0xFFFFFFFE, "SAR -4, 1 should be -2");
+
+    // Test positive: 4 >> 1 = 2
+    let source = "LDI r1, 4\nLDI r2, 1\nSAR r1, r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[1], 2, "SAR 4, 1 should be 2");
 }

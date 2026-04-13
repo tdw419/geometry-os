@@ -207,4 +207,8 @@ try_jump:
   NEG r7
   ADD r10, r7          ; vy = -6
   LDI r11, 0           ; airborne
+  ; Play jump sound
+  LDI r5, 660
+  LDI r6, 80
+  BEEP r5, r6
   JMP after_input

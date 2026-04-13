@@ -65,12 +65,13 @@ geo> run
 ### Arithmetic
 | Opcode | Args | Description |
 |--------|------|-------------|
-| ADD    | rd, rs | rd = rd + rs |
-| SUB    | rd, rs | rd = rd - rs |
-| MUL    | rd, rs | rd = rd * rs |
-| DIV    | rd, rs | rd = rd / rs |
-| MOD    | rd, rs | rd = rd % rs |
+| ADD    | rd, rs | rd += rs (32-bit wrapping) |
+| SUB    | rd, rs | rd -= rs (32-bit wrapping) |
+| MUL    | rd, rs | rd *= rs (32-bit wrapping) |
+| DIV    | rd, rs | rd /= rs (unsigned) |
+| MOD    | rd, rs | rd %= rs (unsigned) |
 | NEG    | rd     | rd = -rd (two's complement) |
+| CMP    | rd, rs | Signed compare: r0 = -1 (rd<rs), 0 (rd==rs), 1 (rd>rs) |
 
 ### Logic
 | Opcode | Args | Description |
@@ -78,8 +79,9 @@ geo> run
 | AND    | rd, rs | Bitwise AND |
 | OR     | rd, rs | Bitwise OR |
 | XOR    | rd, rs | Bitwise XOR |
-| SHL    | rd, rs | Shift left |
-| SHR    | rd, rs | Shift right |
+| SHL    | rd, rs | Logical shift left |
+| SHR    | rd, rs | Logical shift right |
+| SAR    | rd, rs | Arithmetic shift right (preserves sign bit) |
 
 ### Branches
 | Opcode | Args | Description |
@@ -110,7 +112,6 @@ geo> run
 |--------|------|-------------|
 | PUSH   | reg   | Push to stack (r30 = SP) |
 | POP    | reg   | Pop from stack |
-| CMP    | rd, rs | Compare: r0 = -1/0/1 (lt/eq/gt) |
 | IKEY   | reg   | Read keyboard port, clear it |
 | RAND   | reg   | Pseudo-random u32 into register |
 | ASM    | sr, dr | Assemble source text at RAM[sr], write bytecode to RAM[dr] |
@@ -119,6 +120,7 @@ geo> run
 
 | Port  | Address | Description |
 |-------|---------|-------------|
+| KEYS  | 0xFFB   | Multi-key bitmask (Arrows, WASD, Space, Enter) |
 | ASM_RESULT | 0xFFD | Assembler output (word count or 0xFFFFFFFF on error) |
 | TICKS | 0xFFE   | Frame counter (read-only, incremented each FRAME) |
 | KEY   | 0xFFF   | Keyboard input (read via IKEY) |

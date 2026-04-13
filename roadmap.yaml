@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 40
-  tests: 71
+  opcodes: 41
+  tests: 61
   programs: 28
-  loc: 4543
+  loc: 4666
 
 phases:
   # ===================================================================
@@ -391,13 +391,13 @@ phases:
 
   - id: "phase-13"
     title: "Close the Gaps"
-    status: "planned"
+    status: "complete"
     goal: "Every program tested, every error traceable, no regressions"
     priority: 1
     deliverables:
       - name: "Tests for untested programs"
         description: "ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity"
-        status: "pending"
+        status: "done"
         scope_lines: 220
         scope_files: ["tests/program_tests.rs"]
         acceptance_criteria:
@@ -405,70 +405,80 @@ phases:
           - description: "Each untested program has at least one test"
       - name: "Assembler error line numbers"
         description: "Error messages include source line number"
-        status: "pending"
+        status: "done"
         scope_lines: 30
         scope_files: ["src/assembler.rs"]
         acceptance_criteria:
           - description: "Error message format: 'line N: unknown opcode: XYZ'"
       - name: "Version string audit"
         description: "Single source of truth for version across banner, CLI, Cargo.toml"
-        status: "pending"
+        status: "done"
         scope_lines: 10
         scope_files: ["src/main.rs", "Cargo.toml"]
 
   - id: "phase-14"
     title: "Developer Experience"
-    status: "planned"
+    status: "complete"
     goal: "Make the VM pleasant to program"
     priority: 2
     deliverables:
       - name: "Assembler #define constants"
         description: "#define NAME value -- eliminates magic numbers"
-        status: "pending"
+        status: "done"
         scope_lines: 80
         scope_files: ["src/assembler.rs"]
         acceptance_criteria:
           - description: "#define TILE 8 resolves in LDI and other immediate contexts"
+            met: true
       - name: "programs/README.md"
         description: "One-line description + controls + opcodes per program"
-        status: "pending"
+        status: "done"
         scope_lines: 60
         scope_files: ["programs/README.md"]
       - name: "Disassembler panel in GUI"
         description: "Shows PC +/- 10 instructions, updates each step"
-        status: "pending"
+        status: "done"
         scope_lines: 50
         scope_files: ["src/main.rs"]
       - name: "GIF/video capture"
         description: "F10 toggle writes numbered PNGs, ffmpeg command documented"
-        status: "pending"
+        status: "done"
         scope_lines: 20
         scope_files: ["src/main.rs"]
 
   - id: "phase-15"
     title: "VM Capability Gaps"
-    status: "planned"
+    status: "complete"
     goal: "Fix rough edges in game programming"
     priority: 4
     deliverables:
       - name: "SAR opcode (arithmetic shift right, 0x2B)"
         description: "Two's-complement division for negative numbers"
-        status: "pending"
+        status: "done"
         scope_lines: 10
         scope_files: ["src/vm.rs", "src/assembler.rs"]
+        acceptance_criteria:
+          - description: "Two's-complement division works for negative numbers"
+            met: true
       - name: "Multi-key input (bitmask at 0xFFB)"
         description: "Two simultaneous keys in same frame"
-        status: "pending"
+        status: "done"
         scope_lines: 20
         scope_files: ["src/vm.rs", "src/main.rs"]
+        acceptance_criteria:
+          - description: "Two simultaneous keys register in same frame"
+            met: true
       - name: "BEEP in more programs"
         description: "Sound effects for tetris, breakout, maze, sprite_demo"
-        status: "pending"
+        status: "done"
         scope_lines: 20
         scope_files: ["programs/*.asm"]
+        acceptance_criteria:
+          - description: "Sound effects on game events"
+            met: true
       - name: "Signed arithmetic audit"
         description: "Document SUB/ADD/MUL sign contract, CMP semantics"
-        status: "pending"
+        status: "done"
         scope_lines: 30
         scope_files: ["ROADMAP.md", "docs/"]
 
