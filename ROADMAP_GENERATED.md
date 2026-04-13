@@ -1,14 +1,14 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  77 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  78 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 
-**Progress:** 32/37 phases complete, 1 in progress
+**Progress:** 33/37 phases complete, 0 in progress
 
-**Deliverables:** 146/174 complete
+**Deliverables:** 149/174 complete
 
-**Tasks:** 12/23 complete
+**Tasks:** 15/23 complete
 
 ## Scope Summary
 
@@ -46,7 +46,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 | phase-30 Boot Sequence & Init | COMPLETE | 3/3 | - | - |
 | phase-31 Standard Library | COMPLETE | 4/4 | - | - |
 | phase-32 Signals & Process Lifecycle | COMPLETE | 4/4 | - | - |
-| phase-33 QEMU Bridge | IN PROGRESS | 6/9 | - | - |
+| phase-33 QEMU Bridge | COMPLETE | 9/9 | - | - |
 | phase-34 RISC-V RV32I Core | FUTURE | 0/6 | - | - |
 | phase-35 RISC-V Privilege Modes | FUTURE | 0/5 | - | - |
 | phase-36 RISC-V Virtual Memory & Devices | FUTURE | 0/8 | - | - |
@@ -591,7 +591,7 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 - [x] **Zombie cleanup** -- Exited processes cleaned up after parent WAITPID
   - [x] Zombie process freed after WAITPID, pages reclaimed
 
-## [~] phase-33: QEMU Bridge (IN PROGRESS)
+## [x] phase-33: QEMU Bridge (COMPLETE)
 
 **Goal:** Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one.
 
@@ -702,29 +702,29 @@ surface needs to handle (ANSI sequences, scroll speed, buffer size).
     - Disassembler outputs HYPERVISOR for 0x54
     _Files: src/assembler.rs_
   _~60 LOC_
-- [ ] **Shell command** -- hypervisor arch=riscv64 kernel=linux.img command in shell.asm
-  - [ ] `p33.d7.t1` Add hypervisor command to shell.asm (depends: p33.d6.t1)
+- [x] **Shell command** -- hypervisor arch=riscv64 kernel=linux.img command in shell.asm
+  - [x] `p33.d7.t1` Add hypervisor command to shell.asm (depends: p33.d6.t1)
     > Parse 'hypervisor <config>' from shell input, construct config string in RAM, execute HYPERVISOR opcode.
     - 'hypervisor arch=riscv64 kernel=linux.img' spawns QEMU
     - Error message on missing kernel file
     _Files: programs/shell.asm_
-- [ ] **Download helper** -- Script to fetch pre-built RISC-V Linux kernel + rootfs for testing
-  - [ ] `p33.d8.t1` Create scripts/download_riscv_linux.sh
+- [x] **Download helper** -- Script to fetch pre-built RISC-V Linux kernel + rootfs for testing
+  - [x] `p33.d8.t1` Create scripts/download_riscv_linux.sh
     > Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal rootfs
     > from a known URL. Place in .geometry_os/fs/linux/ directory.
     - Script downloads kernel Image and rootfs
     - Files placed in correct directory
     - QEMU can boot the downloaded kernel
     _Files: scripts/download_riscv_linux.sh_
-- [ ] **Integration test** -- Spawn QEMU with known kernel, verify Linux version appears in output
-  - [ ] `p33.d9.t1` Test: boot RISC-V Linux, verify console output (depends: p33.d2.t1, p33.d3.t1, p33.d5.t1)
+- [x] **Integration test** -- Spawn QEMU with known kernel, verify Linux version appears in output
+  - [x] `p33.d9.t1` Test: boot RISC-V Linux, verify console output (depends: p33.d2.t1, p33.d3.t1, p33.d5.t1)
     > Integration test (marked #[ignore] for CI without QEMU).
     > Spawn QEMU with RISC-V kernel, read stdout for 30 seconds,
     > verify "Linux version" string appears.
     - QEMU spawns and produces output
     - 'Linux version' detected in output within 30 seconds
     - QEMU process cleaned up after test
-    _Files: src/qemu.rs_
+    _Files: src/qemu.rs, tests/qemu_boot_test.rs_
   _~60 LOC_
 
 ### Technical Notes
