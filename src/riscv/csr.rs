@@ -379,6 +379,20 @@ impl CsrBank {
             return Some(MCAUSE_INTERRUPT_BIT | INT_SSI);
         }
 
+        // Machine external interrupt (from PLIC)
+        if (self.mip >> INT_MEI) & 1 != 0 && (self.mie >> INT_MEI) & 1 != 0 && mie_enabled {
+            return Some(MCAUSE_INTERRUPT_BIT | INT_MEI);
+        }
+
+        // Supervisor external interrupt (from PLIC, delegated)
+        if (self.mip >> INT_SEI) & 1 != 0
+            && (self.mie >> INT_SEI) & 1 != 0
+            && sie_enabled
+            && current_priv != Privilege::Machine
+        {
+            return Some(MCAUSE_INTERRUPT_BIT | INT_SEI);
+        }
+
         None
     }
 
@@ -812,5 +826,46 @@ mod tests {
     fn pending_interrupt_nothing_pending() {
         let csr = CsrBank::new();
         assert!(csr.pending_interrupt(Privilege::Machine).is_none());
+    }
+
+    #[test]
+    fn pending_interrupt_mei_fires() {
+        let mut csr = CsrBank::new();
+        csr.mip = 1 << INT_MEI; // External interrupt pending
+        csr.mie = 1 << INT_MEI; // MEIE enabled
+        csr.mstatus = 1 << MSTATUS_MIE; // Global MIE enabled
+        let cause = csr.pending_interrupt(Privilege::Machine).unwrap();
+        assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_MEI);
+    }
+
+    #[test]
+    fn pending_interrupt_sei_fires() {
+        let mut csr = CsrBank::new();
+        csr.mip = 1 << INT_SEI; // Supervisor external pending
+        csr.mie = 1 << INT_SEI; // SEIE enabled
+        csr.mstatus = 1 << MSTATUS_SIE; // SIE enabled
+        let cause = csr.pending_interrupt(Privilege::User).unwrap();
+        assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_SEI);
+    }
+
+    #[test]
+    fn pending_interrupt_mei_not_in_s_mode() {
+        // SEI should not fire when in M-mode
+        let mut csr = CsrBank::new();
+        csr.mip = 1 << INT_SEI;
+        csr.mie = 1 << INT_SEI;
+        csr.mstatus = 1 << MSTATUS_SIE;
+        assert!(csr.pending_interrupt(Privilege::Machine).is_none());
+    }
+
+    #[test]
+    fn pending_interrupt_priority_mti_over_mei() {
+        // MTI should be returned before MEI (higher priority in our check order)
+        let mut csr = CsrBank::new();
+        csr.mip = (1 << INT_MTI) | (1 << INT_MEI);
+        csr.mie = (1 << INT_MTI) | (1 << INT_MEI);
+        csr.mstatus = 1 << MSTATUS_MIE;
+        let cause = csr.pending_interrupt(Privilege::Machine).unwrap();
+        assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_MTI);
     }
 }

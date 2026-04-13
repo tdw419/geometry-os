@@ -173,11 +173,12 @@ impl Bus {
         self.clint.tick();
     }
 
-    /// Sync CLINT hardware state into the MIP register.
+    /// Sync CLINT + PLIC hardware state into the MIP register.
     ///
     /// Sets/clears MTIP (bit 7) based on mtime >= mtimecmp.
     /// Sets/clears MSIP (bit 3) based on msip register.
-    /// Other MIP bits (SSIP, STIP, SEIP, etc.) are left unchanged.
+    /// Sets/clears MEIP (bit 11) based on PLIC pending+enabled interrupts.
+    /// Other MIP bits (SSIP, STIP, SEIP) are left unchanged (software-writable).
     pub fn sync_mip(&self, mip: &mut u32) {
         // MTIP (bit 7): machine timer interrupt pending
         if self.clint.timer_pending() {
@@ -191,6 +192,14 @@ impl Bus {
             *mip |= 1 << 3;
         } else {
             *mip &= !(1 << 3);
+        }
+
+        // MEIP (bit 11): machine external interrupt pending from PLIC.
+        // Set whenever PLIC has an enabled, pending interrupt above threshold.
+        if self.plic.pending_interrupt().is_some() {
+            *mip |= 1 << 11;
+        } else {
+            *mip &= !(1 << 11);
         }
     }
 
