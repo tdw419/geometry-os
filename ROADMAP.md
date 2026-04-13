@@ -223,7 +223,7 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 
 ## Priority Order for Automated Development
 
-- [ ] Phase 23: Kernel Boundary -- CPU mode flag, SYSCALL opcode (0x52), RETK opcode (0x53), syscall dispatch table, restricted opcodes in user mode
+- [x] Phase 23: Kernel Boundary -- CPU mode flag, SYSCALL opcode (0x52), RETK opcode (0x53), syscall dispatch table, restricted opcodes in user mode
 - [ ] Phase 24: Memory Protection -- page tables, address space per process, SEGFAULT on illegal access
 - [ ] Phase 25: Filesystem -- VFS layer, OPEN/READ/WRITE/CLOSE/SEEK syscalls, LS syscall, per-process fd table, cat.asm
 - [ ] Phase 26: Preemptive Scheduler -- timer interrupt, priority levels, yield/sleep syscalls
