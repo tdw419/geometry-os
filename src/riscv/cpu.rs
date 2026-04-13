@@ -449,12 +449,21 @@ impl RiscvCpu {
             }
             Operation::SfenceVma { rs1, rs2 } => {
                 if rs1 == 0 && rs2 == 0 {
+                    // Flush all entries.
                     self.tlb.flush_all();
                 } else if rs1 == 0 {
-                    self.tlb.flush_all();
-                } else {
+                    // rs2 specifies ASID: flush non-global entries for that ASID.
+                    let asid = self.get_reg(rs2) as u16;
+                    self.tlb.flush_asid(asid);
+                } else if rs2 == 0 {
+                    // rs1 specifies VPN: flush entries for that virtual address.
                     let vpn = mmu::va_to_vpn(self.get_reg(rs1));
                     self.tlb.flush_va(vpn);
+                } else {
+                    // Both specified: flush entries matching both VPN and ASID.
+                    let vpn = mmu::va_to_vpn(self.get_reg(rs1));
+                    let asid = self.get_reg(rs2) as u16;
+                    self.tlb.flush_va_asid(vpn, asid);
                 }
                 self.pc = next_pc;
                 StepResult::Ok

@@ -197,6 +197,20 @@ impl Tlb {
             }
         }
     }
+
+    /// Flush entries matching both a specific VPN and ASID.
+    pub fn flush_va_asid(&mut self, vpn: u32, asid: u16) {
+        for entry in &mut self.entries {
+            if entry.valid && entry.vpn == vpn && entry.asid == asid {
+                entry.valid = false;
+            }
+        }
+    }
+
+    /// Count valid entries (for testing capacity).
+    pub fn valid_count(&self) -> usize {
+        self.entries.iter().filter(|e| e.valid).count()
+    }
 }
 
 // ---- Translation ----
