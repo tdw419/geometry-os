@@ -130,6 +130,7 @@ impl Pipe {
         self.count == 0
     }
 
+    #[allow(dead_code)]
     pub fn is_full(&self) -> bool {
         self.count >= PIPE_BUFFER_SIZE
     }
@@ -207,10 +208,12 @@ pub struct SpawnedProcess {
     /// Exit code set by EXIT opcode or signal delivery. 0 = success.
     pub exit_code: u32,
     /// PID of parent process (0 = no parent / parent is kernel).
+    #[allow(dead_code)]
     pub parent_pid: u32,
     /// True when process has exited but parent has not called WAITPID yet.
     pub zombie: bool,
     /// Pending signals to be delivered on next step.
+    #[allow(dead_code)]
     pub pending_signals: Vec<Signal>,
     /// Signal handler addresses. Index = signal number (0-3).
     /// 0 = no handler (use default), 0xFFFFFFFF = ignore.
@@ -2579,6 +2582,7 @@ impl Vm {
 
     /// Read a configuration value from boot.cfg in the VFS.
     /// Returns the value for the given key, or None if not found.
+    #[allow(dead_code)]
     pub fn read_boot_config(&self, key: &str) -> Option<String> {
         let boot_cfg_path = self.vfs.base_dir.join("boot.cfg");
         let content = std::fs::read_to_string(&boot_cfg_path).ok()?;

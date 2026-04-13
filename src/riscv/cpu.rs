@@ -103,7 +103,12 @@ impl RiscvCpu {
                     AccessType::Store => csr::CAUSE_STORE_PAGE_FAULT,
                 };
                 self.deliver_trap(cause, va);
-                Err(StepResult::Ok)
+                let fault = match access {
+                    AccessType::Fetch => StepResult::FetchFault,
+                    AccessType::Load => StepResult::LoadFault,
+                    AccessType::Store => StepResult::StoreFault,
+                };
+                Err(fault)
             }
         }
     }

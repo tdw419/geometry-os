@@ -4,7 +4,7 @@
 // Currently handles: CLINT (timer + software interrupts).
 // Phase 36 will add: UART, PLIC, virtio-blk.
 
-use super::clint::{self, Clint};
+use super::clint::Clint;
 use super::memory::{GuestMemory, MemoryError};
 use super::plic::Plic;
 use super::uart::Uart;
@@ -210,6 +210,7 @@ impl Bus {
 
 #[cfg(test)]
 mod tests {
+    use super::super::clint;
     use super::*;
 
     #[test]
@@ -255,7 +256,7 @@ mod tests {
     #[test]
     fn bus_sync_mip_clears_when_not_pending() {
         let mut bus = Bus::new(0x8000_0000, 4096);
-        let mut mip = (1 << 7) | (1 << 3);
+        let mut mip: u32 = (1 << 7) | (1 << 3);
         bus.sync_mip(&mut mip);
         assert_eq!(mip & (1 << 7), 0, "MTIP should be cleared");
         assert_eq!(mip & (1 << 3), 0, "MSIP should be cleared");

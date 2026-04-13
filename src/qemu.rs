@@ -13,6 +13,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 // ── Constants ────────────────────────────────────────────────────
 const CANVAS_COLS: usize = 32;
 const CANVAS_MAX_ROWS: usize = 128;
+#[allow(dead_code)]
 const QEMU_READ_BUF_SIZE: usize = 4096;
 
 // ── Architecture mapping ─────────────────────────────────────────
@@ -1294,7 +1295,7 @@ mod tests {
     fn test_ansi_line_wrap() {
         let mut handler = AnsiHandler::new();
         let mut buf = make_canvas();
-        let mut data = vec![b'A'; CANVAS_COLS + 1];
+        let data = vec![b'A'; CANVAS_COLS + 1];
         handler.process_bytes(&data, &mut buf);
         for i in 0..CANVAS_COLS {
             assert_eq!(buf[i], b'A' as u32);

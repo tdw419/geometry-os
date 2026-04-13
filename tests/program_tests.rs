@@ -31,6 +31,7 @@ fn compile_run(asm_path: &str) -> Vm {
 }
 
 /// Helper: assemble a .asm file with library include support and run it in the VM
+#[allow(dead_code)]
 fn compile_run_with_lib(asm_path: &str) -> Vm {
     let source = std::fs::read_to_string(asm_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", asm_path, e));
@@ -53,6 +54,7 @@ fn compile_run_with_lib(asm_path: &str) -> Vm {
 }
 
 /// Helper: assemble inline source with lib includes and run in VM
+#[allow(dead_code)]
 fn run_inline_with_lib(source: &str) -> Vm {
     let asm = assemble_with_lib(source, 0, Some("."))
         .unwrap_or_else(|e| panic!("inline assembly failed: {:?}", e));
@@ -2002,7 +2004,7 @@ fn test_peek_out_of_bounds_returns_zero() {
 #[test]
 fn test_peek_collision_detection() {
     // Draw a wall, then use PEEK to check if the next position is blocked
-    let source = "
+    let _source = "
     ; Draw a red wall at y=50 across x=0..255
     LDI r1, 0
     LDI r2, 50

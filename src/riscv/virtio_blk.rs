@@ -65,12 +65,6 @@ const DEFAULT_SECTORS: u64 = 2048; // 1MB disk
 /// Config capacity high word offset.
 const CONFIG_CAPACITY_HI: u64 = CONFIG + 4;
 
-/// Virtio device status bits.
-const VIRTIO_STATUS_ACKNOWLEDGE: u32 = 1;
-const VIRTIO_STATUS_DRIVER: u32 = 2;
-const VIRTIO_STATUS_FEATURES_OK: u32 = 8;
-const VIRTIO_STATUS_DRIVER_OK: u32 = 4;
-const VIRTIO_STATUS_FAILED: u32 = 128;
 
 /// Virtio block request header (16 bytes).
 ///   type: u32 (0=read, 1=write)
@@ -81,6 +75,17 @@ struct BlkRequest {
     req_type: u32,
     sector: u64,
 }
+
+#[allow(dead_code)]
+const VIRTIO_STATUS_ACKNOWLEDGE: u32 = 1;
+#[allow(dead_code)]
+const VIRTIO_STATUS_DRIVER: u32 = 2;
+#[allow(dead_code)]
+const VIRTIO_STATUS_FEATURES_OK: u32 = 8;
+#[allow(dead_code)]
+const VIRTIO_STATUS_DRIVER_OK: u32 = 4;
+#[allow(dead_code)]
+const VIRTIO_STATUS_FAILED: u32 = 128;
 
 /// Virtio block device.
 #[derive(Clone, Debug)]

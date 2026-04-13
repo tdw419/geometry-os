@@ -21,7 +21,6 @@ const FDT_END_NODE: u32 = 0x0000_0002;
 /// FDT token: property.
 const FDT_PROP: u32 = 0x0000_0003;
 /// FDT token: end of structure block.
-const FDT_NOP: u32 = 0x0000_0004;
 const FDT_END: u32 = 0x0000_0009;
 
 /// DTB builder. Constructs an FDT blob in memory.

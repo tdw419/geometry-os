@@ -124,10 +124,12 @@ fn bge(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b101, off) }
 fn bltu(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b110, off) }
 fn bgeu(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b111, off) }
 fn ebreak() -> u32 { i_type(1, 0, 0, 0, 0x73) }
+#[allow(dead_code)]
 fn fence() -> u32 { 0x0FF0000F }
 fn nop() -> u32 { addi(0, 0, 0) }
 fn mret() -> u32 { 0x30200073 }
 fn sret() -> u32 { 0x10200073 }
+#[allow(dead_code)]
 fn and_(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 7, rd, 0x33) }
 fn csrrw(rd: u8, rs1: u8, csr: u32) -> u32 { (csr << 20) | ((rs1 as u32) << 15) | (1u32 << 12) | ((rd as u32) << 7) | 0x73 }
 fn csrrs(rd: u8, rs1: u8, csr: u32) -> u32 { (csr << 20) | ((rs1 as u32) << 15) | (2u32 << 12) | ((rd as u32) << 7) | 0x73 }
@@ -141,18 +143,26 @@ const CSR_MSTATUS: u32 = 0x300;
 const CSR_MTVEC: u32 = 0x305;
 const CSR_MEPC: u32 = 0x341;
 const CSR_MCAUSE: u32 = 0x342;
+#[allow(dead_code)]
 const CSR_MTVAL: u32 = 0x343;
 const CSR_SSTATUS: u32 = 0x100;
+#[allow(dead_code)]
 const CSR_STVEC: u32 = 0x105;
+#[allow(dead_code)]
 const CSR_SATP: u32 = 0x180;
 const CSR_MIE: u32 = 0x304;
+#[allow(dead_code)]
 const CSR_MIP: u32 = 0x344;
 const CSR_SIE: u32 = 0x104;
+#[allow(dead_code)]
 const CSR_SIP: u32 = 0x144;
 const CSR_MEDELEG: u32 = 0x302;
+#[allow(dead_code)]
 const CSR_MIDELEG: u32 = 0x303;
 const CSR_SEPC: u32 = 0x141;
+#[allow(dead_code)]
 const CSR_SCAUSE: u32 = 0x142;
+#[allow(dead_code)]
 const CSR_STVAL: u32 = 0x143;
 
 // ============================================================
@@ -1018,8 +1028,11 @@ fn test_rv32_csr_mepc_alignment() {
 // ============================================================
 
 // RISC-V privilege constants
+#[allow(dead_code)]
 const PRIV_USER: u8 = 0;
+#[allow(dead_code)]
 const PRIV_SUPERVISOR: u8 = 1;
+#[allow(dead_code)]
 const PRIV_MACHINE: u8 = 3;
 
 // mstatus bit positions
@@ -1366,8 +1379,8 @@ fn test_rv32_privilege_mret_mstatus_restore() {
 
     // Simulate trap from S: MPP=S(01), MPIE=1, MIE=0
     vm.cpu.csr.mstatus = 0;
-    vm.cpu.csr.mstatus |= (1u32 << MSTATUS_MPP_LSB_BIT); // MPP = S (01)
-    vm.cpu.csr.mstatus |= (1u32 << MSTATUS_MPIE_BIT);     // MPIE = 1
+    vm.cpu.csr.mstatus |= 1u32 << MSTATUS_MPP_LSB_BIT; // MPP = S (01)
+    vm.cpu.csr.mstatus |= 1u32 << MSTATUS_MPIE_BIT;     // MPIE = 1
     // MIE = 0 (cleared during trap)
 
     vm.cpu.step(&mut vm.bus);
@@ -1400,7 +1413,7 @@ fn test_rv32_privilege_sret_mstatus_restore() {
 
     // Simulate trap from U: SPP=0 (U), SPIE=1, SIE=0
     vm.cpu.csr.mstatus = 0;
-    vm.cpu.csr.mstatus |= (1u32 << MSTATUS_SPIE_BIT); // SPIE = 1
+    vm.cpu.csr.mstatus |= 1u32 << MSTATUS_SPIE_BIT; // SPIE = 1
     // SPP = 0 (U), SIE = 0
 
     vm.cpu.step(&mut vm.bus);
@@ -2756,4 +2769,179 @@ fn test_bus_sync_mip_plic_clears_meip() {
     let mut mip = 1 << 11;
     bus.sync_mip(&mut mip);
     assert_eq!(mip & (1 << 11), 0, "MEIP should be cleared");
+}
+
+
+// =====================================================================
+// Phase 36: MMU + Device Integration Test
+// Guest sets up page tables, writes to UART, verify output on canvas
+// =====================================================================
+
+use geometry_os::riscv::bridge::UartBridge;
+
+const INT_CANVAS_COLS: usize = 32;
+const INT_CANVAS_MAX_ROWS: usize = 128;
+
+fn integration_canvas() -> Vec<u32> {
+    vec![0u32; INT_CANVAS_MAX_ROWS * INT_CANVAS_COLS]
+}
+
+/// Helper: set up identity-mapped SV32 page tables for code (at 0x8000_0000)
+/// and UART (at 0x1000_0000), then run code and verify canvas output.
+///
+/// Memory layout (all within guest RAM starting at 0x8000_0000):
+///   PA 0x8000_0000: code page (PPN 0x80000, identity-mapped)
+///   PA 0x8000_1000: root page table (PPN 0x80001)
+///   PA 0x8000_2000: L2 PT for code region VPN[1]=0x200 (PPN 0x80002)
+///   PA 0x8000_3000: L2 PT for UART region VPN[1]=0x040 (PPN 0x80003)
+
+struct MmuTestEnv {
+    vm: RiscvVm,
+    root_ppn: u32,
+    code_ppn: u32,
+}
+
+impl MmuTestEnv {
+    fn new() -> Self {
+        let ram_size = 0x10000; // 64KB
+        let vm = RiscvVm::new(ram_size);
+        Self {
+            vm,
+            root_ppn: 0x80001,   // PA 0x8000_1000
+            code_ppn: 0x80000,   // PA 0x8000_0000
+        }
+    }
+
+    /// Set up page tables for code and (optionally) UART regions.
+    fn setup_page_tables(&mut self, map_uart: bool) {
+        let root_ppn = self.root_ppn;
+        let l2_code_ppn: u32 = 0x80002;
+        let l2_uart_ppn: u32 = 0x80003;
+        let code_ppn = self.code_ppn;
+        let uart_phys_ppn: u32 = 0x10000; // PA 0x1000_0000
+
+        let root_pa = (root_ppn as u64) << 12;
+        self.vm.bus.write_word(root_pa + (0x200u64 * 4), make_pte(l2_code_ppn, mmu::PTE_V)).unwrap();
+
+        let l2_code_pa = (l2_code_ppn as u64) << 12;
+        self.vm.bus.write_word(l2_code_pa, make_pte(code_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+
+        if map_uart {
+            self.vm.bus.write_word(root_pa + (0x040u64 * 4), make_pte(l2_uart_ppn, mmu::PTE_V)).unwrap();
+            let l2_uart_pa = (l2_uart_ppn as u64) << 12;
+            self.vm.bus.write_word(l2_uart_pa, make_pte(uart_phys_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+        }
+    }
+
+    fn load_code(&mut self, code: &[u32]) {
+        let code_base = (self.code_ppn as u64) << 12;
+        for (i, &word) in code.iter().enumerate() {
+            self.vm.bus.write_word(code_base + (i as u64) * 4, word).unwrap();
+        }
+    }
+
+    fn satp_value(&self) -> u32 {
+        (1u32 << 31) | self.root_ppn
+    }
+
+    fn run(&mut self, max_steps: usize) {
+        self.vm.cpu.pc = ((self.code_ppn as u64) << 12) as u32;
+        self.vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
+        for _ in 0..max_steps {
+            match self.vm.step() {
+                StepResult::Ebreak => break,
+                StepResult::Ok | StepResult::Ecall => {}
+                _ => break,
+            }
+        }
+    }
+
+    /// Build guest code: enable SV32 MMU, write text to UART via page tables, EBREAK.
+    fn build_uart_program(&self, text: &str) -> Vec<u32> {
+        let satp = self.satp_value();
+        let satp_hi = satp & 0xFFFF_F000;
+        let satp_lo = (satp & 0xFFF) as i32;
+        let mut code = vec![
+            lui(1, 0x10000000),    // x1 = 0x1000_0000 (UART base VA)
+            lui(2, satp_hi),    // x2 = upper bits of satp
+            addi(2, 2, satp_lo), // x2 = satp (SV32, ASID=0, root PPN)
+            csrrw(0, 2, CSR_SATP), // write satp
+            sfence_vma(0, 0),   // flush TLB
+        ];
+        for &b in text.as_bytes() {
+            code.push(addi(3, 0, b as i32));
+            code.push(sw(3, 1, 0)); // write char to UART through MMU
+        }
+        code.push(ebreak());
+        code
+    }
+}
+
+/// Write text to UART through page tables, verify on canvas.
+#[test]
+fn test_mmu_device_integration_guest_uart_through_page_tables() {
+    let mut env = MmuTestEnv::new();
+    env.setup_page_tables(true);
+
+    let code = env.build_uart_program("OK");
+    env.load_code(&code);
+    env.run(100);
+
+    let mut bridge = UartBridge::new();
+    let mut canvas = integration_canvas();
+    let n = bridge.drain_uart_to_canvas(&mut env.vm.bus, &mut canvas);
+    assert_eq!(n, 2, "Should have drained 2 bytes from UART TX");
+
+    let output = UartBridge::read_canvas_string(&canvas, 0, 0, 32);
+    assert_eq!(output, "OK", "Expected 'OK' on canvas");
+    assert_eq!(canvas[0], b'O' as u32);
+    assert_eq!(canvas[1], b'K' as u32);
+}
+
+/// Enable SV32 without mapping UART -> store to unmapped VA -> page fault.
+#[test]
+fn test_mmu_device_integration_no_output_without_mapping() {
+    let mut env = MmuTestEnv::new();
+    env.setup_page_tables(false);
+
+    let code = env.build_uart_program("X");
+    env.load_code(&code);
+    env.run(100);
+
+    let mut bridge = UartBridge::new();
+    let mut canvas = integration_canvas();
+    let n = bridge.drain_uart_to_canvas(&mut env.vm.bus, &mut canvas);
+    assert_eq!(n, 0, "UART should have no output");
+    assert!(canvas.iter().all(|&c| c == 0), "Canvas should be empty");
+
+    // Page fault should have been delivered.
+    assert_eq!(
+        env.vm.cpu.csr.mcause, csr::CAUSE_STORE_PAGE_FAULT,
+        "Expected store page fault, got 0x{:X}", env.vm.cpu.csr.mcause
+    );
+}
+
+/// Multiple UART writes through MMU: first triggers TLB miss, rest hit TLB.
+#[test]
+fn test_mmu_device_integration_tlb_cached_uart_writes() {
+    let mut env = MmuTestEnv::new();
+    env.setup_page_tables(true);
+
+    let code = env.build_uart_program("ABC");
+    env.load_code(&code);
+    env.run(100);
+
+    let mut bridge = UartBridge::new();
+    let mut canvas = integration_canvas();
+    let n = bridge.drain_uart_to_canvas(&mut env.vm.bus, &mut canvas);
+    assert_eq!(n, 3, "Should drain 3 bytes");
+
+    let output = UartBridge::read_canvas_string(&canvas, 0, 0, 32);
+    assert_eq!(output, "ABC", "Expected 'ABC' on canvas");
+
+    // TLB should have cached the UART mapping
+    assert!(env.vm.cpu.tlb.lookup(
+        mmu::va_to_vpn(0x1000_0000),
+        mmu::satp_asid(env.vm.cpu.csr.satp)
+    ).is_some(), "TLB should cache UART mapping");
 }

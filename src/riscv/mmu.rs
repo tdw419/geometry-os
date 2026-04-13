@@ -216,7 +216,7 @@ impl Tlb {
 // ---- Translation ----
 
 /// PPN mask from a PTE (bits [31:10]).
-const PPN_MASK: u32 = 0xFFF_FC00;
+const PPN_MASK: u32 = 0xFFFF_FC00;
 
 /// Extract PPN from a PTE.
 fn pte_ppn(pte: u32) -> u32 {
