@@ -15,7 +15,7 @@ meta:
   opcodes: 60
   tests: 185
   programs: 36
-  loc: 7115
+  loc: 7124
 
 phases:
   # ===================================================================
@@ -939,12 +939,12 @@ phases:
         status: "todo"
 
 global_risks:
-  - "Opcode space: 57 of ~256 slots used, plenty of room"
+  - "Opcode space: 60 of ~256 slots used, plenty of room"
   - "Scope creep -- adding features is easy, keeping the OS coherent is hard"
   - "Kernel boundary breaks existing programs -- need a compatibility mode"
-  - "Memory protection removes shared RAM -- need IPC first or programs break (window_manager tests #[ignore]'d pending Phase 27)"
+  - "Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing"
   - "Filesystem persistence needs host directory -- WASM port needs different backing"
-  - "Phase 24 partially merged: page tables + segfaults work but broke shared-RAM multiprocess programs"
+  - "Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces shared-RAM for multiprocess"
 
 conventions:
   - "Every new opcode gets a test in tests/program_tests.rs"

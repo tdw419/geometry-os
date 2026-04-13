@@ -5,9 +5,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 26/32 phases complete, 0 in progress
+**Progress:** 27/32 phases complete, 0 in progress
 
-**Deliverables:** 116/137 complete
+**Deliverables:** 120/138 complete
 
 ## Scope Summary
 
@@ -39,7 +39,7 @@ the built-in text editor, press F5, watch it run.
 | phase-24 Memory Protection | COMPLETE | 6/6 | - | - |
 | phase-25 Filesystem | COMPLETE | 5/5 | - | - |
 | phase-26 Preemptive Scheduler | COMPLETE | 3/3 | - | - |
-| phase-27 Inter-Process Communication | PLANNED | 0/3 | - | - |
+| phase-27 Inter-Process Communication | COMPLETE | 4/4 | - | - |
 | phase-28 Device Driver Abstraction | PLANNED | 0/3 | - | - |
 | phase-29 Shell | PLANNED | 0/4 | - | - |
 | phase-30 Boot Sequence & Init | PLANNED | 0/3 | - | - |
@@ -450,15 +450,24 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 - [x] **Priority levels** -- Each process has priority 0-3, higher gets more slices
 - [x] **Yield/Sleep syscalls** -- Voluntary yield and timed sleep
 
-## [ ] phase-27: Inter-Process Communication (PLANNED)
+## [x] phase-27: Inter-Process Communication (COMPLETE)
 
 **Goal:** Processes communicate through pipes and messages, not raw shared RAM.
 
 ### Deliverables
 
-- [ ] **PIPE syscall** -- Create unidirectional pipe with circular buffer
-- [ ] **MSGSND/MSGRCV syscalls** -- Send and receive fixed-size messages by PID
-- [ ] **Blocking I/O** -- READ on empty pipe blocks until data arrives
+- [x] **PIPE syscall** -- Create unidirectional pipe with circular buffer (0x5D)
+  - [x] PIPE r5, r6 creates read FD (0x8000|idx) and write FD (0xC000|idx)
+  - [x] Pipe buffer holds 256 words
+- [x] **MSGSND/MSGRCV syscalls** -- Send and receive fixed-size messages by PID (0x5E, 0x5F)
+  - [x] MSGSND sends 4-word message to target PID
+  - [x] MSGRCV receives message, returns sender PID in r0
+  - [x] Per-process message queue holds 16 messages
+- [x] **Blocking I/O** -- READ on empty pipe blocks until data arrives
+  - [x] READ on empty pipe sets proc.blocked = true
+  - [x] Scheduler skips blocked processes
+  - [x] MSGRCV blocks if no message queued
+- [x] **pipe_test.asm** -- Program demonstrating parent-child pipe communication
 
 ## [ ] phase-28: Device Driver Abstraction (PLANNED)
 
@@ -515,12 +524,12 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 
 ## Global Risks
 
-- Opcode space: 57 of ~256 slots used, plenty of room
+- Opcode space: 60 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
-- Memory protection removes shared RAM -- need IPC first or programs break (window_manager tests #[ignore]'d pending Phase 27)
+- Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
 - Filesystem persistence needs host directory -- WASM port needs different backing
-- Phase 24 partially merged: page tables + segfaults work but broke shared-RAM multiprocess programs
+- Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces shared-RAM for multiprocess
 
 ## Conventions
 
