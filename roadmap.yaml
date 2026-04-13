@@ -1318,12 +1318,12 @@
   1318|      - scripts/download_riscv_linux.sh
   1319|  - name: Integration test
   1320|    description: Spawn QEMU with known kernel, verify Linux version appears in output
-  1321|    status: todo
+  1321|    status: done
   1322|    scope_lines: 60
   1323|    tasks:
   1324|    - id: p33.d9.t1
   1325|      title: 'Test: boot RISC-V Linux, verify console output'
-  1326|      status: todo
+  1326|      status: done
   1327|      description: 'Integration test (marked #[ignore] for CI without QEMU).
   1328|
   1329|        Spawn QEMU with RISC-V kernel, read stdout for 30 seconds,
@@ -1341,8 +1341,9 @@
   1341|      - p33.d5.t1
   1342|      files:
   1343|      - src/qemu.rs
-  1344|  dependencies:
-  1345|  - source: phase-32
+  1344|      - tests/qemu_boot_test.rs
+  1345|  dependencies:
+  1346|  - source: phase-32
   1346|    target: phase-33
   1347|    type: soft
   1348|    reason: Signals not required for QEMU bridge, but nice to have
