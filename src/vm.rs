@@ -1725,6 +1725,116 @@ impl Vm {
                 self.regs[0] = self.current_pid;
             }
 
+            // EXEC path_addr_reg  -- assemble and spawn a program from the programs/ directory
+            // Reads null-terminated filename from RAM[path_addr]. Appends ".asm" if needed.
+            // Assembles the source, creates a new process, copies bytecode in.
+            // r0 = PID on success, 0xFFFFFFFF on error.
+            // RAM[0xFFA] = PID on success, 0xFFFFFFFF on error.
+            0x66 => {
+                let pr = self.fetch() as usize;
+                if pr < NUM_REGS {
+                    let path_addr = self.regs[pr] as usize;
+                    let filename = self.read_ram_string(path_addr, 64);
+                    match filename {
+                        Some(mut fname) => {
+                            // Append .asm if not already present
+                            if !fname.ends_with(".asm") {
+                                fname.push_str(".asm");
+                            }
+                            let prog_path = std::path::Path::new("programs").join(&fname);
+                            let source = match std::fs::read_to_string(&prog_path) {
+                                Ok(s) => s,
+                                Err(_) => {
+                                    self.regs[0] = 0xFFFFFFFF;
+                                    self.ram[0xFFA] = 0xFFFFFFFF;
+                                    return true;
+                                }
+                            };
+                            match crate::assembler::assemble(&source, 0) {
+                                Ok(asm_result) => {
+                                    let active_count = self.processes.iter().filter(|p| !p.halted).count();
+                                    if active_count >= MAX_PROCESSES {
+                                        self.regs[0] = 0xFFFFFFFF;
+                                        self.ram[0xFFA] = 0xFFFFFFFF;
+                                    } else {
+                                        let page_dir = self.create_process_page_dir();
+                                        match page_dir {
+                                            Some(pd) => {
+                                                let phys_base = (pd[0] as usize) * PAGE_SIZE;
+                                                // Copy assembled bytecode into new process's physical memory
+                                                for (i, &word) in asm_result.pixels.iter().enumerate() {
+                                                    let addr = phys_base + i;
+                                                    if addr >= self.ram.len() { break; }
+                                                    self.ram[addr] = word;
+                                                }
+                                                let pid = (self.processes.len() + 1) as u32;
+                                                self.processes.push(SpawnedProcess {
+                                                    pc: 0,
+                                                    regs: [0; NUM_REGS],
+                                                    halted: false,
+                                                    pid,
+                                                    mode: CpuMode::User,
+                                                    page_dir: Some(pd),
+                                                    segfaulted: false,
+                                                    priority: 1,
+                                                    slice_remaining: 0,
+                                                    sleep_until: 0,
+                                                    yielded: false,
+                                                    blocked: false,
+                                                    msg_queue: Vec::new(),
+                                                });
+                                                self.regs[0] = pid;
+                                                self.ram[0xFFA] = pid;
+                                            }
+                                            None => {
+                                                self.regs[0] = 0xFFFFFFFF;
+                                                self.ram[0xFFA] = 0xFFFFFFFF;
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                    self.regs[0] = 0xFFFFFFFF;
+                                    self.ram[0xFFA] = 0xFFFFFFFF;
+                                }
+                            }
+                        }
+                        None => {
+                            self.regs[0] = 0xFFFFFFFF;
+                            self.ram[0xFFA] = 0xFFFFFFFF;
+                        }
+                    }
+                }
+            }
+
+            // WRITESTR fd_reg, str_addr_reg  -- write null-terminated string to file descriptor
+            // Scans RAM from str_addr until null byte, writes all bytes to fd.
+            // r0 = bytes written, or 0xFFFFFFFF on error.
+            0x67 => {
+                let fr = self.fetch() as usize;
+                let sr = self.fetch() as usize;
+                if fr < NUM_REGS && sr < NUM_REGS {
+                    let fd = self.regs[fr];
+                    let str_addr = self.regs[sr] as usize;
+                    // Measure string length
+                    let mut len = 0usize;
+                    let mut a = str_addr;
+                    while a < self.ram.len() && len < 1024 {
+                        if (self.ram[a] & 0xFF) == 0 { break; }
+                        len += 1;
+                        a += 1;
+                    }
+                    if len > 0 {
+                        let n = self.vfs.fwrite(&self.ram, fd, str_addr as u32, len as u32, self.current_pid);
+                        self.regs[0] = n;
+                    } else {
+                        self.regs[0] = 0; // empty string, 0 bytes written
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -2041,6 +2151,15 @@ impl Vm {
                 (format!("SETENV {}, {}", reg(kr), reg(vr)), 3)
             }
             0x65 => ("GETPID".into(), 1),
+            0x66 => {
+                let r = ram(a + 1);
+                (format!("EXEC {}", reg(r)), 2)
+            }
+            0x67 => {
+                let fr = ram(a + 1);
+                let sr = ram(a + 2);
+                (format!("WRITESTR {}, {}", reg(fr), reg(sr)), 3)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

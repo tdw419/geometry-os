@@ -731,6 +731,30 @@ fn parse_instruction(
             bytecode.push(0x65);
         }
 
+        "EXEC" => {
+            if tokens.len() != 2 {
+                return Err(format!(
+                    "EXEC requires 1 argument: EXEC path_addr_reg"
+                ));
+            }
+            bytecode.push(0x66);
+            let r = parse_reg(tokens[1])?;
+            bytecode.push(r as u32);
+        }
+
+        "WRITESTR" => {
+            if tokens.len() != 3 {
+                return Err(format!(
+                    "WRITESTR requires 2 arguments: WRITESTR fd_reg, str_addr_reg"
+                ));
+            }
+            bytecode.push(0x67);
+            let r1 = parse_reg(tokens[1])?;
+            let r2 = parse_reg(tokens[2])?;
+            bytecode.push(r1 as u32);
+            bytecode.push(r2 as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 
