@@ -2053,6 +2053,26 @@ impl Vm {
                 }
             }
 
+            // PEEK dest_reg, x_reg, y_reg  -- read pixel from screen buffer
+            // r[dest_reg] = screen[y * 256 + x], or 0 if out of bounds.
+            // This is the read counterpart to PSET: lets programs inspect what's
+            // on screen for collision detection, copy, or visual queries.
+            // On unified hardware (memory = display), this would be a normal memory load.
+            0x6D => {
+                let dr = self.fetch() as usize;
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                if dr < NUM_REGS && xr < NUM_REGS && yr < NUM_REGS {
+                    let x = self.regs[xr] as usize;
+                    let y = self.regs[yr] as usize;
+                    if x < 256 && y < 256 {
+                        self.regs[dr] = self.screen[y * 256 + x];
+                    } else {
+                        self.regs[dr] = 0; // out of bounds returns black/transparent
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
