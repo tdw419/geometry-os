@@ -25,9 +25,10 @@ ROADMAP_PATH = PROJECT_DIR / "ROADMAP.md"
 CARRY_FORWARD = Path.home() / "zion" / "projects" / "carry_forward" / "carry_forward" / "carry_forward.py"
 SESSION_CHAIN = Path.home() / "zion" / "projects" / "session_relay" / "session_relay" / "session_chain.py"
 LOG_FILE = Path("/tmp/geometry_os_chain.log")
-MAX_CYCLES = 20
+MAX_CYCLES = 4
 CYCLE_TIMEOUT = 1200  # 20 minutes per Hermes session
 CONSECUTIVE_FAILURE_LIMIT = 2
+INTER_CYCLE_DELAY = 30  # seconds between cycles to avoid 429 rate limits
 
 _running = True
 
@@ -189,7 +190,7 @@ def build_prompt(task, context, git_state):
     return prompt
 
 
-def run_cycle(dry_run=False):
+def run_cycle(dry_run=False, cycle_num=1):
     """Run one development cycle. Returns exit code."""
     log("=" * 60)
     log("Starting new cycle")
@@ -221,7 +222,7 @@ def run_cycle(dry_run=False):
             gate_msg = gate.stdout.strip()
             # Allow continuation if the only issue is a "dead session" from a previous
             # non-chain context (carry_forward doesn't know about chain_dev.py sessions)
-            if "Session dead" in gate_msg and cycle == 1:
+            if "Session dead" in gate_msg and cycle_num == 1:
                 log(f"Gate says dead session, but this is cycle 1 -- continuing")
             else:
                 log(f"Carry Forward gate says stop: {gate_msg}")
@@ -314,7 +315,7 @@ def main():
         cycle += 1
         log(f"Cycle {cycle}/{MAX_CYCLES}")
         
-        exit_code = run_cycle(dry_run=dry_run)
+        exit_code = run_cycle(dry_run=dry_run, cycle_num=cycle)
         
         if exit_code == 0:
             log("Roadmap complete! Stopping permanently.")
@@ -339,8 +340,8 @@ def main():
             log("--once mode, stopping after 1 cycle")
             break
         
-        log("Waiting 5s before next cycle...")
-        time.sleep(5)
+        log(f"Waiting {INTER_CYCLE_DELAY}s before next cycle (rate limit cooldown)...")
+        time.sleep(INTER_CYCLE_DELAY)
     
     if not _running:
         log("Stopped by signal")
