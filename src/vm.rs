@@ -58,9 +58,13 @@ pub const MSG_WORDS: usize = 4;
 /// Device fd base: device fds live at 0xE000+device_index.
 pub const DEVICE_FD_BASE: u32 = 0xE000;
 /// Device types mapped to fixed fd slots.
+#[allow(dead_code)]
 pub const DEVICE_SCREEN: u32 = 0; // /dev/screen -> fd 0xE000
+#[allow(dead_code)]
 pub const DEVICE_KEYBOARD: u32 = 1; // /dev/keyboard -> fd 0xE001
+#[allow(dead_code)]
 pub const DEVICE_AUDIO: u32 = 2; // /dev/audio -> fd 0xE002
+#[allow(dead_code)]
 pub const DEVICE_NET: u32 = 3; // /dev/net -> fd 0xE003
 pub const DEVICE_COUNT: usize = 4;
 /// Device names (indexed by device type).

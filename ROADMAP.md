@@ -6,8 +6,8 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 
 ## Current State
 
-- 60 opcodes, 32 registers, 64K RAM, 256x256 framebuffer
-- 185 tests (183 passing, 2 ignored), 36 programs, all green
+- 61 opcodes, 32 registers, 64K RAM, 256x256 framebuffer
+- 167 tests (all passing, 2 ignored), 37 programs, all green
 - Multi-process (SPAWN/KILL), shared RAM, Window Bounds Protocol
 - Self-hosting assembler, browser port (WASM), network port (UDP)
 - Visual debugger, heatmaps, RAM inspector
@@ -232,7 +232,7 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 - [x] Phase 25: Filesystem -- VFS layer, OPEN/READ/WRITE/CLOSE/SEEK syscalls, LS syscall, per-process fd table, cat.asm
 - [x] Phase 26: Preemptive Scheduler -- timer interrupt, priority levels, yield/sleep syscalls
 - [x] Phase 27: IPC -- PIPE syscall, MSGSND/MSGRCV syscalls, blocking I/O
-- [ ] Phase 28: Device Drivers -- device file convention, IOCTL syscall, screen/keyboard/audio/net drivers
+- [x] Phase 28: Device Drivers -- device file convention, IOCTL syscall, screen/keyboard/audio/net drivers
 - [ ] Phase 29: Shell -- shell.asm, pipe operator, redirection, built-in commands (ls, cd, cat, echo, ps, kill, help)
 - [ ] Phase 30: Boot Sequence -- boot ROM, init process (PID 1), graceful shutdown
 - [ ] Phase 31: Standard Library -- lib/stdlib.asm, lib/math.asm, heap allocator, linking convention
