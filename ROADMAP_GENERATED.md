@@ -5,9 +5,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 21/22 phases complete, 1 in progress
+**Progress:** 23/32 phases complete, 0 in progress
 
-**Deliverables:** 96/97 complete
+**Deliverables:** 102/134 complete
 
 ## Scope Summary
 
@@ -34,7 +34,17 @@ the built-in text editor, press F5, watch it run.
 | phase-19 Visual Debugger | COMPLETE | 3/3 | - | - |
 | phase-20 High RAM Visualization | COMPLETE | 2/2 | - | - |
 | phase-21 Spatial Program Coordinator (Native Windowing) | COMPLETE | 3/3 | - | - |
-| phase-22 Screen Readback & Collision Detection | IN PROGRESS | 2/3 | - | - |
+| phase-22 Screen Readback & Collision Detection | COMPLETE | 3/3 | - | - |
+| phase-23 Kernel Boundary (Syscall Mode) | COMPLETE | 5/5 | - | - |
+| phase-24 Memory Protection | PLANNED | 0/3 | - | - |
+| phase-25 Filesystem | PLANNED | 0/5 | - | - |
+| phase-26 Preemptive Scheduler | PLANNED | 0/3 | - | - |
+| phase-27 Inter-Process Communication | PLANNED | 0/3 | - | - |
+| phase-28 Device Driver Abstraction | PLANNED | 0/3 | - | - |
+| phase-29 Shell | PLANNED | 0/4 | - | - |
+| phase-30 Boot Sequence & Init | PLANNED | 0/3 | - | - |
+| phase-31 Standard Library | PLANNED | 0/4 | - | - |
+| phase-32 Signals & Process Lifecycle | PLANNED | 0/4 | - | - |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
 
@@ -363,7 +373,7 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
   - [x] test_window_manager_spawns_child passes
   - [x] Ball stays within window bounds
 
-## [~] phase-22: Screen Readback & Collision Detection (IN PROGRESS)
+## [x] phase-22: Screen Readback & Collision Detection (COMPLETE)
 
 **Goal:** Let programs read pixel values from the framebuffer for collision detection, pick-color, and window compositing.
 
@@ -374,18 +384,124 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
   - [x] Out-of-bounds returns 0
   - [x] test_peek_reads_screen_pixel passes
   _~20 LOC_
-- [ ] **Collision detection in maze.asm** -- Use PEEK to check wall pixels instead of RAM-based collision
-  _~40 LOC_
+- [x] **Collision detection demo** -- peek_bounce.asm -- white ball bounces off drawn obstacles using PEEK. No RAM collision map.
+  _~100 LOC_
 - [x] **MOV instruction everywhere** -- MOV rd, rs documented and used across programs
+
+## [x] phase-23: Kernel Boundary (Syscall Mode) (COMPLETE)
+
+**Goal:** Establish user mode vs kernel mode. Programs can't directly access hardware.
+
+### Deliverables
+
+- [x] **CPU mode flag** -- vm.mode: User/Kernel bit in VM state
+- [x] **SYSCALL opcode (0x52)** -- Trap into kernel mode, dispatch by syscall number
+- [x] **RETK opcode (0x53)** -- Return from kernel mode to user mode
+- [x] **Syscall dispatch table** -- RAM region 0xFE00..0xFEFF mapping syscall numbers to kernel handlers
+- [x] **Restricted opcodes in user mode** -- IKEY, hardware STORE blocked in user mode
+
+## [ ] phase-24: Memory Protection (PLANNED)
+
+**Goal:** Each process gets its own address space. Processes can't trash each other.
+
+### Deliverables
+
+- [ ] **Page tables** -- Simple 1-level paging: page_dir per process, maps virtual to physical
+- [ ] **Address space per process** -- SPAWN creates new page table, not just new registers
+- [ ] **SEGFAULT on illegal access** -- LOAD/STORE to unmapped page halts the process
+
+## [ ] phase-25: Filesystem (PLANNED)
+
+**Goal:** Programs can create, read, write, and delete named files. Persistent storage.
+
+### Deliverables
+
+- [ ] **Virtual filesystem layer** -- Abstract FS interface backed by host filesystem in .geometry_os/fs/
+- [ ] **OPEN/READ/WRITE/CLOSE/SEEK syscalls** -- Full file I/O through syscall interface
+- [ ] **LS syscall** -- Directory listing into RAM buffer
+- [ ] **Per-process fd table** -- Max 16 open files per process
+- [ ] **cat.asm** -- Test program that reads a file and displays it
+
+## [ ] phase-26: Preemptive Scheduler (PLANNED)
+
+**Goal:** Replace round-robin single-step with time-sliced priority scheduler.
+
+### Deliverables
+
+- [ ] **Timer interrupt** -- VM fires tick every N instructions, triggers context switch
+- [ ] **Priority levels** -- Each process has priority 0-3, higher gets more slices
+- [ ] **Yield/Sleep syscalls** -- Voluntary yield and timed sleep
+
+## [ ] phase-27: Inter-Process Communication (PLANNED)
+
+**Goal:** Processes communicate through pipes and messages, not raw shared RAM.
+
+### Deliverables
+
+- [ ] **PIPE syscall** -- Create unidirectional pipe with circular buffer
+- [ ] **MSGSND/MSGRCV syscalls** -- Send and receive fixed-size messages by PID
+- [ ] **Blocking I/O** -- READ on empty pipe blocks until data arrives
+
+## [ ] phase-28: Device Driver Abstraction (PLANNED)
+
+**Goal:** All hardware access through a uniform driver interface. Everything is a file.
+
+### Deliverables
+
+- [ ] **Device file convention** -- /dev/screen, /dev/keyboard, /dev/audio, /dev/net
+- [ ] **IOCTL syscall** -- Device-specific control operations
+- [ ] **Screen/keyboard/audio/net drivers** -- Wrap existing hardware ports as device files
+
+## [ ] phase-29: Shell (PLANNED)
+
+**Goal:** Proper command shell with pipes, redirection, environment variables.
+
+### Deliverables
+
+- [ ] **shell.asm** -- Interactive command interpreter as user process
+- [ ] **Pipe operator** -- prog1 | prog2 connects stdout to stdin
+- [ ] **Redirection** -- prog > file, prog < file, prog >> file
+- [ ] **Built-in commands** -- ls, cd, cat, echo, ps, kill, help
+
+## [ ] phase-30: Boot Sequence & Init (PLANNED)
+
+**Goal:** OS boots into known state, starts init, manages services.
+
+### Deliverables
+
+- [ ] **Boot ROM** -- Fixed bytecode at 0x0000, initializes hardware, jumps to init
+- [ ] **Init process** -- PID 1, reads boot.cfg, starts shell
+- [ ] **Graceful shutdown** -- SHUTDOWN syscall stops all processes, flushes FS
+
+## [ ] phase-31: Standard Library (PLANNED)
+
+**Goal:** Reusable library of common operations for all programs.
+
+### Deliverables
+
+- [ ] **lib/stdlib.asm** -- String ops, memory ops, formatted I/O
+- [ ] **lib/math.asm** -- sin, cos, sqrt via lookup tables
+- [ ] **Heap allocator** -- malloc/free for dynamic memory
+- [ ] **Linking convention** -- .include or .lib directive in assembler
+
+## [ ] phase-32: Signals & Process Lifecycle (PLANNED)
+
+**Goal:** Signals, exit codes, wait, and proper process lifecycle management.
+
+### Deliverables
+
+- [ ] **SIGNAL syscall** -- Send signal to process by PID
+- [ ] **Signal handlers** -- Process sets handler address for each signal type
+- [ ] **EXIT/WAIT syscalls** -- Exit with status code, parent waits for child
+- [ ] **Zombie cleanup** -- Exited processes cleaned up after parent WAIT
 
 ## Global Risks
 
-- Opcode space: 46 of ~256 slots used, plenty of room, but hex layout has gaps
-- Scope creep -- adding opcodes is easy, keeping the VM simple is hard
-- Flaky tests: rainbow, ball, fire, rings tests are non-deterministic (fail intermittently)
-- BEEP spawning aplay processes without rate limiting could exhaust FDs
-- Self-hosting ASM opcode proved fragile (phase-12 test reverted) -- revisit with concrete use case
-- GPU tile issues (#29-54) are orthogonal to core VM -- don't let them block
+- Opcode space: 47 of ~256 slots used, plenty of room
+- Scope creep -- adding features is easy, keeping the OS coherent is hard
+- Kernel boundary breaks existing programs -- need a compatibility mode
+- Memory protection removes shared RAM -- need IPC first or programs break
+- Filesystem persistence needs host directory -- WASM port needs different backing
 
 ## Conventions
 
