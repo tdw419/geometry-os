@@ -2,3 +2,9 @@
 *.sav
 *.png
 Cargo.lock
+
+# Downloaded RISC-V Linux kernel + rootfs (large binaries)
+.geometry_os/fs/linux/Image
+.geometry_os/fs/linux/initrd.gz
+.geometry_os/fs/linux/rootfs/
+.geometry_os/fs/linux/rootfs.cpio.gz
