@@ -677,6 +677,30 @@ fn test_rv32_fibonacci() {
 }
 
 #[test]
+fn test_rv32_fibonacci_20_iterations() {
+    // Acceptance: Fibonacci(10) = 55, then continue to fib(20) = 6765
+    // Phase 34 deliverable: "fibonacci test program that runs 20 iterations"
+    //
+    // After N iterations: a = fib(N), b = fib(N+1)
+    //   fib(10) = 55, fib(20) = 6765
+    //
+    // x1=a=0, x2=b=1, x3=counter=20, x4=temp
+    let mut vm = test_vm(&[
+        addi(1, 0, 0),  // a = 0               [inst 0]
+        addi(2, 0, 1),  // b = 1               [inst 1]
+        addi(3, 0, 20), // counter = 20         [inst 2]
+        add(4, 1, 2),   // temp = a + b         [inst 3] loop start
+        addi(1, 2, 0),  // a = b               [inst 4]
+        addi(2, 4, 0),  // b = temp            [inst 5]
+        addi(3, 3, -1), // counter--           [inst 6]
+        bne(3, 0, -16), // if counter!=0 goto 3 [inst 7]
+        ecall(),        //                      [inst 8]
+    ]);
+    run(&mut vm, 400);
+    assert_eq!(vm.cpu.x[1], 6765, "fib(20) should be 6765 (x1=a)");
+}
+
+#[test]
 fn test_rv32_add_overflow() {
     let mut vm = test_vm(&[
         lui(1, 0x80000000),
