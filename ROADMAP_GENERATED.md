@@ -1,13 +1,13 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-71 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+61 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 28/32 phases complete, 0 in progress
+**Progress:** 30/32 phases complete, 1 in progress
 
-**Deliverables:** 123/138 complete
+**Deliverables:** 135/140 complete
 
 ## Scope Summary
 
@@ -41,9 +41,9 @@ the built-in text editor, press F5, watch it run.
 | phase-26 Preemptive Scheduler | COMPLETE | 3/3 | - | - |
 | phase-27 Inter-Process Communication | COMPLETE | 4/4 | - | - |
 | phase-28 Device Driver Abstraction | COMPLETE | 3/3 | - | - |
-| phase-29 Shell | PLANNED | 0/4 | - | - |
-| phase-30 Boot Sequence & Init | PLANNED | 0/3 | - | - |
-| phase-31 Standard Library | PLANNED | 0/4 | - | - |
+| phase-29 Shell | COMPLETE | 6/6 | - | - |
+| phase-30 Boot Sequence & Init | COMPLETE | 3/3 | - | - |
+| phase-31 Standard Library | IN PROGRESS | 3/4 | - | - |
 | phase-32 Signals & Process Lifecycle | PLANNED | 0/4 | - | - |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
@@ -493,37 +493,68 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
   - [x] READ/WRITE to /dev/net uses RAM[0xFFC]
   - [x] device_test.asm demo program
 
-## [ ] phase-29: Shell (PLANNED)
+## [x] phase-29: Shell (COMPLETE)
 
 **Goal:** Proper command shell with pipes, redirection, environment variables.
 
 ### Deliverables
 
-- [ ] **shell.asm** -- Interactive command interpreter as user process
-- [ ] **Pipe operator** -- prog1 | prog2 connects stdout to stdin
-- [ ] **Redirection** -- prog > file, prog < file, prog >> file
-- [ ] **Built-in commands** -- ls, cd, cat, echo, ps, kill, help
+- [x] **shell.asm** -- Interactive command interpreter as user process
+  - [x] shell.asm assembles without errors
+  - [x] Built-in commands: ls, cd, cat, echo, ps, kill, help, pwd, clear, exit
+- [x] **Pipe operator** -- prog1 | prog2 connects stdout to stdin
+  - [x] EXECP opcode (0x6A) spawns with fd redirection
+  - [x] shell.asm parses | operator and creates pipes
+- [x] **Redirection** -- prog > file, prog < file, prog >> file
+  - [x] shell.asm parses > operator and opens file for output
+- [x] **Built-in commands** -- ls, cd, cat, echo, ps, kill, help
+  - [x] ls lists VFS directory entries
+  - [x] cd changes CWD via CHDIR opcode
+  - [x] cat reads file and displays content
+  - [x] echo prints arguments to screen
+  - [x] ps lists process IDs
+  - [x] kill terminates a process by PID
+  - [x] help displays command list
+- [x] **New opcodes** -- READLN, WAITPID, EXECP, CHDIR, GETCWD
+  - [x] READLN (0x68) reads keyboard chars into line buffer
+  - [x] WAITPID (0x69) waits for child process to halt
+  - [x] EXECP (0x6A) spawns program with stdin/stdout fd redirection
+  - [x] CHDIR (0x6B) changes current working directory
+  - [x] GETCWD (0x6C) reads current working directory
+- [x] **VFS dup_fd** -- Duplicate file descriptors across PID tables for pipe/redir
 
-## [ ] phase-30: Boot Sequence & Init (PLANNED)
+## [x] phase-30: Boot Sequence & Init (COMPLETE)
 
 **Goal:** OS boots into known state, starts init, manages services.
 
 ### Deliverables
 
-- [ ] **Boot ROM** -- Fixed bytecode at 0x0000, initializes hardware, jumps to init
-- [ ] **Init process** -- PID 1, reads boot.cfg, starts shell
-- [ ] **Graceful shutdown** -- SHUTDOWN syscall stops all processes, flushes FS
+- [x] **Boot ROM** -- Fixed bytecode at 0x0000, initializes hardware, jumps to init
+  - [x] boot() method assembles init.asm and spawns PID 1
+  - [x] boot.cfg created with default configuration
+- [x] **Init process** -- PID 1, reads boot.cfg, starts shell
+  - [x] init.asm assembles without errors
+  - [x] init process spawned with priority 2
+  - [x] supervisor loop monitors shell and respawns if it dies
+  - [x] environment variables set (SHELL, HOME, CWD, USER)
+- [x] **Graceful shutdown** -- SHUTDOWN syscall stops all processes, flushes FS
+  - [x] SHUTDOWN opcode 0x6E in kernel mode halts VM
+  - [x] SHUTDOWN in user mode returns error (r0=0xFFFFFFFF)
+  - [x] SHUTDOWN kills all child processes and frees pages
+  - [x] SHUTDOWN clears pipes and closes file descriptors
+  - [x] shutdown_requested flag set for host to check
 
-## [ ] phase-31: Standard Library (PLANNED)
+## [~] phase-31: Standard Library (IN PROGRESS)
 
 **Goal:** Reusable library of common operations for all programs.
 
 ### Deliverables
 
-- [ ] **lib/stdlib.asm** -- String ops, memory ops, formatted I/O
-- [ ] **lib/math.asm** -- sin, cos, sqrt via lookup tables
-- [ ] **Heap allocator** -- malloc/free for dynamic memory
-- [ ] **Linking convention** -- .include or .lib directive in assembler
+- [x] **lib/stdlib.asm** -- String ops, memory ops, formatted I/O
+- [x] **lib/math.asm** -- sin, cos, sqrt via lookup tables
+- [~] **Heap allocator** -- malloc/free for dynamic memory
+- [x] **Linking convention** -- .include or .lib directive in assembler
+  - [x] .include directive resolves and inlines lib/*.asm files
 
 ## [ ] phase-32: Signals & Process Lifecycle (PLANNED)
 
@@ -538,7 +569,7 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 
 ## Global Risks
 
-- Opcode space: 61 of ~256 slots used, plenty of room
+- Opcode space: 73 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing

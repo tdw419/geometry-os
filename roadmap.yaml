@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 71
-  tests: 195
-  programs: 38
-  loc: 7967
+  opcodes: 73
+  tests: 250
+  programs: 39
+  loc: 8258
 
 phases:
   # ===================================================================
@@ -1011,22 +1011,25 @@ phases:
 
   - id: "phase-31"
     title: "Standard Library"
-    status: "todo"
+    status: "in_progress"
     goal: "Reusable library of common operations for all programs."
     priority: 19
     deliverables:
       - name: "lib/stdlib.asm"
         description: "String ops, memory ops, formatted I/O"
-        status: "todo"
+        status: "done"
       - name: "lib/math.asm"
         description: "sin, cos, sqrt via lookup tables"
-        status: "todo"
+        status: "done"
       - name: "Heap allocator"
         description: "malloc/free for dynamic memory"
-        status: "todo"
+        status: "in_progress"
       - name: "Linking convention"
         description: ".include or .lib directive in assembler"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: ".include directive resolves and inlines lib/*.asm files"
+            met: true
 
   - id: "phase-32"
     title: "Signals & Process Lifecycle"
@@ -1048,7 +1051,7 @@ phases:
         status: "todo"
 
 global_risks:
-  - "Opcode space: 61 of ~256 slots used, plenty of room"
+  - "Opcode space: 73 of ~256 slots used, plenty of room"
   - "Scope creep -- adding features is easy, keeping the OS coherent is hard"
   - "Kernel boundary breaks existing programs -- need a compatibility mode"
   - "Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing"
