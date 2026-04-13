@@ -46,7 +46,7 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
-## The Instruction Set (44 opcodes)
+## The Instruction Set (48 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -129,6 +129,12 @@ cd wasm && wasm-pack build --target web
 |--------|------|-------------|
 | SPAWN  | addr_reg | Create child process (PID in RAM[0xFFA]) |
 | KILL   | pid_reg | Terminate child process |
+
+### Kernel Boundary
+| Opcode | Args | Description |
+|--------|------|-------------|
+| SYSCALL | num | Trap to kernel mode, dispatch via RAM[0xFE00+num] |
+| RETK   |     | Return from kernel mode to user mode |
 
 ## Memory-Mapped I/O
 
@@ -230,7 +236,7 @@ child:
 │  └──────────────┘  └──────────────────┘     │
 └──────────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 44 opcodes, 8 concurrent processes
+VM: 32 registers, 65536-word RAM, 48 opcodes, 8 concurrent processes
 Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
 
@@ -244,7 +250,7 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 ## Stats
 
 - 5,623 lines of Rust
-- 44 opcodes
+- 48 opcodes
 - 32 demo programs
 - 113 tests
 - MIT licensed
