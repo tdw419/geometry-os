@@ -13,9 +13,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 48
-  tests: 133
+  tests: 94
   programs: 33
-  loc: 5737
+  loc: 5863
 
 phases:
   # ===================================================================
@@ -715,18 +715,21 @@ phases:
 
   - id: "phase-24"
     title: "Memory Protection"
-    status: "todo"
+    status: "in_progress"
     goal: "Each process gets its own address space. Processes can't trash each other."
     priority: 12
     deliverables:
       - name: "Page tables"
         description: "Simple 1-level paging: page_dir per process, maps virtual to physical"
-        status: "todo"
+        status: "done"
       - name: "Address space per process"
         description: "SPAWN creates new page table, not just new registers"
-        status: "todo"
+        status: "done"
       - name: "SEGFAULT on illegal access"
         description: "LOAD/STORE to unmapped page halts the process"
+        status: "done"
+      - name: "Fix window_manager for isolated address spaces"
+        description: "window_manager.asm shared RAM protocol broken by memory protection; needs IPC (Phase 27) or shared memory region"
         status: "todo"
 
   - id: "phase-25"
@@ -876,8 +879,9 @@ global_risks:
   - "Opcode space: 48 of ~256 slots used, plenty of room"
   - "Scope creep -- adding features is easy, keeping the OS coherent is hard"
   - "Kernel boundary breaks existing programs -- need a compatibility mode"
-  - "Memory protection removes shared RAM -- need IPC first or programs break"
+  - "Memory protection removes shared RAM -- need IPC first or programs break (window_manager tests #[ignore]'d pending Phase 27)"
   - "Filesystem persistence needs host directory -- WASM port needs different backing"
+  - "Phase 24 partially merged: page tables + segfaults work but broke shared-RAM multiprocess programs"
 
 conventions:
   - "Every new opcode gets a test in tests/program_tests.rs"

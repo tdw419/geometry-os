@@ -48,6 +48,10 @@ pub struct SpawnedProcess {
     pub pid: u32,
     /// CPU mode for this process
     pub mode: CpuMode,
+    /// Page directory for address translation. None = identity (kernel).
+    pub page_dir: Option<Vec<u32>>,
+    /// True when process segfaulted on unmapped access.
+    pub segfaulted: bool,
 }
 
 /// Magic bytes for save files
@@ -90,6 +94,14 @@ pub struct Vm {
     pub mode: CpuMode,
     /// Kernel stack: saves (return_pc, saved_mode) on SYSCALL, restored by RETK
     pub kernel_stack: Vec<(u32, CpuMode)>,
+    /// Bitmap of allocated physical pages (bit N = page N in use)
+    pub allocated_pages: u64,
+    /// Current page directory for address translation (None = identity mapping)
+    pub current_page_dir: Option<Vec<u32>>,
+    /// PID of last process that segfaulted
+    pub segfault_pid: u32,
+    /// True when a segfault occurred this step
+    pub segfault: bool,
 }
 
 impl Vm {
@@ -108,6 +120,10 @@ impl Vm {
             processes: Vec::new(),
             mode: CpuMode::Kernel,
             kernel_stack: Vec::new(),
+            allocated_pages: 0b11, // pages 0-1 used by main process
+            current_page_dir: None,
+            segfault_pid: 0,
+            segfault: false,
         }
     }
 
@@ -126,6 +142,10 @@ impl Vm {
         self.processes.clear();
         self.mode = CpuMode::Kernel;
         self.kernel_stack.clear();
+        self.allocated_pages = 0b11;
+        self.current_page_dir = None;
+        self.segfault_pid = 0;
+        self.segfault = false;
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -133,6 +153,77 @@ impl Vm {
         if self.access_log.len() < 4096 {
             self.access_log.push(MemAccess { addr, kind });
         }
+    }
+
+    /// Allocate `count` contiguous physical pages. Returns start page index or None.
+    /// Starts scanning from page 2 (pages 0-1 reserved for kernel/main).
+    fn alloc_pages(&mut self, count: usize) -> Option<usize> {
+        'outer: for start in 2..=(NUM_PAGES - count) {
+            for i in 0..count {
+                if self.allocated_pages & (1u64 << (start + i)) != 0 { continue 'outer; }
+            }
+            for i in 0..count { self.allocated_pages |= 1u64 << (start + i); }
+            return Some(start);
+        }
+        None
+    }
+
+    /// Free all physical pages mapped by a page directory.
+    fn free_page_dir(&mut self, pd: &[u32]) {
+        for &entry in pd {
+            let ppage = entry as usize;
+            if ppage < NUM_PAGES {
+                self.allocated_pages &= !(1u64 << ppage);
+            }
+        }
+    }
+
+    /// Translate virtual address using current page directory.
+    /// Returns None if unmapped (triggers segfault).
+    fn translate_va(&self, vaddr: u32) -> Option<usize> {
+        match &self.current_page_dir {
+            None => Some(vaddr as usize), // identity mapping (kernel)
+            Some(pd) => {
+                let vpage = (vaddr as usize) / PAGE_SIZE;
+                let offset = (vaddr as usize) % PAGE_SIZE;
+                if vpage >= pd.len() { return None; }
+                let ppage = pd[vpage] as usize;
+                if ppage >= NUM_PAGES { return None; } // PAGE_UNMAPPED sentinel
+                Some(ppage * PAGE_SIZE + offset)
+            }
+        }
+    }
+
+    /// Create a page directory for a new process: allocate PROCESS_PAGES contiguous
+    /// physical pages, map virtual pages 0..PROCESS_PAGES to them, rest unmapped.
+    /// The shared region (page containing 0xF00-0xFFF for Window Bounds Protocol,
+    /// page containing 0xFF00+ for hardware ports) is identity-mapped so processes
+    /// can communicate and access hardware through syscalls.
+    fn create_process_page_dir(&mut self) -> Option<Vec<u32>> {
+        let start = self.alloc_pages(PROCESS_PAGES)?;
+        let mut pd = vec![PAGE_UNMAPPED; NUM_PAGES];
+        for i in 0..PROCESS_PAGES { pd[i] = (start + i) as u32; }
+        // Identity-map shared regions so child processes can access them
+        // Page 3 (0xC00-0xFFF): contains Window Bounds Protocol at 0xF00-0xFFF
+        pd[3] = 3;
+        // Release the private page we allocated for virtual page 3
+        let private_page = (start + 3) as usize;
+        if private_page < NUM_PAGES {
+            self.allocated_pages &= !(1u64 << private_page);
+        }
+        // Page 63 (0xFC00-0xFFFF): hardware ports (0xFF00+) and syscall table (0xFE00+)
+        // This is already outside PROCESS_PAGES range so it's PAGE_UNMAPPED.
+        // Identity-map it so syscalls work.
+        pd[63] = 63;
+        // Don't allocate page 63 -- it's always the kernel's hardware page
+        // (main process uses it via identity mapping)
+        Some(pd)
+    }
+
+    /// Trigger a segfault: set flag and halt the process.
+    fn trigger_segfault(&mut self) {
+        self.segfault = true;
+        self.halted = true;
     }
 
     /// Execute one instruction. Returns false if halted.
@@ -186,33 +277,40 @@ impl Vm {
                 }
             }
 
-            // LOAD reg, addr_reg  -- load from RAM
+            // LOAD reg, addr_reg  -- load from RAM (page-translated)
             0x11 => {
                 let reg = self.fetch() as usize;
                 let addr_reg = self.fetch() as usize;
                 if reg < NUM_REGS && addr_reg < NUM_REGS {
-                    let addr = self.regs[addr_reg] as usize;
-                    if addr < self.ram.len() {
-                        self.regs[reg] = self.ram[addr];
-                        self.log_access(addr, MemAccessKind::Read);
+                    let vaddr = self.regs[addr_reg];
+                    match self.translate_va(vaddr) {
+                        Some(addr) if addr < self.ram.len() => {
+                            self.regs[reg] = self.ram[addr];
+                            self.log_access(addr, MemAccessKind::Read);
+                        }
+                        None => { self.trigger_segfault(); return false; }
+                        _ => {}
                     }
                 }
             }
 
-            // STORE addr_reg, reg  -- store to RAM
+            // STORE addr_reg, reg  -- store to RAM (page-translated)
             0x12 => {
                 let addr_reg = self.fetch() as usize;
                 let reg = self.fetch() as usize;
                 if addr_reg < NUM_REGS && reg < NUM_REGS {
-                    let addr = self.regs[addr_reg] as usize;
-                    if addr < self.ram.len() {
-                        // User mode: block writes to hardware register region (0xFF00+)
-                        if self.mode == CpuMode::User && addr >= 0xFF00 {
-                            self.halted = true;
-                            return false;
+                    let vaddr = self.regs[addr_reg];
+                    match self.translate_va(vaddr) {
+                        Some(addr) if addr < self.ram.len() => {
+                            if self.mode == CpuMode::User && addr >= 0xFF00 {
+                                self.trigger_segfault();
+                                return false;
+                            }
+                            self.ram[addr] = self.regs[reg];
+                            self.log_access(addr, MemAccessKind::Write);
                         }
-                        self.ram[addr] = self.regs[reg];
-                        self.log_access(addr, MemAccessKind::Write);
+                        None => { self.trigger_segfault(); return false; }
+                        _ => {}
                     }
                 }
             }
@@ -391,28 +489,37 @@ impl Vm {
                 }
             }
 
-            // PUSH reg  -- push register onto stack (r30 is SP, grows down)
+            // PUSH reg  -- push onto stack (r30=SP, page-translated)
             0x60 => {
                 let reg = self.fetch() as usize;
                 if reg < NUM_REGS {
-                    // Decrement SP (r30)
-                    let sp = self.regs[30] as usize;
-                    if sp > 0 && sp <= self.ram.len() {
+                    let sp = self.regs[30];
+                    if sp > 0 {
                         let new_sp = sp - 1;
-                        self.ram[new_sp] = self.regs[reg];
-                        self.regs[30] = new_sp as u32;
+                        match self.translate_va(new_sp) {
+                            Some(addr) if addr < self.ram.len() => {
+                                self.ram[addr] = self.regs[reg];
+                                self.regs[30] = new_sp;
+                            }
+                            None => { self.trigger_segfault(); return false; }
+                            _ => {}
+                        }
                     }
                 }
             }
 
-            // POP reg  -- pop from stack into register (r30 is SP)
+            // POP reg  -- pop from stack (r30=SP, page-translated)
             0x61 => {
                 let reg = self.fetch() as usize;
                 if reg < NUM_REGS {
-                    let sp = self.regs[30] as usize;
-                    if sp < self.ram.len() {
-                        self.regs[reg] = self.ram[sp];
-                        self.regs[30] = (sp + 1) as u32;
+                    let sp = self.regs[30];
+                    match self.translate_va(sp) {
+                        Some(addr) if addr < self.ram.len() => {
+                            self.regs[reg] = self.ram[addr];
+                            self.regs[30] = sp + 1;
+                        }
+                        None => { self.trigger_segfault(); return false; }
+                        _ => {}
                     }
                 }
             }
@@ -767,42 +874,64 @@ impl Vm {
                 }
             }
 
-            // SPAWN addr_reg  -- create a child process at address in register
-            // Returns process ID (1-based) in RAM[0xFFA], or 0xFFFFFFFF on error
+            // SPAWN addr_reg  -- create child with isolated address space
+            // Returns PID (1-based) in RAM[0xFFA], or 0xFFFFFFFF on error
             0x4D => {
                 let ar = self.fetch() as usize;
                 if ar < NUM_REGS {
                     let active_count = self.processes.iter().filter(|p| !p.halted).count();
                     if active_count >= MAX_PROCESSES {
-                        self.ram[0xFFA] = 0xFFFFFFFF; // too many processes
+                        self.ram[0xFFA] = 0xFFFFFFFF;
                     } else {
                         let start_addr = self.regs[ar];
-                        let pid = (self.processes.len() + 1) as u32;
-                        self.processes.push(SpawnedProcess {
-                            pc: start_addr,
-                            regs: [0; NUM_REGS],
-                            halted: false,
-                            pid,
-                            mode: CpuMode::User, // spawned processes start in user mode
-                        });
-                        self.ram[0xFFA] = pid;
+                        let page_dir = self.create_process_page_dir();
+                        if page_dir.is_none() {
+                            self.ram[0xFFA] = 0xFFFFFFFF;
+                        } else {
+                            let pd = page_dir.as_ref().unwrap();
+                            let phys_base = (pd[0] as usize) * PAGE_SIZE;
+                            let copy_len = PROCESS_PAGES * PAGE_SIZE;
+                            let src = start_addr as usize;
+                            for i in 0..copy_len {
+                                let dst = phys_base + i;
+                                let si = src + i;
+                                if dst >= self.ram.len() || si >= self.ram.len() { break; }
+                                self.ram[dst] = self.ram[si];
+                            }
+                            let pid = (self.processes.len() + 1) as u32;
+                            self.processes.push(SpawnedProcess {
+                                pc: 0,
+                                regs: [0; NUM_REGS],
+                                halted: false,
+                                pid,
+                                mode: CpuMode::User,
+                                page_dir,
+                                segfaulted: false,
+                            });
+                            self.ram[0xFFA] = pid;
+                        }
                     }
                 }
             }
 
-            // KILL pid_reg  -- halt a child process by its ID
+            // KILL pid_reg  -- halt child, free its pages
             // Returns 1 in RAM[0xFFA] on success, 0 if not found
             0x4E => {
                 let pr = self.fetch() as usize;
                 if pr < NUM_REGS {
                     let target_pid = self.regs[pr];
                     let mut found = false;
+                    let mut free_pd: Option<Vec<u32>> = None;
                     for proc in &mut self.processes {
                         if proc.pid == target_pid {
+                            free_pd = proc.page_dir.take();
                             proc.halted = true;
                             found = true;
                             break;
                         }
+                    }
+                    if let Some(ref pd) = free_pd {
+                        self.free_page_dir(pd);
                     }
                     self.ram[0xFFA] = if found { 1 } else { 0 };
                 }
@@ -870,9 +999,6 @@ impl Vm {
     /// Step all non-halted child processes. Called by the host after stepping
     /// the main process. Each child gets one instruction per call.
     pub fn step_all_processes(&mut self) {
-        // Move processes out so we can call self.step() without borrow conflicts.
-        // Any new children spawned during this round go into self.processes (empty
-        // while we iterate), and are merged back in below.
         let mut procs = std::mem::take(&mut self.processes);
 
         let saved_pc = self.pc;
@@ -880,35 +1006,44 @@ impl Vm {
         let saved_halted = self.halted;
         let saved_mode = self.mode;
         let saved_kernel_stack = std::mem::take(&mut self.kernel_stack);
+        let saved_page_dir = self.current_page_dir.take();
+        let saved_segfault = self.segfault;
+        let saved_segfault_pid = self.segfault_pid;
 
         for proc in procs.iter_mut() {
             if proc.halted { continue; }
 
-            // Swap in child state
             self.pc = proc.pc;
             self.regs = proc.regs;
             self.halted = false;
             self.mode = proc.mode;
             self.kernel_stack.clear();
+            self.current_page_dir = proc.page_dir.take();
+            self.segfault = false;
 
             let still_running = self.step();
 
-            // Save child state back
             proc.pc = self.pc;
             proc.regs = self.regs;
-            proc.halted = !still_running || self.halted;
+            proc.halted = !still_running || self.halted || self.segfault;
             proc.mode = self.mode;
+            proc.page_dir = self.current_page_dir.take();
+            proc.segfaulted = self.segfault;
+            if self.segfault {
+                self.segfault_pid = proc.pid;
+                self.ram[0xFF9] = proc.pid;
+            }
         }
 
-        // Restore main process state
         self.pc = saved_pc;
         self.regs = saved_regs;
         self.halted = saved_halted;
         self.mode = saved_mode;
         self.kernel_stack = saved_kernel_stack;
+        self.current_page_dir = saved_page_dir;
+        self.segfault = saved_segfault;
+        self.segfault_pid = saved_segfault_pid;
 
-        // Merge back: append any grandchildren spawned during this round.
-        // Halted processes are kept so callers can inspect their final state.
         procs.extend(std::mem::take(&mut self.processes));
         self.processes = procs;
     }
@@ -1022,11 +1157,11 @@ impl Vm {
     }
 
     fn fetch(&mut self) -> u32 {
-        let val = if (self.pc as usize) < self.ram.len() {
-            self.ram[self.pc as usize]
-        } else {
-            0
+        let phys = match self.translate_va(self.pc) {
+            Some(addr) if addr < self.ram.len() => addr,
+            _ => { self.trigger_segfault(); return 0; }
         };
+        let val = self.ram[phys];
         self.pc += 1;
         val
     }
@@ -1192,6 +1327,10 @@ impl Vm {
             processes: Vec::new(),
             mode: CpuMode::Kernel,
             kernel_stack: Vec::new(),
+            allocated_pages: 0b11,
+            current_page_dir: None,
+            segfault_pid: 0,
+            segfault: false,
         })
     }
 }

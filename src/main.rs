@@ -3040,6 +3040,10 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         processes: Vec::new(),
         mode: vm::CpuMode::Kernel,
         kernel_stack: Vec::new(),
+        allocated_pages: 0b11,
+        current_page_dir: None,
+        segfault_pid: 0,
+        segfault: false,
     };
 
 

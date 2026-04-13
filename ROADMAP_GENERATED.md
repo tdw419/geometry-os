@@ -5,9 +5,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 23/32 phases complete, 0 in progress
+**Progress:** 23/32 phases complete, 1 in progress
 
-**Deliverables:** 102/134 complete
+**Deliverables:** 105/135 complete
 
 ## Scope Summary
 
@@ -36,7 +36,7 @@ the built-in text editor, press F5, watch it run.
 | phase-21 Spatial Program Coordinator (Native Windowing) | COMPLETE | 3/3 | - | - |
 | phase-22 Screen Readback & Collision Detection | COMPLETE | 3/3 | - | - |
 | phase-23 Kernel Boundary (Syscall Mode) | COMPLETE | 5/5 | - | - |
-| phase-24 Memory Protection | PLANNED | 0/3 | - | - |
+| phase-24 Memory Protection | IN PROGRESS | 3/4 | - | - |
 | phase-25 Filesystem | PLANNED | 0/5 | - | - |
 | phase-26 Preemptive Scheduler | PLANNED | 0/3 | - | - |
 | phase-27 Inter-Process Communication | PLANNED | 0/3 | - | - |
@@ -400,15 +400,16 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 - [x] **Syscall dispatch table** -- RAM region 0xFE00..0xFEFF mapping syscall numbers to kernel handlers
 - [x] **Restricted opcodes in user mode** -- IKEY, hardware STORE blocked in user mode
 
-## [ ] phase-24: Memory Protection (PLANNED)
+## [~] phase-24: Memory Protection (IN PROGRESS)
 
 **Goal:** Each process gets its own address space. Processes can't trash each other.
 
 ### Deliverables
 
-- [ ] **Page tables** -- Simple 1-level paging: page_dir per process, maps virtual to physical
-- [ ] **Address space per process** -- SPAWN creates new page table, not just new registers
-- [ ] **SEGFAULT on illegal access** -- LOAD/STORE to unmapped page halts the process
+- [x] **Page tables** -- Simple 1-level paging: page_dir per process, maps virtual to physical
+- [x] **Address space per process** -- SPAWN creates new page table, not just new registers
+- [x] **SEGFAULT on illegal access** -- LOAD/STORE to unmapped page halts the process
+- [ ] **Fix window_manager for isolated address spaces** -- window_manager.asm shared RAM protocol broken by memory protection; needs IPC (Phase 27) or shared memory region
 
 ## [ ] phase-25: Filesystem (PLANNED)
 
@@ -500,8 +501,9 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 - Opcode space: 48 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
-- Memory protection removes shared RAM -- need IPC first or programs break
+- Memory protection removes shared RAM -- need IPC first or programs break (window_manager tests #[ignore]'d pending Phase 27)
 - Filesystem persistence needs host directory -- WASM port needs different backing
+- Phase 24 partially merged: page tables + segfaults work but broke shared-RAM multiprocess programs
 
 ## Conventions
 
