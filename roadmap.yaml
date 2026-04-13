@@ -12,8 +12,8 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 46
-  tests: 116
+  opcodes: 48
+  tests: 133
   programs: 33
   loc: 5623
 

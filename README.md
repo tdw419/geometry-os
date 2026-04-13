@@ -6,7 +6,7 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 44 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 48 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
