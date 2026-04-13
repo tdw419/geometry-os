@@ -1050,6 +1050,518 @@ phases:
         description: "Exited processes cleaned up after parent WAIT"
         status: "todo"
 
+  # ===================================================================
+  # PART II: HYPERVISOR (RUNNING OTHER OPERATING SYSTEMS)
+  # ===================================================================
+
+  - id: "phase-33"
+    title: "QEMU Bridge"
+    status: "planned"
+    goal: "Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one."
+    priority: 30
+    description: |
+      QEMU gives us a working hypervisor in days. Every architecture QEMU supports
+      (x86, ARM, RISC-V, MIPS) works immediately. We learn what the canvas text
+      surface needs to handle (ANSI sequences, scroll speed, buffer size).
+    deliverables:
+      - name: "qemu.rs module"
+        description: "QEMU subprocess management with stdin/stdout pipes"
+        status: "todo"
+        scope_lines: 60
+        scope_files: ["src/qemu.rs"]
+        tasks:
+          - id: "p33.d1.t1"
+            title: "Create src/qemu.rs with QemuBridge struct"
+            status: "todo"
+            description: |
+              Create QemuBridge struct with fields for Child process, stdin/stdout pipes,
+              and an output buffer. Implement Drop to kill child on cleanup.
+            acceptance_criteria:
+              - "QemuBridge struct compiles"
+              - "Drop trait kills child process"
+            files: ["src/qemu.rs"]
+
+      - name: "QEMU spawn"
+        description: "Launch qemu-system-* with -nographic -serial mon:stdio, capture stdin/stdout"
+        status: "todo"
+        scope_lines: 80
+        tasks:
+          - id: "p33.d2.t1"
+            title: "Implement QemuBridge::spawn(config_str) -> Result"
+            status: "todo"
+            description: |
+              Parse config string "arch=riscv64 kernel=linux.img ram=256M disk=rootfs.ext4"
+              into QEMU command. Construct qemu-system-{arch} with appropriate flags.
+              Use std::process::Command with stdin/stdout piped.
+            acceptance_criteria:
+              - "Config string parsed into arch, kernel, ram, disk fields"
+              - "Correct qemu-system-{arch} binary selected"
+              - "-nographic -serial mon:stdio flags always present"
+              - "-machine virt for riscv/aarch64"
+              - "-kernel, -m, -drive flags constructed from config"
+            dependencies: ["p33.d1.t1"]
+            files: ["src/qemu.rs"]
+          - id: "p33.d2.t2"
+            title: "Implement architecture mapping (riscv64, riscv32, x86_64, aarch64, mipsel)"
+            status: "todo"
+            description: "Map arch config values to qemu-system binary names and machine types."
+            acceptance_criteria:
+              - "riscv64 -> qemu-system-riscv64 -machine virt"
+              - "x86_64 -> qemu-system-x86_64"
+              - "aarch64 -> qemu-system-aarch64 -machine virt"
+              - "mipsel -> qemu-system-mipsel -machine malta"
+              - "Unknown arch returns error"
+            dependencies: ["p33.d2.t1"]
+            files: ["src/qemu.rs"]
+          - id: "p33.d2.t3"
+            title: "Test: spawn QEMU with --version, verify process starts and exits clean"
+            status: "todo"
+            description: "Unit test that spawns qemu-system-riscv64 --version and captures version string from stdout."
+            acceptance_criteria:
+              - "QEMU process starts and exits with code 0"
+              - "Version string captured from stdout"
+            dependencies: ["p33.d2.t1"]
+            files: ["src/qemu.rs"]
+
+      - name: "Output to canvas"
+        description: "Read QEMU stdout bytes, write to canvas_buffer as u32 chars, auto-scroll"
+        status: "todo"
+        scope_lines: 60
+        tasks:
+          - id: "p33.d3.t1"
+            title: "Implement non-blocking stdout reader"
+            status: "todo"
+            description: |
+              Set QEMU stdout to non-blocking mode. Each frame tick, read available
+              bytes into a Vec<u8> buffer. Return the bytes for processing.
+            acceptance_criteria:
+              - "Non-blocking read returns immediately even if no data"
+              - "Bytes read are valid QEMU output"
+            dependencies: ["p33.d1.t1"]
+            files: ["src/qemu.rs"]
+          - id: "p33.d3.t2"
+            title: "Implement stdout bytes -> canvas_buffer writer"
+            status: "todo"
+            description: |
+              For each printable byte: write as u32 to canvas_buffer at cursor position.
+              Track virtual cursor (row, col). Auto-scroll when row >= 128.
+            acceptance_criteria:
+              - "Printable ASCII chars appear in canvas_buffer"
+              - "Cursor advances correctly"
+              - "Scrolling works when row exceeds 128"
+            dependencies: ["p33.d3.t1"]
+            files: ["src/qemu.rs", "src/main.rs"]
+          - id: "p33.d3.t3"
+            title: "Test: feed known bytes, verify canvas_buffer contents"
+            status: "todo"
+            description: "Unit test: write 'Hello\\nWorld' bytes, verify canvas_buffer has correct chars at correct positions."
+            acceptance_criteria:
+              - "'H' at position [0][0], 'e' at [0][1], etc."
+              - "'W' starts at row 1 after newline"
+            dependencies: ["p33.d3.t2"]
+            files: ["src/qemu.rs"]
+
+      - name: "Input from keyboard"
+        description: "Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin"
+        status: "todo"
+        scope_lines: 40
+        tasks:
+          - id: "p33.d4.t1"
+            title: "Implement keyboard event -> QEMU stdin writer"
+            status: "todo"
+            description: |
+              When hypervisor is active and a key is pressed, call key_to_ascii_shifted()
+              and write the resulting byte to QEMU's stdin pipe. Map Enter to \\r,
+              Backspace to 0x7F, Ctrl+C to 0x03.
+            acceptance_criteria:
+              - "Regular keys forwarded as ASCII bytes"
+              - "Enter sends \\r (carriage return)"
+              - "Backspace sends 0x7F"
+              - "Ctrl+C sends 0x03"
+            dependencies: ["p33.d1.t1"]
+            files: ["src/qemu.rs", "src/main.rs"]
+
+      - name: "ANSI escape handling"
+        description: "Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering"
+        status: "todo"
+        scope_lines: 100
+        tasks:
+          - id: "p33.d5.t1"
+            title: "Implement ANSI escape state machine"
+            status: "todo"
+            description: |
+              State machine: Normal -> Escape (0x1B) -> Csi ('[') -> params.
+              Handle: CSI A/B/C/D (cursor), CSI H (home), CSI 2J (clear),
+              CSI K (clear line), CSI m (color, can ignore), CSI ? 25 h/l (cursor show/hide).
+            acceptance_criteria:
+              - "ESC [ A moves cursor up"
+              - "ESC [ B moves cursor down"
+              - "ESC [ C moves cursor right"
+              - "ESC [ D moves cursor left"
+              - "ESC [ H moves cursor to 0,0"
+              - "ESC [ 2 J clears canvas_buffer"
+              - "ESC [ K clears from cursor to end of row"
+              - "Unknown sequences ignored gracefully"
+            dependencies: ["p33.d3.t2"]
+            files: ["src/qemu.rs"]
+          - id: "p33.d5.t2"
+            title: "Test: feed ANSI sequences, verify cursor state"
+            status: "todo"
+            description: "Unit tests for each supported ANSI sequence. Verify cursor position and buffer state."
+            acceptance_criteria:
+              - "Test for each cursor movement sequence"
+              - "Test for clear screen"
+              - "Test for clear line"
+              - "Test for mixed text + escape sequences"
+            dependencies: ["p33.d5.t1"]
+            files: ["src/qemu.rs"]
+
+      - name: "HYPERVISOR opcode (0x54)"
+        description: "New opcode that reads config string from RAM and spawns QEMU"
+        status: "todo"
+        scope_lines: 60
+        tasks:
+          - id: "p33.d6.t1"
+            title: "Add HYPERVISOR opcode 0x54 to vm.rs execute"
+            status: "todo"
+            description: |
+              Read config string from RAM at address in r0. Parse config.
+              Spawn QemuBridge. Store in VM state. F5 while active kills QEMU.
+            acceptance_criteria:
+              - "HYPERVISOR opcode triggers QEMU spawn"
+              - "Config string read from VM RAM"
+              - "VM state tracks active hypervisor"
+            dependencies: ["p33.d2.t1", "p33.d3.t2", "p33.d4.t1"]
+            files: ["src/vm.rs"]
+          - id: "p33.d6.t2"
+            title: "Add HYPERVISOR to assembler mnemonic list"
+            status: "todo"
+            description: "Register HYPERVISOR in assembler.rs so it can be used in .asm programs."
+            acceptance_criteria:
+              - "'HYPERVISOR r0' assembles to opcode 0x54"
+              - "Disassembler outputs HYPERVISOR for 0x54"
+            dependencies: ["p33.d6.t1"]
+            files: ["src/assembler.rs"]
+
+      - name: "Shell command"
+        description: "hypervisor arch=riscv64 kernel=linux.img command in shell.asm"
+        status: "todo"
+        tasks:
+          - id: "p33.d7.t1"
+            title: "Add hypervisor command to shell.asm"
+            status: "todo"
+            description: "Parse 'hypervisor <config>' from shell input, construct config string in RAM, execute HYPERVISOR opcode."
+            acceptance_criteria:
+              - "'hypervisor arch=riscv64 kernel=linux.img' spawns QEMU"
+              - "Error message on missing kernel file"
+            dependencies: ["p33.d6.t1"]
+            files: ["programs/shell.asm"]
+
+      - name: "Download helper"
+        description: "Script to fetch pre-built RISC-V Linux kernel + rootfs for testing"
+        status: "todo"
+        tasks:
+          - id: "p33.d8.t1"
+            title: "Create scripts/download_riscv_linux.sh"
+            status: "todo"
+            description: |
+              Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal rootfs
+              from a known URL. Place in .geometry_os/fs/linux/ directory.
+            acceptance_criteria:
+              - "Script downloads kernel Image and rootfs"
+              - "Files placed in correct directory"
+              - "QEMU can boot the downloaded kernel"
+            files: ["scripts/download_riscv_linux.sh"]
+
+      - name: "Integration test"
+        description: "Spawn QEMU with known kernel, verify Linux version appears in output"
+        status: "todo"
+        scope_lines: 60
+        tasks:
+          - id: "p33.d9.t1"
+            title: "Test: boot RISC-V Linux, verify console output"
+            status: "todo"
+            description: |
+              Integration test (marked #[ignore] for CI without QEMU).
+              Spawn QEMU with RISC-V kernel, read stdout for 30 seconds,
+              verify "Linux version" string appears.
+            acceptance_criteria:
+              - "QEMU spawns and produces output"
+              - "'Linux version' detected in output within 30 seconds"
+              - "QEMU process cleaned up after test"
+            dependencies: ["p33.d2.t1", "p33.d3.t1", "p33.d5.t1"]
+            files: ["src/qemu.rs"]
+
+    dependencies:
+      - source: "phase-32"
+        target: "phase-33"
+        type: "soft"
+        reason: "Signals not required for QEMU bridge, but nice to have"
+
+    technical_notes: |
+      QEMU subprocess uses std::process::Command with piped stdin/stdout.
+      Non-blocking reads via set_nonblocking() on the ChildStdout.
+      Canvas rendering reuses existing pixel font pipeline from CANVAS_TEXT_SURFACE.md.
+
+    risks:
+      - "QEMU not installed on host -- need clear error message"
+      - "ANSI parsing incomplete -- Linux boot output may use obscure sequences"
+      - "Non-blocking pipe reads may miss data on fast output -- buffer management"
+
+  - id: "phase-34"
+    title: "RISC-V RV32I Core"
+    status: "future"
+    goal: "Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency."
+    priority: 40
+    description: |
+      QEMU proved what works. Now rebuild it owned -- pure Rust, no subprocess,
+      portable to WASM and embedded. RV32I is the foundation.
+    deliverables:
+      - name: "riscv/ module"
+        description: "src/riscv/ with mod.rs, cpu.rs, memory.rs, decode.rs"
+        status: "todo"
+        scope_lines: 50
+        tasks:
+          - id: "p34.d1.t1"
+            title: "Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs"
+            status: "todo"
+            acceptance_criteria: ["Files compile", "mod.rs exports public structs"]
+            files: ["src/riscv/mod.rs", "src/riscv/cpu.rs", "src/riscv/memory.rs", "src/riscv/decode.rs"]
+
+      - name: "Register file"
+        description: "x[0..32] (x0=zero), PC, 32-bit registers"
+        status: "todo"
+        scope_lines: 30
+        tasks:
+          - id: "p34.d2.t1"
+            title: "Define RiscvCpu struct with x[32], pc, privilege fields"
+            status: "todo"
+            acceptance_criteria:
+              - "RiscvCpu struct with x: [u32; 32], pc: u32, privilege: u8"
+              - "x[0] always reads as 0 (enforced on write)"
+              - "new() initializes pc=0x80000000, privilege=3 (M-mode)"
+            files: ["src/riscv/cpu.rs"]
+
+      - name: "Guest RAM"
+        description: "Vec<u8> separate from host RAM, configurable size (default 128MB)"
+        status: "todo"
+        scope_lines: 60
+        tasks:
+          - id: "p34.d3.t1"
+            title: "Implement GuestMemory with read_byte/half/word and write_byte/half/word"
+            status: "todo"
+            acceptance_criteria:
+              - "GuestMemory with ram: Vec<u8>, ram_base: u64"
+              - "read_word at 0x80000000 reads first 4 bytes little-endian"
+              - "write_word followed by read_word returns same value"
+              - "Out-of-range access returns error"
+            files: ["src/riscv/memory.rs"]
+
+      - name: "Instruction decode"
+        description: "Decode all RV32I opcodes from 32-bit instruction words"
+        status: "todo"
+        scope_lines: 200
+        tasks:
+          - id: "p34.d4.t1"
+            title: "Implement decode() returning Operation enum for all RV32I opcodes"
+            status: "todo"
+            acceptance_criteria:
+              - "R-type: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND"
+              - "I-type: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI"
+              - "Load: LB, LH, LW, LBU, LHU"
+              - "Store: SB, SH, SW"
+              - "Branch: BEQ, BNE, BLT, BGE, BLTU, BGEU"
+              - "Upper: LUI, AUIPC"
+              - "Jump: JAL, JALR"
+              - "System: ECALL, EBREAK, FENCE"
+            dependencies: ["p34.d1.t1"]
+            files: ["src/riscv/decode.rs"]
+
+      - name: "Execute loop"
+        description: "CPU step() fetches, decodes, executes one instruction"
+        status: "todo"
+        scope_lines: 200
+        tasks:
+          - id: "p34.d5.t1"
+            title: "Implement RiscvCpu::step() and execute() for all RV32I instructions"
+            status: "todo"
+            acceptance_criteria:
+              - "step() fetches word at PC, decodes, executes, advances PC by 4"
+              - "JAL/JALR update PC to target and store return address"
+              - "Branches conditionally update PC"
+              - "x[0] always reads as 0 after any write"
+            dependencies: ["p34.d2.t1", "p34.d3.t1", "p34.d4.t1"]
+            files: ["src/riscv/cpu.rs"]
+
+      - name: "Test suite"
+        description: "One test per instruction, verification against known encodings"
+        status: "todo"
+        scope_lines: 300
+        tasks:
+          - id: "p34.d6.t1"
+            title: "Write tests for all R-type ALU operations"
+            status: "todo"
+            acceptance_criteria:
+              - "ADD: 10 + 20 = 30"
+              - "SUB: 30 - 10 = 20"
+              - "SLL: 1 << 5 = 32"
+              - "SLT: 5 < 10 = 1"
+              - "SLTU: unsigned comparison"
+              - "XOR, OR, AND: bitwise ops"
+              - "SRL: logical right shift"
+              - "SRA: arithmetic right shift (sign-preserving)"
+            dependencies: ["p34.d5.t1"]
+            files: ["src/riscv/cpu.rs"]
+          - id: "p34.d6.t2"
+            title: "Write tests for I-type, load, store, branch, jump instructions"
+            status: "todo"
+            acceptance_criteria:
+              - "ADDI: x1 = x2 + 100"
+              - "LW/SW: store word, load same address, verify equal"
+              - "LB/LBU: signed vs unsigned byte load"
+              - "BEQ: branch taken when equal, not taken when not"
+              - "JAL: jump and link, verify return address saved"
+              - "JALR: indirect jump with register base"
+            dependencies: ["p34.d5.t1"]
+            files: ["src/riscv/cpu.rs"]
+          - id: "p34.d6.t3"
+            title: "Write fibonacci test program that runs 20 iterations in RISC-V"
+            status: "todo"
+            acceptance_criteria:
+              - "Fibonacci(10) = 55 computed by RISC-V code"
+              - "Result stored in a register, verified by test"
+            dependencies: ["p34.d5.t1"]
+            files: ["src/riscv/cpu.rs"]
+
+    dependencies:
+      - source: "phase-33"
+        target: "phase-34"
+        type: "informs"
+        reason: "QEMU bridge teaches us what the interpreter needs to reimplement"
+
+  - id: "phase-35"
+    title: "RISC-V Privilege Modes"
+    status: "future"
+    goal: "M/S/U privilege levels, CSR registers, trap handling. Linux needs this to manage its own processes."
+    priority: 50
+    deliverables:
+      - name: "Privilege enum + CSR bank"
+        description: "M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp"
+        status: "todo"
+        scope_lines: 80
+      - name: "CSR read/write"
+        description: "CSRRW, CSRRS, CSRRC and immediate variants"
+        status: "todo"
+        scope_lines: 100
+      - name: "ECALL/MRET/SRET"
+        description: "Trap entry saves PC, jumps to vector. MRET/SRET restore PC."
+        status: "todo"
+        scope_lines: 120
+      - name: "Timer + software interrupts"
+        description: "mtime/mtimecmp, msip/ssip, interrupt pending/enable"
+        status: "todo"
+        scope_lines: 80
+      - name: "Privilege transition tests"
+        description: "U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U"
+        status: "todo"
+        scope_lines: 150
+
+    dependencies:
+      - source: "phase-34"
+        target: "phase-35"
+        type: "hard"
+        reason: "Privilege modes layer on top of the base RV32I interpreter"
+
+  - id: "phase-36"
+    title: "RISC-V Virtual Memory & Devices"
+    status: "future"
+    goal: "SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot."
+    priority: 60
+    deliverables:
+      - name: "SV32 page table walk"
+        description: "2-level lookup, PTE flags, address translation"
+        status: "todo"
+        scope_lines: 120
+      - name: "TLB cache"
+        description: "64-entry TLB with ASID-aware invalidation"
+        status: "todo"
+        scope_lines: 80
+      - name: "Page fault traps"
+        description: "Instruction/Load/Store page faults with stval/mtval"
+        status: "todo"
+        scope_lines: 40
+      - name: "UART 16550"
+        description: "Serial port emulation, reuses Phase 33 bridge pattern to canvas"
+        status: "todo"
+        scope_lines: 150
+      - name: "CLINT + PLIC"
+        description: "Timer interrupt controller + platform interrupt controller"
+        status: "todo"
+        scope_lines: 200
+      - name: "Virtio block device"
+        description: "Virtio MMIO transport, disk image from VFS"
+        status: "todo"
+        scope_lines: 200
+      - name: "Device Tree Blob"
+        description: "Generate DTB describing memory, UART, virtio devices"
+        status: "todo"
+        scope_lines: 150
+      - name: "MMU + device integration test"
+        description: "Guest sets up page tables, writes to UART, verify output on canvas"
+        status: "todo"
+        scope_lines: 150
+
+    dependencies:
+      - source: "phase-35"
+        target: "phase-36"
+        type: "hard"
+        reason: "SV32 and devices need privilege modes for trap handling"
+      - source: "phase-33"
+        target: "phase-36"
+        type: "informs"
+        reason: "QEMU bridge proved which devices are the minimum needed"
+
+  - id: "phase-37"
+    title: "Guest OS Boot (Native RISC-V)"
+    status: "future"
+    goal: "Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes: QEMU and native."
+    priority: 70
+    deliverables:
+      - name: "ELF + binary loader"
+        description: "Parse ELF64 RISC-V kernel images, load segments into guest RAM"
+        status: "todo"
+        scope_lines: 160
+      - name: "DTB passthrough"
+        description: "Pass device tree blob to kernel in a1 register at boot"
+        status: "todo"
+        scope_lines: 30
+      - name: "Boot console"
+        description: "Guest UART output to canvas (same bridge as Phase 33)"
+        status: "todo"
+        scope_lines: 80
+      - name: "HYPERVISOR mode flag"
+        description: "Opcode detects 'native' vs 'qemu' from config string"
+        status: "todo"
+        scope_lines: 30
+      - name: "Verified boot"
+        description: "Boot OpenSBI + Linux tinyconfig, verify 'Linux version' on canvas"
+        status: "todo"
+        scope_lines: 100
+      - name: "Performance benchmark"
+        description: "Measure MIPS, compare interpreter vs QEMU, document results"
+        status: "todo"
+        scope_lines: 40
+
+    dependencies:
+      - source: "phase-36"
+        target: "phase-37"
+        type: "hard"
+        reason: "Need MMU + devices before booting a kernel"
+      - source: "phase-33"
+        target: "phase-37"
+        type: "informs"
+        reason: "QEMU boot experience guides native boot requirements"
+
 global_risks:
   - "Opcode space: 73 of ~256 slots used, plenty of room"
   - "Scope creep -- adding features is easy, keeping the OS coherent is hard"
