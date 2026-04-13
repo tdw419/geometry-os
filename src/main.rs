@@ -9,6 +9,7 @@
 mod assembler;
 mod font;
 mod vm;
+mod preprocessor;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use std::collections::{HashSet, VecDeque};
@@ -786,7 +787,11 @@ fn cli_main(extra_args: &[String]) {
                     println!("No source loaded. Use 'load <file>' first.");
                     continue;
                 }
-                match assembler::assemble(&source_text, 0) {
+                // Abstraction Layer: Preprocess macros and variables
+                let mut pp = preprocessor::Preprocessor::new();
+                let preprocessed_source = pp.preprocess(&source_text);
+
+                match assembler::assemble(&preprocessed_source, 0) {
                     Ok(asm_result) => {
                         // Clear bytecode region (load at 0 so labels resolve correctly)
                         let ram_len = vm.ram.len();
@@ -1463,7 +1468,11 @@ fn execute_cli_command(
                 println!("{}", msg); output.push_str(&msg); output.push('\n');
                 return;
             }
-            match assembler::assemble(source_text, 0) {
+            // Abstraction Layer: Preprocess macros and variables
+            let mut pp = preprocessor::Preprocessor::new();
+            let preprocessed_source = pp.preprocess(source_text);
+
+            match assembler::assemble(&preprocessed_source, 0) {
                 Ok(asm_result) => {
                     let ram_len = vm.ram.len();
                     let load_addr = 0usize;
@@ -2377,7 +2386,11 @@ fn canvas_assemble(
 
     let source = source.replace("\n\n", "\n");
 
-    match assembler::assemble(&source, CANVAS_BYTECODE_ADDR) {
+    // Abstraction Layer: Preprocess macros and variables
+    let mut pp = preprocessor::Preprocessor::new();
+    let preprocessed_source = pp.preprocess(&source);
+
+    match assembler::assemble(&preprocessed_source, CANVAS_BYTECODE_ADDR) {
         Ok(asm_result) => {
             let ram_len = vm.ram.len();
             for v in vm.ram[CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 4096)].iter_mut()
@@ -2798,143 +2811,6 @@ fn render_text(buffer: &mut [u32], x0: usize, y0: usize, text: &str, color: u32)
     }
 }
 
-/// Valid opcodes for syntax highlighting (same set as assembler.rs)
-const OPCODES: &[&str] = &[
-    "HALT", "NOP", "FRAME", "LDI", "LOAD", "STORE", "ADD", "SUB", "MUL", "DIV",
-    "AND", "OR", "XOR", "SHL", "SHR", "MOD", "JMP", "JZ", "JNZ",
-    "CALL", "RET", "BLT", "BGE", "PSET", "PSETI", "FILL", "RECTF",
-    "TEXT", "LINE", "CIRCLE", "SCROLL", "IKEY", "RAND", "NEG", "CMP", "PUSH", "POP",
-    "SPAWN", "KILL",
-];
-
-/// Token types produced by the syntax highlighter.
-#[derive(Clone, Copy, PartialEq)]
-enum SynTok {
-    Opcode,
-    Register,
-    Number,
-    Label,
-    Comment,
-    Default,
-}
-
-/// A single token with its start column and length.
-struct SynSpan {
-    kind: SynTok,
-    start: usize,
-    len: usize,
-}
-
-/// Parse a line of assembly text into syntax spans for highlighting.
-/// Returns spans covering the line -- characters not in any span get SYN_DEFAULT.
-fn parse_syntax_line(line: &str) -> Vec<SynSpan> {
-    let mut spans: Vec<SynSpan> = Vec::new();
-    let trimmed = line.trim();
-
-    if trimmed.is_empty() {
-        return spans;
-    }
-
-    // Check if entire line (after trim) is a comment
-    if trimmed.starts_with(';') {
-        spans.push(SynSpan { kind: SynTok::Comment, start: 0, len: line.len() });
-        return spans;
-    }
-
-    // Check for label definition: word followed by ':'
-    // The assembler does label.find(':') before stripping comments, so
-    // we need to handle "label: instruction ; comment" style lines.
-    let first_start = line.len() - trimmed.len();
-    let mut pos = first_start;
-
-    // Check if line starts with a label (identifier followed by ':')
-    if let Some(colon_pos) = line[pos..].find(':') {
-        let label_end = pos + colon_pos;
-        // Make sure it's not inside a comment
-        if line[pos..label_end].chars().all(|c| c.is_alphanumeric() || c == '_') {
-            spans.push(SynSpan { kind: SynTok::Label, start: pos, len: colon_pos });
-            pos = label_end + 1; // skip the colon
-            // skip whitespace after colon
-            while pos < line.len() && line.as_bytes()[pos] == b' ' {
-                pos += 1;
-            }
-        }
-    }
-
-    // Now parse instruction tokens from current position
-    // First check for inline comment
-    let comment_start = line[pos..].find(';').map(|i| pos + i);
-    let code_end = comment_start.unwrap_or(line.len());
-
-    // Extract the code portion (without comment)
-    let code = &line[pos..code_end];
-    let code_offset = pos; // offset of code start from line start
-
-    if code.is_empty() {
-        // Only whitespace before comment
-        if let Some(cs) = comment_start {
-            spans.push(SynSpan { kind: SynTok::Comment, start: cs, len: line.len() - cs });
-        }
-        return spans;
-    }
-
-    // Tokenize the code portion by splitting on commas and whitespace
-    let mut token_pos = 0;
-    let mut is_first_token = true;
-    let tokens_str: Vec<&str> = code.split(|c: char| c == ',' || c == ' ' || c == '\t')
-        .filter(|s| !s.is_empty())
-        .collect();
-
-    for token in &tokens_str {
-        // Find the actual position of this token in the code string
-        let actual_start = code[token_pos..].find(*token).unwrap_or(token_pos);
-        let abs_start = code_offset + actual_start;
-
-        // Determine token type
-        if is_first_token {
-            // First token: check if it's an opcode
-            let upper: String = token.chars().map(|c| c.to_ascii_uppercase()).collect();
-            if OPCODES.contains(&upper.as_str()) {
-                spans.push(SynSpan { kind: SynTok::Opcode, start: abs_start, len: token.len() });
-            } else {
-                spans.push(SynSpan { kind: SynTok::Default, start: abs_start, len: token.len() });
-            }
-            is_first_token = false;
-        } else {
-            // Subsequent tokens: register, number, or label reference
-            if token.starts_with('r') || token.starts_with('R') {
-                // Could be a register: r0-r31
-                let reg_part = &token[1..];
-                if reg_part.parse::<u32>().is_ok() {
-                    spans.push(SynSpan { kind: SynTok::Register, start: abs_start, len: token.len() });
-                    token_pos = actual_start + token.len();
-                    continue;
-                }
-            }
-            // Check if it's a number (decimal, hex 0x, binary 0b)
-            let is_number = token.chars().next().map_or(false, |c| c.is_ascii_digit())
-                || token.starts_with("0x") || token.starts_with("0X")
-                || token.starts_with("0b") || token.starts_with("0B")
-                || (token.starts_with('-') && token.len() > 1 && token[1..].chars().next().map_or(false, |c| c.is_ascii_digit()));
-            if is_number {
-                spans.push(SynSpan { kind: SynTok::Number, start: abs_start, len: token.len() });
-            } else {
-                // Label reference (e.g. JMP loop)
-                spans.push(SynSpan { kind: SynTok::Label, start: abs_start, len: token.len() });
-            }
-        }
-
-        token_pos = actual_start + token.len();
-    }
-
-    // Add comment span
-    if let Some(cs) = comment_start {
-        spans.push(SynSpan { kind: SynTok::Comment, start: cs, len: line.len() - cs });
-    }
-
-    spans
-}
-
 /// Get the syntax highlighting color for a character at (row, col) in the canvas.
 fn syntax_highlight_color(canvas_buffer: &[u32], row: usize, col: usize) -> u32 {
     // Extract the full line as a string
@@ -2968,19 +2844,19 @@ fn syntax_highlight_color(canvas_buffer: &[u32], row: usize, col: usize) -> u32 
         return SYN_DEFAULT;
     };
 
-    // Parse the line into syntax spans
-    let spans = parse_syntax_line(line);
+    // Parse the line into syntax spans using the preprocessor's logic
+    let spans = preprocessor::parse_syntax_line(line);
 
     // Find which span contains this column
     for span in &spans {
         if col_in_trimmed >= span.start && col_in_trimmed < span.start + span.len {
             return match span.kind {
-                SynTok::Opcode => SYN_OPCODE,
-                SynTok::Register => SYN_REGISTER,
-                SynTok::Number => SYN_NUMBER,
-                SynTok::Label => SYN_LABEL,
-                SynTok::Comment => SYN_COMMENT,
-                SynTok::Default => SYN_DEFAULT,
+                preprocessor::SynTok::Opcode => SYN_OPCODE,
+                preprocessor::SynTok::Register => SYN_REGISTER,
+                preprocessor::SynTok::Number => SYN_NUMBER,
+                preprocessor::SynTok::Label => SYN_LABEL,
+                preprocessor::SynTok::Comment => SYN_COMMENT,
+                preprocessor::SynTok::Default => SYN_DEFAULT,
             };
         }
     }

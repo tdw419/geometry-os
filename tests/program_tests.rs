@@ -1766,3 +1766,84 @@ fn test_spawn_assembles() {
     // HALT
     assert_eq!(asm.pixels[4], 0x00);
 }
+
+// === Window Manager (SPAWN + shared RAM bounds protocol) ===
+
+/// Helper: assemble, load, and run with child processes stepping in lock-step.
+/// Runs for `frames` FRAME opcodes (simulates the display loop).
+fn compile_run_multiproc(asm_path: &str, frames: usize) -> Vm {
+    let source = std::fs::read_to_string(asm_path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", asm_path, e));
+    let asm = assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("assembly failed for {}: {}", asm_path, e));
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = v; }
+    }
+    let mut frame_count = 0;
+    for _ in 0..50_000_000 {
+        if vm.halted { break; }
+        if !vm.step() { break; }
+        vm.step_all_processes();
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frame_count += 1;
+            if frame_count >= frames { break; }
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_window_manager_assembles() {
+    let source = std::fs::read_to_string("programs/window_manager.asm")
+        .expect("window_manager.asm should exist");
+    assemble(&source, 0).expect("window_manager.asm should assemble cleanly");
+}
+
+#[test]
+fn test_window_manager_spawns_child() {
+    // Run for 3 frames: primary should have spawned a child and written bounds
+    let vm = compile_run_multiproc("programs/window_manager.asm", 3);
+    // Child should be alive
+    assert!(!vm.processes.is_empty(), "primary should have spawned a child process");
+    assert!(!vm.processes[0].halted, "child should still be running");
+    // Bounds protocol: RAM[0xF00..0xF03] should be populated
+    assert_ne!(vm.ram[0xF02], 0, "win_w should be non-zero");
+    assert_ne!(vm.ram[0xF03], 0, "win_h should be non-zero");
+}
+
+#[test]
+fn test_window_manager_draws_border() {
+    // Run for 5 frames and check that green border pixels exist
+    let vm = compile_run_multiproc("programs/window_manager.asm", 5);
+    let green = 0x00FF00u32;
+    let green_count = vm.screen.iter().filter(|&&p| p == green).count();
+    assert!(green_count > 0, "window border (green pixels) should be visible");
+}
+
+#[test]
+fn test_window_manager_ball_inside_window() {
+    // Run for 10 frames; the child's red ball should be inside the window bounds
+    let vm = compile_run_multiproc("programs/window_manager.asm", 10);
+    let win_x = vm.ram[0xF00] as usize;
+    let win_y = vm.ram[0xF01] as usize;
+    let win_w = vm.ram[0xF02] as usize;
+    let win_h = vm.ram[0xF03] as usize;
+    // Find any red-ish pixel on screen
+    let ball_color = 0xFF4444u32;
+    let screen = &vm.screen;
+    let ball_pixels: Vec<(usize, usize)> = (0..256usize)
+        .flat_map(|y| (0..256usize).filter_map(move |x| {
+            if screen[y * 256 + x] == ball_color { Some((x, y)) } else { None }
+        }))
+        .collect();
+    assert!(!ball_pixels.is_empty(), "red ball should be visible on screen");
+    // All ball pixels must be inside the window
+    for (x, y) in &ball_pixels {
+        assert!(*x >= win_x && *x < win_x + win_w,
+            "ball pixel x={} outside window x={}..{}", x, win_x, win_x + win_w);
+        assert!(*y >= win_y && *y < win_y + win_h,
+            "ball pixel y={} outside window y={}..{}", y, win_y, win_y + win_h);
+    }
+}

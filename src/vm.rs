@@ -481,6 +481,13 @@ impl Vm {
                 }
             }
 
+            // MOV rd, rs -- rd = rs (register copy)
+            0x51 => {
+                let rd = self.fetch() as usize % NUM_REGS;
+                let rs = self.fetch() as usize % NUM_REGS;
+                self.regs[rd] = self.regs[rs];
+            }
+
             // SPRITE x_reg, y_reg, addr_reg, w_reg, h_reg -- blit NxM pixels from RAM to screen
             // Color 0 in RAM means transparent (skip pixel)
             0x4A => {
@@ -889,6 +896,7 @@ impl Vm {
                 (format!("KILL {}", reg(pr)), 2)
             }
             0x50 => { let rd = ram(a+1); let rs = ram(a+2); (format!("CMP {}, {}", reg(rd), reg(rs)), 3) }
+            0x51 => { let rd = ram(a+1); let rs = ram(a+2); (format!("MOV {}, {}", reg(rd), reg(rs)), 3) }
 
             0x60 => { let r = ram(a+1); (format!("PUSH {}", reg(r)), 2) }
             0x61 => { let r = ram(a+1); (format!("POP {}", reg(r)), 2) }

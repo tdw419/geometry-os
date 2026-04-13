@@ -61,6 +61,11 @@ pub fn assemble(source: &str, base_addr: usize) -> Result<AsmResult, AsmError> {
             continue;
         }
 
+        // Strip inline comment before any further processing so that colons
+        // inside comments are not misidentified as label delimiters.
+        let line = if let Some(c) = line.find(';') { line[..c].trim() } else { line };
+        if line.is_empty() { continue; }
+
         // .org addr -- advance bytecode position (pad with zeros)
         if line.to_lowercase().starts_with(".org") {
             let tokens: Vec<&str> = line.split_whitespace().collect();
@@ -167,7 +172,14 @@ fn parse_instruction(
             }
             bytecode.push(0x10);
             bytecode.push(parse_reg(tokens[1])? as u32);
-            bytecode.push(parse_imm(tokens[2], constants)?);
+            let pos = bytecode.len();
+            if let Ok(imm) = parse_imm(tokens[2], constants) {
+                bytecode.push(imm);
+            } else {
+                // Label reference (e.g. LDI r6, my_label)
+                bytecode.push(0); // placeholder
+                label_refs.push((pos, tokens[2].to_lowercase(), line_num));
+            }
         }
 
         "LOAD" => {
@@ -184,6 +196,15 @@ fn parse_instruction(
                 return Err(format!("STORE requires 2 arguments: STORE addr_reg, reg"));
             }
             bytecode.push(0x12);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
+        "MOV" => {
+            if tokens.len() < 3 {
+                return Err(format!("MOV requires 2 arguments: MOV rd, rs"));
+            }
+            bytecode.push(0x51);
             bytecode.push(parse_reg(tokens[1])? as u32);
             bytecode.push(parse_reg(tokens[2])? as u32);
         }

@@ -28,7 +28,7 @@
 loop:
   ; erase old pixel
   LDI r6, 0
-  PIXEL r1, r2, r6
+  PSET r1, r2, r6
 
   ; move
   ADD r1, r3
@@ -59,7 +59,7 @@ chk_bw:
   LDI r4, -1
 
 draw:
-  PIXEL r1, r2, r5
+  PSET r1, r2, r5
   FRAME
   JMP loop
 
@@ -75,7 +75,7 @@ red_proc:
 red_loop:
   ; erase
   LDI r6, 0
-  PIXEL r1, r2, r6
+  PSET r1, r2, r6
 
   ; move
   ADD r1, r3
@@ -105,6 +105,6 @@ red_chk_bw:
   JNZ r6, red_draw
   LDI r4, -1
 red_draw:
-  PIXEL r1, r2, r5
+  PSET r1, r2, r5
   ; No FRAME here — the primary process drives frame sync
   JMP red_loop
