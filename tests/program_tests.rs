@@ -938,22 +938,27 @@ fn test_sprite_opcode() {
     vm.pc = 0;
     vm.halted = false;
 
+    // Run until first FRAME (game loop programs never halt)
     for _ in 0..10_000_000 {
-        if !vm.step() {
-            break;
-        }
+        if !vm.step() { break; }
+        if vm.frame_ready { break; }
     }
-    assert!(vm.halted, "VM should halt");
 
-    // sprite_demo.asm draws a 4x3 red sprite at (10, 10)
-    // Pixel (10, 10) should be red
-    assert_eq!(vm.screen[10 * 256 + 10], 0xFF0000, "(10,10) should be red");
-    // Pixel (11, 10) should be red
-    assert_eq!(vm.screen[10 * 256 + 11], 0xFF0000, "(11,10) should be red");
-    // Pixel (13, 12) should be red
-    assert_eq!(vm.screen[12 * 256 + 13], 0xFF0000, "(13,12) should be red");
-    // Transparent pixel at (0, 0) should remain 0
-    assert_eq!(vm.screen[0], 0, "(0,0) should remain 0");
+    // Sprite data should be written to RAM at 0x3000
+    // Eye pixels patched at offset 9 (index 1,1) and 14 (index 6,1)
+    assert_eq!(vm.ram[0x3009], 0x00AAFF, "eye pixel at RAM[0x3009] should be 0x00AAFF");
+    assert_eq!(vm.ram[0x300E], 0x00AAFF, "eye pixel at RAM[0x300E] should be 0x00AAFF");
+    // Shirt rows (offsets 32-47 = 0x3020..0x302F) should be shirt blue
+    assert_eq!(vm.ram[0x3020], 0x3355AA, "shirt pixel at RAM[0x3020] should be 0x3355AA");
+    // Corner transparent pixels should remain 0
+    assert_eq!(vm.ram[0x3000], 0, "top-left corner of sprite should be transparent");
+    assert_eq!(vm.ram[0x3007], 0, "top-right corner of sprite should be transparent");
+    // Screen should have been rendered (player starts at 124,100 — some pixel nearby is non-zero)
+    let player_x = 124usize;
+    let player_y = 100usize;
+    let row_has_pixels = (player_x..player_x + 8)
+        .any(|x| vm.screen[player_y * 256 + x] != 0);
+    assert!(row_has_pixels, "screen should have sprite pixels at player start position");
 }
 
 #[test]

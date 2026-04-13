@@ -36,6 +36,7 @@ const REGS_Y: usize = 340;
 // ── Memory map ───────────────────────────────────────────────────
 // 0x000-0x3FF   Canvas grid (source text, 1024 cells visible on 32x32 grid)
 // 0x1000-0x1FFF Assembled bytecode output (F8 writes here)
+// 0xFFD         ASM result port (bytecode word count on success, 0xFFFFFFFF on error)
 // 0xFFE         TICKS port (frame counter, incremented each FRAME opcode, read-only)
 // 0xFFF         Keyboard port (memory-mapped I/O)
 const CANVAS_BYTECODE_ADDR: usize = 0x1000;
@@ -574,8 +575,8 @@ fn cli_main(extra_args: &[String]) {
         }
     }
 
-    println!("Geometry OS v0.3.0 CLI");
-    println!("32 opcodes | 32 regs | 256x256");
+    println!("Geometry OS v1.0.0 CLI");
+    println!("40 opcodes | 32 regs | 256x256");
     println!("Type 'help' for commands.");
     println!();
 
@@ -1546,8 +1547,8 @@ fn main() {
 
     // Boot: write welcome banner + first prompt into canvas
     {
-        term_output_row = write_line_to_canvas(&mut canvas_buffer, 0, "Geometry OS v0.3.0");
-        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "32 opcodes | 32 regs | 256x256");
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, 0, "Geometry OS v1.0.0");
+        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "40 opcodes | 32 regs | 256x256");
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "Type 'help' for commands.");
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "");
         term_prompt_row = term_output_row;
