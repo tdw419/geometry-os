@@ -5,7 +5,7 @@
 // jumps, branches, load/store, FENCE, ECALL, EBREAK.
 // See docs/RISCV_HYPERVISOR.md §CPU State.
 
-use super::decode::{self, Instruction};
+use super::decode::{self, Operation};
 use super::memory::GuestMemory;
 
 /// Privilege level.
@@ -72,7 +72,11 @@ impl RiscvCpu {
 
     /// Read register rs (x[0] always returns 0).
     fn get_reg(&self, rs: u8) -> u32 {
-        if rs == 0 { 0 } else { self.x[rs as usize] }
+        if rs == 0 {
+            0
+        } else {
+            self.x[rs as usize]
+        }
     }
 
     /// Fetch, decode, and execute one instruction.
@@ -82,34 +86,34 @@ impl RiscvCpu {
             Ok(w) => w,
             Err(_) => return StepResult::FetchFault,
         };
-        let instr = decode::decode(word);
-        self.execute(instr, mem)
+        let op = decode::decode(word);
+        self.execute(op, mem)
     }
 
-    /// Execute a decoded instruction. Handles PC advancement internally.
-    fn execute(&mut self, instr: Instruction, mem: &mut GuestMemory) -> StepResult {
+    /// Execute a decoded operation. Handles PC advancement internally.
+    fn execute(&mut self, op: Operation, mem: &mut GuestMemory) -> StepResult {
         let next_pc = self.pc.wrapping_add(4);
 
-        match instr {
+        match op {
             // ---- Upper immediate ----
-            Instruction::Lui { rd, imm } => {
+            Operation::Lui { rd, imm } => {
                 self.set_reg(rd, imm);
                 self.pc = next_pc;
                 StepResult::Ok
             }
-            Instruction::Auipc { rd, imm } => {
+            Operation::Auipc { rd, imm } => {
                 self.set_reg(rd, self.pc.wrapping_add(imm));
                 self.pc = next_pc;
                 StepResult::Ok
             }
 
             // ---- Jumps ----
-            Instruction::Jal { rd, imm } => {
+            Operation::Jal { rd, imm } => {
                 self.set_reg(rd, next_pc);
                 self.pc = (self.pc as i64 + imm as i64) as u32;
                 StepResult::Ok
             }
-            Instruction::Jalr { rd, rs1, imm } => {
+            Operation::Jalr { rd, rs1, imm } => {
                 let target = (self.get_reg(rs1) as i64 + imm as i64) as u32 & !1u32;
                 self.set_reg(rd, next_pc);
                 self.pc = target;
@@ -117,167 +121,275 @@ impl RiscvCpu {
             }
 
             // ---- Branches ----
-            Instruction::Branch { rs1, rs2, imm, funct3 } => {
-                let v1 = self.get_reg(rs1);
-                let v2 = self.get_reg(rs2);
-                let taken = match funct3 {
-                    0b000 => v1 == v2,                    // BEQ
-                    0b001 => v1 != v2,                    // BNE
-                    0b100 => (v1 as i32) < (v2 as i32),   // BLT
-                    0b101 => (v1 as i32) >= (v2 as i32),  // BGE
-                    0b110 => v1 < v2,                     // BLTU
-                    0b111 => v1 >= v2,                    // BGEU
-                    _ => false,
-                };
-                if taken {
-                    self.pc = (self.pc as i64 + imm as i64) as u32;
-                } else {
-                    self.pc = next_pc;
-                }
-                StepResult::Ok
+            Operation::Beq { rs1, rs2, imm } => {
+                self.exec_branch(rs1, rs2, |a, b| a == b, imm, next_pc)
+            }
+            Operation::Bne { rs1, rs2, imm } => {
+                self.exec_branch(rs1, rs2, |a, b| a != b, imm, next_pc)
+            }
+            Operation::Blt { rs1, rs2, imm } => {
+                self.exec_branch(rs1, rs2, |a, b| (a as i32) < (b as i32), imm, next_pc)
+            }
+            Operation::Bge { rs1, rs2, imm } => {
+                self.exec_branch(rs1, rs2, |a, b| (a as i32) >= (b as i32), imm, next_pc)
+            }
+            Operation::Bltu { rs1, rs2, imm } => {
+                self.exec_branch(rs1, rs2, |a, b| a < b, imm, next_pc)
+            }
+            Operation::Bgeu { rs1, rs2, imm } => {
+                self.exec_branch(rs1, rs2, |a, b| a >= b, imm, next_pc)
             }
 
             // ---- Loads ----
-            Instruction::Load { rd, rs1, imm, funct3 } => {
-                let addr = (self.get_reg(rs1) as i64 + imm as i64) as u64;
-                let val = match funct3 {
-                    0b000 => {
-                        match mem.read_byte(addr) {
-                            Ok(b) => sign_extend_byte(b) as u32,
-                            Err(_) => return StepResult::LoadFault,
-                        }
-                    } // LB
-                    0b001 => {
-                        match mem.read_half(addr) {
-                            Ok(h) => sign_extend_half(h) as u32,
-                            Err(_) => return StepResult::LoadFault,
-                        }
-                    } // LH
-                    0b010 => {
-                        match mem.read_word(addr) {
-                            Ok(w) => w,
-                            Err(_) => return StepResult::LoadFault,
-                        }
-                    } // LW
-                    0b100 => {
-                        match mem.read_byte(addr) {
-                            Ok(b) => b as u32,
-                            Err(_) => return StepResult::LoadFault,
-                        }
-                    } // LBU
-                    0b101 => {
-                        match mem.read_half(addr) {
-                            Ok(h) => h as u32,
-                            Err(_) => return StepResult::LoadFault,
-                        }
-                    } // LHU
-                    _ => 0,
-                };
-                self.set_reg(rd, val);
-                self.pc = next_pc;
-                StepResult::Ok
+            Operation::Lb { rd, rs1, imm } => {
+                let addr = self.ea(rs1, imm);
+                match mem.read_byte(addr) {
+                    Ok(b) => {
+                        self.set_reg(rd, sign_extend_byte(b) as u32);
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => StepResult::LoadFault,
+                }
+            }
+            Operation::Lh { rd, rs1, imm } => {
+                let addr = self.ea(rs1, imm);
+                match mem.read_half(addr) {
+                    Ok(h) => {
+                        self.set_reg(rd, sign_extend_half(h) as u32);
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => StepResult::LoadFault,
+                }
+            }
+            Operation::Lw { rd, rs1, imm } => {
+                let addr = self.ea(rs1, imm);
+                match mem.read_word(addr) {
+                    Ok(w) => {
+                        self.set_reg(rd, w);
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => StepResult::LoadFault,
+                }
+            }
+            Operation::Lbu { rd, rs1, imm } => {
+                let addr = self.ea(rs1, imm);
+                match mem.read_byte(addr) {
+                    Ok(b) => {
+                        self.set_reg(rd, b as u32);
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => StepResult::LoadFault,
+                }
+            }
+            Operation::Lhu { rd, rs1, imm } => {
+                let addr = self.ea(rs1, imm);
+                match mem.read_half(addr) {
+                    Ok(h) => {
+                        self.set_reg(rd, h as u32);
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => StepResult::LoadFault,
+                }
             }
 
             // ---- Stores ----
-            Instruction::Store { rs1, rs2, imm, funct3 } => {
-                let addr = (self.get_reg(rs1) as i64 + imm as i64) as u64;
+            Operation::Sb { rs1, rs2, imm } => {
+                let addr = self.ea(rs1, imm);
                 let val = self.get_reg(rs2);
-                let result = match funct3 {
-                    0b000 => mem.write_byte(addr, val as u8),   // SB
-                    0b001 => mem.write_half(addr, val as u16),  // SH
-                    0b010 => mem.write_word(addr, val),         // SW
-                    _ => Ok(()),
-                };
-                if result.is_err() {
-                    return StepResult::StoreFault;
+                match mem.write_byte(addr, val as u8) {
+                    Ok(()) => {
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => StepResult::StoreFault,
                 }
-                self.pc = next_pc;
-                StepResult::Ok
+            }
+            Operation::Sh { rs1, rs2, imm } => {
+                let addr = self.ea(rs1, imm);
+                let val = self.get_reg(rs2);
+                match mem.write_half(addr, val as u16) {
+                    Ok(()) => {
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => StepResult::StoreFault,
+                }
+            }
+            Operation::Sw { rs1, rs2, imm } => {
+                let addr = self.ea(rs1, imm);
+                let val = self.get_reg(rs2);
+                match mem.write_word(addr, val) {
+                    Ok(()) => {
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => StepResult::StoreFault,
+                }
             }
 
             // ---- R-type ALU ----
-            Instruction::RAlu { rd, rs1, rs2, funct3, funct7 } => {
-                let v1 = self.get_reg(rs1);
-                let v2 = self.get_reg(rs2);
-                let result = match (funct3, funct7) {
-                    (0b000, 0b0000000) => v1.wrapping_add(v2),  // ADD
-                    (0b000, 0b0100000) => v1.wrapping_sub(v2),  // SUB
-                    (0b001, _) => v1 << (v2 & 0x1F),           // SLL
-                    (0b010, _) => {
-                        if (v1 as i32) < (v2 as i32) { 1 } else { 0 }
-                    } // SLT
-                    (0b011, _) => if v1 < v2 { 1 } else { 0 }, // SLTU
-                    (0b100, _) => v1 ^ v2,                     // XOR
-                    (0b101, 0b0000000) => v1 >> (v2 & 0x1F),   // SRL
-                    (0b101, 0b0100000) => {
-                        ((v1 as i32) >> (v2 & 0x1F)) as u32    // SRA
-                    }
-                    (0b110, _) => v1 | v2,                     // OR
-                    (0b111, _) => v1 & v2,                     // AND
-                    _ => 0,
-                };
-                self.set_reg(rd, result);
+            Operation::Add { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| a.wrapping_add(b));
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Sub { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| a.wrapping_sub(b));
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Sll { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| a << (b & 0x1F));
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Slt { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| if (a as i32) < (b as i32) { 1 } else { 0 });
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Sltu { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| if a < b { 1 } else { 0 });
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Xor { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| a ^ b);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Srl { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| a >> (b & 0x1F));
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Sra { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| ((a as i32) >> (b & 0x1F)) as u32);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Or { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| a | b);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::And { rd, rs1, rs2 } => {
+                self.alu_r(rd, rs1, rs2, |a, b| a & b);
                 self.pc = next_pc;
                 StepResult::Ok
             }
 
             // ---- I-type ALU ----
-            Instruction::IAlu { rd, rs1, imm, funct3 } => {
+            Operation::Addi { rd, rs1, imm } => {
                 let v1 = self.get_reg(rs1);
-                let shamt = (imm as u32) & 0x1F;
-                let result = match funct3 {
-                    0b000 => v1.wrapping_add(imm as u32),       // ADDI
-                    0b010 => {
-                        if (v1 as i32) < imm { 1 } else { 0 }
-                    } // SLTI
-                    0b011 => {
-                        if v1 < (imm as u32) { 1 } else { 0 }
-                    } // SLTIU
-                    0b100 => v1 ^ (imm as u32),                 // XORI
-                    0b110 => v1 | (imm as u32),                 // ORI
-                    0b111 => v1 & (imm as u32),                 // ANDI
-                    0b001 => v1 << shamt,                       // SLLI
-                    0b101 => {
-                        let funct7 = ((imm as u32) >> 5) & 0x7F;
-                        if funct7 == 0 {
-                            v1 >> shamt                         // SRLI
-                        } else {
-                            ((v1 as i32) >> shamt) as u32      // SRAI
-                        }
-                    }
-                    _ => 0,
-                };
-                self.set_reg(rd, result);
+                self.set_reg(rd, v1.wrapping_add(imm as u32));
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Slti { rd, rs1, imm } => {
+                let v1 = self.get_reg(rs1);
+                self.set_reg(rd, if (v1 as i32) < imm { 1 } else { 0 });
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Sltiu { rd, rs1, imm } => {
+                let v1 = self.get_reg(rs1);
+                self.set_reg(rd, if v1 < (imm as u32) { 1 } else { 0 });
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Xori { rd, rs1, imm } => {
+                let v1 = self.get_reg(rs1);
+                self.set_reg(rd, v1 ^ (imm as u32));
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Ori { rd, rs1, imm } => {
+                let v1 = self.get_reg(rs1);
+                self.set_reg(rd, v1 | (imm as u32));
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Andi { rd, rs1, imm } => {
+                let v1 = self.get_reg(rs1);
+                self.set_reg(rd, v1 & (imm as u32));
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Slli { rd, rs1, shamt } => {
+                let v1 = self.get_reg(rs1);
+                self.set_reg(rd, v1 << shamt);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Srli { rd, rs1, shamt } => {
+                let v1 = self.get_reg(rs1);
+                self.set_reg(rd, v1 >> shamt);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Srai { rd, rs1, shamt } => {
+                let v1 = self.get_reg(rs1);
+                self.set_reg(rd, ((v1 as i32) >> shamt) as u32);
                 self.pc = next_pc;
                 StepResult::Ok
             }
 
-            // ---- Misc ----
-            Instruction::Fence => {
+            // ---- System ----
+            Operation::Ecall => {
+                self.pc = next_pc;
+                StepResult::Ecall
+            }
+            Operation::Ebreak => {
+                self.pc = next_pc;
+                StepResult::Ebreak
+            }
+            Operation::Fence => {
                 self.pc = next_pc;
                 StepResult::Ok
             }
-            Instruction::System { funct12, rs1: _, rd: _, funct3 } => {
-                match (funct3, funct12) {
-                    (0b000, 0x000) => {
-                        self.pc = next_pc;
-                        StepResult::Ecall
-                    }
-                    (0b000, 0x001) => {
-                        self.pc = next_pc;
-                        StepResult::Ebreak
-                    }
-                    _ => {
-                        self.pc = next_pc;
-                        StepResult::Ok // CSR ops: NOP for Phase 35
-                    }
-                }
-            }
-            Instruction::Invalid(_) => {
+
+            // ---- Invalid ----
+            Operation::Invalid(_) => {
                 self.pc = next_pc;
                 StepResult::Ok
             }
         }
+    }
+
+    /// Branch helper.
+    fn exec_branch<F>(&mut self, rs1: u8, rs2: u8, cond: F, imm: i32, next_pc: u32) -> StepResult
+    where
+        F: Fn(u32, u32) -> bool,
+    {
+        let v1 = self.get_reg(rs1);
+        let v2 = self.get_reg(rs2);
+        if cond(v1, v2) {
+            self.pc = (self.pc as i64 + imm as i64) as u32;
+        } else {
+            self.pc = next_pc;
+        }
+        StepResult::Ok
+    }
+
+    /// R-type ALU helper.
+    fn alu_r<F>(&mut self, rd: u8, rs1: u8, rs2: u8, op: F)
+    where
+        F: Fn(u32, u32) -> u32,
+    {
+        let v1 = self.get_reg(rs1);
+        let v2 = self.get_reg(rs2);
+        self.set_reg(rd, op(v1, v2));
+    }
+
+    /// Compute effective address: rs1 + imm.
+    fn ea(&self, rs1: u8, imm: i32) -> u64 {
+        (self.get_reg(rs1) as i64 + imm as i64) as u64
     }
 }
 
@@ -306,9 +418,9 @@ mod tests {
         let cpu = RiscvCpu::new();
         assert_eq!(cpu.pc, 0x8000_0000);
         assert_eq!(cpu.privilege, Privilege::Machine);
-        assert_eq!(cpu.x[0], 0); // x0 always 0
-        assert_eq!(cpu.x[10], 0); // a0
-        assert_eq!(cpu.x[11], 0); // a1
+        assert_eq!(cpu.x[0], 0);
+        assert_eq!(cpu.x[10], 0);
+        assert_eq!(cpu.x[11], 0);
     }
 
     #[test]
@@ -334,7 +446,7 @@ mod tests {
     #[test]
     fn fetch_fault_on_bad_pc() {
         let mut cpu = RiscvCpu::new();
-        cpu.pc = 0x0000_0000; // below ram_base
+        cpu.pc = 0x0000_0000;
         let mut mem = GuestMemory::new(0x8000_0000, 4096);
         assert_eq!(cpu.step(&mut mem), StepResult::FetchFault);
     }
@@ -342,13 +454,148 @@ mod tests {
     #[test]
     fn step_lui() {
         let mut mem = GuestMemory::new(0x8000_0000, 4096);
-        // LUI x5, 0x12345000 => opcode 0x37
-        let word = 0x1234_52B7; // LUI x5, 0x12345000
+        let word = 0x1234_52B7;
         mem.write_word(0x8000_0000, word).unwrap();
         let mut cpu = RiscvCpu::new();
         let result = cpu.step(&mut mem);
         assert_eq!(result, StepResult::Ok);
         assert_eq!(cpu.x[5], 0x1234_5000);
         assert_eq!(cpu.pc, 0x8000_0004);
+    }
+
+    // ---- R-type execution ----
+
+    #[test]
+    fn step_add() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 10;
+        cpu.x[3] = 20;
+        // ADD x1, x2, x3
+        let word = (0u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
+        mem.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        assert_eq!(cpu.x[1], 30);
+    }
+
+    #[test]
+    fn step_sub() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 30;
+        cpu.x[3] = 10;
+        // SUB x1, x2, x3
+        let word = (0b0100000u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
+        mem.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        assert_eq!(cpu.x[1], 20);
+    }
+
+    #[test]
+    fn step_addi() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 100;
+        // ADDI x1, x2, 42
+        let word = (42u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x13;
+        mem.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        assert_eq!(cpu.x[1], 142);
+    }
+
+    #[test]
+    fn step_jal() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        // JAL x1, +8
+        let word = (0u32 << 31) | (4u32 << 21) | (0u32 << 20) | (0u32 << 12) | (1u32 << 7) | 0x6F;
+        mem.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0x8000_0004);
+        assert_eq!(cpu.pc, 0x8000_0008);
+    }
+
+    #[test]
+    fn step_ecall() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        mem.write_word(0x8000_0000, 0x00000073).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ecall);
+        assert_eq!(cpu.pc, 0x8000_0004);
+    }
+
+    #[test]
+    fn step_ebreak() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        mem.write_word(0x8000_0000, 0x00100073).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ebreak);
+        assert_eq!(cpu.pc, 0x8000_0004);
+    }
+
+    #[test]
+    fn step_lw_sw() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 0xDEAD_BEEF;
+        // SW x3, 0(x2)
+        let sw = (0u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b010 << 12) | (0u32 << 7) | 0x23;
+        mem.write_word(0x8000_0000, sw).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        // LW x1, 0(x2)
+        let lw = (0u32 << 20) | (2u32 << 15) | (0b010 << 12) | (1u32 << 7) | 0x03;
+        mem.write_word(0x8000_0004, lw).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xDEAD_BEEF);
+    }
+
+    #[test]
+    fn step_branch_beq_taken() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 42;
+        // BEQ x2, x3, +8
+        let imm: u32 = 8;
+        let bit12 = (imm >> 12) & 1;
+        let bit11 = (imm >> 11) & 1;
+        let bits10_5 = (imm >> 5) & 0x3F;
+        let bits4_1 = (imm >> 1) & 0xF;
+        let word = (bit12 << 31) | (bits10_5 << 25) | (3u32 << 20) | (2u32 << 15)
+            | (0b000 << 12) | (bits4_1 << 8) | (bit11 << 7) | 0x63;
+        mem.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        assert_eq!(cpu.pc, 0x8000_0008);
+    }
+
+    #[test]
+    fn step_branch_bne_not_taken() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 42;
+        // BNE x2, x3, +8 (not taken)
+        let imm: u32 = 8;
+        let bit12 = (imm >> 12) & 1;
+        let bit11 = (imm >> 11) & 1;
+        let bits10_5 = (imm >> 5) & 0x3F;
+        let bits4_1 = (imm >> 1) & 0xF;
+        let word = (bit12 << 31) | (bits10_5 << 25) | (3u32 << 20) | (2u32 << 15)
+            | (0b001 << 12) | (bits4_1 << 8) | (bit11 << 7) | 0x63;
+        mem.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        assert_eq!(cpu.pc, 0x8000_0004);
+    }
+
+    #[test]
+    fn step_auipc() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        // AUIPC x1, 0x1000  -- imm[31:12] = 0x1
+        let word = (0x1u32 << 12) | (1u32 << 7) | 0x17;
+        mem.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0x8000_1000);
     }
 }
