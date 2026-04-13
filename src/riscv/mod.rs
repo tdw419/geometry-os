@@ -1,10 +1,11 @@
-// riscv/mod.rs -- RISC-V hypervisor module (Phase 34 stub)
+// riscv/mod.rs -- RISC-V hypervisor module (Phase 34-35)
 //
 // Pure Rust RISC-V interpreter for Geometry OS.
 // Will eventually boot Linux inside the existing canvas VM.
 // See docs/RISCV_HYPERVISOR.md for full architecture.
 
 pub mod cpu;
+pub mod csr;
 pub mod decode;
 pub mod memory;
 

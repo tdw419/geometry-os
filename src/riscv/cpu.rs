@@ -5,6 +5,7 @@
 // jumps, branches, load/store, FENCE, ECALL, EBREAK.
 // See docs/RISCV_HYPERVISOR.md §CPU State.
 
+use super::csr::CsrBank;
 use super::decode::{self, Operation};
 use super::memory::GuestMemory;
 
@@ -48,6 +49,8 @@ pub struct RiscvCpu {
     pub pc: u32,
     /// Current privilege level.
     pub privilege: Privilege,
+    /// Control and Status Registers.
+    pub csr: CsrBank,
 }
 
 impl RiscvCpu {
@@ -57,6 +60,7 @@ impl RiscvCpu {
             x: [0u32; 32],
             pc: 0x8000_0000,
             privilege: Privilege::Machine,
+            csr: CsrBank::new(),
         };
         cpu.x[10] = 0; // a0 = 0 (no Hart ID)
         cpu.x[11] = 0; // a1 = 0 (no DTB)
