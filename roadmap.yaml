@@ -15,7 +15,7 @@ meta:
   opcodes: 42
   tests: 62
   programs: 28
-  loc: 5193
+  loc: 5207
 
 phases:
   # ===================================================================
@@ -617,6 +617,22 @@ phases:
             met: true
           - description: "PC position highlighted in white"
             met: true
+
+  - id: "phase-21"
+    title: "Spatial Program Coordinator (Native Windowing)"
+    status: "in progress"
+    goal: "Eliminate CPU-side compositor dependency by running multiple autonomous Glyph programs concurrently within the GPU/WGPU substrate."
+    priority: 9
+    deliverables:
+      - name: "Multi-Process VM Scheduler"
+        description: "Modify the core VM to support multiple concurrent execution contexts (window instances) within the same 64K RAM."
+        status: "todo"
+      - name: "SPATIAL_SPAWN Opcode (0xE1 / 225)"
+        description: "Opcode 225: Instantiate a new autonomous region of execution with isolated local coordinates."
+        status: "todo"
+      - name: "Visual Bootstrapping Layout"
+        description: "Implement a 'Window Manager' .glyph program that spawns and coordinates independent apps."
+        status: "todo"
 
 global_risks:
   - "Opcode space: 42 of ~256 slots used, plenty of room, but hex layout has gaps"

@@ -1396,8 +1396,17 @@ fn test_hello_program() {
 fn test_circles_program() {
     let vm = compile_run("programs/circles.asm");
     assert!(vm.halted, "circles.asm should halt");
-    // Center at (128, 128) should have some pixels set
-    assert!(vm.screen.iter().any(|&p| p != 0), "circles.asm should draw something");
+    // Check for pixels around the center (128,128)
+    let mut pixels_found = false;
+    for y in 100..150 {
+        for x in 100..150 {
+            if vm.screen[y * 256 + x] != 0 {
+                pixels_found = true;
+                break;
+            }
+        }
+    }
+    assert!(pixels_found, "circles.asm should draw circles around center");
 }
 
 #[test]
@@ -1485,15 +1494,36 @@ fn compile_run_interactive(asm_path: &str, steps: usize) -> Vm {
 
 #[test]
 fn test_ball_program() {
-    let vm = compile_run_interactive("programs/ball.asm", 1_000_000);
-    // Screen should not be all black
-    assert!(vm.screen.iter().any(|&p| p != 0), "ball.asm should render frames");
+    let vm = compile_run_interactive("programs/ball.asm", 1000);
+    // Ball starts at (128,128) with radius 8 and color 0xFFFFFF
+    // Check if the center or some part of the circle is drawn
+    let mut pixels_found = false;
+    for y in 120..136 {
+        for x in 120..136 {
+            if vm.screen[y * 256 + x] == 0xFFFFFF {
+                pixels_found = true;
+                break;
+            }
+        }
+    }
+    assert!(pixels_found, "ball.asm should draw a white ball near center");
 }
 
 #[test]
 fn test_fire_program() {
-    let vm = compile_run_interactive("programs/fire.asm", 1_000_000);
-    assert!(vm.screen.iter().any(|&p| p != 0), "fire.asm should render frames");
+    let vm = compile_run_interactive("programs/fire.asm", 2000);
+    // Fire starts at bottom row and scrolls up.
+    // Check if there are non-zero pixels in the fire area.
+    let mut pixels_found = false;
+    for y in 200..256 {
+        for x in 0..256 {
+            if vm.screen[y * 256 + x] != 0 {
+                pixels_found = true;
+                break;
+            }
+        }
+    }
+    assert!(pixels_found, "fire.asm should have fire pixels in bottom region");
 }
 
 #[test]

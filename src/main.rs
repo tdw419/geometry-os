@@ -83,12 +83,37 @@ enum Mode {
     Editor,
 }
 
-/// Play a sine-wave tone by generating a PCM WAV and piping it to aplay.
-/// Spawns a detached child process so the VM does not block.
+use std::sync::OnceLock;
+use std::sync::mpsc::{channel, Sender};
+
+static BEEP_SENDER: OnceLock<Sender<Vec<u8>>> = OnceLock::new();
+
+fn get_beep_sender() -> &'static Sender<Vec<u8>> {
+    BEEP_SENDER.get_or_init(|| {
+        let (tx, rx) = channel::<Vec<u8>>();
+        std::thread::spawn(move || {
+            while let Ok(wav) = rx.recv() {
+                if let Ok(mut child) = std::process::Command::new("aplay")
+                    .args(["-q", "-t", "wav", "-"])
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                {
+                    if let Some(mut stdin) = child.stdin.take() {
+                        let _ = std::io::Write::write_all(&mut stdin, &wav);
+                    }
+                    let _ = child.wait();
+                }
+            }
+        });
+        tx
+    })
+}
+
+/// Play a sine-wave tone by generating a PCM WAV and sending it to a worker thread.
 fn play_beep(freq: u32, dur_ms: u32) {
     use std::f32::consts::PI;
-    use std::io::Write as _;
-    use std::process::{Command, Stdio};
 
     const SAMPLE_RATE: u32 = 22050;
     let num_samples = (SAMPLE_RATE * dur_ms / 1000).max(1) as usize;
@@ -120,19 +145,7 @@ fn play_beep(freq: u32, dur_ms: u32) {
         wav.extend_from_slice(&sample.to_le_bytes());
     }
 
-    if let Ok(mut child) = Command::new("aplay")
-        .args(["-q", "-t", "wav", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-    {
-        if let Some(stdin) = child.stdin.take() {
-            let _ = { let mut s = stdin; s.write_all(&wav) };
-        }
-        // detach — don't wait for aplay to finish
-        std::thread::spawn(move || { let _ = child.wait(); });
-    }
+    let _ = get_beep_sender().send(wav);
 }
 
 /// Write a text string into the canvas buffer at the given row.
@@ -1659,11 +1672,11 @@ fn main() {
     let mut ram_view_base: usize = 0x2000;
 
     // Cursor position on canvas (logical coordinates, can exceed visible area)
-    let mut cursor_row: usize = 0;
-    let mut cursor_col: usize = 0;
+    let mut cursor_row: usize;
+    let mut cursor_col: usize;
 
     // Scroll offset: which logical row is at the top of the visible window
-    let mut scroll_offset: usize = 0;
+    let mut scroll_offset: usize;
 
     // Canvas backing buffer (separate from VM RAM to allow > 32 rows
     // without overlapping bytecode at 0x1000)
@@ -1678,9 +1691,9 @@ fn main() {
     // ── Mode state ──────────────────────────────────────────────
     let mut mode = Mode::Terminal;
     // In terminal mode, track which row the prompt is on
-    let mut term_prompt_row: usize = 0;
+    let mut term_prompt_row: usize;
     // The "output row" for terminal -- where next line goes
-    let mut term_output_row: usize = 0;
+    let mut term_output_row: usize;
 
     // Boot: write welcome banner + first prompt into canvas
     {
@@ -1689,7 +1702,7 @@ fn main() {
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "Type 'help' for commands.");
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "");
         term_prompt_row = term_output_row;
-        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "geo> ");
+        let _ = write_line_to_canvas(&mut canvas_buffer, term_output_row, "geo> ");
         // Position cursor after "geo> "
         cursor_row = term_prompt_row;
         cursor_col = 5; // after "geo> "

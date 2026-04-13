@@ -635,6 +635,10 @@ do_left:
   LDI r4, 0x40D1
   STORE r4, r1
 left_ok:
+  ; move sound
+  LDI r5, 440
+  LDI r6, 20
+  BEEP r5, r6
   POP r31
   JMP after_input
 
@@ -656,6 +660,10 @@ do_right:
   LDI r4, 0x40D1
   STORE r4, r1
 right_ok:
+  ; move sound
+  LDI r5, 440
+  LDI r6, 20
+  BEEP r5, r6
   POP r31
   JMP after_input
 
@@ -681,6 +689,10 @@ do_rotate:
   LDI r4, 0x40D3
   STORE r4, r1
 rot_ok:
+  ; rotate sound
+  LDI r5, 660
+  LDI r6, 20
+  BEEP r5, r6
   POP r31
   JMP after_input
 
@@ -692,6 +704,10 @@ do_soft_drop:
 
 do_hard_drop:
   PUSH r31
+  ; hard drop sound (start)
+  LDI r5, 440
+  LDI r6, 50
+  BEEP r5, r6
 hd_loop:
   ; move down until collision
   LDI r4, 0x40D2
@@ -953,6 +969,11 @@ lp_next:
   LDI r6, 4
   CMP r14, r6
   BLT r0, lp_row
+
+  ; lock sound
+  LDI r5, 330
+  LDI r6, 30
+  BEEP r5, r6
 
   RET
 

@@ -217,6 +217,10 @@ update_ball:
   NEG r1
   LDI r4, 0x3023
   STORE r4, r1
+  ; wall bounce sound
+  LDI r5, 330
+  LDI r6, 20
+  BEEP r5, r6
 
 chk_rw:
   ; ── right wall bounce ──
@@ -233,6 +237,10 @@ chk_rw:
   NEG r1
   LDI r4, 0x3023
   STORE r4, r1
+  ; wall bounce sound
+  LDI r5, 330
+  LDI r6, 20
+  BEEP r5, r6
 
 chk_tw:
   ; ── top wall bounce ──
@@ -249,6 +257,10 @@ chk_tw:
   NEG r1
   LDI r4, 0x3024
   STORE r4, r1
+  ; wall bounce sound
+  LDI r5, 330
+  LDI r6, 20
+  BEEP r5, r6
 
 chk_bot:
   ; ── ball lost (fell off bottom) ──

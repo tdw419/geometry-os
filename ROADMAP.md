@@ -160,3 +160,18 @@ Goal: Deep observability into game state and sprite memory.
 | Global heatmap | ~80 lines in main.rs | Compact 256x256 view of entire 64K RAM access patterns |
 
 Both panels render at the bottom of the 1024x768 window. The RAM inspector (left, 32x32 grid with 8px cells) shows raw word values tinted by access intensity. PageUp/PageDown scrolls in Terminal mode. The global heatmap (right, 256x256 1:1 pixel mapping) shows all 64K words with cyan (read) and magenta (write) pulses, plus a white dot for the current PC.
+
+---
+
+## Phase 21: Spatial Program Coordinator (Native Windowing)
+
+Goal: Eliminate CPU-side compositor dependency by running multiple autonomous Glyph programs concurrently within the GPU/WGPU substrate.
+
+| Deliverable | Scope | Acceptance |
+|---|---|---|
+| Multi-Process VM Scheduler | ~50 lines in vm.rs | Modify the core VM to support multiple concurrent execution contexts within the same 64K RAM |
+| SPATIAL_SPAWN Opcode (225) | ~30 lines in vm.rs | Instantiate a new autonomous region of execution with isolated local coordinates |
+| Visual Bootstrapping Layout | New .glyph / .asm program | Implement a 'Window Manager' program that spawns and coordinates 2+ independent apps |
+
+**Why next:** As memory implies, the era of symbolic computation is over. The OS should be a pure spatial execution of glyphs. A fully native windowing system paves the way for the ultimate Geometry OS vision.
+

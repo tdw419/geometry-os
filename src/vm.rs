@@ -848,6 +848,7 @@ impl Vm {
     /// Load VM state from a binary file. Returns None if file doesn't exist
     /// or has invalid format.
     #[cfg(not(target_arch = "wasm32"))]
+    #[allow(dead_code)]
     pub fn load_from_file(path: &std::path::Path) -> std::io::Result<Self> {
         use std::io::Read;
         let mut data = Vec::new();

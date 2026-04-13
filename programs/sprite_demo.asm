@@ -114,35 +114,45 @@ game_loop:
   LDI r9, 220
   LINE r7, r9, r8, r9, r6
 
-  ; read key
-  IKEY r6
+  ; read key bitmask from 0xFFB
+  LDI r6, 0xFFB
+  LOAD r6, r6
 
-  ; A/a: move left
-  LDI r7, 65
-  CMP r6, r7
-  JZ r0, move_left
-  LDI r7, 97
-  CMP r6, r7
-  JZ r0, move_left
+  ; check Left (bit 2: A/Left)
+  LDI r7, 4
+  AND r7, r6
+  JZ r7, check_right
+  LDI r7, 2
+  SUB r1, r7
 
-  ; D/d: move right
-  LDI r7, 68
-  CMP r6, r7
-  JZ r0, move_right
-  LDI r7, 100
-  CMP r6, r7
-  JZ r0, move_right
+check_right:
+  ; check Right (bit 3: D/Right)
+  LDI r7, 8
+  AND r7, r6
+  JZ r7, check_jump
+  LDI r7, 2
+  ADD r1, r7
 
-  ; W/w or Space (32): jump (only if grounded)
-  LDI r7, 87
-  CMP r6, r7
-  JZ r0, try_jump
-  LDI r7, 119
-  CMP r6, r7
-  JZ r0, try_jump
-  LDI r7, 32
-  CMP r6, r7
-  JZ r0, try_jump
+check_jump:
+  ; check Jump (bit 0: W/Up or bit 4: Space)
+  LDI r7, 1
+  LDI r8, 16
+  OR r7, r8            ; r7 = bit 0 | bit 4
+  AND r7, r6
+  JZ r7, after_input
+  ; try jump
+  LDI r7, 0
+  CMP r11, r7
+  JZ r0, after_input   ; not grounded, skip
+  LDI r10, 0
+  LDI r7, 6
+  NEG r7
+  ADD r10, r7          ; vy = -6
+  LDI r11, 0           ; airborne
+  ; Play jump sound
+  LDI r5, 660
+  LDI r6, 80
+  BEEP r5, r6
 
 after_input:
   ; apply gravity: vy += 1, capped at 8
@@ -187,28 +197,3 @@ draw_player:
   SPRITE r1, r2, r3, r4, r5
   FRAME
   JMP game_loop
-
-move_left:
-  LDI r7, 2
-  SUB r1, r7
-  JMP after_input
-
-move_right:
-  LDI r7, 2
-  ADD r1, r7
-  JMP after_input
-
-try_jump:
-  LDI r7, 0
-  CMP r11, r7
-  JZ r0, after_input   ; not grounded, skip
-  LDI r10, 0
-  LDI r7, 6
-  NEG r7
-  ADD r10, r7          ; vy = -6
-  LDI r11, 0           ; airborne
-  ; Play jump sound
-  LDI r5, 660
-  LDI r6, 80
-  BEEP r5, r6
-  JMP after_input
