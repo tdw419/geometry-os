@@ -1109,6 +1109,7 @@ const HERMES_SYSTEM_PROMPT: &str = r#"You are an agent inside the Geometry OS te
 - RECTF xr,yr,wr,hr,cr  Filled rect (0x43)
 - TEXT xr,yr,ar      Render text (0x44)
 - CMP rd, rs         Compare, sets r0 (0x50)
+- PEEK rx,ry,rd      Read screen pixel (0x4F)
 - HALT (0x00), NOP (0x01)
 
 ## Response format

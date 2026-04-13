@@ -581,6 +581,16 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[1])? as u32);
         }
 
+        "PEEK" => {
+            if tokens.len() < 4 {
+                return Err(format!("PEEK requires 3 arguments: PEEK rx, ry, rd"));
+            }
+            bytecode.push(0x4F);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

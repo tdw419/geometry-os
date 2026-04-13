@@ -166,25 +166,6 @@ When you press F8 in TEXT mode (without Ctrl held):
 The key insight: your source text at 0x000-0x3FF stays intact. Bytecode lives
 at 0x1000+. They don't overlap. You can always see what you wrote.
 
-### Multi-Process Assembly (.org and SPAWN)
-
-A single assembly can contain multiple programs using the `.org` directive:
-
-```
-  LDI r0, message
-  SPAWN r0          ; spawn child at label
-  ; ... primary loop ...
-  
-.org 0x400
-message:
-  ; ... child process code ...
-```
-
-The `.org <addr>` directive advances the bytecode emitter to the given address,
-padding with zeros. This lets you lay out a primary process and child processes
-in one file. `LDI rd, <label>` resolves label addresses, so `LDI r0, child`
-loads the child's entry point for use with SPAWN.
-
 ### Ctrl+F8 in TEXT Mode
 
 Holding Ctrl while pressing F8 enters **file input mode**. A prompt appears in the
@@ -343,13 +324,8 @@ Address        Size    Purpose
 0x1000-0x1FFF 4096    Canvas bytecode output
                        F8 preprocesses + assembles grid text here
                        F5 runs VM from here when canvas_assembled=true
-0x400-0xEFF    ~4K     Multi-process bytecode (via .org directive)
-                       e.g. .org 0x400 places a child process starting at 0x400
-0xF00-0xF03    4       Window Bounds Protocol (shared RAM convention)
-                       RAM[0xF00]=win_x, [0xF01]=win_y, [0xF02]=win_w, [0xF03]=win_h
-                       Primary writes; child processes read to clamp their rendering
-0x2000-0xFEFF ~60K     General purpose RAM
-0xFF00-0xFFFF 256      Hardware registers
+0x2000-0xFEFF ~60K    General purpose RAM
+0xFF00-0xFFFF 256     Hardware registers
 ---------------------------------------------------------------
 Total: 65536 (0x10000) u32 cells
 ```
@@ -467,13 +443,6 @@ exactly as if it came from a file.
 
 8. The preprocessor uses r27-r29 as temporaries. Your program should avoid
    relying on these registers persisting across macro calls.
-
-9. **Multi-process programs** use SPAWN (0x4D), KILL (0x4E), and MOV (0x51).
-   Use `.org <addr>` to place child process code at a known address, then
-   `LDI r0, child_label` / `SPAWN r0` to launch it. The spawned process gets
-   its own register file and shares the same RAM. For spatial coordination,
-   the Window Bounds Protocol uses RAM[0xF00..0xF03] (win_x, win_y, win_w, win_h)
-   as a shared convention -- the primary writes bounds, children read and respect them.
 
 ### If you're modifying the codebase:
 

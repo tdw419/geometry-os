@@ -1847,3 +1847,116 @@ fn test_window_manager_ball_inside_window() {
             "ball pixel y={} outside window y={}..{}", y, win_y, win_y + win_h);
     }
 }
+
+#[test]
+fn test_peek_reads_screen_pixel() {
+    // PEEK rx, ry, rd reads screen[rx][ry] into rd
+    // Draw a red pixel at (10, 20), then PEEK it back
+    let source = "
+    LDI r1, 10
+    LDI r2, 20
+    LDI r3, 0xFF0000
+    PSET r1, r2, r3
+    PEEK r1, r2, r4
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // r4 should contain the red pixel color we wrote
+    assert_eq!(vm.regs[4], 0xFF0000, "PEEK should read back the pixel color");
+}
+
+#[test]
+fn test_peek_out_of_bounds_returns_zero() {
+    // PEEK with coordinates >= 256 should return 0
+    let source = "
+    LDI r1, 300
+    LDI r2, 10
+    LDI r3, 0xFF0000
+    PSET r1, r2, r3
+    PEEK r1, r2, r4
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // r4 should be 0 because (300, 10) is out of bounds
+    assert_eq!(vm.regs[4], 0, "PEEK out-of-bounds should return 0");
+}
+
+#[test]
+fn test_peek_collision_detection() {
+    // Draw a wall, then use PEEK to check if the next position is blocked
+    let source = "
+    ; Draw a red wall at y=50 across x=0..255
+    LDI r1, 0
+    LDI r2, 50
+    LDI r3, 0xFF0000
+
+wall_loop:
+    PSET r1, r2, r3
+    ADD r1, r4       ; r4 = 1
+    LDI r5, 256
+    CMP r1, r5
+    JZ r0, wall_done
+    JMP wall_loop
+
+wall_done:
+    ; Now PEEK at (100, 50) -- should be red (non-zero)
+    LDI r6, 100
+    LDI r7, 50
+    PEEK r6, r7, r8
+    ; PEEK at (100, 49) -- should be black (zero)
+    LDI r7, 49
+    PEEK r6, r7, r9
+    HALT
+    ";
+    // Fix: r4 needs to be 1 before the loop
+    let source2 = "
+    LDI r4, 1
+    LDI r1, 0
+    LDI r2, 50
+    LDI r3, 0xFF0000
+
+wall_loop:
+    PSET r1, r2, r3
+    ADD r1, r4
+    LDI r5, 256
+    CMP r1, r5
+    JZ r0, wall_done
+    JMP wall_loop
+
+wall_done:
+    LDI r6, 100
+    LDI r7, 50
+    PEEK r6, r7, r8
+    LDI r7, 49
+    PEEK r6, r7, r9
+    HALT
+    ";
+    let asm = assemble(source2, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..10000 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // Wall pixel should be red (non-zero)
+    assert_ne!(vm.regs[8], 0, "PEEK at wall should return non-zero (wall color)");
+    // Empty pixel above wall should be 0
+    assert_eq!(vm.regs[9], 0, "PEEK above wall should return 0 (empty)");
+}
+
+#[test]
+fn test_peek_assembles() {
+    let source = "PEEK r1, r2, r3\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    // PEEK should compile to 0x4F, 1, 2, 3
+    assert_eq!(asm.pixels[0], 0x4F);
+    assert_eq!(asm.pixels[1], 1);
+    assert_eq!(asm.pixels[2], 2);
+    assert_eq!(asm.pixels[3], 3);
+}

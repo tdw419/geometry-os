@@ -760,6 +760,21 @@ impl Vm {
                 }
             }
 
+            // PEEK rx, ry, rd  -- read screen pixel at (rx,ry) into rd
+            // Out-of-bounds coordinates return 0
+            0x4F => {
+                let rx = self.fetch() as usize % NUM_REGS;
+                let ry = self.fetch() as usize % NUM_REGS;
+                let rd = self.fetch() as usize % NUM_REGS;
+                let x = self.regs[rx] as usize;
+                let y = self.regs[ry] as usize;
+                if x < 256 && y < 256 {
+                    self.regs[rd] = self.screen[y * 256 + x];
+                } else {
+                    self.regs[rd] = 0;
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -894,6 +909,12 @@ impl Vm {
             0x4E => {
                 let pr = ram(a + 1);
                 (format!("KILL {}", reg(pr)), 2)
+            }
+            0x4F => {
+                let rx = ram(a + 1);
+                let ry = ram(a + 2);
+                let rd = ram(a + 3);
+                (format!("PEEK {}, {}, {}", reg(rx), reg(ry), reg(rd)), 4)
             }
             0x50 => { let rd = ram(a+1); let rs = ram(a+2); (format!("CMP {}, {}", reg(rd), reg(rs)), 3) }
             0x51 => { let rd = ram(a+1); let rs = ram(a+2); (format!("MOV {}, {}", reg(rd), reg(rs)), 3) }

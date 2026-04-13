@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 42
-  tests: 62
-  programs: 28
-  loc: 5207
+  opcodes: 46
+  tests: 109
+  programs: 32
+  loc: 5591
 
 phases:
   # ===================================================================
@@ -620,19 +620,67 @@ phases:
 
   - id: "phase-21"
     title: "Spatial Program Coordinator (Native Windowing)"
-    status: "in progress"
+    status: "complete"
     goal: "Eliminate CPU-side compositor dependency by running multiple autonomous Glyph programs concurrently within the GPU/WGPU substrate."
     priority: 9
     deliverables:
       - name: "Multi-Process VM Scheduler"
         description: "Modify the core VM to support multiple concurrent execution contexts (window instances) within the same 64K RAM."
+        status: "done"
+        acceptance_criteria:
+          - description: "SpawnedProcess struct with isolated registers and PC"
+            met: true
+          - description: "step_all_processes() with swap-in/step/swap-out pattern"
+            met: true
+          - description: "MAX_PROCESSES = 8 cap"
+            met: true
+      - name: "SPAWN/KILL Opcodes (0x4D/0x4E)"
+        description: "SPAWN addr_reg creates child process; KILL pid_reg halts it. PID stored in RAM[0xFFA]."
+        status: "done"
+        acceptance_criteria:
+          - description: "test_spawn_creates_child_process passes"
+            met: true
+          - description: "test_spawn_max_processes passes"
+            met: true
+          - description: "test_kill_halts_child_process passes"
+            met: true
+      - name: "Window Manager Demo"
+        description: "window_manager.asm -- primary draws animated window border, child bounces ball inside via shared RAM bounds protocol."
+        status: "done"
+        acceptance_criteria:
+          - description: "window_manager.asm assembles and runs"
+            met: true
+          - description: "test_window_manager_spawns_child passes"
+            met: true
+          - description: "Ball stays within window bounds"
+            met: true
+
+  - id: "phase-22"
+    title: "Screen Readback & Collision Detection"
+    status: "in_progress"
+    goal: "Let programs read pixel values from the framebuffer for collision detection, pick-color, and window compositing."
+    priority: 10
+    deliverables:
+      - name: "PEEK opcode (0x4F)"
+        description: "PEEK rx, ry, rd -- read screen pixel at (rx,ry) into rd. Enables collision detection."
+        status: "done"
+        scope_lines: 20
+        scope_files: ["src/vm.rs", "src/assembler.rs"]
+        acceptance_criteria:
+          - description: "PEEK reads screen buffer value into destination register"
+            met: true
+          - description: "Out-of-bounds returns 0"
+            met: true
+          - description: "test_peek_reads_screen_pixel passes"
+            met: true
+      - name: "Collision detection in maze.asm"
+        description: "Use PEEK to check wall pixels instead of RAM-based collision"
         status: "todo"
-      - name: "SPATIAL_SPAWN Opcode (0xE1 / 225)"
-        description: "Opcode 225: Instantiate a new autonomous region of execution with isolated local coordinates."
-        status: "todo"
-      - name: "Visual Bootstrapping Layout"
-        description: "Implement a 'Window Manager' .glyph program that spawns and coordinates independent apps."
-        status: "todo"
+        scope_lines: 40
+        scope_files: ["programs/maze.asm"]
+      - name: "MOV instruction everywhere"
+        description: "MOV rd, rs documented and used across programs"
+        status: "done"
 
 global_risks:
   - "Opcode space: 42 of ~256 slots used, plenty of room, but hex layout has gaps"
