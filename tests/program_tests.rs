@@ -1960,3 +1960,36 @@ fn test_peek_assembles() {
     assert_eq!(asm.pixels[2], 2);
     assert_eq!(asm.pixels[3], 3);
 }
+
+#[test]
+fn test_peek_bounce_assembles() {
+    let source = std::fs::read_to_string("programs/peek_bounce.asm")
+        .expect("peek_bounce.asm should exist");
+    assemble(&source, 0).expect("peek_bounce.asm should assemble cleanly");
+}
+
+#[test]
+fn test_peek_bounce_bounces_off_walls() {
+    // Run for 20 frames: ball should bounce off border walls and stay on screen
+    let vm = compile_run_multiproc("programs/peek_bounce.asm", 20);
+    let ball_color = 0xFFFFFFu32;
+    // Find ball position
+    let mut ball_x = 0usize;
+    let mut ball_y = 0usize;
+    let mut found = false;
+    for y in 0..256usize {
+        for x in 0..256usize {
+            if vm.screen[y * 256 + x] == ball_color {
+                ball_x = x;
+                ball_y = y;
+                found = true;
+                break;
+            }
+        }
+        if found { break; }
+    }
+    assert!(found, "white ball should be visible on screen");
+    // Ball must be within the playable area (inside the 4px border walls)
+    assert!(ball_x >= 4 && ball_x <= 251, "ball x={} should be inside borders", ball_x);
+    assert!(ball_y >= 4 && ball_y <= 251, "ball y={} should be inside borders", ball_y);
+}
