@@ -1,0 +1,16 @@
+{
+  "name": "geometry_os_wasm",
+  "type": "module",
+  "description": "Geometry OS VM -- WebAssembly browser port",
+  "version": "1.0.0",
+  "files": [
+    "geometry_os_wasm_bg.wasm",
+    "geometry_os_wasm.js",
+    "geometry_os_wasm.d.ts"
+  ],
+  "main": "geometry_os_wasm.js",
+  "types": "geometry_os_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
