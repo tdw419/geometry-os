@@ -13,8 +13,8 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 46
-  tests: 76
-  programs: 32
+  tests: 115
+  programs: 33
   loc: 5623
 
 phases:
@@ -657,7 +657,7 @@ phases:
 
   - id: "phase-22"
     title: "Screen Readback & Collision Detection"
-    status: "in_progress"
+    status: "complete"
     goal: "Let programs read pixel values from the framebuffer for collision detection, pick-color, and window compositing."
     priority: 10
     deliverables:
@@ -673,11 +673,11 @@ phases:
             met: true
           - description: "test_peek_reads_screen_pixel passes"
             met: true
-      - name: "Collision detection in maze.asm"
-        description: "Use PEEK to check wall pixels instead of RAM-based collision"
-        status: "todo"
-        scope_lines: 40
-        scope_files: ["programs/maze.asm"]
+      - name: "Collision detection demo"
+        description: "peek_bounce.asm -- white ball bounces off drawn obstacles using PEEK. No RAM collision map."
+        status: "done"
+        scope_lines: 100
+        scope_files: ["programs/peek_bounce.asm"]
       - name: "MOV instruction everywhere"
         description: "MOV rd, rs documented and used across programs"
         status: "done"
