@@ -8,6 +8,7 @@
 use super::bus::Bus;
 use super::csr::{self, CsrBank};
 use super::decode::{self, Operation};
+use super::mmu::{self, AccessType, Tlb, TranslateResult};
 
 /// Privilege level.
 #[repr(u8)]
@@ -51,6 +52,8 @@ pub struct RiscvCpu {
     pub privilege: Privilege,
     /// Control and Status Registers.
     pub csr: CsrBank,
+    /// Translation Lookaside Buffer for Sv32 MMU.
+    pub tlb: Tlb,
 }
 
 impl RiscvCpu {
@@ -61,6 +64,7 @@ impl RiscvCpu {
             pc: 0x8000_0000,
             privilege: Privilege::Machine,
             csr: CsrBank::new(),
+            tlb: Tlb::new(),
         };
         cpu.x[10] = 0; // a0 = 0 (no Hart ID)
         cpu.x[11] = 0; // a1 = 0 (no DTB)
@@ -391,6 +395,23 @@ impl RiscvCpu {
                 let restored = self.csr.trap_return(Privilege::Supervisor);
                 self.pc = self.csr.sepc;
                 self.privilege = restored;
+                StepResult::Ok
+            }
+            Operation::SfenceVma { rs1, rs2 } => {
+                let asid = mmu::satp_asid(self.csr.satp);
+                if rs1 == 0 && rs2 == 0 {
+                    self.tlb.flush_all();
+                } else if rs1 == 0 {
+                    self.tlb.flush_all();
+                } else {
+                    let vpn = mmu::va_to_vpn(self.get_reg(rs1));
+                    if rs2 == 0 {
+                        self.tlb.flush_vpn(vpn, asid);
+                    } else {
+                        self.tlb.flush_vpn(vpn, asid);
+                    }
+                }
+                self.pc = next_pc;
                 StepResult::Ok
             }
 

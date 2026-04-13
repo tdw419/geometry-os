@@ -66,6 +66,7 @@ pub enum Operation {
     Fence,
     Mret,
     Sret,
+    SfenceVma { rs1: u8, rs2: u8 },
 
     // -- CSR --
     Csrrw { rd: u8, rs1: u8, csr: u32 },
@@ -177,7 +178,11 @@ pub fn decode(word: u32) -> Operation {
             let funct12 = ((word >> 20) & 0xFFF) as u16;
             let csr_addr = (word >> 20) & 0xFFF;
             let uimm = rs1; // for I-type CSR, rs1 field holds uimm
-            match (funct3, funct12) {
+            // SFENCE.VMA: funct3=000, rd=0, funct7=0001001
+            if funct3 == 0 && rd == 0 && funct7 == 0b0001001 {
+                Operation::SfenceVma { rs1, rs2 }
+            } else {
+                match (funct3, funct12) {
                 (0b000, 0x000) => Operation::Ecall,
                 (0b000, 0x001) => Operation::Ebreak,
                 (0b000, 0x302) => Operation::Mret,
@@ -190,7 +195,8 @@ pub fn decode(word: u32) -> Operation {
                 (0b101, _) => Operation::Csrrwi { rd, uimm, csr: csr_addr },
                 (0b110, _) => Operation::Csrrsi { rd, uimm, csr: csr_addr },
                 (0b111, _) => Operation::Csrrci { rd, uimm, csr: csr_addr },
-                _ => Operation::Invalid(word),
+                    _ => Operation::Invalid(word),
+                }
             }
         }
         _ => Operation::Invalid(word),
