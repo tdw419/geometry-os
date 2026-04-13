@@ -3084,6 +3084,8 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         env_vars: std::collections::HashMap::new(),
         booted: false,
         shutdown_requested: false,
+        step_exit_code: None,
+        step_zombie: false,
     };
 
 

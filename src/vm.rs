@@ -297,6 +297,10 @@ pub struct Vm {
     pub booted: bool,
     /// Shutdown requested by SHUTDOWN opcode (Phase 30). Host checks this.
     pub shutdown_requested: bool,
+    /// Per-step transient: exit code from EXIT opcode.
+    pub step_exit_code: Option<u32>,
+    /// Per-step transient: zombie flag from EXIT opcode.
+    pub step_zombie: bool,
 }
 
 impl Vm {
@@ -334,6 +338,8 @@ impl Vm {
             env_vars: std::collections::HashMap::new(),
             booted: false,
             shutdown_requested: false,
+            step_exit_code: None,
+            step_zombie: false,
         }
     }
 
@@ -1947,30 +1953,50 @@ impl Vm {
 
             // WAITPID pid_reg -- wait for child process to halt.
             // r0 = 0 if process still running (yields), 1 if halted/not found.
+            // r1 = exit code of the child (0 if still running or not found).
+            // Reaps zombie processes (frees pages, removes from list).
             0x69 => {
                 let pr = self.fetch() as usize;
                 if pr < NUM_REGS {
                     let target_pid = self.regs[pr];
                     let mut found_running = false;
-                    let mut found_halted = false;
+                    let mut found_zombie = false;
+                    let mut zombie_exit_code = 0u32;
+                    let mut zombie_page_dir: Option<Vec<u32>> = None;
                     for proc in &self.processes {
                         if proc.pid == target_pid {
-                            if proc.halted {
-                                found_halted = true;
-                            } else {
+                            if proc.zombie && proc.halted {
+                                found_zombie = true;
+                                zombie_exit_code = proc.exit_code;
+                                zombie_page_dir = proc.page_dir.clone();
+                            } else if !proc.halted {
                                 found_running = true;
+                            } else {
+                                self.regs[0] = 1;
+                                self.regs[1] = proc.exit_code;
                             }
                             break;
                         }
                     }
-                    if found_halted || !found_running {
-                        self.regs[0] = 1; // done
-                    } else {
-                        self.regs[0] = 0; // still running
+                    if found_zombie {
+                        self.regs[0] = 1;
+                        self.regs[1] = zombie_exit_code;
+                        if let Some(pd) = zombie_page_dir {
+                            self.free_page_dir(&pd);
+                        }
+                        self.vfs.close_all(target_pid);
+                        self.processes.retain(|p| p.pid != target_pid);
+                    } else if found_running {
+                        self.regs[0] = 0;
+                        self.regs[1] = 0;
                         self.yielded = true;
+                    } else {
+                        self.regs[0] = 1;
+                        self.regs[1] = 0;
                     }
                 } else {
                     self.regs[0] = 1;
+                    self.regs[1] = 0;
                 }
             }
 
@@ -2176,6 +2202,98 @@ impl Vm {
                 }
             }
 
+            // EXIT code_reg -- exit with status code.
+            // Child processes become zombies (parent reaps via WAITPID).
+            // Main process just halts.
+            0x6F => {
+                let cr = self.fetch() as usize;
+                if cr < NUM_REGS {
+                    let code = self.regs[cr];
+                    self.halted = true;
+                    if self.current_pid > 0 {
+                        self.step_exit_code = Some(code);
+                        self.step_zombie = true;
+                    }
+                    return false;
+                }
+            }
+
+            // SIGNAL pid_reg, sig_reg -- send signal to process.
+            // Signal 0 (TERM): halt with exit code 1. Signal 3 (STOP): halt with exit code 2.
+            // Signals 1-2 (USER): jump to handler if set, else ignore.
+            // r0 = 0 on success, 0xFFFFFFFF on error.
+            0x70 => {
+                let pr = self.fetch() as usize;
+                let sr = self.fetch() as usize;
+                if pr < NUM_REGS && sr < NUM_REGS {
+                    let target_pid = self.regs[pr];
+                    let sig_num = self.regs[sr];
+                    let mut delivered = false;
+                    if let Some(signal) = Signal::from_u32(sig_num) {
+                        for proc in &mut self.processes {
+                            if proc.pid == target_pid && !proc.halted {
+                                let handler = proc.signal_handlers[signal as usize];
+                                if handler == 0xFFFFFFFF {
+                                    delivered = true;
+                                } else if handler != 0 {
+                                    proc.regs[0] = signal as u32;
+                                    proc.regs[1] = self.current_pid;
+                                    proc.pc = handler;
+                                    delivered = true;
+                                } else {
+                                    match signal {
+                                        Signal::Term => {
+                                            proc.halted = true;
+                                            proc.exit_code = 1;
+                                            proc.zombie = true;
+                                            delivered = true;
+                                        }
+                                        Signal::Stop => {
+                                            proc.halted = true;
+                                            proc.exit_code = 2;
+                                            proc.zombie = true;
+                                            delivered = true;
+                                        }
+                                        Signal::User1 | Signal::User2 => {
+                                            delivered = true;
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    self.regs[0] = if delivered { 0 } else { 0xFFFFFFFF };
+                }
+            }
+
+            // SIGSET sig_reg, handler_reg -- register signal handler for current process.
+            // sig_reg: signal number (0-3). handler_reg: address, 0=default, 0xFFFFFFFF=ignore.
+            // r0 = 0 on success, 0xFFFFFFFF on error.
+            0x71 => {
+                let sr = self.fetch() as usize;
+                let hr = self.fetch() as usize;
+                if sr < NUM_REGS && hr < NUM_REGS {
+                    let sig_num = self.regs[sr];
+                    let handler = self.regs[hr];
+                    if let Some(signal) = Signal::from_u32(sig_num) {
+                        if self.current_pid > 0 {
+                            for proc in &mut self.processes {
+                                if proc.pid == self.current_pid {
+                                    proc.signal_handlers[signal as usize] = handler;
+                                    break;
+                                }
+                            }
+                            self.regs[0] = 0;
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    } else {
+                        self.regs[0] = 0xFFFFFFFF;
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -2265,6 +2383,8 @@ impl Vm {
             self.yielded = false;
             self.sleep_frames = 0;
             self.new_priority = proc.priority;
+            self.step_exit_code = None;
+            self.step_zombie = false;
 
             // Execute one instruction within the time slice
             let still_running = self.step();
@@ -2277,6 +2397,13 @@ impl Vm {
             proc.mode = self.mode;
             proc.page_dir = self.current_page_dir.take();
             proc.segfaulted = self.segfault;
+            // Propagate EXIT opcode's exit code and zombie status
+            if let Some(code) = self.step_exit_code {
+                proc.exit_code = code;
+            }
+            if self.step_zombie {
+                proc.zombie = true;
+            }
             if self.segfault {
                 self.segfault_pid = proc.pid;
                 self.ram[0xFF9] = proc.pid;
@@ -2316,6 +2443,8 @@ impl Vm {
         self.yielded = false;
         self.sleep_frames = 0;
         self.new_priority = 0;
+        self.step_exit_code = None;
+        self.step_zombie = false;
 
         procs.extend(std::mem::take(&mut self.processes));
         self.processes = procs;
@@ -2637,6 +2766,20 @@ impl Vm {
                 (format!("SCREENP {}, {}, {}", reg(dr), reg(xr), reg(yr)), 4)
             }
             0x6E => ("SHUTDOWN".into(), 1),
+            0x6F => {
+                let cr = ram(a + 1);
+                (format!("EXIT {}", reg(cr)), 2)
+            }
+            0x70 => {
+                let pr = ram(a + 1);
+                let sr = ram(a + 2);
+                (format!("SIGNAL {}, {}", reg(pr), reg(sr)), 3)
+            }
+            0x71 => {
+                let sr = ram(a + 1);
+                let hr = ram(a + 2);
+                (format!("SIGSET {}, {}", reg(sr), reg(hr)), 3)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
@@ -2830,8 +2973,10 @@ impl Vm {
             msg_data: [0; MSG_WORDS],
             msg_recv_requested: false,
             env_vars: std::collections::HashMap::new(),
-            booted: false,
             shutdown_requested: false,
+            step_exit_code: None,
+            step_zombie: false,
+            booted: false,
         })
     }
 }

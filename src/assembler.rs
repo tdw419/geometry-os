@@ -973,35 +973,31 @@ fn parse_instruction(
             bytecode.push(0x6E);
         }
         "EXIT" => {
-            let args: Vec<&str> = rest.split_whitespace().collect();
-            if args.len() != 1 {
+            if tokens.len() < 2 {
                 return Err(format!("EXIT requires 1 argument: EXIT code_reg"));
             }
-            let reg = parse_reg(args[0])?;
             bytecode.push(0x6F);
-            bytecode.push(reg as u32);
+            bytecode.push(parse_reg(tokens[1])? as u32);
         }
         "SIGNAL" => {
-            let args: Vec<&str> = rest.split_whitespace().collect();
-            if args.len() != 2 {
-                return Err(format!("SIGNAL requires 2 arguments: SIGNAL pid_reg sig_reg"));
+            if tokens.len() < 3 {
+                return Err(format!(
+                    "SIGNAL requires 2 arguments: SIGNAL pid_reg sig_reg"
+                ));
             }
-            let pid_r = parse_reg(args[0])?;
-            let sig_r = parse_reg(args[1])?;
             bytecode.push(0x70);
-            bytecode.push(pid_r as u32);
-            bytecode.push(sig_r as u32);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
         }
         "SIGSET" => {
-            let args: Vec<&str> = rest.split_whitespace().collect();
-            if args.len() != 2 {
-                return Err(format!("SIGSET requires 2 arguments: SIGSET sig_reg handler_reg"));
+            if tokens.len() < 3 {
+                return Err(format!(
+                    "SIGSET requires 2 arguments: SIGSET sig_reg handler_reg"
+                ));
             }
-            let sig_r = parse_reg(args[0])?;
-            let handler_r = parse_reg(args[1])?;
             bytecode.push(0x71);
-            bytecode.push(sig_r as u32);
-            bytecode.push(handler_r as u32);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
         }
 
         _ => return Err(format!("unknown opcode: {}", opcode)),

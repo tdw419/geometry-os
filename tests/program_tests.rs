@@ -1839,6 +1839,11 @@ fn test_active_process_count() {
         priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
                 blocked: false,
                 msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     assert_eq!(vm.active_process_count(), 1);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -1847,6 +1852,11 @@ fn test_active_process_count() {
         priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
                 blocked: false,
                 msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     assert_eq!(vm.active_process_count(), 1);
 }
@@ -3115,6 +3125,11 @@ fn test_scheduler_basic_child_execution() {
         yielded: false,
                 blocked: false,
                 msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     for _ in 0..10 {
         vm.step_all_processes();
@@ -3153,6 +3168,11 @@ fn test_yield_forfeits_time_slice() {
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     for _ in 0..100 {
         vm.step_all_processes();
@@ -3192,6 +3212,11 @@ fn test_sleep_skips_process_until_wake() {
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     for _ in 0..20 {
         vm.step_all_processes();
@@ -3247,6 +3272,11 @@ fn test_priority_quantum_allocation() {
         segfaulted: false, priority: 3, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     // Process B: priority 0 (quantum = 100 * 1 = 100)
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -3255,6 +3285,11 @@ fn test_priority_quantum_allocation() {
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
 
     // Run one scheduling round to allocate quantums
@@ -3303,6 +3338,11 @@ fn test_setpriority_changes_priority() {
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     for _ in 0..100 { vm.step_all_processes(); }
     assert_eq!(vm.processes[0].priority, 3, "priority should be upgraded to 3");
@@ -3322,6 +3362,11 @@ fn test_scheduler_tick_increments() {
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     vm.step_all_processes();
     assert!(vm.sched_tick > initial_tick, "sched_tick should increment");
@@ -3348,6 +3393,11 @@ fn test_sleep_wakes_and_halts() {
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     vm.step_all_processes(); // LDI r5, 5
     vm.step_all_processes(); // SLEEP r5
@@ -3390,6 +3440,11 @@ fn test_priority_execution_order() {
         segfaulted: false, priority: 2, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x300, regs: [0; 32], halted: false, pid: 2,
@@ -3397,6 +3452,11 @@ fn test_priority_execution_order() {
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x400, regs: [0; 32], halted: false, pid: 1,
@@ -3404,6 +3464,11 @@ fn test_priority_execution_order() {
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     for _ in 0..50 {
         vm.step_all_processes();
@@ -3450,6 +3515,11 @@ fn test_priority_higher_gets_more_instructions() {
         segfaulted: false, priority: 3, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     // Process B: priority 0 (low) -- gets 100 instructions per round
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -3458,6 +3528,11 @@ fn test_priority_higher_gets_more_instructions() {
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     // Run enough rounds for priority-0 to exhaust twice (200 calls)
     for _ in 0..200 {
@@ -3622,6 +3697,11 @@ fn test_msgsnd_delivers_to_target() {
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
 
     // Set up message data in main process registers
@@ -3674,6 +3754,8 @@ fn test_msgrcv_receives_message() {
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: vec![msg],
+        exit_code: 0, parent_pid: 0, zombie: false,
+        pending_signals: Vec::new(), signal_handlers: [0; 4],
     });
 
     // MSGRCV bytecode: 0x5F (no args)
@@ -3702,6 +3784,11 @@ fn test_msgrcv_blocks_when_empty() {
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
 
     vm.ram[0x200] = 0x5F; // MSGRCV
@@ -3726,6 +3813,11 @@ fn test_msgrcv_unblocks_on_msgsnd() {
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
         blocked: false, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
 
     // First block process A
@@ -3774,6 +3866,11 @@ fn test_blocked_process_skipped_by_scheduler() {
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
         blocked: true, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     // Run scheduler 50 times -- blocked process should not execute
     for _ in 0..50 {
@@ -3800,6 +3897,11 @@ fn test_pipe_write_unblocks_blocked_reader() {
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
         blocked: true, msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
 
     // Main process writes to the pipe
@@ -4874,6 +4976,11 @@ fn test_waitpid_still_running() {
         yielded: false,
         blocked: false,
         msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     vm.regs[1] = 1; // PID of running process
     step_waitpid(&mut vm);
@@ -4898,6 +5005,11 @@ fn test_waitpid_halted_process() {
         yielded: false,
         blocked: false,
         msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: 0,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
     });
     vm.regs[1] = 1;
     step_waitpid(&mut vm);
