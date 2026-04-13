@@ -59,8 +59,11 @@ pub const SECTOR_SIZE: u64 = 512;
 /// Maximum virt queue size.
 const QUEUE_SIZE: u32 = 16;
 
-/// Block device capacity (in 512-byte sectors).
+/// Virtio block device capacity (in 512-byte sectors).
 const DEFAULT_SECTORS: u64 = 2048; // 1MB disk
+
+/// Config capacity high word offset.
+const CONFIG_CAPACITY_HI: u64 = CONFIG + 4;
 
 /// Virtio device status bits.
 const VIRTIO_STATUS_ACKNOWLEDGE: u32 = 1;
@@ -167,7 +170,7 @@ impl VirtioBlk {
                 let cap = (self.disk.len() as u64) / SECTOR_SIZE;
                 Some((cap & 0xFFFF_FFFF) as u32)
             }
-            CONFIG + 4 => {
+            CONFIG_CAPACITY_HI => {
                 let cap = (self.disk.len() as u64) / SECTOR_SIZE;
                 Some((cap >> 32) as u32)
             }

@@ -1769,3 +1769,263 @@ fn test_clint_mtime_advances_per_step() {
     vm.step(); // tick 3, execute EBREAK -> stops
     assert_eq!(vm.bus.clint.mtime, 3);
 }
+
+// =====================================================================
+// Phase 36: SV32 Page Table Walk Tests
+// =====================================================================
+
+use geometry_os::riscv::mmu;
+
+fn make_pte(ppn: u32, flags: u32) -> u32 {
+    ((ppn & 0x003F_FFFF) << 10) | (flags & 0x3FF)
+}
+
+fn make_satp(mode: u32, asid: u32, ppn: u32) -> u32 {
+    ((mode & 1) << 31) | ((asid & 0x1FF) << 22) | (ppn & 0x003F_FFFF)
+}
+
+fn sfence_vma(rs1: u8, rs2: u8) -> u32 {
+    (0b0001001u32 << 25) | ((rs2 as u32) << 20) | ((rs1 as u32) << 15) | (0b000 << 12) | (0u32 << 7) | 0x73
+}
+
+#[test]
+fn test_sv32_bare_mode_identity_translation() {
+    let mut tlb = mmu::Tlb::new();
+    let bus = geometry_os::riscv::bus::Bus::new(0x8000_0000, 8192);
+    let result = mmu::translate(0x8000_0000, mmu::AccessType::Fetch, false, 0, &bus, &mut tlb);
+    assert_eq!(result, mmu::TranslateResult::Ok(0x8000_0000));
+}
+
+#[test]
+fn test_sv32_two_level_walk_4k_page() {
+    let mut tlb = mmu::Tlb::new();
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
+    let root_ppn: u32 = 1;
+    let l2_ppn: u32 = 2;
+    let data_ppn: u32 = 3;
+    bus.write_word((data_ppn as u64) << 12, 0xDEAD_BEEF).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
+    bus.write_word((l2_ppn as u64) << 12, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X | mmu::PTE_U)).unwrap();
+    let satp = make_satp(1, 0, root_ppn);
+    let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    assert_eq!(result, mmu::TranslateResult::Ok((data_ppn as u64) << 12));
+    if let mmu::TranslateResult::Ok(pa) = result {
+        assert_eq!(bus.read_word(pa).unwrap(), 0xDEAD_BEEF);
+    }
+}
+
+#[test]
+fn test_sv32_nonzero_vpn_and_offset() {
+    let mut tlb = mmu::Tlb::new();
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x2_0000);
+    let root_ppn: u32 = 1;
+    let l2_ppn: u32 = 2;
+    let data_ppn: u32 = 4;
+    let va: u32 = 0x0040_1100;
+    let vpn1 = (va >> 22) & 0x3FF;
+    let vpn0 = (va >> 12) & 0x3FF;
+    bus.write_word(((data_ppn as u64) << 12) + 0x100, 0x1234_5678).unwrap();
+    bus.write_word(((root_ppn as u64) << 12) | ((vpn1 as u64) * 4), make_pte(l2_ppn, mmu::PTE_V)).unwrap();
+    bus.write_word(((l2_ppn as u64) << 12) | ((vpn0 as u64) * 4), make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_U)).unwrap();
+    let satp = make_satp(1, 0, root_ppn);
+    let result = mmu::translate(va, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    assert_eq!(result, mmu::TranslateResult::Ok(((data_ppn as u64) << 12) + 0x100));
+}
+
+#[test]
+fn test_sv32_page_fault_invalid_pte() {
+    let mut tlb = mmu::Tlb::new();
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
+    bus.write_word(1u64 << 12, 0).unwrap();
+    let satp = make_satp(1, 0, 1);
+    let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    assert_eq!(result, mmu::TranslateResult::LoadFault);
+}
+
+#[test]
+fn test_sv32_page_fault_permission_denied() {
+    let mut tlb = mmu::Tlb::new();
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
+    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
+    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+    let satp = make_satp(1, 0, 1);
+    let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    assert_eq!(result, mmu::TranslateResult::LoadFault);
+}
+
+#[test]
+fn test_sv32_fault_types_by_access() {
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
+    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
+    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R)).unwrap();
+    let satp = make_satp(1, 0, 1);
+    let mut t1 = mmu::Tlb::new();
+    assert_eq!(mmu::translate(0, mmu::AccessType::Fetch, false, satp, &bus, &mut t1), mmu::TranslateResult::FetchFault);
+    let mut t2 = mmu::Tlb::new();
+    assert_eq!(mmu::translate(0, mmu::AccessType::Store, false, satp, &bus, &mut t2), mmu::TranslateResult::StoreFault);
+    let mut t3 = mmu::Tlb::new();
+    assert_eq!(mmu::translate(0, mmu::AccessType::Load, false, satp, &bus, &mut t3), mmu::TranslateResult::Ok(3u64 << 12));
+}
+
+#[test]
+fn test_sv32_megapage() {
+    let mut tlb = mmu::Tlb::new();
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x2_0000);
+    let test_addr = (4u64 << 12) | 0x100;
+    bus.write_word(test_addr, 0xCAFE_0001).unwrap();
+    bus.write_word(((1u64) << 12) | 4, make_pte(4, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X)).unwrap();
+    let satp = make_satp(1, 0, 1);
+    let result = mmu::translate(0x0040_0100, mmu::AccessType::Load, false, satp, &bus, &mut tlb);
+    assert_eq!(result, mmu::TranslateResult::Ok((4u64 << 12) | 0x100));
+    if let mmu::TranslateResult::Ok(pa) = result { assert_eq!(bus.read_word(pa).unwrap(), 0xCAFE_0001); }
+}
+
+#[test]
+fn test_sv32_tlb_caches() {
+    let mut tlb = mmu::Tlb::new();
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
+    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
+    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X | mmu::PTE_U)).unwrap();
+    let satp = make_satp(1, 0, 1);
+    let r1 = mmu::translate(0, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    assert_eq!(r1, mmu::TranslateResult::Ok(3u64 << 12));
+    bus.write_word(1u64 << 12, 0).unwrap();
+    let r2 = mmu::translate(0, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    assert_eq!(r2, mmu::TranslateResult::Ok(3u64 << 12));
+}
+
+#[test]
+fn test_sv32_tlb_flush_sfence() {
+    let mut tlb = mmu::Tlb::new();
+    tlb.insert(0x100, 1, 0xAAA, mmu::PTE_V | mmu::PTE_R);
+    tlb.insert(0x200, 1, 0xBBB, mmu::PTE_V | mmu::PTE_R);
+    assert!(tlb.lookup(0x100, 1).is_some());
+    tlb.flush_all();
+    assert!(tlb.lookup(0x100, 1).is_none());
+    assert!(tlb.lookup(0x200, 1).is_none());
+}
+
+#[test]
+fn test_sv32_tlb_asid_isolation() {
+    let mut tlb = mmu::Tlb::new();
+    tlb.insert(0x100, 1, 0xAAA, mmu::PTE_V | mmu::PTE_R);
+    tlb.insert(0x100, 2, 0xBBB, mmu::PTE_V | mmu::PTE_R);
+    assert_eq!(tlb.lookup(0x100, 1).unwrap().0, 0xAAA);
+    assert_eq!(tlb.lookup(0x100, 2).unwrap().0, 0xBBB);
+    assert!(tlb.lookup(0x100, 3).is_none());
+}
+
+#[test]
+fn test_sv32_decode_sfence_vma() {
+    assert_eq!(geometry_os::riscv::decode::decode(sfence_vma(0, 0)),
+        geometry_os::riscv::decode::Operation::SfenceVma { rs1: 0, rs2: 0 });
+    assert_eq!(geometry_os::riscv::decode::decode(sfence_vma(5, 0)),
+        geometry_os::riscv::decode::Operation::SfenceVma { rs1: 5, rs2: 0 });
+}
+
+#[test]
+fn test_sv32_sfence_flushes_cpu_tlb() {
+    let mut vm = RiscvVm::new(0x1_0000);
+    vm.cpu.tlb.insert(0x100, 0, 0xAAA, mmu::PTE_V | mmu::PTE_R);
+    vm.cpu.tlb.insert(0x200, 0, 0xBBB, mmu::PTE_V | mmu::PTE_R);
+    let base = 0x8000_0000u64;
+    vm.bus.write_word(base, sfence_vma(0, 0)).unwrap();
+    vm.bus.write_word(base + 4, ebreak()).unwrap();
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
+    vm.step();
+    assert!(vm.cpu.tlb.lookup(0x100, 0).is_none());
+    assert!(vm.cpu.tlb.lookup(0x200, 0).is_none());
+}
+
+#[test]
+fn test_sv32_nonleaf_at_l2_is_fault() {
+    let mut tlb = mmu::Tlb::new();
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
+    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
+    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V)).unwrap();
+    let satp = make_satp(1, 0, 1);
+    let result = mmu::translate(0, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    assert_eq!(result, mmu::TranslateResult::LoadFault);
+}
+
+#[test]
+fn test_sv32_tlb_global_entry() {
+    let mut tlb = mmu::Tlb::new();
+    tlb.insert(0x42, 5, 0x100, mmu::PTE_V | mmu::PTE_R | mmu::PTE_G);
+    assert!(tlb.lookup(0x42, 0).is_some());
+    assert!(tlb.lookup(0x42, 99).is_some());
+    assert!(tlb.lookup(0x43, 5).is_none());
+}
+
+#[test]
+fn test_sv32_satp_and_va_field_extraction() {
+    let satp = make_satp(1, 42, 0x12345);
+    assert!(mmu::satp_mode_enabled(satp));
+    assert_eq!(mmu::satp_asid(satp), 42);
+    assert_eq!(mmu::satp_ppn(satp), 0x12345);
+    assert!(!mmu::satp_mode_enabled(0));
+    assert_eq!(mmu::va_vpn1(0x0040_1100), 1);
+    assert_eq!(mmu::va_vpn0(0x0040_1100), 1);
+    assert_eq!(mmu::va_offset(0x0040_1100), 0x100);
+    assert_eq!(mmu::va_to_vpn(0x0040_1100), 0x00401);
+}
+
+#[test]
+fn test_sv32_cpu_load_through_page_table() {
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
+    let mut cpu = geometry_os::riscv::cpu::RiscvCpu::new();
+    let root_ppn: u32 = 1;
+    let l2_ppn: u32 = 2;
+    let data_ppn: u32 = 3;
+    bus.write_word((data_ppn as u64) << 12, 0xDEAD_BEEF).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
+    // L2[0] -> code page (page 0)
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+    // L2[1] -> data page (page 3)
+    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+    // LUI x10, 0x1 -> x10 = 0x1000
+    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap();
+    // LW x5, 0(x10)
+    bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).unwrap();
+    // EBREAK
+    bus.write_word(8, ebreak()).unwrap();
+    cpu.pc = 0;
+    cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
+    cpu.csr.satp = make_satp(1, 0, root_ppn);
+    for _ in 0..10 {
+        match cpu.step(&mut bus) { StepResult::Ebreak => break, StepResult::Ok => {}, o => panic!("Unexpected: {:?}", o) }
+    }
+    assert_eq!(cpu.x[5], 0xDEAD_BEEF);
+}
+
+#[test]
+fn test_sv32_cpu_store_through_page_table() {
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
+    let mut cpu = geometry_os::riscv::cpu::RiscvCpu::new();
+    let root_ppn: u32 = 1;
+    let l2_ppn: u32 = 2;
+    let data_ppn: u32 = 3;
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+    // ADDI x5, x0, 42
+    bus.write_word(0, addi(5, 0, 42)).unwrap();
+    // LUI x10, 0x1
+    bus.write_word(4, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap();
+    // SW x5, 0(x10)
+    bus.write_word(8, (0u32 << 25) | (5u32 << 20) | (10u32 << 15) | (0b010 << 12) | (0u32 << 7) | 0x23).unwrap();
+    // LW x6, 0(x10)
+    bus.write_word(12, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (6u32 << 7) | 0x03).unwrap();
+    // EBREAK
+    bus.write_word(16, ebreak()).unwrap();
+    cpu.pc = 0;
+    cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
+    cpu.csr.satp = make_satp(1, 0, root_ppn);
+    for _ in 0..10 {
+        match cpu.step(&mut bus) { StepResult::Ebreak => break, StepResult::Ok => {}, o => panic!("Unexpected: {:?}", o) }
+    }
+    assert_eq!(cpu.x[5], 42);
+    assert_eq!(cpu.x[6], 42);
+    assert_eq!(bus.read_word((data_ppn as u64) << 12).unwrap(), 42);
+}

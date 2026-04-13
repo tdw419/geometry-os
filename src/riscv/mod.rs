@@ -15,7 +15,6 @@ pub mod mmu;
 pub mod plic;
 pub mod uart;
 pub mod virtio_blk;
-pub mod mmu;
 
 use cpu::StepResult;
 

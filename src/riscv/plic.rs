@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn claim_via_mmio() {
         let mut plic = Plic::new();
-        plic.priority[IRQ_UART] = 5;
+plic.priority[IRQ_UART as usize] = 5;
         plic.enable = 1 << IRQ_UART;
         plic.signal(IRQ_UART);
         assert_eq!(plic.read(CTX0_CLAIM), Some(IRQ_UART));

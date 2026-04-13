@@ -342,7 +342,7 @@ mod tests {
     #[test]
     fn dtb_contains_strings() {
         let dtb = generate_dtb(&DtbConfig::default());
-        let off_strings = u32::from_be_bytes([dtb[16], dtb[17], dtb[18], dtb[19]]);
+        let off_strings = u32::from_be_bytes([dtb[12], dtb[13], dtb[14], dtb[15]]);
         let strings_start = off_strings as usize;
         // Strings block should contain "compatible" at least.
         let strings = &dtb[strings_start..];
