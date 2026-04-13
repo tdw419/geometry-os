@@ -10,9 +10,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 114
-  tests: 632
+  tests: 654
   programs: 40
-  loc: 14429
+  loc: 15524
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1584,25 +1584,25 @@ phases:
     reason: QEMU bridge proved which devices are the minimum needed
 - id: phase-37
   title: Guest OS Boot (Native RISC-V)
-  status: future
+  status: in_progress
   goal: 'Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes: QEMU and native.'
   priority: 70
   deliverables:
   - name: ELF + binary loader
-    description: Parse ELF64 RISC-V kernel images, load segments into guest RAM
-    status: todo
+    description: Parse ELF32 RISC-V kernel images, load segments into guest RAM
+    status: done
     scope_lines: 160
   - name: DTB passthrough
     description: Pass device tree blob to kernel in a1 register at boot
-    status: todo
+    status: done
     scope_lines: 30
   - name: Boot console
     description: Guest UART output to canvas (same bridge as Phase 33)
-    status: todo
+    status: done
     scope_lines: 80
   - name: HYPERVISOR mode flag
     description: Opcode detects 'native' vs 'qemu' from config string
-    status: todo
+    status: done
     scope_lines: 30
   - name: Verified boot
     description: Boot OpenSBI + Linux tinyconfig, verify 'Linux version' on canvas
@@ -1610,7 +1610,7 @@ phases:
     scope_lines: 100
   - name: Performance benchmark
     description: Measure MIPS, compare interpreter vs QEMU, document results
-    status: todo
+    status: done
     scope_lines: 40
   dependencies:
   - source: phase-36
