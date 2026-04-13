@@ -5390,8 +5390,13 @@ fn test_hypervisor_disassembles() {
 #[test]
 fn test_hypervisor_sets_flag_and_config() {
     let mut vm = Vm::new();
+    // Create a temp kernel file so the validation passes
+    let kernel_path = std::env::temp_dir().join("geometry_os_test_Image");
+    std::fs::write(&kernel_path, b"fake kernel").unwrap();
+    let kernel_name = kernel_path.to_str().unwrap();
+    let config_str = format!("arch=riscv64 kernel={} ram=256M", kernel_name);
     // Write config string to RAM at address 0x1000
-    let config = b"arch=riscv64 kernel=Image ram=256M";
+    let config = config_str.as_bytes();
     for (i, &b) in config.iter().enumerate() {
         vm.ram[0x1000 + i] = b as u32;
     }
@@ -5411,11 +5416,13 @@ fn test_hypervisor_sets_flag_and_config() {
 
     assert!(vm.hypervisor_active, "hypervisor_active should be true");
     assert_eq!(
-        vm.hypervisor_config,
-        "arch=riscv64 kernel=Image ram=256M",
+        vm.hypervisor_config, config_str,
         "config string should match"
     );
     assert_eq!(vm.regs[0], 0, "r0 should be 0 (success)");
+
+    // Cleanup
+    let _ = std::fs::remove_file(&kernel_path);
 }
 
 #[test]
