@@ -12,7 +12,7 @@ fn test_vm(instrs: &[u32]) -> RiscvVm {
     let mut vm = RiscvVm::new(4096);
     let ram_base = 0x8000_0000u64;
     for (i, &word) in instrs.iter().enumerate() {
-        let _ = vm.mem.write_word(ram_base + (i as u64) * 4, word);
+        let _ = vm.bus.write_word(ram_base + (i as u64) * 4, word);
     }
     vm.cpu.pc = ram_base as u32;
     vm
@@ -20,7 +20,7 @@ fn test_vm(instrs: &[u32]) -> RiscvVm {
 
 fn run(vm: &mut RiscvVm, max_steps: usize) {
     for _ in 0..max_steps {
-        match vm.cpu.step(&mut vm.mem) {
+        match vm.cpu.step(&mut vm.bus) {
             StepResult::Ecall | StepResult::Ebreak | StepResult::FetchFault => break,
             StepResult::Ok | StepResult::LoadFault | StepResult::StoreFault => {}
         }
@@ -1011,4 +1011,303 @@ fn test_rv32_csr_mepc_alignment() {
     run(&mut vm, 100);
     assert_eq!(vm.cpu.x[2], 0x200, "mepc LSB should be cleared");
     assert_eq!(vm.cpu.csr.mepc, 0x200);
+}
+
+// ============================================================
+// Phase 35: Privilege mode transitions
+// ============================================================
+
+// RISC-V privilege constants
+const PRIV_USER: u8 = 0;
+const PRIV_SUPERVISOR: u8 = 1;
+const PRIV_MACHINE: u8 = 3;
+
+// mstatus bit positions
+const MSTATUS_MIE_BIT: u32 = 3;
+const MSTATUS_MPIE_BIT: u32 = 7;
+const MSTATUS_SIE_BIT: u32 = 1;
+const MSTATUS_SPIE_BIT: u32 = 5;
+const MSTATUS_SPP_BIT: u32 = 8;
+const MSTATUS_MPP_LSB_BIT: u32 = 11;
+
+/// Test U->S transition via ECALL when ECALL-U is delegated to S-mode.
+/// Setup: CPU in U-mode, medeleg has bit 8 (ECALL-U) set, stvec configured.
+/// ECALL should trap to stvec (S-mode handler).
+#[test]
+fn test_rv32_privilege_ecall_u_to_s() {
+    // We need a bigger memory layout:
+    // 0x80000000: entry (ECALL instruction)
+    // 0x80000200: S-mode trap handler (stvec)
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+
+    // Write ECALL at entry point
+    vm.bus.write_word(base, ecall()).unwrap();
+
+    // Write S-mode handler at 0x80000200: just ebreak
+    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+
+    // Configure CPU: start in U-mode with delegation
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::User;
+
+    // Delegate ECALL-U (cause 8) to S-mode
+    vm.cpu.csr.medeleg = 1 << 8;
+
+    // Set stvec to point to S-mode handler
+    vm.cpu.csr.stvec = (base as u32) + 0x200;
+
+    // Execute one step
+    let result = vm.cpu.step(&mut vm.bus);
+    assert_eq!(result, StepResult::Ok);
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x200, "should jump to stvec");
+    assert_eq!(vm.cpu.privilege, geometry_os::riscv::cpu::Privilege::Supervisor);
+    assert_eq!(vm.cpu.csr.scause, 8, "scause should be ECALL-U (8)");
+    assert_eq!(vm.cpu.csr.sepc, base as u32, "sepc should be ECALL PC");
+}
+
+/// Test S->M transition via ECALL (no delegation for ECALL-S).
+/// Setup: CPU in S-mode, mtvec configured. ECALL from S traps to M.
+#[test]
+fn test_rv32_privilege_ecall_s_to_m() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+
+    // Write ECALL at entry point
+    vm.bus.write_word(base, ecall()).unwrap();
+
+    // Write M-mode handler at 0x80000400: just ebreak
+    vm.bus.write_word(base + 0x400, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
+    vm.cpu.csr.mtvec = (base as u32) + 0x400;
+
+    let result = vm.cpu.step(&mut vm.bus);
+    assert_eq!(result, StepResult::Ok);
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x400, "should jump to mtvec");
+    assert_eq!(vm.cpu.privilege, geometry_os::riscv::cpu::Privilege::Machine);
+    assert_eq!(vm.cpu.csr.mcause, 9, "mcause should be ECALL-S (9)");
+    assert_eq!(vm.cpu.csr.mepc, base as u32, "mepc should be ECALL PC");
+}
+
+/// Test MRET: return from M-mode trap back to S-mode.
+/// Simulates: M-mode handler runs, MRET returns to S-mode.
+#[test]
+fn test_rv32_privilege_mret_returns_to_s() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+
+    // Write MRET at 0x80000000
+    vm.bus.write_word(base, mret()).unwrap();
+
+    // Write the code to return to at 0x80000200
+    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
+
+    // Simulate state after trap from S to M:
+    // MPP = S (01), mepc = return address
+    vm.cpu.csr.mepc = (base as u32) + 0x200;
+    vm.cpu.csr.mstatus = 0; // Clear mstatus
+    vm.cpu.csr.mstatus |= (1u32 << MSTATUS_MPP_LSB_BIT) | (1u32 << MSTATUS_SPP_BIT); // MPP=S, SPP=S
+
+    let result = vm.cpu.step(&mut vm.bus);
+    assert_eq!(result, StepResult::Ok);
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x200, "MRET should jump to mepc");
+    assert_eq!(vm.cpu.privilege, geometry_os::riscv::cpu::Privilege::Supervisor,
+        "MRET should restore S-mode from MPP");
+}
+
+/// Test SRET: return from S-mode trap back to U-mode.
+#[test]
+fn test_rv32_privilege_sret_returns_to_u() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+
+    // Write SRET at 0x80000000
+    vm.bus.write_word(base, sret()).unwrap();
+
+    // Write the code to return to at 0x80000200
+    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
+
+    // Simulate state after trap from U to S:
+    // SPP = U (0), sepc = return address
+    vm.cpu.csr.sepc = (base as u32) + 0x200;
+    vm.cpu.csr.mstatus = 0; // SPP = 0 (U-mode)
+
+    let result = vm.cpu.step(&mut vm.bus);
+    assert_eq!(result, StepResult::Ok);
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x200, "SRET should jump to sepc");
+    assert_eq!(vm.cpu.privilege, geometry_os::riscv::cpu::Privilege::User,
+        "SRET should restore U-mode from SPP");
+}
+
+/// Test full round-trip: U -> ECALL -> S handler -> SRET -> U
+#[test]
+fn test_rv32_privilege_u_ecall_sret_roundtrip() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+
+    // 0x80000000: ECALL (U-mode code)
+    vm.bus.write_word(base, ecall()).unwrap();
+    // 0x80000004: addi x1, x0, 42 (returned here after SRET)
+    vm.bus.write_word(base + 4, addi(1, 0, 42)).unwrap();
+    // 0x80000008: ebreak
+    vm.bus.write_word(base + 8, ebreak()).unwrap();
+
+    // 0x80000200: S-mode trap handler -- SRET
+    vm.bus.write_word(base + 0x200, sret()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::User;
+    vm.cpu.csr.medeleg = 1 << 8; // Delegate ECALL-U to S
+    vm.cpu.csr.stvec = (base as u32) + 0x200;
+    vm.cpu.csr.mstatus = 1 << MSTATUS_SIE_BIT; // Enable SIE for SPIE save
+
+    // Step 1: ECALL -> trap to S-mode handler
+    vm.cpu.step(&mut vm.bus);
+    assert_eq!(vm.cpu.privilege, geometry_os::riscv::cpu::Privilege::Supervisor);
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x200);
+
+    // Step 2: SRET -> return to U-mode at sepc
+    vm.cpu.step(&mut vm.bus);
+    assert_eq!(vm.cpu.privilege, geometry_os::riscv::cpu::Privilege::User);
+    assert_eq!(vm.cpu.pc, base as u32);
+
+    // Step 3: Re-execute ECALL (sepc pointed to it). Actually sepc was the ECALL pc,
+    // so we'll hit ECALL again. Let's instead check state.
+    // sepc was set to the ECALL instruction address (0x80000000), so SRET returns
+    // to 0x80000000 and we'll re-execute ECALL. Let's just verify the privilege was restored.
+    assert_eq!(vm.cpu.privilege, geometry_os::riscv::cpu::Privilege::User);
+}
+
+/// Test timer interrupt delivery: set MTIP in MIP, enable MTIE in MIE,
+/// enable MIE in mstatus. Next step should deliver interrupt to mtvec.
+#[test]
+fn test_rv32_privilege_timer_interrupt_delivery() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+
+    // Write NOP at entry (should be preempted by interrupt)
+    vm.bus.write_word(base, nop()).unwrap();
+    // Write handler at 0x80000200
+    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
+
+    // Enable machine timer interrupt
+    vm.cpu.csr.mip = 1 << 7;  // MTIP pending (bit 7 = INT_MTI)
+    vm.cpu.csr.mie = 1 << 7;  // MTIE enabled
+    vm.cpu.csr.mstatus = 1 << MSTATUS_MIE_BIT; // Global MIE enabled
+    vm.cpu.csr.mtvec = (base as u32) + 0x200;
+
+    let result = vm.cpu.step(&mut vm.bus);
+    assert_eq!(result, StepResult::Ok);
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x200,
+        "timer interrupt should jump to mtvec");
+    assert_eq!(vm.cpu.csr.mcause, 0x80000007,
+        "mcause should be interrupt bit | MTI (7)");
+    assert_eq!(vm.cpu.csr.mepc, base as u32,
+        "mepc should be PC of preempted instruction");
+}
+
+/// Test software interrupt delivery: set SSIP, enable SSIE, enable SIE.
+#[test]
+fn test_rv32_privilege_software_interrupt_delivery() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+
+    vm.bus.write_word(base, nop()).unwrap();
+    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::User;
+
+    // Enable supervisor software interrupt
+    vm.cpu.csr.mip = 1 << 1;  // SSIP pending (bit 1 = INT_SSI)
+    vm.cpu.csr.mie = 1 << 1;  // SSIE enabled
+    vm.cpu.csr.mstatus = 1 << MSTATUS_SIE_BIT; // Global SIE enabled
+    vm.cpu.csr.mtvec = (base as u32) + 0x200;
+
+    // No delegation -- goes to M-mode
+    let result = vm.cpu.step(&mut vm.bus);
+    assert_eq!(result, StepResult::Ok);
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x200,
+        "software interrupt should jump to mtvec (M-mode, no delegation)");
+    assert_eq!(vm.cpu.csr.mcause, 0x80000001,
+        "mcause should be interrupt bit | SSI (1)");
+    assert_eq!(vm.cpu.privilege, geometry_os::riscv::cpu::Privilege::Machine);
+}
+
+/// Test that MIE/MIP CSR read/write works via instruction.
+#[test]
+fn test_rv32_csr_mie_mip_rw() {
+    let mut vm = test_vm(&[
+        addi(1, 0, 1 << 7),      // x1 = 0x80 (MTIE bit)
+        csrrw(0, 1, CSR_MIE),    // Write to MIE
+        csrrs(2, 0, CSR_MIE),    // Read MIE into x2
+        ebreak(),
+    ]);
+    run(&mut vm, 100);
+    assert_eq!(vm.cpu.csr.mie, 1 << 7);
+    assert_eq!(vm.cpu.x[2], 1 << 7);
+}
+
+/// Test SIE is a restricted view of MIE via instruction.
+#[test]
+fn test_rv32_csr_sie_view() {
+    let mut vm = test_vm(&[
+        addi(1, 0, (1 << 7) | (1 << 5)),  // x1 = MTIE | STIE
+        csrrw(0, 1, CSR_MIE),              // Write to MIE
+        csrrs(2, 0, CSR_SIE),              // Read SIE (restricted view)
+        ebreak(),
+    ]);
+    run(&mut vm, 100);
+    // SIE should only show S-mode bits (STIE at bit 5)
+    assert_eq!(vm.cpu.x[2], 1 << 5, "SIE should be restricted view of MIE");
+}
+
+/// Test medeleg delegation via instruction execution.
+#[test]
+fn test_rv32_csr_medeleg_rw() {
+    let mut vm = test_vm(&[
+        addi(1, 0, 1 << 8),           // x1 = delegate ECALL-U
+        csrrw(0, 1, CSR_MEDELEG),     // Write to medeleg
+        csrrs(2, 0, CSR_MEDELEG),     // Read back
+        ebreak(),
+    ]);
+    run(&mut vm, 100);
+    assert_eq!(vm.cpu.csr.medeleg, 1 << 8);
+    assert_eq!(vm.cpu.x[2], 1 << 8);
+}
+
+/// Test no interrupt fires when globally disabled (MIE bit = 0).
+#[test]
+fn test_rv32_privilege_no_interrupt_when_disabled() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+
+    vm.bus.write_word(base, addi(1, 0, 42)).unwrap();
+    vm.bus.write_word(base + 4, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
+
+    // Timer pending and enabled in MIE, but MIE bit in mstatus is 0
+    vm.cpu.csr.mip = 1 << 7;  // MTIP pending
+    vm.cpu.csr.mie = 1 << 7;  // MTIE enabled
+    vm.cpu.csr.mstatus = 0;   // Global MIE disabled!
+    vm.cpu.csr.mtvec = (base as u32) + 0x200;
+
+    // Step should execute the instruction normally, not deliver interrupt
+    let result = vm.cpu.step(&mut vm.bus);
+    assert_eq!(result, StepResult::Ok);
+    assert_eq!(vm.cpu.x[1], 42, "instruction should execute normally");
+    assert_eq!(vm.cpu.pc, (base as u32) + 4, "PC should advance normally");
 }

@@ -4,23 +4,39 @@
 // Will eventually boot Linux inside the existing canvas VM.
 // See docs/RISCV_HYPERVISOR.md for full architecture.
 
+pub mod bus;
+pub mod clint;
 pub mod cpu;
 pub mod csr;
 pub mod decode;
 pub mod memory;
 
+use cpu::StepResult;
+
 /// Top-level RISC-V virtual machine.
-/// Owns the CPU, memory, and (eventually) device bus.
+/// Owns the CPU and the bus (memory + devices).
 pub struct RiscvVm {
     pub cpu: cpu::RiscvCpu,
-    pub mem: memory::GuestMemory,
+    pub bus: bus::Bus,
 }
 
 impl RiscvVm {
     /// Create a new VM with the given RAM size in bytes.
     pub fn new(ram_size: usize) -> Self {
-        let mem = memory::GuestMemory::new(0x8000_0000, ram_size);
+        let bus = bus::Bus::new(0x8000_0000, ram_size);
         let cpu = cpu::RiscvCpu::new();
-        Self { cpu, mem }
+        Self { cpu, bus }
+    }
+
+    /// Execute one step: tick CLINT, sync MIP, run instruction.
+    pub fn step(&mut self) -> StepResult {
+        // 1. Advance CLINT timer
+        self.bus.tick_clint();
+
+        // 2. Sync CLINT hardware state into MIP
+        self.bus.sync_mip(&mut self.cpu.csr.mip);
+
+        // 3. Execute one CPU instruction via the bus
+        self.cpu.step(&mut self.bus)
     }
 }

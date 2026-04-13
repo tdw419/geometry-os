@@ -5,9 +5,9 @@
 // jumps, branches, load/store, FENCE, ECALL, EBREAK.
 // See docs/RISCV_HYPERVISOR.md §CPU State.
 
+use super::bus::Bus;
 use super::csr::{self, CsrBank};
 use super::decode::{self, Operation};
-use super::memory::GuestMemory;
 
 /// Privilege level.
 #[repr(u8)]
@@ -88,7 +88,7 @@ impl RiscvCpu {
     ///
     /// Before fetching, checks for pending interrupts and delivers them
     /// as traps if enabled.
-    pub fn step(&mut self, mem: &mut GuestMemory) -> StepResult {
+    pub fn step(&mut self, bus: &mut Bus) -> StepResult {
         // Check for pending interrupts before fetching.
         if let Some(cause) = self.csr.pending_interrupt(self.privilege) {
             let trap_priv = self.csr.trap_target_priv(cause, self.privilege);
@@ -99,16 +99,16 @@ impl RiscvCpu {
             return StepResult::Ok;
         }
 
-        let word = match mem.read_word(self.pc as u64) {
+        let word = match bus.read_word(self.pc as u64) {
             Ok(w) => w,
             Err(_) => return StepResult::FetchFault,
         };
         let op = decode::decode(word);
-        self.execute(op, mem)
+        self.execute(op, bus)
     }
 
     /// Execute a decoded operation. Handles PC advancement internally.
-    fn execute(&mut self, op: Operation, mem: &mut GuestMemory) -> StepResult {
+    fn execute(&mut self, op: Operation, bus: &mut Bus) -> StepResult {
         let next_pc = self.pc.wrapping_add(4);
 
         match op {
@@ -160,7 +160,7 @@ impl RiscvCpu {
             // ---- Loads ----
             Operation::Lb { rd, rs1, imm } => {
                 let addr = self.ea(rs1, imm);
-                match mem.read_byte(addr) {
+                match bus.read_byte(addr) {
                     Ok(b) => {
                         self.set_reg(rd, sign_extend_byte(b) as u32);
                         self.pc = next_pc;
@@ -171,7 +171,7 @@ impl RiscvCpu {
             }
             Operation::Lh { rd, rs1, imm } => {
                 let addr = self.ea(rs1, imm);
-                match mem.read_half(addr) {
+                match bus.read_half(addr) {
                     Ok(h) => {
                         self.set_reg(rd, sign_extend_half(h) as u32);
                         self.pc = next_pc;
@@ -182,7 +182,7 @@ impl RiscvCpu {
             }
             Operation::Lw { rd, rs1, imm } => {
                 let addr = self.ea(rs1, imm);
-                match mem.read_word(addr) {
+                match bus.read_word(addr) {
                     Ok(w) => {
                         self.set_reg(rd, w);
                         self.pc = next_pc;
@@ -193,7 +193,7 @@ impl RiscvCpu {
             }
             Operation::Lbu { rd, rs1, imm } => {
                 let addr = self.ea(rs1, imm);
-                match mem.read_byte(addr) {
+                match bus.read_byte(addr) {
                     Ok(b) => {
                         self.set_reg(rd, b as u32);
                         self.pc = next_pc;
@@ -204,7 +204,7 @@ impl RiscvCpu {
             }
             Operation::Lhu { rd, rs1, imm } => {
                 let addr = self.ea(rs1, imm);
-                match mem.read_half(addr) {
+                match bus.read_half(addr) {
                     Ok(h) => {
                         self.set_reg(rd, h as u32);
                         self.pc = next_pc;
@@ -218,7 +218,7 @@ impl RiscvCpu {
             Operation::Sb { rs1, rs2, imm } => {
                 let addr = self.ea(rs1, imm);
                 let val = self.get_reg(rs2);
-                match mem.write_byte(addr, val as u8) {
+                match bus.write_byte(addr, val as u8) {
                     Ok(()) => {
                         self.pc = next_pc;
                         StepResult::Ok
@@ -229,7 +229,7 @@ impl RiscvCpu {
             Operation::Sh { rs1, rs2, imm } => {
                 let addr = self.ea(rs1, imm);
                 let val = self.get_reg(rs2);
-                match mem.write_half(addr, val as u16) {
+                match bus.write_half(addr, val as u16) {
                     Ok(()) => {
                         self.pc = next_pc;
                         StepResult::Ok
@@ -240,7 +240,7 @@ impl RiscvCpu {
             Operation::Sw { rs1, rs2, imm } => {
                 let addr = self.ea(rs1, imm);
                 let val = self.get_reg(rs2);
-                match mem.write_word(addr, val) {
+                match bus.write_word(addr, val) {
                     Ok(()) => {
                         self.pc = next_pc;
                         StepResult::Ok
@@ -510,6 +510,7 @@ impl Default for RiscvCpu {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::riscv::bus::Bus;
 
     #[test]
     fn new_cpu_defaults() {
@@ -545,17 +546,17 @@ mod tests {
     fn fetch_fault_on_bad_pc() {
         let mut cpu = RiscvCpu::new();
         cpu.pc = 0x0000_0000;
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
-        assert_eq!(cpu.step(&mut mem), StepResult::FetchFault);
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        assert_eq!(cpu.step(&mut bus), StepResult::FetchFault);
     }
 
     #[test]
     fn step_lui() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let word = 0x1234_52B7;
-        mem.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).unwrap();
         let mut cpu = RiscvCpu::new();
-        let result = cpu.step(&mut mem);
+        let result = cpu.step(&mut bus);
         assert_eq!(result, StepResult::Ok);
         assert_eq!(cpu.x[5], 0x1234_5000);
         assert_eq!(cpu.pc, 0x8000_0004);
@@ -565,61 +566,61 @@ mod tests {
 
     #[test]
     fn step_add() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 10;
         cpu.x[3] = 20;
         // ADD x1, x2, x3
         let word = (0u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
-        mem.write_word(0x8000_0000, word).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 30);
     }
 
     #[test]
     fn step_sub() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 30;
         cpu.x[3] = 10;
         // SUB x1, x2, x3
         let word = (0b0100000u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
-        mem.write_word(0x8000_0000, word).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 20);
     }
 
     #[test]
     fn step_addi() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 100;
         // ADDI x1, x2, 42
         let word = (42u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x13;
-        mem.write_word(0x8000_0000, word).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 142);
     }
 
     #[test]
     fn step_jal() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         // JAL x1, +8
         let word = (0u32 << 31) | (4u32 << 21) | (0u32 << 20) | (0u32 << 12) | (1u32 << 7) | 0x6F;
-        mem.write_word(0x8000_0000, word).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0x8000_0004);
         assert_eq!(cpu.pc, 0x8000_0008);
     }
 
     #[test]
     fn step_ecall() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.csr.mtvec = 0x8000_0200;
-        mem.write_word(0x8000_0000, 0x00000073).unwrap(); // ECALL
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0000, 0x00000073).unwrap(); // ECALL
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         // PC should jump to mtvec
         assert_eq!(cpu.pc, 0x8000_0200);
         // mepc should hold the PC of the ECALL instruction
@@ -630,33 +631,33 @@ mod tests {
 
     #[test]
     fn step_ebreak() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
-        mem.write_word(0x8000_0000, 0x00100073).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ebreak);
+        bus.write_word(0x8000_0000, 0x00100073).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ebreak);
         assert_eq!(cpu.pc, 0x8000_0004);
     }
 
     #[test]
     fn step_lw_sw() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0xDEAD_BEEF;
         // SW x3, 0(x2)
         let sw = (0u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b010 << 12) | (0u32 << 7) | 0x23;
-        mem.write_word(0x8000_0000, sw).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0000, sw).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         // LW x1, 0(x2)
         let lw = (0u32 << 20) | (2u32 << 15) | (0b010 << 12) | (1u32 << 7) | 0x03;
-        mem.write_word(0x8000_0004, lw).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0004, lw).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xDEAD_BEEF);
     }
 
     #[test]
     fn step_branch_beq_taken() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 42;
         cpu.x[3] = 42;
@@ -668,14 +669,14 @@ mod tests {
         let bits4_1 = (imm >> 1) & 0xF;
         let word = (bit12 << 31) | (bits10_5 << 25) | (3u32 << 20) | (2u32 << 15)
             | (0b000 << 12) | (bits4_1 << 8) | (bit11 << 7) | 0x63;
-        mem.write_word(0x8000_0000, word).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.pc, 0x8000_0008);
     }
 
     #[test]
     fn step_branch_bne_not_taken() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 42;
         cpu.x[3] = 42;
@@ -687,19 +688,19 @@ mod tests {
         let bits4_1 = (imm >> 1) & 0xF;
         let word = (bit12 << 31) | (bits10_5 << 25) | (3u32 << 20) | (2u32 << 15)
             | (0b001 << 12) | (bits4_1 << 8) | (bit11 << 7) | 0x63;
-        mem.write_word(0x8000_0000, word).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.pc, 0x8000_0004);
     }
 
     #[test]
     fn step_auipc() {
-        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         // AUIPC x1, 0x1000  -- imm[31:12] = 0x1
         let word = (0x1u32 << 12) | (1u32 << 7) | 0x17;
-        mem.write_word(0x8000_0000, word).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0x8000_1000);
     }
 }

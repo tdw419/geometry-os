@@ -1,0 +1,208 @@
+// riscv/bus.rs -- Memory-mapped IO bus (Phase 35)
+//
+// Routes memory accesses to RAM or device MMIO regions.
+// Currently handles: CLINT (timer + software interrupts).
+// Phase 36 will add: UART, PLIC, virtio-blk.
+
+use super::clint::{self, Clint};
+use super::memory::{GuestMemory, MemoryError};
+
+/// CLINT MMIO address range.
+const CLINT_START: u64 = 0x0200_0000;
+const CLINT_END: u64 = 0x0201_0000;
+
+/// The system bus: owns RAM and devices, routes accesses.
+pub struct Bus {
+    /// Guest RAM.
+    pub mem: GuestMemory,
+    /// Core Local Interruptor (timer + software interrupts).
+    pub clint: Clint,
+}
+
+impl Bus {
+    /// Create a new bus with the given RAM base address and size.
+    pub fn new(ram_base: u64, ram_size: usize) -> Self {
+        Self {
+            mem: GuestMemory::new(ram_base, ram_size),
+            clint: Clint::new(),
+        }
+    }
+
+    /// Read a 32-bit word. Routes to CLINT MMIO or RAM.
+    pub fn read_word(&self, addr: u64) -> Result<u32, MemoryError> {
+        if Self::in_clint(addr) {
+            self.clint.read(addr).ok_or(MemoryError { addr, size: 4 })
+        } else {
+            self.mem.read_word(addr)
+        }
+    }
+
+    /// Write a 32-bit word. Routes to CLINT MMIO or RAM.
+    pub fn write_word(&mut self, addr: u64, val: u32) -> Result<(), MemoryError> {
+        if Self::in_clint(addr) {
+            if self.clint.write(addr, val) {
+                Ok(())
+            } else {
+                Err(MemoryError { addr, size: 4 })
+            }
+        } else {
+            self.mem.write_word(addr, val)
+        }
+    }
+
+    /// Read a byte. Routes to CLINT MMIO or RAM.
+    pub fn read_byte(&self, addr: u64) -> Result<u8, MemoryError> {
+        if Self::in_clint(addr) {
+            let word = self.clint.read(addr & !3).ok_or(MemoryError { addr, size: 1 })?;
+            let byte_off = (addr & 3) as usize;
+            Ok((word >> (byte_off * 8)) as u8)
+        } else {
+            self.mem.read_byte(addr)
+        }
+    }
+
+    /// Write a byte. Routes to CLINT MMIO or RAM.
+    pub fn write_byte(&mut self, addr: u64, val: u8) -> Result<(), MemoryError> {
+        if Self::in_clint(addr) {
+            let word_addr = addr & !3;
+            let byte_off = (addr & 3) as usize;
+            let mut word = self.clint.read(word_addr).unwrap_or(0);
+            word = (word & !(0xFF << (byte_off * 8))) | ((val as u32) << (byte_off * 8));
+            if self.clint.write(word_addr, word) {
+                Ok(())
+            } else {
+                Err(MemoryError { addr, size: 1 })
+            }
+        } else {
+            self.mem.write_byte(addr, val)
+        }
+    }
+
+    /// Read a 16-bit half-word. Routes to CLINT MMIO or RAM.
+    pub fn read_half(&self, addr: u64) -> Result<u16, MemoryError> {
+        if Self::in_clint(addr) {
+            let word = self.clint.read(addr & !3).ok_or(MemoryError { addr, size: 2 })?;
+            let half_off = ((addr >> 1) & 1) as usize;
+            Ok((word >> (half_off * 16)) as u16)
+        } else {
+            self.mem.read_half(addr)
+        }
+    }
+
+    /// Write a 16-bit half-word. Routes to CLINT MMIO or RAM.
+    pub fn write_half(&mut self, addr: u64, val: u16) -> Result<(), MemoryError> {
+        if Self::in_clint(addr) {
+            let word_addr = addr & !3;
+            let half_off = ((addr >> 1) & 1) as usize;
+            let mut word = self.clint.read(word_addr).unwrap_or(0);
+            word =
+                (word & !(0xFFFF << (half_off * 16))) | ((val as u32) << (half_off * 16));
+            if self.clint.write(word_addr, word) {
+                Ok(())
+            } else {
+                Err(MemoryError { addr, size: 2 })
+            }
+        } else {
+            self.mem.write_half(addr, val)
+        }
+    }
+
+    /// Advance the CLINT timer by one tick.
+    pub fn tick_clint(&mut self) {
+        self.clint.tick();
+    }
+
+    /// Sync CLINT hardware state into the MIP register.
+    ///
+    /// Sets/clears MTIP (bit 7) based on mtime >= mtimecmp.
+    /// Sets/clears MSIP (bit 3) based on msip register.
+    /// Other MIP bits (SSIP, STIP, SEIP, etc.) are left unchanged.
+    pub fn sync_mip(&self, mip: &mut u32) {
+        // MTIP (bit 7): machine timer interrupt pending
+        if self.clint.timer_pending() {
+            *mip |= 1 << 7;
+        } else {
+            *mip &= !(1 << 7);
+        }
+
+        // MSIP (bit 3): machine software interrupt pending
+        if self.clint.software_pending() {
+            *mip |= 1 << 3;
+        } else {
+            *mip &= !(1 << 3);
+        }
+    }
+
+    fn in_clint(addr: u64) -> bool {
+        addr >= CLINT_START && addr < CLINT_END
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bus_ram_read_write() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        bus.write_word(0x8000_0000, 0xDEAD_BEEF).unwrap();
+        assert_eq!(bus.read_word(0x8000_0000).unwrap(), 0xDEAD_BEEF);
+    }
+
+    #[test]
+    fn bus_clint_mmio_mtimecmp() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        bus.write_word(clint::MTIMECMP_BASE, 0x0000_0100).unwrap();
+        assert_eq!(bus.read_word(clint::MTIMECMP_BASE).unwrap(), 0x0000_0100);
+    }
+
+    #[test]
+    fn bus_clint_msip() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        bus.write_word(clint::MSIP_BASE, 1).unwrap();
+        assert_eq!(bus.read_word(clint::MSIP_BASE).unwrap(), 1);
+        assert!(bus.clint.software_pending());
+    }
+
+    #[test]
+    fn bus_sync_mip_timer() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        bus.clint.mtimecmp = 0; // Timer fires immediately (mtime=0 >= mtimecmp=0)
+        let mut mip = 0u32;
+        bus.sync_mip(&mut mip);
+        assert_eq!(mip & (1 << 7), 1 << 7, "MTIP should be set");
+    }
+
+    #[test]
+    fn bus_sync_mip_software() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        bus.clint.msip = 1;
+        let mut mip = 0u32;
+        bus.sync_mip(&mut mip);
+        assert_eq!(mip & (1 << 3), 1 << 3, "MSIP should be set");
+    }
+
+    #[test]
+    fn bus_sync_mip_clears_when_not_pending() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut mip = (1 << 7) | (1 << 3);
+        bus.sync_mip(&mut mip);
+        assert_eq!(mip & (1 << 7), 0, "MTIP should be cleared");
+        assert_eq!(mip & (1 << 3), 0, "MSIP should be cleared");
+    }
+
+    #[test]
+    fn bus_out_of_range_fails() {
+        let bus = Bus::new(0x8000_0000, 4096);
+        assert!(bus.read_word(0x0000_0000).is_err());
+        assert!(bus.read_word(0x0200_1000).is_err()); // CLINT gap
+    }
+
+    #[test]
+    fn bus_tick_advances_mtime() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        assert_eq!(bus.clint.mtime, 0);
+        bus.tick_clint();
+        assert_eq!(bus.clint.mtime, 1);
+    }
+}
