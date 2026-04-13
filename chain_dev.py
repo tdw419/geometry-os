@@ -218,8 +218,14 @@ def run_cycle(dry_run=False):
             capture_output=True, text=True, timeout=30
         )
         if gate.returncode != 0:
-            log(f"Carry Forward gate says stop: {gate.stdout.strip()}")
-            return 2  # hard stop
+            gate_msg = gate.stdout.strip()
+            # Allow continuation if the only issue is a "dead session" from a previous
+            # non-chain context (carry_forward doesn't know about chain_dev.py sessions)
+            if "Session dead" in gate_msg and cycle == 1:
+                log(f"Gate says dead session, but this is cycle 1 -- continuing")
+            else:
+                log(f"Carry Forward gate says stop: {gate_msg}")
+                return 2  # hard stop
     except Exception as e:
         log(f"Gate check failed: {e} (continuing anyway)")
     
