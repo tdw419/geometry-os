@@ -1537,7 +1537,7 @@ phases:
     reason: Privilege modes layer on top of the base RV32I interpreter
 - id: phase-36
   title: RISC-V Virtual Memory & Devices
-  status: future
+  status: in_progress
   goal: SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot.
   priority: 60
   deliverables:
