@@ -32,8 +32,12 @@ pub enum StepResult {
     Ecall,
     /// EBREAK was executed (breakpoint).
     Ebreak,
-    /// Fetch failed (bad PC).
+    /// Fetch failed (bad PC or unmapped memory).
     FetchFault,
+    /// Load from unmapped memory.
+    LoadFault,
+    /// Store to unmapped memory.
+    StoreFault,
 }
 
 /// RV32I CPU state.
@@ -74,7 +78,10 @@ impl RiscvCpu {
     /// Fetch, decode, and execute one instruction.
     /// Returns StepResult indicating what happened.
     pub fn step(&mut self, mem: &mut GuestMemory) -> StepResult {
-        let word = mem.read_word(self.pc as u64);
+        let word = match mem.read_word(self.pc as u64) {
+            Ok(w) => w,
+            Err(_) => return StepResult::FetchFault,
+        };
         let instr = decode::decode(word);
         self.execute(instr, mem)
     }
@@ -134,11 +141,36 @@ impl RiscvCpu {
             Instruction::Load { rd, rs1, imm, funct3 } => {
                 let addr = (self.get_reg(rs1) as i64 + imm as i64) as u64;
                 let val = match funct3 {
-                    0b000 => sign_extend_byte(mem.read_byte(addr)) as u32,  // LB
-                    0b001 => sign_extend_half(mem.read_half(addr)) as u32,  // LH
-                    0b010 => mem.read_word(addr),                            // LW
-                    0b100 => mem.read_byte(addr) as u32,                     // LBU
-                    0b101 => mem.read_half(addr) as u32,                     // LHU
+                    0b000 => {
+                        match mem.read_byte(addr) {
+                            Ok(b) => sign_extend_byte(b) as u32,
+                            Err(_) => return StepResult::LoadFault,
+                        }
+                    } // LB
+                    0b001 => {
+                        match mem.read_half(addr) {
+                            Ok(h) => sign_extend_half(h) as u32,
+                            Err(_) => return StepResult::LoadFault,
+                        }
+                    } // LH
+                    0b010 => {
+                        match mem.read_word(addr) {
+                            Ok(w) => w,
+                            Err(_) => return StepResult::LoadFault,
+                        }
+                    } // LW
+                    0b100 => {
+                        match mem.read_byte(addr) {
+                            Ok(b) => b as u32,
+                            Err(_) => return StepResult::LoadFault,
+                        }
+                    } // LBU
+                    0b101 => {
+                        match mem.read_half(addr) {
+                            Ok(h) => h as u32,
+                            Err(_) => return StepResult::LoadFault,
+                        }
+                    } // LHU
                     _ => 0,
                 };
                 self.set_reg(rd, val);
@@ -150,11 +182,14 @@ impl RiscvCpu {
             Instruction::Store { rs1, rs2, imm, funct3 } => {
                 let addr = (self.get_reg(rs1) as i64 + imm as i64) as u64;
                 let val = self.get_reg(rs2);
-                match funct3 {
+                let result = match funct3 {
                     0b000 => mem.write_byte(addr, val as u8),   // SB
                     0b001 => mem.write_half(addr, val as u16),  // SH
                     0b010 => mem.write_word(addr, val),         // SW
-                    _ => {}
+                    _ => Ok(()),
+                };
+                if result.is_err() {
+                    return StepResult::StoreFault;
                 }
                 self.pc = next_pc;
                 StepResult::Ok
@@ -259,5 +294,61 @@ fn sign_extend_half(h: u16) -> i32 {
 impl Default for RiscvCpu {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_cpu_defaults() {
+        let cpu = RiscvCpu::new();
+        assert_eq!(cpu.pc, 0x8000_0000);
+        assert_eq!(cpu.privilege, Privilege::Machine);
+        assert_eq!(cpu.x[0], 0); // x0 always 0
+        assert_eq!(cpu.x[10], 0); // a0
+        assert_eq!(cpu.x[11], 0); // a1
+    }
+
+    #[test]
+    fn write_reg_x0_is_noop() {
+        let mut cpu = RiscvCpu::new();
+        cpu.set_reg(0, 0xDEAD_BEEF);
+        assert_eq!(cpu.x[0], 0);
+    }
+
+    #[test]
+    fn read_reg_x0_is_zero() {
+        let cpu = RiscvCpu::new();
+        assert_eq!(cpu.get_reg(0), 0);
+    }
+
+    #[test]
+    fn write_read_reg_roundtrip() {
+        let mut cpu = RiscvCpu::new();
+        cpu.set_reg(5, 0x1234_5678);
+        assert_eq!(cpu.get_reg(5), 0x1234_5678);
+    }
+
+    #[test]
+    fn fetch_fault_on_bad_pc() {
+        let mut cpu = RiscvCpu::new();
+        cpu.pc = 0x0000_0000; // below ram_base
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        assert_eq!(cpu.step(&mut mem), StepResult::FetchFault);
+    }
+
+    #[test]
+    fn step_lui() {
+        let mut mem = GuestMemory::new(0x8000_0000, 4096);
+        // LUI x5, 0x12345000 => opcode 0x37
+        let word = 0x1234_52B7; // LUI x5, 0x12345000
+        mem.write_word(0x8000_0000, word).unwrap();
+        let mut cpu = RiscvCpu::new();
+        let result = cpu.step(&mut mem);
+        assert_eq!(result, StepResult::Ok);
+        assert_eq!(cpu.x[5], 0x1234_5000);
+        assert_eq!(cpu.pc, 0x8000_0004);
     }
 }
