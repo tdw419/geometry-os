@@ -6,7 +6,7 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 54 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling, virtual filesystem, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 61 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling, virtual filesystem, device drivers, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
@@ -46,7 +46,7 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
-## The Instruction Set (54 opcodes)
+## The Instruction Set (61 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -129,6 +129,16 @@ cd wasm && wasm-pack build --target web
 |--------|------|-------------|
 | SPAWN  | addr_reg | Create child process (PID in RAM[0xFFA]) |
 | KILL   | pid_reg | Terminate child process |
+| YIELD  |         | Voluntary context switch |
+| SLEEP  | dur_reg | Sleep for N frames |
+| SETPRIORITY | prio_reg | Set current process priority (0-3) |
+
+### IPC
+| Opcode | Args | Description |
+|--------|------|-------------|
+| PIPE   | read_reg, write_reg | Create pipe, read fd in read_reg, write fd in write_reg |
+| MSGSND | pid_reg | Send 4-word message to target PID |
+| MSGRCV |         | Receive message, sender PID in r0 |
 
 ### Kernel Boundary
 | Opcode | Args | Description |
@@ -145,6 +155,14 @@ cd wasm && wasm-pack build --target web
 | CLOSE  | fd_reg | Close file descriptor, 0=ok, 0xFFFFFFFF=error in r0 |
 | SEEK   | fd_reg, offset_reg, whence_reg | Seek (0=SET, 1=CUR, 2=END), new pos in r0 |
 | LS     | buf_reg | List directory entries into RAM buffer, count in r0 |
+
+### Device Drivers
+
+Device files provide uniform access to hardware. OPEN `/dev/screen`, `/dev/keyboard`, `/dev/audio`, `/dev/net` returns device fds (0xE000-0xE003). READ/WRITE work on device fds. IOCTL provides device-specific control.
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| IOCTL  | fd_reg, cmd_reg, arg_reg | Device-specific control. Screen: get w/h. Keyboard: get/set echo. Audio: get/set volume. Net: get status. Result in r0 |
 
 ## Memory-Mapped I/O
 

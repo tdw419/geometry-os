@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 60
-  tests: 185
-  programs: 36
-  loc: 7124
+  opcodes: 61
+  tests: 160
+  programs: 37
+  loc: 7329
 
 phases:
   # ===================================================================
@@ -849,21 +849,60 @@ phases:
         description: "Program demonstrating parent-child pipe communication"
         status: "done"
 
+  # ===================================================================
+  # OS CONSTRUCTION PHASES (COMPLETE)
+  # ===================================================================
+
   - id: "phase-28"
     title: "Device Driver Abstraction"
-    status: "todo"
+    status: "complete"
     goal: "All hardware access through a uniform driver interface. Everything is a file."
     priority: 16
     deliverables:
       - name: "Device file convention"
         description: "/dev/screen, /dev/keyboard, /dev/audio, /dev/net"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "OPEN /dev/screen returns fd 0xE000"
+            met: true
+          - description: "OPEN /dev/keyboard returns fd 0xE001"
+            met: true
+          - description: "OPEN /dev/audio returns fd 0xE002"
+            met: true
+          - description: "OPEN /dev/net returns fd 0xE003"
+            met: true
       - name: "IOCTL syscall"
         description: "Device-specific control operations"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "IOCTL assembles to opcode 0x62"
+            met: true
+          - description: "Screen: get width/height via cmd 0/1"
+            met: true
+          - description: "Keyboard: get/set echo mode via cmd 0/1"
+            met: true
+          - description: "Audio: get/set volume via cmd 0/1"
+            met: true
+          - description: "Net: get status via cmd 0"
+            met: true
       - name: "Screen/keyboard/audio/net drivers"
         description: "Wrap existing hardware ports as device files"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "WRITE to /dev/screen draws pixels from (x,y,color) triplets"
+            met: true
+          - description: "READ from /dev/keyboard reads RAM[0xFFF] and clears it"
+            met: true
+          - description: "WRITE to /dev/audio sets beep from (freq,dur) pair"
+            met: true
+          - description: "READ/WRITE to /dev/net uses RAM[0xFFC]"
+            met: true
+          - description: "device_test.asm demo program"
+            met: true
+
+  # ===================================================================
+  # UPCOMING PHASES
+  # ===================================================================
 
   - id: "phase-29"
     title: "Shell"
@@ -939,12 +978,13 @@ phases:
         status: "todo"
 
 global_risks:
-  - "Opcode space: 60 of ~256 slots used, plenty of room"
+  - "Opcode space: 61 of ~256 slots used, plenty of room"
   - "Scope creep -- adding features is easy, keeping the OS coherent is hard"
   - "Kernel boundary breaks existing programs -- need a compatibility mode"
   - "Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing"
   - "Filesystem persistence needs host directory -- WASM port needs different backing"
   - "Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces shared-RAM for multiprocess"
+  - "Phase 28 device drivers: IOCTL opcode 0x62, 4 device files at fds 0xE000-0xE003"
 
 conventions:
   - "Every new opcode gets a test in tests/program_tests.rs"

@@ -54,6 +54,18 @@ pub const MAX_MESSAGES: usize = 16;
 /// Message payload size in u32 words.
 pub const MSG_WORDS: usize = 4;
 
+/// Device driver constants (Phase 28: Device Driver Abstraction).
+/// Device fd base: device fds live at 0xE000+device_index.
+pub const DEVICE_FD_BASE: u32 = 0xE000;
+/// Device types mapped to fixed fd slots.
+pub const DEVICE_SCREEN: u32 = 0; // /dev/screen -> fd 0xE000
+pub const DEVICE_KEYBOARD: u32 = 1; // /dev/keyboard -> fd 0xE001
+pub const DEVICE_AUDIO: u32 = 2; // /dev/audio -> fd 0xE002
+pub const DEVICE_NET: u32 = 3; // /dev/net -> fd 0xE003
+pub const DEVICE_COUNT: usize = 4;
+/// Device names (indexed by device type).
+pub const DEVICE_NAMES: &[&str] = &["/dev/screen", "/dev/keyboard", "/dev/audio", "/dev/net"];
+
 /// A unidirectional pipe with a circular buffer.
 /// Created by PIPE syscall. Two fd slots are allocated: read_fd and write_fd.
 #[derive(Debug, Clone)]
@@ -307,6 +319,25 @@ impl Vm {
     fn log_access(&mut self, addr: usize, kind: MemAccessKind) {
         if self.access_log.len() < 4096 {
             self.access_log.push(MemAccess { addr, kind });
+        }
+    }
+
+    /// Read a null-terminated string from RAM (one char per u32 word).
+    fn read_string_static(ram: &[u32], addr: usize) -> Option<String> {
+        let mut s = String::new();
+        let mut a = addr;
+        while a < ram.len() {
+            let ch = (ram[a] & 0xFF) as u8;
+            if ch == 0 {
+                return Some(s);
+            }
+            s.push(ch as char);
+            a += 1;
+        }
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
         }
     }
 
@@ -1157,9 +1188,26 @@ impl Vm {
                 if path_reg < NUM_REGS && mode_reg < NUM_REGS {
                     let path_addr = self.regs[path_reg];
                     let mode = self.regs[mode_reg];
-                    let pid = self.current_pid;
-                    let fd = self.vfs.fopen(&self.ram, path_addr, mode, pid);
-                    self.regs[0] = fd;
+                    // Check if path matches a device name
+                    let mut is_device = false;
+                    let mut dev_fd = 0xFFFFFFFF;
+                    let path_str = Self::read_string_static(&self.ram, path_addr as usize);
+                    if let Some(path) = path_str {
+                        for (i, &name) in DEVICE_NAMES.iter().enumerate() {
+                            if path == name {
+                                is_device = true;
+                                dev_fd = DEVICE_FD_BASE + i as u32;
+                                break;
+                            }
+                        }
+                    }
+                    if is_device {
+                        self.regs[0] = dev_fd;
+                    } else {
+                        let pid = self.current_pid;
+                        let fd = self.vfs.fopen(&self.ram, path_addr, mode, pid);
+                        self.regs[0] = fd;
+                    }
                 } else {
                     self.regs[0] = 0xFFFFFFFF;
                 }
@@ -1173,8 +1221,35 @@ impl Vm {
                 let len_reg = self.fetch() as usize;
                 if fd_reg < NUM_REGS && buf_reg < NUM_REGS && len_reg < NUM_REGS {
                     let fd = self.regs[fd_reg];
+                    // Check if this is a device fd (0xE000+idx)
+                    let dev_idx_r = fd.wrapping_sub(DEVICE_FD_BASE) as usize;
+                    if fd >= DEVICE_FD_BASE && dev_idx_r < DEVICE_COUNT {
+                        let dev_idx = fd.wrapping_sub(DEVICE_FD_BASE) as usize;
+                        let buf_addr = self.regs[buf_reg] as usize;
+                        let len = self.regs[len_reg] as usize;
+                        let mut count = 0usize;
+                        match dev_idx {
+                            1 => {
+                                // /dev/keyboard -- read key from RAM[0xFFF]
+                                if len > 0 && buf_addr < self.ram.len() {
+                                    self.ram[buf_addr] = self.ram[0xFFF];
+                                    self.ram[0xFFF] = 0; // clear port like IKEY
+                                    count = 1;
+                                }
+                            }
+                            3 => {
+                                // /dev/net -- read from RAM[0xFFC]
+                                if len > 0 && buf_addr < self.ram.len() {
+                                    self.ram[buf_addr] = self.ram[0xFFC];
+                                    count = 1;
+                                }
+                            }
+                            _ => {} // other devices: read returns 0
+                        }
+                        self.regs[0] = count as u32;
+                    }
                     // Check if this is a pipe read fd (0x8000+idx)
-                    if fd >= 0x8000 && fd < 0xC000 {
+                    else if fd >= 0x8000 && fd < 0xC000 {
                         let pipe_idx = (fd & 0x0FFF) as usize;
                         let buf_addr = self.regs[buf_reg] as usize;
                         let len = self.regs[len_reg] as usize;
@@ -1233,8 +1308,64 @@ impl Vm {
                 let len_reg = self.fetch() as usize;
                 if fd_reg < NUM_REGS && buf_reg < NUM_REGS && len_reg < NUM_REGS {
                     let fd = self.regs[fd_reg];
+                    // Check if this is a device fd (0xE000+idx)
+                    let dev_idx_w = fd.wrapping_sub(DEVICE_FD_BASE) as usize;
+                    if fd >= DEVICE_FD_BASE && dev_idx_w < DEVICE_COUNT {
+                        let buf_addr = self.regs[buf_reg] as usize;
+                        let len = self.regs[len_reg] as usize;
+                        match dev_idx_w {
+                            0 => {
+                                // /dev/screen -- write (x, y, color) triplets
+                                let mut i = 0;
+                                while i + 2 < len {
+                                    let x_addr = buf_addr + i;
+                                    let y_addr = buf_addr + i + 1;
+                                    let c_addr = buf_addr + i + 2;
+                                    if x_addr < self.ram.len()
+                                        && y_addr < self.ram.len()
+                                        && c_addr < self.ram.len()
+                                    {
+                                        let x = self.ram[x_addr] as usize;
+                                        let y = self.ram[y_addr] as usize;
+                                        let c = self.ram[c_addr];
+                                        if x < 256 && y < 256 {
+                                            self.screen[y * 256 + x] = c;
+                                        }
+                                    }
+                                    i += 3;
+                                }
+                                self.regs[0] = i as u32;
+                            }
+                            2 => {
+                                // /dev/audio -- write (freq, duration) pair
+                                if len >= 2
+                                    && buf_addr < self.ram.len()
+                                    && buf_addr + 1 < self.ram.len()
+                                {
+                                    let freq = self.ram[buf_addr].max(20).min(20000);
+                                    let dur = self.ram[buf_addr + 1].max(1).min(5000);
+                                    self.beep = Some((freq, dur));
+                                    self.regs[0] = 2;
+                                } else {
+                                    self.regs[0] = 0;
+                                }
+                            }
+                            3 => {
+                                // /dev/net -- write to RAM[0xFFC]
+                                if len > 0 && buf_addr < self.ram.len() {
+                                    self.ram[0xFFC] = self.ram[buf_addr];
+                                    self.regs[0] = 1;
+                                } else {
+                                    self.regs[0] = 0;
+                                }
+                            }
+                            _ => {
+                                self.regs[0] = 0;
+                            }
+                        }
+                    }
                     // Check if this is a pipe write fd (0xC000+idx)
-                    if fd >= 0xC000 {
+                    else if fd >= 0xC000 && fd < DEVICE_FD_BASE {
                         let pipe_idx = (fd & 0x0FFF) as usize;
                         let buf_addr = self.regs[buf_reg] as usize;
                         let len = self.regs[len_reg] as usize;
@@ -1283,8 +1414,13 @@ impl Vm {
                 if fd_reg < NUM_REGS {
                     let fd = self.regs[fd_reg];
                     let pid = self.current_pid;
+                    // Check if this is a device fd (no-op close)
+                    let dev_idx_c = fd.wrapping_sub(DEVICE_FD_BASE) as usize;
+                    if fd >= DEVICE_FD_BASE && dev_idx_c < DEVICE_COUNT {
+                        self.regs[0] = 0; // device close always succeeds
+                    }
                     // Check if this is a pipe fd
-                    if (fd >= 0x8000 && fd < 0xC000) || fd >= 0xC000 {
+                    else if (fd >= 0x8000 && fd < 0xC000) || (fd >= 0xC000 && fd < DEVICE_FD_BASE) {
                         let pipe_idx = (fd & 0x0FFF) as usize;
                         if pipe_idx < self.pipes.len() {
                             // Mark pipe as dead (both read and write ends closed)
@@ -1436,6 +1572,61 @@ impl Vm {
                 } else {
                     // Main process: check msg queue on VM (non-blocking for simplicity)
                     self.regs[0] = 0xFFFFFFFF; // main process has no msg queue in current design
+                }
+            }
+
+            // IOCTL fd_reg, cmd_reg, arg_reg  -- device-specific control operations
+            // r0 = result (device-dependent), 0xFFFFFFFF on error
+            // Screen: cmd 0 = get width in r0, cmd 1 = get height in r0
+            // Keyboard: cmd 0 = get echo mode, cmd 1 = set echo mode (arg)
+            // Audio: cmd 0 = get volume, cmd 1 = set volume (arg 0-100)
+            // Net: cmd 0 = get status
+            0x62 => {
+                let fd_reg = self.fetch() as usize;
+                let cmd_reg = self.fetch() as usize;
+                let arg_reg = self.fetch() as usize;
+                if fd_reg < NUM_REGS && cmd_reg < NUM_REGS && arg_reg < NUM_REGS {
+                    let fd = self.regs[fd_reg];
+                    let cmd = self.regs[cmd_reg];
+                    let arg = self.regs[arg_reg];
+                    // Must be a device fd
+                    let dev_idx = fd.wrapping_sub(DEVICE_FD_BASE) as usize;
+                    if fd >= DEVICE_FD_BASE && dev_idx < DEVICE_COUNT {
+                        match dev_idx {
+                            0 => { // /dev/screen
+                                match cmd {
+                                    0 => self.regs[0] = 256, // width
+                                    1 => self.regs[0] = 256, // height
+                                    _ => self.regs[0] = 0xFFFFFFFF,
+                                }
+                            }
+                            1 => { // /dev/keyboard
+                                match cmd {
+                                    0 => self.regs[0] = self.ram[0xFF8], // get echo mode
+                                    1 => { self.ram[0xFF8] = arg; self.regs[0] = 0; }
+                                    _ => self.regs[0] = 0xFFFFFFFF,
+                                }
+                            }
+                            2 => { // /dev/audio
+                                match cmd {
+                                    0 => self.regs[0] = self.ram[0xFF7], // get volume
+                                    1 => { self.ram[0xFF7] = arg.min(100); self.regs[0] = 0; }
+                                    _ => self.regs[0] = 0xFFFFFFFF,
+                                }
+                            }
+                            3 => { // /dev/net
+                                match cmd {
+                                    0 => self.regs[0] = 1, // status: up
+                                    _ => self.regs[0] = 0xFFFFFFFF,
+                                }
+                            }
+                            _ => self.regs[0] = 0xFFFFFFFF,
+                        }
+                    } else {
+                        self.regs[0] = 0xFFFFFFFF; // not a device fd
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
                 }
             }
 
@@ -1738,6 +1929,12 @@ impl Vm {
                 (format!("MSGSND {}", reg(r)), 2)
             }
             0x5F => ("MSGRCV".into(), 1),
+            0x62 => {
+                let fd = ram(a + 1);
+                let cmd = ram(a + 2);
+                let arg = ram(a + 3);
+                (format!("IOCTL {}, {}, {}", reg(fd), reg(cmd), reg(arg)), 4)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

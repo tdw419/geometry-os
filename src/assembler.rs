@@ -699,6 +699,16 @@ fn parse_instruction(
             bytecode.push(0x5F);
         }
 
+        "IOCTL" => {
+            if tokens.len() < 4 {
+                return Err(format!("IOCTL requires 3 arguments: IOCTL fd_reg, cmd_reg, arg_reg"));
+            }
+            bytecode.push(0x62);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

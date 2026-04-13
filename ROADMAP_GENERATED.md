@@ -5,9 +5,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 27/32 phases complete, 0 in progress
+**Progress:** 28/32 phases complete, 0 in progress
 
-**Deliverables:** 120/138 complete
+**Deliverables:** 123/138 complete
 
 ## Scope Summary
 
@@ -40,7 +40,7 @@ the built-in text editor, press F5, watch it run.
 | phase-25 Filesystem | COMPLETE | 5/5 | - | - |
 | phase-26 Preemptive Scheduler | COMPLETE | 3/3 | - | - |
 | phase-27 Inter-Process Communication | COMPLETE | 4/4 | - | - |
-| phase-28 Device Driver Abstraction | PLANNED | 0/3 | - | - |
+| phase-28 Device Driver Abstraction | COMPLETE | 3/3 | - | - |
 | phase-29 Shell | PLANNED | 0/4 | - | - |
 | phase-30 Boot Sequence & Init | PLANNED | 0/3 | - | - |
 | phase-31 Standard Library | PLANNED | 0/4 | - | - |
@@ -469,15 +469,29 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
   - [x] MSGRCV blocks if no message queued
 - [x] **pipe_test.asm** -- Program demonstrating parent-child pipe communication
 
-## [ ] phase-28: Device Driver Abstraction (PLANNED)
+## [x] phase-28: Device Driver Abstraction (COMPLETE)
 
 **Goal:** All hardware access through a uniform driver interface. Everything is a file.
 
 ### Deliverables
 
-- [ ] **Device file convention** -- /dev/screen, /dev/keyboard, /dev/audio, /dev/net
-- [ ] **IOCTL syscall** -- Device-specific control operations
-- [ ] **Screen/keyboard/audio/net drivers** -- Wrap existing hardware ports as device files
+- [x] **Device file convention** -- /dev/screen, /dev/keyboard, /dev/audio, /dev/net
+  - [x] OPEN /dev/screen returns fd 0xE000
+  - [x] OPEN /dev/keyboard returns fd 0xE001
+  - [x] OPEN /dev/audio returns fd 0xE002
+  - [x] OPEN /dev/net returns fd 0xE003
+- [x] **IOCTL syscall** -- Device-specific control operations
+  - [x] IOCTL assembles to opcode 0x62
+  - [x] Screen: get width/height via cmd 0/1
+  - [x] Keyboard: get/set echo mode via cmd 0/1
+  - [x] Audio: get/set volume via cmd 0/1
+  - [x] Net: get status via cmd 0
+- [x] **Screen/keyboard/audio/net drivers** -- Wrap existing hardware ports as device files
+  - [x] WRITE to /dev/screen draws pixels from (x,y,color) triplets
+  - [x] READ from /dev/keyboard reads RAM[0xFFF] and clears it
+  - [x] WRITE to /dev/audio sets beep from (freq,dur) pair
+  - [x] READ/WRITE to /dev/net uses RAM[0xFFC]
+  - [x] device_test.asm demo program
 
 ## [ ] phase-29: Shell (PLANNED)
 
@@ -524,12 +538,13 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 
 ## Global Risks
 
-- Opcode space: 60 of ~256 slots used, plenty of room
+- Opcode space: 61 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
 - Filesystem persistence needs host directory -- WASM port needs different backing
 - Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces shared-RAM for multiprocess
+- Phase 28 device drivers: IOCTL opcode 0x62, 4 device files at fds 0xE000-0xE003
 
 ## Conventions
 
