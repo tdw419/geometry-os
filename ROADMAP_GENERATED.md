@@ -497,7 +497,7 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 
 ## Global Risks
 
-- Opcode space: 47 of ~256 slots used, plenty of room
+- Opcode space: 48 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- need IPC first or programs break
