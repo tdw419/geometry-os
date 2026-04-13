@@ -398,18 +398,13 @@ impl RiscvCpu {
                 StepResult::Ok
             }
             Operation::SfenceVma { rs1, rs2 } => {
-                let asid = mmu::satp_asid(self.csr.satp);
                 if rs1 == 0 && rs2 == 0 {
                     self.tlb.flush_all();
                 } else if rs1 == 0 {
                     self.tlb.flush_all();
                 } else {
                     let vpn = mmu::va_to_vpn(self.get_reg(rs1));
-                    if rs2 == 0 {
-                        self.tlb.flush_vpn(vpn, asid);
-                    } else {
-                        self.tlb.flush_vpn(vpn, asid);
-                    }
+                    self.tlb.flush_va(vpn);
                 }
                 self.pc = next_pc;
                 StepResult::Ok

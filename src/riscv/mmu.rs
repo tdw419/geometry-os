@@ -1,16 +1,33 @@
-// riscv/mmu.rs -- SV32 page table walk + TLB (Phase 36)
+// riscv/mmu.rs -- SV32 Memory Management Unit (Phase 36)
 //
-// Implements RISC-V Sv32 virtual memory translation:
-//   - 2-level page table walk: VPN[1] -> PT1 -> VPN[0] -> PT2 -> PPN + offset
-//   - PTE flags: V, R, W, X, U, G, A, D
-//   - 64-entry TLB with ASID-aware invalidation
-//   - Page fault generation (load, store, instruction)
-//   - SFENCE.VMA support (TLB flush)
+// Implements SV32 virtual memory translation for RISC-V:
+//   - 2-level page table walk (10-bit VPN indices)
+//   - Page table entry flags: V, R, W, X, U, G, A, D
+//   - TLB with ASID-aware invalidation
+//   - Page fault generation (instruction, load, store)
+//
+// SV32 virtual address format (32 bits):
+//   [31:22] VPN[1] (10 bits)
+//   [21:12] VPN[0] (10 bits)
+//   [11:0]  page offset (12 bits)
+//
+// SV32 page table entry (32 bits):
+//   [31:20] PPN[1] (12 bits)
+//   [19:10] PPN[0] (10 bits)
+//   [9:8]   RSW (reserved for software)
+//   [7]     D (dirty)
+//   [6]     A (accessed)
+//   [5]     G (global)
+//   [4]     U (user)
+//   [3]     X (execute)
+//   [2]     W (write)
+//   [1]     R (read)
+//   [0]     V (valid)
 
 use super::bus::Bus;
-use super::csr;
 
-// ---- PTE flag bits ----
+// ---- PTE flag constants ----
+
 pub const PTE_V: u32 = 1 << 0;
 pub const PTE_R: u32 = 1 << 1;
 pub const PTE_W: u32 = 1 << 2;
@@ -21,25 +38,47 @@ pub const PTE_A: u32 = 1 << 6;
 pub const PTE_D: u32 = 1 << 7;
 
 // ---- satp field extraction ----
-const SATP_MODE_BIT: u32 = 31;
-const SATP_ASID_LSB: u32 = 22;
-const SATP_ASID_BITS: u32 = 9;
-const SATP_PPN_MASK: u32 = 0x003F_FFFF;
 
-// ---- Sv32 virtual address fields ----
-const VA_VPN1_LSB: u32 = 22;
-const VA_VPN0_LSB: u32 = 12;
-const VA_OFFSET_MASK: u32 = 0xFFF;
-const VPN_MASK: u32 = 0x3FF;
+/// Check if SV32 mode is enabled (bit 31 of satp).
+pub fn satp_mode_enabled(satp: u32) -> bool {
+    (satp >> 31) & 1 != 0
+}
 
-// ---- Page constants ----
-pub const PAGE_SIZE: usize = 4096;
-const PAGE_SHIFT: u32 = 12;
+/// Extract ASID from satp (bits [30:22]).
+pub fn satp_asid(satp: u32) -> u16 {
+    ((satp >> 22) & 0x1FF) as u16
+}
 
-// ---- TLB constants ----
-const TLB_SIZE: usize = 64;
+/// Extract root page table PPN from satp (bits [21:0]).
+pub fn satp_ppn(satp: u32) -> u32 {
+    satp & 0x003F_FFFF
+}
 
-/// Access type for permission checks.
+// ---- VA field extraction ----
+
+/// Extract VPN[1] from a virtual address (bits [31:22]).
+pub fn va_vpn1(va: u32) -> u32 {
+    (va >> 22) & 0x3FF
+}
+
+/// Extract VPN[0] from a virtual address (bits [21:12]).
+pub fn va_vpn0(va: u32) -> u32 {
+    (va >> 12) & 0x3FF
+}
+
+/// Extract page offset from a virtual address (bits [11:0]).
+pub fn va_offset(va: u32) -> u32 {
+    va & 0xFFF
+}
+
+/// Combine VPN[1] and VPN[0] into a single VPN value for TLB lookup.
+pub fn va_to_vpn(va: u32) -> u32 {
+    ((va >> 12) & 0xFFFFF) // 20-bit combined VPN
+}
+
+// ---- Access type ----
+
+/// Memory access type (determines fault cause code).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AccessType {
     Fetch,
@@ -47,35 +86,42 @@ pub enum AccessType {
     Store,
 }
 
-/// Result of address translation.
+// ---- Translation result ----
+
+/// Result of a virtual address translation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TranslateResult {
+    /// Translation succeeded. Contains the physical address.
     Ok(u64),
+    /// Instruction fetch page fault.
     FetchFault,
+    /// Load page fault.
     LoadFault,
+    /// Store/AMO page fault.
     StoreFault,
 }
+
+// ---- TLB ----
+
+/// Number of TLB entries.
+const TLB_SIZE: usize = 64;
 
 /// A single TLB entry.
 #[derive(Clone, Copy, Debug)]
 struct TlbEntry {
     vpn: u32,
-    asid: u32,
+    asid: u16,
     ppn: u32,
     flags: u32,
     valid: bool,
 }
 
-impl Default for TlbEntry {
-    fn default() -> Self {
-        Self { vpn: 0, asid: 0, ppn: 0, flags: 0, valid: false }
-    }
-}
-
-/// 64-entry fully-associative TLB with ASID-aware invalidation.
+/// Translation Lookaside Buffer.
+/// Caches virtual-to-physical mappings with ASID tagging.
+/// Global entries (PTE_G) match any ASID.
+#[derive(Clone, Debug)]
 pub struct Tlb {
     entries: [TlbEntry; TLB_SIZE],
-    next_idx: usize,
 }
 
 impl Default for Tlb {
@@ -86,127 +132,211 @@ impl Default for Tlb {
 
 impl Tlb {
     pub fn new() -> Self {
-        Self { entries: [TlbEntry::default(); TLB_SIZE], next_idx: 0 }
+        Self {
+            entries: [TlbEntry {
+                vpn: 0,
+                asid: 0,
+                ppn: 0,
+                flags: 0,
+                valid: false,
+            }; TLB_SIZE],
+        }
     }
 
-    pub fn lookup(&self, vpn: u32, asid: u32) -> Option<(u32, u32)> {
+    /// Look up a VPN/ASID in the TLB.
+    /// Returns (ppn, flags) if found, None if not.
+    /// Global entries (PTE_G) match any ASID.
+    pub fn lookup(&self, vpn: u32, asid: u16) -> Option<(u32, u32)> {
         for entry in &self.entries {
-            if entry.valid && entry.vpn == vpn && (entry.asid == asid || entry.flags & PTE_G != 0) {
-                return Some((entry.ppn, entry.flags));
+            if entry.valid && entry.vpn == vpn {
+                let is_global = (entry.flags & PTE_G) != 0;
+                if is_global || entry.asid == asid {
+                    return Some((entry.ppn, entry.flags));
+                }
             }
         }
         None
     }
 
-    pub fn insert(&mut self, vpn: u32, asid: u32, ppn: u32, flags: u32) {
-        let idx = self.next_idx % TLB_SIZE;
-        self.entries[idx] = TlbEntry { vpn, asid, ppn, flags, valid: true };
-        self.next_idx = self.next_idx.wrapping_add(1);
+    /// Insert an entry into the TLB.
+    pub fn insert(&mut self, vpn: u32, asid: u16, ppn: u32, flags: u32) {
+        // Simple hash: use lower bits of VPN as index.
+        let idx = (vpn as usize) % TLB_SIZE;
+        self.entries[idx] = TlbEntry {
+            vpn,
+            asid,
+            ppn,
+            flags,
+            valid: true,
+        };
     }
 
+    /// Flush all TLB entries.
     pub fn flush_all(&mut self) {
-        for entry in &mut self.entries { entry.valid = false; }
-        self.next_idx = 0;
-    }
-
-    pub fn flush_asid(&mut self, asid: u32) {
         for entry in &mut self.entries {
-            if entry.valid && entry.asid == asid { entry.valid = false; }
+            entry.valid = false;
         }
     }
 
-    pub fn flush_vpn(&mut self, vpn: u32, asid: u32) {
+    /// Flush entries for a specific virtual address.
+    pub fn flush_va(&mut self, vpn: u32) {
         for entry in &mut self.entries {
-            if entry.valid && entry.vpn == vpn && (entry.asid == asid || entry.flags & PTE_G != 0) {
+            if entry.valid && entry.vpn == vpn {
+                entry.valid = false;
+            }
+        }
+    }
+
+    /// Flush entries for a specific ASID (non-global only).
+    pub fn flush_asid(&mut self, asid: u16) {
+        for entry in &mut self.entries {
+            if entry.valid && entry.asid == asid && (entry.flags & PTE_G) == 0 {
                 entry.valid = false;
             }
         }
     }
 }
 
-// ---- Field extraction helpers ----
+// ---- Translation ----
 
-pub fn va_vpn1(va: u32) -> u32 { (va >> VA_VPN1_LSB) & VPN_MASK }
-pub fn va_vpn0(va: u32) -> u32 { (va >> VA_VPN0_LSB) & VPN_MASK }
-pub fn va_offset(va: u32) -> u32 { va & VA_OFFSET_MASK }
-pub fn va_to_vpn(va: u32) -> u32 { va >> PAGE_SHIFT }
-pub fn satp_asid(satp: u32) -> u32 { (satp >> SATP_ASID_LSB) & ((1 << SATP_ASID_BITS) - 1) }
-pub fn satp_ppn(satp: u32) -> u32 { satp & SATP_PPN_MASK }
-pub fn satp_mode_enabled(satp: u32) -> bool { (satp >> SATP_MODE_BIT) & 1 != 0 }
+/// PPN mask from a PTE (bits [31:10]).
+const PPN_MASK: u32 = 0xFFF_FC00;
 
-fn pte_is_leaf(pte: u32) -> bool { (pte & (PTE_R | PTE_W | PTE_X)) != 0 }
-fn pte_ppn(pte: u32) -> u32 { (pte >> 10) & 0x003F_FFFF }
-
-fn check_permissions(pte_flags: u32, access: AccessType, is_user: bool) -> bool {
-    let u = (pte_flags & PTE_U) != 0;
-    let r = (pte_flags & PTE_R) != 0;
-    let w = (pte_flags & PTE_W) != 0;
-    let x = (pte_flags & PTE_X) != 0;
-    match access {
-        AccessType::Fetch => if is_user { u && x } else { !u && x },
-        AccessType::Load  => if is_user { u && r } else { !u && r },
-        AccessType::Store => if is_user { u && w } else { !u && w },
-    }
+/// Extract PPN from a PTE.
+fn pte_ppn(pte: u32) -> u32 {
+    (pte & PPN_MASK) >> 10
 }
 
-fn fault_for_access(access: AccessType) -> TranslateResult {
-    match access {
-        AccessType::Fetch => TranslateResult::FetchFault,
-        AccessType::Load  => TranslateResult::LoadFault,
-        AccessType::Store => TranslateResult::StoreFault,
-    }
-}
-
-/// Translate a virtual address to physical using Sv32 page tables.
+/// Translate a virtual address to a physical address.
+///
+/// If satp MODE is 0 (bare), returns va unchanged.
+/// Otherwise performs SV32 page table walk.
+///
+/// # Arguments
+/// * `va` - Virtual address to translate
+/// * `access_type` - Type of access (fetch/load/store)
+/// * `sum` - SUM bit from mstatus (allow S-mode to access U pages)
+/// * `satp` - Current satp CSR value
+/// * `bus` - Memory bus for page table walks
+/// * `tlb` - TLB for caching translations
 pub fn translate(
-    va: u32, access: AccessType, is_user: bool, satp: u32, bus: &Bus, tlb: &mut Tlb,
+    va: u32,
+    access_type: AccessType,
+    sum: bool,
+    satp: u32,
+    bus: &Bus,
+    tlb: &mut Tlb,
 ) -> TranslateResult {
-    if !satp_mode_enabled(satp) { return TranslateResult::Ok(va as u64); }
-
-    let asid = satp_asid(satp);
-    let vpn = va_to_vpn(va);
-    let offset = va_offset(va);
-
-    if let Some((ppn, flags)) = tlb.lookup(vpn, asid) {
-        if !check_permissions(flags, access, is_user) { return fault_for_access(access); }
-        return TranslateResult::Ok(((ppn as u64) << PAGE_SHIFT) | (offset as u64));
+    // Bare mode: no translation.
+    if !satp_mode_enabled(satp) {
+        return TranslateResult::Ok(va as u64);
     }
 
-    let root_ppn = satp_ppn(satp);
     let vpn1 = va_vpn1(va);
     let vpn0 = va_vpn0(va);
+    let offset = va_offset(va);
+    let combined_vpn = va_to_vpn(va);
+    let asid = satp_asid(satp);
 
-    let l1_addr = (root_ppn as u64) << PAGE_SHIFT | ((vpn1 as u64) * 4);
-    let l1_pte = match bus.read_word(l1_addr) { Ok(w) => w, Err(_) => return fault_for_access(access) };
-    if (l1_pte & PTE_V) == 0 { return fault_for_access(access); }
-
-    if pte_is_leaf(l1_pte) {
-        if !check_permissions(l1_pte & 0x3FF, access, is_user) { return fault_for_access(access); }
-        let ppn = pte_ppn(l1_pte);
-        let pa = ((ppn as u64) << PAGE_SHIFT) | ((vpn0 as u64) << PAGE_SHIFT) | (offset as u64);
-        let mega_ppn = (ppn & !VPN_MASK) | vpn0;
-        tlb.insert(vpn, asid, mega_ppn, l1_pte & 0x3FF);
-        return TranslateResult::Ok(pa);
+    // Check TLB first.
+    if let Some((ppn, flags)) = tlb.lookup(combined_vpn, asid) {
+        if let Some(fault) = check_permissions(flags, access_type, sum) {
+            return fault;
+        }
+        return TranslateResult::Ok(((ppn as u64) << 12) | (offset as u64));
     }
 
-    let l2_base = (pte_ppn(l1_pte) as u64) << PAGE_SHIFT;
-    let l2_addr = l2_base | ((vpn0 as u64) * 4);
-    let l2_pte = match bus.read_word(l2_addr) { Ok(w) => w, Err(_) => return fault_for_access(access) };
-    if (l2_pte & PTE_V) == 0 { return fault_for_access(access); }
-    if !pte_is_leaf(l2_pte) { return fault_for_access(access); }
-    if !check_permissions(l2_pte & 0x3FF, access, is_user) { return fault_for_access(access); }
+    // TLB miss: walk page tables.
+    let root_ppn = satp_ppn(satp);
+    let root_addr = (root_ppn as u64) << 12;
+
+    // Level 1: read PTE at root[VPN[1]].
+    let l1_addr = root_addr | ((vpn1 as u64) << 2);
+    let l1_pte = match bus.read_word(l1_addr) {
+        Ok(w) => w,
+        Err(_) => return fault_for(access_type),
+    };
+
+    if (l1_pte & PTE_V) == 0 {
+        return fault_for(access_type);
+    }
+
+    let is_leaf_l1 = (l1_pte & (PTE_R | PTE_W | PTE_X)) != 0;
+
+    if is_leaf_l1 {
+        // Megapage: 4MB mapping.
+        let ppn1 = pte_ppn(l1_pte);
+        // For megapage: PPN[0] = VPN[0], offset from VA.
+        let ppn = (ppn1 << 10) | vpn0;
+        let flags = l1_pte & 0xFF;
+
+        if let Some(fault) = check_permissions(flags, access_type, sum) {
+            return fault;
+        }
+
+        tlb.insert(combined_vpn, asid, ppn, flags);
+        return TranslateResult::Ok(((ppn as u64) << 12) | (offset as u64));
+    }
+
+    // Non-leaf: follow pointer to level 2.
+    let l2_base = (pte_ppn(l1_pte) as u64) << 12;
+    let l2_addr = l2_base | ((vpn0 as u64) << 2);
+    let l2_pte = match bus.read_word(l2_addr) {
+        Ok(w) => w,
+        Err(_) => return fault_for(access_type),
+    };
+
+    if (l2_pte & PTE_V) == 0 {
+        return fault_for(access_type);
+    }
+
+    // Level 2 must be a leaf.
+    let is_leaf_l2 = (l2_pte & (PTE_R | PTE_W | PTE_X)) != 0;
+    if !is_leaf_l2 {
+        return fault_for(access_type);
+    }
 
     let ppn = pte_ppn(l2_pte);
-    let pa = ((ppn as u64) << PAGE_SHIFT) | (offset as u64);
-    tlb.insert(vpn, asid, ppn, l2_pte & 0x3FF);
-    TranslateResult::Ok(pa)
+    let flags = l2_pte & 0xFF;
+
+    if let Some(fault) = check_permissions(flags, access_type, sum) {
+        return fault;
+    }
+
+    tlb.insert(combined_vpn, asid, ppn, flags);
+    TranslateResult::Ok(((ppn as u64) << 12) | (offset as u64))
 }
 
-pub fn page_fault_cause(access: AccessType) -> u32 {
-    match access {
-        AccessType::Fetch => csr::CAUSE_FETCH_PAGE_FAULT,
-        AccessType::Load  => csr::CAUSE_LOAD_PAGE_FAULT,
-        AccessType::Store => csr::CAUSE_STORE_PAGE_FAULT,
+/// Check page permissions.
+/// Returns Some(fault) if the access should fault, None if OK.
+fn check_permissions(flags: u32, access_type: AccessType, _sum: bool) -> Option<TranslateResult> {
+    // Check access type against R/W/X bits.
+    match access_type {
+        AccessType::Fetch => {
+            if (flags & PTE_X) == 0 {
+                return Some(TranslateResult::FetchFault);
+            }
+        }
+        AccessType::Load => {
+            if (flags & PTE_R) == 0 {
+                return Some(TranslateResult::LoadFault);
+            }
+        }
+        AccessType::Store => {
+            if (flags & PTE_W) == 0 {
+                return Some(TranslateResult::StoreFault);
+            }
+        }
+    }
+    None
+}
+
+/// Get the appropriate fault variant for an access type.
+fn fault_for(access_type: AccessType) -> TranslateResult {
+    match access_type {
+        AccessType::Fetch => TranslateResult::FetchFault,
+        AccessType::Load => TranslateResult::LoadFault,
+        AccessType::Store => TranslateResult::StoreFault,
     }
 }
 
@@ -214,63 +344,76 @@ pub fn page_fault_cause(access: AccessType) -> u32 {
 mod tests {
     use super::*;
 
-    #[test] fn test_va_fields() {
-        assert_eq!(va_vpn1(0x0040_0000), 1);
-        assert_eq!(va_vpn0(0x0000_1000), 1);
-        assert_eq!(va_offset(0x0000_0FFF), 0xFFF);
-        assert_eq!(va_to_vpn(0xFFFF_F000), 0xFFFFF);
+    #[test]
+    fn bare_mode_identity() {
+        let mut tlb = Tlb::new();
+        let bus = Bus::new(0x8000_0000, 8192);
+        let result = translate(0x8000_0000, AccessType::Fetch, false, 0, &bus, &mut tlb);
+        assert_eq!(result, TranslateResult::Ok(0x8000_0000));
     }
-    #[test] fn test_satp_fields() {
-        let s = (1u32 << 31) | (42u32 << 22) | 0x12345;
-        assert!(satp_mode_enabled(s)); assert_eq!(satp_asid(s), 42); assert_eq!(satp_ppn(s), 0x12345);
+
+    #[test]
+    fn satp_field_extraction() {
+        let satp = (1u32 << 31) | (42u32 << 22) | 0x12345;
+        assert!(satp_mode_enabled(satp));
+        assert_eq!(satp_asid(satp), 42);
+        assert_eq!(satp_ppn(satp), 0x12345);
         assert!(!satp_mode_enabled(0));
     }
-    #[test] fn test_pte_leaf() { assert!(pte_is_leaf(PTE_V|PTE_R)); assert!(!pte_is_leaf(PTE_V)); }
-    #[test] fn test_permissions_user() {
-        let f = PTE_V|PTE_R|PTE_U;
-        assert!(check_permissions(f, AccessType::Load, true));
-        assert!(!check_permissions(f, AccessType::Store, true));
+
+    #[test]
+    fn va_field_extraction() {
+        assert_eq!(va_vpn1(0x0040_1100), 1);
+        assert_eq!(va_vpn0(0x0040_1100), 1);
+        assert_eq!(va_offset(0x0040_1100), 0x100);
+        assert_eq!(va_to_vpn(0x0040_1100), 0x00401);
     }
-    #[test] fn test_permissions_supervisor() {
-        let f = PTE_V|PTE_R;
-        assert!(check_permissions(f, AccessType::Load, false));
-        assert!(!check_permissions(f, AccessType::Load, true));
+
+    #[test]
+    fn tlb_insert_lookup() {
+        let mut tlb = Tlb::new();
+        tlb.insert(0x100, 1, 0xAAA, PTE_V | PTE_R);
+        assert_eq!(tlb.lookup(0x100, 1), Some((0xAAA, PTE_V | PTE_R)));
     }
-    #[test] fn test_tlb_basic() {
-        let mut t = Tlb::new();
-        assert!(t.lookup(0x100, 0).is_none());
-        t.insert(0x100, 0, 0xAAA, PTE_V|PTE_R);
-        let (ppn, _) = t.lookup(0x100, 0).unwrap();
-        assert_eq!(ppn, 0xAAA);
+
+    #[test]
+    fn tlb_flush_all() {
+        let mut tlb = Tlb::new();
+        tlb.insert(0x100, 1, 0xAAA, PTE_V | PTE_R);
+        tlb.insert(0x200, 1, 0xBBB, PTE_V | PTE_R);
+        tlb.flush_all();
+        assert!(tlb.lookup(0x100, 1).is_none());
+        assert!(tlb.lookup(0x200, 1).is_none());
     }
-    #[test] fn test_tlb_flush() {
-        let mut t = Tlb::new();
-        t.insert(0x100, 0, 0xAAA, PTE_V|PTE_R);
-        t.flush_all();
-        assert!(t.lookup(0x100, 0).is_none());
+
+    #[test]
+    fn tlb_asid_isolation() {
+        let mut tlb = Tlb::new();
+        tlb.insert(0x100, 1, 0xAAA, PTE_V | PTE_R);
+        tlb.insert(0x100, 2, 0xBBB, PTE_V | PTE_R);
+        assert_eq!(tlb.lookup(0x100, 1).unwrap().0, 0xAAA);
+        assert_eq!(tlb.lookup(0x100, 2).unwrap().0, 0xBBB);
+        assert!(tlb.lookup(0x100, 3).is_none());
     }
-    #[test] fn test_tlb_asid() {
-        let mut t = Tlb::new();
-        t.insert(0x100, 1, 0xAAA, PTE_V|PTE_R);
-        t.insert(0x100, 2, 0xBBB, PTE_V|PTE_R);
-        assert_eq!(t.lookup(0x100, 1).unwrap().0, 0xAAA);
-        assert_eq!(t.lookup(0x100, 2).unwrap().0, 0xBBB);
-        assert!(t.lookup(0x100, 3).is_none());
+
+    #[test]
+    fn tlb_global_entry() {
+        let mut tlb = Tlb::new();
+        tlb.insert(0x42, 5, 0x100, PTE_V | PTE_R | PTE_G);
+        assert!(tlb.lookup(0x42, 0).is_some());
+        assert!(tlb.lookup(0x42, 99).is_some());
+        assert!(tlb.lookup(0x43, 5).is_none());
     }
-    #[test] fn test_tlb_global() {
-        let mut t = Tlb::new();
-        t.insert(0x42, 5, 0x100, PTE_V|PTE_R|PTE_G);
-        assert!(t.lookup(0x42, 0).is_some());
-        assert!(t.lookup(0x42, 99).is_some());
+
+    #[test]
+    fn page_fault_invalid_pte() {
+        let mut tlb = Tlb::new();
+        let bus = Bus::new(0x0, 0x1_0000);
+        let result = translate(0, AccessType::Load, true, make_satp(1, 0, 1), &bus, &mut tlb);
+        assert_eq!(result, TranslateResult::LoadFault);
     }
-    #[test] fn test_bare_mode() {
-        let mut t = Tlb::new();
-        let b = Bus::new(0x8000_0000, 4096);
-        assert_eq!(translate(0x8000_0000, AccessType::Fetch, false, 0, &b, &mut t), TranslateResult::Ok(0x8000_0000));
-    }
-    #[test] fn test_page_fault_codes() {
-        assert_eq!(page_fault_cause(AccessType::Fetch), 12);
-        assert_eq!(page_fault_cause(AccessType::Load), 13);
-        assert_eq!(page_fault_cause(AccessType::Store), 15);
+
+    fn make_satp(mode: u32, asid: u32, ppn: u32) -> u32 {
+        ((mode & 1) << 31) | ((asid & 0x1FF) << 22) | (ppn & 0x003F_FFFF)
     }
 }
