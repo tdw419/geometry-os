@@ -2305,12 +2305,31 @@ impl Vm {
 
             0x72 => {
                 // HYPERVISOR: read config string from RAM at address in r0
+                // Config format: "arch=riscv64 [kernel=file.img] [ram=256M] [disk=rootfs.ext4]"
+                // Error codes: 0xFFFFFFFF = bad string, 0xFFFFFFFD = missing arch, 0xFFFFFFFE = kernel file not found
                 let addr_reg = self.fetch() as usize;
                 if addr_reg < NUM_REGS {
                     let addr = self.regs[addr_reg] as usize;
                     let config = Self::read_string_static(&self.ram, addr);
                     match config {
                         Some(cfg) => {
+                            // Validate arch= parameter is present
+                            let has_arch = cfg
+                                .split_whitespace()
+                                .any(|t| t.to_lowercase().starts_with("arch=") && t.len() > 5);
+                            if !has_arch {
+                                self.regs[0] = 0xFFFFFFFD; // missing arch
+                                return true;
+                            }
+                            // Validate kernel= file exists (if specified)
+                            if let Some(kernel_start) = cfg.find("kernel=") {
+                                let after = &cfg[kernel_start + 7..];
+                                let kernel_path = after.split_whitespace().next().unwrap_or("");
+                                if !kernel_path.is_empty() && !std::path::Path::new(kernel_path).exists() {
+                                    self.regs[0] = 0xFFFFFFFE; // kernel file not found
+                                    return true;
+                                }
+                            }
                             self.hypervisor_config = cfg.to_string();
                             self.hypervisor_active = true;
                             self.regs[0] = 0; // success
