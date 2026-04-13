@@ -4,6 +4,7 @@
 // Will eventually boot Linux inside the existing canvas VM.
 // See docs/RISCV_HYPERVISOR.md for full architecture.
 
+pub mod bridge;
 pub mod bus;
 pub mod clint;
 pub mod cpu;

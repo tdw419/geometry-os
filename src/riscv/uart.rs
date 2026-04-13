@@ -95,8 +95,9 @@ impl Uart {
     pub fn read_byte(&mut self, offset: u64) -> u8 {
         match offset {
             THR_RBR => {
-                // Read from receive buffer.
-                if let Some(b) = self.rx_buf.pop() {
+                // Read from receive buffer (FIFO: first in, first out).
+                if !self.rx_buf.is_empty() {
+                    let b = self.rx_buf.remove(0);
                     if self.rx_buf.is_empty() {
                         self.lsr &= !LSR_DR; // Clear Data Ready
                     }
