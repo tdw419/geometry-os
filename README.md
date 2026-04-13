@@ -6,7 +6,7 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 40 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 42 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
@@ -204,16 +204,16 @@ skip_move:
 │  └──────────────┘  └────────────────┘  │
 └─────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 40 opcodes
+VM: 32 registers, 65536-word RAM, 42 opcodes
 Memory: 0x0000 bytecode | 0x1000 canvas text | 0xFFD ASM result | 0xFFE TICKS | 0xFFF KEY
 ```
 
 ## Stats
 
-- 4,536 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
-- 40 opcodes
+- 4,976 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs, glyph_backend.rs)
+- 42 opcodes
 - 28 demo programs (visual demos, animations, interactive games)
-- 49 tests
+- 62 tests
 
 ## License
 

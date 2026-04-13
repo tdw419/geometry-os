@@ -2,7 +2,7 @@ title: "Geometry OS Roadmap"
 version: "1.0.0"
 description: |
   Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  40 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  42 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 project_url: "https://github.com/tdw419/geometry-os"
 
@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 41
+  opcodes: 42
   tests: 62
   programs: 28
-  loc: 5928
+  loc: 4976
 
 phases:
   # ===================================================================
@@ -549,7 +549,7 @@ phases:
         scope_files: ["src/main.rs"]
 
 global_risks:
-  - "Opcode space: 40 of ~256 slots used, plenty of room, but hex layout has gaps"
+  - "Opcode space: 42 of ~256 slots used, plenty of room, but hex layout has gaps"
   - "Scope creep -- adding opcodes is easy, keeping the VM simple is hard"
   - "Flaky tests: rainbow, ball, fire, rings tests are non-deterministic (fail intermittently)"
   - "BEEP spawning aplay processes without rate limiting could exhaust FDs"
