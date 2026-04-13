@@ -1157,6 +1157,9 @@ impl Vm {
     /// Each process gets a time slice proportional to its priority level.
     /// Sleeping processes (sleep_until > sched_tick) are skipped.
     /// Yielded processes lose their remaining slice.
+    /// When a process's slice is exhausted, it waits until ALL runnable
+    /// processes have also exhausted their slices (a new round), then
+    /// everyone gets a fresh allocation based on current priority.
     pub fn step_all_processes(&mut self) {
         self.sched_tick += 1;
 
@@ -1171,6 +1174,25 @@ impl Vm {
         let saved_segfault = self.segfault;
         let saved_segfault_pid = self.segfault_pid;
         let saved_current_pid = self.current_pid;
+
+        // Check if all runnable (non-halted, non-sleeping) processes have
+        // exhausted their slices. If so, start a new scheduling round.
+        let all_exhausted = procs.iter().all(|p| {
+            p.halted
+                || (p.sleep_until > 0 && self.sched_tick < p.sleep_until)
+                || p.slice_remaining == 0
+        });
+        if all_exhausted {
+            for proc in &mut procs {
+                if proc.halted { continue; }
+                if proc.sleep_until > 0 && self.sched_tick < proc.sleep_until {
+                    continue;
+                }
+                let multiplier = 1u32 << proc.priority;
+                proc.slice_remaining = self.default_time_slice * multiplier;
+                proc.yielded = false;
+            }
+        }
 
         // Sort by priority descending (highest priority runs first)
         let mut indices: Vec<usize> = (0..procs.len()).collect();
@@ -1190,12 +1212,9 @@ impl Vm {
                 proc.slice_remaining = 0;
             }
 
-            // Allocate time slice if exhausted: priority-based quantum
-            // priority 0 = 1x, 1 = 2x, 2 = 4x, 3 = 8x
+            // Skip processes whose time slice is exhausted (wait for next round)
             if proc.slice_remaining == 0 {
-                let multiplier = 1u32 << proc.priority;
-                proc.slice_remaining = self.default_time_slice * multiplier;
-                proc.yielded = false;
+                continue;
             }
 
             self.pc = proc.pc;
