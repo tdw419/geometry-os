@@ -6,13 +6,13 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 61 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling, virtual filesystem, device drivers, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 77 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling with memory protection, virtual filesystem, device drivers, a Unix-like shell, and an integrated text editor where you type assembly directly into the VM's memory and execute it live. It also includes a native RISC-V RV32I interpreter with SV32 virtual memory, capable of booting a real Linux kernel.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
 ## Programs
 
-32 programs included -- static art, animations, interactive games:
+40 programs included -- static art, animations, interactive games, and system utilities:
 
 **Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes
 
@@ -20,9 +20,11 @@ There is no compiler. No runtime. No garbage collector. You write the opcodes, t
 
 **Interactive:** blink, painter (freehand drawing), calculator (4-function)
 
-**Games:** snake, ball (bouncing ball), breakout (4 rows of bricks, 3 lives), tetris (7 tetrominoes, rotation, line clearing), maze (randomly generated, WASD to navigate)
+**Games:** snake, ball (bouncing ball), breakout (4 rows of bricks, 3 lives), tetris (7 tetrominoes, rotation, line clearing), maze (randomly generated, WASD to navigate), peek_bounce (collision detection demo)
 
-**Advanced:** window_manager (multi-process demo), sprite_demo, self_host (VM assembles and runs its own code)
+**Advanced:** window_manager (multi-process demo), sprite_demo, self_host (VM assembles and runs its own code), multiproc (multi-process scheduling)
+
+**System:** shell (Unix-like command shell), init (PID 1 init process), cat (file reader), pipe_test (IPC demo), pipe_demo (pipe communication), device_test (device driver demo), stdlib_test, preprocessor_test, preprocessor_advanced_test, sprint_c_test, shift_test, push_pop_test
 
 ## Build & Run
 
@@ -46,7 +48,7 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
-## The Instruction Set (73 opcodes)
+## The Instruction Set (77 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -191,6 +193,14 @@ Device files provide uniform access to hardware. OPEN `/dev/screen`, `/dev/keybo
 | Opcode | Args | Description |
 |--------|------|-------------|
 | SHUTDOWN | | Graceful shutdown: halt all processes, flush FS, close fds. Kernel mode only. User mode sets r0=error |
+| EXIT | status_reg | Exit process with status code (sets zombie flag for parent WAITPID) |
+
+### Signals
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| SIGNAL | pid_reg, sig_reg | Send signal to process (SIGTERM=0, SIGKILL=1, SIGUSR=2, SIGALRM=3) |
+| SIGSET | sig_reg, handler_reg | Set signal handler address for signal type |
 
 ## Memory-Mapped I/O
 
@@ -292,7 +302,7 @@ child:
 │  └──────────────┘  └──────────────────┘     │
 └──────────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 54 opcodes, 8 concurrent processes
+VM: 32 registers, 65536-word RAM, 77 opcodes, 8 concurrent processes
 Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
 
@@ -301,14 +311,16 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 - **docs/CANVAS_TEXT_SURFACE.md** -- The text editor, assembly pipeline, preprocessor macros
 - **docs/ARCHITECTURE.md** -- Full opcode reference, multi-process, instrumentation, WASM, network
 - **docs/SIGNED_ARITHMETIC.md** -- Two's-complement arithmetic semantics
+- **docs/MEMORY_PROTECTION.md** -- Page tables, address spaces, segfault handling
+- **docs/RISCV_HYPERVISOR.md** -- RISC-V interpreter, privilege modes, virtual memory
 - **programs/README.md** -- Per-program descriptions and controls
 
 ## Stats
 
-- 8,187 lines of Rust
-- 73 opcodes
-- 39 demo programs
-- 257 tests
+- 15,768 lines of Rust
+- 77 opcodes
+- 40 programs
+- 697 tests
 - MIT licensed
 
 ## License
