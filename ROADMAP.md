@@ -207,6 +207,112 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 
 ---
 
+### Phase 33: RISC-V RV32I Core
+
+**Goal:** Implement a pure software RISC-V RV32I interpreter as a new module. This is the foundation for running real operating systems inside Geometry OS.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| riscv/ module | New `src/riscv/` directory with mod.rs, cpu.rs, memory.rs, decode.rs | ~50 lines mod.rs |
+| Register file | x[0..32] (x0=zero), PC, 32-bit registers | ~30 lines cpu.rs |
+| Instruction decode | Decode all RV32I opcodes from 32-bit instruction words | ~200 lines decode.rs |
+| R-type ALU | ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND | ~80 lines cpu.rs |
+| I-type immediate | ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI | ~60 lines cpu.rs |
+| Upper immediate | LUI, AUIPC | ~20 lines cpu.rs |
+| Jumps | JAL, JALR (link register x1 or rd) | ~30 lines cpu.rs |
+| Branches | BEQ, BNE, BLT, BGE, BLTU, BGEU | ~40 lines cpu.rs |
+| Memory load | LB, LH, LW, LBU, LHU (sign/zero extend) | ~50 lines cpu.rs |
+| Memory store | SB, SH, SW | ~30 lines cpu.rs |
+| FENCE, ECALL, EBREAK | NOP-like for now (ECALL traps in Phase 34) | ~20 lines cpu.rs |
+| Guest RAM | Vec<u8> separate from host RAM, configurable size (default 128MB) | ~60 lines memory.rs |
+| Test suite | One test per instruction, verification against known encodings | ~300 lines tests |
+| riscv_simple.asm | Demo: compute fibonacci in RISC-V assembly, run in interpreter | programs/ |
+
+**Why first:** RV32I is the base integer ISA. Every RISC-V program uses these 40 instructions. Getting decode+execute right with full test coverage is the non-negotiable foundation. Everything else (privilege modes, virtual memory, device emulation, guest OS boot) layers on top.
+
+---
+
+### Phase 34: RISC-V Privilege Modes
+
+**Goal:** Implement Machine/Supervisor/User privilege levels, CSR registers, and trap handling. This is what allows a guest OS kernel to manage its own processes.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| Privilege enum | M-mode (3), S-mode (1), U-mode (0) in CPU state | ~20 lines cpu.rs |
+| CSR register bank | mstatus, mtvec, mepc, mcause, mtval, sstatus, stvec, sepc, scause, stval, satp, mie, mip, sie, sip, mcounteren, scounteren | ~80 lines csrs.rs |
+| CSR read/write | CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI opcodes (SYSTEM type) | ~100 lines cpu.rs |
+| ECALL trap | ECALL from U->S or S->M: saves PC to mepc/sepc, jumps to stvec/mtvec, sets cause | ~60 lines cpu.rs |
+| MRET instruction | Return from M-mode trap: restore PC from mepc, adjust mstatus | ~30 lines cpu.rs |
+| SRET instruction | Return from S-mode trap: restore PC from sepc, adjust sstatus | ~30 lines cpu.rs |
+| Timer interrupt | mtime/mtimecmp MMIO, fires interrupt when mtime >= mtimecmp | ~50 lines clint.rs |
+| Software interrupt | msip/ssip registers, software-triggered interrupts | ~30 lines clint.rs |
+| Trap delegation | medeleg/mideleg CSRs: delegate traps from M to S mode | ~40 lines csrs.rs |
+| Privilege transition tests | U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U | ~150 lines tests |
+
+**Why here:** Linux can't boot without privilege modes. The kernel runs in S-mode, user programs run in U-mode, and the hypervisor (us) runs in M-mode. Trap handling is how the kernel gets control back from user programs.
+
+---
+
+### Phase 35: RISC-V Virtual Memory
+
+**Goal:** Implement SV32 page tables so a guest OS can manage virtual address spaces for its own processes.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| satp CSR | Mode (off/SV32), ASID, root page table physical address | ~20 lines csrs.rs |
+| SV32 page table walk | 2-level lookup: VPN[1]->PT1->VPN[0]->PT2->PPN+offset | ~120 lines mmu.rs |
+| Page table entry flags | V, R, W, X, U, G, A, D bits in PTE | ~30 lines mmu.rs |
+| Address translation | Virtual address -> physical address through page tables | ~80 lines mmu.rs |
+| TLB cache | 64-entry TLB with ASID-aware invalidation | ~80 lines mmu.rs |
+| Page fault traps | Store/AMO page fault, Load page fault, Instruction page fault with mtval/stval | ~40 lines mmu.rs |
+| SFENCE.VMA | TLB flush instruction (privileged) | ~20 lines cpu.rs |
+| Bare mode (satp=0) | Direct physical addressing, no translation (default for Phase 33) | ~10 lines mmu.rs |
+| Memory test | Guest creates page tables, maps virtual to physical, reads/writes through translations | ~100 lines tests |
+
+**Why here:** After privilege modes, virtual memory is the next piece Linux needs. The kernel sets up page tables (satp) for each user process. Without SV32, the guest kernel can't isolate its own processes.
+
+---
+
+### Phase 36: RISC-V Device Emulation
+
+**Goal:** Emulate the devices a real OS needs: serial console, block storage, network, and timers. Linux needs these to boot and do anything useful.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| UART 16550 | Serial port emulation at MMIO 0x10000000, THR/RBR/LSR/IER registers | ~150 lines uart.rs |
+| UART to canvas | Guest UART output rendered as text on Geometry OS canvas (TEXT opcode) | ~60 lines bridge.rs |
+| UART from keyboard | Geometry OS keyboard input forwarded to guest UART RBR | ~40 lines bridge.rs |
+| CLINT (Core Local Interruptor) | mtime at 0x200BFF8, mtimecmp at 0x2004000, timer interrupts | ~80 lines clint.rs |
+| PLIC (Platform Level Interrupt Controller) | Interrupt priority, enable, threshold, claim/complete for external interrupts | ~120 lines plic.rs |
+| Virtio block device | Virtio MMIO transport at 0x10001000, disk image from VFS file | ~200 lines virtio_blk.rs |
+| Virtio network | Virtio MMIO transport at 0x10002000, TAP interface or loopback | ~200 lines virtio_net.rs |
+| Device Tree Blob | Generate DTB describing memory layout, UART, virtio devices, CPU count | ~150 lines dtb.rs |
+| Disk image loader | Load raw/qcow2 disk image from host filesystem via Geometry OS VFS | ~60 lines loader.rs |
+| Device test | Guest writes to UART THR, verify output appears on canvas | ~80 lines tests |
+
+**Why here:** Linux can't boot without a console (UART), can't persist without storage (virtio-blk), and can't network without a NIC (virtio-net). The device tree tells the kernel what hardware exists. These are the minimum viable devices.
+
+---
+
+### Phase 37: Guest OS Boot
+
+**Goal:** Load and boot a real Linux RISC-V kernel inside Geometry OS. The guest kernel boots, starts init, and provides a console on the canvas.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| ELF loader | Parse ELF64 RISC-V kernel images, load segments into guest RAM | ~120 lines loader.rs |
+| Raw binary loader | Load flat binary images at specified entry point (0x80000000) | ~40 lines loader.rs |
+| DTB passthrough | Pass device tree blob to kernel in a1 register at boot | ~30 lines cpu.rs |
+| Boot console | Guest UART output streams to Geometry OS canvas as scrolling text | ~80 lines bridge.rs |
+| Keyboard forwarding | Geometry OS keypresses injected into guest UART RBR | ~40 lines bridge.rs |
+| HYPERVISOR opcode | New Geometry OS opcode that spawns a RISC-V VM instance, loads kernel from VFS path | ~60 lines vm.rs |
+| Boot script | One-command: `HYPERVISOR "linux/rv32.img"` from shell.asm | programs/ |
+| Verified boot | Boot a known-good Linux RISC-V kernel (tinyconfig or OpenSBI) and verify console output matches expected string | ~100 lines tests |
+
+**Why here:** This is the moment everything comes together. Phases 33-36 built the interpreter, privilege modes, virtual memory, and devices. Phase 37 wires them up to boot a real kernel. After this, Geometry OS isn't just an OS -- it's a hypervisor that can run other operating systems.
+
+---
+
 ## Priority Order
 
 1. Phase 23 (Kernel Boundary) -- foundation for everything
