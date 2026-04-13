@@ -1360,7 +1360,7 @@ phases:
   - Non-blocking pipe reads may miss data on fast output -- buffer management
 - id: phase-34
   title: RISC-V RV32I Core
-  status: in_progress
+  status: complete
   goal: Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
   priority: 40
   description: 'QEMU proved what works. Now rebuild it owned -- pure Rust, no subprocess,
@@ -1437,12 +1437,12 @@ phases:
       - src/riscv/decode.rs
   - name: Execute loop
     description: CPU step() fetches, decodes, executes one instruction
-    status: todo
+    status: done
     scope_lines: 200
     tasks:
     - id: p34.d5.t1
       title: Implement RiscvCpu::step() and execute() for all RV32I instructions
-      status: todo
+      status: done
       acceptance_criteria:
       - step() fetches word at PC, decodes, executes, advances PC by 4
       - JAL/JALR update PC to target and store return address
@@ -1456,12 +1456,12 @@ phases:
       - src/riscv/cpu.rs
   - name: Test suite
     description: One test per instruction, verification against known encodings
-    status: todo
+    status: done
     scope_lines: 300
     tasks:
     - id: p34.d6.t1
       title: Write tests for all R-type ALU operations
-      status: todo
+      status: done
       acceptance_criteria:
       - 'ADD: 10 + 20 = 30'
       - 'SUB: 30 - 10 = 20'
@@ -1477,7 +1477,7 @@ phases:
       - src/riscv/cpu.rs
     - id: p34.d6.t2
       title: Write tests for I-type, load, store, branch, jump instructions
-      status: todo
+      status: done
       acceptance_criteria:
       - 'ADDI: x1 = x2 + 100'
       - 'LW/SW: store word, load same address, verify equal'
@@ -1491,7 +1491,7 @@ phases:
       - src/riscv/cpu.rs
     - id: p34.d6.t3
       title: Write fibonacci test program that runs 20 iterations in RISC-V
-      status: todo
+      status: done
       acceptance_criteria:
       - Fibonacci(10) = 55 computed by RISC-V code
       - Result stored in a register, verified by test
