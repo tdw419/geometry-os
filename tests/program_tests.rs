@@ -3,7 +3,7 @@
 // Each test assembles a .asm file, loads it into the VM, runs it,
 // and verifies the output (screen pixels, register values, etc.)
 
-use geometry_os::assembler::assemble;
+use geometry_os::assembler::{assemble, assemble_with_lib};
 use geometry_os::vm::Vm;
 
 /// Helper: assemble a .asm file and run it in the VM
@@ -22,6 +22,48 @@ fn compile_run(asm_path: &str) -> Vm {
     vm.pc = 0;
     vm.halted = false;
     // Run up to 10M cycles
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    vm
+}
+
+/// Helper: assemble a .asm file with library include support and run it in the VM
+fn compile_run_with_lib(asm_path: &str) -> Vm {
+    let source = std::fs::read_to_string(asm_path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", asm_path, e));
+    let asm = assemble_with_lib(&source, 0, Some("."))
+        .unwrap_or_else(|e| panic!("assembly failed for {}: {:?}", asm_path, e));
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    vm
+}
+
+/// Helper: assemble inline source with lib includes and run in VM
+fn run_inline_with_lib(source: &str) -> Vm {
+    let asm = assemble_with_lib(source, 0, Some("."))
+        .unwrap_or_else(|e| panic!("inline assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
     for _ in 0..10_000_000 {
         if !vm.step() {
             break;

@@ -2,7 +2,7 @@ title: "Geometry OS Roadmap"
 version: "1.0.0"
 description: |
   Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  61 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  73 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 project_url: "https://github.com/tdw419/geometry-os"
 
@@ -13,9 +13,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 73
-  tests: 250
-  programs: 39
-  loc: 8258
+  tests: 257
+  programs: 40
+  loc: 8307
 
 phases:
   # ===================================================================
@@ -1011,7 +1011,7 @@ phases:
 
   - id: "phase-31"
     title: "Standard Library"
-    status: "in_progress"
+    status: "complete"
     goal: "Reusable library of common operations for all programs."
     priority: 19
     deliverables:
@@ -1023,7 +1023,10 @@ phases:
         status: "done"
       - name: "Heap allocator"
         description: "malloc/free for dynamic memory"
-        status: "in_progress"
+        status: "done"
+        acceptance_criteria:
+          - description: "lib/heap.asm implements _lib_heap_alloc and _lib_heap_free"
+            met: true
       - name: "Linking convention"
         description: ".include or .lib directive in assembler"
         status: "done"

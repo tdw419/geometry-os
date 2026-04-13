@@ -1,13 +1,15 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-61 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+73 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 30/32 phases complete, 1 in progress
+**Progress:** 31/37 phases complete, 0 in progress
 
-**Deliverables:** 135/140 complete
+**Deliverables:** 136/174 complete
+
+**Tasks:** 0/23 complete
 
 ## Scope Summary
 
@@ -43,8 +45,25 @@ the built-in text editor, press F5, watch it run.
 | phase-28 Device Driver Abstraction | COMPLETE | 3/3 | - | - |
 | phase-29 Shell | COMPLETE | 6/6 | - | - |
 | phase-30 Boot Sequence & Init | COMPLETE | 3/3 | - | - |
-| phase-31 Standard Library | IN PROGRESS | 3/4 | - | - |
+| phase-31 Standard Library | COMPLETE | 4/4 | - | - |
 | phase-32 Signals & Process Lifecycle | PLANNED | 0/4 | - | - |
+| phase-33 QEMU Bridge | PLANNED | 0/9 | - | - |
+| phase-34 RISC-V RV32I Core | FUTURE | 0/6 | - | - |
+| phase-35 RISC-V Privilege Modes | FUTURE | 0/5 | - | - |
+| phase-36 RISC-V Virtual Memory & Devices | FUTURE | 0/8 | - | - |
+| phase-37 Guest OS Boot (Native RISC-V) | FUTURE | 0/6 | - | - |
+
+## Dependencies
+
+| From | To | Type | Reason |
+|------|----|------|--------|
+| phase-32 | phase-33 | soft | Signals not required for QEMU bridge, but nice to have |
+| phase-33 | phase-34 | informs | QEMU bridge teaches us what the interpreter needs to reimplement |
+| phase-34 | phase-35 | hard | Privilege modes layer on top of the base RV32I interpreter |
+| phase-35 | phase-36 | hard | SV32 and devices need privilege modes for trap handling |
+| phase-33 | phase-36 | informs | QEMU bridge proved which devices are the minimum needed |
+| phase-36 | phase-37 | hard | Need MMU + devices before booting a kernel |
+| phase-33 | phase-37 | informs | QEMU boot experience guides native boot requirements |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
 
@@ -544,7 +563,7 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
   - [x] SHUTDOWN clears pipes and closes file descriptors
   - [x] shutdown_requested flag set for host to check
 
-## [~] phase-31: Standard Library (IN PROGRESS)
+## [x] phase-31: Standard Library (COMPLETE)
 
 **Goal:** Reusable library of common operations for all programs.
 
@@ -552,7 +571,8 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 
 - [x] **lib/stdlib.asm** -- String ops, memory ops, formatted I/O
 - [x] **lib/math.asm** -- sin, cos, sqrt via lookup tables
-- [~] **Heap allocator** -- malloc/free for dynamic memory
+- [x] **Heap allocator** -- malloc/free for dynamic memory
+  - [x] lib/heap.asm implements _lib_heap_alloc and _lib_heap_free
 - [x] **Linking convention** -- .include or .lib directive in assembler
   - [x] .include directive resolves and inlines lib/*.asm files
 
@@ -566,6 +586,290 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 - [ ] **Signal handlers** -- Process sets handler address for each signal type
 - [ ] **EXIT/WAIT syscalls** -- Exit with status code, parent waits for child
 - [ ] **Zombie cleanup** -- Exited processes cleaned up after parent WAIT
+
+## [ ] phase-33: QEMU Bridge (PLANNED)
+
+**Goal:** Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one.
+
+QEMU gives us a working hypervisor in days. Every architecture QEMU supports
+(x86, ARM, RISC-V, MIPS) works immediately. We learn what the canvas text
+surface needs to handle (ANSI sequences, scroll speed, buffer size).
+
+
+### Deliverables
+
+- [ ] **qemu.rs module** -- QEMU subprocess management with stdin/stdout pipes
+  - [ ] `p33.d1.t1` Create src/qemu.rs with QemuBridge struct
+    > Create QemuBridge struct with fields for Child process, stdin/stdout pipes,
+    > and an output buffer. Implement Drop to kill child on cleanup.
+    - QemuBridge struct compiles
+    - Drop trait kills child process
+    _Files: src/qemu.rs_
+  _~60 LOC_
+- [ ] **QEMU spawn** -- Launch qemu-system-* with -nographic -serial mon:stdio, capture stdin/stdout
+  - [ ] `p33.d2.t1` Implement QemuBridge::spawn(config_str) -> Result (depends: p33.d1.t1)
+    > Parse config string "arch=riscv64 kernel=linux.img ram=256M disk=rootfs.ext4"
+    > into QEMU command. Construct qemu-system-{arch} with appropriate flags.
+    > Use std::process::Command with stdin/stdout piped.
+    - Config string parsed into arch, kernel, ram, disk fields
+    - Correct qemu-system-{arch} binary selected
+    - -nographic -serial mon:stdio flags always present
+    - -machine virt for riscv/aarch64
+    - -kernel, -m, -drive flags constructed from config
+    _Files: src/qemu.rs_
+  - [ ] `p33.d2.t2` Implement architecture mapping (riscv64, riscv32, x86_64, aarch64, mipsel) (depends: p33.d2.t1)
+    > Map arch config values to qemu-system binary names and machine types.
+    - riscv64 -> qemu-system-riscv64 -machine virt
+    - x86_64 -> qemu-system-x86_64
+    - aarch64 -> qemu-system-aarch64 -machine virt
+    - mipsel -> qemu-system-mipsel -machine malta
+    - Unknown arch returns error
+    _Files: src/qemu.rs_
+  - [ ] `p33.d2.t3` Test: spawn QEMU with --version, verify process starts and exits clean (depends: p33.d2.t1)
+    > Unit test that spawns qemu-system-riscv64 --version and captures version string from stdout.
+    - QEMU process starts and exits with code 0
+    - Version string captured from stdout
+    _Files: src/qemu.rs_
+  _~80 LOC_
+- [ ] **Output to canvas** -- Read QEMU stdout bytes, write to canvas_buffer as u32 chars, auto-scroll
+  - [ ] `p33.d3.t1` Implement non-blocking stdout reader (depends: p33.d1.t1)
+    > Set QEMU stdout to non-blocking mode. Each frame tick, read available
+    > bytes into a Vec<u8> buffer. Return the bytes for processing.
+    - Non-blocking read returns immediately even if no data
+    - Bytes read are valid QEMU output
+    _Files: src/qemu.rs_
+  - [ ] `p33.d3.t2` Implement stdout bytes -> canvas_buffer writer (depends: p33.d3.t1)
+    > For each printable byte: write as u32 to canvas_buffer at cursor position.
+    > Track virtual cursor (row, col). Auto-scroll when row >= 128.
+    - Printable ASCII chars appear in canvas_buffer
+    - Cursor advances correctly
+    - Scrolling works when row exceeds 128
+    _Files: src/qemu.rs, src/main.rs_
+  - [ ] `p33.d3.t3` Test: feed known bytes, verify canvas_buffer contents (depends: p33.d3.t2)
+    > Unit test: write 'Hello\nWorld' bytes, verify canvas_buffer has correct chars at correct positions.
+    - 'H' at position [0][0], 'e' at [0][1], etc.
+    - 'W' starts at row 1 after newline
+    _Files: src/qemu.rs_
+  _~60 LOC_
+- [ ] **Input from keyboard** -- Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin
+  - [ ] `p33.d4.t1` Implement keyboard event -> QEMU stdin writer (depends: p33.d1.t1)
+    > When hypervisor is active and a key is pressed, call key_to_ascii_shifted()
+    > and write the resulting byte to QEMU's stdin pipe. Map Enter to \\r,
+    > Backspace to 0x7F, Ctrl+C to 0x03.
+    - Regular keys forwarded as ASCII bytes
+    - Enter sends \r (carriage return)
+    - Backspace sends 0x7F
+    - Ctrl+C sends 0x03
+    _Files: src/qemu.rs, src/main.rs_
+  _~40 LOC_
+- [ ] **ANSI escape handling** -- Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering
+  - [ ] `p33.d5.t1` Implement ANSI escape state machine (depends: p33.d3.t2)
+    > State machine: Normal -> Escape (0x1B) -> Csi ('[') -> params.
+    > Handle: CSI A/B/C/D (cursor), CSI H (home), CSI 2J (clear),
+    > CSI K (clear line), CSI m (color, can ignore), CSI ? 25 h/l (cursor show/hide).
+    - ESC [ A moves cursor up
+    - ESC [ B moves cursor down
+    - ESC [ C moves cursor right
+    - ESC [ D moves cursor left
+    - ESC [ H moves cursor to 0,0
+    - ESC [ 2 J clears canvas_buffer
+    - ESC [ K clears from cursor to end of row
+    - Unknown sequences ignored gracefully
+    _Files: src/qemu.rs_
+  - [ ] `p33.d5.t2` Test: feed ANSI sequences, verify cursor state (depends: p33.d5.t1)
+    > Unit tests for each supported ANSI sequence. Verify cursor position and buffer state.
+    - Test for each cursor movement sequence
+    - Test for clear screen
+    - Test for clear line
+    - Test for mixed text + escape sequences
+    _Files: src/qemu.rs_
+  _~100 LOC_
+- [ ] **HYPERVISOR opcode (0x54)** -- New opcode that reads config string from RAM and spawns QEMU
+  - [ ] `p33.d6.t1` Add HYPERVISOR opcode 0x54 to vm.rs execute (depends: p33.d2.t1, p33.d3.t2, p33.d4.t1)
+    > Read config string from RAM at address in r0. Parse config.
+    > Spawn QemuBridge. Store in VM state. F5 while active kills QEMU.
+    - HYPERVISOR opcode triggers QEMU spawn
+    - Config string read from VM RAM
+    - VM state tracks active hypervisor
+    _Files: src/vm.rs_
+  - [ ] `p33.d6.t2` Add HYPERVISOR to assembler mnemonic list (depends: p33.d6.t1)
+    > Register HYPERVISOR in assembler.rs so it can be used in .asm programs.
+    - 'HYPERVISOR r0' assembles to opcode 0x54
+    - Disassembler outputs HYPERVISOR for 0x54
+    _Files: src/assembler.rs_
+  _~60 LOC_
+- [ ] **Shell command** -- hypervisor arch=riscv64 kernel=linux.img command in shell.asm
+  - [ ] `p33.d7.t1` Add hypervisor command to shell.asm (depends: p33.d6.t1)
+    > Parse 'hypervisor <config>' from shell input, construct config string in RAM, execute HYPERVISOR opcode.
+    - 'hypervisor arch=riscv64 kernel=linux.img' spawns QEMU
+    - Error message on missing kernel file
+    _Files: programs/shell.asm_
+- [ ] **Download helper** -- Script to fetch pre-built RISC-V Linux kernel + rootfs for testing
+  - [ ] `p33.d8.t1` Create scripts/download_riscv_linux.sh
+    > Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal rootfs
+    > from a known URL. Place in .geometry_os/fs/linux/ directory.
+    - Script downloads kernel Image and rootfs
+    - Files placed in correct directory
+    - QEMU can boot the downloaded kernel
+    _Files: scripts/download_riscv_linux.sh_
+- [ ] **Integration test** -- Spawn QEMU with known kernel, verify Linux version appears in output
+  - [ ] `p33.d9.t1` Test: boot RISC-V Linux, verify console output (depends: p33.d2.t1, p33.d3.t1, p33.d5.t1)
+    > Integration test (marked #[ignore] for CI without QEMU).
+    > Spawn QEMU with RISC-V kernel, read stdout for 30 seconds,
+    > verify "Linux version" string appears.
+    - QEMU spawns and produces output
+    - 'Linux version' detected in output within 30 seconds
+    - QEMU process cleaned up after test
+    _Files: src/qemu.rs_
+  _~60 LOC_
+
+### Technical Notes
+
+QEMU subprocess uses std::process::Command with piped stdin/stdout.
+Non-blocking reads via set_nonblocking() on the ChildStdout.
+Canvas rendering reuses existing pixel font pipeline from CANVAS_TEXT_SURFACE.md.
+
+
+### Risks
+
+- QEMU not installed on host -- need clear error message
+- ANSI parsing incomplete -- Linux boot output may use obscure sequences
+- Non-blocking pipe reads may miss data on fast output -- buffer management
+
+## [?] phase-34: RISC-V RV32I Core (FUTURE)
+
+**Goal:** Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
+
+QEMU proved what works. Now rebuild it owned -- pure Rust, no subprocess,
+portable to WASM and embedded. RV32I is the foundation.
+
+
+### Deliverables
+
+- [ ] **riscv/ module** -- src/riscv/ with mod.rs, cpu.rs, memory.rs, decode.rs
+  - [ ] `p34.d1.t1` Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs
+    - Files compile
+    - mod.rs exports public structs
+    _Files: src/riscv/mod.rs, src/riscv/cpu.rs, src/riscv/memory.rs, src/riscv/decode.rs_
+  _~50 LOC_
+- [ ] **Register file** -- x[0..32] (x0=zero), PC, 32-bit registers
+  - [ ] `p34.d2.t1` Define RiscvCpu struct with x[32], pc, privilege fields
+    - RiscvCpu struct with x: [u32; 32], pc: u32, privilege: u8
+    - x[0] always reads as 0 (enforced on write)
+    - new() initializes pc=0x80000000, privilege=3 (M-mode)
+    _Files: src/riscv/cpu.rs_
+  _~30 LOC_
+- [ ] **Guest RAM** -- Vec<u8> separate from host RAM, configurable size (default 128MB)
+  - [ ] `p34.d3.t1` Implement GuestMemory with read_byte/half/word and write_byte/half/word
+    - GuestMemory with ram: Vec<u8>, ram_base: u64
+    - read_word at 0x80000000 reads first 4 bytes little-endian
+    - write_word followed by read_word returns same value
+    - Out-of-range access returns error
+    _Files: src/riscv/memory.rs_
+  _~60 LOC_
+- [ ] **Instruction decode** -- Decode all RV32I opcodes from 32-bit instruction words
+  - [ ] `p34.d4.t1` Implement decode() returning Operation enum for all RV32I opcodes (depends: p34.d1.t1)
+    - R-type: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+    - I-type: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
+    - Load: LB, LH, LW, LBU, LHU
+    - Store: SB, SH, SW
+    - Branch: BEQ, BNE, BLT, BGE, BLTU, BGEU
+    - Upper: LUI, AUIPC
+    - Jump: JAL, JALR
+    - System: ECALL, EBREAK, FENCE
+    _Files: src/riscv/decode.rs_
+  _~200 LOC_
+- [ ] **Execute loop** -- CPU step() fetches, decodes, executes one instruction
+  - [ ] `p34.d5.t1` Implement RiscvCpu::step() and execute() for all RV32I instructions (depends: p34.d2.t1, p34.d3.t1, p34.d4.t1)
+    - step() fetches word at PC, decodes, executes, advances PC by 4
+    - JAL/JALR update PC to target and store return address
+    - Branches conditionally update PC
+    - x[0] always reads as 0 after any write
+    _Files: src/riscv/cpu.rs_
+  _~200 LOC_
+- [ ] **Test suite** -- One test per instruction, verification against known encodings
+  - [ ] `p34.d6.t1` Write tests for all R-type ALU operations (depends: p34.d5.t1)
+    - ADD: 10 + 20 = 30
+    - SUB: 30 - 10 = 20
+    - SLL: 1 << 5 = 32
+    - SLT: 5 < 10 = 1
+    - SLTU: unsigned comparison
+    - XOR, OR, AND: bitwise ops
+    - SRL: logical right shift
+    - SRA: arithmetic right shift (sign-preserving)
+    _Files: src/riscv/cpu.rs_
+  - [ ] `p34.d6.t2` Write tests for I-type, load, store, branch, jump instructions (depends: p34.d5.t1)
+    - ADDI: x1 = x2 + 100
+    - LW/SW: store word, load same address, verify equal
+    - LB/LBU: signed vs unsigned byte load
+    - BEQ: branch taken when equal, not taken when not
+    - JAL: jump and link, verify return address saved
+    - JALR: indirect jump with register base
+    _Files: src/riscv/cpu.rs_
+  - [ ] `p34.d6.t3` Write fibonacci test program that runs 20 iterations in RISC-V (depends: p34.d5.t1)
+    - Fibonacci(10) = 55 computed by RISC-V code
+    - Result stored in a register, verified by test
+    _Files: src/riscv/cpu.rs_
+  _~300 LOC_
+
+## [?] phase-35: RISC-V Privilege Modes (FUTURE)
+
+**Goal:** M/S/U privilege levels, CSR registers, trap handling. Linux needs this to manage its own processes.
+
+### Deliverables
+
+- [ ] **Privilege enum + CSR bank** -- M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp
+  _~80 LOC_
+- [ ] **CSR read/write** -- CSRRW, CSRRS, CSRRC and immediate variants
+  _~100 LOC_
+- [ ] **ECALL/MRET/SRET** -- Trap entry saves PC, jumps to vector. MRET/SRET restore PC.
+  _~120 LOC_
+- [ ] **Timer + software interrupts** -- mtime/mtimecmp, msip/ssip, interrupt pending/enable
+  _~80 LOC_
+- [ ] **Privilege transition tests** -- U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
+  _~150 LOC_
+
+## [?] phase-36: RISC-V Virtual Memory & Devices (FUTURE)
+
+**Goal:** SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot.
+
+### Deliverables
+
+- [ ] **SV32 page table walk** -- 2-level lookup, PTE flags, address translation
+  _~120 LOC_
+- [ ] **TLB cache** -- 64-entry TLB with ASID-aware invalidation
+  _~80 LOC_
+- [ ] **Page fault traps** -- Instruction/Load/Store page faults with stval/mtval
+  _~40 LOC_
+- [ ] **UART 16550** -- Serial port emulation, reuses Phase 33 bridge pattern to canvas
+  _~150 LOC_
+- [ ] **CLINT + PLIC** -- Timer interrupt controller + platform interrupt controller
+  _~200 LOC_
+- [ ] **Virtio block device** -- Virtio MMIO transport, disk image from VFS
+  _~200 LOC_
+- [ ] **Device Tree Blob** -- Generate DTB describing memory, UART, virtio devices
+  _~150 LOC_
+- [ ] **MMU + device integration test** -- Guest sets up page tables, writes to UART, verify output on canvas
+  _~150 LOC_
+
+## [?] phase-37: Guest OS Boot (Native RISC-V) (FUTURE)
+
+**Goal:** Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes: QEMU and native.
+
+### Deliverables
+
+- [ ] **ELF + binary loader** -- Parse ELF64 RISC-V kernel images, load segments into guest RAM
+  _~160 LOC_
+- [ ] **DTB passthrough** -- Pass device tree blob to kernel in a1 register at boot
+  _~30 LOC_
+- [ ] **Boot console** -- Guest UART output to canvas (same bridge as Phase 33)
+  _~80 LOC_
+- [ ] **HYPERVISOR mode flag** -- Opcode detects 'native' vs 'qemu' from config string
+  _~30 LOC_
+- [ ] **Verified boot** -- Boot OpenSBI + Linux tinyconfig, verify 'Linux version' on canvas
+  _~100 LOC_
+- [ ] **Performance benchmark** -- Measure MIPS, compare interpreter vs QEMU, document results
+  _~40 LOC_
 
 ## Global Risks
 
