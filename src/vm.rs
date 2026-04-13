@@ -150,6 +150,32 @@ impl Message {
     }
 }
 
+/// Signal types that can be sent to processes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signal {
+    /// Terminate the process (default handler: halt with exit code 1)
+    Term = 0,
+    /// User-defined signal 1 (default handler: ignore)
+    User1 = 1,
+    /// User-defined signal 2 (default handler: ignore)
+    User2 = 2,
+    /// Stop the process (default handler: halt with exit code 2)
+    Stop = 3,
+}
+
+impl Signal {
+    /// Convert from u32 signal number. Returns None for invalid signals.
+    pub fn from_u32(n: u32) -> Option<Signal> {
+        match n {
+            0 => Some(Signal::Term),
+            1 => Some(Signal::User1),
+            2 => Some(Signal::User2),
+            3 => Some(Signal::Stop),
+            _ => None,
+        }
+    }
+}
+
 /// A secondary execution context spawned by SPAWN.
 /// Shares RAM and screen with the primary process.
 #[derive(Debug, Clone)]
@@ -178,6 +204,18 @@ pub struct SpawnedProcess {
     pub blocked: bool,
     /// Per-process message queue (max MAX_MESSAGES entries).
     pub msg_queue: Vec<Message>,
+    /// Exit code set by EXIT opcode or signal delivery. 0 = success.
+    pub exit_code: u32,
+    /// PID of parent process (0 = no parent / parent is kernel).
+    pub parent_pid: u32,
+    /// True when process has exited but parent has not called WAITPID yet.
+    pub zombie: bool,
+    /// Pending signals to be delivered on next step.
+    pub pending_signals: Vec<Signal>,
+    /// Signal handler addresses. Index = signal number (0-3).
+    /// 0 = no handler (use default), 0xFFFFFFFF = ignore.
+    /// Otherwise, the value is a RAM address to jump to.
+    pub signal_handlers: [u32; 4],
 }
 
 /// Magic bytes for save files
@@ -1135,6 +1173,11 @@ impl Vm {
                                 yielded: false,
                                 blocked: false,
                                 msg_queue: Vec::new(),
+                                exit_code: 0,
+                                parent_pid: self.current_pid,
+                                zombie: false,
+                                pending_signals: Vec::new(),
+                                signal_handlers: [0; 4],
                             });
                             self.ram[0xFFA] = pid;
                         }
@@ -1790,6 +1833,11 @@ impl Vm {
                                                     yielded: false,
                                                     blocked: false,
                                                     msg_queue: Vec::new(),
+                                                    exit_code: 0,
+                                                    parent_pid: self.current_pid,
+                                                    zombie: false,
+                                                    pending_signals: Vec::new(),
+                                                    signal_handlers: [0; 4],
                                                 });
                                                 self.regs[0] = pid;
                                                 self.ram[0xFFA] = pid;
@@ -1982,6 +2030,11 @@ impl Vm {
                                                     yielded: false,
                                                     blocked: false,
                                                     msg_queue: Vec::new(),
+                                                    exit_code: 0,
+                                                    parent_pid: self.current_pid,
+                                                    zombie: false,
+                                                    pending_signals: Vec::new(),
+                                                    signal_handlers: [0; 4],
                                                 });
                                                 // Set up fd redirection for the new child
                                                 let child_pid = pid;
@@ -2327,6 +2380,11 @@ impl Vm {
             yielded: false,
             blocked: false,
             msg_queue: Vec::new(),
+            exit_code: 0,
+            parent_pid: 0, // init has no parent
+            zombie: false,
+            pending_signals: Vec::new(),
+            signal_handlers: [0; 4],
         });
 
         // Set default environment
