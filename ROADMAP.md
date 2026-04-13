@@ -195,7 +195,7 @@ Two ways to run guest OSes, same canvas interface. The QEMU bridge taught us wha
 - [x] Phase 34: RISC-V RV32I Core -- instruction decode, register file, ALU ops, branches, LUI/AUIPC/JAL/JALR, memory load/store, test suite for all 40 base instructions
 - [x] Phase 35: RISC-V Privilege Modes -- M/S/U modes, CSR registers, ECALL/MRET/SRET, trap entry/return, privilege transitions, TIMER/SOFTWARE interrupts
 - [x] Phase 36: RISC-V Virtual Memory & Devices -- SV32 page table walk, satp, TLB cache, page fault traps, UART 16550, CLINT, PLIC, virtio-blk, DTB generation
-- [ ] Phase 37: Guest OS Boot (Native RISC-V) -- ELF/binary loader, DTB passthrough, boot console on canvas, HYPERVISOR native mode, verified boot of Linux RISC-V, performance benchmark
+- [x] Phase 37: Guest OS Boot (Native RISC-V) -- ELF/binary loader, DTB passthrough, boot console on canvas, HYPERVISOR native mode, verified boot of Linux RISC-V, performance benchmark
 
 ---
 
