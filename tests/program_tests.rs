@@ -4702,3 +4702,292 @@ fn test_env_vars_persist_across_processes() {
     }
     assert_eq!(result, "alice", "Child should read 'alice' from parent's env");
 }
+
+// ── READLN opcode ───────────────────────────────────────────────
+
+/// Helper: place instruction bytes at vm.pc, then call step().
+/// The opcode and args are placed starting at pc (step reads from pc).
+fn step_readln(vm: &mut Vm, key: u32) {
+    vm.ram[0xFFF] = key;
+    vm.ram[vm.pc as usize] = 0x68; // READLN
+    vm.ram[vm.pc as usize + 1] = 0; // r0 = buf_addr
+    vm.ram[vm.pc as usize + 2] = 1; // r1 = max_len
+    vm.ram[vm.pc as usize + 3] = 2; // r2 = pos_addr
+    vm.step();
+}
+
+fn step_waitpid(vm: &mut Vm) {
+    vm.ram[vm.pc as usize] = 0x69; // WAITPID
+    vm.ram[vm.pc as usize + 1] = 1; // r1 = pid
+    vm.step();
+}
+
+#[test]
+fn test_readln_no_key_yields() {
+    let mut vm = Vm::new();
+    vm.regs[0] = 0x200;  // buf addr
+    vm.regs[1] = 64;     // max len
+    vm.regs[2] = 0x300;  // pos addr
+    vm.ram[0x300] = 0;   // pos = 0
+    step_readln(&mut vm, 0); // no key
+    assert_eq!(vm.regs[0], 0, "READLN should return 0 when no key");
+    assert!(vm.yielded, "READLN should yield when no key available");
+}
+
+#[test]
+fn test_readln_char_accumulation() {
+    let mut vm = Vm::new();
+    vm.regs[0] = 0x200;
+    vm.regs[1] = 64;
+    vm.regs[2] = 0x300;
+    vm.ram[0x300] = 0;
+
+    // Simulate 'H' (72)
+    step_readln(&mut vm, 72);
+    assert_eq!(vm.ram[0x200], 72, "Should store 'H' in buffer");
+    assert_eq!(vm.ram[0x300], 1, "Position should be 1");
+    assert_eq!(vm.ram[0xFFF], 0, "Key port should be cleared");
+
+    // Re-set r0 (buf addr) since READLN returns result in r0
+    vm.regs[0] = 0x200;
+
+    // Simulate 'i' (105)
+    step_readln(&mut vm, 105);
+    assert_eq!(vm.ram[0x201], 105, "Should store 'i'");
+    assert_eq!(vm.ram[0x300], 2, "Position should be 2");
+}
+
+#[test]
+fn test_readln_enter_terminates() {
+    let mut vm = Vm::new();
+    vm.regs[0] = 0x200;
+    vm.regs[1] = 64;
+    vm.regs[2] = 0x300;
+    vm.ram[0x300] = 0;
+
+    // Pre-load "Hi" at buffer
+    vm.ram[0x200] = 72;  // H
+    vm.ram[0x201] = 105; // i
+    vm.ram[0x300] = 2;   // pos = 2
+
+    // Send Enter (13)
+    step_readln(&mut vm, 13);
+    assert_eq!(vm.regs[0], 2, "Should return length 2");
+    assert_eq!(vm.ram[0x202], 0, "Should null-terminate");
+    assert_eq!(vm.ram[0x300], 0, "Position should be reset");
+}
+
+#[test]
+fn test_readln_backspace() {
+    let mut vm = Vm::new();
+    vm.regs[0] = 0x200;
+    vm.regs[1] = 64;
+    vm.regs[2] = 0x300;
+    vm.ram[0x300] = 3; // pos = 3
+
+    // Send Backspace (8)
+    step_readln(&mut vm, 8);
+    assert_eq!(vm.regs[0], 0, "Should return 0 for backspace");
+    assert_eq!(vm.ram[0x300], 2, "Position should decrement to 2");
+}
+
+#[test]
+fn test_readln_max_len() {
+    let mut vm = Vm::new();
+    vm.regs[0] = 0x200;
+    vm.regs[1] = 2;      // max len = 2
+    vm.regs[2] = 0x300;
+    vm.ram[0x300] = 2;   // already at max
+
+    // Try to add another char -- should be rejected
+    step_readln(&mut vm, 88); // 'X'
+    assert_eq!(vm.ram[0x300], 2, "Position should stay at max");
+    assert_eq!(vm.ram[0x202], 0, "Buffer at pos 2 should not be written");
+}
+
+// ── WAITPID opcode ──────────────────────────────────────────────
+
+#[test]
+fn test_waitpid_not_running() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 42; // PID that doesn't exist
+    step_waitpid(&mut vm);
+    assert_eq!(vm.regs[0], 1, "WAITPID should return 1 for non-existent PID");
+}
+
+#[test]
+fn test_waitpid_still_running() {
+    let mut vm = Vm::new();
+    vm.processes.push(geometry_os::vm::SpawnedProcess {
+        pc: 0,
+        regs: [0; 32],
+        halted: false,
+        pid: 1,
+        mode: geometry_os::vm::CpuMode::User,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 0,
+        sleep_until: 0,
+        yielded: false,
+        blocked: false,
+        msg_queue: Vec::new(),
+    });
+    vm.regs[1] = 1; // PID of running process
+    step_waitpid(&mut vm);
+    assert_eq!(vm.regs[0], 0, "WAITPID should return 0 for running PID");
+    assert!(vm.yielded, "WAITPID should yield when process is running");
+}
+
+#[test]
+fn test_waitpid_halted_process() {
+    let mut vm = Vm::new();
+    vm.processes.push(geometry_os::vm::SpawnedProcess {
+        pc: 0,
+        regs: [0; 32],
+        halted: true,
+        pid: 1,
+        mode: geometry_os::vm::CpuMode::User,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 0,
+        sleep_until: 0,
+        yielded: false,
+        blocked: false,
+        msg_queue: Vec::new(),
+    });
+    vm.regs[1] = 1;
+    step_waitpid(&mut vm);
+    assert_eq!(vm.regs[0], 1, "WAITPID should return 1 for halted PID");
+}
+
+// ── Shell assembly test ─────────────────────────────────────────
+
+#[test]
+fn test_shell_assembles() {
+    let source = std::fs::read_to_string("programs/shell.asm")
+        .unwrap_or_else(|e| panic!("failed to read shell.asm: {}", e));
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "shell.asm should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_readln_waitpid_assembler_entries() {
+    let src = "READLN r0, r1, r2\nWAITPID r3\nHALT";
+    let result = assemble(src, 0).unwrap();
+    assert_eq!(result.pixels[0], 0x68, "READLN opcode");
+    assert_eq!(result.pixels[4], 0x69, "WAITPID opcode");
+    assert_eq!(result.pixels[6], 0x00, "HALT opcode");
+}
+
+// ── CHDIR/GETCWD opcode tests ────────────────────────────────
+
+#[test]
+fn test_chdir_sets_cwd() {
+    let mut vm = Vm::new();
+    // Write "/home" at RAM 0x200
+    let path = b"/home";
+    for (i, &b) in path.iter().enumerate() {
+        vm.ram[0x200 + i] = b as u32;
+    }
+    vm.ram[0x200 + path.len()] = 0;
+
+    vm.regs[0] = 0x200;
+    vm.ram[vm.pc as usize] = 0x6B; // CHDIR
+    vm.ram[vm.pc as usize + 1] = 0; // r0
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "CHDIR should return 0 on success");
+    assert_eq!(
+        vm.env_vars.get("CWD").unwrap(),
+        "/home",
+        "CHDIR should set CWD env var"
+    );
+}
+
+#[test]
+fn test_getcwd_reads_cwd() {
+    let mut vm = Vm::new();
+    vm.env_vars.insert("CWD".to_string(), "/tmp".to_string());
+
+    vm.regs[0] = 0x200;
+    vm.ram[vm.pc as usize] = 0x6C; // GETCWD
+    vm.ram[vm.pc as usize + 1] = 0; // r0
+    vm.step();
+
+    assert_eq!(vm.regs[0], 4, "GETCWD should return length 4");
+    assert_eq!(vm.ram[0x200] as u8, b'/' as u8);
+    assert_eq!(vm.ram[0x201] as u8, b't' as u8);
+    assert_eq!(vm.ram[0x202] as u8, b'm' as u8);
+    assert_eq!(vm.ram[0x203] as u8, b'p' as u8);
+    assert_eq!(vm.ram[0x204], 0, "Should be null-terminated");
+}
+
+#[test]
+fn test_getcwd_default_root() {
+    let mut vm = Vm::new();
+    // No CWD set -- should default to "/"
+    vm.regs[0] = 0x200;
+    vm.ram[vm.pc as usize] = 0x6C; // GETCWD
+    vm.ram[vm.pc as usize + 1] = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 1, "GETCWD should return length 1 for default");
+    assert_eq!(vm.ram[0x200] as u8, b'/' as u8);
+}
+
+// ── EXECP assembler test ─────────────────────────────────────
+
+#[test]
+fn test_execp_assembles() {
+    let src = "EXECP r0, r1, r2\nHALT";
+    let result = assemble(src, 0).unwrap();
+    assert_eq!(result.pixels[0], 0x6A, "EXECP opcode");
+    assert_eq!(result.pixels[1], 0, "path reg");
+    assert_eq!(result.pixels[2], 1, "stdin_fd reg");
+    assert_eq!(result.pixels[3], 2, "stdout_fd reg");
+}
+
+// ── CHDIR/GETCWD assembler test ──────────────────────────────
+
+#[test]
+fn test_chdir_getcwd_assembles() {
+    let src = "CHDIR r0\nGETCWD r1\nHALT";
+    let result = assemble(src, 0).unwrap();
+    assert_eq!(result.pixels[0], 0x6B, "CHDIR opcode");
+    assert_eq!(result.pixels[1], 0, "path reg");
+    assert_eq!(result.pixels[2], 0x6C, "GETCWD opcode");
+    assert_eq!(result.pixels[3], 1, "buf reg");
+    assert_eq!(result.pixels[4], 0x00, "HALT");
+}
+
+// ── READLN non-printable discard test ────────────────────────
+
+#[test]
+fn test_readln_non_printable_discarded() {
+    let mut vm = Vm::new();
+    vm.regs[0] = 0x200;
+    vm.regs[1] = 64;
+    vm.regs[2] = 0x300;
+    vm.ram[0x300] = 0;
+
+    // Send ESC (27) -- non-printable, should be discarded
+    step_readln(&mut vm, 27);
+    assert_eq!(vm.ram[0x300], 0, "Position should stay 0 for non-printable");
+    assert_eq!(vm.ram[0xFFF], 0, "Key should be consumed");
+}
+
+// ── READLN buffer full test ──────────────────────────────────
+
+#[test]
+fn test_readln_buffer_full_no_overflow() {
+    let mut vm = Vm::new();
+    vm.regs[0] = 0x200;
+    vm.regs[1] = 2; // max_len = 2
+    vm.regs[2] = 0x300;
+    vm.ram[0x300] = 2; // already at max
+
+    step_readln(&mut vm, 88); // 'X'
+    assert_eq!(vm.ram[0x300], 2, "Position should stay at max");
+    assert_eq!(vm.ram[0x202], 0, "Buffer at pos 2 should not be written");
+}

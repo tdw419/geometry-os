@@ -85,6 +85,23 @@ pub fn assemble(source: &str, base_addr: usize) -> Result<AsmResult, AsmError> {
             continue;
         }
 
+        // .byte val1, val2, ... -- emit raw byte values (each becomes a u32 word)
+        if line.to_lowercase().starts_with(".byte") {
+            let rest = line[5..].trim();
+            let parts: Vec<&str> = rest.split(',').collect();
+            if parts.is_empty() {
+                return Err(AsmError { line: line_num + 1, message: ".byte requires at least one value".into() });
+            }
+            for part in parts {
+                let val_str = part.trim();
+                match parse_imm(val_str, &constants) {
+                    Ok(v) => bytecode.push(v & 0xFF),
+                    Err(e) => return Err(AsmError { line: line_num + 1, message: format!("invalid .byte value '{}': {}", val_str, e) }),
+                }
+            }
+            continue;
+        }
+
         // Check for label
         if let Some(label_end) = line.find(':') {
             let label_name = line[..label_end].trim().to_lowercase();
@@ -753,6 +770,69 @@ fn parse_instruction(
             let r2 = parse_reg(tokens[2])?;
             bytecode.push(r1 as u32);
             bytecode.push(r2 as u32);
+        }
+
+        "READLN" => {
+            if tokens.len() != 4 {
+                return Err(format!(
+                    "READLN requires 3 arguments: READLN buf_reg, max_len_reg, pos_reg"
+                ));
+            }
+            bytecode.push(0x68);
+            let r1 = parse_reg(tokens[1])?;
+            let r2 = parse_reg(tokens[2])?;
+            let r3 = parse_reg(tokens[3])?;
+            bytecode.push(r1 as u32);
+            bytecode.push(r2 as u32);
+            bytecode.push(r3 as u32);
+        }
+
+        "WAITPID" => {
+            if tokens.len() != 2 {
+                return Err(format!(
+                    "WAITPID requires 1 argument: WAITPID pid_reg"
+                ));
+            }
+            bytecode.push(0x69);
+            let r = parse_reg(tokens[1])?;
+            bytecode.push(r as u32);
+        }
+
+        "EXECP" => {
+            if tokens.len() != 4 {
+                return Err(format!(
+                    "EXECP requires 3 arguments: EXECP path_reg, stdin_fd_reg, stdout_fd_reg"
+                ));
+            }
+            bytecode.push(0x6A);
+            let r1 = parse_reg(tokens[1])?;
+            let r2 = parse_reg(tokens[2])?;
+            let r3 = parse_reg(tokens[3])?;
+            bytecode.push(r1 as u32);
+            bytecode.push(r2 as u32);
+            bytecode.push(r3 as u32);
+        }
+
+        "CHDIR" => {
+            if tokens.len() != 2 {
+                return Err(format!(
+                    "CHDIR requires 1 argument: CHDIR path_reg"
+                ));
+            }
+            bytecode.push(0x6B);
+            let r = parse_reg(tokens[1])?;
+            bytecode.push(r as u32);
+        }
+
+        "GETCWD" => {
+            if tokens.len() != 2 {
+                return Err(format!(
+                    "GETCWD requires 1 argument: GETCWD buf_reg"
+                ));
+            }
+            bytecode.push(0x6C);
+            let r = parse_reg(tokens[1])?;
+            bytecode.push(r as u32);
         }
 
         _ => return Err(format!("unknown opcode: {}", opcode)),

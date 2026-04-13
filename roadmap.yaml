@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 61
-  tests: 214
-  programs: 37
-  loc: 7333
+  opcodes: 71
+  tests: 195
+  programs: 38
+  loc: 7967
 
 phases:
   # ===================================================================
@@ -906,22 +906,67 @@ phases:
 
   - id: "phase-29"
     title: "Shell"
-    status: "todo"
+    status: "complete"
     goal: "Proper command shell with pipes, redirection, environment variables."
     priority: 17
     deliverables:
       - name: "shell.asm"
         description: "Interactive command interpreter as user process"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "shell.asm assembles without errors"
+            met: true
+          - description: "Built-in commands: ls, cd, cat, echo, ps, kill, help, pwd, clear, exit"
+            met: true
       - name: "Pipe operator"
         description: "prog1 | prog2 connects stdout to stdin"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "EXECP opcode (0x6A) spawns with fd redirection"
+            met: true
+          - description: "shell.asm parses | operator and creates pipes"
+            met: true
       - name: "Redirection"
         description: "prog > file, prog < file, prog >> file"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "shell.asm parses > operator and opens file for output"
+            met: true
       - name: "Built-in commands"
         description: "ls, cd, cat, echo, ps, kill, help"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "ls lists VFS directory entries"
+            met: true
+          - description: "cd changes CWD via CHDIR opcode"
+            met: true
+          - description: "cat reads file and displays content"
+            met: true
+          - description: "echo prints arguments to screen"
+            met: true
+          - description: "ps lists process IDs"
+            met: true
+          - description: "kill terminates a process by PID"
+            met: true
+          - description: "help displays command list"
+            met: true
+      - name: "New opcodes"
+        description: "READLN, WAITPID, EXECP, CHDIR, GETCWD"
+        status: "done"
+        acceptance_criteria:
+          - description: "READLN (0x68) reads keyboard chars into line buffer"
+            met: true
+          - description: "WAITPID (0x69) waits for child process to halt"
+            met: true
+          - description: "EXECP (0x6A) spawns program with stdin/stdout fd redirection"
+            met: true
+          - description: "CHDIR (0x6B) changes current working directory"
+            met: true
+          - description: "GETCWD (0x6C) reads current working directory"
+            met: true
+      - name: "VFS dup_fd"
+        description: "Duplicate file descriptors across PID tables for pipe/redir"
+        status: "done"
 
   - id: "phase-30"
     title: "Boot Sequence & Init"

@@ -6,8 +6,8 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 
 ## Current State
 
-- 61 opcodes, 32 registers, 64K RAM, 256x256 framebuffer
-- 167 tests (all passing, 2 ignored), 37 programs, all green
+- 71 opcodes, 32 registers, 64K RAM, 256x256 framebuffer
+- 195 tests (all passing, 2 ignored), 38 programs, all green
 - Multi-process (SPAWN/KILL), shared RAM, Window Bounds Protocol
 - Self-hosting assembler, browser port (WASM), network port (UDP)
 - Visual debugger, heatmaps, RAM inspector
@@ -18,16 +18,13 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 - Filesystem (VFS, OPEN/READ/WRITE/CLOSE/SEEK/LS, per-process fd table, cat.asm)
 - Preemptive scheduler (priority levels 0-3, time quantum, YIELD/SLEEP/SETPRIORITY opcodes)
 - IPC (PIPE/MSGSND/MSGRCV opcodes, blocking I/O, per-process message queues, pipe_test.asm)
+- Device drivers (device file convention, IOCTL, screen/keyboard/audio/net drivers)
+- Shell (shell.asm, pipe operator, redirection, built-in commands, READLN/WAITPID/EXECP/CHDIR/GETCWD)
 
 **What's missing for a real OS:**
-- ~~No memory protection (any process can trash any RAM)~~ (Phase 24 done)
-- ~~No syscall boundary (programs directly access hardware)~~ (Phase 23 done)
-- ~~No proper scheduler (round-robin single-step, no priorities)~~ (Phase 26 done)
-- ~~No IPC beyond shared RAM (no pipes, no messages)~~ (Phase 27 done)
-- No device driver model (hardware ports are hardcoded)
-- No shell (just a REPL, no pipes/redirection)
 - No init/boot sequence (hardcoded startup)
 - No standard library for programs
+- No signal handling or proper process lifecycle
 
 ---
 
@@ -233,7 +230,7 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 - [x] Phase 26: Preemptive Scheduler -- timer interrupt, priority levels, yield/sleep syscalls
 - [x] Phase 27: IPC -- PIPE syscall, MSGSND/MSGRCV syscalls, blocking I/O
 - [x] Phase 28: Device Drivers -- device file convention, IOCTL syscall, screen/keyboard/audio/net drivers
-- [ ] Phase 29: Shell -- shell.asm, pipe operator, redirection, built-in commands (ls, cd, cat, echo, ps, kill, help)
+- [x] Phase 29: Shell -- shell.asm, pipe operator, redirection, built-in commands (ls, cd, cat, echo, ps, kill, help)
 - [ ] Phase 30: Boot Sequence -- boot ROM, init process (PID 1), graceful shutdown
 - [ ] Phase 31: Standard Library -- lib/stdlib.asm, lib/math.asm, heap allocator, linking convention
 - [ ] Phase 32: Signals & Lifecycle -- SIGNAL syscall, signal handlers, EXIT/WAIT syscalls, zombie cleanup

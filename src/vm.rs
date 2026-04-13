@@ -1835,6 +1835,224 @@ impl Vm {
                 }
             }
 
+            // READLN buf_addr_reg, max_len_reg, pos_addr_reg
+            // Read one character from keyboard into line buffer.
+            // Uses: r0 = buffer start addr, r1 = max length, r2 = pointer to current position.
+            // Keyboard char read from RAM[0xFFF].
+            // r0 return: 0 = waiting/char stored, >0 = line length (Enter pressed).
+            // Sets self.yielded when no key or waiting for child.
+            0x68 => {
+                let br = self.fetch() as usize;
+                let mr = self.fetch() as usize;
+                let pr = self.fetch() as usize;
+                if br < NUM_REGS && mr < NUM_REGS && pr < NUM_REGS {
+                    let buf_addr = self.regs[br] as usize;
+                    let max_len = self.regs[mr] as usize;
+                    let pos_addr = self.regs[pr] as usize;
+                    let pos = self.ram[pos_addr] as usize;
+                    let key = self.ram[0xFFF];
+
+                    if key == 0 {
+                        // No key available -- yield
+                        self.regs[0] = 0;
+                        self.yielded = true;
+                    } else if key == 13 {
+                        // Enter -- terminate line
+                        if pos < self.ram.len() {
+                            self.ram[buf_addr + pos] = 0; // null terminate
+                        }
+                        self.regs[0] = pos as u32;
+                        self.ram[pos_addr] = 0; // reset position
+                        self.ram[0xFFF] = 0; // consume key
+                    } else if key == 8 {
+                        // Backspace
+                        if pos > 0 {
+                            self.ram[pos_addr] = (pos - 1) as u32;
+                        }
+                        self.regs[0] = 0;
+                        self.ram[0xFFF] = 0;
+                    } else if key >= 32 && pos < max_len {
+                        // Printable character
+                        if buf_addr + pos < self.ram.len() {
+                            self.ram[buf_addr + pos] = key;
+                        }
+                        self.ram[pos_addr] = (pos + 1) as u32;
+                        self.regs[0] = 0;
+                        self.ram[0xFFF] = 0;
+                    } else {
+                        // Non-printable or buffer full -- discard
+                        self.regs[0] = 0;
+                        self.ram[0xFFF] = 0;
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // WAITPID pid_reg -- wait for child process to halt.
+            // r0 = 0 if process still running (yields), 1 if halted/not found.
+            0x69 => {
+                let pr = self.fetch() as usize;
+                if pr < NUM_REGS {
+                    let target_pid = self.regs[pr];
+                    let mut found_running = false;
+                    let mut found_halted = false;
+                    for proc in &self.processes {
+                        if proc.pid == target_pid {
+                            if proc.halted {
+                                found_halted = true;
+                            } else {
+                                found_running = true;
+                            }
+                            break;
+                        }
+                    }
+                    if found_halted || !found_running {
+                        self.regs[0] = 1; // done
+                    } else {
+                        self.regs[0] = 0; // still running
+                        self.yielded = true;
+                    }
+                } else {
+                    self.regs[0] = 1;
+                }
+            }
+
+            // EXECP path_reg, stdin_fd_reg, stdout_fd_reg
+            // Like EXEC but with fd redirection for pipes/redirects.
+            // Assembles and spawns a program from programs/ directory.
+            // stdin_fd/stdout_fd: 0xFFFFFFFF = default, otherwise fd to dup into child's fd 0/1.
+            0x6A => {
+                let path_r = self.fetch() as usize;
+                let stdin_r = self.fetch() as usize;
+                let stdout_r = self.fetch() as usize;
+                if path_r < NUM_REGS && stdin_r < NUM_REGS && stdout_r < NUM_REGS {
+                    let path_addr = self.regs[path_r] as usize;
+                    let stdin_fd = self.regs[stdin_r];
+                    let stdout_fd = self.regs[stdout_r];
+                    let filename = self.read_ram_string(path_addr, 64);
+                    match filename {
+                        Some(mut fname) => {
+                            if !fname.ends_with(".asm") {
+                                fname.push_str(".asm");
+                            }
+                            let prog_path = std::path::Path::new("programs").join(&fname);
+                            let source = match std::fs::read_to_string(&prog_path) {
+                                Ok(s) => s,
+                                Err(_) => {
+                                    self.regs[0] = 0xFFFFFFFF;
+                                    return true;
+                                }
+                            };
+                            match crate::assembler::assemble(&source, 0) {
+                                Ok(asm_result) => {
+                                    let active_count = self.processes.iter().filter(|p| !p.halted).count();
+                                    if active_count >= MAX_PROCESSES {
+                                        self.regs[0] = 0xFFFFFFFF;
+                                    } else {
+                                        let page_dir = self.create_process_page_dir();
+                                        match page_dir {
+                                            Some(pd) => {
+                                                let phys_base = (pd[0] as usize) * PAGE_SIZE;
+                                                for (i, &word) in asm_result.pixels.iter().enumerate() {
+                                                    let addr = phys_base + i;
+                                                    if addr >= self.ram.len() { break; }
+                                                    self.ram[addr] = word;
+                                                }
+                                                let pid = (self.processes.len() + 1) as u32;
+                                                self.processes.push(SpawnedProcess {
+                                                    pc: 0,
+                                                    regs: [0; NUM_REGS],
+                                                    halted: false,
+                                                    pid,
+                                                    mode: CpuMode::User,
+                                                    page_dir: Some(pd),
+                                                    segfaulted: false,
+                                                    priority: 1,
+                                                    slice_remaining: 0,
+                                                    sleep_until: 0,
+                                                    yielded: false,
+                                                    blocked: false,
+                                                    msg_queue: Vec::new(),
+                                                });
+                                                // Set up fd redirection for the new child
+                                                let child_pid = pid;
+                                                if stdin_fd != 0xFFFFFFFF {
+                                                    self.vfs.dup_fd(stdin_fd, 0, child_pid, self.current_pid);
+                                                }
+                                                if stdout_fd != 0xFFFFFFFF {
+                                                    self.vfs.dup_fd(stdout_fd, 1, child_pid, self.current_pid);
+                                                }
+                                                self.regs[0] = pid;
+                                                self.ram[0xFFA] = pid;
+                                            }
+                                            None => {
+                                                self.regs[0] = 0xFFFFFFFF;
+                                                self.ram[0xFFA] = 0xFFFFFFFF;
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                    self.regs[0] = 0xFFFFFFFF;
+                                    self.ram[0xFFA] = 0xFFFFFFFF;
+                                }
+                            }
+                        }
+                        None => {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // CHDIR path_reg -- change current working directory.
+            // Reads null-terminated path from RAM. Stores in env_vars["CWD"].
+            // r0 = 0 on success, 0xFFFFFFFF on error.
+            0x6B => {
+                let pr = self.fetch() as usize;
+                if pr < NUM_REGS {
+                    let path_addr = self.regs[pr] as usize;
+                    let path = self.read_ram_string(path_addr, 256);
+                    match path {
+                        Some(p) if !p.is_empty() => {
+                            self.env_vars.insert("CWD".to_string(), p);
+                            self.regs[0] = 0;
+                        }
+                        _ => {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // GETCWD buf_reg -- write current working directory to RAM buffer.
+            // Reads null-terminated CWD from env_vars, writes to buf.
+            // r0 = string length, 0 if no CWD set.
+            0x6C => {
+                let br = self.fetch() as usize;
+                if br < NUM_REGS {
+                    let buf_addr = self.regs[br] as usize;
+                    let cwd = self.env_vars.get("CWD").cloned().unwrap_or_else(|| "/".to_string());
+                    let bytes = cwd.as_bytes();
+                    for (i, &b) in bytes.iter().enumerate() {
+                        if buf_addr + i < self.ram.len() {
+                            self.ram[buf_addr + i] = b as u32;
+                        }
+                    }
+                    if buf_addr + bytes.len() < self.ram.len() {
+                        self.ram[buf_addr + bytes.len()] = 0; // null terminate
+                    }
+                    self.regs[0] = bytes.len() as u32;
+                } else {
+                    self.regs[0] = 0;
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -2159,6 +2377,33 @@ impl Vm {
                 let fr = ram(a + 1);
                 let sr = ram(a + 2);
                 (format!("WRITESTR {}, {}", reg(fr), reg(sr)), 3)
+            }
+            0x68 => {
+                let br = ram(a + 1);
+                let mr = ram(a + 2);
+                let pr = ram(a + 3);
+                (format!("READLN {}, {}, {}", reg(br), reg(mr), reg(pr)), 4)
+            }
+            0x69 => {
+                let pr = ram(a + 1);
+                (format!("WAITPID {}", reg(pr)), 2)
+            }
+            0x6A => {
+                let pr = ram(a + 1);
+                let sr = ram(a + 2);
+                let dr = ram(a + 3);
+                (
+                    format!("EXECP {}, {}, {}", reg(pr), reg(sr), reg(dr)),
+                    4,
+                )
+            }
+            0x6B => {
+                let pr = ram(a + 1);
+                (format!("CHDIR {}", reg(pr)), 2)
+            }
+            0x6C => {
+                let br = ram(a + 1);
+                (format!("GETCWD {}", reg(br)), 2)
             }
 
             _ => (format!("??? (0x{:02X})", op), 1),

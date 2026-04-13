@@ -347,6 +347,44 @@ impl Vfs {
         count
     }
 
+    /// Duplicate an fd from source_pid's table into target_pid's table at target_fd slot.
+    /// This is used by EXECP to set up stdin/stdout redirection for child processes.
+    /// Returns true on success.
+    pub fn dup_fd(&mut self, src_fd: u32, target_fd: u32, target_pid: u32, src_pid: u32) -> bool {
+        // Read the source fd from source PID's table
+        let source_file = {
+            let src_table = match self.fd_tables.get_mut(&src_pid) {
+                Some(t) => t,
+                None => return false,
+            };
+            match src_table.fds.get(src_fd as usize) {
+                Some(Some(f)) => {
+                    // Re-open the same file to get an independent handle
+                    let path = f.file.try_clone();
+                    match path {
+                        Ok(cloned_file) => OpenFile {
+                            file: cloned_file,
+                            name: f.name.clone(),
+                            mode: f.mode,
+                        },
+                        Err(_) => return false,
+                    }
+                }
+                _ => return false,
+            }
+        };
+
+        // Write into target PID's table at the specified slot
+        let target_table = self.fd_table(target_pid);
+        let idx = target_fd as usize;
+        if idx < target_table.fds.len() {
+            target_table.fds[idx] = Some(source_file);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Close all file descriptors for a given PID.
     #[allow(dead_code)]
     pub fn close_all(&mut self, pid: u32) {
