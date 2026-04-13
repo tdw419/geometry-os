@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Geometry OS is a pixel-art virtual machine evolving into a real operating system. It's written in Rust with a minifb GUI, a custom assembler, and 33 programs. 115 tests, all green.
+Geometry OS is a pixel-art virtual machine evolving into a real operating system. It's written in Rust with a minifb GUI, a custom assembler, and 34 programs. 122 tests, all green.
 
 The goal: build toward modern OS standards (kernel boundary, memory protection, filesystem, scheduler, IPC, device drivers, shell).
 
@@ -11,7 +11,7 @@ The goal: build toward modern OS standards (kernel boundary, memory protection, 
 ```
 src/
   main.rs       -- GUI (minifb), input handling, rendering (1024x768 host window)
-  vm.rs         -- VM core: 47 opcodes, 32 registers, 64K RAM, 256x256 screen, multi-process
+  vm.rs         -- VM core: 57 opcodes, 32 registers, 64K RAM, 256x256 screen, multi-process
   assembler.rs  -- Two-pass assembler: labels, #define, .org, .db, .asciz
   preprocessor.rs -- Abstraction layer: VAR/SET/GET/INC/DEC macros, shared tokenizer
   font.rs       -- 8x8 VGA bitmap font for text rendering

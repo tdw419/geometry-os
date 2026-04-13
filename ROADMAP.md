@@ -6,8 +6,8 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 
 ## Current State
 
-- 47 opcodes, 32 registers, 64K RAM, 256x256 framebuffer
-- 115 tests, 33 programs, all green
+- 57 opcodes, 32 registers, 64K RAM, 256x256 framebuffer
+- 122 tests, 34 programs, all green
 - Multi-process (SPAWN/KILL), shared RAM, Window Bounds Protocol
 - Self-hosting assembler, browser port (WASM), network port (UDP)
 - Visual debugger, heatmaps, RAM inspector
@@ -16,11 +16,12 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 - Kernel boundary (SYSCALL/RETK, user/kernel mode, restricted opcodes)
 - Memory protection (page tables, address space per process, SEGFAULT)
 - Filesystem (VFS, OPEN/READ/WRITE/CLOSE/SEEK/LS, per-process fd table, cat.asm)
+- Preemptive scheduler (priority levels 0-3, time quantum, YIELD/SLEEP/SETPRIORITY opcodes)
 
 **What's missing for a real OS:**
 - ~~No memory protection (any process can trash any RAM)~~ (Phase 24 done)
 - ~~No syscall boundary (programs directly access hardware)~~ (Phase 23 done)
-- No proper scheduler (round-robin single-step, no priorities)
+- ~~No proper scheduler (round-robin single-step, no priorities)~~ (Phase 26 done)
 - No IPC beyond shared RAM (no pipes, no messages)
 - No device driver model (hardware ports are hardcoded)
 - No shell (just a REPL, no pipes/redirection)
@@ -228,7 +229,7 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 - [x] Phase 23: Kernel Boundary -- CPU mode flag, SYSCALL opcode (0x52), RETK opcode (0x53), syscall dispatch table, restricted opcodes in user mode
 - [x] Phase 24: Memory Protection -- page tables, address space per process, SEGFAULT on illegal access
 - [x] Phase 25: Filesystem -- VFS layer, OPEN/READ/WRITE/CLOSE/SEEK syscalls, LS syscall, per-process fd table, cat.asm
-- [ ] Phase 26: Preemptive Scheduler -- timer interrupt, priority levels, yield/sleep syscalls
+- [x] Phase 26: Preemptive Scheduler -- timer interrupt, priority levels, yield/sleep syscalls
 - [ ] Phase 27: IPC -- PIPE syscall, MSGSND/MSGRCV syscalls, blocking I/O
 - [ ] Phase 28: Device Drivers -- device file convention, IOCTL syscall, screen/keyboard/audio/net drivers
 - [ ] Phase 29: Shell -- shell.asm, pipe operator, redirection, built-in commands (ls, cd, cat, echo, ps, kill, help)

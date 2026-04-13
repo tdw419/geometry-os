@@ -1,13 +1,13 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-46 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+92 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 24/32 phases complete, 0 in progress
+**Progress:** 26/32 phases complete, 0 in progress
 
-**Deliverables:** 108/137 complete
+**Deliverables:** 116/137 complete
 
 ## Scope Summary
 
@@ -37,8 +37,8 @@ the built-in text editor, press F5, watch it run.
 | phase-22 Screen Readback & Collision Detection | COMPLETE | 3/3 | - | - |
 | phase-23 Kernel Boundary (Syscall Mode) | COMPLETE | 5/5 | - | - |
 | phase-24 Memory Protection | COMPLETE | 6/6 | - | - |
-| phase-25 Filesystem | PLANNED | 0/5 | - | - |
-| phase-26 Preemptive Scheduler | PLANNED | 0/3 | - | - |
+| phase-25 Filesystem | COMPLETE | 5/5 | - | - |
+| phase-26 Preemptive Scheduler | COMPLETE | 3/3 | - | - |
 | phase-27 Inter-Process Communication | PLANNED | 0/3 | - | - |
 | phase-28 Device Driver Abstraction | PLANNED | 0/3 | - | - |
 | phase-29 Shell | PLANNED | 0/4 | - | - |
@@ -428,27 +428,27 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
   - [x] test_segfault_pid_tracking passes
 - [x] **Process memory regions documentation** -- docs/MEMORY_PROTECTION.md -- code/heap/stack/shared segments
 
-## [ ] phase-25: Filesystem (PLANNED)
+## [x] phase-25: Filesystem (COMPLETE)
 
 **Goal:** Programs can create, read, write, and delete named files. Persistent storage.
 
 ### Deliverables
 
-- [ ] **Virtual filesystem layer** -- Abstract FS interface backed by host filesystem in .geometry_os/fs/
-- [ ] **OPEN/READ/WRITE/CLOSE/SEEK syscalls** -- Full file I/O through syscall interface
-- [ ] **LS syscall** -- Directory listing into RAM buffer
-- [ ] **Per-process fd table** -- Max 16 open files per process
-- [ ] **cat.asm** -- Test program that reads a file and displays it
+- [x] **Virtual filesystem layer** -- Abstract FS interface backed by host filesystem in .geometry_os/fs/
+- [x] **OPEN/READ/WRITE/CLOSE/SEEK syscalls** -- Full file I/O through syscall interface
+- [x] **LS syscall** -- Directory listing into RAM buffer
+- [x] **Per-process fd table** -- Max 16 open files per process
+- [x] **cat.asm** -- Test program that reads a file and displays it
 
-## [ ] phase-26: Preemptive Scheduler (PLANNED)
+## [x] phase-26: Preemptive Scheduler (COMPLETE)
 
 **Goal:** Replace round-robin single-step with time-sliced priority scheduler.
 
 ### Deliverables
 
-- [ ] **Timer interrupt** -- VM fires tick every N instructions, triggers context switch
-- [ ] **Priority levels** -- Each process has priority 0-3, higher gets more slices
-- [ ] **Yield/Sleep syscalls** -- Voluntary yield and timed sleep
+- [x] **Timer interrupt** -- VM fires tick every N instructions, triggers context switch
+- [x] **Priority levels** -- Each process has priority 0-3, higher gets more slices
+- [x] **Yield/Sleep syscalls** -- Voluntary yield and timed sleep
 
 ## [ ] phase-27: Inter-Process Communication (PLANNED)
 

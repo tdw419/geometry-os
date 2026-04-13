@@ -2,7 +2,7 @@ title: "Geometry OS Roadmap"
 version: "1.0.0"
 description: |
   Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  46 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  92 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 project_url: "https://github.com/tdw419/geometry-os"
 
@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 54
-  tests: 114
+  opcodes: 57
+  tests: 122
   programs: 34
-  loc: 6604
+  loc: 6758
 
 phases:
   # ===================================================================
@@ -775,41 +775,41 @@ phases:
 
   - id: "phase-25"
     title: "Filesystem"
-    status: "todo"
+    status: "complete"
     goal: "Programs can create, read, write, and delete named files. Persistent storage."
     priority: 13
     deliverables:
       - name: "Virtual filesystem layer"
         description: "Abstract FS interface backed by host filesystem in .geometry_os/fs/"
-        status: "todo"
+        status: "done"
       - name: "OPEN/READ/WRITE/CLOSE/SEEK syscalls"
         description: "Full file I/O through syscall interface"
-        status: "todo"
+        status: "done"
       - name: "LS syscall"
         description: "Directory listing into RAM buffer"
-        status: "todo"
+        status: "done"
       - name: "Per-process fd table"
         description: "Max 16 open files per process"
-        status: "todo"
+        status: "done"
       - name: "cat.asm"
         description: "Test program that reads a file and displays it"
-        status: "todo"
+        status: "done"
 
   - id: "phase-26"
     title: "Preemptive Scheduler"
-    status: "todo"
+    status: "complete"
     goal: "Replace round-robin single-step with time-sliced priority scheduler."
     priority: 14
     deliverables:
       - name: "Timer interrupt"
         description: "VM fires tick every N instructions, triggers context switch"
-        status: "todo"
+        status: "done"
       - name: "Priority levels"
         description: "Each process has priority 0-3, higher gets more slices"
-        status: "todo"
+        status: "done"
       - name: "Yield/Sleep syscalls"
         description: "Voluntary yield and timed sleep"
-        status: "todo"
+        status: "done"
 
   - id: "phase-27"
     title: "Inter-Process Communication"
