@@ -970,19 +970,44 @@ phases:
 
   - id: "phase-30"
     title: "Boot Sequence & Init"
-    status: "todo"
+    status: "complete"
     goal: "OS boots into known state, starts init, manages services."
     priority: 18
     deliverables:
       - name: "Boot ROM"
         description: "Fixed bytecode at 0x0000, initializes hardware, jumps to init"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "boot() method assembles init.asm and spawns PID 1"
+            met: true
+          - description: "boot.cfg created with default configuration"
+            met: true
       - name: "Init process"
         description: "PID 1, reads boot.cfg, starts shell"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "init.asm assembles without errors"
+            met: true
+          - description: "init process spawned with priority 2"
+            met: true
+          - description: "supervisor loop monitors shell and respawns if it dies"
+            met: true
+          - description: "environment variables set (SHELL, HOME, CWD, USER)"
+            met: true
       - name: "Graceful shutdown"
         description: "SHUTDOWN syscall stops all processes, flushes FS"
-        status: "todo"
+        status: "done"
+        acceptance_criteria:
+          - description: "SHUTDOWN opcode 0x6E in kernel mode halts VM"
+            met: true
+          - description: "SHUTDOWN in user mode returns error (r0=0xFFFFFFFF)"
+            met: true
+          - description: "SHUTDOWN kills all child processes and frees pages"
+            met: true
+          - description: "SHUTDOWN clears pipes and closes file descriptors"
+            met: true
+          - description: "shutdown_requested flag set for host to check"
+            met: true
 
   - id: "phase-31"
     title: "Standard Library"

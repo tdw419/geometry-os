@@ -1637,6 +1637,7 @@ fn main() {
     // Networking setup
     let mut local_port = 9000;
     let mut remote_port = 9001;
+    let mut boot_mode = false;
     let mut i = 1;
     while i < args.len() {
         if args[i] == "--local-port" && i + 1 < args.len() {
@@ -1645,6 +1646,9 @@ fn main() {
         } else if args[i] == "--remote-port" && i + 1 < args.len() {
             remote_port = args[i + 1].parse().unwrap_or(9001);
             i += 2;
+        } else if args[i] == "--boot" {
+            boot_mode = true;
+            i += 1;
         } else {
             i += 1;
         }
@@ -1700,6 +1704,19 @@ fn main() {
 
     // Last loaded file (for Ctrl+F8 reload)
     let mut loaded_file: Option<PathBuf> = None;
+
+    // If --boot flag, perform boot sequence: load init.asm as PID 1
+    if boot_mode {
+        match vm.boot() {
+            Ok(pid) => {
+                status_msg = format!("[BOOT] init started as PID {}", pid);
+                is_running = true;
+            }
+            Err(e) => {
+                status_msg = format!("[BOOT FAILED] {}", e);
+            }
+        }
+    }
 
     // ── Mode state ──────────────────────────────────────────────
     let mut mode = Mode::Terminal;
@@ -2229,6 +2246,13 @@ fn main() {
         // ── Audio dispatch ───────────────────────────────────────
         if let Some((freq, dur)) = vm.beep.take() {
             play_beep(freq, dur);
+        }
+
+        // ── Shutdown check ────────────────────────────────────────
+        if vm.shutdown_requested {
+            status_msg = "[SHUTDOWN] System halted cleanly.".into();
+            is_running = false;
+            break;
         }
 
         // ── Update Visual Debugger intensities ──────────────────
@@ -3058,6 +3082,8 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         msg_data: [0; vm::MSG_WORDS],
         msg_recv_requested: false,
         env_vars: std::collections::HashMap::new(),
+        booted: false,
+        shutdown_requested: false,
     };
 
 

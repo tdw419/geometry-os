@@ -46,7 +46,7 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
-## The Instruction Set (61 opcodes)
+## The Instruction Set (73 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -164,6 +164,34 @@ Device files provide uniform access to hardware. OPEN `/dev/screen`, `/dev/keybo
 |--------|------|-------------|
 | IOCTL  | fd_reg, cmd_reg, arg_reg | Device-specific control. Screen: get w/h. Keyboard: get/set echo. Audio: get/set volume. Net: get status. Result in r0 |
 
+### Screen Readback
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| PEEK   | rx, ry, rd | Read screen pixel at (rx,ry) into rd. 0 if out of bounds |
+| SCREENP | dr, xr, yr | Read screen pixel at (xr,yr) into dr (alternate argument order) |
+
+### Environment & Shell
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| GETENV | key_reg, val_reg | Look up env var, write value to RAM |
+| SETENV | key_reg, val_reg | Set env var from two RAM strings |
+| GETPID | | Returns current PID in r0 (0 in kernel mode) |
+| EXEC   | path_reg | Execute .asm program by name |
+| WRITESTR | fd_reg, str_reg | Write null-terminated string to fd |
+| READLN | buf_reg, max_reg, pos_reg | Read keyboard line into buffer |
+| WAITPID | pid_reg | Check if child is running (0=running, 1=halted) |
+| EXECP  | path_reg, stdin_reg, stdout_reg | Execute with fd redirection |
+| CHDIR  | path_reg | Change current working directory |
+| GETCWD | buf_reg | Write CWD path to RAM buffer |
+
+### Boot & Shutdown
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| SHUTDOWN | | Graceful shutdown: halt all processes, flush FS, close fds. Kernel mode only. User mode sets r0=error |
+
 ## Memory-Mapped I/O
 
 | Port  | Address | Description |
@@ -277,10 +305,10 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 
 ## Stats
 
-- 6,604 lines of Rust
-- 54 opcodes
-- 34 demo programs
-- 114 tests
+- 8,187 lines of Rust
+- 73 opcodes
+- 39 demo programs
+- 257 tests
 - MIT licensed
 
 ## License

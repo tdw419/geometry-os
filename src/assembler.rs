@@ -835,6 +835,23 @@ fn parse_instruction(
             bytecode.push(r as u32);
         }
 
+        "SCREENP" => {
+            // SCREENP dest, x, y -- read screen pixel at (x,y) into dest
+            if tokens.len() < 4 {
+                return Err(format!(
+                    "SCREENP requires 3 arguments: SCREENP dest_reg, x_reg, y_reg"
+                ));
+            }
+            bytecode.push(0x6D);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+        }
+
+        "SHUTDOWN" => {
+            bytecode.push(0x6E);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

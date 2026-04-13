@@ -231,7 +231,7 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 - [x] Phase 27: IPC -- PIPE syscall, MSGSND/MSGRCV syscalls, blocking I/O
 - [x] Phase 28: Device Drivers -- device file convention, IOCTL syscall, screen/keyboard/audio/net drivers
 - [x] Phase 29: Shell -- shell.asm, pipe operator, redirection, built-in commands (ls, cd, cat, echo, ps, kill, help)
-- [ ] Phase 30: Boot Sequence -- boot ROM, init process (PID 1), graceful shutdown
+- [x] Phase 30: Boot Sequence -- boot ROM, init process (PID 1), graceful shutdown
 - [ ] Phase 31: Standard Library -- lib/stdlib.asm, lib/math.asm, heap allocator, linking convention
 - [ ] Phase 32: Signals & Lifecycle -- SIGNAL syscall, signal handlers, EXIT/WAIT syscalls, zombie cleanup
 
