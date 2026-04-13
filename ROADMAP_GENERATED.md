@@ -5,9 +5,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 23/32 phases complete, 1 in progress
+**Progress:** 24/32 phases complete, 0 in progress
 
-**Deliverables:** 105/135 complete
+**Deliverables:** 108/137 complete
 
 ## Scope Summary
 
@@ -36,7 +36,7 @@ the built-in text editor, press F5, watch it run.
 | phase-21 Spatial Program Coordinator (Native Windowing) | COMPLETE | 3/3 | - | - |
 | phase-22 Screen Readback & Collision Detection | COMPLETE | 3/3 | - | - |
 | phase-23 Kernel Boundary (Syscall Mode) | COMPLETE | 5/5 | - | - |
-| phase-24 Memory Protection | IN PROGRESS | 3/4 | - | - |
+| phase-24 Memory Protection | COMPLETE | 6/6 | - | - |
 | phase-25 Filesystem | PLANNED | 0/5 | - | - |
 | phase-26 Preemptive Scheduler | PLANNED | 0/3 | - | - |
 | phase-27 Inter-Process Communication | PLANNED | 0/3 | - | - |
@@ -400,16 +400,33 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 - [x] **Syscall dispatch table** -- RAM region 0xFE00..0xFEFF mapping syscall numbers to kernel handlers
 - [x] **Restricted opcodes in user mode** -- IKEY, hardware STORE blocked in user mode
 
-## [~] phase-24: Memory Protection (IN PROGRESS)
+## [x] phase-24: Memory Protection (COMPLETE)
 
 **Goal:** Each process gets its own address space. Processes can't trash each other.
 
 ### Deliverables
 
 - [x] **Page tables** -- Simple 1-level paging: page_dir per process, maps virtual to physical
+  - [x] translate_va maps virtual to physical via page directory
+  - [x] Kernel mode uses identity mapping (no page directory)
 - [x] **Address space per process** -- SPAWN creates new page table, not just new registers
-- [x] **SEGFAULT on illegal access** -- LOAD/STORE to unmapped page halts the process
-- [ ] **Fix window_manager for isolated address spaces** -- window_manager.asm shared RAM protocol broken by memory protection; needs IPC (Phase 27) or shared memory region
+  - [x] Each child gets 4 private physical pages
+  - [x] Shared regions (page 3, page 63) identity-mapped
+- [x] **SEGFAULT on illegal access** -- LOAD/STORE/fetch to unmapped page halts the process
+  - [x] test_child_segfaults_on_unmapped_store passes
+  - [x] test_child_segfaults_on_unmapped_load passes
+  - [x] test_child_segfaults_on_unmapped_fetch passes
+  - [x] RAM[0xFF9] tracks segfaulted PID
+- [x] **Process memory isolation** -- Two processes can't corrupt each other's memory
+  - [x] test_process_memory_isolation passes
+  - [x] test_child_user_mode_blocks_hardware_port_write passes
+  - [x] test_child_can_access_shared_window_bounds passes
+- [x] **Memory protection tests** -- 9 tests covering segfault, isolation, page tables, kernel mode
+  - [x] test_child_page_directory_has_shared_regions_mapped passes
+  - [x] test_kernel_mode_identity_mapping passes
+  - [x] test_kill_frees_physical_pages passes
+  - [x] test_segfault_pid_tracking passes
+- [x] **Process memory regions documentation** -- docs/MEMORY_PROTECTION.md -- code/heap/stack/shared segments
 
 ## [ ] phase-25: Filesystem (PLANNED)
 

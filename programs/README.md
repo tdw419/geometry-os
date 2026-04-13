@@ -27,6 +27,7 @@ This directory contains assembly programs for the Geometry OS virtual machine. Y
 - **fill_screen.asm**: Basic test that fills the entire screen with a solid color.
 
 ## System & Tools
+- **cat.asm**: Reads "hello.txt" from the virtual filesystem and displays it on screen. Demonstrates `OPEN`, `READ`, `CLOSE`, and `TEXT` opcodes.
 - **self_host.asm**: The ultimate VM test. This program contains assembly source in RAM, uses the `ASM` opcode to compile itself into bytecode, and then executes the result.
 - **calculator.asm**: Basic add/subtract calculator with text display using `TEXT` and `IKEY`.
 - **painter.asm**: Keyboard-controlled drawing tool. WASD to move cursor, Space to paint.

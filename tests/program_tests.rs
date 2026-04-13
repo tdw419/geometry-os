@@ -2957,3 +2957,80 @@ fn test_vfs_path_traversal_blocked() {
     load_and_run(&mut vm, &program, 100);
     assert_eq!(vm.regs[0], 0xFFFFFFFF, "path traversal should be blocked");
 }
+
+#[test]
+fn test_cat_asm_assembles() {
+    use geometry_os::assembler::assemble;
+    let source = std::fs::read_to_string("programs/cat.asm")
+        .expect("cat.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "cat.asm should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_cat_asm_reads_and_displays_file() {
+    let (mut vm, _dir) = vm_with_vfs();
+
+    // Create hello.txt in the VFS directory
+    std::fs::write(vm.vfs.base_dir.join("hello.txt"), b"Hello from file!").unwrap();
+
+    use geometry_os::assembler::assemble;
+    let source = std::fs::read_to_string("programs/cat.asm")
+        .expect("cat.asm should exist");
+    let result = assemble(&source, 0).expect("cat.asm should assemble");
+
+    // Load bytecode into RAM at 0x100 (after the filename data at 0x1000)
+    for (i, &word) in result.pixels.iter().enumerate() {
+        if 0x0100 + i < vm.ram.len() {
+            vm.ram[0x0100 + i] = word;
+        }
+    }
+    vm.pc = 0x0100;
+
+    // Run enough steps to complete
+    for _ in 0..1000 {
+        if vm.halted { break; }
+        vm.step();
+    }
+
+    assert!(vm.halted, "cat.asm should halt");
+
+    // Verify the file content was read into the buffer at 0x2000
+    let expected = b"Hello from file!";
+    for (i, &ch) in expected.iter().enumerate() {
+        assert_eq!(
+            vm.ram[0x2000 + i] & 0xFF, ch as u32,
+            "buffer[{}] should be '{}' but got '{}'",
+            i, ch as char, (vm.ram[0x2000 + i] & 0xFF) as u8 as char
+        );
+    }
+
+    // Verify null terminator after content
+    assert_eq!(vm.ram[0x2000 + expected.len()] & 0xFF, 0, "should be null-terminated");
+}
+
+#[test]
+fn test_cat_asm_nonexistent_file_halts_cleanly() {
+    let (mut vm, _dir) = vm_with_vfs();
+
+    // Don't create any file -- cat.asm should handle open error gracefully
+    use geometry_os::assembler::assemble;
+    let source = std::fs::read_to_string("programs/cat.asm")
+        .expect("cat.asm should exist");
+    let result = assemble(&source, 0).expect("cat.asm should assemble");
+
+    for (i, &word) in result.pixels.iter().enumerate() {
+        if 0x0100 + i < vm.ram.len() {
+            vm.ram[0x0100 + i] = word;
+        }
+    }
+    vm.pc = 0x0100;
+
+    for _ in 0..1000 {
+        if vm.halted { break; }
+        vm.step();
+    }
+
+    // Should halt gracefully (not crash)
+    assert!(vm.halted, "cat.asm should halt even when file doesn't exist");
+}

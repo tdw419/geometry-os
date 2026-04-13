@@ -6,7 +6,7 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 48 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 54 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling, virtual filesystem, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
@@ -46,7 +46,7 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
-## The Instruction Set (48 opcodes)
+## The Instruction Set (54 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -135,6 +135,16 @@ cd wasm && wasm-pack build --target web
 |--------|------|-------------|
 | SYSCALL | num | Trap to kernel mode, dispatch via RAM[0xFE00+num] |
 | RETK   |     | Return from kernel mode to user mode |
+
+### Filesystem
+| Opcode | Args | Description |
+|--------|------|-------------|
+| OPEN   | path_reg, mode_reg | Open file (mode: 0=read, 1=write, 2=append), fd in r0 |
+| READ   | fd_reg, buf_reg, len_reg | Read from file into RAM, bytes read in r0 |
+| WRITE  | fd_reg, buf_reg, len_reg | Write from RAM to file, bytes written in r0 |
+| CLOSE  | fd_reg | Close file descriptor, 0=ok, 0xFFFFFFFF=error in r0 |
+| SEEK   | fd_reg, offset_reg, whence_reg | Seek (0=SET, 1=CUR, 2=END), new pos in r0 |
+| LS     | buf_reg | List directory entries into RAM buffer, count in r0 |
 
 ## Memory-Mapped I/O
 
@@ -236,7 +246,7 @@ child:
 │  └──────────────┘  └──────────────────┘     │
 └──────────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 48 opcodes, 8 concurrent processes
+VM: 32 registers, 65536-word RAM, 54 opcodes, 8 concurrent processes
 Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
 
@@ -249,10 +259,10 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 
 ## Stats
 
-- 5,623 lines of Rust
-- 48 opcodes
-- 32 demo programs
-- 113 tests
+- 6,604 lines of Rust
+- 54 opcodes
+- 34 demo programs
+- 114 tests
 - MIT licensed
 
 ## License
