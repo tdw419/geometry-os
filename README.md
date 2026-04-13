@@ -198,7 +198,7 @@ Memory: 0x0000 bytecode | 0x1000 canvas text | 0xFFD ASM result | 0xFFE TICKS | 
 - 4,536 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs)
 - 40 opcodes
 - 28 demo programs (visual demos, animations, interactive games)
-- 41 tests
+- 49 tests
 
 ## License
 

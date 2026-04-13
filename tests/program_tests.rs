@@ -1264,3 +1264,104 @@ fn test_self_host_runs() {
     assert_eq!(vm.screen[128 * 256 + 128], 3, "center should be green");
     assert_eq!(vm.screen[255 * 256 + 255], 3, "bottom-right should be green");
 }
+
+// ── CMP / BLT / BGE ────────────────────────────────────────────
+
+#[test]
+fn test_cmp_opcode_equal() {
+    let source = "LDI r1, 42\nLDI r2, 42\nCMP r1, r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[0], 0, "CMP equal should set r0 = 0");
+}
+
+#[test]
+fn test_cmp_opcode_less_than() {
+    let source = "LDI r1, 10\nLDI r2, 20\nCMP r1, r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "CMP less-than should set r0 = -1");
+}
+
+#[test]
+fn test_cmp_opcode_greater_than() {
+    let source = "LDI r1, 30\nLDI r2, 20\nCMP r1, r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[0], 1, "CMP greater-than should set r0 = 1");
+}
+
+#[test]
+fn test_blt_opcode() {
+    let source = "\
+LDI r1, 10\nLDI r2, 20\nCMP r1, r2\nBLT r0, less\nLDI r3, 99\nHALT\n\
+less:\nLDI r3, 42\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[3], 42, "BLT should branch when r1 < r2");
+}
+
+#[test]
+fn test_bge_opcode() {
+    let source = "\
+LDI r1, 20\nLDI r2, 10\nCMP r1, r2\nBGE r0, geq\nLDI r3, 99\nHALT\n\
+geq:\nLDI r3, 42\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[3], 42, "BGE should branch when r1 >= r2");
+}
+
+// ── MOD ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_mod_opcode() {
+    let source = "LDI r1, 17\nLDI r2, 5\nMOD r1, r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[1], 2, "17 MOD 5 should be 2");
+}
+
+#[test]
+fn test_mod_opcode_zero_divisor() {
+    let source = "LDI r1, 10\nLDI r2, 0\nMOD r1, r2\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    // Division by zero leaves register unchanged (same behavior as DIV)
+    assert_eq!(vm.regs[1], 10, "MOD by zero should leave register unchanged");
+}
+
+// ── BEEP ────────────────────────────────────────────────────────
+
+#[test]
+fn test_beep_opcode() {
+    // BEEP freq_reg, dur_reg -- set up freq in r1, dur in r2
+    // We test that the VM doesn't crash and advances past BEEP
+    let source = "LDI r1, 440\nLDI r2, 50\nBEEP r1, r2\nLDI r3, 1\nHALT";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[3], 1, "VM should execute past BEEP and set r3");
+}
