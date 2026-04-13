@@ -31,6 +31,16 @@ pub const SCAUSE: u32 = 0x142;
 pub const STVAL: u32 = 0x143;
 pub const SATP: u32 = 0x180;
 
+// Trap delegation CSRs
+pub const MEDELEG: u32 = 0x302;
+pub const MIDELEG: u32 = 0x303;
+
+// MIE/MIP interrupt enable/pending registers
+pub const MIE: u32 = 0x304;
+pub const MIP: u32 = 0x344;
+pub const SIE: u32 = 0x104;
+pub const SIP: u32 = 0x144;
+
 // ---- mstatus bit masks ----
 
 /// SSTATUS is a restricted view of MSTATUS.

@@ -123,6 +123,37 @@ fn blt(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b100, off) }
 fn bge(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b101, off) }
 fn bltu(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b110, off) }
 fn bgeu(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b111, off) }
+fn ebreak() -> u32 { i_type(1, 0, 0, 0, 0x73) }
+fn fence() -> u32 { 0x0FF0000F }
+fn nop() -> u32 { addi(0, 0, 0) }
+fn mret() -> u32 { 0x30200073 }
+fn sret() -> u32 { 0x10200073 }
+fn and_(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 7, rd, 0x33) }
+fn csrrw(rd: u8, rs1: u8, csr: u32) -> u32 { (csr << 20) | ((rs1 as u32) << 15) | (1u32 << 12) | ((rd as u32) << 7) | 0x73 }
+fn csrrs(rd: u8, rs1: u8, csr: u32) -> u32 { (csr << 20) | ((rs1 as u32) << 15) | (2u32 << 12) | ((rd as u32) << 7) | 0x73 }
+fn csrrc(rd: u8, rs1: u8, csr: u32) -> u32 { (csr << 20) | ((rs1 as u32) << 15) | (3u32 << 12) | ((rd as u32) << 7) | 0x73 }
+fn csrrwi(rd: u8, uimm: u8, csr: u32) -> u32 { (csr << 20) | ((uimm as u32) << 15) | (5u32 << 12) | ((rd as u32) << 7) | 0x73 }
+fn csrrsi(rd: u8, uimm: u8, csr: u32) -> u32 { (csr << 20) | ((uimm as u32) << 15) | (6u32 << 12) | ((rd as u32) << 7) | 0x73 }
+fn csrrci(rd: u8, uimm: u8, csr: u32) -> u32 { (csr << 20) | ((uimm as u32) << 15) | (7u32 << 12) | ((rd as u32) << 7) | 0x73 }
+
+// CSR address constants
+const CSR_MSTATUS: u32 = 0x300;
+const CSR_MTVEC: u32 = 0x305;
+const CSR_MEPC: u32 = 0x341;
+const CSR_MCAUSE: u32 = 0x342;
+const CSR_MTVAL: u32 = 0x343;
+const CSR_SSTATUS: u32 = 0x100;
+const CSR_STVEC: u32 = 0x105;
+const CSR_SATP: u32 = 0x180;
+const CSR_MIE: u32 = 0x304;
+const CSR_MIP: u32 = 0x344;
+const CSR_SIE: u32 = 0x104;
+const CSR_SIP: u32 = 0x144;
+const CSR_MEDELEG: u32 = 0x302;
+const CSR_MIDELEG: u32 = 0x303;
+const CSR_SCAUSE: u32 = 0x142;
+const CSR_SEPC: u32 = 0x141;
+const CSR_STVAL: u32 = 0x143;
 
 // ============================================================
 // R-type ALU

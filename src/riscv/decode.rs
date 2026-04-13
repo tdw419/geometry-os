@@ -64,6 +64,16 @@ pub enum Operation {
     Ecall,
     Ebreak,
     Fence,
+    Mret,
+    Sret,
+
+    // -- CSR --
+    Csrrw { rd: u8, rs1: u8, csr: u32 },
+    Csrrs { rd: u8, rs1: u8, csr: u32 },
+    Csrrc { rd: u8, rs1: u8, csr: u32 },
+    Csrrwi { rd: u8, uimm: u8, csr: u32 },
+    Csrrsi { rd: u8, uimm: u8, csr: u32 },
+    Csrrci { rd: u8, uimm: u8, csr: u32 },
 
     // -- Unknown --
     Invalid(u32),
@@ -165,9 +175,21 @@ pub fn decode(word: u32) -> Operation {
         0x0F => Operation::Fence,
         0x73 => {
             let funct12 = ((word >> 20) & 0xFFF) as u16;
+            let csr_addr = (word >> 20) & 0xFFF;
+            let uimm = rs1; // for I-type CSR, rs1 field holds uimm
             match (funct3, funct12) {
                 (0b000, 0x000) => Operation::Ecall,
                 (0b000, 0x001) => Operation::Ebreak,
+                (0b000, 0x302) => Operation::Mret,
+                (0b000, 0x102) => Operation::Sret,
+                // CSR register-register
+                (0b001, _) => Operation::Csrrw { rd, rs1, csr: csr_addr },
+                (0b010, _) => Operation::Csrrs { rd, rs1, csr: csr_addr },
+                (0b011, _) => Operation::Csrrc { rd, rs1, csr: csr_addr },
+                // CSR register-immediate
+                (0b101, _) => Operation::Csrrwi { rd, uimm, csr: csr_addr },
+                (0b110, _) => Operation::Csrrsi { rd, uimm, csr: csr_addr },
+                (0b111, _) => Operation::Csrrci { rd, uimm, csr: csr_addr },
                 _ => Operation::Invalid(word),
             }
         }

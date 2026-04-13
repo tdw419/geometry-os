@@ -5,7 +5,7 @@
 // jumps, branches, load/store, FENCE, ECALL, EBREAK.
 // See docs/RISCV_HYPERVISOR.md §CPU State.
 
-use super::csr::CsrBank;
+use super::csr::{self, CsrBank};
 use super::decode::{self, Operation};
 use super::memory::GuestMemory;
 
@@ -346,14 +346,95 @@ impl RiscvCpu {
 
             // ---- System ----
             Operation::Ecall => {
-                self.pc = next_pc;
-                StepResult::Ecall
+                // Determine trap cause based on current privilege.
+                let cause = match self.privilege {
+                    Privilege::User => csr::CAUSE_ECALL_U,
+                    Privilege::Supervisor => csr::CAUSE_ECALL_S,
+                    Privilege::Machine => csr::CAUSE_ECALL_M,
+                };
+                // ECALL always traps to Machine mode (no delegation yet).
+                let trap_priv = Privilege::Machine;
+                let vector = self.csr.trap_vector(trap_priv);
+                self.csr.trap_enter(trap_priv, self.privilege, self.pc, cause);
+                self.privilege = trap_priv;
+                self.pc = vector;
+                StepResult::Ok
             }
             Operation::Ebreak => {
                 self.pc = next_pc;
                 StepResult::Ebreak
             }
             Operation::Fence => {
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Mret => {
+                let restored = self.csr.trap_return(Privilege::Machine);
+                self.pc = self.csr.mepc;
+                self.privilege = restored;
+                StepResult::Ok
+            }
+            Operation::Sret => {
+                let restored = self.csr.trap_return(Privilege::Supervisor);
+                self.pc = self.csr.sepc;
+                self.privilege = restored;
+                StepResult::Ok
+            }
+
+            // ---- CSR ----
+            Operation::Csrrw { rd, rs1, csr } => {
+                let old = self.csr.read(csr);
+                let new_val = self.get_reg(rs1);
+                // Write even if rd=x0 (but don't read old into x0).
+                self.csr.write(csr, new_val);
+                self.set_reg(rd, old);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Csrrs { rd, rs1, csr } => {
+                let old = self.csr.read(csr);
+                let mask = self.get_reg(rs1);
+                if mask != 0 {
+                    let _ = self.csr.write(csr, old | mask);
+                }
+                self.set_reg(rd, old);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Csrrc { rd, rs1, csr } => {
+                let old = self.csr.read(csr);
+                let mask = self.get_reg(rs1);
+                if mask != 0 {
+                    let _ = self.csr.write(csr, old & !mask);
+                }
+                self.set_reg(rd, old);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Csrrwi { rd, uimm, csr } => {
+                let old = self.csr.read(csr);
+                self.csr.write(csr, uimm as u32);
+                self.set_reg(rd, old);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Csrrsi { rd, uimm, csr } => {
+                let old = self.csr.read(csr);
+                let mask = uimm as u32;
+                if mask != 0 {
+                    let _ = self.csr.write(csr, old | mask);
+                }
+                self.set_reg(rd, old);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Csrrci { rd, uimm, csr } => {
+                let old = self.csr.read(csr);
+                let mask = uimm as u32;
+                if mask != 0 {
+                    let _ = self.csr.write(csr, old & !mask);
+                }
+                self.set_reg(rd, old);
                 self.pc = next_pc;
                 StepResult::Ok
             }
@@ -523,9 +604,15 @@ mod tests {
     fn step_ecall() {
         let mut mem = GuestMemory::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
-        mem.write_word(0x8000_0000, 0x00000073).unwrap();
-        assert_eq!(cpu.step(&mut mem), StepResult::Ecall);
-        assert_eq!(cpu.pc, 0x8000_0004);
+        cpu.csr.mtvec = 0x8000_0200;
+        mem.write_word(0x8000_0000, 0x00000073).unwrap(); // ECALL
+        assert_eq!(cpu.step(&mut mem), StepResult::Ok);
+        // PC should jump to mtvec
+        assert_eq!(cpu.pc, 0x8000_0200);
+        // mepc should hold the PC of the ECALL instruction
+        assert_eq!(cpu.csr.mepc, 0x8000_0000);
+        // mcause should be CAUSE_ECALL_M (we're in M-mode)
+        assert_eq!(cpu.csr.mcause, csr::CAUSE_ECALL_M);
     }
 
     #[test]
