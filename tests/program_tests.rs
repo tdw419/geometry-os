@@ -2360,3 +2360,362 @@ fn test_reset_clears_kernel_state() {
     assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel, "reset should restore Kernel mode");
     assert!(vm.kernel_stack.is_empty(), "reset should clear kernel stack");
 }
+
+// === Phase 24: Memory Protection Tests ===
+
+#[test]
+fn test_child_segfaults_on_unmapped_store() {
+    // Spawn a child that tries to STORE to an unmapped virtual address.
+    // Virtual pages 0-3 are mapped (PROCESS_PAGES=4, PAGE_SIZE=1024).
+    // Virtual address 0x1000 (= page 4) is unmapped -> SEGFAULT.
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    LDI r0, 0x1000
+    LDI r2, 42
+    STORE r0, r2
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    // Run main process to completion (spawns child, then halts)
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.processes.len(), 1);
+
+    // Step child process -- it should segfault on the STORE
+    for _ in 0..50 {
+        vm.step_all_processes();
+        if vm.processes[0].halted { break; }
+    }
+
+    assert!(vm.processes[0].halted, "child should be halted after segfault");
+    assert!(vm.processes[0].segfaulted, "child should have segfaulted flag set");
+    // RAM[0xFF9] should hold the segfaulted PID
+    assert_eq!(vm.ram[0xFF9], 1, "RAM[0xFF9] should hold segfaulted PID");
+}
+
+#[test]
+fn test_child_segfaults_on_unmapped_load() {
+    // Spawn a child that tries to LOAD from an unmapped virtual address.
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    LDI r0, 0x1000
+    LOAD r2, r0
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+
+    for _ in 0..50 {
+        vm.step_all_processes();
+        if vm.processes[0].halted { break; }
+    }
+
+    assert!(vm.processes[0].halted, "child should be halted after segfault");
+    assert!(vm.processes[0].segfaulted, "child should have segfaulted on unmapped LOAD");
+}
+
+#[test]
+fn test_child_segfaults_on_unmapped_fetch() {
+    // Spawn a child with code at virtual page 0.
+    // The child code jumps to an unmapped virtual address.
+    // The fetch at the unmapped address should trigger segfault.
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    JMP 0x1000
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+
+    for _ in 0..50 {
+        vm.step_all_processes();
+        if vm.processes[0].halted { break; }
+    }
+
+    assert!(vm.processes[0].halted, "child should be halted after segfault");
+    assert!(vm.processes[0].segfaulted, "child should segfault on fetching from unmapped page");
+}
+
+#[test]
+fn test_process_memory_isolation() {
+    // Spawn two children. Each writes a unique value to its own virtual page 1.
+    // Verify that child 2's data doesn't overwrite child 1's data.
+    // Child 1 writes 0xAAAA at virtual 0x0400 (page 1 offset 0)
+    // Child 2 writes 0xBBBB at virtual 0x0400 (page 1 offset 0)
+    // These map to DIFFERENT physical pages, so neither sees the other's write.
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    LDI r1, 0x300
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    LDI r0, 0x0400
+    LDI r2, 0xAAAA
+    STORE r0, r2
+    HALT
+
+    .org 0x300
+    LDI r0, 0x0400
+    LDI r2, 0xBBBB
+    STORE r0, r2
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    // Run main to completion
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.processes.len(), 2);
+
+    // Step children to completion
+    for _ in 0..100 {
+        vm.step_all_processes();
+        if vm.processes.iter().all(|p| p.halted) { break; }
+    }
+
+    // Both children should have completed without segfault
+    assert!(!vm.processes[0].segfaulted, "child 1 should not segfault");
+    assert!(!vm.processes[1].segfaulted, "child 2 should not segfault");
+
+    // Verify isolation: find physical pages for each child's virtual page 1
+    let pd1 = vm.processes[0].page_dir.as_ref().expect("child 1 should have page_dir");
+    let pd2 = vm.processes[1].page_dir.as_ref().expect("child 2 should have page_dir");
+
+    // Virtual page 1 -> pd1[1] and pd2[1] should be DIFFERENT physical pages
+    let phys_page1 = pd1[1] as usize;
+    let phys_page2 = pd2[1] as usize;
+    assert_ne!(phys_page1, phys_page2,
+        "children should have different physical pages for virtual page 1");
+
+    // Verify the values are in different physical locations
+    let addr1 = phys_page1 * 1024; // PAGE_SIZE
+    let addr2 = phys_page2 * 1024;
+    assert_eq!(vm.ram[addr1], 0xAAAA, "child 1's physical memory should have 0xAAAA");
+    assert_eq!(vm.ram[addr2], 0xBBBB, "child 2's physical memory should have 0xBBBB");
+}
+
+#[test]
+fn test_kernel_mode_identity_mapping() {
+    // Main process (kernel mode) has no page directory -> identity mapping.
+    // STORE to any address should work directly.
+    let source = "
+    LDI r1, 0x8000
+    LDI r2, 0xDEAD
+    STORE r1, r2
+    LOAD r3, r1
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel, "VM should start in kernel mode");
+    assert!(vm.current_page_dir.is_none(), "kernel should have no page directory");
+
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert!(!vm.segfault, "kernel mode should not segfault on any address");
+    assert_eq!(vm.regs[3], 0xDEAD, "kernel should read back what it wrote");
+    assert_eq!(vm.ram[0x8000], 0xDEAD, "RAM at 0x8000 should have the value");
+}
+
+#[test]
+fn test_kill_frees_physical_pages() {
+    // Spawn a child, kill it, spawn another -- the freed pages should be reusable.
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    LDI r3, 0xFFA
+    LOAD r2, r3
+    KILL r2
+    LDI r1, 0x300
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    HALT
+
+    .org 0x300
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    for _ in 0..200 { if !vm.step() { break; } }
+    assert!(vm.halted);
+
+    // Should have 2 processes: first killed, second alive
+    assert_eq!(vm.processes.len(), 2);
+    assert!(vm.processes[0].halted, "first child should be killed");
+    // Second child should have been spawned successfully (pages were freed)
+    assert!(!vm.processes[1].segfaulted, "second child should not have segfaulted");
+}
+
+#[test]
+fn test_child_user_mode_blocks_hardware_port_write() {
+    // Spawn a child that tries to STORE to 0xFF00+ (hardware ports).
+    // In User mode this should trigger segfault.
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    LDI r0, 0xFF00
+    LDI r2, 42
+    STORE r0, r2
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+
+    for _ in 0..50 {
+        vm.step_all_processes();
+        if vm.processes[0].halted { break; }
+    }
+
+    assert!(vm.processes[0].segfaulted,
+        "child in user mode should segfault when writing to hardware port 0xFF00+");
+}
+
+#[test]
+fn test_child_can_access_shared_window_bounds() {
+    // Children should be able to READ the Window Bounds Protocol region (0xF00-0xFFF)
+    // because page 3 is identity-mapped. They can also write to it (it's shared).
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    LDI r0, 0xF00
+    LOAD r2, r0
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    // Write something at 0xF00 for the child to read
+    vm.ram[0xF00] = 0x1234;
+
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+
+    for _ in 0..50 {
+        vm.step_all_processes();
+        if vm.processes[0].halted { break; }
+    }
+
+    assert!(!vm.processes[0].segfaulted,
+        "child should be able to read shared window bounds region without segfault");
+}
+
+#[test]
+fn test_child_page_directory_has_shared_regions_mapped() {
+    // Spawn a child and verify its page directory maps the shared regions.
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+
+    let pd = vm.processes[0].page_dir.as_ref().expect("child should have page_dir");
+
+    // Page 3 (0xC00-0xFFF) should be identity-mapped for Window Bounds Protocol
+    assert_eq!(pd[3], 3, "page 3 should be identity-mapped (window bounds)");
+    // Page 63 (0xFC00-0xFFFF) should be identity-mapped for hardware/syscalls
+    assert_eq!(pd[63], 63, "page 63 should be identity-mapped (hardware ports)");
+
+    // Pages 0-3 should be private (first 3 are allocated, 3rd is identity)
+    // Actually pages 0, 1, 2 are private allocated pages; page 3 is identity-mapped
+    assert!(pd[0] < 64 && pd[0] != 0 && pd[0] != 1,
+        "virtual page 0 should map to a private physical page");
+    assert!(pd[1] < 64 && pd[1] != 0 && pd[1] != 1,
+        "virtual page 1 should map to a private physical page");
+    assert!(pd[2] < 64 && pd[2] != 0 && pd[2] != 1,
+        "virtual page 2 should map to a private physical page");
+
+    // Pages 4-62 should be unmapped
+    for i in 4..63 {
+        assert_eq!(pd[i], 0xFFFFFFFF, "page {} should be unmapped (PAGE_UNMAPPED)", i);
+    }
+}
+
+#[test]
+fn test_segfault_pid_tracking() {
+    // Spawn two children. First one segfaults. Verify RAM[0xFF9] tracks the PID.
+    let source = "
+    LDI r1, 0x200
+    SPAWN r1
+    LDI r1, 0x300
+    SPAWN r1
+    HALT
+
+    .org 0x200
+    LDI r0, 0x1000
+    LDI r2, 42
+    STORE r0, r2
+    HALT
+
+    .org 0x300
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    assert_eq!(vm.processes.len(), 2);
+
+    for _ in 0..100 {
+        vm.step_all_processes();
+        if vm.processes[0].halted && vm.processes[1].halted { break; }
+    }
+
+    // First child (PID 1) should have segfaulted
+    assert!(vm.processes[0].segfaulted, "child 1 should segfault");
+    // Second child (PID 2) should have completed normally
+    assert!(!vm.processes[1].segfaulted, "child 2 should not segfault");
+    // RAM[0xFF9] should hold PID of the segfaulted process
+    assert_eq!(vm.ram[0xFF9], 1, "RAM[0xFF9] should be PID of segfaulted child");
+}

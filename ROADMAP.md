@@ -13,10 +13,12 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 - Visual debugger, heatmaps, RAM inspector
 - PEEK (screen readback), MOV, CMP/BLT/BGE
 - Text editor (F8/F5 assemble-and-run workflow)
+- Kernel boundary (SYSCALL/RETK, user/kernel mode, restricted opcodes)
+- Memory protection (page tables, address space per process, SEGFAULT)
 
 **What's missing for a real OS:**
-- No memory protection (any process can trash any RAM)
-- No syscall boundary (programs directly access hardware)
+- ~~No memory protection (any process can trash any RAM)~~ (Phase 24 done)
+- ~~No syscall boundary (programs directly access hardware)~~ (Phase 23 done)
 - No filesystem (no open/read/write/close)
 - No proper scheduler (round-robin single-step, no priorities)
 - No IPC beyond shared RAM (no pipes, no messages)
@@ -224,7 +226,7 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 ## Priority Order for Automated Development
 
 - [x] Phase 23: Kernel Boundary -- CPU mode flag, SYSCALL opcode (0x52), RETK opcode (0x53), syscall dispatch table, restricted opcodes in user mode
-- [ ] Phase 24: Memory Protection -- page tables, address space per process, SEGFAULT on illegal access
+- [x] Phase 24: Memory Protection -- page tables, address space per process, SEGFAULT on illegal access
 - [ ] Phase 25: Filesystem -- VFS layer, OPEN/READ/WRITE/CLOSE/SEEK syscalls, LS syscall, per-process fd table, cat.asm
 - [ ] Phase 26: Preemptive Scheduler -- timer interrupt, priority levels, yield/sleep syscalls
 - [ ] Phase 27: IPC -- PIPE syscall, MSGSND/MSGRCV syscalls, blocking I/O

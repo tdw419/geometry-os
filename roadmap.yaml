@@ -13,7 +13,7 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 48
-  tests: 94
+  tests: 104
   programs: 33
   loc: 5863
 
@@ -715,22 +715,63 @@ phases:
 
   - id: "phase-24"
     title: "Memory Protection"
-    status: "in_progress"
+    status: "complete"
     goal: "Each process gets its own address space. Processes can't trash each other."
     priority: 12
     deliverables:
       - name: "Page tables"
         description: "Simple 1-level paging: page_dir per process, maps virtual to physical"
         status: "done"
+        acceptance_criteria:
+          - description: "translate_va maps virtual to physical via page directory"
+            met: true
+          - description: "Kernel mode uses identity mapping (no page directory)"
+            met: true
       - name: "Address space per process"
         description: "SPAWN creates new page table, not just new registers"
         status: "done"
+        acceptance_criteria:
+          - description: "Each child gets 4 private physical pages"
+            met: true
+          - description: "Shared regions (page 3, page 63) identity-mapped"
+            met: true
       - name: "SEGFAULT on illegal access"
-        description: "LOAD/STORE to unmapped page halts the process"
+        description: "LOAD/STORE/fetch to unmapped page halts the process"
         status: "done"
-      - name: "Fix window_manager for isolated address spaces"
-        description: "window_manager.asm shared RAM protocol broken by memory protection; needs IPC (Phase 27) or shared memory region"
-        status: "todo"
+        acceptance_criteria:
+          - description: "test_child_segfaults_on_unmapped_store passes"
+            met: true
+          - description: "test_child_segfaults_on_unmapped_load passes"
+            met: true
+          - description: "test_child_segfaults_on_unmapped_fetch passes"
+            met: true
+          - description: "RAM[0xFF9] tracks segfaulted PID"
+            met: true
+      - name: "Process memory isolation"
+        description: "Two processes can't corrupt each other's memory"
+        status: "done"
+        acceptance_criteria:
+          - description: "test_process_memory_isolation passes"
+            met: true
+          - description: "test_child_user_mode_blocks_hardware_port_write passes"
+            met: true
+          - description: "test_child_can_access_shared_window_bounds passes"
+            met: true
+      - name: "Memory protection tests"
+        description: "9 tests covering segfault, isolation, page tables, kernel mode"
+        status: "done"
+        acceptance_criteria:
+          - description: "test_child_page_directory_has_shared_regions_mapped passes"
+            met: true
+          - description: "test_kernel_mode_identity_mapping passes"
+            met: true
+          - description: "test_kill_frees_physical_pages passes"
+            met: true
+          - description: "test_segfault_pid_tracking passes"
+            met: true
+      - name: "Process memory regions documentation"
+        description: "docs/MEMORY_PROTECTION.md -- code/heap/stack/shared segments"
+        status: "done"
 
   - id: "phase-25"
     title: "Filesystem"
