@@ -1052,9 +1052,9 @@
   1052|    acceptance_criteria:
   1053|    - description: Zombie process freed after WAITPID, pages reclaimed
   1054|      met: true
-  1055|- id: phase-33
-  1056|  title: QEMU Bridge
-  1057|  status: in_progress
+- id: phase-33
+  title: QEMU Bridge
+  status: complete
   1058|  goal: Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one.
   1059|  priority: 30
   1060|  description: 'QEMU gives us a working hypervisor in days. Every architecture QEMU supports
