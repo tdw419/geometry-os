@@ -54,15 +54,9 @@ impl RiscvCpu {
             pc: 0x8000_0000,
             privilege: Privilege::Machine,
         };
-        // a0 = 0, a1 = 0 (no DTB yet)
-        cpu.x[10] = 0;
-        cpu.x[11] = 0;
+        cpu.x[10] = 0; // a0 = 0 (no Hart ID)
+        cpu.x[11] = 0; // a1 = 0 (no DTB)
         cpu
-    }
-
-    /// Ensure x[0] is always zero (call after any register write).
-    pub fn enforce_x0(&mut self) {
-        self.x[0] = 0;
     }
 
     /// Write to register rd, enforcing x[0] = 0.
@@ -74,224 +68,178 @@ impl RiscvCpu {
 
     /// Read register rs (x[0] always returns 0).
     fn get_reg(&self, rs: u8) -> u32 {
-        if rs == 0 {
-            0
-        } else {
-            self.x[rs as usize]
-        }
+        if rs == 0 { 0 } else { self.x[rs as usize] }
     }
 
     /// Fetch, decode, and execute one instruction.
     /// Returns StepResult indicating what happened.
     pub fn step(&mut self, mem: &mut GuestMemory) -> StepResult {
-        let word = match self.fetch(mem) {
-            Some(w) => w,
-            None => return StepResult::FetchFault,
-        };
-
+        let word = mem.read_word(self.pc as u64);
         let instr = decode::decode(word);
+        self.execute(instr, mem)
+    }
+
+    /// Execute a decoded instruction. Handles PC advancement internally.
+    fn execute(&mut self, instr: Instruction, mem: &mut GuestMemory) -> StepResult {
         let next_pc = self.pc.wrapping_add(4);
 
-        match self.execute(instr, next_pc, mem) {
-            StepResult::Ok => {
-                self.pc = next_pc;
-                self.enforce_x0();
-                StepResult::Ok
-            }
-            other => {
-                self.enforce_x0();
-                other
-            }
-        }
-    }
-
-    /// Fetch a 32-bit instruction word at the current PC.
-    fn fetch(&self, mem: &GuestMemory) -> Option<u32> {
-        Some(mem.read_word(self.pc as u64))
-    }
-
-    /// Execute a decoded instruction.
-    /// `next_pc` is PC+4 (the default fallthrough).
-    /// Returns Ok for normal execution, or Ecall/Ebreak for traps.
-    /// On Ok, the caller sets self.pc = next_pc.
-    /// For jumps/branches, execute() sets self.pc directly and returns Ok.
-    fn execute(&mut self, instr: Instruction, next_pc: u32, mem: &mut GuestMemory) -> StepResult {
         match instr {
+            // ---- Upper immediate ----
             Instruction::Lui { rd, imm } => {
                 self.set_reg(rd, imm);
+                self.pc = next_pc;
                 StepResult::Ok
             }
-
             Instruction::Auipc { rd, imm } => {
-                // imm is the upper 20 bits already shifted; PC + upper immediate
-                let result = self.pc.wrapping_add(imm);
-                self.set_reg(rd, result);
+                self.set_reg(rd, self.pc.wrapping_add(imm));
+                self.pc = next_pc;
                 StepResult::Ok
             }
 
+            // ---- Jumps ----
             Instruction::Jal { rd, imm } => {
-                let ret_addr = next_pc;
-                let target = (self.pc as i64 + imm as i64) as u32;
-                self.set_reg(rd, ret_addr);
-                self.pc = target;
-                // Signal Ok with special handling: caller should NOT overwrite pc
-                // We set pc directly, so we need a way to indicate that.
-                // Hack: set a flag by using a special return.
-                // Actually, let's handle this differently -- see below.
+                self.set_reg(rd, next_pc);
+                self.pc = (self.pc as i64 + imm as i64) as u32;
                 StepResult::Ok
             }
-
             Instruction::Jalr { rd, rs1, imm } => {
-                let ret_addr = next_pc;
-                let base = self.get_reg(rs1);
-                let target = (base as i64 + imm as i64) as u32 & !1u32; // clear LSB
-                self.set_reg(rd, ret_addr);
+                let target = (self.get_reg(rs1) as i64 + imm as i64) as u32 & !1u32;
+                self.set_reg(rd, next_pc);
                 self.pc = target;
                 StepResult::Ok
             }
 
+            // ---- Branches ----
             Instruction::Branch { rs1, rs2, imm, funct3 } => {
                 let v1 = self.get_reg(rs1);
                 let v2 = self.get_reg(rs2);
                 let taken = match funct3 {
-                    0b000 => v1 == v2,           // BEQ
-                    0b001 => v1 != v2,           // BNE
-                    0b100 => (v1 as i32) < (v2 as i32),   // BLT (signed)
-                    0b101 => (v1 as i32) >= (v2 as i32),  // BGE (signed)
-                    0b110 => v1 < v2,            // BLTU (unsigned)
-                    0b111 => v1 >= v2,           // BGEU (unsigned)
+                    0b000 => v1 == v2,                    // BEQ
+                    0b001 => v1 != v2,                    // BNE
+                    0b100 => (v1 as i32) < (v2 as i32),   // BLT
+                    0b101 => (v1 as i32) >= (v2 as i32),  // BGE
+                    0b110 => v1 < v2,                     // BLTU
+                    0b111 => v1 >= v2,                    // BGEU
                     _ => false,
                 };
                 if taken {
-                    let target = (self.pc as i64 + imm as i64) as u32;
-                    self.pc = target;
+                    self.pc = (self.pc as i64 + imm as i64) as u32;
                 } else {
                     self.pc = next_pc;
                 }
                 StepResult::Ok
             }
 
+            // ---- Loads ----
             Instruction::Load { rd, rs1, imm, funct3 } => {
-                let base = self.get_reg(rs1);
-                let addr = (base as i64 + imm as i64) as u64;
+                let addr = (self.get_reg(rs1) as i64 + imm as i64) as u64;
                 let val = match funct3 {
-                    0b000 => {
-                        // LB: sign-extend byte
-                        let b = mem.read_byte(addr);
-                        sign_extend_byte(b) as u32
-                    }
-                    0b001 => {
-                        // LH: sign-extend half-word
-                        let h = mem.read_half(addr);
-                        sign_extend_half(h) as u32
-                    }
-                    0b010 => {
-                        // LW: load word
-                        mem.read_word(addr)
-                    }
-                    0b100 => {
-                        // LBU: zero-extend byte
-                        mem.read_byte(addr) as u32
-                    }
-                    0b101 => {
-                        // LHU: zero-extend half-word
-                        mem.read_half(addr) as u32
-                    }
+                    0b000 => sign_extend_byte(mem.read_byte(addr)) as u32,  // LB
+                    0b001 => sign_extend_half(mem.read_half(addr)) as u32,  // LH
+                    0b010 => mem.read_word(addr),                            // LW
+                    0b100 => mem.read_byte(addr) as u32,                     // LBU
+                    0b101 => mem.read_half(addr) as u32,                     // LHU
                     _ => 0,
                 };
                 self.set_reg(rd, val);
+                self.pc = next_pc;
                 StepResult::Ok
             }
 
+            // ---- Stores ----
             Instruction::Store { rs1, rs2, imm, funct3 } => {
-                let base = self.get_reg(rs1);
+                let addr = (self.get_reg(rs1) as i64 + imm as i64) as u64;
                 let val = self.get_reg(rs2);
-                let addr = (base as i64 + imm as i64) as u64;
                 match funct3 {
-                    0b000 => mem.write_byte(addr, val as u8),      // SB
-                    0b001 => mem.write_half(addr, val as u16),     // SH
-                    0b010 => mem.write_word(addr, val),            // SW
+                    0b000 => mem.write_byte(addr, val as u8),   // SB
+                    0b001 => mem.write_half(addr, val as u16),  // SH
+                    0b010 => mem.write_word(addr, val),         // SW
                     _ => {}
                 }
+                self.pc = next_pc;
                 StepResult::Ok
             }
 
+            // ---- R-type ALU ----
             Instruction::RAlu { rd, rs1, rs2, funct3, funct7 } => {
                 let v1 = self.get_reg(rs1);
                 let v2 = self.get_reg(rs2);
                 let result = match (funct3, funct7) {
-                    (0b000, 0b0000000) => v1.wrapping_add(v2),              // ADD
-                    (0b000, 0b0100000) => v1.wrapping_sub(v2),              // SUB
-                    (0b001, 0b0000000) => v1 << (v2 & 0x1F),               // SLL
-                    (0b010, 0b0000000) => {                                   // SLT
+                    (0b000, 0b0000000) => v1.wrapping_add(v2),  // ADD
+                    (0b000, 0b0100000) => v1.wrapping_sub(v2),  // SUB
+                    (0b001, _) => v1 << (v2 & 0x1F),           // SLL
+                    (0b010, _) => {
                         if (v1 as i32) < (v2 as i32) { 1 } else { 0 }
+                    } // SLT
+                    (0b011, _) => if v1 < v2 { 1 } else { 0 }, // SLTU
+                    (0b100, _) => v1 ^ v2,                     // XOR
+                    (0b101, 0b0000000) => v1 >> (v2 & 0x1F),   // SRL
+                    (0b101, 0b0100000) => {
+                        ((v1 as i32) >> (v2 & 0x1F)) as u32    // SRA
                     }
-                    (0b011, 0b0000000) => if v1 < v2 { 1 } else { 0 },     // SLTU
-                    (0b100, 0b0000000) => v1 ^ v2,                           // XOR
-                    (0b101, 0b0000000) => v2 >> (v2 & 0x1F) | v1 >> (v2 & 0x1F), // SRL -- fix below
-                    (0b101, 0b0100000) => {                                   // SRA
-                        let shift = v2 & 0x1F;
-                        ((v1 as i32) >> shift) as u32
-                    }
-                    (0b110, 0b0000000) => v1 | v2,                           // OR
-                    (0b111, 0b0000000) => v1 & v2,                           // AND
+                    (0b110, _) => v1 | v2,                     // OR
+                    (0b111, _) => v1 & v2,                     // AND
                     _ => 0,
                 };
-                // Fix SRL: logical right shift
-                let result = match (funct3, funct7) {
-                    (0b101, 0b0000000) => v1 >> (v2 & 0x1F),               // SRL (logical)
-                    _ => result,
-                };
                 self.set_reg(rd, result);
+                self.pc = next_pc;
                 StepResult::Ok
             }
 
+            // ---- I-type ALU ----
             Instruction::IAlu { rd, rs1, imm, funct3 } => {
                 let v1 = self.get_reg(rs1);
                 let shamt = (imm as u32) & 0x1F;
                 let result = match funct3 {
-                    0b000 => v1.wrapping_add(imm as u32),           // ADDI
-                    0b010 => {                                       // SLTI
+                    0b000 => v1.wrapping_add(imm as u32),       // ADDI
+                    0b010 => {
                         if (v1 as i32) < imm { 1 } else { 0 }
-                    }
-                    0b011 => {                                       // SLTIU
+                    } // SLTI
+                    0b011 => {
                         if v1 < (imm as u32) { 1 } else { 0 }
-                    }
-                    0b100 => v1 ^ (imm as u32),                     // XORI
-                    0b110 => v1 | (imm as u32),                     // ORI
-                    0b111 => v1 & (imm as u32),                     // ANDI
-                    0b001 => v1 << shamt,                            // SLLI
+                    } // SLTIU
+                    0b100 => v1 ^ (imm as u32),                 // XORI
+                    0b110 => v1 | (imm as u32),                 // ORI
+                    0b111 => v1 & (imm as u32),                 // ANDI
+                    0b001 => v1 << shamt,                       // SLLI
                     0b101 => {
-                        // Distinguish SRLI vs SRAI by bit 30 of the instruction
-                        // imm >> 5 gives the upper 7 bits (funct7 for shifts)
                         let funct7 = ((imm as u32) >> 5) & 0x7F;
-                        if funct7 == 0b0000000 {
-                            v1 >> shamt                               // SRLI (logical)
+                        if funct7 == 0 {
+                            v1 >> shamt                         // SRLI
                         } else {
-                            ((v1 as i32) >> shamt) as u32            // SRAI (arithmetic)
+                            ((v1 as i32) >> shamt) as u32      // SRAI
                         }
                     }
                     _ => 0,
                 };
                 self.set_reg(rd, result);
+                self.pc = next_pc;
                 StepResult::Ok
             }
 
+            // ---- Misc ----
             Instruction::Fence => {
-                // FENCE: treat as NOP for now
+                self.pc = next_pc;
                 StepResult::Ok
             }
-
             Instruction::System { funct12, rs1: _, rd: _, funct3 } => {
                 match (funct3, funct12) {
-                    (0b000, 0x000) => StepResult::Ecall,
-                    (0b000, 0x001) => StepResult::Ebreak,
-                    _ => StepResult::Ok, // CSR ops: NOP for now (Phase 35)
+                    (0b000, 0x000) => {
+                        self.pc = next_pc;
+                        StepResult::Ecall
+                    }
+                    (0b000, 0x001) => {
+                        self.pc = next_pc;
+                        StepResult::Ebreak
+                    }
+                    _ => {
+                        self.pc = next_pc;
+                        StepResult::Ok // CSR ops: NOP for Phase 35
+                    }
                 }
             }
-
             Instruction::Invalid(_) => {
-                // Treat unknown instructions as NOP
+                self.pc = next_pc;
                 StepResult::Ok
             }
         }
