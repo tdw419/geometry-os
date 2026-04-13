@@ -13,6 +13,16 @@ pub const MAX_PROCESSES: usize = 8;
 /// RAM[SYSCALL_TABLE + N] = handler address for syscall number N.
 pub const SYSCALL_TABLE: usize = 0xFE00;
 
+/// Memory protection constants (Phase 24: Memory Protection).
+/// RAM is divided into pages. Each process gets a page directory mapping
+/// virtual page numbers to physical page numbers.
+pub const PAGE_SIZE: usize = 1024; // words per page (4096 bytes)
+pub const NUM_PAGES: usize = RAM_SIZE / PAGE_SIZE; // 64 pages
+/// Sentinel: page directory entry is unmapped (no physical page backing).
+pub const PAGE_UNMAPPED: u32 = 0xFFFFFFFF;
+/// Number of pages allocated to each new spawned process.
+pub const PROCESS_PAGES: usize = 4; // 4096 words = 16KB per process
+
 /// CPU privilege mode: Kernel (full access) or User (restricted).
 /// VM starts in Kernel mode for backward compatibility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
