@@ -1211,6 +1211,53 @@ fn test_maze_initializes() {
     assert_eq!(vm.ram[0x5328], 0, "null terminator after text");
 }
 
+#[test]
+fn test_maze_peek_collision_blocks_wall() {
+    // Verify PEEK-based collision: player at (0,0), press W (up)
+    // Top border is always a wall, so player must not move
+    let source = std::fs::read_to_string("programs/maze.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+
+    // Run until first FRAME
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Player starts at (0,0)
+    assert_eq!(vm.ram[0x5310], 0, "player_x should start at 0");
+    assert_eq!(vm.ram[0x5311], 0, "player_y should start at 0");
+
+    // Press W (87) -- move up into the top border wall
+    vm.ram[0xFFF] = 87;
+
+    // Run until next FRAME
+    for _ in 0..100_000 {
+        if !vm.step() { break; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Player must still be at (0,0) -- blocked by wall
+    assert_eq!(vm.ram[0x5310], 0, "player_x should still be 0 after blocked move");
+    assert_eq!(vm.ram[0x5311], 0, "player_y should still be 0 after blocked move");
+}
+
 // ── ASM OPCODE ──────────────────────────────────────────────────
 
 #[test]

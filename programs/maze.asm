@@ -5,6 +5,13 @@
 ;
 ; Screen: 256x256, maze grid 31x31 at 8px each = 248x248, 4px margin
 ;
+; Collision detection: PEEK-based -- reads screen pixel at wall center
+;   Wall color 0x4466AA. Wall block centers computed as:
+;     up:    (px*16+15, py*16+7)
+;     down:  (px*16+15, py*16+23)
+;     left:  (px*16+7,  py*16+15)
+;     right: (px*16+23, py*16+15)
+;
 ; Memory layout:
 ;   0x5000..0x507B  grid[31 rows] u32 bitmasks (1=wall, 0=passage)
 ;   0x5100..0x51E0  visited[225] 1 byte per maze cell (0-14 coords)
@@ -110,22 +117,28 @@ game_loop:
   JMP idle
 
 ; ── Movement Handlers ────────────────────────────────────────────
-; Each checks wall, moves player, redraws
+; PEEK-based collision detection -- reads screen pixel at wall center
+; Wall color 0x4466AA, background 0x001020
+; Wall block centers: up(16*px+15, 16*py+7) down(16*px+15, 16*py+23)
+;                      left(16*px+7, 16*py+15) right(16*px+23, 16*py+15)
 
 try_up:
-  ; Wall at grid (px*2+1, py*2)
-  LDI r4, 0x5311
-  LOAD r2, r4
-  LDI r9, 2
-  MUL r2, r9            ; py*2
   LDI r4, 0x5310
-  LOAD r3, r4
-  LDI r9, 2
-  MUL r3, r9
-  LDI r9, 1
-  ADD r3, r9            ; px*2+1
-  CALL check_wall
-  JNZ r1, idle
+  LOAD r3, r4           ; r3 = px
+  LDI r4, 0x5311
+  LOAD r2, r4           ; r2 = py
+  LDI r9, 4
+  SHL r3, r9            ; r3 = px*16
+  LDI r9, 15
+  ADD r3, r9            ; r3 = px*16+15
+  LDI r9, 4
+  SHL r2, r9            ; r2 = py*16
+  LDI r9, 7
+  ADD r2, r9            ; r2 = py*16+7
+  PEEK r3, r2, r1       ; r1 = pixel at wall center
+  LDI r9, 0x4466AA
+  CMP r1, r9
+  JZ r0, idle           ; wall found, block
   CALL save_old_pos
   LDI r4, 0x5311
   LOAD r1, r4
@@ -135,21 +148,22 @@ try_up:
   JMP after_move
 
 try_down:
-  ; Wall at grid (px*2+1, py*2+2)
-  LDI r4, 0x5311
-  LOAD r2, r4
-  LDI r9, 2
-  MUL r2, r9
-  LDI r9, 2
-  ADD r2, r9            ; py*2+2
   LDI r4, 0x5310
-  LOAD r3, r4
-  LDI r9, 2
-  MUL r3, r9
-  LDI r9, 1
-  ADD r3, r9            ; px*2+1
-  CALL check_wall
-  JNZ r1, idle
+  LOAD r3, r4           ; r3 = px
+  LDI r4, 0x5311
+  LOAD r2, r4           ; r2 = py
+  LDI r9, 4
+  SHL r3, r9            ; r3 = px*16
+  LDI r9, 15
+  ADD r3, r9            ; r3 = px*16+15
+  LDI r9, 4
+  SHL r2, r9            ; r2 = py*16
+  LDI r9, 23
+  ADD r2, r9            ; r2 = py*16+23
+  PEEK r3, r2, r1       ; r1 = pixel at wall center
+  LDI r9, 0x4466AA
+  CMP r1, r9
+  JZ r0, idle           ; wall found, block
   CALL save_old_pos
   LDI r4, 0x5311
   LOAD r1, r4
@@ -159,19 +173,22 @@ try_down:
   JMP after_move
 
 try_left:
-  ; Wall at grid (px*2, py*2+1)
   LDI r4, 0x5310
-  LOAD r3, r4
-  LDI r9, 2
-  MUL r3, r9            ; px*2
+  LOAD r3, r4           ; r3 = px
   LDI r4, 0x5311
-  LOAD r2, r4
-  LDI r9, 2
-  MUL r2, r9
-  LDI r9, 1
-  ADD r2, r9            ; py*2+1
-  CALL check_wall
-  JNZ r1, idle
+  LOAD r2, r4           ; r2 = py
+  LDI r9, 4
+  SHL r3, r9            ; r3 = px*16
+  LDI r9, 7
+  ADD r3, r9            ; r3 = px*16+7
+  LDI r9, 4
+  SHL r2, r9            ; r2 = py*16
+  LDI r9, 15
+  ADD r2, r9            ; r2 = py*16+15
+  PEEK r3, r2, r1       ; r1 = pixel at wall center
+  LDI r9, 0x4466AA
+  CMP r1, r9
+  JZ r0, idle           ; wall found, block
   CALL save_old_pos
   LDI r4, 0x5310
   LOAD r1, r4
@@ -181,21 +198,22 @@ try_left:
   JMP after_move
 
 try_right:
-  ; Wall at grid (px*2+2, py*2+1)
   LDI r4, 0x5310
-  LOAD r3, r4
-  LDI r9, 2
-  MUL r3, r9
-  LDI r9, 2
-  ADD r3, r9            ; px*2+2
+  LOAD r3, r4           ; r3 = px
   LDI r4, 0x5311
-  LOAD r2, r4
-  LDI r9, 2
-  MUL r2, r9
-  LDI r9, 1
-  ADD r2, r9            ; py*2+1
-  CALL check_wall
-  JNZ r1, idle
+  LOAD r2, r4           ; r2 = py
+  LDI r9, 4
+  SHL r3, r9            ; r3 = px*16
+  LDI r9, 23
+  ADD r3, r9            ; r3 = px*16+23
+  LDI r9, 4
+  SHL r2, r9            ; r2 = py*16
+  LDI r9, 15
+  ADD r2, r9            ; r2 = py*16+15
+  PEEK r3, r2, r1       ; r1 = pixel at wall center
+  LDI r9, 0x4466AA
+  CMP r1, r9
+  JZ r0, idle           ; wall found, block
   CALL save_old_pos
   LDI r4, 0x5310
   LOAD r1, r4
