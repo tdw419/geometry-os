@@ -1,13 +1,13 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-42 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+46 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 20/20 phases complete, 0 in progress
+**Progress:** 21/22 phases complete, 1 in progress
 
-**Deliverables:** 91/91 complete
+**Deliverables:** 96/97 complete
 
 ## Scope Summary
 
@@ -33,6 +33,8 @@ the built-in text editor, press F5, watch it run.
 | phase-18 VM Instrumentation | COMPLETE | 2/2 | - | - |
 | phase-19 Visual Debugger | COMPLETE | 3/3 | - | - |
 | phase-20 High RAM Visualization | COMPLETE | 2/2 | - | - |
+| phase-21 Spatial Program Coordinator (Native Windowing) | COMPLETE | 3/3 | - | - |
+| phase-22 Screen Readback & Collision Detection | IN PROGRESS | 2/3 | - | - |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
 
@@ -342,9 +344,43 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
   - [x] PC position highlighted in white
   _~80 LOC_
 
+## [x] phase-21: Spatial Program Coordinator (Native Windowing) (COMPLETE)
+
+**Goal:** Eliminate CPU-side compositor dependency by running multiple autonomous Glyph programs concurrently within the GPU/WGPU substrate.
+
+### Deliverables
+
+- [x] **Multi-Process VM Scheduler** -- Modify the core VM to support multiple concurrent execution contexts (window instances) within the same 64K RAM.
+  - [x] SpawnedProcess struct with isolated registers and PC
+  - [x] step_all_processes() with swap-in/step/swap-out pattern
+  - [x] MAX_PROCESSES = 8 cap
+- [x] **SPAWN/KILL Opcodes (0x4D/0x4E)** -- SPAWN addr_reg creates child process; KILL pid_reg halts it. PID stored in RAM[0xFFA].
+  - [x] test_spawn_creates_child_process passes
+  - [x] test_spawn_max_processes passes
+  - [x] test_kill_halts_child_process passes
+- [x] **Window Manager Demo** -- window_manager.asm -- primary draws animated window border, child bounces ball inside via shared RAM bounds protocol.
+  - [x] window_manager.asm assembles and runs
+  - [x] test_window_manager_spawns_child passes
+  - [x] Ball stays within window bounds
+
+## [~] phase-22: Screen Readback & Collision Detection (IN PROGRESS)
+
+**Goal:** Let programs read pixel values from the framebuffer for collision detection, pick-color, and window compositing.
+
+### Deliverables
+
+- [x] **PEEK opcode (0x4F)** -- PEEK rx, ry, rd -- read screen pixel at (rx,ry) into rd. Enables collision detection.
+  - [x] PEEK reads screen buffer value into destination register
+  - [x] Out-of-bounds returns 0
+  - [x] test_peek_reads_screen_pixel passes
+  _~20 LOC_
+- [ ] **Collision detection in maze.asm** -- Use PEEK to check wall pixels instead of RAM-based collision
+  _~40 LOC_
+- [x] **MOV instruction everywhere** -- MOV rd, rs documented and used across programs
+
 ## Global Risks
 
-- Opcode space: 42 of ~256 slots used, plenty of room, but hex layout has gaps
+- Opcode space: 46 of ~256 slots used, plenty of room, but hex layout has gaps
 - Scope creep -- adding opcodes is easy, keeping the VM simple is hard
 - Flaky tests: rainbow, ball, fire, rings tests are non-deterministic (fail intermittently)
 - BEEP spawning aplay processes without rate limiting could exhaust FDs

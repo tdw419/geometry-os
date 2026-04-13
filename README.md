@@ -6,13 +6,13 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 42 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 44 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling, and an integrated text editor where you type assembly directly into the VM's memory and execute it live.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
 ## Programs
 
-28 programs included -- static art, animations, interactive games:
+32 programs included -- static art, animations, interactive games:
 
 **Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes
 
@@ -22,11 +22,7 @@ There is no compiler. No runtime. No garbage collector. You write the opcodes, t
 
 **Games:** snake, ball (bouncing ball), breakout (4 rows of bricks, 3 lives), tetris (7 tetrominoes, rotation, line clearing), maze (randomly generated, WASD to navigate)
 
-**Self-hosting:** self_host (writes assembly, assembles it, runs the output)
-
-**Test helpers:** push_pop_test, shift_test, sprint_c_test (opcode verification)
-
-**Demos:** sprite_demo (sprite blitting)
+**Advanced:** window_manager (multi-process demo), sprite_demo, self_host (VM assembles and runs its own code)
 
 ## Build & Run
 
@@ -45,20 +41,12 @@ geo> load hello
 geo> run
 ```
 
-## Browser (WASM)
-
-Run the VM entirely in your browser -- no server, no install.
-
+**WASM** (browser):
 ```bash
-cd wasm
-wasm-pack build --target web
-python3 -m http.server 8080
-# Open http://localhost:8080
+cd wasm && wasm-pack build --target web
 ```
 
-11 built-in programs, keyboard input, audio beep via Web Audio API. See [wasm/README.md](wasm/README.md) for details.
-
-## The Instruction Set (41 opcodes)
+## The Instruction Set (44 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -74,17 +62,18 @@ python3 -m http.server 8080
 | LDI    | reg, imm | Load immediate value into register |
 | LOAD   | reg, [reg] | Load from memory address |
 | STORE  | [reg], reg | Store to memory address |
+| MOV    | rd, rs | Register copy |
 
 ### Arithmetic
 | Opcode | Args | Description |
 |--------|------|-------------|
-| ADD    | rd, rs | rd += rs (32-bit wrapping) |
-| SUB    | rd, rs | rd -= rs (32-bit wrapping) |
-| MUL    | rd, rs | rd *= rs (32-bit wrapping) |
-| DIV    | rd, rs | rd /= rs (unsigned) |
-| MOD    | rd, rs | rd %= rs (unsigned) |
+| ADD    | rd, rs | rd = rd + rs |
+| SUB    | rd, rs | rd = rd - rs |
+| MUL    | rd, rs | rd = rd * rs |
+| DIV    | rd, rs | rd = rd / rs |
+| MOD    | rd, rs | rd = rd % rs |
 | NEG    | rd     | rd = -rd (two's complement) |
-| CMP    | rd, rs | Signed compare: r0 = -1 (rd<rs), 0 (rd==rs), 1 (rd>rs) |
+| SAR    | rd, rs | Arithmetic shift right (sign-preserving) |
 
 ### Logic
 | Opcode | Args | Description |
@@ -92,9 +81,8 @@ python3 -m http.server 8080
 | AND    | rd, rs | Bitwise AND |
 | OR     | rd, rs | Bitwise OR |
 | XOR    | rd, rs | Bitwise XOR |
-| SHL    | rd, rs | Logical shift left |
-| SHR    | rd, rs | Logical shift right |
-| SAR    | rd, rs | Arithmetic shift right (preserves sign bit) |
+| SHL    | rd, rs | Shift left |
+| SHR    | rd, rs | Shift right |
 
 ### Branches
 | Opcode | Args | Description |
@@ -119,22 +107,37 @@ python3 -m http.server 8080
 | CIRCLE | xr, yr, rr, cr | Midpoint circle |
 | SCROLL | nr     | Scroll screen up by N pixels |
 | SPRITE | xr,yr,ar,wr,hr | Blit NxM sprite from RAM (0=transparent) |
+| TILEMAP | xr,yr,mr,tr,gwr,ghr,twr,thr | Grid blit from tile index array |
+| PEEK   | rx, ry, rd | Read screen pixel at (rx,ry) into rd |
 
 ### Stack & I/O
 | Opcode | Args | Description |
 |--------|------|-------------|
 | PUSH   | reg   | Push to stack (r30 = SP) |
 | POP    | reg   | Pop from stack |
+| CMP    | rd, rs | Compare: r0 = -1/0/1 (lt/eq/gt) |
 | IKEY   | reg   | Read keyboard port, clear it |
 | RAND   | reg   | Pseudo-random u32 into register |
-| ASM    | sr, dr | Assemble source text at RAM[sr], write bytecode to RAM[dr] |
+
+### Meta-Programming
+| Opcode | Args | Description |
+|--------|------|-------------|
+| ASM    | src_reg, dest_reg | Assemble source text from RAM, write bytecode to RAM |
+
+### Multi-Process
+| Opcode | Args | Description |
+|--------|------|-------------|
+| SPAWN  | addr_reg | Create child process (PID in RAM[0xFFA]) |
+| KILL   | pid_reg | Terminate child process |
 
 ## Memory-Mapped I/O
 
 | Port  | Address | Description |
 |-------|---------|-------------|
-| KEYS  | 0xFFB   | Multi-key bitmask (Arrows, WASD, Space, Enter) |
-| ASM_RESULT | 0xFFD | Assembler output (word count or 0xFFFFFFFF on error) |
+| WIN   | 0xF00-0xF03 | Window bounds (win_x, win_y, win_w, win_h) |
+| KEYS  | 0xFFB   | Key bitmask (bits 0-5, read-only) |
+| NET   | 0xFFC   | Network (UDP) |
+| ASM   | 0xFFD   | Assembler result (word count or error) |
 | TICKS | 0xFFE   | Frame counter (read-only, incremented each FRAME) |
 | KEY   | 0xFFF   | Keyboard input (read via IKEY) |
 
@@ -175,6 +178,27 @@ skip_move:
   JMP loop
 ```
 
+**Multi-process** with SPAWN and .org:
+
+```
+  LDI r0, child
+  SPAWN r0           ; launch child process
+  ; ... primary loop ...
+
+.org 0x400
+child:
+  ; ... child code, shared RAM, own registers ...
+```
+
+**Collision detection** with PEEK:
+
+```
+  PEEK r1, r2, r3    ; r3 = pixel color at (r1, r2)
+  LDI r4, 0
+  CMP r3, r4         ; is it black (empty)?
+  JZ r0, no_wall     ; r0 < 0 means non-zero pixel = wall
+```
+
 ## GUI Controls
 
 | Key | Action |
@@ -182,38 +206,48 @@ skip_move:
 | F5  | Run / resume program |
 | F6  | Single-step (when paused) |
 | F7  | Save VM state |
-| F8  | Load .asm file |
+| F8  | Assemble canvas text |
+| Ctrl+F8 | Load .asm file |
 | F9  | Screenshot (PNG) |
+| F10 | Toggle frame capture |
 | Escape | Toggle editor / terminal |
 
-**Terminal commands:** `help`, `load <name>`, `run`, `step`, `regs`, `peek <addr>`, `poke <addr> <val>`, `bp [addr]`, `bpc`, `trace [n]`, `screenshot`, `reset`, `quit`
+**Terminal commands:** `help`, `load <name>`, `run`, `step`, `regs`, `peek <addr>`, `poke <addr> <val>`, `bp [addr]`, `bpc`, `trace [n]`, `screenshot`, `save [slot]`, `load-slot [slot]`, `reset`, `quit`
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│                 GUI Window              │
-│  ┌──────────────┐  ┌────────────────┐  │
-│  │ Text Editor  │  │   256x256      │  │
-│  │ (32x32 grid) │  │   Screen       │  │
-│  │              │  │                │  │
-│  └──────────────┘  └────────────────┘  │
-│  ┌──────────────┐  ┌────────────────┐  │
-│  │ Registers    │  │  Disassembly   │  │
-│  │ r0-r31       │  │  Panel         │  │
-│  └──────────────┘  └────────────────┘  │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│                  GUI Window                  │
+│  ┌──────────────┐  ┌──────────────────┐     │
+│  │ Text Editor  │  │   256x256        │     │
+│  │ (32x128 grid)│  │   Screen         │     │
+│  │              │  │                  │     │
+│  └──────────────┘  └──────────────────┘     │
+│  ┌──────────────┐  ┌──────────────────┐     │
+│  │ Registers    │  │  Disassembly     │     │
+│  │ + RAM Inspector│ │  Panel          │     │
+│  └──────────────┘  └──────────────────┘     │
+└──────────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 42 opcodes
-Memory: 0x0000 bytecode | 0x1000 canvas text | 0xFFD ASM result | 0xFFE TICKS | 0xFFF KEY
+VM: 32 registers, 65536-word RAM, 44 opcodes, 8 concurrent processes
+Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
+
+## Documentation
+
+- **docs/CANVAS_TEXT_SURFACE.md** -- The text editor, assembly pipeline, preprocessor macros
+- **docs/ARCHITECTURE.md** -- Full opcode reference, multi-process, instrumentation, WASM, network
+- **docs/SIGNED_ARITHMETIC.md** -- Two's-complement arithmetic semantics
+- **programs/README.md** -- Per-program descriptions and controls
 
 ## Stats
 
-- 4,976 lines of Rust (main.rs, vm.rs, assembler.rs, font.rs, glyph_backend.rs)
-- 42 opcodes
-- 28 demo programs (visual demos, animations, interactive games)
-- 62 tests
+- 5,623 lines of Rust
+- 44 opcodes
+- 32 demo programs
+- 113 tests
+- MIT licensed
 
 ## License
 

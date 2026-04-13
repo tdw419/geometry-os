@@ -92,8 +92,9 @@ The backtick key (`) toggles between TEXT mode (default) and DIRECT mode.
 
 ## How TEXT Mode Input Works
 
-When `text_surface_mode == true` and the VM is stopped and not in any special
-mode (editor/REPL/ASM), keystrokes go through this path in main.rs:
+When the VM is stopped and not in any special mode (editor/REPL/ASM),
+keystrokes go through the text input path in main.rs. TEXT mode is the
+default -- the canvas always renders printable ASCII as pixel-font glyphs.
 
 ```
 Keypress
@@ -348,10 +349,12 @@ Address        Size    Purpose
 0xF00-0xF03    4       Window Bounds Protocol (shared RAM convention)
                        RAM[0xF00]=win_x, [0xF01]=win_y, [0xF02]=win_w, [0xF03]=win_h
                        Primary writes; child processes read to clamp their rendering
-0x2000-0xFEFF ~60K     General purpose RAM
-0xFF00-0xFFFF 256      Hardware registers
----------------------------------------------------------------
-Total: 65536 (0x10000) u32 cells
+0xFFB          1       Key bitmask port (bits 0-5: up/down/left/right/space/enter, read-only)
+0xFFC          1       Network port (UDP send/receive)
+0xFFD          1       ASM result port (bytecode word count, or 0xFFFFFFFF on error)
+0xFFE          1       TICKS port (frame counter, incremented each FRAME, read-only)
+0xFFF          1       Keyboard port (memory-mapped I/O, cleared on IKEY read)
+0x1000-0x1FFF 4096    Canvas bytecode output
 ```
 
 **Note on canvas storage:** The canvas text editor uses a separate backing buffer
@@ -475,19 +478,26 @@ exactly as if it came from a file.
    the Window Bounds Protocol uses RAM[0xF00..0xF03] (win_x, win_y, win_w, win_h)
    as a shared convention -- the primary writes bounds, children read and respect them.
 
+10. **PEEK opcode** (0x4F) reads a pixel from the screen buffer: `PEEK rx, ry, rd`
+    stores the color at screen position (regs[rx], regs[ry]) into regs[rd]. Returns 0
+    for out-of-bounds. Use for collision detection -- check wall pixels before moving.
+
+11. **TILEMAP opcode** (0x4C) does grid blit from a tile index array. Useful for
+    drawing tile-based game maps efficiently.
+
+12. **Multi-key input**: RAM[0xFFB] is a bitmask of currently held keys
+    (bits 0-5: up/down/left/right/space/enter). Read it directly to support
+    simultaneous key presses.
+
 ### If you're modifying the codebase:
 
-1. The toggle state is `text_surface_mode: bool` in main.rs
-2. Input handling branches at the `text_surface_mode` check (~line 770)
-3. F8 assembly is at ~line 1049 (the `if text_surface_mode && !ctrl` branch)
-4. Pixel font rendering is at ~line 1833 (the `if use_pixel_font` branch)
+1. TEXT mode is the default canvas mode (no toggle variable)
+2. Input handling is in the text input path in main.rs (search for `key_to_ascii_shifted`)
+3. F8 assembly is at ~line 1049 (the `if !ctrl` branch for F8)
+4. Pixel font rendering is at ~line 2473 (the `if use_pixel_font` branch)
 5. The rendering condition:
    ```rust
-   let use_pixel_font = text_surface_mode
-       && !pending_here        // not mid-hex-entry
-       && val != 0             // not empty cell
-       && ascii_byte >= 0x20   // printable ASCII
-       && ascii_byte < 0x80;
+   let use_pixel_font = val != 0 && ascii_byte >= 0x20 && ascii_byte < 0x80;
    ```
 6. The font data is in `font.rs` -- the `GLYPHS` array, 128 entries of 8 u8
    rows each (8x8 VGA/CP437-style bitmaps). Bit test uses `(7 - col)`.
@@ -563,5 +573,12 @@ The same `parse_syntax_line()` function that determines font colors also
 drives macro expansion. This means the color IS the token type. A cyan cell
 is an opcode, a green cell is a register, an orange cell is a number. The
 abstraction layer reads these token types directly -- it doesn't re-parse the
-text. This eliminates divergence between what you see and what the compiler
+understands. This eliminates divergence between what you see and what the compiler
 understands.
+
+---
+
+## See Also
+
+- **docs/ARCHITECTURE.md** -- Multi-process scheduling, instrumentation, visual debugger, WASM port, and other system-level features beyond the canvas text surface.
+- **docs/SIGNED_ARITHMETIC.md** -- Two's-complement arithmetic semantics (SAR, CMP, signed division).
