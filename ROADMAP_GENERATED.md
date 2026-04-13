@@ -1,13 +1,13 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-73 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+76 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 31/37 phases complete, 0 in progress
+**Progress:** 32/37 phases complete, 0 in progress
 
-**Deliverables:** 136/174 complete
+**Deliverables:** 140/174 complete
 
 **Tasks:** 0/23 complete
 
@@ -46,7 +46,7 @@ the built-in text editor, press F5, watch it run.
 | phase-29 Shell | COMPLETE | 6/6 | - | - |
 | phase-30 Boot Sequence & Init | COMPLETE | 3/3 | - | - |
 | phase-31 Standard Library | COMPLETE | 4/4 | - | - |
-| phase-32 Signals & Process Lifecycle | PLANNED | 0/4 | - | - |
+| phase-32 Signals & Process Lifecycle | COMPLETE | 4/4 | - | - |
 | phase-33 QEMU Bridge | PLANNED | 0/9 | - | - |
 | phase-34 RISC-V RV32I Core | FUTURE | 0/6 | - | - |
 | phase-35 RISC-V Privilege Modes | FUTURE | 0/5 | - | - |
@@ -576,16 +576,21 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 - [x] **Linking convention** -- .include or .lib directive in assembler
   - [x] .include directive resolves and inlines lib/*.asm files
 
-## [ ] phase-32: Signals & Process Lifecycle (PLANNED)
+## [x] phase-32: Signals & Process Lifecycle (COMPLETE)
 
 **Goal:** Signals, exit codes, wait, and proper process lifecycle management.
 
 ### Deliverables
 
-- [ ] **SIGNAL syscall** -- Send signal to process by PID
-- [ ] **Signal handlers** -- Process sets handler address for each signal type
-- [ ] **EXIT/WAIT syscalls** -- Exit with status code, parent waits for child
-- [ ] **Zombie cleanup** -- Exited processes cleaned up after parent WAIT
+- [x] **SIGNAL opcode** -- Send signal to process by PID (SIGTERM=0, SIGKILL=1, SIGUSR=2, SIGALRM=3)
+  - [x] SIGNAL opcode sends signal to target process
+- [x] **Signal handlers (SIGSET)** -- Process sets handler address for each signal type via SIGSET opcode
+  - [x] SIGSET registers handler address, signal delivery jumps to it
+- [x] **EXIT/WAITPID opcodes** -- Exit with status code, parent waits for child via WAITPID
+  - [x] EXIT opcode halts process with status code, sets zombie flag
+  - [x] WAITPID reaps zombie and returns exit code
+- [x] **Zombie cleanup** -- Exited processes cleaned up after parent WAITPID
+  - [x] Zombie process freed after WAITPID, pages reclaimed
 
 ## [ ] phase-33: QEMU Bridge (PLANNED)
 
@@ -873,7 +878,7 @@ portable to WASM and embedded. RV32I is the foundation.
 
 ## Global Risks
 
-- Opcode space: 73 of ~256 slots used, plenty of room
+- Opcode space: 76 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing

@@ -2,7 +2,7 @@ title: "Geometry OS Roadmap"
 version: "1.0.0"
 description: |
   Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  73 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  76 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 project_url: "https://github.com/tdw419/geometry-os"
 
@@ -12,10 +12,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 73
-  tests: 257
+  opcodes: 76
+  tests: 277
   programs: 40
-  loc: 8307
+  loc: 8539
 
 phases:
   # ===================================================================
@@ -1036,22 +1036,36 @@ phases:
 
   - id: "phase-32"
     title: "Signals & Process Lifecycle"
-    status: "todo"
+    status: "complete"
     goal: "Signals, exit codes, wait, and proper process lifecycle management."
     priority: 20
     deliverables:
-      - name: "SIGNAL syscall"
-        description: "Send signal to process by PID"
-        status: "todo"
-      - name: "Signal handlers"
-        description: "Process sets handler address for each signal type"
-        status: "todo"
-      - name: "EXIT/WAIT syscalls"
-        description: "Exit with status code, parent waits for child"
-        status: "todo"
+      - name: "SIGNAL opcode"
+        description: "Send signal to process by PID (SIGTERM=0, SIGKILL=1, SIGUSR=2, SIGALRM=3)"
+        status: "done"
+        acceptance_criteria:
+          - description: "SIGNAL opcode sends signal to target process"
+            met: true
+      - name: "Signal handlers (SIGSET)"
+        description: "Process sets handler address for each signal type via SIGSET opcode"
+        status: "done"
+        acceptance_criteria:
+          - description: "SIGSET registers handler address, signal delivery jumps to it"
+            met: true
+      - name: "EXIT/WAITPID opcodes"
+        description: "Exit with status code, parent waits for child via WAITPID"
+        status: "done"
+        acceptance_criteria:
+          - description: "EXIT opcode halts process with status code, sets zombie flag"
+            met: true
+          - description: "WAITPID reaps zombie and returns exit code"
+            met: true
       - name: "Zombie cleanup"
-        description: "Exited processes cleaned up after parent WAIT"
-        status: "todo"
+        description: "Exited processes cleaned up after parent WAITPID"
+        status: "done"
+        acceptance_criteria:
+          - description: "Zombie process freed after WAITPID, pages reclaimed"
+            met: true
 
   # ===================================================================
   # PART II: HYPERVISOR (RUNNING OTHER OPERATING SYSTEMS)
@@ -1566,7 +1580,7 @@ phases:
         reason: "QEMU boot experience guides native boot requirements"
 
 global_risks:
-  - "Opcode space: 73 of ~256 slots used, plenty of room"
+  - "Opcode space: 76 of ~256 slots used, plenty of room"
   - "Scope creep -- adding features is easy, keeping the OS coherent is hard"
   - "Kernel boundary breaks existing programs -- need a compatibility mode"
   - "Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing"
