@@ -13,9 +13,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 40
-  tests: 49
+  tests: 71
   programs: 28
-  loc: 4536
+  loc: 4543
 
 phases:
   # ===================================================================
@@ -385,10 +385,146 @@ phases:
     scope_lines_total: 5500
     test_target: 54
 
+  # ===================================================================
+  # UPCOMING PHASES
+  # ===================================================================
+
+  - id: "phase-13"
+    title: "Close the Gaps"
+    status: "planned"
+    goal: "Every program tested, every error traceable, no regressions"
+    priority: 1
+    deliverables:
+      - name: "Tests for untested programs"
+        description: "ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity"
+        status: "pending"
+        scope_lines: 220
+        scope_files: ["tests/program_tests.rs"]
+        acceptance_criteria:
+          - description: "cargo test all green"
+          - description: "Each untested program has at least one test"
+      - name: "Assembler error line numbers"
+        description: "Error messages include source line number"
+        status: "pending"
+        scope_lines: 30
+        scope_files: ["src/assembler.rs"]
+        acceptance_criteria:
+          - description: "Error message format: 'line N: unknown opcode: XYZ'"
+      - name: "Version string audit"
+        description: "Single source of truth for version across banner, CLI, Cargo.toml"
+        status: "pending"
+        scope_lines: 10
+        scope_files: ["src/main.rs", "Cargo.toml"]
+
+  - id: "phase-14"
+    title: "Developer Experience"
+    status: "planned"
+    goal: "Make the VM pleasant to program"
+    priority: 2
+    deliverables:
+      - name: "Assembler #define constants"
+        description: "#define NAME value -- eliminates magic numbers"
+        status: "pending"
+        scope_lines: 80
+        scope_files: ["src/assembler.rs"]
+        acceptance_criteria:
+          - description: "#define TILE 8 resolves in LDI and other immediate contexts"
+      - name: "programs/README.md"
+        description: "One-line description + controls + opcodes per program"
+        status: "pending"
+        scope_lines: 60
+        scope_files: ["programs/README.md"]
+      - name: "Disassembler panel in GUI"
+        description: "Shows PC +/- 10 instructions, updates each step"
+        status: "pending"
+        scope_lines: 50
+        scope_files: ["src/main.rs"]
+      - name: "GIF/video capture"
+        description: "F10 toggle writes numbered PNGs, ffmpeg command documented"
+        status: "pending"
+        scope_lines: 20
+        scope_files: ["src/main.rs"]
+
+  - id: "phase-15"
+    title: "VM Capability Gaps"
+    status: "planned"
+    goal: "Fix rough edges in game programming"
+    priority: 4
+    deliverables:
+      - name: "SAR opcode (arithmetic shift right, 0x2B)"
+        description: "Two's-complement division for negative numbers"
+        status: "pending"
+        scope_lines: 10
+        scope_files: ["src/vm.rs", "src/assembler.rs"]
+      - name: "Multi-key input (bitmask at 0xFFB)"
+        description: "Two simultaneous keys in same frame"
+        status: "pending"
+        scope_lines: 20
+        scope_files: ["src/vm.rs", "src/main.rs"]
+      - name: "BEEP in more programs"
+        description: "Sound effects for tetris, breakout, maze, sprite_demo"
+        status: "pending"
+        scope_lines: 20
+        scope_files: ["programs/*.asm"]
+      - name: "Signed arithmetic audit"
+        description: "Document SUB/ADD/MUL sign contract, CMP semantics"
+        status: "pending"
+        scope_lines: 30
+        scope_files: ["ROADMAP.md", "docs/"]
+
+  - id: "phase-16"
+    title: "Showcase Shipping"
+    status: "planned"
+    goal: "Complete game, presentable repo, public release"
+    priority: 3
+    deliverables:
+      - name: "Complete tetris"
+        description: "Scoring, levels, sound, game-over screen"
+        status: "pending"
+        scope_lines: 100
+        scope_files: ["programs/tetris.asm"]
+        acceptance_criteria:
+          - description: "Playable start-to-finish with visible score"
+      - name: "TILEMAP opcode"
+        description: "Grid blit from tile index array -- makes grid games 3x shorter"
+        status: "pending"
+        scope_lines: 60
+        scope_files: ["src/vm.rs", "src/assembler.rs"]
+      - name: "Persistent save slots"
+        description: "4 named save slots accessible from terminal"
+        status: "pending"
+        scope_lines: 30
+        scope_files: ["src/vm.rs", "src/main.rs"]
+      - name: "GitHub release v1.0.1"
+        description: "Tag, release notes, prebuilt binary"
+        status: "pending"
+
+  - id: "phase-17"
+    title: "Platform Growth"
+    status: "planned"
+    goal: "Geometry OS as a target platform"
+    priority: 5
+    deliverables:
+      - name: "GlyphLang compiler backend"
+        description: "Emit .geo bytecode from GlyphLang source"
+        status: "pending"
+        scope_lines: 200
+      - name: "Browser port via WASM"
+        description: "VM runs in browser with canvas rendering"
+        status: "pending"
+        scope_lines: 200
+      - name: "Network port (0xFFB UDP)"
+        description: "Two VM instances exchange messages"
+        status: "pending"
+        scope_lines: 40
+
 global_risks:
-  - "Opcode space filling up (40 of ~256 slots used, but gaps in hex space)"
+  - "Opcode space: 40 of ~256 slots used, plenty of room, but hex layout has gaps"
   - "Scope creep -- adding opcodes is easy, keeping the VM simple is hard"
+  - "Flaky tests: rainbow, ball, fire, rings tests are non-deterministic (fail intermittently)"
   - "BEEP spawning aplay processes without rate limiting could exhaust FDs"
+  - "Self-hosting ASM opcode proved fragile (phase-12 test reverted) -- revisit with concrete use case"
+  - "GPU tile issues (#29-54) are orthogonal to core VM -- don't let them block"
 
 conventions:
   - "Every new opcode gets a test in tests/program_tests.rs"
@@ -396,3 +532,4 @@ conventions:
   - "README.md updated when opcodes or features change"
   - "roadmap.yaml is the single source of truth for project state"
   - "Semantic versioning: minor bump for new opcodes, patch for fixes"
+  - "New opcodes need a program that needs them (no speculative opcodes)"
