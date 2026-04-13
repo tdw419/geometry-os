@@ -48,6 +48,14 @@ pub const SIP: u32 = 0x144;
 /// In RV32 the SD bit (31) is read-only and derived.
 const SSTATUS_MASK: u32 = (1 << 1) | (1 << 5) | (1 << 8) | (1 << 18) | (1 << 19);
 
+/// SIP is a restricted view of MIP.
+/// Visible bits: SSIP (1), STIP (5), SEIP (9).
+const SIP_MASK: u32 = (1 << 1) | (1 << 5) | (1 << 9);
+
+/// SIE is a restricted view of MIE.
+/// Visible bits: SSIE (1), STIE (5), SEIE (9).
+const SIE_MASK: u32 = (1 << 1) | (1 << 5) | (1 << 9);
+
 /// Bit positions in mstatus.
 pub const MSTATUS_SIE: u32 = 1; // Supervisor Interrupt Enable
 pub const MSTATUS_MIE: u32 = 3; // Machine Interrupt Enable
@@ -114,6 +122,23 @@ pub struct CsrBank {
     /// Supervisor address translation and protection.
     /// Bits [31:22] = PPN (page table base), [21] = ASID, [0] = MODE.
     pub satp: u32,
+
+    /// Machine interrupt-enable register.
+    /// Bit 1 = SSIE, Bit 3 = MSIE, Bit 5 = STIE, Bit 7 = MTIE,
+    /// Bit 9 = SEIE, Bit 11 = MEIE.
+    pub mie: u32,
+
+    /// Machine interrupt-pending register.
+    /// Same bit layout as MIE. SIP is a restricted view of MIP.
+    pub mip: u32,
+
+    /// Machine exception delegation register.
+    /// Bit N = 1 means exception N is delegated to S-mode.
+    pub medeleg: u32,
+
+    /// Machine interrupt delegation register.
+    /// Bit N = 1 means interrupt N is delegated to S-mode.
+    pub mideleg: u32,
 }
 
 impl Default for CsrBank {
@@ -140,6 +165,10 @@ impl CsrBank {
             scause: 0,
             stval: 0,
             satp: 0,
+            mie: 0,
+            mip: 0,
+            medeleg: 0,
+            mideleg: 0,
         }
     }
 
@@ -160,6 +189,12 @@ impl CsrBank {
             SCAUSE => self.scause,
             STVAL => self.stval,
             SATP => self.satp,
+            MIE => self.mie,
+            MIP => self.mip,
+            SIE => self.mie & SIE_MASK,
+            SIP => self.mip & SIP_MASK,
+            MEDELEG => self.medeleg,
+            MIDELEG => self.mideleg,
             _ => 0,
         }
     }
@@ -217,6 +252,34 @@ impl CsrBank {
                 self.satp = val;
                 true
             }
+            MIE => {
+                self.mie = val;
+                true
+            }
+            MIP => {
+                // MIP is mostly read-only; only SSIP (bit 1) is writable by S-mode.
+                // For simplicity, allow writing (guest firmware often needs this).
+                self.mip = val;
+                true
+            }
+            SIE => {
+                // Write only the SIE-visible bits in mie.
+                self.mie = (self.mie & !SIE_MASK) | (val & SIE_MASK);
+                true
+            }
+            SIP => {
+                // Write only the SIP-visible bits in mip.
+                self.mip = (self.mip & !SIP_MASK) | (val & SIP_MASK);
+                true
+            }
+            MEDELEG => {
+                self.medeleg = val;
+                true
+            }
+            MIDELEG => {
+                self.mideleg = val;
+                true
+            }
             _ => false,
         }
     }
@@ -250,6 +313,73 @@ impl CsrBank {
     /// Read mcause interrupt bit.
     pub fn mcause_is_interrupt(&self) -> bool {
         (self.mcause & MCAUSE_INTERRUPT_BIT) != 0
+    }
+
+    /// Determine which privilege level handles a trap.
+    /// If the exception/interrupt is delegated to S-mode via medeleg/mideleg,
+    /// and the trap comes from U-mode, route to S. Otherwise M.
+    pub fn trap_target_priv(&self, cause: u32, current_priv: Privilege) -> Privilege {
+        let is_interrupt = (cause & MCAUSE_INTERRUPT_BIT) != 0;
+        let code = cause & !MCAUSE_INTERRUPT_BIT;
+        if is_interrupt {
+            // Check mideleg for this interrupt code
+            if (self.mideleg >> code) & 1 != 0 && current_priv != Privilege::Machine {
+                Privilege::Supervisor
+            } else {
+                Privilege::Machine
+            }
+        } else {
+            // Check medeleg for this exception code
+            if (self.medeleg >> code) & 1 != 0 && current_priv != Privilege::Machine {
+                Privilege::Supervisor
+            } else {
+                Privilege::Machine
+            }
+        }
+    }
+
+    /// Check if a timer interrupt should be delivered.
+    /// Returns Some(interrupt_cause) if an interrupt is pending and enabled,
+    /// prioritized: MTI > STI > MSI > SSI.
+    pub fn pending_interrupt(&self, current_priv: Privilege) -> Option<u32> {
+        let mie_enabled = (self.mstatus >> MSTATUS_MIE) & 1 != 0;
+        let sie_enabled = (self.mstatus >> MSTATUS_SIE) & 1 != 0;
+
+        // Machine timer interrupt: MTIP pending, MTIE enabled, MIE enabled
+        if (self.mip >> INT_MTI) & 1 != 0
+            && (self.mie >> INT_MTI) & 1 != 0
+            && mie_enabled
+        {
+            return Some(MCAUSE_INTERRUPT_BIT | INT_MTI);
+        }
+
+        // Supervisor timer interrupt (only if not in M-mode, or if delegated)
+        if (self.mip >> INT_STI) & 1 != 0
+            && (self.mie >> INT_STI) & 1 != 0
+            && sie_enabled
+            && current_priv != Privilege::Machine
+        {
+            return Some(MCAUSE_INTERRUPT_BIT | INT_STI);
+        }
+
+        // Machine software interrupt
+        if (self.mip >> INT_MSI) & 1 != 0
+            && (self.mie >> INT_MSI) & 1 != 0
+            && mie_enabled
+        {
+            return Some(MCAUSE_INTERRUPT_BIT | INT_MSI);
+        }
+
+        // Supervisor software interrupt
+        if (self.mip >> INT_SSI) & 1 != 0
+            && (self.mie >> INT_SSI) & 1 != 0
+            && sie_enabled
+            && current_priv != Privilege::Machine
+        {
+            return Some(MCAUSE_INTERRUPT_BIT | INT_SSI);
+        }
+
+        None
     }
 
     /// Get the trap vector PC for the current privilege level.

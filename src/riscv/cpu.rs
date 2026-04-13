@@ -85,7 +85,20 @@ impl RiscvCpu {
 
     /// Fetch, decode, and execute one instruction.
     /// Returns StepResult indicating what happened.
+    ///
+    /// Before fetching, checks for pending interrupts and delivers them
+    /// as traps if enabled.
     pub fn step(&mut self, mem: &mut GuestMemory) -> StepResult {
+        // Check for pending interrupts before fetching.
+        if let Some(cause) = self.csr.pending_interrupt(self.privilege) {
+            let trap_priv = self.csr.trap_target_priv(cause, self.privilege);
+            let vector = self.csr.trap_vector(trap_priv);
+            self.csr.trap_enter(trap_priv, self.privilege, self.pc, cause);
+            self.privilege = trap_priv;
+            self.pc = vector;
+            return StepResult::Ok;
+        }
+
         let word = match mem.read_word(self.pc as u64) {
             Ok(w) => w,
             Err(_) => return StepResult::FetchFault,
@@ -352,8 +365,8 @@ impl RiscvCpu {
                     Privilege::Supervisor => csr::CAUSE_ECALL_S,
                     Privilege::Machine => csr::CAUSE_ECALL_M,
                 };
-                // ECALL always traps to Machine mode (no delegation yet).
-                let trap_priv = Privilege::Machine;
+                // Check medeleg to see if this exception is delegated to S-mode.
+                let trap_priv = self.csr.trap_target_priv(cause, self.privilege);
                 let vector = self.csr.trap_vector(trap_priv);
                 self.csr.trap_enter(trap_priv, self.privilege, self.pc, cause);
                 self.privilege = trap_priv;
