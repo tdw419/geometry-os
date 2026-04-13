@@ -249,6 +249,15 @@ fn test_rv32_x0_always_zero() {
 // ============================================================
 
 #[test]
+fn test_rv32_addi_acceptance() {
+    // Acceptance: x1 = x2 + 100
+    let mut vm = test_vm(&[addi(2, 0, 50), addi(1, 2, 100), ecall()]);
+    run(&mut vm, 100);
+    assert_eq!(vm.cpu.x[2], 50);
+    assert_eq!(vm.cpu.x[1], 150); // x1 = x2 + 100
+}
+
+#[test]
 fn test_rv32_addi() {
     let mut vm = test_vm(&[addi(1, 0, 100), addi(2, 1, 50), ecall()]);
     run(&mut vm, 100);
