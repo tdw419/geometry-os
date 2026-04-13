@@ -9,10 +9,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 78
-  tests: 335
+  opcodes: 77
+  tests: 382
   programs: 40
-  loc: 10025
+  loc: 10026
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1622,7 +1622,7 @@ phases:
     type: informs
     reason: QEMU boot experience guides native boot requirements
 global_risks:
-- 'Opcode space: 76 of ~256 slots used, plenty of room'
+- 'Opcode space: 77 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing

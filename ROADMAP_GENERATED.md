@@ -4,11 +4,11 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
   78 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 
-**Progress:** 33/37 phases complete, 0 in progress
+**Progress:** 33/37 phases complete, 1 in progress
 
-**Deliverables:** 149/174 complete
+**Deliverables:** 153/174 complete
 
-**Tasks:** 15/23 complete
+**Tasks:** 19/23 complete
 
 ## Scope Summary
 
@@ -47,7 +47,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 | phase-31 Standard Library | COMPLETE | 4/4 | - | - |
 | phase-32 Signals & Process Lifecycle | COMPLETE | 4/4 | - | - |
 | phase-33 QEMU Bridge | COMPLETE | 9/9 | - | - |
-| phase-34 RISC-V RV32I Core | FUTURE | 0/6 | - | - |
+| phase-34 RISC-V RV32I Core | IN PROGRESS | 4/6 | - | - |
 | phase-35 RISC-V Privilege Modes | FUTURE | 0/5 | - | - |
 | phase-36 RISC-V Virtual Memory & Devices | FUTURE | 0/8 | - | - |
 | phase-37 Guest OS Boot (Native RISC-V) | FUTURE | 0/6 | - | - |
@@ -740,7 +740,7 @@ Canvas rendering reuses existing pixel font pipeline from CANVAS_TEXT_SURFACE.md
 - ANSI parsing incomplete -- Linux boot output may use obscure sequences
 - Non-blocking pipe reads may miss data on fast output -- buffer management
 
-## [?] phase-34: RISC-V RV32I Core (FUTURE)
+## [~] phase-34: RISC-V RV32I Core (IN PROGRESS)
 
 **Goal:** Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
 
@@ -750,29 +750,29 @@ portable to WASM and embedded. RV32I is the foundation.
 
 ### Deliverables
 
-- [ ] **riscv/ module** -- src/riscv/ with mod.rs, cpu.rs, memory.rs, decode.rs
-  - [ ] `p34.d1.t1` Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs
+- [x] **riscv/ module** -- src/riscv/ with mod.rs, cpu.rs, memory.rs, decode.rs
+  - [x] `p34.d1.t1` Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs
     - Files compile
     - mod.rs exports public structs
     _Files: src/riscv/mod.rs, src/riscv/cpu.rs, src/riscv/memory.rs, src/riscv/decode.rs_
   _~50 LOC_
-- [ ] **Register file** -- x[0..32] (x0=zero), PC, 32-bit registers
-  - [ ] `p34.d2.t1` Define RiscvCpu struct with x[32], pc, privilege fields
+- [x] **Register file** -- x[0..32] (x0=zero), PC, 32-bit registers
+  - [x] `p34.d2.t1` Define RiscvCpu struct with x[32], pc, privilege fields
     - RiscvCpu struct with x: [u32; 32], pc: u32, privilege: u8
     - x[0] always reads as 0 (enforced on write)
     - new() initializes pc=0x80000000, privilege=3 (M-mode)
     _Files: src/riscv/cpu.rs_
   _~30 LOC_
-- [ ] **Guest RAM** -- Vec<u8> separate from host RAM, configurable size (default 128MB)
-  - [ ] `p34.d3.t1` Implement GuestMemory with read_byte/half/word and write_byte/half/word
+- [x] **Guest RAM** -- Vec<u8> separate from host RAM, configurable size (default 128MB)
+  - [x] `p34.d3.t1` Implement GuestMemory with read_byte/half/word and write_byte/half/word
     - GuestMemory with ram: Vec<u8>, ram_base: u64
     - read_word at 0x80000000 reads first 4 bytes little-endian
     - write_word followed by read_word returns same value
     - Out-of-range access returns error
     _Files: src/riscv/memory.rs_
   _~60 LOC_
-- [ ] **Instruction decode** -- Decode all RV32I opcodes from 32-bit instruction words
-  - [ ] `p34.d4.t1` Implement decode() returning Operation enum for all RV32I opcodes (depends: p34.d1.t1)
+- [x] **Instruction decode** -- Decode all RV32I opcodes from 32-bit instruction words
+  - [x] `p34.d4.t1` Implement decode() returning Operation enum for all RV32I opcodes (depends: p34.d1.t1)
     - R-type: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
     - I-type: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
     - Load: LB, LH, LW, LBU, LHU
@@ -877,7 +877,7 @@ portable to WASM and embedded. RV32I is the foundation.
 
 ## Global Risks
 
-- Opcode space: 76 of ~256 slots used, plenty of room
+- Opcode space: 77 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
