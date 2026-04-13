@@ -1,12 +1,12 @@
 # Geometry OS Roadmap
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  78 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 
-**Progress:** 35/37 phases complete, 0 in progress
+**Progress:** 36/37 phases complete, 0 in progress
 
-**Deliverables:** 160/174 complete
+**Deliverables:** 168/174 complete
 
 **Tasks:** 23/23 complete
 
@@ -49,7 +49,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 | phase-33 QEMU Bridge | COMPLETE | 9/9 | - | - |
 | phase-34 RISC-V RV32I Core | COMPLETE | 6/6 | - | - |
 | phase-35 RISC-V Privilege Modes | COMPLETE | 5/5 | - | - |
-| phase-36 RISC-V Virtual Memory & Devices | FUTURE | 0/8 | - | - |
+| phase-36 RISC-V Virtual Memory & Devices | COMPLETE | 8/8 | - | - |
 | phase-37 Guest OS Boot (Native RISC-V) | FUTURE | 0/6 | - | - |
 
 ## Dependencies
@@ -833,27 +833,27 @@ portable to WASM and embedded. RV32I is the foundation.
 - [x] **Privilege transition tests** -- U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
   _~150 LOC_
 
-## [?] phase-36: RISC-V Virtual Memory & Devices (FUTURE)
+## [x] phase-36: RISC-V Virtual Memory & Devices (COMPLETE)
 
 **Goal:** SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot.
 
 ### Deliverables
 
-- [ ] **SV32 page table walk** -- 2-level lookup, PTE flags, address translation
+- [x] **SV32 page table walk** -- 2-level lookup, PTE flags, address translation
   _~120 LOC_
-- [ ] **TLB cache** -- 64-entry TLB with ASID-aware invalidation
+- [x] **TLB cache** -- 64-entry TLB with ASID-aware invalidation
   _~80 LOC_
-- [ ] **Page fault traps** -- Instruction/Load/Store page faults with stval/mtval
+- [x] **Page fault traps** -- Instruction/Load/Store page faults with stval/mtval
   _~40 LOC_
-- [ ] **UART 16550** -- Serial port emulation, reuses Phase 33 bridge pattern to canvas
+- [x] **UART 16550** -- Serial port emulation, reuses Phase 33 bridge pattern to canvas
   _~150 LOC_
-- [ ] **CLINT + PLIC** -- Timer interrupt controller + platform interrupt controller
+- [x] **CLINT + PLIC** -- Timer interrupt controller + platform interrupt controller
   _~200 LOC_
-- [ ] **Virtio block device** -- Virtio MMIO transport, disk image from VFS
+- [x] **Virtio block device** -- Virtio MMIO transport, disk image from VFS
   _~200 LOC_
-- [ ] **Device Tree Blob** -- Generate DTB describing memory, UART, virtio devices
+- [x] **Device Tree Blob** -- Generate DTB describing memory, UART, virtio devices
   _~150 LOC_
-- [ ] **MMU + device integration test** -- Guest sets up page tables, writes to UART, verify output on canvas
+- [x] **MMU + device integration test** -- Guest sets up page tables, writes to UART, verify output on canvas
   _~150 LOC_
 
 ## [?] phase-37: Guest OS Boot (Native RISC-V) (FUTURE)

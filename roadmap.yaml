@@ -1,6 +1,6 @@
 title: Geometry OS Roadmap
 version: 1.0.0
-description: "Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  78 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,\
+description: "Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,\
   \ watch it run."
 project_url: https://github.com/tdw419/geometry-os
 meta:
@@ -9,10 +9,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 77
-  tests: 550
+  opcodes: 114
+  tests: 624
   programs: 40
-  loc: 12551
+  loc: 14429
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1537,41 +1537,41 @@ phases:
     reason: Privilege modes layer on top of the base RV32I interpreter
 - id: phase-36
   title: RISC-V Virtual Memory & Devices
-  status: in_progress
+  status: complete
   goal: SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot.
   priority: 60
   deliverables:
   - name: SV32 page table walk
     description: 2-level lookup, PTE flags, address translation
-    status: todo
+    status: done
     scope_lines: 120
   - name: TLB cache
     description: 64-entry TLB with ASID-aware invalidation
-    status: todo
+    status: done
     scope_lines: 80
   - name: Page fault traps
     description: Instruction/Load/Store page faults with stval/mtval
-    status: todo
+    status: done
     scope_lines: 40
   - name: UART 16550
     description: Serial port emulation, reuses Phase 33 bridge pattern to canvas
-    status: todo
+    status: done
     scope_lines: 150
   - name: CLINT + PLIC
     description: Timer interrupt controller + platform interrupt controller
-    status: todo
+    status: done
     scope_lines: 200
   - name: Virtio block device
     description: Virtio MMIO transport, disk image from VFS
-    status: todo
+    status: done
     scope_lines: 200
   - name: Device Tree Blob
     description: Generate DTB describing memory, UART, virtio devices
-    status: todo
+    status: done
     scope_lines: 150
   - name: MMU + device integration test
     description: Guest sets up page tables, writes to UART, verify output on canvas
-    status: todo
+    status: done
     scope_lines: 150
   dependencies:
   - source: phase-35
