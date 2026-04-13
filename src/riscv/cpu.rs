@@ -87,6 +87,19 @@ impl RiscvCpu {
         }
     }
 
+    /// Translate a virtual address through the Sv32 MMU.
+    /// Returns the physical address or a fault StepResult.
+    fn translate_va(&mut self, va: u32, access: AccessType, bus: &Bus) -> Result<u64, StepResult> {
+        let is_user = self.privilege == Privilege::User;
+        let satp = self.csr.satp;
+        match mmu::translate(va, access, is_user, satp, bus, &mut self.tlb) {
+            TranslateResult::Ok(pa) => Ok(pa),
+            TranslateResult::FetchFault => Err(StepResult::FetchFault),
+            TranslateResult::LoadFault => Err(StepResult::LoadFault),
+            TranslateResult::StoreFault => Err(StepResult::StoreFault),
+        }
+    }
+
     /// Fetch, decode, and execute one instruction.
     /// Returns StepResult indicating what happened.
     ///
@@ -103,7 +116,12 @@ impl RiscvCpu {
             return StepResult::Ok;
         }
 
-        let word = match bus.read_word(self.pc as u64) {
+        // Translate PC through MMU for instruction fetch.
+        let fetch_pa = match self.translate_va(self.pc, AccessType::Fetch, &*bus) {
+            Ok(pa) => pa,
+            Err(e) => return e,
+        };
+        let word = match bus.read_word(fetch_pa) {
             Ok(w) => w,
             Err(_) => return StepResult::FetchFault,
         };
@@ -163,8 +181,12 @@ impl RiscvCpu {
 
             // ---- Loads ----
             Operation::Lb { rd, rs1, imm } => {
-                let addr = self.ea(rs1, imm);
-                match bus.read_byte(addr) {
+                let va = self.ea(rs1, imm);
+                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                match bus.read_byte(pa) {
                     Ok(b) => {
                         self.set_reg(rd, sign_extend_byte(b) as u32);
                         self.pc = next_pc;
@@ -174,8 +196,12 @@ impl RiscvCpu {
                 }
             }
             Operation::Lh { rd, rs1, imm } => {
-                let addr = self.ea(rs1, imm);
-                match bus.read_half(addr) {
+                let va = self.ea(rs1, imm);
+                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                match bus.read_half(pa) {
                     Ok(h) => {
                         self.set_reg(rd, sign_extend_half(h) as u32);
                         self.pc = next_pc;
@@ -185,8 +211,12 @@ impl RiscvCpu {
                 }
             }
             Operation::Lw { rd, rs1, imm } => {
-                let addr = self.ea(rs1, imm);
-                match bus.read_word(addr) {
+                let va = self.ea(rs1, imm);
+                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                match bus.read_word(pa) {
                     Ok(w) => {
                         self.set_reg(rd, w);
                         self.pc = next_pc;
@@ -196,8 +226,12 @@ impl RiscvCpu {
                 }
             }
             Operation::Lbu { rd, rs1, imm } => {
-                let addr = self.ea(rs1, imm);
-                match bus.read_byte(addr) {
+                let va = self.ea(rs1, imm);
+                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                match bus.read_byte(pa) {
                     Ok(b) => {
                         self.set_reg(rd, b as u32);
                         self.pc = next_pc;
@@ -207,8 +241,12 @@ impl RiscvCpu {
                 }
             }
             Operation::Lhu { rd, rs1, imm } => {
-                let addr = self.ea(rs1, imm);
-                match bus.read_half(addr) {
+                let va = self.ea(rs1, imm);
+                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                match bus.read_half(pa) {
                     Ok(h) => {
                         self.set_reg(rd, h as u32);
                         self.pc = next_pc;
@@ -220,9 +258,13 @@ impl RiscvCpu {
 
             // ---- Stores ----
             Operation::Sb { rs1, rs2, imm } => {
-                let addr = self.ea(rs1, imm);
+                let va = self.ea(rs1, imm);
+                let pa = match self.translate_va(va as u32, AccessType::Store, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
                 let val = self.get_reg(rs2);
-                match bus.write_byte(addr, val as u8) {
+                match bus.write_byte(pa, val as u8) {
                     Ok(()) => {
                         self.pc = next_pc;
                         StepResult::Ok
@@ -231,9 +273,13 @@ impl RiscvCpu {
                 }
             }
             Operation::Sh { rs1, rs2, imm } => {
-                let addr = self.ea(rs1, imm);
+                let va = self.ea(rs1, imm);
+                let pa = match self.translate_va(va as u32, AccessType::Store, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
                 let val = self.get_reg(rs2);
-                match bus.write_half(addr, val as u16) {
+                match bus.write_half(pa, val as u16) {
                     Ok(()) => {
                         self.pc = next_pc;
                         StepResult::Ok
@@ -242,9 +288,13 @@ impl RiscvCpu {
                 }
             }
             Operation::Sw { rs1, rs2, imm } => {
-                let addr = self.ea(rs1, imm);
+                let va = self.ea(rs1, imm);
+                let pa = match self.translate_va(va as u32, AccessType::Store, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
                 let val = self.get_reg(rs2);
-                match bus.write_word(addr, val) {
+                match bus.write_word(pa, val) {
                     Ok(()) => {
                         self.pc = next_pc;
                         StepResult::Ok
@@ -505,6 +555,7 @@ impl RiscvCpu {
     fn ea(&self, rs1: u8, imm: i32) -> u64 {
         (self.get_reg(rs1) as i64 + imm as i64) as u64
     }
+
 }
 
 /// Sign-extend a byte to i32.

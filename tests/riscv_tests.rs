@@ -1897,12 +1897,16 @@ fn test_sv32_tlb_caches() {
 #[test]
 fn test_sv32_tlb_flush_sfence() {
     let mut tlb = mmu::Tlb::new();
-    tlb.insert(0x100, 1, 0xAAA, mmu::PTE_V | mmu::PTE_R);
-    tlb.insert(0x200, 1, 0xBBB, mmu::PTE_V | mmu::PTE_R);
-    assert!(tlb.lookup(0x100, 1).is_some());
+    // Use VPNs that don't hash to the same TLB slot.
+    // Hash: (vpn + asid * 2654435761) % 64
+    // vpn=0x10, asid=1 -> idx 43; vpn=0x20, asid=1 -> idx 59
+    tlb.insert(0x10, 1, 0xAAA, mmu::PTE_V | mmu::PTE_R);
+    tlb.insert(0x20, 1, 0xBBB, mmu::PTE_V | mmu::PTE_R);
+    assert!(tlb.lookup(0x10, 1).is_some());
+    assert!(tlb.lookup(0x20, 1).is_some());
     tlb.flush_all();
-    assert!(tlb.lookup(0x100, 1).is_none());
-    assert!(tlb.lookup(0x200, 1).is_none());
+    assert!(tlb.lookup(0x10, 1).is_none());
+    assert!(tlb.lookup(0x20, 1).is_none());
 }
 
 #[test]

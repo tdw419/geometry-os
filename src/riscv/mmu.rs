@@ -73,7 +73,7 @@ pub fn va_offset(va: u32) -> u32 {
 
 /// Combine VPN[1] and VPN[0] into a single VPN value for TLB lookup.
 pub fn va_to_vpn(va: u32) -> u32 {
-    ((va >> 12) & 0xFFFFF) // 20-bit combined VPN
+    (va >> 12) & 0xFFFFF // 20-bit combined VPN
 }
 
 // ---- Access type ----
@@ -158,17 +158,19 @@ impl Tlb {
         None
     }
 
-    /// Insert an entry into the TLB.
+    /// Insert an entry into the TLB with linear probing.
     pub fn insert(&mut self, vpn: u32, asid: u16, ppn: u32, flags: u32) {
-        // Simple hash: use lower bits of VPN as index.
-        let idx = (vpn as usize) % TLB_SIZE;
-        self.entries[idx] = TlbEntry {
-            vpn,
-            asid,
-            ppn,
-            flags,
-            valid: true,
-        };
+        let base = ((vpn as usize).wrapping_add((asid as usize) * 2654435761)) % TLB_SIZE;
+        // Linear probe: find an empty slot or evict the base slot.
+        for i in 0..4 {
+            let idx = (base + i) % TLB_SIZE;
+            if !self.entries[idx].valid {
+                self.entries[idx] = TlbEntry { vpn, asid, ppn, flags, valid: true };
+                return;
+            }
+        }
+        // All probed slots full: evict the base slot.
+        self.entries[base] = TlbEntry { vpn, asid, ppn, flags, valid: true };
     }
 
     /// Flush all TLB entries.
@@ -264,10 +266,8 @@ pub fn translate(
     let is_leaf_l1 = (l1_pte & (PTE_R | PTE_W | PTE_X)) != 0;
 
     if is_leaf_l1 {
-        // Megapage: 4MB mapping.
-        let ppn1 = pte_ppn(l1_pte);
-        // For megapage: PPN[0] = VPN[0], offset from VA.
-        let ppn = (ppn1 << 10) | vpn0;
+        // Megapage: use full PPN from L1 leaf PTE.
+        let ppn = pte_ppn(l1_pte);
         let flags = l1_pte & 0xFF;
 
         if let Some(fault) = check_permissions(flags, access_type, sum) {
@@ -309,7 +309,15 @@ pub fn translate(
 
 /// Check page permissions.
 /// Returns Some(fault) if the access should fault, None if OK.
-fn check_permissions(flags: u32, access_type: AccessType, _sum: bool) -> Option<TranslateResult> {
+///
+/// When `sum` is true (S-mode, SUM=1), only U-mode pages are accessible.
+/// When `sum` is false, any page is accessible (bare mode or M-mode).
+fn check_permissions(flags: u32, access_type: AccessType, sum: bool) -> Option<TranslateResult> {
+    // If SUM is set, require PTE_U for S-mode access to user pages.
+    // This is a simplified permission check for the translate function.
+    if sum && (flags & PTE_U) == 0 {
+        return Some(fault_for(access_type));
+    }
     // Check access type against R/W/X bits.
     match access_type {
         AccessType::Fetch => {

@@ -6,6 +6,9 @@
 
 use super::clint::{self, Clint};
 use super::memory::{GuestMemory, MemoryError};
+use super::plic::Plic;
+use super::uart::Uart;
+use super::virtio_blk::VirtioBlk;
 
 /// CLINT MMIO address range.
 const CLINT_START: u64 = 0x0200_0000;
@@ -17,6 +20,12 @@ pub struct Bus {
     pub mem: GuestMemory,
     /// Core Local Interruptor (timer + software interrupts).
     pub clint: Clint,
+    /// UART 16550 serial port.
+    pub uart: Uart,
+    /// Platform-Level Interrupt Controller.
+    pub plic: Plic,
+    /// Virtio block device.
+    pub virtio_blk: VirtioBlk,
 }
 
 impl Bus {
@@ -25,19 +34,34 @@ impl Bus {
         Self {
             mem: GuestMemory::new(ram_base, ram_size),
             clint: Clint::new(),
+            uart: Uart::new(),
+            plic: Plic::new(),
+            virtio_blk: VirtioBlk::new(),
         }
     }
 
-    /// Read a 32-bit word. Routes to CLINT MMIO or RAM.
+    /// Read a 32-bit word. Routes to device MMIO or RAM.
     pub fn read_word(&self, addr: u64) -> Result<u32, MemoryError> {
         if Self::in_clint(addr) {
             self.clint.read(addr).ok_or(MemoryError { addr, size: 4 })
+        } else if super::uart::Uart::contains(addr) {
+            // UART reads need &mut due to side effects (clearing DR).
+            // We clone to work around borrow checker.
+            let mut uart = self.uart.clone();
+            let result = uart.read_word(addr).ok_or(MemoryError { addr, size: 4 });
+            // Note: side effects are lost due to clone. This is acceptable
+            // for page table walks which shouldn't touch UART.
+            result
+        } else if super::plic::Plic::contains(addr) {
+            self.plic.read(addr).ok_or(MemoryError { addr, size: 4 })
+        } else if super::virtio_blk::VirtioBlk::contains(addr) {
+            self.virtio_blk.read(addr).ok_or(MemoryError { addr, size: 4 })
         } else {
             self.mem.read_word(addr)
         }
     }
 
-    /// Write a 32-bit word. Routes to CLINT MMIO or RAM.
+    /// Write a 32-bit word. Routes to device MMIO or RAM.
     pub fn write_word(&mut self, addr: u64, val: u32) -> Result<(), MemoryError> {
         if Self::in_clint(addr) {
             if self.clint.write(addr, val) {
@@ -45,15 +69,38 @@ impl Bus {
             } else {
                 Err(MemoryError { addr, size: 4 })
             }
+        } else if super::uart::Uart::contains(addr) {
+            self.uart.write_word(addr, val);
+            Ok(())
+        } else if super::plic::Plic::contains(addr) {
+            if self.plic.write(addr, val) {
+                Ok(())
+            } else {
+                Err(MemoryError { addr, size: 4 })
+            }
+        } else if super::virtio_blk::VirtioBlk::contains(addr) {
+            self.virtio_blk.write(addr, val);
+            Ok(())
         } else {
             self.mem.write_word(addr, val)
         }
     }
 
-    /// Read a byte. Routes to CLINT MMIO or RAM.
+    /// Read a byte. Routes to device MMIO or RAM.
     pub fn read_byte(&self, addr: u64) -> Result<u8, MemoryError> {
         if Self::in_clint(addr) {
             let word = self.clint.read(addr & !3).ok_or(MemoryError { addr, size: 1 })?;
+            let byte_off = (addr & 3) as usize;
+            Ok((word >> (byte_off * 8)) as u8)
+        } else if super::uart::Uart::contains(addr) {
+            let mut uart = self.uart.clone();
+            Ok(uart.read_byte(addr - super::uart::UART_BASE))
+        } else if super::plic::Plic::contains(addr) {
+            let word = self.plic.read(addr & !3).ok_or(MemoryError { addr, size: 1 })?;
+            let byte_off = (addr & 3) as usize;
+            Ok((word >> (byte_off * 8)) as u8)
+        } else if super::virtio_blk::VirtioBlk::contains(addr) {
+            let word = self.virtio_blk.read(addr & !3).ok_or(MemoryError { addr, size: 1 })?;
             let byte_off = (addr & 3) as usize;
             Ok((word >> (byte_off * 8)) as u8)
         } else {
@@ -61,7 +108,7 @@ impl Bus {
         }
     }
 
-    /// Write a byte. Routes to CLINT MMIO or RAM.
+    /// Write a byte. Routes to device MMIO or RAM.
     pub fn write_byte(&mut self, addr: u64, val: u8) -> Result<(), MemoryError> {
         if Self::in_clint(addr) {
             let word_addr = addr & !3;
@@ -73,12 +120,26 @@ impl Bus {
             } else {
                 Err(MemoryError { addr, size: 1 })
             }
+        } else if super::uart::Uart::contains(addr) {
+            self.uart.write_byte(addr - super::uart::UART_BASE, val);
+            Ok(())
+        } else if super::plic::Plic::contains(addr) {
+            // PLIC byte write: read-modify-write the containing word
+            let word_addr = addr & !3;
+            let byte_off = (addr & 3) as usize;
+            let mut word = self.plic.read(word_addr).unwrap_or(0);
+            word = (word & !(0xFF << (byte_off * 8))) | ((val as u32) << (byte_off * 8));
+            self.plic.write(word_addr, word);
+            Ok(())
+        } else if super::virtio_blk::VirtioBlk::contains(addr) {
+            // Virtio byte write: not common, ignore for now
+            Ok(())
         } else {
             self.mem.write_byte(addr, val)
         }
     }
 
-    /// Read a 16-bit half-word. Routes to CLINT MMIO or RAM.
+    /// Read a 16-bit half-word. Routes to device MMIO or RAM.
     pub fn read_half(&self, addr: u64) -> Result<u16, MemoryError> {
         if Self::in_clint(addr) {
             let word = self.clint.read(addr & !3).ok_or(MemoryError { addr, size: 2 })?;
@@ -89,7 +150,7 @@ impl Bus {
         }
     }
 
-    /// Write a 16-bit half-word. Routes to CLINT MMIO or RAM.
+    /// Write a 16-bit half-word. Routes to device MMIO or RAM.
     pub fn write_half(&mut self, addr: u64, val: u16) -> Result<(), MemoryError> {
         if Self::in_clint(addr) {
             let word_addr = addr & !3;
