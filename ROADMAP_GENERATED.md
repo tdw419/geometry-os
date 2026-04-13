@@ -4,11 +4,11 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
   78 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.
 
-**Progress:** 33/37 phases complete, 1 in progress
+**Progress:** 34/37 phases complete, 0 in progress
 
-**Deliverables:** 153/174 complete
+**Deliverables:** 155/174 complete
 
-**Tasks:** 19/23 complete
+**Tasks:** 23/23 complete
 
 ## Scope Summary
 
@@ -47,7 +47,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 | phase-31 Standard Library | COMPLETE | 4/4 | - | - |
 | phase-32 Signals & Process Lifecycle | COMPLETE | 4/4 | - | - |
 | phase-33 QEMU Bridge | COMPLETE | 9/9 | - | - |
-| phase-34 RISC-V RV32I Core | IN PROGRESS | 4/6 | - | - |
+| phase-34 RISC-V RV32I Core | COMPLETE | 6/6 | - | - |
 | phase-35 RISC-V Privilege Modes | FUTURE | 0/5 | - | - |
 | phase-36 RISC-V Virtual Memory & Devices | FUTURE | 0/8 | - | - |
 | phase-37 Guest OS Boot (Native RISC-V) | FUTURE | 0/6 | - | - |
@@ -740,7 +740,7 @@ Canvas rendering reuses existing pixel font pipeline from CANVAS_TEXT_SURFACE.md
 - ANSI parsing incomplete -- Linux boot output may use obscure sequences
 - Non-blocking pipe reads may miss data on fast output -- buffer management
 
-## [~] phase-34: RISC-V RV32I Core (IN PROGRESS)
+## [x] phase-34: RISC-V RV32I Core (COMPLETE)
 
 **Goal:** Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
 
@@ -783,16 +783,16 @@ portable to WASM and embedded. RV32I is the foundation.
     - System: ECALL, EBREAK, FENCE
     _Files: src/riscv/decode.rs_
   _~200 LOC_
-- [ ] **Execute loop** -- CPU step() fetches, decodes, executes one instruction
-  - [ ] `p34.d5.t1` Implement RiscvCpu::step() and execute() for all RV32I instructions (depends: p34.d2.t1, p34.d3.t1, p34.d4.t1)
+- [x] **Execute loop** -- CPU step() fetches, decodes, executes one instruction
+  - [x] `p34.d5.t1` Implement RiscvCpu::step() and execute() for all RV32I instructions (depends: p34.d2.t1, p34.d3.t1, p34.d4.t1)
     - step() fetches word at PC, decodes, executes, advances PC by 4
     - JAL/JALR update PC to target and store return address
     - Branches conditionally update PC
     - x[0] always reads as 0 after any write
     _Files: src/riscv/cpu.rs_
   _~200 LOC_
-- [ ] **Test suite** -- One test per instruction, verification against known encodings
-  - [ ] `p34.d6.t1` Write tests for all R-type ALU operations (depends: p34.d5.t1)
+- [x] **Test suite** -- One test per instruction, verification against known encodings
+  - [x] `p34.d6.t1` Write tests for all R-type ALU operations (depends: p34.d5.t1)
     - ADD: 10 + 20 = 30
     - SUB: 30 - 10 = 20
     - SLL: 1 << 5 = 32
@@ -802,7 +802,7 @@ portable to WASM and embedded. RV32I is the foundation.
     - SRL: logical right shift
     - SRA: arithmetic right shift (sign-preserving)
     _Files: src/riscv/cpu.rs_
-  - [ ] `p34.d6.t2` Write tests for I-type, load, store, branch, jump instructions (depends: p34.d5.t1)
+  - [x] `p34.d6.t2` Write tests for I-type, load, store, branch, jump instructions (depends: p34.d5.t1)
     - ADDI: x1 = x2 + 100
     - LW/SW: store word, load same address, verify equal
     - LB/LBU: signed vs unsigned byte load
@@ -810,7 +810,7 @@ portable to WASM and embedded. RV32I is the foundation.
     - JAL: jump and link, verify return address saved
     - JALR: indirect jump with register base
     _Files: src/riscv/cpu.rs_
-  - [ ] `p34.d6.t3` Write fibonacci test program that runs 20 iterations in RISC-V (depends: p34.d5.t1)
+  - [x] `p34.d6.t3` Write fibonacci test program that runs 20 iterations in RISC-V (depends: p34.d5.t1)
     - Fibonacci(10) = 55 computed by RISC-V code
     - Result stored in a register, verified by test
     _Files: src/riscv/cpu.rs_
