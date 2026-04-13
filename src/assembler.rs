@@ -603,6 +603,61 @@ fn parse_instruction(
             bytecode.push(0x53);
         }
 
+        "OPEN" => {
+            if tokens.len() < 3 {
+                return Err(format!("OPEN requires 2 arguments: OPEN path_reg, mode_reg"));
+            }
+            bytecode.push(0x54);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
+        "READ" => {
+            if tokens.len() < 4 {
+                return Err(format!("READ requires 3 arguments: READ fd_reg, buf_reg, len_reg"));
+            }
+            bytecode.push(0x55);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+        }
+
+        "WRITE" => {
+            if tokens.len() < 4 {
+                return Err(format!("WRITE requires 3 arguments: WRITE fd_reg, buf_reg, len_reg"));
+            }
+            bytecode.push(0x56);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+        }
+
+        "CLOSE" => {
+            if tokens.len() < 2 {
+                return Err(format!("CLOSE requires 1 argument: CLOSE fd_reg"));
+            }
+            bytecode.push(0x57);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
+        "SEEK" => {
+            if tokens.len() < 4 {
+                return Err(format!("SEEK requires 3 arguments: SEEK fd_reg, offset_reg, whence_reg"));
+            }
+            bytecode.push(0x58);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+        }
+
+        "LS" => {
+            if tokens.len() < 2 {
+                return Err(format!("LS requires 1 argument: LS buf_reg"));
+            }
+            bytecode.push(0x59);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

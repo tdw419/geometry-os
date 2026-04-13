@@ -8,6 +8,7 @@
 
 mod assembler;
 mod font;
+mod vfs;
 mod vm;
 mod preprocessor;
 
@@ -3044,6 +3045,8 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         current_page_dir: None,
         segfault_pid: 0,
         segfault: false,
+        vfs: vfs::Vfs::new(),
+        current_pid: 0,
     };
 
 

@@ -20,3 +20,6 @@ native = ["minifb", "arboard", "png"]
 name = "geometry_os"
 path = "src/main.rs"
 required-features = ["native"]
+
+[dev-dependencies]
+tempfile = "3"

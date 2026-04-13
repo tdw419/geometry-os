@@ -15,11 +15,11 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 - Text editor (F8/F5 assemble-and-run workflow)
 - Kernel boundary (SYSCALL/RETK, user/kernel mode, restricted opcodes)
 - Memory protection (page tables, address space per process, SEGFAULT)
+- Filesystem (VFS, OPEN/READ/WRITE/CLOSE/SEEK/LS, per-process fd table, cat.asm)
 
 **What's missing for a real OS:**
 - ~~No memory protection (any process can trash any RAM)~~ (Phase 24 done)
 - ~~No syscall boundary (programs directly access hardware)~~ (Phase 23 done)
-- No filesystem (no open/read/write/close)
 - No proper scheduler (round-robin single-step, no priorities)
 - No IPC beyond shared RAM (no pipes, no messages)
 - No device driver model (hardware ports are hardcoded)
@@ -227,7 +227,7 @@ v1.0.0 shipped 22 phases of VM construction. Now the real work begins.
 
 - [x] Phase 23: Kernel Boundary -- CPU mode flag, SYSCALL opcode (0x52), RETK opcode (0x53), syscall dispatch table, restricted opcodes in user mode
 - [x] Phase 24: Memory Protection -- page tables, address space per process, SEGFAULT on illegal access
-- [ ] Phase 25: Filesystem -- VFS layer, OPEN/READ/WRITE/CLOSE/SEEK syscalls, LS syscall, per-process fd table, cat.asm
+- [x] Phase 25: Filesystem -- VFS layer, OPEN/READ/WRITE/CLOSE/SEEK syscalls, LS syscall, per-process fd table, cat.asm
 - [ ] Phase 26: Preemptive Scheduler -- timer interrupt, priority levels, yield/sleep syscalls
 - [ ] Phase 27: IPC -- PIPE syscall, MSGSND/MSGRCV syscalls, blocking I/O
 - [ ] Phase 28: Device Drivers -- device file convention, IOCTL syscall, screen/keyboard/audio/net drivers

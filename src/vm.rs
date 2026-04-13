@@ -71,7 +71,7 @@ pub struct MemAccess {
     pub kind: MemAccessKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Vm {
     pub ram: Vec<u32>,
     pub regs: [u32; NUM_REGS],
@@ -102,6 +102,10 @@ pub struct Vm {
     pub segfault_pid: u32,
     /// True when a segfault occurred this step
     pub segfault: bool,
+    /// Virtual filesystem for file I/O operations
+    pub vfs: crate::vfs::Vfs,
+    /// PID of currently executing context (0 = main, 1+ = children)
+    pub current_pid: u32,
 }
 
 impl Vm {
@@ -124,6 +128,8 @@ impl Vm {
             current_page_dir: None,
             segfault_pid: 0,
             segfault: false,
+            vfs: crate::vfs::Vfs::new(),
+            current_pid: 0,
         }
     }
 
@@ -987,6 +993,103 @@ impl Vm {
                 }
             }
 
+            // OPEN path_reg, mode_reg  -- open file, returns fd in r0
+            // path_reg points to null-terminated string in RAM (one char per word)
+            // mode: 0=read, 1=write, 2=read+write(append)
+            0x54 => {
+                let path_reg = self.fetch() as usize;
+                let mode_reg = self.fetch() as usize;
+                if path_reg < NUM_REGS && mode_reg < NUM_REGS {
+                    let path_addr = self.regs[path_reg];
+                    let mode = self.regs[mode_reg];
+                    let pid = self.current_pid;
+                    let fd = self.vfs.fopen(&self.ram, path_addr, mode, pid);
+                    self.regs[0] = fd;
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // READ fd_reg, buf_addr_reg, len_reg  -- read from file into RAM
+            // Returns bytes read in r0
+            0x55 => {
+                let fd_reg = self.fetch() as usize;
+                let buf_reg = self.fetch() as usize;
+                let len_reg = self.fetch() as usize;
+                if fd_reg < NUM_REGS && buf_reg < NUM_REGS && len_reg < NUM_REGS {
+                    let fd = self.regs[fd_reg];
+                    let buf_addr = self.regs[buf_reg];
+                    let len = self.regs[len_reg];
+                    let pid = self.current_pid;
+                    let n = self.vfs.fread(&mut self.ram, fd, buf_addr, len, pid);
+                    self.regs[0] = n;
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // WRITE fd_reg, buf_addr_reg, len_reg  -- write from RAM to file
+            // Returns bytes written in r0
+            0x56 => {
+                let fd_reg = self.fetch() as usize;
+                let buf_reg = self.fetch() as usize;
+                let len_reg = self.fetch() as usize;
+                if fd_reg < NUM_REGS && buf_reg < NUM_REGS && len_reg < NUM_REGS {
+                    let fd = self.regs[fd_reg];
+                    let buf_addr = self.regs[buf_reg];
+                    let len = self.regs[len_reg];
+                    let pid = self.current_pid;
+                    let n = self.vfs.fwrite(&self.ram, fd, buf_addr, len, pid);
+                    self.regs[0] = n;
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // CLOSE fd_reg  -- close file descriptor, returns 0 in r0 on success
+            0x57 => {
+                let fd_reg = self.fetch() as usize;
+                if fd_reg < NUM_REGS {
+                    let fd = self.regs[fd_reg];
+                    let pid = self.current_pid;
+                    let result = self.vfs.fclose(fd, pid);
+                    self.regs[0] = result;
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // SEEK fd_reg, offset_reg, whence_reg  -- seek in file
+            // whence: 0=SET, 1=CUR, 2=END. Returns new position in r0
+            0x58 => {
+                let fd_reg = self.fetch() as usize;
+                let offset_reg = self.fetch() as usize;
+                let whence_reg = self.fetch() as usize;
+                if fd_reg < NUM_REGS && offset_reg < NUM_REGS && whence_reg < NUM_REGS {
+                    let fd = self.regs[fd_reg];
+                    let offset = self.regs[offset_reg];
+                    let whence = self.regs[whence_reg];
+                    let pid = self.current_pid;
+                    let pos = self.vfs.fseek(fd, offset, whence, pid);
+                    self.regs[0] = pos;
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // LS buf_addr_reg  -- list directory entries into RAM buffer
+            // Returns entry count in r0
+            0x59 => {
+                let buf_reg = self.fetch() as usize;
+                if buf_reg < NUM_REGS {
+                    let buf_addr = self.regs[buf_reg];
+                    let count = self.vfs.fls(&mut self.ram, buf_addr);
+                    self.regs[0] = count;
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -1009,6 +1112,7 @@ impl Vm {
         let saved_page_dir = self.current_page_dir.take();
         let saved_segfault = self.segfault;
         let saved_segfault_pid = self.segfault_pid;
+        let saved_current_pid = self.current_pid;
 
         for proc in procs.iter_mut() {
             if proc.halted { continue; }
@@ -1020,6 +1124,7 @@ impl Vm {
             self.kernel_stack.clear();
             self.current_page_dir = proc.page_dir.take();
             self.segfault = false;
+            self.current_pid = proc.pid;
 
             let still_running = self.step();
 
@@ -1043,6 +1148,7 @@ impl Vm {
         self.current_page_dir = saved_page_dir;
         self.segfault = saved_segfault;
         self.segfault_pid = saved_segfault_pid;
+        self.current_pid = saved_current_pid;
 
         procs.extend(std::mem::take(&mut self.processes));
         self.processes = procs;
@@ -1151,6 +1257,37 @@ impl Vm {
                 (format!("SYSCALL {}", n), 2)
             }
             0x53 => ("RETK".into(), 1),
+            0x54 => {
+                let pr = ram(a + 1);
+                let mr = ram(a + 2);
+                (format!("OPEN {}, {}", reg(pr), reg(mr)), 3)
+            }
+            0x55 => {
+                let fr = ram(a + 1);
+                let br = ram(a + 2);
+                let lr = ram(a + 3);
+                (format!("READ {}, {}, {}", reg(fr), reg(br), reg(lr)), 4)
+            }
+            0x56 => {
+                let fr = ram(a + 1);
+                let br = ram(a + 2);
+                let lr = ram(a + 3);
+                (format!("WRITE {}, {}, {}", reg(fr), reg(br), reg(lr)), 4)
+            }
+            0x57 => {
+                let fr = ram(a + 1);
+                (format!("CLOSE {}", reg(fr)), 2)
+            }
+            0x58 => {
+                let fr = ram(a + 1);
+                let or_ = ram(a + 2);
+                let wr = ram(a + 3);
+                (format!("SEEK {}, {}, {}", reg(fr), reg(or_), reg(wr)), 4)
+            }
+            0x59 => {
+                let br = ram(a + 1);
+                (format!("LS {}", reg(br)), 2)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
@@ -1331,6 +1468,8 @@ impl Vm {
             current_page_dir: None,
             segfault_pid: 0,
             segfault: false,
+            vfs: crate::vfs::Vfs::new(),
+            current_pid: 0,
         })
     }
 }
