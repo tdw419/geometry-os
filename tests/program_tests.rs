@@ -1517,3 +1517,66 @@ fn test_sar_opcode() {
     assert!(vm.halted);
     assert_eq!(vm.regs[1], 2, "SAR 4, 1 should be 2");
 }
+
+#[test]
+fn test_tilemap_opcode() {
+    // TILEMAP xr, yr, mr, tr, gwr, ghr, twr, thr
+    // Set up a 2x2 grid at (10, 10) with tile index 1
+    // Tile 1 is a 2x2 red square.
+    
+    let source = "
+        #define MAP_ADDR 0x5000
+        #define TILE_ADDR 0x6000
+        
+        ; Setup tile 1: 2x2 red (0xFF0000)
+        LDI r1, TILE_ADDR
+        LDI r2, 0xFF0000
+        STORE r1, r2
+        LDI r3, 1
+        ADD r1, r3
+        STORE r1, r2
+        ADD r1, r3
+        STORE r1, r2
+        ADD r1, r3
+        STORE r1, r2
+        
+        ; Setup map: 2x2 grid of tile 1
+        LDI r1, MAP_ADDR
+        LDI r2, 1
+        STORE r1, r2
+        LDI r3, 1
+        ADD r1, r3
+        STORE r1, r2
+        ADD r1, r3
+        STORE r1, r2
+        ADD r1, r3
+        STORE r1, r2
+        
+        ; Setup registers for TILEMAP
+        LDI r10, 10    ; x
+        LDI r11, 10    ; y
+        LDI r12, MAP_ADDR
+        LDI r13, TILE_ADDR
+        LDI r14, 2     ; grid_w
+        LDI r15, 2     ; grid_h
+        LDI r16, 2     ; tile_w
+        LDI r17, 2     ; tile_h
+        
+        TILEMAP r10, r11, r12, r13, r14, r15, r16, r17
+        HALT
+    ";
+    
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..1000 { if !vm.step() { break; } }
+    assert!(vm.halted);
+    
+    // Check pixels at (10,10) to (13,13)
+    // Grid 2x2 * Tile 2x2 = 4x4 area
+    for y in 10..14 {
+        for x in 10..14 {
+            assert_eq!(vm.screen[y * 256 + x], 0xFF0000, "pixel at ({}, {}) should be red", x, y);
+        }
+    }
+}

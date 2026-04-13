@@ -510,6 +510,21 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[2])? as u32);
         }
 
+        "TILEMAP" => {
+            if tokens.len() < 9 {
+                return Err(format!("TILEMAP requires 8 arguments: TILEMAP xr, yr, mr, tr, gwr, ghr, twr, thr"));
+            }
+            bytecode.push(0x4C);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            bytecode.push(parse_reg(tokens[5])? as u32);
+            bytecode.push(parse_reg(tokens[6])? as u32);
+            bytecode.push(parse_reg(tokens[7])? as u32);
+            bytecode.push(parse_reg(tokens[8])? as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

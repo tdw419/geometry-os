@@ -1,0 +1,24 @@
+[package]
+name = "geometry_os_wasm"
+version = "1.0.0"
+edition = "2021"
+description = "Geometry OS VM -- WebAssembly browser port"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+console_error_panic_hook = { version = "0.1", optional = true }
+geometry_os = { path = "..", default-features = false }
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies.web-sys]
+version = "0.3"
+features = ["console", "CanvasRenderingContext2d", "HtmlCanvasElement", "ImageData", "Window", "Document", "Element"]
+
+[profile.release]
+opt-level = "s"

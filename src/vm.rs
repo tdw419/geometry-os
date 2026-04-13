@@ -607,6 +607,59 @@ impl Vm {
                 }
             }
 
+            // TILEMAP xr, yr, mr, tr, gwr, ghr, twr, thr -- grid blit
+            0x4C => {
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                let mr = self.fetch() as usize;
+                let tr = self.fetch() as usize;
+                let gwr = self.fetch() as usize;
+                let ghr = self.fetch() as usize;
+                let twr = self.fetch() as usize;
+                let thr = self.fetch() as usize;
+                if xr < NUM_REGS && yr < NUM_REGS && mr < NUM_REGS && tr < NUM_REGS 
+                   && gwr < NUM_REGS && ghr < NUM_REGS && twr < NUM_REGS && thr < NUM_REGS {
+                    let x0 = self.regs[xr] as i32;
+                    let y0 = self.regs[yr] as i32;
+                    let map_base = self.regs[mr] as usize;
+                    let tiles_base = self.regs[tr] as usize;
+                    let gw = self.regs[gwr] as usize;
+                    let gh = self.regs[ghr] as usize;
+                    let tw = self.regs[twr] as usize;
+                    let th = self.regs[thr] as usize;
+                    
+                    if tw > 0 && th > 0 {
+                        for row in 0..gh {
+                            for col in 0..gw {
+                                let map_idx = row * gw + col;
+                                if map_base + map_idx >= self.ram.len() { continue; }
+                                let tile_idx = self.ram[map_base + map_idx] as usize;
+                                if tile_idx == 0 { continue; } // skip tile 0 (empty)
+                                
+                                // Tile 1 is at offset 0, tile 2 at (tw*th), etc.
+                                let tile_data_offset = (tile_idx - 1) * (tw * th);
+                                
+                                for ty in 0..th {
+                                    for tx in 0..tw {
+                                        let pixel_idx = tile_data_offset + ty * tw + tx;
+                                        if tiles_base + pixel_idx >= self.ram.len() { continue; }
+                                        let color = self.ram[tiles_base + pixel_idx];
+                                        if color == 0 { continue; } // transparency
+                                        
+                                        let px = x0 + (col * tw) as i32 + tx as i32;
+                                        let py = y0 + (row * th) as i32 + ty as i32;
+                                        
+                                        if px >= 0 && px < 256 && py >= 0 && py < 256 {
+                                            self.screen[(py as usize) * 256 + (px as usize)] = color;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -682,9 +735,15 @@ impl Vm {
             0x47 => { let nr = ram(a+1); (format!("SCROLL {}", reg(nr)), 2) }
             0x48 => { let rd = ram(a+1); (format!("IKEY {}", reg(rd)), 2) }
             0x49 => { let rd = ram(a+1); (format!("RAND {}", reg(rd)), 2) }
-            0x4A => { let xr = ram(a+1); let yr = ram(a+2); let ar = ram(a+3); let wr = ram(a+4); let hr = ram(a+5); (format!("SPRITE {},{},{},{},{}", reg(xr), reg(yr), reg(ar), reg(wr), reg(hr)), 6) }
+            0x4A => { let xr = ram(a+1); let yr = ram(a+2); let ar = ram(a+3); let wr = ram(a+4); let hr = ram(a+5); (format!("SPRITE {}, {}, {}, {}, {}", reg(xr), reg(yr), reg(ar), reg(wr), reg(hr)), 6) }
             0x4B => { let sr = ram(a+1); let dr = ram(a+2); (format!("ASM {}, {}", reg(sr), reg(dr)), 3) }
+            0x4C => { 
+                let xr = ram(a+1); let yr = ram(a+2); let mr = ram(a+3); let tr = ram(a+4);
+                let gwr = ram(a+5); let ghr = ram(a+6); let twr = ram(a+7); let thr = ram(a+8);
+                (format!("TILEMAP {}, {}, {}, {}, {}, {}, {}, {}", reg(xr), reg(yr), reg(mr), reg(tr), reg(gwr), reg(ghr), reg(twr), reg(thr)), 9)
+            }
             0x50 => { let rd = ram(a+1); let rs = ram(a+2); (format!("CMP {}, {}", reg(rd), reg(rs)), 3) }
+
             0x60 => { let r = ram(a+1); (format!("PUSH {}", reg(r)), 2) }
             0x61 => { let r = ram(a+1); (format!("POP {}", reg(r)), 2) }
             _ => (format!("??? (0x{:02X})", op), 1),
@@ -727,6 +786,7 @@ impl Vm {
     /// Format: GEOS magic (4) + version u32 (4) + halted u8 (1) + pc u32 (4)
     ///         + regs [u32; 32] (128) + ram [u32; RAM_SIZE] + screen [u32; SCREEN_SIZE]
     ///         + rand_state u32 (4) + frame_count u32 (4)   [version >= 2]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save_to_file(&self, path: &std::path::Path) -> std::io::Result<()> {
         use std::io::Write;
         let mut f = std::fs::File::create(path)?;
@@ -751,6 +811,7 @@ impl Vm {
 
     /// Load VM state from a binary file. Returns None if file doesn't exist
     /// or has invalid format.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load_from_file(path: &std::path::Path) -> std::io::Result<Self> {
         use std::io::Read;
         let mut data = Vec::new();

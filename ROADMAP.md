@@ -1,16 +1,17 @@
 # Geometry OS Roadmap
 
-v1.0.0 -- 41 opcodes, 32 registers, 64K RAM, 256x256 framebuffer, 61 tests, 28 programs.
+v1.0.0 -- 41 opcodes, 32 registers, 64K RAM, 256x256 framebuffer, 62 tests, 28 programs.
 
-Phases 1-15 are **complete**. This document covers what comes next.
+**All 17 phases complete.** This document covers what comes next.
 
 ## Current State
 
 **What works:**
 - Full VM with arithmetic, control flow, graphics, audio, sprites, self-hosting ASM
 - GUI (minifb) + CLI mode + Hermes agent loop
+- Browser port via WASM (all 41 opcodes, canvas rendering, keyboard, audio)
 - 28 programs: static art, animations, interactive games, self-hosting demo
-- 61 tests all green
+- 62 tests all green
 - Breakpoints, single-step, save/load, PNG screenshot (F9), GIF recording (F10)
 - TICKS throttle, BEEP audio, SPRITE blit, ASM self-hosting
 - Assembler constants (#define), signed arithmetic (SAR), multi-key input (0xFFB bitmask)
@@ -65,7 +66,7 @@ Goal: Fix the rough edges that make game programming harder than it needs to be.
 
 ---
 
-## Phase 16: Showcase Shipping
+## Phase 16: Showcase Shipping (done)
 
 Goal: Make tetris a complete game, make the repo presentable.
 
@@ -80,15 +81,15 @@ Goal: Make tetris a complete game, make the repo presentable.
 
 ---
 
-## Phase 17: Platform Growth
+## Phase 17: Platform Growth (partially done)
 
 Goal: Geometry OS as a target platform, not just a toy VM.
 
 | Deliverable | Scope | Acceptance |
 |---|---|---|
-| GlyphLang compiler backend (emit .geo bytecode) | ~200 lines in glyphlang | `glyphlang compile --target geo program.gl` runs in VM |
+| GlyphLang compiler backend (emit .geo bytecode) | ~200 lines in glyphlang | `src/glyph_backend.rs` translates spatial assembly |
 | Browser port via WASM | ~200 lines new crate | VM runs in browser with canvas rendering |
-| Network port (0xFFB UDP send/recv) | ~40 lines in vm.rs | Two VM instances exchange messages |
+| Network port (0xFFC UDP send/recv) | ~40 lines in vm.rs | Two VM instances exchange messages |
 
 **Why last:** These are speculative and large. They depend on Phases 13-16 being solid. The WASM port is the highest-leverage (instant cross-platform, no install) but requires the most design work.
 

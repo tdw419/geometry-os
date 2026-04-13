@@ -42,6 +42,7 @@ const REGS_Y: usize = 340;
 // 0xFFF         Keyboard port (memory-mapped I/O, cleared on IKEY read)
 const CANVAS_BYTECODE_ADDR: usize = 0x1000;
 const KEYS_BITMASK_PORT: usize = 0xFFB;
+const NET_PORT: usize = 0xFFC;
 #[allow(dead_code)]
 const TICKS_PORT: usize = 0xFFE;
 const KEY_PORT: usize = 0xFFF;
@@ -215,6 +216,8 @@ fn handle_terminal_command(
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  trace [n]         Execute n steps with log");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  disasm [addr] [n] Disassemble n instrs");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  reset             Reset VM state");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  save [slot]       Save state to slot");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  load [slot]       Load state from slot");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  clear             Clear terminal");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  quit              Exit Geometry OS");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
@@ -245,54 +248,87 @@ fn handle_terminal_command(
         }
         "load" => {
             if parts.len() < 2 {
-                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: load <file>");
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: load <file.asm> or load <slot>");
                 *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
                 ensure_scroll(*output_row, scroll_offset);
                 return (false, false);
             }
-            let mut filename = parts[1..].join(" ");
-            if !filename.ends_with(".asm") {
-                filename.push_str(".asm");
-            }
-            let path = Path::new(&filename);
-            let path = if path.exists() {
-                path.to_path_buf()
-            } else {
-                let prefixed = Path::new("programs").join(&filename);
-                if prefixed.exists() {
-                    prefixed
+            let filename_arg = parts[1..].join(" ");
+            
+            // If it ends in .asm or contains a path separator, assume source file
+            if filename_arg.ends_with(".asm") || filename_arg.contains('/') || filename_arg.contains('\\') {
+                let mut filename = filename_arg.clone();
+                let path = Path::new(&filename);
+                let path = if path.exists() {
+                    path.to_path_buf()
                 } else {
-                    *output_row = write_line_to_canvas(
-                        canvas_buffer,
-                        *output_row,
-                        &format!("File not found: {}", filename),
-                    );
-                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
-                    ensure_scroll(*output_row, scroll_offset);
-                    return (false, false);
-                }
-            };
+                    let prefixed = Path::new("programs").join(&filename);
+                    if prefixed.exists() {
+                        prefixed
+                    } else {
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            &format!("File not found: {}", filename),
+                        );
+                        *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+                        ensure_scroll(*output_row, scroll_offset);
+                        return (false, false);
+                    }
+                };
 
-            match std::fs::read_to_string(&path) {
-                Ok(source) => {
-                    let mut cr = 0usize;
-                    let mut cc = 0usize;
-                    load_source_to_canvas(canvas_buffer, &source, &mut cr, &mut cc);
-                    *loaded_file = Some(path.clone());
-                    let name = path.file_name().unwrap().to_string_lossy();
-                    let lines = source.lines().count();
-                    *output_row = write_line_to_canvas(
-                        canvas_buffer,
-                        *output_row,
-                        &format!("Loaded {} ({} lines)", name, lines),
-                    );
+                match std::fs::read_to_string(&path) {
+                    Ok(source) => {
+                        let mut cr = 0usize;
+                        let mut cc = 0usize;
+                        load_source_to_canvas(canvas_buffer, &source, &mut cr, &mut cc);
+                        *loaded_file = Some(path.clone());
+                        let name = path.file_name().unwrap().to_string_lossy();
+                        let lines = source.lines().count();
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            &format!("Loaded {} ({} lines)", name, lines),
+                        );
+                    }
+                    Err(e) => {
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            &format!("Error: {}", e),
+                        );
+                    }
                 }
-                Err(e) => {
-                    *output_row = write_line_to_canvas(
-                        canvas_buffer,
-                        *output_row,
-                        &format!("Error: {}", e),
-                    );
+            } else {
+                // Assume it's a state slot
+                let filename = format!("geometry_os_{}.sav", filename_arg);
+                match load_state(&filename) {
+                    Ok((saved_vm, saved_canvas, saved_assembled)) => {
+                        *vm = saved_vm;
+                        *canvas_buffer = saved_canvas;
+                        *canvas_assembled = saved_assembled;
+                        let msg = format!("Loaded state from {}", filename);
+                        *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                    }
+                    Err(_) => {
+                        // Fallback: try loading as .asm if slot not found
+                        let mut filename = filename_arg.clone();
+                        filename.push_str(".asm");
+                        let path = Path::new("programs").join(&filename);
+                        if path.exists() {
+                            if let Ok(source) = std::fs::read_to_string(&path) {
+                                let mut cr = 0usize;
+                                let mut cc = 0usize;
+                                load_source_to_canvas(canvas_buffer, &source, &mut cr, &mut cc);
+                                *loaded_file = Some(path.clone());
+                                *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("Loaded programs/{}", filename));
+                            } else {
+                                *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("Slot {} not found and could not read .asm", filename_arg));
+                            }
+                        } else {
+                            *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("Slot or file {} not found", filename_arg));
+                        }
+                    }
                 }
             }
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
@@ -520,11 +556,33 @@ fn handle_terminal_command(
         }
         "reset" => {
             vm.reset();
+            *canvas_assembled = false;
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "VM reset");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
             ensure_scroll(*output_row, scroll_offset);
             (false, false)
         }
+        "save" => {
+            let slot = parts.get(1).map(|&s| s);
+            let filename = match slot {
+                Some(s) => format!("geometry_os_{}.sav", s),
+                None => SAVE_FILE.to_string(),
+            };
+            match save_state(&filename, vm, canvas_buffer, *canvas_assembled) {
+                Ok(()) => {
+                    let msg = format!("Saved state to {}", filename);
+                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                }
+                Err(e) => {
+                    let msg = format!("Save error: {}", e);
+                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                }
+            }
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
+
         "clear" | "cls" => {
             for cell in canvas_buffer.iter_mut() {
                 *cell = 0;
@@ -562,6 +620,7 @@ fn cli_main(extra_args: &[String]) {
     let mut loaded_file: Option<PathBuf> = None;
     let mut source_text = String::new(); // holds the currently loaded source
     let mut cli_breakpoints: Vec<u32> = Vec::new();
+    let mut canvas_buffer: Vec<u32> = vec![0; 4096];
 
     // If extra args given, treat first as a file to load
     if !extra_args.is_empty() {
@@ -637,38 +696,66 @@ fn cli_main(extra_args: &[String]) {
             }
             "load" => {
                 if parts.len() < 2 {
-                    println!("Usage: load <file>");
+                    println!("Usage: load <file.asm> or load <slot>");
                     continue;
                 }
-                let mut filename = parts[1..].join(" ");
-                if !filename.ends_with(".asm") {
-                    filename.push_str(".asm");
-                }
-                let path = Path::new(&filename);
-                let path = if path.exists() {
-                    path.to_path_buf()
-                } else {
-                    let prefixed = Path::new("programs").join(&filename);
-                    if prefixed.exists() {
-                        prefixed
+                let filename_arg = parts[1..].join(" ");
+                if filename_arg.ends_with(".asm") || filename_arg.contains('/') || filename_arg.contains('\\') {
+                    let mut filename = filename_arg.clone();
+                    let path = Path::new(&filename);
+                    let path = if path.exists() {
+                        path.to_path_buf()
                     } else {
-                        println!("File not found: {}", filename);
-                        continue;
+                        let prefixed = Path::new("programs").join(&filename);
+                        if prefixed.exists() {
+                            prefixed
+                        } else {
+                            println!("File not found: {}", filename);
+                            continue;
+                        }
+                    };
+                    match std::fs::read_to_string(&path) {
+                        Ok(src) => {
+                            let lines = src.lines().count();
+                            source_text = src;
+                            loaded_file = Some(path.clone());
+                            println!(
+                                "Loaded {} ({} lines)",
+                                path.file_name().unwrap().to_string_lossy(),
+                                lines
+                            );
+                        }
+                        Err(e) => {
+                            println!("Error: {}", e);
+                        }
                     }
-                };
-                match std::fs::read_to_string(&path) {
-                    Ok(src) => {
-                        let lines = src.lines().count();
-                        source_text = src;
-                        loaded_file = Some(path.clone());
-                        println!(
-                            "Loaded {} ({} lines)",
-                            path.file_name().unwrap().to_string_lossy(),
-                            lines
-                        );
-                    }
-                    Err(e) => {
-                        println!("Error: {}", e);
+                } else {
+                    // Assume it's a state slot
+                    let filename = format!("geometry_os_{}.sav", filename_arg);
+                    match load_state(&filename) {
+                        Ok((saved_vm, saved_canvas, saved_assembled)) => {
+                            vm = saved_vm;
+                            canvas_buffer = saved_canvas;
+                            canvas_assembled = saved_assembled;
+                            println!("Loaded state from {}", filename);
+                        }
+                        Err(_) => {
+                            // Fallback: try loading as .asm if slot not found
+                            let mut filename = filename_arg.clone();
+                            filename.push_str(".asm");
+                            let path = Path::new("programs").join(&filename);
+                            if path.exists() {
+                                if let Ok(src) = std::fs::read_to_string(&path) {
+                                    source_text = src;
+                                    loaded_file = Some(path.clone());
+                                    println!("Loaded programs/{}", filename);
+                                } else {
+                                    println!("Slot {} not found and could not read .asm", filename_arg);
+                                }
+                            } else {
+                                println!("Slot or file {} not found", filename_arg);
+                            }
+                        }
                     }
                 }
             }
@@ -805,6 +892,17 @@ fn cli_main(extra_args: &[String]) {
                 }
             }
             "save" => {
+                let slot = parts.get(1).map(|&s| s);
+                let filename = match slot {
+                    Some(s) => format!("geometry_os_{}.sav", s),
+                    None => SAVE_FILE.to_string(),
+                };
+                match save_state(&filename, &vm, &canvas_buffer, canvas_assembled) {
+                    Ok(()) => println!("Saved state to {}", filename),
+                    Err(e) => println!("Error saving state: {}", e),
+                }
+            }
+            "ppm" => {
                 let filename = if parts.len() >= 2 {
                     parts[1].to_string()
                 } else {
@@ -1501,6 +1599,26 @@ fn main() {
         return;
     }
 
+    // Networking setup
+    let mut local_port = 9000;
+    let mut remote_port = 9001;
+    let mut i = 1;
+    while i < args.len() {
+        if args[i] == "--local-port" && i + 1 < args.len() {
+            local_port = args[i + 1].parse().unwrap_or(9000);
+            i += 2;
+        } else if args[i] == "--remote-port" && i + 1 < args.len() {
+            remote_port = args[i + 1].parse().unwrap_or(9001);
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    let socket = std::net::UdpSocket::bind(format!("127.0.0.1:{}", local_port)).ok();
+    if let Some(ref s) = socket {
+        s.set_nonblocking(true).unwrap();
+    }
+
     let mut window = Window::new(
         "Geometry OS -- Canvas Text Surface",
         WIDTH,
@@ -1610,6 +1728,24 @@ fn main() {
             if window.is_key_down(Key::Space) { mask |= 1 << 4; }
             if window.is_key_down(Key::Enter) { mask |= 1 << 5; }
             vm.ram[KEYS_BITMASK_PORT] = mask;
+
+            // ── Networking ───────────────────────────────────────
+            if let Some(ref s) = socket {
+                let val = vm.ram[NET_PORT];
+                if val != 0 {
+                    // VM wrote something, send it
+                    let _ = s.send_to(&val.to_le_bytes(), format!("127.0.0.1:{}", remote_port));
+                    vm.ram[NET_PORT] = 0; // clear after send
+                } else {
+                    // Port is empty, try to receive
+                    let mut buf = [0u8; 4];
+                    if let Ok((amt, _src)) = s.recv_from(&mut buf) {
+                        if amt == 4 {
+                            vm.ram[NET_PORT] = u32::from_le_bytes(buf);
+                        }
+                    }
+                }
+            }
         }
 
         for key in window.get_keys_pressed(KeyRepeat::No) {

@@ -45,7 +45,20 @@ geo> load hello
 geo> run
 ```
 
-## The Instruction Set (40 opcodes)
+## Browser (WASM)
+
+Run the VM entirely in your browser -- no server, no install.
+
+```bash
+cd wasm
+wasm-pack build --target web
+python3 -m http.server 8080
+# Open http://localhost:8080
+```
+
+11 built-in programs, keyboard input, audio beep via Web Audio API. See [wasm/README.md](wasm/README.md) for details.
+
+## The Instruction Set (41 opcodes)
 
 ### Control
 | Opcode | Args | Description |

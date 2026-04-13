@@ -120,6 +120,9 @@ clear_board:
   LDI r1, 0
   LDI r4, 0x40D9
   STORE r4, r1           ; drop_counter = 0
+  LDI r1, 0
+  LDI r4, 0x40DA
+  STORE r4, r1           ; level = 0
 
   ; pick first and next piece
   RAND r1
@@ -579,10 +582,21 @@ after_input:
   LDI r4, 0x40D8
   LOAD r2, r4           ; soft_drop flag
   JNZ r2, soft_thresh
-  ; normal threshold: 15
+  
+  ; normal threshold based on level: max(2, 15 - level)
+  LDI r4, 0x40DA
+  LOAD r3, r4           ; r3 = level
+  LDI r6, 15
+  SUB r6, r3            ; r6 = 15 - level
+  
+  ; clamp at 2
+  LDI r7, 2
+  CMP r6, r7
+  BGE r0, speed_ok
+  LDI r6, 2
+speed_ok:
   LDI r4, 0x40D9
   LOAD r1, r4
-  LDI r6, 15
   CMP r1, r6
   BLT r0, no_drop
   JMP do_drop
@@ -1067,35 +1081,74 @@ cl_clr:
   CMP r10, r6
   BLT r0, cl_clr
 
-  ; increment lines cleared
+  ; increment lines cleared this turn
   LDI r5, 1
   ADD r25, r5
-
-  ; update score: 100 per line, bonus for multi
-  ; (1 line=100, 2=300, 3=500, 4=800)
-  LDI r4, 0x40D4
-  LOAD r1, r4           ; score
-  LDI r5, 100
-  ADD r1, r5
-  LDI r4, 0x40D4
-  STORE r4, r1
-
-  ; sound
-  LDI r5, 660
-  LDI r6, 50
-  BEEP r5, r6
 
   ; continue scanning from same row (shifted rows might also be full)
   JMP cl_row
 
 cl_done:
-  ; update total lines_cleared
+  ; r25 = lines cleared this turn
   JZ r25, cl_ret
+  
+  ; Update score based on r25
+  LDI r4, 0x40D4
+  LOAD r1, r4           ; r1 = current score
+  
+  LDI r6, 1
+  CMP r25, r6
+  JZ r0, score_1
+  
+  LDI r6, 2
+  CMP r25, r6
+  JZ r0, score_2
+  
+  LDI r6, 3
+  CMP r25, r6
+  JZ r0, score_3
+  
+  ; 4 lines (Tetris)
+  LDI r5, 800
+  ADD r1, r5
+  JMP score_stored
+
+score_1:
+  LDI r5, 100
+  ADD r1, r5
+  JMP score_stored
+score_2:
+  LDI r5, 300
+  ADD r1, r5
+  JMP score_stored
+score_3:
+  LDI r5, 500
+  ADD r1, r5
+
+score_stored:
+  LDI r4, 0x40D4
+  STORE r4, r1
+  
+  ; Clear sound
+  LDI r5, 880
+  LDI r6, 100
+  BEEP r5, r6
+
+  ; Update total lines_cleared
   LDI r4, 0x40D5
   LOAD r1, r4
   ADD r1, r25
   LDI r4, 0x40D5
   STORE r4, r1
+  
+  ; Update level = total_lines / 10
+  LDI r2, 0
+  ADD r2, r1
+  LDI r3, 10
+  DIV r2, r3
+  LDI r4, 0x40DA
+  STORE r4, r2
+
 cl_ret:
   POP r31
   RET
@@ -1246,6 +1299,9 @@ df_bskip:
 
   ; draw lines
   CALL draw_lines
+
+  ; draw level
+  CALL draw_level
 
   ; draw next piece preview
   CALL draw_next
@@ -1644,4 +1700,63 @@ dn_next:
   CMP r14, r6
   BLT r0, dn_row
 
+  RET
+
+; ─────────────────────────────────────────────────────────────────
+; SUBROUTINE: draw_level -- display level
+; ─────────────────────────────────────────────────────────────────
+draw_level:
+  ; "LEVEL:" at 0x4330..0x4335
+  LDI r4, 0x4330
+  LDI r1, 76
+  STORE r4, r1 ; L
+  LDI r4, 0x4331
+  LDI r1, 69
+  STORE r4, r1 ; E
+  LDI r4, 0x4332
+  LDI r1, 86
+  STORE r4, r1 ; V
+  LDI r4, 0x4333
+  LDI r1, 69
+  STORE r4, r1 ; E
+  LDI r4, 0x4334
+  LDI r1, 76
+  STORE r4, r1 ; L
+  LDI r4, 0x4335
+  LDI r1, 58
+  STORE r4, r1 ; :
+  
+  LDI r4, 0x40DA
+  LOAD r1, r4 ; level
+  
+  ; tens
+  LDI r2, 0
+  ADD r2, r1
+  LDI r3, 10
+  DIV r2, r3
+  LDI r5, 48
+  ADD r2, r5
+  LDI r4, 0x4336
+  STORE r4, r2
+  
+  ; ones
+  LDI r2, 0
+  ADD r2, r1
+  LDI r3, 10
+  MOD r2, r3
+  LDI r5, 48
+  ADD r2, r5
+  LDI r4, 0x4337
+  STORE r4, r2
+  
+  ; null
+  LDI r1, 0
+  LDI r4, 0x4338
+  STORE r4, r1
+  
+  ; render
+  LDI r5, 138
+  LDI r6, 50
+  LDI r7, 0x4330
+  TEXT r5, r6, r7
   RET
