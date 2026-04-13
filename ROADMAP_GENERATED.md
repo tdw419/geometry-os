@@ -5,9 +5,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
 the built-in text editor, press F5, watch it run.
 
 
-**Progress:** 17/17 phases complete, 0 in progress
+**Progress:** 20/20 phases complete, 0 in progress
 
-**Deliverables:** 84/84 complete
+**Deliverables:** 91/91 complete
 
 ## Scope Summary
 
@@ -30,6 +30,9 @@ the built-in text editor, press F5, watch it run.
 | phase-15 VM Capability Gaps | COMPLETE | 4/4 | - | - |
 | phase-16 Showcase Shipping | COMPLETE | 4/4 | - | - |
 | phase-17 Platform Growth | COMPLETE | 3/3 | - | - |
+| phase-18 VM Instrumentation | COMPLETE | 2/2 | - | - |
+| phase-19 Visual Debugger | COMPLETE | 3/3 | - | - |
+| phase-20 High RAM Visualization | COMPLETE | 2/2 | - | - |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
 
@@ -297,6 +300,47 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
   _~200 LOC_
 - [x] **Network port (0xFFC UDP)** -- Two VM instances exchange messages
   _~40 LOC_
+
+## [x] phase-18: VM Instrumentation (COMPLETE)
+
+**Goal:** Telemetry for memory access and execution flow
+
+### Deliverables
+
+- [x] **Access log buffer** -- Track LOAD/STORE/SPRITE/TILEMAP RAM hits per frame
+  _~50 LOC_
+- [x] **Instruction fetch logging** -- Track PC addresses for execution trail
+  _~10 LOC_
+
+## [x] phase-19: Visual Debugger (COMPLETE)
+
+**Goal:** Live heat-map and PC trail overlays on canvas
+
+### Deliverables
+
+- [x] **Intensity decay buffer** -- Fade memory highlights over ~10 frames
+  _~30 LOC_
+- [x] **Canvas cell tinting** -- Cyan (Read) and Magenta (Write) flashes on active RAM addresses
+  _~40 LOC_
+- [x] **PC trail visualization** -- Fading white glow follows the execution pointer
+  _~20 LOC_
+
+## [x] phase-20: High RAM Visualization (COMPLETE)
+
+**Goal:** Deep observability into game state and sprite memory
+
+### Deliverables
+
+- [x] **RAM inspector panel** -- Second 32x32 grid visualizing 0x2000-0x23FF or scrollable range
+  - [x] 32x32 grid renders at bottom of window
+  - [x] PageUp/PageDown scrolls through RAM in Terminal mode
+  - [x] Access intensities shown as color tints
+  _~60 LOC_
+- [x] **Global heatmap** -- Compact 256x256 view of entire 64K RAM access patterns
+  - [x] 256x256 pixel grid shows all 64K words
+  - [x] Read/Write access shown as cyan/magenta pulses
+  - [x] PC position highlighted in white
+  _~80 LOC_
 
 ## Global Risks
 

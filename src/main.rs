@@ -11,7 +11,7 @@ mod font;
 mod vm;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -32,6 +32,15 @@ const VM_SCREEN_Y: usize = 64;
 // Register display
 const REGS_X: usize = 640;
 const REGS_Y: usize = 340;
+
+// RAM Inspector (32x32 grid of words, 8x8 pixels per word)
+const RAM_VIEW_X: usize = 0;
+const RAM_VIEW_Y: usize = 512;
+const RAM_VIEW_SCALE: usize = 8;
+
+// Global Heatmap (256x256, each pixel is 1 RAM word)
+const HEATMAP_X: usize = 256;
+const HEATMAP_Y: usize = 512;
 
 // ── Memory map ───────────────────────────────────────────────────
 // 0x000-0x3FF   Canvas grid (source text, 1024 cells visible on 32x32 grid)
@@ -257,7 +266,7 @@ fn handle_terminal_command(
             
             // If it ends in .asm or contains a path separator, assume source file
             if filename_arg.ends_with(".asm") || filename_arg.contains('/') || filename_arg.contains('\\') {
-                let mut filename = filename_arg.clone();
+                let filename = filename_arg.clone();
                 let path = Path::new(&filename);
                 let path = if path.exists() {
                     path.to_path_buf()
@@ -701,7 +710,7 @@ fn cli_main(extra_args: &[String]) {
                 }
                 let filename_arg = parts[1..].join(" ");
                 if filename_arg.ends_with(".asm") || filename_arg.contains('/') || filename_arg.contains('\\') {
-                    let mut filename = filename_arg.clone();
+                    let filename = filename_arg.clone();
                     let path = Path::new(&filename);
                     let path = if path.exists() {
                         path.to_path_buf()
@@ -1643,6 +1652,12 @@ fn main() {
     let mut recording = false;
     let mut frame_id = 0;
 
+    // Visual Debugger state
+    let mut ram_intensity = vec![0.0f32; vm::RAM_SIZE];
+    let mut ram_kind = vec![vm::MemAccessKind::Read; vm::RAM_SIZE];
+    let mut pc_history: VecDeque<u32> = VecDeque::with_capacity(64);
+    let mut ram_view_base: usize = 0x2000;
+
     // Cursor position on canvas (logical coordinates, can exceed visible area)
     let mut cursor_row: usize = 0;
     let mut cursor_col: usize = 0;
@@ -2054,6 +2069,35 @@ fn main() {
                         status_msg = format!("[RECORDING STOPPED: {} frames saved. Use ffmpeg to compile GIF]", frame_id);
                     }
                 }
+                Key::PageUp => {
+                    if mode == Mode::Terminal {
+                        ram_view_base = ram_view_base.saturating_sub(1024);
+                        status_msg = format!("[RAM Inspector: 0x{:04X}-0x{:04X}]", ram_view_base, ram_view_base + 1023);
+                    } else {
+                        if scroll_offset > 0 {
+                            scroll_offset = scroll_offset.saturating_sub(CANVAS_ROWS);
+                            let new_cursor = scroll_offset + CANVAS_ROWS / 2;
+                            if new_cursor < cursor_row || cursor_row < scroll_offset {
+                                cursor_row = new_cursor.min(CANVAS_MAX_ROWS - 1);
+                            }
+                        }
+                    }
+                }
+                Key::PageDown => {
+                    if mode == Mode::Terminal {
+                        ram_view_base = ram_view_base.saturating_add(1024).min(0xFC00);
+                        status_msg = format!("[RAM Inspector: 0x{:04X}-0x{:04X}]", ram_view_base, ram_view_base + 1023);
+                    } else {
+                        let max_scroll = CANVAS_MAX_ROWS.saturating_sub(CANVAS_ROWS);
+                        if scroll_offset < max_scroll {
+                            scroll_offset = (scroll_offset + CANVAS_ROWS).min(max_scroll);
+                            let new_cursor = scroll_offset + CANVAS_ROWS / 2;
+                            if new_cursor > cursor_row || cursor_row >= scroll_offset + CANVAS_ROWS {
+                                cursor_row = new_cursor.min(CANVAS_MAX_ROWS - 1);
+                            }
+                        }
+                    }
+                }
                 Key::Left => {
                     if cursor_col > 0 {
                         cursor_col -= 1;
@@ -2075,29 +2119,6 @@ fn main() {
                         cursor_row += 1;
                     }
                     ensure_cursor_visible(&cursor_row, &mut scroll_offset);
-                }
-                Key::PageUp => {
-                    if scroll_offset > 0 {
-                        scroll_offset = scroll_offset.saturating_sub(CANVAS_ROWS);
-                        // Move cursor to center of visible area
-                        let new_cursor = scroll_offset + CANVAS_ROWS / 2;
-                        if new_cursor < cursor_row || cursor_row < scroll_offset {
-                            cursor_row = new_cursor.min(CANVAS_MAX_ROWS - 1);
-                        }
-                    }
-                }
-                Key::PageDown => {
-                    let max_scroll = CANVAS_MAX_ROWS.saturating_sub(CANVAS_ROWS);
-                    if scroll_offset < max_scroll {
-                        scroll_offset = (scroll_offset + CANVAS_ROWS).min(max_scroll);
-                        // Move cursor to center of visible area
-                        let new_cursor = scroll_offset + CANVAS_ROWS / 2;
-                        if new_cursor > cursor_row
-                            || cursor_row >= scroll_offset + CANVAS_ROWS
-                        {
-                            cursor_row = new_cursor.min(CANVAS_MAX_ROWS - 1);
-                        }
-                    }
                 }
                 Key::V => {
                     let ctrl =
@@ -2182,6 +2203,34 @@ fn main() {
             play_beep(freq, dur);
         }
 
+        // ── Update Visual Debugger intensities ──────────────────
+        // Process new accesses
+        for access in &vm.access_log {
+            if access.addr < ram_intensity.len() {
+                let boost = if access.kind == vm::MemAccessKind::Write { 1.5 } else { 1.0 };
+                ram_intensity[access.addr] = boost;
+                ram_kind[access.addr] = access.kind;
+            }
+        }
+        // Decay existing intensities (every frame)
+        for val in ram_intensity.iter_mut() {
+            if *val > 0.01 {
+                *val *= 0.75;
+            } else {
+                *val = 0.0;
+            }
+        }
+        
+        // Track PC for trail
+        if is_running {
+            pc_history.push_back(vm.pc);
+            if pc_history.len() > 64 {
+                pc_history.pop_front();
+            }
+        } else {
+            pc_history.clear();
+        }
+
         // ── Render ───────────────────────────────────────────────
         render(
             &mut buffer,
@@ -2193,6 +2242,10 @@ fn main() {
             is_running,
             hit_breakpoint,
             &status_msg,
+            &ram_intensity,
+            &ram_kind,
+            &pc_history,
+            ram_view_base,
         );
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
 
@@ -2338,6 +2391,23 @@ fn canvas_assemble(
 }
 
 // ── Rendering ────────────────────────────────────────────────────
+fn lerp_color(base: u32, tint: u32, t: f32) -> u32 {
+    let t = t.min(1.0);
+    let r1 = ((base >> 16) & 0xFF) as f32;
+    let g1 = ((base >> 8) & 0xFF) as f32;
+    let b1 = (base & 0xFF) as f32;
+
+    let r2 = ((tint >> 16) & 0xFF) as f32;
+    let g2 = ((tint >> 8) & 0xFF) as f32;
+    let b2 = (tint & 0xFF) as f32;
+
+    let r = (r1 + (r2 - r1) * t) as u32;
+    let g = (g1 + (g2 - g1) * t) as u32;
+    let b = (b1 + (b2 - b1) * t) as u32;
+
+    (r << 16) | (g << 8) | b
+}
+
 fn render(
     buffer: &mut [u32],
     vm: &vm::Vm,
@@ -2348,6 +2418,10 @@ fn render(
     is_running: bool,
     hit_breakpoint: bool,
     status_msg: &str,
+    ram_intensity: &[f32],
+    ram_kind: &[vm::MemAccessKind],
+    pc_history: &VecDeque<u32>,
+    ram_view_base: usize,
 ) {
     for pixel in buffer.iter_mut() {
         *pixel = BG;
@@ -2357,6 +2431,10 @@ fn render(
     for vis_row in 0..CANVAS_ROWS {
         let log_row = vis_row + scroll_offset;
         for col in 0..CANVAS_COLS {
+            let ram_addr = log_row * CANVAS_COLS + col;
+            let intensity = ram_intensity.get(ram_addr).copied().unwrap_or(0.0);
+            let kind = ram_kind.get(ram_addr).copied().unwrap_or(vm::MemAccessKind::Read);
+
             let val = canvas_buffer[log_row * CANVAS_COLS + col];
             let x0 = col * CANVAS_SCALE;
             let y0 = vis_row * CANVAS_SCALE;
@@ -2364,6 +2442,29 @@ fn render(
             let ascii_byte = (val & 0xFF) as u8;
 
             let use_pixel_font = val != 0 && ascii_byte >= 0x20 && ascii_byte < 0x80;
+
+            // Determine cell base color (with intensity tint)
+            let mut tint_color = if kind == vm::MemAccessKind::Write { 0xFF00FF } else { 0x00FFFF };
+            let mut final_intensity = intensity;
+
+            // PC trail: bytecode lives at CANVAS_BYTECODE_ADDR (0x1000), so subtract
+            // that base to get the canvas cell index for the currently executing word.
+            for (i, &past_pc) in pc_history.iter().enumerate() {
+                let canvas_idx = (past_pc as usize).wrapping_sub(CANVAS_BYTECODE_ADDR);
+                if canvas_idx == ram_addr {
+                    let trail_intensity = (i + 1) as f32 / pc_history.len() as f32;
+                    if trail_intensity > final_intensity {
+                        final_intensity = trail_intensity;
+                        tint_color = 0x666666; // white-ish glow for executing PC
+                    }
+                }
+            }
+
+            let cell_bg = if final_intensity > 0.01 {
+                lerp_color(GRID_BG, tint_color, final_intensity)
+            } else {
+                GRID_BG
+            };
 
             if use_pixel_font {
                 let fg = syntax_highlight_color(canvas_buffer, log_row, col);
@@ -2386,7 +2487,7 @@ fn render(
                         } else if is_border {
                             GRID_LINE
                         } else {
-                            GRID_BG
+                            cell_bg
                         };
 
                         if is_cursor && is_border {
@@ -2405,7 +2506,7 @@ fn render(
                         let px = x0 + dx;
                         let py = y0 + dy;
                         let is_border = dx == CANVAS_SCALE - 1 || dy == CANVAS_SCALE - 1;
-                        let mut color = if is_border { GRID_LINE } else { GRID_BG };
+                        let mut color = if is_border { GRID_LINE } else { cell_bg };
                         if is_cursor && is_border {
                             color = CURSOR_COL;
                         }
@@ -2455,6 +2556,78 @@ fn render(
             if sx < WIDTH && sy < HEIGHT {
                 buffer[sy * WIDTH + sx] = color;
             }
+        }
+    }
+
+    // ── RAM Inspector ────────────────────────────────────────────
+    // Label rendered inside the panel (first row of tiles, top-left corner)
+    let label = format!("RAM [0x{:04X}]", ram_view_base);
+    render_text(buffer, RAM_VIEW_X + 2, RAM_VIEW_Y + 2, &label, 0x888899);
+
+    for row in 0..32 {
+        for col in 0..32 {
+            let addr = ram_view_base + row * 32 + col;
+            if addr >= vm.ram.len() { break; }
+
+            let raw_val = vm.ram[addr];
+            let intensity = ram_intensity.get(addr).copied().unwrap_or(0.0);
+            let kind = ram_kind.get(addr).copied().unwrap_or(vm::MemAccessKind::Read);
+
+            // Base color is the RAM value (masked to 24-bit)
+            let base_color = raw_val & 0xFFFFFF;
+            
+            // Pulse tint
+            let tint_color = if kind == vm::MemAccessKind::Write { 0xFF00FF } else { 0x00FFFF };
+            let cell_color = if intensity > 0.01 {
+                lerp_color(base_color, tint_color, intensity)
+            } else {
+                base_color
+            };
+
+            // Paint 8x8 block
+            let x0 = RAM_VIEW_X + col * RAM_VIEW_SCALE;
+            let y0 = RAM_VIEW_Y + row * RAM_VIEW_SCALE;
+            for dy in 0..RAM_VIEW_SCALE {
+                for dx in 0..RAM_VIEW_SCALE {
+                    let px = x0 + dx;
+                    let py = y0 + dy;
+                    if px < WIDTH && py < HEIGHT {
+                        buffer[py * WIDTH + px] = cell_color;
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Global Heatmap ────────────────────────────────────────────
+    render_text(buffer, HEATMAP_X + 2, HEATMAP_Y + 2, "64K", 0x888899);
+    for i in 0..65536 {
+        let addr = i;
+        let x = HEATMAP_X + (i % 256);
+        let y = HEATMAP_Y + (i / 256);
+
+        let raw_val = vm.ram[addr];
+        let intensity = ram_intensity.get(addr).copied().unwrap_or(0.0);
+        let kind = ram_kind.get(addr).copied().unwrap_or(vm::MemAccessKind::Read);
+
+        // Base color: Dim gray if data exists, else black
+        let base_color = if raw_val > 0 { 0x222222 } else { 0x050505 };
+        
+        // Pulse tint
+        let tint_color = if kind == vm::MemAccessKind::Write { 0xFF00FF } else { 0x00FFFF };
+        let mut pixel_color = if intensity > 0.01 {
+            lerp_color(base_color, tint_color, intensity)
+        } else {
+            base_color
+        };
+
+        // Current PC is bright white
+        if addr == vm.pc as usize {
+            pixel_color = 0xFFFFFF;
+        }
+
+        if x < WIDTH && y < HEIGHT {
+            buffer[y * WIDTH + x] = pixel_color;
         }
     }
 
@@ -2953,6 +3126,11 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         off += 4;
     }
 
+    let rand_state = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+    off += 4;
+    let frame_count = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+    off += 4;
+
     let vm = vm::Vm {
         ram,
         regs,
@@ -2960,10 +3138,12 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         screen,
         halted,
         frame_ready: false,
-        rand_state: 0xDEADBEEF,
-        frame_count: 0,
+        rand_state,
+        frame_count,
         beep: None,
+        access_log: Vec::new(),
     };
+
 
     // Parse canvas trailer
     let canvas_len = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;

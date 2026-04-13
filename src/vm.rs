@@ -13,6 +13,18 @@ pub const SAVE_MAGIC: &[u8; 4] = b"GEOS";
 /// Save file format version
 pub const SAVE_VERSION: u32 = 2;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemAccessKind {
+    Read,
+    Write,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MemAccess {
+    pub addr: usize,
+    pub kind: MemAccessKind,
+}
+
 #[derive(Debug, Clone)]
 pub struct Vm {
     pub ram: Vec<u32>,
@@ -28,6 +40,8 @@ pub struct Vm {
     pub frame_count: u32,
     /// Set by BEEP opcode: (freq_hz, duration_ms). Consumed and cleared by host.
     pub beep: Option<(u32, u32)>,
+    /// Frame-scoped log of RAM accesses for the visual debugger
+    pub access_log: Vec<MemAccess>,
 }
 
 impl Vm {
@@ -42,6 +56,7 @@ impl Vm {
             rand_state: 0xDEADBEEF,
             frame_count: 0,
             beep: None,
+            access_log: Vec::with_capacity(4096),
         }
     }
 
@@ -56,6 +71,14 @@ impl Vm {
         self.rand_state = 0xDEADBEEF;
         self.frame_count = 0;
         self.beep = None;
+        self.access_log.clear();
+    }
+
+    /// Internal helper to log a memory access with a safety cap.
+    fn log_access(&mut self, addr: usize, kind: MemAccessKind) {
+        if self.access_log.len() < 4096 {
+            self.access_log.push(MemAccess { addr, kind });
+        }
     }
 
     /// Execute one instruction. Returns false if halted.
@@ -64,6 +87,10 @@ impl Vm {
             self.halted = true;
             return false;
         }
+
+        // Log the instruction fetch for the visual debugger
+        let pc_addr = self.pc as usize;
+        self.log_access(pc_addr, MemAccessKind::Read);
 
         let opcode = self.fetch();
         match opcode {
@@ -81,6 +108,7 @@ impl Vm {
                 self.frame_count = self.frame_count.wrapping_add(1);
                 self.ram[0xFFE] = self.frame_count;
                 self.frame_ready = true;
+                self.access_log.clear(); // Reset for next frame
                 return true; // keep running (host checks frame_ready to pace rendering)
             }
 
@@ -112,6 +140,7 @@ impl Vm {
                     let addr = self.regs[addr_reg] as usize;
                     if addr < self.ram.len() {
                         self.regs[reg] = self.ram[addr];
+                        self.log_access(addr, MemAccessKind::Read);
                     }
                 }
             }
@@ -124,6 +153,7 @@ impl Vm {
                     let addr = self.regs[addr_reg] as usize;
                     if addr < self.ram.len() {
                         self.ram[addr] = self.regs[reg];
+                        self.log_access(addr, MemAccessKind::Write);
                     }
                 }
             }
@@ -632,8 +662,11 @@ impl Vm {
                         for row in 0..gh {
                             for col in 0..gw {
                                 let map_idx = row * gw + col;
-                                if map_base + map_idx >= self.ram.len() { continue; }
-                                let tile_idx = self.ram[map_base + map_idx] as usize;
+                                let ram_map_addr = map_base + map_idx;
+                                if ram_map_addr >= self.ram.len() { continue; }
+                                
+                                self.log_access(ram_map_addr, MemAccessKind::Read);
+                                let tile_idx = self.ram[ram_map_addr] as usize;
                                 if tile_idx == 0 { continue; } // skip tile 0 (empty)
                                 
                                 // Tile 1 is at offset 0, tile 2 at (tw*th), etc.
@@ -642,8 +675,11 @@ impl Vm {
                                 for ty in 0..th {
                                     for tx in 0..tw {
                                         let pixel_idx = tile_data_offset + ty * tw + tx;
-                                        if tiles_base + pixel_idx >= self.ram.len() { continue; }
-                                        let color = self.ram[tiles_base + pixel_idx];
+                                        let ram_pixel_addr = tiles_base + pixel_idx;
+                                        if ram_pixel_addr >= self.ram.len() { continue; }
+                                        
+                                        self.log_access(ram_pixel_addr, MemAccessKind::Read);
+                                        let color = self.ram[ram_pixel_addr];
                                         if color == 0 { continue; } // transparency
                                         
                                         let px = x0 + (col * tw) as i32 + tx as i32;
@@ -916,6 +952,7 @@ impl Vm {
             rand_state,
             frame_count,
             beep: None,
+            access_log: Vec::with_capacity(4096),
         })
     }
 }

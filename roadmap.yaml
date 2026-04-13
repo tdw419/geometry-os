@@ -15,7 +15,7 @@ meta:
   opcodes: 42
   tests: 62
   programs: 28
-  loc: 4976
+  loc: 5193
 
 phases:
   # ===================================================================
@@ -547,6 +547,76 @@ phases:
         status: "done"
         scope_lines: 40
         scope_files: ["src/main.rs"]
+
+  - id: "phase-18"
+    title: "VM Instrumentation"
+    status: "complete"
+    goal: "Telemetry for memory access and execution flow"
+    priority: 6
+    deliverables:
+      - name: "Access log buffer"
+        description: "Track LOAD/STORE/SPRITE/TILEMAP RAM hits per frame"
+        status: "done"
+        scope_lines: 50
+        scope_files: ["src/vm.rs"]
+      - name: "Instruction fetch logging"
+        description: "Track PC addresses for execution trail"
+        status: "done"
+        scope_lines: 10
+        scope_files: ["src/vm.rs"]
+
+  - id: "phase-19"
+    title: "Visual Debugger"
+    status: "complete"
+    goal: "Live heat-map and PC trail overlays on canvas"
+    priority: 7
+    deliverables:
+      - name: "Intensity decay buffer"
+        description: "Fade memory highlights over ~10 frames"
+        status: "done"
+        scope_lines: 30
+        scope_files: ["src/main.rs"]
+      - name: "Canvas cell tinting"
+        description: "Cyan (Read) and Magenta (Write) flashes on active RAM addresses"
+        status: "done"
+        scope_lines: 40
+        scope_files: ["src/main.rs"]
+      - name: "PC trail visualization"
+        description: "Fading white glow follows the execution pointer"
+        status: "done"
+        scope_lines: 20
+        scope_files: ["src/main.rs"]
+
+  - id: "phase-20"
+    title: "High RAM Visualization"
+    status: "complete"
+    goal: "Deep observability into game state and sprite memory"
+    priority: 8
+    deliverables:
+      - name: "RAM inspector panel"
+        description: "Second 32x32 grid visualizing 0x2000-0x23FF or scrollable range"
+        status: "done"
+        scope_lines: 60
+        scope_files: ["src/main.rs"]
+        acceptance_criteria:
+          - description: "32x32 grid renders at bottom of window"
+            met: true
+          - description: "PageUp/PageDown scrolls through RAM in Terminal mode"
+            met: true
+          - description: "Access intensities shown as color tints"
+            met: true
+      - name: "Global heatmap"
+        description: "Compact 256x256 view of entire 64K RAM access patterns"
+        status: "done"
+        scope_lines: 80
+        scope_files: ["src/main.rs"]
+        acceptance_criteria:
+          - description: "256x256 pixel grid shows all 64K words"
+            met: true
+          - description: "Read/Write access shown as cyan/magenta pulses"
+            met: true
+          - description: "PC position highlighted in white"
+            met: true
 
 global_risks:
   - "Opcode space: 42 of ~256 slots used, plenty of room, but hex layout has gaps"

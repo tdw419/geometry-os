@@ -2,7 +2,7 @@
 
 v1.0.0 -- 41 opcodes, 32 registers, 64K RAM, 256x256 framebuffer, 62 tests, 28 programs.
 
-**All 17 phases complete.** This document covers what comes next.
+**All 20 phases complete.** This document covers what comes next.
 
 ## Current State
 
@@ -15,6 +15,7 @@ v1.0.0 -- 41 opcodes, 32 registers, 64K RAM, 256x256 framebuffer, 62 tests, 28 p
 - Breakpoints, single-step, save/load, PNG screenshot (F9), GIF recording (F10)
 - TICKS throttle, BEEP audio, SPRITE blit, ASM self-hosting
 - Assembler constants (#define), signed arithmetic (SAR), multi-key input (0xFFB bitmask)
+- **Visual Debugger:** Live RAM access heat-map (Cyan/Magenta) and PC trail (White glow)
 
 **What's rough:**
 - GitHub issues #29-54 are all GPU-tile parallelism work (separate track)
@@ -123,3 +124,39 @@ These came up and were deliberately deferred:
 - **Self-hosting ASM opcode (phase-12 revisited):** test_self_host_runs was reverted. The ASM opcode works for simple programs but the self-hosting demo proved fragile. Revisit when there's a concrete use case.
 - **RISC-V cartridge system:** Issues #29-54. Interesting but orthogonal to core VM improvements.
 - **Mobile port:** No current path. WASM port (Phase 17) would cover this indirectly.
+
+---
+
+## Phase 18: VM Instrumentation (done)
+
+Goal: Telemetry for memory access and execution flow.
+
+| Deliverable | Scope | Acceptance |
+|---|---|---|
+| Access log buffer | ~50 lines in vm.rs | Track LOAD/STORE/SPRITE/TILEMAP RAM hits per frame |
+| Instruction fetch logging | ~10 lines in vm.rs | Track PC addresses for execution trail |
+
+---
+
+## Phase 19: Visual Debugger (done)
+
+Goal: Live heat-map and PC trail overlays on canvas.
+
+| Deliverable | Scope | Acceptance |
+|---|---|---|
+| Intensity decay buffer | ~30 lines in main.rs | Fade memory highlights over ~10 frames |
+| Canvas cell tinting | ~40 lines in main.rs | Cyan (Read) and Magenta (Write) flashes on active RAM addresses |
+| PC trail visualization | ~20 lines in main.rs | Fading white glow follows the execution pointer |
+
+---
+
+## Phase 20: High RAM Visualization (done)
+
+Goal: Deep observability into game state and sprite memory.
+
+| Deliverable | Scope | Acceptance |
+|---|---|---|
+| RAM inspector panel | ~60 lines in main.rs | Second 32x32 grid visualizing 0x2000-0x23FF or scrollable range |
+| Global heatmap | ~80 lines in main.rs | Compact 256x256 view of entire 64K RAM access patterns |
+
+Both panels render at the bottom of the 1024x768 window. The RAM inspector (left, 32x32 grid with 8px cells) shows raw word values tinted by access intensity. PageUp/PageDown scrolls in Terminal mode. The global heatmap (right, 256x256 1:1 pixel mapping) shows all 64K words with cyan (read) and magenta (write) pulses, plus a white dot for the current PC.
