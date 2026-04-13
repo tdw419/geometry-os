@@ -88,16 +88,38 @@ impl RiscvCpu {
     }
 
     /// Translate a virtual address through the Sv32 MMU.
-    /// Returns the physical address or a fault StepResult.
+    /// Returns the physical address or triggers a page fault trap.
     fn translate_va(&mut self, va: u32, access: AccessType, bus: &Bus) -> Result<u64, StepResult> {
         let is_user = self.privilege == Privilege::User;
         let satp = self.csr.satp;
         match mmu::translate(va, access, is_user, satp, bus, &mut self.tlb) {
             TranslateResult::Ok(pa) => Ok(pa),
-            TranslateResult::FetchFault => Err(StepResult::FetchFault),
-            TranslateResult::LoadFault => Err(StepResult::LoadFault),
-            TranslateResult::StoreFault => Err(StepResult::StoreFault),
+            TranslateResult::FetchFault
+            | TranslateResult::LoadFault
+            | TranslateResult::StoreFault => {
+                let cause = match access {
+                    AccessType::Fetch => csr::CAUSE_FETCH_PAGE_FAULT,
+                    AccessType::Load => csr::CAUSE_LOAD_PAGE_FAULT,
+                    AccessType::Store => csr::CAUSE_STORE_PAGE_FAULT,
+                };
+                self.deliver_trap(cause, va);
+                Err(StepResult::Ok)
+            }
         }
+    }
+
+    /// Deliver a trap: set cause/epc/tval CSRs, update privilege, jump to vector.
+    fn deliver_trap(&mut self, cause: u32, tval: u32) {
+        let trap_priv = self.csr.trap_target_priv(cause, self.privilege);
+        let vector = self.csr.trap_vector(trap_priv);
+        self.csr.trap_enter(trap_priv, self.privilege, self.pc, cause);
+        match trap_priv {
+            Privilege::Machine => self.csr.mtval = tval,
+            Privilege::Supervisor => self.csr.stval = tval,
+            Privilege::User => {}
+        }
+        self.privilege = trap_priv;
+        self.pc = vector;
     }
 
     /// Fetch, decode, and execute one instruction.
@@ -123,7 +145,10 @@ impl RiscvCpu {
         };
         let word = match bus.read_word(fetch_pa) {
             Ok(w) => w,
-            Err(_) => return StepResult::FetchFault,
+            Err(_) => {
+                self.deliver_trap(csr::CAUSE_FETCH_ACCESS, self.pc);
+                return StepResult::Ok;
+            }
         };
         let op = decode::decode(word);
         self.execute(op, bus)
@@ -181,8 +206,8 @@ impl RiscvCpu {
 
             // ---- Loads ----
             Operation::Lb { rd, rs1, imm } => {
-                let va = self.ea(rs1, imm);
-                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                let va = self.ea(rs1, imm) as u32;
+                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -192,12 +217,15 @@ impl RiscvCpu {
                         self.pc = next_pc;
                         StepResult::Ok
                     }
-                    Err(_) => StepResult::LoadFault,
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_LOAD_ACCESS, va);
+                        StepResult::Ok
+                    }
                 }
             }
             Operation::Lh { rd, rs1, imm } => {
-                let va = self.ea(rs1, imm);
-                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                let va = self.ea(rs1, imm) as u32;
+                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -207,12 +235,15 @@ impl RiscvCpu {
                         self.pc = next_pc;
                         StepResult::Ok
                     }
-                    Err(_) => StepResult::LoadFault,
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_LOAD_ACCESS, va);
+                        StepResult::Ok
+                    }
                 }
             }
             Operation::Lw { rd, rs1, imm } => {
-                let va = self.ea(rs1, imm);
-                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                let va = self.ea(rs1, imm) as u32;
+                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -222,12 +253,15 @@ impl RiscvCpu {
                         self.pc = next_pc;
                         StepResult::Ok
                     }
-                    Err(_) => StepResult::LoadFault,
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_LOAD_ACCESS, va);
+                        StepResult::Ok
+                    }
                 }
             }
             Operation::Lbu { rd, rs1, imm } => {
-                let va = self.ea(rs1, imm);
-                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                let va = self.ea(rs1, imm) as u32;
+                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -237,12 +271,15 @@ impl RiscvCpu {
                         self.pc = next_pc;
                         StepResult::Ok
                     }
-                    Err(_) => StepResult::LoadFault,
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_LOAD_ACCESS, va);
+                        StepResult::Ok
+                    }
                 }
             }
             Operation::Lhu { rd, rs1, imm } => {
-                let va = self.ea(rs1, imm);
-                let pa = match self.translate_va(va as u32, AccessType::Load, &*bus) {
+                let va = self.ea(rs1, imm) as u32;
+                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -252,14 +289,17 @@ impl RiscvCpu {
                         self.pc = next_pc;
                         StepResult::Ok
                     }
-                    Err(_) => StepResult::LoadFault,
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_LOAD_ACCESS, va);
+                        StepResult::Ok
+                    }
                 }
             }
 
             // ---- Stores ----
             Operation::Sb { rs1, rs2, imm } => {
-                let va = self.ea(rs1, imm);
-                let pa = match self.translate_va(va as u32, AccessType::Store, &*bus) {
+                let va = self.ea(rs1, imm) as u32;
+                let pa = match self.translate_va(va, AccessType::Store, &*bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -269,12 +309,15 @@ impl RiscvCpu {
                         self.pc = next_pc;
                         StepResult::Ok
                     }
-                    Err(_) => StepResult::StoreFault,
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_STORE_ACCESS, va);
+                        StepResult::Ok
+                    }
                 }
             }
             Operation::Sh { rs1, rs2, imm } => {
-                let va = self.ea(rs1, imm);
-                let pa = match self.translate_va(va as u32, AccessType::Store, &*bus) {
+                let va = self.ea(rs1, imm) as u32;
+                let pa = match self.translate_va(va, AccessType::Store, &*bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -284,12 +327,15 @@ impl RiscvCpu {
                         self.pc = next_pc;
                         StepResult::Ok
                     }
-                    Err(_) => StepResult::StoreFault,
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_STORE_ACCESS, va);
+                        StepResult::Ok
+                    }
                 }
             }
             Operation::Sw { rs1, rs2, imm } => {
-                let va = self.ea(rs1, imm);
-                let pa = match self.translate_va(va as u32, AccessType::Store, &*bus) {
+                let va = self.ea(rs1, imm) as u32;
+                let pa = match self.translate_va(va, AccessType::Store, &*bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -299,7 +345,10 @@ impl RiscvCpu {
                         self.pc = next_pc;
                         StepResult::Ok
                     }
-                    Err(_) => StepResult::StoreFault,
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_STORE_ACCESS, va);
+                        StepResult::Ok
+                    }
                 }
             }
 
@@ -623,7 +672,13 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.pc = 0x0000_0000;
         let mut bus = Bus::new(0x8000_0000, 4096);
-        assert_eq!(cpu.step(&mut bus), StepResult::FetchFault);
+        cpu.csr.mtvec = 0x8000_0200;
+        let result = cpu.step(&mut bus);
+        assert_eq!(result, StepResult::Ok);
+        assert_eq!(cpu.pc, 0x8000_0200);
+        assert_eq!(cpu.csr.mepc, 0x0000_0000);
+        assert_eq!(cpu.csr.mcause, csr::CAUSE_FETCH_ACCESS);
+        assert_eq!(cpu.csr.mtval, 0x0000_0000);
     }
 
     #[test]
