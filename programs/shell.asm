@@ -931,6 +931,17 @@ help_text:
     .byte 111 ; o
     .byte 114 ; r
     .byte 116 ; t
+    .byte 32  ; space
+    .byte 104 ; h
+    .byte 121 ; y
+    .byte 112 ; p
+    .byte 101 ; e
+    .byte 114 ; r
+    .byte 118 ; v
+    .byte 105 ; i
+    .byte 115 ; s
+    .byte 111 ; o
+    .byte 114 ; r
     .byte 0
 
 .org 0x1A50
@@ -994,6 +1005,77 @@ not_found_msg:
     .byte 111 ; o
     .byte 117 ; u
     .byte 110 ; n
+    .byte 100 ; d
+    .byte 0
+
+.org 0x1AB0
+
+hypervisor_usage_msg:
+    .byte 117 ; u
+    .byte 115 ; s
+    .byte 97  ; a
+    .byte 103 ; g
+    .byte 101 ; e
+    .byte 58  ; :
+    .byte 32  ; space
+    .byte 104 ; h
+    .byte 121 ; y
+    .byte 112 ; p
+    .byte 101 ; e
+    .byte 114 ; r
+    .byte 118 ; v
+    .byte 105 ; i
+    .byte 115 ; s
+    .byte 111 ; o
+    .byte 114 ; r
+    .byte 32  ; space
+    .byte 97  ; a
+    .byte 114 ; r
+    .byte 99  ; c
+    .byte 104 ; h
+    .byte 61  ; =
+    .byte 60  ; <
+    .byte 97  ; a
+    .byte 114 ; r
+    .byte 99  ; c
+    .byte 104 ; h
+    .byte 62  ; >
+    .byte 32  ; space
+    .byte 107 ; k
+    .byte 101 ; e
+    .byte 114 ; r
+    .byte 110 ; n
+    .byte 101 ; e
+    .byte 108 ; l
+    .byte 61  ; =
+    .byte 60  ; <
+    .byte 102 ; f
+    .byte 105 ; i
+    .byte 108 ; l
+    .byte 101 ; e
+    .byte 62  ; >
+    .byte 0
+
+.org 0x1AE0
+
+hypervisor_err_msg:
+    .byte 104 ; h
+    .byte 121 ; y
+    .byte 112 ; p
+    .byte 101 ; e
+    .byte 114 ; r
+    .byte 118 ; v
+    .byte 105 ; i
+    .byte 115 ; s
+    .byte 111 ; o
+    .byte 114 ; r
+    .byte 58  ; :
+    .byte 32  ; space
+    .byte 102 ; f
+    .byte 97  ; a
+    .byte 105 ; i
+    .byte 108 ; l
+    .byte 101 ; e
     .byte 100 ; d
     .byte 0
 
