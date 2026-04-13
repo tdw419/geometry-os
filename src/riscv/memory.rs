@@ -67,6 +67,19 @@ impl GuestMemory {
         true
     }
 
+    /// Read a 16-bit half-word (little-endian) from a physical address.
+    pub fn read_half(&self, addr: u64) -> u16 {
+        let b0 = self.read_byte(addr) as u16;
+        let b1 = self.read_byte(addr + 1) as u16;
+        b0 | (b1 << 8)
+    }
+
+    /// Write a 16-bit half-word (little-endian) to a physical address.
+    pub fn write_half(&mut self, addr: u64, val: u16) {
+        self.write_byte(addr, (val & 0xFF) as u8);
+        self.write_byte(addr + 1, ((val >> 8) & 0xFF) as u8);
+    }
+
     /// RAM size in bytes.
     pub fn size(&self) -> usize {
         self.ram.len()
