@@ -376,8 +376,8 @@ fn test_rv32_jalr() {
 fn test_rv32_jalr_clears_lsb() {
     let mut vm = test_vm(&[
         auipc(5, 0x0),
-        addi(5, 5, 8),
-        ori(5, 5, 1),   // x5 = 0x80000009 (LSB set)
+        addi(5, 5, 16), // x5 = 0x80000010
+        ori(5, 5, 1),   // x5 = 0x80000011 (LSB set)
         jalr(0, 5, 0),  // jump to 0x80000008 (LSB cleared)
         addi(1, 0, 0),  // skipped
         addi(2, 0, 42), // executed
@@ -585,7 +585,7 @@ fn test_rv32_lbu() {
 #[test]
 fn test_rv32_store_load_with_offset() {
     let mut vm = test_vm(&[
-        addi(1, 0, 0xDEAD),
+        addi(1, 0, 42), // 42 fits in 12-bit imm
         auipc(2, 0x0),
         addi(2, 2, 100),
         sw(1, 2, 8),
@@ -593,7 +593,7 @@ fn test_rv32_store_load_with_offset() {
         ecall(),
     ]);
     run(&mut vm, 100);
-    assert_eq!(vm.cpu.x[3], 0xDEAD);
+    assert_eq!(vm.cpu.x[3], 42);
 }
 
 // ============================================================
@@ -660,11 +660,11 @@ fn test_rv32_fibonacci() {
         addi(1, 2, 0),  // a = b               [inst 4]
         addi(2, 4, 0),  // b = temp            [inst 5]
         addi(3, 3, -1), // counter--           [inst 6]
-        bne(3, 0, -20), // if counter!=0 goto 3 [inst 7] offset = -7*4 = -28... wait
+        bne(3, 0, -16), // if counter!=0 goto 3 [inst 7] -4 instr * 4 bytes
         ecall(),
     ]);
     run(&mut vm, 200);
-    assert_eq!(vm.cpu.x[2], 55, "fib(10) should be 55");
+    assert_eq!(vm.cpu.x[1], 55, "fib(10) should be 55 (x1=a)");
 }
 
 #[test]
@@ -736,7 +736,7 @@ fn test_rv32_memory_roundtrip() {
         auipc(5, 0x0),
         addi(5, 5, 200), // base = 0x800000C8
         lui(1, 0xDEADB000),
-        ori(1, 1, 0xEF), // x1 = 0xDEADBEEF
+        ori(1, 1, 0x0EF), // x1 = 0xDEADB0EF (low 12 bits must have bit 11 = 0)
         sw(1, 5, 0),
         addi(2, 0, 0xCA),
         sh(2, 5, 4),     // store half at offset 4
@@ -748,7 +748,7 @@ fn test_rv32_memory_roundtrip() {
         ecall(),
     ]);
     run(&mut vm, 100);
-    assert_eq!(vm.cpu.x[10], 0xDEADBEEF);
+    assert_eq!(vm.cpu.x[10], 0xDEADB0EF);
     assert_eq!(vm.cpu.x[11], 0x00CA);
     assert_eq!(vm.cpu.x[12], 0x42);
 }
