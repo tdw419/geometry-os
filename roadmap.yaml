@@ -1300,11 +1300,11 @@ phases:
       - programs/shell.asm
   - name: Download helper
     description: Script to fetch pre-built RISC-V Linux kernel + rootfs for testing
-    status: todo
+    status: done
     tasks:
     - id: p33.d8.t1
       title: Create scripts/download_riscv_linux.sh
-      status: todo
+      status: done
       description: 'Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal rootfs
 
         from a known URL. Place in .geometry_os/fs/linux/ directory.
