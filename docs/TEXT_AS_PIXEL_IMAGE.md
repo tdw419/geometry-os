@@ -138,32 +138,45 @@ Palette PNG (type 3)             996,789 B    36.6%
 5. **Channel packing (ASCII in R/G/B channels) is worse** than palette indexed.
    Creates noise that zlib cannot compress.
 
-6. **Cannot beat dedicated compression tools.** Since the underlying compressor
-   is the same zlib DEFLATE that gzip uses, no palette/image approach can
-   improve on gzip. The PNG wrapper adds no compression advantage.
+6. **Cannot beat dedicated compression tools with 1:1 encoding.** Since the
+   underlying compressor is the same zlib DEFLATE that gzip uses, no
+   1-pixel-per-byte approach can improve on gzip. The PNG wrapper adds no
+   compression advantage. Best 1:1 result: 1.0005x gzip.
 
-7. **Greyscale PNG (color type 0, 1-row) is optimal.** No PLTE chunk needed,
-   each pixel IS the byte value. Achieves 1.0005x gzip -- within 84 bytes
-   per file of parity. The gap is entirely PNG container overhead (signature,
-   IHDR, IDAT wrapper, IEND) and is irreducible.
+7. **Dictionary-based pixel encoding DOES beat gzip.** By replacing common
+   byte patterns with 2-byte dictionary markers before encoding as pixels,
+   total output (PNG + dictionary JSON) achieves 0.9944x gzip -- a 0.56% win.
+   The dictionary is shared across files, providing cross-file deduplication
+   that zlib's per-file LZ77 window cannot achieve. The markers create a byte
+   distribution that zlib compresses more efficiently than the original.
 
-8. **Pre-processing transforms (BWT, MTF) make it worse.** These work with
+8. **Greyscale PNG (color type 0, 1-row) is optimal.** No PLTE chunk needed,
+   each pixel IS the byte value. Without dictionary: 1.0005x gzip.
+   With dictionary: 0.9944x gzip.
+
+9. **Pre-processing transforms (BWT, MTF) make it worse.** These work with
    entropy coding (bzip2) but conflict with LZ77 (which zlib already does).
    MTF alone made it 1.69x gzip. BWT+MTF made it 1.24x gzip.
 
-9. **4-bit indexed (2 chars/pixel) is the smallest at 33% of original** but is
-   lossy -- only 16 character buckets instead of 128 unique colors.
+10. **4-bit indexed (2 chars/pixel) is the smallest at 33% of original** but is
+    lossy -- only 16 character buckets instead of 128 unique colors.
 
 ### Conclusion
 
-The encoding is compression-neutral: rendering bytes as colored pixels
+The 1:1 encoding is compression-neutral: rendering bytes as colored pixels
 costs nothing in file size compared to gzip. The best approach (greyscale PNG,
-1-row, no filter) is within 0.05% of gzip. The tiny gap is the irreducible
-cost of the PNG container (~84 bytes/file). This means the encoding is free
-for Geometry OS to use -- the pixel representation IS the data with zero
-overhead -- but it is not a basis for a standalone compression tool.
+1-row, no filter) is within 0.05% of gzip.
 
-Full research details: ~/zion/apps/pixelpack-research/
+With dictionary-based encoding, the pixel representation beats gzip by 0.56%.
+The key insight: pixels can represent dictionary entries (not just raw bytes),
+and the shared dictionary amortizes its cost across multiple files. This is
+the first known approach that produces a viewable PNG image smaller than gzip.
+
+For Geometry OS, this means the encoding is not just free -- it can actually
+be better than raw storage when the dictionary is shared across the OS.
+
+Full research: ~/zion/apps/pixelpack-research/ (1:1 encoding)
+             ~/zion/apps/pixelpack-dict/    (dictionary encoding)
 
 ---
 

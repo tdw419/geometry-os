@@ -1,15 +1,16 @@
-; infinite_map.asm -- Infinite scrolling procedural terrain
+; infinite_map.asm -- Infinite scrolling procedural terrain (v2)
 ;
-; Arrow keys or WASD scroll through an infinite procedurally generated world.
-; Every (x,y) coordinate deterministically produces a tile via a hash function.
-; The world is mathematically infinite -- no stored data, no boundaries.
+; Arrow keys / WASD scroll through infinite procedurally generated terrain.
+; Two-level hash: coarse hash determines biome (8x8 tile zones = 32px blocks),
+; fine hash places structures (1/256 tiles get a tree/rock/crystal).
+; Pure math -- no stored world data, truly infinite.
 ;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
-; Renders via RECTF (one opcode per tile, Rust fills the pixels).
+; Renders via RECTF. ~180K instructions/frame (18% of 1M budget).
 ;
 ; Memory:
-;   RAM[0x7800] = camera_x
-;   RAM[0x7801] = camera_y
+;   RAM[0x7800] = camera_x (tile coordinates)
+;   RAM[0x7801] = camera_y (tile coordinates)
 ;   RAM[0xFFB]  = key bitmask (host writes each frame)
 
 ; ===== Constants =====
@@ -19,7 +20,6 @@ LDI r9, 4               ; TILE_SIZE pixels
 LDI r10, 0xFFB          ; key bitmask port
 LDI r11, 0x7800         ; camera_x address
 LDI r12, 0x7801         ; camera_y address
-LDI r13, 0x7802         ; scratch address
 
 ; ===== Main Loop =====
 main_loop:
@@ -36,7 +36,7 @@ MOV r17, r16
 LDI r18, 1
 AND r17, r18
 JZ r17, no_up
-SUB r15, r7             ; camera_y--
+SUB r15, r7
 no_up:
 
 ; --- Process Down (bit 1) ---
@@ -44,7 +44,7 @@ MOV r17, r16
 LDI r18, 2
 AND r17, r18
 JZ r17, no_down
-ADD r15, r7             ; camera_y++
+ADD r15, r7
 no_down:
 
 ; --- Process Left (bit 2) ---
@@ -52,7 +52,7 @@ MOV r17, r16
 LDI r18, 4
 AND r17, r18
 JZ r17, no_left
-SUB r14, r7             ; camera_x--
+SUB r14, r7
 no_left:
 
 ; --- Process Right (bit 3) ---
@@ -60,7 +60,7 @@ MOV r17, r16
 LDI r18, 8
 AND r17, r18
 JZ r17, no_right
-ADD r14, r7             ; camera_x++
+ADD r14, r7
 no_right:
 
 ; --- Store updated camera ---
@@ -74,7 +74,7 @@ FILL r17
 ; ===== Render Viewport =====
 ; r14 = camera_x, r15 = camera_y
 ; 64x64 tile loop: ty=0..63, tx=0..63
-; Per tile: hash(world_x, world_y) -> terrain type -> color -> RECTF
+; Per tile: coarse hash -> biome, fine hash -> structure check, color -> RECTF
 
 LDI r1, 0               ; ty = 0
 
@@ -88,23 +88,71 @@ render_y:
     MOV r4, r15
     ADD r4, r1           ; r4 = world_y = camera_y + ty
 
-    ; ---- Hash: (world_x * 99001) XOR (world_y * 79007), then >> 28 ----
+    ; ---- Coarse hash for contiguous biomes ----
+    ; Zone size = 8 tiles (>> 3) = 32x32 pixel biome patches
     MOV r5, r3
+    LDI r18, 3
+    SHR r5, r18          ; r5 = world_x >> 3 (coarse_x)
     LDI r18, 99001
-    MUL r5, r18          ; r5 = world_x * 99001
+    MUL r5, r18          ; r5 = coarse_x * 99001
 
     MOV r6, r4
+    LDI r18, 3
+    SHR r6, r18          ; r6 = world_y >> 3 (coarse_y)
     LDI r18, 79007
-    MUL r6, r18          ; r6 = world_y * 79007
+    MUL r6, r18          ; r6 = coarse_y * 79007
 
-    XOR r5, r6           ; r5 = hash
+    XOR r5, r6           ; r5 = coarse_hash
 
-    ; Extract top 4 bits: terrain type 0..15
+    ; Extract top 4 bits: biome type 0..15
     LDI r18, 28
-    SHR r5, r18          ; r5 = terrain_type (0..15)
+    SHR r5, r18          ; r5 = biome_type (0..15)
 
-    ; ---- Terrain -> Color ----
-    ; Cascading comparisons. r0 is set by CMP; BLT/BGE/JZ check r0.
+    ; ---- Fine hash for structure placement ----
+    MOV r6, r3
+    LDI r18, 374761393
+    MUL r6, r18          ; r6 = world_x * big_prime
+    MOV r21, r4
+    LDI r18, 668265263
+    MUL r21, r18         ; r21 = world_y * big_prime
+    XOR r6, r21          ; r6 = fine_hash
+
+    ; Structure if fine_hash & 0xFF == 0x2A (1/256 tiles, ~16 per screen)
+    LDI r18, 0xFF
+    MOV r21, r6
+    AND r21, r18
+    LDI r18, 42
+    CMP r21, r18
+    JNZ r0, no_struct
+
+    ; Override with structure color based on biome
+    LDI r18, 4
+    CMP r5, r18
+    BLT r0, struct_water
+    LDI r18, 9
+    CMP r5, r18
+    BLT r0, struct_land
+    LDI r18, 12
+    CMP r5, r18
+    BLT r0, struct_mountain
+    JMP struct_snow
+
+struct_water:
+    LDI r17, 0x0066CC    ; wave crest (bright blue)
+    JMP do_rect
+struct_land:
+    LDI r17, 0x884422    ; tree trunk / hut (brown)
+    JMP do_rect
+struct_mountain:
+    LDI r17, 0xBBBBCC    ; snow patch (pale)
+    JMP do_rect
+struct_snow:
+    LDI r17, 0xAABBEE    ; ice crystal (blue-white)
+    JMP do_rect
+
+no_struct:
+    ; ---- Biome -> Color (using r5 = biome_type 0..15) ----
+    ; Cascading comparisons. r0 set by CMP; BLT/BGE/JZ check r0.
 
     ; Is it water? (types 0-2)
     LDI r18, 3
