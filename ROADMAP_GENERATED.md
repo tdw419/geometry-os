@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
 
-**Progress:** 39/44 phases complete, 1 in progress
+**Progress:** 39/44 phases complete, 3 in progress
 
-**Deliverables:** 180/194 complete
+**Deliverables:** 185/194 complete
 
-**Tasks:** 29/43 complete
+**Tasks:** 34/43 complete
 
 ## Scope Summary
 
@@ -52,8 +52,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  11
 | phase-38 RISC-V M/A/C Extensions | COMPLETE | 3/3 | - | - |
 | phase-39 Build Linux for RV32IMAC | COMPLETE | 3/3 | - | - |
 | phase-40 Boot Linux in Geometry OS | IN PROGRESS | 0/2 | - | - |
-| phase-41 Tracing and Instrumentation | PLANNED | 0/4 | - | - |
-| phase-42 Geometry OS Process Manager | PLANNED | 0/3 | - | - |
+| phase-41 Tracing and Instrumentation | IN PROGRESS | 2/4 | - | - |
+| phase-42 Geometry OS Process Manager | IN PROGRESS | 3/3 | - | - |
 | phase-43 Geometry OS VFS and Disk | PLANNED | 0/2 | - | - |
 | phase-44 Geometry OS Memory Management | PLANNED | 0/3 | - | - |
 
@@ -965,7 +965,7 @@ Load vmlinux + initramfs into the interpreter, boot to shell. This is the "QEMU 
     - Can type commands and see output
   _~100 LOC_
 
-## [ ] phase-41: Tracing and Instrumentation (PLANNED)
+## [~] phase-41: Tracing and Instrumentation (IN PROGRESS)
 
 **Goal:** Add instruction-level tracing to the interpreter so we can watch exactly what Linux does.
 
@@ -973,15 +973,15 @@ Once Linux boots, instrument the interpreter to capture: every syscall, every pa
 
 ### Deliverables
 
-- [ ] **Instruction trace** -- Log every instruction executed with register state
-  - [ ] `p41.d1.t1` Add toggleable instruction-level tracing to step()
+- [x] **Instruction trace** -- Log every instruction executed with register state
+  - [x] `p41.d1.t1` Add toggleable instruction-level tracing to step()
     - Can enable/disable trace at runtime
     - {'Each line': 'PC, opcode, register values, result'}
     - Trace output to file or ring buffer
     - Overhead under 2x when tracing enabled
-  _~150 LOC_
-- [ ] **Syscall trace** -- Intercept ECALL and decode/record syscall name + args + return value
-  - [ ] `p41.d2.t1` Add syscall decoder mapping Linux riscv syscall numbers to names
+  _~272 LOC_
+- [x] **Syscall trace** -- Intercept ECALL and decode/record syscall name + args + return value
+  - [x] `p41.d2.t1` Add syscall decoder mapping Linux riscv syscall numbers to names
     - Maps all ~400 Linux riscv syscalls by number
     - Logs syscall_name(arg0, arg1, ...) = return_value
   _~100 LOC_
@@ -997,7 +997,7 @@ Once Linux boots, instrument the interpreter to capture: every syscall, every pa
     - Logs switch_from to switch_to with PC and SP
   _~60 LOC_
 
-## [ ] phase-42: Geometry OS Process Manager (PLANNED)
+## [~] phase-42: Geometry OS Process Manager (IN PROGRESS)
 
 **Goal:** Rebuild Geometry OS process management based on observed Linux scheduler behavior.
 
@@ -1005,20 +1005,20 @@ Using traces from Phase 41, understand how Linux creates processes, schedules th
 
 ### Deliverables
 
-- [ ] **Process abstraction** -- Process struct with PID, state, page table, registers, kernel stack
-  - [ ] `p42.d1.t1` Design Process struct based on Linux task_struct observations
+- [x] **Process abstraction** -- Process struct with PID, state, page table, registers, kernel stack
+  - [x] `p42.d1.t1` Design Process struct based on Linux task_struct observations
     - Process has PID, state, page table root, saved registers
     - Kernel stack per process
     - Parent/child relationship
   _~200 LOC_
-- [ ] **Context switching** -- Save/restore registers on timer interrupt, switch address space
-  - [ ] `p42.d2.t1` Implement context switch based on traced Linux switch_to pattern
+- [x] **Context switching** -- Save/restore registers on timer interrupt, switch address space
+  - [x] `p42.d2.t1` Implement context switch based on traced Linux switch_to pattern
     - Timer interrupt triggers schedule
     - callee-saved registers preserved
     - SATP updated on address space change
   _~150 LOC_
-- [ ] **Fork/exec/exit/wait** -- Process lifecycle syscalls matching Linux semantics
-  - [ ] `p42.d3.t1` Implement fork, exec, exit, wait syscalls
+- [x] **Fork/exec/exit/wait** -- Process lifecycle syscalls matching Linux semantics
+  - [x] `p42.d3.t1` Implement fork, exec, exit, wait syscalls
     - fork returns 0 in child, child PID in parent
     - exec replaces process image
     - exit marks zombie, wakes parent

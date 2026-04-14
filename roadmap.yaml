@@ -10,9 +10,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 114
-  tests: 788
+  tests: 793
   programs: 40
-  loc: 29324
+  loc: 20131
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1792,7 +1792,7 @@ phases:
 
 - id: phase-41
   title: Tracing and Instrumentation
-  status: todo
+  status: in_progress
   goal: Add instruction-level tracing to the interpreter so we can watch exactly what Linux does.
   priority: 60
   description: 'Once Linux boots, instrument the interpreter to capture:
@@ -1802,12 +1802,12 @@ phases:
   deliverables:
   - name: Instruction trace
     description: Log every instruction executed with register state
-    status: todo
-    scope_lines: 150
+    status: done
+    scope_lines: 272
     tasks:
     - id: p41.d1.t1
       title: Add toggleable instruction-level tracing to step()
-      status: todo
+      status: done
       acceptance_criteria:
       - Can enable/disable trace at runtime
       - Each line: PC, opcode, register values, result
@@ -1815,12 +1815,12 @@ phases:
       - Overhead under 2x when tracing enabled
   - name: Syscall trace
     description: Intercept ECALL and decode/record syscall name + args + return value
-    status: todo
+    status: done
     scope_lines: 100
     tasks:
     - id: p41.d2.t1
       title: Add syscall decoder mapping Linux riscv syscall numbers to names
-      status: todo
+      status: done
       acceptance_criteria:
       - Maps all ~400 Linux riscv syscalls by number
       - Logs syscall_name(arg0, arg1, ...) = return_value
@@ -1850,7 +1850,7 @@ phases:
 
 - id: phase-42
   title: Geometry OS Process Manager
-  status: todo
+  status: in_progress
   goal: Rebuild Geometry OS process management based on observed Linux scheduler behavior.
   priority: 65
   description: 'Using traces from Phase 41, understand how Linux creates processes, schedules them,
@@ -1860,36 +1860,36 @@ phases:
   deliverables:
   - name: Process abstraction
     description: Process struct with PID, state, page table, registers, kernel stack
-    status: todo
+    status: done
     scope_lines: 200
     tasks:
     - id: p42.d1.t1
       title: Design Process struct based on Linux task_struct observations
-      status: todo
+      status: done
       acceptance_criteria:
       - Process has PID, state, page table root, saved registers
       - Kernel stack per process
       - Parent/child relationship
   - name: Context switching
     description: Save/restore registers on timer interrupt, switch address space
-    status: todo
+    status: done
     scope_lines: 150
     tasks:
     - id: p42.d2.t1
       title: Implement context switch based on traced Linux switch_to pattern
-      status: todo
+      status: done
       acceptance_criteria:
       - Timer interrupt triggers schedule
       - callee-saved registers preserved
       - SATP updated on address space change
   - name: Fork/exec/exit/wait
     description: Process lifecycle syscalls matching Linux semantics
-    status: todo
+    status: done
     scope_lines: 200
     tasks:
     - id: p42.d3.t1
       title: Implement fork, exec, exit, wait syscalls
-      status: todo
+      status: done
       acceptance_criteria:
       - fork returns 0 in child, child PID in parent
       - exec replaces process image
