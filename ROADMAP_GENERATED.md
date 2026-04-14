@@ -4,9 +4,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  77
 
 **Progress:** 37/44 phases complete, 0 in progress
 
-**Deliverables:** 174/194 complete
+**Deliverables:** 175/194 complete
 
-**Tasks:** 23/43 complete
+**Tasks:** 24/43 complete
 
 ## Scope Summary
 
@@ -49,7 +49,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  77
 | phase-35 RISC-V Privilege Modes | COMPLETE | 5/5 | - | - |
 | phase-36 RISC-V Virtual Memory & Devices | COMPLETE | 8/8 | - | - |
 | phase-37 Guest OS Boot (Native RISC-V) | COMPLETE | 6/6 | - | - |
-| phase-38 RISC-V M/A/C Extensions | PLANNED | 0/3 | - | - |
+| phase-38 RISC-V M/A/C Extensions | PLANNED | 1/3 | - | - |
 | phase-39 Build Linux for RV32IMAC | PLANNED | 0/3 | - | - |
 | phase-40 Boot Linux in Geometry OS | PLANNED | 0/2 | - | - |
 | phase-41 Tracing and Instrumentation | PLANNED | 0/4 | - | - |
@@ -888,8 +888,8 @@ Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compres
 
 ### Deliverables
 
-- [ ] **M extension (multiply/divide)** -- MUL, MULH, MULHU, MULHSU, DIV, DIVU, REM, REMU. All R-type, funct7=0b0000001.
-  - [ ] `p38.d1.t1` Add M-extension opcodes to decode.rs and execute in cpu.rs
+- [x] **M extension (multiply/divide)** -- MUL, MULH, MULHU, MULHSU, DIV, DIVU, REM, REMU. All R-type, funct7=0b0000001.
+  - [x] `p38.d1.t1` Add M-extension opcodes to decode.rs and execute in cpu.rs
     - MUL: rd = (rs1 * rs2)[31:0]
     - MULH: rd = (rs1 * rs2)[63:32] signed*signed
     - MULHU: rd = (rs1 * rs2)[63:32] unsigned*unsigned
@@ -899,6 +899,8 @@ Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compres
     - REM: rd = rs1 % rs2 signed
     - REMU: rd = rs1 % rs2 unsigned
     _Files: src/riscv/decode.rs, src/riscv/cpu.rs_
+  - [x] All 8 M-extension opcodes decode and execute correctly
+  - [x] Edge cases handled -- div by zero, overflow, signed/unsigned semantics
   _~80 LOC_
 - [ ] **A extension (atomics)** -- LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU
   - [ ] `p38.d2.t1` Add A-extension atomic instructions with reservation set tracking

@@ -406,6 +406,84 @@ impl RiscvCpu {
                 StepResult::Ok
             }
 
+            // ---- M extension (multiply/divide) ----
+            Operation::Mul { rd, rs1, rs2 } => {
+                let v1 = self.get_reg(rs1) as u64;
+                let v2 = self.get_reg(rs2) as u64;
+                self.set_reg(rd, (v1.wrapping_mul(v2)) as u32);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Mulh { rd, rs1, rs2 } => {
+                let v1 = (self.get_reg(rs1) as i32) as i64;
+                let v2 = (self.get_reg(rs2) as i32) as i64;
+                let product = v1.wrapping_mul(v2);
+                // Upper 32 bits of signed 64-bit product
+                self.set_reg(rd, (product >> 32) as u32);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Mulhu { rd, rs1, rs2 } => {
+                let v1 = self.get_reg(rs1) as u64;
+                let v2 = self.get_reg(rs2) as u64;
+                self.set_reg(rd, (v1.wrapping_mul(v2) >> 32) as u32);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Mulhsu { rd, rs1, rs2 } => {
+                // rs1 sign-extended, rs2 zero-extended into i64
+                let v1 = (self.get_reg(rs1) as i32) as i64;
+                let v2 = self.get_reg(rs2) as i64;
+                let product = v1.wrapping_mul(v2);
+                self.set_reg(rd, (product >> 32) as u32);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Div { rd, rs1, rs2 } => {
+                let v1 = self.get_reg(rs1) as i32;
+                let v2 = self.get_reg(rs2) as i32;
+                let result = if v2 == 0 {
+                    -1i32 as u32
+                } else if v1 == i32::MIN && v2 == -1 {
+                    i32::MIN as u32
+                } else {
+                    v1.wrapping_div(v2) as u32
+                };
+                self.set_reg(rd, result);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Divu { rd, rs1, rs2 } => {
+                let v1 = self.get_reg(rs1);
+                let v2 = self.get_reg(rs2);
+                let result = if v2 == 0 { u32::MAX } else { v1 / v2 };
+                self.set_reg(rd, result);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Rem { rd, rs1, rs2 } => {
+                let v1 = self.get_reg(rs1) as i32;
+                let v2 = self.get_reg(rs2) as i32;
+                let result = if v2 == 0 {
+                    self.get_reg(rs1)
+                } else if v1 == i32::MIN && v2 == -1 {
+                    0
+                } else {
+                    v1.wrapping_rem(v2) as u32
+                };
+                self.set_reg(rd, result);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+            Operation::Remu { rd, rs1, rs2 } => {
+                let v1 = self.get_reg(rs1);
+                let v2 = self.get_reg(rs2);
+                let result = if v2 == 0 { v1 } else { v1 % v2 };
+                self.set_reg(rd, result);
+                self.pc = next_pc;
+                StepResult::Ok
+            }
+
             // ---- I-type ALU ----
             Operation::Addi { rd, rs1, imm } => {
                 let v1 = self.get_reg(rs1);
@@ -836,4 +914,235 @@ mod tests {
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0x8000_1000);
     }
+
+    // ---- M extension execution ----
+
+    #[test]
+    fn step_mul() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 6;
+        cpu.x[3] = 7;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 42);
+    }
+
+    #[test]
+    fn step_mul_overflow() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0xFFFF_FFFF;
+        cpu.x[3] = 2;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFE);
+    }
+
+    #[test]
+    fn step_mulh_positive() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 1;
+        cpu.x[3] = 1;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b001 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0);
+    }
+
+    #[test]
+    fn step_mulh_negative_times_negative() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0xFFFF_FFFF; // -1
+        cpu.x[3] = 0xFFFF_FFFF; // -1
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b001 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0); // (-1)*(-1)=1, high 32 = 0
+    }
+
+    #[test]
+    fn step_mulh_large() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x0001_0000; // 65536
+        cpu.x[3] = 0x0001_0000; // 65536
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b001 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 1); // 65536*65536 = 0x1_0000_0000, high 32 = 1
+    }
+
+    #[test]
+    fn step_mulhu() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0xFFFF_FFFF;
+        cpu.x[3] = 0xFFFF_FFFF;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b011 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFE);
+    }
+
+    #[test]
+    fn step_mulhsu() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0xFFFF_FFFF; // -1 signed
+        cpu.x[3] = 2;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b010 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFF); // (-1)*2 = -2 as i64, high 32 = 0xFFFFFFFF
+    }
+
+    #[test]
+    fn step_div() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 7;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b100 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 6);
+    }
+
+    #[test]
+    fn step_div_negative() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0xFFFF_FFFE; // -2
+        cpu.x[3] = 2;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b100 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFF); // -1
+    }
+
+    #[test]
+    fn step_div_by_zero() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 0;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b100 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFF); // -1
+    }
+
+    #[test]
+    fn step_div_overflow() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0000u32; // INT_MIN
+        cpu.x[3] = 0xFFFF_FFFF; // -1
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b100 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0x8000_0000); // INT_MIN
+    }
+
+    #[test]
+    fn step_divu() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 7;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b101 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 6);
+    }
+
+    #[test]
+    fn step_divu_by_zero() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 0;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b101 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], u32::MAX);
+    }
+
+    #[test]
+    fn step_rem() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 7;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b110 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0);
+    }
+
+    #[test]
+    fn step_rem_negative() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0xFFFF_FFFE; // -2
+        cpu.x[3] = 3;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b110 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFE); // -2 (Rust truncation toward zero)
+    }
+
+    #[test]
+    fn step_rem_by_zero() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 0;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b110 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 42);
+    }
+
+    #[test]
+    fn step_rem_overflow() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0000u32; // INT_MIN
+        cpu.x[3] = 0xFFFF_FFFF; // -1
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b110 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0);
+    }
+
+    #[test]
+    fn step_remu() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 7;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b111 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0);
+    }
+
+    #[test]
+    fn step_remu_by_zero() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 42;
+        cpu.x[3] = 0;
+        let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b111 << 12) | (1u32 << 7) | 0x33;
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 42);
+    }
+
 }

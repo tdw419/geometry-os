@@ -10,9 +10,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 114
-  tests: 697
+  tests: 716
   programs: 40
-  loc: 15764
+  loc: 16093
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1635,12 +1635,17 @@ phases:
   deliverables:
   - name: M extension (multiply/divide)
     description: MUL, MULH, MULHU, MULHSU, DIV, DIVU, REM, REMU. All R-type, funct7=0b0000001.
-    status: todo
+    status: done
+    acceptance_criteria:
+    - description: All 8 M-extension opcodes decode and execute correctly
+      met: true
+    - description: Edge cases handled -- div by zero, overflow, signed/unsigned semantics
+      met: true
     scope_lines: 80
     tasks:
     - id: p38.d1.t1
       title: Add M-extension opcodes to decode.rs and execute in cpu.rs
-      status: todo
+      status: done
       acceptance_criteria:
       - 'MUL: rd = (rs1 * rs2)[31:0]'
       - 'MULH: rd = (rs1 * rs2)[63:32] signed*signed'

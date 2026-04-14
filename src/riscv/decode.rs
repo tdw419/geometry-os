@@ -21,6 +21,16 @@ pub enum Operation {
     Or { rd: u8, rs1: u8, rs2: u8 },
     And { rd: u8, rs1: u8, rs2: u8 },
 
+    // -- M extension (multiply/divide) --
+    Mul { rd: u8, rs1: u8, rs2: u8 },
+    Mulh { rd: u8, rs1: u8, rs2: u8 },
+    Mulhu { rd: u8, rs1: u8, rs2: u8 },
+    Mulhsu { rd: u8, rs1: u8, rs2: u8 },
+    Div { rd: u8, rs1: u8, rs2: u8 },
+    Divu { rd: u8, rs1: u8, rs2: u8 },
+    Rem { rd: u8, rs1: u8, rs2: u8 },
+    Remu { rd: u8, rs1: u8, rs2: u8 },
+
     // -- I-type ALU --
     Addi { rd: u8, rs1: u8, imm: i32 },
     Slti { rd: u8, rs1: u8, imm: i32 },
@@ -141,14 +151,23 @@ pub fn decode(word: u32) -> Operation {
         0x33 => match (funct3, funct7) {
             (0b000, 0b0000000) => Operation::Add { rd, rs1, rs2 },
             (0b000, 0b0100000) => Operation::Sub { rd, rs1, rs2 },
-            (0b001, _) => Operation::Sll { rd, rs1, rs2 },
-            (0b010, _) => Operation::Slt { rd, rs1, rs2 },
-            (0b011, _) => Operation::Sltu { rd, rs1, rs2 },
-            (0b100, _) => Operation::Xor { rd, rs1, rs2 },
+            (0b001, 0b0000000) => Operation::Sll { rd, rs1, rs2 },
+            (0b010, 0b0000000) => Operation::Slt { rd, rs1, rs2 },
+            (0b011, 0b0000000) => Operation::Sltu { rd, rs1, rs2 },
+            (0b100, 0b0000000) => Operation::Xor { rd, rs1, rs2 },
             (0b101, 0b0000000) => Operation::Srl { rd, rs1, rs2 },
             (0b101, 0b0100000) => Operation::Sra { rd, rs1, rs2 },
-            (0b110, _) => Operation::Or { rd, rs1, rs2 },
-            (0b111, _) => Operation::And { rd, rs1, rs2 },
+            (0b110, 0b0000000) => Operation::Or { rd, rs1, rs2 },
+            (0b111, 0b0000000) => Operation::And { rd, rs1, rs2 },
+            // M extension: funct7 = 0b0000001
+            (0b000, 0b0000001) => Operation::Mul { rd, rs1, rs2 },
+            (0b001, 0b0000001) => Operation::Mulh { rd, rs1, rs2 },
+            (0b010, 0b0000001) => Operation::Mulhsu { rd, rs1, rs2 },
+            (0b011, 0b0000001) => Operation::Mulhu { rd, rs1, rs2 },
+            (0b100, 0b0000001) => Operation::Div { rd, rs1, rs2 },
+            (0b101, 0b0000001) => Operation::Divu { rd, rs1, rs2 },
+            (0b110, 0b0000001) => Operation::Rem { rd, rs1, rs2 },
+            (0b111, 0b0000001) => Operation::Remu { rd, rs1, rs2 },
             _ => Operation::Invalid(word),
         },
         0x13 => {
