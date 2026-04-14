@@ -1918,7 +1918,7 @@ fn test_sv32_megapage() {
     ).unwrap();
 
     let satp = make_satp(1, 0, 1); // mode=SV32, root PPN=1
-    let result = mmu::translate(va, mmu::AccessType::Load, false, satp, &bus, &mut tlb);
+    let result = mmu::translate(va, mmu::AccessType::Load, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::Ok(expected_pa as u64));
     if let mmu::TranslateResult::Ok(pa) = result {
         assert_eq!(bus.read_word(pa).unwrap(), 0xCAFE_0001);
@@ -1940,7 +1940,7 @@ fn test_sv32_megapage() {
         make_pte(megapage_ppn_b, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X),
     ).unwrap();
 
-    let result_b = mmu::translate(va_b, mmu::AccessType::Load, false, satp, &bus, &mut tlb);
+    let result_b = mmu::translate(va_b, mmu::AccessType::Load, false, satp, &mut bus, &mut tlb);
     assert_eq!(result_b, mmu::TranslateResult::Ok(expected_pa_b));
 }
 
@@ -1951,10 +1951,10 @@ fn test_sv32_tlb_caches() {
     bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
     bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X | mmu::PTE_U)).unwrap();
     let satp = make_satp(1, 0, 1);
-    let r1 = mmu::translate(0, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    let r1 = mmu::translate(0, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
     assert_eq!(r1, mmu::TranslateResult::Ok(3u64 << 12));
     bus.write_word(1u64 << 12, 0).unwrap();
-    let r2 = mmu::translate(0, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    let r2 = mmu::translate(0, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
     assert_eq!(r2, mmu::TranslateResult::Ok(3u64 << 12));
 }
 
@@ -2013,7 +2013,7 @@ fn test_sv32_nonleaf_at_l2_is_fault() {
     bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
     bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V)).unwrap();
     let satp = make_satp(1, 0, 1);
-    let result = mmu::translate(0, mmu::AccessType::Load, true, satp, &bus, &mut tlb);
+    let result = mmu::translate(0, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::LoadFault);
 }
 
