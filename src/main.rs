@@ -3082,6 +3082,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         step_zombie: false,
         hypervisor_active: false,
         hypervisor_config: String::new(),
+        hypervisor_mode: vm::HypervisorMode::default(),
     };
 
 

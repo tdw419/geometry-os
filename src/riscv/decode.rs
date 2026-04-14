@@ -819,7 +819,8 @@ mod tests {
     #[test]
     fn c_addi16sp() {
         // C.ADDI16SP rd=2, imm=16
-        let op = decode_c(0x7101);
+        // nzimm[4]=1 (16=2^4), maps to inst bit[6]
+        let op = decode_c(0x6141);
         assert_eq!(op, Operation::Addi { rd: 2, rs1: 2, imm: 16 });
     }
 

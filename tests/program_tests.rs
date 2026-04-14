@@ -5444,6 +5444,126 @@ fn test_hypervisor_invalid_string_returns_error() {
     // The opcode only reads the string and stores it. Parsing happens in QemuConfig.
 }
 
+// ── HYPERVISOR mode flag tests (Phase 37) ──────────────────────
+
+#[test]
+fn test_hypervisor_mode_default_is_qemu() {
+    let vm = Vm::new();
+    assert_eq!(
+        vm.hypervisor_mode,
+        geometry_os::vm::HypervisorMode::Qemu,
+        "default hypervisor mode should be Qemu"
+    );
+}
+
+#[test]
+fn test_hypervisor_mode_qemu_explicit() {
+    let mut vm = Vm::new();
+    let config_str = "arch=riscv64 mode=qemu";
+    let config = config_str.as_bytes();
+    for (i, &b) in config.iter().enumerate() {
+        vm.ram[0x1000 + i] = b as u32;
+    }
+    vm.ram[0x1000 + config.len()] = 0;
+
+    vm.ram[0] = 0x72; // HYPERVISOR
+    vm.ram[1] = 0;    // r0
+    vm.regs[0] = 0x1000;
+    vm.pc = 0;
+    vm.step();
+
+    assert!(vm.hypervisor_active);
+    assert_eq!(vm.hypervisor_mode, geometry_os::vm::HypervisorMode::Qemu);
+    assert_eq!(vm.regs[0], 0);
+}
+
+#[test]
+fn test_hypervisor_mode_native() {
+    let mut vm = Vm::new();
+    let config_str = "arch=riscv64 mode=native";
+    let config = config_str.as_bytes();
+    for (i, &b) in config.iter().enumerate() {
+        vm.ram[0x1000 + i] = b as u32;
+    }
+    vm.ram[0x1000 + config.len()] = 0;
+
+    vm.ram[0] = 0x72; // HYPERVISOR
+    vm.ram[1] = 0;    // r0
+    vm.regs[0] = 0x1000;
+    vm.pc = 0;
+    vm.step();
+
+    assert!(vm.hypervisor_active);
+    assert_eq!(vm.hypervisor_mode, geometry_os::vm::HypervisorMode::Native);
+    assert_eq!(vm.regs[0], 0);
+}
+
+#[test]
+fn test_hypervisor_mode_native_case_insensitive() {
+    let mut vm = Vm::new();
+    let config_str = "arch=riscv64 mode=NATIVE";
+    let config = config_str.as_bytes();
+    for (i, &b) in config.iter().enumerate() {
+        vm.ram[0x1000 + i] = b as u32;
+    }
+    vm.ram[0x1000 + config.len()] = 0;
+
+    vm.ram[0] = 0x72; // HYPERVISOR
+    vm.ram[1] = 0;    // r0
+    vm.regs[0] = 0x1000;
+    vm.pc = 0;
+    vm.step();
+
+    assert!(vm.hypervisor_active);
+    assert_eq!(vm.hypervisor_mode, geometry_os::vm::HypervisorMode::Native);
+}
+
+#[test]
+fn test_hypervisor_mode_defaults_to_qemu_without_mode_param() {
+    let mut vm = Vm::new();
+    // Config with arch but no mode= parameter -- should default to Qemu
+    let config_str = "arch=riscv64 ram=256M";
+    let config = config_str.as_bytes();
+    for (i, &b) in config.iter().enumerate() {
+        vm.ram[0x1000 + i] = b as u32;
+    }
+    vm.ram[0x1000 + config.len()] = 0;
+
+    vm.ram[0] = 0x72; // HYPERVISOR
+    vm.ram[1] = 0;    // r0
+    vm.regs[0] = 0x1000;
+    vm.pc = 0;
+    vm.step();
+
+    assert!(vm.hypervisor_active);
+    assert_eq!(vm.hypervisor_mode, geometry_os::vm::HypervisorMode::Qemu);
+}
+
+#[test]
+fn test_hypervisor_mode_resets_to_default() {
+    let mut vm = Vm::new();
+    // Set up native mode
+    let config_str = "arch=riscv64 mode=native";
+    let config = config_str.as_bytes();
+    for (i, &b) in config.iter().enumerate() {
+        vm.ram[0x1000 + i] = b as u32;
+    }
+    vm.ram[0x1000 + config.len()] = 0;
+    vm.ram[0] = 0x72;
+    vm.ram[1] = 0;
+    vm.regs[0] = 0x1000;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.hypervisor_mode, geometry_os::vm::HypervisorMode::Native);
+
+    // Reset should clear mode back to default (Qemu)
+    vm.reset();
+    assert_eq!(vm.hypervisor_mode, geometry_os::vm::HypervisorMode::Qemu);
+    assert!(!vm.hypervisor_active);
+}
+
+
 #[test]
 fn test_hypervisor_resets_with_vm() {
     let mut vm = Vm::new();

@@ -306,6 +306,25 @@ pub struct Vm {
     pub hypervisor_active: bool,
     /// Hypervisor config string read from RAM (Phase 33).
     pub hypervisor_config: String,
+    /// Hypervisor mode: Qemu (Phase 33) or Native RISC-V (Phase 37).
+    /// Detected from config string's mode= parameter.
+    pub hypervisor_mode: HypervisorMode,
+}
+
+/// Hypervisor execution mode.
+/// QEMU mode spawns a subprocess; Native mode uses the built-in RISC-V interpreter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HypervisorMode {
+    /// Use QEMU subprocess for guest execution (any architecture).
+    Qemu,
+    /// Use built-in RISC-V interpreter (Phases 34-36, pure Rust, WASM-portable).
+    Native,
+}
+
+impl Default for HypervisorMode {
+    fn default() -> Self {
+        HypervisorMode::Qemu
+    }
 }
 
 impl Default for Vm {
@@ -353,6 +372,7 @@ impl Vm {
             step_zombie: false,
             hypervisor_active: false,
             hypervisor_config: String::new(),
+            hypervisor_mode: HypervisorMode::default(),
         }
     }
 
@@ -389,6 +409,7 @@ impl Vm {
         self.shutdown_requested = false;
         self.hypervisor_active = false;
         self.hypervisor_config.clear();
+        self.hypervisor_mode = HypervisorMode::default();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -2312,8 +2333,9 @@ impl Vm {
 
             0x72 => {
                 // HYPERVISOR: read config string from RAM at address in r0
-                // Config format: "arch=riscv64 [kernel=file.img] [ram=256M] [disk=rootfs.ext4]"
+                // Config format: "arch=riscv64 [kernel=file.img] [ram=256M] [mode=native|qemu]"
                 // Validates arch= parameter is present. Kernel file existence checked at launch time.
+                // Mode detection: mode=native -> HypervisorMode::Native, otherwise HypervisorMode::Qemu
                 let addr_reg = self.fetch() as usize;
                 if addr_reg < NUM_REGS {
                     let addr = self.regs[addr_reg] as usize;
@@ -2328,7 +2350,21 @@ impl Vm {
                                 self.regs[0] = 0xFFFFFFFD; // missing arch
                                 return true;
                             }
+                            // Detect mode from config string
+                            let mode = cfg
+                                .split_whitespace()
+                                .find(|t| t.to_lowercase().starts_with("mode="))
+                                .map(|t| {
+                                    let val = t.split('=').nth(1).unwrap_or("").to_lowercase();
+                                    if val == "native" {
+                                        HypervisorMode::Native
+                                    } else {
+                                        HypervisorMode::Qemu
+                                    }
+                                })
+                                .unwrap_or(HypervisorMode::Qemu);
                             self.hypervisor_config = cfg.to_string();
+                            self.hypervisor_mode = mode;
                             self.hypervisor_active = true;
                             self.regs[0] = 0; // success
                         }
@@ -3028,6 +3064,7 @@ impl Vm {
             booted: false,
             hypervisor_active: false,
             hypervisor_config: String::new(),
+            hypervisor_mode: HypervisorMode::default(),
         })
     }
 }
