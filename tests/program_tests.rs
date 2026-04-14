@@ -6021,7 +6021,20 @@ fn test_register_dashboard() {
     // register_dashboard.asm displays 16 registers (r1-r16) as 4-digit
     // decimal ASCII values on the canvas grid. r1 = frame counter,
     // r2-r16 derive from r1 via arithmetic. The grid IS the debug view.
-    let vm = compile_run("programs/register_dashboard.asm");
+    //
+    // Run for limited steps (2000) so exactly 1 frame completes and r1 = 1.
+    let source = std::fs::read_to_string("programs/register_dashboard.asm")
+        .unwrap_or_else(|e| panic!("failed to read register_dashboard.asm: {}", e));
+    let asm = assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("assembly failed: {}", e));
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = pixel; }
+    }
+    // Run exactly enough steps for 1 frame (682 = 4 init + 87 loop body - 1 JMP + 16*37 sub)
+    for _ in 0..682 {
+        if !vm.step() { break; }
+    }
 
     // Program is an infinite animation loop (FRAME + JMP main_loop)
     assert!(!vm.halted, "register_dashboard should not halt");
