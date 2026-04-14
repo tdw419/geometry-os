@@ -241,10 +241,11 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
     b.prop_string("mmu-type", "riscv,sv32");
     b.prop_string("isa", "rv32imac");
     b.prop_string("status", "okay");
-    // CPU interrupt controller.
+    // CPU interrupt controller (phandle 1).
     b.begin_node("interrupt-controller");
-    b.prop_empty("#interrupt-cells");
-    b.prop_string("interrupt-controller", "");
+    b.prop_u32("#interrupt-cells", 1);
+    b.prop_empty("interrupt-controller");
+    b.prop_u32("phandle", 1);
     b.prop_string("compatible", "riscv,cpu-intc");
     b.end_node(); // interrupt-controller
     b.end_node(); // cpu@0
@@ -269,24 +270,27 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
     b.prop_string("compatible", "ns16550a");
     b.prop_reg("reg", config.uart_base, 0x100);
     b.prop_u32("interrupts", 10); // IRQ 10
-    b.prop_u32("interrupt-parent", 0x0C00_0000); // PLIC phandle (simplified)
-    b.prop_string("reg-shift", "2"); // No reg-shift needed
+    b.prop_u32("interrupt-parent", 2); // PLIC phandle
+    b.prop_u32("reg-shift", 2); // Register stride (each register is 4 bytes apart)
+    b.prop_u32("clock-frequency", 0); // Let driver use default
     b.end_node();
 
     // CLINT node.
     b.begin_node("clint@2000000");
     b.prop_string("compatible", "riscv,clint0");
     b.prop_reg("reg", config.clint_base, 0x10000);
-    b.prop_u32("interrupts-extended", 0); // Simplified
+    b.prop_u32("interrupts-extended", 1); // Reference CPU intc (phandle 1)
     b.end_node();
 
-    // PLIC node.
+    // PLIC node (phandle 2).
     b.begin_node("plic@c000000");
     b.prop_string("compatible", "riscv,plic0");
     b.prop_reg("reg", config.plic_base, 0x200000);
-    b.prop_u32("interrupt-controller", 0);
+    b.prop_empty("interrupt-controller");
     b.prop_u32("#interrupt-cells", 1);
-    b.prop_u32("riscv,ndev", 31);
+    b.prop_u32("riscv,ndev", 31); // Number of external interrupt sources
+    b.prop_u32("phandle", 2);
+    b.prop_u32("interrupts-extended", 1); // Reference CPU intc (phandle 1)
     b.end_node();
 
     // Virtio MMIO node.
@@ -294,7 +298,7 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
     b.prop_string("compatible", "virtio,mmio");
     b.prop_reg("reg", config.virtio_base, 0x1000);
     b.prop_u32("interrupts", 1); // IRQ 1
-    b.prop_u32("interrupt-parent", 0x0C00_0000);
+    b.prop_u32("interrupt-parent", 2); // PLIC phandle
     b.end_node();
 
     b.end_node(); // soc
