@@ -4293,6 +4293,45 @@ mod tests {
         assert_eq!(vm.beep, Some((440, 200)));
     }
 
+    // ── MEMCPY ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_memcpy_copies_words() {
+        let mut vm = Vm::new();
+        // Write some data to addresses 100-104
+        for i in 0..5 {
+            vm.ram[100 + i] = (1000 + i as u32);
+        }
+        // Set regs: r1=200 (dst), r2=100 (src), r3=5 (len)
+        vm.regs[1] = 200;
+        vm.regs[2] = 100;
+        vm.regs[3] = 5;
+        // MEMCPY r1, r2, r3
+        vm.ram[0] = 0x04; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3;
+        vm.ram[4] = 0x00; // HALT
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        // Verify dst has the data
+        for i in 0..5 {
+            assert_eq!(vm.ram[200 + i], 1000 + i as u32, "MEMCPY failed at offset {}", i);
+        }
+    }
+
+    #[test]
+    fn test_memcpy_zero_len_is_noop() {
+        let mut vm = Vm::new();
+        vm.ram[100] = 0xDEAD;
+        vm.ram[200] = 0xBEEF;
+        vm.regs[1] = 200; // dst
+        vm.regs[2] = 100; // src
+        vm.regs[3] = 0;   // len = 0
+        vm.ram[0] = 0x04; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3;
+        vm.ram[4] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.ram[200], 0xBEEF, "MEMCPY with len=0 should not overwrite dst");
+    }
+
     // ── Loop: verify backward jumps work at base_addr 0 ─────────────
 
     #[test]
