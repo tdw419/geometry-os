@@ -2599,7 +2599,8 @@ fn test_kernel_mode_identity_mapping() {
     assert!(vm.halted);
     assert!(!vm.segfault, "kernel mode should not segfault on any address");
     assert_eq!(vm.regs[3], 0xDEAD, "kernel should read back what it wrote");
-    assert_eq!(vm.ram[0x8000], 0xDEAD, "RAM at 0x8000 should have the value");
+    assert_eq!(vm.canvas_buffer[0], 0xDEAD, "canvas_buffer[0] should have the value (0x8000 is canvas RAM range)");
+    assert_eq!(vm.canvas_buffer[0], 0xDEAD, "canvas_buffer[0] should have the value via STORE to 0x8000");
 }
 
 #[test]

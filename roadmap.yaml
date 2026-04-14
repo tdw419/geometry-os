@@ -15,7 +15,7 @@ phases:
     description: 'Define CANVAS_RAM_BASE = 0x8000, CANVAS_RAM_SIZE = 4096 (128*32). Document the mapping: address 0x8000 + row*32 + col corresponds to canvas_buffer[row * 32 + col]. Add to memory map docs.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: CANVAS_RAM_BASE constant defined in vm.rs or main.rs
       validation: grep CANVAS_RAM_BASE src/vm.rs src/main.rs
@@ -26,7 +26,7 @@ phases:
     tasks:
     - id: p45.d1.t1
       title: Define CANVAS_RAM_BASE and CANVAS_RAM_SIZE constants
-      status: todo
+      status: complete
       description: 'Add `pub const CANVAS_RAM_BASE: usize = 0x8000;` and `pub const CANVAS_RAM_SIZE: usize = 4096;` to vm.rs (or main.rs if canvas_buffer ownership stays there). These are the address range
         [0x8000, 0x8FFF] that maps to the canvas grid.
 
@@ -38,7 +38,7 @@ phases:
       - src/vm.rs
     - id: p45.d1.t2
       title: Update CANVAS_TEXT_SURFACE.md memory map with 0x8000 range
-      status: todo
+      status: complete
       description: 'Add a row to the memory map table in CANVAS_TEXT_SURFACE.md: 0x8000-0x8FFF | 4096 | Canvas grid (RAM-mapped mirror of canvas_buffer)
 
         '
@@ -57,7 +57,7 @@ phases:
       needs a reference or copy of the canvas buffer. Easiest approach: the canvas_buffer is passed to the VM (or VM holds a reference) so LOAD can index into it.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: LOAD from 0x8000+row*32+col returns canvas_buffer value
       validation: 'Write test program: STORE to canvas addr, LOAD back, verify'
@@ -68,7 +68,7 @@ phases:
     tasks:
     - id: p45.d2.t1
       title: Add canvas_buffer reference to VM struct
-      status: todo
+      status: complete
       description: 'The VM struct needs access to the canvas buffer for both LOAD and STORE interception. Add a field like `pub canvas_buffer: Vec<u32>` to the VM struct (a copy that gets synced back to
         main.rs canvas_buffer each frame) OR pass it as a mutable reference through the execute method. The copy approach is simpler and avoids lifetime issues.
 
@@ -83,7 +83,7 @@ phases:
       - src/main.rs
     - id: p45.d2.t2
       title: Intercept LOAD opcode for canvas range
-      status: todo
+      status: complete
       description: 'In the LOAD handler (opcode 0x11), after page translation produces a physical address, check if it falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + CANVAS_RAM_SIZE). If so, read from the
         canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr]. The canvas buffer index maps directly: canvas_buffer[addr - 0x8000].
 
@@ -97,7 +97,7 @@ phases:
       - src/vm.rs
     - id: p45.d2.t3
       title: Sync canvas_buffer to VM before execution
-      status: todo
+      status: complete
       description: 'Before each frame''s VM execution, copy the current canvas_buffer contents into the VM''s canvas mirror (or set up the reference). This ensures the VM sees the latest grid state including
         human-typed text.
 
@@ -117,7 +117,7 @@ phases:
       the store, mark the canvas as dirty so the renderer picks up the change on the next frame.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: STORE to 0x8000+row*32+col writes value to canvas_buffer
       validation: 'Write test: STORE 0x8000 with ''H'', see ''H'' appear on grid'
@@ -131,7 +131,7 @@ phases:
     tasks:
     - id: p45.d3.t1
       title: Intercept STORE opcode for canvas range
-      status: todo
+      status: complete
       description: 'In the STORE handler (opcode 0x12), after page translation, check if the address is in the canvas range. If so, write to the canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr].
         Bypass the user-mode protection for this range (canvas is not I/O).
 
@@ -145,7 +145,7 @@ phases:
       - src/vm.rs
     - id: p45.d3.t2
       title: Sync VM canvas mutations back to main canvas_buffer
-      status: todo
+      status: complete
       description: 'After each frame''s VM execution, copy any changed canvas cells from the VM''s mirror back to main.rs''s canvas_buffer. This ensures the renderer displays the VM''s writes. A simple
         full-copy each frame is fine (4096 u32 values = 16KB).
 
@@ -158,7 +158,7 @@ phases:
       - src/main.rs
     - id: p45.d3.t3
       title: Handle User-mode access to canvas region
-      status: todo
+      status: complete
       description: 'The STORE handler currently blocks User-mode writes to addr >= 0xFF00. The canvas range (0x8000) is below this threshold, so User-mode should work by default. But verify and add a comment
         clarifying that canvas writes are permitted in User mode. If any page translation or protection logic would block it, add an explicit exception.
 
@@ -177,7 +177,7 @@ phases:
     description: 'Write tests that verify STORE/LOAD to canvas addresses work correctly. Test read-after-write, boundary conditions, interaction with normal RAM, and multi-process canvas access.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: At least 5 tests covering canvas LOAD/STORE behavior
       validation: cargo test passes with new tests
@@ -188,7 +188,7 @@ phases:
     tasks:
     - id: p45.d4.t1
       title: 'Test: LOAD reads canvas buffer values'
-      status: todo
+      status: complete
       description: 'Write a test that pre-fills canvas_buffer cells with known values, runs a program that LOADs from 0x8000+offset, and checks the register contains the expected value.
 
         '
@@ -201,7 +201,7 @@ phases:
       - src/vm.rs
     - id: p45.d4.t2
       title: 'Test: STORE writes appear in canvas buffer'
-      status: todo
+      status: complete
       description: 'Write a test that runs a program storing values to canvas addresses, then checks the canvas buffer contains those values.
 
         '
@@ -213,7 +213,7 @@ phases:
       - src/vm.rs
     - id: p45.d4.t3
       title: 'Test: boundary conditions (first/last cell, row boundaries)'
-      status: todo
+      status: complete
       description: 'Test STORE/LOAD at 0x8000 (first cell), 0x8FFF (last cell), and at row boundaries (e.g. end of row 0, start of row 1). Verify no off-by-one errors.
 
         '
@@ -225,7 +225,7 @@ phases:
       - src/vm.rs
     - id: p45.d4.t4
       title: 'Test: canvas access does not corrupt normal RAM'
-      status: todo
+      status: complete
       description: 'Write a test that stores to both normal RAM and canvas addresses, then verifies the normal RAM values are unchanged and the canvas values are correct. Ensures the two memory spaces don''t
         overlap.
 
@@ -239,7 +239,7 @@ phases:
       - src/vm.rs
     - id: p45.d4.t5
       title: 'Test: page translation works with canvas addresses'
-      status: todo
+      status: complete
       description: 'Verify that LOAD/STORE to canvas addresses still go through the page translation mechanism. A process with a page table that maps 0x8000 to a different physical address should see the
         translated result. Or if canvas is identity-mapped, verify that works.
 
@@ -259,7 +259,7 @@ phases:
       top row, or filling the grid with sequential ASCII values. The human sees the text appear on the grid while the program runs.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: Program writes visible text to canvas grid via STORE
       validation: Load program, F8 assemble, F5 run, see text on grid
@@ -270,7 +270,7 @@ phases:
     tasks:
     - id: p45.d5.t1
       title: Write canvas_grid_writer.asm demo
-      status: todo
+      status: complete
       description: 'Create programs/canvas_grid_writer.asm. The program uses LDI to load ASCII values and STORE to write them to 0x8000+ addresses. Writes "PIXELS DRIVE PIXELS" across the first visible
         row. Uses a loop with an index register incrementing through the string.
 
@@ -284,7 +284,7 @@ phases:
       - programs/canvas_grid_writer.asm
     - id: p45.d5.t2
       title: Write canvas_counter.asm demo
-      status: todo
+      status: complete
       description: 'Create programs/canvas_counter.asm. A loop that increments a counter and writes the digit (as ASCII) to a specific canvas cell each iteration. The human sees a digit ticking up on the
         grid in real time.
 

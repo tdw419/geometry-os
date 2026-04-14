@@ -3455,10 +3455,6 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
     };
 
 
-    // Parse canvas trailer[0; vm::CANVAS_RAM_SIZE],
-    };
-
-
     // Parse canvas trailer
     let canvas_len = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
     off += 4;
