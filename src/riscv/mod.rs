@@ -417,6 +417,34 @@ mod tests {
     }
 
     #[test]
+    fn fuzzer_lui_direct() {
+        // Replicate exactly what the riscv_fuzzer does for a single LUI instruction.
+        // LUI x1, 0x87EE5000 = word 0x87EE50B7
+        let ram_base: u64 = 0x8000_0000;
+        let ram_size: usize = 4096;
+        let mut vm = RiscvVm::new_with_base(ram_base, ram_size);
+        vm.cpu.pc = ram_base as u32;
+        vm.cpu.csr.satp = 0;
+        vm.cpu.csr.mie = 0;
+        vm.cpu.csr.mstatus = 0;
+
+        let lui_word: u32 = 0x87EE50B7; // LUI x1, 0x87EE5000
+        let ebreak_word: u32 = 0x00100073;
+        vm.bus.write_word(ram_base, lui_word).unwrap();
+        vm.bus.write_word(ram_base + 4, ebreak_word).unwrap();
+
+        // Step 1: LUI
+        let r1 = vm.step();
+        assert_eq!(r1, cpu::StepResult::Ok, "LUI should return Ok");
+        assert_eq!(vm.cpu.x[1], 0x87EE5000, "x1 should be 0x87EE5000 after LUI");
+        assert_eq!(vm.cpu.pc, ram_base as u32 + 4, "PC should advance by 4");
+
+        // Step 2: EBREAK
+        let r2 = vm.step();
+        assert_eq!(r2, cpu::StepResult::Ebreak, "EBREAK should return Ebreak");
+    }
+
+    #[test]
     fn verified_boot_synthetic_kernel() {
         // Build a tiny "kernel" that writes "Linux version 6.1.0" to UART.
         let kernel = build_uart_program("Linux version 6.1.0\n");

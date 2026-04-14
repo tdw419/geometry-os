@@ -25,5 +25,9 @@ required-features = ["native"]
 name = "fuzzer"
 path = "src/fuzzer.rs"
 
+[[bin]]
+name = "riscv_fuzzer"
+path = "src/riscv_fuzzer.rs"
+
 [dev-dependencies]
 tempfile = "3"
