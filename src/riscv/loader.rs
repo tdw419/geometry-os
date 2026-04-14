@@ -152,17 +152,26 @@ pub fn load_elf(bus: &mut Bus, image: &[u8]) -> Result<LoadInfo, LoadError> {
             &[]
         };
 
-        // Load into guest RAM at physical address.
-        // The bus routes by address: p_paddr goes to RAM (offset from ram_base).
+        // Load file data into guest RAM at physical address.
         for (j, &byte) in data.iter().enumerate() {
             let addr = p_paddr + j as u64;
-            // Best-effort: write bytes. If out of range, stop.
             if bus.write_byte(addr, byte).is_err() {
                 return Err(LoadError::SegmentOverflow);
             }
         }
 
-        let seg_end = p_paddr + p_filesz as u64;
+        // Zero BSS: p_memsz > p_filesz means uninitialized data (BSS).
+        // The gap between file data and memory size must be zeroed.
+        if _p_memsz > p_filesz {
+            for j in p_filesz.._p_memsz {
+                let addr = p_paddr + j as u64;
+                if bus.write_byte(addr, 0).is_err() {
+                    break; // best-effort: stop at RAM boundary
+                }
+            }
+        }
+
+        let seg_end = p_paddr + _p_memsz.max(p_filesz) as u64;
         if seg_end > highest_addr {
             highest_addr = seg_end;
         }

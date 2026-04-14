@@ -172,11 +172,34 @@ impl Tlb {
 
     /// Look up a VPN/ASID in the TLB.
     /// Returns (ppn, flags) if found, None if not.
-    /// Global entries (PTE_G) match any ASID.
+    /// Global entries (PTE_G) match any ASID — they're stored at ASID=0's hash.
+    /// Uses the same hash+probe as insert for O(1) lookup.
     pub fn lookup(&self, vpn: u32, asid: u16) -> Option<(u32, u32)> {
-        for entry in &self.entries {
-            if entry.valid && entry.vpn == vpn {
+        // Probe the requested ASID's chain first
+        if let Some(result) = self.probe_chain(vpn, asid, false) {
+            return Some(result);
+        }
+        // For non-zero ASID, also probe ASID=0 chain (where globals live)
+        if asid != 0 {
+            return self.probe_chain(vpn, 0, true);
+        }
+        None
+    }
+
+    /// Probe a single hash chain. If globals_only, only match entries with PTE_G.
+    fn probe_chain(&self, vpn: u32, asid: u16, globals_only: bool) -> Option<(u32, u32)> {
+        let base = ((vpn as usize).wrapping_add((asid as usize) * 2654435761)) % TLB_SIZE;
+        for i in 0..4 {
+            let idx = (base + i) % TLB_SIZE;
+            let entry = &self.entries[idx];
+            if !entry.valid {
+                break;
+            }
+            if entry.vpn == vpn {
                 let is_global = (entry.flags & PTE_G) != 0;
+                if globals_only && !is_global {
+                    continue; // looking for globals only, skip non-global
+                }
                 if is_global || entry.asid == asid {
                     return Some((entry.ppn, entry.flags));
                 }
@@ -186,18 +209,20 @@ impl Tlb {
     }
 
     /// Insert an entry into the TLB with linear probing.
+    /// Global entries (PTE_G) are inserted at ASID=0 so any lookup can find them.
     pub fn insert(&mut self, vpn: u32, asid: u16, ppn: u32, flags: u32) {
-        let base = ((vpn as usize).wrapping_add((asid as usize) * 2654435761)) % TLB_SIZE;
+        let insert_asid = if (flags & PTE_G) != 0 { 0 } else { asid };
+        let base = ((vpn as usize).wrapping_add((insert_asid as usize) * 2654435761)) % TLB_SIZE;
         // Linear probe: find an empty slot or evict the base slot.
         for i in 0..4 {
             let idx = (base + i) % TLB_SIZE;
             if !self.entries[idx].valid {
-                self.entries[idx] = TlbEntry { vpn, asid, ppn, flags, valid: true };
+                self.entries[idx] = TlbEntry { vpn, asid: insert_asid, ppn, flags, valid: true };
                 return;
             }
         }
         // All probed slots full: evict the base slot.
-        self.entries[base] = TlbEntry { vpn, asid, ppn, flags, valid: true };
+        self.entries[base] = TlbEntry { vpn, asid: insert_asid, ppn, flags, valid: true };
     }
 
     /// Flush all TLB entries.
