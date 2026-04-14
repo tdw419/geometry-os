@@ -41,6 +41,8 @@ const SBI_EXT_CONSOLE_PUTCHAR: u32 = 0x02;
 const SBI_EXT_HART_STATE: u32 = 0x48534F; // "HSM"
 const SBI_EXT_SYSTEM_RESET: u32 = 0x53525354; // "SRST"
 const SBI_EXT_TIMER: u32 = 0x54494D45; // "TIME"
+const SBI_EXT_IPI: u32 = 0x735049; // "sPI" (note: lowercase to avoid confusion)
+const SBI_EXT_RFENCE: u32 = 0x52464E43; // "RFNC"
 
 /// SBI device: handles ECALL-based SBI calls and HTIF memory-mapped I/O.
 pub struct Sbi {
@@ -143,7 +145,7 @@ impl Sbi {
                             SBI_EXT_CONSOLE_PUTCHAR |
                             SBI_EXT_TIMER | SBI_EXT_HART_STATE |
                             SBI_EXT_SYSTEM_RESET | SBI_SET_TIMER |
-                            SBI_SHUTDOWN
+                            SBI_SHUTDOWN | SBI_EXT_RFENCE | SBI_EXT_IPI
                         );
                         Some((if available { 1 } else { 0 }, 0))
                     }
@@ -182,6 +184,10 @@ impl Sbi {
                     _ => Some((SBI_ERR_NOT_SUPPORTED as u32, 0)),
                 }
             }
+            // RFENCE extension - remote fence operations (single-hart, NOP)
+            SBI_EXT_RFENCE => Some((SBI_SUCCESS as u32, 0)),
+            // IPI extension - inter-processor interrupts (single-hart, NOP)
+            SBI_EXT_IPI => Some((SBI_SUCCESS as u32, 0)),
             _ => None, // Not an SBI call
         }
     }

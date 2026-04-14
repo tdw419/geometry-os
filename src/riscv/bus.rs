@@ -7,6 +7,7 @@
 use super::clint::Clint;
 use super::memory::{GuestMemory, MemoryError};
 use super::plic::Plic;
+use super::sbi::Sbi;
 use super::uart::Uart;
 use super::virtio_blk::VirtioBlk;
 
@@ -26,6 +27,9 @@ pub struct Bus {
     pub plic: Plic,
     /// Virtio block device.
     pub virtio_blk: VirtioBlk,
+    /// SBI (Supervisor Binary Interface) handler.
+    /// Intercepts SBI ECALLs from the kernel before they reach the trap vector.
+    pub sbi: Sbi,
 }
 
 impl Bus {
@@ -37,6 +41,7 @@ impl Bus {
             uart: Uart::new(),
             plic: Plic::new(),
             virtio_blk: VirtioBlk::new(),
+            sbi: Sbi::new(),
         }
     }
 

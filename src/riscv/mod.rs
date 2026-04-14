@@ -291,6 +291,10 @@ impl RiscvVm {
         // 8. Execute.
         let mut count: u64 = 0;
         while count < max_instructions {
+            // Check for SBI shutdown request
+            if vm.bus.sbi.shutdown_requested {
+                break;
+            }
             match vm.step() {
                 StepResult::Ok => {}
                 StepResult::Ebreak => break,

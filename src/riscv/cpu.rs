@@ -675,6 +675,40 @@ impl RiscvCpu {
                     Privilege::Supervisor => csr::CAUSE_ECALL_S,
                     Privilege::Machine => csr::CAUSE_ECALL_M,
                 };
+
+                // SBI interception: when an ECALL from S-mode would trap to M-mode,
+                // check if it's an SBI call (a7 = SBI extension ID).
+                // If handled by SBI, set results in a0/a1 and advance PC (no trap).
+                // This is how real firmware (OpenSBI/BBL) handles SBI calls.
+                if self.privilege == Privilege::Supervisor {
+                    let a7 = self.x[17]; // extension ID
+                    let a6 = self.x[16]; // function ID
+                    let a0 = self.x[10];
+                    let a1 = self.x[11];
+                    let a2 = self.x[12];
+                    let a3 = self.x[13];
+                    let a4 = self.x[14];
+                    let a5 = self.x[15];
+
+                    let sbi_result =
+                        bus.sbi
+                            .handle_ecall(a7, a6, a0, a1, a2, a3, a4, a5, &mut bus.uart);
+
+                    if let Some((ret_a0, ret_a1)) = sbi_result {
+                        // SBI handled the call. Set results and advance PC.
+                        self.x[10] = ret_a0;
+                        self.x[11] = ret_a1;
+                        self.pc = next_pc;
+
+                        // Check if SBI requested shutdown
+                        if bus.sbi.shutdown_requested {
+                            return StepResult::Ebreak;
+                        }
+                        return StepResult::Ok;
+                    }
+                }
+
+                // Not an SBI call -- deliver as a normal trap.
                 // Check medeleg to see if this exception is delegated to S-mode.
                 let trap_priv = self.csr.trap_target_priv(cause, self.privilege);
                 let vector = self.csr.trap_vector(trap_priv);

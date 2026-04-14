@@ -1096,6 +1096,9 @@ fn test_rv32_privilege_ecall_s_to_m() {
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
     vm.cpu.csr.mtvec = (base as u32) + 0x400;
 
+    // Set a7 to a non-SBI value so ECALL is NOT intercepted by SBI
+    vm.cpu.x[17] = 0x999;
+
     let result = vm.cpu.step(&mut vm.bus);
     assert_eq!(result, StepResult::Ok);
     assert_eq!(vm.cpu.pc, (base as u32) + 0x400, "should jump to mtvec");
@@ -1261,6 +1264,8 @@ fn test_rv32_privilege_full_chain_u_s_m_s_u() {
     assert_eq!(spp, 0, "SPP = 0 (came from U)");
 
     // Step 2: S-mode ECALL -> traps to M (not delegated)
+    // Set a7 to a non-SBI value so ECALL is NOT intercepted by SBI
+    vm.cpu.x[17] = 0x999;
     let r = vm.cpu.step(&mut vm.bus);
     assert_eq!(r, StepResult::Ok);
     assert_eq!(vm.cpu.privilege, Privilege::Machine, "after S ECALL -> M");
@@ -1347,6 +1352,9 @@ fn test_rv32_privilege_ecall_s_to_m_mstatus() {
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Supervisor;
     vm.cpu.csr.mtvec = (base as u32) + 0x400;
+
+    // Set a7 to a non-SBI value so ECALL is NOT intercepted by SBI
+    vm.cpu.x[17] = 0x999;
 
     // Set MIE=1 before trap
     vm.cpu.csr.mstatus = 1 << MSTATUS_MIE_BIT;
@@ -2993,4 +3001,103 @@ fn test_rv32_linux_kernel_loads() {
             }
         }
     }
+}
+
+
+/// Test SBI ECALL interception: ECALL from S-mode with valid SBI extension
+/// is handled by SBI (no trap), while non-SBI ECALL traps to M-mode.
+#[test]
+fn test_sbi_ecall_interception() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+    use geometry_os::riscv::cpu::Privilege;
+
+    // Write ECALL at entry point
+    vm.bus.write_word(base, ecall()).unwrap();
+    vm.bus.write_word(base + 4, ebreak()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = Privilege::Supervisor;
+
+    // --- Test 1: SBI_CONSOLE_PUTCHAR (a7=1) should be intercepted ---
+    vm.cpu.x[17] = 1; // a7 = SBI_CONSOLE_PUTCHAR
+    vm.cpu.x[10] = b'A' as u32; // a0 = 'A'
+
+    let r = vm.cpu.step(&mut vm.bus);
+    assert_eq!(r, StepResult::Ok);
+    // PC should advance past ECALL (no trap)
+    assert_eq!(vm.cpu.pc, (base as u32) + 4, "SBI call should advance PC normally");
+    // Should still be in S-mode (no privilege change)
+    assert_eq!(vm.cpu.privilege, Privilege::Supervisor, "SBI call keeps S-mode");
+    // a0 should be SBI_SUCCESS (0)
+    assert_eq!(vm.cpu.x[10], 0, "a0 = SBI_SUCCESS");
+    // Character should be in SBI console output
+    assert!(!vm.bus.sbi.console_output.is_empty(), "SBI should have console output");
+    assert_eq!(vm.bus.sbi.console_output[0], b'A', "first char should be 'A'");
+
+    // --- Test 2: Non-SBI ECALL (a7=0x999) should trap to M-mode ---
+    vm.cpu.pc = base as u32;
+    vm.cpu.csr.mtvec = (base as u32) + 0x400;
+    vm.bus.write_word(base + 0x400, ebreak()).unwrap();
+    vm.cpu.x[17] = 0x999; // Not an SBI extension
+
+    let r = vm.cpu.step(&mut vm.bus);
+    assert_eq!(r, StepResult::Ok);
+    // Should trap to M-mode
+    assert_eq!(vm.cpu.privilege, Privilege::Machine, "non-SBI ECALL traps to M-mode");
+    assert_eq!(vm.cpu.pc, (base as u32) + 0x400, "should jump to mtvec");
+    assert_eq!(vm.cpu.csr.mcause, 9, "mcause = ECALL-S");
+}
+
+/// Test SBI base extension probe from S-mode.
+#[test]
+fn test_sbi_base_probe_from_smode() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+    use geometry_os::riscv::cpu::Privilege;
+
+    vm.bus.write_word(base, ecall()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = Privilege::Supervisor;
+
+    // Probe SBI_EXT_BASE (0x10), function PROBE_EXTENSION (3)
+    vm.cpu.x[17] = 0x10; // a7 = SBI_EXT_BASE
+    vm.cpu.x[16] = 3; // a6 = PROBE_EXTENSION
+    vm.cpu.x[10] = 1; // a0 = probe for SBI_CONSOLE_PUTCHAR (1)
+
+    vm.cpu.step(&mut vm.bus);
+
+    assert_eq!(vm.cpu.privilege, Privilege::Supervisor);
+    assert_eq!(vm.cpu.x[10], 1, "SBI_CONSOLE_PUTCHAR should be available");
+
+    // Now probe an unknown extension
+    vm.cpu.pc = base as u32;
+    vm.cpu.x[17] = 0x10;
+    vm.cpu.x[16] = 3;
+    vm.cpu.x[10] = 0x999; // unknown extension
+
+    vm.cpu.step(&mut vm.bus);
+
+    assert_eq!(vm.cpu.x[10], 0, "unknown extension should return 0");
+}
+
+/// Test SBI shutdown from S-mode causes EBREAK.
+#[test]
+fn test_sbi_shutdown_from_smode() {
+    let mut vm = RiscvVm::new(8192);
+    let base = 0x8000_0000u64;
+    use geometry_os::riscv::cpu::Privilege;
+
+    vm.bus.write_word(base, ecall()).unwrap();
+
+    vm.cpu.pc = base as u32;
+    vm.cpu.privilege = Privilege::Supervisor;
+
+    // SBI_SHUTDOWN = 8
+    vm.cpu.x[17] = 8; // a7 = SBI_SHUTDOWN
+
+    let r = vm.cpu.step(&mut vm.bus);
+    assert_eq!(r, StepResult::Ebreak, "SBI shutdown should return EBREAK");
+    assert!(vm.bus.sbi.shutdown_requested);
 }
