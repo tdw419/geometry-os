@@ -319,18 +319,18 @@ impl RiscvVm {
         // Delegate interrupts to S-mode: bit 1=SSIP, 5=STI, 9=SEI
         vm.cpu.csr.mideleg = 0x222;
 
-        // 8. Execute with Rust-level trap forwarding.
+        // 8. Execute with Rust-level trap forwarding (OpenSBI emulation).
         //
         // The CPU's trap_target_priv() won't delegate M-mode traps to S-mode
         // (medeleg only applies to traps from lower privileges). So when the
-        // kernel takes a page fault while running in M-mode (e.g., testing page
-        // tables it just set up), the trap goes to our M-mode handler at fw_addr.
+        // kernel takes any exception while running in M-mode, the trap goes to
+        // our M-mode handler at fw_addr.
         //
         // We intercept this here: after each step, if the CPU landed at our
-        // trap handler, we check mcause. For page faults (12/13/15), we forward
-        // the trap to S-mode by setting sepc/scause/stval and jumping to stvec.
-        // For other traps, we skip the faulting instruction (mepc += 4) and let
-        // the MRET at fw_addr return.
+        // trap handler, we forward ALL exceptions to S-mode (except ECALL_M
+        // which is an SBI call). This emulates OpenSBI behavior where most
+        // M-mode traps are reflected to S-mode so the kernel's own handlers
+        // can process them (page faults, access faults, etc.).
         let fw_addr_u32 = fw_addr as u32;
         let mut count: u64 = 0;
         while count < max_instructions {
@@ -346,14 +346,13 @@ impl RiscvVm {
                 let mcause = vm.cpu.csr.mcause;
                 let cause_code = mcause & !(1u32 << 31); // strip interrupt bit
 
-                if cause_code == 12 || cause_code == 13 || cause_code == 15 {
-                    // Page fault in M-mode -- forward to S-mode.
-                    //
-                    // This emulates what OpenSBI does: the kernel sets up page
-                    // tables in M-mode and tests them by accessing virtual addresses.
-                    // When those accesses fault, OpenSBI reflects the trap to S-mode
-                    // so the kernel's own page fault handler can fix the mapping.
-                    let stvec = vm.cpu.csr.stvec & !0x3u32; // direct mode, clear vectored bit
+                // ECALL from M-mode (cause 11) is an SBI call -- handle by
+                // skipping it (the SBI handler runs elsewhere). All other
+                // exceptions should be forwarded to S-mode (OpenSBI behavior).
+                // This includes page faults (12/13/15), access faults (1/5/7),
+                // misaligned access (0/4/6), illegal instruction (2), etc.
+                if cause_code != csr::CAUSE_ECALL_M {
+                    let stvec = vm.cpu.csr.stvec & !0x3u32; // direct mode
                     if stvec != 0 {
                         // Copy M-mode trap info to S-mode CSRs.
                         vm.cpu.csr.sepc = vm.cpu.csr.mepc;
@@ -361,10 +360,8 @@ impl RiscvVm {
                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
 
                         // Set S-mode trap entry state in mstatus:
-                        // SPP = 1 (came from Supervisor... technically we're in
-                        // M-mode, but the kernel's early boot code in M-mode is
-                        // logically "kernel code" that should return to S-mode
-                        // after handling. Setting SPP=1 means sret returns to S-mode).
+                        // SPP = 1 (kernel's early M-mode code is logically
+                        // "kernel code" -- sret should return to S-mode).
                         vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
                             | (1 << csr::MSTATUS_SPP);
                         // SPIE = SIE (save current SIE), SIE = 0 (disable S interrupts)
@@ -385,7 +382,7 @@ impl RiscvVm {
                     // stvec not set yet -- fall through to skip instruction.
                 }
 
-                // Non-page-fault trap (or page fault with no stvec):
+                // ECALL_M or exception with no stvec:
                 // Skip the faulting instruction and return via MRET.
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
                 // The MRET instruction at fw_addr will execute on the next step,

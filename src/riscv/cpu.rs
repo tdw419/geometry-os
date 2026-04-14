@@ -845,7 +845,7 @@ impl RiscvCpu {
 
                     let sbi_result =
                         bus.sbi
-                            .handle_ecall(a7, a6, a0, a1, a2, a3, a4, a5, &mut bus.uart);
+                            .handle_ecall(a7, a6, a0, a1, a2, a3, a4, a5, &mut bus.uart, &mut bus.clint);
 
                     if let Some((ret_a0, ret_a1)) = sbi_result {
                         // SBI handled the call. Set results and advance PC.

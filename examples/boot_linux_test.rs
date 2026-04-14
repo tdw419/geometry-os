@@ -40,7 +40,11 @@ fn main() {
     let mut canvas = vec![0u32; canvas_rows * canvas_cols];
 
     // Boot the kernel.
-    println!("--- Starting boot (100,000 instructions) ---");
+    let max_instr: u64 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(500_000);
+    println!("--- Starting boot ({} instructions) ---", max_instr);
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
     let start = std::time::Instant::now();
 
@@ -48,7 +52,7 @@ fn main() {
         &kernel_image,
         initramfs.as_deref(),
         256,
-        100_000,
+        max_instr,
         bootargs,
     );
 
@@ -59,6 +63,17 @@ fn main() {
             println!("Entry: 0x{:08X}, DTB: 0x{:08X}", r.entry, r.dtb_addr);
             println!("PC after boot: 0x{:08X}", vm.cpu.pc);
             println!("Privilege: {:?}", vm.cpu.privilege);
+            println!("mcause: 0x{:08X}", vm.cpu.csr.mcause);
+            println!("mepc:   0x{:08X}", vm.cpu.csr.mepc);
+            println!("mtval:  0x{:08X}", vm.cpu.csr.mtval);
+            println!("scause: 0x{:08X}", vm.cpu.csr.scause);
+            println!("sepc:   0x{:08X}", vm.cpu.csr.sepc);
+            println!("stval:  0x{:08X}", vm.cpu.csr.stval);
+            println!("stvec:  0x{:08X}", vm.cpu.csr.stvec);
+            println!("satp:   0x{:08X}", vm.cpu.csr.satp);
+            println!("mstatus:0x{:08X}", vm.cpu.csr.mstatus);
+            println!("medeleg:0x{:08X}", vm.cpu.csr.medeleg);
+            println!("mideleg:0x{:08X}", vm.cpu.csr.mideleg);
 
             // Drain UART output.
             bridge.drain_uart_to_canvas(&mut vm.bus, &mut canvas);

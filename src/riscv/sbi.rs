@@ -11,6 +11,7 @@
 // - SBI v0.2 console putchar (console_write_byte)
 // - SBI v0.2 hart state (hart_start, hart_stop)
 // - SBI v0.2 system reset (shutdown, reboot)
+// - SBI v0.2 timer (set_timer)
 // - HTIF tohost/fromhost memory-mapped writes (silently accepted)
 
 use super::uart::Uart;
@@ -75,7 +76,19 @@ impl Sbi {
     /// Returns (a0, a1) pair to set in registers after the ECALL.
     /// If this is NOT an SBI call, returns None and the CPU should
     /// handle the ECALL as a normal trap.
-    pub fn handle_ecall(&mut self, a7: u32, a6: u32, a0: u32, _a1: u32, _a2: u32, _a3: u32, _a4: u32, _a5: u32, uart: &mut Uart) -> Option<(u32, u32)> {
+    pub fn handle_ecall(
+        &mut self,
+        a7: u32,
+        a6: u32,
+        a0: u32,
+        _a1: u32,
+        _a2: u32,
+        _a3: u32,
+        _a4: u32,
+        _a5: u32,
+        uart: &mut Uart,
+        clint: &mut super::clint::Clint,
+    ) -> Option<(u32, u32)> {
         match a7 {
             // SBI v0.1 legacy calls (extension ID is the function ID, a6=0)
             SBI_CONSOLE_PUTCHAR => {
@@ -105,24 +118,15 @@ impl Sbi {
                 }
             }
             SBI_SET_TIMER => {
-                // Ignore timer setting for now
+                // Set the timer: a0 = next timer event (absolute time)
+                clint.mtimecmp = a0 as u64;
                 Some((SBI_SUCCESS as u32, 0))
             }
-            SBI_CLEAR_IPI => {
-                Some((SBI_SUCCESS as u32, 0))
-            }
-            SBI_SEND_IPI => {
-                Some((SBI_SUCCESS as u32, 0))
-            }
-            SBI_REMOTE_FENCE_I => {
-                Some((SBI_SUCCESS as u32, 0))
-            }
-            SBI_REMOTE_SFENCE_VMA => {
-                Some((SBI_SUCCESS as u32, 0))
-            }
-            SBI_REMOTE_SFENCE_VMA_ASID => {
-                Some((SBI_SUCCESS as u32, 0))
-            }
+            SBI_CLEAR_IPI => Some((SBI_SUCCESS as u32, 0)),
+            SBI_SEND_IPI => Some((SBI_SUCCESS as u32, 0)),
+            SBI_REMOTE_FENCE_I => Some((SBI_SUCCESS as u32, 0)),
+            SBI_REMOTE_SFENCE_VMA => Some((SBI_SUCCESS as u32, 0)),
+            SBI_REMOTE_SFENCE_VMA_ASID => Some((SBI_SUCCESS as u32, 0)),
             SBI_SHUTDOWN => {
                 self.shutdown_requested = true;
                 Some((SBI_SUCCESS as u32, 0))
@@ -140,12 +144,18 @@ impl Sbi {
                     // SBI_BASE_PROBE_EXTENSION (3)
                     3 => {
                         // Probe if extension `a0` is available
-                        let available = matches!(a0,
-                            SBI_EXT_BASE | SBI_CONSOLE_PUTCHAR |
-                            SBI_EXT_CONSOLE_PUTCHAR |
-                            SBI_EXT_TIMER | SBI_EXT_HART_STATE |
-                            SBI_EXT_SYSTEM_RESET | SBI_SET_TIMER |
-                            SBI_SHUTDOWN | SBI_EXT_RFENCE | SBI_EXT_IPI
+                        let available = matches!(
+                            a0,
+                            SBI_EXT_BASE
+                                | SBI_CONSOLE_PUTCHAR
+                                | SBI_EXT_CONSOLE_PUTCHAR
+                                | SBI_EXT_TIMER
+                                | SBI_EXT_HART_STATE
+                                | SBI_EXT_SYSTEM_RESET
+                                | SBI_SET_TIMER
+                                | SBI_SHUTDOWN
+                                | SBI_EXT_RFENCE
+                                | SBI_EXT_IPI
                         );
                         Some((if available { 1 } else { 0 }, 0))
                     }
@@ -160,7 +170,10 @@ impl Sbi {
             }
             // SBI_EXT_CONSOLE_PUTCHAR (0x02) already handled above (same as SBI_CONSOLE_GETCHAR)
             SBI_EXT_TIMER => {
-                // Timer extension - just acknowledge
+                // Timer extension: function 0 = sbi_set_timer
+                if a6 == 0 {
+                    clint.mtimecmp = a0 as u64;
+                }
                 Some((SBI_SUCCESS as u32, 0))
             }
             SBI_EXT_HART_STATE => {
@@ -202,12 +215,14 @@ impl Default for Sbi {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::clint::Clint;
 
     #[test]
     fn test_sbi_console_putchar() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
-        let result = sbi.handle_ecall(SBI_CONSOLE_PUTCHAR, 0, b'A' as u32, 0, 0, 0, 0, 0, &mut uart);
+        let mut clint = Clint::new();
+        let result = sbi.handle_ecall(SBI_CONSOLE_PUTCHAR, 0, b'A' as u32, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(result.is_some());
         let (a0, a1) = result.unwrap();
         assert_eq!(a0, SBI_SUCCESS as u32);
@@ -219,7 +234,8 @@ mod tests {
     fn test_sbi_console_putchar_null() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
-        sbi.handle_ecall(SBI_CONSOLE_PUTCHAR, 0, 0, 0, 0, 0, 0, 0, &mut uart);
+        let mut clint = Clint::new();
+        sbi.handle_ecall(SBI_CONSOLE_PUTCHAR, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(sbi.console_output.is_empty());
     }
 
@@ -227,7 +243,8 @@ mod tests {
     fn test_sbi_getchar() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
-        let result = sbi.handle_ecall(SBI_CONSOLE_GETCHAR, 0, 0, 0, 0, 0, 0, 0, &mut uart);
+        let mut clint = Clint::new();
+        let result = sbi.handle_ecall(SBI_CONSOLE_GETCHAR, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(result.is_some());
         let (a0, _) = result.unwrap();
         assert_eq!(a0, 0xFFFFFFFF); // -1 = no char
@@ -237,7 +254,8 @@ mod tests {
     fn test_sbi_base_get_spec_version() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
-        let result = sbi.handle_ecall(SBI_EXT_BASE, 0, 0, 0, 0, 0, 0, 0, &mut uart);
+        let mut clint = Clint::new();
+        let result = sbi.handle_ecall(SBI_EXT_BASE, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert_eq!(result, Some((2, 0)));
     }
 
@@ -245,7 +263,8 @@ mod tests {
     fn test_sbi_unknown_extension() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
-        let result = sbi.handle_ecall(0x999, 0, 0, 0, 0, 0, 0, 0, &mut uart);
+        let mut clint = Clint::new();
+        let result = sbi.handle_ecall(0x999, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(result.is_none());
     }
 
@@ -253,7 +272,8 @@ mod tests {
     fn test_sbi_shutdown() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
-        sbi.handle_ecall(SBI_SHUTDOWN, 0, 0, 0, 0, 0, 0, 0, &mut uart);
+        let mut clint = Clint::new();
+        sbi.handle_ecall(SBI_SHUTDOWN, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(sbi.shutdown_requested);
     }
 
@@ -261,7 +281,8 @@ mod tests {
     fn test_sbi_system_reset() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
-        sbi.handle_ecall(SBI_EXT_SYSTEM_RESET, 0, 0, 0, 0, 0, 0, 0, &mut uart);
+        let mut clint = Clint::new();
+        sbi.handle_ecall(SBI_EXT_SYSTEM_RESET, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(sbi.shutdown_requested);
     }
 
@@ -269,13 +290,14 @@ mod tests {
     fn test_sbi_base_probe_extension() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
+        let mut clint = Clint::new();
 
         // Probe known extension
-        let result = sbi.handle_ecall(SBI_EXT_BASE, 3, SBI_EXT_CONSOLE_PUTCHAR, 0, 0, 0, 0, 0, &mut uart);
+        let result = sbi.handle_ecall(SBI_EXT_BASE, 3, SBI_EXT_CONSOLE_PUTCHAR, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert_eq!(result, Some((1, 0))); // available
 
         // Probe unknown extension
-        let result = sbi.handle_ecall(SBI_EXT_BASE, 3, 0x999, 0, 0, 0, 0, 0, &mut uart);
+        let result = sbi.handle_ecall(SBI_EXT_BASE, 3, 0x999, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert_eq!(result, Some((0, 0))); // not available
     }
 
@@ -283,7 +305,9 @@ mod tests {
     fn test_sbi_set_timer() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
-        let result = sbi.handle_ecall(SBI_SET_TIMER, 0, 0xDEAD, 0, 0, 0, 0, 0, &mut uart);
+        let mut clint = Clint::new();
+        let result = sbi.handle_ecall(SBI_SET_TIMER, 0, 0xDEAD, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert_eq!(result, Some((SBI_SUCCESS as u32, 0)));
+        assert_eq!(clint.mtimecmp, 0xDEAD);
     }
 }

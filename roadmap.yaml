@@ -1,6 +1,6 @@
 title: Geometry OS Roadmap
 version: 1.0.0
-description: Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  101 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch
+description: Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  140 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch
   it run.
 project_url: https://github.com/tdw419/geometry-os
 meta:
@@ -9,10 +9,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 101
-  tests: 1009
-  programs: 47
-  loc: 14363
+  opcodes: 140
+  tests: 1013
+  programs: 48
+  loc: 61456
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1885,7 +1885,7 @@ phases:
       - wait blocks parent until child exits
 - id: phase-43
   title: Geometry OS VFS and Disk
-  status: todo
+  status: in_progress
   goal: Build a virtual filesystem layer based on observed Linux VFS patterns.
   priority: 70
   description: Trace Linux VFS operations during boot and build Geometry OS equivalents.
@@ -1894,30 +1894,30 @@ phases:
   deliverables:
   - name: Inode filesystem
     description: In-memory inode-based filesystem with directory tree
-    status: todo
+    status: in_progress
     scope_lines: 300
     tasks:
     - id: p43.d1.t1
       title: Implement inode structures and directory operations
-      status: todo
+      status: in_progress
       acceptance_criteria:
       - Inode types: regular file, directory, device, pipe
       - Path resolution and read/write with offset tracking
   - name: File descriptor table
     description: Per-process fd table with pipe support
-    status: todo
+    status: done
     scope_lines: 100
     tasks:
     - id: p43.d2.t1
       title: Implement fd table with open/close/dup2/pipe
-      status: todo
+      status: done
       acceptance_criteria:
       - stdin/stdout/stderr per process
       - pipe creates connected read/write fds
       - dup2 for shell redirects
 - id: phase-44
   title: Geometry OS Memory Management
-  status: todo
+  status: in_progress
   goal: Rebuild Geometry OS memory management based on observed Linux SV32 paging.
   priority: 75
   description: Trace Linux page table setup during boot and build Geometry OS equivalents.
@@ -1926,23 +1926,23 @@ phases:
   deliverables:
   - name: Page allocator
     description: Physical page allocator for 4KB pages
-    status: todo
+    status: done
     scope_lines: 150
     tasks:
     - id: p44.d1.t1
       title: Implement physical page allocator
-      status: todo
+      status: done
       acceptance_criteria:
       - Allocates/frees 4KB pages
       - Tracks used/free pages
   - name: Virtual memory areas
     description: Per-process VMA list for code, heap, stack, mmap
-    status: todo
+    status: done
     scope_lines: 150
     tasks:
     - id: p44.d2.t1
       title: Implement VMA tracking and page fault handler
-      status: todo
+      status: done
       acceptance_criteria:
       - VMA list per process
       - Page fault allocates on demand
