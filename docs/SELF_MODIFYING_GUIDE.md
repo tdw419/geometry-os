@@ -11,7 +11,7 @@ executable.
 |--------|-----------|------|---------|
 | Canvas Grid | 0x8000 - 0x8FFF | 4096 cells | 128 rows × 32 cols of editable text |
 | Canvas Bytecode | 0x1000 - 0x1FFF | 4096 cells | Where ASMSELF writes compiled code |
-| Screen Buffer | 0x10000+ | 65536 cells | 256×256 pixel display |
+| Screen Buffer | 0x10000 - 0x1FFFF | 65536 cells | 256×256 pixel display |
 | ASM Status | 0xFFD | 1 cell | Assembly result (word count or error) |
 
 ## The Three Opcodes
@@ -355,3 +355,5 @@ if you pass an immediate value. `SLEEP 60` gives "invalid register: 60". Use
 - `programs/self_writer.asm` — Working demo of the write-compile-execute cycle
 - `programs/canvas_grid_writer.asm` — Demo of writing text to the canvas grid
 - `programs/canvas_counter.asm` — Demo of live canvas state updates
+- `programs/game_of_life.asm` — Conway's Game of Life in pure assembly
+- `programs/code_evolution.asm` — Multigenerational self-writing program
