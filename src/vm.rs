@@ -527,6 +527,13 @@ pub struct Vm {
     /// Hypervisor mode: Qemu (Phase 33) or Native RISC-V (Phase 37).
     /// Detected from config string's mode= parameter.
     pub hypervisor_mode: HypervisorMode,
+    /// Key ring buffer: host pushes keystrokes, IKEY reads them in order.
+    /// Supports up to 16 queued keys so rapid typing doesn't drop inputs.
+    pub key_buffer: Vec<u32>,
+    /// Key buffer head (next read position)
+    pub key_buffer_head: usize,
+    /// Key buffer tail (next write position)
+    pub key_buffer_tail: usize,
 }
 
 /// Hypervisor execution mode.
@@ -594,7 +601,24 @@ impl Vm {
             hypervisor_active: false,
             hypervisor_config: String::new(),
             hypervisor_mode: HypervisorMode::default(),
+            key_buffer: vec![0; 16],
+            key_buffer_head: 0,
+            key_buffer_tail: 0,
         }
+    }
+
+    /// Push a keystroke into the ring buffer. Called by host on key events.
+    /// Returns false if the buffer is full (key dropped).
+    pub fn push_key(&mut self, key: u32) -> bool {
+        let next_tail = (self.key_buffer_tail + 1) % self.key_buffer.len();
+        if next_tail == self.key_buffer_head {
+            return false; // buffer full
+        }
+        self.key_buffer[self.key_buffer_tail] = key;
+        self.key_buffer_tail = next_tail;
+        // Also write to legacy RAM[0xFFF] port for backward compatibility
+        self.ram[0xFFF] = key;
+        true
     }
 
     #[allow(dead_code)]
@@ -1061,14 +1085,24 @@ impl Vm {
                 let offset = self.fetch() as i32 as usize;
                 if rd < NUM_REGS {
                     let sp = self.regs[30] as usize;
-                    let addr = if offset < 0x80000000 { sp.wrapping_add(offset) } else { sp.wrapping_sub(0x100000000_usize - offset) };
-                    match self.translate_va_or_fault(addr as u32) {
-                        Some(a) if a < self.ram.len() => {
-                            self.regs[rd] = self.ram[a];
-                            self.log_access(a, MemAccessKind::Read);
+                    let vaddr = if offset < 0x80000000 { sp.wrapping_add(offset) } else { sp.wrapping_sub(0x100000000_usize - offset) };
+                    match self.translate_va_or_fault(vaddr as u32) {
+                        Some(addr) => {
+                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                                self.regs[rd] = self.screen[addr - SCREEN_RAM_BASE];
+                                self.log_access(addr, MemAccessKind::Read);
+                            } else if addr < self.ram.len() {
+                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                    self.regs[rd] = self.canvas_buffer[addr - CANVAS_RAM_BASE];
+                                } else {
+                                    self.regs[rd] = self.ram[addr];
+                                }
+                                self.log_access(addr, MemAccessKind::Read);
+                            } else {
+                                self.trigger_segfault(); return false;
+                            }
                         }
                         None => { self.trigger_segfault(); return false; }
-                        _ => {}
                     }
                 }
             }
@@ -1533,7 +1567,7 @@ impl Vm {
                 }
             }
 
-            // IKEY reg  -- read keyboard port (RAM[0xFFF]) into reg, then clear port
+            // IKEY reg  -- read keyboard from ring buffer (or legacy RAM[0xFFF] port)
             0x48 => {
                 let rd = self.fetch() as usize;
                 // Blocked in User mode (hardware port access requires syscall)
@@ -1542,7 +1576,15 @@ impl Vm {
                     return false;
                 }
                 if rd < NUM_REGS {
-                    self.regs[rd] = self.ram[0xFFF];
+                    // Try ring buffer first
+                    if self.key_buffer_head != self.key_buffer_tail {
+                        self.regs[rd] = self.key_buffer[self.key_buffer_head];
+                        self.key_buffer[self.key_buffer_head] = 0;
+                        self.key_buffer_head = (self.key_buffer_head + 1) % self.key_buffer.len();
+                    } else {
+                        // Fallback to legacy single-key port
+                        self.regs[rd] = self.ram[0xFFF];
+                    }
                     self.ram[0xFFF] = 0;
                 }
             }
@@ -3648,6 +3690,9 @@ impl Vm {
             hypervisor_active: false,
             hypervisor_config: String::new(),
             hypervisor_mode: HypervisorMode::default(),
+            key_buffer: vec![0; 16],
+            key_buffer_head: 0,
+            key_buffer_tail: 0,
         })
     }
 }

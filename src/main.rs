@@ -56,6 +56,7 @@ const KEYS_BITMASK_PORT: usize = 0xFFB;
 const NET_PORT: usize = 0xFFC;
 #[allow(dead_code)]
 const TICKS_PORT: usize = 0xFFE;
+#[allow(dead_code)]
 const KEY_PORT: usize = 0xFFF;
 
 // ── Save file ───────────────────────────────────────────────────
@@ -2169,9 +2170,9 @@ fn main() {
 
         for key in window.get_keys_pressed(KeyRepeat::No) {
             if is_running {
-                // Runtime: send keys to VM keyboard port
+                // Runtime: send keys to VM key ring buffer
                 if let Some(ch) = key_to_ascii(key) {
-                    vm.ram[KEY_PORT] = ch as u32;
+                    vm.push_key(ch as u32);
                 }
                 continue;
             }
@@ -3452,6 +3453,9 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         hypervisor_config: String::new(),
         hypervisor_mode: vm::HypervisorMode::default(),
         canvas_buffer: vec![0; vm::CANVAS_RAM_SIZE],
+        key_buffer: vec![0; 16],
+        key_buffer_head: 0,
+        key_buffer_tail: 0,
     };
 
 
