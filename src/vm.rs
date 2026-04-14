@@ -4924,6 +4924,65 @@ mod tests {
         assert!(vm.ram[0xFFD] > 0, "Should produce some bytecode");
     }
 
+    #[test]
+    fn test_store_writes_successor_to_canvas_then_asmself_executes() {
+        // Phase 47 integration test: the program itself uses STORE to write
+        // "LDI r0, 99\nHALT\n" to the canvas RAM range (0x8000-0x8FFF).
+        // ASMSELF reads canvas_buffer, assembles the source into bytecode at
+        // 0x1000, then RUNNEXT jumps there. Verify r0 ends up as 99.
+        //
+        // This is the "pixel driving pixels" loop: code writes code, compiles
+        // it, and runs it -- all through the VM's own STORE/ASMSELF/RUNNEXT.
+
+        let mut vm = Vm::new();
+
+        // Build a bootstrap program that writes each character via STORE
+        let successor = "LDI r0, 99\nHALT\n";
+        let mut src = String::new();
+
+        // r1 = canvas address pointer (starts at 0x8000)
+        // r3 = increment (1)
+        src.push_str("LDI r1, 0x8000\n");
+        src.push_str("LDI r3, 1\n");
+
+        for (i, ch) in successor.bytes().enumerate() {
+            if i > 0 {
+                src.push_str("ADD r1, r3\n"); // advance canvas pointer
+            }
+            src.push_str(&format!("LDI r2, {}\nSTORE r1, r2\n", ch as u32));
+        }
+
+        // Compile the canvas source and execute the result
+        src.push_str("ASMSELF\n");
+        src.push_str("RUNNEXT\n");
+
+        // Assemble the bootstrap program
+        let asm = crate::assembler::assemble(&src, 0).unwrap();
+        for (i, &word) in asm.pixels.iter().enumerate() {
+            vm.ram[i] = word;
+        }
+        vm.pc = 0;
+
+        // Verify the canvas buffer is empty before execution
+        assert_eq!(vm.canvas_buffer[0], 0, "canvas should start empty");
+
+        // Run until halted or safety limit
+        for _ in 0..50000 {
+            if vm.halted {
+                break;
+            }
+            vm.step();
+        }
+
+        // The successor code (LDI r0, 99; HALT) should have executed
+        assert!(vm.halted, "VM should halt after self-written code executes");
+        assert_eq!(vm.regs[0], 99, "r0 should be 99 after successor runs");
+        assert_ne!(
+            vm.ram[0xFFD], 0xFFFFFFFF,
+            "ASMSELF should have succeeded"
+        );
+    }
+
     // ── RUNNEXT tests (Phase 48: Self-Execution Opcode) ──────────
 
     #[test]
