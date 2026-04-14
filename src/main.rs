@@ -245,6 +245,7 @@ fn handle_terminal_command(
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  load [slot]       Load state from slot");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  clear             Clear terminal");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  quit              Exit Geometry OS");
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  hermes <prompt>   Ask local LLM for help");
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
             ensure_scroll(*output_row, scroll_offset);
             (false, false)
@@ -617,6 +618,29 @@ fn handle_terminal_command(
             *scroll_offset = 0;
             (false, false)
         }
+        "hermes" => {
+            if parts.len() < 2 {
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: hermes <prompt>");
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  Asks a local LLM to help you via Ollama.");
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+                ensure_scroll(*output_row, scroll_offset);
+                return (false, false);
+            }
+            let user_prompt = parts[1..].join(" ");
+            run_hermes_canvas(
+                &user_prompt,
+                vm,
+                canvas_buffer,
+                output_row,
+                scroll_offset,
+                loaded_file,
+                canvas_assembled,
+                breakpoints,
+            );
+            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+            ensure_scroll(*output_row, scroll_offset);
+            (false, false)
+        }
         "quit" | "exit" => (false, true),
         _ => {
             *output_row = write_line_to_canvas(
@@ -636,6 +660,252 @@ fn ensure_scroll(output_row: usize, scroll_offset: &mut usize) {
     if output_row >= *scroll_offset + CANVAS_ROWS {
         *scroll_offset = output_row - CANVAS_ROWS + 1;
     }
+}
+
+/// Extract source text from canvas buffer (same logic as the "run" command).
+fn source_from_canvas(canvas_buffer: &[u32]) -> String {
+    let buffer_size = CANVAS_MAX_ROWS * CANVAS_COLS;
+    let source: String = canvas_buffer[..buffer_size]
+        .iter()
+        .map(|&cell| {
+            let val = cell & 0xFF;
+            if val == 0 || val == 0x0A {
+                '\n'
+            } else {
+                (val as u8) as char
+            }
+        })
+        .collect();
+    source.replace("\n\n", "\n")
+}
+
+/// Run the Hermes LLM agent loop, but write all output to the canvas buffer
+/// instead of stdout. This is the visual/canvas version of run_hermes_loop().
+#[allow(clippy::too_many_arguments)]
+fn run_hermes_canvas(
+    initial_prompt: &str,
+    vm: &mut vm::Vm,
+    canvas_buffer: &mut Vec<u32>,
+    output_row: &mut usize,
+    scroll_offset: &mut usize,
+    loaded_file: &mut Option<PathBuf>,
+    canvas_assembled: &mut bool,
+    breakpoints: &mut HashSet<u32>,
+) {
+    *output_row = write_line_to_canvas(
+        canvas_buffer, *output_row,
+        "[hermes] Starting agent loop...",
+    );
+    *output_row = write_line_to_canvas(
+        canvas_buffer, *output_row,
+        "[hermes] Press Escape to stop.",
+    );
+    ensure_scroll(*output_row, scroll_offset);
+
+    let mut conversation_history = initial_prompt.to_string();
+
+    for iteration in 0..10 {
+        // Build context from canvas buffer (not source_text string)
+        let source_text = source_from_canvas(canvas_buffer);
+        let ctx = build_hermes_context(vm, &source_text, loaded_file);
+        let full_system = format!("{}\n\n{}", HERMES_SYSTEM_PROMPT, ctx);
+
+        *output_row = write_line_to_canvas(
+            canvas_buffer, *output_row,
+            &format!("[hermes] --- iteration {} ---", iteration + 1),
+        );
+        ensure_scroll(*output_row, scroll_offset);
+
+        // Call LLM (this blocks -- curl subprocess)
+        let response = match call_ollama(&full_system, &conversation_history) {
+            Some(r) => r,
+            None => {
+                *output_row = write_line_to_canvas(
+                    canvas_buffer, *output_row,
+                    "[hermes] LLM call failed. Stopping.",
+                );
+                ensure_scroll(*output_row, scroll_offset);
+                break;
+            }
+        };
+
+        // Strip <think/> blocks
+        let response_clean = response
+            .replace("\\u003cthink\\u003e", "<think")
+            .replace("\\u003c/think\\u003e", "</think");
+        let mut commands = String::new();
+        let mut in_think = false;
+        for line in response_clean.lines() {
+            if line.contains("<think") {
+                in_think = true;
+            }
+            if !in_think {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with("//") {
+                    commands.push_str(trimmed);
+                    commands.push('\n');
+                }
+            }
+            if line.contains("</think") {
+                in_think = false;
+            }
+        }
+
+        if commands.trim().is_empty() {
+            *output_row = write_line_to_canvas(
+                canvas_buffer, *output_row,
+                "[hermes] LLM returned no commands. Stopping.",
+            );
+            ensure_scroll(*output_row, scroll_offset);
+            break;
+        }
+
+        // Show the commands the LLM wants to run
+        for cmd_line in commands.lines() {
+            let trimmed = cmd_line.trim();
+            if !trimmed.is_empty() {
+                *output_row = write_line_to_canvas(
+                    canvas_buffer, *output_row,
+                    &format!("  > {}", trimmed),
+                );
+            }
+        }
+        ensure_scroll(*output_row, scroll_offset);
+
+        // Handle write buffers (LLM can create .asm files)
+        let mut write_buffer: Option<(String, String)> = None;
+        let mut output_capture = String::new();
+
+        for cmd_line in commands.lines() {
+            let cmd_line = cmd_line.trim();
+            if cmd_line.is_empty() { continue; }
+
+            // Handle write command for creating .asm files
+            if let Some(ref mut wb) = write_buffer {
+                if cmd_line == "ENDWRITE" {
+                    match std::fs::write(&wb.0, &wb.1) {
+                        Ok(()) => {
+                            let msg = format!("Wrote {}", wb.0);
+                            *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                            output_capture.push_str(&msg);
+                            output_capture.push('\n');
+                        }
+                        Err(e) => {
+                            let msg = format!("Write error: {}", e);
+                            *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                            output_capture.push_str(&msg);
+                            output_capture.push('\n');
+                        }
+                    }
+                    write_buffer = None;
+                } else {
+                    wb.1.push_str(cmd_line);
+                    wb.1.push('\n');
+                }
+                continue;
+            }
+
+            if cmd_line.starts_with("write ") {
+                let filename = cmd_line.strip_prefix("write ").unwrap().trim();
+                write_buffer = Some((filename.to_string(), String::new()));
+                continue;
+            }
+
+            // Execute command through the GUI terminal handler
+            let cmd_parts: Vec<&str> = cmd_line.split_whitespace().collect();
+            if cmd_parts.is_empty() { continue; }
+            let cmd_word = cmd_parts[0].to_lowercase();
+
+            match cmd_word.as_str() {
+                "load" | "run" | "regs" | "peek" | "poke" | "screen" | "save" | "reset"
+                | "list" | "ls" | "png" | "disasm" | "step" | "bp" | "bpc" | "trace" => {
+                    // Execute through the GUI terminal command handler
+                    // We need to capture what it writes, so we use a temporary
+                    // approach: record output_row before and after, then extract
+                    let row_before = *output_row;
+                    let (_go_edit, _quit) = handle_terminal_command(
+                        cmd_line,
+                        vm,
+                        canvas_buffer,
+                        output_row,
+                        scroll_offset,
+                        loaded_file,
+                        canvas_assembled,
+                        breakpoints,
+                    );
+                    // Capture output text for LLM context
+                    for row in row_before..(*output_row) {
+                        let line_text = read_canvas_line(canvas_buffer, row);
+                        if !line_text.is_empty() && !line_text.starts_with("geo> ") {
+                            output_capture.push_str(&line_text);
+                            output_capture.push('\n');
+                        }
+                    }
+                    // handle_terminal_command writes its own "geo> " prompt;
+                    // we want to continue writing our output, so back up
+                    // to overwrite that prompt on next write
+                    if *output_row > 0 {
+                        // Check if last written line is a "geo> " prompt from the sub-command
+                        let last_text = read_canvas_line(canvas_buffer, *output_row - 1);
+                        if last_text.starts_with("geo> ") || last_text == "geo>" {
+                            // Don't back up -- we want these prompts visible as markers
+                        }
+                    }
+                    ensure_scroll(*output_row, scroll_offset);
+                }
+                _ => {
+                    // Skip unknown commands silently
+                }
+            }
+        }
+
+        // Handle unclosed write buffer
+        if let Some(wb) = write_buffer {
+            match std::fs::write(&wb.0, &wb.1) {
+                Ok(()) => {
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer, *output_row,
+                        &format!("Wrote {}", wb.0),
+                    );
+                }
+                Err(e) => {
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer, *output_row,
+                        &format!("Write error: {}", e),
+                    );
+                }
+            }
+        }
+
+        *output_row = write_line_to_canvas(
+            canvas_buffer, *output_row,
+            "[hermes] Loop complete. Type another prompt or 'stop'.",
+        );
+        ensure_scroll(*output_row, scroll_offset);
+
+        // For canvas mode: auto-continue for up to 3 iterations,
+        // then stop. The user can type "hermes <prompt>" again.
+        // (No stdin blocking in GUI mode -- we just run and return)
+        if iteration >= 2 {
+            *output_row = write_line_to_canvas(
+                canvas_buffer, *output_row,
+                "[hermes] Max iterations reached.",
+            );
+            break;
+        }
+
+        // Feed output back as context for next iteration
+        conversation_history = format!(
+            "Previous commands output:\n{}\n\nUser instruction: continue",
+            output_capture,
+        );
+    }
+
+    *output_row = write_line_to_canvas(
+        canvas_buffer, *output_row,
+        "[hermes] Agent loop ended.",
+    );
+    ensure_scroll(*output_row, scroll_offset);
 }
 
 // ── CLI mode: headless geo> prompt on stdin/stdout ────────────────
