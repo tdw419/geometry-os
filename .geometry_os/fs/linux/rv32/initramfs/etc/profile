@@ -1,0 +1,5 @@
+# Minimal /etc/profile for busybox shell
+export PS1='geo-os:\w\$ '
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+alias ll='ls -la'
+alias la='ls -a'

@@ -1697,7 +1697,7 @@ phases:
 
 - id: phase-39
   title: Build Linux for RV32IMAC
-  status: in_progress
+  status: complete
   goal: Cross-compile a minimal Linux kernel and initramfs for riscv32 that boots in our interpreter.
   priority: 50
   description: 'Use Buildroot or direct kernel build to produce a vmlinux for riscv32.
@@ -1738,16 +1738,19 @@ phases:
       status: done
   - name: Initramfs
     description: Busybox-based root filesystem in initramfs
-    status: todo
+    status: done
     scope_lines: 0
+    acceptance_criteria:
+    - description: busybox statically linked for rv32imac
+      met: true
+    - description: /init script mounts proc/sys, spawns shell
+      met: true
+    - description: initramfs size under 4MB
+      met: true
     tasks:
     - id: p39.d3.t1
       title: Create minimal initramfs with busybox for riscv32
-      status: todo
-      acceptance_criteria:
-      - busybox statically linked for rv32imac
-      - /init script mounts proc/sys, spawns shell
-      - initramfs size under 4MB
+      status: done
 
 - id: phase-40
   title: Boot Linux in Geometry OS

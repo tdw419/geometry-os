@@ -1,0 +1,39 @@
+#!/bin/sh
+# /init - First process (PID 1) for Geometry OS Linux initramfs
+# Mounts essential filesystems and spawns an interactive shell.
+
+# Mount virtual filesystems
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devtmpfs none /dev 2>/dev/null || true
+
+# Create minimal device nodes if devtmpfs failed
+mknod -m 622 /dev/console c 5 1 2>/dev/null || true
+mknod -m 666 /dev/null c 1 3 2>/dev/null || true
+mknod -m 666 /dev/zero c 1 5 2>/dev/null || true
+mknod -m 444 /dev/random c 1 8 2>/dev/null || true
+mknod -m 444 /dev/urandom c 1 9 2>/dev/null || true
+mknod -m 666 /dev/tty c 5 0 2>/dev/null || true
+mknod -m 660 /dev/ttyS0 c 4 64 2>/dev/null || true
+
+# Set hostname
+hostname geometry-os
+
+# Print boot banner
+echo ""
+echo "  ================================"
+echo "   Geometry OS - Linux RV32IMAC"
+echo "   Busybox initramfs"
+echo "  ================================"
+echo ""
+echo "Kernel: $(uname -r 2>/dev/null || echo 'unknown')"
+echo "Arch:   $(uname -m 2>/dev/null || echo 'riscv32')"
+echo ""
+
+# Set PATH
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export HOME=/root
+export TERM=linux
+
+# Spawn interactive shell on console
+exec /bin/sh
