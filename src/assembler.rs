@@ -1174,6 +1174,11 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[1])? as u32);
         }
 
+        "ASMSELF" => {
+            // No operands -- assembles canvas text into bytecode at 0x1000
+            bytecode.push(0x73);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

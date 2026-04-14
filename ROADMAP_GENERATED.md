@@ -2,7 +2,7 @@
 
 Self-modifying canvas programs in Geometry OS. Pixels write pixels.
 
-**Progress:** 1/6 phases complete, 0 in progress
+**Progress:** 3/6 phases complete, 0 in progress
 
 **Deliverables:** 0/18 complete
 
@@ -13,8 +13,8 @@ Self-modifying canvas programs in Geometry OS. Pixels write pixels.
 | Phase | Status | Deliverables | LOC Target | Tests |
 |-------|--------|-------------|-----------|-------|
 | phase-45 RAM-Mapped Canvas Buffer | COMPLETE | 0/5 | 370 | 10 |
-| phase-46 RAM-Mapped Screen Buffer | PLANNED | 0/3 | 220 | 8 |
-| phase-47 Self-Assembly Opcode (ASMSELF) | PLANNED | 0/3 | 340 | 8 |
+| phase-46 RAM-Mapped Screen Buffer | COMPLETE | 0/3 | 220 | 8 |
+| phase-47 Self-Assembly Opcode (ASMSELF) | COMPLETE | 0/3 | 340 | 8 |
 | phase-48 Self-Execution Opcode (RUNNEXT) | PLANNED | 0/2 | 140 | 5 |
 | phase-49 Self-Modifying Programs: Demos and Patterns | PLANNED | 0/2 | 400 | - |
 | phase-50 Reactive Canvas: Live Cell Formulas | FUTURE | 0/3 | 800 | 10 |
@@ -158,7 +158,7 @@ The page translation layer (translate_va_or_fault) must be considered. For kerne
 - Canvas buffer ownership between main.rs and vm.rs needs careful handling
 - STORE handler's user-mode protection (addr >= 0xFF00 check) must not block canvas writes
 
-## [ ] phase-46: RAM-Mapped Screen Buffer (PLANNED)
+## [x] phase-46: RAM-Mapped Screen Buffer (COMPLETE)
 
 **Goal:** Make the 256x256 screen buffer addressable from VM RAM
 
@@ -181,9 +181,9 @@ The screen buffer (256x256 = 65536 pixels) is currently only accessible via PIXE
     > In the STORE handler, check if the translated address falls in the screen buffer range. If so, write to self.screen[addr - SCREEN_RAM_BASE]. The renderer will pick up the change on the next frame automatically since it reads from self.screen.
     - STORE to screen addr changes the visible pixel
     _Files: src/vm.rs_
-  - [ ] Screen buffer is LOAD/STORE accessible at a defined address range
+  - [x] Screen buffer is LOAD/STORE accessible at a defined address range
     _Validation: LOAD from screen addr returns same value as PEEK_
-  - [ ] Existing PIXEL and PEEK opcodes still work
+  - [x] Existing PIXEL and PEEK opcodes still work
     _Validation: cargo test passes_
   _~100 LOC_
 - [ ] **Tests for screen buffer mapping** -- Verify that LOAD/STORE to screen addresses correctly read and write pixels. Cross-validate against PEEK and PIXEL opcodes.
@@ -196,9 +196,9 @@ The screen buffer (256x256 = 65536 pixels) is currently only accessible via PIXE
     > Write a test that writes a pixel via both PIXEL opcode and STORE to screen-mapped address. Read back with PEEK and verify both wrote the same value.
     - Both methods produce identical pixel values on screen
     _Files: src/vm.rs_
-  - [ ] LOAD from screen address matches PEEK result
+  - [x] LOAD from screen address matches PEEK result
     _Validation: Test program: PEEK and LOAD same pixel, compare registers_
-  - [ ] STORE to screen address matches PIXEL result
+  - [x] STORE to screen address matches PIXEL result
     _Validation: Test program: STORE and PIXEL write same location, compare_
   _~80 LOC_
 - [ ] **Unified memory map documentation** -- Update all memory map documentation to show the complete unified address space: RAM (0x0000-0x7FFF), canvas (0x8000-0x8FFF), screen (0x10000+). Add a new doc section showing the full map.
@@ -207,7 +207,7 @@ The screen buffer (256x256 = 65536 pixels) is currently only accessible via PIXE
     > Add a section to CANVAS_TEXT_SURFACE.md (or create UNIFIED_MEMORY_MAP.md) showing the complete address space: 0x0000-0x0FFF: bytecode/data, 0x1000-0x1FFF: canvas bytecode, 0x8000-0x8FFF: canvas grid (mirror), 0x10000-0x1FFFF: screen buffer. Explain the design: one address space, three backing stores, LOAD/STORE as the universal access method.
     - Document shows all regions with address ranges and purposes
     _Files: docs/CANVAS_TEXT_SURFACE.md_
-  - [ ] All three regions documented in one place
+  - [x] All three regions documented in one place
     _Validation: grep 'canvas\|screen\|RAM' docs/CANVAS_TEXT_SURFACE.md shows unified map_
   _~40 LOC_
 
@@ -224,7 +224,7 @@ Alternative: don't expand RAM, instead use a separate mapping that redirects LOA
 - Screen buffer is 256x256=64K which exactly fills the expansion -- no room for growth
 - Page translation for screen addresses may need special handling
 
-## [ ] phase-47: Self-Assembly Opcode (ASMSELF) (PLANNED)
+## [x] phase-47: Self-Assembly Opcode (ASMSELF) (COMPLETE)
 
 **Goal:** Add an opcode that lets a running program assemble canvas text into bytecode
 
@@ -259,9 +259,9 @@ Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas text, runs i
     - Can type ASMSELF in assembly source and it assembles
     - Opcode count incremented in documentation
     _Files: src/assembler.rs, src/preprocessor.rs_
-  - [ ] ASMSELF assembles canvas text into bytecode at 0x1000
+  - [x] ASMSELF assembles canvas text into bytecode at 0x1000
     _Validation: Program writes text to canvas, calls ASMSELF, then LOADs from 0x1000 to verify bytecode_
-  - [ ] Assembly errors are reported without crashing the VM
+  - [x] Assembly errors are reported without crashing the VM
     _Validation: Write invalid text to canvas, call ASMSELF, VM continues running_
   _~200 LOC_
 - [ ] **Assembly status port** -- Define a memory-mapped port (e.g., 0xFFE or 0xFFA) where the ASMSELF opcode writes its result: success (bytecode length) or failure (0xFFFFFFFF). Programs poll this port after calling ASMSELF to check if assembly succeeded.
@@ -270,9 +270,9 @@ Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas text, runs i
     > Use existing RAM[0xFFD] (ASM result port) which already exists for this purpose (bytecode word count, or 0xFFFFFFFF on error). Ensure ASMSELF writes to this port identically to how F8 assembly does.
     - RAM[0xFFD] contains result after ASMSELF
     _Files: src/vm.rs_
-  - [ ] Port shows bytecode length on success
+  - [x] Port shows bytecode length on success
     _Validation: LOAD from status port after ASMSELF returns positive number_
-  - [ ] Port shows 0xFFFFFFFF on failure
+  - [x] Port shows 0xFFFFFFFF on failure
     _Validation: LOAD from status port after bad ASMSELF returns 0xFFFFFFFF_
   _~20 LOC_
 - [ ] **Test suite for ASMSELF** -- Test that ASMSELF correctly assembles canvas text, handles errors, and the resulting bytecode is executable.
@@ -289,7 +289,7 @@ Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas text, runs i
     > Full integration test: a program uses STORE to write "LDI r0, 99\nHALT\n" to the canvas address range, calls ASMSELF, then jumps to 0x1000 (or uses RUNNEXT from phase 48). Verify r0 ends up as 99.
     - Self-written program executes correctly after ASMSELF
     _Files: src/vm.rs_
-  - [ ] ASMSELF assembles and the result runs correctly
+  - [x] ASMSELF assembles and the result runs correctly
     _Validation: Test program: write simple ASM to canvas, ASMSELF, jump to 0x1000, verify behavior_
   _~120 LOC_
 

@@ -2978,6 +2978,66 @@ impl Vm {
                 }
             }
 
+            // ASMSELF (0x73) -- Self-assembly opcode
+            // Reads the canvas buffer as text, runs it through the preprocessor
+            // and assembler, writes bytecode to 0x1000.
+            // Status: RAM[0xFFD] = bytecode word count (success) or 0xFFFFFFFF (error).
+            0x73 => {
+                // Canvas grid dimensions (must match main.rs constants)
+                const CANVAS_COLS: usize = 32;
+                const CANVAS_MAX_ROWS: usize = 128;
+                const CANVAS_BYTECODE_ADDR: usize = 0x1000;
+                const ASM_STATUS_PORT: usize = 0xFFD;
+
+                // Convert canvas buffer to text string (same logic as F8 handler)
+                let buffer_size = CANVAS_MAX_ROWS * CANVAS_COLS;
+                let source: String = self.canvas_buffer[..buffer_size.min(self.canvas_buffer.len())]
+                    .iter()
+                    .map(|&cell| {
+                        let val = cell & 0xFF;
+                        if val == 0 || val == 0x0A {
+                            '\n'
+                        } else {
+                            (val as u8) as char
+                        }
+                    })
+                    .collect();
+
+                // Collapse consecutive newlines (same as F8 handler)
+                let source = source.replace("\n\n", "\n");
+
+                // Run preprocessor then assembler
+                let mut pp = crate::preprocessor::Preprocessor::new();
+                let preprocessed = pp.preprocess(&source);
+
+                match crate::assembler::assemble(&preprocessed, CANVAS_BYTECODE_ADDR) {
+                    Ok(asm_result) => {
+                        // Clear the bytecode region first
+                        let end = (CANVAS_BYTECODE_ADDR + 4096).min(self.ram.len());
+                        for addr in CANVAS_BYTECODE_ADDR..end {
+                            self.ram[addr] = 0;
+                        }
+                        // Write assembled bytecode
+                        for (i, &word) in asm_result.pixels.iter().enumerate() {
+                            let addr = CANVAS_BYTECODE_ADDR + i;
+                            if addr < self.ram.len() {
+                                self.ram[addr] = word;
+                            }
+                        }
+                        // Write success status: bytecode word count
+                        if ASM_STATUS_PORT < self.ram.len() {
+                            self.ram[ASM_STATUS_PORT] = asm_result.pixels.len() as u32;
+                        }
+                    }
+                    Err(_e) => {
+                        // Write error status
+                        if ASM_STATUS_PORT < self.ram.len() {
+                            self.ram[ASM_STATUS_PORT] = 0xFFFFFFFF;
+                        }
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -3498,6 +3558,8 @@ impl Vm {
                 let ar = ram(a + 1);
                 (format!("HYPERVISOR {}", reg(ar)), 2)
             }
+
+            0x73 => ("ASMSELF".into(), 1),
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
@@ -4699,5 +4761,157 @@ mod tests {
         assert!(vm.halted);
         assert_eq!(vm.screen[0], 0xFF0000);
         assert_eq!(vm.ram[0x7000], 0xFF0000);
+    }
+
+    // ── ASMSELF tests (Phase 47: Pixel Driving Pixels) ──────────
+
+    /// Helper: write an ASCII string into the VM's canvas buffer at a given offset.
+    fn write_to_canvas(canvas: &mut Vec<u32>, offset: usize, text: &str) {
+        for (i, ch) in text.bytes().enumerate() {
+            let idx = offset + i;
+            if idx < canvas.len() {
+                canvas[idx] = ch as u32;
+            }
+        }
+    }
+
+    #[test]
+    fn test_asmself_assembles_valid_canvas_text() {
+        // Pre-fill canvas with "LDI r0, 42\nHALT\n"
+        let mut vm = Vm::new();
+        let program = "LDI r0, 42\nHALT\n";
+        write_to_canvas(&mut vm.canvas_buffer, 0, program);
+
+        // Execute ASMSELF opcode
+        vm.ram[0] = 0x73; // ASMSELF
+        vm.pc = 0;
+        vm.step();
+
+        // Check status port: should be positive (bytecode word count)
+        assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+        assert!(vm.ram[0xFFD] > 0, "ASMSELF should produce bytecode");
+
+        // Verify bytecode at 0x1000: LDI r0, 42 = [0x10, 0, 42], HALT = [0x00]
+        assert_eq!(vm.ram[0x1000], 0x10, "LDI opcode");
+        assert_eq!(vm.ram[0x1001], 0, "r0 register");
+        assert_eq!(vm.ram[0x1002], 42, "immediate 42");
+        assert_eq!(vm.ram[0x1003], 0x00, "HALT opcode");
+    }
+
+    #[test]
+    fn test_asmself_handles_invalid_assembly_gracefully() {
+        let mut vm = Vm::new();
+        // Write garbage to canvas
+        write_to_canvas(&mut vm.canvas_buffer, 0, "ZZZTOP R0, R1 !!INVALID!!\n");
+
+        vm.ram[0] = 0x73;
+        vm.pc = 0;
+        vm.step();
+
+        // Status port should be error sentinel
+        assert_eq!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should report error");
+
+        // VM should NOT be halted -- continues executing
+        assert!(!vm.halted, "VM should survive ASMSELF error");
+    }
+
+    #[test]
+    fn test_asmself_full_write_compile_execute() {
+        // Full integration: program writes code to canvas, ASMSELF, then jumps to 0x1000
+        let mut vm = Vm::new();
+
+        // First, set up the canvas with "LDI r0, 99\nHALT\n"
+        write_to_canvas(&mut vm.canvas_buffer, 0, "LDI r0, 99\nHALT\n");
+
+        // Build a program that calls ASMSELF, then jumps to 0x1000
+        // JMP takes an immediate address, not a register
+        let bootstrap = "ASMSELF\nJMP 0x1000\n";
+        let asm = crate::assembler::assemble(bootstrap, 0).unwrap();
+        for (i, &word) in asm.pixels.iter().enumerate() {
+            vm.ram[i] = word;
+        }
+        vm.pc = 0;
+
+        // Run the bootstrap program
+        let max_steps = 200;
+        for _ in 0..max_steps {
+            if vm.halted {
+                break;
+            }
+            vm.step();
+        }
+
+        // After bootstrap: ASMSELF assembled canvas code, JMP went to 0x1000,
+        // new code ran LDI r0, 99 then HALT
+        assert!(vm.halted, "VM should halt after executing assembled code");
+        assert_eq!(vm.ram[0xFFD], 4, "ASMSELF should report 4 words of bytecode");
+        assert_eq!(vm.regs[0], 99, "r0 should be 99 after assembled code runs");
+    }
+
+    #[test]
+    fn test_asmself_disassembler() {
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x73; // ASMSELF
+        let (text, len) = vm.disassemble_at(0);
+        assert_eq!(text, "ASMSELF");
+        assert_eq!(len, 1);
+    }
+
+    #[test]
+    fn test_asmself_assembler_mnemonic() {
+        use crate::assembler::assemble;
+        let src = "ASMSELF\nHALT\n";
+        let result = assemble(src, 0).unwrap();
+        assert_eq!(result.pixels[0], 0x73, "ASMSELF should encode as 0x73");
+        assert_eq!(result.pixels[1], 0x00, "HALT should follow");
+    }
+
+    #[test]
+    fn test_asmself_empty_canvas() {
+        let mut vm = Vm::new();
+        // Canvas is all zeros -- should produce empty/minimal assembly
+        vm.ram[0] = 0x73;
+        vm.pc = 0;
+        vm.step();
+
+        // Empty canvas should either succeed (0 words) or fail gracefully
+        // Either way, VM should not be halted
+        assert!(!vm.halted, "VM should survive ASMSELF on empty canvas");
+    }
+
+    #[test]
+    fn test_asmself_preserves_registers() {
+        // Verify that ASMSELF doesn't clobber registers (only writes to RAM)
+        let mut vm = Vm::new();
+        vm.regs[0] = 111;
+        vm.regs[1] = 222;
+        vm.regs[5] = 555;
+
+        write_to_canvas(&mut vm.canvas_buffer, 0, "LDI r0, 42\nHALT\n");
+
+        vm.ram[0] = 0x73;
+        vm.pc = 0;
+        vm.step();
+
+        // Registers should be preserved after ASMSELF
+        assert_eq!(vm.regs[0], 111, "r0 should be preserved");
+        assert_eq!(vm.regs[1], 222, "r1 should be preserved");
+        assert_eq!(vm.regs[5], 555, "r5 should be preserved");
+    }
+
+    #[test]
+    fn test_asmself_with_preprocessor_macros() {
+        // Test that preprocessor macros work in ASMSELF
+        let mut vm = Vm::new();
+        // Use SET/GET macros
+        write_to_canvas(&mut vm.canvas_buffer, 0, "VAR x 42\nGET r1, x\nHALT\n");
+
+        vm.ram[0] = 0x73;
+        vm.pc = 0;
+        vm.step();
+
+        // Should succeed (preprocessor expands VAR and GET)
+        assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF with macros should succeed");
+        assert!(vm.ram[0xFFD] > 0, "Should produce some bytecode");
     }
 }

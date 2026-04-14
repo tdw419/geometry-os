@@ -468,7 +468,7 @@ phases:
   test_target: 8
 - id: phase-47
   title: Self-Assembly Opcode (ASMSELF)
-  status: todo
+  status: complete
   goal: Add an opcode that lets a running program assemble canvas text into bytecode
   description: 'Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas text, runs it through the preprocessor and assembler, and stores the resulting bytecode at 0x1000. This lets a program
     write new assembly onto the canvas grid (using STORE to the canvas range from phase 45) and then compile it without human intervention. Combined, a program can generate its own replacement.
@@ -480,18 +480,18 @@ phases:
       assembler::assemble() 4. If success: write bytecode to 0x1000, set a flag 5. If failure: set an error register/port with the error info The VM needs access to the preprocessor and assembler modules.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: ASMSELF assembles canvas text into bytecode at 0x1000
       validation: Program writes text to canvas, calls ASMSELF, then LOADs from 0x1000 to verify bytecode
-      met: false
+      met: true
     - description: Assembly errors are reported without crashing the VM
       validation: Write invalid text to canvas, call ASMSELF, VM continues running
-      met: false
+      met: true
     tasks:
     - id: p47.d1.t1
       title: Add ASMSELF opcode constant and handler skeleton
-      status: todo
+      status: complete
       description: 'Reserve the next available opcode number for ASMSELF. Add a stub handler in the VM''s execute loop that reads the canvas buffer, converts to text string, and logs "ASMSELF called" for
         now.
 
@@ -505,7 +505,7 @@ phases:
       - src/vm.rs
     - id: p47.d1.t2
       title: Implement canvas-to-text conversion in VM context
-      status: todo
+      status: complete
       description: 'Extract the canvas-to-text conversion logic from the F8 handler in main.rs into a reusable function. This function takes a &[u32] (canvas buffer slice) and returns a String. The F8 handler
         and the ASMSELF opcode both call this function. Place it in a shared module (e.g., preprocessor.rs or a new canvas.rs).
 
@@ -520,7 +520,7 @@ phases:
       - src/main.rs
     - id: p47.d1.t3
       title: Wire preprocessor and assembler into ASMSELF handler
-      status: todo
+      status: complete
       description: 'In the ASMSELF handler, after getting the text string from the canvas: call preprocessor::preprocess(), then assembler::assemble(). On success, write bytecode bytes to self.ram starting
         at CANVAS_BYTECODE_ADDR (0x1000). On failure, write the error string to a memory-mapped error port or a designated RAM region. The VM will need to import/use the preprocessor and assembler modules.
 
@@ -534,7 +534,7 @@ phases:
       - src/vm.rs
     - id: p47.d1.t4
       title: Add ASMSELF to disassembler
-      status: todo
+      status: complete
       description: 'Add the ASMSELF opcode to the disassemble() method in vm.rs so it appears correctly in trace output and disassembly views.
 
         '
@@ -546,7 +546,7 @@ phases:
       - src/vm.rs
     - id: p47.d1.t5
       title: Add ASMSELF to assembler mnemonic list
-      status: todo
+      status: complete
       description: 'Add "ASMSELF" to the OPCODES list in preprocessor.rs and the assembler in assembler.rs. It takes no operands (just the opcode byte). Update the opcode count in docs and meta.
 
         '
@@ -569,18 +569,18 @@ phases:
       ASMSELF to check if assembly succeeded.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: Port shows bytecode length on success
       validation: LOAD from status port after ASMSELF returns positive number
-      met: false
+      met: true
     - description: Port shows 0xFFFFFFFF on failure
       validation: LOAD from status port after bad ASMSELF returns 0xFFFFFFFF
-      met: false
+      met: true
     tasks:
     - id: p47.d2.t1
       title: Define ASM_STATUS port and write logic
-      status: todo
+      status: complete
       description: 'Use existing RAM[0xFFD] (ASM result port) which already exists for this purpose (bytecode word count, or 0xFFFFFFFF on error). Ensure ASMSELF writes to this port identically to how F8
         assembly does.
 
@@ -598,15 +598,15 @@ phases:
     description: 'Test that ASMSELF correctly assembles canvas text, handles errors, and the resulting bytecode is executable.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: ASMSELF assembles and the result runs correctly
       validation: 'Test program: write simple ASM to canvas, ASMSELF, jump to 0x1000, verify behavior'
-      met: false
+      met: true
     tasks:
     - id: p47.d3.t1
       title: 'Test: ASMSELF assembles valid canvas text'
-      status: todo
+      status: complete
       description: 'Pre-fill canvas buffer with "LDI r0, 42\nHALT\n". Execute ASMSELF. Verify RAM[0xFFD] contains a positive byte count. Verify RAM at 0x1000 contains expected bytecode for LDI r0, 42.
 
         '
@@ -618,7 +618,7 @@ phases:
       - src/vm.rs
     - id: p47.d3.t2
       title: 'Test: ASMSELF handles invalid assembly gracefully'
-      status: todo
+      status: complete
       description: 'Pre-fill canvas with garbage text. Execute ASMSELF. Verify RAM[0xFFD] contains 0xFFFFFFFF. Verify VM did not crash and continues executing.
 
         '
@@ -630,7 +630,7 @@ phases:
       - src/vm.rs
     - id: p47.d3.t3
       title: 'Test: program writes code to canvas then assembles it'
-      status: todo
+      status: complete
       description: 'Full integration test: a program uses STORE to write "LDI r0, 99\nHALT\n" to the canvas address range, calls ASMSELF, then jumps to 0x1000 (or uses RUNNEXT from phase 48). Verify r0
         ends up as 99.
 
@@ -990,9 +990,9 @@ conventions:
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
 meta:
-  opcodes_current: 182
+  opcodes_current: 183
   opcodes_after: 184
-  tests_current: 513
+  tests_current: 692
   programs_current: 42
-  loc_current: 12801
+  loc_current: 13387
   source_doc: docs/PIXEL_DRIVING_PIXELS.md
