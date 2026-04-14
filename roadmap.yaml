@@ -317,7 +317,7 @@ phases:
   test_target: 10
 - id: phase-46
   title: RAM-Mapped Screen Buffer
-  status: todo
+  status: partial
   goal: Make the 256x256 screen buffer addressable from VM RAM
   description: 'The screen buffer (256x256 = 65536 pixels) is currently only accessible via PIXEL (write) and PEEK (read) opcodes. Map it into the VM address space at 0x9000-0x13FFF (a 64K region) so that
     normal LOAD/STORE can read and write screen pixels. This unifies all three memory spaces (RAM, canvas, screen) under one addressing scheme.
@@ -325,11 +325,11 @@ phases:
     '
   deliverables:
   - name: Screen memory region mapping
-    description: 'Define SCREEN_RAM_BASE = 0x9000. The screen is 256x256 = 65536 cells, so it spans 0x9000-0x18FFF. However, VM RAM is only 0x10000 total. Options: (a) expand RAM_SIZE to 0x20000, (b) use
+    description: 'Define SCREEN_RAM_BASE = 0x10000. The screen is 256x256 = 65536 cells, so it spans 0x9000-0x18FFF. However, VM RAM is only 0x10000 total. Options: (a) expand RAM_SIZE to 0x20000, (b) use
       a sparse/aliased mapping where only low-res access works, (c) map screen at a higher address with extended RAM. Simplest: expand RAM to 0x20000 (128K) and map screen at 0x10000.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: Screen buffer is LOAD/STORE accessible at a defined address range
       validation: LOAD from screen addr returns same value as PEEK
