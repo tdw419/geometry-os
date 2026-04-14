@@ -12,6 +12,59 @@ pub const CANVAS_RAM_BASE: usize = 0x8000;
 pub const CANVAS_RAM_SIZE: usize = 4096;
 /// Screen RAM region: address range [0x10000, 0x1FFFF] maps to the screen buffer.
 pub const SCREEN_RAM_BASE: usize = 0x10000;
+
+/// Formula engine constants (Phase 50: Reactive Canvas).
+/// Maximum number of formula cells allowed (to bound recalc cost).
+pub const MAX_FORMULAS: usize = 256;
+/// Maximum dependencies a single formula can reference.
+pub const MAX_FORMULA_DEPS: usize = 8;
+/// Maximum evaluation depth to prevent infinite recursion in cyclic deps.
+pub const FORMULA_EVAL_DEPTH_LIMIT: u32 = 32;
+
+/// A formula attached to a canvas cell. When any of its dependencies change,
+/// the formula is re-evaluated and the result written back to the cell.
+#[derive(Debug, Clone)]
+pub struct Formula {
+    /// The canvas-buffer index this formula writes its result to.
+    pub target_idx: usize,
+    /// List of canvas-buffer indices this formula reads from.
+    pub deps: Vec<usize>,
+    /// The operation to perform.
+    pub op: FormulaOp,
+}
+
+/// Operations a formula can perform.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FormulaOp {
+    /// result = deps[0] + deps[1]
+    Add,
+    /// result = deps[0] - deps[1]
+    Sub,
+    /// result = deps[0] * deps[1]
+    Mul,
+    /// result = deps[0] / deps[1] (0 on div-by-zero)
+    Div,
+    /// result = deps[0] & deps[1]
+    And,
+    /// result = deps[0] | deps[1]
+    Or,
+    /// result = deps[0] ^ deps[1]
+    Xor,
+    /// result = !deps[0] (bitwise NOT, single dep)
+    Not,
+    /// result = deps[0] (identity/copy, single dep)
+    Copy,
+    /// result = max(deps[0], deps[1])
+    Max,
+    /// result = min(deps[0], deps[1])
+    Min,
+    /// result = deps[0] % deps[1]
+    Mod,
+    /// result = deps[0] << deps[1]
+    Shl,
+    /// result = deps[0] >> deps[1]
+    Shr,
+}
 /// Maximum number of concurrently spawned child processes
 pub const MAX_PROCESSES: usize = 8;
 /// Syscall dispatch table base address in RAM.
@@ -534,6 +587,11 @@ pub struct Vm {
     pub key_buffer_head: usize,
     /// Key buffer tail (next write position)
     pub key_buffer_tail: usize,
+    /// Active formulas on canvas cells (Phase 50: Reactive Canvas).
+    pub formulas: Vec<Formula>,
+    /// Reverse dependency index: dep_idx -> list of formula indices in self.formulas.
+    /// Used to quickly find which formulas need recalculation when a cell changes.
+    pub formula_dep_index: Vec<Vec<usize>>,
 }
 
 /// Hypervisor execution mode.
@@ -604,6 +662,8 @@ impl Vm {
             key_buffer: vec![0; 16],
             key_buffer_head: 0,
             key_buffer_tail: 0,
+            formulas: Vec::new(),
+            formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
         }
     }
 
@@ -656,12 +716,145 @@ impl Vm {
         self.hypervisor_active = false;
         self.hypervisor_config.clear();
         self.hypervisor_mode = HypervisorMode::default();
+        self.formulas.clear();
+        for dep_list in self.formula_dep_index.iter_mut() {
+            dep_list.clear();
+        }
     }
 
     /// Internal helper to log a memory access with a safety cap.
     fn log_access(&mut self, addr: usize, kind: MemAccessKind) {
         if self.debug_mode && self.access_log.len() < 4096 {
             self.access_log.push(MemAccess { addr, kind });
+        }
+    }
+
+    // --- Phase 50: Reactive Canvas Formula Engine ---
+
+    /// Register a formula. Returns false if limits exceeded or cycle detected.
+    pub fn formula_register(&mut self, target_idx: usize, deps: Vec<usize>, op: FormulaOp) -> bool {
+        if self.formulas.len() >= MAX_FORMULAS { return false; }
+        if deps.len() > MAX_FORMULA_DEPS { return false; }
+        if target_idx >= CANVAS_RAM_SIZE { return false; }
+        for &d in &deps {
+            if d >= CANVAS_RAM_SIZE { return false; }
+        }
+
+        // Remove any existing formula targeting the same cell
+        self.formula_remove(target_idx);
+
+        // Cycle detection: adding this formula must not create a cycle.
+        // A cycle exists if target_idx is reachable from any of its deps
+        // through the existing formula graph.
+        if self.has_formula_cycle(target_idx, &deps) {
+            return false;
+        }
+
+        let fidx = self.formulas.len();
+        let formula = Formula { target_idx, deps: deps.clone(), op };
+        self.formulas.push(formula);
+
+        // Update reverse dependency index
+        for &dep in &deps {
+            if dep < self.formula_dep_index.len() {
+                self.formula_dep_index[dep].push(fidx);
+            }
+        }
+        true
+    }
+
+    /// Remove the formula targeting `target_idx`, if any.
+    pub fn formula_remove(&mut self, target_idx: usize) {
+        if let Some(pos) = self.formulas.iter().position(|f| f.target_idx == target_idx) {
+            // Remove from dep index
+            for dep_list in self.formula_dep_index.iter_mut() {
+                dep_list.retain(|&fi| fi != pos);
+                // Shift indices > pos down by 1 since we're removing
+                for fi in dep_list.iter_mut() {
+                    if *fi > pos { *fi -= 1; }
+                }
+            }
+            self.formulas.remove(pos);
+        }
+    }
+
+    /// Check if adding a formula from deps -> target would create a cycle.
+    fn has_formula_cycle(&self, target_idx: usize, deps: &[usize]) -> bool {
+        // A cycle exists if target_idx is transitively depended upon by any dep.
+        // Walk the dependency graph from each dep and see if we reach target_idx.
+        let mut visited = std::collections::HashSet::new();
+        let mut stack: Vec<usize> = deps.to_vec();
+        while let Some(idx) = stack.pop() {
+            if idx == target_idx { return true; }
+            if !visited.insert(idx) { continue; }
+            // Find formulas that target this idx -- their deps could reach target
+            for f in &self.formulas {
+                if f.target_idx == idx {
+                    stack.extend_from_slice(&f.deps);
+                }
+            }
+        }
+        false
+    }
+
+    /// Evaluate a single formula given current canvas buffer state.
+    fn formula_eval(&self, formula: &Formula, canvas: &[u32]) -> u32 {
+        let get = |idx: usize| -> u32 {
+            if idx < canvas.len() { canvas[idx] } else { 0 }
+        };
+        match formula.op {
+            FormulaOp::Add  => get(formula.deps[0]).wrapping_add(get(formula.deps[1])),
+            FormulaOp::Sub  => get(formula.deps[0]).wrapping_sub(get(formula.deps[1])),
+            FormulaOp::Mul  => get(formula.deps[0]).wrapping_mul(get(formula.deps[1])),
+            FormulaOp::Div  => {
+                let d = get(formula.deps[1]);
+                if d == 0 { 0 } else { get(formula.deps[0]) / d }
+            },
+            FormulaOp::And  => get(formula.deps[0]) & get(formula.deps[1]),
+            FormulaOp::Or   => get(formula.deps[0]) | get(formula.deps[1]),
+            FormulaOp::Xor  => get(formula.deps[0]) ^ get(formula.deps[1]),
+            FormulaOp::Not  => !get(formula.deps[0]),
+            FormulaOp::Copy => get(formula.deps[0]),
+            FormulaOp::Max  => get(formula.deps[0]).max(get(formula.deps[1])),
+            FormulaOp::Min  => get(formula.deps[0]).min(get(formula.deps[1])),
+            FormulaOp::Mod  => {
+                let d = get(formula.deps[1]);
+                if d == 0 { 0 } else { get(formula.deps[0]) % d }
+            },
+            FormulaOp::Shl  => get(formula.deps[0]).wrapping_shl(get(formula.deps[1]) % 32),
+            FormulaOp::Shr  => get(formula.deps[0]).wrapping_shr(get(formula.deps[1]) % 32),
+        }
+    }
+
+    /// Recalculate all formulas that depend on `changed_idx`.
+    /// Called after a STORE to a canvas cell.
+    pub fn formula_recalc(&mut self, changed_idx: usize) {
+        if changed_idx >= self.formula_dep_index.len() { return; }
+        let affected: Vec<usize> = self.formula_dep_index[changed_idx].clone();
+        if affected.is_empty() { return; }
+
+        // Evaluate all affected formulas (use a snapshot to avoid borrow issues)
+        let canvas_snapshot = self.canvas_buffer.clone();
+        let mut updates: Vec<(usize, u32)> = Vec::new();
+        for &fidx in &affected {
+            if fidx < self.formulas.len() {
+                let result = self.formula_eval(&self.formulas[fidx], &canvas_snapshot);
+                updates.push((self.formulas[fidx].target_idx, result));
+            }
+        }
+        // Apply updates
+        for (idx, val) in updates {
+            if idx < self.canvas_buffer.len() {
+                self.canvas_buffer[idx] = val;
+            }
+        }
+    }
+
+    /// Clear all formulas and rebuild the dependency index.
+    pub fn formula_clear_all(&mut self) {
+        self.formulas.clear();
+        for dep_list in self.formula_dep_index.iter_mut() {
+            dep_list.clear();
         }
     }
 
@@ -981,7 +1174,10 @@ impl Vm {
                                 }
                                 // Phase 45: Intercept canvas RAM range
                                 if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
-                                    self.canvas_buffer[addr - CANVAS_RAM_BASE] = self.regs[reg];
+                                    let cidx = addr - CANVAS_RAM_BASE;
+                                    self.canvas_buffer[cidx] = self.regs[reg];
+                                    // Phase 50: Trigger formula recalculation
+                                    self.formula_recalc(cidx);
                                 } else {
                                     self.ram[addr] = self.regs[reg];
                                 }
@@ -1038,26 +1234,30 @@ impl Vm {
                                     self.screen[addr - SCREEN_RAM_BASE] = ch;
                                     self.log_access(addr, MemAccessKind::Write);
                                 } else if addr < self.ram.len() {
-                                    if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
-                                        self.canvas_buffer[addr - CANVAS_RAM_BASE] = ch;
-                                    } else {
-                                        self.ram[addr] = ch;
-                                    }
-                                    self.log_access(addr, MemAccessKind::Write);
-                                }
-                            }
-                            _ => {}
-                        }
-                        vaddr = vaddr.wrapping_add(1);
-                    }
-                    // null-terminate if possible
-                    match self.translate_va_or_fault(vaddr) {
-                        Some(addr) => {
-                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
-                                self.screen[addr - SCREEN_RAM_BASE] = 0;
-                            } else if addr < self.ram.len() {
                                 if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
-                                    self.canvas_buffer[addr - CANVAS_RAM_BASE] = 0;
+                                    let cidx = addr - CANVAS_RAM_BASE;
+                                    self.canvas_buffer[cidx] = ch;
+                                    self.formula_recalc(cidx);
+                                } else {
+                                    self.ram[addr] = ch;
+                                }
+                                self.log_access(addr, MemAccessKind::Write);
+                            }
+                        }
+                        _ => {}
+                    }
+                    vaddr = vaddr.wrapping_add(1);
+                }
+                // null-terminate if possible
+                match self.translate_va_or_fault(vaddr) {
+                    Some(addr) => {
+                        if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                            self.screen[addr - SCREEN_RAM_BASE] = 0;
+                        } else if addr < self.ram.len() {
+                            if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                let cidx = addr - CANVAS_RAM_BASE;
+                                self.canvas_buffer[cidx] = 0;
+                                self.formula_recalc(cidx);
                                 } else {
                                     self.ram[addr] = 0;
                                 }
@@ -1125,7 +1325,9 @@ impl Vm {
                                     return false;
                                 }
                                 if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
-                                    self.canvas_buffer[addr - CANVAS_RAM_BASE] = self.regs[rs];
+                                    let cidx = addr - CANVAS_RAM_BASE;
+                                    self.canvas_buffer[cidx] = self.regs[rs];
+                                    self.formula_recalc(cidx);
                                 } else {
                                     self.ram[addr] = self.regs[rs];
                                 }
@@ -3046,6 +3248,56 @@ impl Vm {
                 self.pc = 0x1000;
             }
 
+            // FORMULA (0x75) -- Reactive canvas formula registration
+            // Encoding: 0x75, target_idx, op_code, dep_count, dep0, dep1, ...
+            // target_idx: canvas buffer index (0..4095) to attach the formula to
+            // op_code: 0=ADD, 1=SUB, 2=MUL, 3=DIV, 4=AND, 5=OR, 6=XOR, 7=NOT,
+            //          8=COPY, 9=MAX, 10=MIN, 11=MOD, 12=SHL, 13=SHR
+            // dep_count: number of dependency indices (0..8)
+            // dep0..depN: canvas buffer indices the formula reads from
+            // Returns 1 in r0 on success, 0 on failure (cycle/limits exceeded)
+            0x75 => {
+                let target_idx = self.fetch() as usize;
+                let op_code = self.fetch();
+                let dep_count = self.fetch() as usize;
+                let mut deps = Vec::with_capacity(dep_count.min(MAX_FORMULA_DEPS));
+                for _ in 0..dep_count.min(MAX_FORMULA_DEPS) {
+                    deps.push(self.fetch() as usize);
+                }
+                let op = match op_code {
+                    0 => FormulaOp::Add,
+                    1 => FormulaOp::Sub,
+                    2 => FormulaOp::Mul,
+                    3 => FormulaOp::Div,
+                    4 => FormulaOp::And,
+                    5 => FormulaOp::Or,
+                    6 => FormulaOp::Xor,
+                    7 => FormulaOp::Not,
+                    8 => FormulaOp::Copy,
+                    9 => FormulaOp::Max,
+                    10 => FormulaOp::Min,
+                    11 => FormulaOp::Mod,
+                    12 => FormulaOp::Shl,
+                    13 => FormulaOp::Shr,
+                    _ => FormulaOp::Copy,
+                };
+                let ok = self.formula_register(target_idx, deps, op);
+                self.regs[0] = if ok { 1 } else { 0 };
+            }
+
+            // FORMULACLEAR (0x76) -- Clear all formulas
+            // Encoding: 0x76
+            0x76 => {
+                self.formula_clear_all();
+            }
+
+            // FORMULAREM (0x77) -- Remove formula from a canvas cell
+            // Encoding: 0x77, target_idx
+            0x77 => {
+                let target_idx = self.fetch() as usize;
+                self.formula_remove(target_idx);
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -3570,6 +3822,25 @@ impl Vm {
             0x73 => ("ASMSELF".into(), 1),
             0x74 => ("RUNNEXT".into(), 1),
 
+            0x75 => {
+                let ti = ram(a + 1);
+                let oc = ram(a + 2);
+                let dc = ram(a + 3) as usize;
+                let op_name = match oc {
+                    0 => "ADD", 1 => "SUB", 2 => "MUL", 3 => "DIV",
+                    4 => "AND", 5 => "OR", 6 => "XOR", 7 => "NOT",
+                    8 => "COPY", 9 => "MAX", 10 => "MIN", 11 => "MOD",
+                    12 => "SHL", 13 => "SHR", _ => "???",
+                };
+                let total = 4 + dc.min(MAX_FORMULA_DEPS);
+                (format!("FORMULA {}, {}, {}", ti, op_name, dc), total)
+            }
+            0x76 => ("FORMULACLEAR".into(), 1),
+            0x77 => {
+                let ti = ram(a + 1);
+                (format!("FORMULAREM {}", ti), 2)
+            }
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }
@@ -3775,6 +4046,8 @@ impl Vm {
             key_buffer: vec![0; 16],
             key_buffer_head: 0,
             key_buffer_tail: 0,
+            formulas: Vec::new(),
+            formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
         })
     }
 }

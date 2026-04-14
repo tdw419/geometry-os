@@ -1184,6 +1184,63 @@ fn parse_instruction(
             bytecode.push(0x74);
         }
 
+        "FORMULA" => {
+            // FORMULA target_idx, op, dep0, [dep1, ...]
+            // target_idx: canvas buffer index (immediate)
+            // op: ADD/SUB/MUL/DIV/AND/OR/XOR/NOT/COPY/MAX/MIN/MOD/SHL/SHR
+            // deps: 1-8 canvas buffer indices
+            if tokens.len() < 4 {
+                return Err("FORMULA requires: target_idx, op, dep0, [dep1, ...]".into());
+            }
+            let target_idx = parse_imm(tokens[1], constants)? as u32;
+            let op_name = tokens[2].trim().to_uppercase();
+            let op_code = match op_name.as_str() {
+                "ADD" => 0,
+                "SUB" => 1,
+                "MUL" => 2,
+                "DIV" => 3,
+                "AND" => 4,
+                "OR" => 5,
+                "XOR" => 6,
+                "NOT" => 7,
+                "COPY" => 8,
+                "MAX" => 9,
+                "MIN" => 10,
+                "MOD" => 11,
+                "SHL" => 12,
+                "SHR" => 13,
+                _ => return Err(format!("FORMULA: unknown op '{}'", op_name)),
+            };
+            let deps: Vec<u32> = tokens[3..].iter()
+                .map(|a| parse_imm(a, constants).map(|v| v as u32))
+                .collect::<Result<Vec<u32>, String>>()?;
+            if deps.len() > 8 {
+                return Err("FORMULA: too many dependencies (max 8)".into());
+            }
+            bytecode.push(0x75);
+            bytecode.push(target_idx);
+            bytecode.push(op_code);
+            bytecode.push(deps.len() as u32);
+            for d in &deps {
+                bytecode.push(*d);
+            }
+        }
+
+        "FORMULACLEAR" => {
+            // No operands -- clear all formulas
+            bytecode.push(0x76);
+        }
+
+        "FORMULAREM" => {
+            // FORMULAREM target_idx -- remove formula from cell
+            if tokens.len() < 2 {
+                return Err("FORMULAREM requires: target_idx".into());
+            }
+            let target_idx = parse_imm(tokens[1], constants)? as u32;
+            bytecode.push(0x77);
+            bytecode.push(target_idx);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 
