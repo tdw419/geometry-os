@@ -1,0 +1,2961 @@
+title: Geometry OS Roadmap
+version: 1.0.0
+description: Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch
+  it run.
+project_url: https://github.com/tdw419/geometry-os
+meta:
+  language: Rust
+  gui: minifb
+  screen: 256x256 pixels
+  registers: 32
+  ram: 65536 words
+  opcodes: 114
+  tests: 894
+  programs: 40
+  loc: 12305
+phases:
+- id: phase-1
+  title: Core VM + Visual Programs
+  status: complete
+  goal: Working VM with pixel opcodes, static visual output
+  description: Foundational VM + programs that produce static images
+  deliverables:
+  - name: HALT/NOP/FRAME opcodes
+    description: 'Control flow: stop, no-op, yield to renderer'
+    status: done
+  - name: LDI/LOAD/STORE opcodes
+    description: 'Data movement: load immediate, load/store from RAM'
+    status: done
+  - name: ADD/SUB/MUL/DIV opcodes
+    description: Arithmetic on registers
+    status: done
+  - name: AND/OR/XOR opcodes
+    description: Bitwise logic on registers
+    status: done
+  - name: JMP/JZ/JNZ opcodes
+    description: Unconditional and conditional branching
+    status: done
+  - name: CALL/RET opcodes
+    description: Subroutine call/return via r31
+    status: done
+  - name: PSET/PSETI opcodes
+    description: Pixel set from registers or immediates
+    status: done
+  - name: FILL opcode
+    description: Fill entire screen with a color
+    status: done
+  - name: RECTF opcode
+    description: Filled rectangle
+    status: done
+  - name: Two-pass assembler
+    description: Labels, comments, hex/dec/bin literals, .db directive
+    status: done
+  - name: hello.asm
+    description: Hello world text display
+    status: done
+  - name: fill_screen.asm
+    description: Fill screen with solid color
+    status: done
+  - name: diagonal.asm
+    description: Diagonal line from (0,0) to (255,255)
+    status: done
+  - name: border.asm
+    description: Colored border around screen edges
+    status: done
+  - name: gradient.asm
+    description: Horizontal color gradient via nested loops
+    status: done
+  - name: stripes.asm
+    description: Alternating horizontal stripes
+    status: done
+  - name: nested_rects.asm
+    description: Concentric colored rectangles
+    status: done
+  - name: checkerboard.asm
+    description: Checkerboard pattern
+    status: done
+  - name: colors.asm
+    description: Color palette display
+    status: done
+  - name: rainbow.asm
+    description: Rainbow stripes
+    status: done
+  - name: rings.asm
+    description: Concentric rings
+    status: done
+  - name: lines.asm
+    description: Star burst using LINE opcode
+    status: done
+  - name: circles.asm
+    description: Concentric circles using CIRCLE opcode
+    status: done
+  scope_lines_total: 2000
+  test_target: 10
+- id: phase-2
+  title: Extended Opcodes
+  status: complete
+  goal: Shift, modulo, compare, stack, and signed negation opcodes
+  description: Instruction set extensions
+  deliverables:
+  - name: SHL/SHR opcodes
+    description: Bit-shift left and right
+    status: done
+    acceptance_criteria:
+    - description: shift_test.asm passes
+      met: true
+  - name: MOD opcode
+    description: Modulo operation
+    status: done
+  - name: NEG opcode
+    description: Two's complement negation
+    status: done
+  - name: CMP opcode
+    description: 'Compare: r0 = -1/0/1 (lt/eq/gt)'
+    status: done
+  - name: BLT/BGE opcodes
+    description: Branch on CMP result (less-than, greater-or-equal)
+    status: done
+  - name: PUSH/POP opcodes
+    description: Stack operations via r30 (SP)
+    status: done
+    acceptance_criteria:
+    - description: push_pop_test.asm passes
+      met: true
+  - name: TEXT opcode
+    description: Render null-terminated string from RAM at (x,y)
+    status: done
+  - name: LINE opcode
+    description: Bresenham line between two points
+    status: done
+  - name: CIRCLE opcode
+    description: Midpoint circle algorithm
+    status: done
+  - name: SCROLL opcode
+    description: Scroll screen up by N pixels
+    status: done
+  scope_lines_total: 2800
+  test_target: 16
+- id: phase-3
+  title: Interactive Programs
+  status: complete
+  goal: Keyboard input via IKEY and interactive programs
+  deliverables:
+  - name: IKEY opcode
+    description: Read keyboard port RAM[0xFFF], clear it
+    status: done
+  - name: blink.asm
+    description: Toggle a pixel on/off with keyboard
+    status: done
+  - name: calculator.asm
+    description: 4-function calculator with text display
+    status: done
+  - name: painter.asm
+    description: Freehand drawing with cursor keys
+    status: done
+  scope_lines_total: 3200
+  test_target: 20
+- id: phase-4
+  title: Canvas & Editor
+  status: complete
+  goal: 'Text editor improvements: paste, load, scroll, syntax highlighting'
+  deliverables:
+  - name: Clipboard paste
+    description: Ctrl+V to paste text onto the grid
+    status: done
+  - name: File load
+    description: Ctrl+F8 to load .asm files with Tab completion
+    status: done
+  - name: Scroll/pan
+    description: Support programs larger than 32x32 characters
+    status: done
+  - name: Syntax highlighting
+    description: Color opcodes, registers, numbers differently on canvas
+    status: done
+  scope_lines_total: 3500
+  test_target: 22
+- id: phase-5
+  title: Terminal Mode
+  status: complete
+  goal: CLI mode with geo> prompt
+  deliverables:
+  - name: Terminal mode
+    description: geo> prompt with help, list, load, run, edit, regs, peek, poke, reset, clear, quit
+    status: done
+  - name: Mode switching
+    description: Escape toggles Editor/Terminal
+    status: done
+  scope_lines_total: 3800
+  test_target: 24
+- id: phase-6
+  title: Animation
+  status: complete
+  goal: FRAME opcode for 60fps animation loop
+  deliverables:
+  - name: FRAME opcode
+    description: Yield to renderer, enable animation loops
+    status: done
+  - name: fire.asm
+    description: Scrolling fire animation using FRAME + SCROLL
+    status: done
+  - name: scroll_demo.asm
+    description: Horizontal bar scrolling upward
+    status: done
+  scope_lines_total: 4000
+  test_target: 24
+- id: phase-7
+  title: Random & Games
+  status: complete
+  goal: RAND opcode, Snake and Ball games
+  deliverables:
+  - name: RAND opcode
+    description: LCG pseudo-random u32 (seed 0xDEADBEEF)
+    status: done
+  - name: snake.asm
+    description: 'Snake: WASD, random apples, growing tail, self-collision'
+    status: done
+  - name: ball.asm
+    description: Bouncing ball with WASD control
+    status: done
+  scope_lines_total: 4300
+  test_target: 24
+- id: phase-8
+  title: TICKS & Sound
+  status: complete
+  goal: Frame counter for throttling, BEEP opcode for audio
+  deliverables:
+  - name: TICKS register
+    description: RAM[0xFFE] frame counter, incremented each FRAME, wraps at u32 max
+    status: done
+  - name: Snake throttle
+    description: Snake throttled via TICKS & 7 (~7.5 moves/sec)
+    status: done
+  - name: BEEP opcode
+    description: BEEP freq_reg, dur_reg -- sine-wave via aplay (20-20000 Hz, 1-5000 ms)
+    status: done
+  - name: Snake sounds
+    description: 880Hz ping on apple eat, 110Hz thud on death
+    status: done
+  - name: Ball sounds
+    description: 330Hz click on wall bounce
+    status: done
+  scope_lines_total: 4322
+  test_target: 46
+- id: phase-9
+  title: Debug Tools
+  status: complete
+  goal: Breakpoints, instruction trace, and save/load improvements
+  deliverables:
+  - name: Save/load state
+    description: F7 saves full RAM to geometry_os.sav, restore on startup
+    status: done
+    acceptance_criteria:
+    - description: test_vm_save_load_roundtrip passes
+      met: true
+  - name: Disassembly panel
+    description: Show bytecode alongside source text in GUI
+    status: done
+  - name: Single-step mode
+    description: F6 steps one instruction when paused
+    status: done
+  - name: Breakpoints
+    description: Mark PC addresses to pause at during execution
+    status: done
+    scope_lines: 80
+    scope_files:
+    - src/vm.rs
+    - src/main.rs
+    acceptance_criteria:
+    - description: User can set breakpoint at an address
+      met: true
+    - description: VM halts when PC hits breakpoint address
+      met: true
+  - name: Instruction trace
+    description: Log PC + decoded instruction for first N steps
+    status: done
+    scope_lines: 60
+    scope_files:
+    - src/vm.rs
+    - src/main.rs
+    acceptance_criteria:
+    - description: CLI mode logs each instruction with register state
+      met: true
+  scope_lines_total: 4500
+  test_target: 48
+- id: phase-10
+  title: Extended Graphics
+  status: complete
+  goal: Sprite blitting and screenshot export
+  deliverables:
+  - name: SPRITE opcode
+    description: Copy a block of RAM to screen at (x,y) -- sprite blit
+    status: done
+    scope_lines: 120
+    scope_files:
+    - src/vm.rs
+    - src/assembler.rs
+    acceptance_criteria:
+    - description: Copy NxM pixels from RAM to screen buffer
+      met: true
+    - description: Color 0 pixels are transparent (skip)
+      met: true
+    - description: test_sprite_transparent_skips_zero passes
+      met: true
+  - name: Screenshot export
+    description: Dump 256x256 canvas to PNG file
+    status: done
+    scope_lines: 40
+    scope_files:
+    - src/main.rs
+    acceptance_criteria:
+    - description: F9 or CLI command saves PNG
+      met: true
+  scope_lines_total: 4700
+  test_target: 50
+- id: phase-11
+  title: Advanced Games
+  status: complete
+  goal: Richer games using sprites and extended features
+  deliverables:
+  - name: breakout.asm
+    description: Breakout with paddle, ball, 4 rows of colored bricks, score, lives
+    status: done
+  - name: tetris.asm
+    description: Tetris with piece rotation and line clearing
+    status: done
+  - name: maze.asm
+    description: Randomly generated maze with player navigation
+    status: done
+    acceptance_criteria:
+    - description: test_maze_assembles passes
+      met: true
+    - description: test_maze_initializes passes
+      met: true
+  scope_lines_total: 5100
+  test_target: 56
+- id: phase-12
+  title: Self-Hosting
+  status: complete
+  goal: VM can assemble and run its own programs from within
+  description: 'The text editor types assembly, the assembler compiles it, and
+
+    the VM runs it. Missing piece: assembler callable as VM subroutine.
+
+    '
+  deliverables:
+  - name: Assembler syscall
+    description: VM opcode that triggers the assembler on canvas text
+    status: done
+    scope_lines: 150
+    scope_files:
+    - src/vm.rs
+    - src/assembler.rs
+    acceptance_criteria:
+    - description: ASM opcode (0x4B) reads null-terminated source from RAM
+      met: true
+    - description: ASM writes bytecode to RAM at destination address
+      met: true
+    - description: RAM[0xFFD] holds result (word count or 0xFFFFFFFF on error)
+      met: true
+    - description: test_asm_opcode_basic passes
+      met: true
+    - description: test_asm_opcode_error passes
+      met: true
+  - name: Self-hosting demo
+    description: Program that writes assembly, assembles it, runs the output
+    status: done
+    scope_lines: 80
+    scope_files:
+    - programs/self_host.asm
+    acceptance_criteria:
+    - description: self_host.asm compiles and runs
+      met: true
+    - description: Generated code executes (screen filled with green)
+      met: true
+  scope_lines_total: 5500
+  test_target: 54
+- id: phase-13
+  title: Close the Gaps
+  status: complete
+  goal: Every program tested, every error traceable, no regressions
+  priority: 1
+  deliverables:
+  - name: Tests for untested programs
+    description: ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity
+    status: done
+    scope_lines: 220
+    scope_files:
+    - tests/program_tests.rs
+    acceptance_criteria:
+    - description: cargo test all green
+    - description: Each untested program has at least one test
+  - name: Assembler error line numbers
+    description: Error messages include source line number
+    status: done
+    scope_lines: 30
+    scope_files:
+    - src/assembler.rs
+    acceptance_criteria:
+    - description: 'Error message format: ''line N: unknown opcode: XYZ'''
+  - name: Version string audit
+    description: Single source of truth for version across banner, CLI, Cargo.toml
+    status: done
+    scope_lines: 10
+    scope_files:
+    - src/main.rs
+    - Cargo.toml
+- id: phase-14
+  title: Developer Experience
+  status: complete
+  goal: Make the VM pleasant to program
+  priority: 2
+  deliverables:
+  - name: 'Assembler #define constants'
+    description: '#define NAME value -- eliminates magic numbers'
+    status: done
+    scope_lines: 80
+    scope_files:
+    - src/assembler.rs
+    acceptance_criteria:
+    - description: '#define TILE 8 resolves in LDI and other immediate contexts'
+      met: true
+  - name: programs/README.md
+    description: One-line description + controls + opcodes per program
+    status: done
+    scope_lines: 60
+    scope_files:
+    - programs/README.md
+  - name: Disassembler panel in GUI
+    description: Shows PC +/- 10 instructions, updates each step
+    status: done
+    scope_lines: 50
+    scope_files:
+    - src/main.rs
+  - name: GIF/video capture
+    description: F10 toggle writes numbered PNGs, ffmpeg command documented
+    status: done
+    scope_lines: 20
+    scope_files:
+    - src/main.rs
+- id: phase-15
+  title: VM Capability Gaps
+  status: complete
+  goal: Fix rough edges in game programming
+  priority: 4
+  deliverables:
+  - name: SAR opcode (arithmetic shift right, 0x2B)
+    description: Two's-complement division for negative numbers
+    status: done
+    scope_lines: 10
+    scope_files:
+    - src/vm.rs
+    - src/assembler.rs
+    acceptance_criteria:
+    - description: Two's-complement division works for negative numbers
+      met: true
+  - name: Multi-key input (bitmask at 0xFFB)
+    description: Two simultaneous keys in same frame
+    status: done
+    scope_lines: 20
+    scope_files:
+    - src/vm.rs
+    - src/main.rs
+    acceptance_criteria:
+    - description: Two simultaneous keys register in same frame
+      met: true
+  - name: BEEP in more programs
+    description: Sound effects for tetris, breakout, maze, sprite_demo
+    status: done
+    scope_lines: 20
+    scope_files:
+    - programs/*.asm
+    acceptance_criteria:
+    - description: Sound effects on game events
+      met: true
+  - name: Signed arithmetic audit
+    description: Document SUB/ADD/MUL sign contract, CMP semantics
+    status: done
+    scope_lines: 30
+    scope_files:
+    - ROADMAP.md
+    - docs/
+- id: phase-16
+  title: Showcase Shipping
+  status: complete
+  goal: Complete game, presentable repo, public release
+  priority: 3
+  deliverables:
+  - name: Complete tetris
+    description: Scoring, levels, sound, game-over screen
+    status: done
+    scope_lines: 100
+    scope_files:
+    - programs/tetris.asm
+    acceptance_criteria:
+    - description: Playable start-to-finish with visible score
+      met: true
+  - name: TILEMAP opcode
+    description: Grid blit from tile index array -- makes grid games 3x shorter
+    status: done
+    scope_lines: 60
+    scope_files:
+    - src/vm.rs
+    - src/assembler.rs
+    acceptance_criteria:
+    - description: snake, tetris, maze each 3x shorter
+      met: true
+  - name: Persistent save slots
+    description: 4 named save slots accessible from terminal
+    status: done
+    scope_lines: 30
+    scope_files:
+    - src/vm.rs
+    - src/main.rs
+    acceptance_criteria:
+    - description: save/load slot1 works
+      met: true
+  - name: GitHub release v1.0.1
+    description: Tag, release notes, prebuilt binary
+    status: done
+    acceptance_criteria:
+    - description: Release notes prepared
+      met: true
+- id: phase-17
+  title: Platform Growth
+  status: complete
+  goal: Geometry OS as a target platform
+  priority: 5
+  deliverables:
+  - name: GlyphLang compiler backend
+    description: Emit .geo bytecode from GlyphLang source
+    status: done
+    scope_lines: 200
+    scope_files:
+    - src/glyph_backend.rs
+  - name: Browser port via WASM
+    description: VM runs in browser with canvas rendering
+    status: done
+    scope_lines: 200
+    scope_files:
+    - wasm/
+    acceptance_criteria:
+    - description: wasm-pack build succeeds
+      met: true
+    - description: Demo page with built-in programs runs in browser
+      met: true
+    - description: Full opcode set works in WASM
+      met: true
+  - name: Network port (0xFFC UDP)
+    description: Two VM instances exchange messages
+    status: done
+    scope_lines: 40
+    scope_files:
+    - src/main.rs
+- id: phase-18
+  title: VM Instrumentation
+  status: complete
+  goal: Telemetry for memory access and execution flow
+  priority: 6
+  deliverables:
+  - name: Access log buffer
+    description: Track LOAD/STORE/SPRITE/TILEMAP RAM hits per frame
+    status: done
+    scope_lines: 50
+    scope_files:
+    - src/vm.rs
+  - name: Instruction fetch logging
+    description: Track PC addresses for execution trail
+    status: done
+    scope_lines: 10
+    scope_files:
+    - src/vm.rs
+- id: phase-19
+  title: Visual Debugger
+  status: complete
+  goal: Live heat-map and PC trail overlays on canvas
+  priority: 7
+  deliverables:
+  - name: Intensity decay buffer
+    description: Fade memory highlights over ~10 frames
+    status: done
+    scope_lines: 30
+    scope_files:
+    - src/main.rs
+  - name: Canvas cell tinting
+    description: Cyan (Read) and Magenta (Write) flashes on active RAM addresses
+    status: done
+    scope_lines: 40
+    scope_files:
+    - src/main.rs
+  - name: PC trail visualization
+    description: Fading white glow follows the execution pointer
+    status: done
+    scope_lines: 20
+    scope_files:
+    - src/main.rs
+- id: phase-20
+  title: High RAM Visualization
+  status: complete
+  goal: Deep observability into game state and sprite memory
+  priority: 8
+  deliverables:
+  - name: RAM inspector panel
+    description: Second 32x32 grid visualizing 0x2000-0x23FF or scrollable range
+    status: done
+    scope_lines: 60
+    scope_files:
+    - src/main.rs
+    acceptance_criteria:
+    - description: 32x32 grid renders at bottom of window
+      met: true
+    - description: PageUp/PageDown scrolls through RAM in Terminal mode
+      met: true
+    - description: Access intensities shown as color tints
+      met: true
+  - name: Global heatmap
+    description: Compact 256x256 view of entire 64K RAM access patterns
+    status: done
+    scope_lines: 80
+    scope_files:
+    - src/main.rs
+    acceptance_criteria:
+    - description: 256x256 pixel grid shows all 64K words
+      met: true
+    - description: Read/Write access shown as cyan/magenta pulses
+      met: true
+    - description: PC position highlighted in white
+      met: true
+- id: phase-21
+  title: Spatial Program Coordinator (Native Windowing)
+  status: complete
+  goal: Eliminate CPU-side compositor dependency by running multiple autonomous Glyph programs concurrently within the GPU/WGPU substrate.
+  priority: 9
+  deliverables:
+  - name: Multi-Process VM Scheduler
+    description: Modify the core VM to support multiple concurrent execution contexts (window instances) within the same 64K RAM.
+    status: done
+    acceptance_criteria:
+    - description: SpawnedProcess struct with isolated registers and PC
+      met: true
+    - description: step_all_processes() with swap-in/step/swap-out pattern
+      met: true
+    - description: MAX_PROCESSES = 8 cap
+      met: true
+  - name: SPAWN/KILL Opcodes (0x4D/0x4E)
+    description: SPAWN addr_reg creates child process; KILL pid_reg halts it. PID stored in RAM[0xFFA].
+    status: done
+    acceptance_criteria:
+    - description: test_spawn_creates_child_process passes
+      met: true
+    - description: test_spawn_max_processes passes
+      met: true
+    - description: test_kill_halts_child_process passes
+      met: true
+  - name: Window Manager Demo
+    description: window_manager.asm -- primary draws animated window border, child bounces ball inside via shared RAM bounds protocol.
+    status: done
+    acceptance_criteria:
+    - description: window_manager.asm assembles and runs
+      met: true
+    - description: test_window_manager_spawns_child passes
+      met: true
+    - description: Ball stays within window bounds
+      met: true
+- id: phase-22
+  title: Screen Readback & Collision Detection
+  status: complete
+  goal: Let programs read pixel values from the framebuffer for collision detection, pick-color, and window compositing.
+  priority: 10
+  deliverables:
+  - name: PEEK opcode (0x4F)
+    description: PEEK rx, ry, rd -- read screen pixel at (rx,ry) into rd. Enables collision detection.
+    status: done
+    scope_lines: 20
+    scope_files:
+    - src/vm.rs
+    - src/assembler.rs
+    acceptance_criteria:
+    - description: PEEK reads screen buffer value into destination register
+      met: true
+    - description: Out-of-bounds returns 0
+      met: true
+    - description: test_peek_reads_screen_pixel passes
+      met: true
+  - name: Collision detection demo
+    description: peek_bounce.asm -- white ball bounces off drawn obstacles using PEEK. No RAM collision map.
+    status: done
+    scope_lines: 100
+    scope_files:
+    - programs/peek_bounce.asm
+  - name: MOV instruction everywhere
+    description: MOV rd, rs documented and used across programs
+    status: done
+- id: phase-23
+  title: Kernel Boundary (Syscall Mode)
+  status: complete
+  goal: Establish user mode vs kernel mode. Programs can't directly access hardware.
+  priority: 11
+  deliverables:
+  - name: CPU mode flag
+    description: 'vm.mode: User/Kernel bit in VM state'
+    status: done
+    acceptance_criteria_met: true
+  - name: SYSCALL opcode (0x52)
+    description: Trap into kernel mode, dispatch by syscall number
+    status: done
+    acceptance_criteria_met: true
+  - name: RETK opcode (0x53)
+    description: Return from kernel mode to user mode
+    status: done
+    acceptance_criteria_met: true
+  - name: Syscall dispatch table
+    description: RAM region 0xFE00..0xFEFF mapping syscall numbers to kernel handlers
+    status: done
+    acceptance_criteria_met: true
+  - name: Restricted opcodes in user mode
+    description: IKEY, hardware STORE blocked in user mode
+    status: done
+    acceptance_criteria_met: true
+- id: phase-24
+  title: Memory Protection
+  status: complete
+  goal: Each process gets its own address space. Processes can't trash each other.
+  priority: 12
+  deliverables:
+  - name: Page tables
+    description: 'Simple 1-level paging: page_dir per process, maps virtual to physical'
+    status: done
+    acceptance_criteria:
+    - description: translate_va maps virtual to physical via page directory
+      met: true
+    - description: Kernel mode uses identity mapping (no page directory)
+      met: true
+  - name: Address space per process
+    description: SPAWN creates new page table, not just new registers
+    status: done
+    acceptance_criteria:
+    - description: Each child gets 4 private physical pages
+      met: true
+    - description: Shared regions (page 3, page 63) identity-mapped
+      met: true
+  - name: SEGFAULT on illegal access
+    description: LOAD/STORE/fetch to unmapped page halts the process
+    status: done
+    acceptance_criteria:
+    - description: test_child_segfaults_on_unmapped_store passes
+      met: true
+    - description: test_child_segfaults_on_unmapped_load passes
+      met: true
+    - description: test_child_segfaults_on_unmapped_fetch passes
+      met: true
+    - description: RAM[0xFF9] tracks segfaulted PID
+      met: true
+  - name: Process memory isolation
+    description: Two processes can't corrupt each other's memory
+    status: done
+    acceptance_criteria:
+    - description: test_process_memory_isolation passes
+      met: true
+    - description: test_child_user_mode_blocks_hardware_port_write passes
+      met: true
+    - description: test_child_can_access_shared_window_bounds passes
+      met: true
+  - name: Memory protection tests
+    description: 9 tests covering segfault, isolation, page tables, kernel mode
+    status: done
+    acceptance_criteria:
+    - description: test_child_page_directory_has_shared_regions_mapped passes
+      met: true
+    - description: test_kernel_mode_identity_mapping passes
+      met: true
+    - description: test_kill_frees_physical_pages passes
+      met: true
+    - description: test_segfault_pid_tracking passes
+      met: true
+  - name: Process memory regions documentation
+    description: docs/MEMORY_PROTECTION.md -- code/heap/stack/shared segments
+    status: done
+- id: phase-25
+  title: Filesystem
+  status: complete
+  goal: Programs can create, read, write, and delete named files. Persistent storage.
+  priority: 13
+  deliverables:
+  - name: Virtual filesystem layer
+    description: Abstract FS interface backed by host filesystem in .geometry_os/fs/
+    status: done
+  - name: OPEN/READ/WRITE/CLOSE/SEEK syscalls
+    description: Full file I/O through syscall interface
+    status: done
+  - name: LS syscall
+    description: Directory listing into RAM buffer
+    status: done
+  - name: Per-process fd table
+    description: Max 16 open files per process
+    status: done
+  - name: cat.asm
+    description: Test program that reads a file and displays it
+    status: done
+- id: phase-26
+  title: Preemptive Scheduler
+  status: complete
+  goal: Replace round-robin single-step with time-sliced priority scheduler.
+  priority: 14
+  deliverables:
+  - name: Timer interrupt
+    description: VM fires tick every N instructions, triggers context switch
+    status: done
+  - name: Priority levels
+    description: Each process has priority 0-3, higher gets more slices
+    status: done
+  - name: Yield/Sleep syscalls
+    description: Voluntary yield and timed sleep
+    status: done
+- id: phase-27
+  title: Inter-Process Communication
+  status: complete
+  goal: Processes communicate through pipes and messages, not raw shared RAM.
+  priority: 15
+  deliverables:
+  - name: PIPE syscall
+    description: Create unidirectional pipe with circular buffer (0x5D)
+    status: done
+    acceptance_criteria:
+    - description: PIPE r5, r6 creates read FD (0x8000|idx) and write FD (0xC000|idx)
+      met: true
+    - description: Pipe buffer holds 256 words
+      met: true
+  - name: MSGSND/MSGRCV syscalls
+    description: Send and receive fixed-size messages by PID (0x5E, 0x5F)
+    status: done
+    acceptance_criteria:
+    - description: MSGSND sends 4-word message to target PID
+      met: true
+    - description: MSGRCV receives message, returns sender PID in r0
+      met: true
+    - description: Per-process message queue holds 16 messages
+      met: true
+  - name: Blocking I/O
+    description: READ on empty pipe blocks until data arrives
+    status: done
+    acceptance_criteria:
+    - description: READ on empty pipe sets proc.blocked = true
+      met: true
+    - description: Scheduler skips blocked processes
+      met: true
+    - description: MSGRCV blocks if no message queued
+      met: true
+  - name: pipe_test.asm
+    description: Program demonstrating parent-child pipe communication
+    status: done
+- id: phase-28
+  title: Device Driver Abstraction
+  status: complete
+  goal: All hardware access through a uniform driver interface. Everything is a file.
+  priority: 16
+  deliverables:
+  - name: Device file convention
+    description: /dev/screen, /dev/keyboard, /dev/audio, /dev/net
+    status: done
+    acceptance_criteria:
+    - description: OPEN /dev/screen returns fd 0xE000
+      met: true
+    - description: OPEN /dev/keyboard returns fd 0xE001
+      met: true
+    - description: OPEN /dev/audio returns fd 0xE002
+      met: true
+    - description: OPEN /dev/net returns fd 0xE003
+      met: true
+  - name: IOCTL syscall
+    description: Device-specific control operations
+    status: done
+    acceptance_criteria:
+    - description: IOCTL assembles to opcode 0x62
+      met: true
+    - description: 'Screen: get width/height via cmd 0/1'
+      met: true
+    - description: 'Keyboard: get/set echo mode via cmd 0/1'
+      met: true
+    - description: 'Audio: get/set volume via cmd 0/1'
+      met: true
+    - description: 'Net: get status via cmd 0'
+      met: true
+  - name: Screen/keyboard/audio/net drivers
+    description: Wrap existing hardware ports as device files
+    status: done
+    acceptance_criteria:
+    - description: WRITE to /dev/screen draws pixels from (x,y,color) triplets
+      met: true
+    - description: READ from /dev/keyboard reads RAM[0xFFF] and clears it
+      met: true
+    - description: WRITE to /dev/audio sets beep from (freq,dur) pair
+      met: true
+    - description: READ/WRITE to /dev/net uses RAM[0xFFC]
+      met: true
+    - description: device_test.asm demo program
+      met: true
+- id: phase-29
+  title: Shell
+  status: complete
+  goal: Proper command shell with pipes, redirection, environment variables.
+  priority: 17
+  deliverables:
+  - name: shell.asm
+    description: Interactive command interpreter as user process
+    status: done
+    acceptance_criteria:
+    - description: shell.asm assembles without errors
+      met: true
+    - description: 'Built-in commands: ls, cd, cat, echo, ps, kill, help, pwd, clear, exit'
+      met: true
+  - name: Pipe operator
+    description: prog1 | prog2 connects stdout to stdin
+    status: done
+    acceptance_criteria:
+    - description: EXECP opcode (0x6A) spawns with fd redirection
+      met: true
+    - description: shell.asm parses | operator and creates pipes
+      met: true
+  - name: Redirection
+    description: prog > file, prog < file, prog >> file
+    status: done
+    acceptance_criteria:
+    - description: shell.asm parses > operator and opens file for output
+      met: true
+  - name: Built-in commands
+    description: ls, cd, cat, echo, ps, kill, help
+    status: done
+    acceptance_criteria:
+    - description: ls lists VFS directory entries
+      met: true
+    - description: cd changes CWD via CHDIR opcode
+      met: true
+    - description: cat reads file and displays content
+      met: true
+    - description: echo prints arguments to screen
+      met: true
+    - description: ps lists process IDs
+      met: true
+    - description: kill terminates a process by PID
+      met: true
+    - description: help displays command list
+      met: true
+  - name: New opcodes
+    description: READLN, WAITPID, EXECP, CHDIR, GETCWD
+    status: done
+    acceptance_criteria:
+    - description: READLN (0x68) reads keyboard chars into line buffer
+      met: true
+    - description: WAITPID (0x69) waits for child process to halt
+      met: true
+    - description: EXECP (0x6A) spawns program with stdin/stdout fd redirection
+      met: true
+    - description: CHDIR (0x6B) changes current working directory
+      met: true
+    - description: GETCWD (0x6C) reads current working directory
+      met: true
+  - name: VFS dup_fd
+    description: Duplicate file descriptors across PID tables for pipe/redir
+    status: done
+- id: phase-30
+  title: Boot Sequence & Init
+  status: complete
+  goal: OS boots into known state, starts init, manages services.
+  priority: 18
+  deliverables:
+  - name: Boot ROM
+    description: Fixed bytecode at 0x0000, initializes hardware, jumps to init
+    status: done
+    acceptance_criteria:
+    - description: boot() method assembles init.asm and spawns PID 1
+      met: true
+    - description: boot.cfg created with default configuration
+      met: true
+  - name: Init process
+    description: PID 1, reads boot.cfg, starts shell
+    status: done
+    acceptance_criteria:
+    - description: init.asm assembles without errors
+      met: true
+    - description: init process spawned with priority 2
+      met: true
+    - description: supervisor loop monitors shell and respawns if it dies
+      met: true
+    - description: environment variables set (SHELL, HOME, CWD, USER)
+      met: true
+  - name: Graceful shutdown
+    description: SHUTDOWN syscall stops all processes, flushes FS
+    status: done
+    acceptance_criteria:
+    - description: SHUTDOWN opcode 0x6E in kernel mode halts VM
+      met: true
+    - description: SHUTDOWN in user mode returns error (r0=0xFFFFFFFF)
+      met: true
+    - description: SHUTDOWN kills all child processes and frees pages
+      met: true
+    - description: SHUTDOWN clears pipes and closes file descriptors
+      met: true
+    - description: shutdown_requested flag set for host to check
+      met: true
+- id: phase-31
+  title: Standard Library
+  status: complete
+  goal: Reusable library of common operations for all programs.
+  priority: 19
+  deliverables:
+  - name: lib/stdlib.asm
+    description: String ops, memory ops, formatted I/O
+    status: done
+  - name: lib/math.asm
+    description: sin, cos, sqrt via lookup tables
+    status: done
+  - name: Heap allocator
+    description: malloc/free for dynamic memory
+    status: done
+    acceptance_criteria:
+    - description: lib/heap.asm implements _lib_heap_alloc and _lib_heap_free
+      met: true
+  - name: Linking convention
+    description: .include or .lib directive in assembler
+    status: done
+    acceptance_criteria:
+    - description: .include directive resolves and inlines lib/*.asm files
+      met: true
+- id: phase-32
+  title: Signals & Process Lifecycle
+  status: complete
+  goal: Signals, exit codes, wait, and proper process lifecycle management.
+  priority: 20
+  deliverables:
+  - name: SIGNAL opcode
+    description: Send signal to process by PID (SIGTERM=0, SIGKILL=1, SIGUSR=2, SIGALRM=3)
+    status: done
+    acceptance_criteria:
+    - description: SIGNAL opcode sends signal to target process
+      met: true
+  - name: Signal handlers (SIGSET)
+    description: Process sets handler address for each signal type via SIGSET opcode
+    status: done
+    acceptance_criteria:
+    - description: SIGSET registers handler address, signal delivery jumps to it
+      met: true
+  - name: EXIT/WAITPID opcodes
+    description: Exit with status code, parent waits for child via WAITPID
+    status: done
+    acceptance_criteria:
+    - description: EXIT opcode halts process with status code, sets zombie flag
+      met: true
+    - description: WAITPID reaps zombie and returns exit code
+      met: true
+  - name: Zombie cleanup
+    description: Exited processes cleaned up after parent WAITPID
+    status: done
+    acceptance_criteria:
+    - description: Zombie process freed after WAITPID, pages reclaimed
+      met: true
+- id: phase-33
+  title: QEMU Bridge
+  status: complete
+  goal: Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one.
+  priority: 30
+  description: 'QEMU gives us a working hypervisor in days. Every architecture QEMU supports
+
+    (x86, ARM, RISC-V, MIPS) works immediately. We learn what the canvas text
+
+    surface needs to handle (ANSI sequences, scroll speed, buffer size).
+
+    '
+  deliverables:
+  - name: qemu.rs module
+    description: QEMU subprocess management with stdin/stdout pipes
+    status: done
+    scope_lines: 60
+    scope_files:
+    - src/qemu.rs
+    tasks:
+    - id: p33.d1.t1
+      title: Create src/qemu.rs with QemuBridge struct
+      status: done
+      description: 'Create QemuBridge struct with fields for Child process, stdin/stdout pipes,
+
+        and an output buffer. Implement Drop to kill child on cleanup.
+
+        '
+      acceptance_criteria:
+      - QemuBridge struct compiles
+      - Drop trait kills child process
+      files:
+      - src/qemu.rs
+  - name: QEMU spawn
+    description: Launch qemu-system-* with -nographic -serial mon:stdio, capture stdin/stdout
+    status: done
+    scope_lines: 80
+    tasks:
+    - id: p33.d2.t1
+      title: Implement QemuBridge::spawn(config_str) -> Result
+      status: done
+      description: 'Parse config string "arch=riscv64 kernel=linux.img ram=256M disk=rootfs.ext4"
+
+        into QEMU command. Construct qemu-system-{arch} with appropriate flags.
+
+        Use std::process::Command with stdin/stdout piped.
+
+        '
+      acceptance_criteria:
+      - Config string parsed into arch, kernel, ram, disk fields
+      - Correct qemu-system-{arch} binary selected
+      - -nographic -serial mon:stdio flags always present
+      - -machine virt for riscv/aarch64
+      - -kernel, -m, -drive flags constructed from config
+      dependencies:
+      - p33.d1.t1
+      files:
+      - src/qemu.rs
+    - id: p33.d2.t2
+      title: Implement architecture mapping (riscv64, riscv32, x86_64, aarch64, mipsel)
+      status: done
+      description: Map arch config values to qemu-system binary names and machine types.
+      acceptance_criteria:
+      - riscv64 -> qemu-system-riscv64 -machine virt
+      - x86_64 -> qemu-system-x86_64
+      - aarch64 -> qemu-system-aarch64 -machine virt
+      - mipsel -> qemu-system-mipsel -machine malta
+      - Unknown arch returns error
+      dependencies:
+      - p33.d2.t1
+      files:
+      - src/qemu.rs
+    - id: p33.d2.t3
+      title: 'Test: spawn QEMU with --version, verify process starts and exits clean'
+      status: done
+      description: Unit test that spawns qemu-system-riscv64 --version and captures version string from stdout.
+      acceptance_criteria:
+      - QEMU process starts and exits with code 0
+      - Version string captured from stdout
+      dependencies:
+      - p33.d2.t1
+      files:
+      - src/qemu.rs
+  - name: Output to canvas
+    description: Read QEMU stdout bytes, write to canvas_buffer as u32 chars, auto-scroll
+    status: done
+    scope_lines: 60
+    tasks:
+    - id: p33.d3.t1
+      title: Implement non-blocking stdout reader
+      status: done
+      description: 'Set QEMU stdout to non-blocking mode. Each frame tick, read available
+
+        bytes into a Vec<u8> buffer. Return the bytes for processing.
+
+        '
+      acceptance_criteria:
+      - Non-blocking read returns immediately even if no data
+      - Bytes read are valid QEMU output
+      dependencies:
+      - p33.d1.t1
+      files:
+      - src/qemu.rs
+    - id: p33.d3.t2
+      title: Implement stdout bytes -> canvas_buffer writer
+      status: done
+      description: 'For each printable byte: write as u32 to canvas_buffer at cursor position.
+
+        Track virtual cursor (row, col). Auto-scroll when row >= 128.
+
+        '
+      acceptance_criteria:
+      - Printable ASCII chars appear in canvas_buffer
+      - Cursor advances correctly
+      - Scrolling works when row exceeds 128
+      dependencies:
+      - p33.d3.t1
+      files:
+      - src/qemu.rs
+      - src/main.rs
+    - id: p33.d3.t3
+      title: 'Test: feed known bytes, verify canvas_buffer contents'
+      status: done
+      description: 'Unit test: write ''Hello\nWorld'' bytes, verify canvas_buffer has correct chars at correct positions.'
+      acceptance_criteria:
+      - '''H'' at position [0][0], ''e'' at [0][1], etc.'
+      - '''W'' starts at row 1 after newline'
+      dependencies:
+      - p33.d3.t2
+      files:
+      - src/qemu.rs
+  - name: Input from keyboard
+    description: Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin
+    status: done
+    scope_lines: 40
+    tasks:
+    - id: p33.d4.t1
+      title: Implement keyboard event -> QEMU stdin writer
+      status: done
+      description: 'When hypervisor is active and a key is pressed, call key_to_ascii_shifted()
+
+        and write the resulting byte to QEMU''s stdin pipe. Map Enter to \\r,
+
+        Backspace to 0x7F, Ctrl+C to 0x03.
+
+        '
+      acceptance_criteria:
+      - Regular keys forwarded as ASCII bytes
+      - Enter sends \r (carriage return)
+      - Backspace sends 0x7F
+      - Ctrl+C sends 0x03
+      dependencies:
+      - p33.d1.t1
+      files:
+      - src/qemu.rs
+      - src/main.rs
+  - name: ANSI escape handling
+    description: Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering
+    status: done
+    scope_lines: 100
+    tasks:
+    - id: p33.d5.t1
+      title: Implement ANSI escape state machine
+      status: done
+      description: 'State machine: Normal -> Escape (0x1B) -> Csi (''['') -> params.
+
+        Handle: CSI A/B/C/D (cursor), CSI H (home), CSI 2J (clear),
+
+        CSI K (clear line), CSI m (color, can ignore), CSI ? 25 h/l (cursor show/hide).
+
+        '
+      acceptance_criteria:
+      - ESC [ A moves cursor up
+      - ESC [ B moves cursor down
+      - ESC [ C moves cursor right
+      - ESC [ D moves cursor left
+      - ESC [ H moves cursor to 0,0
+      - ESC [ 2 J clears canvas_buffer
+      - ESC [ K clears from cursor to end of row
+      - Unknown sequences ignored gracefully
+      dependencies:
+      - p33.d3.t2
+      files:
+      - src/qemu.rs
+    - id: p33.d5.t2
+      title: 'Test: feed ANSI sequences, verify cursor state'
+      status: done
+      description: Unit tests for each supported ANSI sequence. Verify cursor position and buffer state.
+      acceptance_criteria:
+      - Test for each cursor movement sequence
+      - Test for clear screen
+      - Test for clear line
+      - Test for mixed text + escape sequences
+      dependencies:
+      - p33.d5.t1
+      files:
+      - src/qemu.rs
+  - name: HYPERVISOR opcode (0x72)
+    description: New opcode that reads config string from RAM and spawns QEMU
+    status: done
+    scope_lines: 60
+    tasks:
+    - id: p33.d6.t1
+      title: Add HYPERVISOR opcode 0x72 to vm.rs execute
+      status: done
+      description: 'Read config string from RAM at address in r0. Parse config.
+
+        Spawn QemuBridge. Store in VM state. F5 while active kills QEMU.
+
+        '
+      acceptance_criteria:
+      - HYPERVISOR opcode triggers QEMU spawn
+      - Config string read from VM RAM
+      - VM state tracks active hypervisor
+      dependencies:
+      - p33.d2.t1
+      - p33.d3.t2
+      - p33.d4.t1
+      files:
+      - src/vm.rs
+    - id: p33.d6.t2
+      title: Add HYPERVISOR to assembler mnemonic list
+      status: done
+      description: Register HYPERVISOR in assembler.rs so it can be used in .asm programs.
+      acceptance_criteria:
+      - '''HYPERVISOR r0'' assembles to opcode 0x54'
+      - Disassembler outputs HYPERVISOR for 0x54
+      dependencies:
+      - p33.d6.t1
+      files:
+      - src/assembler.rs
+  - name: Shell command
+    description: hypervisor arch=riscv64 kernel=linux.img command in shell.asm
+    status: done
+    tasks:
+    - id: p33.d7.t1
+      title: Add hypervisor command to shell.asm
+      status: done
+      description: Parse 'hypervisor <config>' from shell input, construct config string in RAM, execute HYPERVISOR opcode.
+      acceptance_criteria:
+      - '''hypervisor arch=riscv64 kernel=linux.img'' spawns QEMU'
+      - Error message on missing kernel file
+      dependencies:
+      - p33.d6.t1
+      files:
+      - programs/shell.asm
+  - name: Download helper
+    description: Script to fetch pre-built RISC-V Linux kernel + rootfs for testing
+    status: done
+    tasks:
+    - id: p33.d8.t1
+      title: Create scripts/download_riscv_linux.sh
+      status: done
+      description: 'Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal rootfs
+
+        from a known URL. Place in .geometry_os/fs/linux/ directory.
+
+        '
+      acceptance_criteria:
+      - Script downloads kernel Image and rootfs
+      - Files placed in correct directory
+      - QEMU can boot the downloaded kernel
+      files:
+      - scripts/download_riscv_linux.sh
+  - name: Integration test
+    description: Spawn QEMU with known kernel, verify Linux version appears in output
+    status: done
+    scope_lines: 60
+    tasks:
+    - id: p33.d9.t1
+      title: 'Test: boot RISC-V Linux, verify console output'
+      status: done
+      description: 'Integration test (marked #[ignore] for CI without QEMU).
+
+        Spawn QEMU with RISC-V kernel, read stdout for 30 seconds,
+
+        verify "Linux version" string appears.
+
+        '
+      acceptance_criteria:
+      - QEMU spawns and produces output
+      - '''Linux version'' detected in output within 30 seconds'
+      - QEMU process cleaned up after test
+      dependencies:
+      - p33.d2.t1
+      - p33.d3.t1
+      - p33.d5.t1
+      files:
+      - src/qemu.rs
+      - tests/qemu_boot_test.rs
+  dependencies:
+  - source: phase-32
+    target: phase-33
+    type: soft
+    reason: Signals not required for QEMU bridge, but nice to have
+  technical_notes: 'QEMU subprocess uses std::process::Command with piped stdin/stdout.
+
+    Non-blocking reads via set_nonblocking() on the ChildStdout.
+
+    Canvas rendering reuses existing pixel font pipeline from CANVAS_TEXT_SURFACE.md.
+
+    '
+  risks:
+  - QEMU not installed on host -- need clear error message
+  - ANSI parsing incomplete -- Linux boot output may use obscure sequences
+  - Non-blocking pipe reads may miss data on fast output -- buffer management
+- id: phase-34
+  title: RISC-V RV32I Core
+  status: complete
+  goal: Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
+  priority: 40
+  description: 'QEMU proved what works. Now rebuild it owned -- pure Rust, no subprocess,
+
+    portable to WASM and embedded. RV32I is the foundation.
+
+    '
+  deliverables:
+  - name: riscv/ module
+    description: src/riscv/ with mod.rs, cpu.rs, memory.rs, decode.rs
+    status: done
+    scope_lines: 50
+    tasks:
+    - id: p34.d1.t1
+      title: Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs
+      status: done
+      acceptance_criteria:
+      - Files compile
+      - mod.rs exports public structs
+      files:
+      - src/riscv/mod.rs
+      - src/riscv/cpu.rs
+      - src/riscv/memory.rs
+      - src/riscv/decode.rs
+  - name: Register file
+    description: x[0..32] (x0=zero), PC, 32-bit registers
+    status: done
+    scope_lines: 30
+    tasks:
+    - id: p34.d2.t1
+      title: Define RiscvCpu struct with x[32], pc, privilege fields
+      status: done
+      acceptance_criteria:
+      - 'RiscvCpu struct with x: [u32; 32], pc: u32, privilege: u8'
+      - x[0] always reads as 0 (enforced on write)
+      - new() initializes pc=0x80000000, privilege=3 (M-mode)
+      files:
+      - src/riscv/cpu.rs
+  - name: Guest RAM
+    description: Vec<u8> separate from host RAM, configurable size (default 128MB)
+    status: done
+    scope_lines: 60
+    tasks:
+    - id: p34.d3.t1
+      title: Implement GuestMemory with read_byte/half/word and write_byte/half/word
+      status: done
+      acceptance_criteria:
+      - 'GuestMemory with ram: Vec<u8>, ram_base: u64'
+      - read_word at 0x80000000 reads first 4 bytes little-endian
+      - write_word followed by read_word returns same value
+      - Out-of-range access returns error
+      files:
+      - src/riscv/memory.rs
+  - name: Instruction decode
+    description: Decode all RV32I opcodes from 32-bit instruction words
+    status: done
+    scope_lines: 200
+    tasks:
+    - id: p34.d4.t1
+      title: Implement decode() returning Operation enum for all RV32I opcodes
+      status: done
+      acceptance_criteria:
+      - 'R-type: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND'
+      - 'I-type: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI'
+      - 'Load: LB, LH, LW, LBU, LHU'
+      - 'Store: SB, SH, SW'
+      - 'Branch: BEQ, BNE, BLT, BGE, BLTU, BGEU'
+      - 'Upper: LUI, AUIPC'
+      - 'Jump: JAL, JALR'
+      - 'System: ECALL, EBREAK, FENCE'
+      dependencies:
+      - p34.d1.t1
+      files:
+      - src/riscv/decode.rs
+  - name: Execute loop
+    description: CPU step() fetches, decodes, executes one instruction
+    status: done
+    scope_lines: 200
+    tasks:
+    - id: p34.d5.t1
+      title: Implement RiscvCpu::step() and execute() for all RV32I instructions
+      status: done
+      acceptance_criteria:
+      - step() fetches word at PC, decodes, executes, advances PC by 4
+      - JAL/JALR update PC to target and store return address
+      - Branches conditionally update PC
+      - x[0] always reads as 0 after any write
+      dependencies:
+      - p34.d2.t1
+      - p34.d3.t1
+      - p34.d4.t1
+      files:
+      - src/riscv/cpu.rs
+  - name: Test suite
+    description: One test per instruction, verification against known encodings
+    status: done
+    scope_lines: 300
+    tasks:
+    - id: p34.d6.t1
+      title: Write tests for all R-type ALU operations
+      status: done
+      acceptance_criteria:
+      - 'ADD: 10 + 20 = 30'
+      - 'SUB: 30 - 10 = 20'
+      - 'SLL: 1 << 5 = 32'
+      - 'SLT: 5 < 10 = 1'
+      - 'SLTU: unsigned comparison'
+      - 'XOR, OR, AND: bitwise ops'
+      - 'SRL: logical right shift'
+      - 'SRA: arithmetic right shift (sign-preserving)'
+      dependencies:
+      - p34.d5.t1
+      files:
+      - src/riscv/cpu.rs
+    - id: p34.d6.t2
+      title: Write tests for I-type, load, store, branch, jump instructions
+      status: done
+      acceptance_criteria:
+      - 'ADDI: x1 = x2 + 100'
+      - 'LW/SW: store word, load same address, verify equal'
+      - 'LB/LBU: signed vs unsigned byte load'
+      - 'BEQ: branch taken when equal, not taken when not'
+      - 'JAL: jump and link, verify return address saved'
+      - 'JALR: indirect jump with register base'
+      dependencies:
+      - p34.d5.t1
+      files:
+      - src/riscv/cpu.rs
+    - id: p34.d6.t3
+      title: Write fibonacci test program that runs 20 iterations in RISC-V
+      status: done
+      acceptance_criteria:
+      - Fibonacci(10) = 55 computed by RISC-V code
+      - Result stored in a register, verified by test
+      dependencies:
+      - p34.d5.t1
+      files:
+      - src/riscv/cpu.rs
+  dependencies:
+  - source: phase-33
+    target: phase-34
+    type: informs
+    reason: QEMU bridge teaches us what the interpreter needs to reimplement
+- id: phase-35
+  title: RISC-V Privilege Modes
+  status: complete
+  goal: M/S/U privilege levels, CSR registers, trap handling. Linux needs this to manage its own processes.
+  priority: 50
+  deliverables:
+  - name: Privilege enum + CSR bank
+    description: M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp
+    status: done
+    scope_lines: 80
+  - name: CSR read/write
+    description: CSRRW, CSRRS, CSRRC and immediate variants
+    status: done
+    scope_lines: 100
+  - name: ECALL/MRET/SRET
+    description: Trap entry saves PC, jumps to vector. MRET/SRET restore PC.
+    status: done
+    scope_lines: 120
+  - name: Timer + software interrupts
+    description: mtime/mtimecmp, msip/ssip, interrupt pending/enable
+    status: done
+    scope_lines: 80
+  - name: Privilege transition tests
+    description: U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
+    status: done
+    scope_lines: 150
+  dependencies:
+  - source: phase-34
+    target: phase-35
+    type: hard
+    reason: Privilege modes layer on top of the base RV32I interpreter
+- id: phase-36
+  title: RISC-V Virtual Memory & Devices
+  status: complete
+  goal: SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot.
+  priority: 60
+  deliverables:
+  - name: SV32 page table walk
+    description: 2-level lookup, PTE flags, address translation
+    status: done
+    scope_lines: 120
+  - name: TLB cache
+    description: 64-entry TLB with ASID-aware invalidation
+    status: done
+    scope_lines: 80
+  - name: Page fault traps
+    description: Instruction/Load/Store page faults with stval/mtval
+    status: done
+    scope_lines: 40
+  - name: UART 16550
+    description: Serial port emulation, reuses Phase 33 bridge pattern to canvas
+    status: done
+    scope_lines: 150
+  - name: CLINT + PLIC
+    description: Timer interrupt controller + platform interrupt controller
+    status: done
+    scope_lines: 200
+  - name: Virtio block device
+    description: Virtio MMIO transport, disk image from VFS
+    status: done
+    scope_lines: 200
+  - name: Device Tree Blob
+    description: Generate DTB describing memory, UART, virtio devices
+    status: done
+    scope_lines: 150
+  - name: MMU + device integration test
+    description: Guest sets up page tables, writes to UART, verify output on canvas
+    status: done
+    scope_lines: 150
+  dependencies:
+  - source: phase-35
+    target: phase-36
+    type: hard
+    reason: SV32 and devices need privilege modes for trap handling
+  - source: phase-33
+    target: phase-36
+    type: informs
+    reason: QEMU bridge proved which devices are the minimum needed
+- id: phase-37
+  title: Guest OS Boot (Native RISC-V)
+  status: complete
+  goal: 'Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes: QEMU and native.'
+  priority: 70
+  deliverables:
+  - name: ELF + binary loader
+    description: Parse ELF32 RISC-V kernel images, load segments into guest RAM
+    status: done
+    scope_lines: 160
+  - name: DTB passthrough
+    description: Pass device tree blob to kernel in a1 register at boot
+    status: done
+    scope_lines: 30
+  - name: Boot console
+    description: Guest UART output to canvas (same bridge as Phase 33)
+    status: done
+    scope_lines: 80
+  - name: HYPERVISOR mode flag
+    description: Opcode detects 'native' vs 'qemu' from config string
+    status: done
+    scope_lines: 30
+  - name: Verified boot
+    description: Boot synthetic RISC-V kernel, verify 'Linux version' on canvas via UART bridge
+    status: done
+    scope_lines: 100
+  - name: Performance benchmark
+    description: Measure MIPS, compare interpreter vs QEMU, document results
+    status: done
+    scope_lines: 40
+  dependencies:
+  - source: phase-36
+    target: phase-37
+    type: hard
+    reason: Need MMU + devices before booting a kernel
+  - source: phase-33
+    target: phase-37
+    type: informs
+    reason: QEMU boot experience guides native boot requirements
+- id: phase-38
+  title: RISC-V M/A/C Extensions
+  status: complete
+  goal: Extend the interpreter from RV32I to RV32IMAC so it can run real Linux kernels.
+  priority: 45
+  description: 'Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compressed 16-bit instructions). Our interpreter currently only handles RV32I. These extensions are well-defined
+    and mechanical to implement. M: 8 instructions. A: 11 instructions. C: ~40 compressed forms.'
+  depends_on:
+  - phase-37
+  deliverables:
+  - name: M extension (multiply/divide)
+    description: MUL, MULH, MULHU, MULHSU, DIV, DIVU, REM, REMU. All R-type, funct7=0b0000001.
+    status: done
+    acceptance_criteria:
+    - description: All 8 M-extension opcodes decode and execute correctly
+      met: true
+    - description: Edge cases handled -- div by zero, overflow, signed/unsigned semantics
+      met: true
+    scope_lines: 80
+    tasks:
+    - id: p38.d1.t1
+      title: Add M-extension opcodes to decode.rs and execute in cpu.rs
+      status: done
+      acceptance_criteria:
+      - 'MUL: rd = (rs1 * rs2)[31:0]'
+      - 'MULH: rd = (rs1 * rs2)[63:32] signed*signed'
+      - 'MULHU: rd = (rs1 * rs2)[63:32] unsigned*unsigned'
+      - 'MULHSU: rd = (rs1 * rs2)[63:32] signed*unsigned'
+      - 'DIV: rd = rs1 / rs2 signed'
+      - 'DIVU: rd = rs1 / rs2 unsigned'
+      - 'REM: rd = rs1 % rs2 signed'
+      - 'REMU: rd = rs1 % rs2 unsigned'
+      files:
+      - src/riscv/decode.rs
+      - src/riscv/cpu.rs
+  - name: A extension (atomics)
+    description: LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU
+    status: done
+    acceptance_criteria_met: true
+    scope_lines: 100
+    tasks:
+    - id: p38.d2.t1
+      title: Add A-extension atomic instructions with reservation set tracking
+      status: done
+      acceptance_criteria:
+      - 'LR.W: load reserved, track address in reservation set'
+      - 'SC.W: store conditional, succeed only if reservation holds'
+      - 'AMOSWAP: atomically swap rs2 into memory, return old value'
+      - 'AMOADD/AMOAND/AMOOR/AMOXOR: atomic RMW operations'
+      - 'AMOMIN/AMOMAX/AMOMINU/AMOMAXU: atomic min/max'
+      files:
+      - src/riscv/decode.rs
+      - src/riscv/cpu.rs
+  - name: C extension (compressed instructions)
+    description: Decode 16-bit compressed instruction forms into equivalent 32-bit operations
+    status: done
+    acceptance_criteria_met: true
+    scope_lines: 200
+    tasks:
+    - id: p38.d3.t1
+      title: Implement C-extension decoder for all RV32C compressed instructions
+      status: done
+      acceptance_criteria:
+      - C.LWSP, C.SWSP, C.LW, C.SW
+      - C.ADDI, C.ADDI16SP, C.ADDI4SPN, C.LI, C.LUI
+      - C.SRLI, C.SRAI, C.ANDI, C.SUB, C.XOR, C.OR, C.AND
+      - C.BEQZ, C.BNEZ, C.J, C.JAL, C.JR, C.JALR, C.EBREAK
+      - C.NOP, C.ADD, C.MV
+      files:
+      - src/riscv/decode.rs
+      - src/riscv/cpu.rs
+- id: phase-39
+  title: Build Linux for RV32IMAC
+  status: complete
+  goal: Cross-compile a minimal Linux kernel and initramfs for riscv32 that boots in our interpreter.
+  priority: 50
+  description: 'Use Buildroot or direct kernel build to produce a vmlinux for riscv32. Tinyconfig + UART + CLINT + PLIC + virtio-blk + initramfs with busybox. Target: boot to shell in under 256MB RAM.'
+  depends_on:
+  - phase-38
+  deliverables:
+  - name: RV32 toolchain
+    description: riscv32 cross-compiler toolchain
+    status: done
+    scope_lines: 0
+    acceptance_criteria:
+    - description: riscv32 gcc compiles a hello world
+      met: true
+    - description: Can produce statically-linked ELF binaries for rv32imac
+      met: true
+    tasks:
+    - id: p39.d1.t1
+      title: Install or build riscv32 cross-compiler toolchain
+      status: done
+  - name: Minimal kernel
+    description: Linux vmlinux for riscv32, defconfig + UART/CLINT/PLIC/virtio
+    status: done
+    scope_lines: 0
+    acceptance_criteria:
+    - description: vmlinux ELF is valid ELF32 RISC-V binary
+      met: true
+    - description: Console output via UART
+      met: true
+    - description: Kernel loads in Geometry OS interpreter
+      met: true
+    - description: Kernel size under 20MB
+      met: true
+    tasks:
+    - id: p39.d2.t1
+      title: Build minimal Linux kernel for riscv32 with UART/CLINT/PLIC/virtio
+      status: done
+  - name: Initramfs
+    description: Busybox-based root filesystem in initramfs
+    status: done
+    scope_lines: 0
+    acceptance_criteria:
+    - description: busybox statically linked for rv32imac
+      met: true
+    - description: /init script mounts proc/sys, spawns shell
+      met: true
+    - description: initramfs size under 4MB
+      met: true
+    tasks:
+    - id: p39.d3.t1
+      title: Create minimal initramfs with busybox for riscv32
+      status: done
+- id: phase-40
+  title: Boot Linux in Geometry OS
+  status: in_progress
+  goal: Boot the riscv32 Linux kernel inside our RISC-V interpreter and reach a shell prompt.
+  priority: 55
+  description: Load vmlinux + initramfs into the interpreter, boot to shell. This is the "QEMU bridge" moment -- running real Linux in our own emulator. Fix any interpreter bugs discovered during boot.
+  depends_on:
+  - phase-39
+  deliverables:
+  - name: Linux boot
+    description: Linux boots to shell prompt in the interpreter
+    status: in_progress
+    scope_lines: 200
+    tasks:
+    - id: p40.d1.t1
+      title: Fix interpreter issues blocking Linux boot
+      status: in_progress
+      acceptance_criteria:
+      - vmlinux loads and begins executing
+      - Kernel reaches console output (prints "Linux version...")
+      - No unimplemented instruction panics
+  - name: Shell access
+    description: Interactive shell via UART bridge to canvas
+    status: todo
+    scope_lines: 100
+    tasks:
+    - id: p40.d2.t1
+      title: Get Linux to a working shell prompt through the UART canvas
+      status: todo
+      acceptance_criteria:
+      - Shell prompt appears on canvas
+      - Can type commands and see output
+  learnings:
+  - Booting real kernels reveals interpreter bugs unit tests miss
+  - Linux boot sequence teaches more than any textbook
+- id: phase-41
+  title: Tracing and Instrumentation
+  status: in_progress
+  goal: Add instruction-level tracing to the interpreter so we can watch exactly what Linux does.
+  priority: 60
+  description: 'Once Linux boots, instrument the interpreter to capture: every syscall, every page table walk, every context switch, every interrupt.'
+  depends_on:
+  - phase-40
+  deliverables:
+  - name: Instruction trace
+    description: Log every instruction executed with register state
+    status: done
+    scope_lines: 272
+    tasks:
+    - id: p41.d1.t1
+      title: Add toggleable instruction-level tracing to step()
+      status: done
+      acceptance_criteria:
+      - Can enable/disable trace at runtime
+      - Each line: PC, opcode, register values, result
+      - Trace output to file or ring buffer
+      - Overhead under 2x when tracing enabled
+  - name: Syscall trace
+    description: Intercept ECALL and decode/record syscall name + args + return value
+    status: done
+    scope_lines: 100
+    tasks:
+    - id: p41.d2.t1
+      title: Add syscall decoder mapping Linux riscv syscall numbers to names
+      status: done
+      acceptance_criteria:
+      - Maps all ~400 Linux riscv syscalls by number
+      - Logs syscall_name(arg0, arg1, ...) = return_value
+  - name: Page table trace
+    description: Trace SV32 page table walks, TLB fills, and page faults
+    status: todo
+    scope_lines: 80
+    tasks:
+    - id: p41.d3.t1
+      title: Add page table walk tracing to MMU
+      status: todo
+      acceptance_criteria:
+      - Logs every SATP write (new page table root)
+      - Logs page table walks with VPN to PFN mappings
+      - Logs page faults with faulting VA and reason
+  - name: Scheduler trace
+    description: Detect and log context switches and schedule decisions
+    status: todo
+    scope_lines: 60
+    tasks:
+    - id: p41.d4.t1
+      title: Infer context switches from register state changes
+      status: todo
+      acceptance_criteria:
+      - Detects task switches via SP/mhartid changes
+      - Logs switch_from to switch_to with PC and SP
+- id: phase-42
+  title: Geometry OS Process Manager
+  status: complete
+  goal: Rebuild Geometry OS process management based on observed Linux scheduler behavior.
+  priority: 65
+  description: Using traces from Phase 41, understand how Linux creates processes, schedules them, and manages task state. Then build Geometry OS equivalents that follow the same patterns but simpler.
+  depends_on:
+  - phase-41
+  deliverables:
+  - name: Process abstraction
+    description: Process struct with PID, state, page table, registers, kernel stack
+    status: done
+    scope_lines: 200
+    tasks:
+    - id: p42.d1.t1
+      title: Design Process struct based on Linux task_struct observations
+      status: done
+      acceptance_criteria:
+      - Process has PID, state, page table root, saved registers
+      - Kernel stack per process
+      - Parent/child relationship
+  - name: Context switching
+    description: Save/restore registers on timer interrupt, switch address space
+    status: done
+    scope_lines: 150
+    tasks:
+    - id: p42.d2.t1
+      title: Implement context switch based on traced Linux switch_to pattern
+      status: done
+      acceptance_criteria:
+      - Timer interrupt triggers schedule
+      - callee-saved registers preserved
+      - SATP updated on address space change
+  - name: Fork/exec/exit/wait
+    description: Process lifecycle syscalls matching Linux semantics
+    status: done
+    scope_lines: 200
+    tasks:
+    - id: p42.d3.t1
+      title: Implement fork, exec, exit, wait syscalls
+      status: done
+      acceptance_criteria:
+      - fork returns 0 in child, child PID in parent
+      - exec replaces process image
+      - exit marks zombie, wakes parent
+      - wait blocks parent until child exits
+- id: phase-43
+  title: Geometry OS VFS and Disk
+  status: todo
+  goal: Build a virtual filesystem layer based on observed Linux VFS patterns.
+  priority: 70
+  description: Trace Linux VFS operations during boot and build Geometry OS equivalents.
+  depends_on:
+  - phase-41
+  deliverables:
+  - name: Inode filesystem
+    description: In-memory inode-based filesystem with directory tree
+    status: todo
+    scope_lines: 300
+    tasks:
+    - id: p43.d1.t1
+      title: Implement inode structures and directory operations
+      status: todo
+      acceptance_criteria:
+      - Inode types: regular file, directory, device, pipe
+      - Path resolution and read/write with offset tracking
+  - name: File descriptor table
+    description: Per-process fd table with pipe support
+    status: todo
+    scope_lines: 100
+    tasks:
+    - id: p43.d2.t1
+      title: Implement fd table with open/close/dup2/pipe
+      status: todo
+      acceptance_criteria:
+      - stdin/stdout/stderr per process
+      - pipe creates connected read/write fds
+      - dup2 for shell redirects
+- id: phase-44
+  title: Geometry OS Memory Management
+  status: todo
+  goal: Rebuild Geometry OS memory management based on observed Linux SV32 paging.
+  priority: 75
+  description: Trace Linux page table setup during boot and build Geometry OS equivalents.
+  depends_on:
+  - phase-41
+  deliverables:
+  - name: Page allocator
+    description: Physical page allocator for 4KB pages
+    status: todo
+    scope_lines: 150
+    tasks:
+    - id: p44.d1.t1
+      title: Implement physical page allocator
+      status: todo
+      acceptance_criteria:
+      - Allocates/frees 4KB pages
+      - Tracks used/free pages
+  - name: Virtual memory areas
+    description: Per-process VMA list for code, heap, stack, mmap
+    status: todo
+    scope_lines: 150
+    tasks:
+    - id: p44.d2.t1
+      title: Implement VMA tracking and page fault handler
+      status: todo
+      acceptance_criteria:
+      - VMA list per process
+      - Page fault allocates on demand
+      - Stack grows downward, heap via brk
+  - name: Copy-on-write fork
+    description: Fork shares physical pages, copies only on write
+    status: todo
+    scope_lines: 100
+    tasks:
+    - id: p44.d3.t1
+      title: Implement COW fork based on observed Linux fork behavior
+      status: todo
+      acceptance_criteria:
+      - fork marks pages read-only in child
+      - Write fault copies page
+      - Reference counting on physical pages
+- id: phase-45
+  title: RAM-Mapped Canvas Buffer
+  status: todo
+  goal: Make the canvas grid addressable from VM RAM via STORE/LOAD
+  description: 'The canvas buffer (128 rows x 32 cols = 4096 cells) currently lives in a separate Vec<u32> outside VM RAM. Map it into the VM address space at 0x8000-0x8FFF so that existing STORE and LOAD
+    opcodes can read and write grid cells directly. No new opcodes needed -- just intercept the address range in the VM''s memory access path.
+
+    '
+  deliverables:
+  - name: Canvas memory region constant and address mapping
+    description: 'Define CANVAS_RAM_BASE = 0x8000, CANVAS_RAM_SIZE = 4096 (128*32). Document the mapping: address 0x8000 + row*32 + col corresponds to canvas_buffer[row * 32 + col]. Add to memory map docs.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: CANVAS_RAM_BASE constant defined in vm.rs or main.rs
+      validation: grep CANVAS_RAM_BASE src/vm.rs src/main.rs
+      met: false
+    - description: Memory map documentation updated in CANVAS_TEXT_SURFACE.md
+      validation: grep 0x8000 docs/CANVAS_TEXT_SURFACE.md
+      met: false
+    tasks:
+    - id: p45.d1.t1
+      title: Define CANVAS_RAM_BASE and CANVAS_RAM_SIZE constants
+      status: todo
+      description: 'Add `pub const CANVAS_RAM_BASE: usize = 0x8000;` and `pub const CANVAS_RAM_SIZE: usize = 4096;` to vm.rs (or main.rs if canvas_buffer ownership stays there). These are the address range
+        [0x8000, 0x8FFF] that maps to the canvas grid.
+
+        '
+      dependencies: []
+      acceptance_criteria:
+      - Constants defined and visible to both vm.rs and main.rs
+      files:
+      - src/vm.rs
+    - id: p45.d1.t2
+      title: Update CANVAS_TEXT_SURFACE.md memory map with 0x8000 range
+      status: todo
+      description: 'Add a row to the memory map table in CANVAS_TEXT_SURFACE.md: 0x8000-0x8FFF | 4096 | Canvas grid (RAM-mapped mirror of canvas_buffer)
+
+        '
+      dependencies:
+      - p45.d1.t1
+      acceptance_criteria:
+      - Memory map shows 0x8000-0x8FFF as canvas region
+      files:
+      - docs/CANVAS_TEXT_SURFACE.md
+    scope_lines: 20
+    scope_files:
+    - src/vm.rs
+    - docs/CANVAS_TEXT_SURFACE.md
+  - name: Intercept LOAD for canvas address range
+    description: 'In the LOAD opcode handler (0x11 in vm.rs), when the translated physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], read from canvas_buffer instead of self.ram. The VM
+      needs a reference or copy of the canvas buffer. Easiest approach: the canvas_buffer is passed to the VM (or VM holds a reference) so LOAD can index into it.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: LOAD from 0x8000+row*32+col returns canvas_buffer value
+      validation: 'Write test program: STORE to canvas addr, LOAD back, verify'
+      met: false
+    - description: LOAD from addresses outside 0x8000-0x8FFF still works normally
+      validation: Existing tests pass without modification
+      met: false
+    tasks:
+    - id: p45.d2.t1
+      title: Add canvas_buffer reference to VM struct
+      status: todo
+      description: 'The VM struct needs access to the canvas buffer for both LOAD and STORE interception. Add a field like `pub canvas_buffer: Vec<u32>` to the VM struct (a copy that gets synced back to
+        main.rs canvas_buffer each frame) OR pass it as a mutable reference through the execute method. The copy approach is simpler and avoids lifetime issues.
+
+        '
+      dependencies:
+      - p45.d1.t1
+      acceptance_criteria:
+      - VM struct has access to canvas buffer data
+      - cargo build succeeds
+      files:
+      - src/vm.rs
+      - src/main.rs
+    - id: p45.d2.t2
+      title: Intercept LOAD opcode for canvas range
+      status: todo
+      description: 'In the LOAD handler (opcode 0x11), after page translation produces a physical address, check if it falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + CANVAS_RAM_SIZE). If so, read from the
+        canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr]. The canvas buffer index maps directly: canvas_buffer[addr - 0x8000].
+
+        '
+      dependencies:
+      - p45.d2.t1
+      acceptance_criteria:
+      - LOAD from canvas addr returns the glyph value stored there
+      - LOAD from normal RAM addr is unchanged
+      files:
+      - src/vm.rs
+    - id: p45.d2.t3
+      title: Sync canvas_buffer to VM before execution
+      status: todo
+      description: 'Before each frame''s VM execution, copy the current canvas_buffer contents into the VM''s canvas mirror (or set up the reference). This ensures the VM sees the latest grid state including
+        human-typed text.
+
+        '
+      dependencies:
+      - p45.d2.t1
+      acceptance_criteria:
+      - VM canvas mirror matches main.rs canvas_buffer at start of each frame
+      files:
+      - src/main.rs
+    scope_lines: 80
+    scope_files:
+    - src/vm.rs
+    - src/main.rs
+  - name: Intercept STORE for canvas address range
+    description: 'In the STORE opcode handler (0x12 in vm.rs), when the translated physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], write to canvas_buffer instead of self.ram. After
+      the store, mark the canvas as dirty so the renderer picks up the change on the next frame.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: STORE to 0x8000+row*32+col writes value to canvas_buffer
+      validation: 'Write test: STORE 0x8000 with ''H'', see ''H'' appear on grid'
+      met: false
+    - description: Stored values appear as glyphs on the canvas grid
+      validation: 'Visual test: program writes ASCII chars, grid shows them'
+      met: false
+    - description: STORE to addresses outside canvas range still works
+      validation: Existing tests pass
+      met: false
+    tasks:
+    - id: p45.d3.t1
+      title: Intercept STORE opcode for canvas range
+      status: todo
+      description: 'In the STORE handler (opcode 0x12), after page translation, check if the address is in the canvas range. If so, write to the canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr].
+        Bypass the user-mode protection for this range (canvas is not I/O).
+
+        '
+      dependencies:
+      - p45.d2.t1
+      acceptance_criteria:
+      - STORE to canvas addr writes to canvas buffer
+      - User-mode programs can write to canvas (no segfault)
+      files:
+      - src/vm.rs
+    - id: p45.d3.t2
+      title: Sync VM canvas mutations back to main canvas_buffer
+      status: todo
+      description: 'After each frame''s VM execution, copy any changed canvas cells from the VM''s mirror back to main.rs''s canvas_buffer. This ensures the renderer displays the VM''s writes. A simple
+        full-copy each frame is fine (4096 u32 values = 16KB).
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - Changes made by VM via STORE appear on the visible canvas grid
+      files:
+      - src/main.rs
+    - id: p45.d3.t3
+      title: Handle User-mode access to canvas region
+      status: todo
+      description: 'The STORE handler currently blocks User-mode writes to addr >= 0xFF00. The canvas range (0x8000) is below this threshold, so User-mode should work by default. But verify and add a comment
+        clarifying that canvas writes are permitted in User mode. If any page translation or protection logic would block it, add an explicit exception.
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - User-mode programs can STORE to canvas range without segfault
+      files:
+      - src/vm.rs
+    scope_lines: 60
+    scope_files:
+    - src/vm.rs
+    - src/main.rs
+  - name: Test suite for RAM-mapped canvas
+    description: 'Write tests that verify STORE/LOAD to canvas addresses work correctly. Test read-after-write, boundary conditions, interaction with normal RAM, and multi-process canvas access.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: At least 5 tests covering canvas LOAD/STORE behavior
+      validation: cargo test passes with new tests
+      met: false
+    - description: All existing tests still pass
+      validation: cargo test --no-fail-fast 2>&1 | tail -5
+      met: false
+    tasks:
+    - id: p45.d4.t1
+      title: 'Test: LOAD reads canvas buffer values'
+      status: todo
+      description: 'Write a test that pre-fills canvas_buffer cells with known values, runs a program that LOADs from 0x8000+offset, and checks the register contains the expected value.
+
+        '
+      dependencies:
+      - p45.d2.t2
+      - p45.d3.t1
+      acceptance_criteria:
+      - Test asserts register value matches canvas cell content
+      files:
+      - src/vm.rs
+    - id: p45.d4.t2
+      title: 'Test: STORE writes appear in canvas buffer'
+      status: todo
+      description: 'Write a test that runs a program storing values to canvas addresses, then checks the canvas buffer contains those values.
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - Test asserts canvas_buffer has stored values after execution
+      files:
+      - src/vm.rs
+    - id: p45.d4.t3
+      title: 'Test: boundary conditions (first/last cell, row boundaries)'
+      status: todo
+      description: 'Test STORE/LOAD at 0x8000 (first cell), 0x8FFF (last cell), and at row boundaries (e.g. end of row 0, start of row 1). Verify no off-by-one errors.
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - All boundary addresses read/write correctly
+      files:
+      - src/vm.rs
+    - id: p45.d4.t4
+      title: 'Test: canvas access does not corrupt normal RAM'
+      status: todo
+      description: 'Write a test that stores to both normal RAM and canvas addresses, then verifies the normal RAM values are unchanged and the canvas values are correct. Ensures the two memory spaces don''t
+        overlap.
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - RAM values unchanged after canvas writes
+      - Canvas values unchanged after RAM writes
+      files:
+      - src/vm.rs
+    - id: p45.d4.t5
+      title: 'Test: page translation works with canvas addresses'
+      status: todo
+      description: 'Verify that LOAD/STORE to canvas addresses still go through the page translation mechanism. A process with a page table that maps 0x8000 to a different physical address should see the
+        translated result. Or if canvas is identity-mapped, verify that works.
+
+        '
+      dependencies:
+      - p45.d2.t2
+      - p45.d3.t1
+      acceptance_criteria:
+      - Canvas LOAD/STORE respects page translation
+      files:
+      - src/vm.rs
+    scope_lines: 150
+    scope_files:
+    - src/vm.rs
+  - name: 'Demo program: canvas grid writer'
+    description: 'Write an assembly program that writes ASCII characters to the canvas grid using STORE. The program fills the grid with a visible pattern -- for example, writing "HELLO WORLD" across the
+      top row, or filling the grid with sequential ASCII values. The human sees the text appear on the grid while the program runs.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: Program writes visible text to canvas grid via STORE
+      validation: Load program, F8 assemble, F5 run, see text on grid
+      met: false
+    - description: Demo program added to programs/ directory
+      validation: ls programs/canvas_*.asm
+      met: false
+    tasks:
+    - id: p45.d5.t1
+      title: Write canvas_grid_writer.asm demo
+      status: todo
+      description: 'Create programs/canvas_grid_writer.asm. The program uses LDI to load ASCII values and STORE to write them to 0x8000+ addresses. Writes "PIXELS DRIVE PIXELS" across the first visible
+        row. Uses a loop with an index register incrementing through the string.
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - Program assembles without errors
+      - Running the program shows text on the canvas grid
+      files:
+      - programs/canvas_grid_writer.asm
+    - id: p45.d5.t2
+      title: Write canvas_counter.asm demo
+      status: todo
+      description: 'Create programs/canvas_counter.asm. A loop that increments a counter and writes the digit (as ASCII) to a specific canvas cell each iteration. The human sees a digit ticking up on the
+        grid in real time.
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - Counter digit visibly changes on the grid each frame
+      files:
+      - programs/canvas_counter.asm
+    scope_lines: 60
+    scope_files:
+    - programs/canvas_grid_writer.asm
+    - programs/canvas_counter.asm
+  dependencies: []
+  technical_notes: 'The VM''s RAM is 0x10000 (65536 cells). The canvas buffer is 4096 cells. Mapping at 0x8000 leaves plenty of headroom (0x9000-0xFFFF still available). The screen buffer (256x256 = 65536
+    pixels) is too large for a contiguous RAM mapping -- that''s addressed in phase 46.
+
+    Canvas buffer sync strategy: copy main''s canvas_buffer into VM before execution, copy VM''s canvas writes back after execution. 4096 * 4 bytes = 16KB per frame, negligible cost.
+
+    The page translation layer (translate_va_or_fault) must be considered. For kernel-mode processes (the default for canvas-assembled programs), virtual address == physical address. For user-mode child
+    processes, the page table may remap things. The canvas range should work through the normal translation path.
+
+    '
+  risks:
+  - Page translation might block canvas access for user-mode processes
+  - Canvas buffer ownership between main.rs and vm.rs needs careful handling
+  - STORE handler's user-mode protection (addr >= 0xFF00 check) must not block canvas writes
+  scope_lines_total: 370
+  test_target: 10
+- id: phase-46
+  title: RAM-Mapped Screen Buffer
+  status: todo
+  goal: Make the 256x256 screen buffer addressable from VM RAM
+  description: 'The screen buffer (256x256 = 65536 pixels) is currently only accessible via PIXEL (write) and PEEK (read) opcodes. Map it into the VM address space at 0x9000-0x13FFF (a 64K region) so that
+    normal LOAD/STORE can read and write screen pixels. This unifies all three memory spaces (RAM, canvas, screen) under one addressing scheme.
+
+    '
+  deliverables:
+  - name: Screen memory region mapping
+    description: 'Define SCREEN_RAM_BASE = 0x9000. The screen is 256x256 = 65536 cells, so it spans 0x9000-0x18FFF. However, VM RAM is only 0x10000 total. Options: (a) expand RAM_SIZE to 0x20000, (b) use
+      a sparse/aliased mapping where only low-res access works, (c) map screen at a higher address with extended RAM. Simplest: expand RAM to 0x20000 (128K) and map screen at 0x10000.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: Screen buffer is LOAD/STORE accessible at a defined address range
+      validation: LOAD from screen addr returns same value as PEEK
+      met: false
+    - description: Existing PIXEL and PEEK opcodes still work
+      validation: cargo test passes
+      met: false
+    tasks:
+    - id: p46.d1.t1
+      title: Determine screen mapping strategy and expand RAM if needed
+      status: todo
+      description: 'Evaluate options for mapping the 64K screen buffer. The simplest approach: expand RAM_SIZE from 0x10000 to 0x20000 (128K) and map the screen buffer at 0x10000. This keeps everything
+        in one flat address space. Alternative: use a windowed mapping at 0x9000 where only a 4K window is visible at a time (controlled by a register). Recommend the flat mapping for simplicity.
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - Decision documented with address range and RAM size
+      files:
+      - src/vm.rs
+    - id: p46.d1.t2
+      title: Implement screen buffer LOAD interception
+      status: todo
+      description: 'In the LOAD handler, check if the translated address falls in the screen buffer range. If so, read from self.screen[addr - SCREEN_RAM_BASE] instead of self.ram[addr]. The screen buffer
+        already exists on the VM struct as `pub screen: Vec<u32>`.
+
+        '
+      dependencies:
+      - p46.d1.t1
+      acceptance_criteria:
+      - LOAD from screen addr returns pixel color value
+      files:
+      - src/vm.rs
+    - id: p46.d1.t3
+      title: Implement screen buffer STORE interception
+      status: todo
+      description: 'In the STORE handler, check if the translated address falls in the screen buffer range. If so, write to self.screen[addr - SCREEN_RAM_BASE]. The renderer will pick up the change on the
+        next frame automatically since it reads from self.screen.
+
+        '
+      dependencies:
+      - p46.d1.t1
+      acceptance_criteria:
+      - STORE to screen addr changes the visible pixel
+      files:
+      - src/vm.rs
+    scope_lines: 100
+    scope_files:
+    - src/vm.rs
+  - name: Tests for screen buffer mapping
+    description: 'Verify that LOAD/STORE to screen addresses correctly read and write pixels. Cross-validate against PEEK and PIXEL opcodes.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: LOAD from screen address matches PEEK result
+      validation: 'Test program: PEEK and LOAD same pixel, compare registers'
+      met: false
+    - description: STORE to screen address matches PIXEL result
+      validation: 'Test program: STORE and PIXEL write same location, compare'
+      met: false
+    tasks:
+    - id: p46.d2.t1
+      title: 'Test: LOAD from screen matches PEEK'
+      status: todo
+      description: 'Write a test that draws a pixel with PIXEL opcode, then reads it with both PEEK and LOAD (via screen-mapped address). Verify both return the same color value.
+
+        '
+      dependencies:
+      - p46.d1.t2
+      acceptance_criteria:
+      - PEEK and LOAD return identical values
+      files:
+      - src/vm.rs
+    - id: p46.d2.t2
+      title: 'Test: STORE to screen matches PIXEL'
+      status: todo
+      description: 'Write a test that writes a pixel via both PIXEL opcode and STORE to screen-mapped address. Read back with PEEK and verify both wrote the same value.
+
+        '
+      dependencies:
+      - p46.d1.t3
+      acceptance_criteria:
+      - Both methods produce identical pixel values on screen
+      files:
+      - src/vm.rs
+    scope_lines: 80
+    scope_files:
+    - src/vm.rs
+  - name: Unified memory map documentation
+    description: 'Update all memory map documentation to show the complete unified address space: RAM (0x0000-0x7FFF), canvas (0x8000-0x8FFF), screen (0x10000+). Add a new doc section showing the full map.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: All three regions documented in one place
+      validation: grep 'canvas\|screen\|RAM' docs/CANVAS_TEXT_SURFACE.md shows unified map
+      met: false
+    tasks:
+    - id: p46.d3.t1
+      title: Write UNIFIED_MEMORY_MAP section in docs
+      status: todo
+      description: 'Add a section to CANVAS_TEXT_SURFACE.md (or create UNIFIED_MEMORY_MAP.md) showing the complete address space: 0x0000-0x0FFF: bytecode/data, 0x1000-0x1FFF: canvas bytecode, 0x8000-0x8FFF:
+        canvas grid (mirror), 0x10000-0x1FFFF: screen buffer. Explain the design: one address space, three backing stores, LOAD/STORE as the universal access method.
+
+        '
+      dependencies:
+      - p46.d1.t3
+      acceptance_criteria:
+      - Document shows all regions with address ranges and purposes
+      files:
+      - docs/CANVAS_TEXT_SURFACE.md
+    scope_lines: 40
+    scope_files:
+    - docs/CANVAS_TEXT_SURFACE.md
+  dependencies:
+  - source: phase-45
+    target: phase-46
+    type: hard
+    reason: Screen mapping follows the same interception pattern as canvas mapping
+  technical_notes: 'The screen buffer (self.screen) is already a field on the VM struct, unlike canvas_buffer which lives in main.rs. This makes interception simpler -- no sync step needed.
+
+    RAM_SIZE expansion from 0x10000 to 0x20000 adds 256KB of memory (64K u32 cells). At current RAM usage this is fine. The screen mapping at 0x10000 means screen pixels are at screen[y * 256 + x], accessed
+    as RAM[0x10000 + y * 256 + x].
+
+    Alternative: don''t expand RAM, instead use a separate mapping that redirects LOAD/STORE at 0x9000-0xFFFF to the screen buffer. But this creates an address collision with I/O ports (0xFFB-0xFFF). Expanding
+    RAM is cleaner.
+
+    '
+  risks:
+  - RAM_SIZE expansion may affect fuzzer or existing test assumptions about address space
+  - Screen buffer is 256x256=64K which exactly fills the expansion -- no room for growth
+  - Page translation for screen addresses may need special handling
+  scope_lines_total: 220
+  test_target: 8
+- id: phase-47
+  title: Self-Assembly Opcode (ASMSELF)
+  status: todo
+  goal: Add an opcode that lets a running program assemble canvas text into bytecode
+  description: 'Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas text, runs it through the preprocessor and assembler, and stores the resulting bytecode at 0x1000. This lets a program
+    write new assembly onto the canvas grid (using STORE to the canvas range from phase 45) and then compile it without human intervention. Combined, a program can generate its own replacement.
+
+    '
+  deliverables:
+  - name: ASMSELF opcode implementation
+    description: 'New opcode (suggest 0x52 or next available). When executed: 1. Read the canvas buffer as a text string (same logic as F8 handler) 2. Run through preprocessor::preprocess() 3. Run through
+      assembler::assemble() 4. If success: write bytecode to 0x1000, set a flag 5. If failure: set an error register/port with the error info The VM needs access to the preprocessor and assembler modules.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: ASMSELF assembles canvas text into bytecode at 0x1000
+      validation: Program writes text to canvas, calls ASMSELF, then LOADs from 0x1000 to verify bytecode
+      met: false
+    - description: Assembly errors are reported without crashing the VM
+      validation: Write invalid text to canvas, call ASMSELF, VM continues running
+      met: false
+    tasks:
+    - id: p47.d1.t1
+      title: Add ASMSELF opcode constant and handler skeleton
+      status: todo
+      description: 'Reserve the next available opcode number for ASMSELF. Add a stub handler in the VM''s execute loop that reads the canvas buffer, converts to text string, and logs "ASMSELF called" for
+        now.
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - Opcode constant defined in vm.rs
+      - Handler appears in execute match arm
+      files:
+      - src/vm.rs
+    - id: p47.d1.t2
+      title: Implement canvas-to-text conversion in VM context
+      status: todo
+      description: 'Extract the canvas-to-text conversion logic from the F8 handler in main.rs into a reusable function. This function takes a &[u32] (canvas buffer slice) and returns a String. The F8 handler
+        and the ASMSELF opcode both call this function. Place it in a shared module (e.g., preprocessor.rs or a new canvas.rs).
+
+        '
+      dependencies:
+      - p47.d1.t1
+      acceptance_criteria:
+      - Function exists and is callable from both vm.rs and main.rs
+      - F8 handler refactored to use the shared function
+      files:
+      - src/vm.rs
+      - src/main.rs
+    - id: p47.d1.t3
+      title: Wire preprocessor and assembler into ASMSELF handler
+      status: todo
+      description: 'In the ASMSELF handler, after getting the text string from the canvas: call preprocessor::preprocess(), then assembler::assemble(). On success, write bytecode bytes to self.ram starting
+        at CANVAS_BYTECODE_ADDR (0x1000). On failure, write the error string to a memory-mapped error port or a designated RAM region. The VM will need to import/use the preprocessor and assembler modules.
+
+        '
+      dependencies:
+      - p47.d1.t2
+      acceptance_criteria:
+      - ASMSELF produces valid bytecode at 0x1000
+      - Invalid assembly writes error info without crashing
+      files:
+      - src/vm.rs
+    - id: p47.d1.t4
+      title: Add ASMSELF to disassembler
+      status: todo
+      description: 'Add the ASMSELF opcode to the disassemble() method in vm.rs so it appears correctly in trace output and disassembly views.
+
+        '
+      dependencies:
+      - p47.d1.t1
+      acceptance_criteria:
+      - Disassembler shows ASMSELF with correct operand count
+      files:
+      - src/vm.rs
+    - id: p47.d1.t5
+      title: Add ASMSELF to assembler mnemonic list
+      status: todo
+      description: 'Add "ASMSELF" to the OPCODES list in preprocessor.rs and the assembler in assembler.rs. It takes no operands (just the opcode byte). Update the opcode count in docs and meta.
+
+        '
+      dependencies:
+      - p47.d1.t1
+      acceptance_criteria:
+      - Can type ASMSELF in assembly source and it assembles
+      - Opcode count incremented in documentation
+      files:
+      - src/assembler.rs
+      - src/preprocessor.rs
+    scope_lines: 200
+    scope_files:
+    - src/vm.rs
+    - src/main.rs
+    - src/assembler.rs
+    - src/preprocessor.rs
+  - name: Assembly status port
+    description: 'Define a memory-mapped port (e.g., 0xFFE or 0xFFA) where the ASMSELF opcode writes its result: success (bytecode length) or failure (0xFFFFFFFF). Programs poll this port after calling
+      ASMSELF to check if assembly succeeded.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: Port shows bytecode length on success
+      validation: LOAD from status port after ASMSELF returns positive number
+      met: false
+    - description: Port shows 0xFFFFFFFF on failure
+      validation: LOAD from status port after bad ASMSELF returns 0xFFFFFFFF
+      met: false
+    tasks:
+    - id: p47.d2.t1
+      title: Define ASM_STATUS port and write logic
+      status: todo
+      description: 'Use existing RAM[0xFFD] (ASM result port) which already exists for this purpose (bytecode word count, or 0xFFFFFFFF on error). Ensure ASMSELF writes to this port identically to how F8
+        assembly does.
+
+        '
+      dependencies:
+      - p47.d1.t3
+      acceptance_criteria:
+      - RAM[0xFFD] contains result after ASMSELF
+      files:
+      - src/vm.rs
+    scope_lines: 20
+    scope_files:
+    - src/vm.rs
+  - name: Test suite for ASMSELF
+    description: 'Test that ASMSELF correctly assembles canvas text, handles errors, and the resulting bytecode is executable.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: ASMSELF assembles and the result runs correctly
+      validation: 'Test program: write simple ASM to canvas, ASMSELF, jump to 0x1000, verify behavior'
+      met: false
+    tasks:
+    - id: p47.d3.t1
+      title: 'Test: ASMSELF assembles valid canvas text'
+      status: todo
+      description: 'Pre-fill canvas buffer with "LDI r0, 42\nHALT\n". Execute ASMSELF. Verify RAM[0xFFD] contains a positive byte count. Verify RAM at 0x1000 contains expected bytecode for LDI r0, 42.
+
+        '
+      dependencies:
+      - p47.d1.t3
+      acceptance_criteria:
+      - Bytecode at 0x1000 matches hand-assembled LDI r0, 42; HALT
+      files:
+      - src/vm.rs
+    - id: p47.d3.t2
+      title: 'Test: ASMSELF handles invalid assembly gracefully'
+      status: todo
+      description: 'Pre-fill canvas with garbage text. Execute ASMSELF. Verify RAM[0xFFD] contains 0xFFFFFFFF. Verify VM did not crash and continues executing.
+
+        '
+      dependencies:
+      - p47.d1.t3
+      acceptance_criteria:
+      - Error port set, VM still running
+      files:
+      - src/vm.rs
+    - id: p47.d3.t3
+      title: 'Test: program writes code to canvas then assembles it'
+      status: todo
+      description: 'Full integration test: a program uses STORE to write "LDI r0, 99\nHALT\n" to the canvas address range, calls ASMSELF, then jumps to 0x1000 (or uses RUNNEXT from phase 48). Verify r0
+        ends up as 99.
+
+        '
+      dependencies:
+      - p47.d1.t3
+      acceptance_criteria:
+      - Self-written program executes correctly after ASMSELF
+      files:
+      - src/vm.rs
+    scope_lines: 120
+    scope_files:
+    - src/vm.rs
+  dependencies:
+  - source: phase-45
+    target: phase-47
+    type: hard
+    reason: ASMSELF needs the canvas buffer to be addressable so programs can write to it first
+  - source: phase-46
+    target: phase-47
+    type: soft
+    reason: Screen mapping not required for ASMSELF, but useful for demos
+  technical_notes: 'The assembler and preprocessor are currently called from main.rs. The VM (vm.rs) will need to import them. Since vm.rs is a separate module, this means adding `use crate::assembler;`
+    and `use crate::preprocessor;` to vm.rs.
+
+    The canvas-to-text conversion currently lives in the F8 handler in main.rs. It reads 4096 cells, converts each u32 to a char, collapses newlines. This logic needs to be extracted into a shared function.
+    The function should be in a neutral module (preprocessor.rs is a good candidate since it already handles text processing).
+
+    ASMSELF takes no operands (1-byte instruction). The assembled bytecode always goes to 0x1000 (CANVAS_BYTECODE_ADDR), same as F8. This means calling ASMSELF overwrites whatever bytecode is currently
+    running. The program should use RUNNEXT (phase 48) to jump to the new bytecode.
+
+    '
+  risks:
+  - ASMSELF during execution replaces the running bytecode -- program must jump to new code carefully
+  - Preprocessor/assembler errors in a running VM context need careful error handling
+  - Self-assembly is inherently dangerous (infinite loops, corrupting own code)
+  scope_lines_total: 340
+  test_target: 8
+- id: phase-48
+  title: Self-Execution Opcode (RUNNEXT)
+  status: todo
+  goal: Add an opcode that starts executing the newly assembled bytecode
+  description: 'Add the RUNNEXT opcode that sets PC to 0x1000 (the canvas bytecode region) and continues execution. Combined with ASMSELF, a program can write new code onto the canvas, compile it, and run
+    it -- all from within the VM. This closes the loop: pixels write pixels, pixels assemble pixels, pixels execute pixels.
+
+    '
+  deliverables:
+  - name: RUNNEXT opcode implementation
+    description: 'New opcode (next available after ASMSELF). When executed: 1. Set PC = CANVAS_BYTECODE_ADDR (0x1000) 2. Reset halted flag 3. Clear any error state 4. Execution continues from the new bytecode
+      on the next fetch cycle
+
+      This is essentially JMP 0x1000 but with awareness that the bytecode at 0x1000 was just assembled from canvas text. Could be implemented as a simple PC set, or as JMP with an implicit operand.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: RUNNEXT starts executing bytecode at 0x1000
+      validation: Program writes code, ASMSELF, RUNNEXT, verify new code runs
+      met: false
+    - description: Register state preserved across RUNNEXT
+      validation: r0-r26 retain their values after RUNNEXT
+      met: false
+    tasks:
+    - id: p48.d1.t1
+      title: Implement RUNNEXT opcode handler
+      status: todo
+      description: 'Add RUNNEXT opcode in vm.rs execute match. Handler sets self.pc = CANVAS_BYTECODE_ADDR (0x1000). No operands needed (1-byte instruction). Register file is preserved. The VM continues
+        fetching from the new PC on the next cycle.
+
+        '
+      dependencies:
+      - p47.d1.t1
+      acceptance_criteria:
+      - PC set to 0x1000 after RUNNEXT
+      - Execution continues from new bytecode
+      files:
+      - src/vm.rs
+    - id: p48.d1.t2
+      title: Add RUNNEXT to disassembler and assembler
+      status: todo
+      description: 'Add RUNNEXT to the mnemonic list in assembler.rs, the OPCODES list in preprocessor.rs, and the disassemble() method in vm.rs. No operands.
+
+        '
+      dependencies:
+      - p48.d1.t1
+      acceptance_criteria:
+      - RUNNEXT appears in trace output correctly
+      - Can type RUNNEXT in assembly source
+      files:
+      - src/vm.rs
+      - src/assembler.rs
+      - src/preprocessor.rs
+    scope_lines: 40
+    scope_files:
+    - src/vm.rs
+    - src/assembler.rs
+    - src/preprocessor.rs
+  - name: Test suite for RUNNEXT
+    description: 'Test the full write-compile-execute cycle. A program writes new code, assembles it, runs it, and the new code''s effects are visible.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: Full write-compile-execute cycle works end-to-end
+      validation: Test program writes LDI r0, 77 to canvas, ASMSELF, RUNNEXT, verify r0=77
+      met: false
+    tasks:
+    - id: p48.d2.t1
+      title: 'Test: RUNNEXT executes newly assembled code'
+      status: todo
+      description: 'Write a test program that: (1) stores "LDI r0, 77\nHALT" to canvas addresses, (2) calls ASMSELF, (3) checks RAM[0xFFD] for success, (4) calls RUNNEXT, (5) verify r0 == 77 after execution.
+
+        '
+      dependencies:
+      - p47.d1.t3
+      - p48.d1.t1
+      acceptance_criteria:
+      - r0 == 77 after RUNNEXT
+      files:
+      - src/vm.rs
+    - id: p48.d2.t2
+      title: 'Test: registers preserved across RUNNEXT'
+      status: todo
+      description: 'Set r5 = 12345. Write code to canvas that reads r5 and adds 1. ASMSELF, RUNNEXT. Verify r5 is still 12345 in the new program''s context, and that the new program can read it.
+
+        '
+      dependencies:
+      - p48.d1.t1
+      acceptance_criteria:
+      - Register values survive the transition
+      files:
+      - src/vm.rs
+    - id: p48.d2.t3
+      title: 'Test: chained self-modification'
+      status: todo
+      description: 'Program A writes Program B to canvas. ASMSELF. RUNNEXT. Program B writes Program C to canvas. ASMSELF. RUNNEXT. Program C HALTs. Verify all three ran in sequence. This is the generational
+        self-modification test.
+
+        '
+      dependencies:
+      - p48.d1.t1
+      acceptance_criteria:
+      - Three generations of code execute in sequence
+      files:
+      - src/vm.rs
+    scope_lines: 100
+    scope_files:
+    - src/vm.rs
+  dependencies:
+  - source: phase-47
+    target: phase-48
+    type: hard
+    reason: RUNNEXT is meaningless without ASMSELF to produce the bytecode
+  technical_notes: 'RUNNEXT is intentionally simple: it just sets PC = 0x1000. The complexity is in ASMSELF (phase 47). RUNNEXT could alternatively be implemented as a JMP to a label at 0x1000, but having
+    a dedicated opcode makes the intent clear and enables future extensions (e.g., RUNNEXT with a timeout, RUNNEXT in a sandboxed context).
+
+    Register preservation: RUNNEXT does NOT reset registers. The new program inherits all register state. This is by design -- it allows data passing between program generations. If a clean slate is needed,
+    the new program can zero registers itself.
+
+    Stack preservation: the return stack is NOT reset. This means the new program can RET back to the caller if the caller used CALL before RUNNEXT. This is a feature, not a bug -- it enables coroutines.
+
+    '
+  risks:
+  - Infinite self-modification loops (program rewrites itself forever)
+  - Assembler errors in a running context could leave the VM in a bad state
+  scope_lines_total: 140
+  test_target: 5
+- id: phase-49
+  title: 'Self-Modifying Programs: Demos and Patterns'
+  status: todo
+  goal: Build demonstration programs that showcase the pixel-driving-pixels capability
+  description: 'With phases 45-48 complete, write programs that demonstrate the full self-modifying capability: programs that write their own code, programs whose state IS the display, programs that evolve
+    over time. These demos prove that the pixel-driving-pixels problem is solved.
+
+    '
+  deliverables:
+  - name: 'Demo: Self-writing program'
+    description: 'A program that writes another program onto the canvas grid using STORE to canvas addresses, calls ASMSELF to compile it, and RUNNEXT to execute it. The generated program is different from
+      the original -- it''s a true successor. The human watches text appear on the grid, then sees the new program run.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: Program generates a visually different successor and runs it
+      validation: Load demo, F5, watch grid change, see new program execute
+      met: false
+    tasks:
+    - id: p49.d1.t1
+      title: Write programs/self_writer.asm
+      status: todo
+      description: 'A program that uses STORE to canvas addresses (0x8000+) to write "LDI r0, 42\nLDI r1, 1\nADD r0, r1\nHALT\n" onto the grid. The text becomes visible as typed glyphs. Then calls ASMSELF
+        and RUNNEXT. The successor runs and r0 = 43.
+
+        '
+      dependencies:
+      - p48.d1.t1
+      acceptance_criteria:
+      - Text appears on grid before assembly
+      - Successor program executes correctly
+      files:
+      - programs/self_writer.asm
+    - id: p49.d1.t2
+      title: Write programs/evolving_counter.asm
+      description: 'A program that counts frames (via TICKS port 0xFFE) and writes the count as ASCII digits directly onto the canvas grid. The grid becomes a live dashboard. The count digits are the program''s
+        visible state -- no separate output. The digit changes each frame. This demonstrates that the grid IS the display.
+
+        '
+      dependencies:
+      - p45.d3.t1
+      acceptance_criteria:
+      - Digits visibly increment on the canvas grid
+      files:
+      - programs/evolving_counter.asm
+      status: todo
+    - id: p49.d1.t3
+      title: Write programs/game_of_life.asm
+      description: 'Conway''s Game of Life implemented entirely in Geometry OS assembly. Uses PEEK to read the screen, POKE (or STORE to screen-mapped RAM) to write the next generation. The screen IS the
+        cellular automaton. No Rust code involved in the logic -- pure pixel-driven-pixels. Initialize with a glider or blinker pattern.
+
+        '
+      dependencies:
+      - p46.d1.t3
+      acceptance_criteria:
+      - Cells evolve according to Conway's rules
+      - Gliders move, blinkers blink
+      files:
+      - programs/game_of_life.asm
+      status: todo
+    - id: p49.d1.t4
+      title: Write programs/code_evolution.asm
+      description: 'The crown jewel demo. A program that writes increasingly complex versions of itself to the canvas grid. Generation 0 just halts. Generation 1 writes generation 2 which adds a counter.
+        Generation 2 writes generation 3 which adds a screen effect. Each generation writes its successor, compiles, and runs it. The human watches the code evolve on the grid in real time.
+
+        '
+      dependencies:
+      - p48.d1.t1
+      acceptance_criteria:
+      - At least 3 generations of code evolution
+      - Each generation visibly different from the last
+      files:
+      - programs/code_evolution.asm
+      status: todo
+    scope_lines: 300
+    scope_files:
+    - programs/
+  - name: 'Documentation: pixel-driving-pixels patterns'
+    description: 'Write a guide for building self-modifying programs. Document the patterns: canvas STORE for writing code, ASMSELF for compiling, RUNNEXT for executing, register passing between generations,
+      and common pitfalls (infinite loops, corrupting your own code).
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: Guide document exists with at least 3 documented patterns
+      validation: ls docs/SELF_MODIFYING_GUIDE.md
+      met: false
+    tasks:
+    - id: p49.d2.t1
+      title: Write docs/SELF_MODIFYING_GUIDE.md
+      status: todo
+      description: 'Create a guide covering: (1) Canvas STORE pattern -- how to write text to canvas cells, (2) ASMSELF + RUNNEXT pattern -- compile and execute, (3) Register passing -- sharing state between
+        generations, (4) Self-reading -- using LOAD from canvas to inspect your own source, (5) Pitfalls -- infinite loops, corruption, error handling. Include code snippets for each pattern.
+
+        '
+      dependencies:
+      - p48.d1.t1
+      acceptance_criteria:
+      - Guide covers all 5 topics with working code examples
+      files:
+      - docs/SELF_MODIFYING_GUIDE.md
+    scope_lines: 100
+    scope_files:
+    - docs/
+  dependencies:
+  - source: phase-45
+    target: phase-49
+    type: hard
+    reason: Canvas RAM mapping needed for all demos
+  - source: phase-46
+    target: phase-49
+    type: soft
+    reason: Screen mapping needed for Game of Life demo
+  - source: phase-47
+    target: phase-49
+    type: hard
+    reason: ASMSELF needed for self-writing and code evolution demos
+  - source: phase-48
+    target: phase-49
+    type: hard
+    reason: RUNNEXT needed for self-writing and code evolution demos
+  technical_notes: 'Demo programs should be small enough to fit on the canvas grid (32 columns, 128 rows). Complex programs may need to use the .org directive for layout. The code_evolution demo is the
+    most ambitious -- it may need careful tuning to keep each generation''s code within grid size limits.
+
+    The game_of_life.asm demo is the purest expression of pixels-driving-pixels. It needs the screen buffer mapping from phase 46 to work optimally, but could also work with just PEEK and PIXEL opcodes.
+
+    '
+  risks:
+  - Demo programs may be too complex to write in raw assembly within grid size limits
+  - Code evolution demo may be too ambitious for initial implementation
+  scope_lines_total: 400
+  test_target: 0
+- id: phase-50
+  title: 'Reactive Canvas: Live Cell Formulas'
+  status: future
+  goal: Make canvas cells react to changes in other cells automatically
+  description: 'Extend the canvas with an optional formula layer. A cell can have a formula instead of a static value. When a referenced cell changes, the formula cell recalculates. This is the spreadsheet
+    model applied to the pixel grid. It makes the canvas reactive without explicit STORE/LOAD loops.
+
+    This is a future phase -- it depends on phases 45-48 being stable and is a natural evolution of the pixel-driving-pixels concept. Not required for the initial self-modifying capability.
+
+    '
+  deliverables:
+  - name: Formula cell type and evaluation engine
+    description: 'Add a parallel buffer (formula_buffer, same size as canvas_buffer) where each cell can optionally hold a formula instead of a value. Formulas reference other cells by address. When a STORE
+      writes to a cell, the engine checks if any formula depends on that cell and recalculates.
+
+      '
+    status: todo
+    tasks: []
+  - name: Formula syntax in preprocessor
+    description: 'Extend the preprocessor to recognize formula syntax in canvas text. A line like `= r0 + r1` means "this cell displays the value of r0 + r1". The preprocessor generates the reactive update
+      hooks.
+
+      '
+    status: todo
+    tasks: []
+  - name: 'Demo: live register dashboard'
+    description: 'A program where the canvas grid shows live register values. As the program runs, the grid cells update to show r0, r1, r2 etc. as changing digits. The display IS the debug view. No separate
+      inspector.
+
+      '
+    status: todo
+    tasks: []
+  dependencies:
+  - source: phase-49
+    target: phase-50
+    type: soft
+    reason: Reactive canvas builds on proven self-modifying patterns
+  technical_notes: 'This phase explores the spreadsheet model. Each cell can be: - A literal value (current behavior) - A formula that references other cells or registers - A formula that references screen
+    pixels (PEEK-equivalent)
+
+    The dependency graph needs cycle detection to prevent infinite recalculation. Simple approach: single-pass topological sort of formula dependencies, recalculate in order after any STORE to the canvas.
+
+    This is marked "future" because it''s a significant new feature. The core pixel-driving-pixels capability (phases 45-48) does not require this.
+
+    '
+  scope_lines_total: 800
+  test_target: 10
+global_risks:
+- 'Opcode space: 114 of ~256 slots used, plenty of room'
+- Scope creep -- adding features is easy, keeping the OS coherent is hard
+- Kernel boundary breaks existing programs -- need a compatibility mode
+- Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
+- Filesystem persistence needs host directory -- WASM port needs different backing
+- 'Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces shared-RAM for multiprocess'
+- 'Phase 28 device drivers: IOCTL opcode 0x62, 4 device files at fds 0xE000-0xE003'
+- Self-modifying code is inherently hard to debug -- need good error reporting
+- Assembly inside a running VM may be slow for large programs -- may need optimization
+- The concept of a program rewriting itself challenges test design -- how do you unit test a program that changes?
+- RAM size expansion (phase 46) affects the fuzzer which generates random addresses
+conventions:
+- Every new opcode gets a test in tests/program_tests.rs
+- Every new program gets assembled by test_all_programs_assemble
+- README.md updated when opcodes or features change
+- roadmap.yaml is the single source of truth for project state
+- 'Semantic versioning: minor bump for new opcodes, patch for fixes'
+- New opcodes need a program that needs them (no speculative opcodes)
+- All new opcodes added to assembler.rs, preprocessor.rs OPCODES list, and vm.rs disassembler
+- Opcode numbers assigned sequentially from next available
+- Canvas and screen mappings use LOAD/STORE interception, not new opcodes
+- ASMSELF and RUNNEXT take no operands (1-byte instructions)
+- Error reporting via RAM[0xFFD] (existing ASM result port)
