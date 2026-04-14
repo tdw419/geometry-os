@@ -295,6 +295,16 @@ fn parse_instruction(
         "NOP" => bytecode.push(0x01),
         "FRAME" => bytecode.push(0x02),
 
+        "MEMCPY" => {
+            if tokens.len() < 4 {
+                return Err("MEMCPY requires 3 arguments: MEMCPY dst_reg, src_reg, len_reg".to_string());
+            }
+            bytecode.push(0x04);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+        }
+
         "BEEP" => {
             if tokens.len() < 3 {
                 return Err("BEEP requires 2 arguments: BEEP freq_reg, dur_reg".to_string());

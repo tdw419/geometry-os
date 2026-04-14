@@ -14,6 +14,7 @@ pub const OPCODES: &[&str] = &[
     "JMP", "JZ", "JNZ", "CALL", "RET", "BLT", "BGE",
     "PSET", "PSETI", "FILL", "RECTF", "TEXT", "LINE", "CIRCLE", "SCROLL",
     "IKEY", "RAND", "NEG", "CMP", "PUSH", "POP", "BEEP", "ASM",
+    "MEMCPY",
     "SPAWN", "KILL", "PEEK", "SPRITE", "TILEMAP",
     // New immediate-form opcodes
     "TEXTI", "STRO", "CMPI", "LOADS", "STORES",
