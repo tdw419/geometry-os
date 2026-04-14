@@ -9,7 +9,7 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 77
+  opcodes: 114
   tests: 697
   programs: 40
   loc: 15764
@@ -1621,18 +1621,6 @@ phases:
     target: phase-37
     type: informs
     reason: QEMU boot experience guides native boot requirements
-  - source: phase-40
-    target: phase-42
-    type: informs
-    reason: Linux boot traces inform Geometry OS process manager design
-  - source: phase-40
-    target: phase-43
-    type: informs
-    reason: Linux boot traces inform Geometry OS VFS design
-  - source: phase-40
-    target: phase-44
-    type: informs
-    reason: Linux boot traces inform Geometry OS memory management design
 
 - id: phase-38
   title: RISC-V M/A/C Extensions

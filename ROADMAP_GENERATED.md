@@ -1,12 +1,12 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  77 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
 
-**Progress:** 37/37 phases complete, 0 in progress
+**Progress:** 37/44 phases complete, 0 in progress
 
-**Deliverables:** 174/174 complete
+**Deliverables:** 174/194 complete
 
-**Tasks:** 23/23 complete
+**Tasks:** 23/43 complete
 
 ## Scope Summary
 
@@ -49,6 +49,13 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  11
 | phase-35 RISC-V Privilege Modes | COMPLETE | 5/5 | - | - |
 | phase-36 RISC-V Virtual Memory & Devices | COMPLETE | 8/8 | - | - |
 | phase-37 Guest OS Boot (Native RISC-V) | COMPLETE | 6/6 | - | - |
+| phase-38 RISC-V M/A/C Extensions | PLANNED | 0/3 | - | - |
+| phase-39 Build Linux for RV32IMAC | PLANNED | 0/3 | - | - |
+| phase-40 Boot Linux in Geometry OS | PLANNED | 0/2 | - | - |
+| phase-41 Tracing and Instrumentation | PLANNED | 0/4 | - | - |
+| phase-42 Geometry OS Process Manager | PLANNED | 0/3 | - | - |
+| phase-43 Geometry OS VFS and Disk | PLANNED | 0/2 | - | - |
+| phase-44 Geometry OS Memory Management | PLANNED | 0/3 | - | - |
 
 ## Dependencies
 
@@ -873,9 +880,198 @@ portable to WASM and embedded. RV32I is the foundation.
 - [x] **Performance benchmark** -- Measure MIPS, compare interpreter vs QEMU, document results
   _~40 LOC_
 
+## [ ] phase-38: RISC-V M/A/C Extensions (PLANNED)
+
+**Goal:** Extend the interpreter from RV32I to RV32IMAC so it can run real Linux kernels.
+
+Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compressed 16-bit instructions). Our interpreter currently only handles RV32I. These extensions are well-defined and mechanical to implement. M: 8 instructions. A: 11 instructions. C: ~40 compressed forms.
+
+### Deliverables
+
+- [ ] **M extension (multiply/divide)** -- MUL, MULH, MULHU, MULHSU, DIV, DIVU, REM, REMU. All R-type, funct7=0b0000001.
+  - [ ] `p38.d1.t1` Add M-extension opcodes to decode.rs and execute in cpu.rs
+    - MUL: rd = (rs1 * rs2)[31:0]
+    - MULH: rd = (rs1 * rs2)[63:32] signed*signed
+    - MULHU: rd = (rs1 * rs2)[63:32] unsigned*unsigned
+    - MULHSU: rd = (rs1 * rs2)[63:32] signed*unsigned
+    - DIV: rd = rs1 / rs2 signed
+    - DIVU: rd = rs1 / rs2 unsigned
+    - REM: rd = rs1 % rs2 signed
+    - REMU: rd = rs1 % rs2 unsigned
+    _Files: src/riscv/decode.rs, src/riscv/cpu.rs_
+  _~80 LOC_
+- [ ] **A extension (atomics)** -- LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU
+  - [ ] `p38.d2.t1` Add A-extension atomic instructions with reservation set tracking
+    - LR.W: load reserved, track address in reservation set
+    - SC.W: store conditional, succeed only if reservation holds
+    - AMOSWAP: atomically swap rs2 into memory, return old value
+    - AMOADD/AMOAND/AMOOR/AMOXOR: atomic RMW operations
+    - AMOMIN/AMOMAX/AMOMINU/AMOMAXU: atomic min/max
+    _Files: src/riscv/decode.rs, src/riscv/cpu.rs_
+  _~100 LOC_
+- [ ] **C extension (compressed instructions)** -- Decode 16-bit compressed instruction forms into equivalent 32-bit operations
+  - [ ] `p38.d3.t1` Implement C-extension decoder for all RV32C compressed instructions
+    - C.LWSP, C.SWSP, C.LW, C.SW
+    - C.ADDI, C.ADDI16SP, C.ADDI4SPN, C.LI, C.LUI
+    - C.SRLI, C.SRAI, C.ANDI, C.SUB, C.XOR, C.OR, C.AND
+    - C.BEQZ, C.BNEZ, C.J, C.JAL, C.JR, C.JALR, C.EBREAK
+    - C.NOP, C.ADD, C.MV
+    _Files: src/riscv/decode.rs, src/riscv/cpu.rs_
+  _~200 LOC_
+
+## [ ] phase-39: Build Linux for RV32IMAC (PLANNED)
+
+**Goal:** Cross-compile a minimal Linux kernel and initramfs for riscv32 that boots in our interpreter.
+
+Use Buildroot or direct kernel build to produce a vmlinux for riscv32. Tinyconfig + UART + CLINT + PLIC + virtio-blk + initramfs with busybox. Target: boot to shell in under 256MB RAM.
+
+### Deliverables
+
+- [ ] **RV32 toolchain** -- riscv32 cross-compiler toolchain
+  - [ ] `p39.d1.t1` Install or build riscv32 cross-compiler toolchain
+    - riscv32 gcc compiles a hello world
+    - Can produce statically-linked ELF binaries for rv32imac
+- [ ] **Minimal kernel** -- Linux vmlinux for riscv32, tinyconfig + necessary drivers
+  - [ ] `p39.d2.t1` Build minimal Linux kernel for riscv32 with UART/CLINT/PLIC/virtio
+    - vmlinux ELF boots on QEMU riscv32 virt machine
+    - Console output via UART
+    - init=/bin/sh in initramfs
+    - Kernel size under 2MB
+- [ ] **Initramfs** -- Busybox-based root filesystem in initramfs
+  - [ ] `p39.d3.t1` Create minimal initramfs with busybox for riscv32
+    - busybox statically linked for rv32imac
+    - /init script mounts proc/sys, spawns shell
+    - initramfs size under 4MB
+
+## [ ] phase-40: Boot Linux in Geometry OS (PLANNED)
+
+**Goal:** Boot the riscv32 Linux kernel inside our RISC-V interpreter and reach a shell prompt.
+
+Load vmlinux + initramfs into the interpreter, boot to shell. This is the "QEMU bridge" moment -- running real Linux in our own emulator. Fix any interpreter bugs discovered during boot.
+
+### Deliverables
+
+- [ ] **Linux boot** -- Linux boots to shell prompt in the interpreter
+  - [ ] `p40.d1.t1` Fix interpreter issues blocking Linux boot
+    - vmlinux loads and begins executing
+    - Kernel reaches console output (prints "Linux version...")
+    - No unimplemented instruction panics
+  _~200 LOC_
+- [ ] **Shell access** -- Interactive shell via UART bridge to canvas
+  - [ ] `p40.d2.t1` Get Linux to a working shell prompt through the UART canvas
+    - Shell prompt appears on canvas
+    - Can type commands and see output
+  _~100 LOC_
+
+## [ ] phase-41: Tracing and Instrumentation (PLANNED)
+
+**Goal:** Add instruction-level tracing to the interpreter so we can watch exactly what Linux does.
+
+Once Linux boots, instrument the interpreter to capture: every syscall, every page table walk, every context switch, every interrupt.
+
+### Deliverables
+
+- [ ] **Instruction trace** -- Log every instruction executed with register state
+  - [ ] `p41.d1.t1` Add toggleable instruction-level tracing to step()
+    - Can enable/disable trace at runtime
+    - {'Each line': 'PC, opcode, register values, result'}
+    - Trace output to file or ring buffer
+    - Overhead under 2x when tracing enabled
+  _~150 LOC_
+- [ ] **Syscall trace** -- Intercept ECALL and decode/record syscall name + args + return value
+  - [ ] `p41.d2.t1` Add syscall decoder mapping Linux riscv syscall numbers to names
+    - Maps all ~400 Linux riscv syscalls by number
+    - Logs syscall_name(arg0, arg1, ...) = return_value
+  _~100 LOC_
+- [ ] **Page table trace** -- Trace SV32 page table walks, TLB fills, and page faults
+  - [ ] `p41.d3.t1` Add page table walk tracing to MMU
+    - Logs every SATP write (new page table root)
+    - Logs page table walks with VPN to PFN mappings
+    - Logs page faults with faulting VA and reason
+  _~80 LOC_
+- [ ] **Scheduler trace** -- Detect and log context switches and schedule decisions
+  - [ ] `p41.d4.t1` Infer context switches from register state changes
+    - Detects task switches via SP/mhartid changes
+    - Logs switch_from to switch_to with PC and SP
+  _~60 LOC_
+
+## [ ] phase-42: Geometry OS Process Manager (PLANNED)
+
+**Goal:** Rebuild Geometry OS process management based on observed Linux scheduler behavior.
+
+Using traces from Phase 41, understand how Linux creates processes, schedules them, and manages task state. Then build Geometry OS equivalents that follow the same patterns but simpler.
+
+### Deliverables
+
+- [ ] **Process abstraction** -- Process struct with PID, state, page table, registers, kernel stack
+  - [ ] `p42.d1.t1` Design Process struct based on Linux task_struct observations
+    - Process has PID, state, page table root, saved registers
+    - Kernel stack per process
+    - Parent/child relationship
+  _~200 LOC_
+- [ ] **Context switching** -- Save/restore registers on timer interrupt, switch address space
+  - [ ] `p42.d2.t1` Implement context switch based on traced Linux switch_to pattern
+    - Timer interrupt triggers schedule
+    - callee-saved registers preserved
+    - SATP updated on address space change
+  _~150 LOC_
+- [ ] **Fork/exec/exit/wait** -- Process lifecycle syscalls matching Linux semantics
+  - [ ] `p42.d3.t1` Implement fork, exec, exit, wait syscalls
+    - fork returns 0 in child, child PID in parent
+    - exec replaces process image
+    - exit marks zombie, wakes parent
+    - wait blocks parent until child exits
+  _~200 LOC_
+
+## [ ] phase-43: Geometry OS VFS and Disk (PLANNED)
+
+**Goal:** Build a virtual filesystem layer based on observed Linux VFS patterns.
+
+Trace Linux VFS operations during boot and build Geometry OS equivalents.
+
+### Deliverables
+
+- [ ] **Inode filesystem** -- In-memory inode-based filesystem with directory tree
+  - [ ] `p43.d1.t1` Implement inode structures and directory operations
+    - {'Inode types': 'regular file, directory, device, pipe'}
+    - Path resolution and read/write with offset tracking
+  _~300 LOC_
+- [ ] **File descriptor table** -- Per-process fd table with pipe support
+  - [ ] `p43.d2.t1` Implement fd table with open/close/dup2/pipe
+    - stdin/stdout/stderr per process
+    - pipe creates connected read/write fds
+    - dup2 for shell redirects
+  _~100 LOC_
+
+## [ ] phase-44: Geometry OS Memory Management (PLANNED)
+
+**Goal:** Rebuild Geometry OS memory management based on observed Linux SV32 paging.
+
+Trace Linux page table setup during boot and build Geometry OS equivalents.
+
+### Deliverables
+
+- [ ] **Page allocator** -- Physical page allocator for 4KB pages
+  - [ ] `p44.d1.t1` Implement physical page allocator
+    - Allocates/frees 4KB pages
+    - Tracks used/free pages
+  _~150 LOC_
+- [ ] **Virtual memory areas** -- Per-process VMA list for code, heap, stack, mmap
+  - [ ] `p44.d2.t1` Implement VMA tracking and page fault handler
+    - VMA list per process
+    - Page fault allocates on demand
+    - Stack grows downward, heap via brk
+  _~150 LOC_
+- [ ] **Copy-on-write fork** -- Fork shares physical pages, copies only on write
+  - [ ] `p44.d3.t1` Implement COW fork based on observed Linux fork behavior
+    - fork marks pages read-only in child
+    - Write fault copies page
+    - Reference counting on physical pages
+  _~100 LOC_
+
 ## Global Risks
 
-- Opcode space: 114 of ~256 slots used, plenty of room
+- Opcode space: 77 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
