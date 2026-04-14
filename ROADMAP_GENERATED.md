@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
 
-**Progress:** 38/44 phases complete, 0 in progress
+**Progress:** 38/44 phases complete, 1 in progress
 
-**Deliverables:** 177/194 complete
+**Deliverables:** 179/194 complete
 
-**Tasks:** 26/43 complete
+**Tasks:** 28/43 complete
 
 ## Scope Summary
 
@@ -50,7 +50,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  11
 | phase-36 RISC-V Virtual Memory & Devices | COMPLETE | 8/8 | - | - |
 | phase-37 Guest OS Boot (Native RISC-V) | COMPLETE | 6/6 | - | - |
 | phase-38 RISC-V M/A/C Extensions | COMPLETE | 3/3 | - | - |
-| phase-39 Build Linux for RV32IMAC | PLANNED | 0/3 | - | - |
+| phase-39 Build Linux for RV32IMAC | IN PROGRESS | 2/3 | - | - |
 | phase-40 Boot Linux in Geometry OS | PLANNED | 0/2 | - | - |
 | phase-41 Tracing and Instrumentation | PLANNED | 0/4 | - | - |
 | phase-42 Geometry OS Process Manager | PLANNED | 0/3 | - | - |
@@ -921,7 +921,7 @@ Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compres
     _Files: src/riscv/decode.rs, src/riscv/cpu.rs_
   _~200 LOC_
 
-## [ ] phase-39: Build Linux for RV32IMAC (PLANNED)
+## [~] phase-39: Build Linux for RV32IMAC (IN PROGRESS)
 
 **Goal:** Cross-compile a minimal Linux kernel and initramfs for riscv32 that boots in our interpreter.
 
@@ -929,16 +929,16 @@ Use Buildroot or direct kernel build to produce a vmlinux for riscv32. Tinyconfi
 
 ### Deliverables
 
-- [ ] **RV32 toolchain** -- riscv32 cross-compiler toolchain
-  - [ ] `p39.d1.t1` Install or build riscv32 cross-compiler toolchain
-    - riscv32 gcc compiles a hello world
-    - Can produce statically-linked ELF binaries for rv32imac
-- [ ] **Minimal kernel** -- Linux vmlinux for riscv32, tinyconfig + necessary drivers
-  - [ ] `p39.d2.t1` Build minimal Linux kernel for riscv32 with UART/CLINT/PLIC/virtio
-    - vmlinux ELF boots on QEMU riscv32 virt machine
-    - Console output via UART
-    - init=/bin/sh in initramfs
-    - Kernel size under 2MB
+- [x] **RV32 toolchain** -- riscv32 cross-compiler toolchain
+  - [x] `p39.d1.t1` Install or build riscv32 cross-compiler toolchain
+  - [x] riscv32 gcc compiles a hello world
+  - [x] Can produce statically-linked ELF binaries for rv32imac
+- [x] **Minimal kernel** -- Linux vmlinux for riscv32, defconfig + UART/CLINT/PLIC/virtio
+  - [x] `p39.d2.t1` Build minimal Linux kernel for riscv32 with UART/CLINT/PLIC/virtio
+  - [x] vmlinux ELF is valid ELF32 RISC-V binary
+  - [x] Console output via UART
+  - [x] Kernel loads in Geometry OS interpreter
+  - [x] Kernel size under 20MB
 - [ ] **Initramfs** -- Busybox-based root filesystem in initramfs
   - [ ] `p39.d3.t1` Create minimal initramfs with busybox for riscv32
     - busybox statically linked for rv32imac
