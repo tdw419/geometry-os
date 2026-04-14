@@ -62,6 +62,9 @@ pub const MSTATUS_MIE: u32 = 3; // Machine Interrupt Enable
 pub const MSTATUS_SPIE: u32 = 5; // Supervisor Previous IE
 pub const MSTATUS_MPIE: u32 = 7; // Machine Previous IE
 pub const MSTATUS_SPP: u32 = 8; // Supervisor Previous Privilege (1 bit)
+pub const MSTATUS_MPRV: u32 = 17; // Memory Privilege (M-mode uses MPP for loads/stores)
+pub const MSTATUS_SUM: u32 = 18; // Supervisor User Memory access
+pub const MSTATUS_MXR: u32 = 19; // Make eXecutable Readable
 pub const MSTATUS_MPP_LSB: u32 = 11; // Machine Previous Privilege (2 bits: 12:11)
 pub const MSTATUS_MPP_MASK: u32 = 0x3 << 11;
 

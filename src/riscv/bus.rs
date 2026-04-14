@@ -15,10 +15,19 @@ use super::virtio_blk::VirtioBlk;
 const CLINT_START: u64 = 0x0200_0000;
 const CLINT_END: u64 = 0x0201_0000;
 
+/// Firmware ROM: 1MB at address 0x00000000-0x000FFFFF.
+/// The Linux kernel writes firmware stubs (e.g., mret instructions) at low
+/// addresses during early boot, then jumps to them expecting OpenSBI to be
+/// there. Without a real firmware, we need to store and return those writes.
+const FW_ROM_SIZE: usize = 0x100_000; // 1MB
+
 /// The system bus: owns RAM and devices, routes accesses.
 pub struct Bus {
     /// Guest RAM.
     pub mem: GuestMemory,
+    /// Firmware ROM at 0x00000000-0x000FFFFF.
+    /// Stores firmware stubs that the kernel writes during early boot.
+    pub fw_rom: Vec<u8>,
     /// Core Local Interruptor (timer + software interrupts).
     pub clint: Clint,
     /// UART 16550 serial port.
@@ -47,6 +56,7 @@ impl Bus {
     pub fn new(ram_base: u64, ram_size: usize) -> Self {
         Self {
             mem: GuestMemory::new(ram_base, ram_size),
+            fw_rom: vec![0u8; FW_ROM_SIZE],
             clint: Clint::new(),
             uart: Uart::new(),
             plic: Plic::new(),
@@ -56,6 +66,29 @@ impl Bus {
             mmu_log: Vec::new(),
             sched_log: Vec::new(),
             pending_syscall_idx: None,
+        }
+    }
+
+    /// Check if address falls in firmware ROM range (0x00000000-0x000FFFFF).
+    fn in_fw_rom(addr: u64) -> bool {
+        addr < FW_ROM_SIZE as u64
+    }
+
+    /// Read a byte from firmware ROM.
+    fn fw_rom_read(&self, addr: u64) -> u8 {
+        let idx = addr as usize;
+        if idx < self.fw_rom.len() {
+            self.fw_rom[idx]
+        } else {
+            0
+        }
+    }
+
+    /// Write a byte to firmware ROM.
+    fn fw_rom_write(&mut self, addr: u64, val: u8) {
+        let idx = addr as usize;
+        if idx < self.fw_rom.len() {
+            self.fw_rom[idx] = val;
         }
     }
 
@@ -77,8 +110,15 @@ impl Bus {
             self.virtio_blk
                 .read(addr)
                 .ok_or(MemoryError { addr, size: 4 })
+        } else if Self::in_fw_rom(addr) {
+            // Read from firmware ROM (stores firmware stubs written by kernel)
+            let b0 = self.fw_rom_read(addr) as u32;
+            let b1 = self.fw_rom_read(addr + 1) as u32;
+            let b2 = self.fw_rom_read(addr + 2) as u32;
+            let b3 = self.fw_rom_read(addr + 3) as u32;
+            Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
         } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
-            // Return 0 for reads from low addresses (boot ROM area)
+            // Return 0 for reads from unmapped low addresses
             Ok(0)
         } else {
             self.mem.read_word(addr)
@@ -105,9 +145,12 @@ impl Bus {
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
             self.virtio_blk.write(addr, val);
             Ok(())
-        } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
-            // Silently accept writes to low addresses (boot ROM, HTIF, etc.)
-            // QEMU does the same -- writes to the boot ROM area are ignored.
+        } else if Self::in_fw_rom(addr) {
+            // Store in firmware ROM (kernel writes firmware stubs here)
+            self.fw_rom_write(addr, (val & 0xFF) as u8);
+            self.fw_rom_write(addr + 1, ((val >> 8) & 0xFF) as u8);
+            self.fw_rom_write(addr + 2, ((val >> 16) & 0xFF) as u8);
+            self.fw_rom_write(addr + 3, ((val >> 24) & 0xFF) as u8);
             Ok(())
         } else {
             self.mem.write_word(addr, val)
@@ -131,6 +174,8 @@ impl Bus {
             let word = self.virtio_blk.read(addr & !3).ok_or(MemoryError { addr, size: 1 })?;
             let byte_off = (addr & 3) as usize;
             Ok((word >> (byte_off * 8)) as u8)
+        } else if Self::in_fw_rom(addr) {
+            Ok(self.fw_rom_read(addr))
         } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
             Ok(0)
         } else {
@@ -154,18 +199,20 @@ impl Bus {
             self.uart.write_byte(addr - super::uart::UART_BASE, val);
             Ok(())
         } else if super::plic::Plic::contains(addr) {
-            // PLIC byte write: read-modify-write the containing word
             let word_addr = addr & !3;
             let byte_off = (addr & 3) as usize;
             let mut word = self.plic.read(word_addr).unwrap_or(0);
             word = (word & !(0xFF << (byte_off * 8))) | ((val as u32) << (byte_off * 8));
-            self.plic.write(word_addr, word);
-            Ok(())
+            if self.plic.write(word_addr, word) {
+                Ok(())
+            } else {
+                Err(MemoryError { addr, size: 1 })
+            }
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
-            // Virtio byte write: not common, ignore for now
+            // Virtio doesn't have byte-level writes; ignore
             Ok(())
-        } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
-            // Silently accept writes to low addresses (boot ROM, HTIF, etc.)
+        } else if Self::in_fw_rom(addr) {
+            self.fw_rom_write(addr, val);
             Ok(())
         } else {
             self.mem.write_byte(addr, val)
@@ -178,6 +225,10 @@ impl Bus {
             let word = self.clint.read(addr & !3).ok_or(MemoryError { addr, size: 2 })?;
             let half_off = ((addr >> 1) & 1) as usize;
             Ok((word >> (half_off * 16)) as u16)
+        } else if Self::in_fw_rom(addr) {
+            let lo = self.fw_rom_read(addr) as u16;
+            let hi = self.fw_rom_read(addr + 1) as u16;
+            Ok(lo | (hi << 8))
         } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
             Ok(0)
         } else {
@@ -198,8 +249,12 @@ impl Bus {
             } else {
                 Err(MemoryError { addr, size: 2 })
             }
+        } else if Self::in_fw_rom(addr) {
+            self.fw_rom_write(addr, (val & 0xFF) as u8);
+            self.fw_rom_write(addr + 1, ((val >> 8) & 0xFF) as u8);
+            Ok(())
         } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
-            // Silently accept writes to low addresses (boot ROM, HTIF, etc.)
+            // Silently accept writes to unmapped low addresses
             Ok(())
         } else {
             self.mem.write_half(addr, val)

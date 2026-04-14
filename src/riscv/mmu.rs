@@ -25,6 +25,7 @@
 //   [0]     V (valid)
 
 use super::bus::Bus;
+use super::cpu::Privilege;
 
 // ---- PTE flag constants ----
 
@@ -257,6 +258,7 @@ fn pte_ppn(pte: u32) -> u32 {
 /// # Arguments
 /// * `va` - Virtual address to translate
 /// * `access_type` - Type of access (fetch/load/store)
+/// * `effective_priv` - Effective privilege level for this access
 /// * `sum` - SUM bit from mstatus (allow S-mode to access U pages)
 /// * `satp` - Current satp CSR value
 /// * `bus` - Memory bus for page table walks
@@ -264,6 +266,7 @@ fn pte_ppn(pte: u32) -> u32 {
 pub fn translate(
     va: u32,
     access_type: AccessType,
+    effective_priv: Privilege,
     sum: bool,
     satp: u32,
     bus: &mut Bus,
@@ -282,7 +285,7 @@ pub fn translate(
 
     // Check TLB first.
     if let Some((ppn, flags)) = tlb.lookup(combined_vpn, asid) {
-        if let Some(fault) = check_permissions(flags, access_type, sum) {
+        if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum) {
             bus.mmu_log.push(MmuEvent::PageFault {
                 va,
                 access: access_type,
@@ -332,7 +335,7 @@ pub fn translate(
         let pa = ((ppn_hi as u64) << 22) | ((vpn0 as u64) << 12) | (offset as u64);
         let flags = l1_pte & 0xFF;
 
-        if let Some(fault) = check_permissions(flags, access_type, sum) {
+        if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum) {
             bus.mmu_log.push(MmuEvent::PageFault {
                 va,
                 access: access_type,
@@ -391,7 +394,7 @@ pub fn translate(
     let ppn = pte_ppn(l2_pte);
     let flags = l2_pte & 0xFF;
 
-    if let Some(fault) = check_permissions(flags, access_type, sum) {
+    if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum) {
         bus.mmu_log.push(MmuEvent::PageFault {
             va,
             access: access_type,
@@ -413,12 +416,24 @@ pub fn translate(
 /// Check page permissions.
 /// Returns Some(fault) if the access should fault, None if OK.
 ///
-/// When `sum` is true (S-mode, SUM=1), only U-mode pages are accessible.
-/// When `sum` is false, any page is accessible (bare mode or M-mode).
-fn check_permissions(flags: u32, access_type: AccessType, sum: bool) -> Option<TranslateResult> {
-    // If SUM is set, require PTE_U for S-mode access to user pages.
-    // This is a simplified permission check for the translate function.
-    if sum && (flags & PTE_U) == 0 {
+/// When `sum` is true (S-mode, SUM=1), S-mode can access U-mode pages.
+/// M-mode (effective_priv == Machine) bypasses all permission checks.
+fn check_permissions(
+    flags: u32,
+    access_type: AccessType,
+    effective_priv: Privilege,
+    sum: bool,
+) -> Option<TranslateResult> {
+    // M-mode bypasses all permission checks.
+    if effective_priv == Privilege::Machine {
+        return None;
+    }
+    // U-mode can only access user pages (PTE_U set).
+    if effective_priv == Privilege::User && (flags & PTE_U) == 0 {
+        return Some(fault_for(access_type));
+    }
+    // S-mode can access supervisor pages. With SUM=1, also user pages.
+    if effective_priv == Privilege::Supervisor && (flags & PTE_U) != 0 && !sum {
         return Some(fault_for(access_type));
     }
     // Check access type against R/W/X bits.
@@ -459,7 +474,7 @@ mod tests {
     fn bare_mode_identity() {
         let mut tlb = Tlb::new();
         let mut bus = Bus::new(0x8000_0000, 8192);
-        let result = translate(0x8000_0000, AccessType::Fetch, false, 0, &mut bus, &mut tlb);
+        let result = translate(0x8000_0000, AccessType::Fetch, Privilege::Machine, false, 0, &mut bus, &mut tlb);
         assert_eq!(result, TranslateResult::Ok(0x8000_0000));
     }
 
@@ -526,7 +541,7 @@ mod tests {
         bus.write_word(l1_addr, pte).unwrap();
         
         let satp = make_satp(1, 0, 0);
-        let result = translate(0x1000, AccessType::Fetch, false, satp, &mut bus, &mut tlb);
+        let result = translate(0x1000, AccessType::Fetch, Privilege::Supervisor, false, satp, &mut bus, &mut tlb);
         assert!(matches!(result, TranslateResult::Ok(0x0140_1000)));
         
         assert_eq!(bus.mmu_log.len(), 1);

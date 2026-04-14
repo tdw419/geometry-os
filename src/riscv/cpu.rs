@@ -128,10 +128,37 @@ impl RiscvCpu {
 
     /// Translate a virtual address through the Sv32 MMU.
     /// Returns the physical address or triggers a page fault trap.
+    ///
+    /// Per RISC-V spec: M-mode instruction fetches always use bare mode
+    /// (no translation). For loads/stores in M-mode, translation depends on
+    /// MPRV: when MPRV=0 (default), bare mode; when MPRV=1, uses MPP privilege.
     fn translate_va(&mut self, va: u32, access: AccessType, bus: &mut Bus) -> Result<u64, StepResult> {
-        let is_user = self.privilege == Privilege::User;
+        // Determine the effective privilege for address translation.
+        let effective_priv = if self.privilege == Privilege::Machine {
+            if access == AccessType::Fetch {
+                // M-mode instruction fetches always use bare mode.
+                return Ok(va as u64);
+            }
+            // For loads/stores in M-mode, check MPRV.
+            let mprv = (self.csr.mstatus >> csr::MSTATUS_MPRV) & 1;
+            if mprv == 0 {
+                // MPRV=0: bare mode, no translation.
+                return Ok(va as u64);
+            }
+            // MPRV=1: use MPP for effective privilege.
+            let mpp = ((self.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB) as u8;
+            match mpp {
+                0 => Privilege::User,
+                1 => Privilege::Supervisor,
+                _ => Privilege::Machine,
+            }
+        } else {
+            self.privilege
+        };
+
+        let sum = (self.csr.mstatus >> csr::MSTATUS_SUM) & 1 != 0;
         let satp = self.csr.satp;
-        match mmu::translate(va, access, is_user, satp, bus, &mut self.tlb) {
+        match mmu::translate(va, access, effective_priv, sum, satp, bus, &mut self.tlb) {
             TranslateResult::Ok(pa) => Ok(pa),
             TranslateResult::FetchFault
             | TranslateResult::LoadFault

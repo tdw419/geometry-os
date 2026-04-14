@@ -1815,7 +1815,7 @@ fn sfence_vma(rs1: u8, rs2: u8) -> u32 {
 fn test_sv32_bare_mode_identity_translation() {
     let mut tlb = mmu::Tlb::new();
     let mut bus = geometry_os::riscv::bus::Bus::new(0x8000_0000, 8192);
-    let result = mmu::translate(0x8000_0000, mmu::AccessType::Fetch, false, 0, &mut bus, &mut tlb);
+    let result = mmu::translate(0x8000_0000, mmu::AccessType::Fetch, geometry_os::riscv::cpu::Privilege::Supervisor, false, 0, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::Ok(0x8000_0000));
 }
 
@@ -1830,7 +1830,7 @@ fn test_sv32_two_level_walk_4k_page() {
     bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
     bus.write_word((l2_ppn as u64) << 12, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X | mmu::PTE_U)).unwrap();
     let satp = make_satp(1, 0, root_ppn);
-    let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
+    let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::Ok((data_ppn as u64) << 12));
     if let mmu::TranslateResult::Ok(pa) = result {
         assert_eq!(bus.read_word(pa).unwrap(), 0xDEAD_BEEF);
@@ -1851,7 +1851,7 @@ fn test_sv32_nonzero_vpn_and_offset() {
     bus.write_word(((root_ppn as u64) << 12) | ((vpn1 as u64) * 4), make_pte(l2_ppn, mmu::PTE_V)).unwrap();
     bus.write_word(((l2_ppn as u64) << 12) | ((vpn0 as u64) * 4), make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_U)).unwrap();
     let satp = make_satp(1, 0, root_ppn);
-    let result = mmu::translate(va, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
+    let result = mmu::translate(va, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::Ok(((data_ppn as u64) << 12) + 0x100));
 }
 
@@ -1861,7 +1861,7 @@ fn test_sv32_page_fault_invalid_pte() {
     let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
     bus.write_word(1u64 << 12, 0).unwrap();
     let satp = make_satp(1, 0, 1);
-    let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
+    let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::LoadFault);
 }
 
@@ -1872,7 +1872,7 @@ fn test_sv32_page_fault_permission_denied() {
     bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
     bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
     let satp = make_satp(1, 0, 1);
-    let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
+    let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::LoadFault);
 }
 
@@ -1883,11 +1883,11 @@ fn test_sv32_fault_types_by_access() {
     bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R)).unwrap();
     let satp = make_satp(1, 0, 1);
     let mut t1 = mmu::Tlb::new();
-    assert_eq!(mmu::translate(0, mmu::AccessType::Fetch, false, satp, &mut bus, &mut t1), mmu::TranslateResult::FetchFault);
+    assert_eq!(mmu::translate(0, mmu::AccessType::Fetch, geometry_os::riscv::cpu::Privilege::Supervisor, false, satp, &mut bus, &mut t1), mmu::TranslateResult::FetchFault);
     let mut t2 = mmu::Tlb::new();
-    assert_eq!(mmu::translate(0, mmu::AccessType::Store, false, satp, &mut bus, &mut t2), mmu::TranslateResult::StoreFault);
+    assert_eq!(mmu::translate(0, mmu::AccessType::Store, geometry_os::riscv::cpu::Privilege::Supervisor, false, satp, &mut bus, &mut t2), mmu::TranslateResult::StoreFault);
     let mut t3 = mmu::Tlb::new();
-    assert_eq!(mmu::translate(0, mmu::AccessType::Load, false, satp, &mut bus, &mut t3), mmu::TranslateResult::Ok(3u64 << 12));
+    assert_eq!(mmu::translate(0, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::Supervisor, false, satp, &mut bus, &mut t3), mmu::TranslateResult::Ok(3u64 << 12));
 }
 
 #[test]
@@ -1918,7 +1918,7 @@ fn test_sv32_megapage() {
     ).unwrap();
 
     let satp = make_satp(1, 0, 1); // mode=SV32, root PPN=1
-    let result = mmu::translate(va, mmu::AccessType::Load, false, satp, &mut bus, &mut tlb);
+    let result = mmu::translate(va, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::Supervisor, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::Ok(expected_pa as u64));
     if let mmu::TranslateResult::Ok(pa) = result {
         assert_eq!(bus.read_word(pa).unwrap(), 0xCAFE_0001);
@@ -1940,7 +1940,7 @@ fn test_sv32_megapage() {
         make_pte(megapage_ppn_b, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X),
     ).unwrap();
 
-    let result_b = mmu::translate(va_b, mmu::AccessType::Load, false, satp, &mut bus, &mut tlb);
+    let result_b = mmu::translate(va_b, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::Supervisor, false, satp, &mut bus, &mut tlb);
     assert_eq!(result_b, mmu::TranslateResult::Ok(expected_pa_b));
 }
 
@@ -1951,10 +1951,10 @@ fn test_sv32_tlb_caches() {
     bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
     bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X | mmu::PTE_U)).unwrap();
     let satp = make_satp(1, 0, 1);
-    let r1 = mmu::translate(0, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
+    let r1 = mmu::translate(0, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, satp, &mut bus, &mut tlb);
     assert_eq!(r1, mmu::TranslateResult::Ok(3u64 << 12));
     bus.write_word(1u64 << 12, 0).unwrap();
-    let r2 = mmu::translate(0, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
+    let r2 = mmu::translate(0, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, satp, &mut bus, &mut tlb);
     assert_eq!(r2, mmu::TranslateResult::Ok(3u64 << 12));
 }
 
@@ -2013,7 +2013,7 @@ fn test_sv32_nonleaf_at_l2_is_fault() {
     bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
     bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V)).unwrap();
     let satp = make_satp(1, 0, 1);
-    let result = mmu::translate(0, mmu::AccessType::Load, true, satp, &mut bus, &mut tlb);
+    let result = mmu::translate(0, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::LoadFault);
 }
 
@@ -2898,7 +2898,7 @@ impl MmuTestEnv {
 
     fn run(&mut self, max_steps: usize) {
         self.vm.cpu.pc = ((self.code_ppn as u64) << 12) as u32;
-        self.vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
+        self.vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
         for _ in 0..max_steps {
             match self.vm.step() {
                 StepResult::Ebreak => break,
