@@ -1,7 +1,7 @@
 # Self-Modifying Programs Guide
 
 Geometry OS has a unique capability: programs can write new programs onto the canvas
-grid, compile them at runtime, and execute them — all without human intervention.
+grid, compile them at runtime, and execute them -- all without human intervention.
 This is the **pixel-driving-pixels** paradigm: the display IS the source code IS the
 executable.
 
@@ -9,33 +9,33 @@ executable.
 
 | Region | Addresses | Size | Purpose |
 |--------|-----------|------|---------|
-| Canvas Grid | 0x8000 - 0x8FFF | 4096 cells | 128 rows × 32 cols of editable text |
+| Canvas Grid | 0x8000 - 0x8FFF | 4096 cells | 128 rows x 32 cols of editable text |
 | Canvas Bytecode | 0x1000 - 0x1FFF | 4096 cells | Where ASMSELF writes compiled code |
-| Screen Buffer | 0x10000 - 0x1FFFF | 65536 cells | 256×256 pixel display |
+| Screen Buffer | 0x10000 - 0x1FFFF | 65536 cells | 256x256 pixel display |
 | ASM Status | 0xFFD | 1 cell | Assembly result (word count or error) |
 
 ## The Three Opcodes
 
-### ASMSELF (0x73) — Compile Canvas Text
+### ASMSELF (0x73) -- Compile Canvas Text
 
 Reads the canvas buffer as text, preprocesses it, assembles it, and writes
 the resulting bytecode to `0x1000`.
 
-- **Input:** Current canvas buffer contents (32 columns × 128 rows)
+- **Input:** Current canvas buffer contents (32 columns x 128 rows)
 - **Output:** Bytecode at `0x1000`, status at `RAM[0xFFD]`
 - **Status codes:**
-  - `RAM[0xFFD] > 0` — Success. Value is the bytecode word count.
-  - `RAM[0xFFD] == 0xFFFFFFFF` — Assembly error (invalid syntax, unknown opcode, etc.)
+  - `RAM[0xFFD] > 0` -- Success. Value is the bytecode word count.
+  - `RAM[0xFFD] == 0xFFFFFFFF` -- Assembly error (invalid syntax, unknown opcode, etc.)
 
 ```asm
 ASMSELF             ; compile canvas -> bytecode at 0x1000
 ```
 
-### RUNNEXT (0x74) — Execute New Code
+### RUNNEXT (0x74) -- Execute New Code
 
 Sets PC to `0x1000` and continues execution from the newly assembled bytecode.
 
-- **Preserves:** All registers (r0–r26), return stack, halted flag is cleared
+- **Preserves:** All registers (r0-r26), return stack, halted flag is cleared
 - **Resets:** PC only
 
 ```asm
@@ -63,7 +63,7 @@ character by character into canvas cells using STORE.
 
 **Key constants:**
 - Canvas base: `0x8000`
-- Row offset: `row × 32` (each row is 32 columns)
+- Row offset: `row x 32` (each row is 32 columns)
 - Newline: ASCII `10` (0x0A)
 
 ```asm
@@ -123,12 +123,22 @@ LDI r7, 10          ; newline
 STORE r8, r7
 ```
 
-**Tip:** Use a helper loop when writing long strings. Load the string address
-into a register and loop through characters, storing each to canvas:
+**Tip:** For long strings, store the character data in RAM at a known address
+using `.org` and manual LDI+STORE pairs, then loop through them:
 
 ```asm
+; Store string data at address 0x200
+.org 0x200
+LDI r1, 76         ; 'L'
+STORE r1, r20
+LDI r1, 68         ; 'D'
+STORE r1, r20
+ADD r20, r6
+; ... etc
+
+; Then a copy loop reads from RAM and writes to canvas:
 LDI r1, 0x8000      ; canvas destination
-LDI r2, string      ; source data address
+LDI r2, 0x200       ; source data address
 LDI r3, 1           ; increment
 
 loop:
@@ -141,16 +151,14 @@ loop:
 
 done:
   HALT
-
-.org 0x100
-string:
-  .db "LDI r0, 42", 10
-  .db "HALT", 10, 0
 ```
 
-**Note:** The `.db` directive stores one byte per u32 word. The assembler
-converts `.db "string"` into a sequence of u32 values where each holds one
-ASCII character. This is useful for string data but not for general data.
+**Note:** There is no `.db` or string literal directive. All string data must be
+stored character by character using LDI+STORE pairs. Each canvas cell holds one
+u32 value representing an ASCII character.
+
+**Working demo:** `programs/self_writer.asm` -- writes "LDI r1, 42\nHALT" to canvas,
+then ASMSELF + RUNNEXT. Verified by `test_self_writer_successor_different_from_parent`.
 
 ## Pattern 2: ASMSELF + RUNNEXT (Compile and Execute)
 
@@ -162,10 +170,10 @@ ASMSELF             ; compile canvas text -> bytecode at 0x1000
 
 ; Check for assembly errors before running
 LDI r1, 0xFFD
-LOAD r2, r1
+LOAD r2, r1         ; r2 = assembly status
 LDI r3, 0xFFFFFFFF
-CMP r2, r3          ; is it an error?
-JEQ r2, error       ; yes, don't run bad code
+CMP r2, r3          ; compare status with error value
+JZ r0, error        ; r0 == 0 means r2 == 0xFFFFFFFF (error!)
 
 RUNNEXT             ; success! jump to newly compiled code at 0x1000
 HALT                ; safety fallback
@@ -174,6 +182,11 @@ error:
   ; Handle error -- maybe write a message to canvas
   HALT
 ```
+
+**Why CMP + JZ, not JEQ:** There is no JEQ instruction. CMP sets r0 to
+0xFFFFFFFF (less), 0 (equal), or 1 (greater). When r2 == r3, r0 == 0,
+so `JZ r0, label` branches on equality. This is the standard equality-test
+pattern in Geometry OS.
 
 **Always check `RAM[0xFFD]` after ASMSELF** before calling RUNNEXT. If the
 canvas contained invalid assembly, running the garbage bytecode at 0x1000
@@ -191,7 +204,7 @@ LDI r5, 0x8000      ; canvas base
 
 ; Write Gen B source that reads r10
 ; "ADD r0, r10\nHALT\n"
-; (character-by-character STORE omitted for brevity)
+; (character-by-character STORE omitted for brevity -- see Pattern 1)
 ; ... write "ADD r0, r10\nHALT\n" to canvas ...
 
 ASMSELF
@@ -200,24 +213,34 @@ HALT
 ```
 
 **Register convention for generational chains:**
-- `r10`–`r15`: Use for passing data between generations (safe from common opcodes)
-- `r0`: Commonly used as accumulator/return value
-- `r1`–`r9`: Available but may be clobbered by loops and helpers
+- `r10`-`r15`: Use for passing data between generations (safe from common opcodes)
+- `r0`: Reserved for CMP results -- never use as general-purpose storage
+- `r1`-`r9`: Available but may be clobbered by loops and helpers
+- `r30`: Stack pointer (preserved, but don't use for data)
+- `r31`: Link register (preserved, but don't use for data)
 
 **Verified behavior (from tests):**
 - `test_self_writer_registers_inherited_across_generations`: r5=100 survives
   RUNNEXT, Gen B reads r5=100 and computes r0=101
 - `test_runnext_registers_inherited_by_new_code`: All register values preserved
+- `test_runnext_preserves_registers`: r0=111, r1=222, r5=555 all survive RUNNEXT
 
 ## Pattern 4: Self-Reading (Inspecting Your Own Source)
 
-A program can LOAD from canvas addresses to read what's on the grid — including
+A program can LOAD from canvas addresses to read what's on the grid -- including
 its own source code. This enables programs that analyze or modify themselves.
 
 ```asm
 ; Read the first character of the current canvas row
 LDI r1, 0x8000      ; canvas start
 LOAD r2, r1         ; r2 = first character of canvas
+
+; Read a specific row and column
+; Row N starts at 0x8000 + N * 32
+LDI r1, 0x8040      ; row 2, col 0 (0x8000 + 2*32)
+LDI r3, 5
+ADD r1, r3          ; row 2, col 5
+LOAD r2, r1         ; r2 = character at row 2, col 5
 ```
 
 This is useful for:
@@ -226,6 +249,11 @@ This is useful for:
 - **Checksum verification:** Verify that your successor source was written
   correctly before calling ASMSELF
 - **Introspection:** A program can read what code it previously wrote
+- **State machines:** Store state in canvas cells and read it back each frame
+
+**Working demo:** `programs/evolving_counter.asm` -- reads TICKS each frame,
+extracts 4 decimal digits, and writes ASCII characters to canvas row 0.
+The grid becomes a live counter display.
 
 ## Pattern 5: Chained Generations (Multi-Step Evolution)
 
@@ -252,7 +280,7 @@ can be different from the last.
 ; Verified: test_self_writer_two_generation_chain passes
 ```
 
-**Three-generation chain (A → B → C):**
+**Three-generation chain (A -> B -> C):**
 1. Gen A writes Gen B source to canvas row 0, calls ASMSELF + RUNNEXT
 2. Gen B writes Gen C source to canvas row 32 (offset 0x8200), calls ASMSELF + RUNNEXT
 3. Gen C executes and halts
@@ -260,6 +288,11 @@ can be different from the last.
 **Important:** Each ASMSELF call overwrites bytecode at 0x1000. The new generation
 must be fully written to canvas BEFORE calling ASMSELF, otherwise the previous
 bytecode may be partially overwritten.
+
+**Working demo:** `programs/code_evolution.asm` -- a self-replicating program where
+each generation evolves behavior (green fill, blue border, rainbow stripes). The
+kernel copies its own source from a data table at 0x2000 to canvas, then
+ASMSELF+RUNNEXT.
 
 ## Common Pitfalls
 
@@ -270,14 +303,18 @@ bytecode may be partially overwritten.
 ASMSELF
 RUNNEXT             ; could execute garbage!
 
-; RIGHT -- check first
+; RIGHT -- check first (CMP + JZ pattern)
 ASMSELF
 LDI r1, 0xFFD
 LOAD r2, r1
 LDI r3, 0xFFFFFFFF
-CMP r2, r3
-JEQ r2, error
+CMP r2, r3          ; compare with error sentinel
+JZ r0, error        ; r0 == 0 means equal (error)
 RUNNEXT
+HALT
+
+error:
+  HALT
 ```
 
 ### 2. Infinite Self-Modification Loop
@@ -293,33 +330,36 @@ A program that writes a copy of itself and runs it will loop forever:
 LDI r10, 3          ; max generations
 ; ... write successor ...
 ; Successor source starts with:
+;   LDI r6, 1
 ;   SUB r10, r6    ; decrement counter
 ;   JZ r10, done   ; stop if counter is 0
 ;   ... rest of code ...
 ; done: HALT
 ```
 
+Since RUNNEXT preserves registers, the counter in r10 persists across
+generations. Each successor decrements it and stops when it hits zero.
+
 ### 3. Corrupting Your Own Code
 
 When writing to canvas, be careful not to overwrite the region where your
 currently running bytecode lives. Bytecode is at `0x1000`, canvas starts at
-`0x8000` — these don't overlap, so writing to canvas is safe. But if you use
+`0x8000` -- these don't overlap, so writing to canvas is safe. But if you use
 `.org` to relocate code, or if the assembler places data near the canvas range,
 you could corrupt yourself.
 
 ### 4. Canvas Row Boundary
 
-Each canvas row is exactly 32 cells. Row N starts at `0x8000 + N × 32`.
+Each canvas row is exactly 32 cells. Row N starts at `0x8000 + N * 32`.
 If you write past column 31, you'll overwrite the start of the next row.
 Use `ADD r8, r6` (increment by 1) and track column position, or use `MOD`
 to wrap.
 
 ### 5. Null Bytes in Canvas
 
-Canvas cell value `0` is treated as a newline by the ASMSELF text converter.
-If you store `0` to a canvas cell, it won't produce a character — it'll break
-the line. This is fine for ending lines (same as newline), but don't use `0`
-as a meaningful character value.
+Canvas cell value `0` is treated as a null/empty by the ASMSELF text converter.
+Null cells act as line terminators in the same way as newlines. Don't use `0`
+as a meaningful character value -- it will break line parsing.
 
 ### 6. Colons in Comments
 
@@ -327,33 +367,34 @@ The assembler's label parser checks for `:` before stripping comments. A comment
 containing a colon (e.g., `; scratch: use r0`) will be misinterpreted as a label.
 **Use dashes or parens in comments instead:** `; scratch -- use r0`
 
-### 7. Immediate vs Register Arguments
+### 7. No String Literal Directive
 
-Most opcodes that take a single register argument (like SLEEP, GETPID) will fail
-if you pass an immediate value. `SLEEP 60` gives "invalid register: 60". Use
-`LDI r10, 60; SLEEP r10` instead.
+There is no `.db`, `.ascii`, or similar directive for embedding string data.
+All text must be written to canvas cells one character at a time using
+LDI + STORE pairs. This is tedious but explicit -- you always know exactly
+what's on the grid.
 
 ## Quick Reference
 
 | Operation | Opcode | Description |
 |-----------|--------|-------------|
-| ASMSELF | 0x73 | Compile canvas text → bytecode at 0x1000 |
+| ASMSELF | 0x73 | Compile canvas text -> bytecode at 0x1000 |
 | RUNNEXT | 0x74 | Jump to 0x1000 (preserves registers) |
-| STORE reg, reg | 0x12 | Write to RAM/canvas/screen |
-| LOAD reg, reg | 0x11 | Read from RAM/canvas/screen |
+| STORE addr_reg, val_reg | 0x12 | Write to RAM/canvas |
+| LOAD val_reg, addr_reg | 0x11 | Read from RAM/canvas |
 
 | Address | Purpose |
 |---------|---------|
 | 0x1000 | Canvas bytecode region (ASMSELF output) |
-| 0x8000 - 0x8FFF | Canvas grid (128 × 32 cells) |
-| 0xFFD | ASM status port (word count or error) |
+| 0x8000 - 0x8FFF | Canvas grid (128 x 32 cells) |
+| 0xFFD | ASM status port (word count or 0xFFFFFFFF on error) |
 
 ## See Also
 
-- `docs/CANVAS_TEXT_SURFACE.md` — Full system specification
-- `docs/PIXEL_DRIVING_PIXELS.md` — Original design document
-- `programs/self_writer.asm` — Working demo of the write-compile-execute cycle
-- `programs/canvas_grid_writer.asm` — Demo of writing text to the canvas grid
-- `programs/canvas_counter.asm` — Demo of live canvas state updates
-- `programs/game_of_life.asm` — Conway's Game of Life in pure assembly
-- `programs/code_evolution.asm` — Multigenerational self-writing program
+- `docs/CANVAS_TEXT_SURFACE.md` -- Full system specification
+- `programs/self_writer.asm` -- Working demo of the write-compile-execute cycle
+- `programs/canvas_grid_writer.asm` -- Demo of writing text to the canvas grid
+- `programs/canvas_counter.asm` -- Demo of live canvas state updates
+- `programs/evolving_counter.asm` -- Live frame counter on canvas grid
+- `programs/code_evolution.asm` -- Multigenerational self-writing program
+- `programs/game_of_life.asm` -- Conway's Game of Life using PEEK/STORE
