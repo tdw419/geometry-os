@@ -100,10 +100,14 @@ pub enum TranslateResult {
     /// Store/AMO page fault.
     StoreFault,
 }
-
 /// MMU trace event (Phase 41).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MmuEvent {
+    /// SATP register written.
+    SatpWrite {
+        old: u32,
+        new: u32,
+    },
     /// Walk completed successfully.
     PageTableWalk {
         va: u32,
@@ -262,7 +266,7 @@ pub fn translate(
     access_type: AccessType,
     sum: bool,
     satp: u32,
-    bus: &Bus,
+    bus: &mut Bus,
     tlb: &mut Tlb,
 ) -> TranslateResult {
     // Bare mode: no translation.
@@ -279,9 +283,16 @@ pub fn translate(
     // Check TLB first.
     if let Some((ppn, flags)) = tlb.lookup(combined_vpn, asid) {
         if let Some(fault) = check_permissions(flags, access_type, sum) {
+            bus.mmu_log.push(MmuEvent::PageFault {
+                va,
+                access: access_type,
+                ptes: Vec::new(),
+            });
             return fault;
         }
-        return TranslateResult::Ok(((ppn as u64) << 12) | (offset as u64));
+        let pa = ((ppn as u64) << 12) | (offset as u64);
+        bus.mmu_log.push(MmuEvent::TlbHit { va, pa });
+        return TranslateResult::Ok(pa);
     }
 
     // TLB miss: walk page tables.
@@ -292,10 +303,22 @@ pub fn translate(
     let l1_addr = root_addr | ((vpn1 as u64) << 2);
     let l1_pte = match bus.read_word(l1_addr) {
         Ok(w) => w,
-        Err(_) => return fault_for(access_type),
+        Err(_) => {
+            bus.mmu_log.push(MmuEvent::PageFault {
+                va,
+                access: access_type,
+                ptes: Vec::new(),
+            });
+            return fault_for(access_type);
+        }
     };
 
     if (l1_pte & PTE_V) == 0 {
+        bus.mmu_log.push(MmuEvent::PageFault {
+            va,
+            access: access_type,
+            ptes: vec![l1_pte],
+        });
         return fault_for(access_type);
     }
 
@@ -310,6 +333,11 @@ pub fn translate(
         let flags = l1_pte & 0xFF;
 
         if let Some(fault) = check_permissions(flags, access_type, sum) {
+            bus.mmu_log.push(MmuEvent::PageFault {
+                va,
+                access: access_type,
+                ptes: vec![l1_pte],
+            });
             return fault;
         }
 
@@ -317,6 +345,11 @@ pub fn translate(
         // Each TLB entry covers one 4KB page, so megapage hits insert per-VPN0.
         let eff_ppn = (pa >> 12) as u32;
         tlb.insert(combined_vpn, asid, eff_ppn, flags);
+        bus.mmu_log.push(MmuEvent::PageTableWalk {
+            va,
+            pa,
+            ptes: vec![l1_pte],
+        });
         return TranslateResult::Ok(pa);
     }
 
@@ -325,16 +358,33 @@ pub fn translate(
     let l2_addr = l2_base | ((vpn0 as u64) << 2);
     let l2_pte = match bus.read_word(l2_addr) {
         Ok(w) => w,
-        Err(_) => return fault_for(access_type),
+        Err(_) => {
+            bus.mmu_log.push(MmuEvent::PageFault {
+                va,
+                access: access_type,
+                ptes: vec![l1_pte],
+            });
+            return fault_for(access_type);
+        }
     };
 
     if (l2_pte & PTE_V) == 0 {
+        bus.mmu_log.push(MmuEvent::PageFault {
+            va,
+            access: access_type,
+            ptes: vec![l1_pte, l2_pte],
+        });
         return fault_for(access_type);
     }
 
     // Level 2 must be a leaf.
     let is_leaf_l2 = (l2_pte & (PTE_R | PTE_W | PTE_X)) != 0;
     if !is_leaf_l2 {
+        bus.mmu_log.push(MmuEvent::PageFault {
+            va,
+            access: access_type,
+            ptes: vec![l1_pte, l2_pte],
+        });
         return fault_for(access_type);
     }
 
@@ -342,11 +392,22 @@ pub fn translate(
     let flags = l2_pte & 0xFF;
 
     if let Some(fault) = check_permissions(flags, access_type, sum) {
+        bus.mmu_log.push(MmuEvent::PageFault {
+            va,
+            access: access_type,
+            ptes: vec![l1_pte, l2_pte],
+        });
         return fault;
     }
 
     tlb.insert(combined_vpn, asid, ppn, flags);
-    TranslateResult::Ok(((ppn as u64) << 12) | (offset as u64))
+    let pa = ((ppn as u64) << 12) | (offset as u64);
+    bus.mmu_log.push(MmuEvent::PageTableWalk {
+        va,
+        pa,
+        ptes: vec![l1_pte, l2_pte],
+    });
+    TranslateResult::Ok(pa)
 }
 
 /// Check page permissions.
@@ -397,8 +458,8 @@ mod tests {
     #[test]
     fn bare_mode_identity() {
         let mut tlb = Tlb::new();
-        let bus = Bus::new(0x8000_0000, 8192);
-        let result = translate(0x8000_0000, AccessType::Fetch, false, 0, &bus, &mut tlb);
+        let mut bus = Bus::new(0x8000_0000, 8192);
+        let result = translate(0x8000_0000, AccessType::Fetch, false, 0, &mut bus, &mut tlb);
         assert_eq!(result, TranslateResult::Ok(0x8000_0000));
     }
 
@@ -456,11 +517,27 @@ mod tests {
     }
 
     #[test]
-    fn page_fault_invalid_pte() {
+    fn page_table_walk_logging() {
         let mut tlb = Tlb::new();
-        let bus = Bus::new(0x0, 0x1_0000);
-        let result = translate(0, AccessType::Load, true, make_satp(1, 0, 1), &bus, &mut tlb);
-        assert_eq!(result, TranslateResult::LoadFault);
+        let mut bus = Bus::new(0x0, 0x1_0000);
+        // Map 0x1000 to 0x5000 via megapage
+        let l1_addr = 0x0;
+        let pte = (0x5u32 << 20) | PTE_V | PTE_R | PTE_X;
+        bus.write_word(l1_addr, pte).unwrap();
+        
+        let satp = make_satp(1, 0, 0);
+        let result = translate(0x1000, AccessType::Fetch, false, satp, &mut bus, &mut tlb);
+        assert!(matches!(result, TranslateResult::Ok(0x0140_1000)));
+        
+        assert_eq!(bus.mmu_log.len(), 1);
+        if let MmuEvent::PageTableWalk { va, pa, ptes } = &bus.mmu_log[0] {
+            assert_eq!(*va, 0x1000);
+            assert_eq!(*pa, 0x0140_1000);
+            assert_eq!(ptes.len(), 1);
+            assert_eq!(ptes[0], pte);
+        } else {
+            panic!("Expected PageTableWalk event");
+        }
     }
 
     fn make_satp(mode: u32, asid: u32, ppn: u32) -> u32 {

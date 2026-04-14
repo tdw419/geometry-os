@@ -35,6 +35,8 @@ pub struct Bus {
     pub syscall_log: Vec<super::syscall::SyscallEvent>,
     /// MMU trace log: records page table walks and faults.
     pub mmu_log: Vec<super::mmu::MmuEvent>,
+    /// Scheduler trace log: records context switches.
+    pub sched_log: Vec<super::cpu::SchedEvent>,
     /// Index into syscall_log of the last U-mode ECALL awaiting its return value.
     /// Set when a U-mode ECALL is captured; cleared when SRET returns to U-mode.
     pub pending_syscall_idx: Option<usize>,
@@ -52,6 +54,7 @@ impl Bus {
             sbi: Sbi::new(),
             syscall_log: Vec::new(),
             mmu_log: Vec::new(),
+            sched_log: Vec::new(),
             pending_syscall_idx: None,
         }
     }

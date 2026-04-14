@@ -63,6 +63,17 @@ pub struct LastStepInfo {
     pub result: StepResult,
 }
 
+/// Scheduler trace event (Phase 41).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SchedEvent {
+    /// Context switch detected (tp register changed).
+    ContextSwitch {
+        old_tp: u32,
+        new_tp: u32,
+        pc: u32,
+    },
+}
+
 /// RV32I CPU state.
 pub struct RiscvCpu {
     /// General-purpose registers x[0..32]. x[0] is hardwired to zero.
@@ -117,7 +128,7 @@ impl RiscvCpu {
 
     /// Translate a virtual address through the Sv32 MMU.
     /// Returns the physical address or triggers a page fault trap.
-    fn translate_va(&mut self, va: u32, access: AccessType, bus: &Bus) -> Result<u64, StepResult> {
+    fn translate_va(&mut self, va: u32, access: AccessType, bus: &mut Bus) -> Result<u64, StepResult> {
         let is_user = self.privilege == Privilege::User;
         let satp = self.csr.satp;
         match mmu::translate(va, access, is_user, satp, bus, &mut self.tlb) {
@@ -139,6 +150,17 @@ impl RiscvCpu {
                 Err(fault)
             }
         }
+    }
+
+    /// Write to a CSR, intercepting side effects like SATP logging (Phase 41).
+    fn write_csr(&mut self, addr: u32, val: u32, bus: &mut Bus) {
+        if addr == csr::SATP {
+            let old = self.csr.satp;
+            if old != val {
+                bus.mmu_log.push(mmu::MmuEvent::SatpWrite { old, new: val });
+            }
+        }
+        self.csr.write(addr, val);
     }
 
     /// Deliver a trap: set cause/epc/tval CSRs, update privilege, jump to vector.
@@ -164,6 +186,7 @@ impl RiscvCpu {
         // Snapshot register state before execution (Phase 41: tracing).
         let regs_before = self.x;
         let pc_before = self.pc;
+        let tp_before = self.x[4];
 
         // Check for pending interrupts before fetching.
         if let Some(cause) = self.csr.pending_interrupt(self.privilege) {
@@ -186,7 +209,7 @@ impl RiscvCpu {
         }
 
         // Translate PC through MMU for instruction fetch.
-        let fetch_pa = match self.translate_va(self.pc, AccessType::Fetch, &*bus) {
+        let fetch_pa = match self.translate_va(self.pc, AccessType::Fetch, bus) {
             Ok(pa) => pa,
             Err(e) => {
                 self.last_step = Some(LastStepInfo {
@@ -230,6 +253,17 @@ impl RiscvCpu {
             (decode::decode(word), 4u32)
         };
         let result = self.execute(op, bus, inst_len);
+
+        // Phase 41: Scheduler tracing (infer context switch from tp register change).
+        let tp_after = self.x[4];
+        if tp_before != tp_after && self.privilege != Privilege::User {
+            bus.sched_log.push(SchedEvent::ContextSwitch {
+                old_tp: tp_before,
+                new_tp: tp_after,
+                pc: pc_before,
+            });
+        }
+
         self.last_step = Some(LastStepInfo {
             pc: pc_before,
             word,
@@ -296,7 +330,7 @@ impl RiscvCpu {
             // ---- Loads ----
             Operation::Lb { rd, rs1, imm } => {
                 let va = self.ea(rs1, imm) as u32;
-                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Load, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -314,7 +348,7 @@ impl RiscvCpu {
             }
             Operation::Lh { rd, rs1, imm } => {
                 let va = self.ea(rs1, imm) as u32;
-                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Load, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -332,7 +366,7 @@ impl RiscvCpu {
             }
             Operation::Lw { rd, rs1, imm } => {
                 let va = self.ea(rs1, imm) as u32;
-                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Load, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -350,7 +384,7 @@ impl RiscvCpu {
             }
             Operation::Lbu { rd, rs1, imm } => {
                 let va = self.ea(rs1, imm) as u32;
-                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Load, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -368,7 +402,7 @@ impl RiscvCpu {
             }
             Operation::Lhu { rd, rs1, imm } => {
                 let va = self.ea(rs1, imm) as u32;
-                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Load, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -388,7 +422,7 @@ impl RiscvCpu {
             // ---- Stores ----
             Operation::Sb { rs1, rs2, imm } => {
                 let va = self.ea(rs1, imm) as u32;
-                let pa = match self.translate_va(va, AccessType::Store, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Store, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -406,7 +440,7 @@ impl RiscvCpu {
             }
             Operation::Sh { rs1, rs2, imm } => {
                 let va = self.ea(rs1, imm) as u32;
-                let pa = match self.translate_va(va, AccessType::Store, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Store, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -424,7 +458,7 @@ impl RiscvCpu {
             }
             Operation::Sw { rs1, rs2, imm } => {
                 let va = self.ea(rs1, imm) as u32;
-                let pa = match self.translate_va(va, AccessType::Store, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Store, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -577,7 +611,7 @@ impl RiscvCpu {
             // aq/rl flags ignored in single-hart emulator (no other harts to order against).
             Operation::LrW { rd, rs1, aq: _, rl: _ } => {
                 let va = self.get_reg(rs1);
-                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Load, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -597,7 +631,7 @@ impl RiscvCpu {
             }
             Operation::ScW { rd, rs1, rs2, aq: _, rl: _ } => {
                 let va = self.get_reg(rs1);
-                let pa = match self.translate_va(va, AccessType::Store, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Store, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -626,7 +660,7 @@ impl RiscvCpu {
             }
             Operation::AmoswapW { rd, rs1, rs2, aq: _, rl: _ } => {
                 let va = self.get_reg(rs1);
-                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+                let pa = match self.translate_va(va, AccessType::Load, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };
@@ -635,7 +669,7 @@ impl RiscvCpu {
                         let new_val = self.get_reg(rs2);
                         self.set_reg(rd, old_val);
                         // AMO also needs store permission.
-                        let pa_s = match self.translate_va(va, AccessType::Store, &*bus) {
+                        let pa_s = match self.translate_va(va, AccessType::Store, bus) {
                             Ok(p) => p,
                             Err(e) => return e,
                         };
@@ -868,7 +902,7 @@ impl RiscvCpu {
                 let old = self.csr.read(csr);
                 let new_val = self.get_reg(rs1);
                 // Write even if rd=x0 (but don't read old into x0).
-                self.csr.write(csr, new_val);
+                self.write_csr(csr, new_val, bus);
                 self.set_reg(rd, old);
                 self.pc = next_pc;
                 StepResult::Ok
@@ -877,7 +911,7 @@ impl RiscvCpu {
                 let old = self.csr.read(csr);
                 let mask = self.get_reg(rs1);
                 if mask != 0 {
-                    let _ = self.csr.write(csr, old | mask);
+                    self.write_csr(csr, old | mask, bus);
                 }
                 self.set_reg(rd, old);
                 self.pc = next_pc;
@@ -887,7 +921,7 @@ impl RiscvCpu {
                 let old = self.csr.read(csr);
                 let mask = self.get_reg(rs1);
                 if mask != 0 {
-                    let _ = self.csr.write(csr, old & !mask);
+                    self.write_csr(csr, old & !mask, bus);
                 }
                 self.set_reg(rd, old);
                 self.pc = next_pc;
@@ -895,7 +929,7 @@ impl RiscvCpu {
             }
             Operation::Csrrwi { rd, uimm, csr } => {
                 let old = self.csr.read(csr);
-                self.csr.write(csr, uimm as u32);
+                self.write_csr(csr, uimm as u32, bus);
                 self.set_reg(rd, old);
                 self.pc = next_pc;
                 StepResult::Ok
@@ -904,7 +938,7 @@ impl RiscvCpu {
                 let old = self.csr.read(csr);
                 let mask = uimm as u32;
                 if mask != 0 {
-                    let _ = self.csr.write(csr, old | mask);
+                    self.write_csr(csr, old | mask, bus);
                 }
                 self.set_reg(rd, old);
                 self.pc = next_pc;
@@ -914,7 +948,7 @@ impl RiscvCpu {
                 let old = self.csr.read(csr);
                 let mask = uimm as u32;
                 if mask != 0 {
-                    let _ = self.csr.write(csr, old & !mask);
+                    self.write_csr(csr, old & !mask, bus);
                 }
                 self.set_reg(rd, old);
                 self.pc = next_pc;
@@ -974,7 +1008,7 @@ impl RiscvCpu {
         F: FnOnce(u32, u32) -> u32,
     {
         let va = self.get_reg(rs1);
-        let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+        let pa = match self.translate_va(va, AccessType::Load, bus) {
             Ok(p) => p,
             Err(e) => return e,
         };
@@ -982,7 +1016,7 @@ impl RiscvCpu {
             Ok(old_val) => {
                 let new_val = f(old_val, self.get_reg(rs2));
                 self.set_reg(rd, old_val);
-                let pa_s = match self.translate_va(va, AccessType::Store, &*bus) {
+                let pa_s = match self.translate_va(va, AccessType::Store, bus) {
                     Ok(p) => p,
                     Err(e) => return e,
                 };

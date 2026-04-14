@@ -603,6 +603,172 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[3])? as u32);
         }
 
+        // TEXTI x, y, "string" -- render inline text (no RAM setup needed)
+        // Encoding: 0x13, x_imm, y_imm, char_count, char1, char2, ..., 0 (null term)
+        "TEXTI" => {
+            if tokens.len() < 4 {
+                return Err("TEXTI requires 3 args: TEXTI x, y, \"string\"".to_string());
+            }
+            let x = parse_imm(tokens[1], constants)?;
+            let y = parse_imm(tokens[2], constants)?;
+            // Reconstruct the string from remaining tokens (handles commas in strings)
+            let rest = tokens[3..].join(",");
+            let s = rest.trim();
+            if !((s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\''))) {
+                return Err("TEXTI requires a quoted string: TEXTI x, y, \"text\"".to_string());
+            }
+            let text = &s[1..s.len()-1];
+            bytecode.push(0x13); // TEXTI opcode
+            bytecode.push(x);
+            bytecode.push(y);
+            bytecode.push(text.len() as u32);
+            for ch in text.bytes() {
+                bytecode.push(ch as u32);
+            }
+        }
+
+        // STRO addr_reg, "string" -- store inline string at address in register
+        // Encoding: 0x14, addr_reg, char_count, char1, char2, ...
+        "STRO" => {
+            if tokens.len() < 3 {
+                return Err("STRO requires 2 args: STRO addr_reg, \"string\"".to_string());
+            }
+            let reg = parse_reg(tokens[1])?;
+            let rest = tokens[2..].join(",");
+            let s = rest.trim();
+            if !((s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\''))) {
+                return Err("STRO requires a quoted string: STRO addr_reg, \"text\"".to_string());
+            }
+            let text = &s[1..s.len()-1];
+            bytecode.push(0x14); // STRO opcode
+            bytecode.push(reg as u32);
+            bytecode.push(text.len() as u32);
+            for ch in text.bytes() {
+                bytecode.push(ch as u32);
+            }
+        }
+
+        // CMPI reg, imm -- compare register against immediate, sets r0
+        // Encoding: 0x15, reg, imm
+        "CMPI" => {
+            if tokens.len() < 3 {
+                return Err("CMPI requires 2 arguments: CMPI reg, imm".to_string());
+            }
+            bytecode.push(0x15);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
+        // LOADS reg, offset -- load from SP+offset (r30 + signed offset)
+        // Encoding: 0x16, reg, offset
+        "LOADS" => {
+            if tokens.len() < 3 {
+                return Err("LOADS requires 2 arguments: LOADS reg, offset".to_string());
+            }
+            bytecode.push(0x16);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
+        // STORES offset, reg -- store to SP+offset (r30 + signed offset)
+        // Encoding: 0x17, offset, reg
+        "STORES" => {
+            if tokens.len() < 3 {
+                return Err("STORES requires 2 arguments: STORES offset, reg".to_string());
+            }
+            bytecode.push(0x17);
+            bytecode.push(parse_imm(tokens[1], constants)?);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+        }
+
+        // SHLI reg, imm -- shift left by immediate
+        // Encoding: 0x18, reg, imm
+        "SHLI" => {
+            if tokens.len() < 3 {
+                return Err("SHLI requires 2 arguments: SHLI reg, imm".to_string());
+            }
+            bytecode.push(0x18);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
+        // SHRI reg, imm -- shift right (logical) by immediate
+        // Encoding: 0x19, reg, imm
+        "SHRI" => {
+            if tokens.len() < 3 {
+                return Err("SHRI requires 2 arguments: SHRI reg, imm".to_string());
+            }
+            bytecode.push(0x19);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
+        // SARI reg, imm -- arithmetic shift right by immediate
+        // Encoding: 0x1A, reg, imm
+        "SARI" => {
+            if tokens.len() < 3 {
+                return Err("SARI requires 2 arguments: SARI reg, imm".to_string());
+            }
+            bytecode.push(0x1A);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
+        // ADDI reg, imm -- add immediate to register
+        // Encoding: 0x1B, reg, imm
+        "ADDI" => {
+            if tokens.len() < 3 {
+                return Err("ADDI requires 2 arguments: ADDI reg, imm".to_string());
+            }
+            bytecode.push(0x1B);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
+        // SUBI reg, imm -- subtract immediate from register
+        // Encoding: 0x1C, reg, imm
+        "SUBI" => {
+            if tokens.len() < 3 {
+                return Err("SUBI requires 2 arguments: SUBI reg, imm".to_string());
+            }
+            bytecode.push(0x1C);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
+        // ANDI reg, imm -- bitwise AND with immediate
+        // Encoding: 0x1D, reg, imm
+        "ANDI" => {
+            if tokens.len() < 3 {
+                return Err("ANDI requires 2 arguments: ANDI reg, imm".to_string());
+            }
+            bytecode.push(0x1D);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
+        // ORI reg, imm -- bitwise OR with immediate
+        // Encoding: 0x1E, reg, imm
+        "ORI" => {
+            if tokens.len() < 3 {
+                return Err("ORI requires 2 arguments: ORI reg, imm".to_string());
+            }
+            bytecode.push(0x1E);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
+        // XORI reg, imm -- bitwise XOR with immediate
+        // Encoding: 0x1F, reg, imm
+        "XORI" => {
+            if tokens.len() < 3 {
+                return Err("XORI requires 2 arguments: XORI reg, imm".to_string());
+            }
+            bytecode.push(0x1F);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_imm(tokens[2], constants)?);
+        }
+
         "CMP" => {
             if tokens.len() < 3 {
                 return Err("CMP requires 2 arguments: CMP rd, rs".to_string());

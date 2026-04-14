@@ -15,6 +15,9 @@ pub const OPCODES: &[&str] = &[
     "PSET", "PSETI", "FILL", "RECTF", "TEXT", "LINE", "CIRCLE", "SCROLL",
     "IKEY", "RAND", "NEG", "CMP", "PUSH", "POP", "BEEP", "ASM",
     "SPAWN", "KILL", "PEEK", "SPRITE", "TILEMAP",
+    // New immediate-form opcodes
+    "TEXTI", "STRO", "CMPI", "LOADS", "STORES",
+    "SHLI", "SHRI", "SARI", "ADDI", "SUBI", "ANDI", "ORI", "XORI",
     "SYSCALL", "RETK", "OPEN", "READ", "WRITE", "CLOSE", "SEEK", "LS",
     "YIELD", "SLEEP", "SETPRIORITY",
     "PIPE", "MSGSND", "MSGRCV", "IOCTL",

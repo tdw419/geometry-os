@@ -1814,8 +1814,8 @@ fn sfence_vma(rs1: u8, rs2: u8) -> u32 {
 #[test]
 fn test_sv32_bare_mode_identity_translation() {
     let mut tlb = mmu::Tlb::new();
-    let bus = geometry_os::riscv::bus::Bus::new(0x8000_0000, 8192);
-    let result = mmu::translate(0x8000_0000, mmu::AccessType::Fetch, false, 0, &bus, &mut tlb);
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x8000_0000, 8192);
+    let result = mmu::translate(0x8000_0000, mmu::AccessType::Fetch, false, 0, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::Ok(0x8000_0000));
 }
 

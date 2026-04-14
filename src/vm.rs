@@ -913,6 +913,181 @@ impl Vm {
                 }
             }
 
+            // TEXTI x, y, "string" -- render inline text (no RAM setup needed)
+            // Encoding: 0x13, x_imm, y_imm, char_count, char1, char2, ...
+            0x13 => {
+                let x = self.fetch() as usize;
+                let y = self.fetch() as usize;
+                let count = self.fetch() as usize;
+                let mut sx = x;
+                let mut sy = y;
+                let fg = 0xFFFFFF; // white text
+                for _ in 0..count {
+                    let ch = self.fetch();
+                    if ch == 0 { continue; }
+                    let byte = (ch & 0xFF) as u8;
+                    if byte == b'\n' {
+                        sx = x;
+                        sy += 10;
+                        continue;
+                    }
+                    self.draw_char(byte, sx, sy, fg);
+                    sx += 6;
+                    if sx > 250 {
+                        sx = x;
+                        sy += 8;
+                    }
+                }
+            }
+
+            // STRO addr_reg, "string" -- store inline string at address in register
+            // Encoding: 0x14, addr_reg, char_count, char1, char2, ...
+            0x14 => {
+                let ar = self.fetch() as usize;
+                let count = self.fetch() as usize;
+                if ar < NUM_REGS {
+                    let mut addr = self.regs[ar] as usize;
+                    for _ in 0..count {
+                        let ch = self.fetch();
+                        if addr < self.ram.len() {
+                            self.ram[addr] = ch;
+                            self.log_access(addr, MemAccessKind::Write);
+                            addr += 1;
+                        } else {
+                            self.fetch(); // consume the char anyway
+                        }
+                    }
+                    // null-terminate
+                    if addr < self.ram.len() {
+                        self.ram[addr] = 0;
+                    }
+                }
+            }
+
+            // CMPI reg, imm -- compare register against immediate, sets r0
+            0x15 => {
+                let rd = self.fetch() as usize;
+                let imm = self.fetch();
+                if rd < NUM_REGS {
+                    let a = self.regs[rd] as i32;
+                    let b = imm as i32;
+                    self.regs[0] = if a < b { 0xFFFFFFFF } else if a > b { 1 } else { 0 };
+                }
+            }
+
+            // LOADS reg, offset -- load from SP + offset (stack-relative)
+            0x16 => {
+                let rd = self.fetch() as usize;
+                let offset = self.fetch() as i32 as usize;
+                if rd < NUM_REGS {
+                    let sp = self.regs[30] as usize;
+                    let addr = if offset < 0x80000000 { sp.wrapping_add(offset) } else { sp.wrapping_sub(0x100000000_usize - offset) };
+                    match self.translate_va_or_fault(addr as u32) {
+                        Some(a) if a < self.ram.len() => {
+                            self.regs[rd] = self.ram[a];
+                            self.log_access(a, MemAccessKind::Read);
+                        }
+                        None => { self.trigger_segfault(); return false; }
+                        _ => {}
+                    }
+                }
+            }
+
+            // STORES offset, reg -- store to SP + offset (stack-relative)
+            0x17 => {
+                let offset = self.fetch() as i32;
+                let rs = self.fetch() as usize;
+                if rs < NUM_REGS {
+                    let sp = self.regs[30] as i32;
+                    let addr = sp.wrapping_add(offset) as u32;
+                    match self.translate_va_or_fault(addr) {
+                        Some(a) if a < self.ram.len() => {
+                            if self.mode == CpuMode::User && a >= 0xFF00 {
+                                self.trigger_segfault();
+                                return false;
+                            }
+                            self.ram[a] = self.regs[rs];
+                            self.log_access(a, MemAccessKind::Write);
+                        }
+                        None => { self.trigger_segfault(); return false; }
+                        _ => {}
+                    }
+                }
+            }
+
+            // SHLI reg, imm -- shift left by immediate
+            0x18 => {
+                let rd = self.fetch() as usize;
+                let imm = self.fetch();
+                if rd < NUM_REGS {
+                    self.regs[rd] <<= (imm % 32) as usize;
+                }
+            }
+
+            // SHRI reg, imm -- logical shift right by immediate
+            0x19 => {
+                let rd = self.fetch() as usize;
+                let imm = self.fetch();
+                if rd < NUM_REGS {
+                    self.regs[rd] >>= (imm % 32) as usize;
+                }
+            }
+
+            // SARI reg, imm -- arithmetic shift right by immediate
+            0x1A => {
+                let rd = self.fetch() as usize;
+                let imm = self.fetch();
+                if rd < NUM_REGS {
+                    let v = self.regs[rd] as i32;
+                    self.regs[rd] = (v >> ((imm % 32) as usize)) as u32;
+                }
+            }
+
+            // ADDI reg, imm -- add immediate to register
+            0x1B => {
+                let rd = self.fetch() as usize;
+                let imm = self.fetch();
+                if rd < NUM_REGS {
+                    self.regs[rd] = self.regs[rd].wrapping_add(imm);
+                }
+            }
+
+            // SUBI reg, imm -- subtract immediate from register
+            0x1C => {
+                let rd = self.fetch() as usize;
+                let imm = self.fetch();
+                if rd < NUM_REGS {
+                    self.regs[rd] = self.regs[rd].wrapping_sub(imm);
+                }
+            }
+
+            // ANDI reg, imm -- bitwise AND with immediate
+            0x1D => {
+                let rd = self.fetch() as usize;
+                let imm = self.fetch();
+                if rd < NUM_REGS {
+                    self.regs[rd] &= imm;
+                }
+            }
+
+            // ORI reg, imm -- bitwise OR with immediate
+            0x1E => {
+                let rd = self.fetch() as usize;
+                let imm = self.fetch();
+                if rd < NUM_REGS {
+                    self.regs[rd] |= imm;
+                }
+            }
+
+            // XORI reg, imm -- bitwise XOR with immediate
+            0x1F => {
+                let rd = self.fetch() as usize;
+                let imm = self.fetch();
+                if rd < NUM_REGS {
+                    self.regs[rd] ^= imm;
+                }
+            }
+
             // ADD rd, rs  -- rd = rd + rs
             0x20 => {
                 let rd = self.fetch() as usize;
@@ -2975,6 +3150,25 @@ impl Vm {
                 let r = ram(a + 2);
                 (format!("STORE [{}], {}", reg(ar), reg(r)), 3)
             }
+            0x13 => {
+                let x = ram(a+1); let y = ram(a+2); let count = ram(a+3) as usize;
+                (format!("TEXTI {}, {}, \"{}\"", x, y, (4..4+count.min(32)).map(|i| (ram(a+i as usize + 3) & 0xFF) as u8 as char).collect::<String>()), 4 + count)
+            }
+            0x14 => {
+                let ar = ram(a+1); let count = ram(a+2) as usize;
+                (format!("STRO {}, \"{}\"", reg(ar), (3..3+count.min(32)).map(|i| (ram(a+i as usize + 2) & 0xFF) as u8 as char).collect::<String>()), 3 + count)
+            }
+            0x15 => { let rd = ram(a+1); let imm = ram(a+2); (format!("CMPI {}, {}", reg(rd), imm), 3) }
+            0x16 => { let rd = ram(a+1); let off = ram(a+2); (format!("LOADS {}, {}", reg(rd), off as i32), 3) }
+            0x17 => { let off = ram(a+1); let rs = ram(a+2); (format!("STORES {}, {}", off as i32, reg(rs)), 3) }
+            0x18 => { let rd = ram(a+1); let imm = ram(a+2); (format!("SHLI {}, {}", reg(rd), imm), 3) }
+            0x19 => { let rd = ram(a+1); let imm = ram(a+2); (format!("SHRI {}, {}", reg(rd), imm), 3) }
+            0x1A => { let rd = ram(a+1); let imm = ram(a+2); (format!("SARI {}, {}", reg(rd), imm), 3) }
+            0x1B => { let rd = ram(a+1); let imm = ram(a+2); (format!("ADDI {}, {}", reg(rd), imm), 3) }
+            0x1C => { let rd = ram(a+1); let imm = ram(a+2); (format!("SUBI {}, {}", reg(rd), imm), 3) }
+            0x1D => { let rd = ram(a+1); let imm = ram(a+2); (format!("ANDI {}, {}", reg(rd), imm), 3) }
+            0x1E => { let rd = ram(a+1); let imm = ram(a+2); (format!("ORI {}, {}", reg(rd), imm), 3) }
+            0x1F => { let rd = ram(a+1); let imm = ram(a+2); (format!("XORI {}, {}", reg(rd), imm), 3) }
             0x20 => { let rd = ram(a+1); let rs = ram(a+2); (format!("ADD {}, {}", reg(rd), reg(rs)), 3) }
             0x21 => { let rd = ram(a+1); let rs = ram(a+2); (format!("SUB {}, {}", reg(rd), reg(rs)), 3) }
             0x22 => { let rd = ram(a+1); let rs = ram(a+2); (format!("MUL {}, {}", reg(rd), reg(rs)), 3) }
