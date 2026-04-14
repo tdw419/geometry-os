@@ -205,6 +205,7 @@ fn read_canvas_line(canvas_buffer: &[u32], row: usize) -> String {
 }
 
 /// Handle a terminal command. Returns (switch_to_editor, should_quit).
+#[allow(clippy::too_many_arguments)]
 fn handle_terminal_command(
     cmd: &str,
     vm: &mut vm::Vm,
@@ -1903,11 +1904,7 @@ fn main() {
                     Key::Enter => {
                         // Read command text from prompt row (skip "geo> " prefix)
                         let raw = read_canvas_line(&canvas_buffer, term_prompt_row);
-                        let cmd = if raw.starts_with("geo> ") {
-                            &raw[5..]
-                        } else {
-                            &raw
-                        };
+                        let cmd = raw.strip_prefix("geo> ").unwrap_or(&raw);
                         let cmd = cmd.trim();
 
                         // Output goes on the line after the prompt
@@ -2320,7 +2317,7 @@ fn ensure_cursor_visible(cursor_row: &usize, scroll_offset: &mut usize) {
 
 // ── Load source text from a string onto the canvas grid ──────────
 fn load_source_to_canvas(
-    canvas_buffer: &mut Vec<u32>,
+    canvas_buffer: &mut [u32],
     source: &str,
     cursor_row: &mut usize,
     cursor_col: &mut usize,
@@ -2353,7 +2350,7 @@ fn load_source_to_canvas(
 
 // ── Paste text from clipboard onto the canvas grid at cursor position ──
 fn paste_text_to_canvas(
-    canvas_buffer: &mut Vec<u32>,
+    canvas_buffer: &mut [u32],
     text: &str,
     cursor_row: &mut usize,
     cursor_col: &mut usize,
@@ -2460,6 +2457,7 @@ fn lerp_color(base: u32, tint: u32, t: f32) -> u32 {
     (r << 16) | (g << 8) | b
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render(
     buffer: &mut [u32],
     vm: &vm::Vm,
@@ -2819,9 +2817,9 @@ fn render_text(buffer: &mut [u32], x0: usize, y0: usize, text: &str, color: u32)
         let idx = ch as usize;
         if idx < 128 {
             let glyph = &font::GLYPHS[idx];
-            for row in 0..font::GLYPH_H {
+            for (row, &glyph_row) in glyph.iter().enumerate().take(font::GLYPH_H) {
                 for col in 0..font::GLYPH_W {
-                    if glyph[row] & (1 << (7 - col)) != 0 {
+                    if glyph_row & (1 << (7 - col)) != 0 {
                         let px = cx + col;
                         let py = y0 + row;
                         if px < WIDTH && py < HEIGHT {
