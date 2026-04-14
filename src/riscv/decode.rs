@@ -576,15 +576,18 @@ fn c_alu_imm(w: u32) -> i32 {
     c_addi_imm(w)
 }
 
-/// C.LW immediate: offset[5:3|2|1:0] = inst[12:10|6|5:4] (unsigned 6-bit, word-aligned)
+/// C.LW immediate: offset[6]=inst[5], offset[5]=inst[12], offset[4]=inst[11], offset[3]=inst[10], offset[2]=inst[6]
+/// Derived from GNU assembler reference encodings. Range: 0-124, word-aligned.
 fn c_lw_imm(w: u32) -> i32 {
-    let imm = (((w >> 10) & 0x7) << 3)
-        | (((w >> 6) & 0x1) << 2)
-        | ((w >> 4) & 0x3);
+    let imm = (((w >> 5) & 0x1) << 6)
+        | (((w >> 12) & 0x1) << 5)
+        | (((w >> 11) & 0x1) << 4)
+        | (((w >> 10) & 0x1) << 3)
+        | (((w >> 6) & 0x1) << 2);
     imm as i32
 }
 
-/// C.SW immediate: offset[5:3|2:6] (same encoding as C.LW)
+/// C.SW immediate: same encoding as C.LW
 fn c_sw_imm(w: u32) -> i32 {
     c_lw_imm(w)
 }
@@ -614,19 +617,29 @@ fn c_j_imm(w: u32) -> i32 {
     sign_extend(raw, 12)
 }
 
-/// C.LWSP immediate: offset[5:4|12:2] (unsigned 8-bit, word-aligned)
+/// C.LWSP immediate: offset[7]=inst[3], offset[6]=inst[2], offset[5]=inst[12],
+/// offset[4]=inst[6], offset[3]=inst[5], offset[2]=inst[4]
+/// Derived from GNU assembler reference encodings. Range: 0-252, word-aligned.
 fn c_lwsp_imm(w: u32) -> i32 {
-    let imm = (((w >> 12) & 0x1) << 5)
-        | (((w >> 4) & 0x1) << 4)
-        | (((w >> 2) & 0x3) << 6)
-        | (((w >> 6) & 0x7) << 2);
+    let imm = (((w >> 3) & 0x1) << 7)
+        | (((w >> 2) & 0x1) << 6)
+        | (((w >> 12) & 0x1) << 5)
+        | (((w >> 6) & 0x1) << 4)
+        | (((w >> 5) & 0x1) << 3)
+        | (((w >> 4) & 0x1) << 2);
     imm as i32
 }
 
-/// C.SWSP immediate: offset[5:2|7:6] (unsigned 8-bit, word-aligned)
+/// C.SWSP immediate: offset[7]=inst[8], offset[6]=inst[7], offset[5]=inst[12],
+/// offset[4]=inst[11], offset[3]=inst[10], offset[2]=inst[9]
+/// Derived from GNU assembler reference encodings. Range: 0-252, word-aligned.
 fn c_swsp_imm(w: u32) -> i32 {
-    let imm = (((w >> 9) & 0xF) << 2)
-        | (((w >> 7) & 0x3) << 6);
+    let imm = (((w >> 8) & 0x1) << 7)
+        | (((w >> 7) & 0x1) << 6)
+        | (((w >> 12) & 0x1) << 5)
+        | (((w >> 11) & 0x1) << 4)
+        | (((w >> 10) & 0x1) << 3)
+        | (((w >> 9) & 0x1) << 2);
     imm as i32
 }
 
@@ -938,8 +951,23 @@ mod tests {
     #[test]
     fn c_lwsp() {
         // C.LWSP rd=5, offset=8
-        let op = decode_c(0x4282);
+        // Encoding verified with riscv64-linux-gnu-as (0x42A2, not 0x4282 which is offset=0)
+        let op = decode_c(0x42A2);
         assert_eq!(op, Operation::Lw { rd: 5, rs1: 2, imm: 8 });
+    }
+
+    #[test]
+    fn c_lwsp_offset_0() {
+        // C.LWSP rd=5, offset=0
+        let op = decode_c(0x4282);
+        assert_eq!(op, Operation::Lw { rd: 5, rs1: 2, imm: 0 });
+    }
+
+    #[test]
+    fn c_lwsp_offset_60() {
+        // C.LWSP rd=5, offset=60 (max for nzuimm[5:2])
+        let op = decode_c(0x52F2);
+        assert_eq!(op, Operation::Lw { rd: 5, rs1: 2, imm: 60 });
     }
 
     #[test]
