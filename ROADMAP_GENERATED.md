@@ -6,7 +6,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  11
 
 **Deliverables:** 176/194 complete
 
-**Tasks:** 24/43 complete
+**Tasks:** 25/43 complete
 
 ## Scope Summary
 
@@ -903,7 +903,7 @@ Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compres
   - [x] Edge cases handled -- div by zero, overflow, signed/unsigned semantics
   _~80 LOC_
 - [x] **A extension (atomics)** -- LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU
-  - [ ] `p38.d2.t1` Add A-extension atomic instructions with reservation set tracking
+  - [x] `p38.d2.t1` Add A-extension atomic instructions with reservation set tracking
     - LR.W: load reserved, track address in reservation set
     - SC.W: store conditional, succeed only if reservation holds
     - AMOSWAP: atomically swap rs2 into memory, return old value

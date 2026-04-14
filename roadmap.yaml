@@ -1666,7 +1666,7 @@ phases:
     tasks:
     - id: p38.d2.t1
       title: Add A-extension atomic instructions with reservation set tracking
-      status: todo
+      status: done
       acceptance_criteria:
       - 'LR.W: load reserved, track address in reservation set'
       - 'SC.W: store conditional, succeed only if reservation holds'
