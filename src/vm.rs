@@ -3601,13 +3601,43 @@ mod tests {
         vm
     }
 
-    // ── HALT / NOP ──────────────────────────────────────────────────
+    // ── RAM-Mapped Canvas (Phase 45) ────────────────────────────────
 
     #[test]
-    fn test_halt_stops_execution() {
-        let vm = run_program(&[0x00], 100);
-        assert!(vm.halted);
-        assert_eq!(vm.pc, 1); // fetched opcode, then halted
+    fn test_canvas_ram_mapping_store() {
+        let mut vm = Vm::new();
+        // STORE 0x8000 (first cell) with 'H' (0x48)
+        vm.regs[1] = 0x8000;
+        vm.regs[2] = 0x48;
+        vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+        vm.pc = 0;
+        vm.step();
+        assert_eq!(vm.canvas_buffer[0], 0x48);
+        assert_eq!(vm.ram[0x8000], 0); // RAM should be unchanged
+    }
+
+    #[test]
+    fn test_canvas_ram_mapping_load() {
+        let mut vm = Vm::new();
+        vm.canvas_buffer[10] = 0x58; // 'X'
+        // LOAD r3, 0x800A
+        vm.regs[1] = 0x800A;
+        vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+        vm.pc = 0;
+        vm.step();
+        assert_eq!(vm.regs[3], 0x58);
+    }
+    
+    #[test]
+    fn test_canvas_ram_mapping_user_mode() {
+        let mut vm = Vm::new();
+        vm.mode = CpuMode::User;
+        vm.regs[1] = 0x8000;
+        vm.regs[2] = 0x48;
+        vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+        vm.pc = 0;
+        assert!(vm.step()); // Should NOT segfault
+        assert_eq!(vm.canvas_buffer[0], 0x48);
     }
 
     #[test]

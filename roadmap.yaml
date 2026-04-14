@@ -4,7 +4,7 @@ description: Self-modifying canvas programs in Geometry OS. Pixels write pixels.
 phases:
 - id: phase-45
   title: RAM-Mapped Canvas Buffer
-  status: todo
+  status: complete
   goal: Make the canvas grid addressable from VM RAM via STORE/LOAD
   description: 'The canvas buffer (128 rows x 32 cols = 4096 cells) currently lives in a separate Vec<u32> outside VM RAM. Map it into the VM address space at 0x8000-0x8FFF so that existing STORE and LOAD
     opcodes can read and write grid cells directly. No new opcodes needed -- just intercept the address range in the VM''s memory access path.

@@ -398,12 +398,20 @@ fn handle_terminal_command(
                         *output_row,
                         &format!("Assembled {} bytes at 0x1000", asm_result.pixels.len()),
                     );
+
+                    // Phase 45: Sync canvas buffer TO VM before execution
+                    vm.canvas_buffer.copy_from_slice(canvas_buffer);
+
                     // Run the VM
                     for _ in 0..10_000_000 {
                         if !vm.step() {
                             break;
                         }
                     }
+
+                    // Phase 45: Sync canvas buffer FROM VM after execution
+                    canvas_buffer.copy_from_slice(&vm.canvas_buffer);
+
                     if vm.halted {
                         *output_row = write_line_to_canvas(
                             canvas_buffer,
@@ -513,7 +521,14 @@ fn handle_terminal_command(
             if vm.halted {
                 *output_row = write_line_to_canvas(canvas_buffer, *output_row, "VM halted. Use reset to restart.");
             } else {
+                // Phase 45: Sync canvas buffer TO VM before execution
+                vm.canvas_buffer.copy_from_slice(canvas_buffer);
+
                 vm.step();
+
+                // Phase 45: Sync canvas buffer FROM VM after execution
+                canvas_buffer.copy_from_slice(&vm.canvas_buffer);
+
                 *output_row = write_line_to_canvas(
                     canvas_buffer,
                     *output_row,
@@ -1086,6 +1101,9 @@ fn cli_main(extra_args: &[String]) {
                             load_addr
                         );
 
+                        // Phase 45: Sync canvas buffer TO VM before execution
+                        vm.canvas_buffer.copy_from_slice(&canvas_buffer);
+
                         // Run the VM
                         let mut hit_bp = false;
                         for _ in 0..10_000_000 {
@@ -1097,6 +1115,10 @@ fn cli_main(extra_args: &[String]) {
                                 break;
                             }
                         }
+
+                        // Phase 45: Sync canvas buffer FROM VM after execution
+                        canvas_buffer.copy_from_slice(&vm.canvas_buffer);
+
                         if hit_bp {
                             println!("BREAK @ PC=0x{:04X}", vm.pc);
                         } else if vm.halted {
@@ -1228,7 +1250,14 @@ fn cli_main(extra_args: &[String]) {
                 if vm.halted {
                     println!("VM halted. Use reset to restart.");
                 } else {
+                    // Phase 45: Sync canvas buffer TO VM before execution
+                    vm.canvas_buffer.copy_from_slice(&canvas_buffer);
+
                     vm.step();
+
+                    // Phase 45: Sync canvas buffer FROM VM after execution
+                    canvas_buffer.copy_from_slice(&vm.canvas_buffer);
+
                     println!("step -> PC=0x{:04X}", vm.pc);
                 }
             }
@@ -1820,6 +1849,7 @@ fn execute_cli_command(
                     vm.halted = false;
                     let msg = format!("Assembled {} bytes at 0x{:04X}", asm_result.pixels.len(), load_addr);
                     println!("{}", msg); output.push_str(&msg); output.push('\n');
+
                     for _ in 0..10_000_000 {
                         if !vm.step() { break; }
                     }
@@ -2542,6 +2572,9 @@ fn main() {
 
         // ── VM execution ─────────────────────────────────────────
         if is_running && !vm.halted {
+            // Phase 45: Sync canvas buffer TO VM before execution
+            vm.canvas_buffer.copy_from_slice(&canvas_buffer);
+
             // Run until FRAME, breakpoint, halt, or 1M steps (safety cap)
             vm.frame_ready = false;
             for _ in 0..1_000_000 {
@@ -2562,6 +2595,9 @@ fn main() {
                     break;
                 }
             }
+
+            // Phase 45: Sync canvas buffer FROM VM after execution
+            canvas_buffer.copy_from_slice(&vm.canvas_buffer);
         }
 
         // ── Audio dispatch ───────────────────────────────────────
@@ -3415,6 +3451,11 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         hypervisor_active: false,
         hypervisor_config: String::new(),
         hypervisor_mode: vm::HypervisorMode::default(),
+        canvas_buffer: vec![0; vm::CANVAS_RAM_SIZE],
+    };
+
+
+    // Parse canvas trailer[0; vm::CANVAS_RAM_SIZE],
     };
 
 
