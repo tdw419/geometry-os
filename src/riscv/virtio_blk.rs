@@ -71,6 +71,7 @@ const CONFIG_CAPACITY_HI: u64 = CONFIG + 4;
 ///   reserved: u32
 ///   sector: u64
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
 struct BlkRequest {
     req_type: u32,
     sector: u64,

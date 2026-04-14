@@ -7,7 +7,9 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+#[cfg(test)]
+use std::path::Path;
 
 /// Maximum open file descriptors per process
 pub const MAX_FDS: usize = 16;
