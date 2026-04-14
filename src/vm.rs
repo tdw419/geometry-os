@@ -209,6 +209,64 @@ impl Default for ProcessState {
     }
 }
 
+/// VMA (Virtual Memory Area) type, analogous to Linux vm_area_struct.
+/// Each VMA describes a contiguous range of virtual pages with a purpose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VmaType {
+    /// Code segment: loaded at spawn, read+execute, not growable.
+    Code,
+    /// Heap segment: grows upward via brk, read+write.
+    Heap,
+    /// Stack segment: grows downward on page fault, read+write.
+    Stack,
+    /// Memory-mapped region: allocated via mmap, read+write.
+    Mmap,
+}
+
+/// A single virtual memory area describing a contiguous page range.
+///
+/// `start_page` is inclusive, `current_end` is the last mapped page.
+/// For growable regions (Heap, Stack), `max_end` is the furthest the VMA
+/// is allowed to expand to.
+#[derive(Debug, Clone)]
+pub struct Vma {
+    /// What this region is used for.
+    pub vtype: VmaType,
+    /// First virtual page number of this region.
+    pub start_page: usize,
+    /// Last currently-mapped virtual page number (inclusive).
+    pub current_end: usize,
+    /// Maximum virtual page number this region may expand to (inclusive).
+    pub max_end: usize,
+}
+
+impl Vma {
+    pub fn new(vtype: VmaType, start_page: usize, current_end: usize, max_end: usize) -> Self {
+        Vma { vtype, start_page, current_end, max_end }
+    }
+
+    /// Does this VMA contain the given virtual page number?
+    pub fn contains_page(&self, vpage: usize) -> bool {
+        vpage >= self.start_page && vpage <= self.max_end
+    }
+
+    /// Is the page within the currently-mapped range?
+    pub fn is_mapped(&self, vpage: usize) -> bool {
+        vpage >= self.start_page && vpage <= self.current_end
+    }
+
+    /// Can this VMA grow to cover `vpage`?
+    pub fn can_grow_to(&self, vpage: usize) -> bool {
+        if !self.contains_page(vpage) { return false; }
+        match self.vtype {
+            VmaType::Code => false, // code is fixed
+            VmaType::Heap => vpage > self.current_end && vpage <= self.max_end,
+            VmaType::Stack => vpage < self.start_page && vpage >= self.max_end,
+            VmaType::Mmap => vpage > self.current_end && vpage <= self.max_end,
+        }
+    }
+}
+
 /// Process control block, modeled after Linux task_struct.
 ///
 /// Each process has:
@@ -267,6 +325,14 @@ pub struct Process {
     /// Pending signals queued for delivery on next step.
     pub pending_signals: Vec<Signal>,
 
+    // ── Virtual Memory Areas (Phase 44) ────────────────────────────
+    /// Per-process list of virtual memory areas describing address space layout.
+    /// Used by the page fault handler to decide whether to allocate on demand.
+    pub vmas: Vec<Vma>,
+    /// Current heap break position (virtual address). Grows upward via brk.
+    /// Initial value is end of code+data segment.
+    pub brk_pos: u32,
+
     // ── Lifecycle ──────────────────────────────────────────────────
     /// Exit code set by EXIT opcode or fatal signal. 0 = success.
     pub exit_code: u32,
@@ -300,6 +366,8 @@ impl Process {
             msg_queue: Vec::new(),
             signal_handlers: [0; 4],
             pending_signals: Vec::new(),
+            vmas: Vec::new(),
+            brk_pos: 0,
             exit_code: 0,
             segfaulted: false,
         }
@@ -315,6 +383,42 @@ impl Process {
     /// Is this process in a runnable state (Ready or Running)?
     pub fn is_runnable(&self) -> bool {
         matches!(self.state, ProcessState::Ready | ProcessState::Running)
+    }
+
+    /// Default VMA layout for a new process:
+    ///   Page 0: Code (fixed, loaded at spawn)
+    ///   Page 1: Heap (grows up to page 4)
+    ///   Page 2: Stack (grows downward from page 2 to page 1 -- toward lower pages)
+    ///   Pages 3+: available for mmap
+    pub fn default_vmas_for_process() -> Vec<Vma> {
+        // Initial address space for a spawned process:
+        //   Code:  virtual pages 0-2 (3 pages for code/data, max PROCESS_PAGES-1)
+        //   Stack: virtual page 3 (top of initial allocation, grows downward)
+        //   Heap:  starts at page 4 but current_end == max_end so no demand paging
+        //          until brk() extends it
+        //
+        // Only the Stack VMA permits demand growth (downward, toward lower pages).
+        // The Heap VMA requires explicit brk() to extend max_end before faults resolve.
+        vec![
+            // Code: pages 0-2, not growable (max_end == current_end)
+            Vma::new(VmaType::Code, 0, PROCESS_PAGES - 2, PROCESS_PAGES - 2),
+            // Stack: page 3 (top of user space), can grow down to page 2
+            // Stack grows downward so start_page > max_end is intentional for Stack
+            Vma::new(VmaType::Stack, PROCESS_PAGES - 1, PROCESS_PAGES - 1, PROCESS_PAGES - 2),
+            // Heap: page 4 onward, initially empty (max_end == PROCESS_PAGES so no growth)
+            // brk() extends max_end to allow demand allocation
+            Vma::new(VmaType::Heap, PROCESS_PAGES, PROCESS_PAGES, PROCESS_PAGES),
+        ]
+    }
+
+    /// Find the VMA that contains the given virtual page.
+    pub fn find_vma(&self, vpage: usize) -> Option<&Vma> {
+        self.vmas.iter().find(|vma| vma.contains_page(vpage))
+    }
+
+    /// Find the VMA that contains the given virtual page (mutable).
+    pub fn find_vma_mut(&mut self, vpage: usize) -> Option<&mut Vma> {
+        self.vmas.iter_mut().find(|vma| vma.contains_page(vpage))
     }
 }
 
@@ -362,6 +466,8 @@ pub struct Vm {
     pub allocated_pages: u64,
     /// Current page directory for address translation (None = identity mapping)
     pub current_page_dir: Option<Vec<u32>>,
+    /// VMA list for the currently executing process (used by page fault handler)
+    pub current_vmas: Vec<Vma>,
     /// PID of last process that segfaulted
     pub segfault_pid: u32,
     /// True when a segfault occurred this step
@@ -451,6 +557,7 @@ impl Vm {
             kernel_stack: Vec::new(),
             allocated_pages: 0b11, // pages 0-1 used by main process
             current_page_dir: None,
+            current_vmas: Vec::new(),
             segfault_pid: 0,
             segfault: false,
             vfs: crate::vfs::Vfs::new(),
@@ -497,6 +604,7 @@ impl Vm {
         self.kernel_stack.clear();
         self.allocated_pages = 0b11;
         self.current_page_dir = None;
+        self.current_vmas = Vec::new();
         self.segfault_pid = 0;
         self.segfault = false;
         self.pipes.clear();
@@ -624,6 +732,89 @@ impl Vm {
         Some(pd)
     }
 
+    /// Try to handle a page fault for the given virtual address.
+    ///
+    /// When translate_va returns None (unmapped page), this method checks if
+    /// the faulting page could be resolved by allocating a new physical page.
+    /// It uses a simple rule based on the process memory layout:
+    /// - Pages 0..1 are code/heap (pre-allocated at spawn)
+    /// - Page 2 is stack (pre-allocated at spawn)
+    /// - Pages in the range PROCESS_PAGES..up to 60 are eligible for demand allocation
+    ///   (this covers heap growth beyond the initial 4 pages, stack growth, and mmap)
+    ///
+    /// Returns true if the fault was resolved (page now mapped), false otherwise.
+    fn handle_page_fault(&mut self, vaddr: u32) -> bool {
+        let vpage = (vaddr as usize) / PAGE_SIZE;
+
+        // Kernel mode has no page directory -- no fault handling needed
+        match &self.current_page_dir {
+            None => return false,
+            Some(pd) => {
+                if vpage >= pd.len() || vpage >= NUM_PAGES {
+                    return false;
+                }
+                // Don't re-allocate already-mapped pages
+                if (pd[vpage] as usize) < NUM_PAGES {
+                    return false;
+                }
+                // Don't allocate for kernel pages (63) or above
+                if vpage > 62 {
+                    return false;
+                }
+            }
+        }
+
+        // If this process has VMAs, only allocate if a VMA covers this page and permits growth.
+        // An empty VMA list means the old behavior (no VMA restrictions) applies.
+        if !self.current_vmas.is_empty() {
+            let allowed = self.current_vmas.iter().any(|vma| vma.can_grow_to(vpage));
+            if !allowed {
+                return false;
+            }
+        }
+
+        // Allocate a single physical page
+        let ppage = match self.alloc_pages(1) {
+            Some(p) => p,
+            None => return false,
+        };
+
+        // Map it in the page directory
+        if let Some(ref mut pd) = self.current_page_dir {
+            if vpage < pd.len() {
+                pd[vpage] = ppage as u32;
+            }
+        }
+
+        // Zero the newly allocated page
+        let phys_base = ppage * PAGE_SIZE;
+        for i in 0..PAGE_SIZE {
+            if phys_base + i < self.ram.len() {
+                self.ram[phys_base + i] = 0;
+            }
+        }
+
+        true
+    }
+
+    /// Translate virtual address, attempting page fault resolution on miss.
+    /// Returns None only if the fault cannot be resolved (triggers segfault).
+    fn translate_va_or_fault(&mut self, vaddr: u32) -> Option<usize> {
+        // First try normal translation
+        match self.translate_va(vaddr) {
+            Some(addr) => Some(addr),
+            None => {
+                // Try to resolve the page fault
+                if self.handle_page_fault(vaddr) {
+                    // Retry translation after mapping the page
+                    self.translate_va(vaddr)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     /// Trigger a segfault: set flag and halt the process.
     fn trigger_segfault(&mut self) {
         self.segfault = true;
@@ -687,7 +878,7 @@ impl Vm {
                 let addr_reg = self.fetch() as usize;
                 if reg < NUM_REGS && addr_reg < NUM_REGS {
                     let vaddr = self.regs[addr_reg];
-                    match self.translate_va(vaddr) {
+                    match self.translate_va_or_fault(vaddr) {
                         Some(addr) if addr < self.ram.len() => {
                             self.regs[reg] = self.ram[addr];
                             self.log_access(addr, MemAccessKind::Read);
@@ -704,7 +895,7 @@ impl Vm {
                 let reg = self.fetch() as usize;
                 if addr_reg < NUM_REGS && reg < NUM_REGS {
                     let vaddr = self.regs[addr_reg];
-                    match self.translate_va(vaddr) {
+                    match self.translate_va_or_fault(vaddr) {
                         Some(addr) if addr < self.ram.len() => {
                             if self.mode == CpuMode::User && addr >= 0xFF00 {
                                 self.trigger_segfault();
@@ -900,7 +1091,7 @@ impl Vm {
                     let sp = self.regs[30];
                     if sp > 0 {
                         let new_sp = sp - 1;
-                        match self.translate_va(new_sp) {
+                        match self.translate_va_or_fault(new_sp) {
                             Some(addr) if addr < self.ram.len() => {
                                 self.ram[addr] = self.regs[reg];
                                 self.regs[30] = new_sp;
@@ -917,7 +1108,7 @@ impl Vm {
                 let reg = self.fetch() as usize;
                 if reg < NUM_REGS {
                     let sp = self.regs[30];
-                    match self.translate_va(sp) {
+                    match self.translate_va_or_fault(sp) {
                         Some(addr) if addr < self.ram.len() => {
                             self.regs[reg] = self.ram[addr];
                             self.regs[30] = sp + 1;
@@ -1306,7 +1497,7 @@ impl Vm {
                                 state: ProcessState::Ready,
                                 pid,
                                 mode: CpuMode::User,
-                                page_dir,
+                                page_dir: page_dir.clone(),
                                 segfaulted: false,
                                 priority: 1,
                                 slice_remaining: 0,
@@ -1318,6 +1509,8 @@ impl Vm {
                                 parent_pid: self.current_pid,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
+                                vmas: Process::default_vmas_for_process(),
+                                brk_pos: PAGE_SIZE as u32,
                             });
                             self.ram[0xFFA] = pid;
                         } else {
@@ -1979,6 +2172,8 @@ impl Vm {
                                                     parent_pid: self.current_pid,
                                                     pending_signals: Vec::new(),
                                                     signal_handlers: [0; 4],
+                                                    vmas: Process::default_vmas_for_process(),
+                                                    brk_pos: PAGE_SIZE as u32,
                                                 });
                                                 self.regs[0] = pid;
                                                 self.ram[0xFFA] = pid;
@@ -2195,6 +2390,8 @@ impl Vm {
                                                     parent_pid: self.current_pid,
                                                     pending_signals: Vec::new(),
                                                     signal_handlers: [0; 4],
+                                                    vmas: Process::default_vmas_for_process(),
+                                                    brk_pos: PAGE_SIZE as u32,
                                                 });
                                                 // Set up fd redirection for the new child
                                                 let child_pid = pid;
@@ -2497,6 +2694,7 @@ impl Vm {
         let saved_mode = self.mode;
         let saved_kernel_stack = std::mem::take(&mut self.kernel_stack);
         let saved_page_dir = self.current_page_dir.take();
+        let saved_vmas = std::mem::take(&mut self.current_vmas);
         let saved_segfault = self.segfault;
         let saved_segfault_pid = self.segfault_pid;
         let saved_current_pid = self.current_pid;
@@ -2552,6 +2750,7 @@ impl Vm {
             self.mode = proc.mode;
             self.kernel_stack.clear();
             self.current_page_dir = proc.page_dir.take();
+            self.current_vmas = std::mem::take(&mut proc.vmas);
             self.segfault = false;
             self.current_pid = proc.pid;
 
@@ -2572,6 +2771,7 @@ impl Vm {
             proc.state = if !still_running || self.halted || self.segfault { ProcessState::Zombie } else { ProcessState::Ready };
             proc.mode = self.mode;
             proc.page_dir = self.current_page_dir.take();
+            proc.vmas = std::mem::take(&mut self.current_vmas);
             proc.segfaulted = self.segfault;
             // Propagate EXIT opcode's exit code and zombie status
             if let Some(code) = self.step_exit_code {
@@ -2611,6 +2811,7 @@ impl Vm {
         self.mode = saved_mode;
         self.kernel_stack = saved_kernel_stack;
         self.current_page_dir = saved_page_dir;
+        self.current_vmas = saved_vmas;
         self.segfault = saved_segfault;
         self.segfault_pid = saved_segfault_pid;
         self.current_pid = saved_current_pid;
@@ -2687,6 +2888,8 @@ impl Vm {
             parent_pid: 0, // init has no parent
             pending_signals: Vec::new(),
             signal_handlers: [0; 4],
+            vmas: Process::default_vmas_for_process(),
+            brk_pos: PAGE_SIZE as u32,
         });
 
         // Set default environment
@@ -3137,6 +3340,7 @@ impl Vm {
             kernel_stack: Vec::new(),
             allocated_pages: 0b11,
             current_page_dir: None,
+            current_vmas: Vec::new(),
             segfault_pid: 0,
             segfault: false,
             vfs: crate::vfs::Vfs::new(),

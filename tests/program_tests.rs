@@ -1844,7 +1844,7 @@ fn test_active_process_count() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     assert_eq!(vm.active_process_count(), 1);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -1856,7 +1856,7 @@ fn test_active_process_count() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     assert_eq!(vm.active_process_count(), 1);
 }
@@ -3128,7 +3128,7 @@ fn test_scheduler_basic_child_execution() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     for _ in 0..10 {
         vm.step_all_processes();
@@ -3170,7 +3170,7 @@ fn test_yield_forfeits_time_slice() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     for _ in 0..100 {
         vm.step_all_processes();
@@ -3213,7 +3213,7 @@ fn test_sleep_skips_process_until_wake() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     for _ in 0..20 {
         vm.step_all_processes();
@@ -3272,7 +3272,7 @@ fn test_priority_quantum_allocation() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     // Process B: priority 0 (quantum = 100 * 1 = 100)
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -3284,7 +3284,7 @@ fn test_priority_quantum_allocation() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
 
     // Run one scheduling round to allocate quantums
@@ -3336,7 +3336,7 @@ fn test_setpriority_changes_priority() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     for _ in 0..100 { vm.step_all_processes(); }
     assert_eq!(vm.processes[0].priority, 3, "priority should be upgraded to 3");
@@ -3359,7 +3359,7 @@ fn test_scheduler_tick_increments() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     vm.step_all_processes();
     assert!(vm.sched_tick > initial_tick, "sched_tick should increment");
@@ -3389,7 +3389,7 @@ fn test_sleep_wakes_and_halts() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     vm.step_all_processes(); // LDI r5, 5
     vm.step_all_processes(); // SLEEP r5
@@ -3435,7 +3435,7 @@ fn test_priority_execution_order() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x300, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 2,
@@ -3446,7 +3446,7 @@ fn test_priority_execution_order() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x400, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
@@ -3457,7 +3457,7 @@ fn test_priority_execution_order() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     for _ in 0..50 {
         vm.step_all_processes();
@@ -3507,7 +3507,7 @@ fn test_priority_higher_gets_more_instructions() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     // Process B: priority 0 (low) -- gets 100 instructions per round
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -3519,7 +3519,7 @@ fn test_priority_higher_gets_more_instructions() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     // Run enough rounds for priority-0 to exhaust twice (200 calls)
     for _ in 0..200 {
@@ -3687,7 +3687,7 @@ fn test_msgsnd_delivers_to_target() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
 
     // Set up message data in main process registers
@@ -3741,7 +3741,7 @@ fn test_msgrcv_receives_message() {
         sleep_until: 0, yielded: false,
         kernel_stack: Vec::new(), msg_queue: vec![msg],
         exit_code: 0, parent_pid: 0, 
-        pending_signals: Vec::new(), signal_handlers: [0; 4],
+        pending_signals: Vec::new(), signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
 
     // MSGRCV bytecode: 0x5F (no args)
@@ -3773,7 +3773,7 @@ fn test_msgrcv_blocks_when_empty() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
 
     vm.ram[0x200] = 0x5F; // MSGRCV
@@ -3801,7 +3801,7 @@ fn test_msgrcv_unblocks_on_msgsnd() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
 
     // First block process A
@@ -3853,7 +3853,7 @@ fn test_blocked_process_skipped_by_scheduler() {
         exit_code: 0,
         parent_pid: 0,
         pending_signals: Vec::new(),
-        signal_handlers: [0; 4],
+        signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     // Run scheduler 50 times -- blocked process should not execute
     for _ in 0..50 {
@@ -3883,7 +3883,7 @@ fn test_pipe_write_unblocks_blocked_reader() {
         exit_code: 0,
         parent_pid: 0,
         pending_signals: Vec::new(),
-        signal_handlers: [0; 4],
+        signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
 
     // Main process writes to the pipe
@@ -4961,7 +4961,7 @@ fn test_waitpid_still_running() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     vm.regs[1] = 1; // PID of running process
     step_waitpid(&mut vm);
@@ -4989,7 +4989,7 @@ fn test_waitpid_halted_process() {
                                 exit_code: 0,
                                 parent_pid: 0,
                                 pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     vm.regs[1] = 1;
     step_waitpid(&mut vm);

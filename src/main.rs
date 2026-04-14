@@ -3391,6 +3391,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         kernel_stack: Vec::new(),
         allocated_pages: 0b11,
         current_page_dir: None,
+        current_vmas: Vec::new(),
         segfault_pid: 0,
         segfault: false,
         vfs: vfs::Vfs::new(),

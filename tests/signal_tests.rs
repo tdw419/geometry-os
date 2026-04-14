@@ -24,7 +24,7 @@ fn vm_with_child(child_pc: u32) -> Vm {
         exit_code: 0,
         parent_pid: 0,
         pending_signals: Vec::new(),
-        signal_handlers: [0; 4],
+        signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
     });
     vm.current_pid = 1;
     vm
