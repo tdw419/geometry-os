@@ -3385,6 +3385,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         rand_state,
         frame_count,
         beep: None,
+        debug_mode: false,
         access_log: Vec::new(),
         processes: Vec::new(),
         mode: vm::CpuMode::Kernel,

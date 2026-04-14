@@ -337,24 +337,20 @@ Address        Size    Purpose
 ---------------------------------------------------------------
 0x000-0x3FF   1024    Canvas grid region (legacy; see note below)
                        Visible source text is in a separate buffer
-0x400-0x7FF   1024    Text input buffer (micro-asm)
-0x800-0xBFF   1024    VM-resident micro-assembler
-0xC00-0xFFF   1024    Label table
-0xFFF          1       Keyboard port (memory-mapped I/O)
 0x1000-0x1FFF 4096    Canvas bytecode output
                        F8 preprocesses + assembles grid text here
                        F5 runs VM from here when canvas_assembled=true
-0x400-0xEFF    ~4K     Multi-process bytecode (via .org directive)
-                       e.g. .org 0x400 places a child process starting at 0x400
-0xF00-0xF03    4       Window Bounds Protocol (shared RAM convention)
-                       RAM[0xF00]=win_x, [0xF01]=win_y, [0xF02]=win_w, [0xF03]=win_h
+0x4000-0x4EFF  ~4K     Multi-process bytecode (via .org directive)
+                       e.g. .org 0x4000 places a child process starting at 0x4000
+0x8000-0x8FFF 4096    Canvas grid (RAM-mapped mirror of canvas_buffer) (Phase 45)
+0xF000-0xF003  4       Window Bounds Protocol (shared RAM convention)
+                       RAM[0xF000]=win_x, [0xF001]=win_y, [0xF002]=win_w, [0xF003]=win_h
                        Primary writes; child processes read to clamp their rendering
-0xFFB          1       Key bitmask port (bits 0-5: up/down/left/right/space/enter, read-only)
-0xFFC          1       Network port (UDP send/receive)
-0xFFD          1       ASM result port (bytecode word count, or 0xFFFFFFFF on error)
-0xFFE          1       TICKS port (frame counter, incremented each FRAME, read-only)
-0xFFF          1       Keyboard port (memory-mapped I/O, cleared on IKEY read)
-0x1000-0x1FFF 4096    Canvas bytecode output
+0xFFFB         1       Key bitmask port (bits 0-5: up/down/left/right/space/enter, read-only)
+0xFFFC         1       Network port (UDP send/receive)
+0xFFFD         1       ASM result port (bytecode word count, or 0xFFFFFFFF on error)
+0xFFFE         1       TICKS port (frame counter, incremented each FRAME, read-only)
+0xFFFF         1       Keyboard port (memory-mapped I/O, cleared on IKEY read)
 ```
 
 **Note on canvas storage:** The canvas text editor uses a separate backing buffer
