@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
 
-**Progress:** 37/44 phases complete, 0 in progress
+**Progress:** 38/44 phases complete, 0 in progress
 
 **Deliverables:** 177/194 complete
 
-**Tasks:** 25/43 complete
+**Tasks:** 26/43 complete
 
 ## Scope Summary
 
@@ -49,7 +49,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  11
 | phase-35 RISC-V Privilege Modes | COMPLETE | 5/5 | - | - |
 | phase-36 RISC-V Virtual Memory & Devices | COMPLETE | 8/8 | - | - |
 | phase-37 Guest OS Boot (Native RISC-V) | COMPLETE | 6/6 | - | - |
-| phase-38 RISC-V M/A/C Extensions | PLANNED | 3/3 | - | - |
+| phase-38 RISC-V M/A/C Extensions | COMPLETE | 3/3 | - | - |
 | phase-39 Build Linux for RV32IMAC | PLANNED | 0/3 | - | - |
 | phase-40 Boot Linux in Geometry OS | PLANNED | 0/2 | - | - |
 | phase-41 Tracing and Instrumentation | PLANNED | 0/4 | - | - |
@@ -880,7 +880,7 @@ portable to WASM and embedded. RV32I is the foundation.
 - [x] **Performance benchmark** -- Measure MIPS, compare interpreter vs QEMU, document results
   _~40 LOC_
 
-## [ ] phase-38: RISC-V M/A/C Extensions (PLANNED)
+## [x] phase-38: RISC-V M/A/C Extensions (COMPLETE)
 
 **Goal:** Extend the interpreter from RV32I to RV32IMAC so it can run real Linux kernels.
 
@@ -912,7 +912,7 @@ Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compres
     _Files: src/riscv/decode.rs, src/riscv/cpu.rs_
   _~100 LOC_
 - [x] **C extension (compressed instructions)** -- Decode 16-bit compressed instruction forms into equivalent 32-bit operations
-  - [ ] `p38.d3.t1` Implement C-extension decoder for all RV32C compressed instructions
+  - [x] `p38.d3.t1` Implement C-extension decoder for all RV32C compressed instructions
     - C.LWSP, C.SWSP, C.LW, C.SW
     - C.ADDI, C.ADDI16SP, C.ADDI4SPN, C.LI, C.LUI
     - C.SRLI, C.SRAI, C.ANDI, C.SUB, C.XOR, C.OR, C.AND

@@ -1624,7 +1624,7 @@ phases:
 
 - id: phase-38
   title: RISC-V M/A/C Extensions
-  status: todo
+  status: complete
   goal: Extend the interpreter from RV32I to RV32IMAC so it can run real Linux kernels.
   priority: 45
   description: 'Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compressed 16-bit instructions).
@@ -1679,11 +1679,12 @@ phases:
   - name: C extension (compressed instructions)
     description: Decode 16-bit compressed instruction forms into equivalent 32-bit operations
     status: done
+    acceptance_criteria_met: true
     scope_lines: 200
     tasks:
     - id: p38.d3.t1
       title: Implement C-extension decoder for all RV32C compressed instructions
-      status: todo
+      status: done
       acceptance_criteria:
       - 'C.LWSP, C.SWSP, C.LW, C.SW'
       - 'C.ADDI, C.ADDI16SP, C.ADDI4SPN, C.LI, C.LUI'
