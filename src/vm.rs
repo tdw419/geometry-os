@@ -493,6 +493,8 @@ pub struct Vm {
     pub new_priority: u8,
     /// System-wide pipe table (Phase 27: IPC)
     pub pipes: Vec<Pipe>,
+    /// Mirror of the canvas grid (Phase 45: Pixel Driving Pixels)
+    pub canvas_buffer: Vec<u32>,
     /// Per-step IPC flag: set by PIPE opcode to signal pipe creation
     pub pipe_created: bool,
     /// Per-step IPC value: sender PID for MSGSND
