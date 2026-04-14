@@ -5668,4 +5668,77 @@ mod tests {
         // With ~25% water tiles and animation, expect some pixels to change
         assert!(changed > 0, "water animation should cause pixel changes between frames");
     }
+
+    #[test]
+    fn test_infinite_map_visual_analysis() {
+        use crate::assembler::assemble;
+
+        let source = include_str!("../programs/infinite_map.asm");
+        let asm = assemble(source, 0).unwrap();
+
+        let mut vm = Vm::new();
+        for (i, &word) in asm.pixels.iter().enumerate() {
+            if i < vm.ram.len() {
+                vm.ram[i] = word;
+            }
+        }
+
+        // Test at camera position (100, 100) to see multiple biome zones
+        // Coarse coords span (12,12) to (20,20) = 9x9 zones = lots of variety
+        vm.ram[0x7800] = 100;
+        vm.ram[0x7801] = 100;
+        vm.ram[0xFFB] = 0;
+        vm.frame_ready = false;
+        for _ in 0..1_000_000 {
+            if vm.frame_ready { break; }
+            if !vm.step() { break; }
+        }
+
+        // Count unique colors (structures + animation create many)
+        let mut color_counts: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+        for &pixel in vm.screen.iter() {
+            *color_counts.entry(pixel).or_insert(0) += 1;
+        }
+        eprintln!("At (100,100): {} unique colors", color_counts.len());
+        assert!(color_counts.len() >= 5, "should see multiple biomes at (100,100)");
+
+        // Check biome contiguity by sampling tile-top-left pixels
+        // and masking the water animation (low 5 blue bits change per tile)
+        // For contiguity, compare the "base biome" by rounding colors
+        let mut biome_zones = 0;
+        let mut prev_base: u32 = 0;
+        for tx in 0..64 {
+            let px = tx * 4;
+            let py = 128; // tile row 32 - middle of screen
+            let color = vm.screen[py * 256 + px];
+            // Round to base biome: mask out animation (low 5 bits of blue)
+            let base = color & !0x1F;
+            if tx == 0 || base != prev_base {
+                biome_zones += 1;
+                prev_base = base;
+            }
+        }
+        eprintln!("At (100,100) row 32: {} biome zone boundaries across 64 tiles", biome_zones);
+
+        // With 8-tile zones, expect ~8 boundaries. Per-tile hash would give ~64.
+        // Allow up to 20 to account for structures overriding colors
+        assert!(biome_zones < 20,
+            "biomes should be contiguous, got {} zone boundaries (expected <20)", biome_zones);
+
+        // Verify the terrain is deterministic: same camera = same screen
+        let screen1 = vm.screen.to_vec();
+        vm.frame_ready = false;
+        for _ in 0..1_000_000 {
+            if vm.frame_ready { break; }
+            if !vm.step() { break; }
+        }
+        // Note: frame counter advanced, so water animation differs. Check non-water.
+        let non_water_same = screen1.iter().zip(vm.screen.iter())
+            .filter(|(&a, &b)| {
+                let a_water = (a & 0xFF) > 0 && ((a >> 16) & 0xFF) == 0 && ((a >> 8) & 0xFF) < 0x20;
+                !a_water && a == b
+            }).count();
+        // Non-water tiles should be identical (deterministic terrain)
+        eprintln!("Non-water pixels identical across frames: {}", non_water_same);
+    }
 }

@@ -294,121 +294,19 @@ impl RiscvVm {
         vm.cpu.x[11] = dtb_addr as u32; // a1 = DTB address
         vm.cpu.privilege = cpu::Privilege::Machine;
 
-        // Install an M-mode trap handler (firmware stub) that forwards
-        // page faults to S-mode instead of blindly skipping instructions.
+        // Install a minimal M-mode trap handler at fw_addr.
         //
-        // On real hardware, OpenSBI handles M-mode traps. Our handler:
-        //   1. Reads mcause
-        //   2. If it's a page fault (12/13/15) AND stvec is set, forwards to S-mode
-        //      by setting sepc=mepc, scause=mcause, and jumping to stvec
-        //   3. Otherwise, skips the faulting instruction (mepc += 4) and returns
+        // On real hardware, OpenSBI handles M-mode traps. Our handler is just
+        // a single MRET instruction. Page faults are intercepted at the Rust
+        // level in the step loop below (Approach A), which is more maintainable
+        // than hand-encoded RISC-V machine code.
         //
-        // This is critical: the kernel sets up page tables in M-mode and tests
-        // them by accessing virtual addresses. When those accesses fault, the
-        // trap must reach the kernel's S-mode handler, not be silently skipped.
+        // The MRET here handles non-page-fault traps: it returns to mepc
+        // (which the step loop adjusts to mepc+4 for non-page-fault cases).
         //
         // Place handler at fw_addr (gap between kernel LOAD segments).
         let fw_addr: u64 = first_vaddr + 0x940_000;
-        // RISC-V machine code for the trap handler:
-        //
-        // entry:
-        //   csrr t0, mcause          // 0x34202373 -- get trap cause
-        //   addi t1, zero, 12        // 0x00C00313 -- t1 = 12 (instr page fault)
-        //   bne t0, t1, check_load   // skip if not instr page fault
-        //   j forward_to_s           // forward to S-mode
-        // check_load:
-        //   addi t1, zero, 13        // 0x00D00313 -- t1 = 13 (load page fault)
-        //   bne t0, t1, check_store  // skip if not load page fault
-        //   j forward_to_s           // forward to S-mode
-        // check_store:
-        //   addi t1, zero, 15        // 0x00F00313 -- t1 = 15 (store page fault)
-        //   bne t0, t1, skip_insn    // skip if not store page fault
-        // forward_to_s:
-        //   csrr t0, mepc            // 0x34102373 -- get faulting PC
-        //   csrw sepc, t0            // 0x14129073 -- sepc = mepc
-        //   csrr t0, mcause          // 0x34202373 -- get cause again
-        //   csrw scause, t0          // 0x14229073 -- scause = mcause
-        //   csrr t0, mtval           // 0x34302373 -- get faulting addr
-        //   csrw stval, t0           // 0x14329073 -- stval = mtval
-        //   csrr t0, stvec           // 0x10502373 -- get S-mode trap vector
-        //   csrw mepc, t0            // 0x34129073 -- mret will jump to stvec
-        //   mret                     // 0x30200073 -- return (to stvec)
-        // skip_insn:
-        //   csrr t0, mepc            // 0x34202373
-        //   addi t0, t0, 4           // 0x00428293
-        //   csrw mepc, t0            // 0x34129073
-        //   mret                     // 0x30200073
-        //
-        let mut off = 0u64;
-        let w = |bus: &mut crate::riscv::bus::Bus, addr: u64, insn: u32| {
-            bus.write_word(addr, insn).ok();
-        };
-        // entry:
-        w(&mut vm.bus, fw_addr + off, 0x34202373); off += 4; // csrr t0, mcause
-        w(&mut vm.bus, fw_addr + off, 0x00C00313); off += 4; // addi t1, zero, 12
-        w(&mut vm.bus, fw_addr + off, 0x00629463); off += 4; // bne t0, t1, +8 -> check_load
-        w(&mut vm.bus, fw_addr + off, 0x0280006F); off += 4; // j forward_to_s (offset calculated below)
-        // check_load:
-        w(&mut vm.bus, fw_addr + off, 0x00D00313); off += 4; // addi t1, zero, 13
-        w(&mut vm.bus, fw_addr + off, 0x00629463); off += 4; // bne t0, t1, +8 -> check_store
-        w(&mut vm.bus, fw_addr + off, 0x0200006F); off += 4; // j forward_to_s
-        // check_store:
-        w(&mut vm.bus, fw_addr + off, 0x00F00313); off += 4; // addi t1, zero, 15
-        w(&mut vm.bus, fw_addr + off, 0x00629063); off += 4; // bne t0, t1, -> skip_insn
-        // forward_to_s:
-        let forward_addr = fw_addr + off;
-        w(&mut vm.bus, fw_addr + off, 0x34102373); off += 4; // csrr t0, mepc
-        w(&mut vm.bus, fw_addr + off, 0x14129073); off += 4; // csrw sepc, t0
-        w(&mut vm.bus, fw_addr + off, 0x34202373); off += 4; // csrr t0, mcause
-        w(&mut vm.bus, fw_addr + off, 0x14229073); off += 4; // csrw scause, t0
-        w(&mut vm.bus, fw_addr + off, 0x34302373); off += 4; // csrr t0, mtval
-        w(&mut vm.bus, fw_addr + off, 0x14329073); off += 4; // csrw stval, t0
-        w(&mut vm.bus, fw_addr + off, 0x10502373); off += 4; // csrr t0, stvec
-        w(&mut vm.bus, fw_addr + off, 0x34129073); off += 4; // csrw mepc, t0
-        w(&mut vm.bus, fw_addr + off, 0x30200073); off += 4; // mret
-        // skip_insn:
-        let skip_addr = fw_addr + off;
-        w(&mut vm.bus, fw_addr + off, 0x34202373); off += 4; // csrr t0, mepc
-        w(&mut vm.bus, fw_addr + off, 0x00428293); off += 4; // addi t0, t0, 4
-        w(&mut vm.bus, fw_addr + off, 0x34129073); off += 4; // csrw mepc, t0
-        w(&mut vm.bus, fw_addr + off, 0x30200073); off += 4; // mret
-
-        // Fix up branch offsets now that we know all addresses
-        // BNE at offset 8: bne t0, t1, +8 -> check_load is at offset 16
-        // BNE encoding: imm[12|10:5] | rs2 | rs1 | funct3 | imm[4:1|11] | opcode
-        // bne t0(5), t1(6), +8: funct3=001, opcode=1100011
-        // imm = +8 = 0b0000000001000
-        // Already correct: 0x00629463 = bne x5,x6,+8
-        // BNE at offset 24: bne t0, t1, +8 -> check_store is at offset 32
-        // Same encoding: 0x00629463
-        // BNE at offset 32: bne t0, t1, +N -> skip_insn
-        let skip_offset = (skip_addr as i32) - ((fw_addr + 32) as i32);
-        // Beq/bne offset is in bits 12,10:5 (upper) and 4:1,11 (lower)
-        let _bne_insn = 0x00629063 | ((((skip_offset << 20) >> 20) & 0xFE0) as u32) << 20
-            | ((((skip_offset << 20) >> 20) & 0x1E) as u32) << 8
-            | ((((skip_offset << 20) >> 20) & 0x800) as u32) >> 4;
-        // Actually let me just compute this properly
-        let imm = skip_offset as u32;
-        let bne_proper = (0x63) | ((imm & 0x1E) << 7) | ((imm & 0x800) >> 4)
-            | ((imm & 0x7E0) << 20) | ((imm & 0x1000) << 19)
-            | (5 << 15) | (6 << 20) | (1 << 12);
-        w(&mut vm.bus, fw_addr + 32, bne_proper);
-
-        // JAL at offset 12: j forward_to_s
-        let fwd_off1 = (forward_addr as i32) - ((fw_addr + 12) as i32);
-        let jal1 = 0x6F | ((fwd_off1 as u32 & 0xFF000) << 0) 
-            | ((fwd_off1 as u32 & 0x800) << 9) 
-            | ((fwd_off1 as u32 & 0x7FE) << 20)
-            | ((fwd_off1 as u32 & 0x100000) << 11);
-        w(&mut vm.bus, fw_addr + 12, jal1);
-
-        // JAL at offset 28: j forward_to_s
-        let fwd_off2 = (forward_addr as i32) - ((fw_addr + 28) as i32);
-        let jal2 = 0x6F | ((fwd_off2 as u32 & 0xFF000) << 0) 
-            | ((fwd_off2 as u32 & 0x800) << 9) 
-            | ((fwd_off2 as u32 & 0x7FE) << 20)
-            | ((fwd_off2 as u32 & 0x100000) << 11);
-        w(&mut vm.bus, fw_addr + 28, jal2);
+        vm.bus.write_word(fw_addr, 0x30200073).ok(); // MRET
 
         // Set mtvec to our trap handler (direct mode, bit[0]=0).
         vm.cpu.csr.write(crate::riscv::csr::MTVEC, fw_addr as u32);
@@ -421,21 +319,87 @@ impl RiscvVm {
         // Delegate interrupts to S-mode: bit 1=SSIP, 5=STI, 9=SEI
         vm.cpu.csr.mideleg = 0x222;
 
-        // 8. Execute.
+        // 8. Execute with Rust-level trap forwarding.
+        //
+        // The CPU's trap_target_priv() won't delegate M-mode traps to S-mode
+        // (medeleg only applies to traps from lower privileges). So when the
+        // kernel takes a page fault while running in M-mode (e.g., testing page
+        // tables it just set up), the trap goes to our M-mode handler at fw_addr.
+        //
+        // We intercept this here: after each step, if the CPU landed at our
+        // trap handler, we check mcause. For page faults (12/13/15), we forward
+        // the trap to S-mode by setting sepc/scause/stval and jumping to stvec.
+        // For other traps, we skip the faulting instruction (mepc += 4) and let
+        // the MRET at fw_addr return.
+        let fw_addr_u32 = fw_addr as u32;
         let mut count: u64 = 0;
         while count < max_instructions {
             // Check for SBI shutdown request
             if vm.bus.sbi.shutdown_requested {
                 break;
             }
+
+            // Detect if we're sitting at the trap handler from a previous step.
+            // This happens when a trap was delivered (mepc/mcause/mtval set,
+            // PC jumped to mtvec = fw_addr) and we haven't processed it yet.
+            if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == cpu::Privilege::Machine {
+                let mcause = vm.cpu.csr.mcause;
+                let cause_code = mcause & !(1u32 << 31); // strip interrupt bit
+
+                if cause_code == 12 || cause_code == 13 || cause_code == 15 {
+                    // Page fault in M-mode -- forward to S-mode.
+                    //
+                    // This emulates what OpenSBI does: the kernel sets up page
+                    // tables in M-mode and tests them by accessing virtual addresses.
+                    // When those accesses fault, OpenSBI reflects the trap to S-mode
+                    // so the kernel's own page fault handler can fix the mapping.
+                    let stvec = vm.cpu.csr.stvec & !0x3u32; // direct mode, clear vectored bit
+                    if stvec != 0 {
+                        // Copy M-mode trap info to S-mode CSRs.
+                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                        vm.cpu.csr.scause = mcause;
+                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
+
+                        // Set S-mode trap entry state in mstatus:
+                        // SPP = 1 (came from Supervisor... technically we're in
+                        // M-mode, but the kernel's early boot code in M-mode is
+                        // logically "kernel code" that should return to S-mode
+                        // after handling. Setting SPP=1 means sret returns to S-mode).
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                            | (1 << csr::MSTATUS_SPP);
+                        // SPIE = SIE (save current SIE), SIE = 0 (disable S interrupts)
+                        let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                            | (sie << csr::MSTATUS_SPIE);
+                        vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
+
+                        // Jump to S-mode trap vector in Supervisor mode.
+                        vm.cpu.pc = stvec;
+                        vm.cpu.privilege = cpu::Privilege::Supervisor;
+
+                        // Flush TLB -- address space context changed.
+                        vm.cpu.tlb.flush_all();
+                        count += 1;
+                        continue;
+                    }
+                    // stvec not set yet -- fall through to skip instruction.
+                }
+
+                // Non-page-fault trap (or page fault with no stvec):
+                // Skip the faulting instruction and return via MRET.
+                vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
+                // The MRET instruction at fw_addr will execute on the next step,
+                // returning to mepc (now faulting_pc + 4).
+                // Fall through to normal step processing.
+            }
+
             match vm.step() {
                 StepResult::Ok
                 | StepResult::FetchFault
                 | StepResult::LoadFault
                 | StepResult::StoreFault => {
-                    // Page faults are delivered as traps by translate_va
-                    // (mepc/mcause/mtval set, PC jumped to trap vector).
-                    // The guest OS trap handler will handle them.
+                    // Traps are handled by the Rust-level interception above
+                    // (checked at the top of the loop on the next iteration).
                 }
                 StepResult::Ebreak => break,
                 StepResult::Ecall => {} // ECALL is normal during boot
