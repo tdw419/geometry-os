@@ -1030,16 +1030,16 @@ phases:
       executing, register passing between generations, and common pitfalls (infinite
       loops, corrupting your own code).
 
-      '
-    status: todo
+    '
+    status: done
     acceptance_criteria:
     - description: Guide document exists with at least 3 documented patterns
       validation: ls docs/SELF_MODIFYING_GUIDE.md
-      met: false
+      met: true
     tasks:
     - id: p49.d2.t1
       title: Write docs/SELF_MODIFYING_GUIDE.md
-      status: todo
+      status: complete
       description: 'Create a guide covering: (1) Canvas STORE pattern -- how to write
         text to canvas cells, (2) ASMSELF + RUNNEXT pattern -- compile and execute,
         (3) Register passing -- sharing state between generations, (4) Self-reading
