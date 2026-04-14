@@ -10,6 +10,8 @@ pub const NUM_REGS: usize = 32;
 /// Canvas RAM region: address range [0x8000, 0x8FFF] maps to the pixel grid.
 pub const CANVAS_RAM_BASE: usize = 0x8000;
 pub const CANVAS_RAM_SIZE: usize = 4096;
+/// Screen RAM region: address range [0x10000, 0x1FFFF] maps to the screen buffer.
+pub const SCREEN_RAM_BASE: usize = 0x10000;
 /// Maximum number of concurrently spawned child processes
 pub const MAX_PROCESSES: usize = 8;
 /// Syscall dispatch table base address in RAM.
@@ -20,7 +22,10 @@ pub const SYSCALL_TABLE: usize = 0xFE00;
 /// RAM is divided into pages. Each process gets a page directory mapping
 /// virtual page numbers to physical page numbers.
 pub const PAGE_SIZE: usize = 1024; // words per page (4096 bytes)
-pub const NUM_PAGES: usize = RAM_SIZE / PAGE_SIZE; // 64 pages
+/// Total number of addressable pages (RAM + Screen)
+pub const NUM_PAGES: usize = (RAM_SIZE + SCREEN_SIZE) / PAGE_SIZE; // 128 pages
+/// Number of pages backed by actual RAM (allocatable)
+pub const NUM_RAM_PAGES: usize = RAM_SIZE / PAGE_SIZE; // 64 pages
 /// Sentinel: page directory entry is unmapped (no physical page backing).
 pub const PAGE_UNMAPPED: u32 = 0xFFFFFFFF;
 /// Number of pages allocated to each new spawned process.
@@ -676,8 +681,9 @@ impl Vm {
 
     /// Allocate `count` contiguous physical pages. Returns start page index or None.
     /// Starts scanning from page 2 (pages 0-1 reserved for kernel/main).
+    /// Only scans up to NUM_RAM_PAGES (0-63).
     fn alloc_pages(&mut self, count: usize) -> Option<usize> {
-        'outer: for start in 2..=(NUM_PAGES - count) {
+        'outer: for start in 2..=(NUM_RAM_PAGES - count) {
             for i in 0..count {
                 if self.allocated_pages & (1u64 << (start + i)) != 0 { continue 'outer; }
             }
