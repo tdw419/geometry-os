@@ -68,6 +68,40 @@ pub fn parse_syntax_line(line: &str) -> Vec<SynSpan> {
         return spans;
     }
 
+    // Check if entire line (after trim) is a formula expression: starts with '='
+    // e.g. "= 10 + 20" or "= score * bonus" or "= ~ 42"
+    if trimmed.starts_with('=') {
+        let eq_pos = line.find('=').unwrap_or(0);
+        // Push the '=' token
+        spans.push(SynSpan { kind: SynTok::Formula, start: eq_pos, len: 1, text: "=".to_string() });
+        // Tokenize everything after '='
+        let rest = &line[eq_pos + 1..];
+        let mut fpos = 0usize;
+        let ftokens: Vec<&str> = rest.split([' ', '\t', ',']).filter(|s| !s.is_empty()).collect();
+        for ftoken in &ftokens {
+            let rel = rest[fpos..].find(*ftoken).unwrap_or(0);
+            let abs = eq_pos + 1 + fpos + rel;
+            let kind = if ftoken.starts_with('r') || ftoken.starts_with('R') {
+                let rp = &ftoken[1..];
+                if rp.parse::<u32>().is_ok() { SynTok::Register } else { SynTok::Label }
+            } else if ftoken.chars().next().is_some_and(|c| c.is_ascii_digit())
+                || ftoken.starts_with("0x") || ftoken.starts_with("0X")
+                || ftoken.starts_with("0b") || ftoken.starts_with("0B")
+            {
+                SynTok::Number
+            } else if ["+", "-", "*", "/", "&", "|", "^", "~", "%", "<<", ">>", "MAX", "MIN",
+                        "max", "min", "ADD", "SUB", "MUL", "DIV", "AND", "OR", "XOR", "NOT",
+                        "MOD", "SHL", "SHR"].contains(&ftoken) {
+                SynTok::Formula
+            } else {
+                SynTok::Label
+            };
+            spans.push(SynSpan { kind, start: abs, len: ftoken.len(), text: ftoken.to_string() });
+            fpos = fpos + rel + ftoken.len();
+        }
+        return spans;
+    }
+
     // Check for label definition: word followed by ':'
     let first_start = line.len() - trimmed.len();
     let mut pos = first_start;
@@ -453,5 +487,112 @@ mod tests {
         let src = "VAR dst 0x4000\nLDI r4, dst\nSTORE r4, r1\n";
         let result = pp.preprocess(src);
         assert!(result.contains("LDI r4, 0x4000"), "variable in arg should resolve, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_formula_binary_add() {
+        let mut pp = Preprocessor::new();
+        let src = "= 10 + 20\n";
+        let result = pp.preprocess(src);
+        assert!(result.contains("FORMULA 0, ADD, 10, 20"),
+            "binary add formula should generate FORMULA directive, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_formula_binary_mul() {
+        let mut pp = Preprocessor::new();
+        let src = "= 5 * 8\n";
+        let result = pp.preprocess(src);
+        assert!(result.contains("FORMULA 0, MUL, 5, 8"),
+            "binary mul formula should generate FORMULA directive, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_formula_with_variables() {
+        let mut pp = Preprocessor::new();
+        pp.variables.insert("score".to_string(), 0x100);
+        pp.variables.insert("bonus".to_string(), 0x200);
+        let src = "= score + bonus\n";
+        let result = pp.preprocess(src);
+        assert!(result.contains("FORMULA 0, ADD, 256, 512"),
+            "formula with variable deps should resolve to addresses, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_formula_unary_not() {
+        let mut pp = Preprocessor::new();
+        let src = "= ~ 42\n";
+        let result = pp.preprocess(src);
+        assert!(result.contains("FORMULA 0, NOT, 42"),
+            "unary NOT formula should generate FORMULA directive, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_formula_identity_copy() {
+        let mut pp = Preprocessor::new();
+        let src = "= 99\n";
+        let result = pp.preprocess(src);
+        assert!(result.contains("FORMULA 0, COPY, 99"),
+            "single dep formula should generate COPY directive, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_formula_all_binary_ops() {
+        let ops = [
+            ("+", "ADD"), ("-", "SUB"), ("*", "MUL"), ("/", "DIV"),
+            ("&", "AND"), ("|", "OR"), ("^", "XOR"), ("%", "MOD"),
+            ("<<", "SHL"), (">>", "SHR"),
+        ];
+        for (sym, name) in &ops {
+            let mut pp = Preprocessor::new();
+            let src = format!("= 1 {} 2\n", sym);
+            let result = pp.preprocess(&src);
+            assert!(result.contains(&format!("FORMULA 0, {}, 1, 2", name)),
+                "formula with {} should generate {}, got: {:?}", sym, name, result);
+        }
+    }
+
+    #[test]
+    fn test_formula_max_min() {
+        let mut pp = Preprocessor::new();
+        let src = "= 10 MAX 20\n";
+        let result = pp.preprocess(src);
+        assert!(result.contains("FORMULA 0, MAX, 10, 20"),
+            "MAX formula should generate FORMULA directive, got: {:?}", result);
+
+        let mut pp2 = Preprocessor::new();
+        let src2 = "= 10 MIN 20\n";
+        let result2 = pp2.preprocess(&src2);
+        assert!(result2.contains("FORMULA 0, MIN, 10, 20"),
+            "MIN formula should generate FORMULA directive, got: {:?}", result2);
+    }
+
+    #[test]
+    fn test_formula_parse_error_passthrough() {
+        let mut pp = Preprocessor::new();
+        // Unresolvable variable in formula
+        let src = "= unknown_var + 10\n";
+        let result = pp.preprocess(src);
+        assert!(result.contains("formula parse error"),
+            "unparseable formula should emit error comment, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_formula_mixed_with_normal_code() {
+        let mut pp = Preprocessor::new();
+        let src = "LDI r1, 10\n= 5 + 6\nSTORE r1, r2\n";
+        let result = pp.preprocess(src);
+        assert!(result.contains("LDI r1, 10"), "normal code should pass through, got: {:?}", result);
+        assert!(result.contains("FORMULA 0, ADD, 5, 6"), "formula should be expanded, got: {:?}", result);
+        assert!(result.contains("STORE r1, r2"), "code after formula should pass through, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_formula_hex_deps() {
+        let mut pp = Preprocessor::new();
+        let src = "= 0x10 + 0x20\n";
+        let result = pp.preprocess(src);
+        assert!(result.contains("FORMULA 0, ADD, 16, 32"),
+            "hex deps should be resolved to decimal, got: {:?}", result);
     }
 }
