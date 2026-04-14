@@ -2,7 +2,7 @@
 
 Self-modifying canvas programs in Geometry OS. Pixels write pixels.
 
-**Progress:** 3/6 phases complete, 0 in progress
+**Progress:** 4/6 phases complete, 0 in progress
 
 **Deliverables:** 0/18 complete
 
@@ -15,7 +15,7 @@ Self-modifying canvas programs in Geometry OS. Pixels write pixels.
 | phase-45 RAM-Mapped Canvas Buffer | COMPLETE | 0/5 | 370 | 10 |
 | phase-46 RAM-Mapped Screen Buffer | COMPLETE | 0/3 | 220 | 8 |
 | phase-47 Self-Assembly Opcode (ASMSELF) | COMPLETE | 0/3 | 340 | 8 |
-| phase-48 Self-Execution Opcode (RUNNEXT) | PLANNED | 0/2 | 140 | 5 |
+| phase-48 Self-Execution Opcode (RUNNEXT) | COMPLETE | 0/2 | 140 | 5 |
 | phase-49 Self-Modifying Programs: Demos and Patterns | PLANNED | 0/2 | 400 | - |
 | phase-50 Reactive Canvas: Live Cell Formulas | FUTURE | 0/3 | 800 | 10 |
 
@@ -306,7 +306,7 @@ ASMSELF takes no operands (1-byte instruction). The assembled bytecode always go
 - Preprocessor/assembler errors in a running VM context need careful error handling
 - Self-assembly is inherently dangerous (infinite loops, corrupting own code)
 
-## [ ] phase-48: Self-Execution Opcode (RUNNEXT) (PLANNED)
+## [x] phase-48: Self-Execution Opcode (RUNNEXT) (COMPLETE)
 
 **Goal:** Add an opcode that starts executing the newly assembled bytecode
 
@@ -328,9 +328,9 @@ This is essentially JMP 0x1000 but with awareness that the bytecode at 0x1000 wa
     - RUNNEXT appears in trace output correctly
     - Can type RUNNEXT in assembly source
     _Files: src/vm.rs, src/assembler.rs, src/preprocessor.rs_
-  - [ ] RUNNEXT starts executing bytecode at 0x1000
+  - [x] RUNNEXT starts executing bytecode at 0x1000
     _Validation: Program writes code, ASMSELF, RUNNEXT, verify new code runs_
-  - [ ] Register state preserved across RUNNEXT
+  - [x] Register state preserved across RUNNEXT
     _Validation: r0-r26 retain their values after RUNNEXT_
   _~40 LOC_
 - [ ] **Test suite for RUNNEXT** -- Test the full write-compile-execute cycle. A program writes new code, assembles it, runs it, and the new code's effects are visible.
@@ -347,7 +347,7 @@ This is essentially JMP 0x1000 but with awareness that the bytecode at 0x1000 wa
     > Program A writes Program B to canvas. ASMSELF. RUNNEXT. Program B writes Program C to canvas. ASMSELF. RUNNEXT. Program C HALTs. Verify all three ran in sequence. This is the generational self-modification test.
     - Three generations of code execute in sequence
     _Files: src/vm.rs_
-  - [ ] Full write-compile-execute cycle works end-to-end
+  - [x] Full write-compile-execute cycle works end-to-end
     _Validation: Test program writes LDI r0, 77 to canvas, ASMSELF, RUNNEXT, verify r0=77_
   _~100 LOC_
 
