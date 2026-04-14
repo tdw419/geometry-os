@@ -197,6 +197,98 @@ pub fn load_raw(bus: &mut Bus, image: &[u8], base_addr: u64) -> Result<LoadInfo,
     })
 }
 
+/// Load an ELF32 image into guest RAM at its virtual addresses.
+///
+/// Like `load_elf`, but uses p_vaddr instead of p_paddr for loading.
+/// This is used for Linux kernel boot where the kernel is linked with
+/// PAGE_OFFSET (e.g., 0xC0000000) and we place RAM at that base address
+/// so that virtual == physical while MMU is off.
+///
+/// Returns the entry point and highest loaded address.
+pub fn load_elf_vaddr(bus: &mut Bus, image: &[u8]) -> Result<LoadInfo, LoadError> {
+    if image.len() < 52 {
+        return Err(LoadError::TooShort);
+    }
+
+    let magic = u32::from_le_bytes([image[0], image[1], image[2], image[3]]);
+    if magic != ELF_MAGIC {
+        return Err(LoadError::NotElf);
+    }
+
+    let class = image[4];
+    if class != 1 {
+        return Err(LoadError::WrongClass);
+    }
+
+    let endian = image[5];
+    if endian != 1 {
+        return Err(LoadError::WrongEndian);
+    }
+
+    let machine = u16::from_le_bytes([image[18], image[19]]);
+    if machine != EM_RISCV {
+        return Err(LoadError::WrongMachine);
+    }
+
+    let entry = u32::from_le_bytes([image[24], image[25], image[26], image[27]]);
+    let phoff = u32::from_le_bytes([image[28], image[29], image[30], image[31]]) as usize;
+    let phentsize = u16::from_le_bytes([image[42], image[43]]) as usize;
+    let phnum = u16::from_le_bytes([image[44], image[45]]) as usize;
+
+    let mut highest_addr: u64 = 0;
+    let mut loaded_any = false;
+
+    for i in 0..phnum {
+        let off = phoff + i * phentsize;
+        if off + phentsize > image.len() {
+            break;
+        }
+
+        let seg = &image[off..off + phentsize];
+        let p_type = u32::from_le_bytes([seg[0], seg[1], seg[2], seg[3]]);
+        let p_offset = u32::from_le_bytes([seg[4], seg[5], seg[6], seg[7]]) as usize;
+        let p_vaddr = u32::from_le_bytes([seg[8], seg[9], seg[10], seg[11]]) as u64;
+        let _p_paddr = u32::from_le_bytes([seg[12], seg[13], seg[14], seg[15]]) as u64;
+        let p_filesz = u32::from_le_bytes([seg[16], seg[17], seg[18], seg[19]]) as usize;
+        let p_memsz = u32::from_le_bytes([seg[20], seg[21], seg[22], seg[23]]) as usize;
+
+        if p_type != PT_LOAD {
+            continue;
+        }
+
+        // Load into guest RAM at virtual address.
+        let file_end = p_offset.saturating_add(p_filesz).min(image.len());
+        let data = if p_offset < image.len() {
+            &image[p_offset..file_end]
+        } else {
+            &[]
+        };
+
+        for (j, &byte) in data.iter().enumerate() {
+            let addr = p_vaddr + j as u64;
+            if bus.write_byte(addr, byte).is_err() {
+                return Err(LoadError::SegmentOverflow);
+            }
+        }
+
+        // Track highest address including BSS (memsz > filesz).
+        let seg_end = p_vaddr + p_memsz as u64;
+        if seg_end > highest_addr {
+            highest_addr = seg_end;
+        }
+        loaded_any = true;
+    }
+
+    if !loaded_any {
+        return Err(LoadError::NoLoadSegments);
+    }
+
+    Ok(LoadInfo {
+        entry,
+        highest_addr,
+    })
+}
+
 /// Detect image format and load accordingly.
 ///
 /// If the image starts with the ELF magic, loads as ELF32.

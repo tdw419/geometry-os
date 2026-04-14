@@ -40,8 +40,17 @@ pub struct BootResult {
 
 impl RiscvVm {
     /// Create a new VM with the given RAM size in bytes.
+    /// RAM starts at 0x8000_0000 (default for synthetic tests).
     pub fn new(ram_size: usize) -> Self {
         let bus = bus::Bus::new(0x8000_0000, ram_size);
+        let cpu = cpu::RiscvCpu::new();
+        Self { cpu, bus }
+    }
+
+    /// Create a new VM with a custom RAM base address.
+    /// Used for Linux boot where RAM starts at 0x0000_0000.
+    pub fn new_with_base(ram_base: u64, ram_size: usize) -> Self {
+        let bus = bus::Bus::new(ram_base, ram_size);
         let cpu = cpu::RiscvCpu::new();
         Self { cpu, bus }
     }
@@ -116,6 +125,190 @@ impl RiscvVm {
             entry: load_info.entry,
             dtb_addr,
         })
+    }
+
+    /// Parse the first PT_LOAD segment's virtual address from an ELF image.
+    /// Returns None if the image is too short or has no LOAD segments.
+    fn parse_first_load_vaddr(image: &[u8]) -> Option<u64> {
+        if image.len() < 52 {
+            return None;
+        }
+        // Check ELF magic.
+        if u32::from_le_bytes([image[0], image[1], image[2], image[3]]) != 0x464C457F {
+            return None;
+        }
+        let phoff = u32::from_le_bytes([image[28], image[29], image[30], image[31]]) as usize;
+        let phentsize = u16::from_le_bytes([image[42], image[43]]) as usize;
+        let phnum = u16::from_le_bytes([image[44], image[45]]) as usize;
+
+        for i in 0..phnum {
+            let off = phoff + i * phentsize;
+            if off + phentsize > image.len() {
+                break;
+            }
+            let seg = &image[off..off + phentsize];
+            let p_type = u32::from_le_bytes([seg[0], seg[1], seg[2], seg[3]]);
+            if p_type == 1 {
+                // PT_LOAD
+                let p_vaddr = u32::from_le_bytes([seg[8], seg[9], seg[10], seg[11]]) as u64;
+                return Some(p_vaddr);
+            }
+        }
+        None
+    }
+
+    /// Parse the highest address (vaddr + memsz) across all PT_LOAD segments.
+    fn parse_elf_highest_addr(image: &[u8]) -> Option<u64> {
+        if image.len() < 52 {
+            return None;
+        }
+        if u32::from_le_bytes([image[0], image[1], image[2], image[3]]) != 0x464C457F {
+            return None;
+        }
+        let phoff = u32::from_le_bytes([image[28], image[29], image[30], image[31]]) as usize;
+        let phentsize = u16::from_le_bytes([image[42], image[43]]) as usize;
+        let phnum = u16::from_le_bytes([image[44], image[45]]) as usize;
+
+        let mut highest: u64 = 0;
+        for i in 0..phnum {
+            let off = phoff + i * phentsize;
+            if off + phentsize > image.len() {
+                break;
+            }
+            let seg = &image[off..off + phentsize];
+            let p_type = u32::from_le_bytes([seg[0], seg[1], seg[2], seg[3]]);
+            if p_type == 1 {
+                // PT_LOAD
+                let p_vaddr = u32::from_le_bytes([seg[8], seg[9], seg[10], seg[11]]) as u64;
+                let p_memsz = u32::from_le_bytes([seg[20], seg[21], seg[22], seg[23]]) as u64;
+                let seg_end = p_vaddr + p_memsz;
+                if seg_end > highest {
+                    highest = seg_end;
+                }
+            }
+        }
+        if highest == 0 { None } else { Some(highest) }
+    }
+
+    /// Boot a Linux kernel with initramfs support (associated function).
+    ///
+    /// This is the main Linux boot entry point. Unlike `boot_guest`, it creates
+    /// its own VM with the correct RAM layout for the kernel.
+    ///
+    /// **Key insight:** The kernel is linked with PAGE_OFFSET (e.g., 0xC0000000).
+    /// All code references use virtual addresses in this range. With MMU off in
+    /// M-mode, the CPU uses addresses as-is (no translation). So we place RAM
+    /// at the kernel's first LOAD segment vaddr, making virtual == physical.
+    /// This way, the `J _start_kernel` (which encodes virtual address 0xC00010D0)
+    /// fetches from physical 0xC00010D0, which IS in RAM.
+    ///
+    /// MMIO devices (UART, CLINT, PLIC, virtio) remain at their standard addresses
+    /// below 0xC0000000. The bus routes these to device handlers before checking RAM.
+    ///
+    /// Steps:
+    /// 1. Parse ELF to find first LOAD segment vaddr (becomes ram_base)
+    /// 2. Calculate RAM size to fit all segments + initramfs + DTB
+    /// 3. Create VM with ram_base = first vaddr
+    /// 4. Load kernel ELF at virtual addresses (which are now physical)
+    /// 5. Load initramfs after the kernel
+    /// 6. Generate DTB with correct ram_base, initrd info, bootargs
+    /// 7. Set PC to ELF entry (vaddr, now a valid physical address)
+    /// 8. Execute up to max_instructions steps
+    pub fn boot_linux(
+        kernel_image: &[u8],
+        initramfs: Option<&[u8]>,
+        ram_size_mb: u32,
+        max_instructions: u64,
+        bootargs: &str,
+    ) -> Result<(Self, BootResult), loader::LoadError> {
+        // 1. Parse ELF header to find the first LOAD segment's vaddr.
+        // This determines where RAM should start.
+        let first_vaddr = Self::parse_first_load_vaddr(kernel_image)
+            .unwrap_or(0x8000_0000); // fallback for non-standard kernels
+
+        // 2. Calculate minimum RAM size from kernel segments.
+        let min_ram = Self::parse_elf_highest_addr(kernel_image)
+            .unwrap_or(first_vaddr + 64 * 1024 * 1024);
+        let min_ram_size = (min_ram - first_vaddr) as usize;
+
+        // Use the larger of: caller-specified size, or minimum needed for kernel.
+        let caller_ram_size = (ram_size_mb as u64) * 1024 * 1024;
+        let actual_ram_size = std::cmp::max(min_ram_size, caller_ram_size as usize);
+
+        // 3. Create VM with RAM starting at the kernel's first LOAD vaddr.
+        let mut vm = Self::new_with_base(first_vaddr, actual_ram_size);
+
+        // 4. Load kernel ELF at virtual addresses (which are physical in our VM).
+        let load_info = loader::load_elf_vaddr(&mut vm.bus, kernel_image)?;
+
+        // 5. Load initramfs at a page-aligned address after the kernel.
+        let (initrd_start, initrd_end) = if let Some(initrd_data) = initramfs {
+            let initrd_addr = ((load_info.highest_addr + 0xFFF) & !0xFFF) as u64;
+            for (i, &byte) in initrd_data.iter().enumerate() {
+                let addr = initrd_addr + i as u64;
+                if vm.bus.write_byte(addr, byte).is_err() {
+                    break; // initrd doesn't fit, skip it
+                }
+            }
+            let initrd_end_addr = initrd_addr + initrd_data.len() as u64;
+            (Some(initrd_addr), Some(initrd_end_addr))
+        } else {
+            (None, None)
+        };
+
+        // 6. Generate DTB with correct ram_base.
+        let ram_size = actual_ram_size as u64;
+        let dtb_config = dtb::DtbConfig {
+            ram_base: first_vaddr,
+            ram_size,
+            initrd_start,
+            initrd_end,
+            bootargs: bootargs.to_string(),
+            ..Default::default()
+        };
+        let dtb_blob = dtb::generate_dtb(&dtb_config);
+
+        // Place DTB after kernel (and after initramfs if present).
+        let after_initrd = initrd_end.unwrap_or(load_info.highest_addr);
+        let dtb_addr = ((after_initrd + 0xFFF) & !0xFFF) as u64;
+        for (i, &byte) in dtb_blob.iter().enumerate() {
+            let addr = dtb_addr + i as u64;
+            if vm.bus.write_byte(addr, byte).is_err() {
+                break;
+            }
+        }
+
+        // 7. Set CPU state for boot.
+        // Entry point is the ELF entry (virtual address), which IS a valid
+        // physical address in our VM since ram_base = first_vaddr.
+        let entry: u32 = load_info.entry;
+        vm.cpu.pc = entry;
+        vm.cpu.x[10] = 0; // a0 = hartid (0)
+        vm.cpu.x[11] = dtb_addr as u32; // a1 = DTB address
+        vm.cpu.privilege = cpu::Privilege::Machine;
+
+        // 8. Execute.
+        let mut count: u64 = 0;
+        while count < max_instructions {
+            match vm.step() {
+                StepResult::Ok => {}
+                StepResult::Ebreak => break,
+                StepResult::FetchFault
+                | StepResult::LoadFault
+                | StepResult::StoreFault => break,
+                StepResult::Ecall => {} // ECALL is normal during boot
+            }
+            count += 1;
+        }
+
+        Ok((
+            vm,
+            BootResult {
+                instructions: count,
+                entry,
+                dtb_addr,
+            },
+        ))
     }
 }
 
@@ -393,5 +586,82 @@ mod tests {
         let result = vm.boot_guest(&[], 1, 100).unwrap();
         assert_eq!(result.instructions, 100);
         assert_eq!(result.entry, 0x8000_0000);
+    }
+
+    #[test]
+    fn test_linux_kernel_early_boot() {
+        use std::fs;
+        use std::time::Instant;
+
+        let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
+        let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
+
+        // Skip if kernel not present (CI, etc.)
+        let kernel_data = match fs::read(kernel_path) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln!("Skipping: {} not found", kernel_path);
+                return;
+            }
+        };
+        let initramfs_data = fs::read(initramfs_path).ok();
+
+        eprintln!("Kernel size: {} bytes", kernel_data.len());
+        if let Some(ref ir) = initramfs_data {
+            eprintln!("Initramfs size: {} bytes", ir.len());
+        }
+
+        let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
+        let start = Instant::now();
+        let (mut vm, result) = RiscvVm::boot_linux(
+            &kernel_data,
+            initramfs_data.as_deref(),
+            512, // 512MB RAM (kernel needs ~305MB)
+            5_000_000, // 5M instructions
+            bootargs,
+        ).unwrap();
+
+        let elapsed = start.elapsed();
+        let mips = result.instructions as f64 / elapsed.as_secs_f64() / 1_000_000.0;
+        eprintln!(
+            "Linux boot: {} instructions in {:?} = {:.2} MIPS",
+            result.instructions, elapsed, mips
+        );
+        eprintln!("Entry: 0x{:08X}, DTB at: 0x{:08X}", result.entry, result.dtb_addr);
+        eprintln!("PC: 0x{:08X}, Privilege: {:?}", vm.cpu.pc, vm.cpu.privilege);
+        eprintln!("RAM base: 0x{:08X}", vm.bus.mem.ram_base);
+
+        // Check UART output
+        let mut uart_output = Vec::new();
+        loop {
+            match vm.bus.uart.read_byte(0) {
+                0 => break, // no more data
+                b => uart_output.push(b),
+            }
+        }
+        if !uart_output.is_empty() {
+            let s = String::from_utf8_lossy(&uart_output);
+            eprintln!("UART output ({} bytes): {}", uart_output.len(), s);
+        } else {
+            eprintln!("No UART output");
+        }
+
+        // Check CSRs
+        eprintln!("mcause: 0x{:08X}, mepc: 0x{:08X}", vm.cpu.csr.mcause, vm.cpu.csr.mepc);
+        eprintln!("scause: 0x{:08X}, sepc: 0x{:08X}", vm.cpu.csr.scause, vm.cpu.csr.sepc);
+        eprintln!("satp: 0x{:08X}", vm.cpu.csr.satp);
+        eprintln!("mstatus: 0x{:08X}", vm.cpu.csr.mstatus);
+
+        // The test "passes" as long as it doesn't panic -- we're measuring progress.
+        assert!(result.instructions > 0, "Should have executed some instructions");
+        // PC should ideally be in kernel code (0xC0xxx range).
+        // Log the actual state for diagnostics even if it's not.
+        if vm.cpu.pc < 0xC0000000 {
+            eprintln!(
+                "WARNING: PC outside kernel range: 0x{:08X}. \
+                 Kernel may have faulted or jumped to invalid address.",
+                vm.cpu.pc
+            );
+        }
     }
 }

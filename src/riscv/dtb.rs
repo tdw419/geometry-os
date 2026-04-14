@@ -200,6 +200,12 @@ pub struct DtbConfig {
     pub plic_base: u64,
     /// Virtio MMIO base address.
     pub virtio_base: u64,
+    /// Initrd start address (physical). None = no initrd.
+    pub initrd_start: Option<u64>,
+    /// Initrd end address (physical). None = no initrd.
+    pub initrd_end: Option<u64>,
+    /// Kernel boot command line.
+    pub bootargs: String,
 }
 
 impl Default for DtbConfig {
@@ -212,6 +218,9 @@ impl Default for DtbConfig {
             clint_base: 0x0200_0000,
             plic_base: 0x0C00_0000,
             virtio_base: 0x1000_1000,
+            initrd_start: None,
+            initrd_end: None,
+            bootargs: String::new(),
         }
     }
 }
@@ -303,9 +312,17 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
 
     b.end_node(); // soc
 
-    // Chosen node (for boot args, etc).
+    // Chosen node (for boot args, initrd, etc).
     b.begin_node("chosen");
     b.prop_string("stdout-path", "/soc/uart@10000000");
+    if let (Some(start), Some(end)) = (config.initrd_start, config.initrd_end) {
+        // linux,initrd-start and linux,initrd-end are u64 values.
+        b.prop_u64("linux,initrd-start", start);
+        b.prop_u64("linux,initrd-end", end);
+    }
+    if !config.bootargs.is_empty() {
+        b.prop_string("bootargs", &config.bootargs);
+    }
     b.end_node();
 
     b.end_node(); // root
@@ -382,6 +399,9 @@ mod tests {
             clint_base: 0x0200_0000,
             plic_base: 0x0C00_0000,
             virtio_base: 0x1000_1000,
+            initrd_start: None,
+            initrd_end: None,
+            bootargs: String::new(),
         };
         let dtb = generate_dtb(&config);
         let magic = u32::from_be_bytes([dtb[0], dtb[1], dtb[2], dtb[3]]);
