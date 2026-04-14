@@ -21,7 +21,7 @@ fn main() {
     let fault_va: u32 = 0x003A4F9C;
     println!("\nAttempting to translate faulting VA 0x{:08X}...", fault_va);
     let mut tlb = mmu::Tlb::new();
-    match mmu::translate(fault_va, mmu::AccessType::Fetch, false, satp, &mut vm.bus, &mut tlb) {
+    match mmu::translate(fault_va, mmu::AccessType::Fetch, geometry_os::riscv::cpu::Privilege::Supervisor, false, satp, &mut vm.bus, &mut tlb) {
         mmu::TranslateResult::Ok(pa) => println!("  -> OK, PA=0x{:08X}", pa),
         mmu::TranslateResult::FetchFault => println!("  -> FetchFault"),
         other => println!("  -> {:?}", other),
@@ -30,7 +30,7 @@ fn main() {
     // Try kernel address
     let kernel_va: u32 = 0xC0000000;
     println!("\nKernel VA 0x{:08X}...", kernel_va);
-    match mmu::translate(kernel_va, mmu::AccessType::Fetch, false, satp, &mut vm.bus, &mut tlb) {
+    match mmu::translate(kernel_va, mmu::AccessType::Fetch, geometry_os::riscv::cpu::Privilege::Supervisor, false, satp, &mut vm.bus, &mut tlb) {
         mmu::TranslateResult::Ok(pa) => println!("  -> OK, PA=0x{:08X}", pa),
         other => println!("  -> {:?}", other),
     }
