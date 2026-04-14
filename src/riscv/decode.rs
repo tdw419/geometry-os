@@ -576,11 +576,11 @@ fn c_alu_imm(w: u32) -> i32 {
     c_addi_imm(w)
 }
 
-/// C.LW immediate: offset[5:3|2:6] (unsigned 7-bit)
+/// C.LW immediate: offset[5:3|2|1:0] = inst[12:10|6|5:4] (unsigned 6-bit, word-aligned)
 fn c_lw_imm(w: u32) -> i32 {
     let imm = (((w >> 10) & 0x7) << 3)
         | (((w >> 6) & 0x1) << 2)
-        | ((w >> 5) & 0x3);
+        | ((w >> 4) & 0x3);
     imm as i32
 }
 
@@ -778,9 +778,9 @@ mod tests {
 
     #[test]
     fn c_li() {
-        // C.LI rd=3, imm=42
-        let op = decode_c(0x51A9);
-        assert_eq!(op, Operation::Addi { rd: 3, rs1: 0, imm: 42 });
+        // C.LI rd=3, imm=10
+        let op = decode_c(0x41A9);
+        assert_eq!(op, Operation::Addi { rd: 3, rs1: 0, imm: 10 });
     }
 
     #[test]
