@@ -180,6 +180,18 @@ impl Oracle {
             OracleOp::Lhu { rd,  off } => { let v = self.mem_read_half(off) as u32; self.set(rd, v); }
             OracleOp::Lb  { rd,  off } => { let v = self.mem_read_byte(off) as i8 as u32; self.set(rd, v); }
             OracleOp::Lbu { rd,  off } => { let v = self.mem_read_byte(off) as u32; self.set(rd, v); }
+            // ── I-type immediate ALU ──
+            OracleOp::Addi  { rd, rs1, imm } => { let v = self.r(rs1).wrapping_add(imm as u32); self.set(rd, v); }
+            OracleOp::Slti  { rd, rs1, imm } => { let v = ((self.r(rs1) as i32) < imm) as u32; self.set(rd, v); }
+            OracleOp::Sltiu { rd, rs1, imm } => { let v = (self.r(rs1) < imm as u32) as u32; self.set(rd, v); }
+            OracleOp::Xori  { rd, rs1, imm } => { let v = self.r(rs1) ^ (imm as u32); self.set(rd, v); }
+            OracleOp::Ori   { rd, rs1, imm } => { let v = self.r(rs1) | (imm as u32); self.set(rd, v); }
+            OracleOp::Andi  { rd, rs1, imm } => { let v = self.r(rs1) & (imm as u32); self.set(rd, v); }
+            OracleOp::Slli  { rd, rs1, shamt } => { let v = self.r(rs1) << shamt; self.set(rd, v); }
+            OracleOp::Srli  { rd, rs1, shamt } => { let v = self.r(rs1) >> shamt; self.set(rd, v); }
+            OracleOp::Srai  { rd, rs1, shamt } => { let v = ((self.r(rs1) as i32) >> shamt) as u32; self.set(rd, v); }
+            // ── Upper-immediate PC-relative ──
+            OracleOp::Auipc { rd, pc, imm } => { let v = pc.wrapping_add(imm); self.set(rd, v); }
             // ── Init ──
             OracleOp::LoadConst { rd, value } => { self.set(rd, value); }
         }
@@ -206,6 +218,18 @@ enum OracleOp {
     Divu { rd: u8, rs1: u8, rs2: u8 },
     Rem { rd: u8, rs1: u8, rs2: u8 },
     Remu { rd: u8, rs1: u8, rs2: u8 },
+    // I-type immediate ALU
+    Addi  { rd: u8, rs1: u8, imm: i32 },
+    Slti  { rd: u8, rs1: u8, imm: i32 },
+    Sltiu { rd: u8, rs1: u8, imm: i32 },
+    Xori  { rd: u8, rs1: u8, imm: i32 },
+    Ori   { rd: u8, rs1: u8, imm: i32 },
+    Andi  { rd: u8, rs1: u8, imm: i32 },
+    Slli  { rd: u8, rs1: u8, shamt: u32 },
+    Srli  { rd: u8, rs1: u8, shamt: u32 },
+    Srai  { rd: u8, rs1: u8, shamt: u32 },
+    // PC-relative
+    Auipc { rd: u8, pc: u32, imm: u32 },
     // Memory — off is byte offset into data region
     Sw  { rs2: u8, off: usize },
     Sh  { rs2: u8, off: usize },
@@ -243,14 +267,15 @@ fn gen_program(rng: &mut Rng, n_ops: usize) -> Program {
     ops.push(OracleOp::LoadConst { rd: BASE_REG, value: data_base });
 
     const N_ALU: usize = 18;
-    const N_MEM: usize = 8; // Sw Sh Sb Lw Lh Lhu Lb Lbu
-    const N_TOTAL: usize = N_ALU + N_MEM;
+    const N_IMM: usize = 10; // Addi Slti Sltiu Xori Ori Andi Slli Srli Srai Auipc
+    const N_MEM: usize = 8;  // Sw Sh Sb Lw Lh Lhu Lb Lbu
+    const N_TOTAL: usize = N_ALU + N_IMM + N_MEM;
 
     for _ in 0..n_ops {
         let op_idx = rng.range(N_TOTAL as u64) as usize;
 
         if op_idx < N_ALU {
-            // ALU op on x1-x8
+            // R-type ALU op on x1-x8
             let rd  = (rng.range(8) + 1) as u8;
             let rs1 = (rng.range(8) + 1) as u8;
             let rs2 = (rng.range(8) + 1) as u8;
@@ -277,9 +302,75 @@ fn gen_program(rng: &mut Rng, n_ops: usize) -> Program {
             };
             words.push(word);
             ops.push(oracle_op);
+        } else if op_idx < N_ALU + N_IMM {
+            // I-type immediate ALU on x1-x8
+            let imm_op = op_idx - N_ALU;
+            let rd  = (rng.range(8) + 1) as u8;
+            let rs1 = (rng.range(8) + 1) as u8;
+
+            match imm_op {
+                0 => { // ADDI
+                    let imm = (rng.u32() as i32) << 20 >> 20; // random 12-bit sign-extended
+                    words.push(enc_i(imm, rs1, 0x0, rd, 0x13));
+                    ops.push(OracleOp::Addi { rd, rs1, imm });
+                }
+                1 => { // SLTI
+                    let imm = (rng.u32() as i32) << 20 >> 20;
+                    words.push(enc_i(imm, rs1, 0x2, rd, 0x13));
+                    ops.push(OracleOp::Slti { rd, rs1, imm });
+                }
+                2 => { // SLTIU
+                    let imm = (rng.u32() as i32) << 20 >> 20;
+                    words.push(enc_i(imm, rs1, 0x3, rd, 0x13));
+                    ops.push(OracleOp::Sltiu { rd, rs1, imm });
+                }
+                3 => { // XORI
+                    let imm = (rng.u32() as i32) << 20 >> 20;
+                    words.push(enc_i(imm, rs1, 0x4, rd, 0x13));
+                    ops.push(OracleOp::Xori { rd, rs1, imm });
+                }
+                4 => { // ORI
+                    let imm = (rng.u32() as i32) << 20 >> 20;
+                    words.push(enc_i(imm, rs1, 0x6, rd, 0x13));
+                    ops.push(OracleOp::Ori { rd, rs1, imm });
+                }
+                5 => { // ANDI
+                    let imm = (rng.u32() as i32) << 20 >> 20;
+                    words.push(enc_i(imm, rs1, 0x7, rd, 0x13));
+                    ops.push(OracleOp::Andi { rd, rs1, imm });
+                }
+                6 => { // SLLI
+                    let shamt = rng.range(32) as u32;
+                    // SLLI: funct7=0x00, funct3=0x1, opcode=0x13
+                    words.push(enc_r(0x00, shamt as u8, rs1, 0x1, rd, 0x13));
+                    ops.push(OracleOp::Slli { rd, rs1, shamt });
+                }
+                7 => { // SRLI
+                    let shamt = rng.range(32) as u32;
+                    words.push(enc_r(0x00, shamt as u8, rs1, 0x5, rd, 0x13));
+                    ops.push(OracleOp::Srli { rd, rs1, shamt });
+                }
+                8 => { // SRAI
+                    let shamt = rng.range(32) as u32;
+                    words.push(enc_r(0x20, shamt as u8, rs1, 0x5, rd, 0x13));
+                    ops.push(OracleOp::Srai { rd, rs1, shamt });
+                }
+                9 => { // AUIPC
+                    let rd = (rng.range(8) + 1) as u8;
+                    let imm = rng.u32() & 0xFFFF_F000; // upper 20 bits only
+                    let pc = (RAM_BASE + (words.len() as u64) * 4) as u32;
+                    words.push(enc_lui(rd, imm)); // AUIPC encoding same layout as LUI but opcode 0x17
+                    // Actually, AUIPC = (imm & 0xFFFF_F000) | (rd << 7) | 0x17
+                    words.pop();
+                    let auipc_word = (imm & 0xFFFF_F000) | ((rd as u32) << 7) | 0x17;
+                    words.push(auipc_word);
+                    ops.push(OracleOp::Auipc { rd, pc, imm });
+                }
+                _ => unreachable!(),
+            }
         } else {
             // Memory op
-            let mem_op = op_idx - N_ALU;
+            let mem_op = op_idx - N_ALU - N_IMM;
             let rd  = (rng.range(8) + 1) as u8;  // x1-x8
             let rs2 = (rng.range(8) + 1) as u8;  // x1-x8
 

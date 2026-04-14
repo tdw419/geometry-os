@@ -3366,3 +3366,709 @@ impl Vm {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: build a bytecode program as Vec<u32>, load into a fresh VM, run N steps.
+    /// Returns the VM for assertions.
+    fn run_program(bytecode: &[u32], max_steps: usize) -> Vm {
+        let mut vm = Vm::new();
+        for (i, &word) in bytecode.iter().enumerate() {
+            vm.ram[i] = word;
+        }
+        vm.pc = 0;
+        vm.halted = false;
+        for _ in 0..max_steps {
+            if !vm.step() { break; }
+        }
+        vm
+    }
+
+    // ── HALT / NOP ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_halt_stops_execution() {
+        let vm = run_program(&[0x00], 100);
+        assert!(vm.halted);
+        assert_eq!(vm.pc, 1); // fetched opcode, then halted
+    }
+
+    #[test]
+    fn test_nop_advances_pc() {
+        // NOP then HALT
+        let vm = run_program(&[0x01, 0x00], 100);
+        assert!(vm.halted);
+        assert_eq!(vm.pc, 2);
+    }
+
+    // ── LDI ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_ldi_loads_immediate() {
+        // LDI r5, 0x42
+        let vm = run_program(&[0x10, 5, 0x42, 0x00], 100);
+        assert!(vm.halted);
+        assert_eq!(vm.regs[5], 0x42);
+    }
+
+    #[test]
+    fn test_ldi_zero() {
+        // LDI r3, 0
+        let vm = run_program(&[0x10, 3, 0, 0x00], 100);
+        assert_eq!(vm.regs[3], 0);
+    }
+
+    #[test]
+    fn test_ldi_max_u32() {
+        // LDI r10, 0xFFFFFFFF
+        let vm = run_program(&[0x10, 10, 0xFFFFFFFF, 0x00], 100);
+        assert_eq!(vm.regs[10], 0xFFFFFFFF);
+    }
+
+    #[test]
+    fn test_ldi_invalid_reg_ignored() {
+        // LDI r32 (out of range), 42 -- should be ignored, no panic
+        let vm = run_program(&[0x10, 32, 42, 0x00], 100);
+        assert!(vm.halted); // still halted at end
+    }
+
+    // ── LOAD / STORE ────────────────────────────────────────────────
+
+    #[test]
+    fn test_load_reads_ram() {
+        // LDI r1, 0x2000   (address)
+        // STORE r1, r2     (store r2 -> RAM[0x2000])
+        // LOAD r3, r1      (load r3 <- RAM[0x2000])
+        // HALT
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 0x2000; // LDI r1, 0x2000
+        vm.ram[3] = 0x12; vm.ram[4] = 1; vm.ram[5] = 2;       // STORE r1, r2
+        vm.ram[6] = 0x11; vm.ram[7] = 3; vm.ram[8] = 1;       // LOAD r3, r1
+        vm.ram[9] = 0x00;                                       // HALT
+        vm.regs[2] = 0xABCDEF;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[3], 0xABCDEF);
+    }
+
+    #[test]
+    fn test_store_then_load_roundtrip() {
+        let mut vm = Vm::new();
+        // LDI r5, 0x500  (addr)
+        // LDI r6, 999    (value)
+        // STORE r5, r6
+        // LOAD r7, r5
+        // HALT
+        vm.ram[0] = 0x10; vm.ram[1] = 5; vm.ram[2] = 0x500;
+        vm.ram[3] = 0x10; vm.ram[4] = 6; vm.ram[5] = 999;
+        vm.ram[6] = 0x12; vm.ram[7] = 5; vm.ram[8] = 6;
+        vm.ram[9] = 0x11; vm.ram[10] = 7; vm.ram[11] = 5;
+        vm.ram[12] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[7], 999);
+    }
+
+    // ── ARITHMETIC ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_add_basic() {
+        // LDI r1, 10; LDI r2, 20; ADD r1, r2; HALT
+        let vm = run_program(&[0x10, 1, 10, 0x10, 2, 20, 0x20, 1, 2, 0x00], 100);
+        assert_eq!(vm.regs[1], 30);
+    }
+
+    #[test]
+    fn test_add_wrapping_overflow() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 0xFFFFFFFF;
+        vm.regs[2] = 1;
+        // ADD r1, r2; HALT
+        vm.ram[0] = 0x20; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 0); // wrapping add
+    }
+
+    #[test]
+    fn test_sub_basic() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 50;
+        vm.regs[2] = 20;
+        vm.ram[0] = 0x21; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 30);
+    }
+
+    #[test]
+    fn test_sub_wrapping_underflow() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 0;
+        vm.regs[2] = 1;
+        vm.ram[0] = 0x21; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 0xFFFFFFFF); // wrapping sub
+    }
+
+    #[test]
+    fn test_mul_basic() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 6;
+        vm.regs[2] = 7;
+        vm.ram[0] = 0x22; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 42);
+    }
+
+    #[test]
+    fn test_div_basic() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 100;
+        vm.regs[2] = 7;
+        vm.ram[0] = 0x23; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 14); // 100 / 7 = 14 (integer division)
+    }
+
+    #[test]
+    fn test_div_by_zero_no_panic() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 42;
+        vm.regs[2] = 0;
+        vm.ram[0] = 0x23; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 42); // unchanged, no panic
+    }
+
+    #[test]
+    fn test_mod_basic() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 100;
+        vm.regs[2] = 7;
+        vm.ram[0] = 0x29; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 2); // 100 % 7 = 2
+    }
+
+    #[test]
+    fn test_mod_by_zero_no_panic() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 42;
+        vm.regs[2] = 0;
+        vm.ram[0] = 0x29; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 42); // unchanged
+    }
+
+    #[test]
+    fn test_neg() {
+        let mut vm = Vm::new();
+        vm.regs[5] = 1;
+        vm.ram[0] = 0x2A; vm.ram[1] = 5;
+        vm.ram[2] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[5], 0xFFFFFFFF); // -1 in two's complement
+    }
+
+    #[test]
+    fn test_neg_zero() {
+        let mut vm = Vm::new();
+        vm.regs[5] = 0;
+        vm.ram[0] = 0x2A; vm.ram[1] = 5;
+        vm.ram[2] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[5], 0);
+    }
+
+    // ── BITWISE ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_and() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 0xFF00FF;
+        vm.regs[2] = 0x0F0F0F;
+        vm.ram[0] = 0x24; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 0x0F000F);
+    }
+
+    #[test]
+    fn test_or() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 0xF00000;
+        vm.regs[2] = 0x000F00;
+        vm.ram[0] = 0x25; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 0xF00F00);
+    }
+
+    #[test]
+    fn test_xor() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 0xFF00FF;
+        vm.regs[2] = 0xFF00FF;
+        vm.ram[0] = 0x26; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 0); // XOR self = 0
+    }
+
+    #[test]
+    fn test_shl() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 1;
+        vm.regs[2] = 8;
+        vm.ram[0] = 0x27; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 256);
+    }
+
+    #[test]
+    fn test_shl_mod_32() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 1;
+        vm.regs[2] = 32; // shift by 32 -> effectively shift by 0 (mod 32)
+        vm.ram[0] = 0x27; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 1); // 1 << 32 = 1 (mod 32 = 0)
+    }
+
+    #[test]
+    fn test_shr() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 256;
+        vm.regs[2] = 4;
+        vm.ram[0] = 0x28; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 16);
+    }
+
+    #[test]
+    fn test_sar_sign_preserving() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 0x80000000; // MSB set (negative in i32)
+        vm.regs[2] = 4;
+        vm.ram[0] = 0x2B; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        // 0x80000000 >> 4 (arithmetic) = 0xF8000000
+        assert_eq!(vm.regs[1], 0xF8000000);
+    }
+
+    // ── CMP / BRANCHES ──────────────────────────────────────────────
+
+    #[test]
+    fn test_cmp_less_than() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 5;
+        vm.regs[2] = 10;
+        vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2; // CMP r1, r2
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[0], 0xFFFFFFFF); // -1 (less than)
+    }
+
+    #[test]
+    fn test_cmp_equal() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 42;
+        vm.regs[2] = 42;
+        vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[0], 0); // equal
+    }
+
+    #[test]
+    fn test_cmp_greater_than() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 10;
+        vm.regs[2] = 5;
+        vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[0], 1); // greater than
+    }
+
+    #[test]
+    fn test_jz_taken() {
+        // LDI r1, 0; JZ r1, 100; HALT -> should jump to 100
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 0; // LDI r1, 0
+        vm.ram[3] = 0x31; vm.ram[4] = 1; vm.ram[5] = 100; // JZ r1, 100
+        vm.ram[6] = 0x00; // HALT (should not reach)
+        vm.ram[100] = 0x00; // HALT at target
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.pc, 101); // halted at 101 (fetched HALT at 100)
+    }
+
+    #[test]
+    fn test_jz_not_taken() {
+        // LDI r1, 1; JZ r1, 100; HALT -> should not jump
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 1; // LDI r1, 1
+        vm.ram[3] = 0x31; vm.ram[4] = 1; vm.ram[5] = 100; // JZ r1, 100
+        vm.ram[6] = 0x00; // HALT (should reach)
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.pc, 7); // halted at HALT
+    }
+
+    #[test]
+    fn test_jnz_taken() {
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 5; // LDI r1, 5
+        vm.ram[3] = 0x32; vm.ram[4] = 1; vm.ram[5] = 100; // JNZ r1, 100
+        vm.ram[6] = 0x00; // HALT
+        vm.ram[100] = 0x00; // HALT at target
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.pc, 101);
+    }
+
+    #[test]
+    fn test_jmp_unconditional() {
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x30; vm.ram[1] = 50; // JMP 50
+        vm.ram[2] = 0x00; // HALT (should not reach)
+        vm.ram[50] = 0x00; // HALT at target
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.pc, 51);
+    }
+
+    #[test]
+    fn test_blt_taken() {
+        // CMP sets r0 = 0xFFFFFFFF (less than); BLT should branch
+        let mut vm = Vm::new();
+        vm.regs[1] = 3;
+        vm.regs[2] = 10;
+        vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2; // CMP r1, r2
+        vm.ram[3] = 0x35; vm.ram[4] = 0; vm.ram[5] = 50; // BLT r0, 50
+        vm.ram[6] = 0x00; // HALT
+        vm.ram[50] = 0x00; // HALT at target
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.pc, 51);
+    }
+
+    #[test]
+    fn test_bge_taken() {
+        // CMP sets r0 = 1 (greater than); BGE should branch
+        let mut vm = Vm::new();
+        vm.regs[1] = 10;
+        vm.regs[2] = 3;
+        vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2; // CMP r1, r2
+        vm.ram[3] = 0x36; vm.ram[4] = 0; vm.ram[5] = 50; // BGE r0, 50
+        vm.ram[6] = 0x00; // HALT
+        vm.ram[50] = 0x00; // HALT at target
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.pc, 51);
+    }
+
+    // ── CALL / RET ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_call_ret() {
+        // CALL 10; HALT
+        // at 10: LDI r5, 99; RET
+        // at 16: HALT (return lands here)
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x33; vm.ram[1] = 10;         // CALL 10
+        vm.ram[2] = 0x00;                            // HALT (return target)
+        vm.ram[10] = 0x10; vm.ram[11] = 5; vm.ram[12] = 99; // LDI r5, 99
+        vm.ram[13] = 0x34;                           // RET
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[5], 99);
+        assert!(vm.halted);
+    }
+
+    // ── MOV ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_mov() {
+        let mut vm = Vm::new();
+        vm.regs[3] = 0xDEADBEEF;
+        vm.ram[0] = 0x51; vm.ram[1] = 7; vm.ram[2] = 3; // MOV r7, r3
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[7], 0xDEADBEEF);
+        assert_eq!(vm.regs[3], 0xDEADBEEF); // source unchanged
+    }
+
+    // ── PUSH / POP ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_push_pop_roundtrip() {
+        // LDI r30, 0xFF00 (SP); LDI r5, 42; PUSH r5; LDI r5, 0; POP r6; HALT
+        let mut vm = Vm::new();
+        let mut pc = 0u32;
+        // LDI r30, 0xFF00
+        vm.ram[pc as usize] = 0x10; pc += 1;
+        vm.ram[pc as usize] = 30; pc += 1;
+        vm.ram[pc as usize] = 0xFF00; pc += 1;
+        // LDI r5, 42
+        vm.ram[pc as usize] = 0x10; pc += 1;
+        vm.ram[pc as usize] = 5; pc += 1;
+        vm.ram[pc as usize] = 42; pc += 1;
+        // PUSH r5
+        vm.ram[pc as usize] = 0x60; pc += 1;
+        vm.ram[pc as usize] = 5; pc += 1;
+        // LDI r5, 0 (clobber)
+        vm.ram[pc as usize] = 0x10; pc += 1;
+        vm.ram[pc as usize] = 5; pc += 1;
+        vm.ram[pc as usize] = 0; pc += 1;
+        // POP r6
+        vm.ram[pc as usize] = 0x61; pc += 1;
+        vm.ram[pc as usize] = 6; pc += 1;
+        // HALT
+        vm.ram[pc as usize] = 0x00; pc += 1;
+
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[6], 42); // got value back from stack
+        assert_eq!(vm.regs[5], 0);  // r5 was clobbered
+        assert_eq!(vm.regs[30], 0xFF00); // SP restored
+    }
+
+    // ── CMP signed comparison ───────────────────────────────────────
+
+    #[test]
+    fn test_cmp_signed_negative_vs_positive() {
+        // -1 (0xFFFFFFFF) vs 5 -> should be less than
+        let mut vm = Vm::new();
+        vm.regs[1] = 0xFFFFFFFF; // -1 as i32
+        vm.regs[2] = 5;
+        vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[0], 0xFFFFFFFF); // -1 < 5 in signed
+    }
+
+    // ── FRAME ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_frame_increments_ticks() {
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x02; // FRAME
+        vm.ram[1] = 0x00; // HALT
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert!(vm.frame_ready);
+        assert_eq!(vm.frame_count, 1);
+        assert_eq!(vm.ram[0xFFE], 1);
+    }
+
+    // ── PSET / FILL ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_fill() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 0x00FF00; // green
+        vm.ram[0] = 0x42; vm.ram[1] = 1; // FILL r1
+        vm.ram[2] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        // Every pixel should be green
+        assert!(vm.screen.iter().all(|&p| p == 0x00FF00));
+    }
+
+    #[test]
+    fn test_pset_pixel() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 10;  // x
+        vm.regs[2] = 20;  // y
+        vm.regs[3] = 0xFF0000; // red
+        vm.ram[0] = 0x40; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; // PSET r1, r2, r3
+        vm.ram[4] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.screen[20 * 256 + 10], 0xFF0000);
+    }
+
+    // ── IKEY ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_ikey_reads_and_clears() {
+        let mut vm = Vm::new();
+        vm.ram[0xFFF] = 65; // 'A' in keyboard port
+        vm.ram[0] = 0x48; vm.ram[1] = 5; // IKEY r5
+        vm.ram[2] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[5], 65);
+        assert_eq!(vm.ram[0xFFF], 0); // port cleared
+    }
+
+    #[test]
+    fn test_ikey_no_key() {
+        let mut vm = Vm::new();
+        vm.ram[0xFFF] = 0; // no key
+        vm.ram[0] = 0x48; vm.ram[1] = 5; // IKEY r5
+        vm.ram[2] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[5], 0);
+    }
+
+    // ── RAND ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_rand_changes_state() {
+        let mut vm = Vm::new();
+        let initial_state = vm.rand_state;
+        vm.ram[0] = 0x49; vm.ram[1] = 5; // RAND r5
+        vm.ram[2] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_ne!(vm.rand_state, initial_state); // state changed
+        assert_ne!(vm.regs[5], 0); // probably nonzero (LCG seeded with DEADBEEF)
+    }
+
+    // ── BEEP ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_beep_sets_state() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 440;  // freq
+        vm.regs[2] = 200;  // duration
+        vm.ram[0] = 0x03; vm.ram[1] = 1; vm.ram[2] = 2; // BEEP r1, r2
+        vm.ram[3] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.beep, Some((440, 200)));
+    }
+
+    // ── Loop: verify backward jumps work at base_addr 0 ─────────────
+
+    #[test]
+    fn test_backward_jump_loop_at_addr_zero() {
+        // Count from 0 to 5 using a loop
+        // LDI r1, 0     ; counter = 0
+        // LDI r2, 1     ; increment
+        // LDI r3, 5     ; limit
+        // loop:
+        // ADD r1, r2     ; counter++
+        // CMP r1, r3
+        // BLT r0, loop   ; if counter < 5, loop
+        // HALT
+        let mut vm = Vm::new();
+        let mut pc = 0usize;
+        // LDI r1, 0
+        vm.ram[pc] = 0x10; vm.ram[pc+1] = 1; vm.ram[pc+2] = 0; pc += 3;
+        // LDI r2, 1
+        vm.ram[pc] = 0x10; vm.ram[pc+1] = 2; vm.ram[pc+2] = 1; pc += 3;
+        // LDI r3, 5
+        vm.ram[pc] = 0x10; vm.ram[pc+1] = 3; vm.ram[pc+2] = 5; pc += 3;
+        let loop_addr = pc as u32;
+        // ADD r1, r2
+        vm.ram[pc] = 0x20; vm.ram[pc+1] = 1; vm.ram[pc+2] = 2; pc += 3;
+        // CMP r1, r3
+        vm.ram[pc] = 0x50; vm.ram[pc+1] = 1; vm.ram[pc+2] = 3; pc += 3;
+        // BLT r0, loop_addr
+        vm.ram[pc] = 0x35; vm.ram[pc+1] = 0; vm.ram[pc+2] = loop_addr; pc += 3;
+        // HALT
+        vm.ram[pc] = 0x00;
+
+        vm.pc = 0;
+        for _ in 0..1000 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 5);
+        assert!(vm.halted);
+    }
+
+    // ── Loop: verify backward jumps work at base_addr 0x1000 ────────
+
+    #[test]
+    fn test_backward_jump_loop_at_addr_0x1000() {
+        // Same program but loaded at 0x1000 -- the GUI mode scenario
+        let mut vm = Vm::new();
+        let base = 0x1000usize;
+        let mut pc = base;
+        // LDI r1, 0
+        vm.ram[pc] = 0x10; vm.ram[pc+1] = 1; vm.ram[pc+2] = 0; pc += 3;
+        // LDI r2, 1
+        vm.ram[pc] = 0x10; vm.ram[pc+1] = 2; vm.ram[pc+2] = 1; pc += 3;
+        // LDI r3, 5
+        vm.ram[pc] = 0x10; vm.ram[pc+1] = 3; vm.ram[pc+2] = 5; pc += 3;
+        let loop_addr = pc as u32;
+        // ADD r1, r2
+        vm.ram[pc] = 0x20; vm.ram[pc+1] = 1; vm.ram[pc+2] = 2; pc += 3;
+        // CMP r1, r3
+        vm.ram[pc] = 0x50; vm.ram[pc+1] = 1; vm.ram[pc+2] = 3; pc += 3;
+        // BLT r0, loop_addr -- label resolved to 0x1000 + offset
+        vm.ram[pc] = 0x35; vm.ram[pc+1] = 0; vm.ram[pc+2] = loop_addr; pc += 3;
+        // HALT
+        vm.ram[pc] = 0x00;
+
+        vm.pc = base as u32;
+        for _ in 0..1000 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[1], 5);
+        assert!(vm.halted);
+    }
+
+    // ── PEEK ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_peek_reads_screen() {
+        let mut vm = Vm::new();
+        vm.screen[30 * 256 + 15] = 0xABCDEF;
+        vm.regs[1] = 15; // x
+        vm.regs[2] = 30; // y
+        vm.ram[0] = 0x6D; vm.ram[1] = 3; vm.ram[2] = 1; vm.ram[3] = 2; // PEEK r3, r1, r2 (dest=r3, x=r1=15, y=r2=30)
+        vm.ram[4] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[3], 0xABCDEF);
+    }
+
+    #[test]
+    fn test_peek_out_of_bounds_returns_zero() {
+        let mut vm = Vm::new();
+        vm.regs[1] = 300; // x out of bounds
+        vm.regs[2] = 300; // y out of bounds
+        vm.ram[0] = 0x6D; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3;
+        vm.ram[4] = 0x00;
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[3], 0);
+    }
+}
