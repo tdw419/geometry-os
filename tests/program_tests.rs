@@ -5661,3 +5661,232 @@ fn test_qemu_boot_riscv_linux() {
         &output_str[..output_str.len().min(500)]
     );
 }
+
+// ============================================================
+// Tests for new immediate-form opcodes (TEXTI, STRO, CMPI, etc.)
+// ============================================================
+
+#[test]
+fn test_texti_renders_inline_string() {
+    let src = "TEXTI 10, 20, \"Hi!\"\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 { if !vm.step() { break; } }
+    // "H" should be drawn at (10, 20) in white (0xFFFFFF)
+    // Check that at least some pixels near (10,20) are non-black
+    let mut found_white = false;
+    for dy in 0..8 {
+        for dx in 0..5 {
+            if vm.screen[(20 + dy) * 256 + (10 + dx)] != 0 {
+                found_white = true;
+            }
+        }
+    }
+    assert!(found_white, "TEXTI should render 'H' at (10,20)");
+    assert!(vm.halted);
+}
+
+#[test]
+fn test_stro_stores_string_to_ram() {
+    let src = "LDI r9, 0x2000\nSTRO r9, \"ABC\"\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 { if !vm.step() { break; } }
+    assert_eq!(vm.ram[0x2000], 65); // 'A'
+    assert_eq!(vm.ram[0x2001], 66); // 'B'
+    assert_eq!(vm.ram[0x2002], 67); // 'C'
+    assert_eq!(vm.ram[0x2003], 0);  // null terminator
+}
+
+#[test]
+fn test_cmpi_less() {
+    let src = "LDI r5, 10\nCMPI r5, 20\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "10 < 20 should set r0 to -1");
+}
+
+#[test]
+fn test_cmpi_equal() {
+    let src = "LDI r5, 42\nCMPI r5, 42\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[0], 0, "42 == 42 should set r0 to 0");
+}
+
+#[test]
+fn test_cmpi_greater() {
+    let src = "LDI r5, 100\nCMPI r5, 50\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[0], 1, "100 > 50 should set r0 to 1");
+}
+
+#[test]
+fn test_cmpi_with_blt() {
+    let src = "LDI r5, 5\nloop:\n  ADDI r5, 1\n  CMPI r5, 10\n  BLT r0, loop\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[5], 10, "loop should stop when r5 reaches 10");
+    assert!(vm.halted);
+}
+
+#[test]
+fn test_addi() {
+    let src = "LDI r1, 10\nADDI r1, 5\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[1], 15, "10 + 5 = 15");
+}
+
+#[test]
+fn test_subi() {
+    let src = "LDI r1, 100\nSUBI r1, 30\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[1], 70, "100 - 30 = 70");
+}
+
+#[test]
+fn test_shli() {
+    let src = "LDI r1, 3\nSHLI r1, 4\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[1], 48, "3 << 4 = 48");
+}
+
+#[test]
+fn test_shri() {
+    let src = "LDI r1, 0xFF\nSHRI r1, 4\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[1], 0x0F, "0xFF >> 4 = 0x0F");
+}
+
+#[test]
+fn test_andi() {
+    let src = "LDI r1, 0xAB\nANDI r1, 0x0F\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[1], 0x0B, "0xAB & 0x0F = 0x0B");
+}
+
+#[test]
+fn test_ori() {
+    let src = "LDI r1, 0xF0\nORI r1, 0x0F\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[1], 0xFF, "0xF0 | 0x0F = 0xFF");
+}
+
+#[test]
+fn test_xori() {
+    let src = "LDI r1, 0xFF\nXORI r1, 0x0F\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[1], 0xF0, "0xFF ^ 0x0F = 0xF0");
+}
+
+#[test]
+fn test_loads_stores() {
+    // Store a value at SP+0, then load it back into another register
+    let src = "LDI r30, 0xFF00\nLDI r1, 42\nSTORES 0, r1\nLOADS r2, 0\nHALT";
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = w; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[2], 42, "LOADS should read back what STORES wrote");
+}
+
+#[test]
+fn test_hello_texti_vs_original() {
+    // TEXTI hello vs original hello -- TEXTI should be much smaller
+    let src_texti = "TEXTI 90, 120, \"Hello, World!\"\nHALT";
+    let texti_asm = assemble(src_texti, 0).unwrap();
+    let src_original = std::fs::read_to_string("programs/hello.asm").unwrap();
+    let original_asm = assemble(&src_original, 0).unwrap();
+    // TEXTI version should be much smaller
+    assert!(texti_asm.pixels.len() < original_asm.pixels.len() / 4,
+        "TEXTI hello ({} words) should be < 1/4 of original ({} words)",
+        texti_asm.pixels.len(), original_asm.pixels.len());
+}
