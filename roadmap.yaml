@@ -6,13 +6,18 @@ phases:
   title: RAM-Mapped Canvas Buffer
   status: complete
   goal: Make the canvas grid addressable from VM RAM via STORE/LOAD
-  description: 'The canvas buffer (128 rows x 32 cols = 4096 cells) currently lives in a separate Vec<u32> outside VM RAM. Map it into the VM address space at 0x8000-0x8FFF so that existing STORE and LOAD
-    opcodes can read and write grid cells directly. No new opcodes needed -- just intercept the address range in the VM''s memory access path.
+  description: 'The canvas buffer (128 rows x 32 cols = 4096 cells) currently lives
+    in a separate Vec<u32> outside VM RAM. Map it into the VM address space at 0x8000-0x8FFF
+    so that existing STORE and LOAD opcodes can read and write grid cells directly.
+    No new opcodes needed -- just intercept the address range in the VM''s memory
+    access path.
 
     '
   deliverables:
   - name: Canvas memory region constant and address mapping
-    description: 'Define CANVAS_RAM_BASE = 0x8000, CANVAS_RAM_SIZE = 4096 (128*32). Document the mapping: address 0x8000 + row*32 + col corresponds to canvas_buffer[row * 32 + col]. Add to memory map docs.
+    description: 'Define CANVAS_RAM_BASE = 0x8000, CANVAS_RAM_SIZE = 4096 (128*32).
+      Document the mapping: address 0x8000 + row*32 + col corresponds to canvas_buffer[row
+      * 32 + col]. Add to memory map docs.
 
       '
     status: complete
@@ -27,8 +32,10 @@ phases:
     - id: p45.d1.t1
       title: Define CANVAS_RAM_BASE and CANVAS_RAM_SIZE constants
       status: complete
-      description: 'Add `pub const CANVAS_RAM_BASE: usize = 0x8000;` and `pub const CANVAS_RAM_SIZE: usize = 4096;` to vm.rs (or main.rs if canvas_buffer ownership stays there). These are the address range
-        [0x8000, 0x8FFF] that maps to the canvas grid.
+      description: 'Add `pub const CANVAS_RAM_BASE: usize = 0x8000;` and `pub const
+        CANVAS_RAM_SIZE: usize = 4096;` to vm.rs (or main.rs if canvas_buffer ownership
+        stays there). These are the address range [0x8000, 0x8FFF] that maps to the
+        canvas grid.
 
         '
       dependencies: []
@@ -39,7 +46,8 @@ phases:
     - id: p45.d1.t2
       title: Update CANVAS_TEXT_SURFACE.md memory map with 0x8000 range
       status: complete
-      description: 'Add a row to the memory map table in CANVAS_TEXT_SURFACE.md: 0x8000-0x8FFF | 4096 | Canvas grid (RAM-mapped mirror of canvas_buffer)
+      description: 'Add a row to the memory map table in CANVAS_TEXT_SURFACE.md: 0x8000-0x8FFF
+        | 4096 | Canvas grid (RAM-mapped mirror of canvas_buffer)
 
         '
       dependencies:
@@ -53,8 +61,11 @@ phases:
     - src/vm.rs
     - docs/CANVAS_TEXT_SURFACE.md
   - name: Intercept LOAD for canvas address range
-    description: 'In the LOAD opcode handler (0x11 in vm.rs), when the translated physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], read from canvas_buffer instead of self.ram. The VM
-      needs a reference or copy of the canvas buffer. Easiest approach: the canvas_buffer is passed to the VM (or VM holds a reference) so LOAD can index into it.
+    description: 'In the LOAD opcode handler (0x11 in vm.rs), when the translated
+      physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], read from
+      canvas_buffer instead of self.ram. The VM needs a reference or copy of the canvas
+      buffer. Easiest approach: the canvas_buffer is passed to the VM (or VM holds
+      a reference) so LOAD can index into it.
 
       '
     status: complete
@@ -69,8 +80,11 @@ phases:
     - id: p45.d2.t1
       title: Add canvas_buffer reference to VM struct
       status: complete
-      description: 'The VM struct needs access to the canvas buffer for both LOAD and STORE interception. Add a field like `pub canvas_buffer: Vec<u32>` to the VM struct (a copy that gets synced back to
-        main.rs canvas_buffer each frame) OR pass it as a mutable reference through the execute method. The copy approach is simpler and avoids lifetime issues.
+      description: 'The VM struct needs access to the canvas buffer for both LOAD
+        and STORE interception. Add a field like `pub canvas_buffer: Vec<u32>` to
+        the VM struct (a copy that gets synced back to main.rs canvas_buffer each
+        frame) OR pass it as a mutable reference through the execute method. The copy
+        approach is simpler and avoids lifetime issues.
 
         '
       dependencies:
@@ -84,8 +98,11 @@ phases:
     - id: p45.d2.t2
       title: Intercept LOAD opcode for canvas range
       status: complete
-      description: 'In the LOAD handler (opcode 0x11), after page translation produces a physical address, check if it falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + CANVAS_RAM_SIZE). If so, read from the
-        canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr]. The canvas buffer index maps directly: canvas_buffer[addr - 0x8000].
+      description: 'In the LOAD handler (opcode 0x11), after page translation produces
+        a physical address, check if it falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE
+        + CANVAS_RAM_SIZE). If so, read from the canvas buffer at (addr - CANVAS_RAM_BASE)
+        instead of self.ram[addr]. The canvas buffer index maps directly: canvas_buffer[addr
+        - 0x8000].
 
         '
       dependencies:
@@ -98,8 +115,9 @@ phases:
     - id: p45.d2.t3
       title: Sync canvas_buffer to VM before execution
       status: complete
-      description: 'Before each frame''s VM execution, copy the current canvas_buffer contents into the VM''s canvas mirror (or set up the reference). This ensures the VM sees the latest grid state including
-        human-typed text.
+      description: 'Before each frame''s VM execution, copy the current canvas_buffer
+        contents into the VM''s canvas mirror (or set up the reference). This ensures
+        the VM sees the latest grid state including human-typed text.
 
         '
       dependencies:
@@ -113,8 +131,10 @@ phases:
     - src/vm.rs
     - src/main.rs
   - name: Intercept STORE for canvas address range
-    description: 'In the STORE opcode handler (0x12 in vm.rs), when the translated physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], write to canvas_buffer instead of self.ram. After
-      the store, mark the canvas as dirty so the renderer picks up the change on the next frame.
+    description: 'In the STORE opcode handler (0x12 in vm.rs), when the translated
+      physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], write to
+      canvas_buffer instead of self.ram. After the store, mark the canvas as dirty
+      so the renderer picks up the change on the next frame.
 
       '
     status: complete
@@ -132,8 +152,10 @@ phases:
     - id: p45.d3.t1
       title: Intercept STORE opcode for canvas range
       status: complete
-      description: 'In the STORE handler (opcode 0x12), after page translation, check if the address is in the canvas range. If so, write to the canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr].
-        Bypass the user-mode protection for this range (canvas is not I/O).
+      description: 'In the STORE handler (opcode 0x12), after page translation, check
+        if the address is in the canvas range. If so, write to the canvas buffer at
+        (addr - CANVAS_RAM_BASE) instead of self.ram[addr]. Bypass the user-mode protection
+        for this range (canvas is not I/O).
 
         '
       dependencies:
@@ -146,8 +168,10 @@ phases:
     - id: p45.d3.t2
       title: Sync VM canvas mutations back to main canvas_buffer
       status: complete
-      description: 'After each frame''s VM execution, copy any changed canvas cells from the VM''s mirror back to main.rs''s canvas_buffer. This ensures the renderer displays the VM''s writes. A simple
-        full-copy each frame is fine (4096 u32 values = 16KB).
+      description: 'After each frame''s VM execution, copy any changed canvas cells
+        from the VM''s mirror back to main.rs''s canvas_buffer. This ensures the renderer
+        displays the VM''s writes. A simple full-copy each frame is fine (4096 u32
+        values = 16KB).
 
         '
       dependencies:
@@ -159,8 +183,11 @@ phases:
     - id: p45.d3.t3
       title: Handle User-mode access to canvas region
       status: complete
-      description: 'The STORE handler currently blocks User-mode writes to addr >= 0xFF00. The canvas range (0x8000) is below this threshold, so User-mode should work by default. But verify and add a comment
-        clarifying that canvas writes are permitted in User mode. If any page translation or protection logic would block it, add an explicit exception.
+      description: 'The STORE handler currently blocks User-mode writes to addr >=
+        0xFF00. The canvas range (0x8000) is below this threshold, so User-mode should
+        work by default. But verify and add a comment clarifying that canvas writes
+        are permitted in User mode. If any page translation or protection logic would
+        block it, add an explicit exception.
 
         '
       dependencies:
@@ -174,7 +201,9 @@ phases:
     - src/vm.rs
     - src/main.rs
   - name: Test suite for RAM-mapped canvas
-    description: 'Write tests that verify STORE/LOAD to canvas addresses work correctly. Test read-after-write, boundary conditions, interaction with normal RAM, and multi-process canvas access.
+    description: 'Write tests that verify STORE/LOAD to canvas addresses work correctly.
+      Test read-after-write, boundary conditions, interaction with normal RAM, and
+      multi-process canvas access.
 
       '
     status: complete
@@ -189,7 +218,9 @@ phases:
     - id: p45.d4.t1
       title: 'Test: LOAD reads canvas buffer values'
       status: complete
-      description: 'Write a test that pre-fills canvas_buffer cells with known values, runs a program that LOADs from 0x8000+offset, and checks the register contains the expected value.
+      description: 'Write a test that pre-fills canvas_buffer cells with known values,
+        runs a program that LOADs from 0x8000+offset, and checks the register contains
+        the expected value.
 
         '
       dependencies:
@@ -202,7 +233,8 @@ phases:
     - id: p45.d4.t2
       title: 'Test: STORE writes appear in canvas buffer'
       status: complete
-      description: 'Write a test that runs a program storing values to canvas addresses, then checks the canvas buffer contains those values.
+      description: 'Write a test that runs a program storing values to canvas addresses,
+        then checks the canvas buffer contains those values.
 
         '
       dependencies:
@@ -214,7 +246,9 @@ phases:
     - id: p45.d4.t3
       title: 'Test: boundary conditions (first/last cell, row boundaries)'
       status: complete
-      description: 'Test STORE/LOAD at 0x8000 (first cell), 0x8FFF (last cell), and at row boundaries (e.g. end of row 0, start of row 1). Verify no off-by-one errors.
+      description: 'Test STORE/LOAD at 0x8000 (first cell), 0x8FFF (last cell), and
+        at row boundaries (e.g. end of row 0, start of row 1). Verify no off-by-one
+        errors.
 
         '
       dependencies:
@@ -226,8 +260,9 @@ phases:
     - id: p45.d4.t4
       title: 'Test: canvas access does not corrupt normal RAM'
       status: complete
-      description: 'Write a test that stores to both normal RAM and canvas addresses, then verifies the normal RAM values are unchanged and the canvas values are correct. Ensures the two memory spaces don''t
-        overlap.
+      description: 'Write a test that stores to both normal RAM and canvas addresses,
+        then verifies the normal RAM values are unchanged and the canvas values are
+        correct. Ensures the two memory spaces don''t overlap.
 
         '
       dependencies:
@@ -240,8 +275,10 @@ phases:
     - id: p45.d4.t5
       title: 'Test: page translation works with canvas addresses'
       status: complete
-      description: 'Verify that LOAD/STORE to canvas addresses still go through the page translation mechanism. A process with a page table that maps 0x8000 to a different physical address should see the
-        translated result. Or if canvas is identity-mapped, verify that works.
+      description: 'Verify that LOAD/STORE to canvas addresses still go through the
+        page translation mechanism. A process with a page table that maps 0x8000 to
+        a different physical address should see the translated result. Or if canvas
+        is identity-mapped, verify that works.
 
         '
       dependencies:
@@ -255,8 +292,10 @@ phases:
     scope_files:
     - src/vm.rs
   - name: 'Demo program: canvas grid writer'
-    description: 'Write an assembly program that writes ASCII characters to the canvas grid using STORE. The program fills the grid with a visible pattern -- for example, writing "HELLO WORLD" across the
-      top row, or filling the grid with sequential ASCII values. The human sees the text appear on the grid while the program runs.
+    description: 'Write an assembly program that writes ASCII characters to the canvas
+      grid using STORE. The program fills the grid with a visible pattern -- for example,
+      writing "HELLO WORLD" across the top row, or filling the grid with sequential
+      ASCII values. The human sees the text appear on the grid while the program runs.
 
       '
     status: complete
@@ -271,8 +310,10 @@ phases:
     - id: p45.d5.t1
       title: Write canvas_grid_writer.asm demo
       status: complete
-      description: 'Create programs/canvas_grid_writer.asm. The program uses LDI to load ASCII values and STORE to write them to 0x8000+ addresses. Writes "PIXELS DRIVE PIXELS" across the first visible
-        row. Uses a loop with an index register incrementing through the string.
+      description: 'Create programs/canvas_grid_writer.asm. The program uses LDI to
+        load ASCII values and STORE to write them to 0x8000+ addresses. Writes "PIXELS
+        DRIVE PIXELS" across the first visible row. Uses a loop with an index register
+        incrementing through the string.
 
         '
       dependencies:
@@ -285,8 +326,9 @@ phases:
     - id: p45.d5.t2
       title: Write canvas_counter.asm demo
       status: complete
-      description: 'Create programs/canvas_counter.asm. A loop that increments a counter and writes the digit (as ASCII) to a specific canvas cell each iteration. The human sees a digit ticking up on the
-        grid in real time.
+      description: 'Create programs/canvas_counter.asm. A loop that increments a counter
+        and writes the digit (as ASCII) to a specific canvas cell each iteration.
+        The human sees a digit ticking up on the grid in real time.
 
         '
       dependencies:
@@ -300,33 +342,46 @@ phases:
     - programs/canvas_grid_writer.asm
     - programs/canvas_counter.asm
   dependencies: []
-  technical_notes: 'The VM''s RAM is 0x10000 (65536 cells). The canvas buffer is 4096 cells. Mapping at 0x8000 leaves plenty of headroom (0x9000-0xFFFF still available). The screen buffer (256x256 = 65536
-    pixels) is too large for a contiguous RAM mapping -- that''s addressed in phase 46.
+  technical_notes: 'The VM''s RAM is 0x10000 (65536 cells). The canvas buffer is 4096
+    cells. Mapping at 0x8000 leaves plenty of headroom (0x9000-0xFFFF still available).
+    The screen buffer (256x256 = 65536 pixels) is too large for a contiguous RAM mapping
+    -- that''s addressed in phase 46.
 
-    Canvas buffer sync strategy: copy main''s canvas_buffer into VM before execution, copy VM''s canvas writes back after execution. 4096 * 4 bytes = 16KB per frame, negligible cost.
+    Canvas buffer sync strategy: copy main''s canvas_buffer into VM before execution,
+    copy VM''s canvas writes back after execution. 4096 * 4 bytes = 16KB per frame,
+    negligible cost.
 
-    The page translation layer (translate_va_or_fault) must be considered. For kernel-mode processes (the default for canvas-assembled programs), virtual address == physical address. For user-mode child
-    processes, the page table may remap things. The canvas range should work through the normal translation path.
+    The page translation layer (translate_va_or_fault) must be considered. For kernel-mode
+    processes (the default for canvas-assembled programs), virtual address == physical
+    address. For user-mode child processes, the page table may remap things. The canvas
+    range should work through the normal translation path.
 
     '
   risks:
   - Page translation might block canvas access for user-mode processes
   - Canvas buffer ownership between main.rs and vm.rs needs careful handling
-  - STORE handler's user-mode protection (addr >= 0xFF00 check) must not block canvas writes
+  - STORE handler's user-mode protection (addr >= 0xFF00 check) must not block canvas
+    writes
   scope_lines_total: 370
   test_target: 10
 - id: phase-46
   title: RAM-Mapped Screen Buffer
   status: complete
   goal: Make the 256x256 screen buffer addressable from VM RAM
-  description: 'The screen buffer (256x256 = 65536 pixels) is currently only accessible via PIXEL (write) and PEEK (read) opcodes. Map it into the VM address space at 0x9000-0x13FFF (a 64K region) so that
-    normal LOAD/STORE can read and write screen pixels. This unifies all three memory spaces (RAM, canvas, screen) under one addressing scheme.
+  description: 'The screen buffer (256x256 = 65536 pixels) is currently only accessible
+    via PIXEL (write) and PEEK (read) opcodes. Map it into the VM address space at
+    0x9000-0x13FFF (a 64K region) so that normal LOAD/STORE can read and write screen
+    pixels. This unifies all three memory spaces (RAM, canvas, screen) under one addressing
+    scheme.
 
     '
   deliverables:
   - name: Screen memory region mapping
-    description: 'Define SCREEN_RAM_BASE = 0x10000. The screen is 256x256 = 65536 cells, so it spans 0x9000-0x18FFF. However, VM RAM is only 0x10000 total. Options: (a) expand RAM_SIZE to 0x20000, (b) use
-      a sparse/aliased mapping where only low-res access works, (c) map screen at a higher address with extended RAM. Simplest: expand RAM to 0x20000 (128K) and map screen at 0x10000.
+    description: 'Define SCREEN_RAM_BASE = 0x10000. The screen is 256x256 = 65536
+      cells, so it spans 0x9000-0x18FFF. However, VM RAM is only 0x10000 total. Options:
+      (a) expand RAM_SIZE to 0x20000, (b) use a sparse/aliased mapping where only
+      low-res access works, (c) map screen at a higher address with extended RAM.
+      Simplest: expand RAM to 0x20000 (128K) and map screen at 0x10000.
 
       '
     status: complete
@@ -341,8 +396,11 @@ phases:
     - id: p46.d1.t1
       title: Determine screen mapping strategy and expand RAM if needed
       status: complete
-      description: 'Evaluate options for mapping the 64K screen buffer. The simplest approach: expand RAM_SIZE from 0x10000 to 0x20000 (128K) and map the screen buffer at 0x10000. This keeps everything
-        in one flat address space. Alternative: use a windowed mapping at 0x9000 where only a 4K window is visible at a time (controlled by a register). Recommend the flat mapping for simplicity.
+      description: 'Evaluate options for mapping the 64K screen buffer. The simplest
+        approach: expand RAM_SIZE from 0x10000 to 0x20000 (128K) and map the screen
+        buffer at 0x10000. This keeps everything in one flat address space. Alternative:
+        use a windowed mapping at 0x9000 where only a 4K window is visible at a time
+        (controlled by a register). Recommend the flat mapping for simplicity.
 
         '
       dependencies:
@@ -354,8 +412,10 @@ phases:
     - id: p46.d1.t2
       title: Implement screen buffer LOAD interception
       status: complete
-      description: 'In the LOAD handler, check if the translated address falls in the screen buffer range. If so, read from self.screen[addr - SCREEN_RAM_BASE] instead of self.ram[addr]. The screen buffer
-        already exists on the VM struct as `pub screen: Vec<u32>`.
+      description: 'In the LOAD handler, check if the translated address falls in
+        the screen buffer range. If so, read from self.screen[addr - SCREEN_RAM_BASE]
+        instead of self.ram[addr]. The screen buffer already exists on the VM struct
+        as `pub screen: Vec<u32>`.
 
         '
       dependencies:
@@ -367,8 +427,10 @@ phases:
     - id: p46.d1.t3
       title: Implement screen buffer STORE interception
       status: complete
-      description: 'In the STORE handler, check if the translated address falls in the screen buffer range. If so, write to self.screen[addr - SCREEN_RAM_BASE]. The renderer will pick up the change on the
-        next frame automatically since it reads from self.screen.
+      description: 'In the STORE handler, check if the translated address falls in
+        the screen buffer range. If so, write to self.screen[addr - SCREEN_RAM_BASE].
+        The renderer will pick up the change on the next frame automatically since
+        it reads from self.screen.
 
         '
       dependencies:
@@ -381,7 +443,8 @@ phases:
     scope_files:
     - src/vm.rs
   - name: Tests for screen buffer mapping
-    description: 'Verify that LOAD/STORE to screen addresses correctly read and write pixels. Cross-validate against PEEK and PIXEL opcodes.
+    description: 'Verify that LOAD/STORE to screen addresses correctly read and write
+      pixels. Cross-validate against PEEK and PIXEL opcodes.
 
       '
     status: complete
@@ -396,7 +459,9 @@ phases:
     - id: p46.d2.t1
       title: 'Test: LOAD from screen matches PEEK'
       status: complete
-      description: 'Write a test that draws a pixel with PIXEL opcode, then reads it with both PEEK and LOAD (via screen-mapped address). Verify both return the same color value.
+      description: 'Write a test that draws a pixel with PIXEL opcode, then reads
+        it with both PEEK and LOAD (via screen-mapped address). Verify both return
+        the same color value.
 
         '
       dependencies:
@@ -408,7 +473,9 @@ phases:
     - id: p46.d2.t2
       title: 'Test: STORE to screen matches PIXEL'
       status: complete
-      description: 'Write a test that writes a pixel via both PIXEL opcode and STORE to screen-mapped address. Read back with PEEK and verify both wrote the same value.
+      description: 'Write a test that writes a pixel via both PIXEL opcode and STORE
+        to screen-mapped address. Read back with PEEK and verify both wrote the same
+        value.
 
         '
       dependencies:
@@ -421,20 +488,26 @@ phases:
     scope_files:
     - src/vm.rs
   - name: Unified memory map documentation
-    description: 'Update all memory map documentation to show the complete unified address space: RAM (0x0000-0x7FFF), canvas (0x8000-0x8FFF), screen (0x10000+). Add a new doc section showing the full map.
+    description: 'Update all memory map documentation to show the complete unified
+      address space: RAM (0x0000-0x7FFF), canvas (0x8000-0x8FFF), screen (0x10000+).
+      Add a new doc section showing the full map.
 
       '
     status: complete
     acceptance_criteria:
     - description: All three regions documented in one place
-      validation: grep 'canvas\|screen\|RAM' docs/CANVAS_TEXT_SURFACE.md shows unified map
+      validation: grep 'canvas\|screen\|RAM' docs/CANVAS_TEXT_SURFACE.md shows unified
+        map
       met: true
     tasks:
     - id: p46.d3.t1
       title: Write UNIFIED_MEMORY_MAP section in docs
       status: complete
-      description: 'Add a section to CANVAS_TEXT_SURFACE.md (or create UNIFIED_MEMORY_MAP.md) showing the complete address space: 0x0000-0x0FFF: bytecode/data, 0x1000-0x1FFF: canvas bytecode, 0x8000-0x8FFF:
-        canvas grid (mirror), 0x10000-0x1FFFF: screen buffer. Explain the design: one address space, three backing stores, LOAD/STORE as the universal access method.
+      description: 'Add a section to CANVAS_TEXT_SURFACE.md (or create UNIFIED_MEMORY_MAP.md)
+        showing the complete address space: 0x0000-0x0FFF: bytecode/data, 0x1000-0x1FFF:
+        canvas bytecode, 0x8000-0x8FFF: canvas grid (mirror), 0x10000-0x1FFFF: screen
+        buffer. Explain the design: one address space, three backing stores, LOAD/STORE
+        as the universal access method.
 
         '
       dependencies:
@@ -451,18 +524,24 @@ phases:
     target: phase-46
     type: hard
     reason: Screen mapping follows the same interception pattern as canvas mapping
-  technical_notes: 'The screen buffer (self.screen) is already a field on the VM struct, unlike canvas_buffer which lives in main.rs. This makes interception simpler -- no sync step needed.
+  technical_notes: 'The screen buffer (self.screen) is already a field on the VM struct,
+    unlike canvas_buffer which lives in main.rs. This makes interception simpler --
+    no sync step needed.
 
-    RAM_SIZE expansion from 0x10000 to 0x20000 adds 256KB of memory (64K u32 cells). At current RAM usage this is fine. The screen mapping at 0x10000 means screen pixels are at screen[y * 256 + x], accessed
-    as RAM[0x10000 + y * 256 + x].
+    RAM_SIZE expansion from 0x10000 to 0x20000 adds 256KB of memory (64K u32 cells).
+    At current RAM usage this is fine. The screen mapping at 0x10000 means screen
+    pixels are at screen[y * 256 + x], accessed as RAM[0x10000 + y * 256 + x].
 
-    Alternative: don''t expand RAM, instead use a separate mapping that redirects LOAD/STORE at 0x9000-0xFFFF to the screen buffer. But this creates an address collision with I/O ports (0xFFB-0xFFF). Expanding
-    RAM is cleaner.
+    Alternative: don''t expand RAM, instead use a separate mapping that redirects
+    LOAD/STORE at 0x9000-0xFFFF to the screen buffer. But this creates an address
+    collision with I/O ports (0xFFB-0xFFF). Expanding RAM is cleaner.
 
     '
   risks:
-  - RAM_SIZE expansion may affect fuzzer or existing test assumptions about address space
-  - Screen buffer is 256x256=64K which exactly fills the expansion -- no room for growth
+  - RAM_SIZE expansion may affect fuzzer or existing test assumptions about address
+    space
+  - Screen buffer is 256x256=64K which exactly fills the expansion -- no room for
+    growth
   - Page translation for screen addresses may need special handling
   scope_lines_total: 220
   test_target: 8
@@ -470,20 +549,27 @@ phases:
   title: Self-Assembly Opcode (ASMSELF)
   status: complete
   goal: Add an opcode that lets a running program assemble canvas text into bytecode
-  description: 'Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas text, runs it through the preprocessor and assembler, and stores the resulting bytecode at 0x1000. This lets a program
-    write new assembly onto the canvas grid (using STORE to the canvas range from phase 45) and then compile it without human intervention. Combined, a program can generate its own replacement.
+  description: 'Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas
+    text, runs it through the preprocessor and assembler, and stores the resulting
+    bytecode at 0x1000. This lets a program write new assembly onto the canvas grid
+    (using STORE to the canvas range from phase 45) and then compile it without human
+    intervention. Combined, a program can generate its own replacement.
 
     '
   deliverables:
   - name: ASMSELF opcode implementation
-    description: 'New opcode (suggest 0x52 or next available). When executed: 1. Read the canvas buffer as a text string (same logic as F8 handler) 2. Run through preprocessor::preprocess() 3. Run through
-      assembler::assemble() 4. If success: write bytecode to 0x1000, set a flag 5. If failure: set an error register/port with the error info The VM needs access to the preprocessor and assembler modules.
+    description: 'New opcode (suggest 0x52 or next available). When executed: 1. Read
+      the canvas buffer as a text string (same logic as F8 handler) 2. Run through
+      preprocessor::preprocess() 3. Run through assembler::assemble() 4. If success:
+      write bytecode to 0x1000, set a flag 5. If failure: set an error register/port
+      with the error info The VM needs access to the preprocessor and assembler modules.
 
       '
     status: complete
     acceptance_criteria:
     - description: ASMSELF assembles canvas text into bytecode at 0x1000
-      validation: Program writes text to canvas, calls ASMSELF, then LOADs from 0x1000 to verify bytecode
+      validation: Program writes text to canvas, calls ASMSELF, then LOADs from 0x1000
+        to verify bytecode
       met: true
     - description: Assembly errors are reported without crashing the VM
       validation: Write invalid text to canvas, call ASMSELF, VM continues running
@@ -492,8 +578,9 @@ phases:
     - id: p47.d1.t1
       title: Add ASMSELF opcode constant and handler skeleton
       status: complete
-      description: 'Reserve the next available opcode number for ASMSELF. Add a stub handler in the VM''s execute loop that reads the canvas buffer, converts to text string, and logs "ASMSELF called" for
-        now.
+      description: 'Reserve the next available opcode number for ASMSELF. Add a stub
+        handler in the VM''s execute loop that reads the canvas buffer, converts to
+        text string, and logs "ASMSELF called" for now.
 
         '
       dependencies:
@@ -506,8 +593,11 @@ phases:
     - id: p47.d1.t2
       title: Implement canvas-to-text conversion in VM context
       status: complete
-      description: 'Extract the canvas-to-text conversion logic from the F8 handler in main.rs into a reusable function. This function takes a &[u32] (canvas buffer slice) and returns a String. The F8 handler
-        and the ASMSELF opcode both call this function. Place it in a shared module (e.g., preprocessor.rs or a new canvas.rs).
+      description: 'Extract the canvas-to-text conversion logic from the F8 handler
+        in main.rs into a reusable function. This function takes a &[u32] (canvas
+        buffer slice) and returns a String. The F8 handler and the ASMSELF opcode
+        both call this function. Place it in a shared module (e.g., preprocessor.rs
+        or a new canvas.rs).
 
         '
       dependencies:
@@ -521,8 +611,12 @@ phases:
     - id: p47.d1.t3
       title: Wire preprocessor and assembler into ASMSELF handler
       status: complete
-      description: 'In the ASMSELF handler, after getting the text string from the canvas: call preprocessor::preprocess(), then assembler::assemble(). On success, write bytecode bytes to self.ram starting
-        at CANVAS_BYTECODE_ADDR (0x1000). On failure, write the error string to a memory-mapped error port or a designated RAM region. The VM will need to import/use the preprocessor and assembler modules.
+      description: 'In the ASMSELF handler, after getting the text string from the
+        canvas: call preprocessor::preprocess(), then assembler::assemble(). On success,
+        write bytecode bytes to self.ram starting at CANVAS_BYTECODE_ADDR (0x1000).
+        On failure, write the error string to a memory-mapped error port or a designated
+        RAM region. The VM will need to import/use the preprocessor and assembler
+        modules.
 
         '
       dependencies:
@@ -535,7 +629,8 @@ phases:
     - id: p47.d1.t4
       title: Add ASMSELF to disassembler
       status: complete
-      description: 'Add the ASMSELF opcode to the disassemble() method in vm.rs so it appears correctly in trace output and disassembly views.
+      description: 'Add the ASMSELF opcode to the disassemble() method in vm.rs so
+        it appears correctly in trace output and disassembly views.
 
         '
       dependencies:
@@ -547,7 +642,9 @@ phases:
     - id: p47.d1.t5
       title: Add ASMSELF to assembler mnemonic list
       status: complete
-      description: 'Add "ASMSELF" to the OPCODES list in preprocessor.rs and the assembler in assembler.rs. It takes no operands (just the opcode byte). Update the opcode count in docs and meta.
+      description: 'Add "ASMSELF" to the OPCODES list in preprocessor.rs and the assembler
+        in assembler.rs. It takes no operands (just the opcode byte). Update the opcode
+        count in docs and meta.
 
         '
       dependencies:
@@ -565,8 +662,9 @@ phases:
     - src/assembler.rs
     - src/preprocessor.rs
   - name: Assembly status port
-    description: 'Define a memory-mapped port (e.g., 0xFFE or 0xFFA) where the ASMSELF opcode writes its result: success (bytecode length) or failure (0xFFFFFFFF). Programs poll this port after calling
-      ASMSELF to check if assembly succeeded.
+    description: 'Define a memory-mapped port (e.g., 0xFFE or 0xFFA) where the ASMSELF
+      opcode writes its result: success (bytecode length) or failure (0xFFFFFFFF).
+      Programs poll this port after calling ASMSELF to check if assembly succeeded.
 
       '
     status: complete
@@ -581,8 +679,9 @@ phases:
     - id: p47.d2.t1
       title: Define ASM_STATUS port and write logic
       status: complete
-      description: 'Use existing RAM[0xFFD] (ASM result port) which already exists for this purpose (bytecode word count, or 0xFFFFFFFF on error). Ensure ASMSELF writes to this port identically to how F8
-        assembly does.
+      description: 'Use existing RAM[0xFFD] (ASM result port) which already exists
+        for this purpose (bytecode word count, or 0xFFFFFFFF on error). Ensure ASMSELF
+        writes to this port identically to how F8 assembly does.
 
         '
       dependencies:
@@ -595,19 +694,23 @@ phases:
     scope_files:
     - src/vm.rs
   - name: Test suite for ASMSELF
-    description: 'Test that ASMSELF correctly assembles canvas text, handles errors, and the resulting bytecode is executable.
+    description: 'Test that ASMSELF correctly assembles canvas text, handles errors,
+      and the resulting bytecode is executable.
 
       '
     status: complete
     acceptance_criteria:
     - description: ASMSELF assembles and the result runs correctly
-      validation: 'Test program: write simple ASM to canvas, ASMSELF, jump to 0x1000, verify behavior'
+      validation: 'Test program: write simple ASM to canvas, ASMSELF, jump to 0x1000,
+        verify behavior'
       met: true
     tasks:
     - id: p47.d3.t1
       title: 'Test: ASMSELF assembles valid canvas text'
       status: complete
-      description: 'Pre-fill canvas buffer with "LDI r0, 42\nHALT\n". Execute ASMSELF. Verify RAM[0xFFD] contains a positive byte count. Verify RAM at 0x1000 contains expected bytecode for LDI r0, 42.
+      description: 'Pre-fill canvas buffer with "LDI r0, 42\nHALT\n". Execute ASMSELF.
+        Verify RAM[0xFFD] contains a positive byte count. Verify RAM at 0x1000 contains
+        expected bytecode for LDI r0, 42.
 
         '
       dependencies:
@@ -619,7 +722,8 @@ phases:
     - id: p47.d3.t2
       title: 'Test: ASMSELF handles invalid assembly gracefully'
       status: complete
-      description: 'Pre-fill canvas with garbage text. Execute ASMSELF. Verify RAM[0xFFD] contains 0xFFFFFFFF. Verify VM did not crash and continues executing.
+      description: 'Pre-fill canvas with garbage text. Execute ASMSELF. Verify RAM[0xFFD]
+        contains 0xFFFFFFFF. Verify VM did not crash and continues executing.
 
         '
       dependencies:
@@ -631,8 +735,9 @@ phases:
     - id: p47.d3.t3
       title: 'Test: program writes code to canvas then assembles it'
       status: complete
-      description: 'Full integration test: a program uses STORE to write "LDI r0, 99\nHALT\n" to the canvas address range, calls ASMSELF, then jumps to 0x1000 (or uses RUNNEXT from phase 48). Verify r0
-        ends up as 99.
+      description: 'Full integration test: a program uses STORE to write "LDI r0,
+        99\nHALT\n" to the canvas address range, calls ASMSELF, then jumps to 0x1000
+        (or uses RUNNEXT from phase 48). Verify r0 ends up as 99.
 
         '
       dependencies:
@@ -648,23 +753,30 @@ phases:
   - source: phase-45
     target: phase-47
     type: hard
-    reason: ASMSELF needs the canvas buffer to be addressable so programs can write to it first
+    reason: ASMSELF needs the canvas buffer to be addressable so programs can write
+      to it first
   - source: phase-46
     target: phase-47
     type: soft
     reason: Screen mapping not required for ASMSELF, but useful for demos
-  technical_notes: 'The assembler and preprocessor are currently called from main.rs. The VM (vm.rs) will need to import them. Since vm.rs is a separate module, this means adding `use crate::assembler;`
-    and `use crate::preprocessor;` to vm.rs.
+  technical_notes: 'The assembler and preprocessor are currently called from main.rs.
+    The VM (vm.rs) will need to import them. Since vm.rs is a separate module, this
+    means adding `use crate::assembler;` and `use crate::preprocessor;` to vm.rs.
 
-    The canvas-to-text conversion currently lives in the F8 handler in main.rs. It reads 4096 cells, converts each u32 to a char, collapses newlines. This logic needs to be extracted into a shared function.
-    The function should be in a neutral module (preprocessor.rs is a good candidate since it already handles text processing).
+    The canvas-to-text conversion currently lives in the F8 handler in main.rs. It
+    reads 4096 cells, converts each u32 to a char, collapses newlines. This logic
+    needs to be extracted into a shared function. The function should be in a neutral
+    module (preprocessor.rs is a good candidate since it already handles text processing).
 
-    ASMSELF takes no operands (1-byte instruction). The assembled bytecode always goes to 0x1000 (CANVAS_BYTECODE_ADDR), same as F8. This means calling ASMSELF overwrites whatever bytecode is currently
-    running. The program should use RUNNEXT (phase 48) to jump to the new bytecode.
+    ASMSELF takes no operands (1-byte instruction). The assembled bytecode always
+    goes to 0x1000 (CANVAS_BYTECODE_ADDR), same as F8. This means calling ASMSELF
+    overwrites whatever bytecode is currently running. The program should use RUNNEXT
+    (phase 48) to jump to the new bytecode.
 
     '
   risks:
-  - ASMSELF during execution replaces the running bytecode -- program must jump to new code carefully
+  - ASMSELF during execution replaces the running bytecode -- program must jump to
+    new code carefully
   - Preprocessor/assembler errors in a running VM context need careful error handling
   - Self-assembly is inherently dangerous (infinite loops, corrupting own code)
   scope_lines_total: 340
@@ -673,16 +785,21 @@ phases:
   title: Self-Execution Opcode (RUNNEXT)
   status: complete
   goal: Add an opcode that starts executing the newly assembled bytecode
-  description: 'Add the RUNNEXT opcode that sets PC to 0x1000 (the canvas bytecode region) and continues execution. Combined with ASMSELF, a program can write new code onto the canvas, compile it, and run
-    it -- all from within the VM. This closes the loop: pixels write pixels, pixels assemble pixels, pixels execute pixels.
+  description: 'Add the RUNNEXT opcode that sets PC to 0x1000 (the canvas bytecode
+    region) and continues execution. Combined with ASMSELF, a program can write new
+    code onto the canvas, compile it, and run it -- all from within the VM. This closes
+    the loop: pixels write pixels, pixels assemble pixels, pixels execute pixels.
 
     '
   deliverables:
   - name: RUNNEXT opcode implementation
-    description: 'New opcode (next available after ASMSELF). When executed: 1. Set PC = CANVAS_BYTECODE_ADDR (0x1000) 2. Reset halted flag 3. Clear any error state 4. Execution continues from the new bytecode
-      on the next fetch cycle
+    description: 'New opcode (next available after ASMSELF). When executed: 1. Set
+      PC = CANVAS_BYTECODE_ADDR (0x1000) 2. Reset halted flag 3. Clear any error state
+      4. Execution continues from the new bytecode on the next fetch cycle
 
-      This is essentially JMP 0x1000 but with awareness that the bytecode at 0x1000 was just assembled from canvas text. Could be implemented as a simple PC set, or as JMP with an implicit operand.
+      This is essentially JMP 0x1000 but with awareness that the bytecode at 0x1000
+      was just assembled from canvas text. Could be implemented as a simple PC set,
+      or as JMP with an implicit operand.
 
       '
     status: complete
@@ -697,8 +814,10 @@ phases:
     - id: p48.d1.t1
       title: Implement RUNNEXT opcode handler
       status: complete
-      description: 'Add RUNNEXT opcode in vm.rs execute match. Handler sets self.pc = CANVAS_BYTECODE_ADDR (0x1000). No operands needed (1-byte instruction). Register file is preserved. The VM continues
-        fetching from the new PC on the next cycle.
+      description: 'Add RUNNEXT opcode in vm.rs execute match. Handler sets self.pc
+        = CANVAS_BYTECODE_ADDR (0x1000). No operands needed (1-byte instruction).
+        Register file is preserved. The VM continues fetching from the new PC on the
+        next cycle.
 
         '
       dependencies:
@@ -711,7 +830,8 @@ phases:
     - id: p48.d1.t2
       title: Add RUNNEXT to disassembler and assembler
       status: complete
-      description: 'Add RUNNEXT to the mnemonic list in assembler.rs, the OPCODES list in preprocessor.rs, and the disassemble() method in vm.rs. No operands.
+      description: 'Add RUNNEXT to the mnemonic list in assembler.rs, the OPCODES
+        list in preprocessor.rs, and the disassemble() method in vm.rs. No operands.
 
         '
       dependencies:
@@ -729,19 +849,23 @@ phases:
     - src/assembler.rs
     - src/preprocessor.rs
   - name: Test suite for RUNNEXT
-    description: 'Test the full write-compile-execute cycle. A program writes new code, assembles it, runs it, and the new code''s effects are visible.
+    description: 'Test the full write-compile-execute cycle. A program writes new
+      code, assembles it, runs it, and the new code''s effects are visible.
 
       '
     status: complete
     acceptance_criteria:
     - description: Full write-compile-execute cycle works end-to-end
-      validation: Test program writes LDI r0, 77 to canvas, ASMSELF, RUNNEXT, verify r0=77
+      validation: Test program writes LDI r0, 77 to canvas, ASMSELF, RUNNEXT, verify
+        r0=77
       met: true
     tasks:
     - id: p48.d2.t1
       title: 'Test: RUNNEXT executes newly assembled code'
       status: complete
-      description: 'Write a test program that: (1) stores "LDI r0, 77\nHALT" to canvas addresses, (2) calls ASMSELF, (3) checks RAM[0xFFD] for success, (4) calls RUNNEXT, (5) verify r0 == 77 after execution.
+      description: 'Write a test program that: (1) stores "LDI r0, 77\nHALT" to canvas
+        addresses, (2) calls ASMSELF, (3) checks RAM[0xFFD] for success, (4) calls
+        RUNNEXT, (5) verify r0 == 77 after execution.
 
         '
       dependencies:
@@ -754,7 +878,9 @@ phases:
     - id: p48.d2.t2
       title: 'Test: registers preserved across RUNNEXT'
       status: complete
-      description: 'Set r5 = 12345. Write code to canvas that reads r5 and adds 1. ASMSELF, RUNNEXT. Verify r5 is still 12345 in the new program''s context, and that the new program can read it.
+      description: 'Set r5 = 12345. Write code to canvas that reads r5 and adds 1.
+        ASMSELF, RUNNEXT. Verify r5 is still 12345 in the new program''s context,
+        and that the new program can read it.
 
         '
       dependencies:
@@ -766,8 +892,9 @@ phases:
     - id: p48.d2.t3
       title: 'Test: chained self-modification'
       status: complete
-      description: 'Program A writes Program B to canvas. ASMSELF. RUNNEXT. Program B writes Program C to canvas. ASMSELF. RUNNEXT. Program C HALTs. Verify all three ran in sequence. This is the generational
-        self-modification test.
+      description: 'Program A writes Program B to canvas. ASMSELF. RUNNEXT. Program
+        B writes Program C to canvas. ASMSELF. RUNNEXT. Program C HALTs. Verify all
+        three ran in sequence. This is the generational self-modification test.
 
         '
       dependencies:
@@ -784,13 +911,19 @@ phases:
     target: phase-48
     type: hard
     reason: RUNNEXT is meaningless without ASMSELF to produce the bytecode
-  technical_notes: 'RUNNEXT is intentionally simple: it just sets PC = 0x1000. The complexity is in ASMSELF (phase 47). RUNNEXT could alternatively be implemented as a JMP to a label at 0x1000, but having
-    a dedicated opcode makes the intent clear and enables future extensions (e.g., RUNNEXT with a timeout, RUNNEXT in a sandboxed context).
+  technical_notes: 'RUNNEXT is intentionally simple: it just sets PC = 0x1000. The
+    complexity is in ASMSELF (phase 47). RUNNEXT could alternatively be implemented
+    as a JMP to a label at 0x1000, but having a dedicated opcode makes the intent
+    clear and enables future extensions (e.g., RUNNEXT with a timeout, RUNNEXT in
+    a sandboxed context).
 
-    Register preservation: RUNNEXT does NOT reset registers. The new program inherits all register state. This is by design -- it allows data passing between program generations. If a clean slate is needed,
-    the new program can zero registers itself.
+    Register preservation: RUNNEXT does NOT reset registers. The new program inherits
+    all register state. This is by design -- it allows data passing between program
+    generations. If a clean slate is needed, the new program can zero registers itself.
 
-    Stack preservation: the return stack is NOT reset. This means the new program can RET back to the caller if the caller used CALL before RUNNEXT. This is a feature, not a bug -- it enables coroutines.
+    Stack preservation: the return stack is NOT reset. This means the new program
+    can RET back to the caller if the caller used CALL before RUNNEXT. This is a feature,
+    not a bug -- it enables coroutines.
 
     '
   risks:
@@ -800,29 +933,35 @@ phases:
   test_target: 5
 - id: phase-49
   title: 'Self-Modifying Programs: Demos and Patterns'
-  status: todo
+  status: in_progress
   goal: Build demonstration programs that showcase the pixel-driving-pixels capability
-  description: 'With phases 45-48 complete, write programs that demonstrate the full self-modifying capability: programs that write their own code, programs whose state IS the display, programs that evolve
-    over time. These demos prove that the pixel-driving-pixels problem is solved.
+  description: 'With phases 45-48 complete, write programs that demonstrate the full
+    self-modifying capability: programs that write their own code, programs whose
+    state IS the display, programs that evolve over time. These demos prove that the
+    pixel-driving-pixels problem is solved.
 
     '
   deliverables:
   - name: 'Demo: Self-writing program'
-    description: 'A program that writes another program onto the canvas grid using STORE to canvas addresses, calls ASMSELF to compile it, and RUNNEXT to execute it. The generated program is different from
-      the original -- it''s a true successor. The human watches text appear on the grid, then sees the new program run.
+    description: 'A program that writes another program onto the canvas grid using
+      STORE to canvas addresses, calls ASMSELF to compile it, and RUNNEXT to execute
+      it. The generated program is different from the original -- it''s a true successor.
+      The human watches text appear on the grid, then sees the new program run.
 
       '
-    status: todo
+    status: done
     acceptance_criteria:
     - description: Program generates a visually different successor and runs it
       validation: Load demo, F5, watch grid change, see new program execute
-      met: false
+      met: true
     tasks:
     - id: p49.d1.t1
       title: Write programs/self_writer.asm
-      status: todo
-      description: 'A program that uses STORE to canvas addresses (0x8000+) to write "LDI r0, 42\nLDI r1, 1\nADD r0, r1\nHALT\n" onto the grid. The text becomes visible as typed glyphs. Then calls ASMSELF
-        and RUNNEXT. The successor runs and r0 = 43.
+      status: complete
+      description: 'A program that uses STORE to canvas addresses (0x8000+) to write
+        "LDI r0, 42\nLDI r1, 1\nADD r0, r1\nHALT\n" onto the grid. The text becomes
+        visible as typed glyphs. Then calls ASMSELF and RUNNEXT. The successor runs
+        and r0 = 43.
 
         '
       dependencies:
@@ -834,8 +973,11 @@ phases:
       - programs/self_writer.asm
     - id: p49.d1.t2
       title: Write programs/evolving_counter.asm
-      description: 'A program that counts frames (via TICKS port 0xFFE) and writes the count as ASCII digits directly onto the canvas grid. The grid becomes a live dashboard. The count digits are the program''s
-        visible state -- no separate output. The digit changes each frame. This demonstrates that the grid IS the display.
+      description: 'A program that counts frames (via TICKS port 0xFFE) and writes
+        the count as ASCII digits directly onto the canvas grid. The grid becomes
+        a live dashboard. The count digits are the program''s visible state -- no
+        separate output. The digit changes each frame. This demonstrates that the
+        grid IS the display.
 
         '
       dependencies:
@@ -847,8 +989,11 @@ phases:
       status: todo
     - id: p49.d1.t3
       title: Write programs/game_of_life.asm
-      description: 'Conway''s Game of Life implemented entirely in Geometry OS assembly. Uses PEEK to read the screen, POKE (or STORE to screen-mapped RAM) to write the next generation. The screen IS the
-        cellular automaton. No Rust code involved in the logic -- pure pixel-driven-pixels. Initialize with a glider or blinker pattern.
+      description: 'Conway''s Game of Life implemented entirely in Geometry OS assembly.
+        Uses PEEK to read the screen, POKE (or STORE to screen-mapped RAM) to write
+        the next generation. The screen IS the cellular automaton. No Rust code involved
+        in the logic -- pure pixel-driven-pixels. Initialize with a glider or blinker
+        pattern.
 
         '
       dependencies:
@@ -861,8 +1006,11 @@ phases:
       status: todo
     - id: p49.d1.t4
       title: Write programs/code_evolution.asm
-      description: 'The crown jewel demo. A program that writes increasingly complex versions of itself to the canvas grid. Generation 0 just halts. Generation 1 writes generation 2 which adds a counter.
-        Generation 2 writes generation 3 which adds a screen effect. Each generation writes its successor, compiles, and runs it. The human watches the code evolve on the grid in real time.
+      description: 'The crown jewel demo. A program that writes increasingly complex
+        versions of itself to the canvas grid. Generation 0 just halts. Generation
+        1 writes generation 2 which adds a counter. Generation 2 writes generation
+        3 which adds a screen effect. Each generation writes its successor, compiles,
+        and runs it. The human watches the code evolve on the grid in real time.
 
         '
       dependencies:
@@ -877,8 +1025,10 @@ phases:
     scope_files:
     - programs/
   - name: 'Documentation: pixel-driving-pixels patterns'
-    description: 'Write a guide for building self-modifying programs. Document the patterns: canvas STORE for writing code, ASMSELF for compiling, RUNNEXT for executing, register passing between generations,
-      and common pitfalls (infinite loops, corrupting your own code).
+    description: 'Write a guide for building self-modifying programs. Document the
+      patterns: canvas STORE for writing code, ASMSELF for compiling, RUNNEXT for
+      executing, register passing between generations, and common pitfalls (infinite
+      loops, corrupting your own code).
 
       '
     status: todo
@@ -890,8 +1040,11 @@ phases:
     - id: p49.d2.t1
       title: Write docs/SELF_MODIFYING_GUIDE.md
       status: todo
-      description: 'Create a guide covering: (1) Canvas STORE pattern -- how to write text to canvas cells, (2) ASMSELF + RUNNEXT pattern -- compile and execute, (3) Register passing -- sharing state between
-        generations, (4) Self-reading -- using LOAD from canvas to inspect your own source, (5) Pitfalls -- infinite loops, corruption, error handling. Include code snippets for each pattern.
+      description: 'Create a guide covering: (1) Canvas STORE pattern -- how to write
+        text to canvas cells, (2) ASMSELF + RUNNEXT pattern -- compile and execute,
+        (3) Register passing -- sharing state between generations, (4) Self-reading
+        -- using LOAD from canvas to inspect your own source, (5) Pitfalls -- infinite
+        loops, corruption, error handling. Include code snippets for each pattern.
 
         '
       dependencies:
@@ -920,10 +1073,14 @@ phases:
     target: phase-49
     type: hard
     reason: RUNNEXT needed for self-writing and code evolution demos
-  technical_notes: 'Demo programs should be small enough to fit on the canvas grid (32 columns, 128 rows). Complex programs may need to use the .org directive for layout. The code_evolution demo is the
-    most ambitious -- it may need careful tuning to keep each generation''s code within grid size limits.
+  technical_notes: 'Demo programs should be small enough to fit on the canvas grid
+    (32 columns, 128 rows). Complex programs may need to use the .org directive for
+    layout. The code_evolution demo is the most ambitious -- it may need careful tuning
+    to keep each generation''s code within grid size limits.
 
-    The game_of_life.asm demo is the purest expression of pixels-driving-pixels. It needs the screen buffer mapping from phase 46 to work optimally, but could also work with just PEEK and PIXEL opcodes.
+    The game_of_life.asm demo is the purest expression of pixels-driving-pixels. It
+    needs the screen buffer mapping from phase 46 to work optimally, but could also
+    work with just PEEK and PIXEL opcodes.
 
     '
   risks:
@@ -935,30 +1092,38 @@ phases:
   title: 'Reactive Canvas: Live Cell Formulas'
   status: future
   goal: Make canvas cells react to changes in other cells automatically
-  description: 'Extend the canvas with an optional formula layer. A cell can have a formula instead of a static value. When a referenced cell changes, the formula cell recalculates. This is the spreadsheet
-    model applied to the pixel grid. It makes the canvas reactive without explicit STORE/LOAD loops.
+  description: 'Extend the canvas with an optional formula layer. A cell can have
+    a formula instead of a static value. When a referenced cell changes, the formula
+    cell recalculates. This is the spreadsheet model applied to the pixel grid. It
+    makes the canvas reactive without explicit STORE/LOAD loops.
 
-    This is a future phase -- it depends on phases 45-48 being stable and is a natural evolution of the pixel-driving-pixels concept. Not required for the initial self-modifying capability.
+    This is a future phase -- it depends on phases 45-48 being stable and is a natural
+    evolution of the pixel-driving-pixels concept. Not required for the initial self-modifying
+    capability.
 
     '
   deliverables:
   - name: Formula cell type and evaluation engine
-    description: 'Add a parallel buffer (formula_buffer, same size as canvas_buffer) where each cell can optionally hold a formula instead of a value. Formulas reference other cells by address. When a STORE
-      writes to a cell, the engine checks if any formula depends on that cell and recalculates.
+    description: 'Add a parallel buffer (formula_buffer, same size as canvas_buffer)
+      where each cell can optionally hold a formula instead of a value. Formulas reference
+      other cells by address. When a STORE writes to a cell, the engine checks if
+      any formula depends on that cell and recalculates.
 
       '
     status: todo
     tasks: []
   - name: Formula syntax in preprocessor
-    description: 'Extend the preprocessor to recognize formula syntax in canvas text. A line like `= r0 + r1` means "this cell displays the value of r0 + r1". The preprocessor generates the reactive update
-      hooks.
+    description: 'Extend the preprocessor to recognize formula syntax in canvas text.
+      A line like `= r0 + r1` means "this cell displays the value of r0 + r1". The
+      preprocessor generates the reactive update hooks.
 
       '
     status: todo
     tasks: []
   - name: 'Demo: live register dashboard'
-    description: 'A program where the canvas grid shows live register values. As the program runs, the grid cells update to show r0, r1, r2 etc. as changing digits. The display IS the debug view. No separate
-      inspector.
+    description: 'A program where the canvas grid shows live register values. As the
+      program runs, the grid cells update to show r0, r1, r2 etc. as changing digits.
+      The display IS the debug view. No separate inspector.
 
       '
     status: todo
@@ -968,12 +1133,16 @@ phases:
     target: phase-50
     type: soft
     reason: Reactive canvas builds on proven self-modifying patterns
-  technical_notes: 'This phase explores the spreadsheet model. Each cell can be: - A literal value (current behavior) - A formula that references other cells or registers - A formula that references screen
-    pixels (PEEK-equivalent)
+  technical_notes: 'This phase explores the spreadsheet model. Each cell can be: -
+    A literal value (current behavior) - A formula that references other cells or
+    registers - A formula that references screen pixels (PEEK-equivalent)
 
-    The dependency graph needs cycle detection to prevent infinite recalculation. Simple approach: single-pass topological sort of formula dependencies, recalculate in order after any STORE to the canvas.
+    The dependency graph needs cycle detection to prevent infinite recalculation.
+    Simple approach: single-pass topological sort of formula dependencies, recalculate
+    in order after any STORE to the canvas.
 
-    This is marked "future" because it''s a significant new feature. The core pixel-driving-pixels capability (phases 45-48) does not require this.
+    This is marked "future" because it''s a significant new feature. The core pixel-driving-pixels
+    capability (phases 45-48) does not require this.
 
     '
   scope_lines_total: 800
@@ -981,7 +1150,8 @@ phases:
 global_risks:
 - Self-modifying code is inherently hard to debug -- need good error reporting
 - Assembly inside a running VM may be slow for large programs -- may need optimization
-- The concept of a program rewriting itself challenges test design -- how do you unit test a program that changes?
+- The concept of a program rewriting itself challenges test design -- how do you unit
+  test a program that changes?
 - RAM size expansion (phase 46) affects the fuzzer which generates random addresses
 conventions:
 - All new opcodes added to assembler.rs, preprocessor.rs OPCODES list, and vm.rs disassembler
@@ -992,7 +1162,7 @@ conventions:
 meta:
   opcodes_current: 67
   opcodes_after: 67
-  tests_current: 971
-  programs_current: 42
+  tests_current: 469
+  programs_current: 43
   loc_current: 13568
   source_doc: docs/PIXEL_DRIVING_PIXELS.md

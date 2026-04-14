@@ -5089,4 +5089,157 @@ mod tests {
         assert_eq!(vm.regs[0], 142, "r0 should be 100 + 42 = 142");
         assert_eq!(vm.regs[1], 42, "r1 should be 42");
     }
+
+    // ============================================================
+    // Phase 49: Self-Modifying Programs - Demo Tests
+    // ============================================================
+
+    #[test]
+    fn test_self_writer_demo_assembles() {
+        // Verify the self_writer.asm program assembles without errors
+        let source = include_str!("../programs/self_writer.asm");
+        let result = crate::assembler::assemble(source, 0x1000);
+        assert!(result.is_ok(), "self_writer.asm should assemble: {:?}", result.err());
+        let asm = result.unwrap();
+        assert!(asm.pixels.len() > 50, "self_writer should produce substantial bytecode");
+    }
+
+    #[test]
+    fn test_self_writer_successor_different_from_parent() {
+        // The parent writes "LDI r0, 42\nHALT\n" to canvas, then ASMSELF + RUNNEXT.
+        // The successor (LDI r0, 42; HALT) is clearly different from the parent
+        // (which writes to canvas, calls ASMSELF, calls RUNNEXT).
+        // Verify: after the full cycle, r0 == 42 (set by successor, not parent).
+        let mut vm = Vm::new();
+        vm.regs[0] = 0; // parent doesn't touch r0
+
+        // Write successor source to canvas
+        write_to_canvas(&mut vm.canvas_buffer, 0, "LDI r0, 42\nHALT\n");
+
+        // Bootstrap: ASMSELF + RUNNEXT at PC=0
+        vm.ram[0] = 0x73; // ASMSELF
+        vm.ram[1] = 0x74; // RUNNEXT
+        vm.pc = 0;
+
+        // Execute ASMSELF
+        vm.step();
+        assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+
+        // Execute RUNNEXT
+        vm.step();
+        assert_eq!(vm.pc, 0x1000, "RUNNEXT should set PC to 0x1000");
+
+        // Execute successor: LDI r0, 42; HALT
+        for _ in 0..20 { vm.step(); }
+
+        assert_eq!(vm.regs[0], 42, "successor should set r0 to 42");
+        assert!(vm.halted, "successor should halt");
+    }
+
+    #[test]
+    fn test_self_writer_canvas_output_visible() {
+        // Verify that the successor's source text is visible in the canvas buffer
+        // after the parent writes it (before ASMSELF compiles it).
+        let mut vm = Vm::new();
+
+        // Write successor source to canvas
+        let successor_src = "LDI r0, 42\nHALT\n";
+        write_to_canvas(&mut vm.canvas_buffer, 0, successor_src);
+
+        // Verify the text is in the canvas buffer
+        assert_eq!(vm.canvas_buffer[0], 'L' as u32);
+        assert_eq!(vm.canvas_buffer[1], 'D' as u32);
+        assert_eq!(vm.canvas_buffer[2], 'I' as u32);
+        assert_eq!(vm.canvas_buffer[3], ' ' as u32);
+        assert_eq!(vm.canvas_buffer[4], 'r' as u32);
+        assert_eq!(vm.canvas_buffer[5], '0' as u32);
+        assert_eq!(vm.canvas_buffer[6], ',' as u32);
+        // Newline at index 10, HALT starts at index 11
+        assert_eq!(vm.canvas_buffer[10], 10, "newline char at index 10");
+        assert_eq!(vm.canvas_buffer[11], 'H' as u32);
+        assert_eq!(vm.canvas_buffer[12], 'A' as u32);
+        assert_eq!(vm.canvas_buffer[13], 'L' as u32);
+        assert_eq!(vm.canvas_buffer[14], 'T' as u32);
+    }
+
+    #[test]
+    fn test_self_writer_two_generation_chain() {
+        // Generation A: writes Gen B source to canvas, ASMSELF, RUNNEXT
+        // Generation B: writes r0=77, then HALT
+        // Verify the full A -> B chain works
+        let mut vm = Vm::new();
+        vm.regs[0] = 0;
+
+        // Gen A writes Gen B's source to canvas
+        write_to_canvas(&mut vm.canvas_buffer, 0, "LDI r0, 77\nHALT\n");
+
+        // Gen A's code: ASMSELF, RUNNEXT
+        vm.ram[0] = 0x73;
+        vm.ram[1] = 0x74;
+        vm.pc = 0;
+
+        vm.step(); // ASMSELF
+        assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF);
+        vm.step(); // RUNNEXT
+        assert_eq!(vm.pc, 0x1000);
+
+        for _ in 0..20 { vm.step(); }
+        assert_eq!(vm.regs[0], 77, "Gen B should set r0 to 77");
+    }
+
+    #[test]
+    fn test_self_writer_successor_modifies_canvas() {
+        // Generation A writes Gen B source to canvas.
+        // Gen B writes a character to a DIFFERENT canvas row, proving it ran.
+        // Gen B source: "LDI r1, 0x8040\nLDI r2, 88\nSTORE r1, r2\nHALT\n"
+        // This writes 'X' (88) to canvas row 2 (0x8040 = 0x8000 + 2*32)
+        let mut vm = Vm::new();
+
+        let gen_b_src = "LDI r1, 0x8040\nLDI r2, 88\nSTORE r1, r2\nHALT\n";
+        write_to_canvas(&mut vm.canvas_buffer, 0, gen_b_src);
+
+        vm.ram[0] = 0x73; // ASMSELF
+        vm.ram[1] = 0x74; // RUNNEXT
+        vm.pc = 0;
+
+        vm.step(); // ASMSELF
+        assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should compile Gen B");
+
+        vm.step(); // RUNNEXT
+        assert_eq!(vm.pc, 0x1000);
+
+        // Run Gen B
+        for _ in 0..50 { vm.step(); }
+
+        // Verify Gen B wrote 'X' to canvas row 2
+        let row2_start = 2 * 32; // 0x8040 - 0x8000 = 64
+        assert_eq!(vm.canvas_buffer[row2_start], 88, "Gen B should write 'X' to canvas row 2");
+        assert!(vm.halted, "Gen B should halt");
+    }
+
+    #[test]
+    fn test_self_writer_registers_inherited_across_generations() {
+        // Gen A sets r5=100, then writes+compiles+runs Gen B.
+        // Gen B reads r5 (should be 100), adds 1, stores in r0.
+        // Gen B source: "ADD r0, r5\nLDI r1, 1\nADD r0, r1\nHALT\n"
+        // Result: r0 = 0 + 100 + 1 = 101
+        let mut vm = Vm::new();
+        vm.regs[5] = 100; // Set by Gen A before RUNNEXT
+        vm.regs[0] = 0;
+
+        let gen_b_src = "ADD r0, r5\nLDI r1, 1\nADD r0, r1\nHALT\n";
+        write_to_canvas(&mut vm.canvas_buffer, 0, gen_b_src);
+
+        vm.ram[0] = 0x73;
+        vm.ram[1] = 0x74;
+        vm.pc = 0;
+
+        vm.step(); // ASMSELF
+        assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF);
+        vm.step(); // RUNNEXT
+
+        for _ in 0..50 { vm.step(); }
+        assert_eq!(vm.regs[0], 101, "r0 should be 0 + r5(100) + 1 = 101");
+        assert_eq!(vm.regs[5], 100, "r5 should still be 100 (inherited from Gen A)");
+    }
 }
