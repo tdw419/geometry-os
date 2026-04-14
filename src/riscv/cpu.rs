@@ -156,13 +156,22 @@ impl RiscvCpu {
                 return StepResult::Ok;
             }
         };
-        let op = decode::decode(word);
-        self.execute(op, bus)
+
+        // RISC-V C extension: check if low 16 bits are a compressed instruction.
+        // Compressed instructions have bits[1:0] != 0b11.
+        // On little-endian, the low halfword is at the lower address.
+        let halfword = (word & 0xFFFF) as u16;
+        let (op, inst_len) = if decode::is_compressed(halfword) {
+            (decode::decode_c(halfword), 2u32)
+        } else {
+            (decode::decode(word), 4u32)
+        };
+        self.execute(op, bus, inst_len)
     }
 
     /// Execute a decoded operation. Handles PC advancement internally.
-    fn execute(&mut self, op: Operation, bus: &mut Bus) -> StepResult {
-        let next_pc = self.pc.wrapping_add(4);
+    fn execute(&mut self, op: Operation, bus: &mut Bus, inst_len: u32) -> StepResult {
+        let next_pc = self.pc.wrapping_add(inst_len);
 
         match op {
             // ---- Upper immediate ----

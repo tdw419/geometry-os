@@ -10,9 +10,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 114
-  tests: 731
+  tests: 747
   programs: 40
-  loc: 16873
+  loc: 17211
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1678,7 +1678,7 @@ phases:
       - src/riscv/cpu.rs
   - name: C extension (compressed instructions)
     description: Decode 16-bit compressed instruction forms into equivalent 32-bit operations
-    status: todo
+    status: done
     scope_lines: 200
     tasks:
     - id: p38.d3.t1
