@@ -5572,4 +5572,79 @@ mod tests {
         assert_eq!(vm.regs[0], 101, "r0 should be 0 + r5(100) + 1 = 101");
         assert_eq!(vm.regs[5], 100, "r5 should still be 100 (inherited from Gen A)");
     }
+
+    #[test]
+    fn test_infinite_map_assembles_and_runs() {
+        use crate::assembler::assemble;
+
+        let source = include_str!("../programs/infinite_map.asm");
+        let asm = assemble(source, 0).expect("infinite_map.asm should assemble");
+        assert!(!asm.pixels.is_empty(), "should produce bytecode");
+        eprintln!("Assembled {} words from infinite_map.asm", asm.pixels.len());
+
+        let mut vm = Vm::new();
+        for (i, &word) in asm.pixels.iter().enumerate() {
+            if i < vm.ram.len() {
+                vm.ram[i] = word;
+            }
+        }
+
+        // Simulate Right arrow (bit 3 = 8)
+        vm.ram[0xFFB] = 8;
+
+        // Run until first FRAME
+        vm.frame_ready = false;
+        let mut steps = 0u32;
+        for _ in 0..1_000_000 {
+            if vm.frame_ready { break; }
+            let keep_going = vm.step();
+            steps += 1;
+            if !keep_going { break; }
+        }
+
+        assert!(vm.frame_ready, "should reach FRAME within 1M steps (took {})", steps);
+        eprintln!("First frame rendered in {} steps", steps);
+        eprintln!("camera_x = {}, camera_y = {}", vm.ram[0x7800], vm.ram[0x7801]);
+        assert_eq!(vm.ram[0x7800], 1, "camera should have moved right by 1");
+
+        // Screen should not be all black
+        let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+        eprintln!("Non-black pixels: {}/{}", non_black, 256*256);
+        assert!(non_black > 0, "screen should have rendered terrain");
+
+        // Second frame: press Down
+        vm.frame_ready = false;
+        vm.ram[0xFFB] = 2; // Down
+        for _ in 0..1_000_000 {
+            if vm.frame_ready { break; }
+            let keep_going = vm.step();
+            if !keep_going { break; }
+        }
+        eprintln!("After 2nd frame: camera_x={}, camera_y={}", vm.ram[0x7800], vm.ram[0x7801]);
+        assert!(vm.frame_ready, "second frame should render");
+        assert_eq!(vm.ram[0x7801], 1, "camera should have moved down by 1");
+
+        // Third frame: press Left+Up (bits 2+0 = 5) -- diagonal movement
+        vm.frame_ready = false;
+        vm.ram[0xFFB] = 5;
+        for _ in 0..1_000_000 {
+            if vm.frame_ready { break; }
+            let keep_going = vm.step();
+            if !keep_going { break; }
+        }
+        eprintln!("After 3rd frame (left+up): camera_x={}, camera_y={}", vm.ram[0x7800], vm.ram[0x7801]);
+        assert_eq!(vm.ram[0x7800], 0, "camera should be back at x=0");
+        assert_eq!(vm.ram[0x7801], 0, "camera should be back at y=0");
+
+        // Fourth frame: no keys -- camera should stay put
+        vm.frame_ready = false;
+        vm.ram[0xFFB] = 0;
+        for _ in 0..1_000_000 {
+            if vm.frame_ready { break; }
+            let keep_going = vm.step();
+            if !keep_going { break; }
+        }
+        assert_eq!(vm.ram[0x7800], 0, "camera should not move with no keys");
+        assert_eq!(vm.ram[0x7801], 0, "camera should not move with no keys");
+    }
 }
