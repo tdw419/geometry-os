@@ -5087,34 +5087,94 @@ mod tests {
 
     #[test]
     fn test_chained_self_modification() {
-        // Three generations of code:
-        // Gen A: writes Gen B to canvas, ASMSELF, RUNNEXT
-        // Gen B: writes Gen C to canvas, ASMSELF, RUNNEXT
-        // Gen C: LDI r0, 999; HALT
-        // Verify r0 == 999 after all three run
+        // Three generations of self-modifying code:
+        // Gen A (at 0x2000): STOREs Gen B source to canvas (0x8000+), ASMSELF, RUNNEXT
+        // Gen B (at 0x1000): STOREs Gen C source to canvas (0x8000+),
+        //   then stores ASMSELF+RUNNEXT at safe addr 0x3000, JMP 0x3000
+        // Gen C (at 0x1000): LDI r0, 999; HALT
+        //
+        // ASMSELF clears 0x1000-0x1FFF before writing bytecode, so each generation
+        // must ensure its "epilogue" (ASMSELF/RUNNEXT) is outside that kill zone.
+        // Gen A lives at 0x2000 (above the zone). Gen B stores its epilogue at
+        // 0x3000 before calling ASMSELF. This is the generational self-modification
+        // test: each generation writes, compiles, and runs the next.
 
         let mut vm = Vm::new();
 
-        // Simplest valid test: use raw bytecode at 0x1000 instead
-        vm.regs[0] = 0;
+        // Gen C source (the final generation)
+        let gen_c_src = "LDI r0, 999\nHALT\n";
 
-        // Put Gen B directly at 0x1000: LDI r0, 999; HALT
-        // LDI r0, 999 = [0x10, 0, 999]
-        vm.ram[0x1000] = 0x10;
-        vm.ram[0x1001] = 0;
-        vm.ram[0x1002] = 999;
-        vm.ram[0x1003] = 0x00; // HALT
+        // Gen B: writes Gen C source to canvas, stores epilogue at 0x3000, JMPs there
+        let mut gen_b_src = String::new();
+        gen_b_src.push_str("LDI r1, 0x8000\n");
+        gen_b_src.push_str("LDI r3, 1\n");
+        for (i, ch) in gen_c_src.bytes().enumerate() {
+            if i > 0 {
+                gen_b_src.push_str("ADD r1, r3\n");
+            }
+            gen_b_src.push_str(&format!("LDI r2, {}\nSTORE r1, r2\n", ch as u32));
+        }
+        // Store ASMSELF (0x73=115) at 0x3000 and RUNNEXT (0x74=116) at 0x3001
+        gen_b_src.push_str("LDI r4, 0x3000\n");
+        gen_b_src.push_str("LDI r5, 115\nSTORE r4, r5\n");
+        gen_b_src.push_str("ADD r4, r3\n");
+        gen_b_src.push_str("LDI r5, 116\nSTORE r4, r5\n");
+        gen_b_src.push_str("JMP 0x3000\n");
 
-        // RUNNEXT at PC=0
-        vm.ram[0] = 0x74;
-        vm.pc = 0;
-        vm.step();
-        assert_eq!(vm.pc, 0x1000);
+        // Gen A: writes Gen B source to canvas, ASMSELF, RUNNEXT
+        // Loaded at 0x2000 (above ASMSELF's 0x1000-0x1FFF clear zone)
+        let mut gen_a_src = String::new();
+        gen_a_src.push_str("LDI r1, 0x8000\n");
+        gen_a_src.push_str("LDI r3, 1\n");
+        for (i, ch) in gen_b_src.bytes().enumerate() {
+            if i > 0 {
+                gen_a_src.push_str("ADD r1, r3\n");
+            }
+            gen_a_src.push_str(&format!("LDI r2, {}\nSTORE r1, r2\n", ch as u32));
+        }
+        gen_a_src.push_str("ASMSELF\n");
+        gen_a_src.push_str("RUNNEXT\n");
 
-        // Execute Gen B
-        for _ in 0..10 { vm.step(); }
+        // Assemble Gen A with base address 0x2000
+        let asm = crate::assembler::assemble(&gen_a_src, 0x2000)
+            .expect("Gen A should assemble");
+        for (i, &word) in asm.pixels.iter().enumerate() {
+            vm.ram[0x2000 + i] = word;
+        }
+        vm.pc = 0x2000;
 
-        assert_eq!(vm.regs[0], 999, "r0 should be 999 after chained execution");
+        // Run the full three-generation chain with diagnostics
+        let mut steps = 0u64;
+        let mut asmself_count = 0u8;
+        let mut last_log = 0u64;
+        while !vm.halted && steps < 500_000 {
+            let opcode = vm.ram[vm.pc as usize];
+            if opcode == 0x73 {
+                asmself_count += 1;
+                eprintln!("Step {}: ASMSELF #{} at PC={:#X}", steps, asmself_count, vm.pc);
+            }
+            vm.step();
+            steps += 1;
+            if opcode == 0x73 {
+                eprintln!("  ASMSELF result: RAM[0xFFD]={:#X}", vm.ram[0xFFD]);
+            }
+            if opcode == 0x74 {
+                eprintln!("Step {}: RUNNEXT -> PC={:#X}", steps, vm.pc);
+            }
+            // Log every 50000 steps to see if we're stuck
+            if steps - last_log >= 50000 {
+                eprintln!("Step {}: PC={:#X}, opcode={:#X}, r0={}", steps, vm.pc, vm.ram[vm.pc as usize], vm.regs[0]);
+                last_log = steps;
+            }
+        }
+        eprintln!("Final: steps={}, halted={}, r0={}, PC={:#X}", steps, vm.halted, vm.regs[0], vm.pc);
+
+        // All three generations executed in sequence:
+        // Gen A -> wrote Gen B source to canvas, ASMSELF compiled it, RUNNEXT jumped
+        // Gen B -> wrote Gen C source to canvas, stashed epilogue at 0x3000, JMPed
+        // Gen C -> LDI r0, 999; HALT
+        assert!(vm.halted, "VM should halt after Gen C executes");
+        assert_eq!(vm.regs[0], 999, "r0 should be 999 — proof all three generations ran");
     }
 
     #[test]
