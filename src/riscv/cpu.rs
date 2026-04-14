@@ -750,6 +750,24 @@ impl RiscvCpu {
                     Privilege::Machine => csr::CAUSE_ECALL_M,
                 };
 
+                // Phase 41: Intercept User-mode ECALL as Linux syscall.
+                // a7 (x[17]) = syscall number, a0-a5 (x[10]-x[15]) = args.
+                if self.privilege == Privilege::User {
+                    let nr = self.x[17];
+                    let name = super::syscall::syscall_name(nr);
+                    let event = super::syscall::SyscallEvent {
+                        nr,
+                        name,
+                        args: [self.x[10], self.x[11], self.x[12],
+                               self.x[13], self.x[14], self.x[15]],
+                        ret: None,
+                        pc: self.pc,
+                    };
+                    let idx = bus.syscall_log.len();
+                    bus.syscall_log.push(event);
+                    bus.pending_syscall_idx = Some(idx);
+                }
+
                 // SBI interception: when an ECALL from S-mode would trap to M-mode,
                 // check if it's an SBI call (a7 = SBI extension ID).
                 // If handled by SBI, set results in a0/a1 and advance PC (no trap).
@@ -809,6 +827,18 @@ impl RiscvCpu {
                 let restored = self.csr.trap_return(Privilege::Supervisor);
                 self.pc = self.csr.sepc;
                 self.privilege = restored;
+
+                // Phase 41: capture syscall return value.
+                // If we had a pending U-mode syscall and SRET returns to U-mode,
+                // a0 (x[10]) holds the syscall return value.
+                if restored == Privilege::User {
+                    if let Some(idx) = bus.pending_syscall_idx.take() {
+                        if let Some(event) = bus.syscall_log.get_mut(idx) {
+                            event.ret = Some(self.x[10]);
+                        }
+                    }
+                }
+
                 StepResult::Ok
             }
             Operation::SfenceVma { rs1, rs2 } => {

@@ -30,6 +30,12 @@ pub struct Bus {
     /// SBI (Supervisor Binary Interface) handler.
     /// Intercepts SBI ECALLs from the kernel before they reach the trap vector.
     pub sbi: Sbi,
+    /// Syscall trace log: records User-mode ECALLs (Linux syscalls).
+    /// Populated by the CPU when it detects a U-mode ECALL.
+    pub syscall_log: Vec<super::syscall::SyscallEvent>,
+    /// Index into syscall_log of the last U-mode ECALL awaiting its return value.
+    /// Set when a U-mode ECALL is captured; cleared when SRET returns to U-mode.
+    pub pending_syscall_idx: Option<usize>,
 }
 
 impl Bus {
@@ -42,6 +48,8 @@ impl Bus {
             plic: Plic::new(),
             virtio_blk: VirtioBlk::new(),
             sbi: Sbi::new(),
+            syscall_log: Vec::new(),
+            pending_syscall_idx: None,
         }
     }
 

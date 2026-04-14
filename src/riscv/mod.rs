@@ -16,6 +16,7 @@ pub mod memory;
 pub mod mmu;
 pub mod plic;
 pub mod sbi;
+pub mod syscall;
 pub mod trace;
 pub mod uart;
 pub mod virtio_blk;
@@ -112,11 +113,15 @@ impl RiscvVm {
         let mut count: u64 = 0;
         while count < max_instructions {
             match self.step() {
-                StepResult::Ok => {}
-                StepResult::Ebreak => break,
-                StepResult::FetchFault
+                StepResult::Ok
+                | StepResult::FetchFault
                 | StepResult::LoadFault
-                | StepResult::StoreFault => break,
+                | StepResult::StoreFault => {
+                    // Page faults are delivered as traps by translate_va
+                    // (mepc/mcause/mtval set, PC jumped to trap vector).
+                    // The guest OS trap handler will handle them.
+                }
+                StepResult::Ebreak => break,
                 StepResult::Ecall => {} // ECALL is normal during boot
             }
             count += 1;
@@ -312,6 +317,14 @@ impl RiscvVm {
         // Set mtvec to our trap handler (direct mode, bit[0]=0).
         vm.cpu.csr.write(crate::riscv::csr::MTVEC, fw_addr as u32);
 
+        // Delegate exceptions to S-mode (standard OpenSBI delegation).
+        // Bits: 0=instr_misaligned, 1=instr_access, 2=illegal_insn, 3=breakpoint,
+        //        8=ecall_U, 9=ecall_S, 12=instr_page_fault, 13=load_page_fault,
+        //        15=store_page_fault
+        vm.cpu.csr.medeleg = 0xB309;
+        // Delegate interrupts to S-mode: bit 1=SSIP, 5=STI, 9=SEI
+        vm.cpu.csr.mideleg = 0x222;
+
         // 8. Execute.
         let mut count: u64 = 0;
         while count < max_instructions {
@@ -320,11 +333,15 @@ impl RiscvVm {
                 break;
             }
             match vm.step() {
-                StepResult::Ok => {}
-                StepResult::Ebreak => break,
-                StepResult::FetchFault
+                StepResult::Ok
+                | StepResult::FetchFault
                 | StepResult::LoadFault
-                | StepResult::StoreFault => break,
+                | StepResult::StoreFault => {
+                    // Page faults are delivered as traps by translate_va
+                    // (mepc/mcause/mtval set, PC jumped to trap vector).
+                    // The guest OS trap handler will handle them.
+                }
+                StepResult::Ebreak => break,
                 StepResult::Ecall => {} // ECALL is normal during boot
             }
             count += 1;
