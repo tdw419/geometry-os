@@ -88,7 +88,7 @@ impl Uart {
 
     /// Check if the given address falls within UART MMIO range.
     pub fn contains(addr: u64) -> bool {
-        addr >= UART_BASE && addr < UART_BASE + UART_SIZE
+        (UART_BASE..UART_BASE + UART_SIZE).contains(&addr)
     }
 
     /// Read a byte from UART MMIO space.

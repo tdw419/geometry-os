@@ -136,7 +136,7 @@ impl QemuConfig {
 
         // Disk
         if let Some(ref disk) = self.disk {
-            cmd.args(&[
+            cmd.args([
                 "-drive",
                 &format!("file={},format=raw,if=virtio", disk),
             ]);
@@ -147,8 +147,8 @@ impl QemuConfig {
             if net == "none" {
                 cmd.arg("-net").arg("none");
             } else {
-                cmd.args(&["-netdev", &format!("user,id=net0,{}", net)]);
-                cmd.args(&["-device", "virtio-net-device,netdev=net0"]);
+                cmd.args(["-netdev", &format!("user,id=net0,{}", net)]);
+                cmd.args(["-device", "virtio-net-device,netdev=net0"]);
             }
         }
 
@@ -178,16 +178,12 @@ enum AnsiState {
 
 /// Virtual cursor position for the canvas text surface.
 #[derive(Debug, Clone, Copy)]
+#[derive(Default)]
 pub struct Cursor {
     pub row: usize,
     pub col: usize,
 }
 
-impl Default for Cursor {
-    fn default() -> Self {
-        Cursor { row: 0, col: 0 }
-    }
-}
 
 impl Cursor {
     pub fn new() -> Self {
@@ -237,6 +233,12 @@ pub struct AnsiHandler {
     scroll_top: usize,
     /// Scroll region bottom (inclusive).
     scroll_bottom: usize,
+}
+
+impl Default for AnsiHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AnsiHandler {
@@ -299,7 +301,7 @@ impl AnsiHandler {
                         // Bell -- ignore
                     }
                     _ => {
-                        if b >= 0x20 && b < 0x7F {
+                        if (0x20..0x7F).contains(&b) {
                             if self.cursor.row < CANVAS_MAX_ROWS {
                                 let idx =
                                     self.cursor.row * CANVAS_COLS + self.cursor.col;

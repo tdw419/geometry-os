@@ -140,7 +140,7 @@ impl VirtioBlk {
 
     /// Check if address is in virtio MMIO range.
     pub fn contains(addr: u64) -> bool {
-        addr >= VIRTIO_BASE && addr < VIRTIO_BASE + VIRTIO_SIZE
+        (VIRTIO_BASE..VIRTIO_BASE + VIRTIO_SIZE).contains(&addr)
     }
 
     /// Read a 32-bit word from virtio MMIO space.

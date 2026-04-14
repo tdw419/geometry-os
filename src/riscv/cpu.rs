@@ -13,17 +13,14 @@ use super::mmu::{self, AccessType, Tlb, TranslateResult};
 /// Privilege level.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Default)]
 pub enum Privilege {
     User = 0,
     Supervisor = 1,
+    #[default]
     Machine = 3,
 }
 
-impl Default for Privilege {
-    fn default() -> Self {
-        Privilege::Machine
-    }
-}
 
 /// Result of a single step.
 #[derive(Debug, PartialEq, Eq)]

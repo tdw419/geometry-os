@@ -66,7 +66,7 @@ impl Plic {
 
     /// Check if address is in PLIC range.
     pub fn contains(addr: u64) -> bool {
-        addr >= PLIC_BASE && addr < PLIC_BASE + PLIC_SIZE
+        (PLIC_BASE..PLIC_BASE + PLIC_SIZE).contains(&addr)
     }
 
     /// Read a 32-bit word from PLIC MMIO space.

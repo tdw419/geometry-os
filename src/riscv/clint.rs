@@ -59,7 +59,7 @@ impl Clint {
     pub fn read(&self, addr: u64) -> Option<u32> {
         if addr == MSIP_BASE {
             Some(self.msip)
-        } else if addr >= MTIMECMP_BASE && addr < MTIMECMP_BASE + 8 {
+        } else if (MTIMECMP_BASE..MTIMECMP_BASE + 8).contains(&addr) {
             // mtimecmp is 64-bit, return the appropriate 32-bit half
             let off = (addr - MTIMECMP_BASE) as usize;
             if off < 4 {
@@ -67,7 +67,7 @@ impl Clint {
             } else {
                 Some((self.mtimecmp >> 32) as u32)
             }
-        } else if addr >= MTIME_ADDR && addr < MTIME_ADDR + 8 {
+        } else if (MTIME_ADDR..MTIME_ADDR + 8).contains(&addr) {
             // mtime is 64-bit
             let off = (addr - MTIME_ADDR) as usize;
             if off < 4 {
@@ -86,7 +86,7 @@ impl Clint {
         if addr == MSIP_BASE {
             self.msip = val & 1;
             true
-        } else if addr >= MTIMECMP_BASE && addr < MTIMECMP_BASE + 8 {
+        } else if (MTIMECMP_BASE..MTIMECMP_BASE + 8).contains(&addr) {
             let off = (addr - MTIMECMP_BASE) as usize;
             if off < 4 {
                 self.mtimecmp = (self.mtimecmp & !0xFFFF_FFFF) | (val as u64);
@@ -94,7 +94,7 @@ impl Clint {
                 self.mtimecmp = (self.mtimecmp & 0xFFFF_FFFF) | ((val as u64) << 32);
             }
             true
-        } else if addr >= MTIME_ADDR && addr < MTIME_ADDR + 8 {
+        } else if (MTIME_ADDR..MTIME_ADDR + 8).contains(&addr) {
             let off = (addr - MTIME_ADDR) as usize;
             if off < 4 {
                 self.mtime = (self.mtime & !0xFFFF_FFFF) | (val as u64);

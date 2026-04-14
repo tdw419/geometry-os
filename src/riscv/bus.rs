@@ -48,10 +48,10 @@ impl Bus {
             // UART reads need &mut due to side effects (clearing DR).
             // We clone to work around borrow checker.
             let mut uart = self.uart.clone();
-            let result = uart.read_word(addr).ok_or(MemoryError { addr, size: 4 });
+            
             // Note: side effects are lost due to clone. This is acceptable
             // for page table walks which shouldn't touch UART.
-            result
+            uart.read_word(addr).ok_or(MemoryError { addr, size: 4 })
         } else if super::plic::Plic::contains(addr) {
             self.plic.read(addr).ok_or(MemoryError { addr, size: 4 })
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
@@ -204,7 +204,7 @@ impl Bus {
     }
 
     fn in_clint(addr: u64) -> bool {
-        addr >= CLINT_START && addr < CLINT_END
+        (CLINT_START..CLINT_END).contains(&addr)
     }
 }
 

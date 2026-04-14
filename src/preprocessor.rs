@@ -91,7 +91,7 @@ pub fn parse_syntax_line(line: &str) -> Vec<SynSpan> {
 
     let mut token_pos = 0;
     let mut is_first_token = true;
-    let tokens_str: Vec<&str> = code.split(|c: char| c == ',' || c == ' ' || c == '\t')
+    let tokens_str: Vec<&str> = code.split([',', ' ', '\t'])
         .filter(|s| !s.is_empty())
         .collect();
 
@@ -116,10 +116,10 @@ pub fn parse_syntax_line(line: &str) -> Vec<SynSpan> {
                     continue;
                 }
             }
-            let is_number = token.chars().next().map_or(false, |c| c.is_ascii_digit())
+            let is_number = token.chars().next().is_some_and(|c| c.is_ascii_digit())
                 || token.starts_with("0x") || token.starts_with("0X")
                 || token.starts_with("0b") || token.starts_with("0B")
-                || (token.starts_with('-') && token.len() > 1 && token[1..].chars().next().map_or(false, |c| c.is_ascii_digit()));
+                || (token.starts_with('-') && token.len() > 1 && token[1..].chars().next().is_some_and(|c| c.is_ascii_digit()));
             if is_number {
                 spans.push(SynSpan { kind: SynTok::Number, start: abs_start, len: token.len(), text: token.to_string() });
             } else {
@@ -138,6 +138,12 @@ pub fn parse_syntax_line(line: &str) -> Vec<SynSpan> {
 
 pub struct Preprocessor {
     pub variables: HashMap<String, u32>,
+}
+
+impl Default for Preprocessor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Preprocessor {

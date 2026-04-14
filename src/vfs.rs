@@ -47,6 +47,12 @@ pub struct FdTable {
     fds: Vec<Option<OpenFile>>,
 }
 
+impl Default for FdTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FdTable {
     pub fn new() -> Self {
         let mut fds = Vec::with_capacity(MAX_FDS);
@@ -109,6 +115,12 @@ pub struct Vfs {
     fd_tables: HashMap<u32, FdTable>,
 }
 
+impl Default for Vfs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Vfs {
     /// Create a new VFS instance, ensuring the base directory exists.
     pub fn new() -> Self {
@@ -125,7 +137,7 @@ impl Vfs {
     fn fd_table(&mut self, pid: u32) -> &mut FdTable {
         self.fd_tables
             .entry(pid)
-            .or_insert_with(FdTable::new)
+            .or_default()
     }
 
     /// Open a file. Returns fd number or FD_ERROR.
@@ -315,12 +327,10 @@ impl Vfs {
 
         // Collect and sort entries
         let mut names: Vec<String> = Vec::new();
-        for entry in entries {
-            if let Ok(e) = entry {
-                if let Some(name) = e.file_name().to_str() {
-                    if !name.starts_with('.') {
-                        names.push(name.to_string());
-                    }
+        for e in entries.flatten() {
+            if let Some(name) = e.file_name().to_str() {
+                if !name.starts_with('.') {
+                    names.push(name.to_string());
                 }
             }
         }

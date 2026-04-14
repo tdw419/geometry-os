@@ -587,7 +587,7 @@ fn handle_terminal_command(
             (false, false)
         }
         "save" => {
-            let slot = parts.get(1).map(|&s| s);
+            let slot = parts.get(1).copied();
             let filename = match slot {
                 Some(s) => format!("geometry_os_{}.sav", s),
                 None => SAVE_FILE.to_string(),
@@ -920,7 +920,7 @@ fn cli_main(extra_args: &[String]) {
                 }
             }
             "save" => {
-                let slot = parts.get(1).map(|&s| s);
+                let slot = parts.get(1).copied();
                 let filename = match slot {
                     Some(s) => format!("geometry_os_{}.sav", s),
                     None => SAVE_FILE.to_string(),
@@ -939,7 +939,7 @@ fn cli_main(extra_args: &[String]) {
                 match std::fs::File::create(&filename) {
                     Ok(mut f) => {
                         // PPM P6 format
-                        let header = format!("P6\n256 256\n255\n");
+                        let header = "P6\n256 256\n255\n".to_string();
                         use std::io::Write;
                         f.write_all(header.as_bytes()).unwrap();
                         for pixel in &vm.screen {
@@ -1582,7 +1582,7 @@ fn execute_cli_command(
             let filename = if parts.len() >= 2 { parts[1].to_string() } else { "output.ppm".to_string() };
             match std::fs::File::create(&filename) {
                 Ok(mut f) => {
-                    let header = format!("P6\n256 256\n255\n");
+                    let header = "P6\n256 256\n255\n".to_string();
                     use std::io::Write;
                     let _ = f.write_all(header.as_bytes());
                     for pixel in &vm.screen {
@@ -2116,13 +2116,11 @@ fn main() {
                     if mode == Mode::Terminal {
                         ram_view_base = ram_view_base.saturating_sub(1024);
                         status_msg = format!("[RAM Inspector: 0x{:04X}-0x{:04X}]", ram_view_base, ram_view_base + 1023);
-                    } else {
-                        if scroll_offset > 0 {
-                            scroll_offset = scroll_offset.saturating_sub(CANVAS_ROWS);
-                            let new_cursor = scroll_offset + CANVAS_ROWS / 2;
-                            if new_cursor < cursor_row || cursor_row < scroll_offset {
-                                cursor_row = new_cursor.min(CANVAS_MAX_ROWS - 1);
-                            }
+                    } else if scroll_offset > 0 {
+                        scroll_offset = scroll_offset.saturating_sub(CANVAS_ROWS);
+                        let new_cursor = scroll_offset + CANVAS_ROWS / 2;
+                        if new_cursor < cursor_row || cursor_row < scroll_offset {
+                            cursor_row = new_cursor.min(CANVAS_MAX_ROWS - 1);
                         }
                     }
                 }
@@ -2142,9 +2140,7 @@ fn main() {
                     }
                 }
                 Key::Left => {
-                    if cursor_col > 0 {
-                        cursor_col -= 1;
-                    }
+                    cursor_col = cursor_col.saturating_sub(1);
                 }
                 Key::Right => {
                     if cursor_col < CANVAS_COLS - 1 {
@@ -2152,9 +2148,7 @@ fn main() {
                     }
                 }
                 Key::Up => {
-                    if cursor_row > 0 {
-                        cursor_row -= 1;
-                    }
+                    cursor_row = cursor_row.saturating_sub(1);
                     ensure_cursor_visible(&cursor_row, &mut scroll_offset);
                 }
                 Key::Down => {
@@ -2253,7 +2247,7 @@ fn main() {
             status_msg = "[SHUTDOWN] System halted cleanly.".into();
             is_running = false;
             #[allow(unused_assignments)]
-            { status_msg = status_msg; is_running = is_running; } // final state before break
+            { status_msg = status_msg.clone(); is_running = is_running; } // final state before break
             break;
         }
 
@@ -2499,7 +2493,7 @@ fn render(
             let is_cursor = log_row == cursor_row && col == cursor_col && !is_running;
             let ascii_byte = (val & 0xFF) as u8;
 
-            let use_pixel_font = val != 0 && ascii_byte >= 0x20 && ascii_byte < 0x80;
+            let use_pixel_font = val != 0 && (0x20..0x80).contains(&ascii_byte);
 
             // Determine cell base color (with intensity tint)
             let mut tint_color = if kind == vm::MemAccessKind::Write { 0xFF00FF } else { 0x00FFFF };
@@ -2774,7 +2768,7 @@ fn render(
     if total > 10 {
         // Keep PC visible: if PC is in the list, center around it
         let pc_idx = display_addrs.iter().position(|&a| a == pc).unwrap_or(4);
-        let start = if pc_idx > 4 { pc_idx - 4 } else { 0 };
+        let start = pc_idx.saturating_sub(4);
         display_addrs = display_addrs[start..(start + 10).min(total)].to_vec();
     }
 
@@ -2784,7 +2778,7 @@ fn render(
         let marker = if is_pc { ">" } else { " " };
         let line = format!("{}{:04X} {}", marker, addr, mnemonic);
         let color = if is_pc { disasm_pc_color } else { disasm_color };
-        let line_y = disasm_y + 14 + i as usize * 12;
+        let line_y = disasm_y + 14 + i * 12;
         if line_y + 12 < HEIGHT - 24 {
             render_text(buffer, REGS_X, line_y, &line, color);
         }
@@ -2856,7 +2850,7 @@ fn syntax_highlight_color(canvas_buffer: &[u32], row: usize, col: usize) -> u32 
             // explicit newline
             break;
         }
-        if byte >= 0x20 && byte < 0x80 {
+        if (0x20..0x80).contains(&byte) {
             line_chars.push(byte as char);
         }
     }
@@ -2937,7 +2931,7 @@ fn list_asm_files(dir: &str) -> Vec<String> {
 /// Save screen buffer as a PNG file (256x256, RGB).
 fn save_screen_png(path: &str, screen: &[u32]) -> std::io::Result<()> {
     let file = std::fs::File::create(path)?;
-    let ref mut w = std::io::BufWriter::new(file);
+    let w = &mut std::io::BufWriter::new(file);
     let mut encoder = png::Encoder::new(w, 256, 256);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
@@ -2954,7 +2948,7 @@ fn save_screen_png(path: &str, screen: &[u32]) -> std::io::Result<()> {
 
 fn save_full_buffer_png(path: &str, buffer: &[u32], w: usize, h: usize) -> std::io::Result<()> {
     let file = std::fs::File::create(path)?;
-    let ref mut writer = std::io::BufWriter::new(file);
+    let writer = &mut std::io::BufWriter::new(file);
     let mut encoder = png::Encoder::new(writer, w as u32, h as u32);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);

@@ -26,16 +26,13 @@ pub const PROCESS_PAGES: usize = 4; // 4096 words = 16KB per process
 /// CPU privilege mode: Kernel (full access) or User (restricted).
 /// VM starts in Kernel mode for backward compatibility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum CpuMode {
+    #[default]
     Kernel,
     User,
 }
 
-impl Default for CpuMode {
-    fn default() -> Self {
-        CpuMode::Kernel
-    }
-}
 
 /// Process priority levels for the preemptive scheduler (Phase 26).
 /// Higher priority = more CPU time slices per round.
@@ -311,6 +308,12 @@ pub struct Vm {
     pub hypervisor_config: String,
 }
 
+impl Default for Vm {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Vm {
     pub fn new() -> Self {
         Vm {
@@ -485,7 +488,7 @@ impl Vm {
         // Page 3 (0xC00-0xFFF): contains Window Bounds Protocol at 0xF00-0xFFF
         pd[3] = 3;
         // Release the private page we allocated for virtual page 3
-        let private_page = (start + 3) as usize;
+        let private_page = start + 3;
         if private_page < NUM_PAGES {
             self.allocated_pages &= !(1u64 << private_page);
         }
@@ -540,8 +543,8 @@ impl Vm {
                 let fr = self.fetch() as usize;
                 let dr = self.fetch() as usize;
                 if fr < NUM_REGS && dr < NUM_REGS {
-                    let freq = self.regs[fr].max(20).min(20000);
-                    let dur  = self.regs[dr].max(1).min(5000);
+                    let freq = self.regs[fr].clamp(20, 20000);
+                    let dur = self.regs[dr].clamp(1, 5000);
                     self.beep = Some((freq, dur));
                 }
             }
@@ -625,7 +628,7 @@ impl Vm {
                 let rd = self.fetch() as usize;
                 let rs = self.fetch() as usize;
                 if rd < NUM_REGS && rs < NUM_REGS && self.regs[rs] != 0 {
-                    self.regs[rd] = self.regs[rd] / self.regs[rs];
+                    self.regs[rd] /= self.regs[rs];
                 }
             }
 
@@ -681,7 +684,7 @@ impl Vm {
                 let rd = self.fetch() as usize;
                 let rs = self.fetch() as usize;
                 if rd < NUM_REGS && rs < NUM_REGS && self.regs[rs] != 0 {
-                    self.regs[rd] = self.regs[rd] % self.regs[rs];
+                    self.regs[rd] %= self.regs[rs];
                 }
             }
 
@@ -993,7 +996,7 @@ impl Vm {
                     let sy: i32 = if y0 < y1 { 1 } else { -1 };
                     let mut err = dx + dy;
                     loop {
-                        if x0 >= 0 && x0 < 256 && y0 >= 0 && y0 < 256 {
+                        if (0..256).contains(&x0) && (0..256).contains(&y0) {
                             self.screen[y0 as usize * 256 + x0 as usize] = color;
                         }
                         if x0 == x1 && y0 == y1 { break; }
@@ -1026,7 +1029,7 @@ impl Vm {
                             (cx + y, cy - x), (cx - y, cy - x),
                         ];
                         for (px, py) in pts {
-                            if px >= 0 && px < 256 && py >= 0 && py < 256 {
+                            if (0..256).contains(&px) && (0..256).contains(&py) {
                                 self.screen[py as usize * 256 + px as usize] = color;
                             }
                         }
@@ -1141,7 +1144,7 @@ impl Vm {
                                         let px = x0 + (col * tw) as i32 + tx as i32;
                                         let py = y0 + (row * th) as i32 + ty as i32;
                                         
-                                        if px >= 0 && px < 256 && py >= 0 && py < 256 {
+                                        if (0..256).contains(&px) && (0..256).contains(&py) {
                                             self.screen[(py as usize) * 256 + (px as usize)] = color;
                                         }
                                     }
@@ -1346,7 +1349,7 @@ impl Vm {
                         self.regs[0] = count as u32;
                     }
                     // Check if this is a pipe read fd (0x8000+idx)
-                    else if fd >= 0x8000 && fd < 0xC000 {
+                    else if (0x8000..0xC000).contains(&fd) {
                         let pipe_idx = (fd & 0x0FFF) as usize;
                         let buf_addr = self.regs[buf_reg] as usize;
                         let len = self.regs[len_reg] as usize;
@@ -1439,8 +1442,8 @@ impl Vm {
                                     && buf_addr < self.ram.len()
                                     && buf_addr + 1 < self.ram.len()
                                 {
-                                    let freq = self.ram[buf_addr].max(20).min(20000);
-                                    let dur = self.ram[buf_addr + 1].max(1).min(5000);
+                                    let freq = self.ram[buf_addr].clamp(20, 20000);
+                                    let dur = self.ram[buf_addr + 1].clamp(1, 5000);
                                     self.beep = Some((freq, dur));
                                     self.regs[0] = 2;
                                 } else {
@@ -1462,7 +1465,7 @@ impl Vm {
                         }
                     }
                     // Check if this is a pipe write fd (0xC000+idx)
-                    else if fd >= 0xC000 && fd < DEVICE_FD_BASE {
+                    else if (0xC000..DEVICE_FD_BASE).contains(&fd) {
                         let pipe_idx = (fd & 0x0FFF) as usize;
                         let buf_addr = self.regs[buf_reg] as usize;
                         let len = self.regs[len_reg] as usize;
@@ -1517,7 +1520,7 @@ impl Vm {
                         self.regs[0] = 0; // device close always succeeds
                     }
                     // Check if this is a pipe fd
-                    else if (fd >= 0x8000 && fd < 0xC000) || (fd >= 0xC000 && fd < DEVICE_FD_BASE) {
+                    else if (0x8000..0xC000).contains(&fd) || (0xC000..DEVICE_FD_BASE).contains(&fd) {
                         let pipe_idx = (fd & 0x0FFF) as usize;
                         if pipe_idx < self.pipes.len() {
                             // Mark pipe as dead (both read and write ends closed)
@@ -2459,10 +2462,8 @@ impl Vm {
             if self.yielded {
                 proc.slice_remaining = 0;
                 proc.yielded = true;
-            } else {
-                if proc.slice_remaining > 0 {
-                    proc.slice_remaining -= 1;
-                }
+            } else if proc.slice_remaining > 0 {
+                proc.slice_remaining -= 1;
             }
 
             // Handle SLEEP: mark process as sleeping
@@ -2606,7 +2607,7 @@ impl Vm {
     pub fn disassemble_at(&self, addr: u32) -> (String, usize) {
         let a = addr as usize;
         if a >= self.ram.len() {
-            return (format!("???"), 1);
+            return ("???".to_string(), 1);
         }
         let op = self.ram[a];
         let ram = |i: usize| -> u32 {
@@ -2847,7 +2848,7 @@ impl Vm {
         // Simple 5x7 font for printable ASCII
         const MINI_FONT: [[u8; 7]; 96] = include!("mini_font.in");
         let idx = ch as usize;
-        if idx < 32 || idx > 127 {
+        if !(32..=127).contains(&idx) {
             return;
         }
         let glyph = &MINI_FONT[idx - 32];
@@ -2917,7 +2918,7 @@ impl Vm {
         }
         let version = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
         // Accept v1 saves (missing rand_state/frame_count) and v2
-        if version < 1 || version > SAVE_VERSION {
+        if !(1..=SAVE_VERSION).contains(&version) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("unsupported save version: {} (need 1-{})", version, SAVE_VERSION),

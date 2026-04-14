@@ -279,7 +279,7 @@ fn parse_instruction(
 
     // Split into tokens: "LDI r0, 10" -> ["LDI", "r0", "10"]
     let tokens: Vec<&str> = line
-        .split(|c: char| c == ' ' || c == ',')
+        .split(|c: char| [' ', ','].contains(&c))
         .map(|t| t.trim())
         .filter(|t| !t.is_empty())
         .collect();
@@ -297,7 +297,7 @@ fn parse_instruction(
 
         "BEEP" => {
             if tokens.len() < 3 {
-                return Err(format!("BEEP requires 2 arguments: BEEP freq_reg, dur_reg"));
+                return Err("BEEP requires 2 arguments: BEEP freq_reg, dur_reg".to_string());
             }
             bytecode.push(0x03);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -306,7 +306,7 @@ fn parse_instruction(
 
         "LDI" => {
             if tokens.len() < 3 {
-                return Err(format!("LDI requires 2 arguments: LDI reg, imm"));
+                return Err("LDI requires 2 arguments: LDI reg, imm".to_string());
             }
             bytecode.push(0x10);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -322,7 +322,7 @@ fn parse_instruction(
 
         "LOAD" => {
             if tokens.len() < 3 {
-                return Err(format!("LOAD requires 2 arguments: LOAD reg, addr_reg"));
+                return Err("LOAD requires 2 arguments: LOAD reg, addr_reg".to_string());
             }
             bytecode.push(0x11);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -331,7 +331,7 @@ fn parse_instruction(
 
         "STORE" => {
             if tokens.len() < 3 {
-                return Err(format!("STORE requires 2 arguments: STORE addr_reg, reg"));
+                return Err("STORE requires 2 arguments: STORE addr_reg, reg".to_string());
             }
             bytecode.push(0x12);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -340,7 +340,7 @@ fn parse_instruction(
 
         "MOV" => {
             if tokens.len() < 3 {
-                return Err(format!("MOV requires 2 arguments: MOV rd, rs"));
+                return Err("MOV requires 2 arguments: MOV rd, rs".to_string());
             }
             bytecode.push(0x51);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -349,7 +349,7 @@ fn parse_instruction(
 
         "ADD" => {
             if tokens.len() < 3 {
-                return Err(format!("ADD requires 2 arguments: ADD rd, rs"));
+                return Err("ADD requires 2 arguments: ADD rd, rs".to_string());
             }
             bytecode.push(0x20);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -358,7 +358,7 @@ fn parse_instruction(
 
         "SUB" => {
             if tokens.len() < 3 {
-                return Err(format!("SUB requires 2 arguments: SUB rd, rs"));
+                return Err("SUB requires 2 arguments: SUB rd, rs".to_string());
             }
             bytecode.push(0x21);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -367,7 +367,7 @@ fn parse_instruction(
 
         "MUL" => {
             if tokens.len() < 3 {
-                return Err(format!("MUL requires 2 arguments: MUL rd, rs"));
+                return Err("MUL requires 2 arguments: MUL rd, rs".to_string());
             }
             bytecode.push(0x22);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -376,7 +376,7 @@ fn parse_instruction(
 
         "DIV" => {
             if tokens.len() < 3 {
-                return Err(format!("DIV requires 2 arguments: DIV rd, rs"));
+                return Err("DIV requires 2 arguments: DIV rd, rs".to_string());
             }
             bytecode.push(0x23);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -385,7 +385,7 @@ fn parse_instruction(
 
         "AND" => {
             if tokens.len() < 3 {
-                return Err(format!("AND requires 2 arguments: AND rd, rs"));
+                return Err("AND requires 2 arguments: AND rd, rs".to_string());
             }
             bytecode.push(0x24);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -394,7 +394,7 @@ fn parse_instruction(
 
         "OR" => {
             if tokens.len() < 3 {
-                return Err(format!("OR requires 2 arguments: OR rd, rs"));
+                return Err("OR requires 2 arguments: OR rd, rs".to_string());
             }
             bytecode.push(0x25);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -403,7 +403,7 @@ fn parse_instruction(
 
         "XOR" => {
             if tokens.len() < 3 {
-                return Err(format!("XOR requires 2 arguments: XOR rd, rs"));
+                return Err("XOR requires 2 arguments: XOR rd, rs".to_string());
             }
             bytecode.push(0x26);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -412,7 +412,7 @@ fn parse_instruction(
 
         "SHL" => {
             if tokens.len() < 3 {
-                return Err(format!("SHL requires 2 arguments: SHL rd, rs"));
+                return Err("SHL requires 2 arguments: SHL rd, rs".to_string());
             }
             bytecode.push(0x27);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -421,7 +421,7 @@ fn parse_instruction(
 
         "SHR" => {
             if tokens.len() < 3 {
-                return Err(format!("SHR requires 2 arguments: SHR rd, rs"));
+                return Err("SHR requires 2 arguments: SHR rd, rs".to_string());
             }
             bytecode.push(0x28);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -430,7 +430,7 @@ fn parse_instruction(
 
         "SAR" => {
             if tokens.len() < 3 {
-                return Err(format!("SAR requires 2 arguments: SAR rd, rs"));
+                return Err("SAR requires 2 arguments: SAR rd, rs".to_string());
             }
             bytecode.push(0x2B);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -439,7 +439,7 @@ fn parse_instruction(
 
         "MOD" => {
             if tokens.len() < 3 {
-                return Err(format!("MOD requires 2 arguments: MOD rd, rs"));
+                return Err("MOD requires 2 arguments: MOD rd, rs".to_string());
             }
             bytecode.push(0x29);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -448,7 +448,7 @@ fn parse_instruction(
 
         "JMP" => {
             if tokens.len() < 2 {
-                return Err(format!("JMP requires 1 argument: JMP addr"));
+                return Err("JMP requires 1 argument: JMP addr".to_string());
             }
             bytecode.push(0x30);
             let pos = bytecode.len();
@@ -463,7 +463,7 @@ fn parse_instruction(
 
         "JZ" => {
             if tokens.len() < 3 {
-                return Err(format!("JZ requires 2 arguments: JZ reg, addr"));
+                return Err("JZ requires 2 arguments: JZ reg, addr".to_string());
             }
             bytecode.push(0x31);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -478,7 +478,7 @@ fn parse_instruction(
 
         "JNZ" => {
             if tokens.len() < 3 {
-                return Err(format!("JNZ requires 2 arguments: JNZ reg, addr"));
+                return Err("JNZ requires 2 arguments: JNZ reg, addr".to_string());
             }
             bytecode.push(0x32);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -493,7 +493,7 @@ fn parse_instruction(
 
         "CALL" => {
             if tokens.len() < 2 {
-                return Err(format!("CALL requires 1 argument: CALL addr"));
+                return Err("CALL requires 1 argument: CALL addr".to_string());
             }
             bytecode.push(0x33);
             let pos = bytecode.len();
@@ -509,7 +509,7 @@ fn parse_instruction(
 
         "BLT" => {
             if tokens.len() < 3 {
-                return Err(format!("BLT requires 2 arguments: BLT reg, addr"));
+                return Err("BLT requires 2 arguments: BLT reg, addr".to_string());
             }
             bytecode.push(0x35);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -524,7 +524,7 @@ fn parse_instruction(
 
         "BGE" => {
             if tokens.len() < 3 {
-                return Err(format!("BGE requires 2 arguments: BGE reg, addr"));
+                return Err("BGE requires 2 arguments: BGE reg, addr".to_string());
             }
             bytecode.push(0x36);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -539,7 +539,7 @@ fn parse_instruction(
 
         "PUSH" => {
             if tokens.len() < 2 {
-                return Err(format!("PUSH requires 1 argument: PUSH reg"));
+                return Err("PUSH requires 1 argument: PUSH reg".to_string());
             }
             bytecode.push(0x60);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -547,7 +547,7 @@ fn parse_instruction(
 
         "POP" => {
             if tokens.len() < 2 {
-                return Err(format!("POP requires 1 argument: POP reg"));
+                return Err("POP requires 1 argument: POP reg".to_string());
             }
             bytecode.push(0x61);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -555,7 +555,7 @@ fn parse_instruction(
 
         "PSET" => {
             if tokens.len() < 4 {
-                return Err(format!("PSET requires 3 arguments: PSET x_reg, y_reg, color_reg"));
+                return Err("PSET requires 3 arguments: PSET x_reg, y_reg, color_reg".to_string());
             }
             bytecode.push(0x40);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -565,7 +565,7 @@ fn parse_instruction(
 
         "PSETI" => {
             if tokens.len() < 4 {
-                return Err(format!("PSETI requires 3 arguments: PSETI x, y, color"));
+                return Err("PSETI requires 3 arguments: PSETI x, y, color".to_string());
             }
             bytecode.push(0x41);
             bytecode.push(parse_imm(tokens[1], constants)?);
@@ -575,7 +575,7 @@ fn parse_instruction(
 
         "FILL" => {
             if tokens.len() < 2 {
-                return Err(format!("FILL requires 1 argument: FILL color_reg"));
+                return Err("FILL requires 1 argument: FILL color_reg".to_string());
             }
             bytecode.push(0x42);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -583,7 +583,7 @@ fn parse_instruction(
 
         "RECTF" => {
             if tokens.len() < 6 {
-                return Err(format!("RECTF requires 5 arguments: RECTF x_reg, y_reg, w_reg, h_reg, color_reg"));
+                return Err("RECTF requires 5 arguments: RECTF x_reg, y_reg, w_reg, h_reg, color_reg".to_string());
             }
             bytecode.push(0x43);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -595,7 +595,7 @@ fn parse_instruction(
 
         "TEXT" => {
             if tokens.len() < 4 {
-                return Err(format!("TEXT requires 3 arguments: TEXT x_reg, y_reg, addr_reg"));
+                return Err("TEXT requires 3 arguments: TEXT x_reg, y_reg, addr_reg".to_string());
             }
             bytecode.push(0x44);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -605,7 +605,7 @@ fn parse_instruction(
 
         "CMP" => {
             if tokens.len() < 3 {
-                return Err(format!("CMP requires 2 arguments: CMP rd, rs"));
+                return Err("CMP requires 2 arguments: CMP rd, rs".to_string());
             }
             bytecode.push(0x50);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -614,7 +614,7 @@ fn parse_instruction(
 
         "NEG" => {
             if tokens.len() < 2 {
-                return Err(format!("NEG requires 1 argument: NEG rd"));
+                return Err("NEG requires 1 argument: NEG rd".to_string());
             }
             bytecode.push(0x2A);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -622,7 +622,7 @@ fn parse_instruction(
 
         "IKEY" => {
             if tokens.len() < 2 {
-                return Err(format!("IKEY requires 1 argument: IKEY reg"));
+                return Err("IKEY requires 1 argument: IKEY reg".to_string());
             }
             bytecode.push(0x48);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -630,7 +630,7 @@ fn parse_instruction(
 
         "RAND" => {
             if tokens.len() < 2 {
-                return Err(format!("RAND requires 1 argument: RAND rd"));
+                return Err("RAND requires 1 argument: RAND rd".to_string());
             }
             bytecode.push(0x49);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -638,7 +638,7 @@ fn parse_instruction(
 
         "LINE" => {
             if tokens.len() < 6 {
-                return Err(format!("LINE requires 5 arguments: LINE x0r, y0r, x1r, y1r, cr"));
+                return Err("LINE requires 5 arguments: LINE x0r, y0r, x1r, y1r, cr".to_string());
             }
             bytecode.push(0x45);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -650,7 +650,7 @@ fn parse_instruction(
 
         "CIRCLE" => {
             if tokens.len() < 5 {
-                return Err(format!("CIRCLE requires 4 arguments: CIRCLE xr, yr, rr, cr"));
+                return Err("CIRCLE requires 4 arguments: CIRCLE xr, yr, rr, cr".to_string());
             }
             bytecode.push(0x46);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -661,7 +661,7 @@ fn parse_instruction(
 
         "SCROLL" => {
             if tokens.len() < 2 {
-                return Err(format!("SCROLL requires 1 argument: SCROLL nr"));
+                return Err("SCROLL requires 1 argument: SCROLL nr".to_string());
             }
             bytecode.push(0x47);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -669,7 +669,7 @@ fn parse_instruction(
 
         "SPRITE" => {
             if tokens.len() < 6 {
-                return Err(format!("SPRITE requires 5 arguments: SPRITE x_reg, y_reg, addr_reg, w_reg, h_reg"));
+                return Err("SPRITE requires 5 arguments: SPRITE x_reg, y_reg, addr_reg, w_reg, h_reg".to_string());
             }
             bytecode.push(0x4A);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -681,7 +681,7 @@ fn parse_instruction(
 
         "ASM" => {
             if tokens.len() < 3 {
-                return Err(format!("ASM requires 2 arguments: ASM src_addr_reg, dest_addr_reg"));
+                return Err("ASM requires 2 arguments: ASM src_addr_reg, dest_addr_reg".to_string());
             }
             bytecode.push(0x4B);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -690,7 +690,7 @@ fn parse_instruction(
 
         "TILEMAP" => {
             if tokens.len() < 9 {
-                return Err(format!("TILEMAP requires 8 arguments: TILEMAP xr, yr, mr, tr, gwr, ghr, twr, thr"));
+                return Err("TILEMAP requires 8 arguments: TILEMAP xr, yr, mr, tr, gwr, ghr, twr, thr".to_string());
             }
             bytecode.push(0x4C);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -705,7 +705,7 @@ fn parse_instruction(
 
         "SPAWN" => {
             if tokens.len() < 2 {
-                return Err(format!("SPAWN requires 1 argument: SPAWN addr_reg"));
+                return Err("SPAWN requires 1 argument: SPAWN addr_reg".to_string());
             }
             bytecode.push(0x4D);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -713,7 +713,7 @@ fn parse_instruction(
 
         "KILL" => {
             if tokens.len() < 2 {
-                return Err(format!("KILL requires 1 argument: KILL pid_reg"));
+                return Err("KILL requires 1 argument: KILL pid_reg".to_string());
             }
             bytecode.push(0x4E);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -721,7 +721,7 @@ fn parse_instruction(
 
         "PEEK" => {
             if tokens.len() < 4 {
-                return Err(format!("PEEK requires 3 arguments: PEEK rx, ry, rd"));
+                return Err("PEEK requires 3 arguments: PEEK rx, ry, rd".to_string());
             }
             bytecode.push(0x4F);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -731,7 +731,7 @@ fn parse_instruction(
 
         "SYSCALL" => {
             if tokens.len() < 2 {
-                return Err(format!("SYSCALL requires 1 argument: SYSCALL num"));
+                return Err("SYSCALL requires 1 argument: SYSCALL num".to_string());
             }
             bytecode.push(0x52);
             bytecode.push(parse_imm(tokens[1], constants)?);
@@ -743,7 +743,7 @@ fn parse_instruction(
 
         "OPEN" => {
             if tokens.len() < 3 {
-                return Err(format!("OPEN requires 2 arguments: OPEN path_reg, mode_reg"));
+                return Err("OPEN requires 2 arguments: OPEN path_reg, mode_reg".to_string());
             }
             bytecode.push(0x54);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -752,7 +752,7 @@ fn parse_instruction(
 
         "READ" => {
             if tokens.len() < 4 {
-                return Err(format!("READ requires 3 arguments: READ fd_reg, buf_reg, len_reg"));
+                return Err("READ requires 3 arguments: READ fd_reg, buf_reg, len_reg".to_string());
             }
             bytecode.push(0x55);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -762,7 +762,7 @@ fn parse_instruction(
 
         "WRITE" => {
             if tokens.len() < 4 {
-                return Err(format!("WRITE requires 3 arguments: WRITE fd_reg, buf_reg, len_reg"));
+                return Err("WRITE requires 3 arguments: WRITE fd_reg, buf_reg, len_reg".to_string());
             }
             bytecode.push(0x56);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -772,7 +772,7 @@ fn parse_instruction(
 
         "CLOSE" => {
             if tokens.len() < 2 {
-                return Err(format!("CLOSE requires 1 argument: CLOSE fd_reg"));
+                return Err("CLOSE requires 1 argument: CLOSE fd_reg".to_string());
             }
             bytecode.push(0x57);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -780,7 +780,7 @@ fn parse_instruction(
 
         "SEEK" => {
             if tokens.len() < 4 {
-                return Err(format!("SEEK requires 3 arguments: SEEK fd_reg, offset_reg, whence_reg"));
+                return Err("SEEK requires 3 arguments: SEEK fd_reg, offset_reg, whence_reg".to_string());
             }
             bytecode.push(0x58);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -790,7 +790,7 @@ fn parse_instruction(
 
         "LS" => {
             if tokens.len() < 2 {
-                return Err(format!("LS requires 1 argument: LS buf_reg"));
+                return Err("LS requires 1 argument: LS buf_reg".to_string());
             }
             bytecode.push(0x59);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -802,7 +802,7 @@ fn parse_instruction(
 
         "SLEEP" => {
             if tokens.len() < 2 {
-                return Err(format!("SLEEP requires 1 argument: SLEEP ticks_reg"));
+                return Err("SLEEP requires 1 argument: SLEEP ticks_reg".to_string());
             }
             bytecode.push(0x5B);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -810,7 +810,7 @@ fn parse_instruction(
 
         "SETPRIORITY" => {
             if tokens.len() < 2 {
-                return Err(format!("SETPRIORITY requires 1 argument: SETPRIORITY priority_reg"));
+                return Err("SETPRIORITY requires 1 argument: SETPRIORITY priority_reg".to_string());
             }
             bytecode.push(0x5C);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -818,7 +818,7 @@ fn parse_instruction(
 
         "PIPE" => {
             if tokens.len() < 3 {
-                return Err(format!("PIPE requires 2 arguments: PIPE read_fd_reg, write_fd_reg"));
+                return Err("PIPE requires 2 arguments: PIPE read_fd_reg, write_fd_reg".to_string());
             }
             bytecode.push(0x5D);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -827,7 +827,7 @@ fn parse_instruction(
 
         "MSGSND" => {
             if tokens.len() < 2 {
-                return Err(format!("MSGSND requires 1 argument: MSGSND pid_reg"));
+                return Err("MSGSND requires 1 argument: MSGSND pid_reg".to_string());
             }
             bytecode.push(0x5E);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -839,7 +839,7 @@ fn parse_instruction(
 
         "IOCTL" => {
             if tokens.len() < 4 {
-                return Err(format!("IOCTL requires 3 arguments: IOCTL fd_reg, cmd_reg, arg_reg"));
+                return Err("IOCTL requires 3 arguments: IOCTL fd_reg, cmd_reg, arg_reg".to_string());
             }
             bytecode.push(0x62);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -849,7 +849,7 @@ fn parse_instruction(
 
         "GETENV" => {
             if tokens.len() < 3 {
-                return Err(format!("GETENV requires 2 arguments: GETENV key_addr_reg, val_addr_reg"));
+                return Err("GETENV requires 2 arguments: GETENV key_addr_reg, val_addr_reg".to_string());
             }
             bytecode.push(0x63);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -858,7 +858,7 @@ fn parse_instruction(
 
         "SETENV" => {
             if tokens.len() < 3 {
-                return Err(format!("SETENV requires 2 arguments: SETENV key_addr_reg, val_addr_reg"));
+                return Err("SETENV requires 2 arguments: SETENV key_addr_reg, val_addr_reg".to_string());
             }
             bytecode.push(0x64);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -871,9 +871,7 @@ fn parse_instruction(
 
         "EXEC" => {
             if tokens.len() != 2 {
-                return Err(format!(
-                    "EXEC requires 1 argument: EXEC path_addr_reg"
-                ));
+                return Err("EXEC requires 1 argument: EXEC path_addr_reg".to_string());
             }
             bytecode.push(0x66);
             let r = parse_reg(tokens[1])?;
@@ -882,9 +880,7 @@ fn parse_instruction(
 
         "WRITESTR" => {
             if tokens.len() != 3 {
-                return Err(format!(
-                    "WRITESTR requires 2 arguments: WRITESTR fd_reg, str_addr_reg"
-                ));
+                return Err("WRITESTR requires 2 arguments: WRITESTR fd_reg, str_addr_reg".to_string());
             }
             bytecode.push(0x67);
             let r1 = parse_reg(tokens[1])?;
@@ -895,9 +891,7 @@ fn parse_instruction(
 
         "READLN" => {
             if tokens.len() != 4 {
-                return Err(format!(
-                    "READLN requires 3 arguments: READLN buf_reg, max_len_reg, pos_reg"
-                ));
+                return Err("READLN requires 3 arguments: READLN buf_reg, max_len_reg, pos_reg".to_string());
             }
             bytecode.push(0x68);
             let r1 = parse_reg(tokens[1])?;
@@ -910,9 +904,7 @@ fn parse_instruction(
 
         "WAITPID" => {
             if tokens.len() != 2 {
-                return Err(format!(
-                    "WAITPID requires 1 argument: WAITPID pid_reg"
-                ));
+                return Err("WAITPID requires 1 argument: WAITPID pid_reg".to_string());
             }
             bytecode.push(0x69);
             let r = parse_reg(tokens[1])?;
@@ -921,9 +913,7 @@ fn parse_instruction(
 
         "EXECP" => {
             if tokens.len() != 4 {
-                return Err(format!(
-                    "EXECP requires 3 arguments: EXECP path_reg, stdin_fd_reg, stdout_fd_reg"
-                ));
+                return Err("EXECP requires 3 arguments: EXECP path_reg, stdin_fd_reg, stdout_fd_reg".to_string());
             }
             bytecode.push(0x6A);
             let r1 = parse_reg(tokens[1])?;
@@ -936,9 +926,7 @@ fn parse_instruction(
 
         "CHDIR" => {
             if tokens.len() != 2 {
-                return Err(format!(
-                    "CHDIR requires 1 argument: CHDIR path_reg"
-                ));
+                return Err("CHDIR requires 1 argument: CHDIR path_reg".to_string());
             }
             bytecode.push(0x6B);
             let r = parse_reg(tokens[1])?;
@@ -947,9 +935,7 @@ fn parse_instruction(
 
         "GETCWD" => {
             if tokens.len() != 2 {
-                return Err(format!(
-                    "GETCWD requires 1 argument: GETCWD buf_reg"
-                ));
+                return Err("GETCWD requires 1 argument: GETCWD buf_reg".to_string());
             }
             bytecode.push(0x6C);
             let r = parse_reg(tokens[1])?;
@@ -959,9 +945,7 @@ fn parse_instruction(
         "SCREENP" => {
             // SCREENP dest, x, y -- read screen pixel at (x,y) into dest
             if tokens.len() < 4 {
-                return Err(format!(
-                    "SCREENP requires 3 arguments: SCREENP dest_reg, x_reg, y_reg"
-                ));
+                return Err("SCREENP requires 3 arguments: SCREENP dest_reg, x_reg, y_reg".to_string());
             }
             bytecode.push(0x6D);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -974,16 +958,14 @@ fn parse_instruction(
         }
         "EXIT" => {
             if tokens.len() < 2 {
-                return Err(format!("EXIT requires 1 argument: EXIT code_reg"));
+                return Err("EXIT requires 1 argument: EXIT code_reg".to_string());
             }
             bytecode.push(0x6F);
             bytecode.push(parse_reg(tokens[1])? as u32);
         }
         "SIGNAL" => {
             if tokens.len() < 3 {
-                return Err(format!(
-                    "SIGNAL requires 2 arguments: SIGNAL pid_reg sig_reg"
-                ));
+                return Err("SIGNAL requires 2 arguments: SIGNAL pid_reg sig_reg".to_string());
             }
             bytecode.push(0x70);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -991,9 +973,7 @@ fn parse_instruction(
         }
         "SIGSET" => {
             if tokens.len() < 3 {
-                return Err(format!(
-                    "SIGSET requires 2 arguments: SIGSET sig_reg handler_reg"
-                ));
+                return Err("SIGSET requires 2 arguments: SIGSET sig_reg handler_reg".to_string());
             }
             bytecode.push(0x71);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -1002,9 +982,7 @@ fn parse_instruction(
 
         "HYPERVISOR" => {
             if tokens.len() < 2 {
-                return Err(format!(
-                    "HYPERVISOR requires 1 argument: HYPERVISOR addr_reg"
-                ));
+                return Err("HYPERVISOR requires 1 argument: HYPERVISOR addr_reg".to_string());
             }
             bytecode.push(0x72);
             bytecode.push(parse_reg(tokens[1])? as u32);
