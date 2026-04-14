@@ -1,16 +1,18 @@
-; infinite_map.asm -- Infinite scrolling procedural terrain (v2)
+; infinite_map.asm -- Infinite scrolling procedural terrain (v3)
 ;
 ; Arrow keys / WASD scroll through infinite procedurally generated terrain.
 ; Two-level hash: coarse hash determines biome (8x8 tile zones = 32px blocks),
 ; fine hash places structures (1/256 tiles get a tree/rock/crystal).
+; Water tiles animate (shimmer) based on frame counter.
 ; Pure math -- no stored world data, truly infinite.
 ;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
-; Renders via RECTF. ~180K instructions/frame (18% of 1M budget).
+; Renders via RECTF. ~210K instructions/frame (21% of 1M budget).
 ;
 ; Memory:
 ;   RAM[0x7800] = camera_x (tile coordinates)
 ;   RAM[0x7801] = camera_y (tile coordinates)
+;   RAM[0x7802] = frame_counter (increments each frame)
 ;   RAM[0xFFB]  = key bitmask (host writes each frame)
 
 ; ===== Constants =====
@@ -20,9 +22,15 @@ LDI r9, 4               ; TILE_SIZE pixels
 LDI r10, 0xFFB          ; key bitmask port
 LDI r11, 0x7800         ; camera_x address
 LDI r12, 0x7801         ; camera_y address
+LDI r13, 0x7802         ; frame_counter address
 
 ; ===== Main Loop =====
 main_loop:
+
+; --- Increment frame counter ---
+LOAD r17, r13
+ADD r17, r7
+STORE r13, r17          ; frame_counter++
 
 ; --- Read camera position ---
 LOAD r14, r11           ; r14 = camera_x
@@ -73,9 +81,11 @@ FILL r17
 
 ; ===== Render Viewport =====
 ; r14 = camera_x, r15 = camera_y
+; r22 = frame_counter (loaded once)
 ; 64x64 tile loop: ty=0..63, tx=0..63
 ; Per tile: coarse hash -> biome, fine hash -> structure check, color -> RECTF
 
+LOAD r22, r13           ; r22 = frame_counter (load once for whole frame)
 LDI r1, 0               ; ty = 0
 
 render_y:
@@ -182,7 +192,7 @@ no_struct:
     ; Snow/ice (types 12-15)
     JMP color_snow
 
-    ; ---- Water subtypes ----
+    ; ---- Water subtypes (animated with frame counter) ----
 color_water:
     LDI r18, 1
     CMP r5, r18
@@ -191,12 +201,22 @@ color_water:
     CMP r5, r18
     JZ r0, water_shallow
     LDI r17, 0x000088    ; mid water
-    JMP do_rect
+    JMP water_animate
 water_deep:
     LDI r17, 0x000044    ; deep ocean
-    JMP do_rect
+    JMP water_animate
 water_shallow:
     LDI r17, 0x0000BB    ; shallow water
+
+water_animate:
+    ; Diagonal wave: shimmer = (frame_counter + world_x + world_y) & 0x1F
+    ; Creates a moving wave pattern across water tiles
+    MOV r21, r22         ; r21 = frame_counter
+    ADD r21, r3          ; + world_x
+    ADD r21, r4          ; + world_y
+    LDI r18, 0x1F
+    AND r21, r18         ; r21 = 0..31
+    ADD r17, r21         ; shimmer the blue channel
     JMP do_rect
 
 color_beach:

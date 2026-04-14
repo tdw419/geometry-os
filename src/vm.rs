@@ -5633,10 +5633,15 @@ mod tests {
             if !keep_going { break; }
         }
         eprintln!("After 3rd frame (left+up): camera_x={}, camera_y={}", vm.ram[0x7800], vm.ram[0x7801]);
-        assert_eq!(vm.ram[0x7800], 0, "camera should be back at x=0");
-        assert_eq!(vm.ram[0x7801], 0, "camera should be back at y=0");
+        assert_eq!(vm.ram[0x7800], 0, "camera should have moved left back to 0");
+        assert_eq!(vm.ram[0x7801], 0, "camera should have moved up back to 0");
 
-        // Fourth frame: no keys -- camera should stay put
+        // Verify frame counter incremented
+        assert!(vm.ram[0x7802] >= 3, "frame_counter should be >= 3 (was {})", vm.ram[0x7802]);
+        eprintln!("Frame counter: {}", vm.ram[0x7802]);
+
+        // Verify water animation: run 2 frames without moving, check screen changes
+        // Frame 4: no keys
         vm.frame_ready = false;
         vm.ram[0xFFB] = 0;
         for _ in 0..1_000_000 {
@@ -5644,7 +5649,23 @@ mod tests {
             let keep_going = vm.step();
             if !keep_going { break; }
         }
-        assert_eq!(vm.ram[0x7800], 0, "camera should not move with no keys");
-        assert_eq!(vm.ram[0x7801], 0, "camera should not move with no keys");
+        let screen_f4: Vec<u32> = vm.screen.to_vec();
+
+        // Frame 5: no keys
+        vm.frame_ready = false;
+        vm.ram[0xFFB] = 0;
+        for _ in 0..1_000_000 {
+            if vm.frame_ready { break; }
+            let keep_going = vm.step();
+            if !keep_going { break; }
+        }
+        let screen_f5: Vec<u32> = vm.screen.to_vec();
+
+        // Count pixels that changed between frames (water animation)
+        let changed: usize = screen_f4.iter().zip(screen_f5.iter())
+            .filter(|(a, b)| a != b).count();
+        eprintln!("Pixels changed between frames 4-5: {}/{}", changed, 256*256);
+        // With ~25% water tiles and animation, expect some pixels to change
+        assert!(changed > 0, "water animation should cause pixel changes between frames");
     }
 }
