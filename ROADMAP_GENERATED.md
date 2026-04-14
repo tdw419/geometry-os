@@ -953,8 +953,8 @@ Load vmlinux + initramfs into the interpreter, boot to shell. This is the "QEMU 
 
 ### Deliverables
 
-- [ ] **Linux boot** -- Linux boots to shell prompt in the interpreter
-  - [ ] `p40.d1.t1` Fix interpreter issues blocking Linux boot
+- [~] **Linux boot** -- Linux boots to shell prompt in the interpreter
+  - [~] `p40.d1.t1` Fix interpreter issues blocking Linux boot
     - vmlinux loads and begins executing
     - Kernel reaches console output (prints "Linux version...")
     - No unimplemented instruction panics

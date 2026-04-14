@@ -12,7 +12,7 @@ meta:
   opcodes: 114
   tests: 788
   programs: 40
-  loc: 18027
+  loc: 29324
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1765,12 +1765,12 @@ phases:
   deliverables:
   - name: Linux boot
     description: Linux boots to shell prompt in the interpreter
-    status: todo
+    status: in_progress
     scope_lines: 200
     tasks:
     - id: p40.d1.t1
       title: Fix interpreter issues blocking Linux boot
-      status: todo
+      status: in_progress
       acceptance_criteria:
       - vmlinux loads and begins executing
       - Kernel reaches console output (prints "Linux version...")
