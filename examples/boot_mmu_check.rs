@@ -37,7 +37,8 @@ fn main() {
             
             // Try MMU translation
             let sum = vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::User;
-            match translate(next_pc, AccessType::Fetch, sum, vm.cpu.csr.satp, &vm.bus, &mut vm.cpu.tlb) {
+            match translate(next_pc, AccessType::Fetch, sum, vm.cpu.csr.satp, &mut vm.bus, &mut vm.cpu.tlb) {
+
                 geometry_os::riscv::mmu::TranslateResult::Ok(pa) => {
                     println!("  Translate: 0x{:08X} -> PA 0x{:08X}", next_pc, pa);
                     // Read instruction at PA

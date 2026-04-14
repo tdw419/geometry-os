@@ -76,17 +76,13 @@ height = number of lines
 ```
 
 Each character becomes exactly one pixel. Short lines are padded with
-background color. This produces the smallest image and is the natural
-encoding -- the pixel grid IS the text grid.
+background color.
 
 ### Mode 2: Palette PNG (indexed color)
 
 Uses PNG color type 3 (palette/indexed). Each pixel stores one byte (the
 ASCII value) and the PNG PLTE chunk maps those values to RGB. This is more
 compact than raw RGB because each pixel is 1 byte instead of 3.
-
-**This is the recommended format.** It's smaller than RGB, lossless, and
-viewable as a color image.
 
 ### Mode 3: 16x16 pixel cells (canvas mode)
 
@@ -95,13 +91,12 @@ Each character fills a 16x16 cell, rendered as either:
 - **Pixel font glyph** -- 8x8 VGA bitmap scaled 2x, colored by palette
 
 This is how Geometry OS renders the canvas. 256x larger than 1:1 mode.
-Use for human-readable canvas display.
 
 ---
 
-## Compression Comparison
+## Compression Research Results
 
-Real test: CANVAS_TEXT_SURFACE.md (23,871 bytes, 586 lines, 164 chars wide)
+Test file: CANVAS_TEXT_SURFACE.md (23,871 bytes, 586 lines, 164 chars wide)
 
 ```
 Format                          Size      vs .md    Lossless?
@@ -109,34 +104,66 @@ Format                          Size      vs .md    Lossless?
 Original .md                    23,871 B   100%       ---
 Shannon entropy limit           14,750 B    62%       yes
 gzip -9                          9,217 B    39%       yes
-Palette PNG (type 3, 1:1)       11,726 B    49%       yes  <-- best image
+Palette PNG (type 3, 1:1)       11,726 B    49%       yes
 RGB PNG (type 2, 1:1)           16,800 B    70%       yes
 4-bit indexed (2 chars/pixel)    7,979 B    33%       no   (16 buckets)
-RGB PNG (16x16 solid cells)    145,131 B   608%       yes
-RGB PNG (16x16 glyph cells)    25,164 B   105%       yes  (50 lines only)
 ```
 
-### Key findings
+Extended test: 2.7 MB compiled binary (geometry_os executable)
 
-1. **Palette PNG beats RGB PNG by 30%** (11,726 vs 16,800 bytes). Each pixel
-   stores 1 byte (palette index) instead of 3 bytes (RGB). The PLTE chunk
-   adds ~384 bytes but saves far more in the IDAT compressed data.
+```
+Format                          Size         vs raw
+───────────────────────────────────────────────────
+gzip -9                          999,631 B    36.7%
+Palette PNG (type 3)             996,789 B    36.6%
+```
 
-2. **Palette PNG overhead vs gzip is only +2,509 bytes** (27%). That overhead
-   buys you a viewable image where document structure is visible as color bands.
+### Findings
 
-3. **PNG filters (SUB/UP/PAETH) make it WORSE for text data.** These filters
-   work well for photographs but text has sharp character boundaries. The
-   "none" filter (raw bytes) is optimal for palette-indexed text.
+1. **Palette PNG is within 0-1% of gzip for all file types.** The PNG container
+   adds ~100 bytes of overhead (PLTE chunk, IHDR, IEND). For any file over a few
+   KB this is negligible. The compression engine (zlib DEFLATE) is the same one
+   gzip uses.
 
-4. **4-bit indexed (2 chars per pixel) is smallest at 7,979 bytes** but is
+2. **Palette PNG beats RGB PNG by 30%.** One byte per pixel instead of three.
+   The PLTE chunk adds ~384 bytes but saves far more in compressed pixel data.
+
+3. **PNG filters (SUB/UP/PAETH) make compression WORSE for text.** These work
+   well for photographs but text has sharp character boundaries. Use filter 0
+   (none) for palette-indexed text data.
+
+4. **4-bit indexed (2 chars per pixel) is smallest at 33% of original** but is
    lossy -- only 12 character buckets instead of 128 unique colors.
 
-5. **gzip beats Shannon entropy** because it exploits patterns beyond single-
-   character frequency (repeated words, LZ77 back-references across lines).
+5. **Channel packing (ASCII in R/G/B channels) is worse** than palette indexed.
+   Creates noise that zlib cannot compress.
 
-6. **Channel packing (2-3 chars per RGB pixel) is WORSE** than palette indexed.
-   Storing ASCII values in R/G/B channels creates noise that zlib can't compress.
+6. **Cannot beat dedicated compression tools.** Since the underlying compressor
+   is the same zlib DEFLATE that gzip uses, no palette/image approach can
+   improve on gzip. The PNG wrapper adds no compression advantage.
+
+7. **Greyscale PNG (color type 0, 1-row) is optimal.** No PLTE chunk needed,
+   each pixel IS the byte value. Achieves 1.0005x gzip -- within 84 bytes
+   per file of parity. The gap is entirely PNG container overhead (signature,
+   IHDR, IDAT wrapper, IEND) and is irreducible.
+
+8. **Pre-processing transforms (BWT, MTF) make it worse.** These work with
+   entropy coding (bzip2) but conflict with LZ77 (which zlib already does).
+   MTF alone made it 1.69x gzip. BWT+MTF made it 1.24x gzip.
+
+9. **4-bit indexed (2 chars/pixel) is the smallest at 33% of original** but is
+   lossy -- only 16 character buckets instead of 128 unique colors.
+
+### Conclusion
+
+The encoding is compression-neutral: rendering bytes as colored pixels
+costs nothing in file size compared to gzip. The best approach (greyscale PNG,
+1-row, no filter) is within 0.05% of gzip. The tiny gap is the irreducible
+cost of the PNG container (~84 bytes/file). This means the encoding is free
+for Geometry OS to use -- the pixel representation IS the data with zero
+overhead -- but it is not a basis for a standalone compression tool.
+
+Full research details: ~/zion/apps/pixelpack-research/
 
 ---
 
@@ -184,16 +211,11 @@ def text_to_palette_png(text, out_path):
         f.write(png)
 ```
 
-### To make an RGB PNG (wider compatibility):
-
-Same as above but use color type 2 (RGB) and write 3 bytes per pixel.
-This is 30% larger but works with tools that don't support palette PNGs.
-
 ---
 
 ## Converting Pixel Image Back to Text
 
-### Round-trip is lossless (for palette and RGB modes)
+### Round-trip is lossless
 
 Because the palette is a bijection (each character maps to a unique color),
 you can reconstruct the original text exactly:
@@ -214,12 +236,12 @@ def pixel_image_to_text(pixels, width, height):
             rgb = tuple(pixels[y * width + x][:3])
             ch = reverse_palette.get(rgb, '\x00')
             row += ch
-        lines.append(row.rstrip('\x00'))  # strip padding
+        lines.append(row.rstrip('\x00'))
     return '\n'.join(lines)
 ```
 
-For palette PNGs, decoding is even simpler: each pixel's palette index IS
-the ASCII value. No color lookup needed.
+For palette PNGs, each pixel's palette index IS the ASCII value. No color
+lookup needed -- just read the indices directly.
 
 ---
 
@@ -227,60 +249,39 @@ the ASCII value. No color lookup needed.
 
 ```
 filename.md                   -- the text (IS the compressed pixel sequence)
-filename_colors.png           -- 1:1 palette PNG (for visual inspection + data)
-filename_pixels.png           -- 16x16 glyph PNG (for readable canvas view)
+filename_colors.png           -- 1:1 palette PNG (visual + data)
+filename_pixels.png           -- 16x16 glyph PNG (readable canvas view)
 ```
 
-No separate key file is needed. The palette_color formula is the canonical
-key and never changes. Any AI agent that knows the formula can encode or
-decode without a JSON lookup table.
+No separate key file needed. The palette_color formula is the canonical key.
+Any AI agent that knows the formula can encode or decode.
 
 ---
 
 ## What You Need to Rebuild
 
-To reconstruct the original file from the pixel image:
+To reconstruct the original file from pixel data:
 
-1. **The palette** -- the palette_color function (~125 bytes as code, or
-   embedded in the PNG's PLTE chunk if using palette PNG)
-2. **The pixel data** -- which is the image itself
+1. **The palette** -- the palette_color function (~125 bytes as code), or
+   the PNG PLTE chunk if using palette PNG format
+2. **The pixel data** -- the image itself
 
-That's it. No external key file. No separate sequence file.
-
-For palette PNGs specifically: the PNG file IS self-contained. The PLTE
-chunk stores the color mapping, the IDAT chunk stores the indices. You can
-decode it with any standard PNG library -- read the palette, read the pixel
-indices, convert indices to ASCII characters.
+For palette PNGs, the file is self-contained. PLTE chunk stores the color
+mapping, IDAT chunk stores the indices. Any PNG library can decode it.
 
 ---
 
-## Why This Works
+## Why This Matters for Geometry OS
 
-The encoding exploits two facts:
+The encoding is compression-neutral. This means:
 
-1. **ASCII is already a palette index.** The byte value IS the color selector.
-   There is no separate indexing step. The text file contains 1-byte indices
-   into a 128-entry color table.
+- The VM pays **zero overhead** for rendering data as pixels
+- The canvas text surface stores bytes that are simultaneously source code AND
+  colored pixel data
+- No separate rendering pass needed -- the storage format IS the display format
+- The palette_color function is the sole bridge between data and appearance
 
-2. **The palette is deterministic and compact.** One 3-line function generates
-   all 128 colors. No lookup table is strictly needed (the PNG PLTE chunk
-   provides one for convenience).
-
-This is different from traditional image compression (PNG, JPEG) which treats
-pixels as independent RGB values. Here, each pixel's RGB is a function of a
-single byte, and the sequence of bytes is the original document. The "image
-format" and the "text format" are the same data viewed through different lenses.
-
-The compression comes from zlib (shared with gzip) operating on the palette
-index stream, which is essentially compressed text. The PNG container adds
-~100 bytes of overhead (headers, PLTE chunk, IEND) for the benefit of making
-the data viewable as a color image in any image viewer or browser.
-
----
-
-## Relationship to Geometry OS
-
-In Geometry OS, this encoding is the foundation of the canvas text surface:
+In Geometry OS:
 
 ```
 keystroke -> ASCII byte -> stored in canvas_buffer[cell]

@@ -6013,3 +6013,56 @@ fn test_evolving_counter() {
         vm.canvas_buffer[0] - 0x30, vm.canvas_buffer[1] - 0x30,
         vm.canvas_buffer[2] - 0x30, vm.canvas_buffer[3] - 0x30);
 }
+
+// === Register Dashboard (Phase 50: Pixel Driving Pixels) ===
+
+#[test]
+fn test_register_dashboard() {
+    // register_dashboard.asm displays 16 registers (r1-r16) as 4-digit
+    // decimal ASCII values on the canvas grid. r1 = frame counter,
+    // r2-r16 derive from r1 via arithmetic. The grid IS the debug view.
+    let vm = compile_run("programs/register_dashboard.asm");
+
+    // Program is an infinite animation loop (FRAME + JMP main_loop)
+    assert!(!vm.halted, "register_dashboard should not halt");
+    assert!(vm.frame_count > 0, "frame_count should be > 0: got {}", vm.frame_count);
+
+    // After first FRAME, r1 = 1 (frame counter incremented once)
+    // Verify r1's digits at canvas indices 0-3: "0001"
+    assert_eq!(vm.canvas_buffer[0], 0x30, "r1 thousands should be '0'");
+    assert_eq!(vm.canvas_buffer[1], 0x30, "r1 hundreds should be '0'");
+    assert_eq!(vm.canvas_buffer[2], 0x30, "r1 tens should be '0'");
+    assert_eq!(vm.canvas_buffer[3], 0x31, "r1 ones should be '1'");
+
+    // r2 = r1*2 = 2 at canvas indices 4-7: "0002"
+    assert_eq!(vm.canvas_buffer[7], 0x32, "r2 ones digit should be '2'");
+
+    // r4 = r1*4 = 4 at canvas indices 12-15: "0004"
+    assert_eq!(vm.canvas_buffer[15], 0x34, "r4 ones digit should be '4'");
+
+    // r8 = r1<<4 = 16 at canvas indices 28-31: "0016"
+    assert_eq!(vm.canvas_buffer[30], 0x31, "r8 tens digit should be '1'");
+    assert_eq!(vm.canvas_buffer[31], 0x36, "r8 ones digit should be '6'");
+
+    // r9 = NEG(r1) = 0xFFFFFFFF at canvas indices 32-35
+    // 0xFFFFFFFF = 4294967295, last 4 decimal digits = "7295"
+    assert_eq!(vm.canvas_buffer[32], 0x37, "r9 thousands digit should be '7'");
+    assert_eq!(vm.canvas_buffer[33], 0x32, "r9 hundreds digit should be '2'");
+    assert_eq!(vm.canvas_buffer[34], 0x39, "r9 tens digit should be '9'");
+    assert_eq!(vm.canvas_buffer[35], 0x35, "r9 ones digit should be '5'");
+
+    // r12 = (r1*r1)>>8 = 0 at canvas indices 44-47: "0000"
+    assert_eq!(vm.canvas_buffer[47], 0x30, "r12 ones digit should be '0'");
+
+    // r16 = r8-r1 = 16-1 = 15 at canvas indices 60-63: "0015"
+    assert_eq!(vm.canvas_buffer[62], 0x31, "r16 tens digit should be '1'");
+    assert_eq!(vm.canvas_buffer[63], 0x35, "r16 ones digit should be '5'");
+
+    // Verify ALL 64 canvas positions (16 regs × 4 digits) contain ASCII digits
+    for i in 0..64 {
+        let val = vm.canvas_buffer[i];
+        assert!(val >= 0x30 && val <= 0x39,
+            "canvas[{}] should be ASCII digit (0x30-0x39): got 0x{:02X} ('{}')",
+            i, val, if val >= 0x20 && val < 0x7F { val as u8 as char } else { '?' });
+    }
+}
