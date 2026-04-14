@@ -990,9 +990,9 @@ conventions:
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
 meta:
-  opcodes_current: 114
-  opcodes_after: 116
-  tests_current: 794
-  programs_current: 40
-  loc_current: 20545
+  opcodes_current: 182
+  opcodes_after: 184
+  tests_current: 513
+  programs_current: 42
+  loc_current: 12801
   source_doc: docs/PIXEL_DRIVING_PIXELS.md
