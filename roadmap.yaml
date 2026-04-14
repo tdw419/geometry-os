@@ -933,7 +933,7 @@ phases:
   test_target: 5
 - id: phase-49
   title: 'Self-Modifying Programs: Demos and Patterns'
-  status: in_progress
+  status: complete
   goal: Build demonstration programs that showcase the pixel-driving-pixels capability
   description: 'With phases 45-48 complete, write programs that demonstrate the full
     self-modifying capability: programs that write their own code, programs whose
@@ -949,7 +949,7 @@ phases:
       The human watches text appear on the grid, then sees the new program run.
 
       '
-    status: done
+    status: complete
     acceptance_criteria:
     - description: Program generates a visually different successor and runs it
       validation: Load demo, F5, watch grid change, see new program execute
@@ -986,7 +986,7 @@ phases:
       - Digits visibly increment on the canvas grid
       files:
       - programs/evolving_counter.asm
-      status: todo
+      status: complete
     - id: p49.d1.t3
       title: Write programs/game_of_life.asm
       description: 'Conway''s Game of Life implemented entirely in Geometry OS assembly.
@@ -1003,7 +1003,7 @@ phases:
       - Gliders move, blinkers blink
       files:
       - programs/game_of_life.asm
-      status: todo
+      status: complete
     - id: p49.d1.t4
       title: Write programs/code_evolution.asm
       description: 'The crown jewel demo. A program that writes increasingly complex
@@ -1020,7 +1020,7 @@ phases:
       - Each generation visibly different from the last
       files:
       - programs/code_evolution.asm
-      status: todo
+      status: complete
     scope_lines: 300
     scope_files:
     - programs/
@@ -1031,7 +1031,7 @@ phases:
       loops, corrupting your own code).
 
     '
-    status: done
+    status: complete
     acceptance_criteria:
     - description: Guide document exists with at least 3 documented patterns
       validation: ls docs/SELF_MODIFYING_GUIDE.md
@@ -1163,6 +1163,6 @@ meta:
   opcodes_current: 67
   opcodes_after: 67
   tests_current: 470
-  programs_current: 43
-  loc_current: 13780
+  programs_current: 46
+  loc_current: 13840
   source_doc: docs/PIXEL_DRIVING_PIXELS.md
