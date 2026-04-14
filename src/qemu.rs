@@ -498,8 +498,8 @@ impl AnsiHandler {
                     2 | 3 => {
                         // Clear entire screen
                         let end = canvas_buffer.len().min(CANVAS_MAX_ROWS * CANVAS_COLS);
-                        for i in 0..end {
-                            canvas_buffer[i] = 0;
+                        for cell in canvas_buffer.iter_mut().take(end) {
+                            *cell = 0;
                         }
                         self.cursor.row = 0;
                         self.cursor.col = 0;
@@ -723,8 +723,8 @@ impl AnsiHandler {
     /// Clear the entire canvas buffer.
     pub fn clear_screen(&self, canvas_buffer: &mut [u32]) {
         let end = canvas_buffer.len().min(CANVAS_MAX_ROWS * CANVAS_COLS);
-        for i in 0..end {
-            canvas_buffer[i] = 0;
+        for cell in canvas_buffer.iter_mut().take(end) {
+            *cell = 0;
         }
     }
 }

@@ -483,7 +483,9 @@ impl Vm {
     fn create_process_page_dir(&mut self) -> Option<Vec<u32>> {
         let start = self.alloc_pages(PROCESS_PAGES)?;
         let mut pd = vec![PAGE_UNMAPPED; NUM_PAGES];
-        for i in 0..PROCESS_PAGES { pd[i] = (start + i) as u32; }
+        for (i, pd_entry) in pd.iter_mut().enumerate().take(PROCESS_PAGES) {
+            *pd_entry = (start + i) as u32;
+        }
         // Identity-map shared regions so child processes can access them
         // Page 3 (0xC00-0xFFF): contains Window Bounds Protocol at 0xF00-0xFFF
         pd[3] = 3;
@@ -1166,10 +1168,7 @@ impl Vm {
                     } else {
                         let start_addr = self.regs[ar];
                         let page_dir = self.create_process_page_dir();
-                        if page_dir.is_none() {
-                            self.ram[0xFFA] = 0xFFFFFFFF;
-                        } else {
-                            let pd = page_dir.as_ref().unwrap();
+                        if let Some(pd) = &page_dir {
                             let phys_base = (pd[0] as usize) * PAGE_SIZE;
                             let copy_len = PROCESS_PAGES * PAGE_SIZE;
                             let src = start_addr as usize;
@@ -1201,6 +1200,8 @@ impl Vm {
                                 signal_handlers: [0; 4],
                             });
                             self.ram[0xFFA] = pid;
+                        } else {
+                            self.ram[0xFFA] = 0xFFFFFFFF;
                         }
                     }
                 }
@@ -1745,10 +1746,10 @@ impl Vm {
                         if let Some(val) = self.env_vars.get(k) {
                             let bytes = val.as_bytes();
                             let len = bytes.len().min(64);
-                            for i in 0..len {
+                            for (i, &byte) in bytes.iter().enumerate().take(len) {
                                 let addr = val_addr + i;
                                 if addr < self.ram.len() {
-                                    self.ram[addr] = bytes[i] as u32;
+                                    self.ram[addr] = byte as u32;
                                 }
                             }
                             // Null terminate
@@ -2852,9 +2853,9 @@ impl Vm {
             return;
         }
         let glyph = &MINI_FONT[idx - 32];
-        for row in 0..7usize {
+        for (row, &glyph_row) in glyph.iter().enumerate().take(7usize) {
             for col in 0..5usize {
-                if glyph[row] & (1 << (4 - col)) != 0 {
+                if glyph_row & (1 << (4 - col)) != 0 {
                     let px = x + col;
                     let py = y + row;
                     if px < 256 && py < 256 {

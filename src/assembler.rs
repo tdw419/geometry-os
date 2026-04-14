@@ -997,8 +997,8 @@ fn parse_instruction(
 fn parse_reg(s: &str) -> Result<usize, String> {
     let s = s.trim();
     let lower = s.to_lowercase();
-    if lower.starts_with('r') {
-        if let Ok(n) = lower[1..].parse::<usize>() {
+    if let Some(rest) = lower.strip_prefix('r') {
+        if let Ok(n) = rest.parse::<usize>() {
             if n < 32 {
                 return Ok(n);
             }

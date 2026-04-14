@@ -228,10 +228,10 @@ impl Vfs {
         match open_file.file.read(&mut buf) {
             Ok(bytes_read) => {
                 // Write bytes into RAM (low 8 bits of each u32)
-                for i in 0..bytes_read {
+                for (i, &byte) in buf.iter().enumerate().take(bytes_read) {
                     let addr = (buf_addr as usize) + i;
                     if addr < ram.len() {
-                        ram[addr] = buf[i] as u32;
+                        ram[addr] = byte as u32;
                     }
                 }
                 bytes_read as u32
