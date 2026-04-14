@@ -280,16 +280,22 @@ pub fn translate(
     let is_leaf_l1 = (l1_pte & (PTE_R | PTE_W | PTE_X)) != 0;
 
     if is_leaf_l1 {
-        // Megapage: use full PPN from L1 leaf PTE.
-        let ppn = pte_ppn(l1_pte);
+        // Megapage (2MB superpage in SV32).
+        // PA[31:22] = PTE.PPN[19:10], PA[21:12] = VA.VPN0[9:0], PA[11:0] = VA.offset
+        // The lower 10 bits of PTE.PPN are reserved (should be zero for megapages).
+        let ppn_hi = (l1_pte >> 20) & 0xFFF; // PTE.PPN[19:10] → PA[31:22]
+        let pa = ((ppn_hi as u64) << 22) | ((vpn0 as u64) << 12) | (offset as u64);
         let flags = l1_pte & 0xFF;
 
         if let Some(fault) = check_permissions(flags, access_type, sum) {
             return fault;
         }
 
-        tlb.insert(combined_vpn, asid, ppn, flags);
-        return TranslateResult::Ok(((ppn as u64) << 12) | (offset as u64));
+        // For TLB: store the effective PPN for this specific VPN (includes VPN0).
+        // Each TLB entry covers one 4KB page, so megapage hits insert per-VPN0.
+        let eff_ppn = (pa >> 12) as u32;
+        tlb.insert(combined_vpn, asid, eff_ppn, flags);
+        return TranslateResult::Ok(pa);
     }
 
     // Non-leaf: follow pointer to level 2.

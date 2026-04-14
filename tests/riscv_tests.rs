@@ -1893,14 +1893,55 @@ fn test_sv32_fault_types_by_access() {
 #[test]
 fn test_sv32_megapage() {
     let mut tlb = mmu::Tlb::new();
-    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x2_0000);
-    let test_addr = (4u64 << 12) | 0x100;
-    bus.write_word(test_addr, 0xCAFE_0001).unwrap();
-    bus.write_word(((1u64) << 12) | 4, make_pte(4, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X)).unwrap();
-    let satp = make_satp(1, 0, 1);
-    let result = mmu::translate(0x0040_0100, mmu::AccessType::Load, false, satp, &bus, &mut tlb);
-    assert_eq!(result, mmu::TranslateResult::Ok((4u64 << 12) | 0x100));
-    if let mmu::TranslateResult::Ok(pa) = result { assert_eq!(bus.read_word(pa).unwrap(), 0xCAFE_0001); }
+    // Use a larger bus to fit the identity-mapped megapage region
+    let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x8_0000); // 512KB
+
+    // SV32 megapage: L1 leaf PTE maps a 4MB region.
+    // PA[31:22] = PTE.PPN[19:10], PA[21:12] = VA.VPN0, PA[11:0] = VA.offset
+    // For identity mapping: use VPN1=0, so VA and PA are in low memory.
+    // PTE.PPN[19:10] = 0, PTE.PPN[9:0] = 0
+    let vpn1 = 0u32;
+    let vpn0 = 4u32;
+    let offset = 0x100u32;
+    let va = (vpn1 << 22) | (vpn0 << 12) | offset; // 0x00004100
+    let expected_pa = va; // identity mapping
+
+    // Write test data at the expected PA
+    bus.write_word(expected_pa as u64, 0xCAFE_0001).unwrap();
+
+    // Write L1 PTE at root[vpn1=0]: megapage with PPN[19:10]=0
+    // PPN = 0 (identity: PA[31:22] = 0)
+    let megapage_ppn = 0u32;
+    bus.write_word(
+        ((1u64) << 12), // root at page 1, entry index 0
+        make_pte(megapage_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X),
+    ).unwrap();
+
+    let satp = make_satp(1, 0, 1); // mode=SV32, root PPN=1
+    let result = mmu::translate(va, mmu::AccessType::Load, false, satp, &bus, &mut tlb);
+    assert_eq!(result, mmu::TranslateResult::Ok(expected_pa as u64));
+    if let mmu::TranslateResult::Ok(pa) = result {
+        assert_eq!(bus.read_word(pa).unwrap(), 0xCAFE_0001);
+    }
+
+    // Also test with a non-zero VPN1 that maps to a different PA.
+    // VPN1=2, PTE.PPN[19:10]=3 → VA 0x00800100 → PA 0x00C00100
+    let vpn1_b = 2u32;
+    let vpn0_b = 1u32;
+    let va_b = (vpn1_b << 22) | (vpn0_b << 12) | 0x100; // 0x00801100
+    // PA = (3 << 22) | (1 << 12) | 0x100 = 0x00C01100
+    let expected_pa_b = (3u64 << 22) | (1u64 << 12) | 0x100;
+    // This PA is beyond bus size but we just test the translation math, not the read
+
+    // Write L1 PTE at root[vpn1=2]
+    let megapage_ppn_b = 3u32 << 10; // PPN[19:10]=3, PPN[9:0]=0
+    bus.write_word(
+        ((1u64) << 12) + (vpn1_b as u64) * 4,
+        make_pte(megapage_ppn_b, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X),
+    ).unwrap();
+
+    let result_b = mmu::translate(va_b, mmu::AccessType::Load, false, satp, &bus, &mut tlb);
+    assert_eq!(result_b, mmu::TranslateResult::Ok(expected_pa_b));
 }
 
 #[test]

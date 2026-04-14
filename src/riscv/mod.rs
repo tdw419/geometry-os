@@ -288,6 +288,29 @@ impl RiscvVm {
         vm.cpu.x[11] = dtb_addr as u32; // a1 = DTB address
         vm.cpu.privilege = cpu::Privilege::Machine;
 
+        // Install a minimal M-mode trap handler (firmware stub).
+        // On real hardware, OpenSBI/firmware provides this. Our handler:
+        //   1. Skips the faulting instruction (mepc += 4)
+        //   2. Returns via mret
+        // This allows the kernel to proceed past unexpected M-mode traps
+        // (e.g., page faults before S-mode trap vectors are set up).
+        //
+        // Place handler at 0xC0940000 -- in the gap between the kernel's
+        // first LOAD segment (ends ~0xC0940000) and second LOAD segment
+        // (starts at 0xC0C00000). This address is within the kernel's
+        // identity-mapped region and won't be overwritten by the ELF loader.
+        let fw_addr: u64 = first_vaddr + 0x940_000;
+        // csrr t0, mepc      (0x34202373)
+        // addi t0, t0, 4     (0x00428293)
+        // csrw mepc, t0      (0x34129073)
+        // mret                (0x30200073)
+        vm.bus.write_word(fw_addr, 0x34202373).ok();
+        vm.bus.write_word(fw_addr + 4, 0x00428293).ok();
+        vm.bus.write_word(fw_addr + 8, 0x34129073).ok();
+        vm.bus.write_word(fw_addr + 12, 0x30200073).ok();
+        // Set mtvec to our trap handler (direct mode, bit[0]=0).
+        vm.cpu.csr.write(crate::riscv::csr::MTVEC, fw_addr as u32);
+
         // 8. Execute.
         let mut count: u64 = 0;
         while count < max_instructions {
