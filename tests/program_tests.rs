@@ -1782,7 +1782,7 @@ fn test_kill_halts_child_process() {
     // KILL should have returned 1 (success)
     assert_eq!(vm.ram[0xFFA], 1, "KILL should return 1 on success");
     // Child should be halted
-    assert!(vm.processes[0].halted);
+    assert!(vm.processes[0].is_halted());
 }
 
 #[test]
@@ -1816,14 +1816,14 @@ fn test_step_all_processes() {
     // Step child processes
     for _ in 0..100 {
         vm.step_all_processes();
-        if vm.processes.iter().all(|p| p.halted) {
+        if vm.processes.iter().all(|p| p.is_halted()) {
             break;
         }
     }
 
     // Both children should be halted
-    assert!(vm.processes[0].halted);
-    assert!(vm.processes[1].halted);
+    assert!(vm.processes[0].is_halted());
+    assert!(vm.processes[1].is_halted());
 
     // Child 1 should have set pixel at (10,10) to red
     assert_eq!(vm.screen[10 * 256 + 10], 0xFF0000);
@@ -1836,27 +1836,25 @@ fn test_active_process_count() {
     let mut vm = Vm::new();
     assert_eq!(vm.active_process_count(), 0);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0, regs: [0; 32], halted: false, pid: 1, mode: geometry_os::vm::CpuMode::Kernel,
+        pc: 0, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1, mode: geometry_os::vm::CpuMode::Kernel,
         page_dir: None, segfaulted: false,
         priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
-                blocked: false,
+                kernel_stack: Vec::new(),
                 msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
     assert_eq!(vm.active_process_count(), 1);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0, regs: [0; 32], halted: true, pid: 2, mode: geometry_os::vm::CpuMode::Kernel,
+        pc: 0, regs: [0; 32], state: geometry_os::vm::ProcessState::Zombie, pid: 2, mode: geometry_os::vm::CpuMode::Kernel,
         page_dir: None, segfaulted: false,
         priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
-                blocked: false,
+                kernel_stack: Vec::new(),
                 msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -1918,7 +1916,7 @@ fn test_window_manager_spawns_child() {
     let vm = compile_run_multiproc("programs/window_manager.asm", 3);
     // Child should be alive
     assert!(!vm.processes.is_empty(), "primary should have spawned a child process");
-    assert!(!vm.processes[0].halted, "child should still be running");
+    assert!(!vm.processes[0].is_halted(), "child should still be running");
     // Bounds protocol: RAM[0xF00..0xF03] should be populated
     assert_ne!(vm.ram[0xF02], 0, "win_w should be non-zero");
     assert_ne!(vm.ram[0xF03], 0, "win_h should be non-zero");
@@ -2451,10 +2449,10 @@ fn test_child_segfaults_on_unmapped_store() {
     // Step child process -- it should segfault on the STORE
     for _ in 0..50 {
         vm.step_all_processes();
-        if vm.processes[0].halted { break; }
+        if vm.processes[0].is_halted() { break; }
     }
 
-    assert!(vm.processes[0].halted, "child should be halted after segfault");
+    assert!(vm.processes[0].is_halted(), "child should be halted after segfault");
     assert!(vm.processes[0].segfaulted, "child should have segfaulted flag set");
     // RAM[0xFF9] should hold the segfaulted PID
     assert_eq!(vm.ram[0xFF9], 1, "RAM[0xFF9] should hold segfaulted PID");
@@ -2482,10 +2480,10 @@ fn test_child_segfaults_on_unmapped_load() {
 
     for _ in 0..50 {
         vm.step_all_processes();
-        if vm.processes[0].halted { break; }
+        if vm.processes[0].is_halted() { break; }
     }
 
-    assert!(vm.processes[0].halted, "child should be halted after segfault");
+    assert!(vm.processes[0].is_halted(), "child should be halted after segfault");
     assert!(vm.processes[0].segfaulted, "child should have segfaulted on unmapped LOAD");
 }
 
@@ -2511,10 +2509,10 @@ fn test_child_segfaults_on_unmapped_fetch() {
 
     for _ in 0..50 {
         vm.step_all_processes();
-        if vm.processes[0].halted { break; }
+        if vm.processes[0].is_halted() { break; }
     }
 
-    assert!(vm.processes[0].halted, "child should be halted after segfault");
+    assert!(vm.processes[0].is_halted(), "child should be halted after segfault");
     assert!(vm.processes[0].segfaulted, "child should segfault on fetching from unmapped page");
 }
 
@@ -2556,7 +2554,7 @@ fn test_process_memory_isolation() {
     // Step children to completion
     for _ in 0..100 {
         vm.step_all_processes();
-        if vm.processes.iter().all(|p| p.halted) { break; }
+        if vm.processes.iter().all(|p| p.is_halted()) { break; }
     }
 
     // Both children should have completed without segfault
@@ -2632,7 +2630,7 @@ fn test_kill_frees_physical_pages() {
 
     // Should have 2 processes: first killed, second alive
     assert_eq!(vm.processes.len(), 2);
-    assert!(vm.processes[0].halted, "first child should be killed");
+    assert!(vm.processes[0].is_halted(), "first child should be killed");
     // Second child should have been spawned successfully (pages were freed)
     assert!(!vm.processes[1].segfaulted, "second child should not have segfaulted");
 }
@@ -2661,7 +2659,7 @@ fn test_child_user_mode_blocks_hardware_port_write() {
 
     for _ in 0..50 {
         vm.step_all_processes();
-        if vm.processes[0].halted { break; }
+        if vm.processes[0].is_halted() { break; }
     }
 
     assert!(vm.processes[0].segfaulted,
@@ -2693,7 +2691,7 @@ fn test_child_can_access_shared_window_bounds() {
 
     for _ in 0..50 {
         vm.step_all_processes();
-        if vm.processes[0].halted { break; }
+        if vm.processes[0].is_halted() { break; }
     }
 
     assert!(!vm.processes[0].segfaulted,
@@ -2769,7 +2767,7 @@ fn test_segfault_pid_tracking() {
 
     for _ in 0..100 {
         vm.step_all_processes();
-        if vm.processes[0].halted && vm.processes[1].halted { break; }
+        if vm.processes[0].is_halted() && vm.processes[1].is_halted() { break; }
     }
 
     // First child (PID 1) should have segfaulted
@@ -3116,7 +3114,7 @@ fn test_scheduler_basic_child_execution() {
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x200,
         regs: [0; 32],
-        halted: false,
+        state: geometry_os::vm::ProcessState::Ready,
         pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel,
         page_dir: None,
@@ -3125,20 +3123,19 @@ fn test_scheduler_basic_child_execution() {
         slice_remaining: 0,
         sleep_until: 0,
         yielded: false,
-                blocked: false,
+                kernel_stack: Vec::new(),
                 msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
     for _ in 0..10 {
         vm.step_all_processes();
-        if vm.processes[0].halted { break; }
+        if vm.processes[0].is_halted() { break; }
     }
     assert_eq!(vm.ram[0x1000], 42, "child should have written 42");
-    assert!(vm.processes[0].halted, "child should have halted");
+    assert!(vm.processes[0].is_halted(), "child should have halted");
 }
 
 #[test]
@@ -3165,14 +3162,13 @@ fn test_yield_forfeits_time_slice() {
         vm.ram[i] = v;
     }
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3209,14 +3205,13 @@ fn test_sleep_skips_process_until_wake() {
         vm.ram[i] = v;
     }
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3269,27 +3264,25 @@ fn test_priority_quantum_allocation() {
     }
     // Process A: priority 3 (quantum = 100 * 8 = 800)
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 3, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
     // Process B: priority 0 (quantum = 100 * 1 = 100)
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x300, regs: [0; 32], halted: false, pid: 2,
+        pc: 0x300, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 2,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3335,14 +3328,13 @@ fn test_setpriority_changes_priority() {
         vm.ram[i] = v;
     }
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3359,14 +3351,13 @@ fn test_scheduler_tick_increments() {
     let asm = assemble(source, 0).unwrap();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3390,14 +3381,13 @@ fn test_sleep_wakes_and_halts() {
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3406,9 +3396,9 @@ fn test_sleep_wakes_and_halts() {
     assert!(vm.processes[0].sleep_until > 0, "process should be sleeping");
     for _ in 0..30 {
         vm.step_all_processes();
-        if vm.processes[0].halted { break; }
+        if vm.processes[0].is_halted() { break; }
     }
-    assert!(vm.processes[0].halted, "process should have woken and halted");
+    assert!(vm.processes[0].is_halted(), "process should have woken and halted");
     assert_eq!(vm.processes[0].sleep_until, 0, "sleep_until should be cleared");
 }
 
@@ -3437,46 +3427,43 @@ fn test_priority_execution_order() {
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 3,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 3,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 2, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x300, regs: [0; 32], halted: false, pid: 2,
+        pc: 0x300, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 2,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x400, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x400, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
     for _ in 0..50 {
         vm.step_all_processes();
-        if vm.processes.iter().all(|p| p.halted) { break; }
+        if vm.processes.iter().all(|p| p.is_halted()) { break; }
     }
-    assert!(vm.processes.iter().all(|p| p.halted), "all processes should halt");
+    assert!(vm.processes.iter().all(|p| p.is_halted()), "all processes should halt");
     assert_eq!(vm.ram[0x1500], 3, "priority-2 process should have written PID 3");
     assert_eq!(vm.ram[0x1501], 2, "priority-1 process should have written PID 2");
     assert_eq!(vm.ram[0x1502], 1, "priority-0 process should have written PID 1");
@@ -3512,27 +3499,25 @@ fn test_priority_higher_gets_more_instructions() {
     }
     // Process A: priority 3 (high) -- gets 800 instructions per round
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 3, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
     // Process B: priority 0 (low) -- gets 100 instructions per round
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x300, regs: [0; 32], halted: false, pid: 2,
+        pc: 0x300, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 2,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 0, slice_remaining: 0,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3694,14 +3679,13 @@ fn test_msgsnd_delivers_to_target() {
 
     // Set up child process
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3751,12 +3735,12 @@ fn test_msgrcv_receives_message() {
     // Set up child with a pending message
     let msg = geometry_os::vm::Message::new(0, [100, 200, 300, 400]);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: vec![msg],
-        exit_code: 0, parent_pid: 0, zombie: false,
+        kernel_stack: Vec::new(), msg_queue: vec![msg],
+        exit_code: 0, parent_pid: 0, 
         pending_signals: Vec::new(), signal_handlers: [0; 4],
     });
 
@@ -3781,14 +3765,13 @@ fn test_msgrcv_blocks_when_empty() {
     vm.current_pid = 1;
 
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3796,7 +3779,7 @@ fn test_msgrcv_blocks_when_empty() {
     vm.ram[0x200] = 0x5F; // MSGRCV
     vm.pc = 0x200;
     vm.step(); // MSGRCV -- should block
-    assert!(vm.processes[0].blocked, "process should be blocked");
+    assert!(vm.processes[0].state == geometry_os::vm::ProcessState::Blocked, "process should be blocked");
     // PC should be rewound so it retries
     assert_eq!(vm.pc, 0x200, "PC should be rewound to retry MSGRCV");
 }
@@ -3810,14 +3793,13 @@ fn test_msgrcv_unblocks_on_msgsnd() {
 
     // Process A (PID 1): blocked on MSGRCV
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
-        blocked: false, msg_queue: Vec::new(),
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -3826,7 +3808,7 @@ fn test_msgrcv_unblocks_on_msgsnd() {
     vm.ram[0x200] = 0x5F; // MSGRCV
     vm.pc = 0x200;
     vm.step();
-    assert!(vm.processes[0].blocked);
+    assert!(vm.processes[0].state == geometry_os::vm::ProcessState::Blocked);
 
     // Now switch to main process (PID 0) and send a message
     vm.current_pid = 0;
@@ -3840,7 +3822,7 @@ fn test_msgrcv_unblocks_on_msgsnd() {
     vm.ram[1] = 5;
     vm.step(); // MSGSND
     assert_eq!(vm.regs[0], 0, "MSGSND should succeed");
-    assert!(!vm.processes[0].blocked, "target should be unblocked after MSGSND");
+    assert!(vm.processes[0].state != geometry_os::vm::ProcessState::Blocked, "target should be unblocked after MSGSND");
     assert_eq!(vm.processes[0].msg_queue.len(), 1, "message should be in queue");
 }
 
@@ -3863,23 +3845,22 @@ fn test_blocked_process_skipped_by_scheduler() {
     }
     // Create a blocked process
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Blocked, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
-        blocked: true, msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: 0,
-                                zombie: false,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
     });
     // Run scheduler 50 times -- blocked process should not execute
     for _ in 0..50 {
         vm.step_all_processes();
     }
     assert_eq!(vm.ram[0x1000], 0, "blocked process should not have run");
-    assert!(vm.processes[0].blocked, "process should still be blocked");
+    assert!(vm.processes[0].state == geometry_os::vm::ProcessState::Blocked, "process should still be blocked");
 }
 
 #[test]
@@ -3894,16 +3875,15 @@ fn test_pipe_write_unblocks_blocked_reader() {
 
     // Process B (PID 1): blocked reading from pipe
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], halted: false, pid: 1,
+        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Blocked, pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
         segfaulted: false, priority: 1, slice_remaining: 100,
         sleep_until: 0, yielded: false,
-        blocked: true, msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: 0,
-                                zombie: false,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
+        kernel_stack: Vec::new(), msg_queue: Vec::new(),
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
     });
 
     // Main process writes to the pipe
@@ -3919,7 +3899,7 @@ fn test_pipe_write_unblocks_blocked_reader() {
     vm.step(); // WRITE
 
     assert_eq!(vm.regs[0], 1, "should have written 1 word");
-    assert!(!vm.processes[0].blocked, "reader should be unblocked after write");
+    assert!(vm.processes[0].state != geometry_os::vm::ProcessState::Blocked, "reader should be unblocked after write");
     assert_eq!(vm.pipes[0].count, 1, "pipe should have 1 word");
     assert_eq!(vm.pipes[0].buffer[0], 42, "pipe should contain 42");
 }
@@ -4612,7 +4592,7 @@ fn test_getpid_returns_pid_in_spawned_process() {
     // Run the child process through the scheduler
     for _ in 0..20 {
         vm.step_all_processes();
-        if vm.processes[0].halted { break; }
+        if vm.processes[0].is_halted() { break; }
     }
 
     let child = &vm.processes[0];
@@ -4836,7 +4816,7 @@ fn test_env_vars_persist_across_processes() {
 
     for _ in 0..20 {
         vm.step_all_processes();
-        if vm.processes[0].halted { break; }
+        if vm.processes[0].is_halted() { break; }
     }
 
     let child = &vm.processes[0];
@@ -4967,7 +4947,7 @@ fn test_waitpid_still_running() {
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0,
         regs: [0; 32],
-        halted: false,
+        state: geometry_os::vm::ProcessState::Ready,
         pid: 1,
         mode: geometry_os::vm::CpuMode::User,
         page_dir: None,
@@ -4976,11 +4956,10 @@ fn test_waitpid_still_running() {
         slice_remaining: 0,
         sleep_until: 0,
         yielded: false,
-        blocked: false,
+        kernel_stack: Vec::new(),
         msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -4996,7 +4975,7 @@ fn test_waitpid_halted_process() {
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0,
         regs: [0; 32],
-        halted: true,
+        state: geometry_os::vm::ProcessState::Zombie,
         pid: 1,
         mode: geometry_os::vm::CpuMode::User,
         page_dir: None,
@@ -5005,11 +4984,10 @@ fn test_waitpid_halted_process() {
         slice_remaining: 0,
         sleep_until: 0,
         yielded: false,
-        blocked: false,
+        kernel_stack: Vec::new(),
         msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: 0,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
     });
@@ -5215,7 +5193,7 @@ fn test_shutdown_kills_child_processes() {
     assert!(vm.halted, "VM should be halted");
     // Both children should be halted
     for proc in &vm.processes {
-        assert!(proc.halted, "child process should be halted after SHUTDOWN");
+        assert!(proc.is_halted(), "child process should be halted after SHUTDOWN");
     }
 }
 
@@ -5310,7 +5288,7 @@ fn test_boot_creates_init_process() {
     assert!(vm.booted, "VM should be marked as booted");
     assert_eq!(vm.processes.len(), 1, "should have exactly one child process");
     assert_eq!(vm.processes[0].pid, 1);
-    assert!(!vm.processes[0].halted, "init process should be running");
+    assert!(!vm.processes[0].is_halted(), "init process should be running");
     assert_eq!(vm.processes[0].priority, 2, "init gets priority 2");
     assert_eq!(vm.processes[0].mode, geometry_os::vm::CpuMode::User);
 }

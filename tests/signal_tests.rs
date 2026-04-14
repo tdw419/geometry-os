@@ -10,7 +10,7 @@ fn vm_with_child(child_pc: u32) -> Vm {
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: child_pc,
         regs: [0; 32],
-        halted: false,
+        state: geometry_os::vm::ProcessState::Ready,
         pid: 1,
         mode: geometry_os::vm::CpuMode::Kernel,
         page_dir: None,
@@ -19,11 +19,10 @@ fn vm_with_child(child_pc: u32) -> Vm {
         slice_remaining: 100,
         sleep_until: 0,
         yielded: false,
-        blocked: false,
+        kernel_stack: Vec::new(),
         msg_queue: Vec::new(),
         exit_code: 0,
         parent_pid: 0,
-        zombie: false,
         pending_signals: Vec::new(),
         signal_handlers: [0; 4],
     });
@@ -77,9 +76,9 @@ fn test_waitpid_returns_exit_code() {
     vm.step();
 
     // Save child state back to process list
-    vm.processes[0].halted = true;
+    vm.processes[0].state = geometry_os::vm::ProcessState::Zombie;
     vm.processes[0].exit_code = vm.step_exit_code.unwrap_or(0);
-    vm.processes[0].zombie = vm.step_zombie;
+    vm.step_zombie = true;
 
     // Switch back to main process
     vm.current_pid = 0;
@@ -137,9 +136,9 @@ fn test_signal_term_halts_process() {
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGNAL should succeed");
-    assert!(vm.processes[0].halted, "child should be halted by SIGTERM");
+    assert!(vm.processes[0].is_halted(), "child should be halted by SIGTERM");
     assert_eq!(vm.processes[0].exit_code, 1, "SIGTERM sets exit code 1");
-    assert!(vm.processes[0].zombie, "child should be zombie");
+    assert!(vm.processes[0].state == geometry_os::vm::ProcessState::Zombie, "child should be zombie");
 }
 
 #[test]
@@ -160,7 +159,7 @@ fn test_signal_stop_halts_process() {
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGNAL should succeed");
-    assert!(vm.processes[0].halted, "child should be halted by SIGSTOP");
+    assert!(vm.processes[0].is_halted(), "child should be halted by SIGSTOP");
     assert_eq!(vm.processes[0].exit_code, 2, "SIGSTOP sets exit code 2");
 }
 
@@ -182,7 +181,7 @@ fn test_signal_user_ignored_by_default() {
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGNAL should succeed");
-    assert!(!vm.processes[0].halted, "USER1 should not halt by default");
+    assert!(!vm.processes[0].is_halted(), "USER1 should not halt by default");
 }
 
 #[test]
@@ -304,7 +303,7 @@ fn test_signal_with_custom_handler() {
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGNAL should succeed");
-    assert!(!vm.processes[0].halted, "custom handler should prevent halt");
+    assert!(!vm.processes[0].is_halted(), "custom handler should prevent halt");
     assert_eq!(vm.processes[0].pc, 0x500, "PC should jump to handler");
     assert_eq!(vm.processes[0].regs[0], 0, "r0 should be signal number (0)");
     assert_eq!(vm.processes[0].regs[1], 0, "r1 should be sender PID (0)");

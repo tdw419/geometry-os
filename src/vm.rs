@@ -174,48 +174,148 @@ impl Signal {
     }
 }
 
-/// A secondary execution context spawned by SPAWN.
-/// Shares RAM and screen with the primary process.
+/// Process lifecycle states, analogous to Linux task_state.
+///
+/// State transitions:
+///   Ready -> Running       (scheduler picks this process)
+///   Running -> Ready       (time slice exhausted or yield)
+///   Running -> Sleeping    (SLEEP opcode)
+///   Sleeping -> Ready      (sleep timer expires)
+///   Running -> Blocked     (pipe read empty / MSGRCV empty)
+///   Blocked -> Ready       (data available)
+///   Running -> Zombie      (EXIT opcode or fatal signal)
+///   Zombie -> <gone>       (parent calls WAITPID, reaps exit code)
+///   Any -> Stopped         (SIGSTOP)
+///   Stopped -> Ready       (SIGCONT -- future)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessState {
+    /// Runnable, waiting for scheduler to pick it up.
+    Ready,
+    /// Currently executing on the CPU.
+    Running,
+    /// Sleeping until sched_tick reaches sleep_until.
+    Sleeping,
+    /// Blocked on I/O (empty pipe read, empty message receive).
+    Blocked,
+    /// Exited but parent has not reaped it yet. exit_code holds the result.
+    Zombie,
+    /// Stopped by signal (SIGSTOP equivalent).
+    Stopped,
+}
+
+impl Default for ProcessState {
+    fn default() -> Self {
+        ProcessState::Ready
+    }
+}
+
+/// Process control block, modeled after Linux task_struct.
+///
+/// Each process has:
+/// - Identity: PID, parent PID
+/// - CPU state: saved registers, PC, privilege mode
+/// - Memory: page table root (page directory), kernel stack
+/// - Scheduling: state, priority, time slice
+/// - IPC: message queue, signal handlers
+/// - Lifecycle: exit code, zombie tracking
 #[derive(Debug, Clone)]
-pub struct SpawnedProcess {
-    pub pc: u32,
-    pub regs: [u32; NUM_REGS],
-    pub halted: bool,
-    /// Process ID assigned at spawn time (1-based)
+pub struct Process {
+    // ── Identity ──────────────────────────────────────────────────
+    /// Process ID (1-based). PID 0 is the main/kernel context.
     pub pid: u32,
-    /// CPU mode for this process
+    /// PID of the parent process. 0 = spawned by kernel/init.
+    pub parent_pid: u32,
+
+    // ── CPU state (saved context) ─────────────────────────────────
+    /// Program counter: address of next instruction to execute.
+    pub pc: u32,
+    /// General-purpose register file (r0-r31).
+    pub regs: [u32; NUM_REGS],
+    /// CPU privilege mode: Kernel (full access) or User (restricted).
     pub mode: CpuMode,
-    /// Page directory for address translation. None = identity (kernel).
+
+    // ── Memory ────────────────────────────────────────────────────
+    /// Page directory for virtual-to-physical address translation.
+    /// None = identity mapping (kernel mode).
+    /// Each entry maps a virtual page number to a physical page number.
+    /// PAGE_UNMAPPED (0xFFFFFFFF) = unmapped -> segfault on access.
     pub page_dir: Option<Vec<u32>>,
-    /// True when process segfaulted on unmapped access.
-    pub segfaulted: bool,
+
+    /// Per-process kernel stack. Stores (return_pc, saved_mode) frames
+    /// pushed by SYSCALL and popped by RETK. Each process has its own
+    /// stack so nested syscalls in different processes don't interfere.
+    pub kernel_stack: Vec<(u32, CpuMode)>,
+
+    // ── Scheduling ────────────────────────────────────────────────
+    /// Current process state (Ready, Running, Sleeping, etc.).
+    pub state: ProcessState,
     /// Scheduler priority (0 = lowest, 3 = highest). Default: 1.
     pub priority: u8,
-    /// Ticks remaining in current time slice (managed by scheduler).
+    /// Remaining instructions in current time slice.
     pub slice_remaining: u32,
-    /// If > 0, process is sleeping until sched_tick reaches this value.
+    /// If sleeping: the sched_tick value at which this process wakes.
     pub sleep_until: u64,
-    /// Set by YIELD opcode; scheduler checks mid-slice and preempts.
+    /// Set by YIELD opcode; scheduler preempts mid-slice.
     pub yielded: bool,
-    /// True when process is blocked waiting for I/O (pipe read, message receive).
-    /// Scheduler skips blocked processes until I/O completes.
-    pub blocked: bool,
+
+    // ── IPC ────────────────────────────────────────────────────────
     /// Per-process message queue (max MAX_MESSAGES entries).
     pub msg_queue: Vec<Message>,
-    /// Exit code set by EXIT opcode or signal delivery. 0 = success.
-    pub exit_code: u32,
-    /// PID of parent process (0 = no parent / parent is kernel).
-    #[allow(dead_code)]
-    pub parent_pid: u32,
-    /// True when process has exited but parent has not called WAITPID yet.
-    pub zombie: bool,
-    /// Pending signals to be delivered on next step.
-    #[allow(dead_code)]
-    pub pending_signals: Vec<Signal>,
-    /// Signal handler addresses. Index = signal number (0-3).
-    /// 0 = no handler (use default), 0xFFFFFFFF = ignore.
-    /// Otherwise, the value is a RAM address to jump to.
+    /// Signal handler addresses, indexed by signal number (0-3).
+    /// 0 = default handler, 0xFFFFFFFF = ignore, else = RAM address.
     pub signal_handlers: [u32; 4],
+    /// Pending signals queued for delivery on next step.
+    pub pending_signals: Vec<Signal>,
+
+    // ── Lifecycle ──────────────────────────────────────────────────
+    /// Exit code set by EXIT opcode or fatal signal. 0 = success.
+    pub exit_code: u32,
+    /// True if the process segfaulted on an unmapped memory access.
+    pub segfaulted: bool,
+}
+
+/// Backward-compatible alias for Process.
+pub type SpawnedProcess = Process;
+
+impl Process {
+    /// Create a new process with the given PID and entry point.
+    ///
+    /// The process starts in Ready state with User mode, priority 1,
+    /// and no page directory (identity-mapped, which means kernel mode
+    /// will be used; callers should set `mode` and `page_dir` as needed).
+    pub fn new(pid: u32, parent_pid: u32, entry_pc: u32) -> Self {
+        Process {
+            pid,
+            parent_pid,
+            pc: entry_pc,
+            regs: [0; NUM_REGS],
+            mode: CpuMode::User,
+            page_dir: None,
+            kernel_stack: Vec::new(),
+            state: ProcessState::Ready,
+            priority: 1,
+            slice_remaining: 0,
+            sleep_until: 0,
+            yielded: false,
+            msg_queue: Vec::new(),
+            signal_handlers: [0; 4],
+            pending_signals: Vec::new(),
+            exit_code: 0,
+            segfaulted: false,
+        }
+    }
+
+    /// Convenience: is this process halted (zombie, segfaulted, or stopped)?
+    /// The scheduler skips halted processes.
+    pub fn is_halted(&self) -> bool {
+        matches!(self.state, ProcessState::Zombie | ProcessState::Stopped)
+            || self.segfaulted
+    }
+
+    /// Is this process in a runnable state (Ready or Running)?
+    pub fn is_runnable(&self) -> bool {
+        matches!(self.state, ProcessState::Ready | ProcessState::Running)
+    }
 }
 
 /// Magic bytes for save files
@@ -1183,7 +1283,7 @@ impl Vm {
             0x4D => {
                 let ar = self.fetch() as usize;
                 if ar < NUM_REGS {
-                    let active_count = self.processes.iter().filter(|p| !p.halted).count();
+                    let active_count = self.processes.iter().filter(|p| !p.is_halted()).count();
                     if active_count >= MAX_PROCESSES {
                         self.ram[0xFFA] = 0xFFFFFFFF;
                     } else {
@@ -1203,7 +1303,7 @@ impl Vm {
                             self.processes.push(SpawnedProcess {
                                 pc: 0,
                                 regs: [0; NUM_REGS],
-                                halted: false,
+                                state: ProcessState::Ready,
                                 pid,
                                 mode: CpuMode::User,
                                 page_dir,
@@ -1212,11 +1312,10 @@ impl Vm {
                                 slice_remaining: 0,
                                 sleep_until: 0,
                                 yielded: false,
-                                blocked: false,
+                                kernel_stack: Vec::new(),
                                 msg_queue: Vec::new(),
                                 exit_code: 0,
                                 parent_pid: self.current_pid,
-                                zombie: false,
                                 pending_signals: Vec::new(),
                                 signal_handlers: [0; 4],
                             });
@@ -1239,7 +1338,7 @@ impl Vm {
                     for proc in &mut self.processes {
                         if proc.pid == target_pid {
                             free_pd = proc.page_dir.take();
-                            proc.halted = true;
+                            proc.state = ProcessState::Zombie;
                             found = true;
                             break;
                         }
@@ -1383,7 +1482,7 @@ impl Vm {
                                     if let Some(proc) =
                                         self.processes.iter_mut().find(|p| p.pid == pid)
                                     {
-                                        proc.blocked = true;
+                                        proc.state = ProcessState::Blocked;
                                         // Rewind PC past the READ opcode (4 words: opcode + 3 args)
                                         self.pc -= 4;
                                     }
@@ -1507,11 +1606,11 @@ impl Vm {
                             self.regs[0] = count as u32;
                             // Unblock any process blocked on read from this pipe
                             for proc in &mut self.processes {
-                                if proc.blocked && !proc.halted {
+                                if proc.state == ProcessState::Blocked && !proc.is_halted() {
                                     // Check if this process is blocked reading from this pipe
                                     // (heuristic: unblock all blocked processes -- they'll
                                     // re-block if their pipe is still empty)
-                                    proc.blocked = false;
+                                    proc.state = ProcessState::Ready;
                                 }
                             }
                         } else {
@@ -1647,13 +1746,13 @@ impl Vm {
                     // Find target process and deliver message
                     let mut delivered = false;
                     for proc in &mut self.processes {
-                        if proc.pid == target_pid && !proc.halted {
+                        if proc.pid == target_pid && !proc.is_halted() {
                             if proc.msg_queue.len() < MAX_MESSAGES {
                                 proc.msg_queue.push(Message::new(sender_pid, data));
                                 delivered = true;
                                 // If process is blocked waiting for a message, unblock it
-                                if proc.blocked {
-                                    proc.blocked = false;
+                                if proc.state == ProcessState::Blocked {
+                                    proc.state = ProcessState::Ready;
                                 }
                             }
                             break;
@@ -1686,7 +1785,7 @@ impl Vm {
                             self.regs[4] = msg.data[3];
                         } else {
                             // No message: block this process
-                            proc.blocked = true;
+                            proc.state = ProcessState::Blocked;
                             // Rewind PC so MSGRCV retries after unblock
                             self.pc -= 1;
                         }
@@ -1846,7 +1945,7 @@ impl Vm {
                             };
                             match crate::assembler::assemble(&source, 0) {
                                 Ok(asm_result) => {
-                                    let active_count = self.processes.iter().filter(|p| !p.halted).count();
+                                    let active_count = self.processes.iter().filter(|p| !p.is_halted()).count();
                                     if active_count >= MAX_PROCESSES {
                                         self.regs[0] = 0xFFFFFFFF;
                                         self.ram[0xFFA] = 0xFFFFFFFF;
@@ -1865,7 +1964,7 @@ impl Vm {
                                                 self.processes.push(SpawnedProcess {
                                                     pc: 0,
                                                     regs: [0; NUM_REGS],
-                                                    halted: false,
+                                                    state: ProcessState::Ready,
                                                     pid,
                                                     mode: CpuMode::User,
                                                     page_dir: Some(pd),
@@ -1874,11 +1973,10 @@ impl Vm {
                                                     slice_remaining: 0,
                                                     sleep_until: 0,
                                                     yielded: false,
-                                                    blocked: false,
+                                                    kernel_stack: Vec::new(),
                                                     msg_queue: Vec::new(),
                                                     exit_code: 0,
                                                     parent_pid: self.current_pid,
-                                                    zombie: false,
                                                     pending_signals: Vec::new(),
                                                     signal_handlers: [0; 4],
                                                 });
@@ -2002,11 +2100,11 @@ impl Vm {
                     let mut zombie_page_dir: Option<Vec<u32>> = None;
                     for proc in &self.processes {
                         if proc.pid == target_pid {
-                            if proc.zombie && proc.halted {
+                            if proc.state == ProcessState::Zombie {
                                 found_zombie = true;
                                 zombie_exit_code = proc.exit_code;
                                 zombie_page_dir = proc.page_dir.clone();
-                            } else if !proc.halted {
+                            } else if !proc.is_halted() {
                                 found_running = true;
                             } else {
                                 self.regs[0] = 1;
@@ -2065,7 +2163,7 @@ impl Vm {
                             };
                             match crate::assembler::assemble(&source, 0) {
                                 Ok(asm_result) => {
-                                    let active_count = self.processes.iter().filter(|p| !p.halted).count();
+                                    let active_count = self.processes.iter().filter(|p| !p.is_halted()).count();
                                     if active_count >= MAX_PROCESSES {
                                         self.regs[0] = 0xFFFFFFFF;
                                     } else {
@@ -2082,7 +2180,7 @@ impl Vm {
                                                 self.processes.push(SpawnedProcess {
                                                     pc: 0,
                                                     regs: [0; NUM_REGS],
-                                                    halted: false,
+                                                    state: ProcessState::Ready,
                                                     pid,
                                                     mode: CpuMode::User,
                                                     page_dir: Some(pd),
@@ -2091,11 +2189,10 @@ impl Vm {
                                                     slice_remaining: 0,
                                                     sleep_until: 0,
                                                     yielded: false,
-                                                    blocked: false,
+                                                    kernel_stack: Vec::new(),
                                                     msg_queue: Vec::new(),
                                                     exit_code: 0,
                                                     parent_pid: self.current_pid,
-                                                    zombie: false,
                                                     pending_signals: Vec::new(),
                                                     signal_handlers: [0; 4],
                                                 });
@@ -2209,13 +2306,13 @@ impl Vm {
                     let page_dirs: Vec<Vec<u32>> = self
                         .processes
                         .iter()
-                        .filter(|p| !p.halted)
+                        .filter(|p| !p.is_halted())
                         .filter_map(|p| p.page_dir.clone())
                         .collect();
                     let pids: Vec<u32> = self
                         .processes
                         .iter()
-                        .filter(|p| !p.halted)
+                        .filter(|p| !p.is_halted())
                         .map(|p| p.pid)
                         .collect();
                     // Free page directories
@@ -2224,7 +2321,7 @@ impl Vm {
                     }
                     // Halt all processes
                     for proc in &mut self.processes {
-                        proc.halted = true;
+                        proc.state = ProcessState::Zombie;
                     }
                     // Close all open file descriptors
                     self.vfs.close_all(0); // main process (pid 0)
@@ -2268,7 +2365,7 @@ impl Vm {
                     let mut delivered = false;
                     if let Some(signal) = Signal::from_u32(sig_num) {
                         for proc in &mut self.processes {
-                            if proc.pid == target_pid && !proc.halted {
+                            if proc.pid == target_pid && !proc.is_halted() {
                                 let handler = proc.signal_handlers[signal as usize];
                                 if handler == 0xFFFFFFFF {
                                     delivered = true;
@@ -2280,16 +2377,14 @@ impl Vm {
                                 } else {
                                     match signal {
                                         Signal::Term => {
-                                            proc.halted = true;
+                                            proc.state = ProcessState::Zombie;
                                             proc.exit_code = 1;
-                                            proc.zombie = true;
-                                            delivered = true;
+                                                                    delivered = true;
                                         }
                                         Signal::Stop => {
-                                            proc.halted = true;
+                                            proc.state = ProcessState::Zombie;
                                             proc.exit_code = 2;
-                                            proc.zombie = true;
-                                            delivered = true;
+                                                                    delivered = true;
                                         }
                                         Signal::User1 | Signal::User2 => {
                                             delivered = true;
@@ -2409,13 +2504,13 @@ impl Vm {
         // Check if all runnable (non-halted, non-sleeping) processes have
         // exhausted their slices. If so, start a new scheduling round.
         let all_exhausted = procs.iter().all(|p| {
-            p.halted
+            p.is_halted()
                 || (p.sleep_until > 0 && self.sched_tick < p.sleep_until)
                 || p.slice_remaining == 0
         });
         if all_exhausted {
             for proc in &mut procs {
-                if proc.halted { continue; }
+                if proc.is_halted() { continue; }
                 if proc.sleep_until > 0 && self.sched_tick < proc.sleep_until {
                     continue;
                 }
@@ -2431,10 +2526,10 @@ impl Vm {
 
         for idx in indices {
             let proc = &mut procs[idx];
-            if proc.halted { continue; }
+            if proc.is_halted() { continue; }
 
             // Skip blocked processes (waiting for pipe data or message)
-            if proc.blocked { continue; }
+            if proc.state == ProcessState::Blocked { continue; }
 
             // Skip sleeping processes whose sleep hasnt expired
             if proc.sleep_until > 0 && self.sched_tick < proc.sleep_until {
@@ -2474,7 +2569,7 @@ impl Vm {
             // Save process state back
             proc.pc = self.pc;
             proc.regs = self.regs;
-            proc.halted = !still_running || self.halted || self.segfault;
+            proc.state = if !still_running || self.halted || self.segfault { ProcessState::Zombie } else { ProcessState::Ready };
             proc.mode = self.mode;
             proc.page_dir = self.current_page_dir.take();
             proc.segfaulted = self.segfault;
@@ -2483,7 +2578,7 @@ impl Vm {
                 proc.exit_code = code;
             }
             if self.step_zombie {
-                proc.zombie = true;
+                proc.state = ProcessState::Zombie;
             }
             if self.segfault {
                 self.segfault_pid = proc.pid;
@@ -2532,7 +2627,7 @@ impl Vm {
         /// Count active (non-halted) child processes
     #[allow(dead_code)]
     pub fn active_process_count(&self) -> usize {
-        self.processes.iter().filter(|p| !p.halted).count()
+        self.processes.iter().filter(|p| !p.is_halted()).count()
     }
 
     /// Boot the OS: load init.asm as PID 1, create boot.cfg if missing.
@@ -2577,7 +2672,7 @@ impl Vm {
         self.processes.push(SpawnedProcess {
             pc: 0,
             regs: [0; NUM_REGS],
-            halted: false,
+            state: ProcessState::Ready,
             pid,
             mode: CpuMode::User,
             page_dir: Some(page_dir),
@@ -2586,11 +2681,10 @@ impl Vm {
             slice_remaining: 0,
             sleep_until: 0,
             yielded: false,
-            blocked: false,
+            kernel_stack: Vec::new(),
             msg_queue: Vec::new(),
             exit_code: 0,
             parent_pid: 0, // init has no parent
-            zombie: false,
             pending_signals: Vec::new(),
             signal_handlers: [0; 4],
         });
