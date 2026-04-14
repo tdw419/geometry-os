@@ -1073,7 +1073,7 @@ Trace Linux page table setup during boot and build Geometry OS equivalents.
 
 ## Global Risks
 
-- Opcode space: 77 of ~256 slots used, plenty of room
+- Opcode space: 114 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
