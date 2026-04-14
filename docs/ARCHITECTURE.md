@@ -1,12 +1,12 @@
 # Geometry OS Architecture
 
-System-level documentation for features beyond the canvas text surface.
+System-level documentation for the full Geometry OS stack.
 Read alongside CANVAS_TEXT_SURFACE.md (editor/assembly pipeline) and
 SIGNED_ARITHMETIC.md (arithmetic semantics).
 
 ---
 
-## Full Opcode Reference (44 opcodes)
+## Full Opcode Reference (77 opcodes)
 
 ### Control Flow
 | Hex  | Mnemonic | Args | Description |
@@ -22,7 +22,7 @@ SIGNED_ARITHMETIC.md (arithmetic semantics).
 | 0x10 | LDI      | reg, imm | Load immediate |
 | 0x11 | LOAD     | reg, [reg] | Load from memory |
 | 0x12 | STORE    | [reg], reg | Store to memory |
-| 0x13 | MOV      | rd, rs | Register copy |
+| 0x51 | MOV      | rd, rs | Register copy |
 
 ### Arithmetic
 | Hex  | Mnemonic | Args | Description |
@@ -40,9 +40,10 @@ SIGNED_ARITHMETIC.md (arithmetic semantics).
 | 0x2A | NEG      | rd     | Two's complement negation |
 | 0x2B | SAR      | rd, rs | Arithmetic shift right (sign-preserving) |
 
-### Branches
+### Compare & Branches
 | Hex  | Mnemonic | Args | Description |
 |------|----------|------|-------------|
+| 0x50 | CMP      | rd, rs | Compare: r0 = -1/0/1 (lt/eq/gt) |
 | 0x30 | JMP      | addr  | Unconditional jump |
 | 0x31 | JZ       | reg, addr | Jump if zero |
 | 0x32 | JNZ      | reg, addr | Jump if not zero |
@@ -71,7 +72,6 @@ SIGNED_ARITHMETIC.md (arithmetic semantics).
 |------|----------|------|-------------|
 | 0x60 | PUSH     | reg   | Push to stack (r30 = SP) |
 | 0x61 | POP      | reg   | Pop from stack |
-| 0x50 | CMP      | rd, rs | Compare: r0 = -1/0/1 (lt/eq/gt) |
 | 0x48 | IKEY     | reg   | Read keyboard port, clear it |
 | 0x49 | RAND     | reg   | Pseudo-random u32 (LCG, seed 0xDEADBEEF) |
 
@@ -85,6 +85,69 @@ SIGNED_ARITHMETIC.md (arithmetic semantics).
 |------|----------|------|-------------|
 | 0x4D | SPAWN    | addr_reg | Create child process at address, PID in RAM[0xFFA] |
 | 0x4E | KILL     | pid_reg | Terminate child process by PID |
+
+### Kernel Mode (Syscalls)
+| Hex  | Mnemonic | Args | Description |
+|------|----------|------|-------------|
+| 0x52 | SYSCALL  |       | Trap into kernel mode, dispatch by number in r0 |
+| 0x53 | RETK     |       | Return from kernel mode to user mode |
+
+### Filesystem
+| Hex  | Mnemonic | Args | Description |
+|------|----------|------|-------------|
+| 0x54 | OPEN     | path_reg, mode_reg | Open file, fd in r0 |
+| 0x55 | READ     | fd_reg, buf_reg, count_reg | Read from file into RAM |
+| 0x56 | WRITE    | fd_reg, buf_reg, count_reg | Write from RAM to file |
+| 0x57 | CLOSE    | fd_reg | Close file descriptor |
+| 0x58 | SEEK     | fd_reg, offset_reg | Seek in file |
+| 0x59 | LS       | buf_reg | Directory listing into RAM buffer |
+
+### Process Management
+| Hex  | Mnemonic | Args | Description |
+|------|----------|------|-------------|
+| 0x5A | YIELD    |       | Voluntary context switch |
+| 0x5B | SLEEP    | ticks_reg | Sleep for N frames |
+| 0x5C | SETPRIORITY | prio_reg | Set process priority (0-3) |
+| 0x65 | GETPID   |       | Get current process ID, result in r0 |
+| 0x66 | EXEC     | addr_reg | Execute program at address (in-kernel) |
+| 0x6F | EXIT     | status_reg | Exit process with status code |
+
+### Inter-Process Communication
+| Hex  | Mnemonic | Args | Description |
+|------|----------|------|-------------|
+| 0x5D | PIPE     | r5, r6 | Create pipe: read FD in r5, write FD in r6 |
+| 0x5E | MSGSND   | pid_reg | Send 4-word message to process |
+| 0x5F | MSGRCV   |       | Receive message, sender PID in r0 |
+
+### Device I/O
+| Hex  | Mnemonic | Args | Description |
+|------|----------|------|-------------|
+| 0x62 | IOCTL    | fd_reg, cmd_reg, val_reg | Device-specific control |
+| 0x63 | GETENV   | key_reg, buf_reg | Read environment variable |
+| 0x64 | SETENV   | key_reg, val_reg | Set environment variable |
+| 0x67 | WRITESTR | fd_reg, buf_reg | Write null-terminated string |
+| 0x68 | READLN   | buf_reg | Read keyboard line into buffer |
+| 0x6D | SCREENP  | xr, yr, cr | Draw pixel to screen via fd |
+
+### Shell & Execution
+| Hex  | Mnemonic | Args | Description |
+|------|----------|------|-------------|
+| 0x69 | WAITPID  | pid_reg | Wait for child process, exit code in r0 |
+| 0x6A | EXECP    | addr_reg, stdin_fd, stdout_fd | Spawn with fd redirection |
+| 0x6B | CHDIR    | path_reg | Change working directory |
+| 0x6C | GETCWD   | buf_reg | Get current working directory |
+
+### System
+| Hex  | Mnemonic | Args | Description |
+|------|----------|------|-------------|
+| 0x6E | SHUTDOWN |       | Halt all processes, flush filesystem |
+| 0x70 | SIGNAL   | pid_reg, sig_reg | Send signal to process |
+| 0x71 | SIGSET   | sig_reg, handler_reg | Register signal handler |
+
+### Hypervisor
+| Hex  | Mnemonic | Args | Description |
+|------|----------|------|-------------|
+| 0x72 | HYPERVISOR | config_reg | Read config from RAM, spawn guest OS |
 
 ---
 
@@ -109,38 +172,56 @@ Total: 65536 (0x10000) u32 cells
 
 ---
 
+## Kernel Mode Architecture
+
+Geometry OS has two execution modes:
+
+- **Kernel mode**: Full access to all opcodes, hardware ports, and system resources.
+- **User mode**: Restricted -- cannot directly access hardware ports (0xFFF, 0xFFB, etc.) or use privileged opcodes.
+
+Programs spawned via `SPAWN` start in user mode. The `SYSCALL` opcode traps into kernel mode, dispatches based on the syscall number in r0, and `RETK` returns to user mode.
+
+### Syscall Convention
+
+1. Set r0 to syscall number
+2. Set argument registers as needed
+3. Execute `SYSCALL`
+4. Kernel handler runs, sets r0 to return value
+5. Execute `RETK` to return to user mode
+
+---
+
 ## Multi-Process Architecture
 
 Geometry OS supports up to 8 concurrent processes sharing the same 64K RAM.
 
-### How It Works
+### Scheduler
 
-Each process has its own register file (r0-r31) and program counter. The VM
-scheduler cycles through all active processes, executing one instruction per
-process per tick (round-robin).
+Processes are scheduled with a priority-based preemptive scheduler:
+- **Priority levels**: 0 (lowest) to 3 (highest)
+- **Timer interrupt**: Fires every N instructions, triggers context switch
+- **YIELD**: Voluntary context switch
+- **SLEEP**: Timed sleep, process wakes after N frames
+- **Blocking I/O**: Processes block on empty pipe reads or message receives
 
-- **SPAWN** (0x4D): Creates a child process. The parent provides an entry address
-  via a register. The child starts with a fresh register file (all zeros) and
-  shares the same RAM. The PID is written to RAM[0xFFA].
-- **KILL** (0x4E): Terminates a child process by PID.
-- **MAX_PROCESSES**: 8 (including the primary). Attempting to spawn beyond this
-  limit silently fails.
+### Process Lifecycle
+
+- **SPAWN** (0x4D): Creates a child process with its own register file, page table, and fd table. PID stored in RAM[0xFFA].
+- **KILL** (0x4E): Terminates a child by PID.
+- **EXIT** (0x6F): Exits current process with status code, becomes zombie.
+- **WAITPID** (0x69): Parent reaps zombie, gets exit code.
+- **SIGNAL** (0x70) / **SIGSET** (0x71): POSIX-like signal handling.
 
 ### Window Bounds Protocol
 
-For spatial coordination between processes, RAM[0xF00..0xF03] is a shared
-convention:
+For spatial coordination between processes, RAM[0xF00..0xF03] is a shared convention:
 
 | Address | Field | Who Writes |
 |---------|-------|------------|
 | 0xF00   | win_x | Primary |
 | 0xF01   | win_y | Primary |
 | 0xF02   | win_w | Primary |
-| 0xF00   | win_h | Primary |
-
-The primary process sets these values each frame. Child processes read them to
-clamp their rendering within the allocated window area. This is a convention,
-not enforced by hardware -- cooperative multitasking.
+| 0xF03   | win_h | Primary |
 
 ### Multi-Process Assembly
 
@@ -156,104 +237,147 @@ child:
   ; ... child process code ...
 ```
 
-The assembler resolves `child` to its actual address (0x400 in this case),
-so `LDI r0, child` loads the correct entry point.
+---
+
+## Memory Protection
+
+Each process gets its own page table mapping virtual addresses to physical RAM.
+
+- **Kernel mode**: Identity mapping (no translation)
+- **User mode**: Page table translation via 1-level paging
+- **SEGFAULT**: Access to unmapped page halts the offending process
+- **RAM[0xFF9]**: Tracks which PID caused the last segfault
+
+Each child process receives 4 private physical pages. Shared regions (page 3, page 63) are identity-mapped for inter-process communication.
+
+See `docs/MEMORY_PROTECTION.md` for full details.
 
 ---
 
-## VM Instrumentation
+## Virtual Filesystem (VFS)
 
-### Access Log Buffer
+Programs access files through syscall opcodes. Backed by the host filesystem at `.geometry_os/fs/`.
 
-The VM tracks LOAD, STORE, SPRITE, and TILEMAP memory accesses per frame.
-Each access records the RAM address and type (read/write). The buffer wraps
-and is consumed by the visual debugger overlay.
+| Opcode | Syscall | Description |
+|--------|---------|-------------|
+| 0x54   | OPEN    | Open file, returns fd |
+| 0x55   | READ    | Read bytes into RAM |
+| 0x56   | WRITE   | Write bytes from RAM |
+| 0x57   | CLOSE   | Close file descriptor |
+| 0x58   | SEEK    | Seek to offset |
+| 0x59   | LS      | Directory listing |
 
-### Instruction Fetch Logging
+Each process has up to 16 open file descriptors.
 
-Every PC value is logged to a circular buffer. Used by the visual debugger
-to trace execution flow.
+### Device Files
 
----
+Hardware accessed through the filesystem interface:
 
-## Visual Debugger
+| Path          | FD        | Description |
+|---------------|-----------|-------------|
+| /dev/screen   | 0xE000    | Screen pixel output |
+| /dev/keyboard | 0xE001    | Keyboard input |
+| /dev/audio    | 0xE002    | Audio output |
+| /dev/net      | 0xE003    | Network (UDP) |
 
-### Memory Heatmap
+### IOCTL (0x62)
 
-A compact 256x256 view of the entire 64K RAM. Each pixel represents one word.
-Colors pulse based on access patterns:
-
-- **Cyan**: Recent read
-- **Magenta**: Recent write
-- **White**: Current PC position
-
-The heatmap uses intensity decay -- highlights fade over ~10 frames.
-
-### Canvas Cell Tinting
-
-Active RAM addresses flash with colored borders on the canvas grid:
-
-- **Cyan border**: Read access
-- **Magenta border**: Write access
-
-### PC Trail
-
-A fading white glow follows the program counter across the canvas, showing
-execution path.
-
-### RAM Inspector Panel
-
-A second 32x32 grid at the bottom of the window visualizes a scrollable
-region of RAM (default 0x2000-0x23FF). PageUp/PageDown in Terminal mode
-scrolls through different regions. Access intensities are shown as color tints.
+Device-specific control operations:
+- **Screen**: cmd 0 = get width, cmd 1 = get height
+- **Keyboard**: cmd 0 = get echo mode, cmd 1 = set echo mode
+- **Audio**: cmd 0 = get volume, cmd 1 = set volume
+- **Net**: cmd 0 = get status
 
 ---
 
-## Audio
+## Inter-Process Communication
 
-The BEEP opcode generates sine-wave tones by piping WAV data to `aplay` (Linux).
-Requires `libasound2-dev`. Parameters:
+### Pipes (0x5D)
 
-- Frequency: 20-20000 Hz (from register)
-- Duration: 1-5000 ms (from register)
+Unidirectional byte streams with circular buffer (256 words). Created with `PIPE r5, r6` which returns read FD (0x8000|idx) and write FD (0xC000|idx).
 
-Each BEEP spawns an `aplay` process. Rapid beeps can exhaust file descriptors
-if not throttled.
+### Messages (0x5E/0x5F)
+
+Fixed-size (4-word) messages between processes. `MSGSND` sends to target PID, `MSGRCV` receives and returns sender PID. Per-process message queue holds 16 messages. `MSGRCV` blocks if no message is queued.
 
 ---
 
-## Platform Ports
+## Shell
 
-### WASM (Web)
+`shell.asm` is an interactive command interpreter running as a user process. It supports:
+- **Built-in commands**: ls, cd, cat, echo, ps, kill, help, pwd, clear, exit
+- **Pipe operator**: `prog1 | prog2` connects stdout to stdin
+- **Redirection**: `prog > file`, `prog < file`, `prog >> file`
+- **Environment variables**: SHELL, HOME, CWD, USER set by init
 
-The VM compiles to WebAssembly via `wasm-pack`. Located in `wasm/`.
+---
 
-```bash
-cd wasm
-wasm-pack build --target web
-```
+## Boot Sequence
 
-The demo page (`wasm-demo/`) provides a browser-based interface with canvas
-rendering. Full opcode set works in WASM mode, with the exception of BEEP
-(audio uses Web Audio API instead of aplay).
+1. VM initializes hardware (screen, keyboard, timer)
+2. Boot ROM assembles `init.asm` from boot.cfg
+3. Init process (PID 1) spawns with priority 2
+4. Init reads boot.cfg, sets environment variables
+5. Init spawns shell process
+6. Init enters supervisor loop, respawns shell if it dies
+7. `SHUTDOWN` (0x6E) halts all processes, flushes filesystem
 
-### Network (UDP)
+---
 
-RAM[0xFFC] is a network port. Two VM instances can exchange messages via UDP.
-The port is bidirectional -- writes send, reads receive.
+## Hypervisor
 
-### GlyphLang Backend
+Geometry OS has two hypervisor modes for running guest operating systems:
 
-`src/glyph_backend.rs` emits Geometry OS bytecode from GlyphLang source.
-This lets you write programs in a higher-level language and compile them
-down to VM bytecode.
+### QEMU Bridge (Phase 33)
+
+Spawns QEMU as a subprocess, pipes serial console I/O through the canvas text surface.
+Supports any QEMU architecture: riscv64, x86_64, aarch64, mipsel.
+
+- ANSI escape sequence parsing for terminal rendering
+- Keyboard forwarding to QEMU stdin
+- Auto-scrolling canvas output
+
+### Native RISC-V Interpreter (Phases 34-37)
+
+Pure Rust RISC-V RV32I interpreter with no external dependencies.
+
+**RISC-V module** (`src/riscv/`):
+- `mod.rs` -- public interface, bridge integration
+- `cpu.rs` -- register file, instruction execute, privilege modes, CSRs
+- `memory.rs` -- guest RAM (up to 128MB), load/store
+- `decode.rs` -- instruction decode for all RV32I opcodes
+- `mmu.rs` -- SV32 page table walk, TLB cache, page fault traps
+- `uart.rs` -- UART 16550 serial port emulation
+- `clint.rs` -- CLINT timer interrupt controller
+- `plic.rs` -- PLIC platform interrupt controller
+- `virtio_blk.rs` -- Virtio MMIO block device
+- `dtb.rs` -- Device Tree Blob generation
+
+**Features**:
+- 40 RV32I base instructions
+- M/S/U privilege modes with ECALL/MRET/SRET
+- CSR register bank (mstatus, mtvec, mepc, sstatus, stvec, satp, etc.)
+- SV32 2-level page table walk with 64-entry ASID-aware TLB
+- Timer and software interrupts
+- ELF and raw binary kernel loader
+- Device tree blob generation for guest kernel boot
+
+---
+
+## Standard Library
+
+Located in `lib/`:
+- `lib/stdlib.asm` -- String operations, memory operations, formatted I/O
+- `lib/math.asm` -- sin, cos, sqrt via lookup tables
+- `lib/heap.asm` -- malloc/free dynamic memory allocator
+
+Loaded via `.include` directive in the assembler.
 
 ---
 
 ## Preprocessor (Abstraction Layer)
 
-The preprocessor (`preprocessor.rs`) sits between the canvas text and the
-assembler. It uses the same tokenizer that drives syntax highlighting.
+The preprocessor (`preprocessor.rs`) sits between the canvas text and the assembler.
 
 ### Macros
 
@@ -262,8 +386,8 @@ assembler. It uses the same tokenizer that drives syntax highlighting.
 | VAR   | `VAR name addr` | Defines variable | none |
 | SET   | `SET var, val` | LDI r28, val / LDI r29, addr / STORE r29, r28 | r28, r29 |
 | GET   | `GET reg, var` | LDI r29, addr / LOAD reg, r29 | r29 |
-| INC   | `INC var` | LDI r29, addr / LOAD r28, r29 / LDI r27, 1 / ADD r28, r27 / STORE r29, r28 | r27, r28, r29 |
-| DEC   | `DEC var` | LDI r29, addr / LOAD r28, r29 / LDI r27, 1 / SUB r28, r27 / STORE r29, r28 | r27, r28, r29 |
+| INC   | `INC var` | LDI r29, addr / LOAD r28, r29 / ADD r28, r27 / STORE r29, r28 | r27, r28, r29 |
+| DEC   | `DEC var` | LDI r29, addr / LOAD r28, r29 / SUB r28, r27 / STORE r29, r28 | r27, r28, r29 |
 
 ### #define Constants
 
@@ -272,13 +396,73 @@ assembler. It uses the same tokenizer that drives syntax highlighting.
 #define MAX_X 255
 ```
 
-The assembler replaces defined names with their values before instruction
-parsing. Works in immediate contexts (LDI, PSETI, etc.).
+Replaced before instruction parsing. Works in immediate contexts.
 
-### Register Safety
+---
 
-The preprocessor uses r27, r28, r29 as temporaries. Programs should avoid
-relying on these across macro calls.
+## VM Instrumentation
+
+### Access Log Buffer
+
+Tracks LOAD, STORE, SPRITE, and TILEMAP memory accesses per frame. Each access records the RAM address and type (read/write). Consumed by the visual debugger overlay.
+
+### Instruction Fetch Logging
+
+Every PC value is logged to a circular buffer. Used by the visual debugger to trace execution flow.
+
+---
+
+## Visual Debugger
+
+### Memory Heatmap
+
+Compact 256x256 view of the entire 64K RAM. Each pixel represents one word.
+
+- **Cyan**: Recent read
+- **Magenta**: Recent write
+- **White**: Current PC position
+
+Intensity decay fades highlights over ~10 frames.
+
+### Canvas Cell Tinting
+
+Active RAM addresses flash with colored borders on the canvas grid.
+
+### PC Trail
+
+Fading white glow follows the program counter, showing execution path.
+
+### RAM Inspector Panel
+
+Second 32x32 grid at the bottom of the window visualizes a scrollable region of RAM. PageUp/PageDown in Terminal mode scrolls through different regions.
+
+---
+
+## Audio
+
+The BEEP opcode generates sine-wave tones via `aplay` (Linux). Requires `libasound2-dev`.
+- Frequency: 20-20000 Hz
+- Duration: 1-5000 ms
+
+---
+
+## Platform Ports
+
+### WASM (Web)
+
+Compiles to WebAssembly via `wasm-pack`. Full opcode set works in WASM mode.
+
+```bash
+cd wasm && wasm-pack build --target web
+```
+
+### Network (UDP)
+
+RAM[0xFFC] is a bidirectional network port. Two VM instances exchange messages via UDP.
+
+### GlyphLang Backend
+
+`src/glyph_backend.rs` compiles GlyphLang source to Geometry OS bytecode.
 
 ---
 
@@ -310,7 +494,6 @@ cargo test
 | F9  | Screenshot (PNG) |
 | F10 | Toggle frame capture |
 | Escape | Toggle editor/terminal |
-| Backtick | (no longer toggles DIRECT mode) |
 
 ### CLI Commands
 
@@ -322,7 +505,9 @@ cargo test
 
 ## Stats
 
-- 5,623 lines of Rust (main.rs, vm.rs, assembler.rs, preprocessor.rs, font.rs, glyph_backend.rs)
-- 44 opcodes
-- 32 demo programs
-- 113 tests
+- 10,023 lines of Rust (core VM, assembler, main, preprocessor, font, glyph backend, QEMU bridge)
+- 5,739 lines of Rust (RISC-V interpreter)
+- 77 opcodes (Geometry OS VM)
+- 40 programs + 5 library modules
+- 697 tests
+- 15,762 total LOC

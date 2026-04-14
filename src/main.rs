@@ -2246,8 +2246,7 @@ fn main() {
         if vm.shutdown_requested {
             status_msg = "[SHUTDOWN] System halted cleanly.".into();
             is_running = false;
-            #[allow(unused_assignments)]
-            { status_msg = status_msg.clone(); is_running = is_running; } // final state before break
+            // final state before break
             break;
         }
 
