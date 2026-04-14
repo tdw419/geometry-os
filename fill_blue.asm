@@ -1,0 +1,3 @@
+LDI r0, 0x0000FF
+FILL r0
+HALT
