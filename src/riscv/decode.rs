@@ -553,14 +553,21 @@ fn c_addi_imm(w: u32) -> i32 {
     sign_extend(raw, 6)
 }
 
-/// C.ADDI16SP immediate: imm[9|4|6|8:7|5] (sign-extended 10-bit)
+/// C.ADDI16SP immediate: nzimm[9|4|6|8|7|5] (sign-extended 10-bit)
+/// Encoding per RISC-V Unprivileged ISA v20240411 Table 16.3:
+///   bit[12] → nzimm[9]
+///   bit[6]  → nzimm[4]
+///   bit[5]  → nzimm[6]
+///   bit[4]  → nzimm[8]
+///   bit[3]  → nzimm[7]
+///   bit[2]  → nzimm[5]
 fn c_addi16sp_imm(w: u32) -> i32 {
-    let raw = (((w >> 6) & 0x1) << 9)
-        | (((w >> 12) & 0x1) << 4)
-        | (((w >> 3) & 0x1) << 6)
-        | (((w >> 5) & 0x1) << 8)
-        | (((w >> 2) & 0x1) << 7)
-        | (((w >> 4) & 0x1) << 5);
+    let raw = (((w >> 12) & 0x1) << 9)
+        | (((w >> 6) & 0x1) << 4)
+        | (((w >> 5) & 0x1) << 6)
+        | (((w >> 4) & 0x1) << 8)
+        | (((w >> 3) & 0x1) << 7)
+        | (((w >> 2) & 0x1) << 5);
     sign_extend(raw, 10)
 }
 
