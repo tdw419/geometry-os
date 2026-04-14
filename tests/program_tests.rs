@@ -5973,3 +5973,43 @@ fn test_self_writer() {
     assert_eq!(vm.canvas_buffer[1], 68,
         "canvas[1] should be 'D' (68): got {}", vm.canvas_buffer[1]);
 }
+
+// === Evolving Counter (Phase 49: Pixel Driving Pixels) ===
+
+#[test]
+fn test_evolving_counter() {
+    // evolving_counter.asm reads TICKS from RAM[0xFFE] each frame,
+    // converts to 4 decimal ASCII digits, writes to canvas buffer at 0x8000-0x8003.
+    // The grid IS the display -- digits change each frame.
+    let vm = compile_run("programs/evolving_counter.asm");
+
+    // Program is an infinite loop (FRAME+JMP), won't halt
+    assert!(!vm.halted, "evolving_counter should not halt (infinite animation)");
+
+    // After running, frame_count should be > 0 (many FRAME opcodes executed)
+    assert!(vm.frame_count > 0, "frame_count should be > 0: got {}", vm.frame_count);
+
+    // Canvas buffer positions 0-3 should contain ASCII digit characters ('0'-'9')
+    for i in 0..4 {
+        let val = vm.canvas_buffer[i];
+        assert!(val >= 0x30 && val <= 0x39,
+            "canvas[{}] should be ASCII digit (0x30-0x39): got 0x{:02X} ('{}')",
+            i, val, if val >= 0x20 && val < 0x7F { val as u8 as char } else { '?' });
+    }
+
+    // Verify the 4 digits actually represent the frame count value
+    // Extract the displayed number from canvas buffer
+    let displayed = (vm.canvas_buffer[0] - 0x30) * 1000
+                  + (vm.canvas_buffer[1] - 0x30) * 100
+                  + (vm.canvas_buffer[2] - 0x30) * 10
+                  + (vm.canvas_buffer[3] - 0x30);
+
+    // The displayed count should match the frame_count mod 10000
+    // (4-digit display wraps at 10000)
+    let expected = vm.frame_count % 10000;
+    assert_eq!(displayed, expected,
+        "canvas digits should show frame_count mod 10000: expected {}, got {} (digits: {}{}{}{})",
+        expected, displayed,
+        vm.canvas_buffer[0] - 0x30, vm.canvas_buffer[1] - 0x30,
+        vm.canvas_buffer[2] - 0x30, vm.canvas_buffer[3] - 0x30);
+}
