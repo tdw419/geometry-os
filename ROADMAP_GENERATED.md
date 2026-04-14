@@ -1,10 +1,10 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  77 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
 
 **Progress:** 37/44 phases complete, 0 in progress
 
-**Deliverables:** 175/194 complete
+**Deliverables:** 176/194 complete
 
 **Tasks:** 24/43 complete
 
@@ -49,7 +49,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  77
 | phase-35 RISC-V Privilege Modes | COMPLETE | 5/5 | - | - |
 | phase-36 RISC-V Virtual Memory & Devices | COMPLETE | 8/8 | - | - |
 | phase-37 Guest OS Boot (Native RISC-V) | COMPLETE | 6/6 | - | - |
-| phase-38 RISC-V M/A/C Extensions | PLANNED | 1/3 | - | - |
+| phase-38 RISC-V M/A/C Extensions | PLANNED | 2/3 | - | - |
 | phase-39 Build Linux for RV32IMAC | PLANNED | 0/3 | - | - |
 | phase-40 Boot Linux in Geometry OS | PLANNED | 0/2 | - | - |
 | phase-41 Tracing and Instrumentation | PLANNED | 0/4 | - | - |
@@ -902,7 +902,7 @@ Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compres
   - [x] All 8 M-extension opcodes decode and execute correctly
   - [x] Edge cases handled -- div by zero, overflow, signed/unsigned semantics
   _~80 LOC_
-- [ ] **A extension (atomics)** -- LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU
+- [x] **A extension (atomics)** -- LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU
   - [ ] `p38.d2.t1` Add A-extension atomic instructions with reservation set tracking
     - LR.W: load reserved, track address in reservation set
     - SC.W: store conditional, succeed only if reservation holds

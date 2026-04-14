@@ -1,6 +1,6 @@
 title: Geometry OS Roadmap
 version: 1.0.0
-description: "Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\\n  77 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\\n  the built-in text editor, press F5,
+description: "Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\\n  the built-in text editor, press F5,
   \ watch it run."
 project_url: https://github.com/tdw419/geometry-os
 meta:
@@ -10,9 +10,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 114
-  tests: 716
+  tests: 731
   programs: 40
-  loc: 16093
+  loc: 16602
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1660,7 +1660,8 @@ phases:
       - src/riscv/cpu.rs
   - name: A extension (atomics)
     description: LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU
-    status: todo
+    status: done
+    acceptance_criteria_met: true
     scope_lines: 100
     tasks:
     - id: p38.d2.t1

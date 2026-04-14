@@ -31,6 +31,30 @@ pub enum Operation {
     Rem { rd: u8, rs1: u8, rs2: u8 },
     Remu { rd: u8, rs1: u8, rs2: u8 },
 
+    // -- A extension (atomics) --
+    /// LR.W: Load Reserved. Sets reservation on address in rs1.
+    LrW { rd: u8, rs1: u8, aq: bool, rl: bool },
+    /// SC.W: Store Conditional. Succeeds only if reservation holds.
+    ScW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+    /// AMOSWAP.W: Atomically swap rs2 into memory, return old value.
+    AmoswapW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+    /// AMOADD.W: Atomically add rs2 to memory, return old value.
+    AmoaddW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+    /// AMOXOR.W: Atomically XOR rs2 into memory, return old value.
+    AmoxorW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+    /// AMOAND.W: Atomically AND rs2 into memory, return old value.
+    AmoandW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+    /// AMOOR.W: Atomically OR rs2 into memory, return old value.
+    AmoorW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+    /// AMOMIN.W: Atomically min(rs2, mem) into memory, return old value (signed).
+    AmominW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+    /// AMOMAX.W: Atomically max(rs2, mem) into memory, return old value (signed).
+    AmomaxW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+    /// AMOMINU.W: Atomically min(rs2, mem) into memory, return old value (unsigned).
+    AmominuW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+    /// AMOMAXU.W: Atomically max(rs2, mem) into memory, return old value (unsigned).
+    AmomaxuW { rd: u8, rs1: u8, rs2: u8, aq: bool, rl: bool },
+
     // -- I-type ALU --
     Addi { rd: u8, rs1: u8, imm: i32 },
     Slti { rd: u8, rs1: u8, imm: i32 },
@@ -216,6 +240,33 @@ pub fn decode(word: u32) -> Operation {
                 (0b111, _) => Operation::Csrrci { rd, uimm, csr: csr_addr },
                     _ => Operation::Invalid(word),
                 }
+            }
+        }
+        // A extension: AMO (opcode 0x2F)
+        // Format: bits[31:27]=funct5, bit[26]=aq, bit[25]=rl, rs2, rs1, funct3=010, rd
+        0x2F => {
+            let aq = (word >> 26) & 1 != 0;
+            let rl = (word >> 25) & 1 != 0;
+            let funct5 = (funct7 >> 2) & 0x1F; // bits[31:27]
+            match funct3 {
+                0b010 => {
+                    // RV32W atomics -- match on funct5
+                    match funct5 {
+                        0b00010 => Operation::LrW { rd, rs1, aq, rl },
+                        0b00011 => Operation::ScW { rd, rs1, rs2, aq, rl },
+                        0b00001 => Operation::AmoswapW { rd, rs1, rs2, aq, rl },
+                        0b00000 => Operation::AmoaddW { rd, rs1, rs2, aq, rl },
+                        0b00101 => Operation::AmoxorW { rd, rs1, rs2, aq, rl },
+                        0b01101 => Operation::AmoandW { rd, rs1, rs2, aq, rl },
+                        0b01001 => Operation::AmoorW { rd, rs1, rs2, aq, rl },
+                        0b10000 => Operation::AmominW { rd, rs1, rs2, aq, rl },
+                        0b10100 => Operation::AmomaxW { rd, rs1, rs2, aq, rl },
+                        0b11000 => Operation::AmominuW { rd, rs1, rs2, aq, rl },
+                        0b11100 => Operation::AmomaxuW { rd, rs1, rs2, aq, rl },
+                        _ => Operation::Invalid(word),
+                    }
+                }
+                _ => Operation::Invalid(word),
             }
         }
         _ => Operation::Invalid(word),

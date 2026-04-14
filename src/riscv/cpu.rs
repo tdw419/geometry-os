@@ -51,6 +51,9 @@ pub struct RiscvCpu {
     pub csr: CsrBank,
     /// Translation Lookaside Buffer for Sv32 MMU.
     pub tlb: Tlb,
+    /// Reservation address for LR.W/SC.W (A extension).
+    /// Set by LR.W, checked by SC.W. None means no reservation.
+    pub reservation: Option<u64>,
 }
 
 impl RiscvCpu {
@@ -62,6 +65,7 @@ impl RiscvCpu {
             privilege: Privilege::Machine,
             csr: CsrBank::new(),
             tlb: Tlb::new(),
+            reservation: None,
         };
         cpu.x[10] = 0; // a0 = 0 (no Hart ID)
         cpu.x[11] = 0; // a1 = 0 (no DTB)
@@ -484,6 +488,120 @@ impl RiscvCpu {
                 StepResult::Ok
             }
 
+            // ---- A extension (atomics) ----
+            // AMO instructions: opcode 0x2F, funct3=010
+            // Address = x[rs1], value in x[rs2], result in x[rd]
+            // aq/rl flags ignored in single-hart emulator (no other harts to order against).
+            Operation::LrW { rd, rs1, aq: _, rl: _ } => {
+                let va = self.get_reg(rs1);
+                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                match bus.read_word(pa) {
+                    Ok(val) => {
+                        self.set_reg(rd, val);
+                        // Set reservation on this address.
+                        self.reservation = Some(pa);
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_LOAD_ACCESS, va);
+                        StepResult::Ok
+                    }
+                }
+            }
+            Operation::ScW { rd, rs1, rs2, aq: _, rl: _ } => {
+                let va = self.get_reg(rs1);
+                let pa = match self.translate_va(va, AccessType::Store, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                // Check reservation: succeeds only if reservation matches this address.
+                // Per RISC-V spec, SC.W always clears the reservation.
+                let store_val = self.get_reg(rs2);
+                let success = self.reservation == Some(pa);
+                self.reservation = None;
+                if success {
+                    match bus.write_word(pa, store_val) {
+                        Ok(()) => {
+                            self.set_reg(rd, 0); // 0 = success
+                            self.pc = next_pc;
+                            StepResult::Ok
+                        }
+                        Err(_) => {
+                            self.deliver_trap(csr::CAUSE_STORE_ACCESS, va);
+                            StepResult::Ok
+                        }
+                    }
+                } else {
+                    self.set_reg(rd, 1); // 1 = failure
+                    self.pc = next_pc;
+                    StepResult::Ok
+                }
+            }
+            Operation::AmoswapW { rd, rs1, rs2, aq: _, rl: _ } => {
+                let va = self.get_reg(rs1);
+                let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                match bus.read_word(pa) {
+                    Ok(old_val) => {
+                        let new_val = self.get_reg(rs2);
+                        self.set_reg(rd, old_val);
+                        // AMO also needs store permission.
+                        let pa_s = match self.translate_va(va, AccessType::Store, &*bus) {
+                            Ok(p) => p,
+                            Err(e) => return e,
+                        };
+                        match bus.write_word(pa_s, new_val) {
+                            Ok(()) => {
+                                self.pc = next_pc;
+                                StepResult::Ok
+                            }
+                            Err(_) => {
+                                self.deliver_trap(csr::CAUSE_STORE_ACCESS, va);
+                                StepResult::Ok
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_LOAD_ACCESS, va);
+                        StepResult::Ok
+                    }
+                }
+            }
+            Operation::AmoaddW { rd, rs1, rs2, aq: _, rl: _ } => {
+                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old.wrapping_add(new), next_pc)
+            }
+            Operation::AmoxorW { rd, rs1, rs2, aq: _, rl: _ } => {
+                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old ^ new, next_pc)
+            }
+            Operation::AmoandW { rd, rs1, rs2, aq: _, rl: _ } => {
+                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old & new, next_pc)
+            }
+            Operation::AmoorW { rd, rs1, rs2, aq: _, rl: _ } => {
+                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old | new, next_pc)
+            }
+            Operation::AmominW { rd, rs1, rs2, aq: _, rl: _ } => {
+                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| {
+                    if (old as i32) < (new as i32) { old } else { new }
+                }, next_pc)
+            }
+            Operation::AmomaxW { rd, rs1, rs2, aq: _, rl: _ } => {
+                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| {
+                    if (old as i32) > (new as i32) { old } else { new }
+                }, next_pc)
+            }
+            Operation::AmominuW { rd, rs1, rs2, aq: _, rl: _ } => {
+                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old.min(new), next_pc)
+            }
+            Operation::AmomaxuW { rd, rs1, rs2, aq: _, rl: _ } => {
+                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old.max(new), next_pc)
+            }
+
             // ---- I-type ALU ----
             Operation::Addi { rd, rs1, imm } => {
                 let v1 = self.get_reg(rs1);
@@ -692,6 +810,51 @@ impl RiscvCpu {
     /// Compute effective address: rs1 + imm.
     fn ea(&self, rs1: u8, imm: i32) -> u64 {
         (self.get_reg(rs1) as i64 + imm as i64) as u64
+    }
+
+    /// Shared helper for AMO arithmetic ops (AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN/MAX).
+    /// Reads old value from memory, computes new = f(old, rs2_val), writes new, returns old in rd.
+    fn exec_amo_arith<F>(
+        &mut self,
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        bus: &mut Bus,
+        f: F,
+        next_pc: u32,
+    ) -> StepResult
+    where
+        F: FnOnce(u32, u32) -> u32,
+    {
+        let va = self.get_reg(rs1);
+        let pa = match self.translate_va(va, AccessType::Load, &*bus) {
+            Ok(p) => p,
+            Err(e) => return e,
+        };
+        match bus.read_word(pa) {
+            Ok(old_val) => {
+                let new_val = f(old_val, self.get_reg(rs2));
+                self.set_reg(rd, old_val);
+                let pa_s = match self.translate_va(va, AccessType::Store, &*bus) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                match bus.write_word(pa_s, new_val) {
+                    Ok(()) => {
+                        self.pc = next_pc;
+                        StepResult::Ok
+                    }
+                    Err(_) => {
+                        self.deliver_trap(csr::CAUSE_STORE_ACCESS, va);
+                        StepResult::Ok
+                    }
+                }
+            }
+            Err(_) => {
+                self.deliver_trap(csr::CAUSE_LOAD_ACCESS, va);
+                StepResult::Ok
+            }
+        }
     }
 
 }
@@ -1143,6 +1306,301 @@ mod tests {
         bus.write_word(0x8000_0000, word).unwrap();
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 42);
+    }
+
+    // ---- A extension (atomics) tests ----
+    // AMO encoding: (funct5 << 27) | (aq << 26) | (rl << 25) | (rs2 << 20) | (rs1 << 15) | (0b010 << 12) | (rd << 7) | 0x2F
+
+    /// Helper to encode an AMO instruction word.
+    fn amo_encode(funct5: u32, rd: u32, rs1: u32, rs2: u32, aq: bool, rl: bool) -> u32 {
+        (funct5 << 27)
+            | ((aq as u32) << 26)
+            | ((rl as u32) << 25)
+            | (rs2 << 20)
+            | (rs1 << 15)
+            | (0b010 << 12)
+            | (rd << 7)
+            | 0x2F
+    }
+
+    #[test]
+    fn step_lr_w() {
+        // LR.W x1, (x2) -- funct5=00010, aq=0, rl=0
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100; // address in bus range
+        bus.write_word(0x8000_0100, 0xDEADBEEF).unwrap();
+        let word = amo_encode(0b00010, 1, 2, 0, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xDEADBEEF);
+        // Reservation should be set
+        assert!(cpu.reservation.is_some());
+    }
+
+    #[test]
+    fn step_sc_w_success() {
+        // First LR.W x1, (x2) then SC.W x3, x1, (x2)
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        bus.write_word(0x8000_0100, 0x11111111).unwrap();
+
+        // LR.W x1, (x2)
+        let lr = amo_encode(0b00010, 1, 2, 0, false, false);
+        bus.write_word(0x8000_0000, lr).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0x11111111);
+
+        // SC.W x3, x4, (x2) -- store x4=0xCAFEBABE to address in x2
+        cpu.x[4] = 0xCAFEBABE;
+        let sc = amo_encode(0b00011, 3, 2, 4, false, false);
+        bus.write_word(0x8000_0004, sc).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[3], 0); // 0 = success
+        assert_eq!(
+            bus.read_word(0x8000_0100).unwrap(),
+            0xCAFEBABE
+        );
+    }
+
+    #[test]
+    fn step_sc_w_fail() {
+        // SC.W without prior LR.W should fail (no reservation)
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[4] = 0xCAFEBABE;
+        bus.write_word(0x8000_0100, 0x11111111).unwrap();
+
+        let sc = amo_encode(0b00011, 3, 2, 4, false, false);
+        bus.write_word(0x8000_0000, sc).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[3], 1); // 1 = failure
+        // Memory should be unchanged
+        assert_eq!(
+            bus.read_word(0x8000_0100).unwrap(),
+            0x11111111
+        );
+    }
+
+    #[test]
+    fn step_amoswap_w() {
+        // AMOSWAP.W x1, x3, (x2) -- funct5=00001
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 0x12345678;
+        bus.write_word(0x8000_0100, 0xABCDEF00).unwrap();
+        let word = amo_encode(0b00001, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xABCDEF00); // old value
+        assert_eq!(
+            bus.read_word(0x8000_0100).unwrap(),
+            0x12345678
+        ); // swapped
+    }
+
+    #[test]
+    fn step_amoadd_w() {
+        // AMOADD.W x1, x3, (x2) -- funct5=00000
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 100;
+        bus.write_word(0x8000_0100, 42).unwrap();
+        let word = amo_encode(0b00000, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 42); // old value
+        assert_eq!(bus.read_word(0x8000_0100).unwrap(), 142); // 42+100
+    }
+
+    #[test]
+    fn step_amoxor_w() {
+        // AMOXOR.W x1, x3, (x2) -- funct5=00101
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 0xFF00FF00;
+        bus.write_word(0x8000_0100, 0x0F0F0F0F).unwrap();
+        let word = amo_encode(0b00101, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0x0F0F0F0F);
+        assert_eq!(
+            bus.read_word(0x8000_0100).unwrap(),
+            0xF00FF00F
+        );
+    }
+
+    #[test]
+    fn step_amoand_w() {
+        // AMOAND.W x1, x3, (x2) -- funct5=01101
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 0x0F0F0F0F;
+        bus.write_word(0x8000_0100, 0xFF00FF00).unwrap();
+        let word = amo_encode(0b01101, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFF00FF00);
+        assert_eq!(
+            bus.read_word(0x8000_0100).unwrap(),
+            0x0F000F00
+        );
+    }
+
+    #[test]
+    fn step_amoor_w() {
+        // AMOOR.W x1, x3, (x2) -- funct5=01001
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 0x0F0F0F0F;
+        bus.write_word(0x8000_0100, 0xF0F0F0F0).unwrap();
+        let word = amo_encode(0b01001, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xF0F0F0F0);
+        assert_eq!(
+            bus.read_word(0x8000_0100).unwrap(),
+            0xFFFFFFFF
+        );
+    }
+
+    #[test]
+    fn step_amomin_w() {
+        // AMOMIN.W x1, x3, (x2) -- funct5=10000 (signed min)
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 10u32; // small positive
+        bus.write_word(0x8000_0100, 0xFFFF_FFFF).unwrap(); // -1 signed
+        let word = amo_encode(0b10000, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFF); // old value
+        // if (old as i32) < (new as i32) { old } else { new }
+        // old = -1, new = 10. -1 < 10, so result = old = -1 = 0xFFFF_FFFF
+        assert_eq!(
+            bus.read_word(0x8000_0100).unwrap(),
+            0xFFFF_FFFF
+        ); // stays as -1
+    }
+
+    #[test]
+    fn step_amomin_w_signed() {
+        // AMOMIN.W: signed comparison. mem=-1, rs2=10 -> -1 is min, stays
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 10u32;
+        bus.write_word(0x8000_0100, 0xFFFF_FFFF).unwrap(); // -1 signed
+        let word = amo_encode(0b10000, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFF); // old
+        assert_eq!(
+            bus.read_word(0x8000_0100).unwrap(),
+            0xFFFF_FFFF
+        ); // -1 < 10, stays
+    }
+
+    #[test]
+    fn step_amomax_w_signed() {
+        // AMOMAX.W: signed comparison. mem=-1, rs2=10 -> 10 is max
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 10u32;
+        bus.write_word(0x8000_0100, 0xFFFF_FFFF).unwrap(); // -1 signed
+        let word = amo_encode(0b10100, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFF); // old
+        assert_eq!(bus.read_word(0x8000_0100).unwrap(), 10); // max(-1, 10) = 10
+    }
+
+    #[test]
+    fn step_amominu_w() {
+        // AMOMINU.W x1, x3, (x2) -- funct5=11000 (unsigned min)
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 0xFFFF_FFFF; // large unsigned
+        bus.write_word(0x8000_0100, 42).unwrap();
+        let word = amo_encode(0b11000, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 42); // old
+        assert_eq!(bus.read_word(0x8000_0100).unwrap(), 42); // min(42, 0xFFFF_FFFF) = 42
+    }
+
+    #[test]
+    fn step_amomaxu_w() {
+        // AMOMAXU.W x1, x3, (x2) -- funct5=11100 (unsigned max)
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 0xFFFF_FFFF; // large unsigned
+        bus.write_word(0x8000_0100, 42).unwrap();
+        let word = amo_encode(0b11100, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 42); // old
+        assert_eq!(
+            bus.read_word(0x8000_0100).unwrap(),
+            0xFFFF_FFFF
+        ); // max(42, 0xFFFF_FFFF)
+    }
+
+    #[test]
+    fn step_amoadd_w_overflow() {
+        // Test wrapping add behavior
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        cpu.x[3] = 1;
+        bus.write_word(0x8000_0100, 0xFFFF_FFFF).unwrap();
+        let word = amo_encode(0b00000, 1, 2, 3, false, false);
+        bus.write_word(0x8000_0000, word).unwrap();
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        assert_eq!(cpu.x[1], 0xFFFF_FFFF);
+        assert_eq!(bus.read_word(0x8000_0100).unwrap(), 0); // wraps to 0
+    }
+
+    #[test]
+    fn step_sc_w_clears_reservation() {
+        // SC.W should clear the reservation regardless of success
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.x[2] = 0x8000_0100;
+        bus.write_word(0x8000_0100, 0).unwrap();
+
+        // LR.W x1, (x2)
+        let lr = amo_encode(0b00010, 1, 2, 0, false, false);
+        bus.write_word(0x8000_0000, lr).unwrap();
+        cpu.step(&mut bus);
+        assert!(cpu.reservation.is_some());
+
+        // SC.W x3, x4, (x2) -- different address
+        cpu.x[3] = 0x8000_0200;
+        cpu.x[4] = 42;
+        let sc = amo_encode(0b00011, 5, 3, 4, false, false);
+        bus.write_word(0x8000_0200, 0).unwrap();
+        bus.write_word(0x8000_0004, sc).unwrap();
+        cpu.step(&mut bus);
+        assert_eq!(cpu.x[5], 1); // fail (no reservation for 0x8000_0200)
+
+        // Second SC.W on original address should also fail (reservation cleared)
+        cpu.x[5] = 0; // reset rd
+        let sc2 = amo_encode(0b00011, 5, 2, 4, false, false);
+        bus.write_word(0x8000_0008, sc2).unwrap();
+        cpu.step(&mut bus);
+        assert_eq!(cpu.x[5], 1); // fail -- reservation was cleared
     }
 
 }
