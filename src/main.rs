@@ -3246,6 +3246,7 @@ fn syntax_highlight_color(canvas_buffer: &[u32], row: usize, col: usize) -> u32 
                 preprocessor::SynTok::Label => SYN_LABEL,
                 preprocessor::SynTok::Comment => SYN_COMMENT,
                 preprocessor::SynTok::Default => SYN_DEFAULT,
+                preprocessor::SynTok::Formula => SYN_OPCODE, // formula ops highlighted like opcodes
             };
         }
     }

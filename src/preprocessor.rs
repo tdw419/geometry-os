@@ -40,6 +40,7 @@ pub enum SynTok {
     Number,
     Label,
     Comment,
+    Formula,
     Default,
 }
 
@@ -171,6 +172,26 @@ impl Preprocessor {
                 continue;
             }
 
+            // Check if this is a formula line: first token is '='
+            if spans[0].kind == SynTok::Formula && spans[0].text == "=" {
+                // Collect formula tokens (everything after the '=')
+                let ftokens: Vec<&SynSpan> = spans[1..].iter()
+                    .filter(|s| s.kind != SynTok::Comment)
+                    .collect();
+
+                // Try to parse the formula expression and generate FORMULA directive
+                if let Some(formula_asm) = self.parse_formula(&ftokens) {
+                    output.push_str(&formula_asm);
+                    output.push('\n');
+                } else {
+                    // Unparseable formula -- emit as comment for debugging
+                    output.push_str("; [formula parse error] ");
+                    output.push_str(&spans.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" "));
+                    output.push('\n');
+                }
+                continue;
+            }
+
             // A line is a directive/macro if the first token is an Opcode from our macro set
             if spans[0].kind == SynTok::Opcode {
                 let cmd = spans[0].text.to_uppercase();
@@ -282,6 +303,95 @@ impl Preprocessor {
         }
 
         output
+    }
+
+    /// Parse a formula expression from spans and generate FORMULA assembler directive.
+    ///
+    /// Supported forms:
+    ///   = <dep> <op> <dep>       -- binary operation (ADD, SUB, MUL, DIV, AND, OR, XOR, MAX, MIN, MOD, SHL, SHR)
+    ///   = <op> <dep>             -- unary operation (NOT, COPY/~)
+    ///   = <dep>                  -- identity copy (single dep)
+    ///
+    /// Dependencies can be:
+    ///   - Numbers: canvas buffer indices (e.g., 32, 0x100)
+    ///   - Variable names: resolved via self.variables to canvas addresses
+    ///   - NOT supported: register names (r0, r1) -- formulas operate on canvas cells, not registers
+    fn parse_formula(&self, ftokens: &[&SynSpan]) -> Option<String> {
+        if ftokens.is_empty() {
+            return None;
+        }
+
+        // Resolve a dependency token to a canvas buffer index
+        let resolve_dep = |span: &SynSpan| -> Option<usize> {
+            match span.kind {
+                SynTok::Number => {
+                    if let Ok(val) = self.parse_imm(&span.text) {
+                        Some(val as usize)
+                    } else {
+                        None
+                    }
+                }
+                SynTok::Label => {
+                    // Try to resolve as a variable name
+                    self.variables.get(&span.text).map(|&v| v as usize)
+                }
+                _ => None,
+            }
+        };
+
+        // Map operator token text to FormulaOp name
+        let op_from_token = |token: &str| -> Option<&'static str> {
+            match token.to_uppercase().as_str() {
+                "+" | "ADD" => Some("ADD"),
+                "-" | "SUB" => Some("SUB"),
+                "*" | "MUL" => Some("MUL"),
+                "/" | "DIV" => Some("DIV"),
+                "&" | "AND" => Some("AND"),
+                "|" | "OR" => Some("OR"),
+                "^" | "XOR" => Some("XOR"),
+                "%" | "MOD" => Some("MOD"),
+                "<<" | "SHL" => Some("SHL"),
+                ">>" | "SHR" => Some("SHR"),
+                "MAX" => Some("MAX"),
+                "MIN" => Some("MIN"),
+                _ => None,
+            }
+        };
+
+        // Determine the formula form
+        if ftokens.len() == 1 {
+            // Form: = <dep> -- identity/copy
+            if let Some(dep_idx) = resolve_dep(ftokens[0]) {
+                return Some(format!("; formula: copy from {}\nFORMULA 0, COPY, {}", dep_idx, dep_idx));
+            }
+            return None;
+        }
+
+        if ftokens.len() == 2 {
+            // Form: = <unary_op> <dep>  or  = <dep> <unary_op>
+            // Check for NOT/~
+            let first_text = ftokens[0].text.trim();
+            if first_text == "~" || first_text.to_uppercase() == "NOT" {
+                if let Some(dep_idx) = resolve_dep(ftokens[1]) {
+                    return Some(format!("; formula: NOT {}\nFORMULA 0, NOT, {}", dep_idx, dep_idx));
+                }
+            }
+            return None;
+        }
+
+        if ftokens.len() == 3 {
+            // Form: = <dep0> <op> <dep1> -- standard binary formula
+            let dep0 = resolve_dep(ftokens[0])?;
+            let op_name = op_from_token(&ftokens[1].text)?;
+            let dep1 = resolve_dep(ftokens[2])?;
+            return Some(format!(
+                "; formula: {} {} {}\nFORMULA 0, {}, {}, {}",
+                dep0, ftokens[1].text.trim(), dep1, op_name, dep0, dep1
+            ));
+        }
+
+        // Longer expressions not yet supported (would need chained formulas)
+        None
     }
 
     fn parse_imm(&self, s: &str) -> Result<u32, String> {

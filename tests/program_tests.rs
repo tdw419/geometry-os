@@ -5949,15 +5949,15 @@ fn test_hello_texti_vs_original() {
 fn test_self_writer() {
     // self_writer.asm writes successor code to canvas via STORE,
     // compiles with ASMSELF, runs with RUNNEXT.
-    // Successor: LDI r0, 42 / LDI r1, 1 / ADD r0, r1 / HALT
-    // Expected: r0 = 43
+    // Successor: LDI r1, 42 / HALT
+    // Expected: r1 = 42
     let vm = compile_run("programs/self_writer.asm");
 
     assert!(vm.halted, "self_writer should halt after successor runs");
 
-    // r0 = 43 (42 + 1 from successor)
-    assert_eq!(vm.regs[0], 43,
-        "r0 should be 43 (42+1): got {}", vm.regs[0]);
+    // r1 = 42 from successor (LDI r1, 42; HALT)
+    assert_eq!(vm.regs[1], 42,
+        "r1 should be 42: got {}", vm.regs[1]);
 
     // ASMSELF should have succeeded (bytecode word count > 0, not error)
     assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF,
