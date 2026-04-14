@@ -915,7 +915,12 @@ impl Vm {
                                 self.trigger_segfault();
                                 return false;
                             }
-                            self.ram[addr] = self.regs[reg];
+                            // Phase 45: Intercept canvas RAM range
+                            if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                self.canvas_buffer[addr - CANVAS_RAM_BASE] = self.regs[reg];
+                            } else {
+                                self.ram[addr] = self.regs[reg];
+                            }
                             self.log_access(addr, MemAccessKind::Write);
                         }
                         None => { self.trigger_segfault(); return false; }
