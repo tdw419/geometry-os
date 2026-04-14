@@ -915,17 +915,25 @@ impl Vm {
                 if reg < NUM_REGS && addr_reg < NUM_REGS {
                     let vaddr = self.regs[addr_reg];
                     match self.translate_va_or_fault(vaddr) {
-                        Some(addr) if addr < self.ram.len() => {
-                            // Phase 45: Intercept canvas RAM range
-                            if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
-                                self.regs[reg] = self.canvas_buffer[addr - CANVAS_RAM_BASE];
+                        Some(addr) => {
+                            // Phase 46: Intercept screen buffer range
+                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                                self.regs[reg] = self.screen[addr - SCREEN_RAM_BASE];
+                                self.log_access(addr, MemAccessKind::Read);
+                            } else if addr < self.ram.len() {
+                                // Phase 45: Intercept canvas RAM range
+                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                    self.regs[reg] = self.canvas_buffer[addr - CANVAS_RAM_BASE];
+                                } else {
+                                    self.regs[reg] = self.ram[addr];
+                                }
+                                self.log_access(addr, MemAccessKind::Read);
                             } else {
-                                self.regs[reg] = self.ram[addr];
+                                self.trigger_segfault();
+                                return false;
                             }
-                            self.log_access(addr, MemAccessKind::Read);
                         }
                         None => { self.trigger_segfault(); return false; }
-                        _ => {}
                     }
                 }
             }
@@ -937,21 +945,29 @@ impl Vm {
                 if addr_reg < NUM_REGS && reg < NUM_REGS {
                     let vaddr = self.regs[addr_reg];
                     match self.translate_va_or_fault(vaddr) {
-                        Some(addr) if addr < self.ram.len() => {
-                            if self.mode == CpuMode::User && addr >= 0xFF00 {
+                        Some(addr) => {
+                            // Phase 46: Intercept screen buffer range
+                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                                self.screen[addr - SCREEN_RAM_BASE] = self.regs[reg];
+                                self.log_access(addr, MemAccessKind::Write);
+                            } else if addr < self.ram.len() {
+                                if self.mode == CpuMode::User && addr >= 0xFF00 {
+                                    self.trigger_segfault();
+                                    return false;
+                                }
+                                // Phase 45: Intercept canvas RAM range
+                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                    self.canvas_buffer[addr - CANVAS_RAM_BASE] = self.regs[reg];
+                                } else {
+                                    self.ram[addr] = self.regs[reg];
+                                }
+                                self.log_access(addr, MemAccessKind::Write);
+                            } else {
                                 self.trigger_segfault();
                                 return false;
                             }
-                            // Phase 45: Intercept canvas RAM range
-                            if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
-                                self.canvas_buffer[addr - CANVAS_RAM_BASE] = self.regs[reg];
-                            } else {
-                                self.ram[addr] = self.regs[reg];
-                            }
-                            self.log_access(addr, MemAccessKind::Write);
                         }
                         None => { self.trigger_segfault(); return false; }
-                        _ => {}
                     }
                 }
             }
@@ -4348,5 +4364,47 @@ mod tests {
         vm.pc = 0;
         for _ in 0..100 { if !vm.step() { break; } }
         assert_eq!(vm.regs[3], 0);
+    }
+
+    #[test]
+    fn test_memcpy_copies_memory() {
+        let mut vm = Vm::new();
+        // Set up source data at 0x2000
+        for i in 0..5 {
+            vm.ram[0x2000 + i] = (100 + i) as u32;
+        }
+        vm.regs[1] = 0x3000; // dst
+        vm.regs[2] = 0x2000; // src
+        vm.regs[3] = 5;      // len
+        vm.ram[0] = 0x04; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; // MEMCPY r1, r2, r3
+        vm.ram[4] = 0x00; // HALT
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert!(vm.halted);
+        // Verify destination has the copied data
+        for i in 0..5 {
+            assert_eq!(vm.ram[0x3000 + i], (100 + i) as u32, "MEMCPY dest[{}] should be {}", i, 100 + i);
+        }
+        // Source should be unchanged
+        for i in 0..5 {
+            assert_eq!(vm.ram[0x2000 + i], (100 + i) as u32, "MEMCPY src[{}] should be unchanged", i);
+        }
+    }
+
+    #[test]
+    fn test_memcpy_assembles_and_runs() {
+        use crate::assembler::assemble;
+        let src = "LDI r1, 0x3000\nLDI r2, 0x2000\nLDI r3, 5\nMEMCPY r1, r2, r3\nHALT";
+        let asm = assemble(src, 0).unwrap();
+        let mut vm = Vm::new();
+        // Write source data
+        for i in 0..5 { vm.ram[0x2000 + i] = (42 + i) as u32; }
+        for (i, &w) in asm.pixels.iter().enumerate() { vm.ram[i] = w; }
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert!(vm.halted);
+        for i in 0..5 {
+            assert_eq!(vm.ram[0x3000 + i], (42 + i) as u32);
+        }
     }
 }
