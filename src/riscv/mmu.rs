@@ -193,7 +193,7 @@ impl Tlb {
             let idx = (base + i) % TLB_SIZE;
             let entry = &self.entries[idx];
             if !entry.valid {
-                break;
+                continue; // skip gaps (may exist after explicit flushes)
             }
             if entry.vpn == vpn {
                 let is_global = (entry.flags & PTE_G) != 0;

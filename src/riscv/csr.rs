@@ -27,6 +27,7 @@ pub const MTVAL: u32 = 0x343;
 pub const SSTATUS: u32 = 0x100;
 pub const STVEC: u32 = 0x105;
 pub const SEPC: u32 = 0x141;
+pub const SSCRATCH: u32 = 0x140;
 pub const SCAUSE: u32 = 0x142;
 pub const STVAL: u32 = 0x143;
 pub const SATP: u32 = 0x180;
@@ -118,6 +119,8 @@ pub struct CsrBank {
     pub stvec: u32,
     /// Supervisor exception program counter.
     pub sepc: u32,
+    /// Supervisor scratch register (per-hart scratch space).
+    pub sscratch: u32,
     /// Supervisor trap cause.
     pub scause: u32,
     /// Supervisor trap value.
@@ -165,6 +168,7 @@ impl CsrBank {
             mtval: 0,
             stvec: 0,
             sepc: 0,
+            sscratch: 0,
             scause: 0,
             stval: 0,
             satp: 0,
@@ -189,6 +193,7 @@ impl CsrBank {
             SSTATUS => self.mstatus & SSTATUS_MASK,
             STVEC => self.stvec,
             SEPC => self.sepc,
+            SSCRATCH => self.sscratch,
             SCAUSE => self.scause,
             STVAL => self.stval,
             SATP => self.satp,
@@ -241,6 +246,10 @@ impl CsrBank {
             }
             SEPC => {
                 self.sepc = val & !1;
+                true
+            }
+            SSCRATCH => {
+                self.sscratch = val;
                 true
             }
             SCAUSE => {
