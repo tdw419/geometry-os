@@ -294,26 +294,122 @@ impl RiscvVm {
         vm.cpu.x[11] = dtb_addr as u32; // a1 = DTB address
         vm.cpu.privilege = cpu::Privilege::Machine;
 
-        // Install a minimal M-mode trap handler (firmware stub).
-        // On real hardware, OpenSBI/firmware provides this. Our handler:
-        //   1. Skips the faulting instruction (mepc += 4)
-        //   2. Returns via mret
-        // This allows the kernel to proceed past unexpected M-mode traps
-        // (e.g., page faults before S-mode trap vectors are set up).
+        // Install an M-mode trap handler (firmware stub) that forwards
+        // page faults to S-mode instead of blindly skipping instructions.
         //
-        // Place handler at 0xC0940000 -- in the gap between the kernel's
-        // first LOAD segment (ends ~0xC0940000) and second LOAD segment
-        // (starts at 0xC0C00000). This address is within the kernel's
-        // identity-mapped region and won't be overwritten by the ELF loader.
+        // On real hardware, OpenSBI handles M-mode traps. Our handler:
+        //   1. Reads mcause
+        //   2. If it's a page fault (12/13/15) AND stvec is set, forwards to S-mode
+        //      by setting sepc=mepc, scause=mcause, and jumping to stvec
+        //   3. Otherwise, skips the faulting instruction (mepc += 4) and returns
+        //
+        // This is critical: the kernel sets up page tables in M-mode and tests
+        // them by accessing virtual addresses. When those accesses fault, the
+        // trap must reach the kernel's S-mode handler, not be silently skipped.
+        //
+        // Place handler at fw_addr (gap between kernel LOAD segments).
         let fw_addr: u64 = first_vaddr + 0x940_000;
-        // csrr t0, mepc      (0x34202373)
-        // addi t0, t0, 4     (0x00428293)
-        // csrw mepc, t0      (0x34129073)
-        // mret                (0x30200073)
-        vm.bus.write_word(fw_addr, 0x34202373).ok();
-        vm.bus.write_word(fw_addr + 4, 0x00428293).ok();
-        vm.bus.write_word(fw_addr + 8, 0x34129073).ok();
-        vm.bus.write_word(fw_addr + 12, 0x30200073).ok();
+        // RISC-V machine code for the trap handler:
+        //
+        // entry:
+        //   csrr t0, mcause          // 0x34202373 -- get trap cause
+        //   addi t1, zero, 12        // 0x00C00313 -- t1 = 12 (instr page fault)
+        //   bne t0, t1, check_load   // skip if not instr page fault
+        //   j forward_to_s           // forward to S-mode
+        // check_load:
+        //   addi t1, zero, 13        // 0x00D00313 -- t1 = 13 (load page fault)
+        //   bne t0, t1, check_store  // skip if not load page fault
+        //   j forward_to_s           // forward to S-mode
+        // check_store:
+        //   addi t1, zero, 15        // 0x00F00313 -- t1 = 15 (store page fault)
+        //   bne t0, t1, skip_insn    // skip if not store page fault
+        // forward_to_s:
+        //   csrr t0, mepc            // 0x34102373 -- get faulting PC
+        //   csrw sepc, t0            // 0x14129073 -- sepc = mepc
+        //   csrr t0, mcause          // 0x34202373 -- get cause again
+        //   csrw scause, t0          // 0x14229073 -- scause = mcause
+        //   csrr t0, mtval           // 0x34302373 -- get faulting addr
+        //   csrw stval, t0           // 0x14329073 -- stval = mtval
+        //   csrr t0, stvec           // 0x10502373 -- get S-mode trap vector
+        //   csrw mepc, t0            // 0x34129073 -- mret will jump to stvec
+        //   mret                     // 0x30200073 -- return (to stvec)
+        // skip_insn:
+        //   csrr t0, mepc            // 0x34202373
+        //   addi t0, t0, 4           // 0x00428293
+        //   csrw mepc, t0            // 0x34129073
+        //   mret                     // 0x30200073
+        //
+        let mut off = 0u64;
+        let w = |bus: &mut crate::riscv::bus::Bus, addr: u64, insn: u32| {
+            bus.write_word(addr, insn).ok();
+        };
+        // entry:
+        w(&mut vm.bus, fw_addr + off, 0x34202373); off += 4; // csrr t0, mcause
+        w(&mut vm.bus, fw_addr + off, 0x00C00313); off += 4; // addi t1, zero, 12
+        w(&mut vm.bus, fw_addr + off, 0x00629463); off += 4; // bne t0, t1, +8 -> check_load
+        w(&mut vm.bus, fw_addr + off, 0x0280006F); off += 4; // j forward_to_s (offset calculated below)
+        // check_load:
+        w(&mut vm.bus, fw_addr + off, 0x00D00313); off += 4; // addi t1, zero, 13
+        w(&mut vm.bus, fw_addr + off, 0x00629463); off += 4; // bne t0, t1, +8 -> check_store
+        w(&mut vm.bus, fw_addr + off, 0x0200006F); off += 4; // j forward_to_s
+        // check_store:
+        w(&mut vm.bus, fw_addr + off, 0x00F00313); off += 4; // addi t1, zero, 15
+        w(&mut vm.bus, fw_addr + off, 0x00629063); off += 4; // bne t0, t1, -> skip_insn
+        // forward_to_s:
+        let forward_addr = fw_addr + off;
+        w(&mut vm.bus, fw_addr + off, 0x34102373); off += 4; // csrr t0, mepc
+        w(&mut vm.bus, fw_addr + off, 0x14129073); off += 4; // csrw sepc, t0
+        w(&mut vm.bus, fw_addr + off, 0x34202373); off += 4; // csrr t0, mcause
+        w(&mut vm.bus, fw_addr + off, 0x14229073); off += 4; // csrw scause, t0
+        w(&mut vm.bus, fw_addr + off, 0x34302373); off += 4; // csrr t0, mtval
+        w(&mut vm.bus, fw_addr + off, 0x14329073); off += 4; // csrw stval, t0
+        w(&mut vm.bus, fw_addr + off, 0x10502373); off += 4; // csrr t0, stvec
+        w(&mut vm.bus, fw_addr + off, 0x34129073); off += 4; // csrw mepc, t0
+        w(&mut vm.bus, fw_addr + off, 0x30200073); off += 4; // mret
+        // skip_insn:
+        let skip_addr = fw_addr + off;
+        w(&mut vm.bus, fw_addr + off, 0x34202373); off += 4; // csrr t0, mepc
+        w(&mut vm.bus, fw_addr + off, 0x00428293); off += 4; // addi t0, t0, 4
+        w(&mut vm.bus, fw_addr + off, 0x34129073); off += 4; // csrw mepc, t0
+        w(&mut vm.bus, fw_addr + off, 0x30200073); off += 4; // mret
+
+        // Fix up branch offsets now that we know all addresses
+        // BNE at offset 8: bne t0, t1, +8 -> check_load is at offset 16
+        // BNE encoding: imm[12|10:5] | rs2 | rs1 | funct3 | imm[4:1|11] | opcode
+        // bne t0(5), t1(6), +8: funct3=001, opcode=1100011
+        // imm = +8 = 0b0000000001000
+        // Already correct: 0x00629463 = bne x5,x6,+8
+        // BNE at offset 24: bne t0, t1, +8 -> check_store is at offset 32
+        // Same encoding: 0x00629463
+        // BNE at offset 32: bne t0, t1, +N -> skip_insn
+        let skip_offset = (skip_addr as i32) - ((fw_addr + 32) as i32);
+        // Beq/bne offset is in bits 12,10:5 (upper) and 4:1,11 (lower)
+        let _bne_insn = 0x00629063 | ((((skip_offset << 20) >> 20) & 0xFE0) as u32) << 20
+            | ((((skip_offset << 20) >> 20) & 0x1E) as u32) << 8
+            | ((((skip_offset << 20) >> 20) & 0x800) as u32) >> 4;
+        // Actually let me just compute this properly
+        let imm = skip_offset as u32;
+        let bne_proper = (0x63) | ((imm & 0x1E) << 7) | ((imm & 0x800) >> 4)
+            | ((imm & 0x7E0) << 20) | ((imm & 0x1000) << 19)
+            | (5 << 15) | (6 << 20) | (1 << 12);
+        w(&mut vm.bus, fw_addr + 32, bne_proper);
+
+        // JAL at offset 12: j forward_to_s
+        let fwd_off1 = (forward_addr as i32) - ((fw_addr + 12) as i32);
+        let jal1 = 0x6F | ((fwd_off1 as u32 & 0xFF000) << 0) 
+            | ((fwd_off1 as u32 & 0x800) << 9) 
+            | ((fwd_off1 as u32 & 0x7FE) << 20)
+            | ((fwd_off1 as u32 & 0x100000) << 11);
+        w(&mut vm.bus, fw_addr + 12, jal1);
+
+        // JAL at offset 28: j forward_to_s
+        let fwd_off2 = (forward_addr as i32) - ((fw_addr + 28) as i32);
+        let jal2 = 0x6F | ((fwd_off2 as u32 & 0xFF000) << 0) 
+            | ((fwd_off2 as u32 & 0x800) << 9) 
+            | ((fwd_off2 as u32 & 0x7FE) << 20)
+            | ((fwd_off2 as u32 & 0x100000) << 11);
+        w(&mut vm.bus, fw_addr + 28, jal2);
+
         // Set mtvec to our trap handler (direct mode, bit[0]=0).
         vm.cpu.csr.write(crate::riscv::csr::MTVEC, fw_addr as u32);
 

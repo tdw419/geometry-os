@@ -7,6 +7,9 @@
 pub const RAM_SIZE: usize = 0x10000; // 65536 u32 cells
 pub const SCREEN_SIZE: usize = 256 * 256;
 pub const NUM_REGS: usize = 32;
+/// Canvas RAM region: address range [0x8000, 0x8FFF] maps to the pixel grid.
+pub const CANVAS_RAM_BASE: usize = 0x8000;
+pub const CANVAS_RAM_SIZE: usize = 4096;
 /// Maximum number of concurrently spawned child processes
 pub const MAX_PROCESSES: usize = 8;
 /// Syscall dispatch table base address in RAM.
