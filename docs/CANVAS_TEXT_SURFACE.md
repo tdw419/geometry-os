@@ -343,6 +343,11 @@ Address        Size    Purpose
 0x4000-0x4EFF  ~4K     Multi-process bytecode (via .org directive)
                        e.g. .org 0x4000 places a child process starting at 0x4000
 0x8000-0x8FFF 4096    Canvas grid (RAM-mapped mirror of canvas_buffer) (Phase 45)
+0x10000-0x1FFFF 65536   Screen buffer (RAM-mapped mirror of screen[]) (Phase 46)
+                       256x256 pixels, each a u32 color value
+                       screen[y * 256 + x] maps to address 0x10000 + y*256 + x
+                       LOAD/STORE to this range reads/writes pixels directly
+                       Equivalent to PEEK/PIXEL opcodes but via memory access
 0xF000-0xF003  4       Window Bounds Protocol (shared RAM convention)
                        RAM[0xF000]=win_x, [0xF001]=win_y, [0xF002]=win_w, [0xF003]=win_h
                        Primary writes; child processes read to clamp their rendering

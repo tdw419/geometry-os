@@ -4523,4 +4523,181 @@ mod tests {
             assert_eq!(vm.ram[0x3000 + i], (42 + i) as u32);
         }
     }
+
+    // ── RAM-Mapped Screen Buffer (Phase 46) ──────────────────────────
+
+    #[test]
+    fn test_screen_ram_store() {
+        let mut vm = Vm::new();
+        // STORE to screen addr 0x10000 (pixel 0,0) with color 0xFF0000
+        vm.regs[1] = 0x10000; // addr
+        vm.regs[2] = 0xFF0000; // value (red)
+        vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+        vm.pc = 0;
+        vm.step();
+        assert_eq!(vm.screen[0], 0xFF0000);
+    }
+
+    #[test]
+    fn test_screen_ram_load() {
+        let mut vm = Vm::new();
+        // Pre-set a pixel in the screen buffer
+        vm.screen[256 * 10 + 5] = 0xABCDEF;
+        // LOAD from screen addr 0x10000 + 256*10 + 5
+        vm.regs[1] = 0x10000 + 256 * 10 + 5;
+        vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+        vm.pc = 0;
+        vm.step();
+        assert_eq!(vm.regs[3], 0xABCDEF);
+    }
+
+    #[test]
+    fn test_screen_ram_store_then_load_roundtrip() {
+        let vm = run_program(&[
+            0x10, 1, 0x10050,       // LDI r1, 0x10050
+            0x10, 2, 0x00FF00,      // LDI r2, 0x00FF00
+            0x12, 1, 2,             // STORE r1, r2
+            0x11, 4, 1,             // LOAD r4, r1
+            0x00,                   // HALT
+        ], 100);
+        assert!(vm.halted);
+        assert_eq!(vm.regs[4], 0x00FF00);
+        assert_eq!(vm.screen[0x50], 0x00FF00);
+    }
+
+    #[test]
+    fn test_screen_ram_does_not_corrupt_normal_ram() {
+        let mut vm = Vm::new();
+        // Store a value at a normal RAM address first
+        vm.ram[0x2000] = 0xDEADBEEF;
+        // Store to screen address
+        vm.regs[1] = 0x10000;
+        vm.regs[2] = 0xFF0000;
+        vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+        vm.pc = 0;
+        vm.step();
+        // Normal RAM should be unchanged
+        assert_eq!(vm.ram[0x2000], 0xDEADBEEF);
+        // Screen should have the stored value
+        assert_eq!(vm.screen[0], 0xFF0000);
+    }
+
+    #[test]
+    fn test_screen_ram_load_matches_peek() {
+        let mut vm = Vm::new();
+        // Set pixel at (15, 30) via screen buffer directly
+        vm.screen[30 * 256 + 15] = 0x123456;
+
+        // Read via LOAD from screen-mapped address
+        let screen_addr = (SCREEN_RAM_BASE + 30 * 256 + 15) as u32;
+        vm.regs[1] = screen_addr;
+        vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+        let load_value = vm.regs[3];
+
+        // Reset halted state for second instruction sequence
+        vm.halted = false;
+
+        // Read via PEEK opcode
+        vm.regs[1] = 15; // x
+        vm.regs[2] = 30; // y
+        vm.ram[4] = 0x6D; vm.ram[5] = 4; vm.ram[6] = 1; vm.ram[7] = 2; // PEEK r4, r1, r2
+        vm.ram[8] = 0x00;
+        vm.pc = 4;
+        for _ in 0..100 { if !vm.step() { break; } }
+        let peek_value = vm.regs[4];
+
+        assert_eq!(load_value, 0x123456);
+        assert_eq!(peek_value, 0x123456);
+        assert_eq!(load_value, peek_value);
+    }
+
+    #[test]
+    fn test_screen_ram_store_matches_pixel() {
+        let mut vm = Vm::new();
+
+        // Write pixel via STORE to screen-mapped address at (10, 20)
+        let screen_addr = (SCREEN_RAM_BASE + 20 * 256 + 10) as u32;
+        vm.regs[1] = screen_addr;
+        vm.regs[2] = 0xFF0000; // red
+        vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+        vm.pc = 0;
+        for _ in 0..100 { if !vm.step() { break; } }
+
+        // Verify via screen buffer directly
+        assert_eq!(vm.screen[20 * 256 + 10], 0xFF0000);
+
+        // Reset halted state for second instruction sequence
+        vm.halted = false;
+
+        // Verify via PEEK opcode
+        vm.regs[1] = 10; // x
+        vm.regs[2] = 20; // y
+        vm.ram[3] = 0x6D; vm.ram[4] = 5; vm.ram[5] = 1; vm.ram[6] = 2; // PEEK r5, r1, r2
+        vm.ram[7] = 0x00;
+        vm.pc = 3;
+        for _ in 0..100 { if !vm.step() { break; } }
+        assert_eq!(vm.regs[5], 0xFF0000);
+    }
+
+    #[test]
+    fn test_screen_ram_boundary_first_and_last_pixel() {
+        let mut vm = Vm::new();
+
+        // First pixel: address 0x10000
+        vm.regs[1] = SCREEN_RAM_BASE as u32;
+        vm.regs[2] = 0x111111;
+        vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+        vm.pc = 0;
+        vm.step();
+        assert_eq!(vm.screen[0], 0x111111);
+
+        // Last pixel: address 0x10000 + 65535 = 0x1FFFF
+        let last_addr = (SCREEN_RAM_BASE + SCREEN_SIZE - 1) as u32;
+        vm.regs[1] = last_addr;
+        vm.regs[2] = 0x222222;
+        vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+        vm.pc = 0;
+        vm.step();
+        assert_eq!(vm.screen[SCREEN_SIZE - 1], 0x222222);
+
+        // Read back via LOAD
+        vm.regs[1] = SCREEN_RAM_BASE as u32;
+        vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+        vm.pc = 0;
+        vm.step();
+        assert_eq!(vm.regs[3], 0x111111);
+
+        vm.regs[1] = last_addr;
+        vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+        vm.pc = 0;
+        vm.step();
+        assert_eq!(vm.regs[3], 0x222222);
+    }
+
+    #[test]
+    fn test_screen_ram_user_mode_allowed() {
+        let mut vm = Vm::new();
+        vm.mode = CpuMode::User;
+        // User-mode store to screen should work (screen is not I/O)
+        vm.regs[1] = 0x10000;
+        vm.regs[2] = 0x00FF00;
+        vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+        vm.pc = 0;
+        assert!(vm.step()); // Should NOT segfault
+        assert_eq!(vm.screen[0], 0x00FF00);
+    }
+
+    #[test]
+    fn test_screen_ram_assembles_and_runs() {
+        use crate::assembler::assemble;
+        // Write assembly that stores to screen buffer, reads back, stores to RAM for comparison
+        let src = "LDI r1, 0x10000\nLDI r2, 0xFF0000\nSTORE r1, r2\nLOAD r3, r1\nLDI r4, 0x7000\nSTORE r4, r3\nHALT";
+        let asm = assemble(src, 0).unwrap();
+        let vm = run_program(&asm.pixels, 100);
+        assert!(vm.halted);
+        assert_eq!(vm.screen[0], 0xFF0000);
+        assert_eq!(vm.ram[0x7000], 0xFF0000);
+    }
 }

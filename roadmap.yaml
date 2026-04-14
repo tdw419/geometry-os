@@ -317,7 +317,7 @@ phases:
   test_target: 10
 - id: phase-46
   title: RAM-Mapped Screen Buffer
-  status: partial
+  status: complete
   goal: Make the 256x256 screen buffer addressable from VM RAM
   description: 'The screen buffer (256x256 = 65536 pixels) is currently only accessible via PIXEL (write) and PEEK (read) opcodes. Map it into the VM address space at 0x9000-0x13FFF (a 64K region) so that
     normal LOAD/STORE can read and write screen pixels. This unifies all three memory spaces (RAM, canvas, screen) under one addressing scheme.
@@ -333,10 +333,10 @@ phases:
     acceptance_criteria:
     - description: Screen buffer is LOAD/STORE accessible at a defined address range
       validation: LOAD from screen addr returns same value as PEEK
-      met: false
+      met: true
     - description: Existing PIXEL and PEEK opcodes still work
       validation: cargo test passes
-      met: false
+      met: true
     tasks:
     - id: p46.d1.t1
       title: Determine screen mapping strategy and expand RAM if needed
@@ -384,18 +384,18 @@ phases:
     description: 'Verify that LOAD/STORE to screen addresses correctly read and write pixels. Cross-validate against PEEK and PIXEL opcodes.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: LOAD from screen address matches PEEK result
       validation: 'Test program: PEEK and LOAD same pixel, compare registers'
-      met: false
+      met: true
     - description: STORE to screen address matches PIXEL result
       validation: 'Test program: STORE and PIXEL write same location, compare'
-      met: false
+      met: true
     tasks:
     - id: p46.d2.t1
       title: 'Test: LOAD from screen matches PEEK'
-      status: todo
+      status: complete
       description: 'Write a test that draws a pixel with PIXEL opcode, then reads it with both PEEK and LOAD (via screen-mapped address). Verify both return the same color value.
 
         '
@@ -407,7 +407,7 @@ phases:
       - src/vm.rs
     - id: p46.d2.t2
       title: 'Test: STORE to screen matches PIXEL'
-      status: todo
+      status: complete
       description: 'Write a test that writes a pixel via both PIXEL opcode and STORE to screen-mapped address. Read back with PEEK and verify both wrote the same value.
 
         '
@@ -424,15 +424,15 @@ phases:
     description: 'Update all memory map documentation to show the complete unified address space: RAM (0x0000-0x7FFF), canvas (0x8000-0x8FFF), screen (0x10000+). Add a new doc section showing the full map.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: All three regions documented in one place
       validation: grep 'canvas\|screen\|RAM' docs/CANVAS_TEXT_SURFACE.md shows unified map
-      met: false
+      met: true
     tasks:
     - id: p46.d3.t1
       title: Write UNIFIED_MEMORY_MAP section in docs
-      status: todo
+      status: complete
       description: 'Add a section to CANVAS_TEXT_SURFACE.md (or create UNIFIED_MEMORY_MAP.md) showing the complete address space: 0x0000-0x0FFF: bytecode/data, 0x1000-0x1FFF: canvas bytecode, 0x8000-0x8FFF:
         canvas grid (mirror), 0x10000-0x1FFFF: screen buffer. Explain the design: one address space, three backing stores, LOAD/STORE as the universal access method.
 
