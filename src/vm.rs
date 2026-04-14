@@ -1113,18 +1113,29 @@ impl Vm {
                 let rs = self.fetch() as usize;
                 if rs < NUM_REGS {
                     let sp = self.regs[30] as i32;
-                    let addr = sp.wrapping_add(offset) as u32;
-                    match self.translate_va_or_fault(addr) {
-                        Some(a) if a < self.ram.len() => {
-                            if self.mode == CpuMode::User && a >= 0xFF00 {
+                    let vaddr = sp.wrapping_add(offset) as u32;
+                    match self.translate_va_or_fault(vaddr) {
+                        Some(addr) => {
+                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                                self.screen[addr - SCREEN_RAM_BASE] = self.regs[rs];
+                                self.log_access(addr, MemAccessKind::Write);
+                            } else if addr < self.ram.len() {
+                                if self.mode == CpuMode::User && addr >= 0xFF00 {
+                                    self.trigger_segfault();
+                                    return false;
+                                }
+                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                    self.canvas_buffer[addr - CANVAS_RAM_BASE] = self.regs[rs];
+                                } else {
+                                    self.ram[addr] = self.regs[rs];
+                                }
+                                self.log_access(addr, MemAccessKind::Write);
+                            } else {
                                 self.trigger_segfault();
                                 return false;
                             }
-                            self.ram[a] = self.regs[rs];
-                            self.log_access(a, MemAccessKind::Write);
                         }
                         None => { self.trigger_segfault(); return false; }
-                        _ => {}
                     }
                 }
             }
