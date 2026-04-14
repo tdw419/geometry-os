@@ -261,8 +261,9 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
 
     b.end_node(); // cpus
 
-    // Memory node.
-    b.begin_node("memory@80000000");
+    // Memory node. Name must match actual base address.
+    let mem_name = format!("memory@{:x}", config.ram_base);
+    b.begin_node(&mem_name);
     b.prop_string("device_type", "memory");
     b.prop_reg("reg", config.ram_base, config.ram_size);
     b.end_node();

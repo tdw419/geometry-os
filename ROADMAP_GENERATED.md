@@ -2,7 +2,7 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  114 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
 
-**Progress:** 39/44 phases complete, 0 in progress
+**Progress:** 39/44 phases complete, 1 in progress
 
 **Deliverables:** 180/194 complete
 
@@ -51,7 +51,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  11
 | phase-37 Guest OS Boot (Native RISC-V) | COMPLETE | 6/6 | - | - |
 | phase-38 RISC-V M/A/C Extensions | COMPLETE | 3/3 | - | - |
 | phase-39 Build Linux for RV32IMAC | COMPLETE | 3/3 | - | - |
-| phase-40 Boot Linux in Geometry OS | PLANNED | 0/2 | - | - |
+| phase-40 Boot Linux in Geometry OS | IN PROGRESS | 0/2 | - | - |
 | phase-41 Tracing and Instrumentation | PLANNED | 0/4 | - | - |
 | phase-42 Geometry OS Process Manager | PLANNED | 0/3 | - | - |
 | phase-43 Geometry OS VFS and Disk | PLANNED | 0/2 | - | - |
@@ -945,7 +945,7 @@ Use Buildroot or direct kernel build to produce a vmlinux for riscv32. Tinyconfi
   - [x] /init script mounts proc/sys, spawns shell
   - [x] initramfs size under 4MB
 
-## [ ] phase-40: Boot Linux in Geometry OS (PLANNED)
+## [~] phase-40: Boot Linux in Geometry OS (IN PROGRESS)
 
 **Goal:** Boot the riscv32 Linux kernel inside our RISC-V interpreter and reach a shell prompt.
 

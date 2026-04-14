@@ -55,7 +55,12 @@ impl Bus {
         } else if super::plic::Plic::contains(addr) {
             self.plic.read(addr).ok_or(MemoryError { addr, size: 4 })
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
-            self.virtio_blk.read(addr).ok_or(MemoryError { addr, size: 4 })
+            self.virtio_blk
+                .read(addr)
+                .ok_or(MemoryError { addr, size: 4 })
+        } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
+            // Return 0 for reads from low addresses (boot ROM area)
+            Ok(0)
         } else {
             self.mem.read_word(addr)
         }
@@ -81,6 +86,10 @@ impl Bus {
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
             self.virtio_blk.write(addr, val);
             Ok(())
+        } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
+            // Silently accept writes to low addresses (boot ROM, HTIF, etc.)
+            // QEMU does the same -- writes to the boot ROM area are ignored.
+            Ok(())
         } else {
             self.mem.write_word(addr, val)
         }
@@ -103,6 +112,8 @@ impl Bus {
             let word = self.virtio_blk.read(addr & !3).ok_or(MemoryError { addr, size: 1 })?;
             let byte_off = (addr & 3) as usize;
             Ok((word >> (byte_off * 8)) as u8)
+        } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
+            Ok(0)
         } else {
             self.mem.read_byte(addr)
         }
@@ -134,6 +145,9 @@ impl Bus {
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
             // Virtio byte write: not common, ignore for now
             Ok(())
+        } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
+            // Silently accept writes to low addresses (boot ROM, HTIF, etc.)
+            Ok(())
         } else {
             self.mem.write_byte(addr, val)
         }
@@ -145,6 +159,8 @@ impl Bus {
             let word = self.clint.read(addr & !3).ok_or(MemoryError { addr, size: 2 })?;
             let half_off = ((addr >> 1) & 1) as usize;
             Ok((word >> (half_off * 16)) as u16)
+        } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
+            Ok(0)
         } else {
             self.mem.read_half(addr)
         }
@@ -163,6 +179,9 @@ impl Bus {
             } else {
                 Err(MemoryError { addr, size: 2 })
             }
+        } else if addr < self.mem.ram_base && !Self::in_clint(addr) {
+            // Silently accept writes to low addresses (boot ROM, HTIF, etc.)
+            Ok(())
         } else {
             self.mem.write_half(addr, val)
         }
@@ -265,7 +284,8 @@ mod tests {
     #[test]
     fn bus_out_of_range_fails() {
         let bus = Bus::new(0x8000_0000, 4096);
-        assert!(bus.read_word(0x0000_0000).is_err());
+        // Low addresses now return 0 (boot ROM area) instead of error
+        assert_eq!(bus.read_word(0x0000_0000).unwrap(), 0);
         assert!(bus.read_word(0x0200_1000).is_err()); // CLINT gap
     }
 

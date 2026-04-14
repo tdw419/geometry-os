@@ -783,9 +783,9 @@ impl RiscvCpu {
                 StepResult::Ok
             }
 
-            // ---- Invalid ----
+            // ---- Invalid / Illegal instruction ----
             Operation::Invalid(_) => {
-                self.pc = next_pc;
+                self.deliver_trap(csr::CAUSE_ILLEGAL_INSTRUCTION, self.pc);
                 StepResult::Ok
             }
         }
@@ -926,11 +926,13 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 4096);
         cpu.csr.mtvec = 0x8000_0200;
         let result = cpu.step(&mut bus);
+        // Low addresses return 0 (boot ROM), so instruction 0x00000000 is fetched.
+        // 0x00000000 decodes as compressed C.ADDI4SPN with nzuimm=0, which is
+        // an illegal instruction (mcause=2). CPU traps to mtvec.
         assert_eq!(result, StepResult::Ok);
         assert_eq!(cpu.pc, 0x8000_0200);
         assert_eq!(cpu.csr.mepc, 0x0000_0000);
-        assert_eq!(cpu.csr.mcause, csr::CAUSE_FETCH_ACCESS);
-        assert_eq!(cpu.csr.mtval, 0x0000_0000);
+        assert_eq!(cpu.csr.mcause, csr::CAUSE_ILLEGAL_INSTRUCTION);
     }
 
     #[test]

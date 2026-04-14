@@ -1605,8 +1605,10 @@ fn test_clint_timer_interrupt_via_vm_step() {
     let mut vm = RiscvVm::new(8192);
     let base = 0x8000_0000u64;
 
-    // Entry: NOP (will be preempted by timer interrupt)
-    vm.bus.write_word(base, nop()).unwrap();
+    // Entry: 5 NOPs (timer fires at step 4 when mtime reaches 5)
+    for i in 0..5u64 {
+        vm.bus.write_word(base + i * 4, nop()).unwrap();
+    }
     // Handler at +0x200: write 42 to x1, then EBREAK
     vm.bus.write_word(base + 0x200, addi(1, 0, 42)).unwrap();
     vm.bus.write_word(base + 0x204, ebreak()).unwrap();
@@ -2717,14 +2719,15 @@ fn test_riscvvm_step_drives_timer_interrupt() {
     for i in 0..10u64 {
         vm.bus.write_word(base + i * 4, nop()).unwrap();
     }
+    vm.cpu.pc = base as u32;
     vm.cpu.csr.mie = 1 << 7; // MTIE
     vm.cpu.csr.mtvec = 0x8000_0200;
     vm.cpu.csr.mstatus = 1 << 3; // MIE
-    vm.bus.clint.mtimecmp = 3;
+    vm.bus.clint.mtimecmp = 4;
     vm.step(); // mtime 0->1
     vm.step(); // mtime 1->2
     vm.step(); // mtime 2->3
-    vm.step(); // mtime 3->4, now 4>=3, MTIP set, trap fires
+    vm.step(); // mtime 3->4, now 4>=4, MTIP set, trap fires
     assert_eq!(vm.cpu.csr.mcause & csr::MCAUSE_INTERRUPT_BIT, csr::MCAUSE_INTERRUPT_BIT);
     assert_eq!(vm.cpu.csr.mcause & !csr::MCAUSE_INTERRUPT_BIT, 7);
 }

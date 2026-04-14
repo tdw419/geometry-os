@@ -10,9 +10,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 114
-  tests: 760
+  tests: 779
   programs: 40
-  loc: 17934
+  loc: 17932
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1754,7 +1754,7 @@ phases:
 
 - id: phase-40
   title: Boot Linux in Geometry OS
-  status: todo
+  status: in_progress
   goal: Boot the riscv32 Linux kernel inside our RISC-V interpreter and reach a shell prompt.
   priority: 55
   description: 'Load vmlinux + initramfs into the interpreter, boot to shell.
