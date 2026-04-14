@@ -697,7 +697,7 @@ impl Vm {
     fn free_page_dir(&mut self, pd: &[u32]) {
         for &entry in pd {
             let ppage = entry as usize;
-            if ppage < NUM_PAGES {
+            if ppage < NUM_RAM_PAGES {
                 self.allocated_pages &= !(1u64 << ppage);
             }
         }
@@ -875,6 +875,27 @@ impl Vm {
                     let freq = self.regs[fr].clamp(20, 20000);
                     let dur = self.regs[dr].clamp(1, 5000);
                     self.beep = Some((freq, dur));
+                }
+            }
+
+            // MEMCPY dst_reg, src_reg, len_reg -- copy len words from [src] to [dst]
+            0x04 => {
+                let dr = self.fetch() as usize;
+                let sr = self.fetch() as usize;
+                let lr = self.fetch() as usize;
+                if dr < NUM_REGS && sr < NUM_REGS && lr < NUM_REGS {
+                    let mut dst = self.regs[dr] as usize;
+                    let mut src = self.regs[sr] as usize;
+                    let len = self.regs[lr] as usize;
+                    // Clamp to RAM bounds to prevent runaway copies
+                    let max_copy = self.ram.len().min(len);
+                    for _ in 0..max_copy {
+                        if dst < self.ram.len() && src < self.ram.len() {
+                            self.ram[dst] = self.ram[src];
+                        }
+                        dst += 1;
+                        src += 1;
+                    }
                 }
             }
 
@@ -3156,6 +3177,12 @@ impl Vm {
                 let fr = ram(a + 1);
                 let dr = ram(a + 2);
                 (format!("BEEP {}, {}", reg(fr), reg(dr)), 3)
+            }
+            0x04 => {
+                let dr = ram(a + 1);
+                let sr = ram(a + 2);
+                let lr = ram(a + 3);
+                (format!("MEMCPY {}, {}, {}", reg(dr), reg(sr), reg(lr)), 4)
             }
             0x10 => {
                 let r = ram(a + 1);
