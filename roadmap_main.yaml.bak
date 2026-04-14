@@ -1783,7 +1783,7 @@ phases:
   - Linux boot sequence teaches more than any textbook
 - id: phase-41
   title: Tracing and Instrumentation
-  status: in_progress
+  status: complete
   goal: Add instruction-level tracing to the interpreter so we can watch exactly what Linux does.
   priority: 60
   description: 'Once Linux boots, instrument the interpreter to capture: every syscall, every page table walk, every context switch, every interrupt.'
@@ -1816,24 +1816,24 @@ phases:
       - Logs syscall_name(arg0, arg1, ...) = return_value
   - name: Page table trace
     description: Trace SV32 page table walks, TLB fills, and page faults
-    status: todo
+    status: done
     scope_lines: 80
     tasks:
     - id: p41.d3.t1
       title: Add page table walk tracing to MMU
-      status: todo
+      status: done
       acceptance_criteria:
       - Logs every SATP write (new page table root)
       - Logs page table walks with VPN to PFN mappings
       - Logs page faults with faulting VA and reason
   - name: Scheduler trace
     description: Detect and log context switches and schedule decisions
-    status: todo
+    status: done
     scope_lines: 60
     tasks:
     - id: p41.d4.t1
       title: Infer context switches from register state changes
-      status: todo
+      status: done
       acceptance_criteria:
       - Detects task switches via SP/mhartid changes
       - Logs switch_from to switch_to with PC and SP
