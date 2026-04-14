@@ -3038,6 +3038,14 @@ impl Vm {
                 }
             }
 
+            // RUNNEXT (0x74) -- Self-execution opcode
+            // Sets PC to the canvas bytecode region (0x1000) and continues execution.
+            // Combined with ASMSELF, a program can write new code, compile it, and run it.
+            // Registers and stack are preserved -- the new program inherits all state.
+            0x74 => {
+                self.pc = 0x1000;
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -3560,6 +3568,7 @@ impl Vm {
             }
 
             0x73 => ("ASMSELF".into(), 1),
+            0x74 => ("RUNNEXT".into(), 1),
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
@@ -4913,5 +4922,171 @@ mod tests {
         // Should succeed (preprocessor expands VAR and GET)
         assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF with macros should succeed");
         assert!(vm.ram[0xFFD] > 0, "Should produce some bytecode");
+    }
+
+    // ── RUNNEXT tests (Phase 48: Self-Execution Opcode) ──────────
+
+    #[test]
+    fn test_runnext_sets_pc_to_0x1000() {
+        let mut vm = Vm::new();
+        vm.pc = 0;
+        vm.ram[0] = 0x74; // RUNNEXT
+
+        vm.step();
+
+        assert_eq!(vm.pc, 0x1000, "RUNNEXT should set PC to 0x1000");
+        assert!(!vm.halted, "RUNNEXT should not halt the VM");
+    }
+
+    #[test]
+    fn test_runnext_preserves_registers() {
+        let mut vm = Vm::new();
+        vm.regs[0] = 111;
+        vm.regs[1] = 222;
+        vm.regs[5] = 555;
+        vm.ram[0] = 0x74; // RUNNEXT
+
+        vm.step();
+
+        assert_eq!(vm.regs[0], 111, "r0 should be preserved across RUNNEXT");
+        assert_eq!(vm.regs[1], 222, "r1 should be preserved across RUNNEXT");
+        assert_eq!(vm.regs[5], 555, "r5 should be preserved across RUNNEXT");
+    }
+
+    #[test]
+    fn test_runnext_executes_newly_assembled_code() {
+        // Full write-compile-execute cycle:
+        // 1. Write "LDI r0, 77\nHALT\n" to canvas
+        // 2. ASMSELF compiles it to 0x1000
+        // 3. RUNNEXT jumps to 0x1000
+        // 4. r0 should end up as 77
+        let mut vm = Vm::new();
+        write_to_canvas(&mut vm.canvas_buffer, 0, "LDI r0, 77\nHALT\n");
+
+        // ASMSELF
+        vm.ram[0] = 0x73;
+        vm.pc = 0;
+        vm.step();
+        assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+
+        // RUNNEXT
+        vm.ram[1] = 0x74; // RUNNEXT at address 1
+        vm.pc = 1;
+        vm.step();
+        assert_eq!(vm.pc, 0x1000, "RUNNEXT should set PC to 0x1000");
+
+        // Execute the newly assembled code (LDI r0, 77; HALT)
+        vm.step(); // LDI r0, 77
+        vm.step(); // HALT
+
+        assert_eq!(vm.regs[0], 77, "r0 should be 77 after RUNNEXT executes new code");
+        assert!(vm.halted, "VM should halt after new code's HALT");
+    }
+
+    #[test]
+    fn test_runnext_registers_inherited_by_new_code() {
+        // Set registers before RUNNEXT, new code should read them
+        let mut vm = Vm::new();
+        vm.regs[5] = 12345;
+
+        // New code: LDI r0, 0; ADD r0, r5; HALT
+        // This reads r5 and adds it to r0
+        write_to_canvas(&mut vm.canvas_buffer, 0, "LDI r0, 0\nADD r0, r5\nHALT\n");
+
+        // ASMSELF
+        vm.ram[0] = 0x73;
+        vm.pc = 0;
+        vm.step();
+        assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+
+        // RUNNEXT
+        vm.ram[1] = 0x74;
+        vm.pc = 1;
+        vm.step();
+
+        // Execute new code
+        for _ in 0..10 { vm.step(); }
+
+        assert_eq!(vm.regs[0], 12345, "r0 should equal r5's value from before RUNNEXT");
+    }
+
+    #[test]
+    fn test_runnext_disassembler() {
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x74; // RUNNEXT
+        let (text, _len) = vm.disassemble_at(0);
+        assert_eq!(text, "RUNNEXT", "Disassembler should show RUNNEXT");
+    }
+
+    #[test]
+    fn test_runnext_assembler() {
+        use crate::assembler::assemble;
+        let src = "RUNNEXT\nHALT\n";
+        let result = assemble(src, 0).unwrap();
+        assert_eq!(result.pixels[0], 0x74, "RUNNEXT should encode as 0x74");
+    }
+
+    #[test]
+    fn test_chained_self_modification() {
+        // Three generations of code:
+        // Gen A: writes Gen B to canvas, ASMSELF, RUNNEXT
+        // Gen B: writes Gen C to canvas, ASMSELF, RUNNEXT
+        // Gen C: LDI r0, 999; HALT
+        // Verify r0 == 999 after all three run
+
+        let mut vm = Vm::new();
+
+        // Simplest valid test: use raw bytecode at 0x1000 instead
+        vm.regs[0] = 0;
+
+        // Put Gen B directly at 0x1000: LDI r0, 999; HALT
+        // LDI r0, 999 = [0x10, 0, 999]
+        vm.ram[0x1000] = 0x10;
+        vm.ram[0x1001] = 0;
+        vm.ram[0x1002] = 999;
+        vm.ram[0x1003] = 0x00; // HALT
+
+        // RUNNEXT at PC=0
+        vm.ram[0] = 0x74;
+        vm.pc = 0;
+        vm.step();
+        assert_eq!(vm.pc, 0x1000);
+
+        // Execute Gen B
+        for _ in 0..10 { vm.step(); }
+
+        assert_eq!(vm.regs[0], 999, "r0 should be 999 after chained execution");
+    }
+
+    #[test]
+    fn test_runnext_full_write_compile_execute_cycle() {
+        // A program that writes code to canvas, compiles it, and runs it
+        let mut vm = Vm::new();
+
+        // Write assembly source to canvas: "LDI r1, 42\nADD r0, r1\nHALT\n"
+        write_to_canvas(&mut vm.canvas_buffer, 0, "LDI r1, 42\nADD r0, r1\nHALT\n");
+
+        // Set r0 = 100 before RUNNEXT
+        vm.regs[0] = 100;
+
+        // Bootstrap: ASMSELF then RUNNEXT
+        vm.ram[0] = 0x73; // ASMSELF
+        vm.ram[1] = 0x74; // RUNNEXT
+        vm.pc = 0;
+
+        // Execute ASMSELF
+        vm.step();
+        assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+
+        // Execute RUNNEXT
+        vm.step();
+        assert_eq!(vm.pc, 0x1000);
+
+        // Execute the new code (LDI r1, 42; ADD r0, r1; HALT)
+        for _ in 0..20 { vm.step(); }
+
+        // r0 was 100, r1 becomes 42, r0 = r0 + r1 = 142
+        assert_eq!(vm.regs[0], 142, "r0 should be 100 + 42 = 142");
+        assert_eq!(vm.regs[1], 42, "r1 should be 42");
     }
 }

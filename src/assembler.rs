@@ -1179,6 +1179,11 @@ fn parse_instruction(
             bytecode.push(0x73);
         }
 
+        "RUNNEXT" => {
+            // No operands -- sets PC to 0x1000 to execute newly assembled bytecode
+            bytecode.push(0x74);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 

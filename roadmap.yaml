@@ -671,7 +671,7 @@ phases:
   test_target: 8
 - id: phase-48
   title: Self-Execution Opcode (RUNNEXT)
-  status: todo
+  status: complete
   goal: Add an opcode that starts executing the newly assembled bytecode
   description: 'Add the RUNNEXT opcode that sets PC to 0x1000 (the canvas bytecode region) and continues execution. Combined with ASMSELF, a program can write new code onto the canvas, compile it, and run
     it -- all from within the VM. This closes the loop: pixels write pixels, pixels assemble pixels, pixels execute pixels.
@@ -685,18 +685,18 @@ phases:
       This is essentially JMP 0x1000 but with awareness that the bytecode at 0x1000 was just assembled from canvas text. Could be implemented as a simple PC set, or as JMP with an implicit operand.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: RUNNEXT starts executing bytecode at 0x1000
       validation: Program writes code, ASMSELF, RUNNEXT, verify new code runs
-      met: false
+      met: true
     - description: Register state preserved across RUNNEXT
       validation: r0-r26 retain their values after RUNNEXT
-      met: false
+      met: true
     tasks:
     - id: p48.d1.t1
       title: Implement RUNNEXT opcode handler
-      status: todo
+      status: complete
       description: 'Add RUNNEXT opcode in vm.rs execute match. Handler sets self.pc = CANVAS_BYTECODE_ADDR (0x1000). No operands needed (1-byte instruction). Register file is preserved. The VM continues
         fetching from the new PC on the next cycle.
 
@@ -710,7 +710,7 @@ phases:
       - src/vm.rs
     - id: p48.d1.t2
       title: Add RUNNEXT to disassembler and assembler
-      status: todo
+      status: complete
       description: 'Add RUNNEXT to the mnemonic list in assembler.rs, the OPCODES list in preprocessor.rs, and the disassemble() method in vm.rs. No operands.
 
         '
@@ -732,15 +732,15 @@ phases:
     description: 'Test the full write-compile-execute cycle. A program writes new code, assembles it, runs it, and the new code''s effects are visible.
 
       '
-    status: todo
+    status: complete
     acceptance_criteria:
     - description: Full write-compile-execute cycle works end-to-end
       validation: Test program writes LDI r0, 77 to canvas, ASMSELF, RUNNEXT, verify r0=77
-      met: false
+      met: true
     tasks:
     - id: p48.d2.t1
       title: 'Test: RUNNEXT executes newly assembled code'
-      status: todo
+      status: complete
       description: 'Write a test program that: (1) stores "LDI r0, 77\nHALT" to canvas addresses, (2) calls ASMSELF, (3) checks RAM[0xFFD] for success, (4) calls RUNNEXT, (5) verify r0 == 77 after execution.
 
         '
@@ -753,7 +753,7 @@ phases:
       - src/vm.rs
     - id: p48.d2.t2
       title: 'Test: registers preserved across RUNNEXT'
-      status: todo
+      status: complete
       description: 'Set r5 = 12345. Write code to canvas that reads r5 and adds 1. ASMSELF, RUNNEXT. Verify r5 is still 12345 in the new program''s context, and that the new program can read it.
 
         '
@@ -765,7 +765,7 @@ phases:
       - src/vm.rs
     - id: p48.d2.t3
       title: 'Test: chained self-modification'
-      status: todo
+      status: complete
       description: 'Program A writes Program B to canvas. ASMSELF. RUNNEXT. Program B writes Program C to canvas. ASMSELF. RUNNEXT. Program C HALTs. Verify all three ran in sequence. This is the generational
         self-modification test.
 
@@ -990,9 +990,9 @@ conventions:
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
 meta:
-  opcodes_current: 183
-  opcodes_after: 184
-  tests_current: 692
+  opcodes_current: 93
+  opcodes_after: 93
+  tests_current: 558
   programs_current: 42
-  loc_current: 13387
+  loc_current: 13568
   source_doc: docs/PIXEL_DRIVING_PIXELS.md

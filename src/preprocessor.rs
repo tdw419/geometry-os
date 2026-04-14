@@ -26,6 +26,7 @@ pub const OPCODES: &[&str] = &[
     "EXEC", "WRITESTR", "READLN", "WAITPID", "EXECP", "CHDIR", "GETCWD",
     "SHUTDOWN", "EXIT", "SIGNAL", "SIGSET", "HYPERVISOR", "HYPERVISOR",
     "ASMSELF",
+    "RUNNEXT",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR", "SET", "GET", "INC", "DEC",
 ];
