@@ -1,10 +1,10 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  140 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  101 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
 
-**Progress:** 46/50 phases complete, 1 in progress
+**Progress:** 47/50 phases complete, 1 in progress
 
-**Deliverables:** 202/212 complete
+**Deliverables:** 205/212 complete
 
 **Tasks:** 76/83 complete
 
@@ -61,7 +61,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  14
 | phase-47 Self-Assembly Opcode (ASMSELF) | COMPLETE | 3/3 | 340 | 8 |
 | phase-48 Self-Execution Opcode (RUNNEXT) | COMPLETE | 2/2 | 140 | 5 |
 | phase-49 Self-Modifying Programs: Demos and Patterns | COMPLETE | 2/2 | 400 | - |
-| phase-50 Reactive Canvas: Live Cell Formulas | PLANNED | 0/3 | 800 | 10 |
+| phase-50 Reactive Canvas: Live Cell Formulas | COMPLETE | 3/3 | 800 | 10 |
 
 ## Dependencies
 
@@ -1470,7 +1470,7 @@ The game_of_life.asm demo is the purest expression of pixels-driving-pixels. It 
 - Demo programs may be too complex to write in raw assembly within grid size limits
 - Code evolution demo may be too ambitious for initial implementation
 
-## [ ] phase-50: Reactive Canvas: Live Cell Formulas (PLANNED)
+## [x] phase-50: Reactive Canvas: Live Cell Formulas (COMPLETE)
 
 **Goal:** Make canvas cells react to changes in other cells automatically
 
@@ -1480,11 +1480,11 @@ This is a future phase -- it depends on phases 45-48 being stable and is a natur
 
 ### Deliverables
 
-- [ ] **Formula cell type and evaluation engine** -- Add a parallel buffer (formula_buffer, same size as canvas_buffer) where each cell can optionally hold a formula instead of a value. Formulas reference other cells by address. When a STORE writes to a cell, the engine checks if any formula depends on that cell and recalculates.
+- [x] **Formula cell type and evaluation engine** -- Add a parallel buffer (formula_buffer, same size as canvas_buffer) where each cell can optionally hold a formula instead of a value. Formulas reference other cells by address. When a STORE writes to a cell, the engine checks if any formula depends on that cell and recalculates.
 
-- [ ] **Formula syntax in preprocessor** -- Extend the preprocessor to recognize formula syntax in canvas text. A line like `= r0 + r1` means "this cell displays the value of r0 + r1". The preprocessor generates the reactive update hooks.
+- [x] **Formula syntax in preprocessor** -- Extend the preprocessor to recognize formula syntax in canvas text. A line like `= r0 + r1` means "this cell displays the value of r0 + r1". The preprocessor generates the reactive update hooks.
 
-- [ ] **Demo: live register dashboard** -- A program where the canvas grid shows live register values. As the program runs, the grid cells update to show r0, r1, r2 etc. as changing digits. The display IS the debug view. No separate inspector.
+- [x] **Demo: live register dashboard** -- A program where the canvas grid shows live register values. As the program runs, the grid cells update to show r0, r1, r2 etc. as changing digits. The display IS the debug view. No separate inspector.
 
 
 ### Technical Notes
@@ -1496,7 +1496,7 @@ This is marked "future" because it's a significant new feature. The core pixel-d
 
 ## Global Risks
 
-- Opcode space: 140 of ~256 slots used, plenty of room
+- Opcode space: 101 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing

@@ -1,6 +1,6 @@
 title: Geometry OS Roadmap
 version: 1.0.0
-description: Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  140 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch
+description: Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  101 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch
   it run.
 project_url: https://github.com/tdw419/geometry-os
 meta:
@@ -9,10 +9,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 140
-  tests: 748
-  programs: 46
-  loc: 14329
+  opcodes: 101
+  tests: 1009
+  programs: 47
+  loc: 14363
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -2890,7 +2890,7 @@ phases:
   test_target: 0
 - id: phase-50
   title: 'Reactive Canvas: Live Cell Formulas'
-  status: partial
+  status: complete
   goal: Make canvas cells react to changes in other cells automatically
   description: 'Extend the canvas with an optional formula layer. A cell can have a formula instead of a static value. When a referenced cell changes, the formula cell recalculates. This is the spreadsheet
     model applied to the pixel grid. It makes the canvas reactive without explicit STORE/LOAD loops.
@@ -2904,21 +2904,21 @@ phases:
       writes to a cell, the engine checks if any formula depends on that cell and recalculates.
 
       '
-    status: todo
+    status: done
     tasks: []
   - name: Formula syntax in preprocessor
     description: 'Extend the preprocessor to recognize formula syntax in canvas text. A line like `= r0 + r1` means "this cell displays the value of r0 + r1". The preprocessor generates the reactive update
       hooks.
 
       '
-    status: todo
+    status: done
     tasks: []
   - name: 'Demo: live register dashboard'
     description: 'A program where the canvas grid shows live register values. As the program runs, the grid cells update to show r0, r1, r2 etc. as changing digits. The display IS the debug view. No separate
       inspector.
 
       '
-    status: todo
+    status: done
     tasks: []
   dependencies:
   - source: phase-49
@@ -2936,7 +2936,7 @@ phases:
   scope_lines_total: 800
   test_target: 10
 global_risks:
-- 'Opcode space: 140 of ~256 slots used, plenty of room'
+- 'Opcode space: 101 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
