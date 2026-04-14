@@ -1162,7 +1162,7 @@ conventions:
 meta:
   opcodes_current: 67
   opcodes_after: 67
-  tests_current: 469
+  tests_current: 470
   programs_current: 43
-  loc_current: 13568
+  loc_current: 13780
   source_doc: docs/PIXEL_DRIVING_PIXELS.md

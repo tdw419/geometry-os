@@ -4,7 +4,7 @@ Self-modifying canvas programs in Geometry OS. Pixels write pixels.
 
 **Progress:** 4/6 phases complete, 1 in progress
 
-**Deliverables:** 1/18 complete
+**Deliverables:** 2/18 complete
 
 **Tasks:** 0/40 complete
 
@@ -16,7 +16,7 @@ Self-modifying canvas programs in Geometry OS. Pixels write pixels.
 | phase-46 RAM-Mapped Screen Buffer | COMPLETE | 0/3 | 220 | 8 |
 | phase-47 Self-Assembly Opcode (ASMSELF) | COMPLETE | 0/3 | 340 | 8 |
 | phase-48 Self-Execution Opcode (RUNNEXT) | COMPLETE | 0/2 | 140 | 5 |
-| phase-49 Self-Modifying Programs: Demos and Patterns | IN PROGRESS | 1/2 | 400 | - |
+| phase-49 Self-Modifying Programs: Demos and Patterns | IN PROGRESS | 2/2 | 400 | - |
 | phase-50 Reactive Canvas: Live Cell Formulas | FUTURE | 0/3 | 800 | 10 |
 
 ## Dependencies
@@ -396,13 +396,13 @@ With phases 45-48 complete, write programs that demonstrate the full self-modify
   - [x] Program generates a visually different successor and runs it
     _Validation: Load demo, F5, watch grid change, see new program execute_
   _~300 LOC_
-- [ ] **Documentation: pixel-driving-pixels patterns** -- Write a guide for building self-modifying programs. Document the patterns: canvas STORE for writing code, ASMSELF for compiling, RUNNEXT for executing, register passing between generations, and common pitfalls (infinite loops, corrupting your own code).
+- [x] **Documentation: pixel-driving-pixels patterns** -- Write a guide for building self-modifying programs. Document the patterns: canvas STORE for writing code, ASMSELF for compiling, RUNNEXT for executing, register passing between generations, and common pitfalls (infinite loops, corrupting your own code).
 
   - [ ] `p49.d2.t1` Write docs/SELF_MODIFYING_GUIDE.md (depends: p48.d1.t1)
     > Create a guide covering: (1) Canvas STORE pattern -- how to write text to canvas cells, (2) ASMSELF + RUNNEXT pattern -- compile and execute, (3) Register passing -- sharing state between generations, (4) Self-reading -- using LOAD from canvas to inspect your own source, (5) Pitfalls -- infinite loops, corruption, error handling. Include code snippets for each pattern.
     - Guide covers all 5 topics with working code examples
     _Files: docs/SELF_MODIFYING_GUIDE.md_
-  - [ ] Guide document exists with at least 3 documented patterns
+  - [x] Guide document exists with at least 3 documented patterns
     _Validation: ls docs/SELF_MODIFYING_GUIDE.md_
   _~100 LOC_
 
