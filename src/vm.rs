@@ -457,6 +457,8 @@ pub struct Vm {
     pub frame_count: u32,
     /// Set by BEEP opcode: (freq_hz, duration_ms). Consumed and cleared by host.
     pub beep: Option<(u32, u32)>,
+    /// When true, log RAM accesses to access_log (off by default for performance)
+    pub debug_mode: bool,
     /// Frame-scoped log of RAM accesses for the visual debugger
     pub access_log: Vec<MemAccess>,
     /// Secondary execution contexts spawned by SPATIAL_SPAWN
@@ -625,7 +627,7 @@ impl Vm {
 
     /// Internal helper to log a memory access with a safety cap.
     fn log_access(&mut self, addr: usize, kind: MemAccessKind) {
-        if self.access_log.len() < 4096 {
+        if self.debug_mode && self.access_log.len() < 4096 {
             self.access_log.push(MemAccess { addr, kind });
         }
     }
