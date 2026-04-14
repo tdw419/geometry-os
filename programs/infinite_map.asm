@@ -114,6 +114,10 @@ render_y:
 
     XOR r5, r6           ; r5 = coarse_hash
 
+    ; Mix: multiply by a large prime to spread bits into upper positions
+    LDI r18, 1103515245
+    MUL r5, r18          ; r5 = coarse_hash * mixing_prime
+
     ; Extract top 4 bits: biome type 0..15
     LDI r18, 28
     SHR r5, r18          ; r5 = biome_type (0..15)

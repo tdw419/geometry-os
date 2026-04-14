@@ -5740,5 +5740,17 @@ mod tests {
             }).count();
         // Non-water tiles should be identical (deterministic terrain)
         eprintln!("Non-water pixels identical across frames: {}", non_water_same);
+
+        // Color distribution audit
+        let mut sorted: Vec<_> = color_counts.into_iter().collect();
+        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        eprintln!("Color distribution at (100,100):");
+        for (i, (color, count)) in sorted.iter().take(15).enumerate() {
+            let r = (color >> 16) & 0xFF;
+            let g = (color >> 8) & 0xFF;
+            let b = color & 0xFF;
+            eprintln!("  #{}: #{:06X} (r={},g={},b={}) - {} px ({:.1}%)",
+                i, color, r, g, b, count, *count as f64 / 65536.0 * 100.0);
+        }
     }
 }

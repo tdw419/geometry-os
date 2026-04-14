@@ -12,3 +12,7 @@
 {"timestamp": "2026-04-14T16:44:07.532091", "iteration": 3, "elapsed_seconds": 765.4, "event": "compacted", "data": {"strategy": "hierarchical", "compacted_tokens": 8747, "original_tokens": 9763}}
 {"timestamp": "2026-04-14T16:44:07.532118", "iteration": 3, "elapsed_seconds": 765.4, "event": "synthesis_prompt", "data": {"tokens": 8770}}
 {"timestamp": "2026-04-14T16:44:07.532335", "iteration": 3, "elapsed_seconds": 765.4, "event": "snapshot_saved", "data": {"path": "rfl_infinite_map/snapshots/iter_003.json"}}
+{"timestamp": "2026-04-14T16:57:49.534632", "iteration": 3, "elapsed_seconds": 1587.4, "event": "iteration_response", "data": {"iteration": 3, "tokens": 2661, "content_preview": "The infinite map shipped last iteration -- 1015 tests passing, 127K steps/frame (12.7% budget). But the terrain is probably noisy/speckled since each tile hashes independently. Let me enhance it with "}}
+{"timestamp": "2026-04-14T16:57:49.534754", "iteration": 4, "elapsed_seconds": 1587.4, "event": "compacted", "data": {"strategy": "hierarchical", "compacted_tokens": 6236, "original_tokens": 12424}}
+{"timestamp": "2026-04-14T16:57:49.534776", "iteration": 4, "elapsed_seconds": 1587.4, "event": "synthesis_prompt", "data": {"tokens": 6259}}
+{"timestamp": "2026-04-14T16:57:49.534960", "iteration": 4, "elapsed_seconds": 1587.4, "event": "snapshot_saved", "data": {"path": "rfl_infinite_map/snapshots/iter_004.json"}}
