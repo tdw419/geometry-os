@@ -24,6 +24,7 @@ pub enum Privilege {
 
 /// Result of a single step.
 #[derive(Debug, PartialEq, Eq)]
+#[derive(Clone)]
 pub enum StepResult {
     /// Executed one instruction normally.
     Ok,
@@ -37,6 +38,29 @@ pub enum StepResult {
     LoadFault,
     /// Store to unmapped memory.
     StoreFault,
+}
+
+/// Information about the last executed instruction (Phase 41: tracing).
+/// Always populated by step() with near-zero overhead. Used by the trace
+/// system when tracing is enabled.
+#[derive(Debug, Clone)]
+pub struct LastStepInfo {
+    /// Program counter before execution.
+    pub pc: u32,
+    /// Raw instruction word fetched.
+    pub word: u32,
+    /// Decoded operation.
+    pub op: Operation,
+    /// Instruction length (2 for compressed, 4 for normal).
+    pub inst_len: u32,
+    /// Registers before execution.
+    pub regs_before: [u32; 32],
+    /// Registers after execution.
+    pub regs_after: [u32; 32],
+    /// PC after execution.
+    pub pc_after: u32,
+    /// Step result.
+    pub result: StepResult,
 }
 
 /// RV32I CPU state.
@@ -54,6 +78,8 @@ pub struct RiscvCpu {
     /// Reservation address for LR.W/SC.W (A extension).
     /// Set by LR.W, checked by SC.W. None means no reservation.
     pub reservation: Option<u64>,
+    /// Last step info, populated every step for tracing (Phase 41).
+    pub last_step: Option<LastStepInfo>,
 }
 
 impl RiscvCpu {
@@ -66,6 +92,7 @@ impl RiscvCpu {
             csr: CsrBank::new(),
             tlb: Tlb::new(),
             reservation: None,
+            last_step: None,
         };
         cpu.x[10] = 0; // a0 = 0 (no Hart ID)
         cpu.x[11] = 0; // a1 = 0 (no DTB)
@@ -134,6 +161,10 @@ impl RiscvCpu {
     /// Before fetching, checks for pending interrupts and delivers them
     /// as traps if enabled.
     pub fn step(&mut self, bus: &mut Bus) -> StepResult {
+        // Snapshot register state before execution (Phase 41: tracing).
+        let regs_before = self.x;
+        let pc_before = self.pc;
+
         // Check for pending interrupts before fetching.
         if let Some(cause) = self.csr.pending_interrupt(self.privilege) {
             let trap_priv = self.csr.trap_target_priv(cause, self.privilege);
@@ -141,18 +172,50 @@ impl RiscvCpu {
             self.csr.trap_enter(trap_priv, self.privilege, self.pc, cause);
             self.privilege = trap_priv;
             self.pc = vector;
+            self.last_step = Some(LastStepInfo {
+                pc: pc_before,
+                word: 0,
+                op: Operation::Invalid(0),
+                inst_len: 0,
+                regs_before,
+                regs_after: self.x,
+                pc_after: self.pc,
+                result: StepResult::Ok,
+            });
             return StepResult::Ok;
         }
 
         // Translate PC through MMU for instruction fetch.
         let fetch_pa = match self.translate_va(self.pc, AccessType::Fetch, &*bus) {
             Ok(pa) => pa,
-            Err(e) => return e,
+            Err(e) => {
+                self.last_step = Some(LastStepInfo {
+                    pc: pc_before,
+                    word: 0,
+                    op: Operation::Invalid(0),
+                    inst_len: 0,
+                    regs_before,
+                    regs_after: self.x,
+                    pc_after: self.pc,
+                    result: e.clone(),
+                });
+                return e;
+            }
         };
         let word = match bus.read_word(fetch_pa) {
             Ok(w) => w,
             Err(_) => {
                 self.deliver_trap(csr::CAUSE_FETCH_ACCESS, self.pc);
+                self.last_step = Some(LastStepInfo {
+                    pc: pc_before,
+                    word: 0,
+                    op: Operation::Invalid(0),
+                    inst_len: 0,
+                    regs_before,
+                    regs_after: self.x,
+                    pc_after: self.pc,
+                    result: StepResult::Ok,
+                });
                 return StepResult::Ok;
             }
         };
@@ -166,7 +229,18 @@ impl RiscvCpu {
         } else {
             (decode::decode(word), 4u32)
         };
-        self.execute(op, bus, inst_len)
+        let result = self.execute(op, bus, inst_len);
+        self.last_step = Some(LastStepInfo {
+            pc: pc_before,
+            word,
+            op,
+            inst_len,
+            regs_before,
+            regs_after: self.x,
+            pc_after: self.pc,
+            result: result.clone(),
+        });
+        result
     }
 
     /// Execute a decoded operation. Handles PC advancement internally.
