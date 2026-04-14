@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn bus_sync_mip_clears_when_not_pending() {
-        let mut bus = Bus::new(0x8000_0000, 4096);
+        let bus = Bus::new(0x8000_0000, 4096);
         let mut mip: u32 = (1 << 7) | (1 << 3);
         bus.sync_mip(&mut mip);
         assert_eq!(mip & (1 << 7), 0, "MTIP should be cleared");

@@ -2765,7 +2765,7 @@ fn test_bus_sync_mip_plic_meip() {
 /// Bus sync_mip clears MEIP when PLIC has no pending interrupts.
 #[test]
 fn test_bus_sync_mip_plic_clears_meip() {
-    let mut bus = geometry_os::riscv::bus::Bus::new(0x8000_0000, 4096);
+    let bus = geometry_os::riscv::bus::Bus::new(0x8000_0000, 4096);
     let mut mip = 1 << 11;
     bus.sync_mip(&mut mip);
     assert_eq!(mip & (1 << 11), 0, "MEIP should be cleared");
