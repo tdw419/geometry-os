@@ -101,6 +101,28 @@ pub enum TranslateResult {
     StoreFault,
 }
 
+/// MMU trace event (Phase 41).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MmuEvent {
+    /// Walk completed successfully.
+    PageTableWalk {
+        va: u32,
+        pa: u64,
+        ptes: Vec<u32>,
+    },
+    /// Walk failed with a page fault.
+    PageFault {
+        va: u32,
+        access: AccessType,
+        ptes: Vec<u32>,
+    },
+    /// Translation hit in the TLB.
+    TlbHit {
+        va: u32,
+        pa: u64,
+    },
+}
+
 // ---- TLB ----
 
 /// Number of TLB entries.
