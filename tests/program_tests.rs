@@ -5942,3 +5942,34 @@ fn test_hello_texti_vs_original() {
         "TEXTI hello ({} words) should be < 1/4 of original ({} words)",
         texti_asm.pixels.len(), original_asm.pixels.len());
 }
+
+// === Self Writer (Phase 49: Pixel Driving Pixels) ===
+
+#[test]
+fn test_self_writer() {
+    // self_writer.asm writes successor code to canvas via STORE,
+    // compiles with ASMSELF, runs with RUNNEXT.
+    // Successor: LDI r0, 42 / LDI r1, 1 / ADD r0, r1 / HALT
+    // Expected: r0 = 43
+    let vm = compile_run("programs/self_writer.asm");
+
+    assert!(vm.halted, "self_writer should halt after successor runs");
+
+    // r0 = 43 (42 + 1 from successor)
+    assert_eq!(vm.regs[0], 43,
+        "r0 should be 43 (42+1): got {}", vm.regs[0]);
+
+    // ASMSELF should have succeeded (bytecode word count > 0, not error)
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF,
+        "ASMSELF should not report error");
+    assert!(vm.ram[0xFFD] > 0,
+        "ASMSELF should produce bytecode words");
+
+    // Verify canvas buffer has the successor text written to it
+    // First char should be 'L' (76) from "LDI r0, 42"
+    assert_eq!(vm.canvas_buffer[0], 76,
+        "canvas[0] should be 'L' (76): got {}", vm.canvas_buffer[0]);
+    // Second char should be 'D' (68)
+    assert_eq!(vm.canvas_buffer[1], 68,
+        "canvas[1] should be 'D' (68): got {}", vm.canvas_buffer[1]);
+}

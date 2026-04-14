@@ -2,12 +2,12 @@
 ; Pixel-Driving-Pixels Demo: A program that writes its successor to the canvas.
 ;
 ; HOW IT WORKS:
-; 1. Stores assembly source code ("LDI r0, 42\nHALT\n") into the canvas buffer
-;    at addresses 0x8000-0x800E using STORE instructions.
+; 1. Copies successor source code from RAM data area to canvas buffer (0x8000+)
+;    using a STORE loop -- each character becomes a visible glyph on the grid.
 ; 2. Calls ASMSELF (0x73) to compile the canvas text into bytecode at 0x1000.
 ; 3. Calls RUNNEXT (0x74) to execute the newly compiled code.
-; 4. The successor program runs: LDI r0, 42 / HALT
-; 5. Result: r0 = 42, proving the self-modification cycle worked.
+; 4. The successor runs: LDI r0, 42 / LDI r1, 1 / ADD r0, r1 / HALT
+; 5. Result: r0 = 43, proving the self-modification cycle worked.
 ;
 ; This is the core "pixel driving pixels" loop:
 ;   Program A writes Program B's source as pixels on the canvas.
@@ -15,61 +15,28 @@
 ;   RUNNEXT executes the new code.
 ;   The new code is a true successor -- different from the original.
 
-  LDI r8, 0x8000      ; canvas base address (row 0, col 0)
-  LDI r6, 1           ; address increment
+  LDI r1, 0x8000      ; canvas base address (row 0, col 0)
+  LDI r2, successor    ; address of successor source data
+  LDI r3, 1           ; address increment
 
-  ; --- Write "LDI r0, 42" to canvas row 0 ---
-  LDI r7, 76          ; 'L'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 68          ; 'D'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 73          ; 'I'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 32          ; ' '
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 114         ; 'r'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 48          ; '0'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 44          ; ','
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 32          ; ' '
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 52          ; '4'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 50          ; '2'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 10          ; '\n' (newline)
-  STORE r8, r7
-  ADD r8, r6
+loop:
+  LOAD r4, r2          ; load next char from successor data
+  JZ r4, compile       ; null terminator means done writing
+  STORE r1, r4         ; write char to canvas cell (visible as glyph!)
+  ADD r1, r3           ; advance canvas pointer
+  ADD r2, r3           ; advance source pointer
+  JMP loop
 
-  ; --- Write "HALT" to canvas row 1 ---
-  LDI r7, 72          ; 'H'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 65          ; 'A'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 76          ; 'L'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 84          ; 'T'
-  STORE r8, r7
-  ADD r8, r6
-  LDI r7, 10          ; '\n'
-  STORE r8, r7
+compile:
+  ASMSELF              ; compile canvas text -> bytecode at 0x1000
+  RUNNEXT              ; jump to 0x1000 and execute successor
+  HALT                 ; safety (successor HALTs first)
 
-  ; --- Compile and execute the successor ---
-  ASMSELF             ; compile canvas text -> bytecode at 0x1000
-  RUNNEXT             ; jump to 0x1000 and execute
-  HALT                ; safety halt (successor HALTs first)
+; Successor program source: "LDI r0, 42\nLDI r1, 1\nADD r0, r1\nHALT\n"
+; Each character stored as a u32 byte value, null-terminated.
+.org 0x200
+successor:
+  .byte 76, 68, 73, 32, 114, 48, 44, 32, 52, 50, 10
+  .byte 76, 68, 73, 32, 114, 49, 44, 32, 49, 10
+  .byte 65, 68, 68, 32, 114, 48, 44, 32, 114, 49, 10
+  .byte 72, 65, 76, 84, 10, 0
