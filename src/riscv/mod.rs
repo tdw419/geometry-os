@@ -15,6 +15,7 @@ pub mod loader;
 pub mod memory;
 pub mod mmu;
 pub mod plic;
+pub mod sbi;
 pub mod uart;
 pub mod virtio_blk;
 
