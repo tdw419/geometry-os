@@ -576,6 +576,7 @@ impl Vm {
             sleep_frames: 0,
             new_priority: 0,
             pipes: Vec::new(),
+            canvas_buffer: vec![0; CANVAS_RAM_SIZE],
             pipe_created: false,
             msg_sender: 0,
             msg_data: [0; MSG_WORDS],
@@ -888,7 +889,12 @@ impl Vm {
                     let vaddr = self.regs[addr_reg];
                     match self.translate_va_or_fault(vaddr) {
                         Some(addr) if addr < self.ram.len() => {
-                            self.regs[reg] = self.ram[addr];
+                            // Phase 45: Intercept canvas RAM range
+                            if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                self.regs[reg] = self.canvas_buffer[addr - CANVAS_RAM_BASE];
+                            } else {
+                                self.regs[reg] = self.ram[addr];
+                            }
                             self.log_access(addr, MemAccessKind::Read);
                         }
                         None => { self.trigger_segfault(); return false; }
@@ -3554,6 +3560,7 @@ impl Vm {
             sleep_frames: 0,
             new_priority: 0,
             pipes: Vec::new(),
+            canvas_buffer: vec![0; CANVAS_RAM_SIZE],
             pipe_created: false,
             msg_sender: 0,
             msg_data: [0; MSG_WORDS],
