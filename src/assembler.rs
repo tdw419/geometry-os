@@ -314,6 +314,16 @@ fn parse_instruction(
             bytecode.push(parse_reg(tokens[2])? as u32);
         }
 
+        "MEMCPY" => {
+            if tokens.len() < 4 {
+                return Err("MEMCPY requires 3 arguments: MEMCPY dst_reg, src_reg, len_reg".to_string());
+            }
+            bytecode.push(0x04);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+        }
+
         "LDI" => {
             if tokens.len() < 3 {
                 return Err("LDI requires 2 arguments: LDI reg, imm".to_string());

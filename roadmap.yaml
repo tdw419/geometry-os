@@ -340,7 +340,7 @@ phases:
     tasks:
     - id: p46.d1.t1
       title: Determine screen mapping strategy and expand RAM if needed
-      status: todo
+      status: complete
       description: 'Evaluate options for mapping the 64K screen buffer. The simplest approach: expand RAM_SIZE from 0x10000 to 0x20000 (128K) and map the screen buffer at 0x10000. This keeps everything
         in one flat address space. Alternative: use a windowed mapping at 0x9000 where only a 4K window is visible at a time (controlled by a register). Recommend the flat mapping for simplicity.
 
@@ -353,7 +353,7 @@ phases:
       - src/vm.rs
     - id: p46.d1.t2
       title: Implement screen buffer LOAD interception
-      status: todo
+      status: complete
       description: 'In the LOAD handler, check if the translated address falls in the screen buffer range. If so, read from self.screen[addr - SCREEN_RAM_BASE] instead of self.ram[addr]. The screen buffer
         already exists on the VM struct as `pub screen: Vec<u32>`.
 
@@ -366,7 +366,7 @@ phases:
       - src/vm.rs
     - id: p46.d1.t3
       title: Implement screen buffer STORE interception
-      status: todo
+      status: complete
       description: 'In the STORE handler, check if the translated address falls in the screen buffer range. If so, write to self.screen[addr - SCREEN_RAM_BASE]. The renderer will pick up the change on the
         next frame automatically since it reads from self.screen.
 

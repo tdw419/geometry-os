@@ -1005,20 +1005,41 @@ impl Vm {
                 let ar = self.fetch() as usize;
                 let count = self.fetch() as usize;
                 if ar < NUM_REGS {
-                    let mut addr = self.regs[ar] as usize;
+                    let mut vaddr = self.regs[ar];
                     for _ in 0..count {
                         let ch = self.fetch();
-                        if addr < self.ram.len() {
-                            self.ram[addr] = ch;
-                            self.log_access(addr, MemAccessKind::Write);
-                            addr += 1;
-                        } else {
-                            self.fetch(); // consume the char anyway
+                        match self.translate_va_or_fault(vaddr) {
+                            Some(addr) => {
+                                if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                                    self.screen[addr - SCREEN_RAM_BASE] = ch;
+                                    self.log_access(addr, MemAccessKind::Write);
+                                } else if addr < self.ram.len() {
+                                    if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                        self.canvas_buffer[addr - CANVAS_RAM_BASE] = ch;
+                                    } else {
+                                        self.ram[addr] = ch;
+                                    }
+                                    self.log_access(addr, MemAccessKind::Write);
+                                }
+                            }
+                            _ => {}
                         }
+                        vaddr = vaddr.wrapping_add(1);
                     }
-                    // null-terminate
-                    if addr < self.ram.len() {
-                        self.ram[addr] = 0;
+                    // null-terminate if possible
+                    match self.translate_va_or_fault(vaddr) {
+                        Some(addr) => {
+                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                                self.screen[addr - SCREEN_RAM_BASE] = 0;
+                            } else if addr < self.ram.len() {
+                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                    self.canvas_buffer[addr - CANVAS_RAM_BASE] = 0;
+                                } else {
+                                    self.ram[addr] = 0;
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
