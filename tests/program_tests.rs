@@ -5879,6 +5879,58 @@ fn test_loads_stores() {
 }
 
 #[test]
+fn test_phase48_registers_preserved_across_runnext() {
+    // Phase 48: registers survive ASMSELF + RUNNEXT transition
+    // 1. Set r5 = 12345 in parent context
+    // 2. Write canvas code that reads r5 and adds 1 to r10 (r5 must be untouched)
+    // 3. ASMSELF assembles canvas -> bytecode at 0x1000
+    // 4. RUNNEXT jumps PC to 0x1000
+    // 5. Verify: r5 == 12345 (preserved), r10 == 12346 (new code read r5 + 1)
+
+    // Canvas source text: reads r5 into r10, adds 1, halts
+    let canvas_source = "MOV r10, r5\nLDI r11, 1\nADD r10, r11\nHALT\n";
+
+    // Bootstrap: ASMSELF then RUNNEXT
+    let bootstrap = "ASMSELF\nRUNNEXT\n";
+
+    let boot_asm = assemble(bootstrap, 0).unwrap();
+
+    let mut vm = Vm::new();
+
+    // Load bootstrap bytecode at address 0
+    for (i, &w) in boot_asm.pixels.iter().enumerate() {
+        vm.ram[i] = w;
+    }
+
+    // Write source text into canvas_buffer (ASMSELF reads canvas_buffer as text)
+    // Each canvas row is 32 cells. Write chars sequentially, newlines as actual \n bytes.
+    for (i, byte) in canvas_source.bytes().enumerate() {
+        if i >= vm.canvas_buffer.len() { break; }
+        vm.canvas_buffer[i] = byte as u32;
+    }
+
+    // Pre-set r5 = 12345
+    vm.regs[5] = 12345;
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until halt
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+    }
+
+    // r5 must be unchanged -- registers survive the transition
+    assert_eq!(vm.regs[5], 12345,
+        "r5 must be preserved across ASMSELF+RUNNEXT: got {}", vm.regs[5]);
+
+    // r10 should be 12346 (new code read r5 and added 1)
+    assert_eq!(vm.regs[10], 12346,
+        "r10 should be 12346 (r5+1): got {}", vm.regs[10]);
+
+    assert!(vm.halted, "VM should have halted after new code finished");
+}
+
+#[test]
 fn test_hello_texti_vs_original() {
     // TEXTI hello vs original hello -- TEXTI should be much smaller
     let src_texti = "TEXTI 90, 120, \"Hello, World!\"\nHALT";
