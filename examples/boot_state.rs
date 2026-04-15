@@ -20,7 +20,7 @@ fn main() {
     
     println!("PC: 0x{:08X}", vm.cpu.pc);
     println!("Privilege: {:?}", vm.cpu.privilege);
-    println!("satap: 0x{:08X}", vm.cpu.csr.satp);
+    println!("satp: 0x{:08X}", vm.cpu.csr.satp);
     println!("mstatus: 0x{:08X}", vm.cpu.csr.mstatus);
     println!("mepc: 0x{:08X}", vm.cpu.csr.mepc);
     println!("sepc: 0x{:08X}", vm.cpu.csr.sepc);

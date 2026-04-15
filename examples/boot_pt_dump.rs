@@ -24,13 +24,13 @@ fn main() {
     // Run until satp changes
     let max_instr = 300_000u64;
     let mut count = 0u64;
-    let mut prev_satap = vm.cpu.csr.satp;
+    let mut prev_satp = vm.cpu.csr.satp;
 
     while count < max_instr {
         vm.step();
         count += 1;
-        if vm.cpu.csr.satp != prev_satap {
-            prev_satap = vm.cpu.csr.satp;
+        if vm.cpu.csr.satp != prev_satp {
+            prev_satp = vm.cpu.csr.satp;
             break;
         }
     }

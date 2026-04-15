@@ -20,7 +20,7 @@ fn main() {
     // Run until satp changes
     let max_instr = 300_000u64;
     let mut count = 0u64;
-    let mut prev_satap = vm.cpu.csr.satp;
+    let mut prev_satp = vm.cpu.csr.satp;
 
     while count < max_instr {
         let satp_before = vm.cpu.csr.satp;
@@ -28,8 +28,8 @@ fn main() {
         let step_result = vm.step();
         count += 1;
 
-        if vm.cpu.csr.satp != prev_satap {
-            println!("[{}] satp changed: 0x{:08X} -> 0x{:08X}", count, prev_satap, vm.cpu.csr.satp);
+        if vm.cpu.csr.satp != prev_satp {
+            println!("[{}] satp changed: 0x{:08X} -> 0x{:08X}", count, prev_satp, vm.cpu.csr.satp);
             
             // Check translation of next instruction PC
             let next_pc = vm.cpu.pc;
@@ -81,7 +81,7 @@ fn main() {
             let vpn0 = (next_pc >> 12) & 0x3FF;
             println!("  VPN1={}, VPN0={}", vpn1, vpn0);
             
-            prev_satap = vm.cpu.csr.satp;
+            prev_satp = vm.cpu.csr.satp;
             
             // Now run a few more steps to see what happens
             for j in 0..10 {
