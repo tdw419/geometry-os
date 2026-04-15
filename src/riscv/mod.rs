@@ -333,8 +333,8 @@ impl RiscvVm {
         // can process them (page faults, access faults, etc.).
         let fw_addr_u32 = fw_addr as u32;
         let mut count: u64 = 0;
-        let mut trap_counts: [u64; 32] = [0; 32]; // cause code counts
-        let mut mmode_trap_count: u64 = 0;
+        let mut _trap_counts: [u64; 32] = [0; 32]; // cause code counts
+        let mut _mmode_trap_count: u64 = 0;
         while count < max_instructions {
             // Check for SBI shutdown request
             if vm.bus.sbi.shutdown_requested {
@@ -364,10 +364,10 @@ impl RiscvVm {
                         >> csr::MSTATUS_MPP_LSB;
 
                     if (cause_code as usize) < 32 {
-                        trap_counts[cause_code as usize] += 1;
+                        _trap_counts[cause_code as usize] += 1;
                     }
                     if mpp == 3 {
-                        mmode_trap_count += 1;
+                        _mmode_trap_count += 1;
                     }
 
                     if mpp != 3 {
