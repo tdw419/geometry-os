@@ -315,7 +315,9 @@ impl RiscvVm {
         // Bits: 0=instr_misaligned, 1=instr_access, 2=illegal_insn, 3=breakpoint,
         //        8=ecall_U, 9=ecall_S, 12=instr_page_fault, 13=load_page_fault,
         //        15=store_page_fault
-        vm.cpu.csr.medeleg = 0xB309;
+        // Do NOT delegate ECALL_S (bit 9) to S-mode -- SBI calls from S-mode
+        // must trap to M-mode so our SBI handler can process them.
+        vm.cpu.csr.medeleg = 0xB109;
         // Delegate interrupts to S-mode: bit 1=SSIP, 5=STI, 9=SEI
         vm.cpu.csr.mideleg = 0x222;
 
@@ -335,6 +337,11 @@ impl RiscvVm {
         let mut count: u64 = 0;
         let mut _trap_counts: [u64; 32] = [0; 32]; // cause code counts
         let mut _mmode_trap_count: u64 = 0;
+        let mut _sbi_call_count: u64 = 0;
+        let mut _forward_count: u64 = 0;
+        let mut _ecall_m_count: u64 = 0;
+        let mut _last_unique_pc: u32 = 0;
+        let mut _same_pc_count: u64 = 0;
         while count < max_instructions {
             // Check for SBI shutdown request
             if vm.bus.sbi.shutdown_requested {
@@ -370,7 +377,22 @@ impl RiscvVm {
                         _mmode_trap_count += 1;
                     }
 
-                    if mpp != 3 {
+                    // ECALL_S from S-mode is an SBI call -- handle it directly.
+                    if cause_code == csr::CAUSE_ECALL_S {
+                        _sbi_call_count += 1;
+                        let result = vm.bus.sbi.handle_ecall(
+                            vm.cpu.x[17], vm.cpu.x[16],
+                            vm.cpu.x[10], vm.cpu.x[11],
+                            vm.cpu.x[12], vm.cpu.x[13],
+                            vm.cpu.x[14], vm.cpu.x[15],
+                            &mut vm.bus.uart, &mut vm.bus.clint,
+                        );
+                        if let Some((a0_val, a1_val)) = result {
+                            vm.cpu.x[10] = a0_val;
+                            vm.cpu.x[11] = a1_val;
+                        }
+                        // Fall through to mepc+4 / MRET to return to S-mode.
+                    } else if mpp != 3 {
                         // Trap came from S-mode or U-mode -- forward to S-mode.
                         let stvec = vm.cpu.csr.stvec & !0x3u32; // direct mode
                         if stvec != 0 {
@@ -396,6 +418,7 @@ impl RiscvVm {
 
                             // Flush TLB -- address space context changed.
                             vm.cpu.tlb.flush_all();
+                            _forward_count += 1;
                             count += 1;
                             continue;
                         }
@@ -404,6 +427,29 @@ impl RiscvVm {
                     // MPP=3: trap came from M-mode. Fall through to skip.
                     // This handles device probes to unmapped addresses (e.g.,
                     // 0xFFFFFFF0 PLIC/DTB probes) during early M-mode boot.
+                }
+
+                // ECALL_M: Handle as SBI call, then skip instruction.
+                if cause_code == csr::CAUSE_ECALL_M {
+                    _ecall_m_count += 1;
+                    // SBI calling convention: a7=extension, a6=function,
+                    // a0..a5=args. Return value in a0 (error), a1 (value).
+                    let result = vm.bus.sbi.handle_ecall(
+                        vm.cpu.x[17], // a7
+                        vm.cpu.x[16], // a6
+                        vm.cpu.x[10], // a0
+                        vm.cpu.x[11], // a1
+                        vm.cpu.x[12], // a2
+                        vm.cpu.x[13], // a3
+                        vm.cpu.x[14], // a4
+                        vm.cpu.x[15], // a5
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
+                    );
+                    if let Some((a0_val, a1_val)) = result {
+                        vm.cpu.x[10] = a0_val; // a0 = error code
+                        vm.cpu.x[11] = a1_val; // a1 = return value
+                    }
                 }
 
                 // ECALL_M or exception with no stvec:
@@ -425,7 +471,26 @@ impl RiscvVm {
                 StepResult::Ebreak => break,
                 StepResult::Ecall => {} // ECALL is normal during boot
             }
+            // Detect spin loops
+            if vm.cpu.pc == _last_unique_pc {
+                _same_pc_count += 1;
+            } else {
+                _last_unique_pc = vm.cpu.pc;
+                _same_pc_count = 0;
+            }
+            if _same_pc_count > 0 && count % 500_000 == 0 {
+                eprintln!("[boot] count={} PC=0x{:08X} priv={:?} mstatus=0x{:08X} same_pc={}",
+                    count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.mstatus, _same_pc_count);
+            }
             count += 1;
+        }
+
+        eprintln!("[boot] Done: SBI_calls={} ECALL_M={} forwards={} mmode_traps={}",
+            _sbi_call_count, _ecall_m_count, _forward_count, _mmode_trap_count);
+        for (i, c) in _trap_counts.iter().enumerate() {
+            if *c > 0 {
+                eprintln!("[boot]   cause {}: {} occurrences", i, c);
+            }
         }
 
         Ok((

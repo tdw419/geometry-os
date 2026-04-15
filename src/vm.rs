@@ -1001,43 +1001,6 @@ impl Vm {
         Some(pd)
     }
 
-    /// Create a COW (copy-on-write) page directory for fork.
-    ///
-    /// Instead of allocating new physical pages and copying memory, the child
-    /// shares the parent's physical pages. Writes trigger a page copy.
-    ///
-    /// `parent_start` is the physical base address in the parent's address space
-    /// where the child's code begins. Rounded down to page boundary for COW.
-    /// Returns (page_dir, child_pc_offset) where child_pc_offset is the
-    /// offset within the first page where the child should start executing.
-    fn create_cow_page_dir(&mut self, parent_start: u32) -> Option<(Vec<u32>, u32)> {
-        let page_offset = parent_start % (PAGE_SIZE as u32);
-        let parent_phys_base = (parent_start as usize) / PAGE_SIZE;
-
-        let mut pd = vec![PAGE_UNMAPPED; NUM_PAGES];
-
-        for vpage in 0..PROCESS_PAGES {
-            let parent_phys = parent_phys_base + vpage;
-            if parent_phys >= NUM_RAM_PAGES { break; }
-
-            // Shared regions are always identity-mapped (NOT COW)
-            if vpage == 3 {
-                pd[3] = 3;
-                self.page_ref_count[3] += 1;
-                continue;
-            }
-
-            pd[vpage] = parent_phys as u32;
-            self.page_ref_count[parent_phys] += 1;
-            self.page_cow |= 1u64 << parent_phys;
-        }
-
-        // Page 63 (hardware ports / syscall table) - always identity-mapped
-        pd[63] = 63;
-
-        Some((pd, page_offset))
-    }
-
     /// Handle a write to a copy-on-write page.
     ///
     /// Called when STORE targets a physical page marked as COW.

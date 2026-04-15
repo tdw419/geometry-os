@@ -1079,8 +1079,8 @@ Trace Linux page table setup during boot and build Geometry OS equivalents.
     - Page fault allocates on demand
     - Stack grows downward, heap via brk
   _~150 LOC_
-- [ ] **Copy-on-write fork** -- Fork shares physical pages, copies only on write
-  - [ ] `p44.d3.t1` Implement COW fork based on observed Linux fork behavior
+- [~] **Copy-on-write fork** -- Fork shares physical pages, copies only on write
+  - [~] `p44.d3.t1` Implement COW fork based on observed Linux fork behavior
     - fork marks pages read-only in child
     - Write fault copies page
     - Reference counting on physical pages

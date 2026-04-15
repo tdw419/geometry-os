@@ -1,0 +1,73 @@
+
+use std::fs;
+use geometry_os::riscv::RiscvVm;
+
+fn main() {
+    let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
+    let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
+    
+    let kernel_image = fs::read(kernel_path).unwrap();
+    let initramfs = fs::read(initramfs_path).ok();
+    
+    let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
+    let (mut vm, _r) = RiscvVm::boot_linux(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        5_000_000,
+        bootargs,
+    ).unwrap();
+    
+    // Step and look for illegal instruction traps
+    let mut illegal_count = 0u64;
+    let mut last_illegal_pc = 0u32;
+    let mut last_illegal_word = 0u32;
+    let mut last_mepc = 0u32;
+    
+    for _ in 0..5_000_000 {
+        let pc_before = vm.cpu.pc;
+        vm.step();
+        
+        // Check if we landed at trap handler
+        let fw_addr: u64 = 0xC0000000u64 + 0x940_000;
+        if vm.cpu.pc == fw_addr as u32 {
+            let mcause = vm.cpu.csr.mcause;
+            let cause_code = mcause & !(1u32 << 31);
+            if cause_code == 2 {
+                illegal_count += 1;
+                last_illegal_pc = vm.cpu.csr.mepc;
+                last_mepc = vm.cpu.csr.mepc;
+                // Read the instruction at mepc
+                if let Ok(word) = vm.bus.read_word(vm.cpu.csr.mepc as u64) {
+                    last_illegal_word = word;
+                }
+            }
+        }
+    }
+    
+    println!("Illegal instruction traps: {}", illegal_count);
+    println!("Last illegal at PC: 0x{:08X}", last_illegal_pc);
+    println!("Last illegal word: 0x{:08X}", last_illegal_word);
+    println!("Opcode: 0x{:02X}", last_illegal_word & 0x7F);
+    
+    // Find symbol
+    let nm = std::process::Command::new("riscv64-linux-gnu-nm")
+        .args(["-n", ".geometry_os/build/linux-6.14/vmlinux"])
+        .output().unwrap();
+    let nm_out = String::from_utf8_lossy(&nm.stdout);
+    let pc = last_illegal_pc as u64;
+    let mut best_sym = String::new();
+    let mut best_addr = 0u64;
+    for line in nm_out.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 3 {
+            if let Ok(addr) = u64::from_str_radix(parts[0], 16) {
+                if addr <= pc && addr > best_addr {
+                    best_addr = addr;
+                    best_sym = parts[2].to_string();
+                }
+            }
+        }
+    }
+    println!("Near symbol: {} (offset +{})", best_sym, pc - best_addr);
+}

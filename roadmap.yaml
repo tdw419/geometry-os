@@ -10,9 +10,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 140
-  tests: 1015
-  programs: 48
-  loc: 36363
+  tests: 1026
+  programs: 49
+  loc: 37276
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1917,7 +1917,7 @@ phases:
       - dup2 for shell redirects
 - id: phase-44
   title: Geometry OS Memory Management
-  status: in_progress
+  status: complete
   goal: Rebuild Geometry OS memory management based on observed Linux SV32 paging.
   priority: 75
   description: Trace Linux page table setup during boot and build Geometry OS equivalents.
@@ -1949,12 +1949,12 @@ phases:
       - Stack grows downward, heap via brk
   - name: Copy-on-write fork
     description: Fork shares physical pages, copies only on write
-    status: todo
+    status: done
     scope_lines: 100
     tasks:
     - id: p44.d3.t1
       title: Implement COW fork based on observed Linux fork behavior
-      status: todo
+      status: done
       acceptance_criteria:
       - fork marks pages read-only in child
       - Write fault copies page
