@@ -1,9 +1,11 @@
-; infinite_map.asm -- Infinite scrolling procedural terrain (v4)
+; infinite_map.asm -- Infinite scrolling procedural terrain (v5)
 ;
 ; Arrow keys / WASD scroll through infinite procedurally generated terrain.
 ; Two-level hash: coarse hash determines biome (8x8 tile zones = 32px blocks),
 ; fine hash places structures (1/256 tiles get a tree/rock/crystal).
 ; Water tiles animate (shimmer) based on frame counter.
+; Day/night tint: camera_x position shifts color warmth -- west is cooler,
+; east is warmer. 16 zones, subtle top-nibble adjustments per channel.
 ; Pure math -- no stored world data, truly infinite.
 ;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
@@ -343,6 +345,30 @@ snow_peak:
 
     ; ---- Draw tile ----
 do_rect:
+    ; ---- Day/night tint based on camera_x position ----
+    ; zone = (camera_x >> 4) & 0xF  ->  16 zones across the world
+    ; West  (zone 0-7):  darken green/blue proportionally
+    ; East  (zone 8-15): warm by boosting red slightly
+    MOV r18, r14           ; r18 = camera_x
+    LDI r19, 4
+    SHR r18, r19           ; camera_x >> 4
+    LDI r19, 0xF
+    AND r18, r19           ; zone = 0..15
+    LDI r19, 8
+    CMP r18, r19
+    BGE r0, tint_warm      ; zone >= 8 -> east
+    ; West: darken G/B by zone * 0x0808 (max subtract 0x3838)
+    LDI r19, 0x0808
+    MUL r18, r19
+    SUB r17, r18
+    JMP tint_done
+tint_warm:
+    ; East: warm red by (zone-8) * 0x080000 (max add 0x380000)
+    SUB r18, r19           ; zone - 8
+    LDI r19, 0x080000
+    MUL r18, r19
+    ADD r17, r18
+tint_done:
     ; Screen position: (tx * 4, ty * 4)
     MOV r3, r2
     MUL r3, r9           ; r3 = tx * TILE_SIZE = tx * 4
