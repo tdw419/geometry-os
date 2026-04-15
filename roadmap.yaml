@@ -1,6 +1,6 @@
 title: Geometry OS Roadmap
 version: 1.0.0
-description: Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  140 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch
+description: Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  96 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch
   it run.
 project_url: https://github.com/tdw419/geometry-os
 meta:
@@ -9,10 +9,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 140
-  tests: 1026
+  opcodes: 99
+  tests: 1104
   programs: 49
-  loc: 37276
+  loc: 55241
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1885,7 +1885,7 @@ phases:
       - wait blocks parent until child exits
 - id: phase-43
   title: Geometry OS VFS and Disk
-  status: in_progress
+  status: complete
   goal: Build a virtual filesystem layer based on observed Linux VFS patterns.
   priority: 70
   description: Trace Linux VFS operations during boot and build Geometry OS equivalents.
@@ -1894,15 +1894,17 @@ phases:
   deliverables:
   - name: Inode filesystem
     description: In-memory inode-based filesystem with directory tree
-    status: in_progress
+    status: done
     scope_lines: 300
     tasks:
     - id: p43.d1.t1
       title: Implement inode structures and directory operations
-      status: in_progress
+      status: done
       acceptance_criteria:
       - Inode types: regular file, directory, device, pipe
       - Path resolution and read/write with offset tracking
+      - FMKDIR, FSTAT, FUNLINK opcodes with assembler and disassembler support
+      - 30+ unit tests for inode operations
   - name: File descriptor table
     description: Per-process fd table with pipe support
     status: done

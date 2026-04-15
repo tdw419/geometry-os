@@ -544,6 +544,8 @@ pub struct Vm {
     pub segfault: bool,
     /// Virtual filesystem for file I/O operations
     pub vfs: crate::vfs::Vfs,
+    /// In-memory inode filesystem for directory tree and inode operations
+    pub inode_fs: crate::inode_fs::InodeFs,
     /// PID of currently executing context (0 = main, 1+ = children)
     pub current_pid: u32,
     /// Monotonically increasing scheduler tick (incremented each step)
@@ -653,6 +655,7 @@ impl Vm {
             segfault_pid: 0,
             segfault: false,
             vfs: crate::vfs::Vfs::new(),
+            inode_fs: crate::inode_fs::InodeFs::new(),
             current_pid: 0,
             sched_tick: 0,
             default_time_slice: DEFAULT_TIME_SLICE,
@@ -3423,6 +3426,83 @@ impl Vm {
                 self.formula_remove(target_idx);
             }
 
+            // FMKDIR path_reg  (0x78) -- Create directory in inode filesystem
+            // Encoding: 0x78, path_reg
+            // path_reg points to null-terminated path string in RAM
+            // Returns inode number in r0, or 0 on error
+            0x78 => {
+                let path_reg = self.fetch() as usize;
+                if path_reg < NUM_REGS {
+                    let path_addr = self.regs[path_reg];
+                    let path_str = Self::read_string_static(&self.ram, path_addr as usize);
+                    match path_str {
+                        Some(path) => {
+                            let ino = self.inode_fs.mkdir(&path);
+                            self.regs[0] = ino;
+                        }
+                        None => {
+                            self.regs[0] = 0;
+                        }
+                    }
+                } else {
+                    self.regs[0] = 0;
+                }
+            }
+
+            // FSTAT ino_reg, buf_reg  (0x79) -- Get inode metadata into RAM buffer
+            // Encoding: 0x79, ino_reg, buf_reg
+            // buf_reg points to 6-word buffer: [ino, itype, size, ref_count, parent_ino, num_children]
+            // Returns 1 in r0 on success, 0 on error
+            0x79 => {
+                let ino_reg = self.fetch() as usize;
+                let buf_reg = self.fetch() as usize;
+                if ino_reg < NUM_REGS && buf_reg < NUM_REGS {
+                    let ino = self.regs[ino_reg];
+                    let buf_addr = self.regs[buf_reg] as usize;
+                    let buf_len = crate::inode_fs::FSTAT_ENTRIES.min(self.ram.len().saturating_sub(buf_addr));
+                    let mut buf = vec![0u32; buf_len];
+                    if self.inode_fs.fstat(ino, &mut buf) {
+                        for (i, &val) in buf.iter().enumerate() {
+                            let addr = buf_addr + i;
+                            if addr < self.ram.len() {
+                                self.ram[addr] = val;
+                            }
+                        }
+                        self.regs[0] = 1;
+                    } else {
+                        self.regs[0] = 0;
+                    }
+                } else {
+                    self.regs[0] = 0;
+                }
+            }
+
+            // FUNLINK path_reg  (0x7A) -- Remove file or empty directory from inode filesystem
+            // Encoding: 0x7A, path_reg
+            // path_reg points to null-terminated path string in RAM
+            // Returns 1 in r0 on success, 0 on error
+            0x7A => {
+                let path_reg = self.fetch() as usize;
+                if path_reg < NUM_REGS {
+                    let path_addr = self.regs[path_reg];
+                    let path_str = Self::read_string_static(&self.ram, path_addr as usize);
+                    match path_str {
+                        Some(path) => {
+                            if self.inode_fs.unlink(&path) {
+                                self.regs[0] = 1;
+                            } else {
+                                self.regs[0] = 0;
+                            }
+                        }
+                        None => {
+                            self.regs[0] = 0;
+                        }
+                    }
+                } else {
+                    self.regs[0] = 0;
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -3965,6 +4045,19 @@ impl Vm {
                 let ti = ram(a + 1);
                 (format!("FORMULAREM {}", ti), 2)
             }
+            0x78 => {
+                let pr = ram(a + 1);
+                (format!("FMKDIR [{}]", reg(pr)), 2)
+            }
+            0x79 => {
+                let ir = ram(a + 1);
+                let br = ram(a + 2);
+                (format!("FSTAT {}, [{}]", reg(ir), reg(br)), 3)
+            }
+            0x7A => {
+                let pr = ram(a + 1);
+                (format!("FUNLINK [{}]", reg(pr)), 2)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
@@ -4155,6 +4248,7 @@ impl Vm {
             segfault_pid: 0,
             segfault: false,
             vfs: crate::vfs::Vfs::new(),
+            inode_fs: crate::inode_fs::InodeFs::new(),
             current_pid: 0,
             sched_tick: 0,
             default_time_slice: DEFAULT_TIME_SLICE,
@@ -5872,5 +5966,142 @@ mod tests {
             }).count();
         // Non-water tiles should be identical (deterministic terrain)
         eprintln!("Non-water pixels identical across frames: {}", non_water_same);
+    }
+
+    // ── Inode Filesystem Opcodes (Phase 43) ──────────────────────────
+
+    /// Helper: create a VM with a string at addr and run bytecode
+    fn run_program_with_string(bytecode: &[u32], max_steps: usize, str_addr: usize, s: &str) -> Vm {
+        let mut vm = Vm::new();
+        // Write string to RAM
+        for (i, ch) in s.bytes().enumerate() {
+            vm.ram[str_addr + i] = ch as u32;
+        }
+        vm.ram[str_addr + s.len()] = 0;
+        // Load bytecode
+        for (i, &word) in bytecode.iter().enumerate() {
+            vm.ram[i] = word;
+        }
+        vm.pc = 0;
+        vm.halted = false;
+        for _ in 0..max_steps {
+            if !vm.step() { break; }
+        }
+        vm
+    }
+
+    #[test]
+    fn test_fmkdir_creates_directory() {
+        // Write "/tmp" to RAM at address 100
+        // LDI r1, 100
+        // FMKDIR r1
+        // HALT
+        let prog = vec![0x10, 1, 100, 0x78, 1, 0x00];
+        let vm = run_program_with_string(&prog, 100, 100, "/tmp");
+        assert_eq!(vm.regs[0], 2); // inode 2 for /tmp
+        assert_eq!(vm.inode_fs.resolve("/tmp"), Some(2));
+    }
+
+    #[test]
+    fn test_fmkdir_nested_fails() {
+        // /a/b/c won't work because /a doesn't exist
+        let prog = vec![0x10, 1, 100, 0x78, 1, 0x00];
+        let vm = run_program_with_string(&prog, 100, 100, "/a/b/c");
+        assert_eq!(vm.regs[0], 0); // failed
+    }
+
+    #[test]
+    fn test_funlink_removes_file() {
+        // Create a file first via FMKDIR... no, use inode_fs directly via a setup step
+        // We need to create a file in the inode_fs before running the program.
+        // Since run_program_with_string creates a fresh VM, we'll create the file
+        // via a two-step program: first create dirs, then unlink
+        // Actually, let's use create directly on the VM after setup
+        let mut vm = Vm::new();
+        vm.inode_fs.create("/del_me.txt");
+        assert!(vm.inode_fs.resolve("/del_me.txt").is_some());
+
+        // Now write unlink path and run
+        let path = "/del_me.txt";
+        for (i, ch) in path.bytes().enumerate() {
+            vm.ram[100 + i] = ch as u32;
+        }
+        vm.ram[100 + path.len()] = 0;
+
+        // LDI r1, 100; FUNLINK r1; HALT
+        vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 100;
+        vm.ram[3] = 0x7A; vm.ram[4] = 1;
+        vm.ram[5] = 0x00;
+        vm.pc = 0;
+        vm.halted = false;
+        for _ in 0..100 {
+            if !vm.step() { break; }
+        }
+        assert_eq!(vm.regs[0], 1); // success
+        assert_eq!(vm.inode_fs.resolve("/del_me.txt"), None);
+    }
+
+    #[test]
+    fn test_fstat_returns_inode_metadata() {
+        let mut vm = Vm::new();
+        let ino = vm.inode_fs.create("/test.txt");
+        vm.inode_fs.write_inode(ino, 0, &[10, 20, 30]);
+
+        // LDI r1, <ino>; LDI r2, 200; FSTAT r1, r2; HALT
+        vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = ino;
+        vm.ram[3] = 0x10; vm.ram[4] = 2; vm.ram[5] = 200;
+        vm.ram[6] = 0x79; vm.ram[7] = 1; vm.ram[8] = 2;
+        vm.ram[9] = 0x00;
+        vm.pc = 0;
+        vm.halted = false;
+        for _ in 0..100 {
+            if !vm.step() { break; }
+        }
+        assert_eq!(vm.regs[0], 1); // success
+        assert_eq!(vm.ram[200], ino);         // ino
+        assert_eq!(vm.ram[201], 1);           // itype = Regular
+        assert_eq!(vm.ram[202], 3);           // size
+        assert_eq!(vm.ram[203], 0);           // ref_count
+        assert_eq!(vm.ram[204], 1);           // parent = root
+        assert_eq!(vm.ram[205], 0);           // num_children
+    }
+
+    #[test]
+    fn test_fstat_nonexistent_returns_zero() {
+        // LDI r1, 999; LDI r2, 200; FSTAT r1, r2; HALT
+        let prog = vec![0x10, 1, 999, 0x10, 2, 200, 0x79, 1, 2, 0x00];
+        let vm = run_program(&prog, 100);
+        assert_eq!(vm.regs[0], 0); // failure
+    }
+
+    #[test]
+    fn test_disassemble_fmkdir() {
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x78;
+        vm.ram[1] = 5;
+        let (text, len) = vm.disassemble_at(0);
+        assert_eq!(text, "FMKDIR [r5]");
+        assert_eq!(len, 2);
+    }
+
+    #[test]
+    fn test_disassemble_fstat() {
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x79;
+        vm.ram[1] = 1;
+        vm.ram[2] = 2;
+        let (text, len) = vm.disassemble_at(0);
+        assert_eq!(text, "FSTAT r1, [r2]");
+        assert_eq!(len, 3);
+    }
+
+    #[test]
+    fn test_disassemble_funlink() {
+        let mut vm = Vm::new();
+        vm.ram[0] = 0x7A;
+        vm.ram[1] = 3;
+        let (text, len) = vm.disassemble_at(0);
+        assert_eq!(text, "FUNLINK [r3]");
+        assert_eq!(len, 2);
     }
 }

@@ -8,6 +8,7 @@
 
 mod assembler;
 mod font;
+mod inode_fs;
 mod vfs;
 mod vm;
 mod preprocessor;
@@ -3441,6 +3442,7 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         segfault_pid: 0,
         segfault: false,
         vfs: vfs::Vfs::new(),
+        inode_fs: inode_fs::InodeFs::new(),
         current_pid: 0,
         sched_tick: 0,
         default_time_slice: vm::DEFAULT_TIME_SLICE,

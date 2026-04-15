@@ -1,12 +1,12 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  140 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  96 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5,  watch it run.
 
-**Progress:** 47/50 phases complete, 3 in progress
+**Progress:** 49/50 phases complete, 1 in progress
 
-**Deliverables:** 208/212 complete
+**Deliverables:** 210/212 complete
 
-**Tasks:** 79/83 complete
+**Tasks:** 81/83 complete
 
 ## Scope Summary
 
@@ -54,8 +54,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  14
 | phase-40 Boot Linux in Geometry OS | IN PROGRESS | 0/2 | - | - |
 | phase-41 Tracing and Instrumentation | COMPLETE | 4/4 | - | - |
 | phase-42 Geometry OS Process Manager | COMPLETE | 3/3 | - | - |
-| phase-43 Geometry OS VFS and Disk | IN PROGRESS | 1/2 | - | - |
-| phase-44 Geometry OS Memory Management | IN PROGRESS | 2/3 | - | - |
+| phase-43 Geometry OS VFS and Disk | COMPLETE | 2/2 | - | - |
+| phase-44 Geometry OS Memory Management | COMPLETE | 3/3 | - | - |
 | phase-45 RAM-Mapped Canvas Buffer | COMPLETE | 5/5 | 370 | 10 |
 | phase-46 RAM-Mapped Screen Buffer | COMPLETE | 3/3 | 220 | 8 |
 | phase-47 Self-Assembly Opcode (ASMSELF) | COMPLETE | 3/3 | 340 | 8 |
@@ -1040,7 +1040,7 @@ Using traces from Phase 41, understand how Linux creates processes, schedules th
     - wait blocks parent until child exits
   _~200 LOC_
 
-## [~] phase-43: Geometry OS VFS and Disk (IN PROGRESS)
+## [x] phase-43: Geometry OS VFS and Disk (COMPLETE)
 
 **Goal:** Build a virtual filesystem layer based on observed Linux VFS patterns.
 
@@ -1048,10 +1048,12 @@ Trace Linux VFS operations during boot and build Geometry OS equivalents.
 
 ### Deliverables
 
-- [~] **Inode filesystem** -- In-memory inode-based filesystem with directory tree
-  - [~] `p43.d1.t1` Implement inode structures and directory operations
+- [x] **Inode filesystem** -- In-memory inode-based filesystem with directory tree
+  - [x] `p43.d1.t1` Implement inode structures and directory operations
     - {'Inode types': 'regular file, directory, device, pipe'}
     - Path resolution and read/write with offset tracking
+    - FMKDIR, FSTAT, FUNLINK opcodes with assembler and disassembler support
+    - 30+ unit tests for inode operations
   _~300 LOC_
 - [x] **File descriptor table** -- Per-process fd table with pipe support
   - [x] `p43.d2.t1` Implement fd table with open/close/dup2/pipe
@@ -1060,7 +1062,7 @@ Trace Linux VFS operations during boot and build Geometry OS equivalents.
     - dup2 for shell redirects
   _~100 LOC_
 
-## [~] phase-44: Geometry OS Memory Management (IN PROGRESS)
+## [x] phase-44: Geometry OS Memory Management (COMPLETE)
 
 **Goal:** Rebuild Geometry OS memory management based on observed Linux SV32 paging.
 
@@ -1079,8 +1081,8 @@ Trace Linux page table setup during boot and build Geometry OS equivalents.
     - Page fault allocates on demand
     - Stack grows downward, heap via brk
   _~150 LOC_
-- [~] **Copy-on-write fork** -- Fork shares physical pages, copies only on write
-  - [~] `p44.d3.t1` Implement COW fork based on observed Linux fork behavior
+- [x] **Copy-on-write fork** -- Fork shares physical pages, copies only on write
+  - [x] `p44.d3.t1` Implement COW fork based on observed Linux fork behavior
     - fork marks pages read-only in child
     - Write fault copies page
     - Reference counting on physical pages

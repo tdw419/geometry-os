@@ -2,6 +2,7 @@
 // Exposes VM and assembler for integration tests
 
 pub mod assembler;
+pub mod inode_fs;
 pub mod vfs;
 pub mod vm;
 pub mod glyph_backend;

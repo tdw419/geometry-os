@@ -1231,6 +1231,38 @@ fn parse_instruction(
             bytecode.push(target_idx);
         }
 
+        "FMKDIR" => {
+            // FMKDIR path_reg -- create directory in inode filesystem
+            if tokens.len() < 2 {
+                return Err("FMKDIR requires: path_reg".into());
+            }
+            let path_reg = parse_reg(tokens[1])?;
+            bytecode.push(0x78);
+            bytecode.push(path_reg as u32);
+        }
+
+        "FSTAT" => {
+            // FSTAT ino_reg, buf_reg -- get inode metadata
+            if tokens.len() < 3 {
+                return Err("FSTAT requires: ino_reg, buf_reg".into());
+            }
+            let ino_reg = parse_reg(tokens[1])?;
+            let buf_reg = parse_reg(tokens[2])?;
+            bytecode.push(0x79);
+            bytecode.push(ino_reg as u32);
+            bytecode.push(buf_reg as u32);
+        }
+
+        "FUNLINK" => {
+            // FUNLINK path_reg -- remove file or empty directory
+            if tokens.len() < 2 {
+                return Err("FUNLINK requires: path_reg".into());
+            }
+            let path_reg = parse_reg(tokens[1])?;
+            bytecode.push(0x7A);
+            bytecode.push(path_reg as u32);
+        }
+
         _ => return Err(format!("unknown opcode: {}", opcode)),
     }
 
