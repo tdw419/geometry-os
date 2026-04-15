@@ -247,7 +247,7 @@ impl RiscvVm {
         // Previously ram_base was set to the kernel's first LOAD vaddr (0xC0000000),
         // which caused all physical addresses below 0xC0000000 to be silently discarded.
         let mut vm = Self::new_with_base(0, actual_ram_size);
-        vm.bus.low_addr_identity_map = true; // Emulate OpenSBI low-address mappings
+        vm.bus.low_addr_identity_map = false; // Disabled: trampoline page table handles identity mapping
 
         // 3. Load kernel ELF at physical addresses (p_paddr).
         // The kernel's ELF has p_paddr = vaddr - PAGE_OFFSET, which are the correct
@@ -384,11 +384,63 @@ impl RiscvVm {
         let mut _smode_fault_count: u64 = 0;
         let mut _last_unique_pc: u32 = 0;
         let mut _same_pc_count: u64 = 0;
+        let mut _trampoline_patched: bool = false;
+        let mut _last_satp: u32 = 0;
         while count < max_instructions {
             // Check for SBI shutdown request
             if vm.bus.sbi.shutdown_requested {
                 break;
             }
+
+            // Full identity mapping injection after setup_vm returns.
+            // The kernel's BSS clear zeroes the trampoline_pg_dir (0x01484000) and
+            // early_pg_dir (0x00802000). The kernel's setup_vm populates the 0xC0
+            // virtual range (L1[768+]) but only creates L1[0] for identity mapping.
+            // However, the kernel has LOAD segments at physical 0x0, 0x00400000,
+            // 0x00800000, 0x00C00000, 0x01000000, 0x01400000. When running with
+            // MMU enabled, the kernel accesses these physical addresses via their
+            // virtual equivalents (VA 0x014809D0 etc), which need identity mappings.
+            // Without them, the kernel page-faults trying to access its own data.
+            //
+            // We detect setup_vm return by PC == 0x10EE (instruction after jalr setup_vm
+            // in _start_kernel, in .head.text loaded at physical 0x0).
+            if !_trampoline_patched
+                && vm.cpu.pc == 0x10EE
+                && vm.cpu.privilege == cpu::Privilege::Supervisor
+                && vm.cpu.csr.satp == 0
+            {
+                // Identity megapage PTE: V=1, R=1, W=1, X=1, A=1, D=1 = 0xEF
+                // Each entry maps a 2MB region: VA 0xXXXX0000-0xXXXXFFFFF → PA same
+                let identity_pte: u32 = 0x0000_00EF;
+
+                // Kernel physical memory spans 0x0 to ~0x01500000 (~21MB = 11 L1 entries).
+                // The LOAD segments are at PA 0x0, 0x00400000, 0x00800000, 0x00C00000,
+                // 0x01000000, 0x01400000. We map L1 entries 0-10 (covers 0x0-0x01600000).
+                let l1_entries_to_map: &[u64] = &[0, 2, 4, 5, 6, 8, 10];
+                let trampoline_phys = 0x0148_4000u64;
+                let early_pg_dir_phys = 0x0080_2000u64;
+
+                for &l1_idx in l1_entries_to_map {
+                    let pte = identity_pte | ((l1_idx as u32) << 20); // PPN = L1 index
+                    let addr_offset = (l1_idx * 4) as u64;
+                    vm.bus.write_word(trampoline_phys + addr_offset, pte).ok();
+                    vm.bus.write_word(early_pg_dir_phys + addr_offset, pte).ok();
+                }
+
+                _trampoline_patched = true;
+                eprintln!("[boot] Injected identity mappings L1[{:?}] into trampoline+early page tables at count={}",
+                    l1_entries_to_map, count);
+            }
+
+            // Track SATP changes for logging (TLB pre-warming removed --
+            // sfence.vma flushes the TLB after each SATP write, making
+            // pre-warming ineffective. The MMU's page table walk handles
+            // TLB misses correctly with ram_base=0.)
+            let cur_satp = vm.cpu.csr.satp;
+            if cur_satp != _last_satp && cur_satp != 0 {
+                eprintln!("[boot] SATP changed to 0x{:08X} at count={}", cur_satp, count);
+            }
+            _last_satp = cur_satp;
 
             // Detect if we're sitting at the trap handler from a previous step.
             // This happens when a trap was delivered (mepc/mcause/mtval set,
@@ -412,12 +464,28 @@ impl RiscvVm {
                     let mpp = (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK)
                         >> csr::MSTATUS_MPP_LSB;
 
-                    if (cause_code as usize) < 32 {
-                        _trap_counts[cause_code as usize] += 1;
-                    }
-                    if mpp == 3 {
-                        _mmode_trap_count += 1;
-                    }
+                if (cause_code as usize) < 32 {
+                    _trap_counts[cause_code as usize] += 1;
+                }
+                if mpp == 3 {
+                    _mmode_trap_count += 1;
+                }
+
+                // Log first few illegal instructions for debugging.
+                if cause_code == 2 && _forward_count < 5 {
+                    let mepc_val = vm.cpu.csr.mepc;
+                    let stvec_val = vm.cpu.csr.stvec;
+                    let inst = vm.bus.read_word(mepc_val as u64).unwrap_or(0);
+                    // Also check a few surrounding addresses
+                    let inst_m4 = vm.bus.read_word((mepc_val as u64).saturating_sub(4)).unwrap_or(0);
+                    let inst_p4 = vm.bus.read_word(mepc_val as u64 + 4).unwrap_or(0);
+                    eprintln!("[boot] Illegal instruction #{} at count={}: mepc=0x{:08X} stvec=0x{:08X} satap=0x{:08X}",
+                        _forward_count + 1, count, mepc_val, stvec_val, vm.cpu.csr.satp);
+                    eprintln!("[boot]   PA[{}-4]=0x{:08X} PA[{}]=0x{:08X} PA[{}+4]=0x{:08X}",
+                        mepc_val, inst_m4, mepc_val, inst, mepc_val, inst_p4);
+                    eprintln!("[boot]   priv={:?} mpp={}", vm.cpu.privilege,
+                        (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB);
+                }
 
                     // ECALL_S from S-mode is an SBI call -- handle it directly.
                     if cause_code == csr::CAUSE_ECALL_S {

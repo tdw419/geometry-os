@@ -334,12 +334,15 @@ pub fn decode_c(halfword: u16) -> Operation {
         // ---- bits[1:0] = 00: CIW (C.ADDI4SPN), CL (C.LW/C.LD), CS (C.SW/C.SD) ----
         0b00 => match funct3 {
             // C.ADDI4SPN: rd' = sp + nzuimm (nz = non-zero)
+            // When nzuimm=0, this is a HINT (NOP), not an illegal instruction.
+            // Per RISC-V spec, HINTs execute as NOPs (no side effects).
             0b000 => {
                 let rd_p = ((w >> 2) & 0x7) as u8;
                 let rd = crd(rd_p);
                 let nzuimm = c_addi4spn_imm(w);
                 if nzuimm == 0 {
-                    Operation::Invalid(w)
+                    // HINT: treat as NOP (write to x0, which is discarded)
+                    Operation::Addi { rd: 0, rs1: 0, imm: 0 }
                 } else {
                     Operation::Addi { rd, rs1: 2, imm: nzuimm }
                 }
@@ -993,9 +996,11 @@ mod tests {
     }
 
     #[test]
-    fn c_addi4spn_zero_is_invalid() {
+    fn c_addi4spn_zero_is_hint_nop() {
         let op = decode_c(0x0004);
-        assert!(matches!(op, Operation::Invalid(_)));
+        // Per RISC-V spec, C.ADDI4SPN with nzuimm=0 is a HINT (executes as NOP).
+        // We implement it as ADDI x0, x0, 0 (write to zero register = no side effect).
+        assert!(matches!(op, Operation::Addi { rd: 0, rs1: 0, imm: 0 }));
     }
 
     // ---- C extension integration test: compressed instruction execution ----
