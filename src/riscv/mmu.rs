@@ -303,9 +303,11 @@ pub fn translate(
                 ptes: Vec::new(),
             });
             // Fallback: identity-map low addresses for S/U-mode when enabled.
-            // Linux's setup_vm() doesn't map the first 4MB; OpenSBI normally
-            // provides these mappings. We emulate this here.
-            if va < 0x0040_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
+            // Linux's setup_vm() doesn't map physical memory below PAGE_OFFSET;
+            // OpenSBI normally provides these mappings. We emulate this here.
+            // Cover up to 64MB to handle kernel data/BSS segments that live at
+            // physical addresses 4-22MB.
+            if va < 0x0400_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
                 let flags = PTE_V | PTE_R | PTE_W | PTE_X | PTE_A | PTE_D;
                 tlb.insert(combined_vpn, asid, va >> 12, flags);
                 return TranslateResult::Ok(va as u64);
@@ -321,7 +323,7 @@ pub fn translate(
             ptes: vec![l1_pte],
         });
         // Fallback: identity-map low addresses for S/U-mode when enabled.
-        if va < 0x0040_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
+        if va < 0x0400_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
             let flags = PTE_V | PTE_R | PTE_W | PTE_X | PTE_A | PTE_D;
             tlb.insert(combined_vpn, asid, va >> 12, flags);
             return TranslateResult::Ok(va as u64);
@@ -376,7 +378,7 @@ pub fn translate(
                 ptes: vec![l1_pte],
             });
             // Fallback: identity-map low addresses for S/U-mode when enabled.
-            if va < 0x0040_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
+            if va < 0x0400_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
                 let flags = PTE_V | PTE_R | PTE_W | PTE_X | PTE_A | PTE_D;
                 tlb.insert(combined_vpn, asid, va >> 12, flags);
                 return TranslateResult::Ok(va as u64);
@@ -392,7 +394,7 @@ pub fn translate(
             ptes: vec![l1_pte, l2_pte],
         });
         // Fallback: identity-map low addresses for S/U-mode when enabled.
-        if va < 0x0040_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
+        if va < 0x0400_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
             let flags = PTE_V | PTE_R | PTE_W | PTE_X | PTE_A | PTE_D;
             tlb.insert(combined_vpn, asid, va >> 12, flags);
             return TranslateResult::Ok(va as u64);

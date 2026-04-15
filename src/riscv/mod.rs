@@ -309,6 +309,13 @@ impl RiscvVm {
         let stack_top: u32 = (actual_ram_size as u64 - 4096) as u32;
         vm.cpu.x[2] = stack_top;
 
+        // Install firmware stubs at low addresses that the kernel expects.
+        // Linux's early boot code (before SBI is fully initialized) may jump
+        // to these addresses expecting OpenSBI firmware to be present.
+        // We place C.JR ra (0x8082) at address 0x12 so the kernel's firmware
+        // call returns immediately instead of hitting an illegal instruction.
+        vm.bus.write_half(0x12, 0x8082).ok();
+
         vm.cpu.privilege = cpu::Privilege::Machine;
 
         // M-mode trap handler (single MRET instruction).
