@@ -1,4 +1,4 @@
-; infinite_map.asm -- Infinite scrolling procedural terrain (v3)
+; infinite_map.asm -- Infinite scrolling procedural terrain (v4)
 ;
 ; Arrow keys / WASD scroll through infinite procedurally generated terrain.
 ; Two-level hash: coarse hash determines biome (8x8 tile zones = 32px blocks),
@@ -14,6 +14,10 @@
 ;   RAM[0x7801] = camera_y (tile coordinates)
 ;   RAM[0x7802] = frame_counter (increments each frame)
 ;   RAM[0xFFB]  = key bitmask (host writes each frame)
+;
+; Biome distribution (8 biomes, types 0-15):
+;   water(0-1), beach(2), desert(3-4), grass(5-6),
+;   swamp(7), forest(8-9), mountain(10-11), lava(12), snow(13-15)
 
 ; ===== Constants =====
 LDI r7, 1               ; constant 1
@@ -140,25 +144,52 @@ render_y:
     JNZ r0, no_struct
 
     ; Override with structure color based on biome
-    LDI r18, 4
+    ; water(0-1)->wave, beach(2)->hut, desert(3-4)->cactus,
+    ; grass(5-6)->hut, swamp(7)->lily, forest(8-9)->hut,
+    ; mountain(10-11)->snow patch, lava(12)->ember, snow(13-15)->crystal
+    LDI r18, 2
     CMP r5, r18
     BLT r0, struct_water
-    LDI r18, 9
+    LDI r18, 3
     CMP r5, r18
-    BLT r0, struct_land
+    BLT r0, struct_land        ; beach gets hut
+    LDI r18, 5
+    CMP r5, r18
+    BLT r0, struct_desert      ; 3-4 desert cactus
+    LDI r18, 7
+    CMP r5, r18
+    BLT r0, struct_land        ; 5-6 grass hut
+    LDI r18, 8
+    CMP r5, r18
+    BLT r0, struct_swamp       ; 7 swamp lily
+    LDI r18, 10
+    CMP r5, r18
+    BLT r0, struct_land        ; 8-9 forest hut
     LDI r18, 12
     CMP r5, r18
-    BLT r0, struct_mountain
-    JMP struct_snow
+    BLT r0, struct_mountain    ; 10-11
+    LDI r18, 13
+    CMP r5, r18
+    BLT r0, struct_lava        ; 12
+    JMP struct_snow            ; 13-15
 
 struct_water:
     LDI r17, 0x0066CC    ; wave crest (bright blue)
     JMP do_rect
+struct_desert:
+    LDI r17, 0x228800    ; cactus (green)
+    JMP do_rect
 struct_land:
     LDI r17, 0x884422    ; tree trunk / hut (brown)
     JMP do_rect
+struct_swamp:
+    LDI r17, 0x44BB44    ; lily pad (bright green)
+    JMP do_rect
 struct_mountain:
     LDI r17, 0xBBBBCC    ; snow patch (pale)
+    JMP do_rect
+struct_lava:
+    LDI r17, 0xFF8800    ; ember (orange)
     JMP do_rect
 struct_snow:
     LDI r17, 0xAABBEE    ; ice crystal (blue-white)
@@ -167,33 +198,50 @@ struct_snow:
 no_struct:
     ; ---- Biome -> Color (using r5 = biome_type 0..15) ----
     ; Cascading comparisons. r0 set by CMP; BLT/BGE/JZ check r0.
+    ; water(0-1), beach(2), desert(3-4), grass(5-6),
+    ; swamp(7), forest(8-9), mountain(10-11), lava(12), snow(13-15)
 
-    ; Is it water? (types 0-2)
-    LDI r18, 3
+    ; Is it water? (types 0-1)
+    LDI r18, 2
     CMP r5, r18
     BLT r0, color_water
 
-    ; Beach? (type 3)
-    LDI r18, 4
+    ; Beach? (type 2)
+    LDI r18, 3
     CMP r5, r18
     BLT r0, color_beach
 
-    ; Grass? (types 4-6)
+    ; Desert? (types 3-4)
+    LDI r18, 5
+    CMP r5, r18
+    BLT r0, color_desert
+
+    ; Grass? (types 5-6)
     LDI r18, 7
     CMP r5, r18
     BLT r0, color_grass
 
-    ; Forest? (types 7-8)
-    LDI r18, 9
+    ; Swamp? (type 7)
+    LDI r18, 8
+    CMP r5, r18
+    BLT r0, color_swamp
+
+    ; Forest? (types 8-9)
+    LDI r18, 10
     CMP r5, r18
     BLT r0, color_forest
 
-    ; Hills/mountain? (types 9-11)
+    ; Hills/mountain? (types 10-11)
     LDI r18, 12
     CMP r5, r18
     BLT r0, color_mountain
 
-    ; Snow/ice (types 12-15)
+    ; Lava? (type 12)
+    LDI r18, 13
+    CMP r5, r18
+    BLT r0, color_lava
+
+    ; Snow/ice (types 13-15)
     JMP color_snow
 
     ; ---- Water subtypes (animated with frame counter) ----
@@ -201,16 +249,11 @@ color_water:
     LDI r18, 1
     CMP r5, r18
     BLT r0, water_deep
-    LDI r18, 2
-    CMP r5, r18
-    JZ r0, water_shallow
-    LDI r17, 0x000088    ; mid water
+    ; type 1 = shallow
+    LDI r17, 0x0000BB    ; shallow water
     JMP water_animate
 water_deep:
     LDI r17, 0x000044    ; deep ocean
-    JMP water_animate
-water_shallow:
-    LDI r17, 0x0000BB    ; shallow water
 
 water_animate:
     ; Diagonal wave: shimmer = (frame_counter + world_x + world_y) & 0x1F
@@ -227,26 +270,36 @@ color_beach:
     LDI r17, 0xC2B280    ; sand
     JMP do_rect
 
+    ; ---- Desert subtypes ----
+color_desert:
+    LDI r18, 4
+    CMP r5, r18
+    JZ r0, desert_dunes
+    LDI r17, 0xDDBB44    ; sand
+    JMP do_rect
+desert_dunes:
+    LDI r17, 0xCCAA33    ; dunes
+    JMP do_rect
+
     ; ---- Grass subtypes ----
 color_grass:
-    LDI r18, 5
-    CMP r5, r18
-    BLT r0, grass_light
     LDI r18, 6
     CMP r5, r18
     JZ r0, grass_dark
-    LDI r17, 0x33AA22    ; medium grass
-    JMP do_rect
-grass_light:
     LDI r17, 0x55BB33    ; light grass
     JMP do_rect
 grass_dark:
     LDI r17, 0x228811    ; dark grass
     JMP do_rect
 
+    ; ---- Swamp ----
+color_swamp:
+    LDI r17, 0x445522    ; dark green-brown
+    JMP do_rect
+
     ; ---- Forest subtypes ----
 color_forest:
-    LDI r18, 8
+    LDI r18, 9
     CMP r5, r18
     JZ r0, forest_dense
     LDI r17, 0x116600    ; forest
@@ -257,19 +310,18 @@ forest_dense:
 
     ; ---- Mountain subtypes ----
 color_mountain:
-    LDI r18, 10
-    CMP r5, r18
-    BLT r0, mt_low
     LDI r18, 11
     CMP r5, r18
     JZ r0, mt_tall
-    LDI r17, 0x888888    ; medium mountain
-    JMP do_rect
-mt_low:
     LDI r17, 0x667766    ; foothills
     JMP do_rect
 mt_tall:
     LDI r17, 0x999999    ; tall mountain
+    JMP do_rect
+
+    ; ---- Lava ----
+color_lava:
+    LDI r17, 0xFF3300    ; red-orange lava
     JMP do_rect
 
     ; ---- Snow subtypes ----
@@ -352,17 +404,26 @@ mm_y:
     LDI r18, 28
     SHR r5, r18          ; biome 0..15
 
-    ; 4-category color map (dimmed for minimap)
+    ; 6-category color map (dimmed for minimap)
+    LDI r18, 2
+    CMP r5, r18
+    BLT r0, mm_water          ; 0-1 water
     LDI r18, 3
     CMP r5, r18
-    BLT r0, mm_water
+    BLT r0, mm_shore          ; 2 beach
     LDI r18, 5
     CMP r5, r18
-    BLT r0, mm_shore
-    LDI r18, 9
+    BLT r0, mm_desert         ; 3-4 desert
+    LDI r18, 8
     CMP r5, r18
-    BLT r0, mm_green
-    JMP mm_gray
+    BLT r0, mm_green          ; 5-7 grass/swamp
+    LDI r18, 10
+    CMP r5, r18
+    BLT r0, mm_forest         ; 8-9 forest
+    LDI r18, 13
+    CMP r5, r18
+    BLT r0, mm_gray           ; 10-12 mountain/lava
+    JMP mm_white              ; 13-15 snow
 
 mm_water:
     LDI r17, 0x000055    ; dim blue
@@ -370,11 +431,20 @@ mm_water:
 mm_shore:
     LDI r17, 0x554422    ; dim sand
     JMP mm_draw
+mm_desert:
+    LDI r17, 0x665522    ; dim desert yellow
+    JMP mm_draw
 mm_green:
     LDI r17, 0x225500    ; dim green
     JMP mm_draw
+mm_forest:
+    LDI r17, 0x113300    ; dim dark green
+    JMP mm_draw
 mm_gray:
-    LDI r17, 0x444444    ; dim gray (mountain/snow)
+    LDI r17, 0x553311    ; dim brown-gray (mountain/lava)
+    JMP mm_draw
+mm_white:
+    LDI r17, 0x8888AA    ; dim white-blue (snow)
     JMP mm_draw
 
 mm_draw:
