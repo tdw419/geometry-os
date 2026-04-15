@@ -313,5 +313,122 @@ next_row:
     JMP render_y
 
 frame_end:
+
+; ===== Minimap Overlay (16x16, top-right corner) =====
+; Shows biome overview: samples every 4th tile in a 64x64 area centered on camera.
+; Screen coords: x=240..255, y=0..15
+
+LDI r1, 0               ; my = 0
+mm_y:
+  LDI r2, 0             ; mx = 0
+  mm_x:
+    ; World tile: camera_x + mx*4, camera_y + my*4
+    MOV r3, r2
+    LDI r18, 4
+    MUL r3, r18          ; r3 = mx * 4
+    ADD r3, r14          ; r3 = world_x
+
+    MOV r4, r1
+    LDI r18, 4
+    MUL r4, r18          ; r4 = my * 4
+    ADD r4, r15          ; r4 = world_y
+
+    ; Coarse hash for biome
+    MOV r5, r3
+    LDI r18, 3
+    SHR r5, r18          ; r5 = world_x >> 3
+    LDI r18, 99001
+    MUL r5, r18
+
+    MOV r6, r4
+    LDI r18, 3
+    SHR r6, r18          ; r6 = world_y >> 3
+    LDI r18, 79007
+    MUL r6, r18
+
+    XOR r5, r6
+    LDI r18, 1103515245
+    MUL r5, r18
+    LDI r18, 28
+    SHR r5, r18          ; biome 0..15
+
+    ; 4-category color map (dimmed for minimap)
+    LDI r18, 3
+    CMP r5, r18
+    BLT r0, mm_water
+    LDI r18, 5
+    CMP r5, r18
+    BLT r0, mm_shore
+    LDI r18, 9
+    CMP r5, r18
+    BLT r0, mm_green
+    JMP mm_gray
+
+mm_water:
+    LDI r17, 0x000055    ; dim blue
+    JMP mm_draw
+mm_shore:
+    LDI r17, 0x554422    ; dim sand
+    JMP mm_draw
+mm_green:
+    LDI r17, 0x225500    ; dim green
+    JMP mm_draw
+mm_gray:
+    LDI r17, 0x444444    ; dim gray (mountain/snow)
+    JMP mm_draw
+
+mm_draw:
+    ; Screen pos: x = 240 + mx, y = my
+    MOV r3, r2
+    LDI r18, 240
+    ADD r3, r18
+    PSET r3, r1, r17
+
+    ; mx++
+    ADD r2, r7
+    LDI r18, 16
+    MOV r19, r2
+    SUB r19, r18
+    JZ r19, mm_next_row
+    JMP mm_x
+
+mm_next_row:
+    ; my++
+    ADD r1, r7
+    LDI r18, 16
+    MOV r19, r1
+    SUB r19, r18
+    JZ r19, mm_border
+    JMP mm_y
+
+; --- Border (1px frame) ---
+mm_border:
+LDI r17, 0xAAAAAA       ; border gray
+LDI r18, 1              ; thin dimension
+LDI r19, 16             ; long dimension
+
+; Top: (240,0) 16x1
+LDI r3, 240
+LDI r4, 0
+RECTF r3, r4, r19, r18, r17
+
+; Bottom: (240,15) 16x1
+LDI r4, 15
+RECTF r3, r4, r19, r18, r17
+
+; Left: (240,0) 1x16
+LDI r4, 0
+RECTF r3, r4, r18, r19, r17
+
+; Right: (255,0) 1x16
+LDI r3, 255
+RECTF r3, r4, r18, r19, r17
+
+; --- Player dot (white, center) ---
+LDI r3, 248             ; 240 + 8
+LDI r4, 8
+LDI r17, 0xFFFFFF
+PSET r3, r4, r17
+
     FRAME
     JMP main_loop
