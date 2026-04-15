@@ -136,11 +136,11 @@ impl RiscvVm {
 
     /// Parse the first PT_LOAD segment's virtual address from an ELF image.
     /// Returns None if the image is too short or has no LOAD segments.
-    fn parse_first_load_vaddr(image: &[u8]) -> Option<u64> {
+    /// Parse the first PT_LOAD segment's physical address from an ELF image.
+    fn parse_first_load_paddr(image: &[u8]) -> Option<u64> {
         if image.len() < 52 {
             return None;
         }
-        // Check ELF magic.
         if u32::from_le_bytes([image[0], image[1], image[2], image[3]]) != 0x464C457F {
             return None;
         }
@@ -157,15 +157,15 @@ impl RiscvVm {
             let p_type = u32::from_le_bytes([seg[0], seg[1], seg[2], seg[3]]);
             if p_type == 1 {
                 // PT_LOAD
-                let p_vaddr = u32::from_le_bytes([seg[8], seg[9], seg[10], seg[11]]) as u64;
-                return Some(p_vaddr);
+                let p_paddr = u32::from_le_bytes([seg[12], seg[13], seg[14], seg[15]]) as u64;
+                return Some(p_paddr);
             }
         }
         None
     }
 
-    /// Parse the highest address (vaddr + memsz) across all PT_LOAD segments.
-    fn parse_elf_highest_addr(image: &[u8]) -> Option<u64> {
+    /// Parse the highest physical address (paddr + memsz) across all PT_LOAD segments.
+    fn parse_elf_highest_paddr(image: &[u8]) -> Option<u64> {
         if image.len() < 52 {
             return None;
         }
@@ -186,15 +186,49 @@ impl RiscvVm {
             let p_type = u32::from_le_bytes([seg[0], seg[1], seg[2], seg[3]]);
             if p_type == 1 {
                 // PT_LOAD
-                let p_vaddr = u32::from_le_bytes([seg[8], seg[9], seg[10], seg[11]]) as u64;
+                let p_paddr = u32::from_le_bytes([seg[12], seg[13], seg[14], seg[15]]) as u64;
                 let p_memsz = u32::from_le_bytes([seg[20], seg[21], seg[22], seg[23]]) as u64;
-                let seg_end = p_vaddr + p_memsz;
+                let seg_end = p_paddr + p_memsz;
                 if seg_end > highest {
                     highest = seg_end;
                 }
             }
         }
         if highest == 0 { None } else { Some(highest) }
+    }
+
+    /// Convert a virtual entry point to physical using ELF segment mappings.
+    /// For Linux, the ELF entry is a virtual address; we find which PT_LOAD
+    /// segment contains it and compute phys = entry - p_vaddr + p_paddr.
+    fn elf_entry_vaddr_to_phys(image: &[u8], entry_vaddr: u32) -> Option<u32> {
+        if image.len() < 52 {
+            return None;
+        }
+        if u32::from_le_bytes([image[0], image[1], image[2], image[3]]) != 0x464C457F {
+            return None;
+        }
+        let phoff = u32::from_le_bytes([image[28], image[29], image[30], image[31]]) as usize;
+        let phentsize = u16::from_le_bytes([image[42], image[43]]) as usize;
+        let phnum = u16::from_le_bytes([image[44], image[45]]) as usize;
+
+        for i in 0..phnum {
+            let off = phoff + i * phentsize;
+            if off + phentsize > image.len() {
+                break;
+            }
+            let seg = &image[off..off + phentsize];
+            let p_type = u32::from_le_bytes([seg[0], seg[1], seg[2], seg[3]]);
+            if p_type == 1 {
+                let p_vaddr = u32::from_le_bytes([seg[8], seg[9], seg[10], seg[11]]);
+                let p_paddr = u32::from_le_bytes([seg[12], seg[13], seg[14], seg[15]]);
+                let p_memsz = u32::from_le_bytes([seg[20], seg[21], seg[22], seg[23]]);
+                if entry_vaddr >= p_vaddr && entry_vaddr < p_vaddr + p_memsz {
+                    let offset = entry_vaddr - p_vaddr;
+                    return Some(p_paddr + offset);
+                }
+            }
+        }
+        None
     }
 
     /// Boot a Linux kernel with initramfs support (associated function).
@@ -221,23 +255,37 @@ impl RiscvVm {
         ram_size_mb: u32,
         bootargs: &str,
     ) -> Result<(Self, u64, u32, u64), loader::LoadError> {
-        // 1. Parse ELF header to find the first LOAD segment's vaddr.
-        let first_vaddr = Self::parse_first_load_vaddr(kernel_image)
-            .unwrap_or(0x8000_0000);
-
-        // 2. Calculate minimum RAM size from kernel segments.
-        let min_ram = Self::parse_elf_highest_addr(kernel_image)
-            .unwrap_or(first_vaddr + 64 * 1024 * 1024);
-        let min_ram_size = (min_ram - first_vaddr) as usize;
+        // 1. Calculate minimum RAM size from kernel's physical address ranges.
+        let highest_paddr = Self::parse_elf_highest_paddr(kernel_image)
+            .unwrap_or(64 * 1024 * 1024);
+        let min_ram_size = highest_paddr as usize + 4 * 1024 * 1024; // extra for initrd/dtb
 
         let caller_ram_size = (ram_size_mb as u64) * 1024 * 1024;
         let actual_ram_size = std::cmp::max(min_ram_size, caller_ram_size as usize);
 
-        // 3. Create VM with RAM starting at the kernel's first LOAD vaddr.
-        let mut vm = Self::new_with_base(first_vaddr, actual_ram_size);
+        // 2. Create VM with ram_base=0.
+        // This is critical: the kernel computes physical addresses as vaddr - PAGE_OFFSET.
+        // With ram_base=0, physical addresses 0x00000000..map directly to RAM,
+        // so the kernel's page table writes go to the correct physical locations.
+        // Previously ram_base was set to the kernel's first LOAD vaddr (0xC0000000),
+        // which caused all physical addresses below 0xC0000000 to be silently discarded.
+        let mut vm = Self::new_with_base(0, actual_ram_size);
 
-        // 4. Load kernel ELF at virtual addresses (which are physical in our VM).
-        let load_info = loader::load_elf_vaddr(&mut vm.bus, kernel_image)?;
+        // 3. Load kernel ELF at physical addresses (p_paddr).
+        // The kernel's ELF has p_paddr = vaddr - PAGE_OFFSET, which are the correct
+        // physical addresses for our ram_base=0 setup.
+        let load_info = loader::load_elf(&mut vm.bus, kernel_image)?;
+
+        // 4. Convert virtual entry point to physical address.
+        // The ELF entry point is a virtual address (e.g., 0xC0000000).
+        // We find which PT_LOAD segment contains it and compute:
+        // phys = entry_vaddr - p_vaddr + p_paddr
+        let entry_vaddr: u32 = load_info.entry;
+        let entry_phys: u32 = Self::elf_entry_vaddr_to_phys(kernel_image, entry_vaddr)
+            .unwrap_or_else(|| {
+                // Fallback: assume identity mapping (entry is already physical)
+                entry_vaddr
+            });
 
         // 5. Load initramfs at a page-aligned address after the kernel.
         let (initrd_start, initrd_end) = if let Some(initrd_data) = initramfs {
@@ -254,10 +302,10 @@ impl RiscvVm {
             (None, None)
         };
 
-        // 6. Generate DTB with correct ram_base.
+        // 6. Generate DTB with ram_base=0.
         let ram_size = actual_ram_size as u64;
         let dtb_config = dtb::DtbConfig {
-            ram_base: first_vaddr,
+            ram_base: 0,
             ram_size,
             initrd_start,
             initrd_end,
@@ -276,21 +324,21 @@ impl RiscvVm {
         }
 
         // 7. Set CPU state for boot.
-        let entry: u32 = load_info.entry;
         vm.cpu.x[10] = 0; // a0 = hartid (0)
-        vm.cpu.x[11] = dtb_addr as u32; // a1 = DTB address
+        vm.cpu.x[11] = dtb_addr as u32; // a1 = DTB physical address
 
         // Stack for the kernel (mimics OpenSBI).
-        let stack_top: u32 = (first_vaddr + actual_ram_size as u64 - 4096) as u32;
+        let stack_top: u32 = (actual_ram_size as u64 - 4096) as u32;
         vm.cpu.x[2] = stack_top;
 
         vm.cpu.privilege = cpu::Privilege::Machine;
 
         // M-mode trap handler (single MRET instruction).
-        let fw_addr: u64 = first_vaddr + 0x940_000;
+        // Place at a physical address above the kernel code to avoid overlap.
+        let fw_addr: u64 = ((load_info.highest_addr + 0xFFF) & !0xFFF) + 0x1000;
         vm.bus.write_word(fw_addr, 0x30200073).ok(); // MRET
 
-        // Set mtvec to our trap handler.
+        // Set mtvec to our trap handler (physical address).
         vm.cpu.csr.write(crate::riscv::csr::MTVEC, fw_addr as u32);
 
         // Delegate exceptions to S-mode.
@@ -298,25 +346,27 @@ impl RiscvVm {
         vm.cpu.csr.mideleg = 0x222;
 
         // Enter S-mode via MRET.
-        vm.cpu.csr.mepc = entry;
+        // mepc = physical entry point (the kernel will enable MMU and start
+        // using virtual addresses via page tables).
+        vm.cpu.csr.mepc = entry_phys;
         vm.cpu.csr.mstatus = 1u32 << csr::MSTATUS_MPP_LSB;
         vm.cpu.csr.mstatus |= 1 << csr::MSTATUS_MPIE;
         let restored = vm.cpu.csr.trap_return(cpu::Privilege::Machine);
         vm.cpu.pc = vm.cpu.csr.mepc;
         vm.cpu.privilege = restored;
 
-        Ok((vm, fw_addr, entry, dtb_addr))
+        Ok((vm, fw_addr, entry_phys, dtb_addr))
     }
 
     /// Boot a RISC-V Linux kernel.
-    /// 1. Parse ELF to find first LOAD segment vaddr (becomes ram_base)
-    /// 2. Calculate RAM size to fit all segments + initramfs + DTB
-    /// 3. Create VM with ram_base = first vaddr
-    /// 4. Load kernel ELF at virtual addresses (which are now physical)
+    /// 1. Calculate RAM size from kernel's physical address ranges (p_paddr + memsz)
+    /// 2. Create VM with ram_base = 0 (so physical addresses map directly to RAM)
+    /// 3. Load kernel ELF at physical addresses (p_paddr)
+    /// 4. Convert virtual entry point to physical (entry - p_vaddr + p_paddr)
     /// 5. Load initramfs after the kernel
-    /// 6. Generate DTB with correct ram_base, initrd info, bootargs
-    /// 7. Set PC to ELF entry (vaddr, now a valid physical address)
-    /// 8. Execute up to max_instructions steps
+    /// 6. Generate DTB with ram_base=0, initrd info, bootargs
+    /// 7. Enter S-mode via MRET, kernel enables MMU and uses virtual addresses
+    /// 8. Execute up to max_instructions steps with trap forwarding
     pub fn boot_linux(
         kernel_image: &[u8],
         initramfs: Option<&[u8]>,
@@ -906,14 +956,148 @@ mod tests {
 
         // The test "passes" as long as it doesn't panic -- we're measuring progress.
         assert!(result.instructions > 0, "Should have executed some instructions");
-        // PC should ideally be in kernel code (0xC0xxx range).
-        // Log the actual state for diagnostics even if it's not.
-        if vm.cpu.pc < 0xC0000000 {
-            eprintln!(
-                "WARNING: PC outside kernel range: 0x{:08X}. \
-                 Kernel may have faulted or jumped to invalid address.",
-                vm.cpu.pc
-            );
+        // With ram_base=0, PC may be a physical address (below 0x02000000)
+        // or a virtual address (0xC0xxxxxx) after MMU is enabled.
+        eprintln!(
+            "Boot result: PC=0x{:08X}, instructions={}",
+            vm.cpu.pc, result.instructions
+        );
+    }
+
+    #[test]
+    fn test_parse_first_load_paddr() {
+        // Build a minimal ELF with one PT_LOAD segment at paddr=0x100000
+        let elf = make_test_elf(0x80000000, 0x100000, 0x1000, 0x1000);
+        let result = RiscvVm::parse_first_load_paddr(&elf);
+        assert_eq!(result, Some(0x100000));
+    }
+
+    #[test]
+    fn test_parse_elf_highest_paddr() {
+        // Two PT_LOAD segments: paddr 0x0 with memsz 0x1000, paddr 0x100000 with memsz 0x2000
+        let elf = make_test_elf_two_segments(
+            0x80000000, 0x00000000, 0x1000, 0x1000,
+            0x00100000, 0x2000, 0x2000,
+        );
+        let result = RiscvVm::parse_elf_highest_paddr(&elf);
+        assert_eq!(result, Some(0x102000));
+    }
+
+    #[test]
+    fn test_elf_entry_vaddr_to_phys() {
+        // Entry at vaddr 0x80001000, segment vaddr=0x80000000, paddr=0x00000000
+        // Physical entry should be 0x00001000
+        let elf = make_test_elf(0x80000000, 0x00000000, 0x2000, 0x2000);
+        let result = RiscvVm::elf_entry_vaddr_to_phys(&elf, 0x80001000);
+        assert_eq!(result, Some(0x00001000));
+    }
+
+    #[test]
+    fn test_elf_entry_vaddr_to_phys_second_segment() {
+        // Entry at vaddr 0x80101000, second segment vaddr=0x80100000, paddr=0x100000
+        let elf = make_test_elf_two_segments(
+            0x80000000, 0x00000000, 0x1000, 0x1000,
+            0x00100000, 0x2000, 0x2000,
+        );
+        let result = RiscvVm::elf_entry_vaddr_to_phys(&elf, 0x80101000);
+        assert_eq!(result, Some(0x00101000));
+    }
+
+    /// Build a minimal ELF32 RISC-V image with one PT_LOAD segment.
+    fn make_test_elf(entry: u32, paddr: u64, filesz: u32, memsz: u32) -> Vec<u8> {
+        let vaddr = entry; // entry is at the start of the segment
+        let mut elf = Vec::new();
+        // ELF32 header (52 bytes)
+        // e_ident (16 bytes)
+        elf.extend_from_slice(&[0x7F, 0x45, 0x4C, 0x46]); // magic
+        elf.push(1); // EI_CLASS: 32-bit
+        elf.push(1); // EI_DATA: little-endian
+        elf.extend_from_slice(&[0; 9]); // padding (EI_VERSION through EI_PAD)
+        elf.extend_from_slice(&[0]); // EI_NIDENT padding
+        // e_type (2), e_machine (2), e_version (4)
+        elf.extend_from_slice(&2u16.to_le_bytes()); // e_type = ET_EXEC
+        elf.extend_from_slice(&0xF3u16.to_le_bytes()); // e_machine = EM_RISCV
+        elf.extend_from_slice(&1u32.to_le_bytes()); // e_version = 1
+        // e_entry (4)
+        elf.extend_from_slice(&entry.to_le_bytes());
+        // e_phoff (4)
+        elf.extend_from_slice(&52u32.to_le_bytes());
+        // e_shoff (4)
+        elf.extend_from_slice(&0u32.to_le_bytes());
+        // e_flags (4)
+        elf.extend_from_slice(&0u32.to_le_bytes());
+        // e_ehsize (2), e_phentsize (2), e_phnum (2), e_shentsize (2), e_shnum (2), e_shstrndx (2)
+        elf.extend_from_slice(&52u16.to_le_bytes()); // e_ehsize
+        elf.extend_from_slice(&32u16.to_le_bytes()); // e_phentsize
+        elf.extend_from_slice(&1u16.to_le_bytes()); // e_phnum
+        elf.extend_from_slice(&0u16.to_le_bytes()); // e_shentsize
+        elf.extend_from_slice(&0u16.to_le_bytes()); // e_shnum
+        elf.extend_from_slice(&0u16.to_le_bytes()); // e_shstrndx
+        assert_eq!(elf.len(), 52);
+        // Program header (32 bytes)
+        elf.extend_from_slice(&1u32.to_le_bytes()); // p_type = PT_LOAD
+        elf.extend_from_slice(&0u32.to_le_bytes()); // p_offset
+        elf.extend_from_slice(&vaddr.to_le_bytes()); // p_vaddr
+        elf.extend_from_slice(&(paddr as u32).to_le_bytes()); // p_paddr
+        elf.extend_from_slice(&filesz.to_le_bytes()); // p_filesz
+        elf.extend_from_slice(&memsz.to_le_bytes()); // p_memsz
+        elf.extend_from_slice(&[5, 0, 0, 0]); // p_flags = R+X
+        elf.extend_from_slice(&0x1000u32.to_le_bytes()); // p_align
+        // Pad to filesz
+        while elf.len() < 52 + 32 + filesz as usize {
+            elf.push(0);
         }
+        elf
+    }
+
+    /// Build a minimal ELF32 RISC-V image with two PT_LOAD segments.
+    fn make_test_elf_two_segments(
+        entry: u32,
+        paddr1: u64, filesz1: u32, memsz1: u32,
+        paddr2: u64, filesz2: u32, memsz2: u32,
+    ) -> Vec<u8> {
+        let vaddr1 = entry;
+        let vaddr2 = 0x80100000u32;
+        let mut elf = Vec::new();
+        // ELF32 header (52 bytes)
+        elf.extend_from_slice(&[0x7F, 0x45, 0x4C, 0x46]); // magic
+        elf.push(1); // EI_CLASS: 32-bit
+        elf.push(1); // EI_DATA: little-endian
+        elf.extend_from_slice(&[0; 9]); // padding
+        elf.push(0); // EI_NIDENT padding
+        elf.extend_from_slice(&2u16.to_le_bytes()); // e_type = ET_EXEC
+        elf.extend_from_slice(&0xF3u16.to_le_bytes()); // e_machine = EM_RISCV
+        elf.extend_from_slice(&1u32.to_le_bytes()); // e_version
+        elf.extend_from_slice(&entry.to_le_bytes()); // e_entry
+        elf.extend_from_slice(&52u32.to_le_bytes()); // e_phoff
+        elf.extend_from_slice(&0u32.to_le_bytes()); // e_shoff
+        elf.extend_from_slice(&0u32.to_le_bytes()); // e_flags
+        elf.extend_from_slice(&52u16.to_le_bytes()); // e_ehsize
+        elf.extend_from_slice(&32u16.to_le_bytes()); // e_phentsize
+        elf.extend_from_slice(&2u16.to_le_bytes()); // e_phnum
+        elf.extend_from_slice(&0u16.to_le_bytes()); // e_shentsize
+        elf.extend_from_slice(&0u16.to_le_bytes()); // e_shnum
+        elf.extend_from_slice(&0u16.to_le_bytes()); // e_shstrndx
+        assert_eq!(elf.len(), 52);
+        // Segment 1
+        elf.extend_from_slice(&1u32.to_le_bytes()); // p_type = PT_LOAD
+        elf.extend_from_slice(&0u32.to_le_bytes()); // p_offset
+        elf.extend_from_slice(&vaddr1.to_le_bytes()); // p_vaddr
+        elf.extend_from_slice(&(paddr1 as u32).to_le_bytes()); // p_paddr
+        elf.extend_from_slice(&filesz1.to_le_bytes()); // p_filesz
+        elf.extend_from_slice(&memsz1.to_le_bytes()); // p_memsz
+        elf.extend_from_slice(&[5, 0, 0, 0]); // p_flags = R+X
+        elf.extend_from_slice(&0x1000u32.to_le_bytes()); // p_align
+        // Segment 2
+        let seg2_offset = (52 + 32 + filesz1 as usize) as u32;
+        elf.extend_from_slice(&1u32.to_le_bytes()); // p_type = PT_LOAD
+        elf.extend_from_slice(&seg2_offset.to_le_bytes()); // p_offset
+        elf.extend_from_slice(&vaddr2.to_le_bytes()); // p_vaddr
+        elf.extend_from_slice(&(paddr2 as u32).to_le_bytes()); // p_paddr
+        elf.extend_from_slice(&filesz2.to_le_bytes()); // p_filesz
+        elf.extend_from_slice(&memsz2.to_le_bytes()); // p_memsz
+        elf.extend_from_slice(&[6, 0, 0, 0]); // p_flags = RW
+        elf.extend_from_slice(&0x1000u32.to_le_bytes()); // p_align
+        elf
     }
 }
