@@ -49,6 +49,15 @@ pub struct Bus {
     /// Index into syscall_log of the last U-mode ECALL awaiting its return value.
     /// Set when a U-mode ECALL is captured; cleared when SRET returns to U-mode.
     pub pending_syscall_idx: Option<usize>,
+    /// Debug write watchpoint: physical address to watch, None = disabled.
+    /// When a write hits this address, records the value and last_pc.
+    pub write_watch_addr: Option<u64>,
+    /// Debug: value written to the watchpoint address.
+    pub write_watch_val: u32,
+    /// Debug: PC when the watchpoint was hit.
+    pub write_watch_pc: u32,
+    /// Debug: whether the watchpoint was hit.
+    pub write_watch_hit: bool,
 }
 
 impl Bus {
@@ -66,6 +75,10 @@ impl Bus {
             mmu_log: Vec::new(),
             sched_log: Vec::new(),
             pending_syscall_idx: None,
+            write_watch_addr: None,
+            write_watch_val: 0,
+            write_watch_pc: 0,
+            write_watch_hit: false,
         }
     }
 
@@ -123,6 +136,13 @@ impl Bus {
 
     /// Write a 32-bit word. Routes to device MMIO or RAM.
     pub fn write_word(&mut self, addr: u64, val: u32) -> Result<(), MemoryError> {
+        // Debug write watchpoint
+        if let Some(watch) = self.write_watch_addr {
+            if addr >= watch && addr < watch + 4 && !self.write_watch_hit {
+                self.write_watch_hit = true;
+                self.write_watch_val = val;
+            }
+        }
         if Self::in_clint(addr) {
             if self.clint.write(addr, val) {
                 Ok(())
@@ -181,6 +201,13 @@ impl Bus {
 
     /// Write a byte. Routes to device MMIO or RAM.
     pub fn write_byte(&mut self, addr: u64, val: u8) -> Result<(), MemoryError> {
+        // Debug write watchpoint (byte-level)
+        if let Some(watch) = self.write_watch_addr {
+            if addr >= watch && addr < watch + 4 && !self.write_watch_hit {
+                self.write_watch_hit = true;
+                self.write_watch_val = val as u32; // approximate for byte writes
+            }
+        }
         if Self::in_clint(addr) {
             let word_addr = addr & !3;
             let byte_off = (addr & 3) as usize;
