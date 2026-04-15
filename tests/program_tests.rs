@@ -2143,6 +2143,47 @@ fn test_window_manager_ball_inside_window() {
 }
 
 #[test]
+fn test_spawn_non_page_aligned_org() {
+    // Regression test: .org 0x600 (non-page-aligned) used to set child PC to
+    // page_offset (0x200) instead of start_addr (0x600), causing immediate HALT.
+    // With identity mapping (start_page < 3), virtual addr == physical addr so
+    // JMP targets assembled with .org resolve correctly.
+    let source = "
+    LDI r1, 0x600
+    SPAWN r1
+    HALT
+
+    .org 0x600
+    LDI r2, 0xBEEF
+    JMP child_loop
+
+    .org 0x610
+child_loop:
+    STORE r0, r2
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    // Run main to spawn child
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.processes.len(), 1, "should have 1 child process");
+    assert!(!vm.processes[0].segfaulted, "child should not segfault");
+    assert!(!vm.processes[0].is_halted(), "child should not halt immediately");
+
+    // Run child: JMP child_loop (0x610) -> STORE -> HALT
+    for _ in 0..200 {
+        vm.step_all_processes();
+        if vm.processes.iter().all(|p| p.is_halted()) { break; }
+    }
+    // Child should have executed successfully -- no segfault, and it halted
+    // (meaning it executed JMP child_loop -> STORE -> HALT correctly)
+    assert!(!vm.processes[0].segfaulted, "child should not segfault after running");
+    assert!(vm.processes[0].is_halted(), "child should have reached HALT via JMP");
+}
+
+#[test]
 fn test_peek_reads_screen_pixel() {
     // PEEK rx, ry, rd reads screen[rx][ry] into rd
     // Draw a red pixel at (10, 20), then PEEK it back
