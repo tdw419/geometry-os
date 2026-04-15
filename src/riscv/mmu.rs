@@ -525,7 +525,7 @@ mod tests {
     fn bare_mode_identity() {
         let mut tlb = Tlb::new();
         let mut bus = Bus::new(0x8000_0000, 8192);
-        let result = translate(0x8000_0000, AccessType::Fetch, Privilege::Machine, false, 0, &mut bus, &mut tlb);
+        let result = translate(0x8000_0000, AccessType::Fetch, Privilege::Machine, false, false, 0, &mut bus, &mut tlb);
         assert_eq!(result, TranslateResult::Ok(0x8000_0000));
     }
 
@@ -592,7 +592,7 @@ mod tests {
         bus.write_word(l1_addr, pte).unwrap();
         
         let satp = make_satp(1, 0, 0);
-        let result = translate(0x1000, AccessType::Fetch, Privilege::Supervisor, false, satp, &mut bus, &mut tlb);
+        let result = translate(0x1000, AccessType::Fetch, Privilege::Supervisor, false, false, satp, &mut bus, &mut tlb);
         assert!(matches!(result, TranslateResult::Ok(0x0140_1000)));
         
         assert_eq!(bus.mmu_log.len(), 1);

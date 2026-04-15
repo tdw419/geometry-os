@@ -157,8 +157,9 @@ impl RiscvCpu {
         };
 
         let sum = (self.csr.mstatus >> csr::MSTATUS_SUM) & 1 != 0;
+        let mxr = (self.csr.mstatus >> csr::MSTATUS_MXR) & 1 != 0;
         let satp = self.csr.satp;
-        match mmu::translate(va, access, effective_priv, sum, satp, bus, &mut self.tlb) {
+        match mmu::translate(va, access, effective_priv, sum, mxr, satp, bus, &mut self.tlb) {
             TranslateResult::Ok(pa) => Ok(pa),
             TranslateResult::FetchFault
             | TranslateResult::LoadFault

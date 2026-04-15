@@ -126,7 +126,7 @@ pub struct CsrBank {
     /// Supervisor trap value.
     pub stval: u32,
     /// Supervisor address translation and protection.
-    /// Bits [31:22] = PPN (page table base), [21] = ASID, [0] = MODE.
+    /// Sv32 format: bit 31 = MODE, bits [30:22] = ASID (9 bits), bits [21:0] = PPN.
     pub satp: u32,
 
     /// Machine interrupt-enable register.
