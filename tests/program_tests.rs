@@ -1728,8 +1728,8 @@ fn test_spawn_creates_child_process() {
     // One process should exist
     assert_eq!(vm.processes.len(), 1);
     assert_eq!(vm.processes[0].pid, 1);
-    // Phase 24: child PC starts at 0 in its own address space (code copied from parent)
-    assert_eq!(vm.processes[0].pc, 0);
+    // With COW fork, child PC starts at the offset within the first shared page
+    assert_eq!(vm.processes[0].pc, 0x200);
 }
 
 #[test]
@@ -1873,6 +1873,192 @@ fn test_spawn_assembles() {
     assert_eq!(asm.pixels[3], 2); // r2
     // HALT
     assert_eq!(asm.pixels[4], 0x00);
+}
+
+// === Copy-on-Write (COW) Fork Tests ===
+
+#[test]
+fn test_cow_fork_shares_physical_pages() {
+    // After SPAWN, child should share parent's physical pages (not allocate new ones)
+    // Use start_addr=0x1000 (page 4) to avoid conflicts with shared region at page 3
+    let source = "
+    LDI r1, 0x1000
+    SPAWN r1
+    HALT
+
+    .org 0x1000
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for _ in 0..100 { if !vm.step() { break; } }
+
+    let pd = vm.processes[0].page_dir.as_ref().unwrap();
+    // With COW, child's virtual page 0 maps to parent's physical page 4 (0x1000/1024=4)
+    assert_eq!(pd[0], 4, "child vpage 0 should share parent's phys page 4");
+    assert_eq!(pd[1], 5, "child vpage 1 should share parent's phys page 5");
+    // Ref count on shared pages should be >= 1 (child's reference)
+    assert!(vm.page_ref_count[4] >= 1, "phys page 4 should have ref count >= 1");
+    assert!(vm.page_ref_count[5] >= 1, "phys page 5 should have ref count >= 1");
+    // COW flag should be set
+    assert_ne!(vm.page_cow & (1u64 << 4), 0, "phys page 4 should be COW");
+    assert_ne!(vm.page_cow & (1u64 << 5), 0, "phys page 5 should be COW");
+}
+
+#[test]
+fn test_cow_write_triggers_page_copy() {
+    // When a child writes to a shared (COW) page, it should get a private copy
+    // Use start_addr=0x1000 (page 4) to avoid shared region at page 3
+    let source = "
+    LDI r1, 0x1000
+    SPAWN r1
+    HALT
+
+    .org 0x1000
+    LDI r2, 0xDEAD
+    STORE r0, r2
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    // Run main to spawn child
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.processes.len(), 1);
+
+    let pd_before = vm.processes[0].page_dir.as_ref().unwrap().clone();
+    let shared_phys_page = pd_before[0]; // vpage 0 -> phys page 4 (0x1000/1024=4)
+
+    // Run child to completion
+    for _ in 0..100 {
+        vm.step_all_processes();
+        if vm.processes.iter().all(|p| p.is_halted()) { break; }
+    }
+
+    let pd_after = vm.processes[0].page_dir.as_ref().unwrap();
+    // After writing to vpage 0 (STORE r0, r2 where r0=0, virtual addr 0 -> vpage 0),
+    // the child should have a NEW private physical page (COW resolved)
+    assert_ne!(pd_after[0], shared_phys_page,
+        "child should have a new private page after COW write");
+    // The new page should NOT be COW
+    assert_eq!(vm.page_cow & (1u64 << pd_after[0] as u64), 0,
+        "new private page should not be COW");
+}
+
+#[test]
+fn test_cow_isolation_between_children() {
+    // Two children sharing the same physical page write different values.
+    // Each should get its own private copy via COW.
+    let source = "
+    LDI r1, 0x1000
+    SPAWN r1
+    LDI r1, 0x1000
+    SPAWN r1
+    HALT
+
+    .org 0x1000
+    LDI r2, 0xAAAA
+    STORE r0, r2
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    // Run main
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.processes.len(), 2);
+
+    // Run children to completion
+    for _ in 0..200 {
+        vm.step_all_processes();
+        if vm.processes.iter().all(|p| p.is_halted()) { break; }
+    }
+
+    assert!(!vm.processes[0].segfaulted, "child 1 should not segfault");
+    assert!(!vm.processes[1].segfaulted, "child 2 should not segfault");
+
+    let pd1 = vm.processes[0].page_dir.as_ref().unwrap();
+    let pd2 = vm.processes[1].page_dir.as_ref().unwrap();
+
+    // After COW resolution, children should have DIFFERENT physical pages
+    // (they both wrote to the same shared page, triggering separate copies)
+    assert_ne!(pd1[0], pd2[0],
+        "children should have different physical pages after COW writes");
+}
+
+#[test]
+fn test_cow_read_does_not_trigger_copy() {
+    // Reading from a shared page should NOT trigger a page copy
+    // Use start_addr=0x1000 (page 4) to avoid shared region at page 3
+    let source = "
+    LDI r1, 0x1000
+    SPAWN r1
+    HALT
+
+    .org 0x1000
+    LOAD r2, r0
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    for _ in 0..100 { if !vm.step() { break; } }
+
+    let pd_before = vm.processes[0].page_dir.as_ref().unwrap().clone();
+
+    // Run child (only reads, no writes)
+    for _ in 0..100 {
+        vm.step_all_processes();
+        if vm.processes.iter().all(|p| p.is_halted()) { break; }
+    }
+
+    let pd_after = vm.processes[0].page_dir.as_ref().unwrap();
+    // Page mapping should be unchanged (no COW resolution for reads)
+    assert_eq!(pd_after[0], pd_before[0],
+        "read-only child should still share the same physical page");
+}
+
+#[test]
+fn test_cow_kill_decrements_ref_count() {
+    // Killing a COW child should decrement ref counts, not free shared pages
+    // Use start_addr=0x1000 (page 4)
+    let source = "
+    LDI r1, 0x1000
+    SPAWN r1
+    LDI r2, 1
+    KILL r2
+    HALT
+
+    .org 0x1000
+    HALT
+    ";
+    let asm = assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+
+    // Before spawn: phys page 4 ref count = 0 (not allocated by main process)
+    assert_eq!(vm.page_ref_count[4], 0);
+
+    // Step 1: LDI r1, 0x1000 (pc 0->3)
+    vm.step();
+    // Step 2: SPAWN r1 (pc 3->5) -- child created with COW page_dir
+    vm.step();
+
+    // After spawn: phys page 4 ref count should be >= 1 (from child's COW mapping)
+    assert!(vm.page_ref_count[4] >= 1, "ref count should be >= 1 after COW fork");
+    let ref_after_spawn = vm.page_ref_count[4];
+
+    // Step 3: LDI r2, 1 (pc 5->8)
+    // Step 4: KILL r2 (pc 8->10) -- decrements ref counts
+    // Step 5: HALT (pc 10->11, returns false)
+    for _ in 0..100 { if !vm.step() { break; } }
+
+    // After kill: ref count should be decremented
+    assert!(vm.page_ref_count[4] < ref_after_spawn, "ref count should decrease after child killed");
 }
 
 // === Window Manager (SPAWN + shared RAM bounds protocol) ===
@@ -2701,6 +2887,7 @@ fn test_child_can_access_shared_window_bounds() {
 #[test]
 fn test_child_page_directory_has_shared_regions_mapped() {
     // Spawn a child and verify its page directory maps the shared regions.
+    // With COW fork, the child shares the parent's physical pages.
     let source = "
     LDI r1, 0x200
     SPAWN r1
@@ -2723,14 +2910,10 @@ fn test_child_page_directory_has_shared_regions_mapped() {
     // Page 63 (0xFC00-0xFFFF) should be identity-mapped for hardware/syscalls
     assert_eq!(pd[63], 63, "page 63 should be identity-mapped (hardware ports)");
 
-    // Pages 0-3 should be private (first 3 are allocated, 3rd is identity)
-    // Actually pages 0, 1, 2 are private allocated pages; page 3 is identity-mapped
-    assert!(pd[0] < 64 && pd[0] != 0 && pd[0] != 1,
-        "virtual page 0 should map to a private physical page");
-    assert!(pd[1] < 64 && pd[1] != 0 && pd[1] != 1,
-        "virtual page 1 should map to a private physical page");
-    assert!(pd[2] < 64 && pd[2] != 0 && pd[2] != 1,
-        "virtual page 2 should map to a private physical page");
+    // With COW fork, virtual pages 0-2 share parent's physical pages 0-2
+    assert_eq!(pd[0], 0, "virtual page 0 should share parent's physical page 0 (COW)");
+    assert_eq!(pd[1], 1, "virtual page 1 should share parent's physical page 1 (COW)");
+    assert_eq!(pd[2], 2, "virtual page 2 should share parent's physical page 2 (COW)");
 
     // Pages 4-62 should be unmapped
     for i in 4..63 {
@@ -6078,4 +6261,11 @@ fn test_register_dashboard() {
             "canvas[{}] should be ASCII digit (0x30-0x39): got 0x{:02X} ('{}')",
             i, val, if val >= 0x20 && val < 0x7F { val as u8 as char } else { '?' });
     }
+}
+
+#[test]
+fn test_living_map_assembles() {
+    let source = std::fs::read_to_string("programs/living_map.asm")
+        .expect("living_map.asm should exist");
+    assemble(&source, 0).expect("living_map.asm should assemble cleanly");
 }
