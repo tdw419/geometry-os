@@ -2057,7 +2057,7 @@ fn test_cow_kill_decrements_ref_count() {
     // Step 5: HALT (pc 10->11, returns false)
     for _ in 0..100 { if !vm.step() { break; } }
 
-    // After kill: ref count should be decremented
+    // After kill: ref count on page 4 should be decremented
     assert!(vm.page_ref_count[4] < ref_after_spawn, "ref count should decrease after child killed");
 }
 
@@ -2096,7 +2096,6 @@ fn test_window_manager_assembles() {
 }
 
 #[test]
-#[ignore = "Phase 24 memory protection breaks shared RAM protocol; needs Phase 27 IPC"]
 fn test_window_manager_spawns_child() {
     // Run for 3 frames: primary should have spawned a child and written bounds
     let vm = compile_run_multiproc("programs/window_manager.asm", 3);
@@ -2118,7 +2117,6 @@ fn test_window_manager_draws_border() {
 }
 
 #[test]
-#[ignore = "Phase 24 memory protection breaks shared RAM protocol; needs Phase 27 IPC"]
 fn test_window_manager_ball_inside_window() {
     // Run for 10 frames; the child's red ball should be inside the window bounds
     let vm = compile_run_multiproc("programs/window_manager.asm", 10);

@@ -86,6 +86,13 @@ pub struct RiscvCpu {
     pub csr: CsrBank,
     /// Translation Lookaside Buffer for Sv32 MMU.
     pub tlb: Tlb,
+    /// Delayed TLB flush: when SATP is written, the flush is deferred
+    /// by one instruction to emulate the pipeline effect. On real hardware,
+    /// the instruction after CSRW SATP is already fetched before the MMU
+    /// change takes effect. Without this, the kernel's MMU-enable trampoline
+    /// (which relies on fetching the next instruction from a physical address
+    /// before the virtual mapping is active) immediately page-faults.
+    pub satp_flush_pending: bool,
     /// Reservation address for LR.W/SC.W (A extension).
     /// Set by LR.W, checked by SC.W. None means no reservation.
     pub reservation: Option<u64>,
@@ -104,6 +111,7 @@ impl RiscvCpu {
             privilege: Privilege::Machine,
             csr: CsrBank::new(),
             tlb: Tlb::new(),
+            satp_flush_pending: false,
             reservation: None,
             last_step: None,
             ecall_count: 0,

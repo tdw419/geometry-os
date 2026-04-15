@@ -2100,6 +2100,14 @@ impl Vm {
             // SPAWN addr_reg  -- create child with isolated address space
             // Returns PID (1-based) in RAM[0xFFA], or 0xFFFFFFFF on error
             // Uses copy-on-write: shares parent's physical pages, copies on write.
+            //
+            // Mapping strategy:
+            //  - If start_addr is in pages 0-2: identity-map pages 0-2 as COW.
+            //    Virtual addr X == physical addr X, so .org label addresses resolve
+            //    correctly for JMP/CALL.  Child PC = start_addr.
+            //  - If start_addr is in page 3+: sequential mapping (legacy mode).
+            //    vpage N -> physical page (start_page + N).  Only works for
+            //    sequential code (no JMP to .org addresses).  Child PC = page_offset.
             0x4D => {
                 let ar = self.fetch() as usize;
                 if ar < NUM_REGS {
@@ -2108,27 +2116,56 @@ impl Vm {
                         self.ram[0xFFA] = 0xFFFFFFFF;
                     } else {
                         let start_addr = self.regs[ar];
-                        // COW fork: share parent's physical pages.
-                        // For non-page-aligned start_addr, the child's PC is adjusted
-                        // to the offset within the first page.
+                        let start_page = (start_addr as usize) / PAGE_SIZE;
                         let page_offset = start_addr % (PAGE_SIZE as u32);
-                        let parent_phys_base = (start_addr as usize) / PAGE_SIZE;
                         let mut pd = vec![PAGE_UNMAPPED; NUM_PAGES];
 
-                        for vpage in 0..PROCESS_PAGES {
-                            let parent_phys = parent_phys_base + vpage;
-                            if parent_phys >= NUM_RAM_PAGES { break; }
+                        // Determine child PC based on mapping strategy
+                        let child_pc: u32;
+                        let identity_map = start_page < 3;
 
-                            // Shared regions are always identity-mapped (NOT COW)
-                            if vpage == 3 || parent_phys == 3 {
-                                pd[vpage] = 3;
-                                self.page_ref_count[3] += 1;
-                                continue;
+                        if identity_map {
+                            // Identity-map pages 0-2: virtual addr N == physical addr N
+                            for phys_page in 0..3usize {
+                                if phys_page >= NUM_RAM_PAGES { break; }
+                                pd[phys_page] = phys_page as u32;
+                                if self.page_ref_count[phys_page] == 0 {
+                                    self.page_ref_count[phys_page] = 1;
+                                }
+                                self.page_ref_count[phys_page] += 1;
+                                self.page_cow |= 1u64 << phys_page;
                             }
+                            child_pc = start_addr;
+                        } else {
+                            // Sequential mapping: vpage N -> phys page (start_page + N)
+                            for vpage in 0..PROCESS_PAGES {
+                                let parent_phys = start_page + vpage;
+                                if parent_phys >= NUM_RAM_PAGES { break; }
+                                if vpage == 3 || parent_phys == 3 {
+                                    pd[vpage] = 3;
+                                    self.page_ref_count[3] += 1;
+                                    continue;
+                                }
+                                pd[vpage] = parent_phys as u32;
+                                self.page_ref_count[parent_phys] += 1;
+                                self.page_cow |= 1u64 << parent_phys;
+                            }
+                            child_pc = page_offset;
+                        }
 
-                            pd[vpage] = parent_phys as u32;
-                            self.page_ref_count[parent_phys] += 1;
-                            self.page_cow |= 1u64 << parent_phys;
+                        // Page 3 (0xC00-0xFFF): shared region, identity-mapped, NOT COW
+                        if !identity_map {
+                            // Already handled in loop above for sequential mode
+                            // but ensure it's set
+                        }
+                        // For identity_map mode, page 3 needs explicit setup since
+                        // the loop only covers pages 0-2
+                        if identity_map {
+                            pd[3] = 3;
+                            if self.page_ref_count[3] == 0 {
+                                self.page_ref_count[3] = 1;
+                            }
+                            self.page_ref_count[3] += 1;
                         }
 
                         // Page 63 (hardware ports / syscall table) - always identity-mapped
@@ -2136,7 +2173,7 @@ impl Vm {
 
                         let pid = (self.processes.len() + 1) as u32;
                         self.processes.push(SpawnedProcess {
-                            pc: page_offset,
+                            pc: child_pc,
                             regs: [0; NUM_REGS],
                             state: ProcessState::Ready,
                             pid,
