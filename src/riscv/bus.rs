@@ -93,17 +93,13 @@ impl Bus {
     }
 
     /// Read a 32-bit word. Routes to device MMIO or RAM.
-    pub fn read_word(&self, addr: u64) -> Result<u32, MemoryError> {
+    /// Takes &mut self because device reads can have side effects
+    /// (e.g., UART RBR read consumes the byte and clears Data Ready).
+    pub fn read_word(&mut self, addr: u64) -> Result<u32, MemoryError> {
         if Self::in_clint(addr) {
             self.clint.read(addr).ok_or(MemoryError { addr, size: 4 })
         } else if super::uart::Uart::contains(addr) {
-            // UART reads need &mut due to side effects (clearing DR).
-            // We clone to work around borrow checker.
-            let mut uart = self.uart.clone();
-            
-            // Note: side effects are lost due to clone. This is acceptable
-            // for page table walks which shouldn't touch UART.
-            uart.read_word(addr).ok_or(MemoryError { addr, size: 4 })
+            self.uart.read_word(addr).ok_or(MemoryError { addr, size: 4 })
         } else if super::plic::Plic::contains(addr) {
             self.plic.read(addr).ok_or(MemoryError { addr, size: 4 })
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
@@ -158,7 +154,8 @@ impl Bus {
     }
 
     /// Read a byte. Routes to device MMIO or RAM.
-    pub fn read_byte(&self, addr: u64) -> Result<u8, MemoryError> {
+    /// Takes &mut self because device reads can have side effects.
+    pub fn read_byte(&mut self, addr: u64) -> Result<u8, MemoryError> {
         if Self::in_clint(addr) {
             let word = self.clint.read(addr & !3).ok_or(MemoryError { addr, size: 1 })?;
             let byte_off = (addr & 3) as usize;
@@ -220,7 +217,7 @@ impl Bus {
     }
 
     /// Read a 16-bit half-word. Routes to device MMIO or RAM.
-    pub fn read_half(&self, addr: u64) -> Result<u16, MemoryError> {
+    pub fn read_half(&mut self, addr: u64) -> Result<u16, MemoryError> {
         if Self::in_clint(addr) {
             let word = self.clint.read(addr & !3).ok_or(MemoryError { addr, size: 2 })?;
             let half_off = ((addr >> 1) & 1) as usize;
@@ -357,7 +354,7 @@ mod tests {
 
     #[test]
     fn bus_out_of_range_fails() {
-        let bus = Bus::new(0x8000_0000, 4096);
+        let mut bus = Bus::new(0x8000_0000, 4096);
         // Low addresses now return 0 (boot ROM area) instead of error
         assert_eq!(bus.read_word(0x0000_0000).unwrap(), 0);
         assert!(bus.read_word(0x0200_1000).is_err()); // CLINT gap

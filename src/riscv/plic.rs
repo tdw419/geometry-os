@@ -70,7 +70,8 @@ impl Plic {
     }
 
     /// Read a 32-bit word from PLIC MMIO space.
-    pub fn read(&self, addr: u64) -> Option<u32> {
+    /// Takes &mut self because claim reads clear the pending bit.
+    pub fn read(&mut self, addr: u64) -> Option<u32> {
         if addr >= PRIORITY_BASE && addr < PRIORITY_BASE + (MAX_SOURCES as u64) * 4 {
             let idx = ((addr - PRIORITY_BASE) / 4) as usize;
             if idx < MAX_SOURCES {
@@ -124,7 +125,8 @@ impl Plic {
 
     /// Claim the highest-priority enabled pending interrupt.
     /// Returns 0 if no interrupt is pending or all are below threshold.
-    pub fn claim(&self) -> u32 {
+    /// Per PLIC spec, claiming clears the pending bit for the claimed IRQ.
+    pub fn claim(&mut self) -> u32 {
         let mut best_irq: u32 = 0;
         let mut best_pri: u32 = 0;
 
@@ -137,6 +139,12 @@ impl Plic {
                 }
             }
         }
+
+        // Clear the pending bit for the claimed interrupt (PLIC spec requirement).
+        if best_irq != 0 {
+            self.pending &= !(1 << best_irq);
+        }
+
         best_irq
     }
 
@@ -156,14 +164,30 @@ impl Plic {
     }
 
     /// Check if there is an enabled, pending interrupt above threshold.
-    /// Returns Some(irq) if so.
+    /// Returns Some(irq) if so. Does NOT claim or clear pending.
     pub fn pending_interrupt(&self) -> Option<u32> {
-        let irq = self.claim();
+        let irq = self.find_best_irq();
         if irq > 0 {
             Some(irq)
         } else {
             None
         }
+    }
+
+    /// Find the highest-priority enabled pending interrupt (no side effects).
+    fn find_best_irq(&self) -> u32 {
+        let mut best_irq: u32 = 0;
+        let mut best_pri: u32 = 0;
+        for i in 1..MAX_SOURCES {
+            if (self.pending & (1 << i)) != 0 && (self.enable & (1 << i)) != 0 {
+                let pri = self.priority[i];
+                if pri > 0 && pri > best_pri && pri > self.threshold {
+                    best_irq = i as u32;
+                    best_pri = pri;
+                }
+            }
+        }
+        best_irq
     }
 }
 
