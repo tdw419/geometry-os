@@ -185,6 +185,10 @@ impl RiscvCpu {
             let old = self.csr.satp;
             if old != val {
                 bus.mmu_log.push(mmu::MmuEvent::SatpWrite { old, new: val });
+                // Flush TLB on SATP change to prevent stale translations.
+                // While software should SFENCE.VMA, many implementations flush
+                // on SATP write to avoid a window of stale entries.
+                self.tlb.flush_all();
             }
         }
         self.csr.write(addr, val);

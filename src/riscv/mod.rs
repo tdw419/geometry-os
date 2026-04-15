@@ -348,38 +348,53 @@ impl RiscvVm {
 
                 // ECALL from M-mode (cause 11) is an SBI call -- handle by
                 // skipping it (the SBI handler runs elsewhere). All other
-                // exceptions should be forwarded to S-mode (OpenSBI behavior).
-                // This includes page faults (12/13/15), access faults (1/5/7),
-                // misaligned access (0/4/6), illegal instruction (2), etc.
+                // exceptions should be forwarded to S-mode (OpenSBI behavior),
+                // BUT ONLY if they originated from S-mode or U-mode.
+                //
+                // MPP in mstatus records the privilege level when the trap was
+                // taken. If MPP=Machine, the trap came from M-mode code and
+                // should NOT be forwarded (real OpenSBI handles these in M-mode;
+                // our firmware just skips the faulting instruction).
+                // If MPP=Supervisor or MPP=User, the trap came from a lower
+                // privilege and OpenSBI would reflect it to S-mode.
                 if cause_code != csr::CAUSE_ECALL_M {
-                    let stvec = vm.cpu.csr.stvec & !0x3u32; // direct mode
-                    if stvec != 0 {
-                        // Copy M-mode trap info to S-mode CSRs.
-                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
-                        vm.cpu.csr.scause = mcause;
-                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
+                    let mpp = (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK)
+                        >> csr::MSTATUS_MPP_LSB;
 
-                        // Set S-mode trap entry state in mstatus:
-                        // SPP = 1 (kernel's early M-mode code is logically
-                        // "kernel code" -- sret should return to S-mode).
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
-                            | (1 << csr::MSTATUS_SPP);
-                        // SPIE = SIE (save current SIE), SIE = 0 (disable S interrupts)
-                        let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
-                            | (sie << csr::MSTATUS_SPIE);
-                        vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
+                    if mpp != 3 {
+                        // Trap came from S-mode or U-mode -- forward to S-mode.
+                        let stvec = vm.cpu.csr.stvec & !0x3u32; // direct mode
+                        if stvec != 0 {
+                            // Copy M-mode trap info to S-mode CSRs.
+                            vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                            vm.cpu.csr.scause = mcause;
+                            vm.cpu.csr.stval = vm.cpu.csr.mtval;
 
-                        // Jump to S-mode trap vector in Supervisor mode.
-                        vm.cpu.pc = stvec;
-                        vm.cpu.privilege = cpu::Privilege::Supervisor;
+                            // Set S-mode trap entry state in mstatus.
+                            // SPP = previous privilege (1=S, 0=U) from MPP.
+                            let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                            vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                                | (spp << csr::MSTATUS_SPP);
+                            // SPIE = SIE (save current SIE), SIE = 0 (disable S interrupts)
+                            let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
+                            vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                                | (sie << csr::MSTATUS_SPIE);
+                            vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
 
-                        // Flush TLB -- address space context changed.
-                        vm.cpu.tlb.flush_all();
-                        count += 1;
-                        continue;
+                            // Jump to S-mode trap vector in Supervisor mode.
+                            vm.cpu.pc = stvec;
+                            vm.cpu.privilege = cpu::Privilege::Supervisor;
+
+                            // Flush TLB -- address space context changed.
+                            vm.cpu.tlb.flush_all();
+                            count += 1;
+                            continue;
+                        }
+                        // stvec not set yet -- fall through to skip instruction.
                     }
-                    // stvec not set yet -- fall through to skip instruction.
+                    // MPP=3: trap came from M-mode. Fall through to skip.
+                    // This handles device probes to unmapped addresses (e.g.,
+                    // 0xFFFFFFF0 PLIC/DTB probes) during early M-mode boot.
                 }
 
                 // ECALL_M or exception with no stvec:

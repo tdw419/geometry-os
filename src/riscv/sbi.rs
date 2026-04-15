@@ -118,8 +118,9 @@ impl Sbi {
                 }
             }
             SBI_SET_TIMER => {
-                // Set the timer: a0 = next timer event (absolute time)
-                clint.mtimecmp = a0 as u64;
+                // Set the timer: a0:a1 = 64-bit next timer event (absolute time)
+                // a0 = low bits, a1 = high bits
+                clint.mtimecmp = (_a1 as u64) << 32 | (a0 as u64);
                 Some((SBI_SUCCESS as u32, 0))
             }
             SBI_CLEAR_IPI => Some((SBI_SUCCESS as u32, 0)),
@@ -171,8 +172,9 @@ impl Sbi {
             // SBI_EXT_CONSOLE_PUTCHAR (0x02) already handled above (same as SBI_CONSOLE_GETCHAR)
             SBI_EXT_TIMER => {
                 // Timer extension: function 0 = sbi_set_timer
+                // a0:a1 = 64-bit next timer event (absolute time)
                 if a6 == 0 {
-                    clint.mtimecmp = a0 as u64;
+                    clint.mtimecmp = (_a1 as u64) << 32 | (a0 as u64);
                 }
                 Some((SBI_SUCCESS as u32, 0))
             }
@@ -302,12 +304,24 @@ mod tests {
     }
 
     #[test]
-    fn test_sbi_set_timer() {
+    fn test_sbi_set_timer_64bit() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
         let mut clint = Clint::new();
-        let result = sbi.handle_ecall(SBI_SET_TIMER, 0, 0xDEAD, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        // Test with 64-bit value: a0=low bits, a1=high bits
+        let result = sbi.handle_ecall(SBI_SET_TIMER, 0, 0xDEAD, 0xBEEF, 0, 0, 0, 0, &mut uart, &mut clint);
         assert_eq!(result, Some((SBI_SUCCESS as u32, 0)));
-        assert_eq!(clint.mtimecmp, 0xDEAD);
+        assert_eq!(clint.mtimecmp, 0xBEEF0000DEAD);
+    }
+
+    #[test]
+    fn test_sbi_set_timer_v02_ext_64bit() {
+        let mut sbi = Sbi::new();
+        let mut uart = Uart::new();
+        let mut clint = Clint::new();
+        // SBI v0.2 timer extension: a0=low, a1=high
+        let result = sbi.handle_ecall(SBI_EXT_TIMER, 0, 0xCAFE, 0xF00D, 0, 0, 0, 0, &mut uart, &mut clint);
+        assert_eq!(result, Some((SBI_SUCCESS as u32, 0)));
+        assert_eq!(clint.mtimecmp, 0xF00D0000CAFE);
     }
 }

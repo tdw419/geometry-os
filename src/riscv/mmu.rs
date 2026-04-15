@@ -293,6 +293,7 @@ pub fn translate(
     access_type: AccessType,
     effective_priv: Privilege,
     sum: bool,
+    mxr: bool,
     satp: u32,
     bus: &mut Bus,
     tlb: &mut Tlb,
@@ -310,7 +311,7 @@ pub fn translate(
 
     // Check TLB first.
     if let Some((ppn, flags)) = tlb.lookup(combined_vpn, asid) {
-        if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum) {
+        if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum, mxr) {
             bus.mmu_log.push(MmuEvent::PageFault {
                 va,
                 access: access_type,
@@ -360,7 +361,7 @@ pub fn translate(
         let pa = ((ppn_hi as u64) << 22) | ((vpn0 as u64) << 12) | (offset as u64);
         let flags = l1_pte & 0xFF;
 
-        if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum) {
+        if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum, mxr) {
             bus.mmu_log.push(MmuEvent::PageFault {
                 va,
                 access: access_type,
@@ -368,6 +369,17 @@ pub fn translate(
             });
             return fault;
         }
+
+        // Hardware-managed A/D bits per RISC-V spec.
+        // Set A (accessed) on any access, D (dirty) on stores.
+        let mut updated_pte = l1_pte | PTE_A;
+        if access_type == AccessType::Store {
+            updated_pte |= PTE_D;
+        }
+        if updated_pte != l1_pte {
+            let _ = bus.write_word(l1_addr, updated_pte);
+        }
+        let flags = updated_pte & 0xFF;
 
         // For TLB: store the effective PPN for this specific VPN (includes VPN0).
         // Each TLB entry covers one 4KB page, so megapage hits insert per-VPN0.
@@ -416,10 +428,9 @@ pub fn translate(
         return fault_for(access_type);
     }
 
-    let ppn = pte_ppn(l2_pte);
     let flags = l2_pte & 0xFF;
 
-    if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum) {
+    if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum, mxr) {
         bus.mmu_log.push(MmuEvent::PageFault {
             va,
             access: access_type,
@@ -427,6 +438,18 @@ pub fn translate(
         });
         return fault;
     }
+
+    // Hardware-managed A/D bits per RISC-V spec.
+    // Set A (accessed) on any access, D (dirty) on stores.
+    let mut updated_pte = l2_pte | PTE_A;
+    if access_type == AccessType::Store {
+        updated_pte |= PTE_D;
+    }
+    if updated_pte != l2_pte {
+        let _ = bus.write_word(l2_addr, updated_pte);
+    }
+    let ppn = pte_ppn(updated_pte);
+    let flags = updated_pte & 0xFF;
 
     tlb.insert(combined_vpn, asid, ppn, flags);
     let pa = ((ppn as u64) << 12) | (offset as u64);
@@ -448,6 +471,7 @@ fn check_permissions(
     access_type: AccessType,
     effective_priv: Privilege,
     sum: bool,
+    mxr: bool,
 ) -> Option<TranslateResult> {
     // M-mode bypasses all permission checks.
     if effective_priv == Privilege::Machine {
@@ -469,7 +493,9 @@ fn check_permissions(
             }
         }
         AccessType::Load => {
-            if (flags & PTE_R) == 0 {
+            // MXR: Make eXecutable Readable. When set, S-mode can read
+            // from pages with X=1 even if R=0.
+            if (flags & PTE_R) == 0 && !(mxr && (flags & PTE_X) != 0) {
                 return Some(TranslateResult::LoadFault);
             }
         }
