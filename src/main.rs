@@ -3429,6 +3429,13 @@ fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         mode: vm::CpuMode::Kernel,
         kernel_stack: Vec::new(),
         allocated_pages: 0b11,
+        page_ref_count: {
+            let mut rc = [0u32; vm::NUM_RAM_PAGES];
+            rc[0] = 1;
+            rc[1] = 1;
+            rc
+        },
+        page_cow: 0,
         current_page_dir: None,
         current_vmas: Vec::new(),
         segfault_pid: 0,

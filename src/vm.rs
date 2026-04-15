@@ -527,6 +527,13 @@ pub struct Vm {
     pub kernel_stack: Vec<(u32, CpuMode)>,
     /// Bitmap of allocated physical pages (bit N = page N in use)
     pub allocated_pages: u64,
+    /// Reference count per physical page for COW fork support.
+    /// When a page is shared between processes, ref_count > 1.
+    /// A write to a COW page triggers a copy (ref_count decremented on original).
+    pub page_ref_count: [u32; NUM_RAM_PAGES],
+    /// Bitmap of physical pages marked as copy-on-write.
+    /// Bit N = 1 means physical page N is shared and should be copied on write.
+    pub page_cow: u64,
     /// Current page directory for address translation (None = identity mapping)
     pub current_page_dir: Option<Vec<u32>>,
     /// VMA list for the currently executing process (used by page fault handler)
@@ -634,6 +641,13 @@ impl Vm {
             mode: CpuMode::Kernel,
             kernel_stack: Vec::new(),
             allocated_pages: 0b11, // pages 0-1 used by main process
+            page_ref_count: {
+                let mut rc = [0u32; NUM_RAM_PAGES];
+                rc[0] = 1; // page 0 used by main process
+                rc[1] = 1; // page 1 used by main process
+                rc
+            },
+            page_cow: 0,
             current_page_dir: None,
             current_vmas: Vec::new(),
             segfault_pid: 0,
@@ -701,6 +715,13 @@ impl Vm {
         self.mode = CpuMode::Kernel;
         self.kernel_stack.clear();
         self.allocated_pages = 0b11;
+        self.page_ref_count = {
+            let mut rc = [0u32; NUM_RAM_PAGES];
+            rc[0] = 1;
+            rc[1] = 1;
+            rc
+        };
+        self.page_cow = 0;
         self.current_page_dir = None;
         self.current_vmas = Vec::new();
         self.segfault_pid = 0;
@@ -904,18 +925,34 @@ impl Vm {
             for i in 0..count {
                 if self.allocated_pages & (1u64 << (start + i)) != 0 { continue 'outer; }
             }
-            for i in 0..count { self.allocated_pages |= 1u64 << (start + i); }
+            for i in 0..count {
+                self.allocated_pages |= 1u64 << (start + i);
+                self.page_ref_count[start + i] = 1;
+            }
             return Some(start);
         }
         None
     }
 
-    /// Free all physical pages mapped by a page directory.
+    /// Free physical pages mapped by a page directory, respecting COW reference counts.
+    /// Only actually frees a page when its reference count drops to 0.
     fn free_page_dir(&mut self, pd: &[u32]) {
         for &entry in pd {
             let ppage = entry as usize;
             if ppage < NUM_RAM_PAGES {
-                self.allocated_pages &= !(1u64 << ppage);
+                if self.page_ref_count[ppage] > 1 {
+                    // Page is shared (COW) -- just decrement ref count
+                    self.page_ref_count[ppage] -= 1;
+                    // Clear COW flag if only one reference remains
+                    if self.page_ref_count[ppage] == 1 {
+                        self.page_cow &= !(1u64 << ppage);
+                    }
+                } else {
+                    // Last reference -- actually free the page
+                    self.allocated_pages &= !(1u64 << ppage);
+                    self.page_ref_count[ppage] = 0;
+                    self.page_cow &= !(1u64 << ppage);
+                }
             }
         }
     }
@@ -962,6 +999,114 @@ impl Vm {
         // Don't allocate page 63 -- it's always the kernel's hardware page
         // (main process uses it via identity mapping)
         Some(pd)
+    }
+
+    /// Create a COW (copy-on-write) page directory for fork.
+    ///
+    /// Instead of allocating new physical pages and copying memory, the child
+    /// shares the parent's physical pages. Writes trigger a page copy.
+    ///
+    /// `parent_start` is the physical base address in the parent's address space
+    /// where the child's code begins. Rounded down to page boundary for COW.
+    /// Returns (page_dir, child_pc_offset) where child_pc_offset is the
+    /// offset within the first page where the child should start executing.
+    fn create_cow_page_dir(&mut self, parent_start: u32) -> Option<(Vec<u32>, u32)> {
+        let page_offset = parent_start % (PAGE_SIZE as u32);
+        let parent_phys_base = (parent_start as usize) / PAGE_SIZE;
+
+        let mut pd = vec![PAGE_UNMAPPED; NUM_PAGES];
+
+        for vpage in 0..PROCESS_PAGES {
+            let parent_phys = parent_phys_base + vpage;
+            if parent_phys >= NUM_RAM_PAGES { break; }
+
+            // Shared regions are always identity-mapped (NOT COW)
+            if vpage == 3 {
+                pd[3] = 3;
+                self.page_ref_count[3] += 1;
+                continue;
+            }
+
+            pd[vpage] = parent_phys as u32;
+            self.page_ref_count[parent_phys] += 1;
+            self.page_cow |= 1u64 << parent_phys;
+        }
+
+        // Page 63 (hardware ports / syscall table) - always identity-mapped
+        pd[63] = 63;
+
+        Some((pd, page_offset))
+    }
+
+    /// Handle a write to a copy-on-write page.
+    ///
+    /// Called when STORE targets a physical page marked as COW.
+    /// Allocates a new physical page, copies the data, updates the
+    /// current page directory to point to the new page, and decrements
+    /// the ref count on the old page.
+    ///
+    /// Returns true if the COW was resolved (page now writable), false on allocation failure.
+    fn handle_cow_write(&mut self, vaddr: u32) -> bool {
+        let vpage = (vaddr as usize) / PAGE_SIZE;
+
+        // Extract old physical page from current page directory
+        let old_phys = match &self.current_page_dir {
+            Some(pd) => {
+                if vpage >= pd.len() || vpage >= NUM_PAGES { return false; }
+                let p = pd[vpage] as usize;
+                if p >= NUM_PAGES { return false; }
+                p
+            }
+            None => return false,
+        };
+
+        // Check if this page is actually COW
+        if self.page_cow & (1u64 << old_phys) == 0 {
+            return false;
+        }
+
+        // Allocate a new physical page for the private copy
+        let new_phys = match self.alloc_pages(1) {
+            Some(p) => p,
+            None => return false,
+        };
+
+        // Copy the page contents
+        let old_base = old_phys * PAGE_SIZE;
+        let new_base = new_phys * PAGE_SIZE;
+        for i in 0..PAGE_SIZE {
+            if old_base + i < self.ram.len() && new_base + i < self.ram.len() {
+                self.ram[new_base + i] = self.ram[old_base + i];
+            }
+        }
+
+        // Update page directory to point to the new private page
+        if let Some(ref mut pd) = self.current_page_dir {
+            pd[vpage] = new_phys as u32;
+        }
+
+        // Decrement ref count on old page, clear COW if last reference
+        self.page_ref_count[old_phys] -= 1;
+        if self.page_ref_count[old_phys] <= 1 {
+            self.page_cow &= !(1u64 << old_phys);
+        }
+
+        // New page is NOT COW (ref_count = 1 from alloc_pages)
+        self.page_cow &= !(1u64 << new_phys);
+
+        true
+    }
+
+    /// Check if a write to the given virtual address targets a COW page.
+    /// If so, resolve the COW by copying the page to a private one.
+    fn resolve_cow_if_needed(&mut self, vaddr: u32) {
+        let phys = match self.translate_va(vaddr) {
+            Some(addr) => addr / PAGE_SIZE,
+            None => return,
+        };
+        if phys < NUM_RAM_PAGES && (self.page_cow & (1u64 << phys)) != 0 {
+            self.handle_cow_write(vaddr);
+        }
     }
 
     /// Try to handle a page fault for the given virtual address.
@@ -1155,12 +1300,15 @@ impl Vm {
                 }
             }
 
-            // STORE addr_reg, reg  -- store to RAM (page-translated)
+            // STORE addr_reg, reg  -- store to RAM (page-translated, COW-aware)
             0x12 => {
                 let addr_reg = self.fetch() as usize;
                 let reg = self.fetch() as usize;
                 if addr_reg < NUM_REGS && reg < NUM_REGS {
                     let vaddr = self.regs[addr_reg];
+                    // Check COW before writing: if the target physical page is shared,
+                    // copy it to a private page first
+                    self.resolve_cow_if_needed(vaddr);
                     match self.translate_va_or_fault(vaddr) {
                         Some(addr) => {
                             // Phase 46: Intercept screen buffer range
@@ -1307,13 +1455,14 @@ impl Vm {
                 }
             }
 
-            // STORES offset, reg -- store to SP + offset (stack-relative)
+            // STORES offset, reg -- store to SP + offset (stack-relative, COW-aware)
             0x17 => {
                 let offset = self.fetch() as i32;
                 let rs = self.fetch() as usize;
                 if rs < NUM_REGS {
                     let sp = self.regs[30] as i32;
                     let vaddr = sp.wrapping_add(offset) as u32;
+                    self.resolve_cow_if_needed(vaddr);
                     match self.translate_va_or_fault(vaddr) {
                         Some(addr) => {
                             if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
@@ -1984,6 +2133,7 @@ impl Vm {
 
             // SPAWN addr_reg  -- create child with isolated address space
             // Returns PID (1-based) in RAM[0xFFA], or 0xFFFFFFFF on error
+            // Uses copy-on-write: shares parent's physical pages, copies on write.
             0x4D => {
                 let ar = self.fetch() as usize;
                 if ar < NUM_REGS {
@@ -1992,43 +2142,55 @@ impl Vm {
                         self.ram[0xFFA] = 0xFFFFFFFF;
                     } else {
                         let start_addr = self.regs[ar];
-                        let page_dir = self.create_process_page_dir();
-                        if let Some(pd) = &page_dir {
-                            let phys_base = (pd[0] as usize) * PAGE_SIZE;
-                            let copy_len = PROCESS_PAGES * PAGE_SIZE;
-                            let src = start_addr as usize;
-                            for i in 0..copy_len {
-                                let dst = phys_base + i;
-                                let si = src + i;
-                                if dst >= self.ram.len() || si >= self.ram.len() { break; }
-                                self.ram[dst] = self.ram[si];
+                        // COW fork: share parent's physical pages.
+                        // For non-page-aligned start_addr, the child's PC is adjusted
+                        // to the offset within the first page.
+                        let page_offset = start_addr % (PAGE_SIZE as u32);
+                        let parent_phys_base = (start_addr as usize) / PAGE_SIZE;
+                        let mut pd = vec![PAGE_UNMAPPED; NUM_PAGES];
+
+                        for vpage in 0..PROCESS_PAGES {
+                            let parent_phys = parent_phys_base + vpage;
+                            if parent_phys >= NUM_RAM_PAGES { break; }
+
+                            // Shared regions are always identity-mapped (NOT COW)
+                            if vpage == 3 || parent_phys == 3 {
+                                pd[vpage] = 3;
+                                self.page_ref_count[3] += 1;
+                                continue;
                             }
-                            let pid = (self.processes.len() + 1) as u32;
-                            self.processes.push(SpawnedProcess {
-                                pc: 0,
-                                regs: [0; NUM_REGS],
-                                state: ProcessState::Ready,
-                                pid,
-                                mode: CpuMode::User,
-                                page_dir: page_dir.clone(),
-                                segfaulted: false,
-                                priority: 1,
-                                slice_remaining: 0,
-                                sleep_until: 0,
-                                yielded: false,
-                                kernel_stack: Vec::new(),
-                                msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: self.current_pid,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4],
-                                vmas: Process::default_vmas_for_process(),
-                                brk_pos: PAGE_SIZE as u32,
-                            });
-                            self.ram[0xFFA] = pid;
-                        } else {
-                            self.ram[0xFFA] = 0xFFFFFFFF;
+
+                            pd[vpage] = parent_phys as u32;
+                            self.page_ref_count[parent_phys] += 1;
+                            self.page_cow |= 1u64 << parent_phys;
                         }
+
+                        // Page 63 (hardware ports / syscall table) - always identity-mapped
+                        pd[63] = 63;
+
+                        let pid = (self.processes.len() + 1) as u32;
+                        self.processes.push(SpawnedProcess {
+                            pc: page_offset,
+                            regs: [0; NUM_REGS],
+                            state: ProcessState::Ready,
+                            pid,
+                            mode: CpuMode::User,
+                            page_dir: Some(pd),
+                            segfaulted: false,
+                            priority: 1,
+                            slice_remaining: 0,
+                            sleep_until: 0,
+                            yielded: false,
+                            kernel_stack: Vec::new(),
+                            msg_queue: Vec::new(),
+                            exit_code: 0,
+                            parent_pid: self.current_pid,
+                            pending_signals: Vec::new(),
+                            signal_handlers: [0; 4],
+                            vmas: Process::default_vmas_for_process(),
+                            brk_pos: PAGE_SIZE as u32,
+                        });
+                        self.ram[0xFFA] = pid;
                     }
                 }
             }
@@ -4018,6 +4180,13 @@ impl Vm {
             mode: CpuMode::Kernel,
             kernel_stack: Vec::new(),
             allocated_pages: 0b11,
+            page_ref_count: {
+                let mut rc = [0u32; NUM_RAM_PAGES];
+                rc[0] = 1;
+                rc[1] = 1;
+                rc
+            },
+            page_cow: 0,
             current_page_dir: None,
             current_vmas: Vec::new(),
             segfault_pid: 0,
