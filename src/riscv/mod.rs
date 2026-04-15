@@ -166,29 +166,16 @@ impl RiscvVm {
 
     /// Parse the highest physical address (paddr + memsz) across all PT_LOAD segments.
     fn parse_elf_highest_paddr(image: &[u8]) -> Option<u64> {
-        if image.len() < 52 {
-            return None;
-        }
-        if u32::from_le_bytes([image[0], image[1], image[2], image[3]]) != 0x464C457F {
-            return None;
-        }
-        let phoff = u32::from_le_bytes([image[28], image[29], image[30], image[31]]) as usize;
-        let phentsize = u16::from_le_bytes([image[42], image[43]]) as usize;
-        let phnum = u16::from_le_bytes([image[44], image[45]]) as usize;
+        let class = crate::riscv::loader::validate_elf_header(image).ok()?;
+        let hdr = crate::riscv::loader::parse_elf_header(image, class);
 
         let mut highest: u64 = 0;
-        for i in 0..phnum {
-            let off = phoff + i * phentsize;
-            if off + phentsize > image.len() {
-                break;
-            }
-            let seg = &image[off..off + phentsize];
-            let p_type = u32::from_le_bytes([seg[0], seg[1], seg[2], seg[3]]);
-            if p_type == 1 {
+        for i in 0..hdr.phnum {
+            let off = hdr.phoff + i * hdr.phentsize;
+            let phdr = crate::riscv::loader::parse_phdr(image, off, class)?;
+            if phdr.p_type == 1 {
                 // PT_LOAD
-                let p_paddr = u32::from_le_bytes([seg[12], seg[13], seg[14], seg[15]]) as u64;
-                let p_memsz = u32::from_le_bytes([seg[20], seg[21], seg[22], seg[23]]) as u64;
-                let seg_end = p_paddr + p_memsz;
+                let seg_end = phdr.p_paddr as u64 + phdr.p_memsz as u64;
                 if seg_end > highest {
                     highest = seg_end;
                 }
@@ -200,31 +187,20 @@ impl RiscvVm {
     /// Convert a virtual entry point to physical using ELF segment mappings.
     /// For Linux, the ELF entry is a virtual address; we find which PT_LOAD
     /// segment contains it and compute phys = entry - p_vaddr + p_paddr.
+    /// Supports both ELF32 and ELF64 images.
     fn elf_entry_vaddr_to_phys(image: &[u8], entry_vaddr: u32) -> Option<u32> {
-        if image.len() < 52 {
-            return None;
-        }
-        if u32::from_le_bytes([image[0], image[1], image[2], image[3]]) != 0x464C457F {
-            return None;
-        }
-        let phoff = u32::from_le_bytes([image[28], image[29], image[30], image[31]]) as usize;
-        let phentsize = u16::from_le_bytes([image[42], image[43]]) as usize;
-        let phnum = u16::from_le_bytes([image[44], image[45]]) as usize;
+        let class = crate::riscv::loader::validate_elf_header(image).ok()?;
+        let hdr = crate::riscv::loader::parse_elf_header(image, class);
 
-        for i in 0..phnum {
-            let off = phoff + i * phentsize;
-            if off + phentsize > image.len() {
-                break;
-            }
-            let seg = &image[off..off + phentsize];
-            let p_type = u32::from_le_bytes([seg[0], seg[1], seg[2], seg[3]]);
-            if p_type == 1 {
-                let p_vaddr = u32::from_le_bytes([seg[8], seg[9], seg[10], seg[11]]);
-                let p_paddr = u32::from_le_bytes([seg[12], seg[13], seg[14], seg[15]]);
-                let p_memsz = u32::from_le_bytes([seg[20], seg[21], seg[22], seg[23]]);
-                if entry_vaddr >= p_vaddr && entry_vaddr < p_vaddr + p_memsz {
-                    let offset = entry_vaddr - p_vaddr;
-                    return Some(p_paddr + offset);
+        for i in 0..hdr.phnum {
+            let off = hdr.phoff + i * hdr.phentsize;
+            let phdr = crate::riscv::loader::parse_phdr(image, off, class)?;
+            if phdr.p_type == 1 {
+                if entry_vaddr >= phdr.p_vaddr
+                    && entry_vaddr < phdr.p_vaddr.wrapping_add(phdr.p_memsz as u32)
+                {
+                    let offset = entry_vaddr - phdr.p_vaddr;
+                    return Some(phdr.p_paddr.wrapping_add(offset));
                 }
             }
         }
