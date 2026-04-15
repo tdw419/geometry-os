@@ -829,11 +829,18 @@ impl RiscvCpu {
                     bus.pending_syscall_idx = Some(idx);
                 }
 
-                // SBI interception: when an ECALL from S-mode would trap to M-mode,
-                // check if it's an SBI call (a7 = SBI extension ID).
+                // SBI interception: when an ECALL from S-mode or M-mode would
+                // trap, check if it's an SBI call (a7 = SBI extension ID).
                 // If handled by SBI, set results in a0/a1 and advance PC (no trap).
                 // This is how real firmware (OpenSBI/BBL) handles SBI calls.
-                if self.privilege == Privilege::Supervisor {
+                //
+                // M-mode ECALL is the standard way the kernel calls SBI during
+                // early boot (before transitioning to S-mode). Without this,
+                // M-mode ECALLs go through the trap forwarding path which just
+                // skips the instruction without setting results.
+                if self.privilege == Privilege::Supervisor
+                    || self.privilege == Privilege::Machine
+                {
                     let a7 = self.x[17]; // extension ID
                     let a6 = self.x[16]; // function ID
                     let a0 = self.x[10];
@@ -1203,6 +1210,9 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.csr.mtvec = 0x8000_0200;
+        // Set a7 to an unrecognized SBI extension (0x999) so the ECALL
+        // is NOT intercepted as an SBI call and falls through to trap.
+        cpu.x[17] = 0x999;
         bus.write_word(0x8000_0000, 0x00000073).unwrap(); // ECALL
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         // PC should jump to mtvec
@@ -1211,6 +1221,25 @@ mod tests {
         assert_eq!(cpu.csr.mepc, 0x8000_0000);
         // mcause should be CAUSE_ECALL_M (we're in M-mode)
         assert_eq!(cpu.csr.mcause, csr::CAUSE_ECALL_M);
+    }
+
+    #[test]
+    fn step_ecall_m_mode_sbi_intercept() {
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        let mut cpu = RiscvCpu::new();
+        cpu.csr.mtvec = 0x8000_0200;
+        // ECALL with a7=0 (SBI_CONSOLE_PUTCHAR) should be intercepted, not trapped.
+        cpu.x[17] = 0; // SBI_CONSOLE_PUTCHAR
+        cpu.x[10] = 0; // null char (no output)
+        bus.write_word(0x8000_0000, 0x00000073).unwrap(); // ECALL
+        assert_eq!(cpu.step(&mut bus), StepResult::Ok);
+        // SBI handled the call: PC advances normally, no trap.
+        assert_eq!(cpu.pc, 0x8000_0004);
+        // a0 = SBI_SUCCESS (0)
+        assert_eq!(cpu.x[10], 0);
+        // mepc/mcause unchanged (no trap delivered)
+        assert_eq!(cpu.csr.mepc, 0);
+        assert_eq!(cpu.csr.mcause, 0);
     }
 
     #[test]

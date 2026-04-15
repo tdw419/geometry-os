@@ -19,6 +19,11 @@ fn test_vm(instrs: &[u32]) -> RiscvVm {
 }
 
 fn run(vm: &mut RiscvVm, max_steps: usize) {
+    // Prevent SBI interception: set a7 (x17) to a non-SBI value so ECALL
+    // traps normally instead of being silently handled. This is needed
+    // because M-mode SBI interception was added for Linux boot support,
+    // and test VMs start in M-mode with all registers at 0 (a7=0 = SBI_CONSOLE_PUTCHAR).
+    vm.cpu.x[17] = 0xDEAD;
     for _ in 0..max_steps {
         match vm.cpu.step(&mut vm.bus) {
             StepResult::Ecall | StepResult::Ebreak | StepResult::FetchFault => break,
