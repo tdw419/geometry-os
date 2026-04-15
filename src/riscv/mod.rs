@@ -226,63 +226,6 @@ impl RiscvVm {
     /// Set up the VM for Linux boot without running the instruction loop.
     /// Returns (vm, fw_addr, entry, dtb_addr) so callers can run their own loop.
 
-    /// Patch the kernel's page tables to add an identity mapping for a low address.
-    ///
-    /// The kernel's setup_vm() creates page tables with a direct mapping
-    /// (VA = PA + 0xC0000000) but doesn't identity-map low physical addresses.
-    /// Some kernel code (per-CPU data, device probes) accesses low addresses
-    /// via virtual addresses that should map to the same physical addresses.
-    ///
-    /// This function walks the kernel's page tables (from satp) and adds
-    /// an identity-mapped L2 entry for the faulting page, pointing to the
-    /// same physical page.
-    fn patch_page_table_identity(bus: &mut bus::Bus, satp: u32, fault_va: u32) {
-        if satp == 0 { return; } // MMU not enabled
-
-        // SV32: mode=bit[31], PPN=bits[21:0]
-        if (satp >> 31) & 1 == 0 { return; }
-
-        let root_ppn = satp & 0x3FFFFF;
-        let root_addr = (root_ppn as u64) << 12;
-
-        let vpn1 = ((fault_va >> 22) & 0x3FF) as u64;
-        let vpn0 = ((fault_va >> 12) & 0x3FF) as u64;
-
-        // Read L1 PTE
-        let l1_addr = root_addr + vpn1 * 4;
-        let l1_pte = match bus.read_word(l1_addr) {
-            Ok(w) => w,
-            Err(_) => return,
-        };
-
-        // L1 entry must be valid and non-leaf (points to L2 table)
-        if (l1_pte & 1) == 0 { return; }
-        if (l1_pte & 0xE) != 0 { return; } // leaf (megapage), can't add L2
-
-        let l2_ppn = ((l1_pte >> 10) & 0x3FFFFF) as u64;
-        let l2_base = l2_ppn << 12;
-        let l2_addr = l2_base + vpn0 * 4;
-
-        let l2_pte = bus.read_word(l2_addr).unwrap_or(0);
-
-        // Only patch if the L2 entry is not already valid
-        if (l2_pte & 1) != 0 { return; }
-
-        // Create identity-mapped PTE: VA page -> PA same page
-        // PTE format: V(1) R(1) W(1) X(0) G(0) U(0) A(1) D(1) PPN
-        let pa_ppn = vpn0; // identity mapping: PA = VA for low addresses
-        let new_pte: u32 = (0x00000000u32
-            | (1 << 0)   // V = valid
-            | (1 << 1)   // R = readable
-            | (1 << 2)   // W = writable
-            | (0 << 3)   // X = not executable
-            | (1 << 6)   // A = accessed
-            | (1 << 7)   // D = dirty
-            | ((pa_ppn as u32) << 10)) as u32; // PPN = identity
-
-        let _ = bus.write_word(l2_addr, new_pte);
-    }
-
     pub fn boot_linux_setup(
         kernel_image: &[u8],
         initramfs: Option<&[u8]>,
@@ -304,6 +247,7 @@ impl RiscvVm {
         // Previously ram_base was set to the kernel's first LOAD vaddr (0xC0000000),
         // which caused all physical addresses below 0xC0000000 to be silently discarded.
         let mut vm = Self::new_with_base(0, actual_ram_size);
+        vm.bus.low_addr_identity_map = true; // Emulate OpenSBI low-address mappings
 
         // 3. Load kernel ELF at physical addresses (p_paddr).
         // The kernel's ELF has p_paddr = vaddr - PAGE_OFFSET, which are the correct
@@ -574,21 +518,9 @@ impl RiscvVm {
                 StepResult::Ecall => {} // ECALL is normal during boot
             }
 
-            // Demand-paging for low addresses: the kernel's page tables don't
-            // identity-map the first 4MB (used for per-CPU data, device probes,
-            // and early boot structures). When an S-mode fault occurs for a low
-            // address, add an identity mapping to the kernel's page tables.
-            // This emulates what a more complete firmware (OpenSBI) would do.
-            if vm.cpu.privilege == cpu::Privilege::Supervisor {
-                let stval = vm.cpu.csr.stval;
-                if stval < 0x0040_0000 && stval > 0 && matches!(step_result, 
-                    StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault) {
-                    Self::patch_page_table_identity(&mut vm.bus, vm.cpu.csr.satp, stval);
-                    vm.cpu.tlb.flush_all();
-                    // Don't count demand-paged faults in the stall/loop detection
-                    _smode_fault_count = _smode_fault_count.saturating_sub(1);
-                }
-            }
+            // Demand-paging is handled at the MMU level via low_addr_identity_map.
+            // No need to patch page tables here.
+
             // Detect spin loops
             if vm.cpu.pc == _last_unique_pc {
                 _same_pc_count += 1;

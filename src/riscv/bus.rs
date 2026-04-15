@@ -49,6 +49,12 @@ pub struct Bus {
     pub write_watch_pc: u32,
     /// Debug: whether the watchpoint was hit.
     pub write_watch_hit: bool,
+    /// When true, the MMU identity-maps virtual addresses below 4MB
+    /// (VA == PA) when the page table walk fails. This emulates OpenSBI
+    /// firmware behavior for Linux boot, where per-CPU data, device
+    /// probes, and early boot structures live in low memory.
+    /// Default: false. Set to true by boot_linux_setup().
+    pub low_addr_identity_map: bool,
 }
 
 impl Bus {
@@ -69,6 +75,7 @@ impl Bus {
             write_watch_val: 0,
             write_watch_pc: 0,
             write_watch_hit: false,
+            low_addr_identity_map: false,
         }
     }
 
