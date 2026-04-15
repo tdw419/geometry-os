@@ -6264,8 +6264,117 @@ fn test_register_dashboard() {
 }
 
 #[test]
+
+// === Living Map (stateful world + simulated creatures) ===
+
+#[test]
 fn test_living_map_assembles() {
     let source = std::fs::read_to_string("programs/living_map.asm")
         .expect("living_map.asm should exist");
     assemble(&source, 0).expect("living_map.asm should assemble cleanly");
+}
+
+#[test]
+fn test_living_map_runs() {
+    let source = std::fs::read_to_string("programs/living_map.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = v; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run for enough steps for several frames
+    for _ in 0..2_000_000 {
+        if vm.halted { break; }
+        if !vm.step() { break; }
+    }
+
+    // Player at center of viewport
+    assert_eq!(vm.ram[0x7803], 32, "player_world_x should be 32");
+    assert_eq!(vm.ram[0x7804], 32, "player_world_y should be 32");
+
+    // Screen should have terrain
+    let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(non_black > 100, "Expected terrain on screen, got {} non-black pixels", non_black);
+
+    // Should not halt
+    assert!(!vm.halted, "living_map should not halt");
+}
+
+#[test]
+fn test_living_map_draws_terrain() {
+    let source = std::fs::read_to_string("programs/living_map.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = v; }
+    }
+
+    // Run until first frame completes
+    for _ in 0..1_000_000 {
+        if vm.halted { break; }
+        if !vm.step() { break; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(non_black > 1000, "terrain should fill screen, got {} non-black pixels", non_black);
+}
+
+#[test]
+fn test_living_map_draws_player() {
+    let source = std::fs::read_to_string("programs/living_map.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = v; }
+    }
+
+    for _ in 0..1_000_000 {
+        if vm.halted { break; }
+        if !vm.step() { break; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Player at pixel (128,128) as 4x4 white rectangle
+    let white = 0xFFFFFFu32;
+    assert_eq!(vm.screen[128 * 256 + 128], white, "player top-left should be white");
+    assert_eq!(vm.screen[131 * 256 + 131], white, "player bottom-right should be white");
+}
+
+#[test]
+fn test_living_map_footstep_trail() {
+    let source = std::fs::read_to_string("programs/living_map.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = v; }
+    }
+
+    // Press Right for several frames
+    let mut frames = 0;
+    for _ in 0..5_000_000 {
+        if vm.halted { break; }
+        vm.ram[0xFFB] = 8; // bit 3 = right
+        if !vm.step() { break; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames += 1;
+            if frames >= 10 { break; }
+        }
+    }
+
+    let state_count = vm.ram[0x7807];
+    assert!(state_count > 0, "should have footstep entries after moving, got state_count={}", state_count);
+
+    let cam_x = vm.ram[0x7800];
+    assert!(cam_x > 0, "camera should have moved right: camera_x={}", cam_x);
 }
