@@ -1663,13 +1663,13 @@ mod tests {
 
     #[test]
     fn step_amoxor_w() {
-        // AMOXOR.W x1, x3, (x2) -- funct5=00101
+        // AMOXOR.W x1, x3, (x2) -- funct5=00100
         let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0xFF00FF00;
         bus.write_word(0x8000_0100, 0x0F0F0F0F).unwrap();
-        let word = amo_encode(0b00101, 1, 2, 3, false, false);
+        let word = amo_encode(0b00100, 1, 2, 3, false, false);
         bus.write_word(0x8000_0000, word).unwrap();
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0x0F0F0F0F);
@@ -1681,13 +1681,13 @@ mod tests {
 
     #[test]
     fn step_amoand_w() {
-        // AMOAND.W x1, x3, (x2) -- funct5=01101
+        // AMOAND.W x1, x3, (x2) -- funct5=01100
         let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0x0F0F0F0F;
         bus.write_word(0x8000_0100, 0xFF00FF00).unwrap();
-        let word = amo_encode(0b01101, 1, 2, 3, false, false);
+        let word = amo_encode(0b01100, 1, 2, 3, false, false);
         bus.write_word(0x8000_0000, word).unwrap();
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFF00FF00);
@@ -1699,13 +1699,13 @@ mod tests {
 
     #[test]
     fn step_amoor_w() {
-        // AMOOR.W x1, x3, (x2) -- funct5=01001
+        // AMOOR.W x1, x3, (x2) -- funct5=01000
         let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0x0F0F0F0F;
         bus.write_word(0x8000_0100, 0xF0F0F0F0).unwrap();
-        let word = amo_encode(0b01001, 1, 2, 3, false, false);
+        let word = amo_encode(0b01000, 1, 2, 3, false, false);
         bus.write_word(0x8000_0000, word).unwrap();
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xF0F0F0F0);
