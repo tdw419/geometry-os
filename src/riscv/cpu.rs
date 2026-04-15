@@ -91,6 +91,8 @@ pub struct RiscvCpu {
     pub reservation: Option<u64>,
     /// Last step info, populated every step for tracing (Phase 41).
     pub last_step: Option<LastStepInfo>,
+    /// Count of ECALL instructions executed (diagnostic).
+    pub ecall_count: u64,
 }
 
 impl RiscvCpu {
@@ -104,6 +106,7 @@ impl RiscvCpu {
             tlb: Tlb::new(),
             reservation: None,
             last_step: None,
+            ecall_count: 0,
         };
         cpu.x[10] = 0; // a0 = 0 (no Hart ID)
         cpu.x[11] = 0; // a1 = 0 (no DTB)
@@ -809,6 +812,7 @@ impl RiscvCpu {
 
             // ---- System ----
             Operation::Ecall => {
+                self.ecall_count += 1;
                 // Determine trap cause based on current privilege.
                 let cause = match self.privilege {
                     Privilege::User => csr::CAUSE_ECALL_U,

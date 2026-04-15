@@ -2171,19 +2171,21 @@ fn test_tlb_64_entry_capacity() {
 }
 
 #[test]
-fn test_tlb_eviction_on_overfill() {
-    // Insert 80 entries: only 64 can fit, so some must be evicted.
-    // Sequential VPNs fill all 64 base slots; after that, linear probing
-    // finds full slots and evicts the base slot.
+fn test_tlb_no_eviction_hashmap() {
+    // HashMap-based TLB has no capacity limit -- all entries are retained.
+    // Entries persist until explicitly flushed (SFENCE.VMA, SATP change).
     let mut tlb = mmu::Tlb::new();
     for i in 0..80u32 {
         tlb.insert(i, 1, 0x1000 + i, mmu::PTE_V | mmu::PTE_R);
     }
-    // TLB should still have exactly 64 valid entries.
-    assert_eq!(tlb.valid_count(), 64);
-    // The last entries we inserted should be findable (some early ones evicted).
-    let found_last = tlb.lookup(79, 1);
-    assert!(found_last.is_some(), "last inserted entry should be in TLB");
+    // All 80 entries should be present (no eviction).
+    assert_eq!(tlb.valid_count(), 80);
+    // All entries should be findable.
+    for i in 0..80u32 {
+        let result = tlb.lookup(i, 1);
+        assert!(result.is_some(), "VPN {} should be in TLB", i);
+        assert_eq!(result.unwrap().0, 0x1000 + i);
+    }
 }
 
 #[test]

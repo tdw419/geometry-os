@@ -161,8 +161,7 @@ impl Bus {
             let byte_off = (addr & 3) as usize;
             Ok((word >> (byte_off * 8)) as u8)
         } else if super::uart::Uart::contains(addr) {
-            let mut uart = self.uart.clone();
-            Ok(uart.read_byte(addr - super::uart::UART_BASE))
+            Ok(self.uart.read_byte(addr - super::uart::UART_BASE))
         } else if super::plic::Plic::contains(addr) {
             let word = self.plic.read(addr & !3).ok_or(MemoryError { addr, size: 1 })?;
             let byte_off = (addr & 3) as usize;

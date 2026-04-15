@@ -213,32 +213,23 @@ impl RiscvVm {
     /// below 0xC0000000. The bus routes these to device handlers before checking RAM.
     ///
     /// Steps:
-    /// 1. Parse ELF to find first LOAD segment vaddr (becomes ram_base)
-    /// 2. Calculate RAM size to fit all segments + initramfs + DTB
-    /// 3. Create VM with ram_base = first vaddr
-    /// 4. Load kernel ELF at virtual addresses (which are now physical)
-    /// 5. Load initramfs after the kernel
-    /// 6. Generate DTB with correct ram_base, initrd info, bootargs
-    /// 7. Set PC to ELF entry (vaddr, now a valid physical address)
-    /// 8. Execute up to max_instructions steps
-    pub fn boot_linux(
+    /// Set up the VM for Linux boot without running the instruction loop.
+    /// Returns (vm, fw_addr, entry, dtb_addr) so callers can run their own loop.
+    pub fn boot_linux_setup(
         kernel_image: &[u8],
         initramfs: Option<&[u8]>,
         ram_size_mb: u32,
-        max_instructions: u64,
         bootargs: &str,
-    ) -> Result<(Self, BootResult), loader::LoadError> {
+    ) -> Result<(Self, u64, u32, u64), loader::LoadError> {
         // 1. Parse ELF header to find the first LOAD segment's vaddr.
-        // This determines where RAM should start.
         let first_vaddr = Self::parse_first_load_vaddr(kernel_image)
-            .unwrap_or(0x8000_0000); // fallback for non-standard kernels
+            .unwrap_or(0x8000_0000);
 
         // 2. Calculate minimum RAM size from kernel segments.
         let min_ram = Self::parse_elf_highest_addr(kernel_image)
             .unwrap_or(first_vaddr + 64 * 1024 * 1024);
         let min_ram_size = (min_ram - first_vaddr) as usize;
 
-        // Use the larger of: caller-specified size, or minimum needed for kernel.
         let caller_ram_size = (ram_size_mb as u64) * 1024 * 1024;
         let actual_ram_size = std::cmp::max(min_ram_size, caller_ram_size as usize);
 
@@ -254,7 +245,7 @@ impl RiscvVm {
             for (i, &byte) in initrd_data.iter().enumerate() {
                 let addr = initrd_addr + i as u64;
                 if vm.bus.write_byte(addr, byte).is_err() {
-                    break; // initrd doesn't fit, skip it
+                    break;
                 }
             }
             let initrd_end_addr = initrd_addr + initrd_data.len() as u64;
@@ -275,7 +266,6 @@ impl RiscvVm {
         };
         let dtb_blob = dtb::generate_dtb(&dtb_config);
 
-        // Place DTB after kernel (and after initramfs if present).
         let after_initrd = initrd_end.unwrap_or(load_info.highest_addr);
         let dtb_addr = ((after_initrd + 0xFFF) & !0xFFF) as u64;
         for (i, &byte) in dtb_blob.iter().enumerate() {
@@ -286,40 +276,56 @@ impl RiscvVm {
         }
 
         // 7. Set CPU state for boot.
-        // Entry point is the ELF entry (virtual address), which IS a valid
-        // physical address in our VM since ram_base = first_vaddr.
         let entry: u32 = load_info.entry;
-        vm.cpu.pc = entry;
         vm.cpu.x[10] = 0; // a0 = hartid (0)
         vm.cpu.x[11] = dtb_addr as u32; // a1 = DTB address
+
+        // Stack for the kernel (mimics OpenSBI).
+        let stack_top: u32 = (first_vaddr + actual_ram_size as u64 - 4096) as u32;
+        vm.cpu.x[2] = stack_top;
+
         vm.cpu.privilege = cpu::Privilege::Machine;
 
-        // Install a minimal M-mode trap handler at fw_addr.
-        //
-        // On real hardware, OpenSBI handles M-mode traps. Our handler is just
-        // a single MRET instruction. Page faults are intercepted at the Rust
-        // level in the step loop below (Approach A), which is more maintainable
-        // than hand-encoded RISC-V machine code.
-        //
-        // The MRET here handles non-page-fault traps: it returns to mepc
-        // (which the step loop adjusts to mepc+4 for non-page-fault cases).
-        //
-        // Place handler at fw_addr (gap between kernel LOAD segments).
+        // M-mode trap handler (single MRET instruction).
         let fw_addr: u64 = first_vaddr + 0x940_000;
         vm.bus.write_word(fw_addr, 0x30200073).ok(); // MRET
 
-        // Set mtvec to our trap handler (direct mode, bit[0]=0).
+        // Set mtvec to our trap handler.
         vm.cpu.csr.write(crate::riscv::csr::MTVEC, fw_addr as u32);
 
-        // Delegate exceptions to S-mode (standard OpenSBI delegation).
-        // Bits: 0=instr_misaligned, 1=instr_access, 2=illegal_insn, 3=breakpoint,
-        //        8=ecall_U, 9=ecall_S, 12=instr_page_fault, 13=load_page_fault,
-        //        15=store_page_fault
-        // Do NOT delegate ECALL_S (bit 9) to S-mode -- SBI calls from S-mode
-        // must trap to M-mode so our SBI handler can process them.
+        // Delegate exceptions to S-mode.
         vm.cpu.csr.medeleg = 0xB109;
-        // Delegate interrupts to S-mode: bit 1=SSIP, 5=STI, 9=SEI
         vm.cpu.csr.mideleg = 0x222;
+
+        // Enter S-mode via MRET.
+        vm.cpu.csr.mepc = entry;
+        vm.cpu.csr.mstatus = 1u32 << csr::MSTATUS_MPP_LSB;
+        vm.cpu.csr.mstatus |= 1 << csr::MSTATUS_MPIE;
+        let restored = vm.cpu.csr.trap_return(cpu::Privilege::Machine);
+        vm.cpu.pc = vm.cpu.csr.mepc;
+        vm.cpu.privilege = restored;
+
+        Ok((vm, fw_addr, entry, dtb_addr))
+    }
+
+    /// Boot a RISC-V Linux kernel.
+    /// 1. Parse ELF to find first LOAD segment vaddr (becomes ram_base)
+    /// 2. Calculate RAM size to fit all segments + initramfs + DTB
+    /// 3. Create VM with ram_base = first vaddr
+    /// 4. Load kernel ELF at virtual addresses (which are now physical)
+    /// 5. Load initramfs after the kernel
+    /// 6. Generate DTB with correct ram_base, initrd info, bootargs
+    /// 7. Set PC to ELF entry (vaddr, now a valid physical address)
+    /// 8. Execute up to max_instructions steps
+    pub fn boot_linux(
+        kernel_image: &[u8],
+        initramfs: Option<&[u8]>,
+        ram_size_mb: u32,
+        max_instructions: u64,
+        bootargs: &str,
+    ) -> Result<(Self, BootResult), loader::LoadError> {
+        let (mut vm, fw_addr, entry, dtb_addr) =
+            Self::boot_linux_setup(kernel_image, initramfs, ram_size_mb, bootargs)?;
 
         // 8. Execute with Rust-level trap forwarding (OpenSBI emulation).
         //
@@ -340,6 +346,7 @@ impl RiscvVm {
         let mut _sbi_call_count: u64 = 0;
         let mut _forward_count: u64 = 0;
         let mut _ecall_m_count: u64 = 0;
+        let mut _smode_fault_count: u64 = 0;
         let mut _last_unique_pc: u32 = 0;
         let mut _same_pc_count: u64 = 0;
         while count < max_instructions {
@@ -460,13 +467,24 @@ impl RiscvVm {
                 // Fall through to normal step processing.
             }
 
-            match vm.step() {
-                StepResult::Ok
-                | StepResult::FetchFault
+            let step_result = vm.step();
+            match step_result {
+                StepResult::Ok => {}
+                StepResult::FetchFault
                 | StepResult::LoadFault
                 | StepResult::StoreFault => {
-                    // Traps are handled by the Rust-level interception above
-                    // (checked at the top of the loop on the next iteration).
+                    // Log S-mode faults for debugging (first 20).
+                    if vm.cpu.privilege == cpu::Privilege::Supervisor && _smode_fault_count < 20 {
+                        _smode_fault_count += 1;
+                        let fault_type = match step_result {
+                            StepResult::FetchFault => "fetch",
+                            StepResult::LoadFault => "load",
+                            StepResult::StoreFault => "store",
+                            _ => unreachable!(),
+                        };
+                        eprintln!("[boot] S-mode {} fault at count={}: PC=0x{:08X} scause=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
+                            fault_type, count, vm.cpu.pc, vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec);
+                    }
                 }
                 StepResult::Ebreak => break,
                 StepResult::Ecall => {} // ECALL is normal during boot

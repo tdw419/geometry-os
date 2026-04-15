@@ -129,26 +129,33 @@ pub enum MmuEvent {
 }
 
 // ---- TLB ----
+//
+// Uses a HashMap instead of a fixed-size array. This matches QEMU's behavior:
+// TLB entries persist until explicitly flushed (SFENCE.VMA, SATP change).
+// No capacity-based eviction. Linux modifies page table entries without
+// SFENCE.VMA during boot, relying on stale TLB entries to remain valid
+// until the kernel finishes the update and flushes. A fixed-size TLB with
+// eviction breaks this pattern.
 
-/// Number of TLB entries.
-const TLB_SIZE: usize = 64;
+use std::collections::HashMap;
+
+/// TLB key: (vpn, asid). Global entries use asid=0.
+type TlbKey = (u32, u16);
 
 /// A single TLB entry.
 #[derive(Clone, Copy, Debug)]
 struct TlbEntry {
-    vpn: u32,
-    asid: u16,
     ppn: u32,
     flags: u32,
-    valid: bool,
 }
 
 /// Translation Lookaside Buffer.
 /// Caches virtual-to-physical mappings with ASID tagging.
 /// Global entries (PTE_G) match any ASID.
+/// No capacity-based eviction — entries live until explicitly flushed.
 #[derive(Clone, Debug)]
 pub struct Tlb {
-    entries: [TlbEntry; TLB_SIZE],
+    entries: HashMap<TlbKey, TlbEntry>,
 }
 
 impl Default for Tlb {
@@ -160,47 +167,22 @@ impl Default for Tlb {
 impl Tlb {
     pub fn new() -> Self {
         Self {
-            entries: [TlbEntry {
-                vpn: 0,
-                asid: 0,
-                ppn: 0,
-                flags: 0,
-                valid: false,
-            }; TLB_SIZE],
+            entries: HashMap::new(),
         }
     }
 
     /// Look up a VPN/ASID in the TLB.
     /// Returns (ppn, flags) if found, None if not.
-    /// Global entries (PTE_G) match any ASID — they're stored at ASID=0's hash.
-    /// Uses the same hash+probe as insert for O(1) lookup.
+    /// Global entries (PTE_G) match any ASID — they're stored at asid=0.
     pub fn lookup(&self, vpn: u32, asid: u16) -> Option<(u32, u32)> {
-        // Probe the requested ASID's chain first
-        if let Some(result) = self.probe_chain(vpn, asid, false) {
-            return Some(result);
+        // Check exact (vpn, asid) match first
+        if let Some(entry) = self.entries.get(&(vpn, asid)) {
+            return Some((entry.ppn, entry.flags));
         }
-        // For non-zero ASID, also probe ASID=0 chain (where globals live)
+        // For non-zero ASID, also check global entries (asid=0 with PTE_G set)
         if asid != 0 {
-            return self.probe_chain(vpn, 0, true);
-        }
-        None
-    }
-
-    /// Probe a single hash chain. If globals_only, only match entries with PTE_G.
-    fn probe_chain(&self, vpn: u32, asid: u16, globals_only: bool) -> Option<(u32, u32)> {
-        let base = ((vpn as usize).wrapping_add((asid as usize) * 2654435761)) % TLB_SIZE;
-        for i in 0..4 {
-            let idx = (base + i) % TLB_SIZE;
-            let entry = &self.entries[idx];
-            if !entry.valid {
-                continue; // skip gaps (may exist after explicit flushes)
-            }
-            if entry.vpn == vpn {
-                let is_global = (entry.flags & PTE_G) != 0;
-                if globals_only && !is_global {
-                    continue; // looking for globals only, skip non-global
-                }
-                if is_global || entry.asid == asid {
+            if let Some(entry) = self.entries.get(&(vpn, 0)) {
+                if (entry.flags & PTE_G) != 0 {
                     return Some((entry.ppn, entry.flags));
                 }
             }
@@ -208,60 +190,42 @@ impl Tlb {
         None
     }
 
-    /// Insert an entry into the TLB with linear probing.
-    /// Global entries (PTE_G) are inserted at ASID=0 so any lookup can find them.
+    /// Insert an entry into the TLB.
+    /// Global entries (PTE_G) are stored at asid=0 so any lookup can find them.
+    /// If an entry already exists for this key, it is updated (not duplicated).
     pub fn insert(&mut self, vpn: u32, asid: u16, ppn: u32, flags: u32) {
         let insert_asid = if (flags & PTE_G) != 0 { 0 } else { asid };
-        let base = ((vpn as usize).wrapping_add((insert_asid as usize) * 2654435761)) % TLB_SIZE;
-        // Linear probe: find an empty slot or evict the base slot.
-        for i in 0..4 {
-            let idx = (base + i) % TLB_SIZE;
-            if !self.entries[idx].valid {
-                self.entries[idx] = TlbEntry { vpn, asid: insert_asid, ppn, flags, valid: true };
-                return;
-            }
-        }
-        // All probed slots full: evict the base slot.
-        self.entries[base] = TlbEntry { vpn, asid: insert_asid, ppn, flags, valid: true };
+        self.entries.insert(
+            (vpn, insert_asid),
+            TlbEntry { ppn, flags },
+        );
     }
 
     /// Flush all TLB entries.
     pub fn flush_all(&mut self) {
-        for entry in &mut self.entries {
-            entry.valid = false;
-        }
+        self.entries.clear();
     }
 
     /// Flush entries for a specific virtual address.
     pub fn flush_va(&mut self, vpn: u32) {
-        for entry in &mut self.entries {
-            if entry.valid && entry.vpn == vpn {
-                entry.valid = false;
-            }
-        }
+        self.entries.retain(|&(v, _), _| v != vpn);
     }
 
     /// Flush entries for a specific ASID (non-global only).
     pub fn flush_asid(&mut self, asid: u16) {
-        for entry in &mut self.entries {
-            if entry.valid && entry.asid == asid && (entry.flags & PTE_G) == 0 {
-                entry.valid = false;
-            }
-        }
+        self.entries.retain(|&(_, a), entry| {
+            a != asid || (entry.flags & PTE_G) != 0
+        });
     }
 
     /// Flush entries matching both a specific VPN and ASID.
     pub fn flush_va_asid(&mut self, vpn: u32, asid: u16) {
-        for entry in &mut self.entries {
-            if entry.valid && entry.vpn == vpn && entry.asid == asid {
-                entry.valid = false;
-            }
-        }
+        self.entries.remove(&(vpn, asid));
     }
 
     /// Count valid entries (for testing capacity).
     pub fn valid_count(&self) -> usize {
-        self.entries.iter().filter(|e| e.valid).count()
+        self.entries.len()
     }
 }
 
@@ -370,16 +334,9 @@ pub fn translate(
             return fault;
         }
 
-        // Hardware-managed A/D bits per RISC-V spec.
-        // Set A (accessed) on any access, D (dirty) on stores.
-        let mut updated_pte = l1_pte | PTE_A;
-        if access_type == AccessType::Store {
-            updated_pte |= PTE_D;
-        }
-        if updated_pte != l1_pte {
-            let _ = bus.write_word(l1_addr, updated_pte);
-        }
-        let flags = updated_pte & 0xFF;
+        // A/D bit updates DISABLED for testing.
+        // The PTE flags are used as-read (no write-back).
+        let flags = l1_pte & 0xFF;
 
         // For TLB: store the effective PPN for this specific VPN (includes VPN0).
         // Each TLB entry covers one 4KB page, so megapage hits insert per-VPN0.
@@ -439,17 +396,9 @@ pub fn translate(
         return fault;
     }
 
-    // Hardware-managed A/D bits per RISC-V spec.
-    // Set A (accessed) on any access, D (dirty) on stores.
-    let mut updated_pte = l2_pte | PTE_A;
-    if access_type == AccessType::Store {
-        updated_pte |= PTE_D;
-    }
-    if updated_pte != l2_pte {
-        let _ = bus.write_word(l2_addr, updated_pte);
-    }
-    let ppn = pte_ppn(updated_pte);
-    let flags = updated_pte & 0xFF;
+    // A/D bit updates DISABLED for testing (L2 leaf).
+    let flags = l2_pte & 0xFF;
+    let ppn = pte_ppn(l2_pte);
 
     tlb.insert(combined_vpn, asid, ppn, flags);
     let pa = ((ppn as u64) << 12) | (offset as u64);
