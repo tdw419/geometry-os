@@ -1,115 +1,136 @@
+/// Dump early_pg_dir AFTER boot has progressed (run 200K steps first)
+use geometry_os::riscv::RiscvVm;
+use geometry_os::riscv::cpu::{StepResult, Privilege};
+use geometry_os::riscv::csr;
+
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
-    let bootargs = "console=ttyS0 panic=1";
+    let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
 
-    use geometry_os::riscv::RiscvVm;
+    let (mut vm, fw_addr, _, _) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
+    let fw_addr_u32 = fw_addr as u32;
 
-    let (mut vm, _) = RiscvVm::boot_linux(
-        &kernel_image,
-        initramfs.as_deref(),
-        256,
-        20_000_000,
-        bootargs,
-    )
-    .unwrap();
-
-    // Use the same PPN extraction as the MMU code
-    let satp = vm.cpu.csr.satp;
-    let ppn = satp & 0x003F_FFFF; // satp_ppn() implementation
-    let asid = ((satp >> 22) & 0x1FF) as u16; // satp_asid() implementation
-    let pt_root = (ppn as u64) << 12;
-    println!("SATP=0x{:08X} PPN=0x{:06X} ASID={} root=0x{:08X}", satp, ppn, asid, pt_root);
-
-    // Check L1 entry for the faulting VA (0xC08BDFFCu32, VPN2=770)
-    let l1_idx = 770;
-    let l1_pte_addr = pt_root + (l1_idx as u64) * 4;
-    let l1_pte = vm.bus.read_word(l1_pte_addr).unwrap_or(0);
-    println!("L1[770] at PA=0x{:08X} = 0x{:08X}", l1_pte_addr, l1_pte);
-    let l1_v = l1_pte & 1;
-    let l1_rwx = (l1_pte >> 1) & 7;
-    println!("  V={} RWX={:03b}", l1_v, l1_rwx);
-    
-    if l1_v != 0 && l1_rwx == 0 {
-        // Non-leaf: points to L2 table
-        let l2_base = ((l1_pte as u64) >> 10) << 12;
-        println!("  L2 base PA: 0x{:08X}", l2_base);
-        let l2_idx = (0xC08BDFFCu32 >> 12) & 0x3FF; // VPN1 = 189
-        let l2_pte_addr = l2_base + (l2_idx as u64) * 4;
-        let l2_pte = vm.bus.read_word(l2_pte_addr).unwrap_or(0);
-        println!("  L2[{}] at PA=0x{:08X} = 0x{:08X}", l2_idx, l2_pte_addr, l2_pte);
-        let l2_v = l2_pte & 1;
-        let l2_rwx = (l2_pte >> 1) & 7;
-        println!("  V={} RWX={:03b}", l2_v, l2_rwx);
-        let pa = ((l2_pte as u64 >> 10) << 12) | (0xC08BDFFCu32 & 0xFFF) as u64;
-        println!("  Translated PA: 0x{:08X}", pa);
-    } else if l1_v != 0 {
-        // Leaf (megapage)
-        let ppn_hi = (l1_pte >> 20) & 0xFFF;
-        let vpn0 = (0xC08BDFFCu32 >> 12) & 0x3FF;
-        let pa = ((ppn_hi as u64) << 22) | ((vpn0 as u64) << 12) | (0xC08BDFFCu32 & 0xFFF) as u64;
-        println!("  Megapage PA: 0x{:08X}", pa);
+    // Run 200K steps with trap handling
+    let max_count = 200_000u64;
+    let mut count: u64 = 0;
+    while count < max_count {
+        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
+            let mcause = vm.cpu.csr.mcause;
+            let cause_code = mcause & !(1u32 << 31);
+            if cause_code == csr::CAUSE_ECALL_M {
+                let r = vm.bus.sbi.handle_ecall(
+                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
+                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
+                    &mut vm.bus.uart, &mut vm.bus.clint);
+                if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+            } else {
+                let mpp = (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB;
+                if cause_code == csr::CAUSE_ECALL_S {
+                    let r = vm.bus.sbi.handle_ecall(
+                        vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
+                        vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
+                        &mut vm.bus.uart, &mut vm.bus.clint);
+                    if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                } else if mpp != 3 {
+                    let stvec = vm.cpu.csr.stvec & !0x3u32;
+                    if stvec != 0 {
+                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                        vm.cpu.csr.scause = mcause;
+                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
+                        let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP)) | (spp << csr::MSTATUS_SPP);
+                        let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE)) | (sie << csr::MSTATUS_SPIE);
+                        vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
+                        vm.cpu.pc = stvec;
+                        vm.cpu.privilege = Privilege::Supervisor;
+                        vm.cpu.tlb.flush_all();
+                        count += 1;
+                        continue;
+                    }
+                }
+            }
+            vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
+            count += 1;
+            continue;
+        }
+        vm.step();
+        count += 1;
     }
 
-    // Now check: what does the kernel's page table look like for the kernel code region?
-    // The kernel code is at 0xC0000000-0xC08F012E (LOAD[0])
-    // VPN2 for 0xC0000000 = 768 (0x300)
-    println!("\nL1 entries for kernel code region (VPN2 768-771):");
-    for i in 768..772 {
-        let pte_addr = pt_root + (i as u64) * 4;
-        let pte = vm.bus.read_word(pte_addr).unwrap_or(0);
+    // Now dump the current page table
+    let satp = vm.cpu.csr.satp;
+    let ppn = (satp & 0x3FFFFF) as u64;
+    let pg_dir_phys = ppn * 4096;
+    
+    eprintln!("\n=== Page table dump at count={} ===", count);
+    eprintln!("satp=0x{:08X} pg_dir_phys=0x{:08X}", satp, pg_dir_phys);
+    eprintln!("PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
+
+    let mut l1_count = 0;
+    let mut l2_count = 0;
+    let mut bad_ppn_count = 0;
+    
+    for i in 0..1024u32 {
+        let addr = pg_dir_phys + (i as u64) * 4;
+        let pte = vm.bus.read_word(addr).unwrap_or(0);
+        if pte == 0 { continue; }
+        l1_count += 1;
+        
+        let ppn_val = (pte >> 10) & 0x3FFFFF;
         let v = pte & 1;
-        let rwx = (pte >> 1) & 7;
-        if v != 0 {
-            let is_leaf = rwx != 0;
-            if is_leaf {
-                let ppn_hi = (pte >> 20) & 0xFFF;
-                println!("  L1[{}] = 0x{:08X} V=1 LEAF megapage PPN_hi=0x{:03X} RWX={:03b}", 
-                    i, pte, ppn_hi, rwx);
-            } else {
-                let l2_base = ((pte as u64) >> 10) << 12;
-                println!("  L1[{}] = 0x{:08X} V=1 NON-LEAF L2 at 0x{:08X}", i, pte, l2_base);
+        let r = (pte >> 1) & 1;
+        let w = (pte >> 2) & 1;
+        let x = (pte >> 3) & 1;
+        
+        let is_leaf = r == 1 || w == 1 || x == 1;
+        let is_bad_ppn = ppn_val >= 0xC0000;
+        if is_bad_ppn { bad_ppn_count += 1; }
+        
+        if i >= 760 && i <= 780 {
+            eprintln!("  L1[{}] = 0x{:08X}  PPN=0x{:06X} PA=0x{:08X} leaf={} {}",
+                i, pte, ppn_val, ppn_val * 4096, is_leaf, 
+                if is_bad_ppn { "<<< BAD PPN" } else { "" });
+        }
+        
+        // If non-leaf, dump L2
+        if !is_leaf && v == 1 && ppn_val < 0x100000 {
+            let l2_base = (ppn_val as u64) * 4096;
+            for j in 0..1024u32 {
+                let l2_addr = l2_base + (j as u64) * 4;
+                let l2_pte = vm.bus.read_word(l2_addr).unwrap_or(0);
+                if l2_pte == 0 { continue; }
+                l2_count += 1;
+                
+                let l2_ppn = (l2_pte >> 10) & 0x3FFFFF;
+                let l2_bad = l2_ppn >= 0xC0000;
+                if l2_bad { bad_ppn_count += 1; }
+                
+                // Check specific VAs that the kernel might access
+                // VA 0xC1400AE8: exception handler table
+                let vpn1 = i;
+                let vpn0 = j;
+                let va = ((vpn1 as u64) << 22) | ((vpn0 as u64) << 12);
+                if va >= 0xC1400000 && va <= 0xC1410000 {
+                    eprintln!("  L2[{},{}] = 0x{:08X}  PPN=0x{:06X} PA=0x{:08X} VA=0x{:08X} {}",
+                        i, j, l2_pte, l2_ppn, l2_ppn * 4096, va,
+                        if l2_bad { "<<< BAD PPN" } else { "" });
+                }
             }
-        } else {
-            println!("  L1[{}] = 0x{:08X} V=0 (not present)", i, pte);
         }
     }
-
-    // Check: is the crash caused by the memmove overwriting the page table?
-    // Read L1[770] BEFORE the crash (at 16M instructions)
-    println!("\n--- Checking at 16M instructions (before crash) ---");
-    let (mut vm2, _) = RiscvVm::boot_linux(
-        &kernel_image,
-        initramfs.as_deref(),
-        256,
-        16_000_000,  // before the crash at ~17M
-        bootargs,
-    )
-    .unwrap();
-    let satp2 = vm2.cpu.csr.satp;
-    let ppn2 = satp2 & 0x003F_FFFF;
-    let pt_root2 = (ppn2 as u64) << 12;
-    let l1_770_before = vm2.bus.read_word(pt_root2 + 770 * 4).unwrap_or(0);
-    let l1_769_before = vm2.bus.read_word(pt_root2 + 769 * 4).unwrap_or(0);
-    let l1_768_before = vm2.bus.read_word(pt_root2 + 768 * 4).unwrap_or(0);
-    println!("L1[768] before crash = 0x{:08X}", l1_768_before);
-    println!("L1[769] before crash = 0x{:08X}", l1_769_before);
-    println!("L1[770] before crash = 0x{:08X}", l1_770_before);
-
-    // Now check AFTER the crash
-    println!("\n--- After crash (20M instructions) ---");
-    let l1_770_after = vm.bus.read_word(pt_root + 770 * 4).unwrap_or(0);
-    let l1_769_after = vm.bus.read_word(pt_root + 769 * 4).unwrap_or(0);
-    let l1_768_after = vm.bus.read_word(pt_root + 768 * 4).unwrap_or(0);
-    println!("L1[768] after crash = 0x{:08X}", l1_768_after);
-    println!("L1[769] after crash = 0x{:08X}", l1_769_after);
-    println!("L1[770] after crash = 0x{:08X}", l1_770_after);
-
-    if l1_770_before != l1_770_after {
-        println!("\n*** L1[770] CHANGED! Corruption detected ***");
-        println!("  Before: 0x{:08X}", l1_770_before);
-        println!("  After:  0x{:08X}", l1_770_after);
-    }
+    
+    eprintln!("\nSummary: {} L1 entries, {} L2 entries, {} bad PPNs (>=0xC0000)", 
+        l1_count, l2_count, bad_ppn_count);
+    
+    // Also check: what PA does the MMU translate VA 0xC1400AE8 to?
+    // And what's stored at that PA?
+    let pa_check = pg_dir_phys; // just a placeholder
+    eprintln!("\nDirect read at PA 0x01400AE8: 0x{:08X}", 
+        vm.bus.read_word(0x01400AE8).unwrap_or(0));
 }

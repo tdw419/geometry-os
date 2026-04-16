@@ -37,7 +37,7 @@ fn main() {
         let l1_ppn_raw = ((l1_pte & 0xFFFF_FC00) >> 10) as u32;
         let l1_rwx = (l1_pte >> 1) & 7;
         let page_offset_ppn: u32 = 0xC000_0000 >> 12;
-        let l1_ppn = if vm.bus.virtual_satp_fixup && l1_ppn_raw >= page_offset_ppn {
+        let l1_ppn = if vm.bus.auto_pte_fixup && l1_ppn_raw >= page_offset_ppn {
             l1_ppn_raw - page_offset_ppn
         } else {
             l1_ppn_raw
@@ -48,7 +48,7 @@ fn main() {
             let l2_base = (l1_ppn as u64) << 12;
             let l2_pte = vm.bus.read_word(l2_base + vpn0 * 4).unwrap_or(0);
             let l2_ppn_raw = ((l2_pte & 0xFFFF_FC00) >> 10) as u32;
-            let l2_ppn = if vm.bus.virtual_satp_fixup && l2_ppn_raw >= page_offset_ppn {
+            let l2_ppn = if vm.bus.auto_pte_fixup && l2_ppn_raw >= page_offset_ppn {
                 l2_ppn_raw - page_offset_ppn
             } else {
                 l2_ppn_raw

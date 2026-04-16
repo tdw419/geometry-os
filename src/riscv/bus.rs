@@ -10,6 +10,7 @@ use super::plic::Plic;
 use super::sbi::Sbi;
 use super::uart::Uart;
 use super::virtio_blk::VirtioBlk;
+use std::collections::HashSet;
 
 /// CLINT MMIO address range.
 const CLINT_START: u64 = 0x0200_0000;
@@ -55,13 +56,19 @@ pub struct Bus {
     /// probes, and early boot structures live in low memory.
     /// Default: false. Set to true by boot_linux_setup().
     pub low_addr_identity_map: bool,
-    /// When true, SATP writes from S-mode have their PPN translated from
-    /// virtual to physical. Linux's relocate_enable_mmu writes the virtual
-    /// PPN of trampoline_pg_dir into SATP (because the kernel uses virtual
-    /// addresses before __pa() conversion). On real hardware, OpenSBI handles
-    /// this; we fix it up here. Translation: if PPN >= PAGE_OFFSET>>12,
-    /// subtract PAGE_OFFSET>>12 to get the physical PPN.
-    pub virtual_satp_fixup: bool,
+    /// When true, automatically fix virtual PPNs in kernel page tables on SATP write.
+    /// Linux's setup_vm() creates PTEs with virtual PPNs (because __pa() is a no-op
+    /// without real SBI firmware). This flag triggers a full page table scan on each
+    /// SATP write, translating PPNs >= 0xC0000 (virtual) to physical PPNs.
+    /// Default: false. Set to true by boot_linux_setup().
+    pub auto_pte_fixup: bool,
+    /// Known page table physical page addresses (4KB-aligned).
+    /// When auto_pte_fixup is true, writes to these pages are intercepted:
+    /// PPNs >= 0xC0000 (virtual kernel addresses) are translated to physical PPNs
+    /// by subtracting PAGE_OFFSET/4096. New L2 table pages are discovered when
+    /// non-leaf PTEs are written and automatically registered.
+    /// Populated by fixup_kernel_page_table() and dynamically during writes.
+    pub known_pt_pages: HashSet<u64>,
 }
 
 impl Bus {
@@ -83,7 +90,8 @@ impl Bus {
             write_watch_pc: 0,
             write_watch_hit: false,
             low_addr_identity_map: false,
-            virtual_satp_fixup: false,
+            auto_pte_fixup: false,
+            known_pt_pages: HashSet::new(),
         }
     }
 
@@ -140,7 +148,10 @@ impl Bus {
             // Silently accept writes to unmapped addresses below RAM
             Ok(())
         } else {
-            self.mem.write_word(addr, val)
+            // Real-time PTE write interception: if this address is in a known
+            // page table page, fix virtual PPNs before storing.
+            let fixed_val = self.intercept_pte_write(addr, val);
+            self.mem.write_word(addr, fixed_val)
         }
     }
 
@@ -282,6 +293,177 @@ impl Bus {
     fn in_clint(addr: u64) -> bool {
         (CLINT_START..CLINT_END).contains(&addr)
     }
+
+    /// Intercept a word write to check if it targets a known page table page.
+    ///
+    /// When `auto_pte_fixup` is enabled and the write address falls within a
+    /// registered page table page (tracked in `known_pt_pages`), this method:
+    /// 1. Checks if the written value is a valid PTE with V=1
+    /// 2. If the PPN >= PAGE_OFFSET/4096 (0xC0000), subtracts the offset to
+    ///    convert from virtual PPN to physical PPN
+    /// 3. If the PTE is a non-leaf entry (R=W=X=0), registers the pointed-to
+    ///    L2 table page as a known page table page for future interception
+    ///
+    /// This handles the Linux demand paging case where the page fault handler
+    /// creates NEW PTEs with virtual PPNs after the initial SATP fixup.
+    fn intercept_pte_write(&mut self, addr: u64, val: u32) -> u32 {
+        if !self.auto_pte_fixup || self.known_pt_pages.is_empty() {
+            return val;
+        }
+
+        // Check if this address is in a known page table page
+        let page_base = addr & !0xFFF; // 4KB page alignment
+        if !self.known_pt_pages.contains(&page_base) {
+            return val;
+        }
+
+        // Check if the value looks like a valid PTE (V=1)
+        const PTE_V: u32 = 1;
+        const PPN_MASK: u32 = 0xFFFF_FC00;
+        const LEAF_FLAGS: u32 = 2 | 4 | 8; // R | W | X
+        const PAGE_OFFSET_PPN: u32 = 0xC000_0000 >> 12; // 0xC0000
+
+        if (val & PTE_V) == 0 {
+            return val;
+        }
+
+        let ppn = (val & PPN_MASK) >> 10;
+
+        // Discover new L2 table pages from non-leaf PTEs.
+        // A non-leaf PTE (R=W=X=0, V=1) points to a lower-level page table.
+        if (val & LEAF_FLAGS) == 0 && ppn < PAGE_OFFSET_PPN {
+            // Only register if the PPN is in a reasonable physical range.
+            // Skip virtual PPNs here -- they'll be fixed below, and we
+            // register the fixed physical address.
+            let l2_page_addr = (ppn as u64) << 12;
+            if l2_page_addr < 0x1000_0000 && l2_page_addr >= 0x1000 {
+                if self.known_pt_pages.insert(l2_page_addr) {
+                    eprintln!(
+                        "[pte_intercept] Discovered new L2 table at PA 0x{:08X} (from PTE write at PA 0x{:08X})",
+                        l2_page_addr, addr
+                    );
+                }
+            }
+        }
+
+        // Fix virtual PPNs: subtract PAGE_OFFSET/4096 if PPN is in kernel VA range
+        if ppn >= PAGE_OFFSET_PPN {
+            let fixed_ppn = ppn - PAGE_OFFSET_PPN;
+            let fixed_val = (val & !PPN_MASK) | (fixed_ppn << 10);
+            eprintln!(
+                "[pte_intercept] Fixed PTE at PA 0x{:08X}: PPN 0x{:05X} -> 0x{:05X} (val 0x{:08X} -> 0x{:08X})",
+                addr, ppn, fixed_ppn, val, fixed_val
+            );
+
+            // If this is a non-leaf PTE, also register the (now fixed) L2 page
+            if (val & LEAF_FLAGS) == 0 {
+                let l2_page_addr = (fixed_ppn as u64) << 12;
+                if l2_page_addr < 0x1000_0000 && l2_page_addr >= 0x1000 {
+                    if self.known_pt_pages.insert(l2_page_addr) {
+                        eprintln!(
+                            "[pte_intercept] Discovered new L2 table at PA 0x{:08X} (fixed from virtual PPN)",
+                            l2_page_addr
+                        );
+                    }
+                }
+            }
+
+            return fixed_val;
+        }
+
+        val
+    }
+
+    /// Fix virtual PPNs in a kernel page table.
+    ///
+    /// Linux's setup_vm() creates PTEs with virtual PPNs because __pa() is a no-op
+    /// without real SBI firmware. This scans all L1 and L2 entries and subtracts
+    /// PAGE_OFFSET (0xC0000000 >> 12 = 0xC0000) from any PPN >= 0xC0000.
+    ///
+    /// Also registers all discovered page table pages in `known_pt_pages` so that
+    /// `intercept_pte_write` can fix future PTE writes (demand paging) in real-time.
+    ///
+    /// Called automatically from write_csr(SATP) when auto_pte_fixup is true.
+    pub fn fixup_kernel_page_table(&mut self, pg_dir_phys: u64) {
+        const PAGE_OFFSET_PPN: u32 = 0xC000_0000 >> 12; // 0xC0000
+        const PPN_MASK: u32 = 0xFFFF_FC00;
+        const LEAF_FLAGS: u32 = 2 | 4 | 8; // R | W | X
+
+        let mut l2_tables_to_fix: Vec<u64> = Vec::new();
+
+        // Register the L1 page directory itself as a known page table page.
+        // All PTE writes to this page will be intercepted for virtual PPN fixup.
+        self.known_pt_pages.insert(pg_dir_phys);
+
+        // Scan all 1024 L1 entries
+        for i in 0..1024u32 {
+            let l1_addr = pg_dir_phys + (i as u64) * 4;
+            let l1_pte = match self.read_word(l1_addr) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            if (l1_pte & 1) == 0 {
+                continue;
+            }
+
+            let l1_ppn = (l1_pte & PPN_MASK) >> 10;
+
+            // Compute the fixed PPN for this L1 entry
+            let final_ppn = if l1_ppn >= PAGE_OFFSET_PPN {
+                l1_ppn - PAGE_OFFSET_PPN
+            } else {
+                l1_ppn
+            };
+
+            if l1_ppn >= PAGE_OFFSET_PPN {
+                let fixed_pte = (l1_pte & !PPN_MASK) | (final_ppn << 10);
+                // Use mem.write_word directly to avoid going through intercept_pte_write
+                // (we're doing the fixup manually here, no need for double-fixing).
+                self.mem.write_word(l1_addr, fixed_pte).ok();
+            }
+
+            // If non-leaf L1 entry, queue the L2 table for fixup and register it
+            if (l1_pte & LEAF_FLAGS) == 0 {
+                let l2_base = (final_ppn as u64) << 12;
+                if l2_base < 0x1000_0000 {
+                    // Register this L2 table page for future write interception
+                    self.known_pt_pages.insert(l2_base);
+                    l2_tables_to_fix.push(l2_base);
+                }
+            }
+        }
+
+        // Fix L2 tables
+        for l2_base in &l2_tables_to_fix {
+            for j in 0..1024u32 {
+                let l2_addr = *l2_base + (j as u64) * 4;
+                let l2_pte = match self.read_word(l2_addr) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+
+                if (l2_pte & 1) == 0 {
+                    continue;
+                }
+
+                let l2_ppn = (l2_pte & PPN_MASK) >> 10;
+
+                if l2_ppn >= PAGE_OFFSET_PPN {
+                    let fixed_ppn = l2_ppn - PAGE_OFFSET_PPN;
+                    let fixed_pte = (l2_pte & !PPN_MASK) | (fixed_ppn << 10);
+                    // Use mem.write_word directly to avoid intercept recursion
+                    self.mem.write_word(l2_addr, fixed_pte).ok();
+                }
+            }
+        }
+
+        eprintln!(
+            "[pte_fixup] Registered {} page table pages (L1 at PA 0x{:08X})",
+            self.known_pt_pages.len(),
+            pg_dir_phys
+        );
+    }
 }
 
 #[cfg(test)]
@@ -360,5 +542,109 @@ mod tests {
         assert_eq!(bus.clint.mtime, 0);
         bus.tick_clint();
         assert_eq!(bus.clint.mtime, 1);
+    }
+
+    #[test]
+    fn pte_intercept_fixes_virtual_ppn() {
+        // Simulate Linux demand paging: kernel writes PTE with virtual PPN
+        // to a known page table page, and the intercept translates it.
+        let mut bus = Bus::new(0, 1024 * 1024); // 1MB RAM, base 0
+        bus.auto_pte_fixup = true;
+
+        // Register a page table page at PA 0x1000
+        let pt_page = 0x1000u64;
+        bus.known_pt_pages.insert(pt_page);
+
+        // Write a leaf PTE with virtual PPN (0xC0000 = 0xC0000000 >> 12)
+        // PTE format: V=1, R=1, W=1, X=0, A=1, D=1 = 0x07, PPN = 0xC0000
+        // PPN bits [31:10], so val = (0xC0000 << 10) | 0x07 = 0x30000007
+        let virtual_pte: u32 = (0xC0000 << 10) | 0x07; // 0x30000007
+        bus.write_word(pt_page, virtual_pte).unwrap();
+
+        // The intercept should have fixed it: PPN 0xC0000 -> 0x00000
+        let stored = bus.read_word(pt_page).unwrap();
+        let expected: u32 = (0x00000 << 10) | 0x07; // 0x00000007
+        assert_eq!(stored, expected,
+            "Virtual PTE 0x{:08X} should be fixed to 0x{:08X}, got 0x{:08X}",
+            virtual_pte, expected, stored);
+    }
+
+    #[test]
+    fn pte_intercept_skips_non_pt_page() {
+        // Writes to non-page-table pages should pass through unchanged
+        let mut bus = Bus::new(0, 1024 * 1024);
+        bus.auto_pte_fixup = true;
+        bus.known_pt_pages.insert(0x1000);
+
+        // Write to a non-registered page
+        bus.write_word(0x2000, 0xDEADBEEF).unwrap();
+        assert_eq!(bus.read_word(0x2000).unwrap(), 0xDEADBEEF);
+    }
+
+    #[test]
+    fn pte_intercept_discovers_new_l2_tables() {
+        // Writing a non-leaf PTE should register the pointed-to L2 page
+        let mut bus = Bus::new(0, 1024 * 1024);
+        bus.auto_pte_fixup = true;
+
+        let l1_page = 0x1000u64;
+        bus.known_pt_pages.insert(l1_page);
+
+        // Write a non-leaf PTE pointing to L2 at PA 0x2000
+        // Non-leaf: V=1, R=0, W=0, X=0 = 0x01, PPN = 0x2 (PA 0x2000)
+        let non_leaf_pte: u32 = (2u32 << 10) | 0x01; // 0x00000801
+        bus.write_word(l1_page, non_leaf_pte).unwrap();
+
+        // The L2 page should now be registered
+        assert!(bus.known_pt_pages.contains(&0x2000),
+            "L2 page at 0x2000 should be auto-discovered");
+
+        // And subsequent writes to the L2 page should be intercepted
+        let virtual_l2_pte: u32 = (0xC0001 << 10) | 0x07; // PPN 0xC0001 -> 0x00001
+        bus.write_word(0x2000, virtual_l2_pte).unwrap();
+        let stored = bus.read_word(0x2000).unwrap();
+        let expected: u32 = (0x00001 << 10) | 0x07;
+        assert_eq!(stored, expected,
+            "Virtual L2 PTE should be fixed to 0x{:08X}, got 0x{:08X}",
+            expected, stored);
+    }
+
+    #[test]
+    fn pte_intercept_disabled_when_flag_off() {
+        // When auto_pte_fixup is false, no interception should occur
+        let mut bus = Bus::new(0, 1024 * 1024);
+        bus.auto_pte_fixup = false;
+        bus.known_pt_pages.insert(0x1000);
+
+        let virtual_pte: u32 = (0xC0000 << 10) | 0x07;
+        bus.write_word(0x1000, virtual_pte).unwrap();
+        assert_eq!(bus.read_word(0x1000).unwrap(), virtual_pte,
+            "PTE should NOT be fixed when auto_pte_fixup is false");
+    }
+
+    #[test]
+    fn pte_intercept_skips_non_valid_pte() {
+        // PTEs with V=0 should pass through unchanged
+        let mut bus = Bus::new(0, 1024 * 1024);
+        bus.auto_pte_fixup = true;
+        bus.known_pt_pages.insert(0x1000);
+
+        let invalid_pte: u32 = (0xC0000 << 10) | 0x00; // V=0
+        bus.write_word(0x1000, invalid_pte).unwrap();
+        assert_eq!(bus.read_word(0x1000).unwrap(), invalid_pte,
+            "Invalid PTE (V=0) should pass through unchanged");
+    }
+
+    #[test]
+    fn pte_intercept_skips_low_ppn() {
+        // PTEs with PPN < PAGE_OFFSET_PPN should pass through unchanged
+        let mut bus = Bus::new(0, 1024 * 1024);
+        bus.auto_pte_fixup = true;
+        bus.known_pt_pages.insert(0x1000);
+
+        let normal_pte: u32 = (0x500 << 10) | 0x07; // PPN 0x500, well below 0xC0000
+        bus.write_word(0x1000, normal_pte).unwrap();
+        assert_eq!(bus.read_word(0x1000).unwrap(), normal_pte,
+            "Low PPN PTE should pass through unchanged");
     }
 }

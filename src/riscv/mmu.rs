@@ -292,12 +292,12 @@ pub fn translate(
     let root_ppn = satp_ppn(satp);
     let root_addr = (root_ppn as u64) << 12;
 
-    // Helper: translate virtual PPN to physical PPN when virtual_satp_fixup is enabled.
+    // Helper: translate virtual PPN to physical PPN when auto_pte_fixup is enabled.
     // Linux's setup_vm() uses virtual addresses as physical addresses in PTEs
     // (kernel_map.phys_addr = &_start gives VA, not PA). When fixup is on,
     // PPNs >= PAGE_OFFSET>>12 are translated by subtracting the offset.
     let page_offset_ppn: u32 = 0xC000_0000 >> 12; // 0xC0000
-    let do_fixup = bus.virtual_satp_fixup;
+    let do_fixup = bus.auto_pte_fixup;
     let fixup_ppn = |ppn: u32| -> u32 {
         if do_fixup && ppn >= page_offset_ppn {
             ppn - page_offset_ppn

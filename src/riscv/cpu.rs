@@ -200,13 +200,11 @@ impl RiscvCpu {
             // we translate virtual PPNs to physical PPNs here.
             // PAGE_OFFSET for RV32 Linux = 0xC0000000, PPN offset = 0xC0000.
             let mut fixed_val = val;
-            if bus.virtual_satp_fixup {
-                let ppn = val & 0x003F_FFFF;
-                let page_offset_ppn: u32 = 0xC000_0000 >> 12; // 0xC0000
-                if ppn >= page_offset_ppn {
-                    let phys_ppn = ppn - page_offset_ppn;
-                    fixed_val = (val & !0x003F_FFFF) | phys_ppn;
-                }
+            let page_offset_ppn: u32 = 0xC000_0000 >> 12; // 0xC0000
+            let ppn = val & 0x003F_FFFF;
+            if ppn >= page_offset_ppn {
+                let phys_ppn = ppn - page_offset_ppn;
+                fixed_val = (val & !0x003F_FFFF) | phys_ppn;
             }
             let old = self.csr.satp;
             if old != fixed_val {
@@ -217,6 +215,18 @@ impl RiscvCpu {
                 self.tlb.flush_all();
             }
             self.csr.write(addr, fixed_val);
+
+            // Auto-fixup: scan and fix virtual PPNs in the new page table.
+            // This must happen BEFORE any instruction executes with the new SATP,
+            // otherwise the kernel's writes go to wrong physical addresses.
+            if bus.auto_pte_fixup && (old != fixed_val) {
+                let new_ppn = fixed_val & 0x003F_FFFF;
+                let pg_dir_phys = (new_ppn as u64) * 4096;
+                eprintln!("[cpu] write_csr SATP: auto PTE fixup at pg_dir PA 0x{:08X} (SATP 0x{:08X} -> 0x{:08X})", pg_dir_phys, old, fixed_val);
+                bus.fixup_kernel_page_table(pg_dir_phys);
+                // Flush TLB again since we modified page table entries.
+                self.tlb.flush_all();
+            }
             return;
         }
         self.csr.write(addr, val);

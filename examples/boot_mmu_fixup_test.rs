@@ -33,7 +33,7 @@ fn main() {
 
     eprintln!("\n=== MMU translation test ===");
     eprintln!("SATP = 0x{:08X}", vm.cpu.csr.satp);
-    eprintln!("virtual_satp_fixup = {}", vm.bus.virtual_satp_fixup);
+    eprintln!("auto_pte_fixup = {}", vm.bus.auto_pte_fixup);
     eprintln!();
 
     // Test translation of several kernel virtual addresses
@@ -63,7 +63,7 @@ fn main() {
         
         // Apply fixup
         let page_offset_ppn: u32 = 0xC000_0000 >> 12; // 0xC0000
-        let l1_ppn_fixed = if vm.bus.virtual_satp_fixup && l1_ppn_raw >= page_offset_ppn {
+        let l1_ppn_fixed = if vm.bus.auto_pte_fixup && l1_ppn_raw >= page_offset_ppn {
             l1_ppn_raw - page_offset_ppn
         } else {
             l1_ppn_raw
@@ -80,7 +80,7 @@ fn main() {
             let l2_base = (l1_ppn_fixed as u64) << 12;
             let l2_pte = vm.bus.read_word(l2_base + vpn0 * 4).unwrap_or(0);
             let l2_ppn_raw = ((l2_pte & 0xFFFF_FC00) >> 10) as u32;
-            let l2_ppn_fixed = if vm.bus.virtual_satp_fixup && l2_ppn_raw >= page_offset_ppn {
+            let l2_ppn_fixed = if vm.bus.auto_pte_fixup && l2_ppn_raw >= page_offset_ppn {
                 l2_ppn_raw - page_offset_ppn
             } else {
                 l2_ppn_raw

@@ -1,9 +1,11 @@
-/// Trace the last N instructions before the first S-mode fault at 0x3FFFF000
+/// Watch for writes to PA 0x01401D8C (where 0x3FFFF000 appears on the stack)
 use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{StepResult, Privilege};
 use geometry_os::riscv::csr;
 use geometry_os::riscv::decode;
 use geometry_os::riscv::mmu::{translate, AccessType, TranslateResult};
+
+const WATCH_PA: u64 = 0x01401D8C;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -16,15 +18,17 @@ fn main() {
         RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
     let fw_addr_u32 = fw_addr as u32;
 
-    let max_count = 250_000u64;
+    let max_count = 178_510u64;
     let mut count: u64 = 0;
-    let mut fault_found = false;
-    let mut last_pcs: Vec<(u64, u32, u32)> = Vec::new(); // (count, pc, instruction)
-    let trace_window = 50;
+    let mut last_val: u32 = 0;
+    let mut found = false;
 
-    while count < max_count && !fault_found {
+    // Also watch nearby addresses
+    let watch_start: u64 = 0x01401D80;
+    let watch_end: u64 = 0x01401DA0;
+    
+    while count < max_count && !found {
         if vm.bus.sbi.shutdown_requested { break; }
-
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
@@ -66,44 +70,45 @@ fn main() {
             continue;
         }
 
-        // Record PC and instruction before stepping
-        let pc = vm.cpu.pc;
-        let inst_word = {
-            let satp = vm.cpu.csr.satp;
-            match translate(pc, AccessType::Fetch, vm.cpu.privilege, false, false, satp, &mut vm.bus, &mut vm.cpu.tlb) {
-                TranslateResult::Ok(pa) => vm.bus.read_word(pa).unwrap_or(0),
-                _ => 0,
-            }
-        };
-        last_pcs.push((count, pc, inst_word));
-        if last_pcs.len() > trace_window {
-            last_pcs.remove(0);
-        }
-
-        let result = vm.step();
-        match result {
-            StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
-                if vm.cpu.privilege == Privilege::Supervisor && !fault_found {
-                    fault_found = true;
-                    let ft = match result {
-                        StepResult::FetchFault => "fetch",
-                        StepResult::LoadFault => "load",
-                        StepResult::StoreFault => "store",
-                        _ => "",
-                    };
-                    eprintln!("[{}] FIRST S-mode {} fault: sepc=0x{:08X} stval=0x{:08X}", 
-                        count, ft, vm.cpu.csr.sepc, vm.cpu.csr.stval);
-                    eprintln!("RA=0x{:08X} SP=0x{:08X}", vm.cpu.x[1], vm.cpu.x[2]);
-                    eprintln!("\nLast {} instructions before fault:", trace_window);
-                    for &(c, p, w) in &last_pcs {
-                        let op_str = format!("{:?}", decode::decode(w));
-                        eprintln!("  [{:>7}] 0x{:08X}: 0x{:08X}  {}", c, p, w, op_str);
-                    }
+        // Check before step
+        let prev_val = vm.bus.read_word(WATCH_PA).unwrap_or(0);
+        
+        vm.step();
+        
+        // Check after step
+        let new_val = vm.bus.read_word(WATCH_PA).unwrap_or(0);
+        if new_val != prev_val {
+            // Decode the instruction that caused the write
+            let inst_word = {
+                let satp = vm.cpu.csr.satp;
+                match translate(vm.cpu.pc, AccessType::Fetch, vm.cpu.privilege, false, false, satp, &mut vm.bus, &mut vm.cpu.tlb) {
+                    TranslateResult::Ok(pa) => vm.bus.read_word(pa).unwrap_or(0),
+                    _ => 0,
                 }
+            };
+            let half = (inst_word & 0xFFFF) as u16;
+            let op_str = if decode::is_compressed(half) {
+                format!("{:?}", decode::decode_c(half))
+            } else {
+                format!("{:?}", decode::decode(inst_word))
+            };
+            
+            eprintln!("[{}] WRITE to PA 0x{:08X}: 0x{:08X} -> 0x{:08X} at PC=0x{:08X} inst={}",
+                count, WATCH_PA, prev_val, new_val, vm.cpu.pc, op_str);
+            eprintln!("    SP=0x{:08X} RA=0x{:08X} S0=0x{:08X}", 
+                vm.cpu.x[2], vm.cpu.x[1], vm.cpu.x[8]);
+            
+            if new_val == 0x3FFFF000 {
+                found = true;
+                eprintln!("    *** FOUND THE WRITE OF 0x3FFFF000! ***");
             }
-            StepResult::Ebreak => break,
-            _ => {}
         }
+        
         count += 1;
+    }
+    
+    if !found {
+        eprintln!("Did not find write of 0x3FFFF000 to PA 0x{:08X} in {} steps", WATCH_PA, count);
+        eprintln!("Final value: 0x{:08X}", vm.bus.read_word(WATCH_PA).unwrap_or(0));
     }
 }

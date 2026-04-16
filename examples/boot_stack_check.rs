@@ -1,103 +1,109 @@
-/// Check the page table entry for the stack area (VA 0xC1401F0C).
-/// Also check what's at the stack address.
-
+/// Check what's on the kernel stack at the time of the fault
 use geometry_os::riscv::RiscvVm;
+use geometry_os::riscv::cpu::{StepResult, Privilege};
+use geometry_os::riscv::csr;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
-    let bootargs = "console=ttyS0 earlycon=sbi panic=1";
+    let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
 
-    let (mut vm, _fw_addr, _entry, _dtb) =
-        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs)
-            .expect("boot setup failed");
+    let (mut vm, fw_addr, _, _) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
+    let fw_addr_u32 = fw_addr as u32;
 
-    // Run to 177562 (just before the lw ra,12(sp))
-    for _ in 0..177562 {
+    // Run to 178K steps (just before the fault)
+    let max_count = 178_500u64;
+    let mut count: u64 = 0;
+    while count < max_count {
         if vm.bus.sbi.shutdown_requested { break; }
+        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
+            let mcause = vm.cpu.csr.mcause;
+            let cause_code = mcause & !(1u32 << 31);
+            if cause_code == csr::CAUSE_ECALL_M {
+                let r = vm.bus.sbi.handle_ecall(
+                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
+                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
+                    &mut vm.bus.uart, &mut vm.bus.clint);
+                if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+            } else {
+                let mpp = (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB;
+                if cause_code == csr::CAUSE_ECALL_S {
+                    let r = vm.bus.sbi.handle_ecall(
+                        vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
+                        vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
+                        &mut vm.bus.uart, &mut vm.bus.clint);
+                    if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                } else if mpp != 3 {
+                    let stvec = vm.cpu.csr.stvec & !0x3u32;
+                    if stvec != 0 {
+                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                        vm.cpu.csr.scause = mcause;
+                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
+                        let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP)) | (spp << csr::MSTATUS_SPP);
+                        let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE)) | (sie << csr::MSTATUS_SPIE);
+                        vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
+                        vm.cpu.pc = stvec;
+                        vm.cpu.privilege = Privilege::Supervisor;
+                        vm.cpu.tlb.flush_all();
+                        count += 1;
+                        continue;
+                    }
+                }
+            }
+            vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
+            count += 1;
+            continue;
+        }
         vm.step();
+        count += 1;
     }
 
+    eprintln!("=== State at count {} ===", count);
+    eprintln!("PC=0x{:08X} SP=0x{:08X} RA=0x{:08X}", vm.cpu.pc, vm.cpu.x[2], vm.cpu.x[1]);
+    eprintln!("S0=0x{:08X} (frame pointer)", vm.cpu.x[8]);
+    
+    // Dump stack contents around SP
     let sp = vm.cpu.x[2];
-    let ra_addr = sp + 12;
-    eprintln!("SP=0x{:08X}, RA loaded from VA 0x{:08X}", sp, ra_addr);
+    eprintln!("\nStack (SP=0x{:08X}):", sp);
+    // SP is a virtual address. Translate to physical.
+    // SP=0xC1401E00, L1[773] maps VA 0xC1400000-0xC15FFFFF to PA 0x14000000-0x15FFFFF
+    // PA = SP - 0xC0000000 = 0x1401E00
+    let sp_pa = (sp as u64) - 0xC0000000;
+    for offset in -16..=16i32 {
+        let addr = sp_pa.wrapping_add((offset as i64 * 4) as u64);
+        let val = vm.bus.read_word(addr).unwrap_or(0);
+        let marker = if offset == 0 { " <-- SP" } else { "" };
+        eprintln!("  [SP{:+3}] VA 0x{:08X} PA 0x{:08X} = 0x{:08X}{}", 
+            offset * 4, sp.wrapping_add((offset * 4) as u32), addr, val, marker);
+    }
 
-    // Check the page table for this VA
-    let satp = vm.cpu.csr.satp;
-    let satp_ppn = (satp & 0x3FFFFF) as u64;
-    let root = satp_ppn << 12;
-
-    let vpn1 = ((ra_addr >> 22) & 0x3FF) as u64;
-    let vpn0 = ((ra_addr >> 12) & 0x3FF) as u64;
-    let offset = (ra_addr & 0xFFF) as u64;
-
-    let l1_pte = vm.bus.read_word(root + vpn1 * 4).unwrap_or(0);
-    eprintln!("SATP=0x{:08X}, root=0x{:08X}", satp, root);
-    eprintln!("L1[{}] = 0x{:08X}", vpn1, l1_pte);
-
-    let l1_ppn_raw = ((l1_pte & 0xFFFF_FC00) >> 10) as u32;
-    let l1_rwx = (l1_pte >> 1) & 7;
-    let page_offset_ppn: u32 = 0xC000_0000 >> 12;
-    let l1_ppn = if vm.bus.virtual_satp_fixup && l1_ppn_raw >= page_offset_ppn {
-        l1_ppn_raw - page_offset_ppn
-    } else {
-        l1_ppn_raw
-    };
-    eprintln!("L1 PPN raw=0x{:06X} fixed=0x{:06X} rwx={}", l1_ppn_raw, l1_ppn, l1_rwx);
-
-    if l1_rwx == 7 {
-        // Megapage
-        let ppn_hi = (l1_ppn >> 10) & 0xFFF;
-        let pa = ((ppn_hi as u64) << 22) | (vpn0 << 12) | offset;
-        eprintln!("Megapage: ppn_hi=0x{:03X} PA=0x{:08X}", ppn_hi, pa);
-        let val = vm.bus.read_word(pa).unwrap_or(0);
-        eprintln!("Value at PA 0x{:08X}: 0x{:08X}", pa, val);
-    } else {
-        // L2
-        let l2_base = (l1_ppn as u64) << 12;
-        let l2_addr = l2_base + vpn0 * 4;
-        let l2_pte = vm.bus.read_word(l2_addr).unwrap_or(0);
-        let l2_ppn_raw = ((l2_pte & 0xFFFF_FC00) >> 10) as u32;
-        let l2_ppn = if vm.bus.virtual_satp_fixup && l2_ppn_raw >= page_offset_ppn {
-            l2_ppn_raw - page_offset_ppn
-        } else {
-            l2_ppn_raw
-        };
-        eprintln!("L2 at PA 0x{:08X}: PTE=0x{:08X} PPN raw=0x{:06X} fixed=0x{:06X}",
-            l2_addr, l2_pte, l2_ppn_raw, l2_ppn);
-        if l2_pte & 1 != 0 {
-            let pa = ((l2_ppn as u64) << 12) | offset;
-            eprintln!("PA=0x{:08X}", pa);
-            let val = vm.bus.read_word(pa).unwrap_or(0);
-            eprintln!("Value at PA 0x{:08X}: 0x{:08X}", pa, val);
+    // Also dump around S0 (frame pointer)
+    let s0 = vm.cpu.x[8];
+    let s0_pa = (s0 as u64) - 0xC0000000;
+    eprintln!("\nFrame (S0=0x{:08X}):", s0);
+    for offset in -20..=4i32 {
+        let addr = s0_pa.wrapping_add((offset as i64 * 4) as u64);
+        let val = vm.bus.read_word(addr).unwrap_or(0);
+        let marker = if offset == 0 { " <-- S0" } else { "" };
+        if val != 0 {
+            eprintln!("  [S0{:+3}] VA 0x{:08X} PA 0x{:08X} = 0x{:08X}{}", 
+                offset * 4, s0.wrapping_add((offset * 4) as u32), addr, val, marker);
         }
     }
-
-    // Also dump a few words around SP+12
-    eprintln!("\nStack dump (VA 0x{:08X} - 0x{:08X}):", sp, sp + 32);
-    for i in 0..8u32 {
-        let addr = sp + i * 4;
-        // Compute PA manually
-        let v1 = ((addr >> 22) & 0x3FF) as u64;
-        let v0 = ((addr >> 12) & 0x3FF) as u64;
-        let off = (addr & 0xFFF) as u64;
-        let l1 = vm.bus.read_word(root + v1 * 4).unwrap_or(0);
-        let l1p = ((l1 & 0xFFFF_FC00) >> 10) as u32;
-        let l1r = (l1 >> 1) & 7;
-        let l1f = if vm.bus.virtual_satp_fixup && l1p >= page_offset_ppn { l1p - page_offset_ppn } else { l1p };
-        let pa = if l1r == 7 {
-            (((l1f >> 10) & 0xFFF) as u64) << 22 | (v0 << 12) | off
-        } else {
-            let l2b = (l1f as u64) << 12;
-            let l2 = vm.bus.read_word(l2b + v0 * 4).unwrap_or(0);
-            let l2p = ((l2 & 0xFFFF_FC00) >> 10) as u32;
-            let l2f = if vm.bus.virtual_satp_fixup && l2p >= page_offset_ppn { l2p - page_offset_ppn } else { l2p };
-            ((l2f as u64) << 12) | off
-        };
-        let val = vm.bus.read_word(pa).unwrap_or(0);
-        let marker = if i * 4 == 12 { " <-- RA saved here" } else { "" };
-        eprintln!("  [SP+{:2}] VA=0x{:08X} PA=0x{:08X}: 0x{:08X}{}", i * 4, addr, pa, val, marker);
+    
+    // The fault is at sepc=0x3FFFF000, which means RA=0x3FFFF000
+    // Let's search for 0x3FFFF000 in the stack region
+    eprintln!("\nSearching for 0x3FFFF000 in stack region (PA 0x14018000-0x14020000):");
+    for addr in (0x14018000u64..0x14020000).step_by(4) {
+        let val = vm.bus.read_word(addr).unwrap_or(0);
+        if val == 0x3FFFF000 {
+            let va = 0xC0000000u32 + addr as u32;
+            eprintln!("  FOUND at PA 0x{:08X} (VA 0x{:08X})", addr, va);
+        }
     }
 }

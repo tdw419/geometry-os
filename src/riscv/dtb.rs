@@ -281,7 +281,8 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
     b.prop_reg("reg", config.uart_base, 0x100);
     b.prop_u32("interrupts", 10); // IRQ 10
     b.prop_u32("interrupt-parent", 2); // PLIC phandle
-    b.prop_u32("reg-shift", 2); // Register stride (each register is 4 bytes apart)
+    b.prop_u32("reg-shift", 0); // Register stride: 1 byte apart (matches our UART emulation)
+    b.prop_u32("reg-io-width", 1); // Use 8-bit (byte) I/O
     b.prop_u32("clock-frequency", 0); // Let driver use default
     b.end_node();
 

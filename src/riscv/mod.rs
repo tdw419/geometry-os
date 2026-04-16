@@ -222,6 +222,22 @@ impl RiscvVm {
     /// MMIO devices (UART, CLINT, PLIC, virtio) remain at their standard addresses
     /// below 0xC0000000. The bus routes these to device handlers before checking RAM.
     ///
+    /// Fix virtual PPNs in a kernel page table after SATP change.
+    ///
+    /// Linux's setup_vm() creates page table entries using virtual addresses
+    /// as physical addresses (because __pa() is a no-op without SBI). For example,
+    /// L1[768] = 0x300000EF maps VA 0xC0000000 to "PA" 0xC0000000 (identity),
+    /// but the correct PA is 0x00000000. This function scans the page table
+    /// and translates any PPNs >= PAGE_OFFSET/4096 by subtracting the offset.
+    ///
+    /// Called after each SATP change during Linux boot to fix the kernel's
+    /// page tables in place.
+    fn fixup_kernel_page_table(&mut self, pg_dir_phys: u64) {
+        // Delegate to Bus which handles both PTE fixup AND page registration
+        // for real-time write interception (demand paging).
+        self.bus.fixup_kernel_page_table(pg_dir_phys);
+    }
+
     /// Steps:
     /// Set up the VM for Linux boot without running the instruction loop.
     /// Returns (vm, fw_addr, entry, dtb_addr) so callers can run their own loop.
@@ -248,7 +264,7 @@ impl RiscvVm {
         // which caused all physical addresses below 0xC0000000 to be silently discarded.
         let mut vm = Self::new_with_base(0, actual_ram_size);
         vm.bus.low_addr_identity_map = false; // Disabled: trampoline page table handles identity mapping
-        vm.bus.virtual_satp_fixup = true; // Translate virtual PPNs to physical in SATP writes
+        vm.bus.auto_pte_fixup = true; // Fix virtual PPNs in page tables on SATP write
 
         // 3. Load kernel ELF at physical addresses (p_paddr).
         // The kernel's ELF has p_paddr = vaddr - PAGE_OFFSET, which are the correct
@@ -348,8 +364,10 @@ impl RiscvVm {
         // PPN = physical page number (bits[31:10] of PTE)
         let mega_pte_base: u32 = 0x0000_00CF; // V+R+W+X+A+D, U=0
 
-        // Kernel virtual range: L1[768..776] -> PA 0x0..0x01000000
-        for i in 0..8 {
+        // Kernel virtual range: L1[768..777] -> PA 0x0..0x01200000 (9 megapages, 18MB)
+        // The first LOAD segment is ~2.1MB (PA 0x0-0x21110C), requiring L1[768] and L1[776].
+        // Subsequent segments start at PA 0x400000, 0x800000, etc.
+        for i in 0..9 {
             let l1_idx: u32 = 768 + i;
             let pte = mega_pte_base | ((i as u32) << 20); // PPN = i * 512 (2MB aligned)
             let addr = boot_pt_addr + (l1_idx as u64) * 4;
@@ -384,6 +402,11 @@ impl RiscvVm {
         // _start code can use virtual addresses (e.g., j 0xC0001084).
         let boot_pt_ppn = (boot_pt_addr / 4096) as u32;
         vm.cpu.csr.satp = (1u32 << 31) | boot_pt_ppn; // Sv32 mode
+
+        // Register the boot page table for real-time PTE write interception.
+        // This ensures that if the kernel modifies the boot page table after
+        // SATP is set, those writes are intercepted for virtual PPN fixup.
+        vm.bus.known_pt_pages.insert(boot_pt_addr);
 
         // Enter S-mode via MRET.
         // mepc = VIRTUAL entry point (e.g., 0xC0000000).
@@ -465,9 +488,12 @@ impl RiscvVm {
             {
                 let cur_satp = vm.cpu.csr.satp;
 
-                // On SATP change, inject identity mappings into the new page table root.
-                // This handles the kernel switching from our boot page table to
-                // trampoline_pg_dir -> early_pg_dir -> swapper_pg_dir.
+                // On SATP change, fixup kernel page tables and inject identity mappings.
+                //
+                // The kernel's setup_vm() creates PTEs with virtual PPNs (because
+                // __pa() returns VA without SBI). We fix these in-place so both
+                // the MMU and the kernel's own page table reads see correct PAs.
+                // We also inject identity mappings for low physical addresses.
                 if cur_satp != _last_satp {
                     eprintln!("[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", _last_satp, cur_satp, count);
                     let mode = (cur_satp >> 31) & 1;
@@ -476,6 +502,9 @@ impl RiscvVm {
                         let ppn = cur_satp & 0x3FFFFF;
                         let pg_dir_phys = (ppn as u64) * 4096;
 
+                        // Fix virtual PPNs in the kernel's page table.
+                        vm.fixup_kernel_page_table(pg_dir_phys);
+
                         let identity_pte: u32 = 0x0000_00CF;
                         // Inject identity mappings for L1[0..128] (512MB physical).
                         // The kernel needs access to all low physical addresses
@@ -483,21 +512,50 @@ impl RiscvVm {
                         let l1_entries_to_map: &[u32] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
                             16, 32, 48, 64, 80, 96, 112, 127];
 
+                        // Also inject kernel VA range mappings that the kernel's
+                        // setup_vm() misses. The kernel's first LOAD segment is
+                        // ~2.1MB, spanning PA 0x0-0x21110C. setup_vm() creates a
+                        // megapage for L1[768] (PA 0x0) but misses L1[776]
+                        // (PA 0x200000) because it only maps aligned segments.
+                        // The exception handler and other kernel code live at
+                        // VA 0xC0200000+ which maps to PA 0x200000+.
+                        //
+                        // Kernel VA mapping formula: L1[768+i] -> PA i*2MB
+                        // VA = 0xC0000000 + L1_idx * 4MB
+                        // PA = (L1_idx - 768) * 2MB
+                        let kernel_va_entries: &[u32] = &[
+                            // L1[776] -> PA 0x200000 (VA 0xC0200000-0xC03FFFFF)
+                            // Covers kernel .text tail, exception handlers
+                            776,
+                        ];
+
                         // Check if this page table already has our mappings
                         let l1_0_val = vm.bus.read_word(pg_dir_phys).unwrap_or(0);
                         let already_patched = (l1_0_val & 0xCF) == 0xCF
                             && ((l1_0_val >> 20) & 0xFFF) == 0;
 
                         if !already_patched {
+                            // Identity mappings (physical addresses)
                             for &l1_idx in l1_entries_to_map {
                                 let pte = identity_pte | (l1_idx << 20);
                                 let addr_offset = (l1_idx * 4) as u64;
                                 vm.bus.write_word(pg_dir_phys + addr_offset, pte).ok();
                             }
+                            // Kernel VA range mappings
+                            for &l1_idx in kernel_va_entries {
+                                let pa_megapage_num = (l1_idx - 768) as u32; // 0, 1, 2, ...
+                                let pte = identity_pte | (pa_megapage_num << 20);
+                                let addr_offset = (l1_idx * 4) as u64;
+                                // Only inject if not already mapped
+                                let existing = vm.bus.read_word(pg_dir_phys + addr_offset).unwrap_or(0);
+                                if (existing & 1) == 0 {
+                                    vm.bus.write_word(pg_dir_phys + addr_offset, pte).ok();
+                                }
+                            }
                             // Flush TLB since we modified page tables
                             vm.cpu.tlb.flush_all();
-                            eprintln!("[boot] Injected identity L1[{:?}] into pg_dir at PA 0x{:08X} (SATP=0x{:08X}) at count={}",
-                                l1_entries_to_map, pg_dir_phys, cur_satp, count);
+                            eprintln!("[boot] Injected identity L1[{:?}] + kernel VA L1[{:?}] into pg_dir at PA 0x{:08X} (SATP=0x{:08X}) at count={}",
+                                l1_entries_to_map, kernel_va_entries, pg_dir_phys, cur_satp, count);
                         }
                     }
                 }
