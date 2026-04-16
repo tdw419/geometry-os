@@ -7,8 +7,9 @@ use std::io::Read;
 use std::io::Write;
 use std::process::{Child, ChildStdin, ChildStdout};
 
-use super::ansi::{AnsiHandler, Cursor};
+use super::ansi::AnsiHandler;
 use super::config::{arch_to_qemu, QemuConfig};
+use super::cursor::Cursor;
 
 #[allow(dead_code)]
 const QEMU_READ_BUF_SIZE: usize = 4096;

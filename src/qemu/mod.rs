@@ -10,9 +10,11 @@
 pub mod ansi;
 pub mod bridge;
 pub mod config;
+pub mod cursor;
 
 // Re-export primary types for backward compatibility.
 // `use crate::qemu::{AnsiHandler, Cursor}` still works.
-pub use ansi::{AnsiHandler, Cursor, CANVAS_COLS, CANVAS_MAX_ROWS};
+pub use ansi::AnsiHandler;
+pub use cursor::{Cursor, CANVAS_COLS, CANVAS_MAX_ROWS};
 pub use bridge::QemuBridge;
 pub use config::{QemuConfig, arch_to_qemu};
