@@ -98,6 +98,9 @@ pub enum Operation {
     Ecall,
     Ebreak,
     Fence,
+
+    // -- NOP (e.g., floating-point instructions treated as no-ops) --
+    Nop,
     Mret,
     Sret,
     SfenceVma { rs1: u8, rs2: u8 },
@@ -269,6 +272,20 @@ pub fn decode(word: u32) -> Operation {
                 _ => Operation::Invalid(word),
             }
         }
+        // Floating-point load/store/convert instructions: treat as NOP.
+        // The RV32IMAC kernel may contain FP instructions in generic code
+        // (e.g., printk context save/restore). Since we don't implement FP,
+        // these would trap as illegal instructions and corrupt the stack via
+        // the S-mode exception handler. Treating them as NOPs lets the
+        // kernel boot past such code.
+        0x07 | // FLW, FLD, FLQ (FP load)
+        0x27 | // FSW, FSD, FSQ (FP store)
+        0x43 | // FMADD
+        0x47 | // FMSUB
+        0x53 | // FP compute (FADD, FSUB, FMUL, FDIV, etc.)
+        0x5B   // FP compute (FSGNJ, FEQ, FLT, FLE, etc.)
+        => Operation::Nop,
+
         _ => Operation::Invalid(word),
     }
 }

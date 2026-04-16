@@ -275,7 +275,8 @@ impl RiscvVm {
         // The kernel is linked to run at this virtual address (e.g., 0xC0000000).
         // Our boot page table maps VA -> PA, so the kernel enters at the
         // correct virtual address with all PC-relative addressing intact.
-        let entry_vaddr: u32 = load_info.entry;
+        // (entry_vaddr used implicitly via load_info below)
+        let _entry_vaddr: u32 = load_info.entry;
 
         // 5. Load initramfs at a page-aligned address after the kernel.
         let (initrd_start, initrd_end) = if let Some(initrd_data) = initramfs {
@@ -403,10 +404,50 @@ impl RiscvVm {
         let boot_pt_ppn = (boot_pt_addr / 4096) as u32;
         vm.cpu.csr.satp = (1u32 << 31) | boot_pt_ppn; // Sv32 mode
 
-        // Register the boot page table for real-time PTE write interception.
-        // This ensures that if the kernel modifies the boot page table after
-        // SATP is set, those writes are intercepted for virtual PPN fixup.
-        vm.bus.known_pt_pages.insert(boot_pt_addr);
+        // --- Kernel binary patch: fix __pa() root cause ---
+        //
+        // The 32-bit RV32 Linux kernel computes phys_addr as &_start (VA 0xC0000000)
+        // instead of the actual physical address (0x00000000). This makes __pa() a
+        // no-op: __pa(x) = x - va_pa_offset = x - 0 = x. ALL PTE corruption,
+        // stack corruption, and SATP oscillation stem from this one bug.
+        //
+        // Fix: NOP the two instructions that write phys_addr and va_pa_offset
+        // in setup_vm(), then pre-set the correct values in the kernel_map struct.
+        //
+        // setup_vm() is in arch/riscv/mm/init.c. The relevant instructions are:
+        //   PA 0x0040495E: sw a5, 12(s1)  -- writes &_start (0xC0000000) to phys_addr
+        //   PA 0x00404968: sw a1, 20(s1)  -- writes PAGE_OFFSET - _start (0) to va_pa_offset
+        //
+        // kernel_map struct is at VA 0xC0C79E90 (PA 0x00C79E90), layout:
+        //   offset 0: page_offset, 4: virt_addr, 8: virt_offset,
+        //   12: phys_addr (need 0), 16: size, 20: va_pa_offset (need 0xC0000000), 24: va_kernel_pa_offset
+        //
+        // The assertion `slli a5, a5, 10; beqz a5` at PA 0x00404972 still passes
+        // because a5=0xC0000000 << 10 overflows to 0 in 32-bit.
+        let setup_vm_phys_addr_store: u64 = 0x0040495E;
+        let setup_vm_va_pa_offset_store: u64 = 0x00404968;
+        let kernel_map_phys: u64 = 0x00C79E90;
+
+        // Verify the instructions match before patching (safety check).
+        let sw_a5_12 = vm.bus.read_half(setup_vm_phys_addr_store).unwrap_or(0);
+        let sw_a1_20 = vm.bus.read_half(setup_vm_va_pa_offset_store).unwrap_or(0);
+        if sw_a5_12 == 0xC4DC && sw_a1_20 == 0xC8CC {
+            // NOP the sw a5, 12(s1) -- prevents writing wrong phys_addr
+            vm.bus.write_half(setup_vm_phys_addr_store, 0x0001).ok(); // C.NOP
+            // NOP the sw a1, 20(s1) -- prevents writing wrong va_pa_offset
+            vm.bus.write_half(setup_vm_va_pa_offset_store, 0x0001).ok(); // C.NOP
+            // Pre-set correct values in kernel_map struct
+            vm.bus.write_word(kernel_map_phys + 12, 0x00000000).ok(); // phys_addr = 0
+            vm.bus.write_word(kernel_map_phys + 20, 0xC0000000).ok(); // va_pa_offset = 0xC0000000
+            eprintln!("[boot] Patched kernel_map: phys_addr=0, va_pa_offset=0xC0000000");
+        } else {
+            eprintln!("[boot] WARNING: kernel patch mismatch! sw_a5_12=0x{:04X} sw_a1_20=0x{:04X} (expected 0xC4DC/0xC8CC)", sw_a5_12, sw_a1_20);
+        }
+
+        // With __pa() now correct, PTE fixup workarounds are no longer needed.
+        // The kernel will create correct PTEs with proper physical addresses.
+        vm.bus.auto_pte_fixup = false;
+        vm.bus.known_pt_pages.clear();
 
         // Enter S-mode via MRET.
         // mepc = VIRTUAL entry point (e.g., 0xC0000000).
@@ -477,89 +518,50 @@ impl RiscvVm {
                 break;
             }
 
-            // Identity mapping injection for Linux boot.
+            // On SATP change, inject identity mappings for device regions.
             //
-            // Our boot page table provides VA 0xC0xxxxxx -> PA 0x0xxxxxx and
-            // identity mapping for low addresses. But when the kernel's setup_vm()
-            // creates its own page tables and switches SATP, those new tables may
-            // not include identity mappings for low physical addresses (per-CPU
-            // data, device probes, etc.). We inject identity megapage mappings into
-            // whichever page table the kernel switches to.
+            // With __pa() now correct, the kernel creates proper page tables for
+            // its own code/data. But early boot code accesses device registers
+            // at physical addresses (CLINT, PLIC, UART) before the kernel's
+            // paging_init() creates those mappings. We inject identity megapages
+            // for device regions only -- NOT for RAM (the kernel's linear mapping
+            // handles RAM via VA 0xC0000000+).
             {
                 let cur_satp = vm.cpu.csr.satp;
-
-                // On SATP change, fixup kernel page tables and inject identity mappings.
-                //
-                // The kernel's setup_vm() creates PTEs with virtual PPNs (because
-                // __pa() returns VA without SBI). We fix these in-place so both
-                // the MMU and the kernel's own page table reads see correct PAs.
-                // We also inject identity mappings for low physical addresses.
                 if cur_satp != _last_satp {
                     eprintln!("[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", _last_satp, cur_satp, count);
                     let mode = (cur_satp >> 31) & 1;
                     if mode == 1 {
-                        // Sv32: PPN = bits[21:0]
                         let ppn = cur_satp & 0x3FFFFF;
                         let pg_dir_phys = (ppn as u64) * 4096;
 
-                        // Fix virtual PPNs in the kernel's page table.
-                        vm.fixup_kernel_page_table(pg_dir_phys);
-
-                        let identity_pte: u32 = 0x0000_00CF;
-                        // Inject identity mappings for L1[0..128] (512MB physical).
-                        // The kernel needs access to all low physical addresses
-                        // (kernel code, data, initramfs, DTB, device memory).
-                        let l1_entries_to_map: &[u32] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                            16, 32, 48, 64, 80, 96, 112, 127];
-
-                        // Also inject kernel VA range mappings that the kernel's
-                        // setup_vm() misses. The kernel's first LOAD segment is
-                        // ~2.1MB, spanning PA 0x0-0x21110C. setup_vm() creates a
-                        // megapage for L1[768] (PA 0x0) but misses L1[776]
-                        // (PA 0x200000) because it only maps aligned segments.
-                        // The exception handler and other kernel code live at
-                        // VA 0xC0200000+ which maps to PA 0x200000+.
-                        //
-                        // Kernel VA mapping formula: L1[768+i] -> PA i*2MB
-                        // VA = 0xC0000000 + L1_idx * 4MB
-                        // PA = (L1_idx - 768) * 2MB
-                        let kernel_va_entries: &[u32] = &[
-                            // L1[776] -> PA 0x200000 (VA 0xC0200000-0xC03FFFFF)
-                            // Covers kernel .text tail, exception handlers
-                            776,
+                        // Device regions that need identity mapping (from DTB):
+                        // CLINT: 0x02000000 (L1[8])
+                        // PLIC:  0x0C000000 (L1[48])
+                        // UART:  0x10000000 (L1[64])
+                        // Also map low RAM for DTB/initramfs access: L1[0..5]
+                        let device_l1_entries: &[u32] = &[
+                            0, 1, 2, 3, 4, 5,  // Low RAM (0x0-0x17FFFFF) for DTB/initramfs
+                            8,                   // CLINT at 0x02000000
+                            48,                  // PLIC at 0x0C000000
+                            64,                  // UART at 0x10000000
                         ];
+                        let identity_pte: u32 = 0x0000_00CF; // V+R+W+X+A+D, U=0
 
-                        // Check if this page table already has our mappings
-                        let l1_0_val = vm.bus.read_word(pg_dir_phys).unwrap_or(0);
-                        let already_patched = (l1_0_val & 0xCF) == 0xCF
-                            && ((l1_0_val >> 20) & 0xFFF) == 0;
-
-                        if !already_patched {
-                            // Identity mappings (physical addresses)
-                            for &l1_idx in l1_entries_to_map {
-                                let pte = identity_pte | (l1_idx << 20);
-                                let addr_offset = (l1_idx * 4) as u64;
-                                vm.bus.write_word(pg_dir_phys + addr_offset, pte).ok();
-                            }
-                            // Kernel VA range mappings
-                            for &l1_idx in kernel_va_entries {
-                                let pa_megapage_num = (l1_idx - 768) as u32; // 0, 1, 2, ...
-                                let pte = identity_pte | (pa_megapage_num << 20);
-                                let addr_offset = (l1_idx * 4) as u64;
+                        for &l1_idx in device_l1_entries {
+                            let addr = pg_dir_phys + (l1_idx as u64) * 4;
+                            let existing = vm.bus.read_word(addr).unwrap_or(0);
+                            if (existing & 1) == 0 {
                                 // Only inject if not already mapped
-                                let existing = vm.bus.read_word(pg_dir_phys + addr_offset).unwrap_or(0);
-                                if (existing & 1) == 0 {
-                                    vm.bus.write_word(pg_dir_phys + addr_offset, pte).ok();
-                                }
+                                let pte = identity_pte | (l1_idx << 20);
+                                vm.bus.write_word(addr, pte).ok();
                             }
-                            // Flush TLB since we modified page tables
-                            vm.cpu.tlb.flush_all();
-                            eprintln!("[boot] Injected identity L1[{:?}] + kernel VA L1[{:?}] into pg_dir at PA 0x{:08X} (SATP=0x{:08X}) at count={}",
-                                l1_entries_to_map, kernel_va_entries, pg_dir_phys, cur_satp, count);
                         }
+                        vm.cpu.tlb.flush_all();
+                        eprintln!("[boot] Injected device identity mappings into pg_dir at PA 0x{:08X}", pg_dir_phys);
                     }
+                    _last_satp = cur_satp;
                 }
-                _last_satp = cur_satp;
             }
 
             // Detect if we're sitting at the trap handler from a previous step.
@@ -642,6 +644,15 @@ impl RiscvVm {
                                 | (sie << csr::MSTATUS_SPIE);
                             vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
 
+                            // For timer interrupts: advance mtimecmp to prevent
+                            // immediate re-trap. Without this, MTIP stays pending
+                            // after forwarding, and the next vm.step() traps back
+                            // to M-mode before the S-mode handler can execute.
+                            // The kernel will set its own mtimecmp via SBI_SET_TIMER.
+                            if cause_code == csr::INT_MTI {
+                                vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                            }
+
                             // Jump to S-mode trap vector in Supervisor mode.
                             vm.cpu.pc = stvec;
                             vm.cpu.privilege = cpu::Privilege::Supervisor;
@@ -689,6 +700,12 @@ impl RiscvVm {
                 // returning to mepc (now faulting_pc + 4).
                 // Fall through to normal step processing.
             }
+
+            // Advance CLINT timer and sync hardware interrupt state into MIP.
+            // Without this, mtime never advances and timer interrupts never fire,
+            // causing the kernel to hang waiting for the first timer tick.
+            vm.bus.tick_clint();
+            vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
             let step_result = vm.step();
             match step_result {

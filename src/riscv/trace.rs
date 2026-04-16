@@ -215,6 +215,7 @@ pub fn op_name(op: &Operation) -> &'static str {
         Operation::Ecall => "ECALL",
         Operation::Ebreak => "EBREAK",
         Operation::Fence => "FENCE",
+        Operation::Nop => "NOP",
         Operation::Mret => "MRET",
         Operation::Sret => "SRET",
         Operation::SfenceVma { .. } => "SFENCE.VMA",

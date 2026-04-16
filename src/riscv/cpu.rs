@@ -928,6 +928,10 @@ impl RiscvCpu {
                 self.pc = next_pc;
                 StepResult::Ok
             }
+            Operation::Nop => {
+                self.pc = next_pc;
+                StepResult::Ok
+            }
             Operation::Mret => {
                 let restored = self.csr.trap_return(Privilege::Machine);
                 self.pc = self.csr.mepc;

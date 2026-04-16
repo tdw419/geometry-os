@@ -101,10 +101,16 @@ impl Sbi {
                 Some((SBI_SUCCESS as u32, 0))
             }
             SBI_CONSOLE_GETCHAR => {
-                // Extension ID 2 serves dual purpose:
-                // - Legacy SBI_CONSOLE_GETCHAR (a6=0): return -1 (no char)
-                // - SBI v0.2 SBI_EXT_CONSOLE_PUTCHAR (a6=1): write char
-                if a6 == 1 {
+                // Extension ID 0x02 serves dual purpose:
+                // - SBI v0.2 SBI_EXT_CONSOLE_PUTCHAR (a6=0): write char
+                // - Legacy SBI_CONSOLE_GETCHAR (a6!=0): return -1 (no char)
+                //
+                // The kernel with earlycon=sbi uses SBI v0.2 calling convention:
+                // a7=0x02 (extension), a6=0 (function=putchar), a0=character.
+                // The legacy SBI v0.1 used a7=1 for putchar and a7=2 for getchar
+                // with no a6 distinction. Since we report 0x02 as available via
+                // PROBE_EXTENSION, the kernel uses v0.2, so a6=0 is putchar.
+                if a6 == 0 {
                     // SBI v0.2 console_putchar: a0 = character
                     let ch = a0 as u8;
                     if ch != 0 {
@@ -246,10 +252,24 @@ mod tests {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
         let mut clint = Clint::new();
-        let result = sbi.handle_ecall(SBI_CONSOLE_GETCHAR, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        // Legacy SBI_CONSOLE_GETCHAR uses a6!=0 (e.g., a6=1)
+        let result = sbi.handle_ecall(SBI_CONSOLE_GETCHAR, 1, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(result.is_some());
         let (a0, _) = result.unwrap();
         assert_eq!(a0, 0xFFFFFFFF); // -1 = no char
+    }
+
+    #[test]
+    fn test_sbi_v02_console_putchar() {
+        let mut sbi = Sbi::new();
+        let mut uart = Uart::new();
+        let mut clint = Clint::new();
+        // SBI v0.2 console putchar: a7=0x02, a6=0, a0=char
+        let result = sbi.handle_ecall(SBI_CONSOLE_GETCHAR, 0, b'X' as u32, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        assert!(result.is_some());
+        let (a0, _) = result.unwrap();
+        assert_eq!(a0, SBI_SUCCESS as u32);
+        assert_eq!(sbi.console_output, vec![b'X']);
     }
 
     #[test]
