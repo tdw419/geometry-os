@@ -14,6 +14,11 @@
 
 mod includes;
 mod instructions;
+mod core_ops;
+mod graphics_ops;
+mod immediate_ops;
+mod system_ops;
+mod formula_ops;
 
 #[derive(Debug)]
 pub struct AsmError {
