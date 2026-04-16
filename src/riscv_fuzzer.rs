@@ -461,7 +461,7 @@ fn run_program(prog: &Program) -> Result<([u32; 32], Box<[u8]>), String> {
                 let _data_start = (RAM_BASE + DATA_OFF) as u32;
                 let mut data = vec![0u8; DATA_SIZE];
                 for i in 0..DATA_SIZE {
-                    data[i] = vm.bus.read_byte((RAM_BASE + DATA_OFF + i as u64) as u64)
+                    data[i] = vm.bus.read_byte((RAM_BASE + DATA_OFF + i as u64))
                         .map_err(|e| format!("read data[{}]: {:?}", i, e))?;
                 }
                 return Ok((vm.cpu.x, data.into_boxed_slice()));

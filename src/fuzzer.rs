@@ -235,7 +235,7 @@ fn gen_nested_loop(rng: &mut Rng) -> TestCase {
     let outer = rng.range_u(3, 30);
     let inner = rng.range_u(3, 30);
     let source = format!("  LDI r10, 0\n  LDI r1, 0\nouter:\n  CMP r1, {outer}\n  BGE r1, done\n  LDI r2, 0\ninner:\n  CMP r2, {inner}\n  BGE r2, next_outer\n  LDI r3, 1\n  ADD r10, r3\n  ADD r2, r3\n  JMP inner\nnext_outer:\n  ADD r1, r3\n  JMP outer\ndone:\n  HALT", outer=outer, inner=inner);
-    let exp: u32 = (outer as u32) * (inner as u32);
+    let exp: u32 = outer * inner;
     TestCase { name: "nested_loop".into(), source,
         check: Box::new(move |vm: &Vm| if vm.regs[10] != exp { vec![format!("nested_loop({}x{}): r10 = {}, expected {}", outer, inner, vm.regs[10], exp)] } else { vec![] }) }
 }

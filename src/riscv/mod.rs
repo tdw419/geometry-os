@@ -41,6 +41,7 @@ pub struct BootResult {
     pub dtb_addr: u64,
 }
 
+#[allow(dead_code)]
 impl RiscvVm {
     /// Create a new VM with the given RAM size in bytes.
     /// RAM starts at 0x8000_0000 (default for synthetic tests).
@@ -195,14 +196,13 @@ impl RiscvVm {
         for i in 0..hdr.phnum {
             let off = hdr.phoff + i * hdr.phentsize;
             let phdr = crate::riscv::loader::parse_phdr(image, off, class)?;
-            if phdr.p_type == 1 {
-                if entry_vaddr >= phdr.p_vaddr
+            if phdr.p_type == 1
+                && entry_vaddr >= phdr.p_vaddr
                     && entry_vaddr < phdr.p_vaddr.wrapping_add(phdr.p_memsz as u32)
                 {
                     let offset = entry_vaddr - phdr.p_vaddr;
                     return Some(phdr.p_paddr.wrapping_add(offset));
                 }
-            }
         }
         None
     }
@@ -241,7 +241,6 @@ impl RiscvVm {
     /// Steps:
     /// Set up the VM for Linux boot without running the instruction loop.
     /// Returns (vm, fw_addr, entry, dtb_addr) so callers can run their own loop.
-
     pub fn boot_linux_setup(
         kernel_image: &[u8],
         initramfs: Option<&[u8]>,
@@ -370,7 +369,7 @@ impl RiscvVm {
         // Subsequent segments start at PA 0x400000, 0x800000, etc.
         for i in 0..9 {
             let l1_idx: u32 = 768 + i;
-            let pte = mega_pte_base | ((i as u32) << 20); // PPN = i * 512 (2MB aligned)
+            let pte = mega_pte_base | (i << 20); // PPN = i * 512 (2MB aligned)
             let addr = boot_pt_addr + (l1_idx as u64) * 4;
             vm.bus.write_word(addr, pte).ok();
         }
@@ -740,7 +739,7 @@ impl RiscvVm {
                 _last_unique_pc = vm.cpu.pc;
                 _same_pc_count = 0;
             }
-            if _same_pc_count > 0 && count % 500_000 == 0 {
+            if _same_pc_count > 0 && count.is_multiple_of(500_000) {
                 eprintln!("[boot] count={} PC=0x{:08X} priv={:?} mstatus=0x{:08X} same_pc={}",
                     count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.mstatus, _same_pc_count);
             }

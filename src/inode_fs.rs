@@ -4,6 +4,8 @@
 // Inodes track file type (regular, directory, device, pipe), size, data,
 // and directory children. Path resolution supports absolute and relative paths.
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 
 /// Maximum filename length
@@ -314,10 +316,10 @@ impl InodeFs {
 
         let start = offset as usize;
         let mut read = 0u32;
-        for i in 0..buf.len() {
+        for (i, slot) in buf.iter_mut().enumerate() {
             let idx = start + i;
             if idx < inode.data.len() {
-                buf[i] = inode.data[idx];
+                *slot = inode.data[idx];
                 read += 1;
             } else {
                 break;
@@ -340,7 +342,7 @@ impl InodeFs {
 
         let start = offset as usize;
         let mut written = 0u32;
-        for i in 0..buf.len() {
+        for (i, &val) in buf.iter().enumerate() {
             let idx = start + i;
             if idx >= MAX_FILE_SIZE {
                 break;
@@ -349,7 +351,7 @@ impl InodeFs {
             while inode.data.len() <= idx {
                 inode.data.push(0);
             }
-            inode.data[idx] = buf[i];
+            inode.data[idx] = val;
             written += 1;
         }
         inode.size = inode.data.len() as u32;

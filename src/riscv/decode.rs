@@ -520,17 +520,15 @@ pub fn decode_c(halfword: u16) -> Operation {
                         // C.MV: add rd, x0, rs2
                         Operation::Add { rd, rs1: 0, rs2 }
                     }
+                } else if rd == 0 {
+                    // C.EBREAK
+                    Operation::Ebreak
+                } else if rs2 == 0 {
+                    // C.JALR: jalr x1, rd, 0
+                    Operation::Jalr { rd: 1, rs1: rd, imm: 0 }
                 } else {
-                    if rd == 0 {
-                        // C.EBREAK
-                        Operation::Ebreak
-                    } else if rs2 == 0 {
-                        // C.JALR: jalr x1, rd, 0
-                        Operation::Jalr { rd: 1, rs1: rd, imm: 0 }
-                    } else {
-                        // C.ADD: add rd, rd, rs2
-                        Operation::Add { rd, rs1: rd, rs2 }
-                    }
+                    // C.ADD: add rd, rd, rs2
+                    Operation::Add { rd, rs1: rd, rs2 }
                 }
             }
             // C.SDSP (RV64) / C.SWSP
@@ -593,9 +591,9 @@ fn c_addi16sp_imm(w: u32) -> i32 {
 
 /// C.LUI immediate: nzimm[17|12:2] (not sign-extended, 32-bit)
 fn c_lui_imm(w: u32) -> u32 {
-    let imm = (((w >> 12) & 0x1) << 17)
-        | (((w >> 2) & 0x1F) << 12);
-    imm
+    
+    (((w >> 12) & 0x1) << 17)
+        | (((w >> 2) & 0x1F) << 12)
 }
 
 /// C.ANDI immediate: imm[5:4|12|2:6|3] (same encoding as C.ADDI, sign-extended 6-bit)

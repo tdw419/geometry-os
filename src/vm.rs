@@ -19,6 +19,7 @@ pub const MAX_FORMULAS: usize = 256;
 /// Maximum dependencies a single formula can reference.
 pub const MAX_FORMULA_DEPS: usize = 8;
 /// Maximum evaluation depth to prevent infinite recursion in cyclic deps.
+#[allow(dead_code)]
 pub const FORMULA_EVAL_DEPTH_LIMIT: u32 = 32;
 
 /// A formula attached to a canvas cell. When any of its dependencies change,
@@ -248,9 +249,11 @@ impl Signal {
 ///   Zombie -> <gone>       (parent calls WAITPID, reaps exit code)
 ///   Any -> Stopped         (SIGSTOP)
 ///   Stopped -> Ready       (SIGCONT -- future)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[allow(dead_code)]
 pub enum ProcessState {
     /// Runnable, waiting for scheduler to pick it up.
+    #[default]
     Ready,
     /// Currently executing on the CPU.
     Running,
@@ -264,15 +267,11 @@ pub enum ProcessState {
     Stopped,
 }
 
-impl Default for ProcessState {
-    fn default() -> Self {
-        ProcessState::Ready
-    }
-}
 
 /// VMA (Virtual Memory Area) type, analogous to Linux vm_area_struct.
 /// Each VMA describes a contiguous range of virtual pages with a purpose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum VmaType {
     /// Code segment: loaded at spawn, read+execute, not growable.
     Code,
@@ -606,18 +605,15 @@ pub struct Vm {
 /// Hypervisor execution mode.
 /// QEMU mode spawns a subprocess; Native mode uses the built-in RISC-V interpreter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum HypervisorMode {
     /// Use QEMU subprocess for guest execution (any architecture).
+    #[default]
     Qemu,
     /// Use built-in RISC-V interpreter (Phases 34-36, pure Rust, WASM-portable).
     Native,
 }
 
-impl Default for HypervisorMode {
-    fn default() -> Self {
-        HypervisorMode::Qemu
-    }
-}
 
 impl Default for Vm {
     fn default() -> Self {
@@ -1245,12 +1241,12 @@ impl Vm {
                     match self.translate_va_or_fault(vaddr) {
                         Some(addr) => {
                             // Phase 46: Intercept screen buffer range
-                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                            if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE).contains(&addr) {
                                 self.regs[reg] = self.screen[addr - SCREEN_RAM_BASE];
                                 self.log_access(addr, MemAccessKind::Read);
                             } else if addr < self.ram.len() {
                                 // Phase 45: Intercept canvas RAM range
-                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                if (CANVAS_RAM_BASE..CANVAS_RAM_BASE + CANVAS_RAM_SIZE).contains(&addr) {
                                     self.regs[reg] = self.canvas_buffer[addr - CANVAS_RAM_BASE];
                                 } else {
                                     self.regs[reg] = self.ram[addr];
@@ -1278,7 +1274,7 @@ impl Vm {
                     match self.translate_va_or_fault(vaddr) {
                         Some(addr) => {
                             // Phase 46: Intercept screen buffer range
-                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                            if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE).contains(&addr) {
                                 self.screen[addr - SCREEN_RAM_BASE] = self.regs[reg];
                                 self.log_access(addr, MemAccessKind::Write);
                             } else if addr < self.ram.len() {
@@ -1287,7 +1283,7 @@ impl Vm {
                                     return false;
                                 }
                                 // Phase 45: Intercept canvas RAM range
-                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                if (CANVAS_RAM_BASE..CANVAS_RAM_BASE + CANVAS_RAM_SIZE).contains(&addr) {
                                     let cidx = addr - CANVAS_RAM_BASE;
                                     self.canvas_buffer[cidx] = self.regs[reg];
                                     // Phase 50: Trigger formula recalculation
@@ -1342,13 +1338,12 @@ impl Vm {
                     let mut vaddr = self.regs[ar];
                     for _ in 0..count {
                         let ch = self.fetch();
-                        match self.translate_va_or_fault(vaddr) {
-                            Some(addr) => {
-                                if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                        if let Some(addr) = self.translate_va_or_fault(vaddr) {
+                                if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE).contains(&addr) {
                                     self.screen[addr - SCREEN_RAM_BASE] = ch;
                                     self.log_access(addr, MemAccessKind::Write);
                                 } else if addr < self.ram.len() {
-                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                if (CANVAS_RAM_BASE..CANVAS_RAM_BASE + CANVAS_RAM_SIZE).contains(&addr) {
                                     let cidx = addr - CANVAS_RAM_BASE;
                                     self.canvas_buffer[cidx] = ch;
                                     self.formula_recalc(cidx);
@@ -1358,27 +1353,22 @@ impl Vm {
                                 self.log_access(addr, MemAccessKind::Write);
                             }
                         }
-                        _ => {}
-                    }
                     vaddr = vaddr.wrapping_add(1);
                 }
                 // null-terminate if possible
-                match self.translate_va_or_fault(vaddr) {
-                    Some(addr) => {
-                        if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
-                            self.screen[addr - SCREEN_RAM_BASE] = 0;
-                        } else if addr < self.ram.len() {
-                            if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
-                                let cidx = addr - CANVAS_RAM_BASE;
-                                self.canvas_buffer[cidx] = 0;
-                                self.formula_recalc(cidx);
-                                } else {
-                                    self.ram[addr] = 0;
-                                }
-                            }
+                if let Some(addr) = self.translate_va_or_fault(vaddr) {
+                if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE).contains(&addr) {
+                    self.screen[addr - SCREEN_RAM_BASE] = 0;
+                } else if addr < self.ram.len() {
+                    if (CANVAS_RAM_BASE..CANVAS_RAM_BASE + CANVAS_RAM_SIZE).contains(&addr) {
+                        let cidx = addr - CANVAS_RAM_BASE;
+                        self.canvas_buffer[cidx] = 0;
+                        self.formula_recalc(cidx);
+                        } else {
+                            self.ram[addr] = 0;
                         }
-                        _ => {}
                     }
+                }
                 }
             }
 
@@ -1402,11 +1392,11 @@ impl Vm {
                     let vaddr = if offset < 0x80000000 { sp.wrapping_add(offset) } else { sp.wrapping_sub(0x100000000_usize - offset) };
                     match self.translate_va_or_fault(vaddr as u32) {
                         Some(addr) => {
-                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                            if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE).contains(&addr) {
                                 self.regs[rd] = self.screen[addr - SCREEN_RAM_BASE];
                                 self.log_access(addr, MemAccessKind::Read);
                             } else if addr < self.ram.len() {
-                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                if (CANVAS_RAM_BASE..CANVAS_RAM_BASE + CANVAS_RAM_SIZE).contains(&addr) {
                                     self.regs[rd] = self.canvas_buffer[addr - CANVAS_RAM_BASE];
                                 } else {
                                     self.regs[rd] = self.ram[addr];
@@ -1431,7 +1421,7 @@ impl Vm {
                     self.resolve_cow_if_needed(vaddr);
                     match self.translate_va_or_fault(vaddr) {
                         Some(addr) => {
-                            if addr >= SCREEN_RAM_BASE && addr < SCREEN_RAM_BASE + SCREEN_SIZE {
+                            if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE).contains(&addr) {
                                 self.screen[addr - SCREEN_RAM_BASE] = self.regs[rs];
                                 self.log_access(addr, MemAccessKind::Write);
                             } else if addr < self.ram.len() {
@@ -1439,7 +1429,7 @@ impl Vm {
                                     self.trigger_segfault();
                                     return false;
                                 }
-                                if addr >= CANVAS_RAM_BASE && addr < CANVAS_RAM_BASE + CANVAS_RAM_SIZE {
+                                if (CANVAS_RAM_BASE..CANVAS_RAM_BASE + CANVAS_RAM_SIZE).contains(&addr) {
                                     let cidx = addr - CANVAS_RAM_BASE;
                                     self.canvas_buffer[cidx] = self.regs[rs];
                                     self.formula_recalc(cidx);
@@ -2126,9 +2116,9 @@ impl Vm {
 
                         if identity_map {
                             // Identity-map pages 0-2: virtual addr N == physical addr N
-                            for phys_page in 0..3usize {
+                            for (phys_page, pd_entry) in pd.iter_mut().enumerate().take(3) {
                                 if phys_page >= NUM_RAM_PAGES { break; }
-                                pd[phys_page] = phys_page as u32;
+                                *pd_entry = phys_page as u32;
                                 if self.page_ref_count[phys_page] == 0 {
                                     self.page_ref_count[phys_page] = 1;
                                 }
@@ -2138,15 +2128,15 @@ impl Vm {
                             child_pc = start_addr;
                         } else {
                             // Sequential mapping: vpage N -> phys page (start_page + N)
-                            for vpage in 0..PROCESS_PAGES {
+                            for (vpage, pd_entry) in pd.iter_mut().enumerate().take(PROCESS_PAGES) {
                                 let parent_phys = start_page + vpage;
                                 if parent_phys >= NUM_RAM_PAGES { break; }
                                 if vpage == 3 || parent_phys == 3 {
-                                    pd[vpage] = 3;
+                                    *pd_entry = 3;
                                     self.page_ref_count[3] += 1;
                                     continue;
                                 }
-                                pd[vpage] = parent_phys as u32;
+                                *pd_entry = parent_phys as u32;
                                 self.page_ref_count[parent_phys] += 1;
                                 self.page_cow |= 1u64 << parent_phys;
                             }
@@ -3853,11 +3843,11 @@ impl Vm {
             }
             0x13 => {
                 let x = ram(a+1); let y = ram(a+2); let count = ram(a+3) as usize;
-                (format!("TEXTI {}, {}, \"{}\"", x, y, (4..4+count.min(32)).map(|i| (ram(a+i as usize + 3) & 0xFF) as u8 as char).collect::<String>()), 4 + count)
+                (format!("TEXTI {}, {}, \"{}\"", x, y, (4..4+count.min(32)).map(|i| (ram(a+i + 3) & 0xFF) as u8 as char).collect::<String>()), 4 + count)
             }
             0x14 => {
                 let ar = ram(a+1); let count = ram(a+2) as usize;
-                (format!("STRO {}, \"{}\"", reg(ar), (3..3+count.min(32)).map(|i| (ram(a+i as usize + 2) & 0xFF) as u8 as char).collect::<String>()), 3 + count)
+                (format!("STRO {}, \"{}\"", reg(ar), (3..3+count.min(32)).map(|i| (ram(a+i + 2) & 0xFF) as u8 as char).collect::<String>()), 3 + count)
             }
             0x15 => { let rd = ram(a+1); let imm = ram(a+2); (format!("CMPI {}, {}", reg(rd), imm), 3) }
             0x16 => { let rd = ram(a+1); let off = ram(a+2); (format!("LOADS {}, {}", reg(rd), off as i32), 3) }

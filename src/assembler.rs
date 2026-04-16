@@ -1202,7 +1202,7 @@ fn parse_instruction(
                 _ => return Err(format!("FORMULA: unknown op '{}'", op_name)),
             };
             let deps: Vec<u32> = tokens[3..].iter()
-                .map(|a| parse_imm(a, constants).map(|v| v as u32))
+                .map(|a| parse_imm(a, constants))
                 .collect::<Result<Vec<u32>, String>>()?;
             if deps.len() > 8 {
                 return Err("FORMULA: too many dependencies (max 8)".into());

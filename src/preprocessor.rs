@@ -91,7 +91,7 @@ pub fn parse_syntax_line(line: &str) -> Vec<SynSpan> {
                 SynTok::Number
             } else if ["+", "-", "*", "/", "&", "|", "^", "~", "%", "<<", ">>", "MAX", "MIN",
                         "max", "min", "ADD", "SUB", "MUL", "DIV", "AND", "OR", "XOR", "NOT",
-                        "MOD", "SHL", "SHR"].contains(&ftoken) {
+                        "MOD", "SHL", "SHR"].contains(ftoken) {
                 SynTok::Formula
             } else {
                 SynTok::Label

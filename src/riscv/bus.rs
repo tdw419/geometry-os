@@ -336,14 +336,13 @@ impl Bus {
             // Skip virtual PPNs here -- they'll be fixed below, and we
             // register the fixed physical address.
             let l2_page_addr = (ppn as u64) << 12;
-            if l2_page_addr < 0x1000_0000 && l2_page_addr >= 0x1000 {
-                if self.known_pt_pages.insert(l2_page_addr) {
+            if (0x1000..0x1000_0000).contains(&l2_page_addr)
+                && self.known_pt_pages.insert(l2_page_addr) {
                     eprintln!(
                         "[pte_intercept] Discovered new L2 table at PA 0x{:08X} (from PTE write at PA 0x{:08X})",
                         l2_page_addr, addr
                     );
                 }
-            }
         }
 
         // Fix virtual PPNs: subtract PAGE_OFFSET/4096 if PPN is in kernel VA range
@@ -358,14 +357,13 @@ impl Bus {
             // If this is a non-leaf PTE, also register the (now fixed) L2 page
             if (val & LEAF_FLAGS) == 0 {
                 let l2_page_addr = (fixed_ppn as u64) << 12;
-                if l2_page_addr < 0x1000_0000 && l2_page_addr >= 0x1000 {
-                    if self.known_pt_pages.insert(l2_page_addr) {
+                if (0x1000..0x1000_0000).contains(&l2_page_addr)
+                    && self.known_pt_pages.insert(l2_page_addr) {
                         eprintln!(
                             "[pte_intercept] Discovered new L2 table at PA 0x{:08X} (fixed from virtual PPN)",
                             l2_page_addr
                         );
                     }
-                }
             }
 
             return fixed_val;
