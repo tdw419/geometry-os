@@ -248,22 +248,18 @@ impl RiscvVm {
         // which caused all physical addresses below 0xC0000000 to be silently discarded.
         let mut vm = Self::new_with_base(0, actual_ram_size);
         vm.bus.low_addr_identity_map = false; // Disabled: trampoline page table handles identity mapping
+        vm.bus.virtual_satp_fixup = true; // Translate virtual PPNs to physical in SATP writes
 
         // 3. Load kernel ELF at physical addresses (p_paddr).
         // The kernel's ELF has p_paddr = vaddr - PAGE_OFFSET, which are the correct
         // physical addresses for our ram_base=0 setup.
         let load_info = loader::load_elf(&mut vm.bus, kernel_image)?;
 
-        // 4. Convert virtual entry point to physical address.
-        // The ELF entry point is a virtual address (e.g., 0xC0000000).
-        // We find which PT_LOAD segment contains it and compute:
-        // phys = entry_vaddr - p_vaddr + p_paddr
+        // 4. Get virtual entry point from ELF header.
+        // The kernel is linked to run at this virtual address (e.g., 0xC0000000).
+        // Our boot page table maps VA -> PA, so the kernel enters at the
+        // correct virtual address with all PC-relative addressing intact.
         let entry_vaddr: u32 = load_info.entry;
-        let entry_phys: u32 = Self::elf_entry_vaddr_to_phys(kernel_image, entry_vaddr)
-            .unwrap_or_else(|| {
-                // Fallback: assume identity mapping (entry is already physical)
-                entry_vaddr
-            });
 
         // 5. Load initramfs at a page-aligned address after the kernel.
         let (initrd_start, initrd_end) = if let Some(initrd_data) = initramfs {
@@ -316,11 +312,64 @@ impl RiscvVm {
         // call returns immediately instead of hitting an illegal instruction.
         vm.bus.write_half(0x12, 0x8082).ok();
 
+        // Allocate a boot page table (4KB, 1024 L1 entries) above kernel + initrd.
+        let after_dtb = ((dtb_addr + 4096 + 0xFFF) & !0xFFF) as u64;
+        let boot_pt_addr: u64 = after_dtb; // Boot page table physical address
+
+        // Create initial page table for early kernel boot.
+        // The kernel's _start code uses virtual addresses (e.g., j 0xC0001084)
+        // before setup_vm() creates proper page tables. We need VA == PA + 0xC0000000
+        // mapping so these jumps work.
+        //
+        // With ram_base=0: kernel physical address = vaddr - 0xC0000000
+        // So VA 0xC0000000 must map to PA 0x00000000.
+        //
+        // Sv32 megapage mapping: each L1 entry covers 2MB.
+        // L1 index = (vaddr >> 22) & 0x3FF
+        // VA 0xC0000000: L1 index = 768 (0x300)
+        // VA 0xC1400000: L1 index = 775 (0x307)
+        //
+        // We create megapage entries mapping:
+        //   L1[768] = PA 0x00000000 (VA 0xC0000000-0xC01FFFFF)
+        //   L1[769] = PA 0x00200000 (VA 0xC0200000-0xC03FFFFF)
+        //   L1[770] = PA 0x00400000 (VA 0xC0400000-0xC05FFFFF)
+        //   L1[771] = PA 0x00600000 (VA 0xC0600000-0xC07FFFFF)
+        //   L1[772] = PA 0x00800000 (VA 0xC0800000-0xC09FFFFF)
+        //   L1[773] = PA 0x00A00000 (VA 0xC0A00000-0xC0BFFFFF)
+        //   L1[774] = PA 0x00C00000 (VA 0xC0C00000-0xC0DFFFFF)
+        //   L1[775] = PA 0x00E00000 (VA 0xC0E00000-0xC0FFFFFF)
+        //
+        // Also keep low addresses identity-mapped (for DTB, initramfs, etc.):
+        //   L1[0] = PA 0x00000000 (VA 0x00000000-0x001FFFFF) -- identity
+        //   L1[1] = PA 0x00200000 (VA 0x00200000-0x003FFFFF) -- identity
+        //   etc.
+        //
+        // Megapage PTE format: V=1, R=1, W=1, X=1, A=1, D=1, U=0 = 0xCF
+        // PPN = physical page number (bits[31:10] of PTE)
+        let mega_pte_base: u32 = 0x0000_00CF; // V+R+W+X+A+D, U=0
+
+        // Kernel virtual range: L1[768..776] -> PA 0x0..0x01000000
+        for i in 0..8 {
+            let l1_idx: u32 = 768 + i;
+            let pte = mega_pte_base | ((i as u32) << 20); // PPN = i * 512 (2MB aligned)
+            let addr = boot_pt_addr + (l1_idx as u64) * 4;
+            vm.bus.write_word(addr, pte).ok();
+        }
+
+        // Low address identity mapping: L1[0..128] -> PA 0x0..0x10000000 (512MB)
+        // This covers the entire kernel physical address range (~21MB) plus
+        // initramfs, DTB, and any other low physical memory the kernel needs.
+        for i in 0..128u32 {
+            let pte = mega_pte_base | (i << 20); // PPN = i * 512 (2MB aligned)
+            let addr = boot_pt_addr + (i as u64) * 4;
+            vm.bus.write_word(addr, pte).ok();
+        }
+
         vm.cpu.privilege = cpu::Privilege::Machine;
 
         // M-mode trap handler (single MRET instruction).
-        // Place at a physical address above the kernel code to avoid overlap.
-        let fw_addr: u64 = ((load_info.highest_addr + 0xFFF) & !0xFFF) + 0x1000;
+        // Place at a physical address above the boot page table to avoid overlap.
+        let fw_addr: u64 = (boot_pt_addr + 4096 + 0xFFF) & !0xFFF;
         vm.bus.write_word(fw_addr, 0x30200073).ok(); // MRET
 
         // Set mtvec to our trap handler (physical address).
@@ -330,17 +379,30 @@ impl RiscvVm {
         vm.cpu.csr.medeleg = 0xB109;
         vm.cpu.csr.mideleg = 0x222;
 
+        // Set SATP to boot page table (Sv32 mode, PPN = boot_pt_addr / 4096).
+        // This enables MMU before entering the kernel so that the kernel's
+        // _start code can use virtual addresses (e.g., j 0xC0001084).
+        let boot_pt_ppn = (boot_pt_addr / 4096) as u32;
+        vm.cpu.csr.satp = (1u32 << 31) | boot_pt_ppn; // Sv32 mode
+
         // Enter S-mode via MRET.
-        // mepc = physical entry point (the kernel will enable MMU and start
-        // using virtual addresses via page tables).
-        vm.cpu.csr.mepc = entry_phys;
+        // mepc = VIRTUAL entry point (e.g., 0xC0000000).
+        // The boot page table maps VA 0xC0000000 -> PA 0x0, so the kernel
+        // executes from the correct virtual address. This is critical because
+        // the kernel uses PC-relative addressing (auipc, jal, etc.) that
+        // only produces correct results at the linked virtual address.
+        // Entering at PA 0 (identity-mapped) causes all auipc calculations
+        // to be off by 0xC0000000, leading to wrong GP/SP/TP and eventual
+        // boot failure when the kernel returns to a corrupted low address.
+        let entry_vaddr: u32 = load_info.entry;
+        vm.cpu.csr.mepc = entry_vaddr;
         vm.cpu.csr.mstatus = 1u32 << csr::MSTATUS_MPP_LSB;
         vm.cpu.csr.mstatus |= 1 << csr::MSTATUS_MPIE;
         let restored = vm.cpu.csr.trap_return(cpu::Privilege::Machine);
         vm.cpu.pc = vm.cpu.csr.mepc;
         vm.cpu.privilege = restored;
 
-        Ok((vm, fw_addr, entry_phys, dtb_addr))
+        Ok((vm, fw_addr, entry_vaddr, dtb_addr))
     }
 
     /// Boot a RISC-V Linux kernel.
@@ -384,63 +446,63 @@ impl RiscvVm {
         let mut _smode_fault_count: u64 = 0;
         let mut _last_unique_pc: u32 = 0;
         let mut _same_pc_count: u64 = 0;
-        let mut _trampoline_patched: bool = false;
-        let mut _last_satp: u32 = 0;
+        let mut _trampoline_patched: bool = true; // Boot page table already provides initial mapping
+        let mut _last_satp: u32 = vm.cpu.csr.satp; // Already set by setup
         while count < max_instructions {
             // Check for SBI shutdown request
             if vm.bus.sbi.shutdown_requested {
                 break;
             }
 
-            // Full identity mapping injection after setup_vm returns.
-            // The kernel's BSS clear zeroes the trampoline_pg_dir (0x01484000) and
-            // early_pg_dir (0x00802000). The kernel's setup_vm populates the 0xC0
-            // virtual range (L1[768+]) but only creates L1[0] for identity mapping.
-            // However, the kernel has LOAD segments at physical 0x0, 0x00400000,
-            // 0x00800000, 0x00C00000, 0x01000000, 0x01400000. When running with
-            // MMU enabled, the kernel accesses these physical addresses via their
-            // virtual equivalents (VA 0x014809D0 etc), which need identity mappings.
-            // Without them, the kernel page-faults trying to access its own data.
+            // Identity mapping injection for Linux boot.
             //
-            // We detect setup_vm return by PC == 0x10EE (instruction after jalr setup_vm
-            // in _start_kernel, in .head.text loaded at physical 0x0).
-            if !_trampoline_patched
-                && vm.cpu.pc == 0x10EE
-                && vm.cpu.privilege == cpu::Privilege::Supervisor
-                && vm.cpu.csr.satp == 0
+            // Our boot page table provides VA 0xC0xxxxxx -> PA 0x0xxxxxx and
+            // identity mapping for low addresses. But when the kernel's setup_vm()
+            // creates its own page tables and switches SATP, those new tables may
+            // not include identity mappings for low physical addresses (per-CPU
+            // data, device probes, etc.). We inject identity megapage mappings into
+            // whichever page table the kernel switches to.
             {
-                // Identity megapage PTE: V=1, R=1, W=1, X=1, A=1, D=1 = 0xEF
-                // Each entry maps a 2MB region: VA 0xXXXX0000-0xXXXXFFFFF → PA same
-                let identity_pte: u32 = 0x0000_00EF;
+                let cur_satp = vm.cpu.csr.satp;
 
-                // Kernel physical memory spans 0x0 to ~0x01500000 (~21MB = 11 L1 entries).
-                // The LOAD segments are at PA 0x0, 0x00400000, 0x00800000, 0x00C00000,
-                // 0x01000000, 0x01400000. We map L1 entries 0-10 (covers 0x0-0x01600000).
-                let l1_entries_to_map: &[u64] = &[0, 2, 4, 5, 6, 8, 10];
-                let trampoline_phys = 0x0148_4000u64;
-                let early_pg_dir_phys = 0x0080_2000u64;
+                // On SATP change, inject identity mappings into the new page table root.
+                // This handles the kernel switching from our boot page table to
+                // trampoline_pg_dir -> early_pg_dir -> swapper_pg_dir.
+                if cur_satp != _last_satp {
+                    eprintln!("[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", _last_satp, cur_satp, count);
+                    let mode = (cur_satp >> 31) & 1;
+                    if mode == 1 {
+                        // Sv32: PPN = bits[21:0]
+                        let ppn = cur_satp & 0x3FFFFF;
+                        let pg_dir_phys = (ppn as u64) * 4096;
 
-                for &l1_idx in l1_entries_to_map {
-                    let pte = identity_pte | ((l1_idx as u32) << 20); // PPN = L1 index
-                    let addr_offset = (l1_idx * 4) as u64;
-                    vm.bus.write_word(trampoline_phys + addr_offset, pte).ok();
-                    vm.bus.write_word(early_pg_dir_phys + addr_offset, pte).ok();
+                        let identity_pte: u32 = 0x0000_00CF;
+                        // Inject identity mappings for L1[0..128] (512MB physical).
+                        // The kernel needs access to all low physical addresses
+                        // (kernel code, data, initramfs, DTB, device memory).
+                        let l1_entries_to_map: &[u32] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                            16, 32, 48, 64, 80, 96, 112, 127];
+
+                        // Check if this page table already has our mappings
+                        let l1_0_val = vm.bus.read_word(pg_dir_phys).unwrap_or(0);
+                        let already_patched = (l1_0_val & 0xCF) == 0xCF
+                            && ((l1_0_val >> 20) & 0xFFF) == 0;
+
+                        if !already_patched {
+                            for &l1_idx in l1_entries_to_map {
+                                let pte = identity_pte | (l1_idx << 20);
+                                let addr_offset = (l1_idx * 4) as u64;
+                                vm.bus.write_word(pg_dir_phys + addr_offset, pte).ok();
+                            }
+                            // Flush TLB since we modified page tables
+                            vm.cpu.tlb.flush_all();
+                            eprintln!("[boot] Injected identity L1[{:?}] into pg_dir at PA 0x{:08X} (SATP=0x{:08X}) at count={}",
+                                l1_entries_to_map, pg_dir_phys, cur_satp, count);
+                        }
+                    }
                 }
-
-                _trampoline_patched = true;
-                eprintln!("[boot] Injected identity mappings L1[{:?}] into trampoline+early page tables at count={}",
-                    l1_entries_to_map, count);
+                _last_satp = cur_satp;
             }
-
-            // Track SATP changes for logging (TLB pre-warming removed --
-            // sfence.vma flushes the TLB after each SATP write, making
-            // pre-warming ineffective. The MMU's page table walk handles
-            // TLB misses correctly with ram_base=0.)
-            let cur_satp = vm.cpu.csr.satp;
-            if cur_satp != _last_satp && cur_satp != 0 {
-                eprintln!("[boot] SATP changed to 0x{:08X} at count={}", cur_satp, count);
-            }
-            _last_satp = cur_satp;
 
             // Detect if we're sitting at the trap handler from a previous step.
             // This happens when a trap was delivered (mepc/mcause/mtval set,

@@ -194,14 +194,30 @@ impl RiscvCpu {
     /// Write to a CSR, intercepting side effects like SATP logging (Phase 41).
     fn write_csr(&mut self, addr: u32, val: u32, bus: &mut Bus) {
         if addr == csr::SATP {
+            // Virtual SATP fixup for Linux boot: the kernel's relocate_enable_mmu
+            // writes the virtual PPN of trampoline_pg_dir into SATP (e.g., 0xC1484
+            // instead of physical 0x1484). On real hardware, OpenSBI handles this;
+            // we translate virtual PPNs to physical PPNs here.
+            // PAGE_OFFSET for RV32 Linux = 0xC0000000, PPN offset = 0xC0000.
+            let mut fixed_val = val;
+            if bus.virtual_satp_fixup {
+                let ppn = val & 0x003F_FFFF;
+                let page_offset_ppn: u32 = 0xC000_0000 >> 12; // 0xC0000
+                if ppn >= page_offset_ppn {
+                    let phys_ppn = ppn - page_offset_ppn;
+                    fixed_val = (val & !0x003F_FFFF) | phys_ppn;
+                }
+            }
             let old = self.csr.satp;
-            if old != val {
-                bus.mmu_log.push(mmu::MmuEvent::SatpWrite { old, new: val });
+            if old != fixed_val {
+                bus.mmu_log.push(mmu::MmuEvent::SatpWrite { old, new: fixed_val });
                 // Flush TLB on SATP change to prevent stale translations.
                 // While software should SFENCE.VMA, many implementations flush
                 // on SATP write to avoid a window of stale entries.
                 self.tlb.flush_all();
             }
+            self.csr.write(addr, fixed_val);
+            return;
         }
         self.csr.write(addr, val);
     }
@@ -1143,19 +1159,32 @@ mod tests {
     }
 
     #[test]
-    fn fetch_fault_on_bad_pc() {
+    fn illegal_instruction_traps_to_mtvec() {
         let mut cpu = RiscvCpu::new();
-        cpu.pc = 0x0000_0000;
         let mut bus = Bus::new(0x8000_0000, 4096);
+        cpu.pc = 0x8000_0000;
         cpu.csr.mtvec = 0x8000_0200;
+        // Write an invalid instruction (opcode 0x7F is not a valid RISC-V opcode)
+        bus.write_word(0x8000_0000, 0x0000_007F).unwrap();
         let result = cpu.step(&mut bus);
-        // Low addresses return 0 (boot ROM), so instruction 0x00000000 is fetched.
-        // 0x00000000 decodes as compressed C.ADDI4SPN with nzuimm=0, which is
-        // an illegal instruction (mcause=2). CPU traps to mtvec.
         assert_eq!(result, StepResult::Ok);
         assert_eq!(cpu.pc, 0x8000_0200);
-        assert_eq!(cpu.csr.mepc, 0x0000_0000);
+        assert_eq!(cpu.csr.mepc, 0x8000_0000);
         assert_eq!(cpu.csr.mcause, csr::CAUSE_ILLEGAL_INSTRUCTION);
+    }
+
+    #[test]
+    fn zero_instruction_is_hint_nop() {
+        let mut cpu = RiscvCpu::new();
+        let mut bus = Bus::new(0x8000_0000, 4096);
+        cpu.pc = 0x8000_0000;
+        // Write 0x00000000 at PC -- decodes as compressed C.ADDI4SPN with nzuimm=0
+        // Per RISC-V spec this is a HINT (NOP), not an illegal instruction.
+        bus.write_word(0x8000_0000, 0x0000_0000).unwrap();
+        let result = cpu.step(&mut bus);
+        assert_eq!(result, StepResult::Ok);
+        // PC advances by 2 (compressed instruction length), does NOT trap
+        assert_eq!(cpu.pc, 0x8000_0002);
     }
 
     #[test]

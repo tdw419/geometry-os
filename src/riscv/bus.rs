@@ -55,6 +55,13 @@ pub struct Bus {
     /// probes, and early boot structures live in low memory.
     /// Default: false. Set to true by boot_linux_setup().
     pub low_addr_identity_map: bool,
+    /// When true, SATP writes from S-mode have their PPN translated from
+    /// virtual to physical. Linux's relocate_enable_mmu writes the virtual
+    /// PPN of trampoline_pg_dir into SATP (because the kernel uses virtual
+    /// addresses before __pa() conversion). On real hardware, OpenSBI handles
+    /// this; we fix it up here. Translation: if PPN >= PAGE_OFFSET>>12,
+    /// subtract PAGE_OFFSET>>12 to get the physical PPN.
+    pub virtual_satp_fixup: bool,
 }
 
 impl Bus {
@@ -76,6 +83,7 @@ impl Bus {
             write_watch_pc: 0,
             write_watch_hit: false,
             low_addr_identity_map: false,
+            virtual_satp_fixup: false,
         }
     }
 

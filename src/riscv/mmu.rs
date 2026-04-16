@@ -292,6 +292,20 @@ pub fn translate(
     let root_ppn = satp_ppn(satp);
     let root_addr = (root_ppn as u64) << 12;
 
+    // Helper: translate virtual PPN to physical PPN when virtual_satp_fixup is enabled.
+    // Linux's setup_vm() uses virtual addresses as physical addresses in PTEs
+    // (kernel_map.phys_addr = &_start gives VA, not PA). When fixup is on,
+    // PPNs >= PAGE_OFFSET>>12 are translated by subtracting the offset.
+    let page_offset_ppn: u32 = 0xC000_0000 >> 12; // 0xC0000
+    let do_fixup = bus.virtual_satp_fixup;
+    let fixup_ppn = |ppn: u32| -> u32 {
+        if do_fixup && ppn >= page_offset_ppn {
+            ppn - page_offset_ppn
+        } else {
+            ppn
+        }
+    };
+
     // Level 1: read PTE at root[VPN[1]].
     let l1_addr = root_addr | ((vpn1 as u64) << 2);
     let l1_pte = match bus.read_word(l1_addr) {
@@ -337,7 +351,9 @@ pub fn translate(
         // Megapage (2MB superpage in SV32).
         // PA[31:22] = PTE.PPN[19:10], PA[21:12] = VA.VPN0[9:0], PA[11:0] = VA.offset
         // The lower 10 bits of PTE.PPN are reserved (should be zero for megapages).
-        let ppn_hi = (l1_pte >> 20) & 0xFFF; // PTE.PPN[19:10] → PA[31:22]
+        let full_ppn = pte_ppn(l1_pte);
+        let fixed_ppn = fixup_ppn(full_ppn);
+        let ppn_hi = (fixed_ppn >> 10) & 0xFFF; // PTE.PPN[19:10] → PA[31:22]
         let pa = ((ppn_hi as u64) << 22) | ((vpn0 as u64) << 12) | (offset as u64);
         let flags = l1_pte & 0xFF;
 
@@ -367,7 +383,7 @@ pub fn translate(
     }
 
     // Non-leaf: follow pointer to level 2.
-    let l2_base = (pte_ppn(l1_pte) as u64) << 12;
+    let l2_base = (fixup_ppn(pte_ppn(l1_pte)) as u64) << 12;
     let l2_addr = l2_base | ((vpn0 as u64) << 2);
     let l2_pte = match bus.read_word(l2_addr) {
         Ok(w) => w,
@@ -426,7 +442,7 @@ pub fn translate(
 
     // A/D bit updates DISABLED for testing (L2 leaf).
     let flags = l2_pte & 0xFF;
-    let ppn = pte_ppn(l2_pte);
+    let ppn = fixup_ppn(pte_ppn(l2_pte));
 
     tlb.insert(combined_vpn, asid, ppn, flags);
     let pa = ((ppn as u64) << 12) | (offset as u64);
