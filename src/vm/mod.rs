@@ -4113,7 +4113,7 @@ impl Vm {
     /// Draw a character to the screen buffer (tiny 5x7 inline font for TEXT opcode)
     fn draw_char(&mut self, ch: u8, x: usize, y: usize, color: u32) {
         // Simple 5x7 font for printable ASCII
-        const MINI_FONT: [[u8; 7]; 96] = include!("mini_font.in");
+        const MINI_FONT: [[u8; 7]; 96] = include!("../mini_font.in");
         let idx = ch as usize;
         if !(32..=127).contains(&idx) {
             return;
@@ -5690,7 +5690,7 @@ mod tests {
     #[test]
     fn test_self_writer_demo_assembles() {
         // Verify the self_writer.asm program assembles without errors
-        let source = include_str!("../programs/self_writer.asm");
+        let source = include_str!("../../programs/self_writer.asm");
         let result = crate::assembler::assemble(source, 0x1000);
         assert!(result.is_ok(), "self_writer.asm should assemble: {:?}", result.err());
         let asm = result.expect("operation should succeed");
@@ -5840,7 +5840,7 @@ mod tests {
     fn test_infinite_map_assembles_and_runs() {
         use crate::assembler::assemble;
 
-        let source = include_str!("../programs/infinite_map.asm");
+        let source = include_str!("../../programs/infinite_map.asm");
         let asm = assemble(source, 0).expect("infinite_map.asm should assemble");
         assert!(!asm.pixels.is_empty(), "should produce bytecode");
         eprintln!("Assembled {} words from infinite_map.asm", asm.pixels.len());
@@ -5936,7 +5936,7 @@ mod tests {
     fn test_infinite_map_visual_analysis() {
         use crate::assembler::assemble;
 
-        let source = include_str!("../programs/infinite_map.asm");
+        let source = include_str!("../../programs/infinite_map.asm");
         let asm = assemble(source, 0).expect("assembly should succeed");
 
         let mut vm = Vm::new();
