@@ -1,21 +1,17 @@
-// qemu/bridge.rs -- QEMU subprocess management
+// qemu/bridge.rs -- QEMU subprocess bridge
 //
-// Spawns QEMU as a subprocess, pipes serial console I/O through
-// the Geometry OS canvas text surface via the ANSI handler.
-//
-// Usage from .asm: HYPERVISOR r0  (r0 = address of config string in RAM)
-// Config: "arch=riscv64 kernel=linux.img ram=256M disk=rootfs.ext4"
+// Manages a QEMU subprocess with piped stdin/stdout.
+// Reads QEMU output and writes it to a canvas buffer via the ANSI handler.
 
-use std::io::{Read, Write};
+use std::io::Read;
+use std::io::Write;
 use std::process::{Child, ChildStdin, ChildStdout};
 
 use super::ansi::{AnsiHandler, Cursor};
-use super::config::QemuConfig;
+use super::config::{arch_to_qemu, QemuConfig};
 
 #[allow(dead_code)]
 const QEMU_READ_BUF_SIZE: usize = 4096;
-
-// ── QEMU Bridge ──────────────────────────────────────────────────
 
 /// Manages a QEMU subprocess with piped stdin/stdout.
 /// Reads QEMU output and writes it to a canvas buffer via the ANSI handler.
@@ -38,7 +34,7 @@ impl QemuBridge {
 
         let mut child = cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                let (binary, _) = super::config::arch_to_qemu(&config.arch)
+                let (binary, _) = arch_to_qemu(&config.arch)
                     .unwrap_or(("qemu-system-unknown", None));
                 format!(
                     "QEMU not found: '{}'. Install with: sudo apt install qemu-system-{}",
@@ -170,4 +166,11 @@ impl Drop for QemuBridge {
             let _ = self.child.kill();
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    // QemuBridge tests require QEMU installed, so we only test config
+    // and ANSI handler here (those tests live in their respective modules).
+    // Integration tests for QemuBridge would go in tests/ with #[ignore].
 }

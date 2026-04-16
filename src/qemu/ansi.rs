@@ -1,11 +1,12 @@
-// qemu/ansi.rs -- ANSI escape sequence handler and canvas cursor
+// qemu/ansi.rs -- ANSI escape sequence handler for canvas text surface
 //
-// Parses ANSI escape sequences from QEMU stdout and writes
-// printable characters into the Geometry OS canvas text buffer.
+// State machine that processes bytes from QEMU stdout (or RISC-V UART),
+// interprets ANSI escape sequences, and writes printable characters into
+// a canvas buffer (Vec<u32>).
 
 // ── Constants ────────────────────────────────────────────────────
-pub(crate) const CANVAS_COLS: usize = 32;
-pub(crate) const CANVAS_MAX_ROWS: usize = 128;
+pub const CANVAS_COLS: usize = 32;
+pub const CANVAS_MAX_ROWS: usize = 128;
 
 // ── ANSI Escape State Machine ────────────────────────────────────
 
@@ -31,7 +32,7 @@ pub struct Cursor {
 }
 
 impl Cursor {
-    /// Create a new cursor at position (0, 0).
+        /// Create a new cursor at position (0, 0).
     pub fn new() -> Self {
         Cursor::default()
     }
@@ -88,7 +89,7 @@ impl Default for AnsiHandler {
 }
 
 impl AnsiHandler {
-    /// Create a new ANSI handler with default state.
+        /// Create a new ANSI handler with default state.
     pub fn new() -> Self {
         AnsiHandler {
             state: AnsiState::Normal,
@@ -583,8 +584,6 @@ mod tests {
     fn make_canvas() -> Vec<u32> {
         vec![0u32; CANVAS_MAX_ROWS * CANVAS_COLS]
     }
-
-    // ── AnsiHandler tests ────────────────────────────────────────
 
     #[test]
     fn test_ansi_basic_text() {
