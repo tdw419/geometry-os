@@ -165,6 +165,7 @@ impl Default for Tlb {
 }
 
 impl Tlb {
+        /// Create a new empty TLB.
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),

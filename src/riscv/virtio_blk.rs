@@ -118,6 +118,7 @@ impl Default for VirtioBlk {
 }
 
 impl VirtioBlk {
+        /// Create a new virtio block device with a zeroed disk of default size.
     pub fn new() -> Self {
         Self {
             disk: vec![0u8; (DEFAULT_SECTORS * SECTOR_SIZE) as usize],

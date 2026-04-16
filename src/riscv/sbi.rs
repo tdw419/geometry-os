@@ -55,6 +55,7 @@ pub struct Sbi {
 }
 
 impl Sbi {
+        /// Create a new SBI handler with empty console output.
     pub fn new() -> Self {
         Self {
             console_output: Vec::new(),

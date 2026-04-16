@@ -30,6 +30,7 @@ impl Default for Clint {
 }
 
 impl Clint {
+        /// Create a new CLINT with mtime=0 and mtimecmp=max (no timer interrupt).
     pub fn new() -> Self {
         Self {
             mtime: 0,

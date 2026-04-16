@@ -151,6 +151,7 @@ pub struct Pipe {
 }
 
 impl Pipe {
+            /// Create a new pipe with the given reader/writer PIDs.
     pub fn new(read_pid: u32, write_pid: u32) -> Self {
         Pipe {
             buffer: [0; PIPE_BUFFER_SIZE],
@@ -185,10 +186,12 @@ impl Pipe {
         Some(val)
     }
 
+            /// Returns true if the pipe buffer is empty.
     pub fn is_empty(&self) -> bool {
         self.count == 0
     }
 
+            /// Returns true if the pipe buffer is full.
     #[allow(dead_code)]
     pub fn is_full(&self) -> bool {
         self.count >= PIPE_BUFFER_SIZE
@@ -205,6 +208,7 @@ pub struct Message {
 }
 
 impl Message {
+            /// Create a new message with the given sender PID and payload.
     pub fn new(sender: u32, data: [u32; MSG_WORDS]) -> Self {
         Message { sender, data }
     }
@@ -301,6 +305,7 @@ pub struct Vma {
 }
 
 impl Vma {
+            /// Create a new virtual memory area.
     pub fn new(vtype: VmaType, start_page: usize, current_end: usize, max_end: usize) -> Self {
         Vma { vtype, start_page, current_end, max_end }
     }
@@ -625,6 +630,7 @@ impl Default for Vm {
 }
 
 impl Vm {
+        /// Create a new VM with zeroed RAM, registers, and screen buffer.
     pub fn new() -> Self {
         Vm {
             ram: vec![0; RAM_SIZE],
@@ -697,6 +703,7 @@ impl Vm {
         true
     }
 
+        /// Reset the VM to initial state (zeroed RAM, registers, screen, halted=false).
     #[allow(dead_code)]
     pub fn reset(&mut self) {
         for r in self.ram.iter_mut() {

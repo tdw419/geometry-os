@@ -38,6 +38,7 @@ impl Default for DtbBuilder {
 }
 
 impl DtbBuilder {
+        /// Create a new DTB builder with empty struct and strings blocks.
     pub fn new() -> Self {
         Self {
             struct_block: Vec::new(),

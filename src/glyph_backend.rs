@@ -8,6 +8,7 @@
 //   r0 -> reserved for CMP results
 //   r27-r29 -> reserved for backend scratch
 
+/// Translate a GlyphLang source string into Geometry OS assembly.
 pub fn translate_glyph(source: &str) -> String {
     let mut asm = String::new();
     asm.push_str("; Translated from GlyphLang\n");

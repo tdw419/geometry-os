@@ -186,6 +186,7 @@ pub struct Cursor {
 
 
 impl Cursor {
+        /// Create a new cursor at position (0, 0).
     pub fn new() -> Self {
         Cursor::default()
     }
@@ -242,6 +243,7 @@ impl Default for AnsiHandler {
 }
 
 impl AnsiHandler {
+        /// Create a new ANSI handler with default state.
     pub fn new() -> Self {
         AnsiHandler {
             state: AnsiState::Normal,

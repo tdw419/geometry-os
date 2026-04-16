@@ -55,6 +55,7 @@ impl Default for Plic {
 }
 
 impl Plic {
+        /// Create a new PLIC with all interrupts disabled and zero priorities.
     pub fn new() -> Self {
         Self {
             priority: [0u32; MAX_SOURCES],

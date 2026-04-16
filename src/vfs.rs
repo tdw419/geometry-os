@@ -56,6 +56,7 @@ impl Default for FdTable {
 }
 
 impl FdTable {
+        /// Create a new fd table with reserved slots for stdin/stdout/stderr.
     pub fn new() -> Self {
         let mut fds = Vec::with_capacity(MAX_FDS);
         for _ in 0..MAX_FDS {

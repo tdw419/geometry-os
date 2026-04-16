@@ -28,6 +28,7 @@ pub enum InodeType {
 }
 
 impl InodeType {
+        /// Convert a raw u32 to an InodeType, returning None for invalid values.
     pub fn from_u32(v: u32) -> Option<Self> {
         match v {
             1 => Some(InodeType::Regular),
@@ -38,6 +39,7 @@ impl InodeType {
         }
     }
 
+        /// Convert this InodeType to its raw u32 representation.
     pub fn to_u32(self) -> u32 {
         self as u32
     }

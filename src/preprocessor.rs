@@ -189,6 +189,7 @@ impl Default for Preprocessor {
 }
 
 impl Preprocessor {
+        /// Create a new preprocessor with an empty variable table.
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
