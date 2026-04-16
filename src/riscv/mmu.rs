@@ -252,6 +252,7 @@ fn pte_ppn(pte: u32) -> u32 {
 /// * `satp` - Current satp CSR value
 /// * `bus` - Memory bus for page table walks
 /// * `tlb` - TLB for caching translations
+#[allow(clippy::too_many_arguments)]
 pub fn translate(
     va: u32,
     access_type: AccessType,

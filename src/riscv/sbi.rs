@@ -76,6 +76,7 @@ impl Sbi {
     /// Returns (a0, a1) pair to set in registers after the ECALL.
     /// If this is NOT an SBI call, returns None and the CPU should
     /// handle the ECALL as a normal trap.
+    #[allow(clippy::too_many_arguments)]
     pub fn handle_ecall(
         &mut self,
         a7: u32,

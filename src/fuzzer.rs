@@ -40,6 +40,7 @@ impl Rng {
 
 enum Outcome { Ok(Vec<String>), AsmError(String), Segfault, Timeout, Panic(String) }
 
+#[allow(clippy::type_complexity)]
 struct TestCase { name: String, source: String, check: Box<dyn Fn(&Vm) -> Vec<String>> }
 
 fn run_with_oracle(tc: TestCase, max_steps: u64) -> Outcome {
@@ -197,7 +198,7 @@ fn gen_multi_store(rng: &mut Rng) -> TestCase {
     TestCase { name: "multi_store".into(), source: lines.join("\n"),
         check: Box::new(move |vm: &Vm| {
             let mut f = vec![];
-            for i in 0..n { if vm.regs[10+i] != expected[i] { f.push(format!("r{} = {}, expected {}", 10+i, vm.regs[10+i], expected[i])); } }
+            for (i, exp_val) in expected.iter().enumerate() { if vm.regs[10+i] != *exp_val { f.push(format!("r{} = {}, expected {}", 10+i, vm.regs[10+i], exp_val)); } }
             f
         }) }
 }
@@ -206,7 +207,7 @@ fn gen_push_pop(rng: &mut Rng) -> TestCase {
     let n = rng.range(2, 8) as usize;
     let mut lines = vec!["  LDI r30, 60000".into()]; // SP in safe high region
     let mut vals: Vec<u32> = vec![];
-    for i in 0..n {
+    for _ in 0..n {
         let v: u32 = rng.range_u(1, 0xFFFF);
         vals.push(v);
         lines.push(format!("  LDI r1, {}", v));
@@ -218,7 +219,7 @@ fn gen_push_pop(rng: &mut Rng) -> TestCase {
     TestCase { name: "push_pop".into(), source: lines.join("\n"),
         check: Box::new(move |vm: &Vm| {
             let mut f = vec![];
-            for i in 0..n { if vm.regs[10+i] != exp[i] { f.push(format!("POP r{} = {}, expected {}", 10+i, vm.regs[10+i], exp[i])); } }
+            for (i, exp_val) in exp.iter().enumerate() { if vm.regs[10+i] != *exp_val { f.push(format!("POP r{} = {}, expected {}", 10+i, vm.regs[10+i], exp_val)); } }
             f
         }) }
 }
@@ -277,6 +278,7 @@ fn gen_conditional_sum(rng: &mut Rng) -> TestCase {
 // --- REGISTRY ---
 
 type Generator = fn(&mut Rng) -> TestCase;
+#[allow(dead_code)]
 struct GenEntry { name: &'static str, category: &'static str, gen: Generator }
 
 const GENERATORS: &[GenEntry] = &[

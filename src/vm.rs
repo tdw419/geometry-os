@@ -311,6 +311,7 @@ impl Vma {
     }
 
     /// Is the page within the currently-mapped range?
+    #[allow(dead_code)]
     pub fn is_mapped(&self, vpage: usize) -> bool {
         vpage >= self.start_page && vpage <= self.current_end
     }
@@ -337,6 +338,7 @@ impl Vma {
 /// - IPC: message queue, signal handlers
 /// - Lifecycle: exit code, zombie tracking
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Process {
     // ── Identity ──────────────────────────────────────────────────
     /// Process ID (1-based). PID 0 is the main/kernel context.
@@ -403,6 +405,7 @@ pub struct Process {
 /// Backward-compatible alias for Process.
 pub type SpawnedProcess = Process;
 
+#[allow(dead_code)]
 impl Process {
     /// Create a new process with the given PID and entry point.
     ///

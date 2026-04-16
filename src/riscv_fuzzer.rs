@@ -458,10 +458,9 @@ fn run_program(prog: &Program) -> Result<([u32; 32], Box<[u8]>), String> {
             cpu::StepResult::Ok    => {}
             cpu::StepResult::Ebreak => {
                 // Snapshot data region from bus
-                let _data_start = (RAM_BASE + DATA_OFF) as u32;
                 let mut data = vec![0u8; DATA_SIZE];
-                for i in 0..DATA_SIZE {
-                    data[i] = vm.bus.read_byte((RAM_BASE + DATA_OFF + i as u64))
+                for (i, slot) in data.iter_mut().enumerate().take(DATA_SIZE) {
+                    *slot = vm.bus.read_byte(RAM_BASE + DATA_OFF + i as u64)
                         .map_err(|e| format!("read data[{}]: {:?}", i, e))?;
                 }
                 return Ok((vm.cpu.x, data.into_boxed_slice()));
@@ -493,9 +492,9 @@ fn check_program(prog: &Program, vm_regs: &[u32; 32], vm_data: &[u8]) -> bool {
     }
 
     // Check data region
-    for i in 0..DATA_SIZE {
-        if oracle.mem[i] != vm_data[i] {
-            eprintln!("  mem[{}]: oracle={:#04x}  vm={:#04x}", i, oracle.mem[i], vm_data[i]);
+    for (i, (expected, got)) in oracle.mem.iter().zip(vm_data.iter()).enumerate() {
+        if expected != got {
+            eprintln!("  mem[{}]: oracle={:#04x}  vm={:#04x}", i, expected, got);
             ok = false;
             break; // report first divergence only
         }

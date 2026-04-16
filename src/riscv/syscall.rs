@@ -556,10 +556,8 @@ static SYSCALL_TABLE: &[Option<&str>] = &[
     Some("mseal"),                // 468
 ];
 
-impl SyscallEvent {
-    /// Format the syscall event as: name(arg0, arg1, ...) = ret
-    /// or: name(arg0, arg1, ...) [no return captured]
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for SyscallEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let args_str = self
             .args
             .iter()
@@ -567,11 +565,13 @@ impl SyscallEvent {
             .collect::<Vec<_>>()
             .join(", ");
         match self.ret {
-            Some(r) => format!(
+            Some(r) => write!(
+                f,
                 "{}({}) = 0x{:08X}  [pc=0x{:08X}, nr={}]",
                 self.name, args_str, r, self.pc, self.nr
             ),
-            None => format!(
+            None => write!(
+                f,
                 "{}({}) [pending]  [pc=0x{:08X}, nr={}]",
                 self.name, args_str, self.pc, self.nr
             ),
