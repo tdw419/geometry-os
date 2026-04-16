@@ -18,6 +18,7 @@ mod render;
 mod canvas;
 mod cli;
 mod hermes;
+mod audio;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use std::collections::{HashSet, VecDeque};
@@ -30,6 +31,7 @@ use canvas::*;
 use cli::cli_main;
 use hermes::run_hermes_canvas;
 use save::{save_state, load_state, save_screen_png, save_full_buffer_png};
+use audio::play_beep;
 
 // ── Memory map ───────────────────────────────────────────────────
 const KEYS_BITMASK_PORT: usize = 0xFFB;
@@ -47,72 +49,6 @@ const SAVE_FILE: &str = "geometry_os.sav";
 enum Mode {
     Terminal,
     Editor,
-}
-
-use std::sync::OnceLock;
-use std::sync::mpsc::{channel, Sender};
-
-static BEEP_SENDER: OnceLock<Sender<Vec<u8>>> = OnceLock::new();
-
-fn get_beep_sender() -> &'static Sender<Vec<u8>> {
-    BEEP_SENDER.get_or_init(|| {
-        let (tx, rx) = channel::<Vec<u8>>();
-        std::thread::spawn(move || {
-            while let Ok(wav_data) = rx.recv() {
-                match std::process::Command::new("aplay")
-                    .args(["-q", "-t", "wav", "-"])
-                    .stdin(std::process::Stdio::piped())
-                    .spawn()
-                {
-                    Ok(mut child) => {
-                        if let Some(mut stdin) = child.stdin.take() {
-                            let _ = stdin.write_all(&wav_data);
-                        }
-                        let _ = child.wait();
-                    }
-                    Err(_) => {}
-                }
-            }
-        });
-        tx
-    })
-}
-
-fn play_beep(freq: u32, dur_ms: u32) {
-    let sender = get_beep_sender().clone();
-    let sample_rate = 22050u32;
-    let num_samples = (sample_rate * dur_ms / 1000) as usize;
-
-    // Build WAV in memory
-    let data_size = num_samples * 2; // 16-bit mono
-    let mut wav = Vec::with_capacity(44 + data_size);
-    // RIFF header
-    wav.extend_from_slice(b"RIFF");
-    let file_size = (36 + data_size) as u32;
-    wav.extend_from_slice(&file_size.to_le_bytes());
-    wav.extend_from_slice(b"WAVE");
-    // fmt chunk
-    wav.extend_from_slice(b"fmt ");
-    wav.extend_from_slice(&16u32.to_le_bytes()); // chunk size
-    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
-    wav.extend_from_slice(&1u16.to_le_bytes()); // mono
-    wav.extend_from_slice(&sample_rate.to_le_bytes());
-    let byte_rate = sample_rate * 2;
-    wav.extend_from_slice(&byte_rate.to_le_bytes());
-    wav.extend_from_slice(&2u16.to_le_bytes()); // block align
-    wav.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
-    // data chunk
-    wav.extend_from_slice(b"data");
-    wav.extend_from_slice(&(data_size as u32).to_le_bytes());
-
-    let amplitude = 16000i16;
-    for i in 0..num_samples {
-        let t = i as f64 / sample_rate as f64;
-        let val = (amplitude as f64 * (2.0 * std::f64::consts::PI * freq as f64 * t).sin()) as i16;
-        wav.extend_from_slice(&val.to_le_bytes());
-    }
-
-    let _ = sender.send(wav);
 }
 
 fn main() {
