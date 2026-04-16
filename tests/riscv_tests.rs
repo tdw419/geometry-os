@@ -1060,10 +1060,10 @@ fn test_rv32_privilege_ecall_u_to_s() {
     let base = 0x8000_0000u64;
 
     // Write ECALL at entry point
-    vm.bus.write_word(base, ecall()).unwrap();
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");
 
     // Write S-mode handler at 0x80000200: just ebreak
-    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+    vm.bus.write_word(base + 0x200, ebreak()).expect("operation should succeed");
 
     // Configure CPU: start in U-mode with delegation
     vm.cpu.pc = base as u32;
@@ -1092,10 +1092,10 @@ fn test_rv32_privilege_ecall_s_to_m() {
     let base = 0x8000_0000u64;
 
     // Write ECALL at entry point
-    vm.bus.write_word(base, ecall()).unwrap();
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");
 
     // Write M-mode handler at 0x80000400: just ebreak
-    vm.bus.write_word(base + 0x400, ebreak()).unwrap();
+    vm.bus.write_word(base + 0x400, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
@@ -1120,10 +1120,10 @@ fn test_rv32_privilege_mret_returns_to_s() {
     let base = 0x8000_0000u64;
 
     // Write MRET at 0x80000000
-    vm.bus.write_word(base, mret()).unwrap();
+    vm.bus.write_word(base, mret()).expect("operation should succeed");
 
     // Write the code to return to at 0x80000200
-    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+    vm.bus.write_word(base + 0x200, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
@@ -1148,10 +1148,10 @@ fn test_rv32_privilege_sret_returns_to_u() {
     let base = 0x8000_0000u64;
 
     // Write SRET at 0x80000000
-    vm.bus.write_word(base, sret()).unwrap();
+    vm.bus.write_word(base, sret()).expect("operation should succeed");
 
     // Write the code to return to at 0x80000200
-    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+    vm.bus.write_word(base + 0x200, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
@@ -1175,14 +1175,14 @@ fn test_rv32_privilege_u_ecall_sret_roundtrip() {
     let base = 0x8000_0000u64;
 
     // 0x80000000: ECALL (U-mode code)
-    vm.bus.write_word(base, ecall()).unwrap();
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");
     // 0x80000004: addi x1, x0, 42 (returned here after SRET)
-    vm.bus.write_word(base + 4, addi(1, 0, 42)).unwrap();
+    vm.bus.write_word(base + 4, addi(1, 0, 42)).expect("operation should succeed");
     // 0x80000008: ebreak
-    vm.bus.write_word(base + 8, ebreak()).unwrap();
+    vm.bus.write_word(base + 8, ebreak()).expect("operation should succeed");
 
     // 0x80000200: S-mode trap handler -- SRET
-    vm.bus.write_word(base + 0x200, sret()).unwrap();
+    vm.bus.write_word(base + 0x200, sret()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::User;
@@ -1233,22 +1233,22 @@ fn test_rv32_privilege_full_chain_u_s_m_s_u() {
     use geometry_os::riscv::cpu::Privilege;
 
     // ---- U-mode code at base ----
-    vm.bus.write_word(base, ecall()).unwrap();              // 0x00: ECALL (U->S)
-    vm.bus.write_word(base + 4, addi(1, 0, 42)).unwrap();  // 0x04: x1 = 42 (after return)
-    vm.bus.write_word(base + 8, ebreak()).unwrap();         // 0x08: stop
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");              // 0x00: ECALL (U->S)
+    vm.bus.write_word(base + 4, addi(1, 0, 42)).expect("operation should succeed");  // 0x04: x1 = 42 (after return)
+    vm.bus.write_word(base + 8, ebreak()).expect("operation should succeed");         // 0x08: stop
 
     // ---- S-mode handler at base+0x200 ----
-    vm.bus.write_word(base + 0x200, ecall()).unwrap();               // ECALL (S->M)
-    vm.bus.write_word(base + 0x204, csrrs(5, 0, CSR_SEPC)).unwrap(); // x5 = sepc
-    vm.bus.write_word(base + 0x208, addi(5, 5, 4)).unwrap();         // x5 = sepc + 4
-    vm.bus.write_word(base + 0x20C, csrrw(0, 5, CSR_SEPC)).unwrap(); // sepc = x5
-    vm.bus.write_word(base + 0x210, sret()).unwrap();                 // return to U
+    vm.bus.write_word(base + 0x200, ecall()).expect("operation should succeed");               // ECALL (S->M)
+    vm.bus.write_word(base + 0x204, csrrs(5, 0, CSR_SEPC)).expect("operation should succeed"); // x5 = sepc
+    vm.bus.write_word(base + 0x208, addi(5, 5, 4)).expect("operation should succeed");         // x5 = sepc + 4
+    vm.bus.write_word(base + 0x20C, csrrw(0, 5, CSR_SEPC)).expect("operation should succeed"); // sepc = x5
+    vm.bus.write_word(base + 0x210, sret()).expect("operation should succeed");                 // return to U
 
     // ---- M-mode handler at base+0x400 ----
-    vm.bus.write_word(base + 0x400, csrrs(6, 0, CSR_MEPC)).unwrap(); // x6 = mepc
-    vm.bus.write_word(base + 0x404, addi(6, 6, 4)).unwrap();         // x6 = mepc + 4
-    vm.bus.write_word(base + 0x408, csrrw(0, 6, CSR_MEPC)).unwrap(); // mepc = x6
-    vm.bus.write_word(base + 0x40C, mret()).unwrap();                 // return to S
+    vm.bus.write_word(base + 0x400, csrrs(6, 0, CSR_MEPC)).expect("operation should succeed"); // x6 = mepc
+    vm.bus.write_word(base + 0x404, addi(6, 6, 4)).expect("operation should succeed");         // x6 = mepc + 4
+    vm.bus.write_word(base + 0x408, csrrw(0, 6, CSR_MEPC)).expect("operation should succeed"); // mepc = x6
+    vm.bus.write_word(base + 0x40C, mret()).expect("operation should succeed");                 // return to S
 
     // ---- CPU setup ----
     vm.cpu.pc = base as u32;
@@ -1319,8 +1319,8 @@ fn test_rv32_privilege_ecall_u_to_s_mstatus() {
     let base = 0x8000_0000u64;
     use geometry_os::riscv::cpu::Privilege;
 
-    vm.bus.write_word(base, ecall()).unwrap();
-    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");
+    vm.bus.write_word(base + 0x200, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::User;
@@ -1351,8 +1351,8 @@ fn test_rv32_privilege_ecall_s_to_m_mstatus() {
     let base = 0x8000_0000u64;
     use geometry_os::riscv::cpu::Privilege;
 
-    vm.bus.write_word(base, ecall()).unwrap();
-    vm.bus.write_word(base + 0x400, ebreak()).unwrap();
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");
+    vm.bus.write_word(base + 0x400, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Supervisor;
@@ -1384,7 +1384,7 @@ fn test_rv32_privilege_mret_mstatus_restore() {
     let base = 0x8000_0000u64;
     use geometry_os::riscv::cpu::Privilege;
 
-    vm.bus.write_word(base, mret()).unwrap();
+    vm.bus.write_word(base, mret()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Machine;
@@ -1418,7 +1418,7 @@ fn test_rv32_privilege_sret_mstatus_restore() {
     let base = 0x8000_0000u64;
     use geometry_os::riscv::cpu::Privilege;
 
-    vm.bus.write_word(base, sret()).unwrap();
+    vm.bus.write_word(base, sret()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Supervisor;
@@ -1451,8 +1451,8 @@ fn test_rv32_privilege_ecall_u_to_m_no_delegation() {
     let base = 0x8000_0000u64;
     use geometry_os::riscv::cpu::Privilege;
 
-    vm.bus.write_word(base, ecall()).unwrap();
-    vm.bus.write_word(base + 0x400, ebreak()).unwrap();
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");
+    vm.bus.write_word(base + 0x400, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::User;
@@ -1479,9 +1479,9 @@ fn test_rv32_privilege_timer_interrupt_delivery() {
     let base = 0x8000_0000u64;
 
     // Write NOP at entry (should be preempted by interrupt)
-    vm.bus.write_word(base, nop()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
     // Write handler at 0x80000200
-    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+    vm.bus.write_word(base + 0x200, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
@@ -1508,8 +1508,8 @@ fn test_rv32_privilege_software_interrupt_delivery() {
     let mut vm = RiscvVm::new(8192);
     let base = 0x8000_0000u64;
 
-    vm.bus.write_word(base, nop()).unwrap();
-    vm.bus.write_word(base + 0x200, ebreak()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
+    vm.bus.write_word(base + 0x200, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::User;
@@ -1578,8 +1578,8 @@ fn test_rv32_privilege_no_interrupt_when_disabled() {
     let mut vm = RiscvVm::new(8192);
     let base = 0x8000_0000u64;
 
-    vm.bus.write_word(base, addi(1, 0, 42)).unwrap();
-    vm.bus.write_word(base + 4, ebreak()).unwrap();
+    vm.bus.write_word(base, addi(1, 0, 42)).expect("operation should succeed");
+    vm.bus.write_word(base + 4, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
@@ -1620,11 +1620,11 @@ fn test_clint_timer_interrupt_via_vm_step() {
 
     // Entry: 5 NOPs (timer fires at step 4 when mtime reaches 5)
     for i in 0..5u64 {
-        vm.bus.write_word(base + i * 4, nop()).unwrap();
+        vm.bus.write_word(base + i * 4, nop()).expect("operation should succeed");
     }
     // Handler at +0x200: write 42 to x1, then EBREAK
-    vm.bus.write_word(base + 0x200, addi(1, 0, 42)).unwrap();
-    vm.bus.write_word(base + 0x204, ebreak()).unwrap();
+    vm.bus.write_word(base + 0x200, addi(1, 0, 42)).expect("operation should succeed");
+    vm.bus.write_word(base + 0x204, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
@@ -1653,9 +1653,9 @@ fn test_clint_software_interrupt_via_vm_step() {
     let mut vm = RiscvVm::new(8192);
     let base = 0x8000_0000u64;
 
-    vm.bus.write_word(base, nop()).unwrap();
-    vm.bus.write_word(base + 0x200, addi(1, 0, 99)).unwrap();
-    vm.bus.write_word(base + 0x204, ebreak()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
+    vm.bus.write_word(base + 0x200, addi(1, 0, 99)).expect("operation should succeed");
+    vm.bus.write_word(base + 0x204, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
@@ -1685,11 +1685,11 @@ fn test_clint_mmio_read_mtime() {
     vm.bus.clint.mtime = 0x0000_0042_0000_0100;
 
     // Program: load mtime from CLINT MMIO address 0x0200BFF8
-    vm.bus.write_word(base, lui(5, 0x0200C000)).unwrap();     // x5 = 0x0200C000
-    vm.bus.write_word(base + 4, addi(5, 5, -8)).unwrap();     // x5 = 0x0200BFF8
-    vm.bus.write_word(base + 8, lw(1, 5, 0)).unwrap();        // x1 = mtime[31:0]
-    vm.bus.write_word(base + 12, lw(2, 5, 4)).unwrap();       // x2 = mtime[63:32]
-    vm.bus.write_word(base + 16, ebreak()).unwrap();
+    vm.bus.write_word(base, lui(5, 0x0200C000)).expect("operation should succeed");     // x5 = 0x0200C000
+    vm.bus.write_word(base + 4, addi(5, 5, -8)).expect("operation should succeed");     // x5 = 0x0200BFF8
+    vm.bus.write_word(base + 8, lw(1, 5, 0)).expect("operation should succeed");        // x1 = mtime[31:0]
+    vm.bus.write_word(base + 12, lw(2, 5, 4)).expect("operation should succeed");       // x2 = mtime[63:32]
+    vm.bus.write_word(base + 16, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     run_vm(&mut vm, 20);
@@ -1708,12 +1708,12 @@ fn test_clint_mmio_write_mtimecmp() {
     let base = 0x8000_0000u64;
 
     // x5 = 0x02004000 (mtimecmp address) -- LUI alone can load page-aligned address
-    vm.bus.write_word(base, lui(5, 0x02004000)).unwrap(); // x5 = 0x02004000
-    vm.bus.write_word(base + 4, addi(1, 0, 0x100)).unwrap(); // x1 = 0x100
-    vm.bus.write_word(base + 8, sw(1, 5, 0)).unwrap(); // mtimecmp[31:0] = 0x100
-    vm.bus.write_word(base + 12, addi(2, 0, 0)).unwrap(); // x2 = 0
-    vm.bus.write_word(base + 16, sw(2, 5, 4)).unwrap(); // mtimecmp[63:32] = 0
-    vm.bus.write_word(base + 20, ebreak()).unwrap();
+    vm.bus.write_word(base, lui(5, 0x02004000)).expect("operation should succeed"); // x5 = 0x02004000
+    vm.bus.write_word(base + 4, addi(1, 0, 0x100)).expect("operation should succeed"); // x1 = 0x100
+    vm.bus.write_word(base + 8, sw(1, 5, 0)).expect("operation should succeed"); // mtimecmp[31:0] = 0x100
+    vm.bus.write_word(base + 12, addi(2, 0, 0)).expect("operation should succeed"); // x2 = 0
+    vm.bus.write_word(base + 16, sw(2, 5, 4)).expect("operation should succeed"); // mtimecmp[63:32] = 0
+    vm.bus.write_word(base + 20, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     run_vm(&mut vm, 20);
@@ -1728,10 +1728,10 @@ fn test_clint_mmio_write_msip() {
     let base = 0x8000_0000u64;
 
     // x5 = 0x02000000 (msip address) -- LUI can load this page-aligned address directly
-    vm.bus.write_word(base, lui(5, 0x02000000)).unwrap(); // x5 = 0x02000000
-    vm.bus.write_word(base + 4, addi(1, 0, 1)).unwrap(); // x1 = 1
-    vm.bus.write_word(base + 8, sw(1, 5, 0)).unwrap(); // msip = 1
-    vm.bus.write_word(base + 12, ebreak()).unwrap();
+    vm.bus.write_word(base, lui(5, 0x02000000)).expect("operation should succeed"); // x5 = 0x02000000
+    vm.bus.write_word(base + 4, addi(1, 0, 1)).expect("operation should succeed"); // x1 = 1
+    vm.bus.write_word(base + 8, sw(1, 5, 0)).expect("operation should succeed"); // msip = 1
+    vm.bus.write_word(base + 12, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     run_vm(&mut vm, 20);
@@ -1746,18 +1746,18 @@ fn test_clint_timer_clears_after_mtimecmp_update() {
     let mut vm = RiscvVm::new(8192);
     let base = 0x8000_0000u64;
 
-    vm.bus.write_word(base, nop()).unwrap();
-    vm.bus.write_word(base + 4, addi(1, 0, 42)).unwrap(); // x1 = 42 after interrupt clears
-    vm.bus.write_word(base + 8, ebreak()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
+    vm.bus.write_word(base + 4, addi(1, 0, 42)).expect("operation should succeed"); // x1 = 42 after interrupt clears
+    vm.bus.write_word(base + 8, ebreak()).expect("operation should succeed");
 
     // Handler at +0x200: clear timer by setting mtimecmp far ahead, then MRET
     // x5 = mtimecmp address (0x02004000)
-    vm.bus.write_word(base + 0x200, lui(5, 0x02004000)).unwrap(); // x5 = 0x02004000
-    vm.bus.write_word(base + 0x204, lui(6, 0xFFFFF000)).unwrap(); // x6 = 0xFFFFF000
-    vm.bus.write_word(base + 0x208, ori(6, 6, 0xFFF)).unwrap(); // x6 = 0xFFFFFFFF
-    vm.bus.write_word(base + 0x20C, sw(6, 5, 0)).unwrap(); // mtimecmp low = 0xFFFFFFFF
-    vm.bus.write_word(base + 0x210, sw(6, 5, 4)).unwrap(); // mtimecmp high = 0xFFFFFFFF
-    vm.bus.write_word(base + 0x214, mret()).unwrap();
+    vm.bus.write_word(base + 0x200, lui(5, 0x02004000)).expect("operation should succeed"); // x5 = 0x02004000
+    vm.bus.write_word(base + 0x204, lui(6, 0xFFFFF000)).expect("operation should succeed"); // x6 = 0xFFFFF000
+    vm.bus.write_word(base + 0x208, ori(6, 6, 0xFFF)).expect("operation should succeed"); // x6 = 0xFFFFFFFF
+    vm.bus.write_word(base + 0x20C, sw(6, 5, 0)).expect("operation should succeed"); // mtimecmp low = 0xFFFFFFFF
+    vm.bus.write_word(base + 0x210, sw(6, 5, 4)).expect("operation should succeed"); // mtimecmp high = 0xFFFFFFFF
+    vm.bus.write_word(base + 0x214, mret()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Machine;
@@ -1783,9 +1783,9 @@ fn test_clint_mtime_advances_per_step() {
     let mut vm = RiscvVm::new(8192);
     let base = 0x8000_0000u64;
 
-    vm.bus.write_word(base, nop()).unwrap();
-    vm.bus.write_word(base + 4, nop()).unwrap();
-    vm.bus.write_word(base + 8, ebreak()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
+    vm.bus.write_word(base + 4, nop()).expect("operation should succeed");
+    vm.bus.write_word(base + 8, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
 
@@ -1831,14 +1831,14 @@ fn test_sv32_two_level_walk_4k_page() {
     let root_ppn: u32 = 1;
     let l2_ppn: u32 = 2;
     let data_ppn: u32 = 3;
-    bus.write_word((data_ppn as u64) << 12, 0xDEAD_BEEF).unwrap();
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
-    bus.write_word((l2_ppn as u64) << 12, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X | mmu::PTE_U)).unwrap();
+    bus.write_word((data_ppn as u64) << 12, 0xDEAD_BEEF).expect("operation should succeed");
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word((l2_ppn as u64) << 12, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X | mmu::PTE_U)).expect("operation should succeed");
     let satp = make_satp(1, 0, root_ppn);
     let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::Ok((data_ppn as u64) << 12));
     if let mmu::TranslateResult::Ok(pa) = result {
-        assert_eq!(bus.read_word(pa).unwrap(), 0xDEAD_BEEF);
+        assert_eq!(bus.read_word(pa).expect("operation should succeed"), 0xDEAD_BEEF);
     }
 }
 
@@ -1852,9 +1852,9 @@ fn test_sv32_nonzero_vpn_and_offset() {
     let va: u32 = 0x0040_1100;
     let vpn1 = (va >> 22) & 0x3FF;
     let vpn0 = (va >> 12) & 0x3FF;
-    bus.write_word(((data_ppn as u64) << 12) + 0x100, 0x1234_5678).unwrap();
-    bus.write_word(((root_ppn as u64) << 12) | ((vpn1 as u64) * 4), make_pte(l2_ppn, mmu::PTE_V)).unwrap();
-    bus.write_word(((l2_ppn as u64) << 12) | ((vpn0 as u64) * 4), make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_U)).unwrap();
+    bus.write_word(((data_ppn as u64) << 12) + 0x100, 0x1234_5678).expect("operation should succeed");
+    bus.write_word(((root_ppn as u64) << 12) | ((vpn1 as u64) * 4), make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word(((l2_ppn as u64) << 12) | ((vpn0 as u64) * 4), make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_U)).expect("operation should succeed");
     let satp = make_satp(1, 0, root_ppn);
     let result = mmu::translate(va, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::Ok(((data_ppn as u64) << 12) + 0x100));
@@ -1864,7 +1864,7 @@ fn test_sv32_nonzero_vpn_and_offset() {
 fn test_sv32_page_fault_invalid_pte() {
     let mut tlb = mmu::Tlb::new();
     let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
-    bus.write_word(1u64 << 12, 0).unwrap();
+    bus.write_word(1u64 << 12, 0).expect("operation should succeed");
     let satp = make_satp(1, 0, 1);
     let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::LoadFault);
@@ -1874,8 +1874,8 @@ fn test_sv32_page_fault_invalid_pte() {
 fn test_sv32_page_fault_permission_denied() {
     let mut tlb = mmu::Tlb::new();
     let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
-    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
-    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).expect("operation should succeed");
     let satp = make_satp(1, 0, 1);
     let result = mmu::translate(0x0000_0000, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::LoadFault);
@@ -1884,8 +1884,8 @@ fn test_sv32_page_fault_permission_denied() {
 #[test]
 fn test_sv32_fault_types_by_access() {
     let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
-    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
-    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R)).unwrap();
+    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R)).expect("operation should succeed");
     let satp = make_satp(1, 0, 1);
     let mut t1 = mmu::Tlb::new();
     assert_eq!(mmu::translate(0, mmu::AccessType::Fetch, geometry_os::riscv::cpu::Privilege::Supervisor, false, false, satp, &mut bus, &mut t1), mmu::TranslateResult::FetchFault);
@@ -1912,7 +1912,7 @@ fn test_sv32_megapage() {
     let expected_pa = va; // identity mapping
 
     // Write test data at the expected PA
-    bus.write_word(expected_pa as u64, 0xCAFE_0001).unwrap();
+    bus.write_word(expected_pa as u64, 0xCAFE_0001).expect("operation should succeed");
 
     // Write L1 PTE at root[vpn1=0]: megapage with PPN[19:10]=0
     // PPN = 0 (identity: PA[31:22] = 0)
@@ -1920,13 +1920,13 @@ fn test_sv32_megapage() {
     bus.write_word(
         ((1u64) << 12), // root at page 1, entry index 0
         make_pte(megapage_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X),
-    ).unwrap();
+    ).expect("operation should succeed");
 
     let satp = make_satp(1, 0, 1); // mode=SV32, root PPN=1
     let result = mmu::translate(va, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::Supervisor, false, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::Ok(expected_pa as u64));
     if let mmu::TranslateResult::Ok(pa) = result {
-        assert_eq!(bus.read_word(pa).unwrap(), 0xCAFE_0001);
+        assert_eq!(bus.read_word(pa).expect("operation should succeed"), 0xCAFE_0001);
     }
 
     // Also test with a non-zero VPN1 that maps to a different PA.
@@ -1943,7 +1943,7 @@ fn test_sv32_megapage() {
     bus.write_word(
         ((1u64) << 12) + (vpn1_b as u64) * 4,
         make_pte(megapage_ppn_b, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X),
-    ).unwrap();
+    ).expect("operation should succeed");
 
     let result_b = mmu::translate(va_b, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::Supervisor, false, false, satp, &mut bus, &mut tlb);
     assert_eq!(result_b, mmu::TranslateResult::Ok(expected_pa_b));
@@ -1953,12 +1953,12 @@ fn test_sv32_megapage() {
 fn test_sv32_tlb_caches() {
     let mut tlb = mmu::Tlb::new();
     let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
-    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
-    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X | mmu::PTE_U)).unwrap();
+    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X | mmu::PTE_U)).expect("operation should succeed");
     let satp = make_satp(1, 0, 1);
     let r1 = mmu::translate(0, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, false, satp, &mut bus, &mut tlb);
     assert_eq!(r1, mmu::TranslateResult::Ok(3u64 << 12));
-    bus.write_word(1u64 << 12, 0).unwrap();
+    bus.write_word(1u64 << 12, 0).expect("operation should succeed");
     let r2 = mmu::translate(0, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, false, satp, &mut bus, &mut tlb);
     assert_eq!(r2, mmu::TranslateResult::Ok(3u64 << 12));
 }
@@ -1983,8 +1983,8 @@ fn test_sv32_tlb_asid_isolation() {
     let mut tlb = mmu::Tlb::new();
     tlb.insert(0x100, 1, 0xAAA, mmu::PTE_V | mmu::PTE_R);
     tlb.insert(0x100, 2, 0xBBB, mmu::PTE_V | mmu::PTE_R);
-    assert_eq!(tlb.lookup(0x100, 1).unwrap().0, 0xAAA);
-    assert_eq!(tlb.lookup(0x100, 2).unwrap().0, 0xBBB);
+    assert_eq!(tlb.lookup(0x100, 1).expect("operation should succeed").0, 0xAAA);
+    assert_eq!(tlb.lookup(0x100, 2).expect("operation should succeed").0, 0xBBB);
     assert!(tlb.lookup(0x100, 3).is_none());
 }
 
@@ -2002,8 +2002,8 @@ fn test_sv32_sfence_flushes_cpu_tlb() {
     vm.cpu.tlb.insert(0x100, 0, 0xAAA, mmu::PTE_V | mmu::PTE_R);
     vm.cpu.tlb.insert(0x200, 0, 0xBBB, mmu::PTE_V | mmu::PTE_R);
     let base = 0x8000_0000u64;
-    vm.bus.write_word(base, sfence_vma(0, 0)).unwrap();
-    vm.bus.write_word(base + 4, ebreak()).unwrap();
+    vm.bus.write_word(base, sfence_vma(0, 0)).expect("operation should succeed");
+    vm.bus.write_word(base + 4, ebreak()).expect("operation should succeed");
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
     vm.step();
@@ -2015,8 +2015,8 @@ fn test_sv32_sfence_flushes_cpu_tlb() {
 fn test_sv32_nonleaf_at_l2_is_fault() {
     let mut tlb = mmu::Tlb::new();
     let mut bus = geometry_os::riscv::bus::Bus::new(0x0, 0x1_0000);
-    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).unwrap();
-    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V)).unwrap();
+    bus.write_word(1u64 << 12, make_pte(2, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word(2u64 << 12, make_pte(3, mmu::PTE_V)).expect("operation should succeed");
     let satp = make_satp(1, 0, 1);
     let result = mmu::translate(0, mmu::AccessType::Load, geometry_os::riscv::cpu::Privilege::User, false, false, satp, &mut bus, &mut tlb);
     assert_eq!(result, mmu::TranslateResult::LoadFault);
@@ -2051,18 +2051,18 @@ fn test_sv32_cpu_load_through_page_table() {
     let root_ppn: u32 = 1;
     let l2_ppn: u32 = 2;
     let data_ppn: u32 = 3;
-    bus.write_word((data_ppn as u64) << 12, 0xDEAD_BEEF).unwrap();
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
+    bus.write_word((data_ppn as u64) << 12, 0xDEAD_BEEF).expect("operation should succeed");
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
     // L2[0] -> code page (page 0)
-    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).expect("operation should succeed");
     // L2[1] -> data page (page 3)
-    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).expect("operation should succeed");
     // LUI x10, 0x1 -> x10 = 0x1000
-    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap();
+    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).expect("operation should succeed");
     // LW x5, 0(x10)
-    bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).unwrap();
+    bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).expect("operation should succeed");
     // EBREAK
-    bus.write_word(8, ebreak()).unwrap();
+    bus.write_word(8, ebreak()).expect("operation should succeed");
     cpu.pc = 0;
     cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
     cpu.csr.satp = make_satp(1, 0, root_ppn);
@@ -2079,19 +2079,19 @@ fn test_sv32_cpu_store_through_page_table() {
     let root_ppn: u32 = 1;
     let l2_ppn: u32 = 2;
     let data_ppn: u32 = 3;
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
-    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
-    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).expect("operation should succeed");
+    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).expect("operation should succeed");
     // ADDI x5, x0, 42
-    bus.write_word(0, addi(5, 0, 42)).unwrap();
+    bus.write_word(0, addi(5, 0, 42)).expect("operation should succeed");
     // LUI x10, 0x1
-    bus.write_word(4, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap();
+    bus.write_word(4, (0x1u32 << 12) | (10u32 << 7) | 0x37).expect("operation should succeed");
     // SW x5, 0(x10)
-    bus.write_word(8, (0u32 << 25) | (5u32 << 20) | (10u32 << 15) | (0b010 << 12) | (0u32 << 7) | 0x23).unwrap();
+    bus.write_word(8, (0u32 << 25) | (5u32 << 20) | (10u32 << 15) | (0b010 << 12) | (0u32 << 7) | 0x23).expect("operation should succeed");
     // LW x6, 0(x10)
-    bus.write_word(12, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (6u32 << 7) | 0x03).unwrap();
+    bus.write_word(12, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (6u32 << 7) | 0x03).expect("operation should succeed");
     // EBREAK
-    bus.write_word(16, ebreak()).unwrap();
+    bus.write_word(16, ebreak()).expect("operation should succeed");
     cpu.pc = 0;
     cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
     cpu.csr.satp = make_satp(1, 0, root_ppn);
@@ -2100,7 +2100,7 @@ fn test_sv32_cpu_store_through_page_table() {
     }
     assert_eq!(cpu.x[5], 42);
     assert_eq!(cpu.x[6], 42);
-    assert_eq!(bus.read_word((data_ppn as u64) << 12).unwrap(), 42);
+    assert_eq!(bus.read_word((data_ppn as u64) << 12).expect("operation should succeed"), 42);
 }
 
 // =====================================================================
@@ -2166,7 +2166,7 @@ fn test_tlb_64_entry_capacity() {
     for i in 0..64u32 {
         let result = tlb.lookup(i, 1);
         assert!(result.is_some(), "VPN {} should be in TLB", i);
-        assert_eq!(result.unwrap().0, 0x1000 + i);
+        assert_eq!(result.expect("operation should succeed").0, 0x1000 + i);
     }
 }
 
@@ -2184,7 +2184,7 @@ fn test_tlb_no_eviction_hashmap() {
     for i in 0..80u32 {
         let result = tlb.lookup(i, 1);
         assert!(result.is_some(), "VPN {} should be in TLB", i);
-        assert_eq!(result.unwrap().0, 0x1000 + i);
+        assert_eq!(result.expect("operation should succeed").0, 0x1000 + i);
     }
 }
 
@@ -2199,11 +2199,11 @@ fn test_tlb_sfence_vma_with_asid() {
     vm.cpu.tlb.insert(0x200, 2, 0xBBB, mmu::PTE_V | mmu::PTE_R);
     vm.cpu.tlb.insert(0x300, 1, 0xCCC, mmu::PTE_V | mmu::PTE_R | mmu::PTE_G);
     // ADDI x2, x0, 1  -- x2 = ASID 1
-    vm.bus.write_word(base, addi(2, 0, 1)).unwrap();
+    vm.bus.write_word(base, addi(2, 0, 1)).expect("operation should succeed");
     // SFENCE.VMA x0, x2 -- flush ASID 1
-    vm.bus.write_word(base + 4, sfence_vma(0, 2)).unwrap();
+    vm.bus.write_word(base + 4, sfence_vma(0, 2)).expect("operation should succeed");
     // EBREAK
-    vm.bus.write_word(base + 8, ebreak()).unwrap();
+    vm.bus.write_word(base + 8, ebreak()).expect("operation should succeed");
     vm.cpu.pc = base as u32;
     for _ in 0..5 {
         match vm.step() { StepResult::Ebreak => break, StepResult::Ok => {}, o => panic!("Unexpected: {:?}", o) }
@@ -2227,13 +2227,13 @@ fn test_tlb_sfence_vma_with_vpn_and_asid() {
     vm.cpu.tlb.insert(0x200, 1, 0xCCC, mmu::PTE_V | mmu::PTE_R);
     // Set x1 = virtual address that maps to VPN 0x100
     // VPN = va >> 12 & 0xFFFFF, so VA = 0x100 << 12 = 0x100_000
-    vm.bus.write_word(base, lui(1, 0x100_000)).unwrap();
+    vm.bus.write_word(base, lui(1, 0x100_000)).expect("operation should succeed");
     // ADDI x2, x0, 1 -- ASID 1
-    vm.bus.write_word(base + 4, addi(2, 0, 1)).unwrap();
+    vm.bus.write_word(base + 4, addi(2, 0, 1)).expect("operation should succeed");
     // SFENCE.VMA x1, x2
-    vm.bus.write_word(base + 8, sfence_vma(1, 2)).unwrap();
+    vm.bus.write_word(base + 8, sfence_vma(1, 2)).expect("operation should succeed");
     // EBREAK
-    vm.bus.write_word(base + 12, ebreak()).unwrap();
+    vm.bus.write_word(base + 12, ebreak()).expect("operation should succeed");
     vm.cpu.pc = base as u32;
     for _ in 0..5 {
         match vm.step() { StepResult::Ebreak => break, StepResult::Ok => {}, o => panic!("Unexpected: {:?}", o) }
@@ -2256,9 +2256,9 @@ fn test_tlb_asid_switch_reuses_entries() {
     // Process B (ASID 2) maps VPN 0x100 -> PPN 0x2000 (same VA, different PA)
     tlb.insert(0x100, 2, 0x2000, mmu::PTE_V | mmu::PTE_R);
     // Looking up as ASID 1 gives PPN 0x1000
-    assert_eq!(tlb.lookup(0x100, 1).unwrap().0, 0x1000);
+    assert_eq!(tlb.lookup(0x100, 1).expect("operation should succeed").0, 0x1000);
     // Looking up as ASID 2 gives PPN 0x2000
-    assert_eq!(tlb.lookup(0x100, 2).unwrap().0, 0x2000);
+    assert_eq!(tlb.lookup(0x100, 2).expect("operation should succeed").0, 0x2000);
     // Looking up as ASID 3 gives nothing
     assert!(tlb.lookup(0x100, 3).is_none());
 }
@@ -2294,16 +2294,16 @@ fn test_page_fault_fetch_no_exec_permission() {
     let l2_ppn: u32 = 2;
 
     // Root[0] -> L2 table
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
     // L2[0] -> code page (RX)
-    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).expect("operation should succeed");
     // L2[1] -> data page (RW, no X)
-    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(3, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).expect("operation should succeed");
 
     // Code at VA 0x0: LUI x1, 0x1 -> x1 = 0x1000
-    bus.write_word(0, (0x1u32 << 12) | (1u32 << 7) | 0x37).unwrap();
+    bus.write_word(0, (0x1u32 << 12) | (1u32 << 7) | 0x37).expect("operation should succeed");
     // JALR x0, x1, 0 -> jump to 0x1000
-    bus.write_word(4, (0u32 << 20) | (1u32 << 15) | (0b000 << 12) | (0u32 << 7) | 0x67).unwrap();
+    bus.write_word(4, (0u32 << 20) | (1u32 << 15) | (0b000 << 12) | (0u32 << 7) | 0x67).expect("operation should succeed");
 
     cpu.pc = 0;
     cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
@@ -2332,15 +2332,15 @@ fn test_page_fault_load_no_read_permission() {
     let root_ppn: u32 = 1;
     let l2_ppn: u32 = 2;
 
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
-    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).expect("operation should succeed");
     // L2[1] -> write-only page (no R)
-    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(3, mmu::PTE_V | mmu::PTE_W)).unwrap();
+    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(3, mmu::PTE_V | mmu::PTE_W)).expect("operation should succeed");
 
     // LUI x10, 0x1 -> x10 = 0x1000
-    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap();
+    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).expect("operation should succeed");
     // LW x5, 0(x10) -> load from 0x1000
-    bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).unwrap();
+    bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).expect("operation should succeed");
 
     cpu.pc = 0;
     cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
@@ -2363,14 +2363,14 @@ fn test_page_fault_store_no_write_permission() {
     let root_ppn: u32 = 1;
     let l2_ppn: u32 = 2;
 
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
-    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).expect("operation should succeed");
     // L2[1] -> read-only page (no W)
-    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(3, mmu::PTE_V | mmu::PTE_R)).unwrap();
+    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(3, mmu::PTE_V | mmu::PTE_R)).expect("operation should succeed");
 
-    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap(); // LUI x10, 0x1
-    bus.write_word(4, addi(5, 0, 42)).unwrap(); // ADDI x5, x0, 42
-    bus.write_word(8, sw(5, 10, 0)).unwrap(); // SW x5, 0(x10) -> store to 0x1000
+    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).expect("operation should succeed"); // LUI x10, 0x1
+    bus.write_word(4, addi(5, 0, 42)).expect("operation should succeed"); // ADDI x5, x0, 42
+    bus.write_word(8, sw(5, 10, 0)).expect("operation should succeed"); // SW x5, 0(x10) -> store to 0x1000
 
     cpu.pc = 0;
     cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
@@ -2395,18 +2395,18 @@ fn test_page_fault_delegated_to_s_mode() {
     let root_ppn: u32 = 1;
     let l2_ppn: u32 = 2;
 
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
     // L2[0] -> code page (RXU)
-    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X | mmu::PTE_U)).unwrap();
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X | mmu::PTE_U)).expect("operation should succeed");
     // L2[1] -> not mapped
 
     // Delegate load page fault (cause 13) to S-mode
     cpu.csr.medeleg = 1 << csr::CAUSE_LOAD_PAGE_FAULT;
 
     // LUI x10, 0x1
-    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap();
+    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).expect("operation should succeed");
     // LW x5, 0(x10) -> unmapped
-    bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).unwrap();
+    bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).expect("operation should succeed");
 
     cpu.pc = 0;
     cpu.privilege = geometry_os::riscv::cpu::Privilege::User;
@@ -2432,14 +2432,14 @@ fn test_page_fault_stval_for_s_mode_trap() {
     let root_ppn: u32 = 1;
     let l2_ppn: u32 = 2;
 
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
-    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X | mmu::PTE_U)).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X | mmu::PTE_U)).expect("operation should succeed");
 
     cpu.csr.medeleg = 1 << csr::CAUSE_STORE_PAGE_FAULT;
 
-    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap(); // LUI x10, 0x1
-    bus.write_word(4, addi(5, 0, 99)).unwrap(); // ADDI x5, x0, 99
-    bus.write_word(8, sw(5, 10, 0)).unwrap(); // SW x5, 0(x10)
+    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).expect("operation should succeed"); // LUI x10, 0x1
+    bus.write_word(4, addi(5, 0, 99)).expect("operation should succeed"); // ADDI x5, x0, 99
+    bus.write_word(8, sw(5, 10, 0)).expect("operation should succeed"); // SW x5, 0(x10)
 
     cpu.pc = 0;
     cpu.privilege = geometry_os::riscv::cpu::Privilege::User;
@@ -2467,19 +2467,19 @@ fn test_page_fault_mret_recovery() {
     let l2_ppn: u32 = 2;
     let data_ppn: u32 = 3;
 
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
-    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).expect("operation should succeed");
     // L2[1] initially unmapped
 
     // Put expected data at data page
-    bus.write_word((data_ppn as u64) << 12, 0xFEED_FACE).unwrap();
+    bus.write_word((data_ppn as u64) << 12, 0xFEED_FACE).expect("operation should succeed");
 
     // LUI x10, 0x1
-    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap();
+    bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).expect("operation should succeed");
     // LW x5, 0(x10)
-    bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).unwrap();
+    bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).expect("operation should succeed");
     // EBREAK
-    bus.write_word(8, ebreak()).unwrap();
+    bus.write_word(8, ebreak()).expect("operation should succeed");
 
     cpu.pc = 0;
     cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
@@ -2496,7 +2496,7 @@ fn test_page_fault_mret_recovery() {
     assert_eq!(cpu.csr.mepc, 4);
 
     // Fix page table externally
-    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+    bus.write_word(((l2_ppn as u64) << 12) | 4, make_pte(data_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).expect("operation should succeed");
     cpu.tlb.flush_all();
 
     // MRET (simulate)
@@ -2519,8 +2519,8 @@ fn test_page_fault_unmapped_va_all_three_types() {
     let root_ppn: u32 = 1;
     let l2_ppn: u32 = 2;
 
-    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).unwrap();
-    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+    bus.write_word((root_ppn as u64) << 12, make_pte(l2_ppn, mmu::PTE_V)).expect("operation should succeed");
+    bus.write_word((l2_ppn as u64) << 12, make_pte(0, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).expect("operation should succeed");
 
     // Fetch page fault: PC = 0x1000 (VPN 1, unmapped)
     {
@@ -2538,8 +2538,8 @@ fn test_page_fault_unmapped_va_all_three_types() {
     {
         let mut cpu = geometry_os::riscv::cpu::RiscvCpu::new();
         // LUI x10, 0x1; LW x5, 0(x10)
-        bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap();
-        bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).unwrap();
+        bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).expect("operation should succeed");
+        bus.write_word(4, (0u32 << 20) | (10u32 << 15) | (0b010 << 12) | (5u32 << 7) | 0x03).expect("operation should succeed");
         cpu.pc = 0;
         cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
         cpu.csr.satp = make_satp(1, 0, root_ppn);
@@ -2554,8 +2554,8 @@ fn test_page_fault_unmapped_va_all_three_types() {
     // Store page fault: SW to 0x1000
     {
         let mut cpu = geometry_os::riscv::cpu::RiscvCpu::new();
-        bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).unwrap();
-        bus.write_word(4, sw(5, 10, 0)).unwrap();
+        bus.write_word(0, (0x1u32 << 12) | (10u32 << 7) | 0x37).expect("operation should succeed");
+        bus.write_word(4, sw(5, 10, 0)).expect("operation should succeed");
         cpu.x[5] = 42;
         cpu.pc = 0;
         cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
@@ -2586,16 +2586,16 @@ fn test_clint_timer_trap_and_mret() {
     let base = 0x8000_0000u64;
 
     // Main code (3 instructions)
-    vm.bus.write_word(base, addi(5, 0, 42)).unwrap();      // 0x00
-    vm.bus.write_word(base + 4, addi(6, 0, 99)).unwrap();   // 0x04
-    vm.bus.write_word(base + 8, nop()).unwrap();             // 0x08
+    vm.bus.write_word(base, addi(5, 0, 42)).expect("operation should succeed");      // 0x00
+    vm.bus.write_word(base + 4, addi(6, 0, 99)).expect("operation should succeed");   // 0x04
+    vm.bus.write_word(base + 8, nop()).expect("operation should succeed");             // 0x08
 
     // Trap handler: save mepc, advance by 4, restore, mret
     let handler = 0x8000_0200u64;
-    vm.bus.write_word(handler, csrrw(10, 0, CSR_MEPC)).unwrap();
-    vm.bus.write_word(handler + 4, addi(10, 10, 4)).unwrap();
-    vm.bus.write_word(handler + 8, csrrw(0, 10, CSR_MEPC)).unwrap();
-    vm.bus.write_word(handler + 12, mret()).unwrap();
+    vm.bus.write_word(handler, csrrw(10, 0, CSR_MEPC)).expect("operation should succeed");
+    vm.bus.write_word(handler + 4, addi(10, 10, 4)).expect("operation should succeed");
+    vm.bus.write_word(handler + 8, csrrw(0, 10, CSR_MEPC)).expect("operation should succeed");
+    vm.bus.write_word(handler + 12, mret()).expect("operation should succeed");
 
     // Enable MTIE + MIE, set mtvec, timer fires at mtime=4
     vm.cpu.csr.mie = 1 << 7;
@@ -2633,11 +2633,11 @@ fn test_clint_software_interrupt_trap() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
 
-    vm.bus.write_word(base, nop()).unwrap();
-    vm.bus.write_word(base + 4, nop()).unwrap();
-    vm.bus.write_word(0x8000_0200, csrrw(10, 0, CSR_MEPC)).unwrap();
-    vm.bus.write_word(0x8000_0204, csrrw(0, 10, CSR_MEPC)).unwrap();
-    vm.bus.write_word(0x8000_0208, mret()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
+    vm.bus.write_word(base + 4, nop()).expect("operation should succeed");
+    vm.bus.write_word(0x8000_0200, csrrw(10, 0, CSR_MEPC)).expect("operation should succeed");
+    vm.bus.write_word(0x8000_0204, csrrw(0, 10, CSR_MEPC)).expect("operation should succeed");
+    vm.bus.write_word(0x8000_0208, mret()).expect("operation should succeed");
 
     vm.cpu.csr.mie = 1 << 3; // MSIE
     vm.cpu.csr.mtvec = 0x8000_0200;
@@ -2657,14 +2657,14 @@ fn test_plic_external_interrupt_to_trap() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
 
-    vm.bus.write_word(base, nop()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
 
     // Handler: save mepc, claim from PLIC via MMIO, complete, restore, mret
     // Use direct bus.write_word for PLIC claim/complete instead of CPU instructions
     // to avoid needing LUI+ADDI+LW+SW encoding issues.
-    vm.bus.write_word(0x8000_0200, csrrw(10, 0, CSR_MEPC)).unwrap();
-    vm.bus.write_word(0x8000_0204, csrrw(0, 10, CSR_MEPC)).unwrap();
-    vm.bus.write_word(0x8000_0208, mret()).unwrap();
+    vm.bus.write_word(0x8000_0200, csrrw(10, 0, CSR_MEPC)).expect("operation should succeed");
+    vm.bus.write_word(0x8000_0204, csrrw(0, 10, CSR_MEPC)).expect("operation should succeed");
+    vm.bus.write_word(0x8000_0208, mret()).expect("operation should succeed");
 
     vm.cpu.csr.mie = 1 << 11; // MEIE
     vm.cpu.csr.mtvec = 0x8000_0200;
@@ -2691,8 +2691,8 @@ fn test_plic_external_interrupt_to_trap() {
 fn test_interrupt_masked_by_mie() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
-    vm.bus.write_word(base, nop()).unwrap();
-    vm.bus.write_word(base + 4, nop()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
+    vm.bus.write_word(base + 4, nop()).expect("operation should succeed");
     vm.cpu.csr.mtvec = 0x8000_0200;
     vm.cpu.csr.mie = 1 << 7; // MTIE
     vm.cpu.csr.mstatus = 0;  // MIE=0!
@@ -2705,19 +2705,19 @@ fn test_interrupt_masked_by_mie() {
 #[test]
 fn test_clint_mtime_mmio_full() {
     let mut vm = RiscvVm::new(4096);
-    vm.bus.write_word(clint::MTIME_ADDR, 0xDEAD_BEEF).unwrap();
-    vm.bus.write_word(clint::MTIME_ADDR + 4, 0x1234_5678).unwrap();
+    vm.bus.write_word(clint::MTIME_ADDR, 0xDEAD_BEEF).expect("operation should succeed");
+    vm.bus.write_word(clint::MTIME_ADDR + 4, 0x1234_5678).expect("operation should succeed");
     assert_eq!(vm.bus.clint.mtime, 0x1234_5678_DEAD_BEEF);
-    assert_eq!(vm.bus.read_word(clint::MTIME_ADDR).unwrap(), 0xDEAD_BEEF);
-    assert_eq!(vm.bus.read_word(clint::MTIME_ADDR + 4).unwrap(), 0x1234_5678);
+    assert_eq!(vm.bus.read_word(clint::MTIME_ADDR).expect("operation should succeed"), 0xDEAD_BEEF);
+    assert_eq!(vm.bus.read_word(clint::MTIME_ADDR + 4).expect("operation should succeed"), 0x1234_5678);
 }
 
 /// CLINT mtimecmp full 64-bit MMIO through the bus.
 #[test]
 fn test_clint_mtimecmp_mmio_full() {
     let mut vm = RiscvVm::new(4096);
-    vm.bus.write_word(clint::MTIMECMP_BASE, 0x0000_0100).unwrap();
-    vm.bus.write_word(clint::MTIMECMP_BASE + 4, 0x0000_0002).unwrap();
+    vm.bus.write_word(clint::MTIMECMP_BASE, 0x0000_0100).expect("operation should succeed");
+    vm.bus.write_word(clint::MTIMECMP_BASE + 4, 0x0000_0002).expect("operation should succeed");
     assert_eq!(vm.bus.clint.mtimecmp, 0x0000_0002_0000_0100);
 }
 
@@ -2726,7 +2726,7 @@ fn test_clint_mtimecmp_mmio_full() {
 fn test_plic_threshold_blocks_low_priority() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
-    vm.bus.write_word(base, nop()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
     vm.cpu.csr.mie = 1 << 11; // MEIE
     vm.cpu.csr.mtvec = 0x8000_0200;
     vm.cpu.csr.mstatus = 1 << 3;
@@ -2773,7 +2773,7 @@ fn test_riscvvm_step_drives_timer_interrupt() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
     for i in 0..10u64 {
-        vm.bus.write_word(base + i * 4, nop()).unwrap();
+        vm.bus.write_word(base + i * 4, nop()).expect("operation should succeed");
     }
     vm.cpu.pc = base as u32;
     vm.cpu.csr.mie = 1 << 7; // MTIE
@@ -2793,10 +2793,10 @@ fn test_riscvvm_step_drives_timer_interrupt() {
 fn test_supervisor_timer_with_delegation() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
-    vm.bus.write_word(base, nop()).unwrap();
-    vm.bus.write_word(0x8000_0200, csrrw(10, 0, CSR_SEPC)).unwrap();
-    vm.bus.write_word(0x8000_0204, csrrw(0, 10, CSR_SEPC)).unwrap();
-    vm.bus.write_word(0x8000_0208, sret()).unwrap();
+    vm.bus.write_word(base, nop()).expect("operation should succeed");
+    vm.bus.write_word(0x8000_0200, csrrw(10, 0, CSR_SEPC)).expect("operation should succeed");
+    vm.bus.write_word(0x8000_0204, csrrw(0, 10, CSR_SEPC)).expect("operation should succeed");
+    vm.bus.write_word(0x8000_0208, sret()).expect("operation should succeed");
 
     vm.cpu.csr.mideleg = 1 << 5; // Delegate STI
     vm.cpu.csr.mie = 1 << 5; // STIE
@@ -2880,22 +2880,22 @@ impl MmuTestEnv {
         let uart_phys_ppn: u32 = 0x10000; // PA 0x1000_0000
 
         let root_pa = (root_ppn as u64) << 12;
-        self.vm.bus.write_word(root_pa + (0x200u64 * 4), make_pte(l2_code_ppn, mmu::PTE_V)).unwrap();
+        self.vm.bus.write_word(root_pa + (0x200u64 * 4), make_pte(l2_code_ppn, mmu::PTE_V)).expect("operation should succeed");
 
         let l2_code_pa = (l2_code_ppn as u64) << 12;
-        self.vm.bus.write_word(l2_code_pa, make_pte(code_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).unwrap();
+        self.vm.bus.write_word(l2_code_pa, make_pte(code_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).expect("operation should succeed");
 
         if map_uart {
-            self.vm.bus.write_word(root_pa + (0x040u64 * 4), make_pte(l2_uart_ppn, mmu::PTE_V)).unwrap();
+            self.vm.bus.write_word(root_pa + (0x040u64 * 4), make_pte(l2_uart_ppn, mmu::PTE_V)).expect("operation should succeed");
             let l2_uart_pa = (l2_uart_ppn as u64) << 12;
-            self.vm.bus.write_word(l2_uart_pa, make_pte(uart_phys_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).unwrap();
+            self.vm.bus.write_word(l2_uart_pa, make_pte(uart_phys_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).expect("operation should succeed");
         }
     }
 
     fn load_code(&mut self, code: &[u32]) {
         let code_base = (self.code_ppn as u64) << 12;
         for (i, &word) in code.iter().enumerate() {
-            self.vm.bus.write_word(code_base + (i as u64) * 4, word).unwrap();
+            self.vm.bus.write_word(code_base + (i as u64) * 4, word).expect("operation should succeed");
         }
     }
 
@@ -3061,8 +3061,8 @@ fn test_sbi_ecall_interception() {
     use geometry_os::riscv::cpu::Privilege;
 
     // Write ECALL at entry point
-    vm.bus.write_word(base, ecall()).unwrap();
-    vm.bus.write_word(base + 4, ebreak()).unwrap();
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");
+    vm.bus.write_word(base + 4, ebreak()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Supervisor;
@@ -3086,7 +3086,7 @@ fn test_sbi_ecall_interception() {
     // --- Test 2: Non-SBI ECALL (a7=0x999) should trap to M-mode ---
     vm.cpu.pc = base as u32;
     vm.cpu.csr.mtvec = (base as u32) + 0x400;
-    vm.bus.write_word(base + 0x400, ebreak()).unwrap();
+    vm.bus.write_word(base + 0x400, ebreak()).expect("operation should succeed");
     vm.cpu.x[17] = 0x999; // Not an SBI extension
 
     let r = vm.cpu.step(&mut vm.bus);
@@ -3104,7 +3104,7 @@ fn test_sbi_base_probe_from_smode() {
     let base = 0x8000_0000u64;
     use geometry_os::riscv::cpu::Privilege;
 
-    vm.bus.write_word(base, ecall()).unwrap();
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Supervisor;
@@ -3137,7 +3137,7 @@ fn test_sbi_shutdown_from_smode() {
     let base = 0x8000_0000u64;
     use geometry_os::riscv::cpu::Privilege;
 
-    vm.bus.write_word(base, ecall()).unwrap();
+    vm.bus.write_word(base, ecall()).expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Supervisor;

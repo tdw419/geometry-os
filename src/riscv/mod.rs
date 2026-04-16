@@ -837,8 +837,8 @@ mod tests {
 
         let lui_word: u32 = 0x87EE50B7; // LUI x1, 0x87EE5000
         let ebreak_word: u32 = 0x00100073;
-        vm.bus.write_word(ram_base, lui_word).unwrap();
-        vm.bus.write_word(ram_base + 4, ebreak_word).unwrap();
+        vm.bus.write_word(ram_base, lui_word).expect("operation should succeed");
+        vm.bus.write_word(ram_base + 4, ebreak_word).expect("operation should succeed");
 
         // Step 1: LUI
         let r1 = vm.step();
@@ -862,7 +862,7 @@ mod tests {
         let mut canvas = make_canvas();
 
         // Boot the kernel.
-        let result = vm.boot_guest(&kernel, 1, 10_000).unwrap();
+        let result = vm.boot_guest(&kernel, 1, 10_000).expect("operation should succeed");
 
         // Should have executed some instructions and stopped at EBREAK.
         assert!(result.instructions > 0);
@@ -894,7 +894,7 @@ mod tests {
 
         // Verify the DTB is actually at that address (starts with FDT magic).
         let dtb_addr = vm.cpu.x[11] as u64;
-        let byte0 = vm.bus.read_byte(dtb_addr).unwrap();
+        let byte0 = vm.bus.read_byte(dtb_addr).expect("operation should succeed");
         // FDT magic is 0xD00DFEED stored big-endian, first byte is 0xD0.
         assert_eq!(byte0, 0xD0, "DTB should start with FDT magic byte (0xD0)");
     }
@@ -904,7 +904,7 @@ mod tests {
         // Raw (non-ELF) binary should load at 0x8000_0000.
         let kernel = build_uart_program("OK");
         let mut vm = RiscvVm::new(64 * 1024);
-        let result = vm.boot_guest(&kernel, 1, 100).unwrap();
+        let result = vm.boot_guest(&kernel, 1, 100).expect("operation should succeed");
 
         assert_eq!(result.entry, 0x8000_0000);
     }
@@ -955,7 +955,7 @@ mod tests {
         let mut bridge = UartBridge::new();
         let mut canvas = make_canvas();
 
-        let result = vm.boot_guest(&img, 1, 10_000).unwrap();
+        let result = vm.boot_guest(&img, 1, 10_000).expect("operation should succeed");
         assert_eq!(result.entry, 0x8000_0000);
 
         bridge.drain_uart_to_canvas(&mut vm.bus, &mut canvas);
@@ -971,18 +971,18 @@ mod tests {
         let _ = vm.boot_guest(&kernel, 128, 100);
 
         let dtb_addr = vm.cpu.x[11] as u64;
-        let b0 = vm.bus.read_byte(dtb_addr).unwrap();
-        let b1 = vm.bus.read_byte(dtb_addr + 1).unwrap();
-        let b2 = vm.bus.read_byte(dtb_addr + 2).unwrap();
-        let b3 = vm.bus.read_byte(dtb_addr + 3).unwrap();
+        let b0 = vm.bus.read_byte(dtb_addr).expect("operation should succeed");
+        let b1 = vm.bus.read_byte(dtb_addr + 1).expect("operation should succeed");
+        let b2 = vm.bus.read_byte(dtb_addr + 2).expect("operation should succeed");
+        let b3 = vm.bus.read_byte(dtb_addr + 3).expect("operation should succeed");
         let magic = u32::from_be_bytes([b0, b1, b2, b3]);
         assert_eq!(magic, 0xD00D_FEED, "DTB should have FDT magic");
 
         // Verify totalsize field matches.
-        let ts0 = vm.bus.read_byte(dtb_addr + 4).unwrap();
-        let ts1 = vm.bus.read_byte(dtb_addr + 5).unwrap();
-        let ts2 = vm.bus.read_byte(dtb_addr + 6).unwrap();
-        let ts3 = vm.bus.read_byte(dtb_addr + 7).unwrap();
+        let ts0 = vm.bus.read_byte(dtb_addr + 4).expect("operation should succeed");
+        let ts1 = vm.bus.read_byte(dtb_addr + 5).expect("operation should succeed");
+        let ts2 = vm.bus.read_byte(dtb_addr + 6).expect("operation should succeed");
+        let ts3 = vm.bus.read_byte(dtb_addr + 7).expect("operation should succeed");
         let totalsize = u32::from_be_bytes([ts0, ts1, ts2, ts3]) as usize;
         assert!(totalsize > 40, "DTB should be > 40 bytes");
     }
@@ -1022,7 +1022,7 @@ mod tests {
         let mut vm = RiscvVm::new(64 * 1024);
 
         let start = std::time::Instant::now();
-        let result = vm.boot_guest(&code, 1, 100_000).unwrap();
+        let result = vm.boot_guest(&code, 1, 100_000).expect("operation should succeed");
         let elapsed = start.elapsed();
 
         let mips = result.instructions as f64 / elapsed.as_secs_f64() / 1_000_000.0;
@@ -1064,7 +1064,7 @@ mod tests {
         // An empty raw binary loads at 0x8000_0000 with entry=0x8000_0000.
         // All-zero RAM decodes as ADDI x0, x0, 0 (NOP) so the CPU runs all N steps.
         let mut vm = RiscvVm::new(64 * 1024);
-        let result = vm.boot_guest(&[], 1, 100).unwrap();
+        let result = vm.boot_guest(&[], 1, 100).expect("operation should succeed");
         assert_eq!(result.instructions, 100);
         assert_eq!(result.entry, 0x8000_0000);
     }
@@ -1100,7 +1100,7 @@ mod tests {
             512, // 512MB RAM (kernel needs ~305MB)
             5_000_000, // 5M instructions
             bootargs,
-        ).unwrap();
+        ).expect("operation should succeed");
 
         let elapsed = start.elapsed();
         let mips = result.instructions as f64 / elapsed.as_secs_f64() / 1_000_000.0;

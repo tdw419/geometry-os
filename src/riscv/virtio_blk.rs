@@ -292,8 +292,8 @@ mod tests {
     #[test]
     fn config_capacity() {
         let dev = VirtioBlk::new();
-        let lo = dev.read(VIRTIO_BASE + CONFIG).unwrap();
-        let hi = dev.read(VIRTIO_BASE + CONFIG + 4).unwrap();
+        let lo = dev.read(VIRTIO_BASE + CONFIG).expect("read should succeed");
+        let hi = dev.read(VIRTIO_BASE + CONFIG + 4).expect("read should succeed");
         let capacity = lo as u64 | ((hi as u64) << 32);
         assert_eq!(capacity, DEFAULT_SECTORS);
     }
@@ -317,7 +317,7 @@ mod tests {
         let mut dev = VirtioBlk::new();
         let data = vec![0xABu8; 512];
         assert!(dev.write_sectors(0, &data));
-        let read = dev.read_sectors(0, 1).unwrap();
+        let read = dev.read_sectors(0, 1).expect("operation should succeed");
         assert_eq!(read, data);
     }
 

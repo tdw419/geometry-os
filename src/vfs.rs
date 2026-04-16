@@ -464,7 +464,7 @@ mod tests {
         vfs.base_dir = dir.clone();
 
         // Create a file in the VFS dir
-        fs::write(dir.join("test.txt"), b"Hello").unwrap();
+        fs::write(dir.join("test.txt"), b"Hello").expect("filesystem operation failed");
 
         // Write filename into RAM
         let mut ram = vec![0u32; 256];
@@ -531,7 +531,7 @@ mod tests {
         assert_eq!(vfs.fclose(fd, 0), 0);
 
         // Verify on host filesystem
-        let content = fs::read(dir.join("output.txt")).unwrap();
+        let content = fs::read(dir.join("output.txt")).expect("filesystem operation failed");
         assert_eq!(&content, b"World");
 
         let _ = fs::remove_dir_all(&dir);
@@ -547,8 +547,8 @@ mod tests {
         vfs.base_dir = dir.clone();
 
         // Create some files
-        fs::write(dir.join("alpha.txt"), b"A").unwrap();
-        fs::write(dir.join("beta.txt"), b"B").unwrap();
+        fs::write(dir.join("alpha.txt"), b"A").expect("filesystem operation failed");
+        fs::write(dir.join("beta.txt"), b"B").expect("filesystem operation failed");
 
         let mut ram = vec![0u32; 256];
         let count = vfs.fls(&mut ram, 100);

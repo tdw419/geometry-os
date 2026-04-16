@@ -233,7 +233,7 @@ mod tests {
         let mut clint = Clint::new();
         let result = sbi.handle_ecall(SBI_CONSOLE_PUTCHAR, 0, b'A' as u32, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(result.is_some());
-        let (a0, a1) = result.unwrap();
+        let (a0, a1) = result.expect("operation should succeed");
         assert_eq!(a0, SBI_SUCCESS as u32);
         assert_eq!(a1, 0);
         assert_eq!(sbi.console_output, vec![b'A']);
@@ -256,7 +256,7 @@ mod tests {
         // Legacy SBI_CONSOLE_GETCHAR uses a6!=0 (e.g., a6=1)
         let result = sbi.handle_ecall(SBI_CONSOLE_GETCHAR, 1, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(result.is_some());
-        let (a0, _) = result.unwrap();
+        let (a0, _) = result.expect("operation should succeed");
         assert_eq!(a0, 0xFFFFFFFF); // -1 = no char
     }
 
@@ -268,7 +268,7 @@ mod tests {
         // SBI v0.2 console putchar: a7=0x02, a6=0, a0=char
         let result = sbi.handle_ecall(SBI_CONSOLE_GETCHAR, 0, b'X' as u32, 0, 0, 0, 0, 0, &mut uart, &mut clint);
         assert!(result.is_some());
-        let (a0, _) = result.unwrap();
+        let (a0, _) = result.expect("operation should succeed");
         assert_eq!(a0, SBI_SUCCESS as u32);
         assert_eq!(sbi.console_output, vec![b'X']);
     }

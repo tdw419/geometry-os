@@ -1032,7 +1032,7 @@ mod tests {
         cpu.x[5] = 10;
         // Write C.ADDI x5, 6 as a 16-bit value in the low halfword
         // On little-endian: the 16-bit compressed instruction goes in the low 2 bytes
-        bus.write_word(0x8000_0000, 0x0299).unwrap();
+        bus.write_word(0x8000_0000, 0x0299).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), super::super::cpu::StepResult::Ok);
         assert_eq!(cpu.x[5], 16); // 10 + 6
         assert_eq!(cpu.pc, 0x8000_0002); // PC advanced by 2
@@ -1046,7 +1046,7 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 1024 * 1024);
         cpu.x[11] = 42;
         // C.MV x10, x11 -> 0x852E
-        bus.write_word(0x8000_0000, 0x852E).unwrap();
+        bus.write_word(0x8000_0000, 0x852E).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), super::super::cpu::StepResult::Ok);
         assert_eq!(cpu.x[10], 42);
         assert_eq!(cpu.pc, 0x8000_0002);
@@ -1060,7 +1060,7 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 1024 * 1024);
         // ADDI x5, x0, 100 (32-bit): opcode=0010011, rd=5, funct3=000, rs1=0, imm=100
         let word = (100 << 20) | (0 << 15) | (0b000 << 12) | (5 << 7) | 0x13;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), super::super::cpu::StepResult::Ok);
         assert_eq!(cpu.x[5], 100);
         assert_eq!(cpu.pc, 0x8000_0004); // PC advanced by 4
@@ -1074,7 +1074,7 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 1024 * 1024);
         cpu.pc = 0x8000_0000;
         // C.JAL imm=4 -> jal x1, 4. Sets x1 = PC+2 = 0x8000_0002, jumps to PC+4
-        bus.write_word(0x8000_0000, 0x2011).unwrap();
+        bus.write_word(0x8000_0000, 0x2011).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), super::super::cpu::StepResult::Ok);
         assert_eq!(cpu.x[1], 0x8000_0002); // return addr = PC + 2 (compressed)
         assert_eq!(cpu.pc, 0x8000_0004); // target = PC + 4

@@ -543,7 +543,7 @@ mod tests {
         assert_ne!(ino, 0);
         assert_eq!(fs.resolve("/hello.txt"), Some(ino));
 
-        let inode = fs.get_inode(ino).unwrap();
+        let inode = fs.get_inode(ino).expect("inode should exist");
         assert_eq!(inode.itype, InodeType::Regular);
     }
 
@@ -655,7 +655,7 @@ mod tests {
         fs.create("/mydir/file1.txt");
         fs.create("/mydir/file2.txt");
 
-        let dir_ino = fs.resolve("/mydir").unwrap();
+        let dir_ino = fs.resolve("/mydir").expect("path resolution should succeed");
         let mut buf = vec![0u32; 10];
         assert!(fs.fstat(dir_ino, &mut buf));
         assert_eq!(buf[1], 2);  // itype = Directory
@@ -677,7 +677,7 @@ mod tests {
         fs.create("/home/user/file.txt");
 
         assert!(fs.chdir("/home/user"));
-        assert_eq!(fs.get_cwd(), fs.resolve("/home/user").unwrap());
+        assert_eq!(fs.get_cwd(), fs.resolve("/home/user").expect("path resolution should succeed"));
 
         // Relative path from cwd
         assert_eq!(fs.resolve("file.txt"), fs.resolve("/home/user/file.txt"));
@@ -700,7 +700,7 @@ mod tests {
         fs.create("/dir/beta.txt");
         fs.mkdir("/dir/sub");
 
-        let dir_ino = fs.resolve("/dir").unwrap();
+        let dir_ino = fs.resolve("/dir").expect("path resolution should succeed");
         let mut buf = vec![0u32; 256];
         let count = fs.list_dir(dir_ino, &mut buf);
         assert_eq!(count, 3); // alpha.txt, beta.txt, sub
@@ -724,7 +724,7 @@ mod tests {
         fs.write_inode(ino, 0, &[1, 2, 3, 4, 5]);
         assert!(fs.truncate(ino, 3));
 
-        let inode = fs.get_inode(ino).unwrap();
+        let inode = fs.get_inode(ino).expect("inode should exist");
         assert_eq!(inode.data.len(), 3);
         assert_eq!(inode.size, 3);
     }
@@ -736,7 +736,7 @@ mod tests {
         fs.write_inode(ino, 0, &[1, 2]);
         assert!(fs.truncate(ino, 5));
 
-        let inode = fs.get_inode(ino).unwrap();
+        let inode = fs.get_inode(ino).expect("inode should exist");
         assert_eq!(inode.data.len(), 2); // truncate only shrinks, doesn't extend with zeros
     }
 
@@ -755,7 +755,7 @@ mod tests {
         fs.mkdir("/dev");
         let ino = fs.create_file("/dev/null", InodeType::Device);
         assert_ne!(ino, 0);
-        let inode = fs.get_inode(ino).unwrap();
+        let inode = fs.get_inode(ino).expect("inode should exist");
         assert_eq!(inode.itype, InodeType::Device);
     }
 
@@ -764,7 +764,7 @@ mod tests {
         let mut fs = InodeFs::new();
         let ino = fs.create_file("/pipe1", InodeType::Pipe);
         assert_ne!(ino, 0);
-        let inode = fs.get_inode(ino).unwrap();
+        let inode = fs.get_inode(ino).expect("inode should exist");
         assert_eq!(inode.itype, InodeType::Pipe);
     }
 
@@ -779,7 +779,7 @@ mod tests {
     fn test_write_directory_fails() {
         let mut fs = InodeFs::new();
         fs.mkdir("/mydir");
-        let dir_ino = fs.resolve("/mydir").unwrap();
+        let dir_ino = fs.resolve("/mydir").expect("path resolution should succeed");
         let data = vec![1u32, 2, 3];
         assert_eq!(fs.write_inode(dir_ino, 0, &data), 0);
     }
@@ -807,7 +807,7 @@ mod tests {
         fs.mkdir("/home/user");
 
         // "." should resolve to the directory itself
-        let user_ino = fs.resolve("/home/user").unwrap();
+        let user_ino = fs.resolve("/home/user").expect("path resolution should succeed");
         assert_eq!(fs.resolve("/home/user/."), Some(user_ino));
 
         // ".." should resolve to parent

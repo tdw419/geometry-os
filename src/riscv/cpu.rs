@@ -1179,7 +1179,7 @@ mod tests {
         cpu.pc = 0x8000_0000;
         cpu.csr.mtvec = 0x8000_0200;
         // Write an invalid instruction (opcode 0x7F is not a valid RISC-V opcode)
-        bus.write_word(0x8000_0000, 0x0000_007F).unwrap();
+        bus.write_word(0x8000_0000, 0x0000_007F).expect("operation should succeed");
         let result = cpu.step(&mut bus);
         assert_eq!(result, StepResult::Ok);
         assert_eq!(cpu.pc, 0x8000_0200);
@@ -1194,7 +1194,7 @@ mod tests {
         cpu.pc = 0x8000_0000;
         // Write 0x00000000 at PC -- decodes as compressed C.ADDI4SPN with nzuimm=0
         // Per RISC-V spec this is a HINT (NOP), not an illegal instruction.
-        bus.write_word(0x8000_0000, 0x0000_0000).unwrap();
+        bus.write_word(0x8000_0000, 0x0000_0000).expect("operation should succeed");
         let result = cpu.step(&mut bus);
         assert_eq!(result, StepResult::Ok);
         // PC advances by 2 (compressed instruction length), does NOT trap
@@ -1205,7 +1205,7 @@ mod tests {
     fn step_lui() {
         let mut bus = Bus::new(0x8000_0000, 4096);
         let word = 0x1234_52B7;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         let mut cpu = RiscvCpu::new();
         let result = cpu.step(&mut bus);
         assert_eq!(result, StepResult::Ok);
@@ -1223,7 +1223,7 @@ mod tests {
         cpu.x[3] = 20;
         // ADD x1, x2, x3
         let word = (0u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 30);
     }
@@ -1236,7 +1236,7 @@ mod tests {
         cpu.x[3] = 10;
         // SUB x1, x2, x3
         let word = (0b0100000u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 20);
     }
@@ -1248,7 +1248,7 @@ mod tests {
         cpu.x[2] = 100;
         // ADDI x1, x2, 42
         let word = (42u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x13;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 142);
     }
@@ -1259,7 +1259,7 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         // JAL x1, +8
         let word = (0u32 << 31) | (4u32 << 21) | (0u32 << 20) | (0u32 << 12) | (1u32 << 7) | 0x6F;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0x8000_0004);
         assert_eq!(cpu.pc, 0x8000_0008);
@@ -1273,7 +1273,7 @@ mod tests {
         // Set a7 to an unrecognized SBI extension (0x999) so the ECALL
         // is NOT intercepted as an SBI call and falls through to trap.
         cpu.x[17] = 0x999;
-        bus.write_word(0x8000_0000, 0x00000073).unwrap(); // ECALL
+        bus.write_word(0x8000_0000, 0x00000073).expect("operation should succeed"); // ECALL
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         // PC should jump to mtvec
         assert_eq!(cpu.pc, 0x8000_0200);
@@ -1291,7 +1291,7 @@ mod tests {
         // ECALL with a7=0 (SBI_CONSOLE_PUTCHAR) should be intercepted, not trapped.
         cpu.x[17] = 0; // SBI_CONSOLE_PUTCHAR
         cpu.x[10] = 0; // null char (no output)
-        bus.write_word(0x8000_0000, 0x00000073).unwrap(); // ECALL
+        bus.write_word(0x8000_0000, 0x00000073).expect("operation should succeed"); // ECALL
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         // SBI handled the call: PC advances normally, no trap.
         assert_eq!(cpu.pc, 0x8000_0004);
@@ -1306,7 +1306,7 @@ mod tests {
     fn step_ebreak() {
         let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
-        bus.write_word(0x8000_0000, 0x00100073).unwrap();
+        bus.write_word(0x8000_0000, 0x00100073).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ebreak);
         assert_eq!(cpu.pc, 0x8000_0004);
     }
@@ -1319,11 +1319,11 @@ mod tests {
         cpu.x[3] = 0xDEAD_BEEF;
         // SW x3, 0(x2)
         let sw = (0u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b010 << 12) | (0u32 << 7) | 0x23;
-        bus.write_word(0x8000_0000, sw).unwrap();
+        bus.write_word(0x8000_0000, sw).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         // LW x1, 0(x2)
         let lw = (0u32 << 20) | (2u32 << 15) | (0b010 << 12) | (1u32 << 7) | 0x03;
-        bus.write_word(0x8000_0004, lw).unwrap();
+        bus.write_word(0x8000_0004, lw).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xDEAD_BEEF);
     }
@@ -1342,7 +1342,7 @@ mod tests {
         let bits4_1 = (imm >> 1) & 0xF;
         let word = (bit12 << 31) | (bits10_5 << 25) | (3u32 << 20) | (2u32 << 15)
             | (0b000 << 12) | (bits4_1 << 8) | (bit11 << 7) | 0x63;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.pc, 0x8000_0008);
     }
@@ -1361,7 +1361,7 @@ mod tests {
         let bits4_1 = (imm >> 1) & 0xF;
         let word = (bit12 << 31) | (bits10_5 << 25) | (3u32 << 20) | (2u32 << 15)
             | (0b001 << 12) | (bits4_1 << 8) | (bit11 << 7) | 0x63;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.pc, 0x8000_0004);
     }
@@ -1372,7 +1372,7 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         // AUIPC x1, 0x1000  -- imm[31:12] = 0x1
         let word = (0x1u32 << 12) | (1u32 << 7) | 0x17;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0x8000_1000);
     }
@@ -1386,7 +1386,7 @@ mod tests {
         cpu.x[2] = 6;
         cpu.x[3] = 7;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 42);
     }
@@ -1398,7 +1398,7 @@ mod tests {
         cpu.x[2] = 0xFFFF_FFFF;
         cpu.x[3] = 2;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b000 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFE);
     }
@@ -1410,7 +1410,7 @@ mod tests {
         cpu.x[2] = 1;
         cpu.x[3] = 1;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b001 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0);
     }
@@ -1422,7 +1422,7 @@ mod tests {
         cpu.x[2] = 0xFFFF_FFFF; // -1
         cpu.x[3] = 0xFFFF_FFFF; // -1
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b001 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0); // (-1)*(-1)=1, high 32 = 0
     }
@@ -1434,7 +1434,7 @@ mod tests {
         cpu.x[2] = 0x0001_0000; // 65536
         cpu.x[3] = 0x0001_0000; // 65536
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b001 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 1); // 65536*65536 = 0x1_0000_0000, high 32 = 1
     }
@@ -1446,7 +1446,7 @@ mod tests {
         cpu.x[2] = 0xFFFF_FFFF;
         cpu.x[3] = 0xFFFF_FFFF;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b011 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFE);
     }
@@ -1458,7 +1458,7 @@ mod tests {
         cpu.x[2] = 0xFFFF_FFFF; // -1 signed
         cpu.x[3] = 2;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b010 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFF); // (-1)*2 = -2 as i64, high 32 = 0xFFFFFFFF
     }
@@ -1470,7 +1470,7 @@ mod tests {
         cpu.x[2] = 42;
         cpu.x[3] = 7;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b100 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 6);
     }
@@ -1482,7 +1482,7 @@ mod tests {
         cpu.x[2] = 0xFFFF_FFFE; // -2
         cpu.x[3] = 2;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b100 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFF); // -1
     }
@@ -1494,7 +1494,7 @@ mod tests {
         cpu.x[2] = 42;
         cpu.x[3] = 0;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b100 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFF); // -1
     }
@@ -1506,7 +1506,7 @@ mod tests {
         cpu.x[2] = 0x8000_0000u32; // INT_MIN
         cpu.x[3] = 0xFFFF_FFFF; // -1
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b100 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0x8000_0000); // INT_MIN
     }
@@ -1518,7 +1518,7 @@ mod tests {
         cpu.x[2] = 42;
         cpu.x[3] = 7;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b101 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 6);
     }
@@ -1530,7 +1530,7 @@ mod tests {
         cpu.x[2] = 42;
         cpu.x[3] = 0;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b101 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], u32::MAX);
     }
@@ -1542,7 +1542,7 @@ mod tests {
         cpu.x[2] = 42;
         cpu.x[3] = 7;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b110 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0);
     }
@@ -1554,7 +1554,7 @@ mod tests {
         cpu.x[2] = 0xFFFF_FFFE; // -2
         cpu.x[3] = 3;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b110 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFE); // -2 (Rust truncation toward zero)
     }
@@ -1566,7 +1566,7 @@ mod tests {
         cpu.x[2] = 42;
         cpu.x[3] = 0;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b110 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 42);
     }
@@ -1578,7 +1578,7 @@ mod tests {
         cpu.x[2] = 0x8000_0000u32; // INT_MIN
         cpu.x[3] = 0xFFFF_FFFF; // -1
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b110 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0);
     }
@@ -1590,7 +1590,7 @@ mod tests {
         cpu.x[2] = 42;
         cpu.x[3] = 7;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b111 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0);
     }
@@ -1602,7 +1602,7 @@ mod tests {
         cpu.x[2] = 42;
         cpu.x[3] = 0;
         let word = (0x01u32 << 25) | (3u32 << 20) | (2u32 << 15) | (0b111 << 12) | (1u32 << 7) | 0x33;
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 42);
     }
@@ -1628,9 +1628,9 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100; // address in bus range
-        bus.write_word(0x8000_0100, 0xDEADBEEF).unwrap();
+        bus.write_word(0x8000_0100, 0xDEADBEEF).expect("operation should succeed");
         let word = amo_encode(0b00010, 1, 2, 0, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xDEADBEEF);
         // Reservation should be set
@@ -1643,22 +1643,22 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
-        bus.write_word(0x8000_0100, 0x11111111).unwrap();
+        bus.write_word(0x8000_0100, 0x11111111).expect("operation should succeed");
 
         // LR.W x1, (x2)
         let lr = amo_encode(0b00010, 1, 2, 0, false, false);
-        bus.write_word(0x8000_0000, lr).unwrap();
+        bus.write_word(0x8000_0000, lr).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0x11111111);
 
         // SC.W x3, x4, (x2) -- store x4=0xCAFEBABE to address in x2
         cpu.x[4] = 0xCAFEBABE;
         let sc = amo_encode(0b00011, 3, 2, 4, false, false);
-        bus.write_word(0x8000_0004, sc).unwrap();
+        bus.write_word(0x8000_0004, sc).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[3], 0); // 0 = success
         assert_eq!(
-            bus.read_word(0x8000_0100).unwrap(),
+            bus.read_word(0x8000_0100).expect("operation should succeed"),
             0xCAFEBABE
         );
     }
@@ -1670,15 +1670,15 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[4] = 0xCAFEBABE;
-        bus.write_word(0x8000_0100, 0x11111111).unwrap();
+        bus.write_word(0x8000_0100, 0x11111111).expect("operation should succeed");
 
         let sc = amo_encode(0b00011, 3, 2, 4, false, false);
-        bus.write_word(0x8000_0000, sc).unwrap();
+        bus.write_word(0x8000_0000, sc).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[3], 1); // 1 = failure
         // Memory should be unchanged
         assert_eq!(
-            bus.read_word(0x8000_0100).unwrap(),
+            bus.read_word(0x8000_0100).expect("operation should succeed"),
             0x11111111
         );
     }
@@ -1690,13 +1690,13 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0x12345678;
-        bus.write_word(0x8000_0100, 0xABCDEF00).unwrap();
+        bus.write_word(0x8000_0100, 0xABCDEF00).expect("operation should succeed");
         let word = amo_encode(0b00001, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xABCDEF00); // old value
         assert_eq!(
-            bus.read_word(0x8000_0100).unwrap(),
+            bus.read_word(0x8000_0100).expect("operation should succeed"),
             0x12345678
         ); // swapped
     }
@@ -1708,12 +1708,12 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 100;
-        bus.write_word(0x8000_0100, 42).unwrap();
+        bus.write_word(0x8000_0100, 42).expect("operation should succeed");
         let word = amo_encode(0b00000, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 42); // old value
-        assert_eq!(bus.read_word(0x8000_0100).unwrap(), 142); // 42+100
+        assert_eq!(bus.read_word(0x8000_0100).expect("operation should succeed"), 142); // 42+100
     }
 
     #[test]
@@ -1723,13 +1723,13 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0xFF00FF00;
-        bus.write_word(0x8000_0100, 0x0F0F0F0F).unwrap();
+        bus.write_word(0x8000_0100, 0x0F0F0F0F).expect("operation should succeed");
         let word = amo_encode(0b00100, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0x0F0F0F0F);
         assert_eq!(
-            bus.read_word(0x8000_0100).unwrap(),
+            bus.read_word(0x8000_0100).expect("operation should succeed"),
             0xF00FF00F
         );
     }
@@ -1741,13 +1741,13 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0x0F0F0F0F;
-        bus.write_word(0x8000_0100, 0xFF00FF00).unwrap();
+        bus.write_word(0x8000_0100, 0xFF00FF00).expect("operation should succeed");
         let word = amo_encode(0b01100, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFF00FF00);
         assert_eq!(
-            bus.read_word(0x8000_0100).unwrap(),
+            bus.read_word(0x8000_0100).expect("operation should succeed"),
             0x0F000F00
         );
     }
@@ -1759,13 +1759,13 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0x0F0F0F0F;
-        bus.write_word(0x8000_0100, 0xF0F0F0F0).unwrap();
+        bus.write_word(0x8000_0100, 0xF0F0F0F0).expect("operation should succeed");
         let word = amo_encode(0b01000, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xF0F0F0F0);
         assert_eq!(
-            bus.read_word(0x8000_0100).unwrap(),
+            bus.read_word(0x8000_0100).expect("operation should succeed"),
             0xFFFFFFFF
         );
     }
@@ -1777,15 +1777,15 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 10u32; // small positive
-        bus.write_word(0x8000_0100, 0xFFFF_FFFF).unwrap(); // -1 signed
+        bus.write_word(0x8000_0100, 0xFFFF_FFFF).expect("operation should succeed"); // -1 signed
         let word = amo_encode(0b10000, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFF); // old value
         // if (old as i32) < (new as i32) { old } else { new }
         // old = -1, new = 10. -1 < 10, so result = old = -1 = 0xFFFF_FFFF
         assert_eq!(
-            bus.read_word(0x8000_0100).unwrap(),
+            bus.read_word(0x8000_0100).expect("operation should succeed"),
             0xFFFF_FFFF
         ); // stays as -1
     }
@@ -1797,13 +1797,13 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 10u32;
-        bus.write_word(0x8000_0100, 0xFFFF_FFFF).unwrap(); // -1 signed
+        bus.write_word(0x8000_0100, 0xFFFF_FFFF).expect("operation should succeed"); // -1 signed
         let word = amo_encode(0b10000, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFF); // old
         assert_eq!(
-            bus.read_word(0x8000_0100).unwrap(),
+            bus.read_word(0x8000_0100).expect("operation should succeed"),
             0xFFFF_FFFF
         ); // -1 < 10, stays
     }
@@ -1815,12 +1815,12 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 10u32;
-        bus.write_word(0x8000_0100, 0xFFFF_FFFF).unwrap(); // -1 signed
+        bus.write_word(0x8000_0100, 0xFFFF_FFFF).expect("operation should succeed"); // -1 signed
         let word = amo_encode(0b10100, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFF); // old
-        assert_eq!(bus.read_word(0x8000_0100).unwrap(), 10); // max(-1, 10) = 10
+        assert_eq!(bus.read_word(0x8000_0100).expect("operation should succeed"), 10); // max(-1, 10) = 10
     }
 
     #[test]
@@ -1830,12 +1830,12 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0xFFFF_FFFF; // large unsigned
-        bus.write_word(0x8000_0100, 42).unwrap();
+        bus.write_word(0x8000_0100, 42).expect("operation should succeed");
         let word = amo_encode(0b11000, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 42); // old
-        assert_eq!(bus.read_word(0x8000_0100).unwrap(), 42); // min(42, 0xFFFF_FFFF) = 42
+        assert_eq!(bus.read_word(0x8000_0100).expect("operation should succeed"), 42); // min(42, 0xFFFF_FFFF) = 42
     }
 
     #[test]
@@ -1845,13 +1845,13 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 0xFFFF_FFFF; // large unsigned
-        bus.write_word(0x8000_0100, 42).unwrap();
+        bus.write_word(0x8000_0100, 42).expect("operation should succeed");
         let word = amo_encode(0b11100, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 42); // old
         assert_eq!(
-            bus.read_word(0x8000_0100).unwrap(),
+            bus.read_word(0x8000_0100).expect("operation should succeed"),
             0xFFFF_FFFF
         ); // max(42, 0xFFFF_FFFF)
     }
@@ -1863,12 +1863,12 @@ mod tests {
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
         cpu.x[3] = 1;
-        bus.write_word(0x8000_0100, 0xFFFF_FFFF).unwrap();
+        bus.write_word(0x8000_0100, 0xFFFF_FFFF).expect("operation should succeed");
         let word = amo_encode(0b00000, 1, 2, 3, false, false);
-        bus.write_word(0x8000_0000, word).unwrap();
+        bus.write_word(0x8000_0000, word).expect("operation should succeed");
         assert_eq!(cpu.step(&mut bus), StepResult::Ok);
         assert_eq!(cpu.x[1], 0xFFFF_FFFF);
-        assert_eq!(bus.read_word(0x8000_0100).unwrap(), 0); // wraps to 0
+        assert_eq!(bus.read_word(0x8000_0100).expect("operation should succeed"), 0); // wraps to 0
     }
 
     #[test]
@@ -1877,11 +1877,11 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 4096);
         let mut cpu = RiscvCpu::new();
         cpu.x[2] = 0x8000_0100;
-        bus.write_word(0x8000_0100, 0).unwrap();
+        bus.write_word(0x8000_0100, 0).expect("operation should succeed");
 
         // LR.W x1, (x2)
         let lr = amo_encode(0b00010, 1, 2, 0, false, false);
-        bus.write_word(0x8000_0000, lr).unwrap();
+        bus.write_word(0x8000_0000, lr).expect("operation should succeed");
         cpu.step(&mut bus);
         assert!(cpu.reservation.is_some());
 
@@ -1889,15 +1889,15 @@ mod tests {
         cpu.x[3] = 0x8000_0200;
         cpu.x[4] = 42;
         let sc = amo_encode(0b00011, 5, 3, 4, false, false);
-        bus.write_word(0x8000_0200, 0).unwrap();
-        bus.write_word(0x8000_0004, sc).unwrap();
+        bus.write_word(0x8000_0200, 0).expect("operation should succeed");
+        bus.write_word(0x8000_0004, sc).expect("operation should succeed");
         cpu.step(&mut bus);
         assert_eq!(cpu.x[5], 1); // fail (no reservation for 0x8000_0200)
 
         // Second SC.W on original address should also fail (reservation cleared)
         cpu.x[5] = 0; // reset rd
         let sc2 = amo_encode(0b00011, 5, 2, 4, false, false);
-        bus.write_word(0x8000_0008, sc2).unwrap();
+        bus.write_word(0x8000_0008, sc2).expect("operation should succeed");
         cpu.step(&mut bus);
         assert_eq!(cpu.x[5], 1); // fail -- reservation was cleared
     }

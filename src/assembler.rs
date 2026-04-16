@@ -24,6 +24,8 @@ impl std::fmt::Display for AsmError {
     }
 }
 
+impl std::error::Error for AsmError {}
+
 pub struct AsmResult {
     pub pixels: Vec<u32>,
 }
@@ -1306,40 +1308,40 @@ mod tests {
 
     #[test]
     fn test_halt() {
-        let result = assemble("HALT", 0).unwrap();
+        let result = assemble("HALT", 0).expect("assembly should succeed");
         assert_eq!(result.pixels, vec![0x00]);
     }
 
     #[test]
     fn test_ldi() {
-        let result = assemble("LDI r0, 42", 0).unwrap();
+        let result = assemble("LDI r0, 42", 0).expect("assembly should succeed");
         assert_eq!(result.pixels, vec![0x10, 0, 42]);
     }
 
     #[test]
     fn test_add() {
-        let result = assemble("ADD r0, r1", 0).unwrap();
+        let result = assemble("ADD r0, r1", 0).expect("assembly should succeed");
         assert_eq!(result.pixels, vec![0x20, 0, 1]);
     }
 
     #[test]
     fn test_multiple_lines() {
         let src = "LDI r0, 10\nLDI r1, 20\nADD r0, r1\nHALT";
-        let result = assemble(src, 0).unwrap();
+        let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels, vec![0x10, 0, 10, 0x10, 1, 20, 0x20, 0, 1, 0x00]);
     }
 
     #[test]
     fn test_comments() {
         let src = "; this is a comment\nLDI r0, 5 ; inline comment\nHALT";
-        let result = assemble(src, 0).unwrap();
+        let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels, vec![0x10, 0, 5, 0x00]);
     }
 
     #[test]
     fn test_labels() {
         let src = "start:\n  LDI r0, 1\n  JZ r0, start\n  HALT";
-        let result = assemble(src, 0).unwrap();
+        let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels[0..3], vec![0x10, 0, 1]); // LDI r0, 1
         assert_eq!(result.pixels[3], 0x31); // JZ
         assert_eq!(result.pixels[4], 0);    // r0
@@ -1348,7 +1350,7 @@ mod tests {
 
     #[test]
     fn test_hex_immediate() {
-        let result = assemble("LDI r0, 0xFF", 0).unwrap();
+        let result = assemble("LDI r0, 0xFF", 0).expect("assembly should succeed");
         assert_eq!(result.pixels, vec![0x10, 0, 255]);
     }
 
@@ -1367,7 +1369,7 @@ mod tests {
     #[test]
     fn test_sub_mul_div() {
         let src = "SUB r1, r2\nMUL r3, r4\nDIV r5, r6";
-        let result = assemble(src, 0).unwrap();
+        let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels[0], 0x21);
         assert_eq!(result.pixels[3], 0x22);
         assert_eq!(result.pixels[6], 0x23);
@@ -1376,21 +1378,21 @@ mod tests {
     #[test]
     fn test_sar() {
         let src = "SAR r1, r2";
-        let result = assemble(src, 0).unwrap();
+        let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels, vec![0x2B, 1, 2]);
     }
 
     #[test]
     fn test_define_constants() {
         let src = "#define SCREEN_WIDTH 256\n#define COLOR 0xFF0000\nLDI r0, SCREEN_WIDTH\nLDI r1, COLOR\nFILL r1";
-        let result = assemble(src, 0).unwrap();
+        let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels, vec![0x10, 0, 256, 0x10, 1, 0xFF0000, 0x42, 1]);
     }
 
     #[test]
     fn test_nested_defines() {
         let src = "#define VAL1 10\n#define VAL2 VAL1\nLDI r0, VAL2";
-        let result = assemble(src, 0).unwrap();
+        let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels, vec![0x10, 0, 10]);
     }
 }

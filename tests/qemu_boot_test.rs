@@ -77,7 +77,7 @@ fn cleanup_child(child: &mut Child) {
 
 #[test]
 #[ignore] // Requires qemu-system-riscv64 and kernel images
-fn test_boot_riscv_linux_verify_version() {
+fn test_boot_riscv_linux_verify_version() -> Result<(), Box<dyn std::error::Error>> {
     // Pre-flight checks
     assert!(qemu_available(), "qemu-system-riscv64 not found on PATH");
     let kernel = kernel_path();
@@ -98,19 +98,18 @@ fn test_boot_riscv_linux_verify_version() {
             "-m",
             "256M",
             "-kernel",
-            kernel.to_str().unwrap(),
+            kernel.to_str().ok_or("kernel path is not valid UTF-8")?,
             "-initrd",
-            initrd.to_str().unwrap(),
+            initrd.to_str().ok_or("initrd path is not valid UTF-8")?,
             "-append",
             "console=ttyS0 panic=1",
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to spawn qemu-system-riscv64");
+        .spawn()?;
 
-    let stdout = child.stdout.take().expect("failed to capture QEMU stdout");
+    let stdout = child.stdout.take().ok_or("failed to capture QEMU stdout")?;
 
     // Read QEMU output in a background thread (stdout.read() is blocking)
     let output: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
@@ -139,7 +138,7 @@ fn test_boot_riscv_linux_verify_version() {
     let _ = reader.join();
 
     // Get the final output
-    let output_text = output.lock().unwrap().clone();
+    let output_text = output.lock().expect("output mutex poisoned").clone();
 
     // Verify we got output at all
     assert!(
@@ -160,4 +159,5 @@ fn test_boot_riscv_linux_verify_version() {
         "First 500 chars of output:\n{}",
         &output_text[..output_text.len().min(500)]
     );
+    Ok(())
 }

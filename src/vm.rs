@@ -5111,7 +5111,7 @@ mod tests {
     fn test_memcpy_assembles_and_runs() {
         use crate::assembler::assemble;
         let src = "LDI r1, 0x3000\nLDI r2, 0x2000\nLDI r3, 5\nMEMCPY r1, r2, r3\nHALT";
-        let asm = assemble(src, 0).unwrap();
+        let asm = assemble(src, 0).expect("assembly should succeed");
         let mut vm = Vm::new();
         // Write source data
         for i in 0..5 { vm.ram[0x2000 + i] = (42 + i) as u32; }
@@ -5294,7 +5294,7 @@ mod tests {
         use crate::assembler::assemble;
         // Write assembly that stores to screen buffer, reads back, stores to RAM for comparison
         let src = "LDI r1, 0x10000\nLDI r2, 0xFF0000\nSTORE r1, r2\nLOAD r3, r1\nLDI r4, 0x7000\nSTORE r4, r3\nHALT";
-        let asm = assemble(src, 0).unwrap();
+        let asm = assemble(src, 0).expect("assembly should succeed");
         let vm = run_program(&asm.pixels, 100);
         assert!(vm.halted);
         assert_eq!(vm.screen[0], 0xFF0000);
@@ -5364,7 +5364,7 @@ mod tests {
         // Build a program that calls ASMSELF, then jumps to 0x1000
         // JMP takes an immediate address, not a register
         let bootstrap = "ASMSELF\nJMP 0x1000\n";
-        let asm = crate::assembler::assemble(bootstrap, 0).unwrap();
+        let asm = crate::assembler::assemble(bootstrap, 0).expect("assembly should succeed");
         for (i, &word) in asm.pixels.iter().enumerate() {
             vm.ram[i] = word;
         }
@@ -5399,7 +5399,7 @@ mod tests {
     fn test_asmself_assembler_mnemonic() {
         use crate::assembler::assemble;
         let src = "ASMSELF\nHALT\n";
-        let result = assemble(src, 0).unwrap();
+        let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels[0], 0x73, "ASMSELF should encode as 0x73");
         assert_eq!(result.pixels[1], 0x00, "HALT should follow");
     }
@@ -5486,7 +5486,7 @@ mod tests {
         src.push_str("RUNNEXT\n");
 
         // Assemble the bootstrap program
-        let asm = crate::assembler::assemble(&src, 0).unwrap();
+        let asm = crate::assembler::assemble(&src, 0).expect("assembly should succeed");
         for (i, &word) in asm.pixels.iter().enumerate() {
             vm.ram[i] = word;
         }
@@ -5610,7 +5610,7 @@ mod tests {
     fn test_runnext_assembler() {
         use crate::assembler::assemble;
         let src = "RUNNEXT\nHALT\n";
-        let result = assemble(src, 0).unwrap();
+        let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels[0], 0x74, "RUNNEXT should encode as 0x74");
     }
 
@@ -5686,7 +5686,7 @@ mod tests {
         let source = include_str!("../programs/self_writer.asm");
         let result = crate::assembler::assemble(source, 0x1000);
         assert!(result.is_ok(), "self_writer.asm should assemble: {:?}", result.err());
-        let asm = result.unwrap();
+        let asm = result.expect("operation should succeed");
         assert!(asm.pixels.len() > 50, "self_writer should produce substantial bytecode");
     }
 
@@ -5930,7 +5930,7 @@ mod tests {
         use crate::assembler::assemble;
 
         let source = include_str!("../programs/infinite_map.asm");
-        let asm = assemble(source, 0).unwrap();
+        let asm = assemble(source, 0).expect("assembly should succeed");
 
         let mut vm = Vm::new();
         for (i, &word) in asm.pixels.iter().enumerate() {

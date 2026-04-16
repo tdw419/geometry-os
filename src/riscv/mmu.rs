@@ -562,8 +562,8 @@ mod tests {
         let mut tlb = Tlb::new();
         tlb.insert(0x100, 1, 0xAAA, PTE_V | PTE_R);
         tlb.insert(0x100, 2, 0xBBB, PTE_V | PTE_R);
-        assert_eq!(tlb.lookup(0x100, 1).unwrap().0, 0xAAA);
-        assert_eq!(tlb.lookup(0x100, 2).unwrap().0, 0xBBB);
+        assert_eq!(tlb.lookup(0x100, 1).expect("operation should succeed").0, 0xAAA);
+        assert_eq!(tlb.lookup(0x100, 2).expect("operation should succeed").0, 0xBBB);
         assert!(tlb.lookup(0x100, 3).is_none());
     }
 
@@ -583,7 +583,7 @@ mod tests {
         // Map 0x1000 to 0x5000 via megapage
         let l1_addr = 0x0;
         let pte = (0x5u32 << 20) | PTE_V | PTE_R | PTE_X;
-        bus.write_word(l1_addr, pte).unwrap();
+        bus.write_word(l1_addr, pte).expect("operation should succeed");
         
         let satp = make_satap(1, 0, 0);
         let result = translate(0x1000, AccessType::Fetch, Privilege::Supervisor, false, false, satp, &mut bus, &mut tlb);

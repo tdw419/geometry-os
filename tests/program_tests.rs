@@ -597,9 +597,9 @@ fn test_vm_save_load_roundtrip() {
     vm.screen[128 * 256 + 128] = 0xFF0000; // red pixel at center
 
     let tmp = std::env::temp_dir().join("geometry_os_test_save.sav");
-    vm.save_to_file(&tmp).unwrap();
+    vm.save_to_file(&tmp).expect("VM save should succeed");
 
-    let loaded = Vm::load_from_file(&tmp).unwrap();
+    let loaded = Vm::load_from_file(&tmp).expect("VM load should succeed");
 
     assert_eq!(loaded.regs[0], 42, "r0 should be 42");
     assert_eq!(loaded.regs[1], 0xDEADBEEF, "r1 should be 0xDEADBEEF");
@@ -643,9 +643,9 @@ fn test_vm_save_load_preserves_rand_state_and_frame_count() {
     assert_ne!(rng_state_before, 0xDEADBEEF, "RNG should have advanced");
 
     let tmp = std::env::temp_dir().join("geometry_os_test_v2_save.sav");
-    vm.save_to_file(&tmp).unwrap();
+    vm.save_to_file(&tmp).expect("VM save should succeed");
 
-    let loaded = Vm::load_from_file(&tmp).unwrap();
+    let loaded = Vm::load_from_file(&tmp).expect("VM load should succeed");
     assert_eq!(loaded.rand_state, rng_state_before, "rand_state should be preserved");
     assert_eq!(loaded.frame_count, frame_count_before, "frame_count should be preserved");
 
@@ -665,7 +665,7 @@ fn test_vm_save_load_preserves_rand_state_and_frame_count() {
 #[test]
 fn test_vm_save_load_invalid_magic() {
     let tmp = std::env::temp_dir().join("geometry_os_test_bad_magic.sav");
-    std::fs::write(&tmp, b"BAD!\x00\x00\x00\x01").unwrap();
+    std::fs::write(&tmp, b"BAD!\x00\x00\x00\x01").expect("filesystem operation failed");
 
     let result = Vm::load_from_file(&tmp);
     assert!(result.is_err(), "should reject invalid magic");
@@ -681,9 +681,9 @@ fn test_vm_save_load_preserves_program_execution() {
     assert_eq!(vm.screen[0], 0x0000FF); // blue fill
 
     let tmp = std::env::temp_dir().join("geometry_os_test_program.sav");
-    vm.save_to_file(&tmp).unwrap();
+    vm.save_to_file(&tmp).expect("VM save should succeed");
 
-    let loaded = Vm::load_from_file(&tmp).unwrap();
+    let loaded = Vm::load_from_file(&tmp).expect("VM load should succeed");
     assert!(loaded.halted);
     // Spot-check a few screen pixels
     assert_eq!(loaded.screen[0], 0x0000FF, "top-left should be blue");
@@ -702,7 +702,7 @@ fn test_vm_save_load_preserves_program_execution() {
 #[test]
 fn test_line_opcode() {
     let source = "LDI r0, 0\nLDI r1, 0\nLDI r2, 255\nLDI r3, 255\nLDI r4, 0xFFFFFF\nLINE r0,r1,r2,r3,r4\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100_000 { if !vm.step() { break; } }
@@ -715,7 +715,7 @@ fn test_line_opcode() {
 #[test]
 fn test_circle_opcode() {
     let source = "LDI r0, 128\nLDI r1, 128\nLDI r2, 50\nLDI r3, 0xFF0000\nCIRCLE r0,r1,r2,r3\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100_000 { if !vm.step() { break; } }
@@ -729,7 +729,7 @@ fn test_circle_opcode() {
 #[test]
 fn test_scroll_opcode() {
     let source = "LDI r0, 0\nLDI r1, 10\nLDI r2, 0xFFFFFF\nPSET r0,r1,r2\nLDI r3, 5\nSCROLL r3\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100_000 { if !vm.step() { break; } }
@@ -748,7 +748,7 @@ fn test_frame_opcode() {
     // Program: fill red, FRAME, fill blue, HALT
     // After FRAME, frame_ready should be set; after running to HALT, screen is blue
     let source = "LDI r1, 0xFF0000\nFILL r1\nFRAME\nLDI r1, 0x0000FF\nFILL r1\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     vm.pc = 0;
@@ -773,7 +773,7 @@ fn test_frame_opcode() {
 #[test]
 fn test_neg_opcode() {
     let source = "LDI r1, 5\nNEG r1\nLDI r2, 3\nADD r2, r1\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..10_000 { if !vm.step() { break; } }
@@ -786,7 +786,7 @@ fn test_neg_opcode() {
 #[test]
 fn test_ikey_opcode() {
     let source = "IKEY r1\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     // Simulate key press: write ASCII 'A' (65) to keyboard port
@@ -802,7 +802,7 @@ fn test_ikey_opcode() {
 #[test]
 fn test_rand_opcode() {
     let source = "RAND r1\nRAND r2\nRAND r3\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -831,7 +831,7 @@ fn test_breakpoint_halts_at_correct_address() {
     // Assemble a simple program: LDI r1, 42 / LDI r2, 99 / HALT
     // Set breakpoint at address of LDI r2, 99 (second instruction)
     let source = "LDI r1, 42\nLDI r2, 99\nHALT";
-    let asm = assemble(source, 0x1000).unwrap();
+    let asm = assemble(source, 0x1000).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
     vm.pc = 0x1000;
@@ -863,7 +863,7 @@ fn test_breakpoint_halts_at_correct_address() {
 fn test_breakpoint_can_be_toggled() {
     // Set breakpoint, verify it fires, remove it, verify it doesn't fire again
     let source = "LDI r1, 1\nLDI r2, 2\nLDI r3, 3\nHALT";
-    let asm = assemble(source, 0x1000).unwrap();
+    let asm = assemble(source, 0x1000).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
     vm.pc = 0x1000;
@@ -901,7 +901,7 @@ fn test_breakpoint_can_be_toggled() {
 fn test_breakpoint_not_hit_if_address_skipped() {
     // Set breakpoint at an address that the program never reaches
     let source = "LDI r1, 10\nHALT";
-    let asm = assemble(source, 0x1000).unwrap();
+    let asm = assemble(source, 0x1000).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
     vm.pc = 0x1000;
@@ -920,7 +920,7 @@ fn test_breakpoint_not_hit_if_address_skipped() {
 fn test_multiple_breakpoints() {
     // Set breakpoints at multiple addresses, verify each fires
     let source = "LDI r1, 1\nLDI r2, 2\nLDI r3, 3\nLDI r4, 4\nHALT";
-    let asm = assemble(source, 0x1000).unwrap();
+    let asm = assemble(source, 0x1000).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
     vm.pc = 0x1000;
@@ -1312,7 +1312,7 @@ fn test_asm_opcode_basic() {
         vm.ram[0x0800 + i] = byte as u32;
     }
     vm.ram[0x0800 + source.len()] = 0;
-    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0).unwrap();
+    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0).expect("assembly should succeed");
     for (i, &word) in prog.pixels.iter().enumerate() {
         vm.ram[i] = word;
     }
@@ -1336,7 +1336,7 @@ fn test_asm_opcode_error() {
         vm.ram[0x0800 + i] = byte as u32;
     }
     vm.ram[0x0800 + source.len()] = 0;
-    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0).unwrap();
+    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0).expect("assembly should succeed");
     for (i, &word) in prog.pixels.iter().enumerate() {
         vm.ram[i] = word;
     }
@@ -1366,7 +1366,7 @@ fn test_self_host_runs() {
 #[test]
 fn test_cmp_opcode_equal() {
     let source = "LDI r1, 42\nLDI r2, 42\nCMP r1, r2\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1377,7 +1377,7 @@ fn test_cmp_opcode_equal() {
 #[test]
 fn test_cmp_opcode_less_than() {
     let source = "LDI r1, 10\nLDI r2, 20\nCMP r1, r2\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1388,7 +1388,7 @@ fn test_cmp_opcode_less_than() {
 #[test]
 fn test_cmp_opcode_greater_than() {
     let source = "LDI r1, 30\nLDI r2, 20\nCMP r1, r2\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1401,7 +1401,7 @@ fn test_blt_opcode() {
     let source = "\
 LDI r1, 10\nLDI r2, 20\nCMP r1, r2\nBLT r0, less\nLDI r3, 99\nHALT\n\
 less:\nLDI r3, 42\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1414,7 +1414,7 @@ fn test_bge_opcode() {
     let source = "\
 LDI r1, 20\nLDI r2, 10\nCMP r1, r2\nBGE r0, geq\nLDI r3, 99\nHALT\n\
 geq:\nLDI r3, 42\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1427,7 +1427,7 @@ geq:\nLDI r3, 42\nHALT";
 #[test]
 fn test_mod_opcode() {
     let source = "LDI r1, 17\nLDI r2, 5\nMOD r1, r2\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1438,7 +1438,7 @@ fn test_mod_opcode() {
 #[test]
 fn test_mod_opcode_zero_divisor() {
     let source = "LDI r1, 10\nLDI r2, 0\nMOD r1, r2\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1454,7 +1454,7 @@ fn test_beep_opcode() {
     // BEEP freq_reg, dur_reg -- set up freq in r1, dur in r2
     // We test that the VM doesn't crash and advances past BEEP
     let source = "LDI r1, 440\nLDI r2, 50\nBEEP r1, r2\nLDI r3, 1\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1553,8 +1553,8 @@ fn test_scroll_demo_program() {
 #[test]
 fn test_painter_program() {
     // Painter writes a signature to RAM
-    let source = std::fs::read_to_string("programs/painter.asm").unwrap();
-    let asm = assemble(&source, 0).unwrap();
+    let source = std::fs::read_to_string("programs/painter.asm").expect("filesystem operation failed");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     // Run for enough steps to do initial RAM writes
@@ -1622,7 +1622,7 @@ fn test_sar_opcode() {
     // SAR rd, rs
     // Test negative: -4 (0xFFFFFFFC) >> 1 = -2 (0xFFFFFFFE)
     let source = "LDI r1, 0xFFFFFFFC\nLDI r2, 1\nSAR r1, r2\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1631,7 +1631,7 @@ fn test_sar_opcode() {
 
     // Test positive: 4 >> 1 = 2
     let source = "LDI r1, 4\nLDI r2, 1\nSAR r1, r2\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1687,7 +1687,7 @@ fn test_tilemap_opcode() {
         HALT
     ";
     
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..1000 { if !vm.step() { break; } }
@@ -1718,7 +1718,7 @@ fn test_spawn_creates_child_process() {
     LDI r0, 42
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1749,7 +1749,7 @@ fn test_spawn_max_processes() {
     }
     source.push_str(".org 0x300\nHALT\n");
 
-    let asm = assemble(&source, 0).unwrap();
+    let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..1000 { if !vm.step() { break; } }
@@ -1774,7 +1774,7 @@ fn test_kill_halts_child_process() {
     FRAME
     JMP 0x200
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -1805,7 +1805,7 @@ fn test_step_all_processes() {
     PSETI 20, 20, 0x00FF00
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     // Run main process to completion
@@ -1864,7 +1864,7 @@ fn test_active_process_count() {
 #[test]
 fn test_spawn_assembles() {
     let source = "SPAWN r1\nKILL r2\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     // SPAWN r1 = 0x4D, r1
     assert_eq!(asm.pixels[0], 0x4D);
     assert_eq!(asm.pixels[1], 1); // r1
@@ -1889,12 +1889,12 @@ fn test_cow_fork_shares_physical_pages() {
     .org 0x1000
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
 
-    let pd = vm.processes[0].page_dir.as_ref().unwrap();
+    let pd = vm.processes[0].page_dir.as_ref().expect("operation should succeed");
     // With COW, child's virtual page 0 maps to parent's physical page 4 (0x1000/1024=4)
     assert_eq!(pd[0], 4, "child vpage 0 should share parent's phys page 4");
     assert_eq!(pd[1], 5, "child vpage 1 should share parent's phys page 5");
@@ -1920,7 +1920,7 @@ fn test_cow_write_triggers_page_copy() {
     STORE r0, r2
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -1928,7 +1928,7 @@ fn test_cow_write_triggers_page_copy() {
     for _ in 0..100 { if !vm.step() { break; } }
     assert_eq!(vm.processes.len(), 1);
 
-    let pd_before = vm.processes[0].page_dir.as_ref().unwrap().clone();
+    let pd_before = vm.processes[0].page_dir.as_ref().expect("operation should succeed").clone();
     let shared_phys_page = pd_before[0]; // vpage 0 -> phys page 4 (0x1000/1024=4)
 
     // Run child to completion
@@ -1937,7 +1937,7 @@ fn test_cow_write_triggers_page_copy() {
         if vm.processes.iter().all(|p| p.is_halted()) { break; }
     }
 
-    let pd_after = vm.processes[0].page_dir.as_ref().unwrap();
+    let pd_after = vm.processes[0].page_dir.as_ref().expect("operation should succeed");
     // After writing to vpage 0 (STORE r0, r2 where r0=0, virtual addr 0 -> vpage 0),
     // the child should have a NEW private physical page (COW resolved)
     assert_ne!(pd_after[0], shared_phys_page,
@@ -1963,7 +1963,7 @@ fn test_cow_isolation_between_children() {
     STORE r0, r2
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -1980,8 +1980,8 @@ fn test_cow_isolation_between_children() {
     assert!(!vm.processes[0].segfaulted, "child 1 should not segfault");
     assert!(!vm.processes[1].segfaulted, "child 2 should not segfault");
 
-    let pd1 = vm.processes[0].page_dir.as_ref().unwrap();
-    let pd2 = vm.processes[1].page_dir.as_ref().unwrap();
+    let pd1 = vm.processes[0].page_dir.as_ref().expect("operation should succeed");
+    let pd2 = vm.processes[1].page_dir.as_ref().expect("operation should succeed");
 
     // After COW resolution, children should have DIFFERENT physical pages
     // (they both wrote to the same shared page, triggering separate copies)
@@ -2002,13 +2002,13 @@ fn test_cow_read_does_not_trigger_copy() {
     LOAD r2, r0
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
     for _ in 0..100 { if !vm.step() { break; } }
 
-    let pd_before = vm.processes[0].page_dir.as_ref().unwrap().clone();
+    let pd_before = vm.processes[0].page_dir.as_ref().expect("operation should succeed").clone();
 
     // Run child (only reads, no writes)
     for _ in 0..100 {
@@ -2016,7 +2016,7 @@ fn test_cow_read_does_not_trigger_copy() {
         if vm.processes.iter().all(|p| p.is_halted()) { break; }
     }
 
-    let pd_after = vm.processes[0].page_dir.as_ref().unwrap();
+    let pd_after = vm.processes[0].page_dir.as_ref().expect("operation should succeed");
     // Page mapping should be unchanged (no COW resolution for reads)
     assert_eq!(pd_after[0], pd_before[0],
         "read-only child should still share the same physical page");
@@ -2036,7 +2036,7 @@ fn test_cow_kill_decrements_ref_count() {
     .org 0x1000
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -2162,7 +2162,7 @@ child_loop:
     STORE r0, r2
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -2195,7 +2195,7 @@ fn test_peek_reads_screen_pixel() {
     PEEK r1, r2, r4
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -2215,7 +2215,7 @@ fn test_peek_out_of_bounds_returns_zero() {
     PEEK r1, r2, r4
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..100 { if !vm.step() { break; } }
@@ -2274,7 +2274,7 @@ wall_done:
     PEEK r6, r7, r9
     HALT
     ";
-    let asm = assemble(source2, 0).unwrap();
+    let asm = assemble(source2, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     for _ in 0..10000 { if !vm.step() { break; } }
@@ -2288,7 +2288,7 @@ wall_done:
 #[test]
 fn test_peek_assembles() {
     let source = "PEEK r1, r2, r3\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     // PEEK should compile to 0x4F, 1, 2, 3
     assert_eq!(asm.pixels[0], 0x4F);
     assert_eq!(asm.pixels[1], 1);
@@ -2349,7 +2349,7 @@ fn test_cpu_mode_flag_user_and_kernel() {
 #[test]
 fn test_syscall_assembles() {
     let source = "SYSCALL 0\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     assert_eq!(asm.pixels[0], 0x52, "SYSCALL opcode should be 0x52");
     assert_eq!(asm.pixels[1], 0, "syscall number should be 0");
 }
@@ -2357,7 +2357,7 @@ fn test_syscall_assembles() {
 #[test]
 fn test_retk_assembles() {
     let source = "RETK\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     assert_eq!(asm.pixels[0], 0x53, "RETK opcode should be 0x53");
 }
 
@@ -2580,7 +2580,7 @@ fn test_spawned_process_inherits_user_mode() {
     SPAWN r1
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -2662,7 +2662,7 @@ fn test_child_segfaults_on_unmapped_store() {
     STORE r0, r2
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -2696,7 +2696,7 @@ fn test_child_segfaults_on_unmapped_load() {
     LOAD r2, r0
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -2725,7 +2725,7 @@ fn test_child_segfaults_on_unmapped_fetch() {
     .org 0x200
     JMP 0x1000
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -2767,7 +2767,7 @@ fn test_process_memory_isolation() {
     STORE r0, r2
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -2814,7 +2814,7 @@ fn test_kernel_mode_identity_mapping() {
     LOAD r3, r1
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     assert_eq!(vm.mode, geometry_os::vm::CpuMode::Kernel, "VM should start in kernel mode");
@@ -2846,7 +2846,7 @@ fn test_kill_frees_physical_pages() {
     .org 0x300
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -2875,7 +2875,7 @@ fn test_child_user_mode_blocks_hardware_port_write() {
     STORE r0, r2
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -2905,7 +2905,7 @@ fn test_child_can_access_shared_window_bounds() {
     LOAD r2, r0
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     // Write something at 0xF00 for the child to read
@@ -2935,7 +2935,7 @@ fn test_child_page_directory_has_shared_regions_mapped() {
     .org 0x200
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -2979,7 +2979,7 @@ fn test_segfault_pid_tracking() {
     .org 0x300
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
 
@@ -3005,7 +3005,7 @@ fn test_segfault_pid_tracking() {
 
 /// Helper: create a VM with a temp VFS directory for file tests
 fn vm_with_vfs() -> (Vm, tempfile::TempDir) {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("operation should succeed");
     let mut vm = Vm::new();
     vm.vfs.base_dir = dir.path().to_path_buf();
     let _ = std::fs::create_dir_all(&vm.vfs.base_dir);
@@ -3164,8 +3164,8 @@ fn test_ls_opcode() {
     let (mut vm, _dir) = vm_with_vfs();
 
     // Create some files in the VFS directory
-    std::fs::write(vm.vfs.base_dir.join("aaa.txt"), b"").unwrap();
-    std::fs::write(vm.vfs.base_dir.join("bbb.txt"), b"").unwrap();
+    std::fs::write(vm.vfs.base_dir.join("aaa.txt"), b"").expect("filesystem operation failed");
+    std::fs::write(vm.vfs.base_dir.join("bbb.txt"), b"").expect("filesystem operation failed");
 
     vm.regs[1] = 0x2000; // buffer for listing
 
@@ -3252,7 +3252,7 @@ fn test_cat_asm_reads_and_displays_file() {
     let (mut vm, _dir) = vm_with_vfs();
 
     // Create hello.txt in the VFS directory
-    std::fs::write(vm.vfs.base_dir.join("hello.txt"), b"Hello from file!").unwrap();
+    std::fs::write(vm.vfs.base_dir.join("hello.txt"), b"Hello from file!").expect("filesystem operation failed");
 
     use geometry_os::assembler::assemble;
     let source = std::fs::read_to_string("programs/cat.asm")
@@ -3328,7 +3328,7 @@ fn test_scheduler_basic_child_execution() {
     STORE r1, r2
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -3378,7 +3378,7 @@ fn test_yield_forfeits_time_slice() {
     YIELD
     JMP 0x21C
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -3421,7 +3421,7 @@ fn test_sleep_skips_process_until_wake() {
     SLEEP r5
     JMP 0x200
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -3479,7 +3479,7 @@ fn test_priority_quantum_allocation() {
     STORE r1, r2
     JMP 0x300
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -3544,7 +3544,7 @@ fn test_setpriority_changes_priority() {
     SETPRIORITY r6
     JMP 0x200
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -3570,7 +3570,7 @@ fn test_scheduler_tick_increments() {
     let mut vm = Vm::new();
     let initial_tick = vm.sched_tick;
     let source = ".org 0x200\nHALT\n";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
@@ -3599,7 +3599,7 @@ fn test_sleep_wakes_and_halts() {
     SLEEP r5
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -3645,7 +3645,7 @@ fn test_priority_execution_order() {
     STORE r1, r2
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -3714,7 +3714,7 @@ fn test_priority_higher_gets_more_instructions() {
     STORE r1, r2
     JMP 0x300
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -3768,7 +3768,7 @@ fn test_pipe_create_opcode() {
     PIPE r5, r6
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -3788,7 +3788,7 @@ fn test_pipe_create_multiple() {
     PIPE r7, r8
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -4060,7 +4060,7 @@ fn test_blocked_process_skipped_by_scheduler() {
     STORE r1, r2
     JMP 0x200
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -4136,7 +4136,7 @@ fn test_pipe_assembles() {
     ";
     let result = assemble(source, 0);
     assert!(result.is_ok(), "PIPE/MSGSND/MSGRCV should assemble");
-    let bc = &result.unwrap().pixels;
+    let bc = &result.expect("operation should succeed").pixels;
     assert_eq!(bc[0], 0x5D, "PIPE opcode");
     assert_eq!(bc[1], 5,  "PIPE read reg");
     assert_eq!(bc[2], 6,  "PIPE write reg");
@@ -4154,7 +4154,7 @@ fn test_pipe_close_marks_dead() {
     CLOSE r5
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         vm.ram[i] = v;
@@ -4198,7 +4198,7 @@ fn test_ioctl_assembles() {
     ";
     let result = assemble(source, 0);
     assert!(result.is_ok(), "IOCTL should assemble: {:?}", result.err());
-    let bc = &result.unwrap().pixels;
+    let bc = &result.expect("operation should succeed").pixels;
     assert_eq!(bc[0], 0x62, "IOCTL opcode should be 0x62");
     assert_eq!(bc[1], 1, "fd_reg");
     assert_eq!(bc[2], 2, "cmd_reg");
@@ -4516,7 +4516,7 @@ fn test_write_device_audio() {
     vm.step();
     assert_eq!(vm.regs[0], 2, "WRITE audio should return 2");
     assert!(vm.beep.is_some(), "beep should be set");
-    let (freq, dur) = vm.beep.unwrap();
+    let (freq, dur) = vm.beep.expect("operation should succeed");
     assert_eq!(freq, 440);
     assert_eq!(dur, 100);
 }
@@ -4681,7 +4681,7 @@ fn test_device_write_audio_beep() {
     vm.step();
     assert_eq!(vm.regs[0], 2, "WRITE should return 2 words written");
     assert!(vm.beep.is_some(), "Beep should be triggered");
-    let (freq, dur) = vm.beep.unwrap();
+    let (freq, dur) = vm.beep.expect("operation should succeed");
     assert_eq!(freq, 440);
     assert_eq!(dur, 100);
 }
@@ -4773,7 +4773,7 @@ fn test_getpid_assembles() {
     ";
     let result = assemble(source, 0);
     assert!(result.is_ok(), "GETPID should assemble: {:?}", result.err());
-    let bc = &result.unwrap().pixels;
+    let bc = &result.expect("operation should succeed").pixels;
     assert_eq!(bc[0], 0x65, "GETPID opcode should be 0x65");
 }
 
@@ -4829,7 +4829,7 @@ fn test_getenv_assembles() {
     ";
     let result = assemble(source, 0);
     assert!(result.is_ok(), "GETENV should assemble: {:?}", result.err());
-    let bc = &result.unwrap().pixels;
+    let bc = &result.expect("operation should succeed").pixels;
     assert_eq!(bc[0], 0x63, "GETENV opcode should be 0x63");
     assert_eq!(bc[1], 1, "key_reg");
     assert_eq!(bc[2], 2, "val_reg");
@@ -4843,7 +4843,7 @@ fn test_setenv_assembles() {
     ";
     let result = assemble(source, 0);
     assert!(result.is_ok(), "SETENV should assemble: {:?}", result.err());
-    let bc = &result.unwrap().pixels;
+    let bc = &result.expect("operation should succeed").pixels;
     assert_eq!(bc[0], 0x64, "SETENV opcode should be 0x64");
     assert_eq!(bc[1], 1, "key_reg");
     assert_eq!(bc[2], 2, "val_reg");
@@ -5231,7 +5231,7 @@ fn test_shell_assembles() {
 #[test]
 fn test_readln_waitpid_assembler_entries() {
     let src = "READLN r0, r1, r2\nWAITPID r3\nHALT";
-    let result = assemble(src, 0).unwrap();
+    let result = assemble(src, 0).expect("assembly should succeed");
     assert_eq!(result.pixels[0], 0x68, "READLN opcode");
     assert_eq!(result.pixels[4], 0x69, "WAITPID opcode");
     assert_eq!(result.pixels[6], 0x00, "HALT opcode");
@@ -5255,7 +5255,7 @@ fn test_chdir_sets_cwd() {
     vm.step();
     assert_eq!(vm.regs[0], 0, "CHDIR should return 0 on success");
     assert_eq!(
-        vm.env_vars.get("CWD").unwrap(),
+        vm.env_vars.get("CWD").expect("map entry should exist"),
         "/home",
         "CHDIR should set CWD env var"
     );
@@ -5297,7 +5297,7 @@ fn test_getcwd_default_root() {
 #[test]
 fn test_execp_assembles() {
     let src = "EXECP r0, r1, r2\nHALT";
-    let result = assemble(src, 0).unwrap();
+    let result = assemble(src, 0).expect("assembly should succeed");
     assert_eq!(result.pixels[0], 0x6A, "EXECP opcode");
     assert_eq!(result.pixels[1], 0, "path reg");
     assert_eq!(result.pixels[2], 1, "stdin_fd reg");
@@ -5309,7 +5309,7 @@ fn test_execp_assembles() {
 #[test]
 fn test_chdir_getcwd_assembles() {
     let src = "CHDIR r0\nGETCWD r1\nHALT";
-    let result = assemble(src, 0).unwrap();
+    let result = assemble(src, 0).expect("assembly should succeed");
     assert_eq!(result.pixels[0], 0x6B, "CHDIR opcode");
     assert_eq!(result.pixels[1], 0, "path reg");
     assert_eq!(result.pixels[2], 0x6C, "GETCWD opcode");
@@ -5401,7 +5401,7 @@ fn test_shutdown_kills_child_processes() {
     SLEEP r9
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     vm.pc = 0;
@@ -5422,7 +5422,7 @@ fn test_shutdown_kills_child_processes() {
 #[test]
 fn test_shutdown_assembles() {
     let source = "SHUTDOWN\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     assert_eq!(asm.pixels[0], 0x6E, "SHUTDOWN should assemble to 0x6E");
 }
 
@@ -5467,7 +5467,7 @@ fn test_screenp_out_of_bounds_returns_zero() {
 #[test]
 fn test_screenp_assembles() {
     let source = "SCREENP r0, r1, r2\nHALT";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     assert_eq!(asm.pixels[0], 0x6D, "SCREENP should assemble to 0x6D");
     assert_eq!(asm.pixels[1], 0, "dest register should be r0");
     assert_eq!(asm.pixels[2], 1, "x register should be r1");
@@ -5553,7 +5553,7 @@ fn test_shutdown_clears_pipes() {
     SHUTDOWN
     HALT
     ";
-    let asm = assemble(source, 0).unwrap();
+    let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
     vm.pc = 0;
@@ -5574,7 +5574,7 @@ fn test_hypervisor_assembler() {
     let source = "HYPERVISOR r0";
     let result = assemble(source, 0);
     assert!(result.is_ok(), "HYPERVISOR should assemble");
-    let asm = result.unwrap();
+    let asm = result.expect("operation should succeed");
     assert_eq!(asm.pixels[0], 0x72, "HYPERVISOR opcode should be 0x72");
     assert_eq!(asm.pixels[1], 0, "operand should be r0");
 }
@@ -5594,8 +5594,8 @@ fn test_hypervisor_sets_flag_and_config() {
     let mut vm = Vm::new();
     // Create a temp kernel file so the validation passes
     let kernel_path = std::env::temp_dir().join("geometry_os_test_Image");
-    std::fs::write(&kernel_path, b"fake kernel").unwrap();
-    let kernel_name = kernel_path.to_str().unwrap();
+    std::fs::write(&kernel_path, b"fake kernel").expect("filesystem operation failed");
+    let kernel_name = kernel_path.to_str().expect("path should be valid UTF-8");
     let config_str = format!("arch=riscv64 kernel={} ram=256M", kernel_name);
     // Write config string to RAM at address 0x1000
     let config = config_str.as_bytes();
@@ -5818,7 +5818,7 @@ fn test_qemu_boot_riscv_linux() {
     let qemu_check = std::process::Command::new("which")
         .arg("qemu-system-riscv64")
         .output();
-    if qemu_check.is_err() || !qemu_check.unwrap().status.success() {
+    if qemu_check.is_err() || !qemu_check.expect("operation should succeed").status.success() {
         eprintln!("SKIP: qemu-system-riscv64 not found in PATH");
         return;
     }
@@ -5836,7 +5836,7 @@ fn test_qemu_boot_riscv_linux() {
     assert!(parsed.is_ok(), "config should parse: {:?}", parsed.err());
 
     // Build command (don't spawn yet, just verify it builds)
-    let cmd_result = parsed.unwrap().build_command();
+    let cmd_result = parsed.expect("command build should succeed").build_command();
     assert!(cmd_result.is_ok(), "command should build: {:?}", cmd_result.err());
 
     // Spawn QEMU
@@ -5846,7 +5846,7 @@ fn test_qemu_boot_riscv_linux() {
         eprintln!("SKIP: QEMU spawn failed: {:?}", bridge.err());
         return;
     }
-    let mut bridge = bridge.unwrap();
+    let mut bridge = bridge.expect("operation should succeed");
 
     // Read output for up to 30 seconds, checking for Linux boot output
     let mut canvas_buffer = vec![0u32; 32 * 128];
@@ -5891,7 +5891,7 @@ fn test_qemu_boot_riscv_linux() {
 #[test]
 fn test_texti_renders_inline_string() {
     let src = "TEXTI 10, 20, \"Hi!\"\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -5916,7 +5916,7 @@ fn test_texti_renders_inline_string() {
 #[test]
 fn test_stro_stores_string_to_ram() {
     let src = "LDI r9, 0x2000\nSTRO r9, \"ABC\"\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -5933,7 +5933,7 @@ fn test_stro_stores_string_to_ram() {
 #[test]
 fn test_cmpi_less() {
     let src = "LDI r5, 10\nCMPI r5, 20\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -5947,7 +5947,7 @@ fn test_cmpi_less() {
 #[test]
 fn test_cmpi_equal() {
     let src = "LDI r5, 42\nCMPI r5, 42\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -5961,7 +5961,7 @@ fn test_cmpi_equal() {
 #[test]
 fn test_cmpi_greater() {
     let src = "LDI r5, 100\nCMPI r5, 50\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -5975,7 +5975,7 @@ fn test_cmpi_greater() {
 #[test]
 fn test_cmpi_with_blt() {
     let src = "LDI r5, 5\nloop:\n  ADDI r5, 1\n  CMPI r5, 10\n  BLT r0, loop\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -5990,7 +5990,7 @@ fn test_cmpi_with_blt() {
 #[test]
 fn test_addi() {
     let src = "LDI r1, 10\nADDI r1, 5\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -6004,7 +6004,7 @@ fn test_addi() {
 #[test]
 fn test_subi() {
     let src = "LDI r1, 100\nSUBI r1, 30\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -6018,7 +6018,7 @@ fn test_subi() {
 #[test]
 fn test_shli() {
     let src = "LDI r1, 3\nSHLI r1, 4\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -6032,7 +6032,7 @@ fn test_shli() {
 #[test]
 fn test_shri() {
     let src = "LDI r1, 0xFF\nSHRI r1, 4\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -6046,7 +6046,7 @@ fn test_shri() {
 #[test]
 fn test_andi() {
     let src = "LDI r1, 0xAB\nANDI r1, 0x0F\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -6060,7 +6060,7 @@ fn test_andi() {
 #[test]
 fn test_ori() {
     let src = "LDI r1, 0xF0\nORI r1, 0x0F\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -6074,7 +6074,7 @@ fn test_ori() {
 #[test]
 fn test_xori() {
     let src = "LDI r1, 0xFF\nXORI r1, 0x0F\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -6089,7 +6089,7 @@ fn test_xori() {
 fn test_loads_stores() {
     // Store a value at SP+0, then load it back into another register
     let src = "LDI r30, 0xFF00\nLDI r1, 42\nSTORES 0, r1\nLOADS r2, 0\nHALT";
-    let asm = assemble(src, 0).unwrap();
+    let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = w; }
@@ -6115,7 +6115,7 @@ fn test_phase48_registers_preserved_across_runnext() {
     // Bootstrap: ASMSELF then RUNNEXT
     let bootstrap = "ASMSELF\nRUNNEXT\n";
 
-    let boot_asm = assemble(bootstrap, 0).unwrap();
+    let boot_asm = assemble(bootstrap, 0).expect("assembly should succeed");
 
     let mut vm = Vm::new();
 
@@ -6156,9 +6156,9 @@ fn test_phase48_registers_preserved_across_runnext() {
 fn test_hello_texti_vs_original() {
     // TEXTI hello vs original hello -- TEXTI should be much smaller
     let src_texti = "TEXTI 90, 120, \"Hello, World!\"\nHALT";
-    let texti_asm = assemble(src_texti, 0).unwrap();
-    let src_original = std::fs::read_to_string("programs/hello.asm").unwrap();
-    let original_asm = assemble(&src_original, 0).unwrap();
+    let texti_asm = assemble(src_texti, 0).expect("assembly should succeed");
+    let src_original = std::fs::read_to_string("programs/hello.asm").expect("filesystem operation failed");
+    let original_asm = assemble(&src_original, 0).expect("assembly should succeed");
     // TEXTI version should be much smaller
     assert!(texti_asm.pixels.len() < original_asm.pixels.len() / 4,
         "TEXTI hello ({} words) should be < 1/4 of original ({} words)",
@@ -6302,8 +6302,6 @@ fn test_register_dashboard() {
     }
 }
 
-#[test]
-
 // === Living Map (stateful world + simulated creatures) ===
 
 #[test]
@@ -6315,8 +6313,8 @@ fn test_living_map_assembles() {
 
 #[test]
 fn test_living_map_runs() {
-    let source = std::fs::read_to_string("programs/living_map.asm").unwrap();
-    let asm = assemble(&source, 0).unwrap();
+    let source = std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = v; }
@@ -6344,8 +6342,8 @@ fn test_living_map_runs() {
 
 #[test]
 fn test_living_map_draws_terrain() {
-    let source = std::fs::read_to_string("programs/living_map.asm").unwrap();
-    let asm = assemble(&source, 0).unwrap();
+    let source = std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = v; }
@@ -6367,8 +6365,8 @@ fn test_living_map_draws_terrain() {
 
 #[test]
 fn test_living_map_draws_player() {
-    let source = std::fs::read_to_string("programs/living_map.asm").unwrap();
-    let asm = assemble(&source, 0).unwrap();
+    let source = std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = v; }
@@ -6391,8 +6389,8 @@ fn test_living_map_draws_player() {
 
 #[test]
 fn test_living_map_footstep_trail() {
-    let source = std::fs::read_to_string("programs/living_map.asm").unwrap();
-    let asm = assemble(&source, 0).unwrap();
+    let source = std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() { vm.ram[i] = v; }

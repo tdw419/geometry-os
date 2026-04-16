@@ -472,30 +472,30 @@ mod tests {
     #[test]
     fn bus_ram_read_write() {
         let mut bus = Bus::new(0x8000_0000, 4096);
-        bus.write_word(0x8000_0000, 0xDEAD_BEEF).unwrap();
-        assert_eq!(bus.read_word(0x8000_0000).unwrap(), 0xDEAD_BEEF);
+        bus.write_word(0x8000_0000, 0xDEAD_BEEF).expect("operation should succeed");
+        assert_eq!(bus.read_word(0x8000_0000).expect("operation should succeed"), 0xDEAD_BEEF);
     }
 
     #[test]
     fn bus_ram_base_zero_read_write() {
         // With ram_base=0, all physical addresses map directly to RAM
         let mut bus = Bus::new(0, 4096);
-        bus.write_word(0x0000_0000, 0xDEAD_BEEF).unwrap();
-        assert_eq!(bus.read_word(0x0000_0000).unwrap(), 0xDEAD_BEEF);
+        bus.write_word(0x0000_0000, 0xDEAD_BEEF).expect("operation should succeed");
+        assert_eq!(bus.read_word(0x0000_0000).expect("operation should succeed"), 0xDEAD_BEEF);
     }
 
     #[test]
     fn bus_clint_mmio_mtimecmp() {
         let mut bus = Bus::new(0x8000_0000, 4096);
-        bus.write_word(clint::MTIMECMP_BASE, 0x0000_0100).unwrap();
-        assert_eq!(bus.read_word(clint::MTIMECMP_BASE).unwrap(), 0x0000_0100);
+        bus.write_word(clint::MTIMECMP_BASE, 0x0000_0100).expect("operation should succeed");
+        assert_eq!(bus.read_word(clint::MTIMECMP_BASE).expect("operation should succeed"), 0x0000_0100);
     }
 
     #[test]
     fn bus_clint_msip() {
         let mut bus = Bus::new(0x8000_0000, 4096);
-        bus.write_word(clint::MSIP_BASE, 1).unwrap();
-        assert_eq!(bus.read_word(clint::MSIP_BASE).unwrap(), 1);
+        bus.write_word(clint::MSIP_BASE, 1).expect("operation should succeed");
+        assert_eq!(bus.read_word(clint::MSIP_BASE).expect("operation should succeed"), 1);
         assert!(bus.clint.software_pending());
     }
 
@@ -530,7 +530,7 @@ mod tests {
     fn bus_out_of_range_fails() {
         let mut bus = Bus::new(0x8000_0000, 4096);
         // Low addresses return 0 (unmapped below ram_base)
-        assert_eq!(bus.read_word(0x0000_0000).unwrap(), 0);
+        assert_eq!(bus.read_word(0x0000_0000).expect("operation should succeed"), 0);
         assert!(bus.read_word(0x0200_1000).is_err()); // CLINT gap
     }
 
@@ -557,10 +557,10 @@ mod tests {
         // PTE format: V=1, R=1, W=1, X=0, A=1, D=1 = 0x07, PPN = 0xC0000
         // PPN bits [31:10], so val = (0xC0000 << 10) | 0x07 = 0x30000007
         let virtual_pte: u32 = (0xC0000 << 10) | 0x07; // 0x30000007
-        bus.write_word(pt_page, virtual_pte).unwrap();
+        bus.write_word(pt_page, virtual_pte).expect("operation should succeed");
 
         // The intercept should have fixed it: PPN 0xC0000 -> 0x00000
-        let stored = bus.read_word(pt_page).unwrap();
+        let stored = bus.read_word(pt_page).expect("operation should succeed");
         let expected: u32 = (0x00000 << 10) | 0x07; // 0x00000007
         assert_eq!(stored, expected,
             "Virtual PTE 0x{:08X} should be fixed to 0x{:08X}, got 0x{:08X}",
@@ -575,8 +575,8 @@ mod tests {
         bus.known_pt_pages.insert(0x1000);
 
         // Write to a non-registered page
-        bus.write_word(0x2000, 0xDEADBEEF).unwrap();
-        assert_eq!(bus.read_word(0x2000).unwrap(), 0xDEADBEEF);
+        bus.write_word(0x2000, 0xDEADBEEF).expect("operation should succeed");
+        assert_eq!(bus.read_word(0x2000).expect("operation should succeed"), 0xDEADBEEF);
     }
 
     #[test]
@@ -591,7 +591,7 @@ mod tests {
         // Write a non-leaf PTE pointing to L2 at PA 0x2000
         // Non-leaf: V=1, R=0, W=0, X=0 = 0x01, PPN = 0x2 (PA 0x2000)
         let non_leaf_pte: u32 = (2u32 << 10) | 0x01; // 0x00000801
-        bus.write_word(l1_page, non_leaf_pte).unwrap();
+        bus.write_word(l1_page, non_leaf_pte).expect("operation should succeed");
 
         // The L2 page should now be registered
         assert!(bus.known_pt_pages.contains(&0x2000),
@@ -599,8 +599,8 @@ mod tests {
 
         // And subsequent writes to the L2 page should be intercepted
         let virtual_l2_pte: u32 = (0xC0001 << 10) | 0x07; // PPN 0xC0001 -> 0x00001
-        bus.write_word(0x2000, virtual_l2_pte).unwrap();
-        let stored = bus.read_word(0x2000).unwrap();
+        bus.write_word(0x2000, virtual_l2_pte).expect("operation should succeed");
+        let stored = bus.read_word(0x2000).expect("operation should succeed");
         let expected: u32 = (0x00001 << 10) | 0x07;
         assert_eq!(stored, expected,
             "Virtual L2 PTE should be fixed to 0x{:08X}, got 0x{:08X}",
@@ -615,8 +615,8 @@ mod tests {
         bus.known_pt_pages.insert(0x1000);
 
         let virtual_pte: u32 = (0xC0000 << 10) | 0x07;
-        bus.write_word(0x1000, virtual_pte).unwrap();
-        assert_eq!(bus.read_word(0x1000).unwrap(), virtual_pte,
+        bus.write_word(0x1000, virtual_pte).expect("operation should succeed");
+        assert_eq!(bus.read_word(0x1000).expect("operation should succeed"), virtual_pte,
             "PTE should NOT be fixed when auto_pte_fixup is false");
     }
 
@@ -628,8 +628,8 @@ mod tests {
         bus.known_pt_pages.insert(0x1000);
 
         let invalid_pte: u32 = (0xC0000 << 10) | 0x00; // V=0
-        bus.write_word(0x1000, invalid_pte).unwrap();
-        assert_eq!(bus.read_word(0x1000).unwrap(), invalid_pte,
+        bus.write_word(0x1000, invalid_pte).expect("operation should succeed");
+        assert_eq!(bus.read_word(0x1000).expect("operation should succeed"), invalid_pte,
             "Invalid PTE (V=0) should pass through unchanged");
     }
 
@@ -641,8 +641,8 @@ mod tests {
         bus.known_pt_pages.insert(0x1000);
 
         let normal_pte: u32 = (0x500 << 10) | 0x07; // PPN 0x500, well below 0xC0000
-        bus.write_word(0x1000, normal_pte).unwrap();
-        assert_eq!(bus.read_word(0x1000).unwrap(), normal_pte,
+        bus.write_word(0x1000, normal_pte).expect("operation should succeed");
+        assert_eq!(bus.read_word(0x1000).expect("operation should succeed"), normal_pte,
             "Low PPN PTE should pass through unchanged");
     }
 }

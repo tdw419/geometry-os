@@ -900,7 +900,7 @@ mod tests {
 
     #[test]
     fn test_config_parse_minimal() {
-        let cfg = QemuConfig::parse("arch=riscv64").unwrap();
+        let cfg = QemuConfig::parse("arch=riscv64").expect("config parse should succeed");
         assert_eq!(cfg.arch, "riscv64");
         assert!(cfg.kernel.is_none());
         assert!(cfg.ram.is_none());
@@ -911,7 +911,7 @@ mod tests {
         let cfg = QemuConfig::parse(
             "arch=x86_64 kernel=bzImage ram=512M disk=rootfs.ext4",
         )
-        .unwrap();
+        .expect("operation should succeed");
         assert_eq!(cfg.arch, "x86_64");
         assert_eq!(cfg.kernel.as_deref(), Some("bzImage"));
         assert_eq!(cfg.ram.as_deref(), Some("512M"));
@@ -920,7 +920,7 @@ mod tests {
 
     #[test]
     fn test_config_parse_memory_alias() {
-        let cfg = QemuConfig::parse("arch=aarch64 memory=1G").unwrap();
+        let cfg = QemuConfig::parse("arch=aarch64 memory=1G").expect("config parse should succeed");
         assert_eq!(cfg.ram.as_deref(), Some("1G"));
     }
 
@@ -929,7 +929,7 @@ mod tests {
         let cfg = QemuConfig::parse(
             "arch=riscv64 kernel=Image initrd=initramfs.cpio.gz append=root=/dev/vda",
         )
-        .unwrap();
+        .expect("operation should succeed");
         assert_eq!(cfg.initrd.as_deref(), Some("initramfs.cpio.gz"));
         assert_eq!(cfg.append.as_deref(), Some("root=/dev/vda"));
     }
@@ -949,7 +949,7 @@ mod tests {
 
     #[test]
     fn test_config_parse_extra_args() {
-        let cfg = QemuConfig::parse("arch=riscv64 custom=foo").unwrap();
+        let cfg = QemuConfig::parse("arch=riscv64 custom=foo").expect("config parse should succeed");
         assert_eq!(cfg.extra_args, vec!["custom=foo"]);
     }
 
@@ -957,28 +957,28 @@ mod tests {
 
     #[test]
     fn test_arch_mapping_riscv64() {
-        let (bin, machine) = arch_to_qemu("riscv64").unwrap();
+        let (bin, machine) = arch_to_qemu("riscv64").expect("arch should be supported");
         assert_eq!(bin, "qemu-system-riscv64");
         assert_eq!(machine, Some("-machine virt"));
     }
 
     #[test]
     fn test_arch_mapping_x86_64() {
-        let (bin, machine) = arch_to_qemu("x86_64").unwrap();
+        let (bin, machine) = arch_to_qemu("x86_64").expect("arch should be supported");
         assert_eq!(bin, "qemu-system-x86_64");
         assert!(machine.is_none());
     }
 
     #[test]
     fn test_arch_mapping_aarch64() {
-        let (bin, machine) = arch_to_qemu("aarch64").unwrap();
+        let (bin, machine) = arch_to_qemu("aarch64").expect("arch should be supported");
         assert_eq!(bin, "qemu-system-aarch64");
         assert_eq!(machine, Some("-machine virt"));
     }
 
     #[test]
     fn test_arch_mapping_mipsel() {
-        let (bin, machine) = arch_to_qemu("mipsel").unwrap();
+        let (bin, machine) = arch_to_qemu("mipsel").expect("arch should be supported");
         assert_eq!(bin, "qemu-system-mipsel");
         assert_eq!(machine, Some("-machine malta"));
     }
@@ -993,8 +993,8 @@ mod tests {
     #[test]
     fn test_build_command_riscv64() {
         let cfg =
-            QemuConfig::parse("arch=riscv64 kernel=Image ram=256M").unwrap();
-        let cmd = cfg.build_command().unwrap();
+            QemuConfig::parse("arch=riscv64 kernel=Image ram=256M").expect("config parse should succeed");
+        let cmd = cfg.build_command().expect("command build should succeed");
         let args: Vec<String> =
             cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
         assert!(args.contains(&"-nographic".to_string()));
@@ -1009,19 +1009,19 @@ mod tests {
 
     #[test]
     fn test_build_command_with_disk() {
-        let cfg = QemuConfig::parse("arch=riscv64 disk=rootfs.ext4").unwrap();
-        let cmd = cfg.build_command().unwrap();
+        let cfg = QemuConfig::parse("arch=riscv64 disk=rootfs.ext4").expect("config parse should succeed");
+        let cmd = cfg.build_command().expect("command build should succeed");
         let args: Vec<String> =
             cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
-        let drive_arg = args.iter().find(|a| a.contains("rootfs.ext4")).unwrap();
+        let drive_arg = args.iter().find(|a| a.contains("rootfs.ext4")).expect("expected element should exist");
         assert!(drive_arg.contains("format=raw"));
         assert!(drive_arg.contains("if=virtio"));
     }
 
     #[test]
     fn test_build_command_with_net_none() {
-        let cfg = QemuConfig::parse("arch=riscv64 net=none").unwrap();
-        let cmd = cfg.build_command().unwrap();
+        let cfg = QemuConfig::parse("arch=riscv64 net=none").expect("config parse should succeed");
+        let cmd = cfg.build_command().expect("command build should succeed");
         let args: Vec<String> =
             cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
         assert!(args.contains(&"none".to_string()));
@@ -1029,7 +1029,7 @@ mod tests {
 
     #[test]
     fn test_build_command_unknown_arch() {
-        let cfg = QemuConfig::parse("arch=invalid_cpu").unwrap();
+        let cfg = QemuConfig::parse("arch=invalid_cpu").expect("config parse should succeed");
         assert!(cfg.build_command().is_err());
     }
 

@@ -496,9 +496,9 @@ mod tests {
         // ELF64 header with a PT_LOAD segment should load successfully.
         let mut bus = Bus::new(0, 8192);
         let img = make_elf64_with_segment(0x1000, 0x1000, &[0x13, 0x00, 0x00, 0x00]);
-        let info = load_elf(&mut bus, &img).unwrap();
+        let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x1000);
-        assert_eq!(bus.read_byte(0x1000).unwrap(), 0x13);
+        assert_eq!(bus.read_byte(0x1000).expect("operation should succeed"), 0x13);
     }
 
     #[test]
@@ -530,11 +530,11 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 8192);
         let data: &[u8] = &[0x13, 0x00, 0x00, 0x00]; // NOP instruction
         let img = make_elf_with_segment(0x8000_0000, 0x8000_0000, data);
-        let info = load_elf(&mut bus, &img).unwrap();
+        let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
         // Verify the data was loaded.
-        assert_eq!(bus.read_byte(0x8000_0000).unwrap(), 0x13);
-        assert_eq!(bus.read_byte(0x8000_0003).unwrap(), 0x00);
+        assert_eq!(bus.read_byte(0x8000_0000).expect("operation should succeed"), 0x13);
+        assert_eq!(bus.read_byte(0x8000_0003).expect("operation should succeed"), 0x00);
     }
 
     #[test]
@@ -575,10 +575,10 @@ mod tests {
         img.extend_from_slice(code);
         img.extend_from_slice(data);
 
-        let info = load_elf(&mut bus, &img).unwrap();
+        let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
-        assert_eq!(bus.read_word(0x8000_0000).unwrap(), 0x0000_0013);
-        assert_eq!(bus.read_word(0x8000_1000).unwrap(), 0xEFBE_ADDE);
+        assert_eq!(bus.read_word(0x8000_0000).expect("operation should succeed"), 0x0000_0013);
+        assert_eq!(bus.read_word(0x8000_1000).expect("operation should succeed"), 0xEFBE_ADDE);
     }
 
     #[test]
@@ -594,9 +594,9 @@ mod tests {
     fn raw_load_at_base() {
         let mut bus = Bus::new(0x8000_0000, 4096);
         let data: &[u8] = &[0x13, 0x01, 0xA0, 0x23]; // some instruction
-        let info = load_raw(&mut bus, data, 0x8000_0000).unwrap();
+        let info = load_raw(&mut bus, data, 0x8000_0000).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
-        assert_eq!(bus.read_byte(0x8000_0000).unwrap(), 0x13);
+        assert_eq!(bus.read_byte(0x8000_0000).expect("operation should succeed"), 0x13);
     }
 
     #[test]
@@ -612,7 +612,7 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 4096);
         let data: &[u8] = &[0x13, 0x00, 0x00, 0x00];
         let img = make_elf_with_segment(0x8000_0000, 0x8000_0000, data);
-        let info = load_auto(&mut bus, &img, 0x8000_0000).unwrap();
+        let info = load_auto(&mut bus, &img, 0x8000_0000).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
     }
 
@@ -620,9 +620,9 @@ mod tests {
     fn auto_detect_raw() {
         let mut bus = Bus::new(0x8000_0000, 4096);
         let data: &[u8] = &[0x13, 0x00, 0x00, 0x00];
-        let info = load_auto(&mut bus, data, 0x8000_0000).unwrap();
+        let info = load_auto(&mut bus, data, 0x8000_0000).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
-        assert_eq!(bus.read_byte(0x8000_0000).unwrap(), 0x13);
+        assert_eq!(bus.read_byte(0x8000_0000).expect("operation should succeed"), 0x13);
     }
 
     #[test]
@@ -652,9 +652,9 @@ mod tests {
         img.extend_from_slice(&phdr_load);
         img.extend_from_slice(data);
 
-        let info = load_elf(&mut bus, &img).unwrap();
+        let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
-        assert_eq!(bus.read_byte(0x8000_0000).unwrap(), 0xAB);
+        assert_eq!(bus.read_byte(0x8000_0000).expect("operation should succeed"), 0xAB);
     }
 
     #[test]
@@ -662,7 +662,7 @@ mod tests {
         let mut bus = Bus::new(0x8000_0000, 8192);
         let data: &[u8] = &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
         let img = make_elf_with_segment(0x8000_0000, 0x8000_0000, data);
-        let info = load_elf(&mut bus, &img).unwrap();
+        let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.highest_addr, 0x8000_0008);
     }
 
@@ -719,10 +719,10 @@ mod tests {
         let mut bus = Bus::new(0, 8192);
         let data: &[u8] = &[0x13, 0x00, 0x00, 0x00]; // NOP
         let img = make_elf64_with_segment(0x1000, 0x1000, data);
-        let info = load_elf(&mut bus, &img).unwrap();
+        let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x1000);
-        assert_eq!(bus.read_byte(0x1000).unwrap(), 0x13);
-        assert_eq!(bus.read_byte(0x1003).unwrap(), 0x00);
+        assert_eq!(bus.read_byte(0x1000).expect("operation should succeed"), 0x13);
+        assert_eq!(bus.read_byte(0x1003).expect("operation should succeed"), 0x00);
         assert_eq!(info.highest_addr, 0x1004);
     }
 
@@ -734,7 +734,7 @@ mod tests {
         let mut img = make_elf64_with_segment(0x8000_0000, 0x1000, data);
         // Overwrite entry with 64-bit value.
         img[24..32].copy_from_slice(&0x1_8000_0000u64.to_le_bytes());
-        let info = load_elf(&mut bus, &img).unwrap();
+        let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000); // truncated
     }
 
@@ -783,9 +783,9 @@ mod tests {
         img.extend_from_slice(code);
         img.extend_from_slice(data);
 
-        let info = load_elf(&mut bus, &img).unwrap();
+        let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x1000);
-        assert_eq!(bus.read_byte(0x1000).unwrap(), 0x13);
-        assert_eq!(bus.read_byte(0x2000).unwrap(), 0xDE);
+        assert_eq!(bus.read_byte(0x1000).expect("operation should succeed"), 0x13);
+        assert_eq!(bus.read_byte(0x2000).expect("operation should succeed"), 0xDE);
     }
 }

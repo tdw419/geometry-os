@@ -310,29 +310,32 @@ fn test_signal_with_custom_handler() {
 }
 
 #[test]
-fn test_exit_assembler() {
+fn test_exit_assembler() -> Result<(), Box<dyn std::error::Error>> {
     let source = "EXIT r5";
-    let result = assemble(source, 0).unwrap();
+    let result = assemble(source, 0)?;
     assert_eq!(result.pixels[0], 0x6F, "EXIT opcode");
     assert_eq!(result.pixels[1], 5, "register r5");
+    Ok(())
 }
 
 #[test]
-fn test_signal_assembler() {
+fn test_signal_assembler() -> Result<(), Box<dyn std::error::Error>> {
     let source = "SIGNAL r3, r7";
-    let result = assemble(source, 0).unwrap();
+    let result = assemble(source, 0)?;
     assert_eq!(result.pixels[0], 0x70, "SIGNAL opcode");
     assert_eq!(result.pixels[1], 3, "pid register r3");
     assert_eq!(result.pixels[2], 7, "sig register r7");
+    Ok(())
 }
 
 #[test]
-fn test_sigset_assembler() {
+fn test_sigset_assembler() -> Result<(), Box<dyn std::error::Error>> {
     let source = "SIGSET r1, r10";
-    let result = assemble(source, 0).unwrap();
+    let result = assemble(source, 0)?;
     assert_eq!(result.pixels[0], 0x71, "SIGSET opcode");
     assert_eq!(result.pixels[1], 1, "sig register r1");
     assert_eq!(result.pixels[2], 10, "handler register r10");
+    Ok(())
 }
 
 #[test]

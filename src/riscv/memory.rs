@@ -133,15 +133,15 @@ mod tests {
         mem.ram[1] = 0x56;
         mem.ram[2] = 0x34;
         mem.ram[3] = 0x12;
-        let val = mem.read_word(0x8000_0000).unwrap();
+        let val = mem.read_word(0x8000_0000).expect("operation should succeed");
         assert_eq!(val, 0x1234_5678);
     }
 
     #[test]
     fn write_word_then_read_word_roundtrips() {
         let mut mem = GuestMemory::new(0x8000_0000, 4096);
-        mem.write_word(0x8000_0000, 0xDEAD_BEEF).unwrap();
-        let val = mem.read_word(0x8000_0000).unwrap();
+        mem.write_word(0x8000_0000, 0xDEAD_BEEF).expect("operation should succeed");
+        let val = mem.read_word(0x8000_0000).expect("operation should succeed");
         assert_eq!(val, 0xDEAD_BEEF);
     }
 
@@ -169,15 +169,15 @@ mod tests {
     #[test]
     fn read_write_byte_roundtrip() {
         let mut mem = GuestMemory::new(0x8000_0000, 4096);
-        mem.write_byte(0x8000_0100, 0xAB).unwrap();
-        assert_eq!(mem.read_byte(0x8000_0100).unwrap(), 0xAB);
+        mem.write_byte(0x8000_0100, 0xAB).expect("operation should succeed");
+        assert_eq!(mem.read_byte(0x8000_0100).expect("operation should succeed"), 0xAB);
     }
 
     #[test]
     fn read_write_half_roundtrip() {
         let mut mem = GuestMemory::new(0x8000_0000, 4096);
-        mem.write_half(0x8000_0100, 0xCAFE).unwrap();
-        assert_eq!(mem.read_half(0x8000_0100).unwrap(), 0xCAFE);
+        mem.write_half(0x8000_0100, 0xCAFE).expect("operation should succeed");
+        assert_eq!(mem.read_half(0x8000_0100).expect("operation should succeed"), 0xCAFE);
     }
 
     #[test]
@@ -185,7 +185,7 @@ mod tests {
         let mut mem = GuestMemory::new(0x8000_0000, 4096);
         let data: &[u8] = &[0x01, 0x02, 0x03, 0x04];
         assert!(mem.load(0, data));
-        assert_eq!(mem.read_word(0x8000_0000).unwrap(), 0x0403_0201);
+        assert_eq!(mem.read_word(0x8000_0000).expect("operation should succeed"), 0x0403_0201);
     }
 
     #[test]

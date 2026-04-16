@@ -341,10 +341,10 @@ mod tests {
         // SW x2, 0(x1)        -> store 'A' to UART THR
         //   encoding: 0x00208023
         // EBREAK
-        vm.bus.write_word(base, 0x100000B7).unwrap();
-        vm.bus.write_word(base + 4, 0x04100113).unwrap();
-        vm.bus.write_word(base + 8, 0x00208023).unwrap();
-        vm.bus.write_word(base + 12, 0x00100073).unwrap();
+        vm.bus.write_word(base, 0x100000B7).expect("operation should succeed");
+        vm.bus.write_word(base + 4, 0x04100113).expect("operation should succeed");
+        vm.bus.write_word(base + 8, 0x00208023).expect("operation should succeed");
+        vm.bus.write_word(base + 12, 0x00100073).expect("operation should succeed");
 
         vm.cpu.pc = base as u32;
         for _ in 0..10 {

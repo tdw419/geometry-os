@@ -820,7 +820,7 @@ mod tests {
         csr.mip = 1 << INT_MTI; // Timer pending
         csr.mie = 1 << INT_MTI; // Timer enabled
         csr.mstatus = 1 << MSTATUS_MIE; // Global MIE enabled
-        let cause = csr.pending_interrupt(Privilege::Machine).unwrap();
+        let cause = csr.pending_interrupt(Privilege::Machine).expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_MTI);
     }
 
@@ -830,7 +830,7 @@ mod tests {
         csr.mip = 1 << INT_SSI; // Software pending
         csr.mie = 1 << INT_SSI; // Software enabled
         csr.mstatus = 1 << MSTATUS_SIE; // SIE enabled
-        let cause = csr.pending_interrupt(Privilege::User).unwrap();
+        let cause = csr.pending_interrupt(Privilege::User).expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_SSI);
     }
 
@@ -846,7 +846,7 @@ mod tests {
         csr.mip = 1 << INT_MEI; // External interrupt pending
         csr.mie = 1 << INT_MEI; // MEIE enabled
         csr.mstatus = 1 << MSTATUS_MIE; // Global MIE enabled
-        let cause = csr.pending_interrupt(Privilege::Machine).unwrap();
+        let cause = csr.pending_interrupt(Privilege::Machine).expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_MEI);
     }
 
@@ -856,7 +856,7 @@ mod tests {
         csr.mip = 1 << INT_SEI; // Supervisor external pending
         csr.mie = 1 << INT_SEI; // SEIE enabled
         csr.mstatus = 1 << MSTATUS_SIE; // SIE enabled
-        let cause = csr.pending_interrupt(Privilege::User).unwrap();
+        let cause = csr.pending_interrupt(Privilege::User).expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_SEI);
     }
 
@@ -877,7 +877,7 @@ mod tests {
         csr.mip = (1 << INT_MTI) | (1 << INT_MEI);
         csr.mie = (1 << INT_MTI) | (1 << INT_MEI);
         csr.mstatus = 1 << MSTATUS_MIE;
-        let cause = csr.pending_interrupt(Privilege::Machine).unwrap();
+        let cause = csr.pending_interrupt(Privilege::Machine).expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_MTI);
     }
 }

@@ -301,7 +301,7 @@ mod tests {
         uart.write_byte(IER, 0x01);
         uart.write_byte(IIR_FCR, 0x02);
         // Reading a word at UART_BASE reads THR_RBR, IER, IIR_FCR, LCR
-        let word = uart.read_word(UART_BASE).unwrap();
+        let word = uart.read_word(UART_BASE).expect("operation should succeed");
         // Byte 0 = THR_RBR (0, no data), Byte 1 = IER (0x01), Byte 2 = IIR_FCR, Byte 3 = LCR
         assert_eq!((word >> 8) & 0xFF, 0x01); // IER value
     }
