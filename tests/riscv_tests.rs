@@ -16,8 +16,16 @@ pub mod privilege;
 pub mod clint;
 #[path = "riscv_tests/sv32.rs"]
 pub mod sv32;
+#[path = "riscv_tests/sv32_tlb.rs"]
+pub mod sv32_tlb;
+#[path = "riscv_tests/sv32_faults.rs"]
+pub mod sv32_faults;
+#[path = "riscv_tests/sv32_interrupt.rs"]
+pub mod sv32_interrupt;
 #[path = "riscv_tests/integration.rs"]
 pub mod integration;
+#[path = "riscv_tests/base_programs.rs"]
+pub mod base_programs;
 
 use geometry_os::riscv::cpu::StepResult;
 use geometry_os::riscv::RiscvVm;
