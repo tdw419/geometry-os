@@ -22,7 +22,6 @@ mod audio;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use std::collections::{HashSet, VecDeque};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use keys::{key_to_ascii, key_to_ascii_shifted};
