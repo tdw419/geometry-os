@@ -9,10 +9,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 103
+  opcodes: 99
   tests: 1123
   programs: 49
-  loc: 26408
+  loc: 26403
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -2938,7 +2938,7 @@ phases:
   scope_lines_total: 800
   test_target: 10
 global_risks:
-- 'Opcode space: 103 of ~256 slots used, plenty of room'
+- 'Opcode space: 99 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
