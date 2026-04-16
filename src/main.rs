@@ -311,7 +311,7 @@ fn handle_terminal_command(
                         let mut cc = 0usize;
                         load_source_to_canvas(canvas_buffer, &source, &mut cr, &mut cc);
                         *loaded_file = Some(path.clone());
-                        let name = path.file_name().unwrap().to_string_lossy();
+                        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                         let lines = source.lines().count();
                         *output_row = write_line_to_canvas(
                             canvas_buffer,
@@ -823,8 +823,9 @@ fn run_hermes_canvas(
             }
 
             if cmd_line.starts_with("write ") {
-                let filename = cmd_line.strip_prefix("write ").unwrap().trim();
-                write_buffer = Some((filename.to_string(), String::new()));
+                if let Some(filename) = cmd_line.strip_prefix("write ").map(|s| s.trim()) {
+                    write_buffer = Some((filename.to_string(), String::new()));
+                }
                 continue;
             }
 
@@ -956,10 +957,10 @@ fn cli_main(extra_args: &[String]) {
     let stdin = io::stdin();
     loop {
         print!("geo> ");
-        io::stdout().flush().unwrap();
+        let _ = io::stdout().flush();
 
         let mut line = String::new();
-        if stdin.read_line(&mut line).unwrap() == 0 {
+        if stdin.read_line(&mut line).unwrap_or(0) == 0 {
             break; // EOF
         }
         let cmd = line.trim();
@@ -1033,7 +1034,7 @@ fn cli_main(extra_args: &[String]) {
                             loaded_file = Some(path.clone());
                             println!(
                                 "Loaded {} ({} lines)",
-                                path.file_name().unwrap().to_string_lossy(),
+                                path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
                                 lines
                             );
                         }
@@ -1236,12 +1237,18 @@ fn cli_main(extra_args: &[String]) {
                         // PPM P6 format
                         let header = "P6\n256 256\n255\n".to_string();
                         use std::io::Write;
-                        f.write_all(header.as_bytes()).unwrap();
+                        if f.write_all(header.as_bytes()).is_err() {
+                            println!("Error writing PPM header");
+                            continue;
+                        }
                         for pixel in &vm.screen {
                             let r = (pixel >> 16) & 0xFF;
                             let g = (pixel >> 8) & 0xFF;
                             let b = pixel & 0xFF;
-                            f.write_all(&[r as u8, g as u8, b as u8]).unwrap();
+                            if f.write_all(&[r as u8, g as u8, b as u8]).is_err() {
+                                println!("Error writing PPM data");
+                                break;
+                            }
                         }
                         println!("Saved screen to {}", filename);
                     }
@@ -1708,8 +1715,9 @@ fn run_hermes_loop(
             }
 
             if cmd_line.starts_with("write ") {
-                let filename = cmd_line.strip_prefix("write ").unwrap().trim();
-                write_buffer = Some((filename.to_string(), String::new()));
+                if let Some(filename) = cmd_line.strip_prefix("write ").map(|s| s.trim()) {
+                    write_buffer = Some((filename.to_string(), String::new()));
+                }
                 continue;
             }
 
@@ -1744,9 +1752,9 @@ fn run_hermes_loop(
 
         // Ask if user wants to continue
         print!("[hermes] Continue? (Enter=continue, stop=quit): ");
-        io::stdout().flush().unwrap();
+        let _ = io::stdout().flush();
         let mut input = String::new();
-        if io::stdin().read_line(&mut input).unwrap() == 0 {
+        if io::stdin().read_line(&mut input).unwrap_or(0) == 0 {
             break;
         }
         let answer = input.trim().to_lowercase();
@@ -1819,7 +1827,7 @@ fn execute_cli_command(
                     let lines = src.lines().count();
                     *source_text = src;
                     *loaded_file = Some(path.clone());
-                    let msg = format!("Loaded {} ({} lines)", path.file_name().unwrap().to_string_lossy(), lines);
+                    let msg = format!("Loaded {} ({} lines)", path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), lines);
                     println!("{}", msg); output.push_str(&msg); output.push('\n');
                 }
                 Err(e) => {
@@ -2018,7 +2026,7 @@ fn main() {
     }
     let socket = std::net::UdpSocket::bind(format!("127.0.0.1:{}", local_port)).ok();
     if let Some(ref s) = socket {
-        s.set_nonblocking(true).unwrap();
+        let _ = s.set_nonblocking(true);
     }
 
     let mut window = Window::new(
@@ -2030,7 +2038,7 @@ fn main() {
             ..Default::default()
         },
     )
-    .unwrap();
+    .expect("Failed to create window. Ensure a display is available.");
 
     window.set_target_fps(60);
 
@@ -2660,7 +2668,10 @@ fn main() {
             &pc_history,
             ram_view_base,
         );
-        window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+        if let Err(e) = window.update_with_buffer(&buffer, WIDTH, HEIGHT) {
+            eprintln!("Render error: {}. Exiting.", e);
+            break;
+        }
 
         if recording {
             let path = format!("/tmp/geo_frames/frame_{:05}.png", frame_id);

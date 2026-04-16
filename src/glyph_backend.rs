@@ -16,7 +16,7 @@ pub fn translate_glyph(source: &str) -> String {
     for c in source.chars() {
         match c {
             '0'..='9' => {
-                let val = c.to_digit(10).unwrap();
+                let val = c.to_digit(10).unwrap_or(0);
                 asm.push_str(&format!("LDI r27, {}\n", val));
                 asm.push_str("PUSH r27\n");
             }

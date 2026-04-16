@@ -11,8 +11,8 @@ fn parse_args() -> Config {
     while i < args.len() {
         match args[i].as_str() {
             "--seed" => { i += 1; cfg.seed = parse_u64(&args[i]); }
-            "--count" => { i += 1; cfg.count = args[i].parse().unwrap(); }
-            "--max-steps" => { i += 1; cfg.max_steps = args[i].parse().unwrap(); }
+            "--count" => { i += 1; cfg.count = args[i].parse().unwrap_or(200); }
+            "--max-steps" => { i += 1; cfg.max_steps = args[i].parse().unwrap_or(500_000); }
             "--category" => { i += 1; cfg.category = args[i].clone(); }
             "--verbose" => cfg.verbose = true,
             _ => {}

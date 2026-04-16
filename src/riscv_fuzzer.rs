@@ -106,14 +106,16 @@ impl Oracle {
         self.mem[off..off+4].copy_from_slice(&b);
     }
     fn mem_read_word(&self, off: usize) -> u32 {
-        u32::from_le_bytes(self.mem[off..off+4].try_into().unwrap())
+        let bytes: [u8; 4] = self.mem[off..off + 4].try_into().unwrap_or([0; 4]);
+        u32::from_le_bytes(bytes)
     }
     fn mem_write_half(&mut self, off: usize, val: u16) {
         let b = val.to_le_bytes();
         self.mem[off..off+2].copy_from_slice(&b);
     }
     fn mem_read_half(&self, off: usize) -> u16 {
-        u16::from_le_bytes(self.mem[off..off+2].try_into().unwrap())
+        let bytes: [u8; 2] = self.mem[off..off + 2].try_into().unwrap_or([0; 2]);
+        u16::from_le_bytes(bytes)
     }
     fn mem_write_byte(&mut self, off: usize, val: u8) {
         self.mem[off] = val;
