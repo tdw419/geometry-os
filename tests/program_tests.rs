@@ -186,6 +186,12 @@ pub fn step_readln(vm: &mut Vm, key: u32) {
     vm.step();
 }
 
+pub fn step_waitpid(vm: &mut Vm) {
+    vm.ram[vm.pc as usize] = 0x69; // WAITPID
+    vm.ram[vm.pc as usize + 1] = 1; // r1 = pid
+    vm.step();
+}
+
 #[path = "program_tests/basic_programs.rs"]
 pub mod basic_programs;
 #[path = "program_tests/opcodes.rs"]
