@@ -602,15 +602,19 @@ fn c_sw_imm(w: u32) -> i32 {
     c_lw_imm(w)
 }
 
-/// C.BEQZ/C.BNEZ immediate: offset[8|4:3|12|2:6|5|1:0|11] (sign-extended 9-bit)
+/// C.BEQZ/C.BNEZ immediate (sign-extended 9-bit).
+/// RISC-V spec Table 16.4:
+///   imm[8]   = inst[12]
+///   imm[7:6] = inst[6:5]
+///   imm[5]   = inst[2]
+///   imm[4:3] = inst[11:10]
+///   imm[2:1] = inst[4:3]
 fn c_b_imm(w: u32) -> i32 {
     let raw = (((w >> 12) & 0x1) << 8)
+        | (((w >> 5) & 0x3) << 6)
+        | (((w >> 2) & 0x1) << 5)
         | (((w >> 10) & 0x3) << 3)
-        | (((w >> 5) & 0x3) << 1)
-        | (((w >> 3) & 0x3) << 5)
-        | (((w >> 2) & 0x1) << 7)
-        | (((w >> 7) & 0x1) << 4)
-        | (((w >> 6) & 0x1) << 6);
+        | (((w >> 3) & 0x3) << 1);
     sign_extend(raw, 9)
 }
 
