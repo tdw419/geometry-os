@@ -1,127 +1,150 @@
-// Dump the page table entries for VA 0xC0001048
-use std::fs;
+/// Check early_pg_dir contents after boot reaches 250K instructions.
+
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::mmu::{translate, AccessType, satp_ppn, va_vpn1, va_vpn0, PTE_V, PTE_R, PTE_W, PTE_X};
-
-const PTE_A: u32 = 1 << 6;
-const PTE_D: u32 = 1 << 7;
-
-fn pte_ppn(pte: u32) -> u32 {
-    (pte & 0xFFFF_FC00) >> 10
-}
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
-    let kernel = fs::read(kernel_path).unwrap();
-    let initramfs = fs::read(initramfs_path).ok();
+    let kernel_image = std::fs::read(kernel_path).expect("kernel");
+    let initramfs = std::fs::read(initramfs_path).ok();
+    let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, result) = RiscvVm::boot_linux(
-        &kernel, initramfs.as_deref(), 512, 0, bootargs,
-    ).unwrap();
+    let (mut vm, fw_addr, _entry, _dtb) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs)
+            .expect("boot setup failed");
 
-    // Run until satp changes
-    let max_instr = 300_000u64;
-    let mut count = 0u64;
-    let mut prev_satp = vm.cpu.csr.satp;
+    let fw_addr_u32 = fw_addr as u32;
+    let mut count: u64 = 0;
+    let max_instructions: u64 = 250_000;
+    let mut trampoline_patched = false;
+    let mut last_satp: u32 = 0;
 
-    while count < max_instr {
-        vm.step();
+    while count < max_instructions {
+        if vm.bus.sbi.shutdown_requested { break; }
+
+        if !trampoline_patched
+            && vm.cpu.pc == 0x10EE
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Supervisor
+            && vm.cpu.csr.satp == 0
+        {
+            let identity_pte: u32 = 0x0000_00EF;
+            let l1_entries: &[u64] = &[0, 2, 4, 5, 6, 8, 10];
+            let trampoline_phys = 0x0148_4000u64;
+            let early_pg_dir_phys = 0x0080_2000u64;
+            for &l1_idx in l1_entries {
+                let pte = identity_pte | ((l1_idx as u32) << 20);
+                let addr_offset = (l1_idx * 4) as u64;
+                vm.bus.write_word(trampoline_phys + addr_offset, pte).ok();
+                vm.bus.write_word(early_pg_dir_phys + addr_offset, pte).ok();
+            }
+            trampoline_patched = true;
+        }
+
+        let cur_satp = vm.cpu.csr.satp;
+        if cur_satp != last_satp && cur_satp != 0 {
+            let new_ppn = (cur_satp & 0x3FFFFF) as u64;
+            let pt_base = new_ppn << 12;
+            let asid = (cur_satp >> 22) & 0x1FF;
+            for l1_idx in 0..1024u64 {
+                let l1_addr = pt_base + l1_idx * 4;
+                let l1_pte = vm.bus.read_word(l1_addr).unwrap_or(0);
+                if l1_pte == 0 { continue; }
+                let is_leaf = (l1_pte & 0xE) != 0;
+                if !is_leaf { continue; }
+                let ppn_hi = ((l1_pte >> 20) & 0xFFF) as u32;
+                let flags = (l1_pte & 0xFF) as u32;
+                for vpn0 in 0..512u32 {
+                    let vpn_combined = ((l1_idx as u32) << 10) | vpn0;
+                    let eff_ppn = (ppn_hi << 10) | vpn0;
+                    vm.cpu.tlb.insert(vpn_combined, asid as u16, eff_ppn, flags);
+                }
+            }
+        }
+        last_satp = cur_satp;
+
+        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+            let mcause = vm.cpu.csr.mcause;
+            let cause_code = mcause & !(1u32 << 31);
+            if cause_code != 11 {
+                let mpp = (vm.cpu.csr.mstatus & 0x300) >> 8;
+                if mpp != 3 {
+                    let stvec = vm.cpu.csr.stvec & !0x3u32;
+                    if stvec != 0 {
+                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                        vm.cpu.csr.scause = mcause;
+                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
+                        let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (spp << 5);
+                        let sie = (vm.cpu.csr.mstatus >> 1) & 1;
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
+                        vm.cpu.csr.mstatus &= !(1 << 1);
+                        vm.cpu.pc = stvec;
+                        vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
+                        vm.cpu.tlb.flush_all();
+                        count += 1;
+                        continue;
+                    }
+                }
+                vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
+            } else {
+                let result = vm.bus.sbi.handle_ecall(
+                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
+                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
+                    &mut vm.bus.uart, &mut vm.bus.clint,
+                );
+                if let Some((a0_val, a1_val)) = result {
+                    vm.cpu.x[10] = a0_val;
+                    vm.cpu.x[11] = a1_val;
+                }
+            }
+        }
+
+        let _ = vm.step();
         count += 1;
-        if vm.cpu.csr.satp != prev_satp {
-            prev_satp = vm.cpu.csr.satp;
-            break;
-        }
     }
 
-    let satp = vm.cpu.csr.satp;
-    let root_ppn = satp_ppn(satp);
-    let root_addr = (root_ppn as u64) << 12;
-    
-    println!("satp = 0x{:08X}, root PPN = 0x{:06X}, root PA = 0x{:08X}", satp, root_ppn, root_addr);
-    
-    // Check VA 0xC0001048
-    let va = 0xC0001048u32;
-    let vpn1 = va_vpn1(va);
-    let vpn0 = va_vpn0(va);
-    println!("\nVA = 0x{:08X}, VPN1 = {} (0x{:03X}), VPN0 = {} (0x{:03X})", va, vpn1, vpn1, vpn0, vpn0);
-    
-    // Level 1 PTE
-    let l1_addr = root_addr + (vpn1 as u64) * 4;
-    let l1_pte = vm.bus.read_word(l1_addr).unwrap_or(0);
-    println!("\nL1 PTE[{}] at PA 0x{:08X} = 0x{:08X}", vpn1, l1_addr, l1_pte);
-    println!("  V={} R={} W={} X={} G={} A={} D={}", 
-             (l1_pte >> 0) & 1, (l1_pte >> 1) & 1, (l1_pte >> 2) & 1,
-             (l1_pte >> 3) & 1, (l1_pte >> 5) & 1, (l1_pte >> 6) & 1, (l1_pte >> 7) & 1);
-    
-    let l1_ppn = pte_ppn(l1_pte);
-    println!("  PPN = 0x{:06X}", l1_ppn);
-    
-    let is_leaf = (l1_pte & (PTE_R | PTE_W | PTE_X)) != 0;
-    println!("  Is leaf: {}", is_leaf);
-    
-    if !is_leaf {
-        // Level 2
-        let l2_base = (l1_ppn as u64) << 12;
-        let l2_addr = l2_base + (vpn0 as u64) * 4;
-        let l2_pte = vm.bus.read_word(l2_addr).unwrap_or(0);
-        println!("\nL2 PTE[{}] at PA 0x{:08X} = 0x{:08X}", vpn0, l2_addr, l2_pte);
-        println!("  V={} R={} W={} X={} G={} A={} D={}", 
-                 (l2_pte >> 0) & 1, (l2_pte >> 1) & 1, (l2_pte >> 2) & 1,
-                 (l2_pte >> 3) & 1, (l2_pte >> 5) & 1, (l2_pte >> 6) & 1, (l2_pte >> 7) & 1);
-        
-        let l2_ppn = pte_ppn(l2_pte);
-        println!("  PPN = 0x{:06X}", l2_ppn);
-        
-        let offset = va & 0xFFF;
-        let pa = ((l2_ppn as u64) << 12) | (offset as u64);
-        println!("\n  => PA = (PPN << 12) | offset = 0x{:08X}", pa);
-        println!("  Expected PA = 0x{:08X} (identity)", va);
-    }
-    
-    // Also check: what PTE value would produce correct identity mapping?
-    println!("\n--- For correct identity mapping of 0xC0001000 ---");
-    println!("  L2 PTE should have PPN = 0x{:06X}", (va >> 12) & 0xFFFFF);
-    
-    // Check a few other page table entries in the L2 table
-    println!("\n--- L2 table entries (L1 PPN = 0x{:06X}) ---", l1_ppn);
-    let l2_base = (l1_ppn as u64) << 12;
-    for i in 0..16 {
-        let l2_pte = vm.bus.read_word(l2_base + (i as u64) * 4).unwrap_or(0);
-        if l2_pte != 0 {
-            let ppn = pte_ppn(l2_pte);
-            let va_base = (vpn1 << 22) | (i << 12);
-            let pa_base = (ppn as u64) << 12;
-            println!("  L2[{}] VA=0x{:08X} PTE=0x{:08X} PPN=0x{:06X} PA=0x{:08X} {}",
-                     i, va_base, l2_pte, ppn, pa_base,
-                     if va_base as u64 == pa_base { "IDENTITY" } else { "MISMATCH" });
-        }
-    }
-    
-    // Check what's at trampoline_pg_dir 
-    println!("\n--- trampoline_pg_dir at 0xC1CCF000 (first 16 entries) ---");
-    for i in 0..16 {
-        let pte = vm.bus.read_word(0xC1CCF000_u64 + (i as u64) * 4).unwrap_or(0);
+    // Dump the active page table (early_pg_dir at 0x00802000)
+    eprintln!("=== Active page table at PA 0x00802000 (early_pg_dir) ===");
+    let mut non_zero_count = 0;
+    for i in 0..1024u64 {
+        let pte = vm.bus.read_word(0x00802000 + i * 4).unwrap_or(0);
         if pte != 0 {
-            let ppn = pte_ppn(pte);
-            let is_leaf = (pte & (PTE_R | PTE_W | PTE_X)) != 0;
-            println!("  PTE[{}] = 0x{:08X} PPN=0x{:06X} leaf={}", i, pte, ppn, is_leaf);
+            let is_leaf = (pte & 0xE) != 0;
+            let ppn = (pte >> 10) & 0x3FFFFF;
+            let va_start = i << 22;
+            eprintln!("  L1[{}] = 0x{:08X} (V={} leaf={} PPN=0x{:06X}) -> VA 0x{:08X}-0x{:08X}",
+                i, pte, pte & 1, is_leaf, ppn, va_start, va_start + 0x3FFFFF);
+            non_zero_count += 1;
+
+            // If non-leaf, dump first few L2 entries
+            if !is_leaf && ppn != 0 {
+                let l2_base = (ppn as u64) << 12;
+                for j in 0..16u64 {
+                    let l2_pte = vm.bus.read_word(l2_base + j * 4).unwrap_or(0);
+                    if l2_pte != 0 {
+                        let l2_ppn = (l2_pte >> 10) & 0x3FFFFF;
+                        let l2_leaf = (l2_pte & 0xE) != 0;
+                        eprintln!("    L2[{}] = 0x{:08X} (leaf={} PPN=0x{:06X})", j, l2_pte, l2_leaf, l2_ppn);
+                    }
+                }
+            }
         }
     }
-    
-    // The key question: does the kernel's relocate_enable_mmu expect the
-    // page tables to be set up by setup_vm()? The kernel runs setup_vm() first,
-    // then relocate_enable_mmu. The trampoline_pg_dir is a temporary page table
-    // used DURING the relocation.
-    // Let's check the early_pg_dir too
-    println!("\n--- early_pg_dir at 0xC1002000 (first 16 entries) ---");
-    for i in 0..16 {
-        let pte = vm.bus.read_word(0xC1002000_u64 + (i as u64) * 4).unwrap_or(0);
+    eprintln!("Non-zero L1 entries: {}", non_zero_count);
+
+    // Also dump trampoline_pg_dir
+    eprintln!("\n=== trampoline_pg_dir at PA 0x01484000 ===");
+    let mut non_zero_count2 = 0;
+    for i in 0..1024u64 {
+        let pte = vm.bus.read_word(0x01484000 + i * 4).unwrap_or(0);
         if pte != 0 {
-            let ppn = pte_ppn(pte);
-            let is_leaf = (pte & (PTE_R | PTE_W | PTE_X)) != 0;
-            println!("  PTE[{}] = 0x{:08X} PPN=0x{:06X} leaf={}", i, pte, ppn, is_leaf);
+            let is_leaf = (pte & 0xE) != 0;
+            let ppn = (pte >> 10) & 0x3FFFFF;
+            let va_start = i << 22;
+            eprintln!("  L1[{}] = 0x{:08X} (V={} leaf={} PPN=0x{:06X}) -> VA 0x{:08X}-0x{:08X}",
+                i, pte, pte & 1, is_leaf, ppn, va_start, va_start + 0x3FFFFF);
+            non_zero_count2 += 1;
         }
     }
+    eprintln!("Non-zero L1 entries: {}", non_zero_count2);
 }

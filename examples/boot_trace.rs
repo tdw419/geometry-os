@@ -1,147 +1,130 @@
-// Step-by-step Linux boot diagnostic with progress
-// cargo run --example boot_trace
-use std::fs;
+/// Trace the instructions leading up to the first illegal instruction at mepc=0x00000004.
+
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::StepResult;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
-    let kernel = match fs::read(kernel_path) {
-        Ok(d) => d,
-        Err(e) => { eprintln!("Error: {}", e); std::process::exit(1); }
-    };
-    let initramfs = fs::read(initramfs_path).ok();
+    let kernel_image = std::fs::read(kernel_path).expect("kernel");
+    let initramfs = std::fs::read(initramfs_path).ok();
+    let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    println!("=== Linux Boot Trace ===");
-    println!("Kernel: {} bytes", kernel.len());
+    let (mut vm, fw_addr, _entry, _dtb) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs)
+            .expect("boot setup failed");
 
-    let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, result) = RiscvVm::boot_linux(
-        &kernel,
-        initramfs.as_deref(),
-        512,
-        0, // 0 = don't run any instructions in boot_linux
-        bootargs,
-    ).unwrap();
+    let fw_addr_u32 = fw_addr as u32;
+    let mut count: u64 = 0;
+    let max_instructions: u64 = 178000; // Stop just after first illegal
+    let mut trampoline_patched = false;
+    let mut last_satp: u32 = 0;
 
-    println!("Entry: 0x{:08X}, DTB: 0x{:08X}", result.entry, result.dtb_addr);
-    println!("RAM base: 0x{:08X}", vm.bus.mem.ram_base);
+    // Ring buffer for PC history
+    let mut pc_history: Vec<(u64, u32)> = Vec::new();
+    let history_size = 50;
 
-    let max_instr = 20_000_000u64;
-    let mut count = 0u64;
-    let mut last_pc: u32 = 0xFFFFFFFF;
-    let mut pc_loop_count = 0u32;
-    let mut fault_count = 0u64;
-    let _last_report_pc = vm.cpu.pc;
-    let start = std::time::Instant::now();
+    while count < max_instructions {
+        if vm.bus.sbi.shutdown_requested { break; }
 
-    // Report milestones
-    let milestones: Vec<u64> = vec![
-        100, 1000, 10000, 100000, 500000,
-        1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000
-    ];
-    let mut milestone_idx = 0;
+        // Trampoline patching
+        if !trampoline_patched
+            && vm.cpu.pc == 0x10EE
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Supervisor
+            && vm.cpu.csr.satp == 0
+        {
+            let identity_pte: u32 = 0x0000_00EF;
+            let l1_entries: &[u64] = &[0, 2, 4, 5, 6, 8, 10];
+            let trampoline_phys = 0x0148_4000u64;
+            let early_pg_dir_phys = 0x0080_2000u64;
+            for &l1_idx in l1_entries {
+                let pte = identity_pte | ((l1_idx as u32) << 20);
+                let addr_offset = (l1_idx * 4) as u64;
+                vm.bus.write_word(trampoline_phys + addr_offset, pte).ok();
+                vm.bus.write_word(early_pg_dir_phys + addr_offset, pte).ok();
+            }
+            trampoline_patched = true;
+            eprintln!("[trace] Trampoline patched at count={}", count);
+        }
 
-    while count < max_instr {
-        let _pc_before = vm.cpu.pc;
-        let step_result = vm.step();
+        // Track SATP
+        let cur_satp = vm.cpu.csr.satp;
+        if cur_satp != last_satp && cur_satp != 0 {
+            eprintln!("[trace] SATP changed to 0x{:08X} at count={}", cur_satp, count);
+        }
+        last_satp = cur_satp;
+
+        // Trap forwarding
+        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+            let mcause = vm.cpu.csr.mcause;
+            let cause_code = mcause & !(1u32 << 31);
+
+            if cause_code != 11 {
+                let mpp = (vm.cpu.csr.mstatus & 0x300) >> 8;
+
+                if mpp != 3 {
+                    let stvec = vm.cpu.csr.stvec & !0x3u32;
+                    if stvec != 0 {
+                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                        vm.cpu.csr.scause = mcause;
+                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
+                        let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (spp << 5);
+                        let sie = (vm.cpu.csr.mstatus >> 1) & 1;
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
+                        vm.cpu.csr.mstatus &= !(1 << 1);
+                        vm.cpu.pc = stvec;
+                        vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
+                        vm.cpu.tlb.flush_all();
+
+                        if cause_code == 2 && count >= 177000 {
+                            eprintln!("[trace] FORWARD trap at count={}: mepc=0x{:08X} cause=2 mpp={} -> stvec=0x{:08X}",
+                                count, vm.cpu.csr.sepc, mpp, stvec);
+                            eprintln!("[trace]   x[1](ra)=0x{:08X} x[5](t0)=0x{:08X}", vm.cpu.x[1], vm.cpu.x[5]);
+                        }
+                        count += 1;
+                        continue;
+                    }
+                }
+
+                if cause_code == 2 {
+                    eprintln!("[trace] M-mode illegal at count={}: mepc=0x{:08X} mpp={} (skipping)",
+                        count, vm.cpu.csr.mepc, mpp);
+                }
+
+                vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
+            } else {
+                let result = vm.bus.sbi.handle_ecall(
+                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
+                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
+                    &mut vm.bus.uart, &mut vm.bus.clint,
+                );
+                if let Some((a0_val, a1_val)) = result {
+                    vm.cpu.x[10] = a0_val;
+                    vm.cpu.x[11] = a1_val;
+                }
+            }
+        }
+
+        // Track PC history (only after trampoline patch)
+        if trampoline_patched && count >= 177000 {
+            pc_history.push((count, vm.cpu.pc));
+            if pc_history.len() > history_size {
+                pc_history.remove(0);
+            }
+        }
+
+        let _ = vm.step();
         count += 1;
-
-        // Detect PC loops (same PC twice = trap loop)
-        if vm.cpu.pc == last_pc {
-            pc_loop_count += 1;
-            if pc_loop_count > 100 {
-                println!("\nPC loop detected at 0x{:08X} after {} steps", vm.cpu.pc, count);
-                println!("  mcause: 0x{:08X}, mepc: 0x{:08X}",
-                         vm.cpu.csr.mcause, vm.cpu.csr.mepc);
-                println!("  satp: 0x{:08X}, mstatus: 0x{:08X}",
-                         vm.cpu.csr.satp, vm.cpu.csr.mstatus);
-                println!("  mtvec: 0x{:08X}", vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC));
-                break;
-            }
-        } else {
-            pc_loop_count = 0;
-        }
-        last_pc = vm.cpu.pc;
-
-        // Check milestones
-        while milestone_idx < milestones.len() && count >= milestones[milestone_idx] {
-            let elapsed = start.elapsed();
-            let ips = count as f64 / elapsed.as_secs_f64();
-            println!("[{:>8}] PC=0x{:08X} priv={:?} satp=0x{:08X} mcause=0x{:08X} ({:.0} instr/s)",
-                     count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp,
-                     vm.cpu.csr.mcause, ips);
-            milestone_idx += 1;
-        }
-
-        match step_result {
-            StepResult::Ebreak => {
-                println!("\nEBREAK at PC=0x{:08X} after {} instructions", vm.cpu.pc, count);
-                break;
-            }
-            StepResult::FetchFault => {
-                fault_count += 1;
-                println!("\nFetchFault at PC=0x{:08X} after {} instructions (fault #{})",
-                         vm.cpu.pc, count, fault_count);
-                println!("  mcause: 0x{:08X}, mepc: 0x{:08X}",
-                         vm.cpu.csr.mcause, vm.cpu.csr.mepc);
-                break;
-            }
-            StepResult::LoadFault => {
-                fault_count += 1;
-                if fault_count <= 5 {
-                    println!("  LoadFault at PC=0x{:08X} after {} steps",
-                             vm.cpu.pc, count);
-                }
-            }
-            StepResult::StoreFault => {
-                fault_count += 1;
-                if fault_count <= 5 {
-                    println!("  StoreFault at PC=0x{:08X} after {} steps",
-                             vm.cpu.pc, count);
-                }
-            }
-            StepResult::Ecall => {
-                // Normal during boot, but log first few
-                if count < 200_000 {
-                    println!("  ECALL at PC=0x{:08X} after {} steps, a7=0x{:08X}",
-                             vm.cpu.pc, count, vm.cpu.x[17]);
-                }
-            }
-            StepResult::Ok => {}
-        }
     }
 
-    let elapsed = start.elapsed();
-    println!("\n=== Summary ===");
-    println!("Instructions: {} in {:?}", count, elapsed);
-    println!("Final PC: 0x{:08X}", vm.cpu.pc);
-    println!("Privilege: {:?}", vm.cpu.privilege);
-    println!("mcause: 0x{:08X}, mepc: 0x{:08X}", vm.cpu.csr.mcause, vm.cpu.csr.mepc);
-    println!("satp: 0x{:08X}, mstatus: 0x{:08X}", vm.cpu.csr.satp, vm.cpu.csr.mstatus);
-    println!("mtvec: 0x{:08X}", vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC));
-    println!("Faults: {}", fault_count);
-    println!("MIPS: {:.2}", count as f64 / elapsed.as_secs_f64() / 1_000_000.0);
+    eprintln!("\n=== Last {} PC transitions before halt ===", pc_history.len());
+    for (c, pc) in &pc_history {
+        let insn = vm.bus.read_word(*pc as u64).unwrap_or(0);
+        eprintln!("  count={} PC=0x{:08X} insn=0x{:08X}", c, pc, insn);
+    }
 
-    // Check UART
-    let mut out = Vec::new();
-    loop {
-        match vm.bus.uart.read_byte(0) {
-            0 => break,
-            b => out.push(b),
-        }
-    }
-    if !out.is_empty() {
-        println!("\n=== UART Output ({} bytes) ===", out.len());
-        let s = String::from_utf8_lossy(&out);
-        // Print last 2KB to avoid flooding
-        if s.len() > 2048 {
-            println!("... (truncated) ...{}", &s[s.len()-2048..]);
-        } else {
-            println!("{}", s);
-        }
-    } else {
-        println!("\nNo UART output");
-    }
+    eprintln!("\nFinal: PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
+    eprintln!("x[0]=0x{:08X} x[1]=0x{:08X} x[2]=0x{:08X} x[5]=0x{:08X}",
+        vm.cpu.x[0], vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[5]);
+    eprintln!("SATP=0x{:08X} STVEC=0x{:08X}", vm.cpu.csr.satp, vm.cpu.csr.stvec);
 }
