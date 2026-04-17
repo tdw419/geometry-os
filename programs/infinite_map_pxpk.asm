@@ -5,10 +5,10 @@
 ;
 ; Key changes from infinite_map.asm:
 ;   1. Biome color table in RAM replaces the ~200-instruction CMP/BLT cascade
-;   2. Fine hash (seed) drives per-tile color variation via nibble extraction
-;   3. Seed expansion with 4 pattern strategies (flat, horiz, vert, center)
-;   4. Accent color via XOR_CHAIN (Pixelpack strategy 0xC)
-;   5. Net result: ~46-53 instructions/tile (all paths under 55 budget)
+;   2. Per-tile variation via XOR fine hash + nibble lookup
+;   3. 4 pattern strategies from coarse hash: flat, center, horiz, vert
+;   4. Accent color via XOR_CHAIN (Pixelpack strategy 0xC) from coarse hash
+;   5. Net result: ~42-56 instructions/tile (flat=42, non-flat avg ~55)
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -18,10 +18,11 @@
 ;   RAM[0x7802] = frame_counter
 ;   RAM[0xFFB]  = key bitmask
 ;
-; Seed expansion architecture (32-bit fine_hash = THE SEED):
-;   Bits 0-3:    R channel variation (nibble lookup into 0x7020 table)
-;   Bits 16-20:  XOR mask for accent color (XOR_CHAIN strategy 0xC)
-;   Bits 30-31:  Pattern type selector (dispatch-optimized order)
+; Seed expansion architecture (32-bit coarse_hash / mixed_hash):
+;   Top 5 bits (>>27): biome index (table lookup)
+;   Bits 25-26 (&0x3): pattern type selector (4 strategies)
+;   Bits 10-20 (&0x1F1F1F): XOR mask for accent color
+;   Fine hash (world_x XOR world_y, low 4 bits): nibble variation index
 ;
 ; Pattern strategies (ordered by dispatch cost for balanced paths):
 ;   0 (flat):    Single RECTF -- smooth terrain (water, snow, plains)
@@ -395,74 +396,65 @@ render_y:
     MOV r4, r15
     ADD r4, r1           ; r4 = world_y
 
-    ; ---- Coarse hash for biome (optimized: reuse shift constant) ----
+    ; ---- Coarse hash for biome (unchanged from infinite_map.asm) ----
     MOV r5, r3
     MOV r6, r4
     LDI r18, 3
     SHR r5, r18          ; r5 = world_x >> 3
-    SHR r6, r18          ; r6 = world_y >> 3 (reuse r18=3)
+    SHR r6, r18          ; r6 = world_y >> 3
     LDI r18, 99001
     MUL r5, r18
     LDI r18, 79007
     MUL r6, r18
     XOR r5, r6           ; r5 = coarse_hash
     LDI r18, 1103515245
-    MUL r5, r18          ; r5 = mixed_hash (full 32-bit)
+    MUL r5, r18          ; r5 = mixed_hash (32-bit)
 
-    ; Extract biome index (top 5 bits)
+    ; ---- Extract biome (top 5 bits) + pattern type (bits 25-26) ----
     MOV r17, r5
     LDI r18, 27
     SHR r17, r18         ; r17 = biome_type (0..31)
+    MOV r18, r5
+    LDI r20, 25
+    SHR r18, r20          ; r18 = mixed_hash >> 25
+    ANDI r18, 3           ; r18 = pattern_type (0-3) from coarse hash
 
     ; ---- TABLE LOOKUP: biome color ----
-    MOV r18, r24          ; r18 = 0x7000
-    ADD r18, r17          ; r18 = 0x7000 + biome_index
-    LOAD r17, r18         ; r17 = biome base color from table
+    MOV r20, r24
+    ADD r20, r17          ; r20 = 0x7000 + biome_index
+    LOAD r17, r20         ; r17 = biome base color
 
-    ; ---- Fine hash for seed expansion (per-tile variation) ----
+    ; ---- Fine hash: XOR for nibble variation (only 4 bits needed) ----
     MOV r6, r3
-    LDI r18, 374761393
-    MUL r6, r18
-    MOV r21, r4
-    LDI r18, 668265263
-    MUL r21, r18
-    XOR r6, r21          ; r6 = fine_hash (THE SEED)
+    XOR r6, r4            ; r6 = world_x XOR world_y
+    ANDI r6, 0xF          ; r6 = nibble index (0-15)
+    ADD r6, r25           ; r6 = 0x7020 + index
+    LOAD r6, r6           ; r6 = variation offset
+    ADD r17, r6           ; r17 = base color + variation
 
-    ; ---- Seed: R variation (nibble 0, bits 0-3) ----
-    MOV r18, r6
-    LDI r19, 0xF
-    AND r18, r19          ; r18 = seed & 0xF
-    ADD r18, r25          ; r18 = 0x7020 + index
-    LOAD r18, r18         ; r18 = variation offset
-    ADD r17, r18          ; r17 = base color + R variation
-
-    ; ---- Combined: accent + pattern type (optimized) ----
-    ; Pattern type from bits 30-31, accent from bits 16-20
-    MOV r18, r6
-    LDI r20, 30
-    SHR r18, r20          ; r18 = pattern_type (0-3)
-    MOV r19, r6
-    LDI r20, 16
-    SHR r19, r20          ; r19 = seed >> 16
-    LDI r20, 0x1F1F1F     ; 5 bits per channel mask
-    AND r19, r20          ; r19 = seed-derived XOR mask
-    XOR r19, r17          ; r19 = accent color (base XOR mask)
+    ; ---- Accent from coarse_hash bits 10-20 (XOR_CHAIN strategy) ----
+    MOV r19, r5
+    LDI r20, 10
+    SHR r19, r20
+    ANDI r19, 0x1F1F1F     ; 5 bits per channel mask
+    XOR r19, r17          ; r19 = accent color
 
     ; ---- Apply day/night tint to both colors ----
     ADD r17, r23          ; base += tint
     ADD r19, r23          ; accent += tint
 
-    ; ---- Pattern dispatch (order: flat=0, center=1, horiz=2, vert=3) ----
-    ; Reordered so expensive patterns get shorter dispatch paths
+    ; ---- Pre-load half-width constant for non-flat patterns ----
+    LDI r20, 2            ; shared by center/horiz/vert patterns
+
+    ; ---- Pattern dispatch (flat=0, center=1, horiz=2, vert=3) ----
     JZ r18, pat_flat       ; 0: flat tile
     SUB r18, r7            ; pattern - 1
-    JZ r18, pat_center     ; 1: center bright (2x2 accent)
+    JZ r18, pat_center     ; 1: center bright
     SUB r18, r7            ; pattern - 2
     JZ r18, pat_horiz      ; 2: horizontal stripe
     ; Fall through: 3 = vertical stripe
 
     ; Pattern 3: left half base, right half accent (rock faces)
-    LDI r20, 2
     RECTF r28, r27, r20, r9, r17
     MOV r21, r28
     ADD r21, r20           ; r21 = x + 2
@@ -478,16 +470,14 @@ pat_center:
     ; Pattern 1: base background + 2x2 accent center (oasis, crystals)
     RECTF r28, r27, r9, r9, r17
     MOV r21, r28
-    ADD r21, r7            ; r21 = x + 1 (r7=1)
+    ADD r21, r7            ; r21 = x + 1
     MOV r22, r27
-    ADD r22, r7            ; r22 = y + 1 (r7=1)
-    LDI r20, 2
+    ADD r22, r7            ; r22 = y + 1
     RECTF r21, r22, r20, r20, r19
     JMP tile_done
 
 pat_horiz:
     ; Pattern 2: top half base, bottom half accent (dune ridges)
-    LDI r20, 2
     RECTF r28, r27, r9, r20, r17
     MOV r21, r27
     ADD r21, r20           ; r21 = y + 2
