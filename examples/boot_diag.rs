@@ -15,16 +15,15 @@ fn main() {
             "console=ttyS0 loglevel=8",
         ).unwrap();
 
+    vm.bus.auto_pte_fixup = false;
+
     let fw_addr_u32 = fw_addr as u32;
     let mut count: u64 = 0;
     let mut last_satp: u32 = vm.cpu.csr.satp;
     let mut sbi_count: u64 = 0;
-    let mut forward_count: u64 = 0;
-    let mut cause_counts: [u64; 32] = [0; 32];
-    let mut panic_found: bool = false;
-    let mut last_log: u64 = 0;
+    let mut first_fault: bool = true;
 
-    while count < 2_000_000 {
+    while count < 1_000_000 {
         if vm.bus.sbi.shutdown_requested { break; }
 
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
@@ -47,18 +46,6 @@ fn main() {
             } else if cause_code != 11 {
                 let mpp = (vm.cpu.csr.mstatus >> 11) & 3;
                 if mpp != 3 {
-                    forward_count += 1;
-                    if (cause_code as usize) < 32 {
-                        cause_counts[cause_code as usize] += 1;
-                    }
-                    
-                    // Log first few forwards in detail
-                    if forward_count <= 10 {
-                        let stvec = vm.cpu.csr.stvec & !0x3u32;
-                        eprintln!("[fwd] #{} count={}: cause={} mepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X} mpp={}",
-                            forward_count, count, cause_code, vm.cpu.csr.mepc, vm.cpu.csr.mtval, stvec, mpp);
-                    }
-                    
                     let stvec = vm.cpu.csr.stvec & !0x3u32;
                     if stvec != 0 {
                         vm.cpu.csr.sepc = vm.cpu.csr.mepc;
@@ -86,33 +73,79 @@ fn main() {
         vm.bus.tick_clint();
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
-        if !panic_found && vm.cpu.pc == 0xC000252E {
-            panic_found = true;
-            eprintln!("[test] PANIC at count={}", count);
-        }
-
         let step_result = vm.step();
+
         match step_result {
             StepResult::Ebreak => break,
+            StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
+                if vm.cpu.privilege == Privilege::Supervisor && first_fault {
+                    first_fault = false;
+                    let ft = match step_result {
+                        StepResult::FetchFault => "fetch",
+                        StepResult::LoadFault => "load",
+                        _ => "store",
+                    };
+                    eprintln!("[diag] FIRST S-mode {} fault at count={}", ft, count);
+                    eprintln!("[diag]   PC=0x{:08X}", vm.cpu.pc);
+                    eprintln!("[diag]   scause=0x{:08X}", vm.cpu.csr.scause);
+                    eprintln!("[diag]   stval=0x{:08X}", vm.cpu.csr.stval);
+                    eprintln!("[diag]   sepc=0x{:08X}", vm.cpu.csr.sepc);
+                    eprintln!("[diag]   stvec=0x{:08X}", vm.cpu.csr.stvec);
+                    eprintln!("[diag]   mstatus=0x{:08X}", vm.cpu.csr.mstatus);
+                    eprintln!("[diag]   SP=0x{:08X} RA=0x{:08X}", vm.cpu.x[2], vm.cpu.x[1]);
+                    eprintln!("[diag]   GP=0x{:08X} TP=0x{:08X}", vm.cpu.x[3], vm.cpu.x[4]);
+                    eprintln!("[diag]   SATP=0x{:08X}", vm.cpu.csr.satp);
+                    
+                    // Read instruction at PC
+                    let inst = vm.bus.read_word(vm.cpu.pc as u64).unwrap_or(0);
+                    eprintln!("[diag]   instruction at PC: 0x{:08X}", inst);
+                    
+                    // Disassemble: check if it's a store
+                    let opcode = inst & 0x7F;
+                    let funct3 = (inst >> 12) & 7;
+                    eprintln!("[diag]   opcode=0x{:02X} funct3={}", opcode, funct3);
+                    
+                    // Check what L1 index the fault address maps to
+                    let fault_va = vm.cpu.csr.stval;
+                    let l1_idx = (fault_va >> 22) & 0x3FF;
+                    let ppn = vm.cpu.csr.satp & 0x3FFFFF;
+                    let pg_dir_phys = (ppn as u64) * 4096;
+                    let l1_entry = vm.bus.read_word(pg_dir_phys + (l1_idx as u64) * 4).unwrap_or(0);
+                    eprintln!("[diag]   fault VA L1[{}] = 0x{:08X} (V={})", l1_idx, l1_entry, l1_entry & 1);
+                    
+                    // Also check the SP's L1 entry
+                    let sp_l1_idx = (vm.cpu.x[2] >> 22) & 0x3FF;
+                    let sp_l1_entry = vm.bus.read_word(pg_dir_phys + (sp_l1_idx as u64) * 4).unwrap_or(0);
+                    eprintln!("[diag]   SP VA L1[{}] = 0x{:08X} (V={})", sp_l1_idx, sp_l1_entry, sp_l1_entry & 1);
+                    
+                    // Run 200 more steps to see the aftermath
+                    eprintln!("[diag] --- Running 200 more steps ---");
+                    for _ in 0..200 {
+                        vm.bus.tick_clint();
+                        vm.bus.sync_mip(&mut vm.cpu.csr.mip);
+                        let sr = vm.step();
+                        if matches!(sr, StepResult::Ebreak) { break; }
+                        count += 1;
+                    }
+                    eprintln!("[diag] --- After 200 steps ---");
+                    eprintln!("[diag]   PC=0x{:08X} SP=0x{:08X} RA=0x{:08X}", vm.cpu.pc, vm.cpu.x[2], vm.cpu.x[1]);
+                    eprintln!("[diag]   scause=0x{:08X} stval=0x{:08X}", vm.cpu.csr.scause, vm.cpu.csr.stval);
+                    break;
+                }
+            }
             _ => {}
-        }
-
-        // Periodic status
-        if count - last_log >= 500_000 {
-            last_log = count;
-            eprintln!("[status] count={} PC=0x{:08X} priv={:?} forwards={} sbi={}",
-                count, vm.cpu.pc, vm.cpu.privilege, forward_count, sbi_count);
         }
 
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[test] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!("[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
             
+            // Inject identity mappings for all of low memory + devices
             let ppn = cur_satp & 0x3FFFFF;
             let pg_dir_phys = (ppn as u64) * 4096;
-            
-            // Identity mappings
             let identity_pte: u32 = 0x0000_00CF;
+            
+            // Map ALL of physical RAM as identity: L1[0..64] covers 256MB
             for i in 0..64u32 {
                 let addr = pg_dir_phys + (i as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
@@ -129,14 +162,15 @@ fn main() {
                     vm.bus.write_word(addr, pte).ok();
                 }
             }
-            
             vm.cpu.tlb.flush_all();
             
             // Verify kernel_map
             let km_phys: u64 = 0x00C79E90;
             let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
             let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
-            if km_pa != 0 || km_vapo != 0xC0000000 {
+            let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
+            if km_pa != 0 || km_vapo != 0xC0000000 || km_vkpo != 0 {
+                eprintln!("[boot] Re-patching kernel_map");
                 vm.bus.write_word(km_phys + 12, 0).ok();
                 vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
                 vm.bus.write_word(km_phys + 24, 0).ok();
@@ -148,29 +182,9 @@ fn main() {
         count += 1;
     }
 
-    eprintln!("\n[test] Done: count={} forwards={} sbi={}", count, forward_count, sbi_count);
-    eprintln!("[test] PC=0x{:08X} SATP=0x{:08X} panic={}", vm.cpu.pc, vm.cpu.csr.satp, panic_found);
-    eprintln!("[test] Cause counts:");
-    for (i, c) in cause_counts.iter().enumerate() {
-        if *c > 0 {
-            let name = match i {
-                2 => "illegal_instruction",
-                7 => "timer",
-                8 => "ecall_u",
-                9 => "ecall_s",
-                12 => "fetch_page_fault",
-                13 => "load_page_fault",
-                15 => "store_page_fault",
-                _ => "unknown",
-            };
-            eprintln!("  cause {} ({}) : {} occurrences", i, name, c);
-        }
-    }
-    
     let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+    eprintln!("\n[boot] Done: count={} SBI_calls={}", count, sbi_count);
     if !sbi_str.is_empty() {
-        eprintln!("[test] SBI output (first 3000 chars):");
-        let preview: String = sbi_str.chars().take(3000).collect();
-        eprintln!("{}", preview);
+        eprintln!("[boot] SBI output: {}", &sbi_str[..sbi_str.len().min(2000)]);
     }
 }

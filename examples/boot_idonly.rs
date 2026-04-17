@@ -1,5 +1,4 @@
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{Privilege, StepResult};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -15,23 +14,23 @@ fn main() {
             "console=ttyS0 loglevel=8",
         ).unwrap();
 
+    // Disable auto_pte_fixup
+    vm.bus.auto_pte_fixup = false;
+
     let fw_addr_u32 = fw_addr as u32;
     let mut count: u64 = 0;
     let mut last_satp: u32 = vm.cpu.csr.satp;
     let mut sbi_count: u64 = 0;
-    let mut forward_count: u64 = 0;
-    let mut cause_counts: [u64; 32] = [0; 32];
-    let mut panic_found: bool = false;
-    let mut last_log: u64 = 0;
+    let mut smode_faults: u64 = 0;
 
-    while count < 2_000_000 {
+    while count < 5_000_000 {
         if vm.bus.sbi.shutdown_requested { break; }
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
 
-            if cause_code == 9 {
+            if cause_code == 9 { // ECALL_S -> SBI call
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
                     vm.cpu.x[17], vm.cpu.x[16],
@@ -47,25 +46,13 @@ fn main() {
             } else if cause_code != 11 {
                 let mpp = (vm.cpu.csr.mstatus >> 11) & 3;
                 if mpp != 3 {
-                    forward_count += 1;
-                    if (cause_code as usize) < 32 {
-                        cause_counts[cause_code as usize] += 1;
-                    }
-                    
-                    // Log first few forwards in detail
-                    if forward_count <= 10 {
-                        let stvec = vm.cpu.csr.stvec & !0x3u32;
-                        eprintln!("[fwd] #{} count={}: cause={} mepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X} mpp={}",
-                            forward_count, count, cause_code, vm.cpu.csr.mepc, vm.cpu.csr.mtval, stvec, mpp);
-                    }
-                    
                     let stvec = vm.cpu.csr.stvec & !0x3u32;
                     if stvec != 0 {
                         vm.cpu.csr.sepc = vm.cpu.csr.mepc;
                         vm.cpu.csr.scause = mcause;
                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 8)) | (spp << 8);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (spp << 5);
                         let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                         vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                         vm.cpu.csr.mstatus &= !(1 << 1);
@@ -73,7 +60,7 @@ fn main() {
                             vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
                         }
                         vm.cpu.pc = stvec;
-                        vm.cpu.privilege = Privilege::Supervisor;
+                        vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
                         vm.cpu.tlb.flush_all();
                         count += 1;
                         continue;
@@ -86,33 +73,39 @@ fn main() {
         vm.bus.tick_clint();
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
-        if !panic_found && vm.cpu.pc == 0xC000252E {
-            panic_found = true;
-            eprintln!("[test] PANIC at count={}", count);
-        }
-
         let step_result = vm.step();
-        match step_result {
-            StepResult::Ebreak => break,
-            _ => {}
-        }
 
-        // Periodic status
-        if count - last_log >= 500_000 {
-            last_log = count;
-            eprintln!("[status] count={} PC=0x{:08X} priv={:?} forwards={} sbi={}",
-                count, vm.cpu.pc, vm.cpu.privilege, forward_count, sbi_count);
+        match step_result {
+            geometry_os::riscv::cpu::StepResult::Ebreak => break,
+            geometry_os::riscv::cpu::StepResult::FetchFault
+            | geometry_os::riscv::cpu::StepResult::LoadFault
+            | geometry_os::riscv::cpu::StepResult::StoreFault => {
+                if vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Supervisor {
+                    smode_faults += 1;
+                    if smode_faults <= 5 {
+                        let ft = match step_result {
+                            geometry_os::riscv::cpu::StepResult::FetchFault => "fetch",
+                            geometry_os::riscv::cpu::StepResult::LoadFault => "load",
+                            _ => "store",
+                        };
+                        eprintln!("[boot] S-mode {} fault #{} at count={}: PC=0x{:08X} scause=0x{:08X} stval=0x{:08X}",
+                            ft, smode_faults, count, vm.cpu.pc, vm.cpu.csr.scause, vm.cpu.csr.stval);
+                    }
+                }
+            }
+            _ => {}
         }
 
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[test] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!("[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
             
+            // Only inject identity mappings for device regions, NOT kernel megapages
             let ppn = cur_satp & 0x3FFFFF;
             let pg_dir_phys = (ppn as u64) * 4096;
-            
-            // Identity mappings
             let identity_pte: u32 = 0x0000_00CF;
+            
+            // Map a large identity range: L1[0..64] covers 0x0-0x0FFFFFFF (256MB)
             for i in 0..64u32 {
                 let addr = pg_dir_phys + (i as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
@@ -121,6 +114,7 @@ fn main() {
                     vm.bus.write_word(addr, pte).ok();
                 }
             }
+            // CLINT, PLIC, UART
             for &l1_idx in &[8u32, 48, 64] {
                 let addr = pg_dir_phys + (l1_idx as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
@@ -131,12 +125,16 @@ fn main() {
             }
             
             vm.cpu.tlb.flush_all();
+            eprintln!("[boot] Injected identity mappings only (no kernel PT fixups)");
             
-            // Verify kernel_map
+            // Verify kernel_map is still correct
             let km_phys: u64 = 0x00C79E90;
             let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
             let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
-            if km_pa != 0 || km_vapo != 0xC0000000 {
+            let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
+            eprintln!("[boot] kernel_map check: pa=0x{:X} vapo=0x{:X} vkpo=0x{:X}", km_pa, km_vapo, km_vkpo);
+            if km_pa != 0 || km_vapo != 0xC0000000 || km_vkpo != 0 {
+                eprintln!("[boot] WARNING: re-patching kernel_map");
                 vm.bus.write_word(km_phys + 12, 0).ok();
                 vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
                 vm.bus.write_word(km_phys + 24, 0).ok();
@@ -148,29 +146,12 @@ fn main() {
         count += 1;
     }
 
-    eprintln!("\n[test] Done: count={} forwards={} sbi={}", count, forward_count, sbi_count);
-    eprintln!("[test] PC=0x{:08X} SATP=0x{:08X} panic={}", vm.cpu.pc, vm.cpu.csr.satp, panic_found);
-    eprintln!("[test] Cause counts:");
-    for (i, c) in cause_counts.iter().enumerate() {
-        if *c > 0 {
-            let name = match i {
-                2 => "illegal_instruction",
-                7 => "timer",
-                8 => "ecall_u",
-                9 => "ecall_s",
-                12 => "fetch_page_fault",
-                13 => "load_page_fault",
-                15 => "store_page_fault",
-                _ => "unknown",
-            };
-            eprintln!("  cause {} ({}) : {} occurrences", i, name, c);
-        }
-    }
-    
     let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+    eprintln!("\n[boot] Done: count={} SBI_calls={} faults={} SBI_output={} bytes",
+        count, sbi_count, smode_faults, sbi_str.len());
     if !sbi_str.is_empty() {
-        eprintln!("[test] SBI output (first 3000 chars):");
-        let preview: String = sbi_str.chars().take(3000).collect();
+        eprintln!("[boot] SBI output (first 2000 chars):");
+        let preview: String = sbi_str.chars().take(2000).collect();
         eprintln!("{}", preview);
     }
 }

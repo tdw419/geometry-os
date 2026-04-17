@@ -234,30 +234,30 @@ impl RiscvVm {
 
         // 6. Generate DTB.
         //
-        // CRITICAL: Set the memory node's base ABOVE the kernel, initramfs, and DTB.
+        // Set memory node base to PA 0 with full RAM size.
         //
-        // The kernel's early_init_dt_alloc_memory_arch() runs DURING
-        // early_init_dt_scan_memory() -- BEFORE early_init_fdt_scan_reserved_mem()
-        // processes the mem_rsvmap. So reserving PA 0 in the mem_rsvmap does NOT
-        // prevent memblock_alloc() from returning PA 0.
+        // The kernel's early_init_dt_scan_memory() reads the first memory node
+        // and sets phys_ram_base from its address. With mem_base=0,
+        // phys_ram_base=0, and setup_bootmem() reserves the kernel image
+        // correctly.
         //
-        // The only reliable fix: start the memory node above all loaded data.
-        // The kernel can still access PA 0..mem_base through:
-        //   - Identity mappings (L1[0..64]) for early boot
-        //   - Linear mapping (VA 0xC0000000+ -> PA 0) for normal operation
+        // The risk: memblock_alloc() might return PA 0 for page tables,
+        // overwriting kernel code. But our SATP-change fixup logic in
+        // boot_linux() replaces any broken L1 entries with correct megapages.
         let ram_size = actual_ram_size as u64;
         let kernel_phys_end = ((load_info.highest_addr + 0xFFF) & !0xFFF) as u64;
-        let after_initrd = initrd_end.unwrap_or(load_info.highest_addr);
-        let dtb_size_est = 4096u64; // upper bound for DTB size
-        let mem_base = ((after_initrd + dtb_size_est + 0xFFF) & !0xFFF) as u64;
-        let mem_size = ram_size.saturating_sub(mem_base);
+        let mem_base: u64 = 0;
+        let mem_size = ram_size;
 
-        // Still reserve in mem_rsvmap for early_init_fdt_scan_reserved_mem().
+        // Reserve kernel, initramfs, and DTB regions in mem_rsvmap.
         let mut reserved_regions = vec![(0u64, kernel_phys_end)];
         if let (Some(initrd_addr), Some(initrd_end_addr)) = (initrd_start, initrd_end) {
             let initrd_start_aligned = (initrd_addr as u64) & !0xFFF;
             let initrd_end_aligned = ((initrd_end_addr as u64) + 0xFFF) & !0xFFF;
-            reserved_regions.push((initrd_start_aligned, initrd_end_aligned - initrd_start_aligned));
+            reserved_regions.push((
+                initrd_start_aligned,
+                initrd_end_aligned - initrd_start_aligned,
+            ));
         }
 
         let dtb_config = dtb::DtbConfig {
@@ -273,7 +273,7 @@ impl RiscvVm {
         eprintln!("[boot] DTB generated: {} bytes, mem_base=0x{:08X}, mem_size=0x{:08X} ({}MB)",
                   dtb_blob.len(), mem_base, mem_size, mem_size / (1024*1024));
 
-        let dtb_addr = ((after_initrd + 0xFFF) & !0xFFF) as u64;
+        let dtb_addr = ((initrd_end.unwrap_or(load_info.highest_addr) + 0xFFF) & !0xFFF) as u64;
         for (i, &byte) in dtb_blob.iter().enumerate() {
             let addr = dtb_addr + i as u64;
             if vm.bus.write_byte(addr, byte).is_err() {
@@ -778,6 +778,36 @@ impl RiscvVm {
                     let s: String = chars.iter().collect();
                     eprintln!("[boot]   FMT: \"{}\"", s);
                 }
+                // Read allocation args from the panic call chain.
+                // __memblock_alloc_or_panic stores size at s0-20 = SP+12.
+                // The caller (__memblock_alloc_or_panic) saved s0 = SP+32,
+                // and the size was stored at s0-20 = original_sp+12.
+                // Since we're inside panic() now, we need to walk back.
+                // Instead, read the memblock struct to see available memory.
+                let memblock_va = 0xC0803448u64;
+                let memblock_pa = memblock_va - 0xC0000000;
+                // memblock.memory.cnt (at offset 48) and memblock.reserved.cnt (at offset 52)
+                let mem_cnt = vm.bus.read_word(memblock_pa + 48).unwrap_or(0);
+                let res_cnt = vm.bus.read_word(memblock_pa + 52).unwrap_or(0);
+                eprintln!("[boot]   memblock: memory.regions={} reserved.regions={}", mem_cnt, res_cnt);
+                // Read total memory and reserved memory from memblock
+                // memblock.memory.regions[0] starts at offset 0 (base, size pairs)
+                for ri in 0..mem_cnt.min(4) {
+                    let base = vm.bus.read_word(memblock_pa + (ri * 16) as u64).unwrap_or(0);
+                    let size = vm.bus.read_word(memblock_pa + (ri * 16 + 4) as u64).unwrap_or(0);
+                    eprintln!("[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)", ri, base, size, size / (1024*1024));
+                }
+                for ri in 0..res_cnt.min(8) {
+                    let base = vm.bus.read_word(memblock_pa + (0x200 + ri * 16) as u64).unwrap_or(0);
+                    let size = vm.bus.read_word(memblock_pa + (0x200 + ri * 16 + 4) as u64).unwrap_or(0);
+                    if size > 0 {
+                        eprintln!("[boot]   reserved[{}]: base=0x{:08X} size=0x{:08X} ({}KB)", ri, base, size, size / 1024);
+                    }
+                }
+                // Also read phys_ram_base
+                let prb_pa = 0x00C79EACu64;
+                let prb = vm.bus.read_word(prb_pa).unwrap_or(0);
+                eprintln!("[boot]   phys_ram_base=0x{:08X}", prb);
                 // Dump register state
                 for i in 0..32 {
                     let name = ["zero","ra","sp","gp","tp","t0","t1","t2","s0","s1","a0","a1","a2","a3","a4","a5",

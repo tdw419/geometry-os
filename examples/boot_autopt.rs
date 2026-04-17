@@ -15,14 +15,14 @@ fn main() {
             "console=ttyS0 loglevel=8",
         ).unwrap();
 
+    // Keep auto_pte_fixup ENABLED (fixes virtual PPNs during MMU walks)
+    // vm.bus.auto_pte_fixup = true;  // already set by boot_linux_setup
+
     let fw_addr_u32 = fw_addr as u32;
     let mut count: u64 = 0;
     let mut last_satp: u32 = vm.cpu.csr.satp;
     let mut sbi_count: u64 = 0;
-    let mut forward_count: u64 = 0;
-    let mut cause_counts: [u64; 32] = [0; 32];
     let mut panic_found: bool = false;
-    let mut last_log: u64 = 0;
 
     while count < 2_000_000 {
         if vm.bus.sbi.shutdown_requested { break; }
@@ -47,18 +47,6 @@ fn main() {
             } else if cause_code != 11 {
                 let mpp = (vm.cpu.csr.mstatus >> 11) & 3;
                 if mpp != 3 {
-                    forward_count += 1;
-                    if (cause_code as usize) < 32 {
-                        cause_counts[cause_code as usize] += 1;
-                    }
-                    
-                    // Log first few forwards in detail
-                    if forward_count <= 10 {
-                        let stvec = vm.cpu.csr.stvec & !0x3u32;
-                        eprintln!("[fwd] #{} count={}: cause={} mepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X} mpp={}",
-                            forward_count, count, cause_code, vm.cpu.csr.mepc, vm.cpu.csr.mtval, stvec, mpp);
-                    }
-                    
                     let stvec = vm.cpu.csr.stvec & !0x3u32;
                     if stvec != 0 {
                         vm.cpu.csr.sepc = vm.cpu.csr.mepc;
@@ -86,22 +74,39 @@ fn main() {
         vm.bus.tick_clint();
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
+        // Panic detection
         if !panic_found && vm.cpu.pc == 0xC000252E {
             panic_found = true;
             eprintln!("[test] PANIC at count={}", count);
+            let fmt_va = vm.cpu.x[10];
+            if fmt_va >= 0xC0000000 {
+                let fmt_pa = (fmt_va - 0xC0000000) as u64;
+                let mut chars = Vec::new();
+                for j in 0..200u64 {
+                    let b = vm.bus.read_byte(fmt_pa + j).unwrap_or(0);
+                    if b == 0 { break; }
+                    if b >= 0x20 && b < 0x7f { chars.push(b as char); } else { break; }
+                }
+                eprintln!("[test] FMT: \"{}\"", chars.iter().collect::<String>());
+            }
         }
 
         let step_result = vm.step();
+
         match step_result {
             StepResult::Ebreak => break,
+            StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
+                if vm.cpu.privilege == Privilege::Supervisor && count < 200_000 {
+                    let ft = match step_result {
+                        StepResult::FetchFault => "fetch",
+                        StepResult::LoadFault => "load",
+                        _ => "store",
+                    };
+                    eprintln!("[test] S-mode {} fault at count={}: PC=0x{:08X} stval=0x{:08X}",
+                        ft, count, vm.cpu.pc, vm.cpu.csr.stval);
+                }
+            }
             _ => {}
-        }
-
-        // Periodic status
-        if count - last_log >= 500_000 {
-            last_log = count;
-            eprintln!("[status] count={} PC=0x{:08X} priv={:?} forwards={} sbi={}",
-                count, vm.cpu.pc, vm.cpu.privilege, forward_count, sbi_count);
         }
 
         let cur_satp = vm.cpu.csr.satp;
@@ -110,9 +115,10 @@ fn main() {
             
             let ppn = cur_satp & 0x3FFFFF;
             let pg_dir_phys = (ppn as u64) * 4096;
-            
-            // Identity mappings
             let identity_pte: u32 = 0x0000_00CF;
+            
+            // Inject identity mappings for low RAM + devices ONLY
+            // Do NOT touch kernel L1[768..779] entries
             for i in 0..64u32 {
                 let addr = pg_dir_phys + (i as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
@@ -131,12 +137,14 @@ fn main() {
             }
             
             vm.cpu.tlb.flush_all();
+            eprintln!("[test] Identity-only fixups applied");
             
             // Verify kernel_map
             let km_phys: u64 = 0x00C79E90;
             let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
             let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
             if km_pa != 0 || km_vapo != 0xC0000000 {
+                eprintln!("[test] Re-patching kernel_map");
                 vm.bus.write_word(km_phys + 12, 0).ok();
                 vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
                 vm.bus.write_word(km_phys + 24, 0).ok();
@@ -148,26 +156,9 @@ fn main() {
         count += 1;
     }
 
-    eprintln!("\n[test] Done: count={} forwards={} sbi={}", count, forward_count, sbi_count);
-    eprintln!("[test] PC=0x{:08X} SATP=0x{:08X} panic={}", vm.cpu.pc, vm.cpu.csr.satp, panic_found);
-    eprintln!("[test] Cause counts:");
-    for (i, c) in cause_counts.iter().enumerate() {
-        if *c > 0 {
-            let name = match i {
-                2 => "illegal_instruction",
-                7 => "timer",
-                8 => "ecall_u",
-                9 => "ecall_s",
-                12 => "fetch_page_fault",
-                13 => "load_page_fault",
-                15 => "store_page_fault",
-                _ => "unknown",
-            };
-            eprintln!("  cause {} ({}) : {} occurrences", i, name, c);
-        }
-    }
-    
     let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+    eprintln!("\n[test] Done: count={} SBI_calls={} panic={}", count, sbi_count, panic_found);
+    eprintln!("[test] PC=0x{:08X} SATP=0x{:08X}", vm.cpu.pc, vm.cpu.csr.satp);
     if !sbi_str.is_empty() {
         eprintln!("[test] SBI output (first 3000 chars):");
         let preview: String = sbi_str.chars().take(3000).collect();
