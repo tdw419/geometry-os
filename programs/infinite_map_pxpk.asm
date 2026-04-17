@@ -5,10 +5,10 @@
 ;
 ; Key changes from infinite_map.asm:
 ;   1. Biome color table in RAM replaces the ~200-instruction CMP/BLT cascade
-;   2. Per-tile variation via XOR fine hash + nibble lookup
+;   2. Per-tile variation via MUL fine hash + nibble lookup
 ;   3. 4 pattern strategies from coarse hash: flat, center, horiz, vert
 ;   4. Accent color via XOR_CHAIN (Pixelpack strategy 0xC) from coarse hash
-;   5. Net result: ~42-56 instructions/tile (flat=42, non-flat avg ~55)
+;   5. Net result: ~49-56 instructions/tile (flat=49, non-flat avg ~56)
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -18,13 +18,15 @@
 ;   RAM[0x7802] = frame_counter
 ;   RAM[0xFFB]  = key bitmask
 ;
-; Seed expansion architecture (32-bit coarse_hash / mixed_hash):
-;   Top 5 bits (>>27): biome index (table lookup)
-;   Bits 25-26 (&0x3): pattern type selector (4 strategies)
-;   Bits 10-20 (&0x1F1F1F): XOR mask for accent color
-;   Fine hash (world_x XOR world_y, low 4 bits): nibble variation index
+; Seed expansion architecture:
+;   COARSE HASH (world_x>>3 * 99001 XOR world_y>>3 * 79007, LCG mixed):
+;     Top 5 bits (>>27): biome index (table lookup into 0x7000-0x701F)
+;     Bits 25-26 (&0x3): pattern type selector (4 strategies)
+;     Bits 10-20 (&0x1F1F1F): XOR mask for accent color
+;   FINE HASH (world_x * 374761393 XOR world_y * 668265263):
+;     Nibble 0 (bits 0-3): R-channel variation index into nibble table
 ;
-; Pattern strategies (ordered by dispatch cost for balanced paths):
+; Pattern strategies:
 ;   0 (flat):    Single RECTF -- smooth terrain (water, snow, plains)
 ;   1 (center):  Base background + 2x2 accent center -- oasis, crystals
 ;   2 (horiz):   Top half base + bottom half accent -- dune ridges, grass
@@ -408,40 +410,48 @@ render_y:
     MUL r6, r18
     XOR r5, r6           ; r5 = coarse_hash
     LDI r18, 1103515245
-    MUL r5, r18          ; r5 = mixed_hash (32-bit)
+    MUL r5, r18          ; r5 = mixed_hash
 
-    ; ---- Extract biome (top 5 bits) + pattern type (bits 25-26) ----
+    ; ---- Extract biome (top 5 bits) + pattern (bits 25-26) ----
     MOV r17, r5
     LDI r18, 27
     SHR r17, r18         ; r17 = biome_type (0..31)
     MOV r18, r5
     LDI r20, 25
-    SHR r18, r20          ; r18 = mixed_hash >> 25
-    ANDI r18, 3           ; r18 = pattern_type (0-3) from coarse hash
+    SHR r18, r20
+    ANDI r18, 3           ; r18 = pattern_type (0-3)
 
     ; ---- TABLE LOOKUP: biome color ----
     MOV r20, r24
     ADD r20, r17          ; r20 = 0x7000 + biome_index
     LOAD r17, r20         ; r17 = biome base color
 
-    ; ---- Fine hash: XOR for nibble variation (only 4 bits needed) ----
+    ; ---- Fine hash: MUL-based per-tile seeding (Pixelpack strategy) ----
+    ; r6 = world_x * 374761393 XOR world_y * 668265263
+    ; This gives good avalanche -- adjacent tiles get very different seeds
     MOV r6, r3
-    XOR r6, r4            ; r6 = world_x XOR world_y
-    ANDI r6, 0xF          ; r6 = nibble index (0-15)
-    ADD r6, r25           ; r6 = 0x7020 + index
-    LOAD r6, r6           ; r6 = variation offset
-    ADD r17, r6           ; r17 = base color + variation
+    LDI r18, 374761393
+    MUL r6, r18
+    MOV r21, r4
+    LDI r18, 668265263
+    MUL r21, r18
+    XOR r6, r21           ; r6 = fine_hash (THE SEED, 32 bits of goodness)
 
-    ; ---- Accent from coarse_hash bits 10-20 (XOR_CHAIN strategy) ----
+    ; ---- R-channel variation: nibble 0 of fine_hash ----
+    MOV r18, r6
+    ANDI r18, 0xF          ; r18 = seed & 0xF (nibble 0: R variation index)
+    ADD r18, r25           ; r18 = 0x7020 + index
+    LOAD r18, r18          ; r18 = variation offset
+    ADD r17, r18           ; r17 += R variation
+
+    ; ---- Apply day/night tint to base, then derive accent ----
+    ADD r17, r23          ; base += tint
+    ; Accent: XOR tinted base with coarse_hash mask (XOR_CHAIN strategy)
     MOV r19, r5
     LDI r20, 10
     SHR r19, r20
     ANDI r19, 0x1F1F1F     ; 5 bits per channel mask
-    XOR r19, r17          ; r19 = accent color
-
-    ; ---- Apply day/night tint to both colors ----
-    ADD r17, r23          ; base += tint
-    ADD r19, r23          ; accent += tint
+    XOR r19, r17          ; r19 = accent color (inherits tint via XOR of tinted base)
 
     ; ---- Pre-load half-width constant for non-flat patterns ----
     LDI r20, 2            ; shared by center/horiz/vert patterns
