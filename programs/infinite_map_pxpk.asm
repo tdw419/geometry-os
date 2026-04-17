@@ -6,7 +6,9 @@
 ; Key changes from infinite_map.asm:
 ;   1. Biome color table in RAM replaces the ~200-instruction CMP/BLT cascade
 ;   2. Fine hash (seed) drives per-tile color variation via nibble extraction
-;   3. Net result: ~34 instructions/tile (was ~60), richer per-tile visuals
+;   3. Seed expansion with 4 pattern strategies (flat, horiz, vert, center)
+;   4. Accent color via XOR_CHAIN (Pixelpack strategy 0xC)
+;   5. Net result: ~34-46 instructions/tile, richer sub-pattern visuals
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -16,8 +18,19 @@
 ;   RAM[0x7802] = frame_counter
 ;   RAM[0xFFB]  = key bitmask
 ;
+; Seed expansion architecture (32-bit fine_hash = THE SEED):
+;   Bits 0-3:    R channel variation (nibble lookup into 0x7020 table)
+;   Bits 16-20:  XOR mask for accent color (XOR_CHAIN strategy)
+;   Bits 30-31:  Pattern type selector (0=flat, 1=horiz, 2=vert, 3=center)
+;
+; Pattern strategies:
+;   0 (flat):    Single RECTF -- smooth terrain (water, snow, plains)
+;   1 (horiz):   Top half base + bottom half accent -- dune ridges, grass
+;   2 (vert):    Left half base + right half accent -- rock faces, walls
+;   3 (center):  Base background + 2x2 accent center -- oasis, crystals
+;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
-; Renders via RECTF.
+; Renders via RECTF (1-2 per tile depending on pattern).
 
 ; ===== Constants =====
 LDI r7, 1               ; constant 1
@@ -420,48 +433,75 @@ render_y:
     MUL r21, r18
     XOR r6, r21          ; r6 = fine_hash (THE SEED)
 
-    ; ---- Pixelpack-style nibble expansion ----
-    ; Extract 3 nibbles from seed for R, G, B variation
-    ; Nibble 0 (bits 0-3): R variation index
+    ; ---- Seed: R variation (nibble 0, bits 0-3) ----
     MOV r18, r6
     LDI r19, 0xF
-    AND r18, r19          ; r18 = seed & 0xF (R variation index)
-    ; Look up variation offset from nibble table
+    AND r18, r19          ; r18 = seed & 0xF
     ADD r18, r25          ; r18 = 0x7020 + index
-    LOAD r18, r18         ; r18 = variation offset for R
-    ADD r17, r18          ; r17 += R variation
+    LOAD r18, r18         ; r18 = variation offset
+    ADD r17, r18          ; r17 = base color + R variation
 
-    ; Nibble 1 (bits 4-7): G variation index
+    ; ---- Seed: accent color via XOR_CHAIN (bits 16-20) ----
+    ; Pixelpack strategy 0xC: XOR base with seed-derived key
+    MOV r19, r6
+    LDI r20, 16
+    SHR r19, r20          ; r19 = seed >> 16
+    LDI r20, 0x1F1F1F     ; 5 bits per channel mask
+    AND r19, r20          ; r19 = seed-derived XOR mask
+    XOR r19, r17          ; r19 = accent color (base XOR mask)
+
+    ; ---- Seed: pattern type from bits 30-31 ----
     MOV r18, r6
-    LDI r19, 4
-    SHR r18, r19
-    LDI r19, 0xF
-    AND r18, r19          ; r18 = (seed >> 4) & 0xF (G variation index)
-    ADD r18, r25
-    LOAD r18, r18
-    ; Shift G variation to green channel position (bits 8-15)
-    LDI r19, 8
-    SHL r18, r19          ; shift into green channel range
-    ADD r17, r18
+    LDI r20, 30
+    SHR r18, r20          ; r18 = pattern_type (0-3)
 
-    ; Nibble 2 (bits 8-11): B variation index
-    MOV r18, r6
-    LDI r19, 8
-    SHR r18, r19
-    LDI r19, 0xF
-    AND r18, r19          ; r18 = (seed >> 8) & 0xF (B variation index)
-    ADD r18, r25
-    LOAD r18, r18
-    ; Shift B variation to blue channel position (bits 16-23)
-    LDI r19, 16
-    SHL r18, r19
-    ADD r17, r18
+    ; ---- Apply day/night tint to both colors ----
+    ADD r17, r23          ; base += tint
+    ADD r19, r23          ; accent += tint
 
-    ; ---- Apply day/night tint ----
-    ADD r17, r23
+    ; ---- Pattern dispatch (4 strategies from seed) ----
+    JZ r18, pat_flat       ; 0: flat tile
+    SUB r18, r7            ; pattern - 1
+    JZ r18, pat_horiz      ; 1: horizontal stripe
+    SUB r18, r7            ; pattern - 2
+    JZ r18, pat_vert       ; 2: vertical stripe
+    ; Fall through: 3 = center bright
 
-    ; ---- Draw tile ----
+    ; Pattern 3: base background + 2x2 accent center
     RECTF r28, r27, r9, r9, r17
+    LDI r20, 1
+    MOV r21, r28
+    ADD r21, r20           ; r21 = x + 1
+    MOV r22, r27
+    ADD r22, r20           ; r22 = y + 1
+    LDI r20, 2
+    RECTF r21, r22, r20, r20, r19
+    JMP tile_done
+
+pat_flat:
+    ; Pattern 0: single flat tile
+    RECTF r28, r27, r9, r9, r17
+    JMP tile_done
+
+pat_horiz:
+    ; Pattern 1: top half base, bottom half accent (dune ridges)
+    LDI r20, 2
+    RECTF r28, r27, r9, r20, r17
+    MOV r21, r27
+    ADD r21, r20           ; r21 = y + 2
+    RECTF r28, r21, r9, r20, r19
+    JMP tile_done
+
+pat_vert:
+    ; Pattern 2: left half base, right half accent (rock faces)
+    LDI r20, 2
+    RECTF r28, r27, r20, r9, r17
+    MOV r21, r28
+    ADD r21, r20           ; r21 = x + 2
+    RECTF r21, r27, r20, r9, r19
+    JMP tile_done
+
+tile_done:
 
     ; ---- Next tile ----
     ADD r2, r7            ; tx++

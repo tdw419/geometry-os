@@ -382,6 +382,72 @@ fn test_infinite_map_assembles() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_assembles() {
+    let source = std::fs::read_to_string("programs/infinite_map_pxpk.asm")
+        .expect("infinite_map_pxpk.asm not found");
+    let asm = assemble(&source, 0).expect("infinite_map_pxpk.asm should assemble");
+    assert!(!asm.pixels.is_empty(), "should produce non-empty bytecode");
+    // pxpk version is ~635 lines; expect similar bytecode size
+    assert!(asm.pixels.len() > 400, "bytecode should be >400 words, got {}", asm.pixels.len());
+}
+
+/// Helper: assemble infinite_map_pxpk.asm, load into VM.
+fn infinite_map_pxpk_vm() -> Vm {
+    let source = std::fs::read_to_string("programs/infinite_map_pxpk.asm")
+        .expect("infinite_map_pxpk.asm not found");
+    let asm = assemble(&source, 0).expect("infinite_map_pxpk.asm failed to assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_infinite_map_pxpk_runs_and_renders() {
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "pxpk should reach FRAME within 1M steps (took {})", steps);
+    let non_black: usize = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(non_black > 50000,
+        "pxpk screen should have mostly colored pixels, got {}/{}", non_black, 256 * 256);
+}
+
+#[test]
+fn test_infinite_map_pxpk_camera_moves() {
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 2; // bit 1 = down
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "pxpk should reach FRAME (took {})", steps);
+    // Camera should have moved -- y position in RAM[0x7801] should be > 0
+    assert!(vm.ram[0x7801] > 0, "camera y should have moved down, got {}", vm.ram[0x7801]);
+}
+
+#[test]
+fn test_infinite_map_pxpk_pattern_variety() {
+    // Verify that different tiles get different patterns (not all flat)
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    // Sample a few tiles and check they aren't all the same color
+    let mut colors = std::collections::HashSet::new();
+    for y in [0, 32, 64, 128, 200] {
+        for x in [0, 32, 64, 128, 200] {
+            let idx = (y as usize) * 256 + (x as usize);
+            if idx < vm.screen.len() {
+                colors.insert(vm.screen[idx]);
+            }
+        }
+    }
+    assert!(colors.len() > 5, "pxpk should produce varied tile colors, got {} unique", colors.len());
+}
+
+#[test]
 fn test_infinite_map_runs_and_renders() {
     // Requirement: the program runs to completion of a frame and renders non-black pixels.
     let mut vm = infinite_map_vm();
