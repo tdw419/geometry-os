@@ -1,104 +1,85 @@
-// Check MMU translation right after satp write
-use std::fs;
-use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::StepResult;
-use geometry_os::riscv::mmu::{translate, AccessType};
+use geometry_os::riscv::{RiscvVm, cpu, csr, mmu};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
-    let kernel = fs::read(kernel_path).unwrap();
-    let initramfs = fs::read(initramfs_path).ok();
+    let kernel_image = std::fs::read(kernel_path).expect("kernel");
+    let initramfs = std::fs::read(initramfs_path).ok();
 
-    let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, result) = RiscvVm::boot_linux(
-        &kernel, initramfs.as_deref(), 512, 0, bootargs,
+    let (mut vm, _br) = RiscvVm::boot_linux(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        180_000,
+        "console=ttyS0 loglevel=8",
     ).unwrap();
 
-    println!("Entry: 0x{:08X}, DTB: 0x{:08X}", result.entry, result.dtb_addr);
-
-    // Run until satp changes
-    let max_instr = 300_000u64;
-    let mut count = 0u64;
-    let mut prev_satp = vm.cpu.csr.satp;
-
-    while count < max_instr {
-        let satp_before = vm.cpu.csr.satp;
-        let pc_before = vm.cpu.pc;
-        let step_result = vm.step();
-        count += 1;
-
-        if vm.cpu.csr.satp != prev_satp {
-            println!("[{}] satp changed: 0x{:08X} -> 0x{:08X}", count, prev_satp, vm.cpu.csr.satp);
-            
-            // Check translation of next instruction PC
-            let next_pc = vm.cpu.pc;
-            println!("  Next PC to fetch: 0x{:08X}", next_pc);
-            
-            // Try MMU translation
-            let sum = vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::User;
-            match translate(next_pc, AccessType::Fetch, vm.cpu.privilege, sum, false, vm.cpu.csr.satp, &mut vm.bus, &mut vm.cpu.tlb) {
-
-                geometry_os::riscv::mmu::TranslateResult::Ok(pa) => {
-                    println!("  Translate: 0x{:08X} -> PA 0x{:08X}", next_pc, pa);
-                    // Read instruction at PA
-                    match vm.bus.read_word(pa) {
-                        Ok(word) => println!("  Instruction at PA: 0x{:08X}", word),
-                        Err(e) => println!("  Read failed: {:?}", e),
-                    }
-                    // Also read directly from VA (pre-MMU) for comparison
-                    match vm.bus.mem.read_word(next_pc as u64) {
-                        Ok(word) => println!("  Instruction at VA (raw): 0x{:08X}", word),
-                        Err(e) => println!("  Raw read failed: {:?}", e),
-                    }
-                }
-                geometry_os::riscv::mmu::TranslateResult::FetchFault => {
-                    println!("  Translate: FETCH FAULT");
-                }
-                geometry_os::riscv::mmu::TranslateResult::LoadFault => {
-                    println!("  Translate: LOAD FAULT");
-                }
-                geometry_os::riscv::mmu::TranslateResult::StoreFault => {
-                    println!("  Translate: STORE FAULT");
+    println!("=== MMU Translation Check ===");
+    
+    // Use mmu::translate directly
+    let satp = vm.cpu.csr.satp;
+    let sum = (vm.cpu.csr.mstatus >> csr::MSTATUS_SUM) & 1 != 0;
+    let mxr = (vm.cpu.csr.mstatus >> csr::MSTATUS_MXR) & 1 != 0;
+    
+    // Check handler address translation
+    let handler_va = 0xC0210F14u32;
+    match mmu::translate(handler_va, mmu::AccessType::Fetch, cpu::Privilege::Supervisor, sum, mxr, satp, &mut vm.bus, &mut vm.cpu.tlb) {
+        mmu::TranslateResult::Ok(pa) => {
+            println!("Handler VA 0x{:08X} -> PA 0x{:08X} OK", handler_va, pa);
+            if let Ok(inst) = vm.bus.read_word(pa) {
+                println!("  Instruction: 0x{:08X}", inst);
+            }
+        }
+        mmu::TranslateResult::FetchFault => println!("Handler VA 0x{:08X} -> FETCH FAULT!", handler_va),
+        mmu::TranslateResult::LoadFault => println!("Handler VA 0x{:08X} -> LOAD FAULT!", handler_va),
+        mmu::TranslateResult::StoreFault => println!("Handler VA 0x{:08X} -> STORE FAULT!", handler_va),
+    }
+    
+    // Check bad return address
+    let bad_ra = 0x3FFFF000u32;
+    match mmu::translate(bad_ra, mmu::AccessType::Fetch, cpu::Privilege::Supervisor, sum, mxr, satp, &mut vm.bus, &mut vm.cpu.tlb) {
+        mmu::TranslateResult::Ok(pa) => println!("Bad RA VA 0x{:08X} -> PA 0x{:08X} OK (unexpected!)", bad_ra, pa),
+        _ => println!("Bad RA VA 0x{:08X} -> FAULT (expected)", bad_ra),
+    }
+    
+    // Check instructions around the crash
+    println!("\nInstructions near crash point (VA 0xC003F9B0):");
+    let base_va = 0xC003F9B0u32;
+    for offset in 0..48 {
+        let va = base_va + offset * 2; // compressed instructions are 2 bytes
+        match mmu::translate(va, mmu::AccessType::Fetch, cpu::Privilege::Supervisor, sum, mxr, satp, &mut vm.bus, &mut vm.cpu.tlb) {
+            mmu::TranslateResult::Ok(pa) => {
+                if let Ok(hw) = vm.bus.read_half(pa) {
+                    println!("  VA 0x{:08X} -> PA 0x{:08X}: 0x{:04X}", va, pa, hw);
                 }
             }
-            
-            // Dump satp PPN and first few page table entries
-            let root_ppn = vm.cpu.csr.satp & 0x003F_FFFF;
-            let root_addr = (root_ppn as u64) << 12;
-            println!("  Root PT at PA: 0x{:08X}", root_addr);
-            for i in 0..8 {
-                let pte_addr = root_addr + (i as u64) * 4;
-                if let Ok(pte) = vm.bus.read_word(pte_addr) {
-                    if pte != 0 {
-                        println!("  PTE[{}] at PA 0x{:08X} = 0x{:08X}", i, pte_addr, pte);
-                    }
-                }
-            }
-            
-            // Walk the page table for the specific VA
-            let vpn1 = (next_pc >> 22) & 0x3FF;
-            let vpn0 = (next_pc >> 12) & 0x3FF;
-            println!("  VPN1={}, VPN0={}", vpn1, vpn0);
-            
-            prev_satp = vm.cpu.csr.satp;
-            
-            // Now run a few more steps to see what happens
-            for j in 0..10 {
-                let pc = vm.cpu.pc;
-                let sr = vm.step();
-                count += 1;
-                let mcause = vm.cpu.csr.mcause;
-                println!("  [{}] PC=0x{:08X} -> 0x{:08X} mcause={} result={:?}", 
-                         count, pc, vm.cpu.pc, mcause, sr);
-                if mcause != 0 || matches!(sr, StepResult::FetchFault) {
-                    break;
-                }
-            }
-            break;
+            _ => println!("  VA 0x{:08X} -> FAULT", va),
         }
     }
-
-    println!("\n=== Final: {} steps, PC=0x{:08X}, mcause=0x{:08X} ===", 
-             count, vm.cpu.pc, vm.cpu.csr.mcause);
+    
+    // Check page table for user space
+    let pg_dir_phys = ((satp & 0x3FFFFF) as u64) * 4096;
+    println!("\nPage table L1[255] (VA 0x3FC00000-0x3FFFFFFF):");
+    let l1_255 = vm.bus.read_word(pg_dir_phys + 255 * 4).unwrap_or(0);
+    println!("  PTE = 0x{:08X} V={}", l1_255, l1_255 & 1);
+    
+    // Check stack
+    let sp = vm.cpu.x[2];
+    println!("\nStack (SP=0x{:08X}):", sp);
+    match mmu::translate(sp, mmu::AccessType::Load, cpu::Privilege::Supervisor, sum, mxr, satp, &mut vm.bus, &mut vm.cpu.tlb) {
+        mmu::TranslateResult::Ok(sp_pa) => {
+            println!("  SP -> PA 0x{:08X}", sp_pa);
+            for off in [80, 84, 88, 92, 96, 100] as [u32; 6] {
+                if let Ok(val) = vm.bus.read_word(sp_pa + off as u64) {
+                    let label = match off {
+                        88 => " (s0 save area)",
+                        92 => " (ra save area!)",
+                        _ => "",
+                    };
+                    println!("  [SP+{}] = 0x{:08X}{}", off, val, label);
+                }
+            }
+        }
+        _ => println!("  SP -> FAULT!"),
+    }
 }
