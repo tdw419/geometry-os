@@ -7,7 +7,7 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
 
     // Get VM after setup, run exactly 178200 steps (just before the crash)
-    let (vm, _br) = RiscvVm::boot_linux(
+    let (mut vm, _br) = RiscvVm::boot_linux(
         &kernel_image,
         initramfs.as_deref(),
         256,
