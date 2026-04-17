@@ -10,10 +10,11 @@
 ; Pure math -- no stored world data, truly infinite.
 ;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
-; Renders via RECTF. ~155K instructions/frame (16% of 1M budget).
+; Renders via RECTF. ~322K instructions/frame (32% of 1M budget).
 ; Optimized: day/night tint precomputed once per frame (was per-tile ~40K savings),
 ; screen position via incrementing accumulators (was MUL per-tile ~8K savings),
-; off-screen tiles skip hash+color computation entirely (~30 ops saved per tile).
+; viewport (64x64 tiles) exactly fills 256x256 screen -- no off-screen tiles,
+;   so bounds checks removed (was 4 dead ops/tile = 16K savings).
 ;
 ; Memory:
 ;   RAM[0x7800] = camera_x (tile coordinates)
@@ -162,7 +163,6 @@ pre_tint_done:
 ; Per tile: coarse hash -> biome, fine hash -> structure check, color -> RECTF
 
 LOAD r22, r13           ; r22 = frame_counter (load once for whole frame)
-LDI r19, 256            ; screen dimension for bounds check
 LDI r1, 0               ; ty = 0
 LDI r25, 0              ; screen_y = 0 (accumulator, replaces ty*4 multiply)
 
@@ -171,11 +171,7 @@ render_y:
   LDI r26, 0            ; screen_x = 0 (accumulator, replaces tx*4 multiply)
 
   render_x:
-    ; ---- Off-screen skip: avoid hash+color for tiles outside viewport ----
-    CMP r26, r19
-    BGE r0, next_tile     ; screen_x >= 256 -> skip
-    CMP r25, r19
-    BGE r0, next_tile     ; screen_y >= 256 -> skip
+    ; All 64x64 tiles are on-screen (64*4=256 = screen size), no bounds check needed.
 
     ; World coordinates
     MOV r3, r14
@@ -302,6 +298,15 @@ struct_oasis:
     JMP do_rect
 struct_land:
     LDI r17, 0x884422    ; tree trunk / hut (brown)
+    ; -- tree sway: shimmer green every 4th frame, offset by world_x
+    MOV r20, r22
+    ADD r20, r3           ; frame_counter + world_x
+    LDI r18, 3
+    AND r20, r18          ; & 3 -> 0..3
+    JNZ r20, struct_land_done
+    LDI r18, 0x001100    ; brighter foliage flicker
+    ADD r17, r18
+struct_land_done:
     JMP do_rect
 struct_swamp:
     LDI r17, 0x44BB44    ; lily pad (bright green)
@@ -317,6 +322,12 @@ struct_tundra:
     JMP do_rect
 struct_lava:
     LDI r17, 0xFF8800    ; ember (orange)
+    ; -- ember pulse: blue flicker based on frame + world_y
+    MOV r20, r22
+    ADD r20, r4           ; frame_counter + world_y
+    LDI r18, 7
+    AND r20, r18          ; & 7 -> 0..7
+    ADD r17, r20          ; subtle blue channel flicker
     JMP do_rect
 struct_volcanic:
     LDI r17, 0xFFDD00    ; fire vent (yellow-orange)
@@ -332,6 +343,14 @@ struct_ruins:
     JMP do_rect
 struct_crystal:
     LDI r17, 0x22DDCC    ; crystal cluster (bright teal)
+    ; -- crystal sparkle: XOR flicker per frame, shifted into hue variation
+    MOV r20, r22
+    XOR r20, r3           ; frame_counter ^ world_x
+    LDI r18, 0xF
+    AND r20, r18          ; & 0xF -> 0..15
+    LDI r18, 4
+    SHL r20, r18          ; shift left 4 -> 0..0xF0
+    ADD r17, r20
     JMP do_rect
 struct_ash:
     LDI r17, 0x666655    ; ash geyser (dark grey-green)
@@ -341,6 +360,15 @@ struct_dead:
     JMP do_rect
 struct_biolum:
     LDI r17, 0x00FFAA    ; glowing spore (bright cyan-green)
+    ; -- spore glow cycle: slow 4-step green pulse via frame >> 2
+    MOV r20, r22
+    LDI r18, 2
+    SHR r20, r18          ; frame_counter >> 2 (slow cycle)
+    LDI r18, 3
+    AND r20, r18          ; & 3 -> 0..3
+    LDI r18, 0x002200    ; green pulse unit
+    MUL r20, r18          ; 0, 0x002200, 0x004400, or 0x006600
+    ADD r17, r20
     JMP do_rect
 struct_void:
     LDI r17, 0x440088    ; void spark (deep purple)

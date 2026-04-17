@@ -563,3 +563,21 @@ fn test_infinite_map_cardinal_and_diagonal_combined() {
     assert_eq!(vm.ram[0x7800], 2, "camera_x should be 2 (Right + Down+Right diagonal)");
     assert_eq!(vm.ram[0x7801], 1, "camera_y should be 1 (Down+Right diagonal only)");
 }
+
+#[test]
+fn test_infinite_map_render_loop_instruction_count() {
+    // Performance regression test: verify the render loop stays within budget.
+    // After removing dead off-screen bounds checks (4 ops/tile = ~16K savings),
+    // a single frame runs in ~322K steps. Before the optimization it was ~338K.
+    // We allow some slack (350K) to account for variations in the pre-tint path.
+    let mut vm = infinite_map_vm();
+    vm.ram[0xFFB] = 0; // no input
+
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "should reach FRAME within 1M steps (took {})", steps);
+
+    // The render loop should be well under 350K steps for a single frame.
+    assert!(steps < 350_000,
+        "render loop should take < 350K steps, took {} (possible performance regression)",
+        steps);
+}
