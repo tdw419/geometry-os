@@ -8,7 +8,7 @@
 ;   2. Fine hash (seed) drives per-tile color variation via nibble extraction
 ;   3. Seed expansion with 4 pattern strategies (flat, horiz, vert, center)
 ;   4. Accent color via XOR_CHAIN (Pixelpack strategy 0xC)
-;   5. Net result: ~34-46 instructions/tile, richer sub-pattern visuals
+;   5. Net result: ~46-53 instructions/tile (all paths under 55 budget)
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -20,14 +20,14 @@
 ;
 ; Seed expansion architecture (32-bit fine_hash = THE SEED):
 ;   Bits 0-3:    R channel variation (nibble lookup into 0x7020 table)
-;   Bits 16-20:  XOR mask for accent color (XOR_CHAIN strategy)
-;   Bits 30-31:  Pattern type selector (0=flat, 1=horiz, 2=vert, 3=center)
+;   Bits 16-20:  XOR mask for accent color (XOR_CHAIN strategy 0xC)
+;   Bits 30-31:  Pattern type selector (dispatch-optimized order)
 ;
-; Pattern strategies:
+; Pattern strategies (ordered by dispatch cost for balanced paths):
 ;   0 (flat):    Single RECTF -- smooth terrain (water, snow, plains)
-;   1 (horiz):   Top half base + bottom half accent -- dune ridges, grass
-;   2 (vert):    Left half base + right half accent -- rock faces, walls
-;   3 (center):  Base background + 2x2 accent center -- oasis, crystals
+;   1 (center):  Base background + 2x2 accent center -- oasis, crystals
+;   2 (horiz):   Top half base + bottom half accent -- dune ridges, grass
+;   3 (vert):    Left half base + right half accent -- rock faces, walls
 ;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
 ; Renders via RECTF (1-2 per tile depending on pattern).
@@ -381,7 +381,6 @@ pre_tint_done:
 LDI r24, 0x7000         ; biome color table base
 LDI r25, 0x7020         ; nibble variation table base
 
-LOAD r22, r13           ; r22 = frame_counter
 LDI r1, 0               ; ty = 0
 LDI r27, 0              ; screen_y accumulator
 
@@ -396,19 +395,16 @@ render_y:
     MOV r4, r15
     ADD r4, r1           ; r4 = world_y
 
-    ; ---- Coarse hash for biome ----
+    ; ---- Coarse hash for biome (optimized: reuse shift constant) ----
     MOV r5, r3
-    LDI r18, 3
-    SHR r5, r18          ; r5 = world_x >> 3
-    LDI r18, 99001
-    MUL r5, r18
-
     MOV r6, r4
     LDI r18, 3
-    SHR r6, r18          ; r6 = world_y >> 3
+    SHR r5, r18          ; r5 = world_x >> 3
+    SHR r6, r18          ; r6 = world_y >> 3 (reuse r18=3)
+    LDI r18, 99001
+    MUL r5, r18
     LDI r18, 79007
     MUL r6, r18
-
     XOR r5, r6           ; r5 = coarse_hash
     LDI r18, 1103515245
     MUL r5, r18          ; r5 = mixed_hash (full 32-bit)
@@ -419,7 +415,6 @@ render_y:
     SHR r17, r18         ; r17 = biome_type (0..31)
 
     ; ---- TABLE LOOKUP: biome color ----
-    ; Address = 0x7000 + biome_type
     MOV r18, r24          ; r18 = 0x7000
     ADD r18, r17          ; r18 = 0x7000 + biome_index
     LOAD r17, r18         ; r17 = biome base color from table
@@ -441,8 +436,11 @@ render_y:
     LOAD r18, r18         ; r18 = variation offset
     ADD r17, r18          ; r17 = base color + R variation
 
-    ; ---- Seed: accent color via XOR_CHAIN (bits 16-20) ----
-    ; Pixelpack strategy 0xC: XOR base with seed-derived key
+    ; ---- Combined: accent + pattern type (optimized) ----
+    ; Pattern type from bits 30-31, accent from bits 16-20
+    MOV r18, r6
+    LDI r20, 30
+    SHR r18, r20          ; r18 = pattern_type (0-3)
     MOV r19, r6
     LDI r20, 16
     SHR r19, r20          ; r19 = seed >> 16
@@ -450,32 +448,25 @@ render_y:
     AND r19, r20          ; r19 = seed-derived XOR mask
     XOR r19, r17          ; r19 = accent color (base XOR mask)
 
-    ; ---- Seed: pattern type from bits 30-31 ----
-    MOV r18, r6
-    LDI r20, 30
-    SHR r18, r20          ; r18 = pattern_type (0-3)
-
     ; ---- Apply day/night tint to both colors ----
     ADD r17, r23          ; base += tint
     ADD r19, r23          ; accent += tint
 
-    ; ---- Pattern dispatch (4 strategies from seed) ----
+    ; ---- Pattern dispatch (order: flat=0, center=1, horiz=2, vert=3) ----
+    ; Reordered so expensive patterns get shorter dispatch paths
     JZ r18, pat_flat       ; 0: flat tile
     SUB r18, r7            ; pattern - 1
-    JZ r18, pat_horiz      ; 1: horizontal stripe
+    JZ r18, pat_center     ; 1: center bright (2x2 accent)
     SUB r18, r7            ; pattern - 2
-    JZ r18, pat_vert       ; 2: vertical stripe
-    ; Fall through: 3 = center bright
+    JZ r18, pat_horiz      ; 2: horizontal stripe
+    ; Fall through: 3 = vertical stripe
 
-    ; Pattern 3: base background + 2x2 accent center
-    RECTF r28, r27, r9, r9, r17
-    LDI r20, 1
-    MOV r21, r28
-    ADD r21, r20           ; r21 = x + 1
-    MOV r22, r27
-    ADD r22, r20           ; r22 = y + 1
+    ; Pattern 3: left half base, right half accent (rock faces)
     LDI r20, 2
-    RECTF r21, r22, r20, r20, r19
+    RECTF r28, r27, r20, r9, r17
+    MOV r21, r28
+    ADD r21, r20           ; r21 = x + 2
+    RECTF r21, r27, r20, r9, r19
     JMP tile_done
 
 pat_flat:
@@ -483,22 +474,24 @@ pat_flat:
     RECTF r28, r27, r9, r9, r17
     JMP tile_done
 
+pat_center:
+    ; Pattern 1: base background + 2x2 accent center (oasis, crystals)
+    RECTF r28, r27, r9, r9, r17
+    MOV r21, r28
+    ADD r21, r7            ; r21 = x + 1 (r7=1)
+    MOV r22, r27
+    ADD r22, r7            ; r22 = y + 1 (r7=1)
+    LDI r20, 2
+    RECTF r21, r22, r20, r20, r19
+    JMP tile_done
+
 pat_horiz:
-    ; Pattern 1: top half base, bottom half accent (dune ridges)
+    ; Pattern 2: top half base, bottom half accent (dune ridges)
     LDI r20, 2
     RECTF r28, r27, r9, r20, r17
     MOV r21, r27
     ADD r21, r20           ; r21 = y + 2
     RECTF r28, r21, r9, r20, r19
-    JMP tile_done
-
-pat_vert:
-    ; Pattern 2: left half base, right half accent (rock faces)
-    LDI r20, 2
-    RECTF r28, r27, r20, r9, r17
-    MOV r21, r28
-    ADD r21, r20           ; r21 = x + 2
-    RECTF r21, r27, r20, r9, r19
     JMP tile_done
 
 tile_done:
