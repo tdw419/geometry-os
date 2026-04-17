@@ -18,11 +18,12 @@
 ;   RAM[0x7802] = frame_counter (increments each frame)
 ;   RAM[0xFFB]  = key bitmask (host writes each frame)
 ;
-; Biome distribution (16 biomes, types 0-31):
+; Biome distribution (21 biomes, types 0-31):
 ;   water(0-1), beach(2), desert(3-4), oasis(5), grass(6-7),
 ;   swamp(8-9), forest(10-11), mushroom(12), mountain(13-14),
 ;   tundra(15), lava(16-17), volcanic(18), snow(19-21),
-;   coral(22), ruins(23), reserved(24-31->water)
+;   coral(22), ruins(23), crystal(24-25), ash(26),
+;   deadlands(27-28), bioluminescent(29-30), void(31)
 
 ; ===== Constants =====
 LDI r7, 1               ; constant 1
@@ -189,7 +190,9 @@ render_y:
     ; oasis(5)->palm, grass(6-7)->hut, swamp(8-9)->lily,
     ; forest(10-11)->hut, mushroom(12)->cap, mountain(13-14)->snow patch,
     ; tundra(15)->frost, lava(16-17)->ember, volcanic(18)->vent,
-    ; snow(19-21)->crystal, coral(22)->anemone, ruins(23)->pillar
+    ; snow(19-21)->crystal, coral(22)->anemone, ruins(23)->pillar,
+    ; crystal(24-25)->cluster, ash(26)->geyser, deadlands(27-28)->bone,
+    ; bioluminescent(29-30)->spore, void(31)->spark
     LDI r18, 2
     CMP r5, r18
     BLT r0, struct_water       ; 0-1 water
@@ -235,7 +238,19 @@ render_y:
     LDI r18, 24
     CMP r5, r18
     BLT r0, struct_ruins       ; 23 ruins pillar
-    JMP struct_water           ; 24-31 default water
+    LDI r18, 26
+    CMP r5, r18
+    BLT r0, struct_crystal     ; 24-25 crystal cluster
+    LDI r18, 27
+    CMP r5, r18
+    BLT r0, struct_ash         ; 26 ash geyser
+    LDI r18, 29
+    CMP r5, r18
+    BLT r0, struct_dead        ; 27-28 deadlands bone
+    LDI r18, 31
+    CMP r5, r18
+    BLT r0, struct_biolum      ; 29-30 bioluminescent spore
+    JMP struct_void            ; 31 void spark
 
 struct_water:
     LDI r17, 0x0066CC    ; wave crest (bright blue)
@@ -276,6 +291,21 @@ struct_coral:
 struct_ruins:
     LDI r17, 0x998877    ; stone pillar (weathered gray)
     JMP do_rect
+struct_crystal:
+    LDI r17, 0x22DDCC    ; crystal cluster (bright teal)
+    JMP do_rect
+struct_ash:
+    LDI r17, 0x666655    ; ash geyser (dark grey-green)
+    JMP do_rect
+struct_dead:
+    LDI r17, 0xBBAA99    ; bleached bone (pale tan)
+    JMP do_rect
+struct_biolum:
+    LDI r17, 0x00FFAA    ; glowing spore (bright cyan-green)
+    JMP do_rect
+struct_void:
+    LDI r17, 0x440088    ; void spark (deep purple)
+    JMP do_rect
 
 no_struct:
     ; ---- Biome -> Color (using r5 = biome_type 0..31) ----
@@ -283,7 +313,8 @@ no_struct:
     ; water(0-1), beach(2), desert(3-4), oasis(5), grass(6-7),
     ; swamp(8-9), forest(10-11), mushroom(12), mountain(13-14),
     ; tundra(15), lava(16-17), volcanic(18), snow(19-21),
-    ; coral(22), ruins(23), reserved(24-31->water)
+    ; coral(22), ruins(23), crystal(24-25), ash(26),
+    ; deadlands(27-28), bioluminescent(29-30), void(31)
 
     ; Is it water? (types 0-1)
     LDI r18, 2
@@ -360,8 +391,28 @@ no_struct:
     CMP r5, r18
     BLT r0, color_ruins
 
-    ; Reserved (24-31) -> render as deep water
-    JMP color_water
+    ; Crystal Caverns? (types 24-25)
+    LDI r18, 26
+    CMP r5, r18
+    BLT r0, color_crystal
+
+    ; Ash Wastes? (type 26)
+    LDI r18, 27
+    CMP r5, r18
+    BLT r0, color_ash
+
+    ; Deadlands? (types 27-28)
+    LDI r18, 29
+    CMP r5, r18
+    BLT r0, color_dead
+
+    ; Bioluminescent? (types 29-30)
+    LDI r18, 31
+    CMP r5, r18
+    BLT r0, color_biolum
+
+    ; Void? (type 31) -> render as dark abyss
+    JMP color_void
 
     ; ---- Water subtypes (animated with frame counter) ----
 color_water:
@@ -502,6 +553,49 @@ color_ruins:
     LDI r17, 0x776655    ; weathered stone
     JMP do_rect
 
+    ; ---- Crystal Cavern subtypes ----
+color_crystal:
+    LDI r18, 25
+    CMP r5, r18
+    JZ r0, crystal_dense
+    LDI r17, 0x1A3333    ; dark teal cavern
+    JMP do_rect
+crystal_dense:
+    LDI r17, 0x2A5555    ; lighter teal crystal
+    JMP do_rect
+
+    ; ---- Ash Wastes ----
+color_ash:
+    LDI r17, 0x444444    ; dark grey volcanic ash
+    JMP do_rect
+
+    ; ---- Deadlands subtypes ----
+color_dead:
+    LDI r18, 28
+    CMP r5, r18
+    JZ r0, dead_cracked
+    LDI r17, 0x3D2B1F    ; dark cracked earth
+    JMP do_rect
+dead_cracked:
+    LDI r17, 0x4A3525    ; dry barren brown
+    JMP do_rect
+
+    ; ---- Bioluminescent subtypes ----
+color_biolum:
+    LDI r18, 30
+    CMP r5, r18
+    JZ r0, biolum_glow
+    LDI r17, 0x004433    ; dark fungal cavern
+    JMP do_rect
+biolum_glow:
+    LDI r17, 0x006655    ; brighter glowing cavern
+    JMP do_rect
+
+    ; ---- Void ----
+color_void:
+    LDI r17, 0x110022    ; near-black deep purple abyss
+    JMP do_rect
+
     ; ---- Draw tile ----
 do_rect:
     ; ---- Day/night tint based on camera_x position ----
@@ -635,7 +729,19 @@ mm_y:
     LDI r18, 24
     CMP r5, r18
     BLT r0, mm_ruins          ; 23 ruins
-    JMP mm_water              ; 24-31 default water
+    LDI r18, 26
+    CMP r5, r18
+    BLT r0, mm_crystal        ; 24-25 crystal
+    LDI r18, 27
+    CMP r5, r18
+    BLT r0, mm_ash            ; 26 ash
+    LDI r18, 29
+    CMP r5, r18
+    BLT r0, mm_dead           ; 27-28 deadlands
+    LDI r18, 31
+    CMP r5, r18
+    BLT r0, mm_biolum         ; 29-30 bioluminescent
+    JMP mm_void               ; 31 void
 
 mm_water:
     LDI r17, 0x000055    ; dim blue
@@ -681,6 +787,21 @@ mm_coral:
     JMP mm_draw
 mm_ruins:
     LDI r17, 0x443322    ; dim brown-gray (ruins)
+    JMP mm_draw
+mm_crystal:
+    LDI r17, 0x113333    ; dim teal (crystal caverns)
+    JMP mm_draw
+mm_ash:
+    LDI r17, 0x222222    ; dim grey (ash wastes)
+    JMP mm_draw
+mm_dead:
+    LDI r17, 0x1A1008    ; dim brown (deadlands)
+    JMP mm_draw
+mm_biolum:
+    LDI r17, 0x003322    ; dim cyan-green (bioluminescent)
+    JMP mm_draw
+mm_void:
+    LDI r17, 0x0A0011    ; dim deep purple (void)
     JMP mm_draw
 
 mm_draw:
