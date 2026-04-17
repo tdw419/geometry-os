@@ -364,21 +364,22 @@ impl RiscvVm {
         // PPN = physical page number (bits[31:10] of PTE)
         let mega_pte_base: u32 = 0x0000_00CF; // V+R+W+X+A+D, U=0
 
-        // Kernel virtual range: L1[768..777] -> PA 0x0..0x01200000 (9 megapages, 18MB)
-        // The first LOAD segment is ~2.1MB (PA 0x0-0x21110C), requiring L1[768] and L1[776].
-        // Subsequent segments start at PA 0x400000, 0x800000, etc.
+        // Kernel virtual range: L1[768..777] -> PA 0x0..0x01200000 (9 megapages, 36MB)
+        // Each Sv32 megapage covers 4MB (PPN[19:10] selects 4MB-aligned base).
+        // L1[768+i] maps VA (0xC0000000 + i*4MB) to PA (i*4MB).
+        // PTE = (i << 20) | flags  -- PPN[19:10] = i
         for i in 0..9 {
             let l1_idx: u32 = 768 + i;
-            let pte = mega_pte_base | (i << 20); // PPN = i * 512 (2MB aligned)
+            let pte = mega_pte_base | (i << 20);
             let addr = boot_pt_addr + (l1_idx as u64) * 4;
             vm.bus.write_word(addr, pte).ok();
         }
 
-        // Low address identity mapping: L1[0..128] -> PA 0x0..0x10000000 (512MB)
-        // This covers the entire kernel physical address range (~21MB) plus
-        // initramfs, DTB, and any other low physical memory the kernel needs.
-        for i in 0..128u32 {
-            let pte = mega_pte_base | (i << 20); // PPN = i * 512 (2MB aligned)
+        // Low address identity mapping: L1[0..64] -> PA 0x0..0x10000000 (256MB)
+        // Each Sv32 megapage covers 4MB.
+        // L1[i] maps VA (i*4MB) to PA (i*4MB) -- identity.
+        for i in 0..64u32 {
+            let pte = mega_pte_base | (i << 20);
             let addr = boot_pt_addr + (i as u64) * 4;
             vm.bus.write_word(addr, pte).ok();
         }
@@ -423,24 +424,30 @@ impl RiscvVm {
         //
         // The assertion `slli a5, a5, 10; beqz a5` at PA 0x00404972 still passes
         // because a5=0xC0000000 << 10 overflows to 0 in 32-bit.
-        let setup_vm_phys_addr_store: u64 = 0x0040495E;
-        let setup_vm_va_pa_offset_store: u64 = 0x00404968;
+        let setup_vm_phys_addr_store: u64 = 0x0040495E;     // C.SW a5, 12(s1) (2 bytes)
+        let setup_vm_va_kernel_pa_store: u64 = 0x00404964;  // SW a6, 24(s1) (4 bytes!)
+        let setup_vm_va_pa_offset_store: u64 = 0x00404968;  // C.SW a1, 20(s1) (2 bytes)
         let kernel_map_phys: u64 = 0x00C79E90;
 
         // Verify the instructions match before patching (safety check).
+        // The two C.SW instructions are 16-bit; the SW a6,24(s1) is 32-bit.
         let sw_a5_12 = vm.bus.read_half(setup_vm_phys_addr_store).unwrap_or(0);
+        let sw_a6_24 = vm.bus.read_word(setup_vm_va_kernel_pa_store).unwrap_or(0);
         let sw_a1_20 = vm.bus.read_half(setup_vm_va_pa_offset_store).unwrap_or(0);
-        if sw_a5_12 == 0xC4DC && sw_a1_20 == 0xC8CC {
+        if sw_a5_12 == 0xC4DC && sw_a6_24 == 0x0104AC23 && sw_a1_20 == 0xC8CC {
             // NOP the sw a5, 12(s1) -- prevents writing wrong phys_addr
             vm.bus.write_half(setup_vm_phys_addr_store, 0x0001).ok(); // C.NOP
+            // NOP the sw a6, 24(s1) -- prevents writing wrong va_kernel_pa_offset
+            vm.bus.write_word(setup_vm_va_kernel_pa_store, 0x00000013).ok(); // 32-bit NOP
             // NOP the sw a1, 20(s1) -- prevents writing wrong va_pa_offset
             vm.bus.write_half(setup_vm_va_pa_offset_store, 0x0001).ok(); // C.NOP
             // Pre-set correct values in kernel_map struct
             vm.bus.write_word(kernel_map_phys + 12, 0x00000000).ok(); // phys_addr = 0
             vm.bus.write_word(kernel_map_phys + 20, 0xC0000000).ok(); // va_pa_offset = 0xC0000000
-            eprintln!("[boot] Patched kernel_map: phys_addr=0, va_pa_offset=0xC0000000");
+            vm.bus.write_word(kernel_map_phys + 24, 0xC0000000).ok(); // va_kernel_pa_offset = 0xC0000000
+            eprintln!("[boot] Patched kernel_map: phys_addr=0, va_pa_offset=0xC0000000, va_kernel_pa_offset=0xC0000000");
         } else {
-            eprintln!("[boot] WARNING: kernel patch mismatch! sw_a5_12=0x{:04X} sw_a1_20=0x{:04X} (expected 0xC4DC/0xC8CC)", sw_a5_12, sw_a1_20);
+            eprintln!("[boot] WARNING: kernel patch mismatch! sw_a5_12=0x{:04X} sw_a6_24=0x{:08X} sw_a1_20=0x{:04X} (expected 0xC4DC/0x0104AC23/0xC8CC)", sw_a5_12, sw_a6_24, sw_a1_20);
         }
 
         // With __pa() now correct, PTE fixup workarounds are no longer needed.
@@ -558,6 +565,20 @@ impl RiscvVm {
                         }
                         vm.cpu.tlb.flush_all();
                         eprintln!("[boot] Injected device identity mappings into pg_dir at PA 0x{:08X}", pg_dir_phys);
+
+                        // Re-verify kernel_map values after setup_vm() runs.
+                        // Belt-and-suspenders: ensure our patches survived any
+                        // unexpected code paths that might write to kernel_map.
+                        let km_phys: u64 = 0x00C79E90;
+                        let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
+                        let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
+                        let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
+                        if km_pa != 0 || km_vapo != 0xC0000000 || km_vkpo != 0xC0000000 {
+                            eprintln!("[boot] WARNING: kernel_map corrupted after setup_vm! pa=0x{:X} vapo=0x{:X} vkpo=0x{:X}, re-patching", km_pa, km_vapo, km_vkpo);
+                            vm.bus.write_word(km_phys + 12, 0x00000000).ok();
+                            vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
+                            vm.bus.write_word(km_phys + 24, 0xC0000000).ok();
+                        }
                     }
                     _last_satp = cur_satp;
                 }

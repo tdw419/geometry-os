@@ -343,3 +343,155 @@ fn test_maze_peek_collision_blocks_wall() {
     assert_eq!(vm.ram[0x5310], 0, "player_x should still be 0 after blocked move");
     assert_eq!(vm.ram[0x5311], 0, "player_y should still be 0 after blocked move");
 }
+
+
+// ── INFINITE MAP ──────────────────────────────────────────────
+
+/// Helper: assemble infinite_map.asm, load into a fresh VM, return it.
+/// The VM is ready to step but has not been run yet.
+fn infinite_map_vm() -> Vm {
+    let source = std::fs::read_to_string("programs/infinite_map.asm")
+        .expect("infinite_map.asm not found");
+    let asm = assemble(&source, 0).expect("infinite_map.asm failed to assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm
+}
+
+/// Helper: step the VM until it signals frame_ready or reaches max steps.
+/// Returns the number of steps taken.
+fn step_until_frame(vm: &mut Vm, max_steps: u32) -> u32 {
+    vm.frame_ready = false;
+    for i in 0..max_steps {
+        if vm.frame_ready { return i; }
+        if !vm.step() { return i; }
+    }
+    max_steps
+}
+
+#[test]
+fn test_infinite_map_assembles() {
+    // Requirement: infinite_map.asm assembles without errors and produces bytecode.
+    let source = std::fs::read_to_string("programs/infinite_map.asm")
+        .expect("infinite_map.asm not found");
+    let asm = assemble(&source, 0).expect("infinite_map.asm should assemble");
+    assert!(!asm.pixels.is_empty(), "should produce non-empty bytecode");
+    // The program is ~530 lines of asm; expect a substantial bytecode output.
+    assert!(asm.pixels.len() > 500, "bytecode should be >500 words, got {}", asm.pixels.len());
+}
+
+#[test]
+fn test_infinite_map_runs_and_renders() {
+    // Requirement: the program runs to completion of a frame and renders non-black pixels.
+    let mut vm = infinite_map_vm();
+
+    // No key input -- camera stays at (0,0)
+    vm.ram[0xFFB] = 0;
+
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "should reach FRAME within 1M steps (took {})", steps);
+
+    // Screen should have rendered terrain -- not all black.
+    let non_black: usize = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(non_black > 0, "screen should have non-black pixels after rendering, got 0/{}", 256 * 256);
+
+    // With 64x64 tiles covering the full 256x256 screen, nearly all pixels should be colored.
+    // Water at (0,0) still produces non-black blue pixels.
+    assert!(non_black > 50000,
+        "most of the screen should be colored, got {}/{} non-black pixels",
+        non_black, 256 * 256);
+}
+
+#[test]
+fn test_infinite_map_camera_moves_on_key_input() {
+    // Requirement: camera moves when arrow keys are pressed.
+    let mut vm = infinite_map_vm();
+
+    // --- Frame 1: press Right (bit 3 = 8) ---
+    vm.ram[0xFFB] = 8;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 1 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 1, "camera_x should be 1 after pressing Right");
+    assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 (no vertical input)");
+
+    // --- Frame 2: press Down (bit 1 = 2) ---
+    vm.ram[0xFFB] = 2;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 2 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 1, "camera_x should still be 1");
+    assert_eq!(vm.ram[0x7801], 1, "camera_y should be 1 after pressing Down");
+
+    // --- Frame 3: press Up+Left (bits 0+2 = 5) ---
+    vm.ram[0xFFB] = 5;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 3 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 0, "camera_x should be 0 after pressing Left");
+    assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after pressing Up");
+
+    // --- Frame 4: no keys, camera stays ---
+    vm.ram[0xFFB] = 0;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 4 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 0, "camera_x should stay 0 with no input");
+    assert_eq!(vm.ram[0x7801], 0, "camera_y should stay 0 with no input");
+
+    // Frame counter should have incremented each frame.
+    assert!(vm.ram[0x7802] >= 4, "frame_counter should be >= 4, got {}", vm.ram[0x7802]);
+}
+
+#[test]
+fn test_infinite_map_camera_moves_multiple_steps() {
+    // Requirement: holding a direction for multiple frames accumulates movement.
+    let mut vm = infinite_map_vm();
+
+    // Hold Right for 5 frames.
+    for frame in 1..=5 {
+        vm.ram[0xFFB] = 8; // Right
+        let steps = step_until_frame(&mut vm, 1_000_000);
+        assert!(vm.frame_ready, "frame {} should render (took {} steps)", frame, steps);
+    }
+    assert_eq!(vm.ram[0x7800], 5, "camera_x should be 5 after 5 Right presses");
+    assert_eq!(vm.ram[0x7801], 0, "camera_y should still be 0");
+
+    // Now hold Down+Right for 3 frames.
+    for frame in 6..=8 {
+        vm.ram[0xFFB] = 8 | 2; // Right + Down = 10
+        let steps = step_until_frame(&mut vm, 1_000_000);
+        assert!(vm.frame_ready, "frame {} should render (took {} steps)", frame, steps);
+    }
+    assert_eq!(vm.ram[0x7800], 8, "camera_x should be 5+3=8");
+    assert_eq!(vm.ram[0x7801], 3, "camera_y should be 0+3=3");
+}
+
+#[test]
+fn test_infinite_map_screen_differs_per_camera_position() {
+    // Requirement: different camera positions produce different screens,
+    // confirming the procedural terrain actually varies.
+    let mut vm = infinite_map_vm();
+
+    // Render at camera (0, 0)
+    vm.ram[0xFFB] = 0;
+    step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+    let screen_origin = vm.screen.clone();
+
+    // Manually set camera to (50, 50) and re-render
+    vm.ram[0x7800] = 50;
+    vm.ram[0x7801] = 50;
+    vm.ram[0xFFB] = 0;
+    step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+    let screen_far = vm.screen.clone();
+
+    // The two screens should be significantly different.
+    let same: usize = screen_origin.iter().zip(screen_far.iter())
+        .filter(|(a, b)| a == b).count();
+    let total = 256 * 256;
+    // At most 10% of pixels should be identical between two distant camera positions.
+    assert!(same < total / 10,
+        "screens at (0,0) vs (50,50) should be mostly different, but {}/{} pixels match", same, total);
+}

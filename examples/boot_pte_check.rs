@@ -1,136 +1,121 @@
-/// Dump early_pg_dir AFTER boot has progressed (run 200K steps first)
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
-use geometry_os::riscv::csr;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
-    let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
 
-    let (mut vm, fw_addr, _, _) =
-        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
-    let fw_addr_u32 = fw_addr as u32;
+    // Boot with 200K instructions to get past setup_vm
+    let (mut vm, _br) = RiscvVm::boot_linux(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        200_000,
+        "console=ttyS0 loglevel=8",
+    ).unwrap();
 
-    // Run 200K steps with trap handling
-    let max_count = 200_000u64;
-    let mut count: u64 = 0;
-    while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
-            let mcause = vm.cpu.csr.mcause;
-            let cause_code = mcause & !(1u32 << 31);
-            if cause_code == csr::CAUSE_ECALL_M {
-                let r = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint);
-                if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
-            } else {
-                let mpp = (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB;
-                if cause_code == csr::CAUSE_ECALL_S {
-                    let r = vm.bus.sbi.handle_ecall(
-                        vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint);
-                    if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
-                } else if mpp != 3 {
-                    let stvec = vm.cpu.csr.stvec & !0x3u32;
-                    if stvec != 0 {
-                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
-                        vm.cpu.csr.scause = mcause;
-                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
-                        let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP)) | (spp << csr::MSTATUS_SPP);
-                        let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE)) | (sie << csr::MSTATUS_SPIE);
-                        vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
-                        vm.cpu.pc = stvec;
-                        vm.cpu.privilege = Privilege::Supervisor;
-                        vm.cpu.tlb.flush_all();
-                        count += 1;
-                        continue;
-                    }
-                }
-            }
-            vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
-            count += 1;
-            continue;
-        }
-        vm.step();
-        count += 1;
-    }
+    println!("\n=== Post-setup_vm state ===");
+    println!("PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
+    println!("SATP=0x{:08X}", vm.cpu.csr.satp);
+    println!("SP=0x{:08X}", vm.cpu.x[2]);
 
-    // Now dump the current page table
+    // Check kernel_map values
+    let km_phys: u64 = 0x00C79E90;
+    let page_offset = vm.bus.read_word(km_phys).unwrap_or(0);
+    let virt_addr = vm.bus.read_word(km_phys + 4).unwrap_or(0);
+    let virt_offset = vm.bus.read_word(km_phys + 8).unwrap_or(0);
+    let phys_addr = vm.bus.read_word(km_phys + 12).unwrap_or(0);
+    let size = vm.bus.read_word(km_phys + 16).unwrap_or(0);
+    let va_pa_offset = vm.bus.read_word(km_phys + 20).unwrap_or(0);
+    let va_kernel_pa_offset = vm.bus.read_word(km_phys + 24).unwrap_or(0);
+    println!("\nkernel_map struct:");
+    println!("  page_offset       = 0x{:08X}", page_offset);
+    println!("  virt_addr         = 0x{:08X}", virt_addr);
+    println!("  virt_offset       = 0x{:08X}", virt_offset);
+    println!("  phys_addr         = 0x{:08X}", phys_addr);
+    println!("  size              = 0x{:08X}", size);
+    println!("  va_pa_offset      = 0x{:08X}", va_pa_offset);
+    println!("  va_kernel_pa_offset = 0x{:08X}", va_kernel_pa_offset);
+
+    // Check page table entries for the linear mapping
     let satp = vm.cpu.csr.satp;
-    let ppn = (satp & 0x3FFFFF) as u64;
-    let pg_dir_phys = ppn * 4096;
-    
-    eprintln!("\n=== Page table dump at count={} ===", count);
-    eprintln!("satp=0x{:08X} pg_dir_phys=0x{:08X}", satp, pg_dir_phys);
-    eprintln!("PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
+    let pg_dir_phys = ((satp & 0x3FFFFF) as u64) * 4096;
+    println!("\nPage table root at PA 0x{:08X}", pg_dir_phys);
 
-    let mut l1_count = 0;
-    let mut l2_count = 0;
-    let mut bad_ppn_count = 0;
-    
-    for i in 0..1024u32 {
-        let addr = pg_dir_phys + (i as u64) * 4;
-        let pte = vm.bus.read_word(addr).unwrap_or(0);
-        if pte == 0 { continue; }
-        l1_count += 1;
-        
-        let ppn_val = (pte >> 10) & 0x3FFFFF;
-        let v = pte & 1;
+    // Check L1[768] through L1[775] (kernel linear mapping)
+    for i in 768..776 {
+        let pte_addr = pg_dir_phys + (i as u64) * 4;
+        let pte = vm.bus.read_word(pte_addr).unwrap_or(0);
+        let v = (pte >> 0) & 1;
         let r = (pte >> 1) & 1;
         let w = (pte >> 2) & 1;
         let x = (pte >> 3) & 1;
-        
-        let is_leaf = r == 1 || w == 1 || x == 1;
-        let is_bad_ppn = ppn_val >= 0xC0000;
-        if is_bad_ppn { bad_ppn_count += 1; }
-        
-        if i >= 760 && i <= 780 {
-            eprintln!("  L1[{}] = 0x{:08X}  PPN=0x{:06X} PA=0x{:08X} leaf={} {}",
-                i, pte, ppn_val, ppn_val * 4096, is_leaf, 
-                if is_bad_ppn { "<<< BAD PPN" } else { "" });
-        }
-        
-        // If non-leaf, dump L2
-        if !is_leaf && v == 1 && ppn_val < 0x100000 {
-            let l2_base = (ppn_val as u64) * 4096;
-            for j in 0..1024u32 {
-                let l2_addr = l2_base + (j as u64) * 4;
-                let l2_pte = vm.bus.read_word(l2_addr).unwrap_or(0);
-                if l2_pte == 0 { continue; }
-                l2_count += 1;
-                
-                let l2_ppn = (l2_pte >> 10) & 0x3FFFFF;
-                let l2_bad = l2_ppn >= 0xC0000;
-                if l2_bad { bad_ppn_count += 1; }
-                
-                // Check specific VAs that the kernel might access
-                // VA 0xC1400AE8: exception handler table
-                let vpn1 = i;
-                let vpn0 = j;
-                let va = ((vpn1 as u64) << 22) | ((vpn0 as u64) << 12);
-                if va >= 0xC1400000 && va <= 0xC1410000 {
-                    eprintln!("  L2[{},{}] = 0x{:08X}  PPN=0x{:06X} PA=0x{:08X} VA=0x{:08X} {}",
-                        i, j, l2_pte, l2_ppn, l2_ppn * 4096, va,
-                        if l2_bad { "<<< BAD PPN" } else { "" });
-                }
-            }
-        }
+        let u = (pte >> 4) & 1;
+        let g = (pte >> 5) & 1;
+        let a = (pte >> 6) & 1;
+        let d = (pte >> 7) & 1;
+        let ppn = pte >> 10;
+        println!("  L1[{}] = 0x{:08X} V={} R={} W={} X={} U={} G={} A={} D={} PPN=0x{:X}", 
+            i, pte, v, r, w, x, u, g, a, d, ppn);
     }
+
+    // Check specific VA translation: 0xC003F9CC
+    let test_va = 0xC003F9CC;
+    let vpn2 = (test_va >> 22) & 0x3FF;
+    let vpn1 = (test_va >> 12) & 0x3FF;
+    let offset = test_va & 0xFFF;
+    println!("\nTranslation of VA 0x{:08X}:", test_va);
+    println!("  VPN2={} VPN1={} offset=0x{:03X}", vpn2, vpn1, offset);
     
-    eprintln!("\nSummary: {} L1 entries, {} L2 entries, {} bad PPNs (>=0xC0000)", 
-        l1_count, l2_count, bad_ppn_count);
+    let l1_pte = vm.bus.read_word(pg_dir_phys + (vpn2 as u64) * 4).unwrap_or(0);
+    let l1_ppn = (l1_pte >> 10) & 0x3FFFFF;
+    let l1_v = l1_pte & 1;
+    let l1_rwx = (l1_pte >> 1) & 0x7;
+    println!("  L1[{}] = 0x{:08X} V={} RWX={} PPN=0x{:X}", vpn2, l1_pte, l1_v, l1_rwx, l1_ppn);
     
-    // Also check: what PA does the MMU translate VA 0xC1400AE8 to?
-    // And what's stored at that PA?
-    let pa_check = pg_dir_phys; // just a placeholder
-    eprintln!("\nDirect read at PA 0x01400AE8: 0x{:08X}", 
-        vm.bus.read_word(0x01400AE8).unwrap_or(0));
+    if l1_rwx != 0 && l1_v != 0 {
+        // Megapage
+        let pa = (l1_ppn << 22) | (offset as u32);
+        println!("  -> MEGAPAGE: PA=0x{:08X}", pa);
+    } else if l1_v != 0 {
+        // L2 page table
+        let l2_addr = (l1_ppn as u64) * 4096 + (vpn1 as u64) * 4;
+        let l2_pte = vm.bus.read_word(l2_addr).unwrap_or(0);
+        let l2_ppn = (l2_pte >> 10) & 0x3FFFFF;
+        let l2_v = l2_pte & 1;
+        println!("  L2[{}] at PA 0x{:08X} = 0x{:08X} V={} PPN=0x{:X}", 
+            vpn1, l2_addr, l2_pte, l2_v, l2_ppn);
+        let pa = (l2_ppn << 12) | offset;
+        println!("  -> 4KB PAGE: PA=0x{:08X}", pa);
+        
+        // Read the actual instruction at that PA
+        let inst = vm.bus.read_word(pa as u64).unwrap_or(0);
+        println!("  Instruction at PA 0x{:08X}: 0x{:08X}", pa, inst);
+    }
+
+    // Also check SP area
+    let sp = vm.cpu.x[2];
+    let sp_pa = if sp >= 0xC0000000 { sp - 0xC0000000 } else { sp };
+    println!("\nStack area (SP=0x{:08X}, PA=0x{:08X}):", sp, sp_pa);
+    for off in [88, 92, 96, 100, 104] {
+        let addr = sp_pa as u64 + off as u64;
+        let val = vm.bus.read_word(addr).unwrap_or(0);
+        let reg = match off {
+            88 => "s0",
+            92 => "ra",
+            96 => "??",
+            100 => "??",
+            104 => "??",
+            _ => "??",
+        };
+        println!("  [SP+{}] = 0x{:08X} ({})", off, val, reg);
+    }
+
+    // SBI output
+    let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+    if !sbi_str.is_empty() {
+        println!("\nSBI console output ({} bytes):", sbi_str.len());
+        println!("{}", sbi_str);
+    }
 }
