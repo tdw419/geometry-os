@@ -11,6 +11,8 @@
 ;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
 ; Renders via RECTF. ~322K instructions/frame (32% of 1M budget).
+; Player cursor: pulsing white/yellow crosshair at screen center (127,127).
+;   4 arms (3px each) with 1px center gap. Pulses every 16 frames.
 ; Optimized: day/night tint precomputed once per frame (was per-tile ~40K savings),
 ; screen position via incrementing accumulators (was MUL per-tile ~8K savings),
 ; viewport (64x64 tiles) exactly fills 256x256 screen -- no off-screen tiles,
@@ -688,6 +690,37 @@ next_row:
     JMP render_y
 
 frame_end:
+
+; ===== Player Cursor (crosshair at screen center) =====
+; The camera IS the player position; the viewport is always centered on it.
+; Draw a pulsing crosshair at pixel (127,127) -- center of the 256x256 screen.
+; Four arms radiate from center with a 1px gap so terrain shows through.
+; Color pulses between white and yellow based on frame_counter bit 4.
+LOAD r17, r13           ; r17 = frame_counter
+LDI r18, 16
+AND r17, r18            ; frame_counter & 16 -> toggles every 16 frames
+JZ r17, cursor_white
+LDI r17, 0xFFFF00       ; yellow pulse
+JMP cursor_arms
+cursor_white:
+LDI r17, 0xFFFFFF       ; white
+cursor_arms:
+LDI r18, 1              ; thin dimension (1px)
+LDI r19, 3              ; arm length (3px)
+; Top arm: (127, 124) 1x3
+LDI r3, 127
+LDI r4, 124
+RECTF r3, r4, r18, r19, r17
+; Bottom arm: (127, 128) 1x3
+LDI r4, 128
+RECTF r3, r4, r18, r19, r17
+; Left arm: (124, 127) 3x1
+LDI r3, 124
+LDI r4, 127
+RECTF r3, r4, r19, r18, r17
+; Right arm: (128, 127) 3x1
+LDI r3, 128
+RECTF r3, r4, r19, r18, r17
 
 ; ===== Minimap Overlay (16x16, top-right corner) =====
 ; Shows biome overview: samples every 4th tile in a 64x64 area centered on camera.

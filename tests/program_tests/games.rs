@@ -581,3 +581,61 @@ fn test_infinite_map_render_loop_instruction_count() {
         "render loop should take < 350K steps, took {} (possible performance regression)",
         steps);
 }
+
+#[test]
+fn test_infinite_map_player_cursor_visible() {
+    // Requirement: a player cursor (crosshair) is drawn at the screen center.
+    // After one frame (frame_counter=1), the cursor is white (0xFFFFFF) since
+    // frame_counter & 16 == 0. The crosshair has 4 arms around (127,127) with
+    // a 1px gap at center.
+    let mut vm = infinite_map_vm();
+    vm.ram[0xFFB] = 0;
+    step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    let white: u32 = 0xFFFFFF;
+
+    // Top arm: pixel (127, 124)
+    let px = vm.screen[124 * 256 + 127];
+    assert_eq!(px, white, "top arm pixel (127,124) should be white cursor, got {:#X}", px);
+
+    // Bottom arm: pixel (127, 128)
+    let px = vm.screen[128 * 256 + 127];
+    assert_eq!(px, white, "bottom arm pixel (127,128) should be white cursor, got {:#X}", px);
+
+    // Left arm: pixel (124, 127)
+    let px = vm.screen[127 * 256 + 124];
+    assert_eq!(px, white, "left arm pixel (124,127) should be white cursor, got {:#X}", px);
+
+    // Right arm: pixel (130, 127)
+    let px = vm.screen[127 * 256 + 130];
+    assert_eq!(px, white, "right arm pixel (130,127) should be white cursor, got {:#X}", px);
+
+    // Center pixel (127,127) should NOT be cursor -- it's a gap showing terrain
+    let center_px = vm.screen[127 * 256 + 127];
+    assert_ne!(center_px, white,
+        "center pixel (127,127) should be terrain (cursor gap), not cursor color");
+}
+
+#[test]
+fn test_infinite_map_player_cursor_pulses() {
+    // Requirement: cursor color pulses between white and yellow every 16 frames.
+    // Run 17 frames; on frame 17, frame_counter=17, 17 & 16 != 0 -> yellow.
+    let mut vm = infinite_map_vm();
+    vm.ram[0xFFB] = 0;
+
+    // Run 16 frames to get frame_counter past the pulse boundary
+    for _ in 0..16 {
+        step_until_frame(&mut vm, 1_000_000);
+        vm.frame_ready = false;
+    }
+    // Frame 17: frame_counter will be 17 after increment; 17 & 16 = 16 != 0 -> yellow
+    step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    let yellow: u32 = 0xFFFF00;
+    // Top arm should be yellow now
+    let px = vm.screen[124 * 256 + 127];
+    assert_eq!(px, yellow,
+        "cursor should pulse to yellow on frame 17, got {:#X}", px);
+}
