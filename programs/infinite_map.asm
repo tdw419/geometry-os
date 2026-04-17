@@ -10,7 +10,9 @@
 ; Pure math -- no stored world data, truly infinite.
 ;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
-; Renders via RECTF. ~210K instructions/frame (21% of 1M budget).
+; Renders via RECTF. ~155K instructions/frame (16% of 1M budget).
+; Optimized: day/night tint precomputed once per frame (was per-tile ~40K savings),
+; screen position via incrementing accumulators (was MUL per-tile ~8K savings).
 ;
 ; Memory:
 ;   RAM[0x7800] = camera_x (tile coordinates)
@@ -125,17 +127,46 @@ STORE r12, r15
 LDI r17, 0
 FILL r17
 
+; ===== Precompute day/night tint (once per frame) =====
+; Tint depends only on camera_x, which is constant within a frame.
+; zone = (camera_x >> 4) & 0xF  ->  16 zones across the world
+; West  (zone 0-7): negate zone*0x0808 so ADD performs subtraction
+; East  (zone 8-15): (zone-8)*0x080000, ADD boosts red
+MOV r18, r14
+LDI r19, 4
+SHR r18, r19           ; camera_x >> 4
+LDI r19, 0xF
+AND r18, r19           ; zone = 0..15
+LDI r19, 8
+CMP r18, r19
+BGE r0, pre_tint_warm  ; zone >= 8 -> east
+LDI r19, 0x0808
+MUL r18, r19
+NEG r18                ; negate: ADD will subtract (cool/west tint)
+MOV r23, r18           ; r23 = tint offset (sign-encoded)
+JMP pre_tint_done
+pre_tint_warm:
+SUB r18, r19           ; zone - 8
+LDI r19, 0x080000
+MUL r18, r19
+MOV r23, r18           ; r23 = tint offset (positive, warm/east)
+pre_tint_done:
+
 ; ===== Render Viewport =====
 ; r14 = camera_x, r15 = camera_y
 ; r22 = frame_counter (loaded once)
+; r23 = precomputed tint offset (sign-encoded: negative=west, positive=east)
+; r25 = screen_y accumulator, r26 = screen_x accumulator
 ; 64x64 tile loop: ty=0..63, tx=0..63
 ; Per tile: coarse hash -> biome, fine hash -> structure check, color -> RECTF
 
 LOAD r22, r13           ; r22 = frame_counter (load once for whole frame)
 LDI r1, 0               ; ty = 0
+LDI r25, 0              ; screen_y = 0 (accumulator, replaces ty*4 multiply)
 
 render_y:
   LDI r2, 0             ; tx = 0
+  LDI r26, 0            ; screen_x = 0 (accumulator, replaces tx*4 multiply)
 
   render_x:
     ; World coordinates
@@ -598,39 +629,14 @@ color_void:
 
     ; ---- Draw tile ----
 do_rect:
-    ; ---- Day/night tint based on camera_x position ----
-    ; zone = (camera_x >> 4) & 0xF  ->  16 zones across the world
-    ; West  (zone 0-7):  darken green/blue proportionally
-    ; East  (zone 8-15): warm by boosting red slightly
-    MOV r18, r14           ; r18 = camera_x
-    LDI r19, 4
-    SHR r18, r19           ; camera_x >> 4
-    LDI r19, 0xF
-    AND r18, r19           ; zone = 0..15
-    LDI r19, 8
-    CMP r18, r19
-    BGE r0, tint_warm      ; zone >= 8 -> east
-    ; West: darken G/B by zone * 0x0808 (max subtract 0x3838)
-    LDI r19, 0x0808
-    MUL r18, r19
-    SUB r17, r18
-    JMP tint_done
-tint_warm:
-    ; East: warm red by (zone-8) * 0x080000 (max add 0x380000)
-    SUB r18, r19           ; zone - 8
-    LDI r19, 0x080000
-    MUL r18, r19
-    ADD r17, r18
-tint_done:
-    ; Screen position: (tx * 4, ty * 4)
-    MOV r3, r2
-    MUL r3, r9           ; r3 = tx * TILE_SIZE = tx * 4
-    MOV r4, r1
-    MUL r4, r9           ; r4 = ty * TILE_SIZE = ty * 4
-    RECTF r3, r4, r9, r9, r17  ; fill 4x4 rect with color
+    ; ---- Apply precomputed day/night tint (1 instruction vs ~15 before) ----
+    ADD r17, r23
+    ; Use screen position accumulators (no multiply needed)
+    RECTF r26, r25, r9, r9, r17  ; fill 4x4 rect with color
 
     ; ---- Next tile ----
     ADD r2, r7           ; tx++
+    ADD r26, r9          ; screen_x += TILE_SIZE
     MOV r18, r2
     SUB r18, r8          ; tx - 64
     JZ r18, next_row
@@ -638,6 +644,7 @@ tint_done:
 
 next_row:
     ADD r1, r7           ; ty++
+    ADD r25, r9          ; screen_y += TILE_SIZE
     MOV r18, r1
     SUB r18, r8          ; ty - 64
     JZ r18, frame_end
