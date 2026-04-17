@@ -538,22 +538,57 @@ impl RiscvVm {
                         vm.cpu.tlb.flush_all();
                         eprintln!("[boot] Injected device identity mappings into pg_dir at PA 0x{:08X}", pg_dir_phys);
 
-                        // Fix broken L2 table pointers: if any non-leaf L1 entry
-                        // has PPN=0, the kernel allocated the L2 table at PA 0
-                        // (overlapping kernel code). This happens when memblock_alloc
-                        // returns 0 despite DTB reservation entries. Replace with
-                        // megapage mappings (same as early_pg_dir used).
-                        // Fix broken L2 table pointers: if any non-leaf L1 entry
-                        // has PPN=0, the kernel allocated the L2 table at PA 0
-                        // (because __pa() returned VA which, minus PAGE_OFFSET, gives 0).
-                        // The kernel_map patch fixes __pa() but the L2 table was already
-                        // allocated at PA 0. Fix by finding a free page and copying.
+                        // Fix broken or missing page table entries in the kernel
+                        // linear mapping range (L1[768..777], VA 0xC0000000-0xC1BFFFFF).
+                        //
+                        // The __pa() bug causes two problems:
+                        // 1. Non-leaf L1 entries with PPN=0 (L2 table allocated at PA 0)
+                        // 2. Completely unmapped L1 entries (V=0) because the kernel
+                        //    couldn't allocate page tables at the wrong address
+                        //
+                        // Fix: scan all L1 entries in the kernel range and replace
+                        // any that are unmapped, non-leaf with PPN=0, or otherwise
+                        // broken with correct megapage mappings.
+                        let mega_flags: u32 = 0x0000_00CF; // V+R+W+X+A+D, U=0
+                        let mut fixup_count = 0u32;
+                        // Kernel linear mapping: L1[768..777] (9 entries, 36MB)
+                        // Also check slightly beyond in case kernel is large
+                        for l1_scan in 768..780u32 {
+                            let scan_addr = pg_dir_phys + (l1_scan as u64) * 4;
+                            let entry = vm.bus.read_word(scan_addr).unwrap_or(0);
+                            let is_valid = (entry & 1) != 0;
+                            let is_non_leaf = is_valid && (entry & 0xE) == 0;
+                            let ppn = (entry >> 10) & 0x3FFFFF;
+                            let needs_fix = !is_valid                    // Unmapped
+                                || (is_non_leaf && ppn == 0);         // Broken L2 at PA 0
+                            if !needs_fix {
+                                continue;
+                            }
+                            fixup_count += 1;
+                            // Correct megapage: VA (768+i)*4MB -> PA i*4MB
+                            let pa_offset = l1_scan - 768;
+                            let fixup_pte = mega_flags | (pa_offset << 20);
+                            vm.bus.write_word(scan_addr, fixup_pte).ok();
+                            if fixup_count <= 10 {
+                                eprintln!(
+                                    "[boot] Fixed kernel PT: L1[{}] 0x{:08X} -> megapage 0x{:08X} (PA=0x{:08X})",
+                                    l1_scan, entry, fixup_pte, (pa_offset as u64) << 22
+                                );
+                            }
+                        }
+                        if fixup_count > 0 {
+                            eprintln!("[boot] Fixed {} kernel page table entries", fixup_count);
+                            vm.cpu.tlb.flush_all();
+                        }
+
+                        // Also verify kernel_map wasn't corrupted by the kernel
+                        // re-running setup_vm or other init code.
                         let km_phys: u64 = 0x00C79E90;
                         let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
                         let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
                         let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
                         if km_pa != 0 || km_vapo != 0xC0000000 || km_vkpo != 0x00000000 {
-                            eprintln!("[boot] WARNING: kernel_map corrupted after setup_vm! pa=0x{:X} vapo=0x{:X} vkpo=0x{:X}, re-patching", km_pa, km_vapo, km_vkpo);
+                            eprintln!("[boot] WARNING: kernel_map corrupted! pa=0x{:X} vapo=0x{:X} vkpo=0x{:X}, re-patching", km_pa, km_vapo, km_vkpo);
                             vm.bus.write_word(km_phys + 12, 0x00000000).ok();
                             vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
                             vm.bus.write_word(km_phys + 24, 0x00000000).ok();
