@@ -331,10 +331,9 @@ impl Bus {
 
         // Discover new L2 table pages from non-leaf PTEs.
         // A non-leaf PTE (R=W=X=0, V=1) points to a lower-level page table.
-        if (val & LEAF_FLAGS) == 0 && ppn < PAGE_OFFSET_PPN {
+        if (val & LEAF_FLAGS) == 0 && ppn < PAGE_OFFSET_PPN && ppn > 0 {
             // Only register if the PPN is in a reasonable physical range.
-            // Skip virtual PPNs here -- they'll be fixed below, and we
-            // register the fixed physical address.
+            // Skip PPN=0 (kernel code at PA 0, see fixup_kernel_page_table).
             let l2_page_addr = (ppn as u64) << 12;
             if (0x1000..0x1000_0000).contains(&l2_page_addr)
                 && self.known_pt_pages.insert(l2_page_addr) {
@@ -424,7 +423,12 @@ impl Bus {
             // If non-leaf L1 entry, queue the L2 table for fixup and register it
             if (l1_pte & LEAF_FLAGS) == 0 {
                 let l2_base = (final_ppn as u64) << 12;
-                if l2_base < 0x1000_0000 {
+                // Skip PA 0 -- the kernel allocates L2 tables there when
+                // memblock returns 0 despite DTB reservations. Registering
+                // PA 0 as a known PT page causes ALL writes to the first 4KB
+                // of RAM (kernel entry point!) to go through intercept_pte_write,
+                // corrupting kernel code.
+                if l2_base > 0 && l2_base < 0x1000_0000 {
                     // Register this L2 table page for future write interception
                     self.known_pt_pages.insert(l2_base);
                     l2_tables_to_fix.push(l2_base);

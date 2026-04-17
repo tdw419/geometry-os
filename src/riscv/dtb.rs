@@ -29,6 +29,9 @@ pub struct DtbBuilder {
     struct_block: Vec<u8>,
     /// Strings block (property names).
     strings_block: Vec<u8>,
+    /// Memory reservation map entries: (address, size) pairs.
+    /// Each entry is two u64 values (address, size), followed by a (0, 0) terminator.
+    mem_rsvmap: Vec<(u64, u64)>,
 }
 
 impl Default for DtbBuilder {
@@ -43,6 +46,7 @@ impl DtbBuilder {
         Self {
             struct_block: Vec::new(),
             strings_block: Vec::new(),
+            mem_rsvmap: Vec::new(),
         }
     }
 
@@ -61,8 +65,20 @@ impl DtbBuilder {
         }
     }
 
+    /// Add a memory reservation entry (address, size).
+    /// These are processed by the kernel's early_init_fdt_scan() BEFORE setup_vm(),
+    /// calling memblock_reserve() for each entry. This prevents memblock_alloc()
+    /// from returning addresses in the reserved range.
+    pub fn add_mem_reserve(&mut self, address: u64, size: u64) {
+        self.mem_rsvmap.push((address, size));
+    }
+
     /// Push a big-endian u32.
     fn push_u32(buf: &mut Vec<u8>, val: u32) {
+        buf.extend_from_slice(&val.to_be_bytes());
+    }
+
+    fn push_u64(buf: &mut Vec<u8>, val: u64) {
         buf.extend_from_slice(&val.to_be_bytes());
     }
 
@@ -155,9 +171,18 @@ impl DtbBuilder {
         let struct_size = self.struct_block.len() as u32;
         let strings_size = self.strings_block.len() as u32;
 
+        // Memory reservation map: (address, size) pairs as u64 BE, terminated by (0, 0).
+        // Each entry is 16 bytes. Terminator is 16 bytes.
+        let mem_rsvmap_size = if self.mem_rsvmap.is_empty() {
+            0u32
+        } else {
+            (self.mem_rsvmap.len() as u32 + 1) * 16 // +1 for terminator
+        };
+
         // Header: 10 u32s = 40 bytes.
         let header_size: u32 = 40;
-        let off_dt_struct = header_size;
+        let off_mem_rsvmap = header_size;
+        let off_dt_struct = off_mem_rsvmap + mem_rsvmap_size;
         let off_dt_strings = off_dt_struct + struct_size;
         let totalsize = off_dt_strings + strings_size;
 
@@ -168,12 +193,23 @@ impl DtbBuilder {
         Self::push_u32(&mut blob, totalsize);
         Self::push_u32(&mut blob, off_dt_struct);
         Self::push_u32(&mut blob, off_dt_strings);
-        Self::push_u32(&mut blob, 0); // off_mem_rsvmap (no reservations)
+        Self::push_u32(&mut blob, off_mem_rsvmap);
         Self::push_u32(&mut blob, header_size); // version
         Self::push_u32(&mut blob, header_size); // last_comp_version
         Self::push_u32(&mut blob, 0); // boot_cpuid_phys
         Self::push_u32(&mut blob, strings_size);
         Self::push_u32(&mut blob, struct_size);
+
+        // Memory reservation map.
+        for &(addr, size) in &self.mem_rsvmap {
+            Self::push_u64(&mut blob, addr);
+            Self::push_u64(&mut blob, size);
+        }
+        if !self.mem_rsvmap.is_empty() {
+            // Terminator entry.
+            Self::push_u64(&mut blob, 0);
+            Self::push_u64(&mut blob, 0);
+        }
 
         // Structure block (already has FDT_END appended by caller).
         blob.extend_from_slice(&self.struct_block);
@@ -207,6 +243,10 @@ pub struct DtbConfig {
     pub initrd_end: Option<u64>,
     /// Kernel boot command line.
     pub bootargs: String,
+    /// Reserved memory regions: (base_address, size) pairs.
+    /// The kernel's early DTB parser calls memblock_reserve() for these,
+    /// preventing allocations from overlapping with kernel code/initramfs.
+    pub reserved_regions: Vec<(u64, u64)>,
 }
 
 impl Default for DtbConfig {
@@ -222,6 +262,7 @@ impl Default for DtbConfig {
             initrd_start: None,
             initrd_end: None,
             bootargs: String::new(),
+            reserved_regions: Vec::new(),
         }
     }
 }
@@ -229,6 +270,16 @@ impl Default for DtbConfig {
 /// Generate a DTB for the RISC-V virtual machine.
 pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
     let mut b = DtbBuilder::new();
+
+    // Memory reservation map entries.
+    // These are processed by the kernel's early_init_fdt_scan_reserved_mem()
+    // BEFORE setup_vm() allocates page tables. Each entry calls memblock_reserve(),
+    // preventing memblock_alloc() from returning addresses in these ranges.
+    // This is critical: without reserving PA 0..kernel_end, the kernel allocates
+    // page tables at PA 0, overwriting its own code.
+    for &(addr, size) in &config.reserved_regions {
+        b.add_mem_reserve(addr, size);
+    }
 
     // Root node.
     b.begin_node("");
@@ -268,6 +319,27 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
     b.prop_string("device_type", "memory");
     b.prop_reg("reg", config.ram_base, config.ram_size);
     b.end_node();
+
+    // Reserved memory node.
+    // The kernel's early_init_fdt_scan_reserved_mem() parses this and calls
+    // memblock_reserve() for each region BEFORE setup_vm() allocates page tables.
+    // This prevents the allocator from returning PA 0 (which has kernel code).
+    if !config.reserved_regions.is_empty() {
+        b.begin_node("reserved-memory");
+        b.prop_empty("ranges");
+        for (i, &(base, size)) in config.reserved_regions.iter().enumerate() {
+            let name = format!("region@{:x}", base);
+            b.begin_node(&name);
+            b.prop_string("compatible", "geometry-os,reserved\0reserved");
+            b.prop_reg("reg", base, size);
+            // NOTE: no-map removed -- the kernel needs these regions mapped
+            // for the linear mapping. With kernel_map patched, __pa() returns
+            // correct physical addresses, so the kernel's own page tables
+            // will handle these regions correctly.
+            b.end_node();
+        }
+        b.end_node();
+    }
 
     // SOC node.
     b.begin_node("soc");
@@ -405,6 +477,7 @@ mod tests {
             initrd_start: None,
             initrd_end: None,
             bootargs: String::new(),
+            reserved_regions: Vec::new(),
         };
         let dtb = generate_dtb(&config);
         let magic = u32::from_be_bytes([dtb[0], dtb[1], dtb[2], dtb[3]]);

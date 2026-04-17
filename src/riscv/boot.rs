@@ -203,7 +203,7 @@ impl RiscvVm {
         // which caused all physical addresses below 0xC0000000 to be silently discarded.
         let mut vm = Self::new_with_base(0, actual_ram_size);
         vm.bus.low_addr_identity_map = false; // Disabled: trampoline page table handles identity mapping
-        vm.bus.auto_pte_fixup = true; // Fix virtual PPNs in page tables on SATP write
+        vm.bus.auto_pte_fixup = true; // Needed: MMU-level fixup_ppn translates virtual PPNs during page table walks
 
         // 3. Load kernel ELF at physical addresses (p_paddr).
         // The kernel's ELF has p_paddr = vaddr - PAGE_OFFSET, which are the correct
@@ -234,12 +234,29 @@ impl RiscvVm {
 
         // 6. Generate DTB with ram_base=0.
         let ram_size = actual_ram_size as u64;
+
+        // Reserve the kernel's physical memory range in the DTB's reserved-memory node.
+        // Without this, the kernel's memblock_alloc() returns PA 0 (where kernel code
+        // lives) for page table allocations, overwriting kernel code with page table data.
+        // The kernel's early_init_fdt_scan_reserved_mem() parses reserved-memory nodes
+        // and calls memblock_reserve() BEFORE setup_vm() allocates anything.
+        let kernel_phys_end = ((load_info.highest_addr + 0xFFF) & !0xFFF) as u64;
+        let mut reserved_regions = vec![(0u64, kernel_phys_end)];
+
+        // Also reserve the initramfs and DTB regions.
+        if let (Some(initrd_addr), Some(initrd_end_addr)) = (initrd_start, initrd_end) {
+            let initrd_start_aligned = (initrd_addr as u64) & !0xFFF;
+            let initrd_end_aligned = ((initrd_end_addr as u64) + 0xFFF) & !0xFFF;
+            reserved_regions.push((initrd_start_aligned, initrd_end_aligned - initrd_start_aligned));
+        }
+
         let dtb_config = dtb::DtbConfig {
             ram_base: 0,
             ram_size,
             initrd_start,
             initrd_end,
             bootargs: bootargs.to_string(),
+            reserved_regions,
             ..Default::default()
         };
         let dtb_blob = dtb::generate_dtb(&dtb_config);
@@ -335,7 +352,12 @@ impl RiscvVm {
         vm.cpu.csr.write(crate::riscv::csr::MTVEC, fw_addr as u32);
 
         // Delegate exceptions to S-mode.
-        vm.cpu.csr.medeleg = 0xB109;
+        // IMPORTANT: Do NOT delegate ECALL_S (bit 9) to S-mode!
+        // ECALL_S is how the kernel calls SBI (console output, timer, etc.).
+        // If delegated, the kernel's own S-mode trap handler processes it
+        // instead of reaching our M-mode SBI handler, and all SBI calls silently fail.
+        // 0xB109 with bit 9 cleared = 0xA109
+        vm.cpu.csr.medeleg = 0xA109;
         vm.cpu.csr.mideleg = 0x222;
 
         // Set SATP to boot page table (Sv32 mode, PPN = boot_pt_addr / 4096).
@@ -381,19 +403,28 @@ impl RiscvVm {
             vm.bus.write_word(setup_vm_va_kernel_pa_store, 0x00000013).ok(); // 32-bit NOP
             // NOP the sw a1, 20(s1) -- prevents writing wrong va_pa_offset
             vm.bus.write_half(setup_vm_va_pa_offset_store, 0x0001).ok(); // C.NOP
-            // Pre-set correct values in kernel_map struct
+            // Pre-set correct values in kernel_map struct.
+            // phys_addr: the kernel's physical base address. Correct: 0.
+            // va_pa_offset: used as __va_to_pa(va) = va - va_pa_offset for VAs >= virt_addr.
+            //   Correct: 0xC0000000 (PAGE_OFFSET), so VA 0xC0000000 -> PA 0.
+            // va_kernel_pa_offset: used in setup_vm to relocate fixmap function pointers
+            //   (pt_ops[0] and pt_ops[4]). The kernel does: func_ptr + va_kernel_pa_offset.
+            //   Must be 0 so function pointers remain as correct VAs.
+            //   If set to 0xC0000000, the addition wraps (e.g., 0xC04046C8 + 0xC0000000 = 0x804046C8).
             vm.bus.write_word(kernel_map_phys + 12, 0x00000000).ok(); // phys_addr = 0
             vm.bus.write_word(kernel_map_phys + 20, 0xC0000000).ok(); // va_pa_offset = 0xC0000000
-            vm.bus.write_word(kernel_map_phys + 24, 0xC0000000).ok(); // va_kernel_pa_offset = 0xC0000000
-            eprintln!("[boot] Patched kernel_map: phys_addr=0, va_pa_offset=0xC0000000, va_kernel_pa_offset=0xC0000000");
+            vm.bus.write_word(kernel_map_phys + 24, 0x00000000).ok(); // va_kernel_pa_offset = 0
+            eprintln!("[boot] Patched kernel_map: phys_addr=0, va_pa_offset=0xC0000000, va_kernel_pa_offset=0");
         } else {
             eprintln!("[boot] WARNING: kernel patch mismatch! sw_a5_12=0x{:04X} sw_a6_24=0x{:08X} sw_a1_20=0x{:04X} (expected 0xC4DC/0x0104AC23/0xC8CC)", sw_a5_12, sw_a6_24, sw_a1_20);
         }
 
-        // With __pa() now correct, PTE fixup workarounds are no longer needed.
-        // The kernel will create correct PTEs with proper physical addresses.
-        vm.bus.auto_pte_fixup = false;
-        vm.bus.known_pt_pages.clear();
+        // With __pa() fixed for kernel_map, most PTEs are correct.
+        // auto_pte_fixup remains enabled for:
+        // 1. MMU-level fixup_ppn: translates any remaining virtual PPNs during walks
+        // 2. Write interception: fixes demand-paged PTEs created by fault handler
+        // 3. SATP scan: fixes PTEs on page table switch
+        vm.bus.auto_pte_fixup = true;
 
         // Enter S-mode via MRET.
         // mepc = VIRTUAL entry point (e.g., 0xC0000000).
@@ -457,6 +488,7 @@ impl RiscvVm {
         let mut _last_unique_pc: u32 = 0;
         let mut _same_pc_count: u64 = 0;
         let mut _trampoline_patched: bool = true; // Boot page table already provides initial mapping
+        let mut _panic_breakpoint: bool = false;
         let mut _last_satp: u32 = vm.cpu.csr.satp; // Already set by setup
         while count < max_instructions {
             // Check for SBI shutdown request
@@ -506,18 +538,25 @@ impl RiscvVm {
                         vm.cpu.tlb.flush_all();
                         eprintln!("[boot] Injected device identity mappings into pg_dir at PA 0x{:08X}", pg_dir_phys);
 
-                        // Re-verify kernel_map values after setup_vm() runs.
-                        // Belt-and-suspenders: ensure our patches survived any
-                        // unexpected code paths that might write to kernel_map.
+                        // Fix broken L2 table pointers: if any non-leaf L1 entry
+                        // has PPN=0, the kernel allocated the L2 table at PA 0
+                        // (overlapping kernel code). This happens when memblock_alloc
+                        // returns 0 despite DTB reservation entries. Replace with
+                        // megapage mappings (same as early_pg_dir used).
+                        // Fix broken L2 table pointers: if any non-leaf L1 entry
+                        // has PPN=0, the kernel allocated the L2 table at PA 0
+                        // (because __pa() returned VA which, minus PAGE_OFFSET, gives 0).
+                        // The kernel_map patch fixes __pa() but the L2 table was already
+                        // allocated at PA 0. Fix by finding a free page and copying.
                         let km_phys: u64 = 0x00C79E90;
                         let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
                         let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
                         let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
-                        if km_pa != 0 || km_vapo != 0xC0000000 || km_vkpo != 0xC0000000 {
+                        if km_pa != 0 || km_vapo != 0xC0000000 || km_vkpo != 0x00000000 {
                             eprintln!("[boot] WARNING: kernel_map corrupted after setup_vm! pa=0x{:X} vapo=0x{:X} vkpo=0x{:X}, re-patching", km_pa, km_vapo, km_vkpo);
                             vm.bus.write_word(km_phys + 12, 0x00000000).ok();
                             vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
-                            vm.bus.write_word(km_phys + 24, 0xC0000000).ok();
+                            vm.bus.write_word(km_phys + 24, 0x00000000).ok();
                         }
                     }
                     _last_satp = cur_satp;
@@ -668,6 +707,39 @@ impl RiscvVm {
             vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
             let step_result = vm.step();
+
+            // Breakpoint: capture state when panic() is first entered
+            if vm.cpu.pc == 0xC000252E && !_panic_breakpoint {
+                _panic_breakpoint = true;
+                eprintln!("[boot] *** PANIC ENTERED at count={} ***", count);
+                eprintln!("[boot]   RA=0x{:08X} (caller of panic)", vm.cpu.x[1]);
+                eprintln!("[boot]   SP=0x{:08X}", vm.cpu.x[2]);
+                eprintln!("[boot]   A0=0x{:08X} (fmt string ptr)", vm.cpu.x[10]);
+                // Read the format string
+                let fmt_va = vm.cpu.x[10];
+                if fmt_va >= 0xC0000000 {
+                    let fmt_pa = fmt_va - 0xC0000000;
+                    let mut chars = Vec::new();
+                    for j in 0..200 {
+                        let b = vm.bus.read_byte(fmt_pa as u64 + j as u64).unwrap_or(0);
+                        if b == 0 { break; }
+                        if b >= 0x20 && b < 0x7f {
+                            chars.push(b as char);
+                        } else {
+                            break;
+                        }
+                    }
+                    let s: String = chars.iter().collect();
+                    eprintln!("[boot]   FMT: \"{}\"", s);
+                }
+                // Dump register state
+                for i in 0..32 {
+                    let name = ["zero","ra","sp","gp","tp","t0","t1","t2","s0","s1","a0","a1","a2","a3","a4","a5",
+                                "a6","a7","s2","s3","s4","s5","s6","s7","s8","s9","s10","s11","t3","t4","t5","t6"][i];
+                    eprintln!("[boot]   x{} ({}) = 0x{:08X}", i, name, vm.cpu.x[i]);
+                }
+            }
+
             match step_result {
                 StepResult::Ok => {}
                 StepResult::FetchFault
