@@ -639,3 +639,102 @@ fn test_infinite_map_player_cursor_pulses() {
     assert_eq!(px, yellow,
         "cursor should pulse to yellow on frame 17, got {:#X}", px);
 }
+
+#[test]
+fn test_infinite_map_minimap_overlay() {
+    // Requirement: a 16x16 minimap overlay is rendered in the top-right corner
+    // of the screen (x=240..255, y=0..15) with biome-colored pixels, a gray
+    // border frame, and a white player dot at the center (248, 8).
+    let mut vm = infinite_map_vm();
+    vm.ram[0xFFB] = 0;
+    step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    // 1. Minimap interior should have non-black pixels (biome colors).
+    //    Interior excludes the 1px border: x=241..254, y=1..14.
+    let mut interior_non_black = 0;
+    for y in 1..15 {
+        for x in 241..255 {
+            if vm.screen[y * 256 + x] != 0 {
+                interior_non_black += 1;
+            }
+        }
+    }
+    assert!(interior_non_black > 0,
+        "minimap interior should have non-black biome pixels, got 0/196");
+
+    // 2. Border frame: all 4 edges should be entirely gray (0xAAAAAA).
+    //    The border is drawn AFTER biome pixels, so it overwrites them completely.
+    let border_color: u32 = 0xAAAAAA;
+
+    // Top edge: y=0, x=240..255
+    for x in 240..256 {
+        let px = vm.screen[0 * 256 + x];
+        assert_eq!(px, border_color,
+            "top border pixel ({},0) should be gray, got {:#X}", x, px);
+    }
+
+    // Bottom edge: y=15, x=240..255
+    for x in 240..256 {
+        let px = vm.screen[15 * 256 + x];
+        assert_eq!(px, border_color,
+            "bottom border pixel ({},15) should be gray, got {:#X}", x, px);
+    }
+
+    // Left edge: x=240, y=0..15
+    for y in 0..16 {
+        let px = vm.screen[y * 256 + 240];
+        assert_eq!(px, border_color,
+            "left border pixel (240,{}) should be gray, got {:#X}", y, px);
+    }
+
+    // Right edge: x=255, y=0..15
+    for y in 0..16 {
+        let px = vm.screen[y * 256 + 255];
+        assert_eq!(px, border_color,
+            "right border pixel (255,{}) should be gray, got {:#X}", y, px);
+    }
+
+    // 3. Player dot at center of minimap (248, 8) should be white.
+    //    Drawn AFTER border, so it overwrites the border pixel.
+    let player_dot = vm.screen[8 * 256 + 248];
+    assert_eq!(player_dot, 0xFFFFFF,
+        "player dot at (248,8) should be white, got {:#X}", player_dot);
+
+    // 4. Minimap terrain changes when camera moves significantly.
+    //    The minimap samples every 4th tile with 8-tile zone boundaries,
+    //    so we need to move at least 4 tiles to see any difference.
+    //    Snapshot the interior pixels from frame 1 (camera at 0,0).
+    let mut frame1_interior: Vec<u32> = Vec::new();
+    for y in 1..15 {
+        for x in 241..255 {
+            frame1_interior.push(vm.screen[y * 256 + x]);
+        }
+    }
+
+    // Move camera 10 tiles right (10 frames with right key).
+    for _ in 0..10 {
+        vm.ram[0xFFB] = 8; // right
+        vm.frame_ready = false;
+        step_until_frame(&mut vm, 1_000_000);
+        assert!(vm.frame_ready);
+    }
+    assert_eq!(vm.ram[0x7800], 10, "camera should have moved 10 tiles right");
+
+    let mut frame2_interior: Vec<u32> = Vec::new();
+    for y in 1..15 {
+        for x in 241..255 {
+            frame2_interior.push(vm.screen[y * 256 + x]);
+        }
+    }
+
+    let diffs: usize = frame1_interior
+        .iter()
+        .zip(frame2_interior.iter())
+        .filter(|(a, b)| a != b)
+        .count();
+    assert!(
+        diffs > 0,
+        "minimap should show different terrain after camera moves, but all 196 interior pixels identical"
+    );
+}
