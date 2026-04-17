@@ -232,18 +232,28 @@ impl RiscvVm {
             (None, None)
         };
 
-        // 6. Generate DTB with ram_base=0.
+        // 6. Generate DTB.
+        //
+        // CRITICAL: Set the memory node's base ABOVE the kernel, initramfs, and DTB.
+        //
+        // The kernel's early_init_dt_alloc_memory_arch() runs DURING
+        // early_init_dt_scan_memory() -- BEFORE early_init_fdt_scan_reserved_mem()
+        // processes the mem_rsvmap. So reserving PA 0 in the mem_rsvmap does NOT
+        // prevent memblock_alloc() from returning PA 0.
+        //
+        // The only reliable fix: start the memory node above all loaded data.
+        // The kernel can still access PA 0..mem_base through:
+        //   - Identity mappings (L1[0..64]) for early boot
+        //   - Linear mapping (VA 0xC0000000+ -> PA 0) for normal operation
         let ram_size = actual_ram_size as u64;
-
-        // Reserve the kernel's physical memory range in the DTB's reserved-memory node.
-        // Without this, the kernel's memblock_alloc() returns PA 0 (where kernel code
-        // lives) for page table allocations, overwriting kernel code with page table data.
-        // The kernel's early_init_fdt_scan_reserved_mem() parses reserved-memory nodes
-        // and calls memblock_reserve() BEFORE setup_vm() allocates anything.
         let kernel_phys_end = ((load_info.highest_addr + 0xFFF) & !0xFFF) as u64;
-        let mut reserved_regions = vec![(0u64, kernel_phys_end)];
+        let after_initrd = initrd_end.unwrap_or(load_info.highest_addr);
+        let dtb_size_est = 4096u64; // upper bound for DTB size
+        let mem_base = ((after_initrd + dtb_size_est + 0xFFF) & !0xFFF) as u64;
+        let mem_size = ram_size.saturating_sub(mem_base);
 
-        // Also reserve the initramfs and DTB regions.
+        // Still reserve in mem_rsvmap for early_init_fdt_scan_reserved_mem().
+        let mut reserved_regions = vec![(0u64, kernel_phys_end)];
         if let (Some(initrd_addr), Some(initrd_end_addr)) = (initrd_start, initrd_end) {
             let initrd_start_aligned = (initrd_addr as u64) & !0xFFF;
             let initrd_end_aligned = ((initrd_end_addr as u64) + 0xFFF) & !0xFFF;
@@ -251,8 +261,8 @@ impl RiscvVm {
         }
 
         let dtb_config = dtb::DtbConfig {
-            ram_base: 0,
-            ram_size,
+            ram_base: mem_base,
+            ram_size: mem_size,
             initrd_start,
             initrd_end,
             bootargs: bootargs.to_string(),
@@ -260,8 +270,9 @@ impl RiscvVm {
             ..Default::default()
         };
         let dtb_blob = dtb::generate_dtb(&dtb_config);
+        eprintln!("[boot] DTB generated: {} bytes, mem_base=0x{:08X}, mem_size=0x{:08X} ({}MB)",
+                  dtb_blob.len(), mem_base, mem_size, mem_size / (1024*1024));
 
-        let after_initrd = initrd_end.unwrap_or(load_info.highest_addr);
         let dtb_addr = ((after_initrd + 0xFFF) & !0xFFF) as u64;
         for (i, &byte) in dtb_blob.iter().enumerate() {
             let addr = dtb_addr + i as u64;

@@ -327,7 +327,7 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
     if !config.reserved_regions.is_empty() {
         b.begin_node("reserved-memory");
         b.prop_empty("ranges");
-        for (i, &(base, size)) in config.reserved_regions.iter().enumerate() {
+        for &(base, size) in config.reserved_regions.iter() {
             let name = format!("region@{:x}", base);
             b.begin_node(&name);
             b.prop_string("compatible", "geometry-os,reserved\0reserved");
