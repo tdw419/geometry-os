@@ -18,9 +18,11 @@
 ;   RAM[0x7802] = frame_counter (increments each frame)
 ;   RAM[0xFFB]  = key bitmask (host writes each frame)
 ;
-; Biome distribution (8 biomes, types 0-15):
-;   water(0-1), beach(2), desert(3-4), grass(5-6),
-;   swamp(7), forest(8-9), mountain(10-11), lava(12), snow(13-15)
+; Biome distribution (16 biomes, types 0-31):
+;   water(0-1), beach(2), desert(3-4), oasis(5), grass(6-7),
+;   swamp(8-9), forest(10-11), mushroom(12), mountain(13-14),
+;   tundra(15), lava(16-17), volcanic(18), snow(19-21),
+;   coral(22), ruins(23), reserved(24-31->water)
 
 ; ===== Constants =====
 LDI r7, 1               ; constant 1
@@ -161,9 +163,9 @@ render_y:
     LDI r18, 1103515245
     MUL r5, r18          ; r5 = coarse_hash * mixing_prime
 
-    ; Extract top 4 bits: biome type 0..15
-    LDI r18, 28
-    SHR r5, r18          ; r5 = biome_type (0..15)
+    ; Extract top 5 bits: biome type 0..31
+    LDI r18, 27
+    SHR r5, r18          ; r5 = biome_type (0..31)
 
     ; ---- Fine hash for structure placement ----
     MOV r6, r3
@@ -184,33 +186,56 @@ render_y:
 
     ; Override with structure color based on biome
     ; water(0-1)->wave, beach(2)->hut, desert(3-4)->cactus,
-    ; grass(5-6)->hut, swamp(7)->lily, forest(8-9)->hut,
-    ; mountain(10-11)->snow patch, lava(12)->ember, snow(13-15)->crystal
+    ; oasis(5)->palm, grass(6-7)->hut, swamp(8-9)->lily,
+    ; forest(10-11)->hut, mushroom(12)->cap, mountain(13-14)->snow patch,
+    ; tundra(15)->frost, lava(16-17)->ember, volcanic(18)->vent,
+    ; snow(19-21)->crystal, coral(22)->anemone, ruins(23)->pillar
     LDI r18, 2
     CMP r5, r18
-    BLT r0, struct_water
+    BLT r0, struct_water       ; 0-1 water
     LDI r18, 3
     CMP r5, r18
-    BLT r0, struct_land        ; beach gets hut
+    BLT r0, struct_land        ; 2 beach hut
     LDI r18, 5
     CMP r5, r18
     BLT r0, struct_desert      ; 3-4 desert cactus
-    LDI r18, 7
+    LDI r18, 6
     CMP r5, r18
-    BLT r0, struct_land        ; 5-6 grass hut
+    BLT r0, struct_oasis       ; 5 oasis palm
     LDI r18, 8
     CMP r5, r18
-    BLT r0, struct_swamp       ; 7 swamp lily
+    BLT r0, struct_land        ; 6-7 grass hut
     LDI r18, 10
     CMP r5, r18
-    BLT r0, struct_land        ; 8-9 forest hut
+    BLT r0, struct_swamp       ; 8-9 swamp lily
     LDI r18, 12
     CMP r5, r18
-    BLT r0, struct_mountain    ; 10-11
+    BLT r0, struct_land        ; 10-11 forest hut
     LDI r18, 13
     CMP r5, r18
-    BLT r0, struct_lava        ; 12
-    JMP struct_snow            ; 13-15
+    BLT r0, struct_mushroom    ; 12 mushroom cap
+    LDI r18, 15
+    CMP r5, r18
+    BLT r0, struct_mountain    ; 13-14
+    LDI r18, 16
+    CMP r5, r18
+    BLT r0, struct_tundra      ; 15 tundra frost
+    LDI r18, 18
+    CMP r5, r18
+    BLT r0, struct_lava        ; 16-17 lava ember
+    LDI r18, 19
+    CMP r5, r18
+    BLT r0, struct_volcanic    ; 18 volcanic vent
+    LDI r18, 22
+    CMP r5, r18
+    BLT r0, struct_snow        ; 19-21 snow crystal
+    LDI r18, 23
+    CMP r5, r18
+    BLT r0, struct_coral       ; 22 coral anemone
+    LDI r18, 24
+    CMP r5, r18
+    BLT r0, struct_ruins       ; 23 ruins pillar
+    JMP struct_water           ; 24-31 default water
 
 struct_water:
     LDI r17, 0x0066CC    ; wave crest (bright blue)
@@ -218,27 +243,47 @@ struct_water:
 struct_desert:
     LDI r17, 0x228800    ; cactus (green)
     JMP do_rect
+struct_oasis:
+    LDI r17, 0x33CC33    ; palm frond (bright green)
+    JMP do_rect
 struct_land:
     LDI r17, 0x884422    ; tree trunk / hut (brown)
     JMP do_rect
 struct_swamp:
     LDI r17, 0x44BB44    ; lily pad (bright green)
     JMP do_rect
+struct_mushroom:
+    LDI r17, 0xBB22BB    ; mushroom cap (purple-red)
+    JMP do_rect
 struct_mountain:
     LDI r17, 0xBBBBCC    ; snow patch (pale)
+    JMP do_rect
+struct_tundra:
+    LDI r17, 0xCCDDFF    ; frost crystal (pale blue)
     JMP do_rect
 struct_lava:
     LDI r17, 0xFF8800    ; ember (orange)
     JMP do_rect
+struct_volcanic:
+    LDI r17, 0xFFDD00    ; fire vent (yellow-orange)
+    JMP do_rect
 struct_snow:
     LDI r17, 0xAABBEE    ; ice crystal (blue-white)
     JMP do_rect
+struct_coral:
+    LDI r17, 0xFF77AA    ; anemone (pink)
+    JMP do_rect
+struct_ruins:
+    LDI r17, 0x998877    ; stone pillar (weathered gray)
+    JMP do_rect
 
 no_struct:
-    ; ---- Biome -> Color (using r5 = biome_type 0..15) ----
+    ; ---- Biome -> Color (using r5 = biome_type 0..31) ----
     ; Cascading comparisons. r0 set by CMP; BLT/BGE/JZ check r0.
-    ; water(0-1), beach(2), desert(3-4), grass(5-6),
-    ; swamp(7), forest(8-9), mountain(10-11), lava(12), snow(13-15)
+    ; water(0-1), beach(2), desert(3-4), oasis(5), grass(6-7),
+    ; swamp(8-9), forest(10-11), mushroom(12), mountain(13-14),
+    ; tundra(15), lava(16-17), volcanic(18), snow(19-21),
+    ; coral(22), ruins(23), reserved(24-31->water)
 
     ; Is it water? (types 0-1)
     LDI r18, 2
@@ -255,33 +300,68 @@ no_struct:
     CMP r5, r18
     BLT r0, color_desert
 
-    ; Grass? (types 5-6)
-    LDI r18, 7
+    ; Oasis? (type 5)
+    LDI r18, 6
+    CMP r5, r18
+    BLT r0, color_oasis
+
+    ; Grass? (types 6-7)
+    LDI r18, 8
     CMP r5, r18
     BLT r0, color_grass
 
-    ; Swamp? (type 7)
-    LDI r18, 8
+    ; Swamp? (types 8-9)
+    LDI r18, 10
     CMP r5, r18
     BLT r0, color_swamp
 
-    ; Forest? (types 8-9)
-    LDI r18, 10
+    ; Forest? (types 10-11)
+    LDI r18, 12
     CMP r5, r18
     BLT r0, color_forest
 
-    ; Hills/mountain? (types 10-11)
-    LDI r18, 12
+    ; Mushroom? (type 12)
+    LDI r18, 13
+    CMP r5, r18
+    BLT r0, color_mushroom
+
+    ; Mountain? (types 13-14)
+    LDI r18, 15
     CMP r5, r18
     BLT r0, color_mountain
 
-    ; Lava? (type 12)
-    LDI r18, 13
+    ; Tundra? (type 15)
+    LDI r18, 16
+    CMP r5, r18
+    BLT r0, color_tundra
+
+    ; Lava? (types 16-17)
+    LDI r18, 18
     CMP r5, r18
     BLT r0, color_lava
 
-    ; Snow/ice (types 13-15)
-    JMP color_snow
+    ; Volcanic? (type 18)
+    LDI r18, 19
+    CMP r5, r18
+    BLT r0, color_volcanic
+
+    ; Snow? (types 19-21)
+    LDI r18, 22
+    CMP r5, r18
+    BLT r0, color_snow
+
+    ; Coral? (type 22)
+    LDI r18, 23
+    CMP r5, r18
+    BLT r0, color_coral
+
+    ; Ruins? (type 23)
+    LDI r18, 24
+    CMP r5, r18
+    BLT r0, color_ruins
+
+    ; Reserved (24-31) -> render as deep water
+    JMP color_water
 
     ; ---- Water subtypes (animated with frame counter) ----
 color_water:
@@ -320,9 +400,14 @@ desert_dunes:
     LDI r17, 0xCCAA33    ; dunes
     JMP do_rect
 
+    ; ---- Oasis ----
+color_oasis:
+    LDI r17, 0x22AA55    ; lush green pool
+    JMP do_rect
+
     ; ---- Grass subtypes ----
 color_grass:
-    LDI r18, 6
+    LDI r18, 7
     CMP r5, r18
     JZ r0, grass_dark
     LDI r17, 0x55BB33    ; light grass
@@ -331,14 +416,20 @@ grass_dark:
     LDI r17, 0x228811    ; dark grass
     JMP do_rect
 
-    ; ---- Swamp ----
+    ; ---- Swamp subtypes ----
 color_swamp:
-    LDI r17, 0x445522    ; dark green-brown
+    LDI r18, 9
+    CMP r5, r18
+    JZ r0, swamp_mangrove
+    LDI r17, 0x445522    ; murky green-brown
+    JMP do_rect
+swamp_mangrove:
+    LDI r17, 0x2D4A1A    ; dark mangrove
     JMP do_rect
 
     ; ---- Forest subtypes ----
 color_forest:
-    LDI r18, 9
+    LDI r18, 11
     CMP r5, r18
     JZ r0, forest_dense
     LDI r17, 0x116600    ; forest
@@ -347,9 +438,14 @@ forest_dense:
     LDI r17, 0x0A4400    ; dense forest
     JMP do_rect
 
+    ; ---- Mushroom grove ----
+color_mushroom:
+    LDI r17, 0x883388    ; purple fungal ground
+    JMP do_rect
+
     ; ---- Mountain subtypes ----
 color_mountain:
-    LDI r18, 11
+    LDI r18, 14
     CMP r5, r18
     JZ r0, mt_tall
     LDI r17, 0x667766    ; foothills
@@ -358,17 +454,33 @@ mt_tall:
     LDI r17, 0x999999    ; tall mountain
     JMP do_rect
 
-    ; ---- Lava ----
+    ; ---- Tundra ----
+color_tundra:
+    LDI r17, 0x8899AA    ; cold rocky gray-blue
+    JMP do_rect
+
+    ; ---- Lava subtypes ----
 color_lava:
-    LDI r17, 0xFF3300    ; red-orange lava
+    LDI r18, 17
+    CMP r5, r18
+    JZ r0, lava_cooled
+    LDI r17, 0xFF3300    ; red-orange flowing lava
+    JMP do_rect
+lava_cooled:
+    LDI r17, 0x332222    ; cooled basalt (dark)
+    JMP do_rect
+
+    ; ---- Volcanic wasteland ----
+color_volcanic:
+    LDI r17, 0x442211    ; scorched earth (dark brown-red)
     JMP do_rect
 
     ; ---- Snow subtypes ----
 color_snow:
-    LDI r18, 14
+    LDI r18, 20
     CMP r5, r18
     BLT r0, snow_light
-    LDI r18, 15
+    LDI r18, 21
     CMP r5, r18
     JZ r0, snow_peak
     LDI r17, 0xDDEEFF    ; ice
@@ -378,6 +490,16 @@ snow_light:
     JMP do_rect
 snow_peak:
     LDI r17, 0xFFFFFF    ; peak
+    JMP do_rect
+
+    ; ---- Coral reef ----
+color_coral:
+    LDI r17, 0x3377AA    ; shallow turquoise water
+    JMP do_rect
+
+    ; ---- Ruins ----
+color_ruins:
+    LDI r17, 0x776655    ; weathered stone
     JMP do_rect
 
     ; ---- Draw tile ----
@@ -464,10 +586,10 @@ mm_y:
     XOR r5, r6
     LDI r18, 1103515245
     MUL r5, r18
-    LDI r18, 28
-    SHR r5, r18          ; biome 0..15
+    LDI r18, 27
+    SHR r5, r18          ; biome 0..31
 
-    ; 6-category color map (dimmed for minimap)
+    ; 10-category color map (dimmed for minimap)
     LDI r18, 2
     CMP r5, r18
     BLT r0, mm_water          ; 0-1 water
@@ -477,16 +599,43 @@ mm_y:
     LDI r18, 5
     CMP r5, r18
     BLT r0, mm_desert         ; 3-4 desert
+    LDI r18, 6
+    CMP r5, r18
+    BLT r0, mm_oasis          ; 5 oasis
     LDI r18, 8
     CMP r5, r18
-    BLT r0, mm_green          ; 5-7 grass/swamp
+    BLT r0, mm_green          ; 6-7 grass
     LDI r18, 10
     CMP r5, r18
-    BLT r0, mm_forest         ; 8-9 forest
+    BLT r0, mm_swamp          ; 8-9 swamp
+    LDI r18, 12
+    CMP r5, r18
+    BLT r0, mm_forest         ; 10-11 forest
     LDI r18, 13
     CMP r5, r18
-    BLT r0, mm_gray           ; 10-12 mountain/lava
-    JMP mm_white              ; 13-15 snow
+    BLT r0, mm_mushroom       ; 12 mushroom
+    LDI r18, 15
+    CMP r5, r18
+    BLT r0, mm_gray           ; 13-14 mountain
+    LDI r18, 16
+    CMP r5, r18
+    BLT r0, mm_tundra         ; 15 tundra
+    LDI r18, 18
+    CMP r5, r18
+    BLT r0, mm_lava           ; 16-17 lava
+    LDI r18, 19
+    CMP r5, r18
+    BLT r0, mm_volcanic       ; 18 volcanic
+    LDI r18, 22
+    CMP r5, r18
+    BLT r0, mm_white          ; 19-21 snow
+    LDI r18, 23
+    CMP r5, r18
+    BLT r0, mm_coral          ; 22 coral
+    LDI r18, 24
+    CMP r5, r18
+    BLT r0, mm_ruins          ; 23 ruins
+    JMP mm_water              ; 24-31 default water
 
 mm_water:
     LDI r17, 0x000055    ; dim blue
@@ -497,17 +646,41 @@ mm_shore:
 mm_desert:
     LDI r17, 0x665522    ; dim desert yellow
     JMP mm_draw
+mm_oasis:
+    LDI r17, 0x225533    ; dim oasis green
+    JMP mm_draw
 mm_green:
     LDI r17, 0x225500    ; dim green
+    JMP mm_draw
+mm_swamp:
+    LDI r17, 0x1A2200    ; dim murky green
     JMP mm_draw
 mm_forest:
     LDI r17, 0x113300    ; dim dark green
     JMP mm_draw
+mm_mushroom:
+    LDI r17, 0x441144    ; dim purple
+    JMP mm_draw
 mm_gray:
-    LDI r17, 0x553311    ; dim brown-gray (mountain/lava)
+    LDI r17, 0x444444    ; dim gray (mountain)
+    JMP mm_draw
+mm_tundra:
+    LDI r17, 0x445566    ; dim cold blue-gray
+    JMP mm_draw
+mm_lava:
+    LDI r17, 0x551100    ; dim red-orange (lava)
+    JMP mm_draw
+mm_volcanic:
+    LDI r17, 0x331100    ; dim dark red-brown (volcanic)
     JMP mm_draw
 mm_white:
     LDI r17, 0x8888AA    ; dim white-blue (snow)
+    JMP mm_draw
+mm_coral:
+    LDI r17, 0x224466    ; dim turquoise (coral)
+    JMP mm_draw
+mm_ruins:
+    LDI r17, 0x443322    ; dim brown-gray (ruins)
     JMP mm_draw
 
 mm_draw:
