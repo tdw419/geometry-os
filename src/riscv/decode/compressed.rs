@@ -231,13 +231,24 @@ fn crd(prime: u8) -> u8 {
     8 + prime
 }
 
-/// C.ADDI4SPN immediate: nzimm[5:4|9:6|2|3|8]
+/// C.ADDI4SPN immediate per RISC-V spec Table 16.2:
+///   nzuimm[3]  = inst[5]
+///   nzuimm[2]  = inst[6]
+///   nzuimm[5]  = inst[12]
+///   nzuimm[4]  = inst[11]
+///   nzuimm[9]  = inst[10]
+///   nzuimm[8]  = inst[9]
+///   nzuimm[7]  = inst[8]
+///   nzuimm[6]  = inst[7]
 fn c_addi4spn_imm(w: u32) -> i32 {
-    let imm = (((w >> 5) & 0x1) << 3)
-        | (((w >> 6) & 0x1) << 2)
-        | (((w >> 7) & 0x1) << 8)
-        | (((w >> 10) & 0x7) << 5)
-        | (((w >> 11) & 0x1) << 4);
+    let imm = (((w >> 5) & 0x1) << 3)    // inst[5]  -> nzimm[3]
+        | (((w >> 6) & 0x1) << 2)        // inst[6]  -> nzimm[2]
+        | (((w >> 7) & 0x1) << 6)        // inst[7]  -> nzimm[6]
+        | (((w >> 8) & 0x1) << 7)        // inst[8]  -> nzimm[7]
+        | (((w >> 9) & 0x1) << 8)        // inst[9]  -> nzimm[8]
+        | (((w >> 10) & 0x1) << 9)       // inst[10] -> nzimm[9]
+        | (((w >> 11) & 0x1) << 4)       // inst[11] -> nzimm[4]
+        | (((w >> 12) & 0x1) << 5);      // inst[12] -> nzimm[5]
     imm as i32
 }
 
