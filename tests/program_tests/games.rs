@@ -270,10 +270,7 @@ fn test_maze_initializes() {
     }
 
     // Top border (row 0) should be all walls
-    assert_eq!(
-        vm.ram[0x5000], 0xFFFFFFFF,
-        "top border row should be all walls"
-    );
+    assert_eq!(vm.ram[0x5000], 0xFFFFFFFF, "top border row should be all walls");
 
     // Row 1 should have passages carved (not all walls)
     assert_ne!(
@@ -494,4 +491,75 @@ fn test_infinite_map_screen_differs_per_camera_position() {
     // At most 10% of pixels should be identical between two distant camera positions.
     assert!(same < total / 10,
         "screens at (0,0) vs (50,50) should be mostly different, but {}/{} pixels match", same, total);
+}
+
+#[test]
+fn test_infinite_map_diagonal_keys_move_camera() {
+    // Requirement: dedicated diagonal key bits (4-7) move the camera diagonally.
+    let mut vm = infinite_map_vm();
+
+    // --- Frame 1: press Up+Right diagonal (bit 4 = 16) ---
+    vm.ram[0xFFB] = 16;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 1 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 1, "camera_x should be 1 after Up+Right diagonal");
+    assert_eq!(vm.ram[0x7801], u32::MAX, "camera_y should wrap to u32::MAX after Up+Right diagonal");
+
+    // --- Frame 2: press Down+Right diagonal (bit 5 = 32) ---
+    vm.ram[0xFFB] = 32;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 2 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 2, "camera_x should be 2 after Down+Right diagonal");
+    assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Down+Right diagonal");
+
+    // --- Frame 3: press Down+Left diagonal (bit 6 = 64) ---
+    vm.ram[0xFFB] = 64;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 3 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 1, "camera_x should be 1 after Down+Left diagonal");
+    assert_eq!(vm.ram[0x7801], 1, "camera_y should be 1 after Down+Left diagonal");
+
+    // --- Frame 4: press Up+Left diagonal (bit 7 = 128) ---
+    vm.ram[0xFFB] = 128;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 4 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 0, "camera_x should be 0 after Up+Left diagonal");
+    assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Up+Left diagonal");
+}
+
+#[test]
+fn test_infinite_map_diagonal_accumulates() {
+    // Requirement: diagonal keys accumulate over multiple frames.
+    let mut vm = infinite_map_vm();
+
+    // Hold Down+Right diagonal for 3 frames.
+    for frame in 1..=3 {
+        vm.ram[0xFFB] = 32; // Down+Right
+        let steps = step_until_frame(&mut vm, 1_000_000);
+        assert!(vm.frame_ready, "frame {} should render (took {} steps)", frame, steps);
+    }
+    assert_eq!(vm.ram[0x7800], 3, "camera_x should be 3 after 3 Down+Right diagonals");
+    assert_eq!(vm.ram[0x7801], 3, "camera_y should be 3 after 3 Down+Right diagonals");
+
+    // Hold Up+Left diagonal for 2 frames to partially reverse.
+    for frame in 4..=5 {
+        vm.ram[0xFFB] = 128; // Up+Left
+        let steps = step_until_frame(&mut vm, 1_000_000);
+        assert!(vm.frame_ready, "frame {} should render (took {} steps)", frame, steps);
+    }
+    assert_eq!(vm.ram[0x7800], 1, "camera_x should be 3-2=1 after 2 Up+Left diagonals");
+    assert_eq!(vm.ram[0x7801], 1, "camera_y should be 3-2=1 after 2 Up+Left diagonals");
+}
+
+#[test]
+fn test_infinite_map_cardinal_and_diagonal_combined() {
+    // Requirement: diagonal bits stack with cardinal bits for faster movement.
+    // Pressing Right (bit 3) + Down+Right diagonal (bit 5) should move x+2, y+1.
+    let mut vm = infinite_map_vm();
+
+    vm.ram[0xFFB] = 8 | 32; // Right + Down+Right diagonal = 40
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 2, "camera_x should be 2 (Right + Down+Right diagonal)");
+    assert_eq!(vm.ram[0x7801], 1, "camera_y should be 1 (Down+Right diagonal only)");
 }

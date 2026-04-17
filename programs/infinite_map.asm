@@ -1,6 +1,7 @@
 ; infinite_map.asm -- Infinite scrolling procedural terrain (v5)
 ;
 ; Arrow keys / WASD scroll through infinite procedurally generated terrain.
+; Diagonal keys (bits 4-7) allow single-key diagonal scrolling.
 ; Two-level hash: coarse hash determines biome (8x8 tile zones = 32px blocks),
 ; fine hash places structures (1/256 tiles get a tree/rock/crystal).
 ; Water tiles animate (shimmer) based on frame counter.
@@ -76,6 +77,42 @@ AND r17, r18
 JZ r17, no_right
 ADD r14, r7
 no_right:
+
+; --- Process Up+Right diagonal (bit 4) ---
+MOV r17, r16
+LDI r18, 16
+AND r17, r18
+JZ r17, no_ur
+SUB r15, r7
+ADD r14, r7
+no_ur:
+
+; --- Process Down+Right diagonal (bit 5) ---
+MOV r17, r16
+LDI r18, 32
+AND r17, r18
+JZ r17, no_dr
+ADD r15, r7
+ADD r14, r7
+no_dr:
+
+; --- Process Down+Left diagonal (bit 6) ---
+MOV r17, r16
+LDI r18, 64
+AND r17, r18
+JZ r17, no_dl
+ADD r15, r7
+SUB r14, r7
+no_dl:
+
+; --- Process Up+Left diagonal (bit 7) ---
+MOV r17, r16
+LDI r18, 128
+AND r17, r18
+JZ r17, no_ul
+SUB r15, r7
+SUB r14, r7
+no_ul:
 
 ; --- Store updated camera ---
 STORE r11, r14
