@@ -1,7 +1,6 @@
 use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
 use geometry_os::riscv::csr;
-use std::collections::HashMap;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -13,10 +12,8 @@ fn main() {
     ).unwrap();
     let fw = fw_addr as u32;
 
-    let max = 1_000_000u64;
+    let max = 200_000u64;
     let mut count = 0u64;
-    let mut pc_hist: HashMap<u32, u64> = HashMap::new();
-    let mut last_uart_len = 0usize;
 
     while count < max {
         if vm.cpu.pc == fw && vm.cpu.privilege == Privilege::Machine {
@@ -68,26 +65,40 @@ fn main() {
         }
         vm.step();
         count += 1;
-        
-        // Track hot PCs
-        *pc_hist.entry(vm.cpu.pc).or_insert(0) += 1;
-        
-        // Check UART
-        if vm.bus.uart.tx_buf.len() > last_uart_len && count > 400000 {
-            let new_bytes = &vm.bus.uart.tx_buf[last_uart_len..];
-            let s = String::from_utf8_lossy(new_bytes);
-            eprintln!("[{}] UART: {}", count, s.trim());
-            last_uart_len = vm.bus.uart.tx_buf.len();
-        }
     }
 
-    // Top 20 hot PCs
-    let mut pcs: Vec<(u32, u64)> = pc_hist.into_iter().collect();
-    pcs.sort_by(|a, b| b.1.cmp(&a.1));
-    eprintln!("\nTop 20 hot PCs:");
-    for (pc, hits) in pcs.iter().take(20) {
-        eprintln!("  0x{:08X}: {} hits ({:.1}%)", pc, hits, *hits as f64 / max as f64 * 100.0);
+    // Disassemble the hot loop region
+    eprintln!("=== Disassembly at hot PCs (PA = VA - 0xC0000000) ===");
+    for base_va in [0xC00010A0u32, 0xC0002780u32, 0xC020B0C0u32] {
+        let base_pa = base_va.wrapping_sub(0xC0000000);
+        eprintln!("\n--- VA 0x{:08X} (PA 0x{:08X}) ---", base_va, base_pa);
+        for off in (0..48).step_by(2) {
+            let pa = (base_pa + off) as u64;
+            let b0 = vm.bus.read_byte(pa).unwrap_or(0xFF);
+            let b1 = vm.bus.read_byte(pa + 1).unwrap_or(0xFF);
+            let half = (b1 as u16) << 8 | b0 as u16;
+            let va = base_va + off;
+            
+            // Decode compressed vs regular
+            let is_compressed = (half & 0x3) != 0x3;
+            if is_compressed {
+                eprintln!("  0x{:08X}: 0x{:04X}       (compressed)", va, half);
+            } else {
+                let b2 = vm.bus.read_byte(pa + 2).unwrap_or(0xFF);
+                let b3 = vm.bus.read_byte(pa + 3).unwrap_or(0xFF);
+                let word = (b3 as u32) << 24 | (b2 as u32) << 16 | (b1 as u32) << 8 | b0 as u32;
+                eprintln!("  0x{:08X}: 0x{:08X} (32-bit)", va, word);
+            }
+        }
     }
     
-    eprintln!("\nUART total: {} bytes", vm.bus.uart.tx_buf.len());
+    // Also check: what's the instruction at 0xC00010B2?
+    eprintln!("\n=== Registers at count {} ===", count);
+    for i in 0..32 {
+        if vm.cpu.x[i] != 0 {
+            eprintln!("  x{} = 0x{:08X}", i, vm.cpu.x[i]);
+        }
+    }
+    eprintln!("  pc  = 0x{:08X}", vm.cpu.pc);
+    eprintln!("  satp= 0x{:08X}", vm.cpu.csr.satp);
 }

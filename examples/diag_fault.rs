@@ -162,7 +162,7 @@ fn main() {
             }
             
             // Check UART output
-            let uart_bytes: Vec<u8> = vm.bus.uart.output.iter().copied().collect();
+            let uart_bytes: Vec<u8> = vm.bus.uart.tx_buf.iter().copied().collect();
             if !uart_bytes.is_empty() {
                 let s = String::from_utf8_lossy(&uart_bytes);
                 eprintln!("\nUART output so far ({} bytes):", uart_bytes.len());

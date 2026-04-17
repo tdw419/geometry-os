@@ -738,3 +738,38 @@ fn test_infinite_map_minimap_overlay() {
         "minimap should show different terrain after camera moves, but all 196 interior pixels identical"
     );
 }
+
+#[test]
+fn test_infinite_map_diagonal_scroll() {
+    // Requirement: pressing two cardinal directions simultaneously moves diagonally.
+    // Up (bit 0) + Right (bit 3) = bitmask 9 should move camera_y down (wraps) and camera_x up.
+    let mut vm = infinite_map_vm();
+
+    // Frame 1: Up + Right (bits 0 + 3 = 9)
+    vm.ram[0xFFB] = 9;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 1 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 1, "camera_x should be 1 after Up+Right");
+    assert_eq!(vm.ram[0x7801], u32::MAX, "camera_y should wrap to u32::MAX after Up+Right");
+
+    // Frame 2: Down + Left (bits 1 + 2 = 6) -- reverses frame 1
+    vm.ram[0xFFB] = 6;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 2 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 0, "camera_x should be 0 after Down+Left");
+    assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Down+Left");
+
+    // Frame 3: Up + Left (bits 0 + 2 = 5) -- both decrease
+    vm.ram[0xFFB] = 5;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 3 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], u32::MAX, "camera_x should wrap to u32::MAX after Up+Left");
+    assert_eq!(vm.ram[0x7801], u32::MAX, "camera_y should wrap to u32::MAX after Up+Left");
+
+    // Frame 4: Down + Right (bits 1 + 3 = 10) -- reverses frame 3
+    vm.ram[0xFFB] = 10;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "frame 4 should render within 1M steps (took {})", steps);
+    assert_eq!(vm.ram[0x7800], 0, "camera_x should be 0 after Down+Right");
+    assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Down+Right");
+}
