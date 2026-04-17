@@ -5,7 +5,11 @@
 // jumps, branches, load/store, FENCE, ECALL, EBREAK.
 // See docs/RISCV_HYPERVISOR.md §CPU State.
 
+mod alu;
+mod atomic;
 mod execute;
+mod loadstore;
+mod system;
 #[cfg(test)]
 mod tests;
 
