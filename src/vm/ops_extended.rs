@@ -1,9 +1,11 @@
 use super::types::*;
+use super::trace::MAX_SNAPSHOTS;
 use super::Vm;
 
 impl Vm {
-    /// Handle extended opcodes (0x62-0x7C): IOCTL, env, process control,
-    /// signals, hypervisor, self-hosting, reactive formulas, inode ops, trace.
+    /// Handle extended opcodes (0x62-0x7D): IOCTL, env, process control,
+    /// signals, hypervisor, self-hosting, reactive formulas, inode ops, trace,
+    /// timeline forking.
     /// Returns false if halted, true otherwise.
     #[allow(unreachable_patterns)]
     pub(super) fn step_extended(&mut self, opcode: u32) -> bool {
@@ -961,7 +963,11 @@ impl Vm {
             // On failure: r0 = 0xFFFFFFFF
             0x7C => {
                 let idx_reg = self.fetch() as usize;
-                let frame_idx = if idx_reg < NUM_REGS { self.regs[idx_reg] as usize } else { 0 };
+                let frame_idx = if idx_reg < NUM_REGS {
+                    self.regs[idx_reg] as usize
+                } else {
+                    0
+                };
 
                 match self.frame_checkpoints.replay_frame(frame_idx) {
                     Some(screen) => {
@@ -971,6 +977,58 @@ impl Vm {
                     }
                     None => {
                         self.regs[0] = 0xFFFFFFFF;
+                    }
+                }
+            }
+
+            // FORK mode_reg  (0x7D) -- Timeline forking: save/restore full VM state.
+            // Encoding: 0x7D, mode_reg
+            // mode_reg value: 0 = save snapshot to next slot
+            //                 1 = restore from snapshot slot (r1 = slot index)
+            //                 2 = list saved snapshots (r0 = count)
+            //                 3 = clear all snapshots
+            // r0 = slot index on save, 0 on restore/clear, count on list, 0xFFFFFFFF on error
+            0x7D => {
+                let mode_reg = self.fetch() as usize;
+                let mode = if mode_reg < NUM_REGS {
+                    self.regs[mode_reg]
+                } else {
+                    0
+                };
+                match mode {
+                    0 => {
+                        // Save snapshot to next slot
+                        if self.snapshots.len() < MAX_SNAPSHOTS {
+                            let snap = self.snapshot();
+                            let slot = self.snapshots.len();
+                            self.snapshots.push(snap);
+                            self.regs[0] = slot as u32; // return slot index
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF; // too many snapshots
+                        }
+                    }
+                    1 => {
+                        // Restore from snapshot slot (slot index in r1)
+                        let slot = self.regs[1] as usize;
+                        if slot < self.snapshots.len() {
+                            let snap = self.snapshots[slot].clone();
+                            self.restore(&snap);
+                            self.regs[0] = 0; // success
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF; // invalid slot
+                        }
+                    }
+                    2 => {
+                        // List: return count of saved snapshots
+                        self.regs[0] = self.snapshots.len() as u32;
+                    }
+                    3 => {
+                        // Clear all snapshots
+                        self.snapshots.clear();
+                        self.regs[0] = 0;
+                    }
+                    _ => {
+                        self.regs[0] = 0xFFFFFFFF; // invalid mode
                     }
                 }
             }

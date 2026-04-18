@@ -107,6 +107,9 @@ pub struct Vm {
     /// Frame checkpoint ring buffer (Phase 38b: Frame Checkpointing).
     /// Snapshots the full screen at every FRAME opcode when trace_recording is on.
     pub frame_checkpoints: FrameCheckBuffer,
+    /// Saved VM snapshots for timeline forking (Phase 38d).
+    /// Max 16 snapshots; each captures full RAM + screen + registers.
+    pub snapshots: Vec<VmSnapshot>,
 }
 
 impl Default for Vm {
@@ -175,6 +178,7 @@ impl Vm {
             trace_recording: false,
             trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
             frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
+            snapshots: Vec::new(),
         }
     }
 
@@ -242,6 +246,7 @@ impl Vm {
         self.trace_recording = false;
         self.trace_buffer.clear();
         self.frame_checkpoints.clear();
+        self.snapshots.clear();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -249,6 +254,40 @@ impl Vm {
         if self.debug_mode && self.access_log.len() < 4096 {
             self.access_log.push(MemAccess { addr, kind });
         }
+    }
+
+    /// Take a full snapshot of VM state for timeline forking (Phase 38d).
+    /// Returns the VmSnapshot capturing RAM, screen, registers, PC, and config.
+    /// The snapshot can be restored later with `restore()`.
+    pub fn snapshot(&self) -> VmSnapshot {
+        VmSnapshot {
+            ram: self.ram.clone(),
+            screen: self.screen.clone(),
+            regs: self.regs,
+            pc: self.pc,
+            mode: self.mode,
+            halted: self.halted,
+            frame_count: self.frame_count,
+            rand_state: self.rand_state,
+            current_pid: self.current_pid,
+            step_number: self.trace_buffer.step_counter(),
+        }
+    }
+
+    /// Restore VM state from a snapshot (Phase 38d).
+    /// Overwrites RAM, screen, registers, PC, and config with the snapshot values.
+    /// Does NOT restore child processes, pipes, VFS, or other system state --
+    /// only the execution state of the current context.
+    pub fn restore(&mut self, snap: &VmSnapshot) {
+        self.ram.copy_from_slice(&snap.ram);
+        self.screen.copy_from_slice(&snap.screen);
+        self.regs = snap.regs;
+        self.pc = snap.pc;
+        self.mode = snap.mode;
+        self.halted = snap.halted;
+        self.frame_count = snap.frame_count;
+        self.rand_state = snap.rand_state;
+        self.current_pid = snap.current_pid;
     }
 }
 mod types;
@@ -573,7 +612,7 @@ impl Vm {
                     return false;
                 }
             }
-            0x62..=0x7C => {
+            0x62..=0x7D => {
                 if !self.step_extended(opcode) {
                     return false;
                 }

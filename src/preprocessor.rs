@@ -110,6 +110,7 @@ pub const OPCODES: &[&str] = &[
     "FUNLINK",
     "SNAP_TRACE",
     "REPLAY",
+    "FORK",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

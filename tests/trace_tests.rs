@@ -862,3 +862,250 @@ fn test_checkpoint_replay_pipeline() {
     assert_eq!(replayed[0], 0x333333);
     assert_eq!(replayed[65535], 0x333333);
 }
+
+// --- Phase 38d: Timeline Forking tests ---
+
+use geometry_os::vm::{VmSnapshot, MAX_SNAPSHOTS};
+
+#[test]
+fn test_snapshot_restore_roundtrip() {
+    let mut vm = Vm::new();
+    vm.ram[100] = 42;
+    vm.ram[200] = 99;
+    vm.regs[5] = 0x12345678;
+    vm.pc = 500;
+    vm.rand_state = 0xCAFEBABE;
+    vm.frame_count = 17;
+    vm.screen[0] = 0xFF000000;
+    vm.screen[65535] = 0x00FF0000;
+
+    let snap = vm.snapshot();
+    assert_eq!(snap.ram[100], 42);
+    assert_eq!(snap.ram[200], 99);
+    assert_eq!(snap.regs[5], 0x12345678);
+    assert_eq!(snap.pc, 500);
+    assert_eq!(snap.rand_state, 0xCAFEBABE);
+    assert_eq!(snap.frame_count, 17);
+    assert_eq!(snap.screen[0], 0xFF000000);
+    assert_eq!(snap.screen[65535], 0x00FF0000);
+
+    // Mutate
+    vm.ram[100] = 0;
+    vm.ram[200] = 0;
+    vm.regs[5] = 0;
+    vm.pc = 0;
+    vm.screen[0] = 0;
+    vm.screen[65535] = 0;
+
+    // Restore
+    vm.restore(&snap);
+    assert_eq!(vm.ram[100], 42);
+    assert_eq!(vm.ram[200], 99);
+    assert_eq!(vm.regs[5], 0x12345678);
+    assert_eq!(vm.pc, 500);
+    assert_eq!(vm.rand_state, 0xCAFEBABE);
+    assert_eq!(vm.frame_count, 17);
+    assert_eq!(vm.screen[0], 0xFF000000);
+    assert_eq!(vm.screen[65535], 0x00FF0000);
+}
+
+#[test]
+fn test_multiple_snapshots() {
+    let mut vm = Vm::new();
+
+    vm.regs[1] = 10;
+    let snap0 = vm.snapshot();
+
+    vm.regs[1] = 20;
+    let snap1 = vm.snapshot();
+
+    vm.regs[1] = 30;
+    let snap2 = vm.snapshot();
+
+    vm.restore(&snap0);
+    assert_eq!(vm.regs[1], 10);
+
+    vm.restore(&snap2);
+    assert_eq!(vm.regs[1], 30);
+
+    vm.restore(&snap1);
+    assert_eq!(vm.regs[1], 20);
+}
+
+#[test]
+fn test_restore_from_middle() {
+    let mut vm = Vm::new();
+    for i in 0..100 {
+        vm.ram[i] = i as u32;
+    }
+    let snap = vm.snapshot();
+
+    for i in 0..100 {
+        vm.ram[i] = 0xFFFFFFFF;
+    }
+
+    vm.restore(&snap);
+    for i in 0..100 {
+        assert_eq!(vm.ram[i], i as u32, "RAM[{}] should be {}", i, i);
+    }
+}
+
+#[test]
+fn test_fork_opcode_save() {
+    let mut vm = Vm::new();
+    load_asm(&mut vm, "
+        LDI r1, 42
+        LDI r7, 0
+        FORK r7
+        HALT
+    ", 0x100);
+
+    loop {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.snapshots.len(), 1, "should have 1 snapshot");
+    assert_eq!(vm.regs[0], 0, "r0 should be slot index 0");
+    assert_eq!(vm.snapshots[0].regs[1], 42);
+}
+
+#[test]
+fn test_fork_opcode_list() {
+    let mut vm = Vm::new();
+    load_asm(&mut vm, "
+        LDI r7, 0
+        FORK r7
+        LDI r7, 2
+        FORK r7
+        HALT
+    ", 0x100);
+
+    loop {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.regs[0], 1, "should have 1 snapshot");
+    assert_eq!(vm.snapshots.len(), 1);
+}
+
+#[test]
+fn test_fork_opcode_clear() {
+    let mut vm = Vm::new();
+    load_asm(&mut vm, "
+        LDI r7, 0
+        FORK r7
+        LDI r7, 3
+        FORK r7
+        HALT
+    ", 0x100);
+
+    loop {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.regs[0], 0, "clear should succeed");
+    assert_eq!(vm.snapshots.len(), 0, "snapshots should be empty");
+}
+
+#[test]
+fn test_fork_opcode_max_snapshots() {
+    let mut vm = Vm::new();
+    for i in 0..MAX_SNAPSHOTS {
+        vm.regs[1] = i as u32;
+        vm.snapshots.push(vm.snapshot());
+    }
+
+    assert_eq!(vm.snapshots.len(), MAX_SNAPSHOTS);
+    load_asm(&mut vm, "
+        LDI r7, 0
+        FORK r7
+        HALT
+    ", 0x200);
+
+    loop {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "should fail when max snapshots reached");
+    assert_eq!(vm.snapshots.len(), MAX_SNAPSHOTS, "should not exceed max");
+}
+
+#[test]
+fn test_fork_opcode_invalid_mode() {
+    let mut vm = Vm::new();
+    load_asm(&mut vm, "
+        LDI r7, 99
+        FORK r7
+        HALT
+    ", 0x100);
+
+    loop {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "invalid mode should return error");
+}
+
+#[test]
+fn test_fork_opcode_invalid_slot() {
+    let mut vm = Vm::new();
+    load_asm(&mut vm, "
+        LDI r7, 0
+        FORK r7
+        LDI r7, 1
+        LDI r1, 5
+        FORK r7
+        HALT
+    ", 0x100);
+
+    loop {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "invalid slot should return error");
+}
+
+#[test]
+fn test_fork_restore_api_roundtrip() {
+    let mut vm = Vm::new();
+
+    vm.regs[1] = 111;
+    vm.regs[2] = 222;
+    vm.ram[1000] = 0xABCD;
+    vm.pc = 0x50;
+
+    let snap = vm.snapshot();
+    vm.snapshots.push(snap);
+
+    vm.regs[1] = 999;
+    vm.regs[2] = 888;
+    vm.ram[1000] = 0;
+    vm.pc = 0x99;
+
+    let snap = vm.snapshots[0].clone();
+    vm.restore(&snap);
+
+    assert_eq!(vm.regs[1], 111);
+    assert_eq!(vm.regs[2], 222);
+    assert_eq!(vm.ram[1000], 0xABCD);
+    assert_eq!(vm.pc, 0x50);
+}
+
+#[test]
+fn test_fork_demo_assembles() {
+    let source = std::fs::read_to_string("programs/fork_demo.asm")
+        .expect("fork_demo.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "fork_demo.asm should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_snapshots_cleared_on_reset() {
+    let mut vm = Vm::new();
+    vm.snapshots.push(vm.snapshot());
+    vm.snapshots.push(vm.snapshot());
+    assert_eq!(vm.snapshots.len(), 2);
+
+    vm.reset();
+    assert_eq!(vm.snapshots.len(), 0, "snapshots should be cleared on reset");
+}

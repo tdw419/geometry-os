@@ -265,6 +265,7 @@ impl Vm {
             trace_recording: false,
             trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
             frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
+            snapshots: Vec::new(),
         })
     }
 }

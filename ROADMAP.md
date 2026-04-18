@@ -282,7 +282,7 @@ The convergence analysis from two independent possibility explorations both iden
 - [x] Phase 38a: Execution Trace Ring Buffer
 - [x] Phase 38b: Frame Checkpointing
 - [x] Phase 38c: Backward Replay
-- [ ] Phase 38d: Timeline Forking
+- [x] Phase 38d: Timeline Forking
 
 ---
 

@@ -1,5 +1,6 @@
 // vm/trace.rs -- Execution Trace Ring Buffer (Phase 38a)
 //                 Frame Checkpointing (Phase 38b)
+//                 Timeline Forking (Phase 38d)
 //
 // Records every instruction execution to a fixed-size ring buffer.
 // Zero overhead when recording is off (one bool check per step).
@@ -8,6 +9,10 @@
 // Phase 38b: Snapshots the full screen buffer at every FRAME opcode.
 // Combined with the trace ring buffer, you can reconstruct the screen
 // at any point without re-executing.
+//
+// Phase 38d: Full VM state snapshots for timeline forking.
+// Save the complete state (RAM, registers, PC, screen, all config) and
+// restore it later to explore alternate execution paths.
 
 /// Default ring buffer capacity (entries).
 pub const DEFAULT_TRACE_CAPACITY: usize = 10_000;
@@ -333,4 +338,43 @@ impl<'a> Iterator for FrameCheckIter<'a> {
         self.pos += 1;
         self.buffer.entries[idx].as_ref()
     }
+}
+
+// --- Phase 38d: Timeline Forking ---
+
+/// Maximum number of VM snapshots that can be stored simultaneously.
+/// At 256KB per snapshot (64K u32 RAM), 16 snapshots = 4MB total.
+pub const MAX_SNAPSHOTS: usize = 16;
+
+/// A complete snapshot of VM state, used for timeline forking.
+///
+/// Captures everything needed to restore the VM to an exact prior state:
+/// full RAM, screen buffer, all registers, PC, and configuration fields.
+/// This enables "what if" exploration -- save a snapshot, run forward,
+/// then restore and try a different path.
+///
+/// Size: ~384KB per snapshot (64K RAM words + 64K screen words + overhead).
+/// Delta compression can reduce this later; for now, keep it simple.
+#[derive(Debug, Clone)]
+pub struct VmSnapshot {
+    /// Full RAM contents (65536 u32 words = 256KB).
+    pub ram: Vec<u32>,
+    /// Full screen buffer (65536 u32 words = 256KB).
+    pub screen: Vec<u32>,
+    /// All 32 general-purpose registers.
+    pub regs: [u32; 32],
+    /// Program counter.
+    pub pc: u32,
+    /// CPU privilege mode (Kernel/User).
+    pub mode: super::types::CpuMode,
+    /// Whether the VM was halted.
+    pub halted: bool,
+    /// Frame counter value.
+    pub frame_count: u32,
+    /// LCG random state.
+    pub rand_state: u32,
+    /// Current PID.
+    pub current_pid: u32,
+    /// Step number when this snapshot was taken (from trace buffer).
+    pub step_number: u64,
 }

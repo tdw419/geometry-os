@@ -371,6 +371,15 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "FORK" => {
+            if tokens.len() < 2 {
+                return Err("FORK requires 1 argument: FORK mode_reg".to_string());
+            }
+            bytecode.push(0x7D);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

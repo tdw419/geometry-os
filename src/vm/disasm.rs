@@ -568,6 +568,10 @@ impl Vm {
                 let fr = ram(a + 1);
                 (format!("REPLAY {}", reg(fr)), 2)
             }
+            0x7D => {
+                let mr = ram(a + 1);
+                (format!("FORK {}", reg(mr)), 2)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
