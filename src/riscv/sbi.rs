@@ -142,15 +142,19 @@ impl Sbi {
             }
 
             // SBI v0.2 extensions
+            // IMPORTANT: SBI v0.2 return convention is (a0=error, a1=value).
+            // a0=0 means success, a0<0 means error. The actual return value
+            // goes in a1. The Linux kernel's __sbi_base_ecall wrapper checks
+            // a0 for error and returns a1 on success.
             SBI_EXT_BASE => {
                 match a6 {
                     // SBI_BASE_GET_SPEC_VERSION (0)
                     // Encoded as (major << 16 | minor). OpenSBI returns v1.0.
-                    0 => Some((0x00010000, 0)), // version 1.0
+                    0 => Some((0, 0x00010000)), // a0=success, a1=version 1.0
                     // SBI_BASE_GET_IMPL_ID (1)
-                    1 => Some((0, 0)), // implementation ID 0 = "BBL/OpenSBI"
+                    1 => Some((0, 0)), // a0=success, a1=implementation ID 0
                     // SBI_BASE_GET_IMPL_VERSION (2)
-                    2 => Some((1, 0)),
+                    2 => Some((0, 1)), // a0=success, a1=implementation version 1
                     // SBI_BASE_PROBE_EXTENSION (3)
                     3 => {
                         // Probe if extension `a0` is available
@@ -167,12 +171,12 @@ impl Sbi {
                                 | SBI_EXT_RFENCE
                                 | SBI_EXT_IPI
                         );
-                        Some((if available { 1 } else { 0 }, 0))
+                        Some((0, if available { 1 } else { 0 }))
                     }
                     // SBI_BASE_GET_MVENDORID (4)
                     4 => Some((0, 0)),
                     // SBI_BASE_GET_MARCHID (5)
-                    5 => Some((0x80000000, 0)), // generic RISC-V
+                    5 => Some((0, 0x80000000)), // generic RISC-V
                     // SBI_BASE_GET_MIMPID (6)
                     6 => Some((0, 0)),
                     _ => Some((SBI_ERR_NOT_SUPPORTED as u32, 0)),
@@ -325,7 +329,7 @@ mod tests {
         let mut uart = Uart::new();
         let mut clint = Clint::new();
         let result = sbi.handle_ecall(SBI_EXT_BASE, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
-        assert_eq!(result, Some((0x00010000, 0)));
+        assert_eq!(result, Some((0, 0x00010000))); // a0=success, a1=version 1.0
     }
 
     #[test]
@@ -385,11 +389,11 @@ mod tests {
             &mut uart,
             &mut clint,
         );
-        assert_eq!(result, Some((1, 0))); // available
+        assert_eq!(result, Some((0, 1))); // a0=success, a1=available
 
         // Probe unknown extension
         let result = sbi.handle_ecall(SBI_EXT_BASE, 3, 0x999, 0, 0, 0, 0, 0, &mut uart, &mut clint);
-        assert_eq!(result, Some((0, 0))); // not available
+        assert_eq!(result, Some((0, 0))); // a0=success, a1=not available
     }
 
     #[test]

@@ -1,6 +1,5 @@
 use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{StepResult, Privilege};
-use std::collections::HashSet;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -23,23 +22,18 @@ fn main() {
     let time_accel = 100u64;
     let mut last_satp: u32 = vm.cpu.csr.satp;
     let mut last_ecall = 0u64;
+    let mut last_lpj: u32 = 0;
 
-    // Track unique function entries (jumps to new high addresses after ret)
-    let mut seen_functions: HashSet<u32> = HashSet::new();
-    let mut last_was_ret = false;
-    let mut in_udelay = false;
-    let mut udelay_entries: u64 = 0;
-    let mut non_udelay_instrs: u64 = 0;
-    let mut last_100_pcs: Vec<u32> = Vec::new();
-    let mut sample_idx: u64 = 0;
+    // Check lpj_fine at intervals
+    let check_points = [100_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000];
 
     while count < max_instr {
         if vm.bus.sbi.shutdown_requested { break; }
 
         let cur_ecall = vm.cpu.ecall_count;
         if cur_ecall != last_ecall {
-            eprintln!("[boot] ECALL #{} at count={}: a7=0x{:X} a6=0x{:X} a0=0x{:X}",
-                cur_ecall, count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]);
+            eprintln!("[boot] ECALL #{} at count={}: a7=0x{:X} a6=0x{:X} a0=0x{:X} priv={:?}",
+                cur_ecall, count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.privilege);
             last_ecall = cur_ecall;
         }
 
@@ -74,14 +68,6 @@ fn main() {
         for _ in 0..time_accel { vm.bus.tick_clint(); }
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
-        // Track if we're in udelay
-        let pc = vm.cpu.pc;
-        in_udelay = pc >= 0xC020B0D2 && pc <= 0xC020B136;
-        if in_udelay && pc == 0xC020B0D2 { udelay_entries += 1; }
-        
-        // Track non-udelay instructions
-        if !in_udelay { non_udelay_instrs += 1; }
-
         let step_result = vm.step();
         count += 1;
 
@@ -114,6 +100,7 @@ fn main() {
 
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
+            eprintln!("[boot] SATP change at count={}: 0x{:08X} -> 0x{:08X}", count, last_satp, cur_satp);
             let ppn = cur_satp & 0x3FFFFF;
             let pg_dir_phys = (ppn as u64) * 4096;
             for i in 0..64u32 {
@@ -141,18 +128,29 @@ fn main() {
             last_satp = cur_satp;
         }
 
-        // Sample PCs every 100K instructions after ECALL
-        if count > 182000 && count % 100_000 == 0 && sample_idx < 50 {
-            last_100_pcs.push(vm.cpu.pc);
-            sample_idx += 1;
+        // Check lpj_fine at intervals
+        if check_points.contains(&count) {
+            let lpj = vm.bus.read_word(0x01482060).unwrap_or(0);
+            if lpj != last_lpj {
+                eprintln!("[diag] count={}: lpj_fine=0x{:08X} ({}) PC=0x{:08X} mtime=0x{:X}",
+                    count, lpj, lpj, vm.cpu.pc, vm.bus.clint.mtime);
+                last_lpj = lpj;
+            }
         }
     }
 
-    eprintln!("[diag] udelay_entries={} non_udelay_instrs={}", udelay_entries, non_udelay_instrs);
-    eprintln!("[diag] Sampled PCs (every 100K after ECALL):");
-    for (i, pc) in last_100_pcs.iter().enumerate() {
-        eprintln!("  [{}] 0x{:08X}{}", i, pc, if *pc >= 0xC020B0D2 && *pc <= 0xC020B136 { " (udelay)" } else { "" });
+    let lpj_fine = vm.bus.read_word(0x01482060).unwrap_or(0);
+    eprintln!("[diag] FINAL: lpj_fine=0x{:08X} ({}) PC=0x{:08X} mtime=0x{:X}",
+        lpj_fine, lpj_fine, vm.cpu.pc, vm.bus.clint.mtime);
+    eprintln!("[diag] ECALLs={} console={}", vm.cpu.ecall_count, vm.bus.sbi.console_output.len());
+    
+    // Check a few related globals
+    for (name, pa) in &[
+        ("loops_per_jiffy", 0x01482060u64),
+        ("preset_lpj", 0x01482048),
+        ("cpu_mhz", 0x0148204C),
+    ] {
+        let val = vm.bus.read_word(*pa).unwrap_or(0);
+        eprintln!("[diag] {} at PA 0x{:X} = 0x{:08X} ({})", name, pa, val, val);
     }
-    eprintln!("[diag] console={}", vm.bus.sbi.console_output.len());
-    eprintln!("[diag] ECALLs={}", vm.cpu.ecall_count);
 }

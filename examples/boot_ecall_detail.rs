@@ -1,6 +1,5 @@
 use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{StepResult, Privilege};
-use std::collections::HashSet;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -19,27 +18,19 @@ fn main() {
     let dtb_va = ((dtb_addr.wrapping_add(0xC0000000)) & 0xFFFFFFFF) as u32;
     let dtb_pa = dtb_addr as u32;
     let mut count: u64 = 0;
-    let max_instr = 5_000_000u64;
+    let max_instr = 500_000u64;
     let time_accel = 100u64;
     let mut last_satp: u32 = vm.cpu.csr.satp;
     let mut last_ecall = 0u64;
-
-    // Track unique function entries (jumps to new high addresses after ret)
-    let mut seen_functions: HashSet<u32> = HashSet::new();
-    let mut last_was_ret = false;
-    let mut in_udelay = false;
-    let mut udelay_entries: u64 = 0;
-    let mut non_udelay_instrs: u64 = 0;
-    let mut last_100_pcs: Vec<u32> = Vec::new();
-    let mut sample_idx: u64 = 0;
 
     while count < max_instr {
         if vm.bus.sbi.shutdown_requested { break; }
 
         let cur_ecall = vm.cpu.ecall_count;
         if cur_ecall != last_ecall {
-            eprintln!("[boot] ECALL #{} at count={}: a7=0x{:X} a6=0x{:X} a0=0x{:X}",
-                cur_ecall, count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]);
+            eprintln!("[ECALL #{}] count={} PC=0x{:08X}: a7=0x{:X} a6=0x{:X} a0=0x{:X} -> a0=0x{:X} a1=0x{:X}",
+                cur_ecall, count, vm.cpu.pc, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10],
+                vm.cpu.x[10], vm.cpu.x[11]);
             last_ecall = cur_ecall;
         }
 
@@ -73,14 +64,6 @@ fn main() {
 
         for _ in 0..time_accel { vm.bus.tick_clint(); }
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
-
-        // Track if we're in udelay
-        let pc = vm.cpu.pc;
-        in_udelay = pc >= 0xC020B0D2 && pc <= 0xC020B136;
-        if in_udelay && pc == 0xC020B0D2 { udelay_entries += 1; }
-        
-        // Track non-udelay instructions
-        if !in_udelay { non_udelay_instrs += 1; }
 
         let step_result = vm.step();
         count += 1;
@@ -140,19 +123,5 @@ fn main() {
             vm.bus.write_word(0x0080100C, dtb_pa).ok();
             last_satp = cur_satp;
         }
-
-        // Sample PCs every 100K instructions after ECALL
-        if count > 182000 && count % 100_000 == 0 && sample_idx < 50 {
-            last_100_pcs.push(vm.cpu.pc);
-            sample_idx += 1;
-        }
     }
-
-    eprintln!("[diag] udelay_entries={} non_udelay_instrs={}", udelay_entries, non_udelay_instrs);
-    eprintln!("[diag] Sampled PCs (every 100K after ECALL):");
-    for (i, pc) in last_100_pcs.iter().enumerate() {
-        eprintln!("  [{}] 0x{:08X}{}", i, pc, if *pc >= 0xC020B0D2 && *pc <= 0xC020B136 { " (udelay)" } else { "" });
-    }
-    eprintln!("[diag] console={}", vm.bus.sbi.console_output.len());
-    eprintln!("[diag] ECALLs={}", vm.cpu.ecall_count);
 }

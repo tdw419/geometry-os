@@ -383,7 +383,8 @@ fn test_sbi_base_probe_from_smode() {
     vm.cpu.step(&mut vm.bus);
 
     assert_eq!(vm.cpu.privilege, Privilege::Supervisor);
-    assert_eq!(vm.cpu.x[10], 1, "SBI_CONSOLE_PUTCHAR should be available");
+    assert_eq!(vm.cpu.x[10], 0, "SBI error code should be 0 (success)");
+    assert_eq!(vm.cpu.x[11], 1, "SBI_CONSOLE_PUTCHAR should be available in a1");
 
     // Now probe an unknown extension
     vm.cpu.pc = base as u32;
@@ -393,7 +394,8 @@ fn test_sbi_base_probe_from_smode() {
 
     vm.cpu.step(&mut vm.bus);
 
-    assert_eq!(vm.cpu.x[10], 0, "unknown extension should return 0");
+    assert_eq!(vm.cpu.x[10], 0, "SBI error code should be 0 (success)");
+    assert_eq!(vm.cpu.x[11], 0, "unknown extension should return 0 in a1");
 }
 
 /// Test SBI shutdown from S-mode causes EBREAK.
