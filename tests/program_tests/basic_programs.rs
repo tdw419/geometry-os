@@ -861,3 +861,62 @@ fn test_plasma() {
         "plasma should have no black pixels (sine table minimum is 128)"
     );
 }
+
+#[test]
+fn test_starfield() {
+    // Starfield is an infinite animation -- run until first FRAME completes
+    let source = std::fs::read_to_string("programs/starfield.asm").expect("read starfield.asm");
+    let asm = geometry_os::assembler::assemble(&source, 0).expect("assemble starfield");
+    let mut vm = geometry_os::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until frame_ready (first complete frame)
+    let mut frames_seen = 0;
+    for _ in 0..2_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= 1 {
+                break;
+            }
+        }
+    }
+
+    assert!(
+        frames_seen >= 1,
+        "starfield.asm should produce at least 1 frame in 2M steps"
+    );
+
+    // Should have some non-black pixels (stars)
+    let mut colored_pixels = 0;
+    let mut colors = std::collections::HashSet::new();
+    for y in 0..256 {
+        for x in 0..256 {
+            let px = vm.screen[y * 256 + x];
+            if px != 0 {
+                colored_pixels += 1;
+                colors.insert(px);
+            }
+        }
+    }
+    assert!(
+        colored_pixels > 20,
+        "starfield should have 20+ visible stars, got {}",
+        colored_pixels
+    );
+    // Should have varied brightness (multiple gray levels)
+    assert!(
+        colors.len() > 5,
+        "starfield should have varied brightness (5+ levels), got {}",
+        colors.len()
+    );
+}
