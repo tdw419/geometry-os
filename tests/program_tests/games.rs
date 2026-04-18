@@ -665,6 +665,110 @@ fn test_infinite_map_pxpk_tint_phase_analysis() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_contour_lines() {
+    // Elevation contour lines: 1px dark lines (0x222222) at tile boundaries
+    // where fine_hash elevation (top 3 bits, 0-7) changes by > 2.
+    // Not drawn on water tiles. Creates topographic map effect.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready);
+
+    let contour_color: u32 = 0x222222;
+
+    // Count contour line pixels (dark gray pixels at tile edges)
+    let tile_size = 4;
+    let mut contour_pixels = 0usize;
+    let mut total_edge_pixels = 0usize;
+
+    // Check right edges (x = 3, 7, 11, ... 251, 255) and bottom edges (y = 3, 7, ...)
+    for ty in (0..256).step_by(tile_size) {
+        for tx in (0..256).step_by(tile_size) {
+            // Right edge: column tx+3
+            let rx = tx + tile_size - 1;
+            if rx < 256 {
+                for dy in 0..tile_size {
+                    let ry = ty + dy;
+                    if ry < 256 {
+                        let px = vm.screen[ry * 256 + rx];
+                        total_edge_pixels += 1;
+                        if px == contour_color {
+                            contour_pixels += 1;
+                        }
+                    }
+                }
+            }
+            // Bottom edge: row ty+3
+            let by = ty + tile_size - 1;
+            if by < 256 {
+                for dx in 0..tile_size {
+                    let rx = tx + dx;
+                    if rx < 256 {
+                        let px = vm.screen[by * 256 + rx];
+                        total_edge_pixels += 1;
+                        if px == contour_color {
+                            contour_pixels += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Should have some contour pixels (elevation varies across terrain)
+    assert!(
+        contour_pixels > 50,
+        "should have contour line pixels, got {}/{}",
+        contour_pixels,
+        total_edge_pixels
+    );
+
+    // But not too many — contour lines only appear at steep elevation changes
+    // (diff > 2 in a 0-7 range), so typically < 30% of edge pixels
+    let ratio = contour_pixels as f64 / total_edge_pixels as f64;
+    assert!(
+        ratio < 0.35,
+        "contour lines should be sparse (steep changes only), got {:.1}% of edges",
+        ratio * 100.0
+    );
+
+    // Water tiles should NOT have contour lines
+    // Find a water pixel (high blue channel) and verify it's not at a contour edge
+    // or that its edge pixels aren't contour_color
+    let water_tiles_without_contour = (0..256).step_by(tile_size)
+        .flat_map(|ty| (0..256).step_by(tile_size).map(move |tx| (tx, ty)))
+        .filter(|&(tx, ty)| {
+            // Check if this is a water tile (center pixel is blue-dominant)
+            let cx = tx + 2;
+            let cy = ty + 2;
+            if cx >= 256 || cy >= 256 { return false; }
+            let px = vm.screen[cy * 256 + cx];
+            let r = (px >> 16) & 0xFF;
+            let g = (px >> 8) & 0xFF;
+            let b = px & 0xFF;
+            if !(b > 100 && b > r * 2) { return false; } // not water
+            // Check edges: right edge pixel should NOT be contour_color
+            let rx = tx + 3;
+            if rx < 256 {
+                for dy in 0..4 {
+                    let ry = ty + dy;
+                    if ry < 256 && vm.screen[ry * 256 + rx] == contour_color {
+                        return false; // contour on water tile
+                    }
+                }
+            }
+            true
+        })
+        .count();
+
+    assert!(
+        water_tiles_without_contour > 10,
+        "water tiles should not have contour lines, only {} water tiles had no contour",
+        water_tiles_without_contour
+    );
+}
+
+#[test]
 fn test_infinite_map_pxpk_day_night_tint() {
     // Verify the day/night tint produces visible color shifts across frames.
     // The tint cycles with period 256, 4 phases of 64 frames:
@@ -831,79 +935,6 @@ fn test_infinite_map_pxpk_sky_gradient() {
     eprintln!(
         "Sky gradient: dawn top={:06X}, dawn horizon={:06X}, night top={:06X}",
         top_pixel_dawn, horizon_pixel_dawn, top_pixel_night
-    );
-}
-
-#[test]
-fn test_infinite_map_pxpk_contour_lines() {
-    // Contour lines: subtle dark lines (0x222222) at tile boundaries where
-    // elevation (fine_hash >> 28 & 7) differs by > 2 between adjacent tiles.
-    // Right-edge contour: 1px vertical at x = sx + 2, height = 4.
-    // Bottom-edge contour: 1px horizontal at y = sy + 2, width = 4.
-    // Water tiles skip contours (r31 != 0).
-    // Verify: (1) some contour pixels exist (not all terrain), (2) contour
-    // color matches expected 0x222222, (3) contour pixels are at tile
-    // boundaries (column sx+2 or row sy+2).
-    let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
-    let _ = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready);
-
-    let screen = vm.screen.to_vec();
-    let mut contour_pixels = Vec::new();
-
-    // Scan for contour-colored pixels at tile boundary positions
-    let tile_size = 4;
-    for ty in (0..256).step_by(tile_size) {
-        for tx in (0..256).step_by(tile_size) {
-            // Check right-edge contour column (sx + 2)
-            let cx = tx + 2;
-            if cx < 256 {
-                for dy in 0..tile_size {
-                    let cy = ty + dy;
-                    if cy < 256 {
-                        let idx = cy * 256 + cx;
-                        if screen[idx] == 0x222222 {
-                            contour_pixels.push((cx, cy));
-                        }
-                    }
-                }
-            }
-            // Check bottom-edge contour row (sy + 2)
-            let cy = ty + 2;
-            if cy < 256 {
-                for dx in 0..tile_size {
-                    let cx = tx + dx;
-                    if cx < 256 {
-                        let idx = cy * 256 + cx;
-                        if screen[idx] == 0x222222 {
-                            contour_pixels.push((cx, cy));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // There should be contour lines (elevation boundaries are common)
-    assert!(
-        contour_pixels.len() > 10,
-        "expected at least 10 contour pixels, found {}",
-        contour_pixels.len()
-    );
-
-    // Verify at least some contour pixels are NOT in the top 16 rows (sky area)
-    let below_sky = contour_pixels.iter().filter(|&&(_, y)| y >= 16).count();
-    assert!(
-        below_sky > 5,
-        "expected contour pixels below sky (y>=16), found {}",
-        below_sky
-    );
-
-    eprintln!(
-        "Contour lines: {} pixels detected ({} below sky area)",
-        contour_pixels.len(),
-        below_sky
     );
 }
 
