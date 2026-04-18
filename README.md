@@ -48,7 +48,7 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
-## The Instruction Set (77 opcodes)
+## The Instruction Set (99 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -302,7 +302,7 @@ child:
 │  └──────────────┘  └──────────────────┘     │
 └──────────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 77 opcodes, 8 concurrent processes
+VM: 32 registers, 65536-word RAM, 99 opcodes, 8 concurrent processes
 Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
 
@@ -317,10 +317,10 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 
 ## Stats
 
-- 15,768 lines of Rust
-- 77 opcodes
-- 40 programs
-- 697 tests
+- 30,611 lines of Rust
+- 99 opcodes
+- 50 programs
+- 1109 tests
 - MIT licensed
 
 ## License
