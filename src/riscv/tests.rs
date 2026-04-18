@@ -526,3 +526,70 @@ fn make_test_elf_two_segments(
     elf.extend_from_slice(&0x1000u32.to_le_bytes()); // p_align
     elf
 }
+
+#[test]
+fn test_rdtime_returns_clint_mtime() {
+    // rdtime should return the CLINT mtime value, not 0.
+    // CSRRS rd, time, x0 encodes as: funct3=010 (CSRRS), rd=a3(13), rs1=x0(0), csr=0xC01
+    // Encoding: imm[31:20]=0xC01, rs1=0, funct3=010, rd=13, opcode=1110011
+    // = 0xC0102073
+    use crate::riscv::bus::Bus;
+    use crate::riscv::cpu::RiscvCpu;
+
+    let mut bus = Bus::new(0x8000_0000, 1024 * 1024);
+    let mut cpu = RiscvCpu::new();
+    cpu.pc = 0x8000_0000;
+
+    // Write rdtime instruction: csrrs a3, time, x0
+    // Encoding: (0xC01 << 20) | (0 << 15) | (2 << 12) | (13 << 7) | 0x73 = 0xC01026F3
+    let rdtime_insn: u32 = 0xC01026F3;
+    bus.write_word(0x8000_0000, rdtime_insn).unwrap();
+
+    // Execute with mtime=0
+    cpu.step(&mut bus);
+    assert_eq!(cpu.x[13], 0); // a3 = mtime low = 0
+
+    // Advance mtime and execute again
+    bus.clint.mtime = 42;
+    cpu.pc = 0x8000_0000;
+    cpu.step(&mut bus);
+    assert_eq!(cpu.x[13], 42); // a3 = mtime low = 42
+
+    // Test TIMEH (0xC81): csrrs a4, timeh, x0 = 0xC8102773
+    cpu.pc = 0x8000_0000;
+    let rdtimeh_insn: u32 = 0xC8102773;
+    bus.write_word(0x8000_0000, rdtimeh_insn).unwrap();
+    bus.clint.mtime = 0x1_0000_0042; // high word = 1
+    cpu.step(&mut bus);
+    assert_eq!(cpu.x[14], 1); // a4 = mtime high = 1
+}
+
+#[test]
+fn test_rdtime_advances_with_clint_tick() {
+    // Each RiscvVm::step() calls tick_clint(), which increments mtime by 1.
+    // After N steps, rdtime should return N.
+    use crate::riscv::RiscvVm;
+
+    let mut vm = RiscvVm::new(1024 * 1024);
+    vm.cpu.pc = 0x8000_0000;
+
+    // Write a loop: csrrs a3, time, x0 (1 instruction)
+    let rdtime_insn: u32 = 0xC01026F3;
+    vm.bus.write_word(0x8000_0000, rdtime_insn).unwrap();
+
+    // After 1 step, mtime should be 1 (tick_clint increments before execute)
+    vm.step();
+    // The instruction reads mtime AFTER tick_clint (step() calls tick_clint first,
+    // then cpu.step which executes the instruction). So after 1 step, mtime=1,
+    // but the instruction reads mtime at that point which is 1.
+    // Wait -- tick_clint is called in RiscvVm::step() BEFORE cpu.step().
+    // So on the first call: mtime goes from 0 to 1, then rdtime reads 1.
+    assert_eq!(vm.cpu.x[13], 1);
+
+    // After 10 more steps, mtime should be 11
+    for _ in 0..10 {
+        vm.cpu.pc = 0x8000_0000;
+        vm.step();
+    }
+    assert_eq!(vm.cpu.x[13], 11);
+}

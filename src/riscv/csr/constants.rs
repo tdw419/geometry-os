@@ -82,3 +82,7 @@ pub const INT_STI: u32 = 5; // Supervisor timer interrupt
 pub const INT_MTI: u32 = 7; // Machine timer interrupt
 pub const INT_SEI: u32 = 9; // Supervisor external interrupt
 pub const INT_MEI: u32 = 11; // Machine external interrupt
+
+// Timer CSRs (read-only, map to CLINT mtime)
+pub const TIME: u32 = 0xC01; // mtime low 32 bits (read via rdtime instruction)
+pub const TIMEH: u32 = 0xC81; // mtime high 32 bits (RV32 only)

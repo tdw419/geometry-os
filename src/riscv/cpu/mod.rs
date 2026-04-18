@@ -199,6 +199,18 @@ impl RiscvCpu {
         }
     }
 
+    /// Read a CSR, intercepting hardware-mapped CSRs like TIME/TIMEH.
+    ///
+    /// The TIME (0xC01) and TIMEH (0xC81) CSRs map to the CLINT mtime register.
+    /// Since the CSR bank has no access to the bus/CLINT, we intercept them here.
+    pub(crate) fn read_csr_with_time(&self, addr: u32, bus: &Bus) -> u32 {
+        match addr {
+            csr::TIME => bus.clint.mtime as u32,
+            csr::TIMEH => (bus.clint.mtime >> 32) as u32,
+            _ => self.csr.read(addr),
+        }
+    }
+
     /// Write to a CSR, intercepting side effects like SATP logging (Phase 41).
     pub(crate) fn write_csr(&mut self, addr: u32, val: u32, bus: &mut Bus) {
         if addr == csr::SATP {

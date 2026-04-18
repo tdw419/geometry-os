@@ -135,8 +135,11 @@ impl RiscvCpu {
             }
 
             // ---- CSR ----
+            // Note: TIME/TIMEH CSRs (0xC01/0xC81) are intercepted here because
+            // they map to CLINT mtime hardware, not to the CSR bank. The csr.read()
+            // function has no access to the bus/CLINT, so we handle them here.
             Operation::Csrrw { rd, rs1, csr } => {
-                let old = self.csr.read(csr);
+                let old = self.read_csr_with_time(csr, bus);
                 let new_val = self.get_reg(rs1);
                 self.write_csr(csr, new_val, bus);
                 self.set_reg(rd, old);
@@ -144,7 +147,7 @@ impl RiscvCpu {
                 StepResult::Ok
             }
             Operation::Csrrs { rd, rs1, csr } => {
-                let old = self.csr.read(csr);
+                let old = self.read_csr_with_time(csr, bus);
                 let mask = self.get_reg(rs1);
                 if mask != 0 {
                     self.write_csr(csr, old | mask, bus);
@@ -154,7 +157,7 @@ impl RiscvCpu {
                 StepResult::Ok
             }
             Operation::Csrrc { rd, rs1, csr } => {
-                let old = self.csr.read(csr);
+                let old = self.read_csr_with_time(csr, bus);
                 let mask = self.get_reg(rs1);
                 if mask != 0 {
                     self.write_csr(csr, old & !mask, bus);
@@ -164,14 +167,14 @@ impl RiscvCpu {
                 StepResult::Ok
             }
             Operation::Csrrwi { rd, uimm, csr } => {
-                let old = self.csr.read(csr);
+                let old = self.read_csr_with_time(csr, bus);
                 self.write_csr(csr, uimm as u32, bus);
                 self.set_reg(rd, old);
                 self.pc = next_pc;
                 StepResult::Ok
             }
             Operation::Csrrsi { rd, uimm, csr } => {
-                let old = self.csr.read(csr);
+                let old = self.read_csr_with_time(csr, bus);
                 let mask = uimm as u32;
                 if mask != 0 {
                     self.write_csr(csr, old | mask, bus);
@@ -181,7 +184,7 @@ impl RiscvCpu {
                 StepResult::Ok
             }
             Operation::Csrrci { rd, uimm, csr } => {
-                let old = self.csr.read(csr);
+                let old = self.read_csr_with_time(csr, bus);
                 let mask = uimm as u32;
                 if mask != 0 {
                     self.write_csr(csr, old & !mask, bus);

@@ -281,7 +281,22 @@ impl RiscvVm {
             }
         }
 
-        // 7. Set CPU state for boot.
+        // 7. Pre-set initial_boot_params (kernel expects OpenSBI to do this).
+        //
+        // The kernel's _start_kernel moves a1 (DTB PA) to a0 and passes it to
+        // setup_vm(). But setup_vm() does NOT save it to initial_boot_params.
+        // The kernel expects OpenSBI firmware to have already written the DTB
+        // physical address to initial_boot_params before the kernel starts.
+        // Without OpenSBI, we must do it ourselves.
+        //
+        // initial_boot_params is at VA 0xC0C7A178 (PA 0x00C7A178).
+        // It stores the DTB physical address. The kernel's early_init_dt_scan()
+        // reads this and converts to virtual via phys_to_virt().
+        let ibp_phys: u64 = 0x00C7A178;
+        vm.bus.write_word(ibp_phys, dtb_addr as u32).ok();
+        eprintln!("[boot] Pre-set initial_boot_params = 0x{:08X} (DTB PA)", dtb_addr as u32);
+
+        // 8. Set CPU state for boot.
         vm.cpu.x[10] = 0; // a0 = hartid (0)
         vm.cpu.x[11] = dtb_addr as u32; // a1 = DTB physical address
 
@@ -808,6 +823,17 @@ impl RiscvVm {
                 let prb_pa = 0x00C79EACu64;
                 let prb = vm.bus.read_word(prb_pa).unwrap_or(0);
                 eprintln!("[boot]   phys_ram_base=0x{:08X}", prb);
+                // Check initial_boot_params (VA 0xC0C7A178, PA 0x00C7A178)
+                let ibp_pa = 0x00C7A178u64;
+                let ibp = vm.bus.read_word(ibp_pa).unwrap_or(0);
+                eprintln!("[boot]   initial_boot_params=0x{:08X} (expect DTB PA 0x{:08X})", ibp, dtb_addr as u32);
+                // Verify DTB at the address initial_boot_params points to
+                if ibp != 0 {
+                    let dtb_magic_pa = ibp as u64;
+                    let dtb_magic = vm.bus.read_word(dtb_magic_pa).unwrap_or(0);
+                    // DTB magic 0xD00DFEED in BE = 0xEDFE0DD0 in LE read
+                    eprintln!("[boot]   DTB at 0x{:08X}: magic=0x{:08X} (expect 0xEDFE0DD0)", ibp, dtb_magic);
+                }
                 // Dump register state
                 for i in 0..32 {
                     let name = ["zero","ra","sp","gp","tp","t0","t1","t2","s0","s1","a0","a1","a2","a3","a4","a5",
