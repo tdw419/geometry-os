@@ -325,7 +325,7 @@ mod tests {
         let mut uart = Uart::new();
         let mut clint = Clint::new();
         let result = sbi.handle_ecall(SBI_EXT_BASE, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
-        assert_eq!(result, Some((2, 0)));
+        assert_eq!(result, Some((0x00010000, 0)));
     }
 
     #[test]
