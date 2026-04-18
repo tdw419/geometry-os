@@ -52,16 +52,17 @@ LDI r12, 0x7801         ; camera_y address
 LDI r13, 0x7802         ; frame_counter address
 
 ; ===== Pattern Table (32 entries at 0x7900-0x791F) =====
-; 2-bit pattern per biome: 0=horizontal, 1=vertical, 2=center, 3=corner
-; Deterministic biome texture bias -- deserts horizontal, mountains vertical, etc.
+; 3-bit pattern per biome: 0=horiz 1=vert 2=center 3=corner 4=diag\ 5=diag/ 6=topedge 7=dither
 LDI r20, 0x7900
 LDI r17, 0              ; water(0) -> horizontal
 STORE r20, r17
 ADD r20, r7
 STORE r20, r17           ; water(1) -> horizontal
 ADD r20, r7
-STORE r20, r17           ; beach(2) -> horizontal
+LDI r17, 4
+STORE r20, r17           ; beach(2) -> diagonal\ (wave wash)
 ADD r20, r7
+LDI r17, 0
 STORE r20, r17           ; desert(3) -> horizontal
 ADD r20, r7
 STORE r20, r17           ; desert(4) -> horizontal
@@ -69,18 +70,22 @@ ADD r20, r7
 LDI r17, 2
 STORE r20, r17           ; oasis(5) -> center
 ADD r20, r7
-STORE r20, r17           ; grass(6) -> center
+LDI r17, 7
+STORE r20, r17           ; grass(6) -> dither (grass clumps)
 ADD r20, r7
-STORE r20, r17           ; grass(7) -> center
+STORE r20, r17           ; grass(7) -> dither
 ADD r20, r7
-STORE r20, r17           ; swamp(8) -> center
+LDI r17, 4
+STORE r20, r17           ; swamp(8) -> diagonal\ (murky)
 ADD r20, r7
-STORE r20, r17           ; swamp(9) -> center
+STORE r20, r17           ; swamp(9) -> diagonal\
 ADD r20, r7
-STORE r20, r17           ; forest(10) -> center
+LDI r17, 5
+STORE r20, r17           ; forest(10) -> diagonal/ (canopy)
 ADD r20, r7
-STORE r20, r17           ; forest(11) -> center
+STORE r20, r17           ; forest(11) -> diagonal/
 ADD r20, r7
+LDI r17, 2
 STORE r20, r17           ; mushroom(12) -> center
 ADD r20, r7
 LDI r17, 1
@@ -88,7 +93,8 @@ STORE r20, r17           ; mountain(13) -> vertical
 ADD r20, r7
 STORE r20, r17           ; mountain(14) -> vertical
 ADD r20, r7
-STORE r20, r17           ; tundra(15) -> vertical
+LDI r17, 7
+STORE r20, r17           ; tundra(15) -> dither (frost scatter)
 ADD r20, r7
 LDI r17, 3
 STORE r20, r17           ; lava(16) -> corner
@@ -97,29 +103,31 @@ STORE r20, r17           ; lava(17) -> corner
 ADD r20, r7
 STORE r20, r17           ; volcanic(18) -> corner
 ADD r20, r7
-LDI r17, 0
-STORE r20, r17           ; snow(19) -> horizontal (drift)
+LDI r17, 6
+STORE r20, r17           ; snow(19) -> top edge (drift tops)
 ADD r20, r7
-STORE r20, r17           ; snow(20) -> horizontal
+STORE r20, r17           ; snow(20) -> top edge
 ADD r20, r7
-STORE r20, r17           ; snow(21) -> horizontal
+STORE r20, r17           ; snow(21) -> top edge
 ADD r20, r7
-LDI r17, 2
-STORE r20, r17           ; coral(22) -> center
+LDI r17, 5
+STORE r20, r17           ; coral(22) -> diagonal/ (branching)
 ADD r20, r7
 LDI r17, 1
 STORE r20, r17           ; ruins(23) -> vertical (pillar)
 ADD r20, r7
-STORE r20, r17           ; crystal(24) -> vertical
+LDI r17, 4
+STORE r20, r17           ; crystal(24) -> diagonal\ (facets)
 ADD r20, r7
-STORE r20, r17           ; crystal(25) -> vertical
+STORE r20, r17           ; crystal(25) -> diagonal\
 ADD r20, r7
 LDI r17, 3
 STORE r20, r17           ; ash(26) -> corner
 ADD r20, r7
-STORE r20, r17           ; deadlands(27) -> corner
+LDI r17, 7
+STORE r20, r17           ; deadlands(27) -> dither (debris)
 ADD r20, r7
-STORE r20, r17           ; deadlands(28) -> corner
+STORE r20, r17           ; deadlands(28) -> dither
 ADD r20, r7
 LDI r17, 2
 STORE r20, r17           ; biolum(29) -> center
@@ -783,16 +791,28 @@ do_rect:
     SHL r20, r21          ; shift into nibble range (0..0xF0)
     ADD r19, r20          ; animated accent color
 
-    ; Dispatch on pattern type
+    ; Dispatch on pattern type (3-bit: 0-7)
     ; Use fine_hash bit 0 for per-tile position variation
-    JZ r18, pat_horiz     ; pattern 0 = horizontal accent
+    JZ r18, pat_horiz      ; pattern 0 = horizontal accent
     LDI r20, 1
     CMP r18, r20
-    JZ r0, pat_vert       ; pattern 1 = vertical accent
+    JZ r0, pat_vert        ; pattern 1 = vertical accent
     LDI r20, 2
     CMP r18, r20
-    JZ r0, pat_center     ; pattern 2 = center dot
-    JMP pat_corner        ; pattern 3 = corner spark
+    JZ r0, pat_center      ; pattern 2 = center dot
+    LDI r20, 3
+    CMP r18, r20
+    JZ r0, pat_corner      ; pattern 3 = corner spark
+    LDI r20, 4
+    CMP r18, r20
+    JZ r0, pat_diag_bl     ; pattern 4 = diagonal backslash
+    LDI r20, 5
+    CMP r18, r20
+    JZ r0, pat_diag_fw     ; pattern 5 = diagonal forward slash
+    LDI r20, 6
+    CMP r18, r20
+    JZ r0, pat_topedge     ; pattern 6 = top edge
+    JMP pat_dither          ; pattern 7 = dither scatter
 
 pat_horiz:
     ; Horizontal accent: pixel at (screen_x + 1 or 2, screen_y + 2)
@@ -867,6 +887,100 @@ pat_cr_tl:
     ADD r18, r21          ; x = screen_x + 1
     ; y = screen_y + 0 (already set)
 pat_cr_draw:
+    PSET r18, r20, r19
+    JMP next_tile
+
+pat_diag_bl:
+    ; Diagonal backslash: pixel at (1,1) or (2,2)
+    MOV r18, r26
+    MOV r20, r25
+    LDI r21, 1
+    ADD r18, r21          ; x = screen_x + 1
+    ADD r20, r21          ; y = screen_y + 1
+    MOV r21, r6
+    LDI r17, 1
+    AND r21, r17          ; fine_hash & 1
+    JZ r21, pat_dbl_draw
+    ADD r18, r7           ; x = screen_x + 2
+    ADD r20, r7           ; y = screen_y + 2
+pat_dbl_draw:
+    PSET r18, r20, r19
+    JMP next_tile
+
+pat_diag_fw:
+    ; Diagonal forward slash: pixel at (3,1) or (1,3)
+    MOV r18, r26
+    MOV r20, r25
+    MOV r21, r6
+    LDI r17, 1
+    AND r21, r17          ; fine_hash & 1
+    JZ r21, pat_dfw_lo
+    LDI r21, 1
+    ADD r18, r21          ; x = screen_x + 1
+    LDI r21, 3
+    ADD r20, r21          ; y = screen_y + 3
+    JMP pat_dfw_draw
+pat_dfw_lo:
+    LDI r21, 3
+    ADD r18, r21          ; x = screen_x + 3
+    LDI r21, 1
+    ADD r20, r21          ; y = screen_y + 1
+pat_dfw_draw:
+    PSET r18, r20, r19
+    JMP next_tile
+
+pat_topedge:
+    ; Top edge: pixel at (1,0) or (2,0)
+    MOV r18, r26
+    MOV r20, r25          ; y = screen_y + 0
+    LDI r21, 1
+    ADD r18, r21          ; x = screen_x + 1
+    MOV r21, r6
+    LDI r17, 1
+    AND r21, r17          ; fine_hash & 1
+    JZ r21, pat_te_draw
+    ADD r18, r7           ; x = screen_x + 2
+pat_te_draw:
+    PSET r18, r20, r19
+    JMP next_tile
+
+pat_dither:
+    ; Dither scatter: pixel at one of 4 positions based on fine_hash bits 0-1
+    MOV r18, r26
+    MOV r20, r25
+    MOV r21, r6
+    LDI r17, 3
+    AND r21, r17          ; fine_hash & 3 = position index (0-3)
+    JZ r21, pat_di_a
+    LDI r17, 1
+    CMP r21, r17
+    JZ r0, pat_di_b
+    LDI r17, 2
+    CMP r21, r17
+    JZ r0, pat_di_c
+    JMP pat_di_d
+pat_di_a:
+    LDI r21, 1
+    ADD r18, r21          ; (1, 1)
+    ADD r20, r21
+    JMP pat_di_draw
+pat_di_b:
+    LDI r21, 3
+    ADD r18, r21          ; (3, 1)
+    LDI r21, 1
+    ADD r20, r21
+    JMP pat_di_draw
+pat_di_c:
+    LDI r21, 1
+    ADD r18, r21          ; (1, 3)
+    LDI r21, 3
+    ADD r20, r21
+    JMP pat_di_draw
+pat_di_d:
+    LDI r21, 3
+    ADD r18, r21          ; (3, 3)
+    ADD r20, r21
+pat_di_draw:
     PSET r18, r20, r19
     JMP next_tile
 

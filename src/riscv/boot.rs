@@ -523,10 +523,42 @@ impl RiscvVm {
         let mut _trampoline_patched: bool = true; // Boot page table already provides initial mapping
         let mut _panic_breakpoint: bool = false;
         let mut _last_satp: u32 = vm.cpu.csr.satp; // Already set by setup
+        let dtb_early_va_expected: u32 = (dtb_addr.wrapping_add(0xC0000000)) as u32;
+        let dtb_early_pa_expected: u32 = dtb_addr as u32;
+        let dtb_early_va_pa: u64 = 0x00801008;
+        let dtb_early_pa_pa: u64 = 0x0080100C;
+        let mut _dtb_watchdog_triggers: u32 = 0;
         while count < max_instructions {
             // Check for SBI shutdown request
             if vm.bus.sbi.shutdown_requested {
                 break;
+            }
+
+            // DTB pointer watchdog: continuously protect _dtb_early_va and _dtb_early_pa.
+            //
+            // The kernel's setup_vm() pt_ops writes 16 bytes at VA 0xC0801000, which
+            // clobbers _dtb_early_va (0xC0801008) and _dtb_early_pa (0xC080100C).
+            // This happens AFTER the final SATP switch, so the SATP-change re-set
+            // comes too late. Without this watchdog, phys_ram_base stays 0 and the
+            // kernel can't allocate memory.
+            //
+            // Check every 100 instructions (cheap: 2 reads + branch).
+            // Stop watching once phys_ram_base is set (DTB parsing succeeded).
+            if count % 100 == 0 {
+                let prb = vm.bus.read_word(0x00C79EACu64).unwrap_or(0);
+                if prb == 0 {
+                    // DTB parsing hasn't succeeded yet -- protect the pointers
+                    let cur_va = vm.bus.read_word(dtb_early_va_pa).unwrap_or(0);
+                    if cur_va != dtb_early_va_expected {
+                        vm.bus.write_word(dtb_early_va_pa, dtb_early_va_expected).ok();
+                        vm.bus.write_word(dtb_early_pa_pa, dtb_early_pa_expected).ok();
+                        _dtb_watchdog_triggers += 1;
+                        if _dtb_watchdog_triggers <= 5 {
+                            eprintln!("[boot] DTB watchdog #{} at count={}: restored _dtb_early_va from 0x{:08X} to 0x{:08X}",
+                                _dtb_watchdog_triggers, count, cur_va, dtb_early_va_expected);
+                        }
+                    }
+                }
             }
 
             // On SATP change, inject identity mappings for device regions.
@@ -905,6 +937,12 @@ impl RiscvVm {
 
         eprintln!("[boot] Done: SBI_calls={} ECALL_M={} forwards={} mmode_traps={}",
             _sbi_call_count, _ecall_m_count, _forward_count, _mmode_trap_count);
+        // Post-boot state
+        let prb = vm.bus.read_word(0x00C79EACu64).unwrap_or(0);
+        let deva = vm.bus.read_word(0x00801008).unwrap_or(0);
+        let depa = vm.bus.read_word(0x0080100C).unwrap_or(0);
+        eprintln!("[boot] Post-boot: phys_ram_base=0x{:08X} _dtb_early_va=0x{:08X} _dtb_early_pa=0x{:08X}",
+            prb, deva, depa);
         for (i, c) in _trap_counts.iter().enumerate() {
             if *c > 0 {
                 eprintln!("[boot]   cause {}: {} occurrences", i, c);
