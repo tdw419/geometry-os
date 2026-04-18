@@ -205,7 +205,7 @@ impl RiscvVm {
         // Previously ram_base was set to the kernel's first LOAD vaddr (0xC0000000),
         // which caused all physical addresses below 0xC0000000 to be silently discarded.
         let mut vm = Self::new_with_base(0, actual_ram_size);
-        vm.bus.low_addr_identity_map = false; // Disabled: trampoline page table handles identity mapping
+        vm.bus.low_addr_identity_map = true; // Identity-map low addresses when page table walk fails (DTB, device regs)
         vm.bus.auto_pte_fixup = true; // Needed: MMU-level fixup_ppn translates virtual PPNs during page table walks
 
         // 3. Load kernel ELF at physical addresses (p_paddr).
@@ -263,12 +263,22 @@ impl RiscvVm {
             ));
         }
 
+        // Append nosmp -- we only emulate 1 hart. Without this, the SMP
+        // kernel tries to start secondary CPUs via RFENCE SBI calls and
+        // panics with "Attempted to kill the idle task!" when they don't
+        // respond.
+        let bootargs = if bootargs.contains("nosmp") || bootargs.contains("maxcpus=1") {
+            bootargs.to_string()
+        } else {
+            format!("{} {}", bootargs, "nosmp")
+        };
+
         let dtb_config = dtb::DtbConfig {
             ram_base: mem_base,
             ram_size: mem_size,
             initrd_start,
             initrd_end,
-            bootargs: bootargs.to_string(),
+            bootargs,
             reserved_regions,
             ..Default::default()
         };
@@ -308,6 +318,23 @@ impl RiscvVm {
             "[boot] Pre-set _dtb_early_va = 0x{:08X}, _dtb_early_pa = 0x{:08X}",
             dtb_va, dtb_addr as u32
         );
+
+        // Protect _dtb_early_va and _dtb_early_pa from pt_ops overflow.
+        //
+        // The kernel's setup_vm() writes pt_ops function pointers at VA 0xC0801000
+        // (16 bytes, 4 function pointers). _dtb_early_va lives at VA 0xC0801008
+        // and _dtb_early_pa at VA 0xC0801008. The 16-byte pt_ops write overflows
+        // into these addresses, corrupting them. This causes early_init_dt_scan()
+        // to read a wrong DTB address, fail to parse the DTB, and leave
+        // phys_ram_base=0 and memblock memory.cnt=0.
+        //
+        // The periodic watchdog (every 100 instructions) is insufficient because
+        // the kernel may read the corrupted value between watchdog checks.
+        // Instead, we protect these addresses at the bus level: writes are silently
+        // dropped, and reads always return the correct values.
+        vm.bus.protected_addrs.push((dtb_early_va_pa, dtb_va));
+        vm.bus.protected_addrs.push((dtb_early_pa_pa, dtb_addr as u32));
+        eprintln!("[boot] Protected DTB pointers at PA 0x{:08X} and 0x{:08X}", dtb_early_va_pa, dtb_early_pa_pa);
 
         // Also set initial_boot_params for compatibility (some kernel paths
         // read it directly).
@@ -483,21 +510,81 @@ impl RiscvVm {
         // Pre-populate the reservation directly to ensure it exists even
         // if DTB parsing fails.
         //
-        // memblock struct at VA 0xC0803448 (PA 0x00803448):
-        //   memory:  cnt@0 max@4 regions@8 (each 8 bytes: base u32 + size u32)
-        //   reserved: cnt@48 max@52 regions@56
-        //
-        // We write to the reserved regions array at the next available slot.
+        // Linux 6.14 struct memblock_type layout (20 bytes on rv32):
+        //   cnt (4) + max (4) + total_size (4) + regions (4) + name (4)
+        // struct memblock layout:
+        //   bottom_up (4) + current_limit (4) + memory (20) + reserved (20) [+ physmem (20)]
+        // So reserved.cnt is at offset 4 + 4 + 20 = 28, reserved.regions at 28 + 12 = 40.
+        // Verified: memblock at VA 0xC0803448, memory.regions=0xC080348C (offset 20),
+        // reserved.regions=0xC0803A8C (offset 40).
         let memblock_pa: u64 = 0x00803448;
-        let res_cnt_addr = memblock_pa + 48;
+        let res_cnt_addr = memblock_pa + 28; // reserved.cnt
         let res_cnt = vm.bus.read_word(res_cnt_addr).unwrap_or(0);
-        let res_region_offset = 56 + (res_cnt as u64) * 8;
-        // Reserve PA 0 to kernel_phys_end (kernel image region)
-        vm.bus.write_word(memblock_pa + res_region_offset, 0).ok();           // base = 0
-        vm.bus.write_word(memblock_pa + res_region_offset + 4, kernel_phys_end as u32).ok(); // size
-        vm.bus.write_word(res_cnt_addr, res_cnt + 1).ok();                   // cnt++
-        eprintln!("[boot] Pre-populated memblock reserved: PA 0 - PA 0x{:08X} (slot {})", 
-            kernel_phys_end, res_cnt);
+        // Read reserved.regions pointer to find the regions array
+        let res_regions_ptr = vm.bus.read_word(memblock_pa + 40).unwrap_or(0);
+        if res_regions_ptr >= 0xC0000000 {
+            // Convert VA to PA
+            let res_regions_pa = (res_regions_ptr - 0xC0000000) as u64;
+            // Each memblock_region is 8 bytes: base (u32) + size (u32)
+            let res_region_offset = (res_cnt as u64) * 8;
+            // Reserve PA 0 to kernel_phys_end (kernel image region)
+            vm.bus
+                .write_word(res_regions_pa + res_region_offset, 0)
+                .ok(); // base = 0
+            vm.bus
+                .write_word(
+                    res_regions_pa + res_region_offset + 4,
+                    kernel_phys_end as u32,
+                )
+                .ok(); // size
+            vm.bus.write_word(res_cnt_addr, res_cnt + 1).ok(); // cnt++
+            eprintln!("[boot] Pre-populated memblock reserved: PA 0 - PA 0x{:08X} (slot {}, regions at PA 0x{:08X})", 
+                kernel_phys_end, res_cnt, res_regions_pa);
+        } else {
+            eprintln!("[boot] WARNING: reserved.regions pointer not set (0x{:08X}), skipping memblock pre-populate", res_regions_ptr);
+        }
+
+        // Pre-populate memblock.memory with the full RAM range.
+        //
+        // The kernel's early_init_dt_scan_memory() parses the DTB memory node
+        // and calls memblock_add(). But this happens AFTER setup_vm() creates
+        // page tables. If DTB parsing fails (page table doesn't map DTB VA yet,
+        // or the DTB format has an issue), memblock_add() is never called and
+        // memory.cnt stays 0. This causes:
+        //   1. memblock_alloc() returns 0 for all subsequent allocations
+        //   2. max_mapnr stays 0 (no pages available)
+        //   3. init_unavailable_range() skips all pages (s1 >= s6 check)
+        //   4. No "Linux version..." message because the console isn't set up
+        //
+        // Pre-populate ensures the kernel has memory to work with even if
+        // DTB parsing is delayed or fails. The DTB parsing will call
+        // memblock_add() again, but memblock handles duplicates gracefully
+        // (they get merged or the second call is a no-op for the same range).
+        {
+            let mem_cnt_addr = memblock_pa + 8; // memory.cnt
+            let mem_cnt = vm.bus.read_word(mem_cnt_addr).unwrap_or(0);
+            if mem_cnt == 0 {
+                let mem_regions_ptr = vm.bus.read_word(memblock_pa + 20).unwrap_or(0);
+                if mem_regions_ptr >= 0xC0000000 {
+                    let mem_regions_pa = (mem_regions_ptr - 0xC0000000) as u64;
+                    let ram_size_u32 = actual_ram_size as u32;
+                    // Add memory region: base=0, size=actual_ram_size
+                    vm.bus.write_word(mem_regions_pa, 0).ok(); // base = PA 0
+                    vm.bus.write_word(mem_regions_pa + 4, ram_size_u32).ok(); // size
+                    vm.bus.write_word(mem_cnt_addr, 1).ok(); // memory.cnt = 1
+                    eprintln!(
+                        "[boot] Pre-populated memblock memory: PA 0 - PA 0x{:08X} ({}MB)",
+                        ram_size_u32,
+                        ram_size_u32 / (1024 * 1024)
+                    );
+                } else {
+                    eprintln!(
+                        "[boot] WARNING: memory.regions pointer not set (0x{:08X}), skipping memory pre-populate",
+                        mem_regions_ptr
+                    );
+                }
+            }
+        }
 
         // Pre-set riscv_timebase to 10MHz (10000000).
         // The kernel reads this from the DTB's timebase-frequency property.
@@ -706,7 +793,7 @@ impl RiscvVm {
                             let is_non_leaf = is_valid && (entry & 0xE) == 0;
                             let ppn = (entry >> 10) & 0x3FFFFF;
                             let needs_fix = !is_valid                    // Unmapped
-                                || (is_non_leaf && ppn == 0);         // Broken L2 at PA 0
+                                || (is_non_leaf && ppn == 0); // Broken L2 at PA 0
                             if !needs_fix {
                                 continue;
                             }
@@ -724,6 +811,54 @@ impl RiscvVm {
                         }
                         if fixup_count > 0 {
                             eprintln!("[boot] Fixed {} kernel page table entries", fixup_count);
+                            vm.cpu.tlb.flush_all();
+                        }
+
+                        // Ensure DTB is mapped in the kernel's page table.
+                        //
+                        // The kernel's setup_vm() creates L2 page tables for
+                        // L1[768..773+] (kernel VA range), but only maps pages
+                        // within the kernel image. The DTB (at PA ~21MB) is
+                        // outside the kernel image, so its L2 entry is missing.
+                        // Our L1 fixup above skips valid non-leaf entries.
+                        // Without this, early_init_dt_scan() page-faults on
+                        // the DTB, memblock_add() is never called, and
+                        // max_mapnr stays 0.
+                        {
+                            let dtb_va: u32 = (dtb_addr.wrapping_add(0xC0000000)) as u32;
+                            let dtb_vpn1 = ((dtb_va >> 22) & 0x3FF) as u64;
+                            let dtb_vpn0 = ((dtb_va >> 12) & 0x3FF) as u64;
+                            let l1_addr = pg_dir_phys + dtb_vpn1 * 4;
+                            let l1_entry = vm.bus.read_word(l1_addr).unwrap_or(0);
+                            let l1_valid = (l1_entry & 1) != 0;
+                            let l1_leaf = l1_valid && (l1_entry & 0xE) != 0;
+
+                            if l1_valid && !l1_leaf {
+                                // Non-leaf: walk to L2
+                                let l2_ppn = ((l1_entry >> 10) & 0x3FFFFF) as u64;
+                                let l2_base = l2_ppn * 4096;
+                                let l2_addr = l2_base + dtb_vpn0 * 4;
+                                let l2_entry = vm.bus.read_word(l2_addr).unwrap_or(0);
+                                if (l2_entry & 1) == 0 {
+                                    // Missing L2 entry -- add it
+                                    let dtb_ppn = (dtb_addr >> 12) as u32;
+                                    let dtb_pte: u32 = (dtb_ppn << 10) | 0x0000_00CF; // V+R+W+X+A+D
+                                    vm.bus.write_word(l2_addr, dtb_pte).ok();
+                                    eprintln!(
+                                        "[boot] Added DTB L2 entry: pg_dir[{}] VPN0={} -> PA 0x{:08X} (DTB at PA 0x{:08X})",
+                                        dtb_vpn1, dtb_vpn0, (dtb_ppn as u64) * 4096, dtb_addr
+                                    );
+                                }
+                            } else if !l1_valid {
+                                // L1 not mapped at all -- add megapage
+                                let dtb_l1_offset = (dtb_addr >> 22) as u32;
+                                let fixup_pte: u32 = 0x0000_00CF | (dtb_l1_offset << 20);
+                                vm.bus.write_word(l1_addr, fixup_pte).ok();
+                                eprintln!(
+                                    "[boot] Added DTB L1 megapage: [{}] -> PA 0x{:08X}",
+                                    dtb_vpn1, (dtb_l1_offset as u64) << 22
+                                );
+                            }
                             vm.cpu.tlb.flush_all();
                         }
 
@@ -1008,49 +1143,60 @@ impl RiscvVm {
                 // Instead, read the memblock struct to see available memory.
                 let memblock_va = 0xC0803448u64;
                 let memblock_pa = memblock_va - 0xC0000000;
-                // memblock.memory.cnt (at offset 48) and memblock.reserved.cnt (at offset 52)
-                let mem_cnt = vm.bus.read_word(memblock_pa + 48).unwrap_or(0);
-                let res_cnt = vm.bus.read_word(memblock_pa + 52).unwrap_or(0);
+                // Linux 6.14 memblock layout (20-byte memblock_type):
+                //   bottom_up(4) + current_limit(4) + memory(20) + reserved(20)
+                //   memory.cnt at offset 8, memory.regions at offset 12 (VA pointer)
+                //   reserved.cnt at offset 28, reserved.regions at offset 32 (VA pointer)
+                let mem_cnt = vm.bus.read_word(memblock_pa + 8).unwrap_or(0);
+                let res_cnt = vm.bus.read_word(memblock_pa + 28).unwrap_or(0);
                 eprintln!(
                     "[boot]   memblock: memory.regions={} reserved.regions={}",
                     mem_cnt, res_cnt
                 );
                 // Read total memory and reserved memory from memblock
-                // memblock.memory.regions[0] starts at offset 0 (base, size pairs)
-                for ri in 0..mem_cnt.min(4) {
-                    let base = vm
-                        .bus
-                        .read_word(memblock_pa + (ri * 16) as u64)
-                        .unwrap_or(0);
-                    let size = vm
-                        .bus
-                        .read_word(memblock_pa + (ri * 16 + 4) as u64)
-                        .unwrap_or(0);
-                    eprintln!(
-                        "[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)",
-                        ri,
-                        base,
-                        size,
-                        size / (1024 * 1024)
-                    );
-                }
-                for ri in 0..res_cnt.min(8) {
-                    let base = vm
-                        .bus
-                        .read_word(memblock_pa + (0x200 + ri * 16) as u64)
-                        .unwrap_or(0);
-                    let size = vm
-                        .bus
-                        .read_word(memblock_pa + (0x200 + ri * 16 + 4) as u64)
-                        .unwrap_or(0);
-                    if size > 0 {
+                // memory.regions is a pointer (VA) at offset 12
+                let mem_regions_ptr = vm.bus.read_word(memblock_pa + 12).unwrap_or(0);
+                if mem_regions_ptr >= 0xC0000000 {
+                    let mem_regions_pa = (mem_regions_ptr - 0xC0000000) as u64;
+                    for ri in 0..mem_cnt.min(4) {
+                        let base = vm
+                            .bus
+                            .read_word(mem_regions_pa + (ri * 8) as u64)
+                            .unwrap_or(0);
+                        let size = vm
+                            .bus
+                            .read_word(mem_regions_pa + (ri * 8 + 4) as u64)
+                            .unwrap_or(0);
                         eprintln!(
-                            "[boot]   reserved[{}]: base=0x{:08X} size=0x{:08X} ({}KB)",
+                            "[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)",
                             ri,
                             base,
                             size,
-                            size / 1024
+                            size / (1024 * 1024)
                         );
+                    }
+                }
+                let res_regions_ptr = vm.bus.read_word(memblock_pa + 32).unwrap_or(0);
+                if res_regions_ptr >= 0xC0000000 {
+                    let res_regions_pa = (res_regions_ptr - 0xC0000000) as u64;
+                    for ri in 0..res_cnt.min(8) {
+                        let base = vm
+                            .bus
+                            .read_word(res_regions_pa + (ri * 8) as u64)
+                            .unwrap_or(0);
+                        let size = vm
+                            .bus
+                            .read_word(res_regions_pa + (ri * 8 + 4) as u64)
+                            .unwrap_or(0);
+                        if size > 0 {
+                            eprintln!(
+                                "[boot]   reserved[{}]: base=0x{:08X} size=0x{:08X} ({}KB)",
+                                ri,
+                                base,
+                                size,
+                                size / 1024
+                            );
+                        }
                     }
                 }
                 // Also read phys_ram_base
@@ -1130,13 +1276,18 @@ impl RiscvVm {
             if _same_pc_count > 0 && count.is_multiple_of(500_000) {
                 eprintln!(
                     "[boot] count={} PC=0x{:08X} priv={:?} mstatus=0x{:08X} same_pc={}",
-                    count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.mstatus,                    _same_pc_count
+                    count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.mstatus, _same_pc_count
                 );
             }
             if count.is_multiple_of(2_000_000) && count > 0 {
-                eprintln!("[boot] PROGRESS {}M: PC=0x{:08X} priv={:?} SBI={} fwd={}",
-                    count / 1_000_000, vm.cpu.pc, vm.cpu.privilege,
-                    _sbi_call_count, _forward_count);
+                eprintln!(
+                    "[boot] PROGRESS {}M: PC=0x{:08X} priv={:?} SBI={} fwd={}",
+                    count / 1_000_000,
+                    vm.cpu.pc,
+                    vm.cpu.privilege,
+                    _sbi_call_count,
+                    _forward_count
+                );
             }
             count += 1;
         }
@@ -1152,14 +1303,27 @@ impl RiscvVm {
         eprintln!("[boot] Post-boot: phys_ram_base=0x{:08X} _dtb_early_va=0x{:08X} _dtb_early_pa=0x{:08X}",
             prb, deva, depa);
         // Check memblock state
-        let memblock_va = 0xC0803448u64;
-        let memblock_pa = memblock_va - 0xC0000000;
-        let mem_cnt = vm.bus.read_word(memblock_pa + 48).unwrap_or(0);
-        let res_cnt = vm.bus.read_word(memblock_pa + 52).unwrap_or(0);
+        // Linux 6.14 struct memblock layout (rv32):
+        //   bottom_up(4) + current_limit(4) + memory(20) + reserved(20) [+ physmem(20)]
+        // struct memblock_type: cnt(4) + max(4) + total_size(4) + regions(ptr) + name(ptr) = 20
+        // memory.cnt at offset 8, reserved.cnt at offset 28
+        let memblock_pa: u64 = 0x00803448;
+        let mem_cnt = vm.bus.read_word(memblock_pa + 8).unwrap_or(0);
+        let mem_regions_ptr = vm.bus.read_word(memblock_pa + 20).unwrap_or(0);
+        let res_cnt = vm.bus.read_word(memblock_pa + 28).unwrap_or(0);
+        let _res_regions_ptr = vm.bus.read_word(memblock_pa + 40).unwrap_or(0);
         eprintln!(
             "[boot] Post-boot: memblock memory.cnt={} reserved.cnt={}",
             mem_cnt, res_cnt
         );
+        if mem_cnt > 0 && mem_regions_ptr >= 0xC0000000 {
+            let mr_pa = (mem_regions_ptr - 0xC0000000) as u64;
+            for ri in 0..mem_cnt.min(4) {
+                let base = vm.bus.read_word(mr_pa + (ri * 8) as u64).unwrap_or(0);
+                let size = vm.bus.read_word(mr_pa + (ri * 8 + 4) as u64).unwrap_or(0);
+                eprintln!("[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)", ri, base, size, size / (1024 * 1024));
+            }
+        }
         for (i, c) in _trap_counts.iter().enumerate() {
             if *c > 0 {
                 eprintln!("[boot]   cause {}: {} occurrences", i, c);

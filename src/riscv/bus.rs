@@ -69,6 +69,12 @@ pub struct Bus {
     /// non-leaf PTEs are written and automatically registered.
     /// Populated by fixup_kernel_page_table() and dynamically during writes.
     pub known_pt_pages: HashSet<u64>,
+    /// Write-protected physical addresses. Writes to these addresses are silently
+    /// dropped. Used to protect DTB early pointers (_dtb_early_va, _dtb_early_pa)
+    /// from being clobbered by setup_vm()'s pt_ops write.
+    /// Each entry is (physical_address, protected_value). Reads return the
+    /// protected value regardless of what's in RAM.
+    pub protected_addrs: Vec<(u64, u32)>,
 }
 
 impl Bus {
@@ -92,6 +98,7 @@ impl Bus {
             low_addr_identity_map: false,
             auto_pte_fixup: false,
             known_pt_pages: HashSet::new(),
+            protected_addrs: Vec::new(),
         }
     }
 
@@ -99,6 +106,12 @@ impl Bus {
     /// Takes &mut self because device reads can have side effects
     /// (e.g., UART RBR read consumes the byte and clears Data Ready).
     pub fn read_word(&mut self, addr: u64) -> Result<u32, MemoryError> {
+        // Write-protected address check: return protected value for reads.
+        for &(pa, protected_val) in &self.protected_addrs {
+            if addr == pa {
+                return Ok(protected_val);
+            }
+        }
         if Self::in_clint(addr) {
             self.clint.read(addr).ok_or(MemoryError { addr, size: 4 })
         } else if super::uart::Uart::contains(addr) {
@@ -121,6 +134,12 @@ impl Bus {
 
     /// Write a 32-bit word. Routes to device MMIO or RAM.
     pub fn write_word(&mut self, addr: u64, val: u32) -> Result<(), MemoryError> {
+        // Write-protected address check: silently drop writes to protected addresses.
+        for &(pa, _protected_val) in &self.protected_addrs {
+            if addr == pa {
+                return Ok(());
+            }
+        }
         // Debug write watchpoint
         if let Some(watch) = self.write_watch_addr {
             if addr >= watch && addr < watch + 4 && !self.write_watch_hit {
