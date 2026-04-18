@@ -448,6 +448,20 @@ fn test_infinite_map_pxpk_pattern_variety() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_step_budget() {
+    // Day/night tint is inline (1 ADD per tile = +4096 steps for 64x64 grid).
+    // Pattern dispatch now uses r29 save/restore (+2 per tile = +8192).
+    // Total should be well under 500K.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let steps = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready, "pxpk should reach FRAME (took {})", steps);
+    eprintln!("pxpk frame: {} steps", steps);
+    assert!(steps < 500_000,
+        "pxpk render loop should take < 500K steps, took {}", steps);
+}
+
+#[test]
 fn test_infinite_map_runs_and_renders() {
     // Requirement: the program runs to completion of a frame and renders non-black pixels.
     let mut vm = infinite_map_vm();
