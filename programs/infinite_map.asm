@@ -137,6 +137,105 @@ ADD r20, r7
 LDI r17, 3
 STORE r20, r17           ; void(31) -> corner
 
+; ===== Color Table (32 entries at 0x7A00-0x7A1F) =====
+; Direct biome_type -> base color lookup. Eliminates cascade dispatch.
+LDI r20, 0x7A00
+LDI r17, 0x000044
+STORE r20, r17           ; 0: deep ocean
+ADD r20, r7
+LDI r17, 0x0000BB
+STORE r20, r17           ; 1: shallow water
+ADD r20, r7
+LDI r17, 0xC2B280
+STORE r20, r17           ; 2: beach sand
+ADD r20, r7
+LDI r17, 0xDDBB44
+STORE r20, r17           ; 3: desert sand
+ADD r20, r7
+LDI r17, 0xCCAA33
+STORE r20, r17           ; 4: desert dunes
+ADD r20, r7
+LDI r17, 0x22AA55
+STORE r20, r17           ; 5: oasis
+ADD r20, r7
+LDI r17, 0x33AA33
+STORE r20, r17           ; 6: grass light
+ADD r20, r7
+LDI r17, 0x228822
+STORE r20, r17           ; 7: grass dark
+ADD r20, r7
+LDI r17, 0x336633
+STORE r20, r17           ; 8: swamp light
+ADD r20, r7
+LDI r17, 0x224422
+STORE r20, r17           ; 9: swamp dark
+ADD r20, r7
+LDI r17, 0x116611
+STORE r20, r17           ; 10: forest light
+ADD r20, r7
+LDI r17, 0x004400
+STORE r20, r17           ; 11: forest dark
+ADD r20, r7
+LDI r17, 0xAA6688
+STORE r20, r17           ; 12: mushroom
+ADD r20, r7
+LDI r17, 0x888899
+STORE r20, r17           ; 13: mountain rock
+ADD r20, r7
+LDI r17, 0x666677
+STORE r20, r17           ; 14: mountain snow
+ADD r20, r7
+LDI r17, 0xAABBCC
+STORE r20, r17           ; 15: tundra
+ADD r20, r7
+LDI r17, 0xFF3300
+STORE r20, r17           ; 16: lava flowing
+ADD r20, r7
+LDI r17, 0x332222
+STORE r20, r17           ; 17: lava cooled
+ADD r20, r7
+LDI r17, 0x442211
+STORE r20, r17           ; 18: volcanic
+ADD r20, r7
+LDI r17, 0xCCCCEE
+STORE r20, r17           ; 19: snow light
+ADD r20, r7
+LDI r17, 0xDDEEFF
+STORE r20, r17           ; 20: snow ice
+ADD r20, r7
+LDI r17, 0xFFFFFF
+STORE r20, r17           ; 21: snow peak
+ADD r20, r7
+LDI r17, 0x3377AA
+STORE r20, r17           ; 22: coral
+ADD r20, r7
+LDI r17, 0x776655
+STORE r20, r17           ; 23: ruins
+ADD r20, r7
+LDI r17, 0x1A3333
+STORE r20, r17           ; 24: crystal dark
+ADD r20, r7
+LDI r17, 0x2A5555
+STORE r20, r17           ; 25: crystal dense
+ADD r20, r7
+LDI r17, 0x444444
+STORE r20, r17           ; 26: ash
+ADD r20, r7
+LDI r17, 0x554433
+STORE r20, r17           ; 27: deadlands light
+ADD r20, r7
+LDI r17, 0x332211
+STORE r20, r17           ; 28: deadlands dark
+ADD r20, r7
+LDI r17, 0x338866
+STORE r20, r17           ; 29: biolum light
+ADD r20, r7
+LDI r17, 0x226644
+STORE r20, r17           ; 30: biolum dark
+ADD r20, r7
+LDI r17, 0x110022
+STORE r20, r17           ; 31: void
+
 ; ===== Main Loop =====
 main_loop:
 
@@ -474,294 +573,22 @@ struct_void:
     JMP do_rect
 
 no_struct:
-    ; ---- Biome -> Color (using r5 = biome_type 0..31) ----
-    ; Cascading comparisons. r0 set by CMP; BLT/BGE/JZ check r0.
-    ; water(0-1), beach(2), desert(3-4), oasis(5), grass(6-7),
-    ; swamp(8-9), forest(10-11), mushroom(12), mountain(13-14),
-    ; tundra(15), lava(16-17), volcanic(18), snow(19-21),
-    ; coral(22), ruins(23), crystal(24-25), ash(26),
-    ; deadlands(27-28), bioluminescent(29-30), void(31)
+    ; ---- Biome -> Color via lookup table ----
+    LDI r17, 0x7A00
+    ADD r17, r5           ; r17 = &color_table[biome_type]
+    LOAD r17, r17         ; r17 = base color
 
-    ; Is it water? (types 0-1)
+    ; Water shimmer: biome 0-1 get animated blue channel
     LDI r18, 2
     CMP r5, r18
-    BLT r0, color_water
-
-    ; Beach? (type 2)
-    LDI r18, 3
-    CMP r5, r18
-    BLT r0, color_beach
-
-    ; Desert? (types 3-4)
-    LDI r18, 5
-    CMP r5, r18
-    BLT r0, color_desert
-
-    ; Oasis? (type 5)
-    LDI r18, 6
-    CMP r5, r18
-    BLT r0, color_oasis
-
-    ; Grass? (types 6-7)
-    LDI r18, 8
-    CMP r5, r18
-    BLT r0, color_grass
-
-    ; Swamp? (types 8-9)
-    LDI r18, 10
-    CMP r5, r18
-    BLT r0, color_swamp
-
-    ; Forest? (types 10-11)
-    LDI r18, 12
-    CMP r5, r18
-    BLT r0, color_forest
-
-    ; Mushroom? (type 12)
-    LDI r18, 13
-    CMP r5, r18
-    BLT r0, color_mushroom
-
-    ; Mountain? (types 13-14)
-    LDI r18, 15
-    CMP r5, r18
-    BLT r0, color_mountain
-
-    ; Tundra? (type 15)
-    LDI r18, 16
-    CMP r5, r18
-    BLT r0, color_tundra
-
-    ; Lava? (types 16-17)
-    LDI r18, 18
-    CMP r5, r18
-    BLT r0, color_lava
-
-    ; Volcanic? (type 18)
-    LDI r18, 19
-    CMP r5, r18
-    BLT r0, color_volcanic
-
-    ; Snow? (types 19-21)
-    LDI r18, 22
-    CMP r5, r18
-    BLT r0, color_snow
-
-    ; Coral? (type 22)
-    LDI r18, 23
-    CMP r5, r18
-    BLT r0, color_coral
-
-    ; Ruins? (type 23)
-    LDI r18, 24
-    CMP r5, r18
-    BLT r0, color_ruins
-
-    ; Crystal Caverns? (types 24-25)
-    LDI r18, 26
-    CMP r5, r18
-    BLT r0, color_crystal
-
-    ; Ash Wastes? (type 26)
-    LDI r18, 27
-    CMP r5, r18
-    BLT r0, color_ash
-
-    ; Deadlands? (types 27-28)
-    LDI r18, 29
-    CMP r5, r18
-    BLT r0, color_dead
-
-    ; Bioluminescent? (types 29-30)
-    LDI r18, 31
-    CMP r5, r18
-    BLT r0, color_biolum
-
-    ; Void? (type 31) -> render as dark abyss
-    JMP color_void
-
-    ; ---- Water subtypes (animated with frame counter) ----
-color_water:
-    LDI r18, 1
-    CMP r5, r18
-    BLT r0, water_deep
-    ; type 1 = shallow
-    LDI r17, 0x0000BB    ; shallow water
-    JMP water_animate
-water_deep:
-    LDI r17, 0x000044    ; deep ocean
-
-water_animate:
-    ; Diagonal wave: shimmer = (frame_counter + world_x + world_y) & 0x1F
-    ; Creates a moving wave pattern across water tiles
-    MOV r21, r22         ; r21 = frame_counter
-    ADD r21, r3          ; + world_x
-    ADD r21, r4          ; + world_y
+    BGE r0, no_struct_not_water
+    MOV r21, r22          ; frame_counter
+    ADD r21, r3           ; + world_x
+    ADD r21, r4           ; + world_y
     LDI r18, 0x1F
-    AND r21, r18         ; r21 = 0..31
-    ADD r17, r21         ; shimmer the blue channel
-    JMP do_rect
-
-color_beach:
-    LDI r17, 0xC2B280    ; sand
-    JMP do_rect
-
-    ; ---- Desert subtypes ----
-color_desert:
-    LDI r18, 4
-    CMP r5, r18
-    JZ r0, desert_dunes
-    LDI r17, 0xDDBB44    ; sand
-    JMP do_rect
-desert_dunes:
-    LDI r17, 0xCCAA33    ; dunes
-    JMP do_rect
-
-    ; ---- Oasis ----
-color_oasis:
-    LDI r17, 0x22AA55    ; lush green pool
-    JMP do_rect
-
-    ; ---- Grass subtypes ----
-color_grass:
-    LDI r18, 7
-    CMP r5, r18
-    JZ r0, grass_dark
-    LDI r17, 0x55BB33    ; light grass
-    JMP do_rect
-grass_dark:
-    LDI r17, 0x228811    ; dark grass
-    JMP do_rect
-
-    ; ---- Swamp subtypes ----
-color_swamp:
-    LDI r18, 9
-    CMP r5, r18
-    JZ r0, swamp_mangrove
-    LDI r17, 0x445522    ; murky green-brown
-    JMP do_rect
-swamp_mangrove:
-    LDI r17, 0x2D4A1A    ; dark mangrove
-    JMP do_rect
-
-    ; ---- Forest subtypes ----
-color_forest:
-    LDI r18, 11
-    CMP r5, r18
-    JZ r0, forest_dense
-    LDI r17, 0x116600    ; forest
-    JMP do_rect
-forest_dense:
-    LDI r17, 0x0A4400    ; dense forest
-    JMP do_rect
-
-    ; ---- Mushroom grove ----
-color_mushroom:
-    LDI r17, 0x883388    ; purple fungal ground
-    JMP do_rect
-
-    ; ---- Mountain subtypes ----
-color_mountain:
-    LDI r18, 14
-    CMP r5, r18
-    JZ r0, mt_tall
-    LDI r17, 0x667766    ; foothills
-    JMP do_rect
-mt_tall:
-    LDI r17, 0x999999    ; tall mountain
-    JMP do_rect
-
-    ; ---- Tundra ----
-color_tundra:
-    LDI r17, 0x8899AA    ; cold rocky gray-blue
-    JMP do_rect
-
-    ; ---- Lava subtypes ----
-color_lava:
-    LDI r18, 17
-    CMP r5, r18
-    JZ r0, lava_cooled
-    LDI r17, 0xFF3300    ; red-orange flowing lava
-    JMP do_rect
-lava_cooled:
-    LDI r17, 0x332222    ; cooled basalt (dark)
-    JMP do_rect
-
-    ; ---- Volcanic wasteland ----
-color_volcanic:
-    LDI r17, 0x442211    ; scorched earth (dark brown-red)
-    JMP do_rect
-
-    ; ---- Snow subtypes ----
-color_snow:
-    LDI r18, 20
-    CMP r5, r18
-    BLT r0, snow_light
-    LDI r18, 21
-    CMP r5, r18
-    JZ r0, snow_peak
-    LDI r17, 0xDDEEFF    ; ice
-    JMP do_rect
-snow_light:
-    LDI r17, 0xCCCCEE    ; snow
-    JMP do_rect
-snow_peak:
-    LDI r17, 0xFFFFFF    ; peak
-    JMP do_rect
-
-    ; ---- Coral reef ----
-color_coral:
-    LDI r17, 0x3377AA    ; shallow turquoise water
-    JMP do_rect
-
-    ; ---- Ruins ----
-color_ruins:
-    LDI r17, 0x776655    ; weathered stone
-    JMP do_rect
-
-    ; ---- Crystal Cavern subtypes ----
-color_crystal:
-    LDI r18, 25
-    CMP r5, r18
-    JZ r0, crystal_dense
-    LDI r17, 0x1A3333    ; dark teal cavern
-    JMP do_rect
-crystal_dense:
-    LDI r17, 0x2A5555    ; lighter teal crystal
-    JMP do_rect
-
-    ; ---- Ash Wastes ----
-color_ash:
-    LDI r17, 0x444444    ; dark grey volcanic ash
-    JMP do_rect
-
-    ; ---- Deadlands subtypes ----
-color_dead:
-    LDI r18, 28
-    CMP r5, r18
-    JZ r0, dead_cracked
-    LDI r17, 0x3D2B1F    ; dark cracked earth
-    JMP do_rect
-dead_cracked:
-    LDI r17, 0x4A3525    ; dry barren brown
-    JMP do_rect
-
-    ; ---- Bioluminescent subtypes ----
-color_biolum:
-    LDI r18, 30
-    CMP r5, r18
-    JZ r0, biolum_glow
-    LDI r17, 0x004433    ; dark fungal cavern
-    JMP do_rect
-biolum_glow:
-    LDI r17, 0x006655    ; brighter glowing cavern
-    JMP do_rect
-
-    ; ---- Void ----
-color_void:
-    LDI r17, 0x110022    ; near-black deep purple abyss
-    JMP do_rect
-
+    AND r21, r18          ; shimmer = 0..31
+    ADD r17, r21
+no_struct_not_water:
     ; ---- Draw tile ----
 do_rect:
     ; ---- G-channel variation from fine hash (same-biome tiles differ) ----

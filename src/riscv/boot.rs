@@ -558,6 +558,9 @@ impl RiscvVm {
                                 _dtb_watchdog_triggers, count, cur_va, dtb_early_va_expected);
                         }
                     }
+                } else if _dtb_watchdog_triggers > 0 {
+                    eprintln!("[boot] phys_ram_base set to 0x{:08X} at count={} (DTB parsing succeeded)", prb, count);
+                    _dtb_watchdog_triggers = 0;
                 }
             }
 
@@ -625,7 +628,8 @@ impl RiscvVm {
                             let is_non_leaf = is_valid && (entry & 0xE) == 0;
                             let ppn = (entry >> 10) & 0x3FFFFF;
                             let needs_fix = !is_valid                    // Unmapped
-                                || (is_non_leaf && ppn == 0);         // Broken L2 at PA 0
+                                || (is_non_leaf && ppn == 0)         // Broken L2 at PA 0
+                                || is_non_leaf;                       // Any non-leaf -- force megapage
                             if !needs_fix {
                                 continue;
                             }
@@ -943,6 +947,12 @@ impl RiscvVm {
         let depa = vm.bus.read_word(0x0080100C).unwrap_or(0);
         eprintln!("[boot] Post-boot: phys_ram_base=0x{:08X} _dtb_early_va=0x{:08X} _dtb_early_pa=0x{:08X}",
             prb, deva, depa);
+        // Check memblock state
+        let memblock_va = 0xC0803448u64;
+        let memblock_pa = memblock_va - 0xC0000000;
+        let mem_cnt = vm.bus.read_word(memblock_pa + 48).unwrap_or(0);
+        let res_cnt = vm.bus.read_word(memblock_pa + 52).unwrap_or(0);
+        eprintln!("[boot] Post-boot: memblock memory.cnt={} reserved.cnt={}", mem_cnt, res_cnt);
         for (i, c) in _trap_counts.iter().enumerate() {
             if *c > 0 {
                 eprintln!("[boot]   cause {}: {} occurrences", i, c);
