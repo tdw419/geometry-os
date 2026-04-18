@@ -100,7 +100,6 @@ pub const OPCODES: &[&str] = &[
     "SIGNAL",
     "SIGSET",
     "HYPERVISOR",
-    "HYPERVISOR",
     "ASMSELF",
     "RUNNEXT",
     "FORMULA",
