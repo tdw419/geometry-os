@@ -214,6 +214,78 @@ These are the next batch of work for the chain. Each should produce a working .a
 
 ---
 
+## Phase 38: Time-Travel Debugger
+
+**Goal:** Deterministic execution recording with backward replay and timeline forking. Every instruction the VM executes gets logged to a ring buffer. Programs can rewind to any point, step backward, and fork into alternate timelines. This makes debugging visual programs 10x easier -- rewind from a crash, diff frames, explore "what if" branches.
+
+The convergence analysis from two independent possibility explorations both identified this as the #1 highest-impact feature. It amplifies everything: debugging any future program, understanding existing demos, and enabling new interactive experiences (fork a snake game at a decision point, replay maze generation to watch it build).
+
+### Phase 38a: Execution Trace Ring Buffer
+
+**Goal:** Record every instruction execution to a fixed-size ring buffer. The VM logs (PC, registers, opcode) each step into a circular buffer that overwrites old entries. Zero impact on forward execution when recording is off.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| TraceEntry struct | (step_number: u64, pc: u32, regs: [u32; 16], opcode: u32) | ~5 lines vm/trace.rs |
+| TraceBuffer struct | Ring buffer of TraceEntry with configurable capacity (default 10000 entries) | ~40 lines vm/trace.rs |
+| Recording flag | `trace_recording: bool` on Vm, off by default | vm/mod.rs |
+| Hook in step() | After instruction decode, if recording: push TraceEntry to buffer | vm/mod.rs step() |
+| SNAP_TRACE opcode (0x73) | Toggle trace recording on/off. Takes register arg: r0=0 off, r0=1 on, r0=2 snapshot-and-clear | vm/ops_syscall.rs |
+| Tests | Record 100 steps, verify entries match, test wraparound, test toggle | ~30 lines |
+
+**Constraints:** Recording off = zero overhead (one bool check per step). Ring buffer allocated once, never grows. No heap allocation in the hot path.
+
+### Phase 38b: Frame Checkpointing
+
+**Goal:** Snapshot the full screen buffer at every FRAME opcode. These checkpoints let the debugger show visual history without re-executing. Combined with the trace ring buffer, you can reconstruct the screen at any point.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| FrameCheckpoint struct | (step_number: u64, frame_count: u32, screen: Vec<u32>) | vm/trace.rs |
+| Checkpoint ring buffer | Fixed capacity (default 256 frames), each entry = full 64x64 screen = 4096 u32s | vm/trace.rs |
+| Hook in FRAME handler | After incrementing frame_count, if recording: push screen snapshot | vm/mod.rs FRAME opcode |
+| Tests | Run a program with 300 frames, verify oldest frames evicted, verify frame_count matches | ~20 lines |
+
+**Constraints:** 256 frames * 4096 u32s = 4MB memory. Acceptable. Screen snapshots are cheap compared to full VM state.
+
+### Phase 38c: Backward Replay
+
+**Goal:** Replay the trace buffer backward from any checkpoint. The debugger can show the last N frames in reverse, step backward through instructions, and display register/PC state at each point.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| Replay API | `replay_from(step: u64) -> Vec<TraceEntry>` reads backward from ring buffer | vm/trace.rs |
+| Frame replay | `replay_frame(n: u32) -> Vec<u32>` returns the screen at frame n | vm/trace.rs |
+| REPLAY opcode (0x74) | Load a checkpoint into the screen buffer. Takes register arg: frame index (0=most recent). Sets frame_ready=true. | vm/ops_syscall.rs |
+| replay_demo.asm | Program that draws 64 frames of animation, then replays them backward on screen | programs/ |
+| Tests | Test replay_from, test replay_frame boundary conditions, test REPLAY opcode | ~25 lines |
+
+### Phase 38d: Timeline Forking
+
+**Goal:** Save the full VM state (ram + regs + pc + all fields) at any point. Fork into an alternate timeline by restoring that state and continuing execution differently. Enables "what if" exploration -- rewind a game to a decision point and try a different move.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| VmSnapshot struct | Serializable VM state: ram (or delta), regs, pc, all configuration fields | vm/trace.rs |
+| Snapshot API | `snapshot(&self) -> VmSnapshot` and `restore(&mut self, snap: &VmSnapshot)` | vm/trace.rs |
+| FORK opcode (0x75) | Take register arg. r0=0: save snapshot to slot. r0=1: restore from slot. r0=2: list saved snapshots via IOCTL. | vm/ops_syscall.rs |
+| Snapshot storage | Vec<VmSnapshot> on Vm, max 16 snapshots | vm/mod.rs |
+| fork_demo.asm | Run snake for 200 frames, fork, replay from fork point with different random seed | programs/ |
+| Tests | Snapshot/restore roundtrip, multiple snapshots, restore from middle, test FORK opcode | ~30 lines |
+
+**Constraints:** Full RAM snapshot = 64K * 4 bytes = 256KB per snapshot. 16 snapshots = 4MB. Delta compression can reduce this later. Keep it simple first.
+
+---
+
+## Priority Order for Phase 38
+
+- [ ] Phase 38a: Execution Trace Ring Buffer
+- [ ] Phase 38b: Frame Checkpointing
+- [ ] Phase 38c: Backward Replay
+- [ ] Phase 38d: Timeline Forking
+
+---
+
 ## Design Principles
 
 - **Pixels are the truth.** Everything visual should be expressible as pixel operations. The screen isn't an afterthought -- it's the primary interface.
