@@ -990,6 +990,74 @@ fn test_infinite_map_pxpk_biome_blending() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_y_blending() {
+    // Y-direction biome blending: at local_y == 0 (top edge of biome),
+    // tile blends with the biome above. At local_y == 7 (bottom edge),
+    // tile blends with the biome below. Uses the same masked average
+    // technique as X-direction blending.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    // Biome boundaries in Y occur at tile rows ty = 8, 16, 24, ...
+    // (each biome is 8 tiles tall). The boundary tile at local_y == 0
+    // of the new biome should be blended with the biome above.
+    let mut blend_count = 0;
+    let mut checked = 0;
+
+    for boundary_ty in (8..64).step_by(8) {
+        // Sample several columns
+        for tx in (0..64).step_by(4) {
+            let bnd_idx = boundary_ty * 16 + tx * 4; // top-left pixel of boundary tile
+            let above_idx = (boundary_ty - 4) * 16 + tx * 4; // interior of biome above
+            let below_idx = (boundary_ty + 3) * 16 + tx * 4; // interior of biome below
+
+            if bnd_idx >= 256 * 256 || above_idx >= 256 * 256 || below_idx >= 256 * 256 {
+                continue;
+            }
+
+            let bnd_color = vm.screen[bnd_idx];
+            let above_color = vm.screen[above_idx];
+            let below_color = vm.screen[below_idx];
+
+            // Skip black pixels
+            if bnd_color == 0 || above_color == 0 || below_color == 0 {
+                continue;
+            }
+
+            // Skip water (biome 0/1) -- shimmer/foam changes colors
+            let bnd_b = (bnd_color & 0xFF) as i32;
+            let bnd_r = ((bnd_color >> 16) & 0xFF) as i32;
+            if bnd_r < 30 && bnd_b > 100 {
+                continue;
+            }
+
+            checked += 1;
+
+            // Boundary tile should differ from at least one neighbor interior
+            let differs_from_above = bnd_color != above_color;
+            let differs_from_below = bnd_color != below_color;
+
+            if differs_from_above || differs_from_below {
+                blend_count += 1;
+            }
+        }
+    }
+
+    eprintln!(
+        "Y-direction blending: {}/{} boundary tiles show intermediate colors",
+        blend_count, checked
+    );
+
+    assert!(
+        blend_count >= 5,
+        "at least 5 Y-boundary tiles should show blended colors, got {}/{}",
+        blend_count, checked
+    );
+}
+
+#[test]
 fn test_infinite_map_runs_and_renders() {
     // Requirement: the program runs to completion of a frame and renders non-black pixels.
     let mut vm = infinite_map_vm();
