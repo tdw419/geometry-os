@@ -32,6 +32,7 @@
 ;   RAM[0x7900-0x791F] = pattern table (32 biome -> pattern type mappings)
 ;   RAM[0x7A00-0x7A1F] = color table (32 biome -> base color mappings)
 ;   RAM[0x7B00-0x7B0F] = BPE variation table (16 entries, Pixelpack seed expansion)
+;   RAM[0x7C00-0x7C1F] = dim color table (32 entries, minimap hand-tuned dim colors)
 ;
 ; Pattern types (2-bit per biome):
 ;   0=horizontal: water(0-1), beach(2), desert(3-4), snow(19-21) -- ripple/drift
@@ -294,6 +295,93 @@ STORE r20, r17
 ADD r20, r7
 LDI r17, 0x08040C    ; 15: balanced violet
 STORE r20, r17
+
+; ===== Dim Color Table (32 entries at 0x7C00-0x7C1F) =====
+; Minimap uses these hand-tuned dim versions of biome colors.
+LDI r20, 0x7C00
+LDI r17, 0x000055
+STORE r20, r17           ; 0: dim water
+ADD r20, r7
+STORE r20, r17           ; 1: dim water
+ADD r20, r7
+LDI r17, 0x554422
+STORE r20, r17           ; 2: dim beach
+ADD r20, r7
+LDI r17, 0x665522
+STORE r20, r17           ; 3: dim desert
+ADD r20, r7
+STORE r20, r17           ; 4: dim desert
+ADD r20, r7
+LDI r17, 0x225533
+STORE r20, r17           ; 5: dim oasis
+ADD r20, r7
+LDI r17, 0x225500
+STORE r20, r17           ; 6: dim grass
+ADD r20, r7
+STORE r20, r17           ; 7: dim grass
+ADD r20, r7
+LDI r17, 0x1A2200
+STORE r20, r17           ; 8: dim swamp
+ADD r20, r7
+STORE r20, r17           ; 9: dim swamp
+ADD r20, r7
+LDI r17, 0x113300
+STORE r20, r17           ; 10: dim forest
+ADD r20, r7
+STORE r20, r17           ; 11: dim forest
+ADD r20, r7
+LDI r17, 0x441144
+STORE r20, r17           ; 12: dim mushroom
+ADD r20, r7
+LDI r17, 0x444444
+STORE r20, r17           ; 13: dim mountain
+ADD r20, r7
+STORE r20, r17           ; 14: dim mountain
+ADD r20, r7
+LDI r17, 0x445566
+STORE r20, r17           ; 15: dim tundra
+ADD r20, r7
+LDI r17, 0x551100
+STORE r20, r17           ; 16: dim lava
+ADD r20, r7
+STORE r20, r17           ; 17: dim lava
+ADD r20, r7
+LDI r17, 0x331100
+STORE r20, r17           ; 18: dim volcanic
+ADD r20, r7
+LDI r17, 0x8888AA
+STORE r20, r17           ; 19: dim snow
+ADD r20, r7
+STORE r20, r17           ; 20: dim snow
+ADD r20, r7
+STORE r20, r17           ; 21: dim snow
+ADD r20, r7
+LDI r17, 0x224466
+STORE r20, r17           ; 22: dim coral
+ADD r20, r7
+LDI r17, 0x443322
+STORE r20, r17           ; 23: dim ruins
+ADD r20, r7
+LDI r17, 0x113333
+STORE r20, r17           ; 24: dim crystal
+ADD r20, r7
+STORE r20, r17           ; 25: dim crystal
+ADD r20, r7
+LDI r17, 0x222222
+STORE r20, r17           ; 26: dim ash
+ADD r20, r7
+LDI r17, 0x1A1008
+STORE r20, r17           ; 27: dim deadlands
+ADD r20, r7
+STORE r20, r17           ; 28: dim deadlands
+ADD r20, r7
+LDI r17, 0x003322
+STORE r20, r17           ; 29: dim biolum
+ADD r20, r7
+STORE r20, r17           ; 30: dim biolum
+ADD r20, r7
+LDI r17, 0x0A0011
+STORE r20, r17           ; 31: dim void
 
 ; ===== Main Loop =====
 main_loop:
@@ -975,126 +1063,10 @@ mm_y:
     LDI r18, 27
     SHR r5, r18          ; biome 0..31
 
-    ; 10-category color map (dimmed for minimap)
-    LDI r18, 2
-    CMP r5, r18
-    BLT r0, mm_water          ; 0-1 water
-    LDI r18, 3
-    CMP r5, r18
-    BLT r0, mm_shore          ; 2 beach
-    LDI r18, 5
-    CMP r5, r18
-    BLT r0, mm_desert         ; 3-4 desert
-    LDI r18, 6
-    CMP r5, r18
-    BLT r0, mm_oasis          ; 5 oasis
-    LDI r18, 8
-    CMP r5, r18
-    BLT r0, mm_green          ; 6-7 grass
-    LDI r18, 10
-    CMP r5, r18
-    BLT r0, mm_swamp          ; 8-9 swamp
-    LDI r18, 12
-    CMP r5, r18
-    BLT r0, mm_forest         ; 10-11 forest
-    LDI r18, 13
-    CMP r5, r18
-    BLT r0, mm_mushroom       ; 12 mushroom
-    LDI r18, 15
-    CMP r5, r18
-    BLT r0, mm_gray           ; 13-14 mountain
-    LDI r18, 16
-    CMP r5, r18
-    BLT r0, mm_tundra         ; 15 tundra
-    LDI r18, 18
-    CMP r5, r18
-    BLT r0, mm_lava           ; 16-17 lava
-    LDI r18, 19
-    CMP r5, r18
-    BLT r0, mm_volcanic       ; 18 volcanic
-    LDI r18, 22
-    CMP r5, r18
-    BLT r0, mm_white          ; 19-21 snow
-    LDI r18, 23
-    CMP r5, r18
-    BLT r0, mm_coral          ; 22 coral
-    LDI r18, 24
-    CMP r5, r18
-    BLT r0, mm_ruins          ; 23 ruins
-    LDI r18, 26
-    CMP r5, r18
-    BLT r0, mm_crystal        ; 24-25 crystal
-    LDI r18, 27
-    CMP r5, r18
-    BLT r0, mm_ash            ; 26 ash
-    LDI r18, 29
-    CMP r5, r18
-    BLT r0, mm_dead           ; 27-28 deadlands
-    LDI r18, 31
-    CMP r5, r18
-    BLT r0, mm_biolum         ; 29-30 bioluminescent
-    JMP mm_void               ; 31 void
-
-mm_water:
-    LDI r17, 0x000055    ; dim blue
-    JMP mm_draw
-mm_shore:
-    LDI r17, 0x554422    ; dim sand
-    JMP mm_draw
-mm_desert:
-    LDI r17, 0x665522    ; dim desert yellow
-    JMP mm_draw
-mm_oasis:
-    LDI r17, 0x225533    ; dim oasis green
-    JMP mm_draw
-mm_green:
-    LDI r17, 0x225500    ; dim green
-    JMP mm_draw
-mm_swamp:
-    LDI r17, 0x1A2200    ; dim murky green
-    JMP mm_draw
-mm_forest:
-    LDI r17, 0x113300    ; dim dark green
-    JMP mm_draw
-mm_mushroom:
-    LDI r17, 0x441144    ; dim purple
-    JMP mm_draw
-mm_gray:
-    LDI r17, 0x444444    ; dim gray (mountain)
-    JMP mm_draw
-mm_tundra:
-    LDI r17, 0x445566    ; dim cold blue-gray
-    JMP mm_draw
-mm_lava:
-    LDI r17, 0x551100    ; dim red-orange (lava)
-    JMP mm_draw
-mm_volcanic:
-    LDI r17, 0x331100    ; dim dark red-brown (volcanic)
-    JMP mm_draw
-mm_white:
-    LDI r17, 0x8888AA    ; dim white-blue (snow)
-    JMP mm_draw
-mm_coral:
-    LDI r17, 0x224466    ; dim turquoise (coral)
-    JMP mm_draw
-mm_ruins:
-    LDI r17, 0x443322    ; dim brown-gray (ruins)
-    JMP mm_draw
-mm_crystal:
-    LDI r17, 0x113333    ; dim teal (crystal caverns)
-    JMP mm_draw
-mm_ash:
-    LDI r17, 0x222222    ; dim grey (ash wastes)
-    JMP mm_draw
-mm_dead:
-    LDI r17, 0x1A1008    ; dim brown (deadlands)
-    JMP mm_draw
-mm_biolum:
-    LDI r17, 0x003322    ; dim cyan-green (bioluminescent)
-    JMP mm_draw
-mm_void:
-    LDI r17, 0x0A0011    ; dim deep purple (void)
-    JMP mm_draw
+    ; Load dim color from table (0x7C00 + biome_index)
+    LDI r17, 0x7C00
+    ADD r17, r5
+    LOAD r17, r17
 
 mm_draw:
     ; Screen pos: x = 240 + mx, y = my
