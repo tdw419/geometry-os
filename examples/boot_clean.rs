@@ -91,11 +91,9 @@ fn main() {
                         vm.cpu.csr.scause = mcause;
                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus =
-                            (vm.cpu.csr.mstatus & !(1 << 8)) | (spp << 8);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 8)) | (spp << 8);
                         let sie = (vm.cpu.csr.mstatus >> 1) & 1;
-                        vm.cpu.csr.mstatus =
-                            (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                         vm.cpu.csr.mstatus &= !(1 << 1);
                         if cause_code == 7 {
                             vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
@@ -173,14 +171,21 @@ fn main() {
         }
     }
 
-    eprintln!("[clean] Done: count={} SBI={} ECALL_M={} fwd={} smode_faults={}", 
-        count, sbi_count, ecall_m_count, forward_count, smode_fault_count);
-    
+    eprintln!(
+        "[clean] Done: count={} SBI={} ECALL_M={} fwd={} smode_faults={}",
+        count, sbi_count, ecall_m_count, forward_count, smode_fault_count
+    );
+
     // Check UART output
     let uart_output = vm.bus.uart.drain_tx();
     if !uart_output.is_empty() {
-        let preview: String = String::from_utf8_lossy(&uart_output[..uart_output.len().min(500)]).to_string();
-        eprintln!("[clean] UART output ({} bytes): {}", uart_output.len(), preview);
+        let preview: String =
+            String::from_utf8_lossy(&uart_output[..uart_output.len().min(500)]).to_string();
+        eprintln!(
+            "[clean] UART output ({} bytes): {}",
+            uart_output.len(),
+            preview
+        );
     } else {
         eprintln!("[clean] No UART output");
     }

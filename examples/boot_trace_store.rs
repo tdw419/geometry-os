@@ -35,9 +35,16 @@ fn main() {
             if cause_code == 9 {
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -73,7 +80,10 @@ fn main() {
         // Check for SATP changes
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!(
+                "[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
             last_satp = cur_satp;
         }
 
@@ -96,28 +106,45 @@ fn main() {
                     };
                     eprintln!("[fault] #{} at count={}: {} PC=0x{:08X} scause=0x{:02X} stval=0x{:08X} sepc=0x{:08X}",
                         fault_log_count, count, ft, vm.cpu.pc, vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.sepc);
-                    
+
                     // Check page table for the faulting VA
                     let fault_va = vm.cpu.csr.stval;
                     let l1_idx = (fault_va >> 22) & 0x3FF;
                     let satp = vm.cpu.csr.satp;
                     let pg_dir_ppn = satp & 0x3FFFFF;
                     let pg_dir_phys = (pg_dir_ppn as u64) * 4096;
-                    let l1_entry = vm.bus.read_word(pg_dir_phys + (l1_idx as u64) * 4).unwrap_or(0);
+                    let l1_entry = vm
+                        .bus
+                        .read_word(pg_dir_phys + (l1_idx as u64) * 4)
+                        .unwrap_or(0);
                     eprintln!("  stval L1[{}] = 0x{:08X}", l1_idx, l1_entry);
-                    
-                    // Also check stvec mapping  
+
+                    // Also check stvec mapping
                     let stvec = vm.cpu.csr.stvec;
                     let stvec_l1 = (stvec >> 22) & 0x3FF;
-                    let stvec_l1_entry = vm.bus.read_word(pg_dir_phys + (stvec_l1 as u64) * 4).unwrap_or(0);
+                    let stvec_l1_entry = vm
+                        .bus
+                        .read_word(pg_dir_phys + (stvec_l1 as u64) * 4)
+                        .unwrap_or(0);
                     let is_leaf = (stvec_l1_entry & 0xE) != 0;
-                    eprintln!("  stvec=0x{:08X} L1[{}] = 0x{:08X} leaf={}", stvec, stvec_l1, stvec_l1_entry, is_leaf);
+                    eprintln!(
+                        "  stvec=0x{:08X} L1[{}] = 0x{:08X} leaf={}",
+                        stvec, stvec_l1, stvec_l1_entry, is_leaf
+                    );
                     if !is_leaf && (stvec_l1_entry & 1) != 0 {
                         // Non-leaf, check L2
                         let l2_ppn = (stvec_l1_entry >> 10) & 0x3FFFFF;
                         let l2_idx = (stvec >> 12) & 0x3FF;
-                        let l2_entry = vm.bus.read_word((l2_ppn as u64) * 4096 + (l2_idx as u64) * 4).unwrap_or(0);
-                        eprintln!("  stvec L2[{}] at PA 0x{:08X} = 0x{:08X}", l2_idx, l2_ppn * 4096, l2_entry);
+                        let l2_entry = vm
+                            .bus
+                            .read_word((l2_ppn as u64) * 4096 + (l2_idx as u64) * 4)
+                            .unwrap_or(0);
+                        eprintln!(
+                            "  stvec L2[{}] at PA 0x{:08X} = 0x{:08X}",
+                            l2_idx,
+                            l2_ppn * 4096,
+                            l2_entry
+                        );
                     }
                 }
             }
@@ -126,12 +153,20 @@ fn main() {
         count += 1;
     }
     eprintln!("[boot] Done: count={} SBI_calls={}", count, sbi_count);
-    
+
     // Check UART output
     let uart_buf = &vm.bus.uart.tx_buf;
     if !uart_buf.is_empty() {
-        let text: String = uart_buf.iter().filter(|&&c| c >= 0x20 && c < 0x7F).map(|&c| c as char).collect();
-        eprintln!("[boot] UART output ({} bytes): {}", uart_buf.len(), &text[..text.len().min(500)]);
+        let text: String = uart_buf
+            .iter()
+            .filter(|&&c| c >= 0x20 && c < 0x7F)
+            .map(|&c| c as char)
+            .collect();
+        eprintln!(
+            "[boot] UART output ({} bytes): {}",
+            uart_buf.len(),
+            &text[..text.len().min(500)]
+        );
     } else {
         eprintln!("[boot] No UART output");
     }

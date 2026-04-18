@@ -1,65 +1,206 @@
-use geometry_os::riscv::cpu::{Privilege, StepResult};
-use geometry_os::riscv::RiscvVm;
-
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
+    let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_image,
-        initramfs.as_deref(),
-        256,
-        "console=ttyS0 loglevel=8",
-    )
-    .unwrap();
+    use geometry_os::riscv::cpu::{Privilege, StepResult};
+    use geometry_os::riscv::RiscvVm;
 
-    vm.bus.auto_pte_fixup = false;
+    let (mut vm, fw_addr, _entry, dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
 
     let fw_addr_u32 = fw_addr as u32;
     let mut count: u64 = 0;
     let mut last_satp: u32 = vm.cpu.csr.satp;
-    let mut sbi_count: u64 = 0;
-    let mut first_fault: bool = true;
+    let mut illegal_count = 0u32;
+    let max_instr = 100_000_000u64;
 
-    while count < 1_000_000 {
+    while count < max_instr {
         if vm.bus.sbi.shutdown_requested {
             break;
         }
 
+        // DTB watchdog (same as boot_linux)
+        if count % 100 == 0 {
+            let prb = vm.bus.read_word(0x00C79EACu64).unwrap_or(0);
+            if prb == 0 {
+                let dtb_early_va_expected = (dtb_addr.wrapping_add(0xC0000000)) as u32;
+                let cur_va = vm.bus.read_word(0x00801008).unwrap_or(0);
+                if cur_va != dtb_early_va_expected {
+                    vm.bus.write_word(0x00801008, dtb_early_va_expected).ok();
+                    vm.bus.write_word(0x0080100C, dtb_addr as u32).ok();
+                }
+            }
+        }
+
+        // SATP change handling (same as boot_linux)
+        {
+            let cur_satp = vm.cpu.csr.satp;
+            if cur_satp != last_satp {
+                let mode = (cur_satp >> 31) & 1;
+                if mode == 1 {
+                    let ppn = cur_satp & 0x3FFFFF;
+                    let pg_dir_phys = (ppn as u64) * 4096;
+                    let device_l1: &[u32] = &[0, 1, 2, 3, 4, 5, 8, 48, 64];
+                    let identity_pte: u32 = 0x0000_00CF;
+                    for &l1_idx in device_l1 {
+                        let addr = pg_dir_phys + (l1_idx as u64) * 4;
+                        let existing = vm.bus.read_word(addr).unwrap_or(0);
+                        if (existing & 1) == 0 {
+                            let pte = identity_pte | (l1_idx << 20);
+                            vm.bus.write_word(addr, pte).ok();
+                        }
+                    }
+                    // Fix kernel PT entries
+                    let mega_flags: u32 = 0x0000_00CF;
+                    for l1_scan in 768..780u32 {
+                        let scan_addr = pg_dir_phys + (l1_scan as u64) * 4;
+                        let entry = vm.bus.read_word(scan_addr).unwrap_or(0);
+                        let is_valid = (entry & 1) != 0;
+                        let is_non_leaf = is_valid && (entry & 0xE) == 0;
+                        let ppn_val = (entry >> 10) & 0x3FFFFF;
+                        let needs_fix = !is_valid || (is_non_leaf && ppn_val == 0);
+                        if !needs_fix {
+                            continue;
+                        }
+                        let pa_offset = l1_scan - 768;
+                        let fixup_pte = mega_flags | (pa_offset << 20);
+                        vm.bus.write_word(scan_addr, fixup_pte).ok();
+                    }
+                    vm.cpu.tlb.flush_all();
+                    // Re-verify kernel_map
+                    let km_phys: u64 = 0x00C79E90;
+                    let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
+                    let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
+                    let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
+                    if km_pa != 0 || km_vapo != 0xC0000000 || km_vkpo != 0 {
+                        vm.bus.write_word(km_phys + 12, 0).ok();
+                        vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
+                        vm.bus.write_word(km_phys + 24, 0).ok();
+                    }
+                    // Re-set DTB pointers
+                    vm.bus
+                        .write_word(0x00801008, (dtb_addr.wrapping_add(0xC0000000)) as u32)
+                        .ok();
+                    vm.bus.write_word(0x0080100C, dtb_addr as u32).ok();
+                    eprintln!(
+                        "[diag] SATP changed to 0x{:08X} at count={}",
+                        cur_satp, count
+                    );
+                }
+                last_satp = cur_satp;
+            }
+        }
+
+        // Trap handling (same as boot_linux)
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
 
-            if cause_code == 9 {
-                sbi_count += 1;
-                let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17],
-                    vm.cpu.x[16],
-                    vm.cpu.x[10],
-                    vm.cpu.x[11],
-                    vm.cpu.x[12],
-                    vm.cpu.x[13],
-                    vm.cpu.x[14],
-                    vm.cpu.x[15],
-                    &mut vm.bus.uart,
-                    &mut vm.bus.clint,
-                );
-                if let Some((a0, a1)) = result {
-                    vm.cpu.x[10] = a0;
-                    vm.cpu.x[11] = a1;
-                }
-            } else if cause_code != 11 {
-                let mpp = (vm.cpu.csr.mstatus >> 11) & 3;
-                if mpp != 3 {
+            if cause_code != 11 {
+                // Not ECALL_M
+                let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
+
+                if cause_code == 9 {
+                    // ECALL_S = SBI call
+                    let result = vm.bus.sbi.handle_ecall(
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
+                    );
+                    if let Some((a0, a1)) = result {
+                        vm.cpu.x[10] = a0;
+                        vm.cpu.x[11] = a1;
+                    }
+                } else if mpp != 3 && cause_code == 2 {
+                    // Illegal instruction from S/U mode
+                    illegal_count += 1;
+                    if illegal_count <= 5 {
+                        let mepc = vm.cpu.csr.mepc;
+                        eprintln!(
+                            "[diag] Illegal instr #{} at count={}: mepc=0x{:08X} mpp={}",
+                            illegal_count, count, mepc, mpp
+                        );
+
+                        // Manually translate mepc through MMU to get the actual PA
+                        let vpn1 = ((mepc >> 22) & 0x3FF) as u64;
+                        let vpn0 = ((mepc >> 12) & 0x3FF) as u64;
+                        let satp = vm.cpu.csr.satp;
+                        let pg_ppn = (satp & 0x3FFFFF) as u64;
+                        let pg_dir_phys = pg_ppn * 4096;
+                        let l1_entry = vm.bus.read_word(pg_dir_phys + vpn1 * 4).unwrap_or(0);
+                        let l1_ppn = ((l1_entry >> 10) & 0x3FFFFF) as u64;
+                        let l1_is_leaf = (l1_entry & 0xE) != 0;
+
+                        if l1_is_leaf {
+                            // Megapage
+                            let pa = (l1_ppn << 12) | ((mepc as u64) & 0x3FFFFF);
+                            let inst = vm.bus.read_word(pa).unwrap_or(0);
+                            eprintln!(
+                                "[diag]   L1[{}] = 0x{:08X} (megapage), PA=0x{:08X}, inst=0x{:08X}",
+                                vpn1, l1_entry, pa, inst
+                            );
+                        } else if (l1_entry & 1) != 0 {
+                            // Non-leaf -> L2 lookup
+                            let l2_entry = vm.bus.read_word(l1_ppn * 4096 + vpn0 * 4).unwrap_or(0);
+                            let l2_ppn = ((l2_entry >> 10) & 0x3FFFFF) as u64;
+                            let pa = (l2_ppn << 12) | ((mepc as u64) & 0xFFF);
+                            let inst = vm.bus.read_word(pa).unwrap_or(0);
+                            eprintln!("[diag]   L1[{}] = 0x{:08X} (non-leaf), L2[{}] = 0x{:08X}, PA=0x{:08X}, inst=0x{:08X}", 
+                                vpn1, l1_entry, vpn0, l2_entry, pa, inst);
+                        } else {
+                            eprintln!("[diag]   L1[{}] = 0x{:08X} (UNMAPPED!)", vpn1, l1_entry);
+                        }
+
+                        // Check what the correct instruction should be (direct from kernel binary)
+                        // For VA 0xC000xxxx, PA should be 0x0000xxxx
+                        let expected_pa = if mepc >= 0xC0000000 {
+                            (mepc - 0xC0000000) as u64
+                        } else {
+                            mepc as u64
+                        };
+                        let correct_inst = vm.bus.read_word(expected_pa).unwrap_or(0);
+                        eprintln!(
+                            "[diag]   Expected PA=0x{:08X}, correct inst=0x{:08X}",
+                            expected_pa, correct_inst
+                        );
+                    }
+
+                    // Forward to S-mode
                     let stvec = vm.cpu.csr.stvec & !0x3u32;
                     if stvec != 0 {
                         vm.cpu.csr.sepc = vm.cpu.csr.mepc;
                         vm.cpu.csr.scause = mcause;
                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 8)) | (spp << 8);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (spp << 5);
+                        let sie = (vm.cpu.csr.mstatus >> 1) & 1;
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
+                        vm.cpu.csr.mstatus &= !(1 << 1);
+                        vm.cpu.pc = stvec;
+                        vm.cpu.privilege = Privilege::Supervisor;
+                        vm.cpu.tlb.flush_all();
+                        count += 1;
+                        continue;
+                    }
+                } else if mpp != 3 {
+                    // Other faults from S/U mode - forward to S-mode
+                    let stvec = vm.cpu.csr.stvec & !0x3u32;
+                    if stvec != 0 {
+                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                        vm.cpu.csr.scause = mcause;
+                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
+                        let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (spp << 5);
                         let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                         vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                         vm.cpu.csr.mstatus &= !(1 << 1);
@@ -74,157 +215,69 @@ fn main() {
                     }
                 }
             }
+
+            // Skip faulting instruction
             vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
         }
 
+        // On-demand identity mapping for low address page faults
         vm.bus.tick_clint();
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
-        let step_result = vm.step();
-
-        match step_result {
-            StepResult::Ebreak => break,
+        match vm.step() {
+            StepResult::Ok => {}
             StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
-                if vm.cpu.privilege == Privilege::Supervisor && first_fault {
-                    first_fault = false;
-                    let ft = match step_result {
-                        StepResult::FetchFault => "fetch",
-                        StepResult::LoadFault => "load",
-                        _ => "store",
-                    };
-                    eprintln!("[diag] FIRST S-mode {} fault at count={}", ft, count);
-                    eprintln!("[diag]   PC=0x{:08X}", vm.cpu.pc);
-                    eprintln!("[diag]   scause=0x{:08X}", vm.cpu.csr.scause);
-                    eprintln!("[diag]   stval=0x{:08X}", vm.cpu.csr.stval);
-                    eprintln!("[diag]   sepc=0x{:08X}", vm.cpu.csr.sepc);
-                    eprintln!("[diag]   stvec=0x{:08X}", vm.cpu.csr.stvec);
-                    eprintln!("[diag]   mstatus=0x{:08X}", vm.cpu.csr.mstatus);
-                    eprintln!("[diag]   SP=0x{:08X} RA=0x{:08X}", vm.cpu.x[2], vm.cpu.x[1]);
-                    eprintln!("[diag]   GP=0x{:08X} TP=0x{:08X}", vm.cpu.x[3], vm.cpu.x[4]);
-                    eprintln!("[diag]   SATP=0x{:08X}", vm.cpu.csr.satp);
-
-                    // Read instruction at PC
-                    let inst = vm.bus.read_word(vm.cpu.pc as u64).unwrap_or(0);
-                    eprintln!("[diag]   instruction at PC: 0x{:08X}", inst);
-
-                    // Disassemble: check if it's a store
-                    let opcode = inst & 0x7F;
-                    let funct3 = (inst >> 12) & 7;
-                    eprintln!("[diag]   opcode=0x{:02X} funct3={}", opcode, funct3);
-
-                    // Check what L1 index the fault address maps to
-                    let fault_va = vm.cpu.csr.stval;
-                    let l1_idx = (fault_va >> 22) & 0x3FF;
-                    let ppn = vm.cpu.csr.satp & 0x3FFFFF;
-                    let pg_dir_phys = (ppn as u64) * 4096;
-                    let l1_entry = vm
-                        .bus
-                        .read_word(pg_dir_phys + (l1_idx as u64) * 4)
-                        .unwrap_or(0);
-                    eprintln!(
-                        "[diag]   fault VA L1[{}] = 0x{:08X} (V={})",
-                        l1_idx,
-                        l1_entry,
-                        l1_entry & 1
-                    );
-
-                    // Also check the SP's L1 entry
-                    let sp_l1_idx = (vm.cpu.x[2] >> 22) & 0x3FF;
-                    let sp_l1_entry = vm
-                        .bus
-                        .read_word(pg_dir_phys + (sp_l1_idx as u64) * 4)
-                        .unwrap_or(0);
-                    eprintln!(
-                        "[diag]   SP VA L1[{}] = 0x{:08X} (V={})",
-                        sp_l1_idx,
-                        sp_l1_entry,
-                        sp_l1_entry & 1
-                    );
-
-                    // Run 200 more steps to see the aftermath
-                    eprintln!("[diag] --- Running 200 more steps ---");
-                    for _ in 0..200 {
-                        vm.bus.tick_clint();
-                        vm.bus.sync_mip(&mut vm.cpu.csr.mip);
-                        let sr = vm.step();
-                        if matches!(sr, StepResult::Ebreak) {
-                            break;
+                if vm.cpu.privilege == Privilege::Supervisor {
+                    let fault_addr = vm.cpu.csr.stval;
+                    if fault_addr < 0x0200_0000 {
+                        let satp = vm.cpu.csr.satp;
+                        let pg_dir_ppn = (satp & 0x3FFFFF) as u64;
+                        if pg_dir_ppn > 0 {
+                            let pg_dir_phys = pg_dir_ppn * 4096;
+                            let vpn1 = ((fault_addr >> 22) & 0x3FF) as u64;
+                            let l1_addr = pg_dir_phys + vpn1 * 4;
+                            let existing = vm.bus.read_word(l1_addr).unwrap_or(0);
+                            if (existing & 1) == 0 {
+                                let pte: u32 = 0x0000_00CF | ((vpn1 as u32) << 20);
+                                vm.bus.write_word(l1_addr, pte).ok();
+                                vm.cpu.tlb.flush_all();
+                            }
                         }
-                        count += 1;
                     }
-                    eprintln!("[diag] --- After 200 steps ---");
-                    eprintln!(
-                        "[diag]   PC=0x{:08X} SP=0x{:08X} RA=0x{:08X}",
-                        vm.cpu.pc, vm.cpu.x[2], vm.cpu.x[1]
-                    );
-                    eprintln!(
-                        "[diag]   scause=0x{:08X} stval=0x{:08X}",
-                        vm.cpu.csr.scause, vm.cpu.csr.stval
-                    );
-                    break;
                 }
             }
-            _ => {}
+            StepResult::Ebreak => break,
+            StepResult::Ecall => {}
         }
 
-        let cur_satp = vm.cpu.csr.satp;
-        if cur_satp != last_satp {
+        if count.is_multiple_of(10_000_000) && count > 0 {
             eprintln!(
-                "[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
-                last_satp, cur_satp, count
+                "[diag] {}M: PC=0x{:08X} priv={:?}",
+                count / 1_000_000,
+                vm.cpu.pc,
+                vm.cpu.privilege
             );
-
-            // Inject identity mappings for all of low memory + devices
-            let ppn = cur_satp & 0x3FFFFF;
-            let pg_dir_phys = (ppn as u64) * 4096;
-            let identity_pte: u32 = 0x0000_00CF;
-
-            // Map ALL of physical RAM as identity: L1[0..64] covers 256MB
-            for i in 0..64u32 {
-                let addr = pg_dir_phys + (i as u64) * 4;
-                let existing = vm.bus.read_word(addr).unwrap_or(0);
-                if (existing & 1) == 0 {
-                    let pte = identity_pte | (i << 20);
-                    vm.bus.write_word(addr, pte).ok();
-                }
-            }
-            for &l1_idx in &[8u32, 48, 64] {
-                let addr = pg_dir_phys + (l1_idx as u64) * 4;
-                let existing = vm.bus.read_word(addr).unwrap_or(0);
-                if (existing & 1) == 0 {
-                    let pte = identity_pte | (l1_idx << 20);
-                    vm.bus.write_word(addr, pte).ok();
-                }
-            }
-            vm.cpu.tlb.flush_all();
-
-            // Verify kernel_map
-            let km_phys: u64 = 0x00C79E90;
-            let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
-            let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
-            let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
-            if km_pa != 0 || km_vapo != 0xC0000000 || km_vkpo != 0 {
-                eprintln!("[boot] Re-patching kernel_map");
-                vm.bus.write_word(km_phys + 12, 0).ok();
-                vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
-                vm.bus.write_word(km_phys + 24, 0).ok();
-            }
-
-            last_satp = cur_satp;
         }
-
         count += 1;
     }
 
-    let sbi_str: String = vm
-        .bus
-        .sbi
-        .console_output
-        .iter()
-        .map(|&b| b as char)
-        .collect();
-    eprintln!("\n[boot] Done: count={} SBI_calls={}", count, sbi_count);
-    if !sbi_str.is_empty() {
-        eprintln!("[boot] SBI output: {}", &sbi_str[..sbi_str.len().min(2000)]);
+    eprintln!(
+        "[diag] Done: {} instr, {} illegal, PC=0x{:08X}",
+        count, illegal_count, vm.cpu.pc
+    );
+    eprintln!(
+        "[diag] UART: {} chars, SBI console: {} chars",
+        vm.bus.uart.tx_buf.len(),
+        vm.bus.sbi.console_output.len()
+    );
+    if !vm.bus.sbi.console_output.is_empty() {
+        let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
+        let preview: String = s.chars().take(2000).collect();
+        eprintln!("[diag] SBI output:\n{}", preview);
+    }
+    if !vm.bus.uart.tx_buf.is_empty() {
+        let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);
+        let preview: String = s.chars().take(2000).collect();
+        eprintln!("[diag] UART output:\n{}", preview);
     }
 }

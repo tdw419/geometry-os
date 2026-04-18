@@ -1,8 +1,8 @@
 //! Check if pre-set values survive BSS clear.
 //! Run: cargo run --example boot_bss_check
 
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -12,9 +12,13 @@ fn main() {
         .exists()
         .then(|| std::fs::read(ir_path).unwrap());
 
-    let (mut vm, fw_addr, _entry, dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel_data, initramfs_data.as_deref(), 128, "console=ttyS0 earlycon=sbi loglevel=8")
-            .expect("boot setup failed");
+    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_data,
+        initramfs_data.as_deref(),
+        128,
+        "console=ttyS0 earlycon=sbi loglevel=8",
+    )
+    .expect("boot setup failed");
 
     vm.bus.auto_pte_fixup = false;
     let fw_addr_u32 = fw_addr as u32;
@@ -31,13 +35,31 @@ fn main() {
     let bss_stop_pa: u64 = 0x014BB8B8;
 
     eprintln!("[bss] Before boot:");
-    eprintln!("[bss]   riscv_timebase (PA 0x{:08X}) = {}", riscv_timebase_pa, vm.bus.read_word(riscv_timebase_pa).unwrap_or(0));
-    eprintln!("[bss]   lpj_fine (PA 0x{:08X}) = {}", lpj_fine_pa, vm.bus.read_word(lpj_fine_pa).unwrap_or(0));
-    eprintln!("[bss]   __bss_start (PA 0x{:08X}) = {}", bss_start_pa, vm.bus.read_word(bss_start_pa).unwrap_or(0));
-    eprintln!("[bss]   __bss_stop  (PA 0x{:08X}) = {}", bss_stop_pa, vm.bus.read_word(bss_stop_pa).unwrap_or(0));
+    eprintln!(
+        "[bss]   riscv_timebase (PA 0x{:08X}) = {}",
+        riscv_timebase_pa,
+        vm.bus.read_word(riscv_timebase_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "[bss]   lpj_fine (PA 0x{:08X}) = {}",
+        lpj_fine_pa,
+        vm.bus.read_word(lpj_fine_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "[bss]   __bss_start (PA 0x{:08X}) = {}",
+        bss_start_pa,
+        vm.bus.read_word(bss_start_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "[bss]   __bss_stop  (PA 0x{:08X}) = {}",
+        bss_stop_pa,
+        vm.bus.read_word(bss_stop_pa).unwrap_or(0)
+    );
 
     while count < max_instr {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
@@ -48,10 +70,16 @@ fn main() {
                 let a6 = vm.cpu.x[16];
                 let a0 = vm.cpu.x[10];
                 let result = vm.bus.sbi.handle_ecall(
-                    a7, a6, a0, vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    a7,
+                    a6,
+                    a0,
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((ret_a0, ret_a1)) = result {
                     vm.cpu.x[10] = ret_a0;
@@ -68,7 +96,9 @@ fn main() {
                     let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                     vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                     vm.cpu.csr.mstatus &= !(1 << 1);
-                    if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                    if cause_code == 7 {
+                        vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                    }
                     vm.cpu.pc = stvec;
                     vm.cpu.privilege = Privilege::Supervisor;
                     vm.cpu.tlb.flush_all();
@@ -83,7 +113,9 @@ fn main() {
         count += 1;
 
         match step_result {
-            StepResult::Ebreak => { break; }
+            StepResult::Ebreak => {
+                break;
+            }
             StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
                 if vm.cpu.privilege == Privilege::Supervisor {
                     let fault_addr = vm.cpu.csr.stval;
@@ -117,21 +149,29 @@ fn main() {
             for i in 0..64u32 {
                 let addr = pg_dir_phys + (i as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
-                if (existing & 1) == 0 { vm.bus.write_word(addr, 0x0000_00CF | (i << 20)).ok(); }
+                if (existing & 1) == 0 {
+                    vm.bus.write_word(addr, 0x0000_00CF | (i << 20)).ok();
+                }
             }
             for &l1_idx in &[8u32, 48, 64] {
                 let addr = pg_dir_phys + (l1_idx as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
-                if (existing & 1) == 0 { vm.bus.write_word(addr, 0x0000_00CF | (l1_idx << 20)).ok(); }
+                if (existing & 1) == 0 {
+                    vm.bus.write_word(addr, 0x0000_00CF | (l1_idx << 20)).ok();
+                }
             }
             for l1_scan in 768..780u32 {
                 let scan_addr = pg_dir_phys + (l1_scan as u64) * 4;
                 let entry = vm.bus.read_word(scan_addr).unwrap_or(0);
                 let is_valid = (entry & 1) != 0;
                 let is_non_leaf = is_valid && (entry & 0xE) == 0;
-                if is_valid && !is_non_leaf { continue; }
+                if is_valid && !is_non_leaf {
+                    continue;
+                }
                 let pa_offset = l1_scan - 768;
-                vm.bus.write_word(scan_addr, 0x0000_00CF | (pa_offset << 20)).ok();
+                vm.bus
+                    .write_word(scan_addr, 0x0000_00CF | (pa_offset << 20))
+                    .ok();
             }
             vm.cpu.tlb.flush_all();
             vm.bus.write_word(0x00801008, dtb_va).ok();
@@ -140,9 +180,24 @@ fn main() {
         }
     }
 
-    eprintln!("\n[bss] After {} instructions (PC=0x{:08X}):", count, vm.cpu.pc);
-    eprintln!("[bss]   riscv_timebase = {}", vm.bus.read_word(riscv_timebase_pa).unwrap_or(0));
-    eprintln!("[bss]   lpj_fine = {}", vm.bus.read_word(lpj_fine_pa).unwrap_or(0));
-    eprintln!("[bss]   __bss_start word = {}", vm.bus.read_word(bss_start_pa).unwrap_or(0));
-    eprintln!("[bss]   __bss_stop word = {}", vm.bus.read_word(bss_stop_pa).unwrap_or(0));
+    eprintln!(
+        "\n[bss] After {} instructions (PC=0x{:08X}):",
+        count, vm.cpu.pc
+    );
+    eprintln!(
+        "[bss]   riscv_timebase = {}",
+        vm.bus.read_word(riscv_timebase_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "[bss]   lpj_fine = {}",
+        vm.bus.read_word(lpj_fine_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "[bss]   __bss_start word = {}",
+        vm.bus.read_word(bss_start_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "[bss]   __bss_stop word = {}",
+        vm.bus.read_word(bss_stop_pa).unwrap_or(0)
+    );
 }

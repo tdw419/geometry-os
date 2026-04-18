@@ -1,169 +1,128 @@
-/// Diagnostic: Parse the generated DTB to verify memory layout
-use geometry_os::riscv::dtb::DtbConfig;
-use geometry_os::riscv::loader;
-use geometry_os::riscv::RiscvVm;
-
-fn parse_dtb(dtb: &[u8]) {
-    if dtb.len() < 28 || &dtb[0..4] != b"\xd0\x0d\xfe\xed" {
-        eprintln!("[DTB] Invalid DTB magic");
-        return;
-    }
-    let totalsize = u32::from_be_bytes(dtb[4..8].try_into().unwrap()) as usize;
-    let off_dt_struct = u32::from_be_bytes(dtb[8..12].try_into().unwrap()) as usize;
-    let off_dt_strings = u32::from_be_bytes(dtb[12..16].try_into().unwrap()) as usize;
-    let off_mem_rsvmap = u32::from_be_bytes(dtb[16..20].try_into().unwrap()) as usize;
-    let version = u32::from_be_bytes(dtb[20..24].try_into().unwrap());
-
-    eprintln!(
-        "[DTB] totalsize={} struct_off={} strings_off={} mem_rsvmap_off={} version={}",
-        totalsize, off_dt_struct, off_dt_strings, off_mem_rsvmap, version
-    );
-
-    // Parse memory reservation map
-    eprintln!("[DTB] Memory reservation map:");
-    let mut pos = off_mem_rsvmap;
-    loop {
-        if pos + 16 > dtb.len() {
-            break;
-        }
-        let addr = u64::from_be_bytes(dtb[pos..pos + 8].try_into().unwrap());
-        let size = u64::from_be_bytes(dtb[pos + 8..pos + 16].try_into().unwrap());
-        pos += 16;
-        if addr == 0 && size == 0 {
-            break;
-        }
-        eprintln!(
-            "  reserved: PA 0x{:08X} - 0x{:08X} ({} bytes)",
-            addr,
-            addr + size,
-            size
-        );
-    }
-
-    // Parse structure block to find memory node
-    eprintln!("[DTB] Looking for memory node in structure block...");
-    pos = off_dt_struct;
-    let strings = &dtb[off_dt_strings..];
-    let mut depth = 0i32;
-    while pos < off_dt_strings {
-        let token = u32::from_be_bytes(dtb[pos..pos + 4].try_into().unwrap());
-        pos += 4;
-        match token {
-            0x00000001 => {
-                // FDT_BEGIN_NODE
-                let name_start = pos;
-                while pos < dtb.len() && dtb[pos] != 0 {
-                    pos += 1;
-                }
-                let name = std::str::from_utf8(&dtb[name_start..pos]).unwrap_or("?");
-                pos += 1; // null terminator
-                pos = (pos + 3) & !3; // align to 4 bytes
-                eprintln!("  BEGIN_NODE (depth={}): '{}'", depth, name);
-                depth += 1;
-            }
-            0x00000002 => {
-                // FDT_END_NODE
-                depth -= 1;
-            }
-            0x00000003 => {
-                // FDT_PROP
-                let prop_len = u32::from_be_bytes(dtb[pos..pos + 4].try_into().unwrap()) as usize;
-                let name_off =
-                    u32::from_be_bytes(dtb[pos + 4..pos + 8].try_into().unwrap()) as usize;
-                pos += 8;
-                let prop_data = &dtb[pos..pos + prop_len];
-                pos += prop_len;
-                pos = (pos + 3) & !3; // align to 4 bytes
-                                      // Get property name
-                let name_end = strings[name_off..]
-                    .iter()
-                    .position(|&b| b == 0)
-                    .unwrap_or(0);
-                let name =
-                    std::str::from_utf8(&strings[name_off..name_off + name_end]).unwrap_or("?");
-                if name == "reg" || name == "device_type" || name == "compatible" {
-                    if prop_len == 16 && name == "reg" {
-                        let a = u64::from_be_bytes(prop_data[0..8].try_into().unwrap());
-                        let s = u64::from_be_bytes(prop_data[8..16].try_into().unwrap());
-                        eprintln!(
-                            "    PROP '{}': base=0x{:08X} size=0x{:08X} ({}MB)",
-                            name,
-                            a,
-                            s,
-                            s / (1024 * 1024)
-                        );
-                    } else {
-                        let preview: String = prop_data
-                            .iter()
-                            .take(40)
-                            .map(|&b| {
-                                if b >= 0x20 && b < 0x7f {
-                                    b as char
-                                } else {
-                                    '.'
-                                }
-                            })
-                            .collect();
-                        eprintln!(
-                            "    PROP '{}': len={} data={:?}...",
-                            name, prop_len, preview
-                        );
-                    }
-                }
-            }
-            0x00000009 => break, // FDT_END
-            _ => break,
-        }
-    }
-}
-
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
+    let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    // Use boot_linux_setup to get the DTB address
-    let (mut vm, _fw, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_image,
-        initramfs.as_deref(),
-        256,
-        "console=ttyS0 loglevel=8",
-    )
-    .unwrap();
+    use geometry_os::riscv::RiscvVm;
 
-    // Read the DTB from the VM's memory (use totalsize from header)
-    let mut dtb_blob = Vec::new();
-    // First read the header to get totalsize
-    for i in 0..8 {
-        if let Ok(b) = vm.bus.read_byte(dtb_addr + i as u64) {
-            dtb_blob.push(b);
-        }
-    }
-    let totalsize = u32::from_be_bytes(dtb_blob[4..8].try_into().unwrap()) as usize;
-    // Read the rest
-    for i in 8..totalsize {
-        if let Ok(b) = vm.bus.read_byte(dtb_addr + i as u64) {
-            dtb_blob.push(b);
-        } else {
+    let (mut vm, _fw_addr, _entry, dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
+
+    // 1. Check DTB magic at the physical address
+    let dtb_magic = vm.bus.read_word(dtb_addr).unwrap_or(0);
+    let dtb_magic_be = u32::from_be(dtb_magic);
+    println!(
+        "DTB at PA 0x{:08X}: magic=0x{:08X} (expect 0xD00DFEED)",
+        dtb_addr, dtb_magic_be
+    );
+
+    // 2. Read DTB header fields
+    let totalsize = u32::from_be(vm.bus.read_word(dtb_addr + 4).unwrap_or(0));
+    let off_mem_rsvmap = u32::from_be(vm.bus.read_word(dtb_addr + 16).unwrap_or(0));
+    let off_dt_struct = u32::from_be(vm.bus.read_word(dtb_addr + 8).unwrap_or(0));
+    let off_dt_strings = u32::from_be(vm.bus.read_word(dtb_addr + 12).unwrap_or(0));
+    println!(
+        "DTB header: totalsize={} off_mem_rsvmap={} off_dt_struct={} off_dt_strings={}",
+        totalsize, off_mem_rsvmap, off_dt_struct, off_dt_strings
+    );
+
+    // 3. Read memory reservation map entries
+    let rsvmap_base = dtb_addr + off_mem_rsvmap as u64;
+    println!("\nMemory reservation map at PA 0x{:08X}:", rsvmap_base);
+    for i in 0..5 {
+        let hi_addr = vm.bus.read_word(rsvmap_base + i as u64 * 16).unwrap_or(0);
+        let lo_addr = vm
+            .bus
+            .read_word(rsvmap_base + i as u64 * 16 + 4)
+            .unwrap_or(0);
+        let hi_size = vm
+            .bus
+            .read_word(rsvmap_base + i as u64 * 16 + 8)
+            .unwrap_or(0);
+        let lo_size = vm
+            .bus
+            .read_word(rsvmap_base + i as u64 * 16 + 12)
+            .unwrap_or(0);
+        let addr = (u64::from(hi_addr) << 32) | u64::from(lo_addr);
+        let size = (u64::from(hi_size) << 32) | u64::from(lo_size);
+        if addr == 0 && size == 0 {
+            println!("  Entry {}: (terminator)", i);
             break;
         }
+        println!(
+            "  Entry {}: addr=0x{:016X} size=0x{:016X} ({}KB)",
+            i,
+            addr,
+            size,
+            size / 1024
+        );
     }
-    eprintln!(
-        "[DIAG] DTB at PA 0x{:08X}, size {} bytes",
-        dtb_addr,
-        dtb_blob.len()
-    );
-    parse_dtb(&dtb_blob);
 
-    // Also generate a fresh DTB and parse it
-    eprintln!("\n[DIAG] Fresh DTB from DtbConfig:");
-    let config = DtbConfig {
-        ram_base: 0,
-        ram_size: 256 * 1024 * 1024,
-        bootargs: "console=ttyS0 loglevel=8".to_string(),
-        ..Default::default()
-    };
-    let fresh_dtb = geometry_os::riscv::dtb::generate_dtb(&config);
-    parse_dtb(&fresh_dtb);
+    // 4. Check _dtb_early_va and _dtb_early_pa
+    let dtb_early_va = vm.bus.read_word(0x00801008).unwrap_or(0);
+    let dtb_early_pa = vm.bus.read_word(0x0080100C).unwrap_or(0);
+    println!(
+        "\n_dtb_early_va = 0x{:08X} (expect 0x{:08X})",
+        dtb_early_va,
+        (dtb_addr as u32).wrapping_add(0xC0000000)
+    );
+    println!(
+        "_dtb_early_pa = 0x{:08X} (expect 0x{:08X})",
+        dtb_early_pa, dtb_addr as u32
+    );
+
+    // 5. Check phys_ram_base
+    let prb = vm.bus.read_word(0x00C79EAC).unwrap_or(0);
+    println!("phys_ram_base = 0x{:08X}", prb);
+
+    // 6. Check memblock struct layout
+    // memblock symbol should be at VA 0xC0803448 (PA 0x00803448)
+    // Try different offsets for reserved.cnt
+    println!("\nMemblock struct at PA 0x00803448:");
+    for off in &[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60] {
+        let val = vm.bus.read_word(0x00803448 + *off as u64).unwrap_or(0);
+        if val != 0 {
+            println!("  offset {}: 0x{:08X} ({})", off, val, val);
+        }
+    }
+
+    // 7. Try to find memblock by searching for memory.cnt=1
+    // In the kernel, after early_init_dt_scan_memory, memory.cnt should be 1
+    // and memory.regions[0] should have base=0 and size=256MB
+    // The regions pointer will point to a static array
+    println!("\nScanning for memblock regions array...");
+    for probe_off in &[0, 8, 24, 40] {
+        let regions_ptr = vm.bus.read_word(0x00803448 + probe_off + 12).unwrap_or(0); // regions is 3rd field (cnt, max, total_size, regions)
+        if regions_ptr > 0 && regions_ptr < 0x02000000 {
+            // Try to read from this pointer (as physical address)
+            let base = vm.bus.read_word(regions_ptr as u64).unwrap_or(0);
+            let size = vm.bus.read_word(regions_ptr as u64 + 4).unwrap_or(0);
+            println!(
+                "  offset {}+12 (regions ptr): 0x{:08X} -> [0]=base=0x{:08X} size=0x{:08X}",
+                probe_off, regions_ptr, base, size
+            );
+        }
+    }
+
+    // 8. Also try reading memory.cnt and reserved.cnt from different offset combinations
+    // Layout attempt: bottom_up(4) + current_limit(4) + memory(16) + reserved(16) = 40
+    // Layout attempt: bottom_up(4) + current_limit(4) + padding(4) + memory(16) + reserved(16) = 44
+    // Layout attempt with physmem: ... + physmem(16) = 56
+    println!("\nTrying different memblock layouts:");
+    for mem_off in &[8, 12, 16, 20, 24] {
+        for res_off in &[mem_off + 16, mem_off + 20, mem_off + 24] {
+            let mem_cnt = vm.bus.read_word(0x00803448 + mem_off).unwrap_or(0);
+            let res_cnt = vm.bus.read_word(0x00803448 + res_off).unwrap_or(0);
+            if mem_cnt == 1 && res_cnt <= 10 {
+                let mem_max = vm.bus.read_word(0x00803448 + mem_off + 4).unwrap_or(0);
+                let res_max = vm.bus.read_word(0x00803448 + res_off + 4).unwrap_or(0);
+                println!(
+                    "  memory@{} cnt={} max={}, reserved@{} cnt={} max={}",
+                    mem_off, mem_cnt, mem_max, res_off, res_cnt, res_max
+                );
+            }
+        }
+    }
 }

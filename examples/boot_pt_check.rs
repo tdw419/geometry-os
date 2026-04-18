@@ -37,9 +37,16 @@ fn main() {
             if cause_code == 9 || cause_code == 11 {
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -77,24 +84,41 @@ fn main() {
         if cur_satp != last_satp {
             let n = satp_change_count.get();
             satp_change_count.set(n + 1);
-            eprintln!("[pt] SATP #{}: 0x{:08X} -> 0x{:08X} at count={}", n + 1, last_satp, cur_satp, count);
+            eprintln!(
+                "[pt] SATP #{}: 0x{:08X} -> 0x{:08X} at count={}",
+                n + 1,
+                last_satp,
+                cur_satp,
+                count
+            );
             let mode = (cur_satp >> 31) & 1;
             if mode == 1 {
                 let ppn = (cur_satp & 0x3FFFFF) as u64;
                 let pg_dir_phys = ppn * 4096;
-                
+
                 // Dump kernel range L1 entries BEFORE injection
-                eprintln!("[pt] pg_dir at PA 0x{:08X}, kernel range L1[768..779]:", pg_dir_phys);
+                eprintln!(
+                    "[pt] pg_dir at PA 0x{:08X}, kernel range L1[768..779]:",
+                    pg_dir_phys
+                );
                 for i in 768..779u32 {
                     let addr = pg_dir_phys + (i as u64) * 4;
                     let entry = vm.bus.read_word(addr).unwrap_or(0);
                     let v = entry & 1;
                     let rwx = (entry >> 1) & 7;
                     let ppn = (entry >> 10) & 0x3FFFFF;
-                    let kind = if rwx != 0 { "mega" } else if v != 0 { "L2" } else { "---" };
-                    eprintln!("[pt]   L1[{}] = 0x{:08X} V={} RWX={} PPN=0x{:06X} ({})", 
-                        i, entry, v, rwx, ppn, kind);
-                    
+                    let kind = if rwx != 0 {
+                        "mega"
+                    } else if v != 0 {
+                        "L2"
+                    } else {
+                        "---"
+                    };
+                    eprintln!(
+                        "[pt]   L1[{}] = 0x{:08X} V={} RWX={} PPN=0x{:06X} ({})",
+                        i, entry, v, rwx, ppn, kind
+                    );
+
                     // If non-leaf (L2 pointer), dump a few L2 entries
                     if v != 0 && rwx == 0 && ppn > 0 {
                         let l2_base = (ppn as u64) * 4096;
@@ -104,13 +128,18 @@ fn main() {
                             if l2e != 0 {
                                 let l2_ppn = (l2e >> 10) & 0x3FFFFF;
                                 let l2_rwx = (l2e >> 1) & 7;
-                                eprintln!("[pt]     L2[{}] = 0x{:08X} PPN=0x{:06X} PA=0x{:08X}", 
-                                    j, l2e, l2_ppn, (l2_ppn as u64) << 12);
+                                eprintln!(
+                                    "[pt]     L2[{}] = 0x{:08X} PPN=0x{:06X} PA=0x{:08X}",
+                                    j,
+                                    l2e,
+                                    l2_ppn,
+                                    (l2_ppn as u64) << 12
+                                );
                             }
                         }
                     }
                 }
-                
+
                 // Inject identity maps for device/low regions
                 let identity_pte: u32 = 0x0000_00CF;
                 let device_l1: &[u32] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 48, 64];
@@ -135,8 +164,10 @@ fn main() {
         // Log what happens right after the 3rd SATP change
         let n = satp_change_count.get();
         if n >= 3 && count < 800_000 && forward_count <= 10 {
-            eprintln!("[pt] count={} PC=0x{:08X} priv={:?} step={:?}", 
-                count, vm.cpu.pc, vm.cpu.privilege, step_result);
+            eprintln!(
+                "[pt] count={} PC=0x{:08X} priv={:?} step={:?}",
+                count, vm.cpu.pc, vm.cpu.privilege, step_result
+            );
         }
 
         match step_result {
@@ -149,15 +180,20 @@ fn main() {
         count += 1;
 
         if count == 800_000 {
-            eprintln!("[pt] At 800K: PC=0x{:08X} priv={:?} fwd={}", 
-                vm.cpu.pc, vm.cpu.privilege, forward_count);
+            eprintln!(
+                "[pt] At 800K: PC=0x{:08X} priv={:?} fwd={}",
+                vm.cpu.pc, vm.cpu.privilege, forward_count
+            );
             // Check what instruction is at the current PC
             let inst = vm.bus.read_word(vm.cpu.pc as u64).unwrap_or(0);
             eprintln!("[pt] Instruction at PA 0x{:08X}: 0x{:08X}", vm.cpu.pc, inst);
         }
     }
 
-    eprintln!("[pt] Done: count={} SBI={} fwd={}", count, sbi_count, forward_count);
+    eprintln!(
+        "[pt] Done: count={} SBI={} fwd={}",
+        count, sbi_count, forward_count
+    );
     let uart = vm.bus.uart.drain_tx();
     if !uart.is_empty() {
         eprintln!("[pt] UART: {}", String::from_utf8_lossy(&uart));

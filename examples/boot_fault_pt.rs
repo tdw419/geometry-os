@@ -33,9 +33,16 @@ fn main() {
             if cause_code == 9 {
                 // ECALL_S = SBI call
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -71,7 +78,10 @@ fn main() {
         // Track SATP changes
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[diag] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!(
+                "[diag] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
             last_satp = cur_satp;
         }
 
@@ -84,14 +94,19 @@ fn main() {
             let scause = vm.cpu.csr.scause;
             let cause_code = scause & !(1u32 << 31);
             if cause_code >= 12 && cause_code <= 15 && count > 180000 {
-                eprintln!("[diag] S-mode fault at count={}: PC=0x{:08X} scause=0x{:X} stval=0x{:08X}", 
-                    count, vm.cpu.pc, scause, vm.cpu.csr.stval);
-                
+                eprintln!(
+                    "[diag] S-mode fault at count={}: PC=0x{:08X} scause=0x{:X} stval=0x{:08X}",
+                    count, vm.cpu.pc, scause, vm.cpu.csr.stval
+                );
+
                 let satp = vm.cpu.csr.satp;
                 let pg_dir_ppn = (satp & 0x3FFFFF) as u64;
                 let pg_dir_phys = pg_dir_ppn * 4096;
-                eprintln!("[diag] SATP=0x{:08X} pg_dir_phys=0x{:08X}", satp, pg_dir_phys);
-                
+                eprintln!(
+                    "[diag] SATP=0x{:08X} pg_dir_phys=0x{:08X}",
+                    satp, pg_dir_phys
+                );
+
                 // Dump L1[768..780] - kernel linear mapping
                 for i in 768..780u32 {
                     let l1_addr = pg_dir_phys + (i as u64) * 4;
@@ -103,10 +118,23 @@ fn main() {
                     let u = (entry >> 4) & 1;
                     let ppn = (entry >> 10) & 0x3FFFFF;
                     let is_leaf = r | w | x;
-                    eprintln!("[diag] L1[{}] = 0x{:08X} V={} R={} W={} X={} U={} PPN=0x{:06X} {}",
-                        i, entry, v, r, w, x, u, ppn,
-                        if is_leaf != 0 { "LEAF (megapage)" } else { "NON-LEAF (L2 ptr)" });
-                    
+                    eprintln!(
+                        "[diag] L1[{}] = 0x{:08X} V={} R={} W={} X={} U={} PPN=0x{:06X} {}",
+                        i,
+                        entry,
+                        v,
+                        r,
+                        w,
+                        x,
+                        u,
+                        ppn,
+                        if is_leaf != 0 {
+                            "LEAF (megapage)"
+                        } else {
+                            "NON-LEAF (L2 ptr)"
+                        }
+                    );
+
                     // If non-leaf, dump L2 entries
                     if v == 1 && is_leaf == 0 && ppn > 0 {
                         let l2_base = (ppn as u64) * 4096;
@@ -114,27 +142,43 @@ fn main() {
                         // VPN0 = (0xC0210F14 >> 12) & 0x3FF = 0x210 = 528
                         let vpn0 = (0xC0210F14u32 >> 12) & 0x3FF;
                         if i == 768 {
-                            eprintln!("[diag] L2 base at PA 0x{:08X}, checking entry [{}]", l2_base, vpn0);
+                            eprintln!(
+                                "[diag] L2 base at PA 0x{:08X}, checking entry [{}]",
+                                l2_base, vpn0
+                            );
                             let l2_addr = l2_base + (vpn0 as u64) * 4;
                             let l2_entry = vm.bus.read_word(l2_addr).unwrap_or(0);
                             let l2_ppn = (l2_entry >> 10) & 0x3FFFFF;
                             let l2_v = l2_entry & 1;
-                            let l2_leaf = ((l2_entry >> 1) & 1) | ((l2_entry >> 2) & 1) | ((l2_entry >> 3) & 1);
-                            eprintln!("[diag] L2[{}] = 0x{:08X} V={} LEAF={} PPN=0x{:06X} PA=0x{:08X}",
-                                vpn0, l2_entry, l2_v, l2_leaf, l2_ppn, (l2_ppn as u64) * 4096);
+                            let l2_leaf = ((l2_entry >> 1) & 1)
+                                | ((l2_entry >> 2) & 1)
+                                | ((l2_entry >> 3) & 1);
+                            eprintln!(
+                                "[diag] L2[{}] = 0x{:08X} V={} LEAF={} PPN=0x{:06X} PA=0x{:08X}",
+                                vpn0,
+                                l2_entry,
+                                l2_v,
+                                l2_leaf,
+                                l2_ppn,
+                                (l2_ppn as u64) * 4096
+                            );
                         }
                     }
                 }
-                
+
                 // Also check: what instruction is actually at PA 0x00210F14?
                 let inst_pa = 0x00210F14u64;
                 let inst = vm.bus.read_word(inst_pa).unwrap_or(0);
                 eprintln!("[diag] Instruction at PA 0x{:08X}: 0x{:08X}", inst_pa, inst);
-                
+
                 // What's the VA the kernel uses for the handler?
                 let handler_va = 0xC0210F14u32;
-                eprintln!("[diag] Handler VA 0x{:08X}, expected PA 0x{:08X}", handler_va, handler_va - 0xC0000000);
-                
+                eprintln!(
+                    "[diag] Handler VA 0x{:08X}, expected PA 0x{:08X}",
+                    handler_va,
+                    handler_va - 0xC0000000
+                );
+
                 break;
             }
         }

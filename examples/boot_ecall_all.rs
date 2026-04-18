@@ -1,8 +1,8 @@
 //! Count ALL ECALLs with full details.
 //! Run: cargo run --example boot_ecall_all
 
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -12,9 +12,13 @@ fn main() {
         .exists()
         .then(|| std::fs::read(ir_path).unwrap());
 
-    let (mut vm, fw_addr, _entry, dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel_data, initramfs_data.as_deref(), 128, "console=ttyS0 earlycon=sbi loglevel=8")
-            .expect("boot setup failed");
+    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_data,
+        initramfs_data.as_deref(),
+        128,
+        "console=ttyS0 earlycon=sbi loglevel=8",
+    )
+    .expect("boot setup failed");
 
     vm.bus.auto_pte_fixup = false;
     let fw_addr_u32 = fw_addr as u32;
@@ -33,7 +37,9 @@ fn main() {
     eprintln!("[ecall] Booting...");
 
     while count < max_instr {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // Check if we're at the fw_addr (M-mode trap handler)
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
@@ -53,10 +59,16 @@ fn main() {
 
                 // Handle the ECALL
                 let result = vm.bus.sbi.handle_ecall(
-                    a7, a6, a0, a1,
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    a7,
+                    a6,
+                    a0,
+                    a1,
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((ret_a0, ret_a1)) = result {
                     vm.cpu.x[10] = ret_a0;
@@ -67,8 +79,10 @@ fn main() {
                 if a7 == 0x01 || (a7 == 0x02 && a6 == 0) || a7 == 0x4442434E {
                     putchar_count += 1;
                     if putchar_count <= 5 {
-                        eprintln!("[ecall] PUTCHAR #{}: a7=0x{:X} a6=0x{:X} a0=0x{:X} ('{}')",
-                            putchar_count, a7, a6, a0, a0 as u8 as char);
+                        eprintln!(
+                            "[ecall] PUTCHAR #{}: a7=0x{:X} a6=0x{:X} a0=0x{:X} ('{}')",
+                            putchar_count, a7, a6, a0, a0 as u8 as char
+                        );
                     }
                 }
 
@@ -80,8 +94,10 @@ fn main() {
             } else if cause_code != 11 && mpp != 3 {
                 // Other exceptions from S-mode
                 if mmode_trap_count <= 50 {
-                    eprintln!("[ecall] M-mode trap #{} at count={}: cause={} mepc=0x{:08X} priv={:?}",
-                        mmode_trap_count, count, cause_code, vm.cpu.csr.mepc, vm.cpu.privilege);
+                    eprintln!(
+                        "[ecall] M-mode trap #{} at count={}: cause={} mepc=0x{:08X} priv={:?}",
+                        mmode_trap_count, count, cause_code, vm.cpu.csr.mepc, vm.cpu.privilege
+                    );
                 }
                 let stvec = vm.cpu.csr.stvec & !0x3u32;
                 if stvec != 0 {
@@ -93,7 +109,9 @@ fn main() {
                     let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                     vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                     vm.cpu.csr.mstatus &= !(1 << 1);
-                    if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                    if cause_code == 7 {
+                        vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                    }
                     vm.cpu.pc = stvec;
                     vm.cpu.privilege = Privilege::Supervisor;
                     vm.cpu.tlb.flush_all();
@@ -104,14 +122,18 @@ fn main() {
             vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
         }
 
-        for _ in 0..time_accel { vm.bus.tick_clint(); }
+        for _ in 0..time_accel {
+            vm.bus.tick_clint();
+        }
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
         let step_result = vm.step();
         count += 1;
 
         match step_result {
-            StepResult::Ebreak => { break; }
+            StepResult::Ebreak => {
+                break;
+            }
             StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
                 if vm.cpu.privilege == Privilege::Supervisor {
                     let fault_addr = vm.cpu.csr.stval;
@@ -140,27 +162,38 @@ fn main() {
         // SATP change
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[ecall] SATP: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!(
+                "[ecall] SATP: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
             let ppn = cur_satp & 0x3FFFFF;
             let pg_dir_phys = (ppn as u64) * 4096;
             for i in 0..64u32 {
                 let addr = pg_dir_phys + (i as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
-                if (existing & 1) == 0 { vm.bus.write_word(addr, 0x0000_00CF | (i << 20)).ok(); }
+                if (existing & 1) == 0 {
+                    vm.bus.write_word(addr, 0x0000_00CF | (i << 20)).ok();
+                }
             }
             for &l1_idx in &[8u32, 48, 64] {
                 let addr = pg_dir_phys + (l1_idx as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
-                if (existing & 1) == 0 { vm.bus.write_word(addr, 0x0000_00CF | (l1_idx << 20)).ok(); }
+                if (existing & 1) == 0 {
+                    vm.bus.write_word(addr, 0x0000_00CF | (l1_idx << 20)).ok();
+                }
             }
             for l1_scan in 768..780u32 {
                 let scan_addr = pg_dir_phys + (l1_scan as u64) * 4;
                 let entry = vm.bus.read_word(scan_addr).unwrap_or(0);
                 let is_valid = (entry & 1) != 0;
                 let is_non_leaf = is_valid && (entry & 0xE) == 0;
-                if is_valid && !is_non_leaf { continue; }
+                if is_valid && !is_non_leaf {
+                    continue;
+                }
                 let pa_offset = l1_scan - 768;
-                vm.bus.write_word(scan_addr, 0x0000_00CF | (pa_offset << 20)).ok();
+                vm.bus
+                    .write_word(scan_addr, 0x0000_00CF | (pa_offset << 20))
+                    .ok();
             }
             vm.cpu.tlb.flush_all();
             vm.bus.write_word(0x00801008, dtb_va).ok();
@@ -169,10 +202,25 @@ fn main() {
         }
     }
 
-    let console: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
-    eprintln!("\n[ecall] Done: {} instr, {} ECALLs, {} putchars, {} M-mode traps, {} console chars",
-        count, ecall_count, putchar_count, mmode_trap_count, console.len());
+    let console: String = vm
+        .bus
+        .sbi
+        .console_output
+        .iter()
+        .map(|&b| b as char)
+        .collect();
+    eprintln!(
+        "\n[ecall] Done: {} instr, {} ECALLs, {} putchars, {} M-mode traps, {} console chars",
+        count,
+        ecall_count,
+        putchar_count,
+        mmode_trap_count,
+        console.len()
+    );
     if !console.is_empty() {
-        eprintln!("[ecall] Console output:\n{}", &console[..console.len().min(3000)]);
+        eprintln!(
+            "[ecall] Console output:\n{}",
+            &console[..console.len().min(3000)]
+        );
     }
 }

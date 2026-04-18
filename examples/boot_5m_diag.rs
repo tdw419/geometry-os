@@ -34,9 +34,16 @@ fn main() {
             if cause_code == 9 {
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -74,8 +81,14 @@ fn main() {
         let step_result = vm.step();
 
         if count >= next_report {
-            eprintln!("[progress] {}M: PC=0x{:08X} SP=0x{:08X} SBI={} faults={}",
-                count / 1_000_000, vm.cpu.pc, vm.cpu.x[2], sbi_count, fault_count);
+            eprintln!(
+                "[progress] {}M: PC=0x{:08X} SP=0x{:08X} SBI={} faults={}",
+                count / 1_000_000,
+                vm.cpu.pc,
+                vm.cpu.x[2],
+                sbi_count,
+                fault_count
+            );
             next_report += 1_000_000;
         }
 
@@ -92,20 +105,33 @@ fn main() {
                         StepResult::LoadFault => "LOAD",
                         _ => "STORE",
                     };
-                    eprintln!("[fault] #{} count={}: {} PC=0x{:08X} stval=0x{:08X}",
-                        fault_count, count, ft, vm.cpu.pc, vm.cpu.csr.stval);
+                    eprintln!(
+                        "[fault] #{} count={}: {} PC=0x{:08X} stval=0x{:08X}",
+                        fault_count, count, ft, vm.cpu.pc, vm.cpu.csr.stval
+                    );
                 }
             }
             _ => {}
         }
         count += 1;
     }
-    eprintln!("[boot] Done: count={} SBI_calls={} faults={}", count, sbi_count, fault_count);
-    
+    eprintln!(
+        "[boot] Done: count={} SBI_calls={} faults={}",
+        count, sbi_count, fault_count
+    );
+
     let uart_buf = &vm.bus.uart.tx_buf;
     if !uart_buf.is_empty() {
-        let text: String = uart_buf.iter().filter(|&&c| c >= 0x20 && c < 0x7F).map(|&c| c as char).collect();
-        eprintln!("[boot] UART ({} bytes): {}", uart_buf.len(), &text[..text.len().min(2000)]);
+        let text: String = uart_buf
+            .iter()
+            .filter(|&&c| c >= 0x20 && c < 0x7F)
+            .map(|&c| c as char)
+            .collect();
+        eprintln!(
+            "[boot] UART ({} bytes): {}",
+            uart_buf.len(),
+            &text[..text.len().min(2000)]
+        );
     } else {
         eprintln!("[boot] No UART output");
     }

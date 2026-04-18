@@ -43,9 +43,16 @@ fn main() {
                 // SBI call (ECALL_S or ECALL_M)
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -83,7 +90,10 @@ fn main() {
         // Do NOT touch the kernel range (L1[768+]) - the kernel manages those.
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[test] SATP: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!(
+                "[test] SATP: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
             let mode = (cur_satp >> 31) & 1;
             if mode == 1 {
                 let ppn = (cur_satp & 0x3FFFFF) as u64;
@@ -110,7 +120,10 @@ fn main() {
                     }
                 }
                 vm.cpu.tlb.flush_all();
-                eprintln!("[test] Injected identity maps into pg_dir PA 0x{:08X}", pg_dir_phys);
+                eprintln!(
+                    "[test] Injected identity maps into pg_dir PA 0x{:08X}",
+                    pg_dir_phys
+                );
             }
             last_satp = cur_satp;
         }
@@ -144,7 +157,12 @@ fn main() {
             let new_faults = smode_fault_count;
             eprintln!(
                 "[test] {}K: PC=0x{:08X} priv={:?} SBI={} fwd={} faults={}",
-                count / 1000, vm.cpu.pc, vm.cpu.privilege, sbi_count, forward_count, new_faults
+                count / 1000,
+                vm.cpu.pc,
+                vm.cpu.privilege,
+                sbi_count,
+                forward_count,
+                new_faults
             );
             last_log_count = count;
             if new_faults > 0 && new_faults < 100 {
@@ -157,11 +175,17 @@ fn main() {
         }
     }
 
-    eprintln!("[test] Done: count={} SBI={} fwd={} faults={}", 
-        count, sbi_count, forward_count, smode_fault_count);
+    eprintln!(
+        "[test] Done: count={} SBI={} fwd={} faults={}",
+        count, sbi_count, forward_count, smode_fault_count
+    );
     let uart = vm.bus.uart.drain_tx();
     if !uart.is_empty() {
-        eprintln!("[test] UART ({} bytes): {}", uart.len(), String::from_utf8_lossy(&uart));
+        eprintln!(
+            "[test] UART ({} bytes): {}",
+            uart.len(),
+            String::from_utf8_lossy(&uart)
+        );
     } else {
         eprintln!("[test] No UART output");
     }

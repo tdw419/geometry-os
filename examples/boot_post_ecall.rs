@@ -1,6 +1,6 @@
 //! Trace kernel execution right after the first SBI ECALL
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -10,9 +10,13 @@ fn main() {
         .exists()
         .then(|| std::fs::read(ir_path).unwrap());
 
-    let (mut vm, fw_addr, _entry, dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel_data, initramfs_data.as_deref(), 128, "console=ttyS0 earlycon=sbi loglevel=8")
-            .expect("boot setup failed");
+    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_data,
+        initramfs_data.as_deref(),
+        128,
+        "console=ttyS0 earlycon=sbi loglevel=8",
+    )
+    .expect("boot setup failed");
 
     vm.bus.auto_pte_fixup = false;
     let fw_addr_u32 = fw_addr as u32;
@@ -26,12 +30,16 @@ fn main() {
     let mut ecall_pc: u32 = 0;
 
     while count < max_instr {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         let cur_ecall = vm.cpu.ecall_count;
         if cur_ecall != last_ecall {
-            eprintln!("[boot] ECALL #{} at count={} PC=0x{:08X}: a7=0x{:X} a6=0x{:X} a0=0x{:X}",
-                cur_ecall, count, vm.cpu.pc, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]);
+            eprintln!(
+                "[boot] ECALL #{} at count={} PC=0x{:08X}: a7=0x{:X} a6=0x{:X} a0=0x{:X}",
+                cur_ecall, count, vm.cpu.pc, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]
+            );
             last_ecall = cur_ecall;
         }
 
@@ -52,7 +60,9 @@ fn main() {
                     let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                     vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                     vm.cpu.csr.mstatus &= !(1 << 1);
-                    if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                    if cause_code == 7 {
+                        vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                    }
                     vm.cpu.pc = stvec;
                     vm.cpu.privilege = Privilege::Supervisor;
                     vm.cpu.tlb.flush_all();
@@ -63,7 +73,9 @@ fn main() {
             vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
         }
 
-        for _ in 0..time_accel { vm.bus.tick_clint(); }
+        for _ in 0..time_accel {
+            vm.bus.tick_clint();
+        }
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
         let pc = vm.cpu.pc;
@@ -77,18 +89,31 @@ fn main() {
         if ecall_pc == 1 {
             let mut note = String::new();
             match step_result {
-                StepResult::FetchFault => note = format!("FETCH_FAULT stval=0x{:X}", vm.cpu.csr.stval),
-                StepResult::LoadFault => note = format!("LOAD_FAULT stval=0x{:X}", vm.cpu.csr.stval),
-                StepResult::StoreFault => note = format!("STORE_FAULT stval=0x{:X}", vm.cpu.csr.stval),
+                StepResult::FetchFault => {
+                    note = format!("FETCH_FAULT stval=0x{:X}", vm.cpu.csr.stval)
+                }
+                StepResult::LoadFault => {
+                    note = format!("LOAD_FAULT stval=0x{:X}", vm.cpu.csr.stval)
+                }
+                StepResult::StoreFault => {
+                    note = format!("STORE_FAULT stval=0x{:X}", vm.cpu.csr.stval)
+                }
                 StepResult::Ecall => note = format!("ECALL a7=0x{:X}", vm.cpu.x[17]),
                 _ => {}
             }
-            eprintln!("  [{}] PC=0x{:08X} a0=0x{:08X} {}", count, pc, vm.cpu.x[10], note);
-            if count - 181737 > 200 { ecall_pc = 2; }
+            eprintln!(
+                "  [{}] PC=0x{:08X} a0=0x{:08X} {}",
+                count, pc, vm.cpu.x[10], note
+            );
+            if count - 181737 > 200 {
+                ecall_pc = 2;
+            }
         }
 
         match step_result {
-            StepResult::Ebreak => { break; }
+            StepResult::Ebreak => {
+                break;
+            }
             StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
                 if vm.cpu.privilege == Privilege::Supervisor {
                     let fault_addr = vm.cpu.csr.stval;
@@ -116,27 +141,38 @@ fn main() {
 
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[boot] SATP change at count={}: 0x{:08X} -> 0x{:08X}", count, last_satp, cur_satp);
+            eprintln!(
+                "[boot] SATP change at count={}: 0x{:08X} -> 0x{:08X}",
+                count, last_satp, cur_satp
+            );
             let ppn = cur_satp & 0x3FFFFF;
             let pg_dir_phys = (ppn as u64) * 4096;
             for i in 0..64u32 {
                 let addr = pg_dir_phys + (i as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
-                if (existing & 1) == 0 { vm.bus.write_word(addr, 0x0000_00CF | (i << 20)).ok(); }
+                if (existing & 1) == 0 {
+                    vm.bus.write_word(addr, 0x0000_00CF | (i << 20)).ok();
+                }
             }
             for &l1_idx in &[8u32, 48, 64] {
                 let addr = pg_dir_phys + (l1_idx as u64) * 4;
                 let existing = vm.bus.read_word(addr).unwrap_or(0);
-                if (existing & 1) == 0 { vm.bus.write_word(addr, 0x0000_00CF | (l1_idx << 20)).ok(); }
+                if (existing & 1) == 0 {
+                    vm.bus.write_word(addr, 0x0000_00CF | (l1_idx << 20)).ok();
+                }
             }
             for l1_scan in 768..780u32 {
                 let scan_addr = pg_dir_phys + (l1_scan as u64) * 4;
                 let entry = vm.bus.read_word(scan_addr).unwrap_or(0);
                 let is_valid = (entry & 1) != 0;
                 let is_non_leaf = is_valid && (entry & 0xE) == 0;
-                if is_valid && !is_non_leaf { continue; }
+                if is_valid && !is_non_leaf {
+                    continue;
+                }
                 let pa_offset = l1_scan - 768;
-                vm.bus.write_word(scan_addr, 0x0000_00CF | (pa_offset << 20)).ok();
+                vm.bus
+                    .write_word(scan_addr, 0x0000_00CF | (pa_offset << 20))
+                    .ok();
             }
             vm.cpu.tlb.flush_all();
             vm.bus.write_word(0x00801008, dtb_va).ok();
@@ -145,5 +181,10 @@ fn main() {
         }
     }
 
-    eprintln!("[diag] Final: PC=0x{:08X} ECALLs={} console={}", vm.cpu.pc, vm.cpu.ecall_count, vm.bus.sbi.console_output.len());
+    eprintln!(
+        "[diag] Final: PC=0x{:08X} ECALLs={} console={}",
+        vm.cpu.pc,
+        vm.cpu.ecall_count,
+        vm.bus.sbi.console_output.len()
+    );
 }

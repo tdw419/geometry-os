@@ -735,19 +735,24 @@ fn test_infinite_map_pxpk_contour_lines() {
     // Water tiles should NOT have contour lines
     // Find a water pixel (high blue channel) and verify it's not at a contour edge
     // or that its edge pixels aren't contour_color
-    let water_tiles_without_contour = (0..256).step_by(tile_size)
+    let water_tiles_without_contour = (0..256)
+        .step_by(tile_size)
         .flat_map(|ty| (0..256).step_by(tile_size).map(move |tx| (tx, ty)))
         .filter(|&(tx, ty)| {
             // Check if this is a water tile (center pixel is blue-dominant)
             let cx = tx + 2;
             let cy = ty + 2;
-            if cx >= 256 || cy >= 256 { return false; }
+            if cx >= 256 || cy >= 256 {
+                return false;
+            }
             let px = vm.screen[cy * 256 + cx];
             let r = (px >> 16) & 0xFF;
             let g = (px >> 8) & 0xFF;
             let b = px & 0xFF;
-            if !(b > 100 && b > r * 2) { return false; } // not water
-            // Check edges: right edge pixel should NOT be contour_color
+            if !(b > 100 && b > r * 2) {
+                return false;
+            } // not water
+              // Check edges: right edge pixel should NOT be contour_color
             let rx = tx + 3;
             if rx < 256 {
                 for dy in 0..4 {
@@ -862,7 +867,9 @@ fn test_infinite_map_pxpk_sky_gradient() {
     assert!(
         top_b > top_r && top_b > top_g,
         "dawn sky top should be blue-dominant, got R={} G={} B={}",
-        top_r, top_g, top_b
+        top_r,
+        top_g,
+        top_b
     );
 
     // Row 12-15 (band 3) should be orange horizon: 0xCC6600
@@ -914,7 +921,9 @@ fn test_infinite_map_pxpk_sky_gradient() {
     assert!(
         night_r < 30 && night_g < 30 && night_b < 30,
         "night sky top should be very dark, got R={} G={} B={}",
-        night_r, night_g, night_b
+        night_r,
+        night_g,
+        night_b
     );
 
     // Verify gradient exists within a single frame:
@@ -925,7 +934,7 @@ fn test_infinite_map_pxpk_sky_gradient() {
     let _ = step_until_frame(&mut vm2, 1_000_000);
     let screen_dawn2 = vm2.screen.to_vec();
 
-    let band0 = screen_dawn2[0];       // row 0
+    let band0 = screen_dawn2[0]; // row 0
     let band3 = screen_dawn2[12 * 256]; // row 12
     assert_ne!(
         band0, band3,
@@ -1037,7 +1046,8 @@ fn test_infinite_map_pxpk_coastline_foam() {
     assert!(
         foam_pixels > 0,
         "at least 1 water pixel should have coastline foam, got {}/{}",
-        foam_pixels, water_total
+        foam_pixels,
+        water_total
     );
 }
 
@@ -1191,7 +1201,8 @@ fn test_infinite_map_pxpk_biome_blending() {
     assert!(
         blend_count >= 5,
         "at least 5 boundary tiles should show blended colors, got {}/{}",
-        blend_count, checked
+        blend_count,
+        checked
     );
 }
 
@@ -1259,7 +1270,8 @@ fn test_infinite_map_pxpk_y_blending() {
     assert!(
         blend_count >= 5,
         "at least 5 Y-boundary tiles should show blended colors, got {}/{}",
-        blend_count, checked
+        blend_count,
+        checked
     );
 }
 
@@ -1329,7 +1341,8 @@ fn test_infinite_map_pxpk_smooth_transition_zone() {
     assert!(
         inner_edge_blended >= inner_edge_checked / 7,
         "at least ~15% of inner-edge tiles should show hash-dithered blending, got {}/{}",
-        inner_edge_blended, inner_edge_checked
+        inner_edge_blended,
+        inner_edge_checked
     );
 }
 
@@ -1396,12 +1409,9 @@ fn test_infinite_map_pxpk_32x32_minimap_overlay() {
     // Check a few pixels just left of the minimap are main terrain (non-dimmed)
     let _main_px = vm.screen[128 * 256 + 128]; // center of screen
     let _mm_px = vm.screen[16 * 256 + 240]; // center of minimap
-    // Minimap pixels are dimmed (>>1), so they should differ from main terrain
-    // unless coincidentally same biome at half brightness
-    assert!(
-        mm_colored > 0,
-        "minimap area should have rendered content"
-    );
+                                            // Minimap pixels are dimmed (>>1), so they should differ from main terrain
+                                            // unless coincidentally same biome at half brightness
+    assert!(mm_colored > 0, "minimap area should have rendered content");
 }
 
 #[test]
@@ -1470,8 +1480,16 @@ fn test_infinite_map_pxpk_minimap_updates_every_4_frames() {
     }
 
     // Frames 0-2 should have identical minimap content (cached, no recompute)
-    let same_01 = mm_frame0.iter().zip(mm_frame1.iter()).filter(|(a, b)| a == b).count();
-    let same_12 = mm_frame1.iter().zip(mm_frame2.iter()).filter(|(a, b)| a == b).count();
+    let same_01 = mm_frame0
+        .iter()
+        .zip(mm_frame1.iter())
+        .filter(|(a, b)| a == b)
+        .count();
+    let same_12 = mm_frame1
+        .iter()
+        .zip(mm_frame2.iter())
+        .filter(|(a, b)| a == b)
+        .count();
 
     // At least 90% of pixels should match between cached frames
     assert!(

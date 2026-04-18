@@ -539,10 +539,7 @@ fn test_living_map_weather_init() {
         vm.ram[0x780A]
     );
     // Lightning vars should be initialized
-    assert_eq!(
-        vm.ram[0x780C], 0,
-        "lightning_flash should init to 0"
-    );
+    assert_eq!(vm.ram[0x780C], 0, "lightning_flash should init to 0");
 
     // Rain particles should be initialized (some should be non-zero)
     let mut rain_initialized = false;
@@ -606,11 +603,7 @@ fn test_living_map_weather_cycles() {
             if vm.ram[0x7809] != 0 {
                 // Weather changed! Verify it's in valid range 0..3
                 let ws = vm.ram[0x7809];
-                assert!(
-                    ws <= 3,
-                    "weather_state should be 0-3, got {}",
-                    ws
-                );
+                assert!(ws <= 3, "weather_state should be 0-3, got {}", ws);
                 return; // test passed
             }
             if frames >= 50 {
@@ -621,10 +614,7 @@ fn test_living_map_weather_cycles() {
 
     // The weather might not have changed (random), but timer should have decremented
     // If it did change, we already returned. If not, the timer should be lower.
-    assert!(
-        frames > 1,
-        "should have completed multiple frames"
-    );
+    assert!(frames > 1, "should have completed multiple frames");
 }
 
 #[test]
@@ -718,16 +708,8 @@ fn test_living_map_snow_particles_exist() {
     for i in 0..32 {
         let x = vm.ram[0x7050 + i * 2];
         let y = vm.ram[0x7050 + i * 2 + 1];
-        assert!(
-            x < 256,
-            "snow particle {} x should be < 256, got {}",
-            i, x
-        );
-        assert!(
-            y < 256,
-            "snow particle {} y should be < 256, got {}",
-            i, y
-        );
+        assert!(x < 256, "snow particle {} x should be < 256, got {}", i, x);
+        assert!(y < 256, "snow particle {} y should be < 256, got {}", i, y);
     }
 
     assert!(!vm.halted, "program should not halt");

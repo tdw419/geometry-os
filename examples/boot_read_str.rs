@@ -24,7 +24,8 @@ fn main() {
         initramfs.as_deref(),
         256,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Read the panic string at VA 0xC1408AC8 (from a1 in the panic)
     let va = 0xC1408AC8u64;
@@ -45,7 +46,7 @@ fn main() {
         "VFS: Cannot open",
         "init",
     ];
-    
+
     // Read from the kernel .rodata section (PA 0x00D0xxxx range)
     for offset in (0x00C00000..0x01400000).step_by(0x1000) {
         let mut buf = [0u8; 256];
