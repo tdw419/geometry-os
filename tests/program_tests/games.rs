@@ -734,6 +734,106 @@ fn test_infinite_map_pxpk_day_night_tint() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_sky_gradient() {
+    // The sky gradient paints the top 16 rows with phase-dependent colors.
+    // Dawn: blue-purple→orange, Day: blue→light-blue,
+    // Dusk: dark-purple→deep-orange, Night: near-black→dark-navy.
+    // Verify: (1) top 16 rows are dominated by sky colors, not terrain.
+    //         (2) sky color changes across phases.
+    //         (3) bottom rows (below sky) are NOT overwritten by sky.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+
+    // Frame 1: dawn phase (fc=1, phase=0). Sky should be blue-purple top, orange horizon.
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+    let screen_dawn = vm.screen.to_vec();
+
+    // Top row (y=0) should be the dawn top color: 0x101040 (deep blue-purple)
+    let top_pixel_dawn = screen_dawn[0]; // (x=0, y=0)
+    let top_r = ((top_pixel_dawn >> 16) & 0xFF) as u32;
+    let top_g = ((top_pixel_dawn >> 8) & 0xFF) as u32;
+    let top_b = (top_pixel_dawn & 0xFF) as u32;
+    assert!(
+        top_b > top_r && top_b > top_g,
+        "dawn sky top should be blue-dominant, got R={} G={} B={}",
+        top_r, top_g, top_b
+    );
+
+    // Row 12-15 (band 3) should be orange horizon: 0xCC6600
+    let horizon_pixel_dawn = screen_dawn[12 * 256 + 0]; // (x=0, y=12)
+    let horiz_r = ((horizon_pixel_dawn >> 16) & 0xFF) as u32;
+    let _horiz_g = ((horizon_pixel_dawn >> 8) & 0xFF) as u32;
+    assert!(
+        horiz_r > 100,
+        "dawn horizon band should have significant red, got R={}",
+        horiz_r
+    );
+
+    // Sky band (rows 0-15) should be uniform per band (all same color across X)
+    let band0_color = screen_dawn[0]; // (0, 0)
+    let band0_color_end = screen_dawn[223]; // (223, 0) -- before minimap
+    assert_eq!(
+        band0_color, band0_color_end,
+        "sky band 0 should be uniform across x"
+    );
+
+    // Below sky (row 16+) should NOT be sky-colored (terrain should show)
+    let terrain_pixel = screen_dawn[16 * 256 + 128]; // (128, 16)
+    assert_ne!(
+        terrain_pixel, top_pixel_dawn,
+        "row 16 should be terrain, not sky"
+    );
+
+    // Now advance to night phase (fc >= 193, phase 3)
+    // fc increments by 1 each frame. Frame 1 had fc=1. We need fc ~193.
+    // Advance 192 more frames.
+    for _ in 0..192 {
+        vm.frame_ready = false;
+        let _ = step_until_frame(&mut vm, 1_000_000);
+    }
+    assert!(vm.frame_ready);
+    let screen_night = vm.screen.to_vec();
+
+    // Night top should be very dark: 0x050510
+    let top_pixel_night = screen_night[0];
+    assert_ne!(
+        top_pixel_dawn, top_pixel_night,
+        "dawn and night sky top should differ"
+    );
+
+    let night_r = ((top_pixel_night >> 16) & 0xFF) as u32;
+    let night_g = ((top_pixel_night >> 8) & 0xFF) as u32;
+    let night_b = (top_pixel_night & 0xFF) as u32;
+    // Night top is 0x050510 -- all channels very low
+    assert!(
+        night_r < 30 && night_g < 30 && night_b < 30,
+        "night sky top should be very dark, got R={} G={} B={}",
+        night_r, night_g, night_b
+    );
+
+    // Verify gradient exists within a single frame:
+    // Band 0 (row 0) should differ from band 3 (row 12) during dawn.
+    // We re-run dawn to check.
+    let mut vm2 = infinite_map_pxpk_vm();
+    vm2.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm2, 1_000_000);
+    let screen_dawn2 = vm2.screen.to_vec();
+
+    let band0 = screen_dawn2[0];       // row 0
+    let band3 = screen_dawn2[12 * 256]; // row 12
+    assert_ne!(
+        band0, band3,
+        "sky gradient bands should differ within a single frame"
+    );
+
+    eprintln!(
+        "Sky gradient: dawn top={:06X}, dawn horizon={:06X}, night top={:06X}",
+        top_pixel_dawn, horizon_pixel_dawn, top_pixel_night
+    );
+}
+
+#[test]
 fn test_infinite_map_pxpk_water_animates() {
     // Water tiles should shimmer -- accent color changes between frames
     // due to (frame_counter & 0xF) cycling XOR on the accent.

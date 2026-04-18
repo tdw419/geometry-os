@@ -208,7 +208,7 @@ These are the next batch of work for the chain. Each should produce a working .a
 - [x] Mini-map overlay for infinite_map_pxpk.asm -- render a 32x32 pixel thumbnail of the surrounding terrain in the top-right corner, updated every 4 frames, using the same hash functions at reduced resolution.
 - [x] Procedural tree sprites on terrain -- detect grass/forest biomes in infinite_map_pxpk.asm and overlay small tree shapes (brown trunk + green canopy) at deterministic hash-derived positions.
 - [x] Water reflection animation -- water tiles mirror the color of the tile above them with a slight blue tint, creating a reflection effect that varies with frame_counter for ripple motion.
-- [ ] Day/night cycle with sky gradient -- extend the existing day/night tint system to also change the top 16 rows of the screen to a sky color that shifts from blue to orange to dark blue over the cycle.
+- [x] Day/night cycle with sky gradient -- extend the existing day/night tint system to also change the top 16 rows of the screen to a sky color that shifts from blue to orange to dark blue over the cycle.
 - [ ] Terrain elevation contour lines -- add subtle dark lines at elevation boundaries (where fine_hash top bits change by more than 2 between adjacent tiles), creating a topographic map effect.
 - [ ] Particle system demo program -- new programs/particles.asm: spawn 100 colored pixels that drift, bounce off screen edges, and fade over time. Proves the FRAME + pixel write performance for real-time effects.
 

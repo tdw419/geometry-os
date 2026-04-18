@@ -37,6 +37,10 @@
 ;      Deterministic placement via fine_hash bits: forest ~50%, grass ~25%.
 ;      Tree shape: 3x2 green canopy + 1x1 brown trunk (2 RECTF calls).
 ;      Skips water tiles. RAM[0x7806] = biome_type per tile.
+;  14. Sky gradient: top 16 rows show a 4-band color gradient that shifts
+;      with the day/night cycle. Dawn=blue-purple→orange, Day=blue→light-blue,
+;      Dusk=dark-purple→deep-orange, Night=near-black→dark-navy.
+;      4 bands of 4 rows each, blended via ADD+SHR packed-RGB operations.
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -991,6 +995,78 @@ next_row:
     JMP render_y
 
 frame_end:
+
+; ===== Sky Gradient (top 16 rows) =====
+; 4-band gradient from top_sky to horizon_sky, drawn over terrain.
+; Colors shift per phase: dawn=blue-purple→orange, day=blue→light-blue,
+; dusk=dark-purple→deep-orange, night=near-black→dark-blue.
+; Bands: [0-3]=top, [4-7]=top+(horizon>>2), [8-11]=(top+horizon)>>1, [12-15]=horizon
+LOAD r17, r13           ; r17 = frame_counter
+LDI r18, 0xFF
+AND r17, r18
+LDI r18, 6
+SHR r17, r18            ; r17 = phase (0-3)
+
+JZ r17, sky_dawn
+LDI r18, 1
+SUB r17, r18
+JZ r17, sky_day
+LDI r18, 1
+SUB r17, r18
+JZ r17, sky_dusk
+
+sky_night:
+  LDI r5, 0x050510       ; top: near-black with hint of blue
+  LDI r6, 0x0A0A30       ; horizon: dark navy
+  JMP sky_draw
+
+sky_dawn:
+  LDI r5, 0x101040       ; top: deep blue-purple
+  LDI r6, 0xCC6600       ; horizon: warm orange
+  JMP sky_draw
+
+sky_day:
+  LDI r5, 0x1844AA       ; top: medium blue
+  LDI r6, 0x5599DD       ; horizon: light sky blue
+  JMP sky_draw
+
+sky_dusk:
+  LDI r5, 0x0C0820       ; top: dark purple
+  LDI r6, 0xDD4400       ; horizon: deep orange-red
+  JMP sky_draw
+
+sky_draw:
+; Band 0 (rows 0-3): top color
+LDI r3, 0
+LDI r4, 0
+LDI r18, 256
+LDI r19, 4
+RECTF r3, r4, r18, r19, r5
+
+; Band 1 (rows 4-7): top + (horizon >> 2) = 75% top + 25% horizon
+MOV r17, r6
+LDI r18, 2
+SHR r17, r18            ; horizon >> 2
+ADD r17, r5             ; top + (horizon >> 2)
+LDI r18, 256            ; width
+LDI r4, 4
+RECTF r3, r4, r18, r19, r17
+
+; Band 2 (rows 8-11): (top >> 1) + (horizon >> 1) = 50/50 blend
+MOV r17, r5
+LDI r18, 1
+SHR r17, r18            ; top >> 1
+MOV r20, r6
+SHR r20, r18            ; horizon >> 1
+ADD r17, r20            ; mid blend
+LDI r18, 256            ; width
+LDI r4, 8
+RECTF r3, r4, r18, r19, r17
+
+; Band 3 (rows 12-15): horizon color
+LDI r18, 256            ; width
+LDI r4, 12
+RECTF r3, r4, r18, r19, r6
 
 ; ===== Player Cursor =====
 LOAD r17, r13
