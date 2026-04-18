@@ -1,115 +1,42 @@
-/// Run for 50M instructions, check for ECALLs and timer interrupts.
+//! Run the actual boot_linux() with a high instruction count to see how far we get.
+//! Uses the full M-mode trap handling from boot.rs.
+//! Run: cargo run --example boot_long_run
+
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::Privilege;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
-    let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
-    let kernel_image = std::fs::read(kernel_path).expect("kernel");
-    let initramfs = std::fs::read(initramfs_path).ok();
-    let bootargs = "console=ttyS0 earlycon=sbi panic=1";
+    let ir_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
+    let kernel_data = std::fs::read(kernel_path).expect("kernel");
+    let initramfs_data = std::path::Path::new(ir_path).exists()
+        .then(|| std::fs::read(ir_path).unwrap());
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
+    eprintln!("[long_run] Starting boot with 5M instruction limit...");
+    let result = RiscvVm::boot_linux(
+        &kernel_data,
+        initramfs_data.as_deref(),
+        512,
+        5_000_000,
+        "console=ttyS0 earlycon=sbi loglevel=7",
+    );
 
-    let max = 50_000_000u64;
-    let mut count: u64 = 0;
-    let fw_addr_u32 = fw_addr as u32;
-    let mut last_satp: u32 = vm.cpu.csr.satp;
-    let mut trap_count: u64 = 0;
-    let mut sbi_m_count: u64 = 0;
-    let mut interrupt_count: u64 = 0;
-    let mut report_interval = 5_000_000u64;
-    let mut next_report = report_interval;
-
-    while count < max {
-        if vm.bus.sbi.shutdown_requested {
-            println!("[boot] Shutdown at count={}", count);
-            break;
-        }
-
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
-            let mcause = vm.cpu.csr.mcause;
-            let cause_code = mcause & !(1u32 << 31);
-            if cause_code == 11 {
-                sbi_m_count += 1;
-                let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
-                );
-                if let Some((a0, a1)) = result {
-                    vm.cpu.x[10] = a0;
-                    vm.cpu.x[11] = a1;
-                }
+    match result {
+        Ok((vm, stats)) => {
+            let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+            eprintln!("\n[long_run] Boot completed: {} instructions", stats.instructions);
+            eprintln!("[long_run] PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
+            eprintln!("[long_run] DTB addr=0x{:08X}", stats.dtb_addr);
+            if !sbi_str.is_empty() {
+                eprintln!("\n[long_run] Console output ({} chars):", sbi_str.len());
+                // Print last 3000 chars
+                let start = sbi_str.len().saturating_sub(3000);
+                eprintln!("{}", &sbi_str[start..]);
             } else {
-                let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
-                if mpp != 3 {
-                    let stvec = vm.cpu.csr.stvec & !0x3u32;
-                    if stvec != 0 {
-                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
-                        vm.cpu.csr.scause = mcause;
-                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
-                        let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (spp << 5);
-                        let sie = (vm.cpu.csr.mstatus >> 1) & 1;
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
-                        vm.cpu.csr.mstatus &= !(1 << 1);
-                        vm.cpu.pc = stvec;
-                        vm.cpu.privilege = Privilege::Supervisor;
-                        vm.cpu.tlb.flush_all();
-                        trap_count += 1;
-                        count += 1;
-                        continue;
-                    }
-                }
+                eprintln!("[long_run] No console output!");
             }
-            vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
         }
-
-        let prev_ecall = vm.cpu.ecall_count;
-        vm.step();
-        if vm.cpu.ecall_count > prev_ecall {
-            println!("[boot] ECALL #{} at count={} PC_before=0x{:08X} a7=0x{:X} priv={:?}",
-                vm.cpu.ecall_count, count,
-                vm.cpu.last_step.as_ref().map(|ls| ls.pc).unwrap_or(0),
-                vm.cpu.x[17], vm.cpu.privilege);
+        Err(e) => {
+            eprintln!("[long_run] Boot error: {:?}", e);
         }
-
-        if vm.cpu.csr.satp != last_satp {
-            println!("[boot] SATP: 0x{:08X} -> 0x{:08X} at count={}", last_satp, vm.cpu.csr.satp, count);
-            last_satp = vm.cpu.csr.satp;
-        }
-
-        // Count S-mode timer interrupts (scause bit 31 set, cause 5 = timer)
-        if let Some(ref ls) = vm.cpu.last_step {
-            // Detect interrupt delivery by checking if PC jumped to stvec
-            // This is a rough heuristic
-        }
-
-        count += 1;
-        if count >= next_report {
-            println!("[boot] count={} PC=0x{:08X} ecall={} traps_m={} fw_trap={} uart={} sbi_out={}",
-                count, vm.cpu.pc, vm.cpu.ecall_count, sbi_m_count, trap_count,
-                vm.bus.uart.tx_buf.len(), vm.bus.sbi.console_output.len());
-            next_report += report_interval;
-        }
-    }
-
-    println!("\n[boot] FINAL: count={} ecall_count={} fw_traps={} uart={} sbi_out={}",
-        count, vm.cpu.ecall_count, trap_count, 
-        vm.bus.uart.tx_buf.len(), vm.bus.sbi.console_output.len());
-    
-    if !vm.bus.sbi.console_output.is_empty() {
-        let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
-        let preview: String = s.chars().take(3000).collect();
-        println!("\n[boot] SBI console output:\n{}", preview);
-    }
-    if !vm.bus.uart.tx_buf.is_empty() {
-        let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);
-        let preview: String = s.chars().take(3000).collect();
-        println!("\n[boot] UART output:\n{}", preview);
     }
 }
