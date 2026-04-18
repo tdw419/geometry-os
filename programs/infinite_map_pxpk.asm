@@ -11,6 +11,8 @@
 ;   5. Day/night cycle: frame_counter-driven 4-phase tint (dawn/day/dusk/night)
 ;      Uses frac>>3 for safe packed-RGB addition without per-channel overflow
 ;   6. Net result: ~49-56 instructions/tile (flat=49, non-flat avg ~56)
+;   7. Height-based shading from fine_hash top bits (0-7 * 0x030303 per tile)
+;   8. Animated water shimmer: center pattern + frame_counter cycling accent
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -460,6 +462,7 @@ render_y:
     LDI r18, 25
     SHR r29, r18
     ANDI r29, 3           ; r29 = pattern_type (0-3) -- saved from clobber
+    MOV r30, r17          ; save biome_type for water/height checks
 
     ; ---- TABLE LOOKUP: biome color ----
     MOV r20, r24
@@ -477,6 +480,23 @@ render_y:
     MUL r21, r18
     XOR r6, r21           ; r6 = fine_hash (THE SEED, 32 bits of goodness)
 
+    ; ---- Height-based shading (skip for water biomes 0,1) ----
+    ; Elevation from fine_hash top bits: range 0-7, shade 0x030303 per step
+    ; Applied before R-variation and tint. Max +21/channel, safe for Snow biome.
+    MOV r18, r30           ; biome_type
+    JZ r18, height_skip    ; biome 0 = water, skip
+    LDI r31, 1
+    SUB r18, r31
+    JZ r18, height_skip    ; biome 1 = water, skip
+    MOV r18, r6            ; fine_hash
+    LDI r31, 28
+    SHR r18, r31           ; top 4 bits (0-15)
+    ANDI r18, 0x7          ; clamp to 0-7
+    LDI r31, 0x030303
+    MUL r18, r31           ; height_shade = 0..0x151515
+    ADD r17, r18           ; base_color += height_shade
+height_skip:
+
     ; ---- R-channel variation: nibble 0 of fine_hash ----
     MOV r18, r6
     ANDI r18, 0xF          ; r18 = seed & 0xF (nibble 0: R variation index)
@@ -492,6 +512,24 @@ render_y:
     SHR r19, r18
     ANDI r19, 0x1F1F1F     ; 5 bits per channel mask
     XOR r19, r17          ; r19 = accent color (inherits tint via XOR of tinted base)
+
+    ; ---- Water shimmer (animated accent cycling for water biomes 0,1) ----
+    ; Override pattern to center + XOR accent with (frame_counter & 0xF) << 4
+    ; This gives 16 distinct shimmer phases cycling blue-channel accent each frame.
+    MOV r18, r30           ; biome_type
+    JZ r18, water_shimmer  ; biome 0
+    LDI r31, 1
+    SUB r18, r31
+    JZ r18, water_shimmer  ; biome 1
+    JMP no_shimmer
+water_shimmer:
+    LDI r29, 1             ; force center pattern for water
+    LOAD r18, r13          ; frame_counter
+    ANDI r18, 0xF          ; 0-15 shimmer phase
+    LDI r31, 16
+    MUL r18, r31           ; << 4 (blue-channel cycling offset)
+    XOR r19, r18           ; accent ^= shimmer
+no_shimmer:
 
     ; ---- Pre-load half-width constant for non-flat patterns ----
     LDI r20, 2            ; shared by center/horiz/vert patterns

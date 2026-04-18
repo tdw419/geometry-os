@@ -733,6 +733,124 @@ fn test_infinite_map_pxpk_day_night_tint() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_water_animates() {
+    // Water tiles should shimmer -- accent color changes between frames
+    // due to (frame_counter & 0xF) cycling XOR on the accent.
+    // Water is forced to center pattern (2x2 bright center on 4x4 base).
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+
+    // Frame 0 (fc=1 after increment, tint=0 since frac_shr=0)
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+    let screen_f0 = vm.screen.to_vec();
+
+    // Frame 1 (fc=2, tint=0 still) -- only shimmer differs
+    vm.frame_ready = false;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+    let screen_f1 = vm.screen.to_vec();
+
+    // Find water pixels (blue-dominant, low red) and check they changed
+    let mut water_total = 0usize;
+    let mut water_changed = 0usize;
+    for i in 0..256 * 256 {
+        let c0 = screen_f0[i];
+        let r0 = ((c0 >> 16) & 0xFF) as u32;
+        let b0 = (c0 & 0xFF) as u32;
+        // Water: blue-dominant, low red
+        if r0 < 30 && b0 > 50 {
+            water_total += 1;
+            if screen_f0[i] != screen_f1[i] {
+                water_changed += 1;
+            }
+        }
+    }
+
+    eprintln!(
+        "Water shimmer: {}/{} pixels changed between frames 0 and 1",
+        water_changed, water_total
+    );
+    assert!(
+        water_total > 50,
+        "should find water pixels, got {}",
+        water_total
+    );
+    // Water center pattern is 2x2 out of 4x4 = 4/16 = 25% of water pixels should change
+    // Some tiles may happen to have (fc & 0xF) XOR produce same accent, so allow some slack
+    assert!(
+        water_changed > water_total / 8,
+        "at least ~12.5% of water pixels should shimmer, got {}/{}",
+        water_changed,
+        water_total
+    );
+}
+
+#[test]
+fn test_infinite_map_pxpk_height_shading() {
+    // Height shading adds 0x030303 * (fine_hash >> 28 & 7) to non-water tiles.
+    // R-variation only affects blue channel (small ±12 values).
+    // Height shading adds equal offset to R, G, B → green channel variation
+    // across same-biome tiles proves height shading is active.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    // Frame 0: tint=0, so all variation comes from biome + height + R-variation (blue only).
+    // Group tiles by approximate biome (rounded R,G) and check green-channel spread.
+    let mut biome_groups: std::collections::BTreeMap<(u8, u8), Vec<u8>> =
+        std::collections::BTreeMap::new();
+
+    for ty in (0..256).step_by(4) {
+        for tx in (0..256).step_by(4) {
+            let idx = ty * 256 + tx;
+            let color = vm.screen[idx];
+            if color == 0 {
+                continue;
+            }
+            let r = ((color >> 16) & 0xFF) as u8;
+            let g = ((color >> 8) & 0xFF) as u8;
+            let b = (color & 0xFF) as u8;
+
+            // Skip water (blue-dominant, low R)
+            if r < 30 && b > 100 {
+                continue;
+            }
+
+            // Biome key = rounded (R, G) to group same-biome tiles
+            let biome_key = (r / 8 * 8, g / 8 * 8);
+            biome_groups.entry(biome_key).or_default().push(g);
+        }
+    }
+
+    // Check that biome groups have green-channel variation from height shading
+    let mut groups_with_height = 0;
+    for (_biome, greens) in &biome_groups {
+        if greens.len() < 5 {
+            continue;
+        }
+        let min_g = *greens.iter().min().unwrap();
+        let max_g = *greens.iter().max().unwrap();
+        let range = max_g - min_g;
+        // Height shading adds 0-21 to green. Range > 4 indicates height variation.
+        if range > 4 {
+            groups_with_height += 1;
+        }
+    }
+
+    eprintln!(
+        "Height shading: {} biome groups show green variation > 4",
+        groups_with_height
+    );
+    assert!(
+        groups_with_height >= 3,
+        "at least 3 biome groups should show height-based green variation, got {}",
+        groups_with_height
+    );
+}
+
+#[test]
 fn test_infinite_map_runs_and_renders() {
     // Requirement: the program runs to completion of a frame and renders non-black pixels.
     let mut vm = infinite_map_vm();
