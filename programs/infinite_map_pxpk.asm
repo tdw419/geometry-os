@@ -24,6 +24,11 @@
 ;      Blend mode stored in RAM[0x7803], x_hash cached in RAM[0x7805].
 ;      Neighbor y_hash cached in RAM[0x7804] for per-tile Y-blend.
 ;      Corner tiles get sequential X+Y blend (bilinear-like).
+;  11. 32x32 minimap overlay: top-right corner (x=224..255, y=0..31).
+;      Covers 64-tile viewport at half resolution (1 pixel = 2 tiles).
+;      Pixel cache in RAM[0x7100..0x74FF]. Biome hashes recomputed every
+;      4 frames; repaint from cache every frame. Dimmed 50% brightness.
+;      Border (0xAAAAAA) and white center dot drawn every frame.
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -34,6 +39,7 @@
 ;   RAM[0x7803] = y_blend_mode (0=none, 1=top 50/50, 2=top 75/25, 3=bottom 75/25, 4=bottom 50/50)
 ;   RAM[0x7804] = y_neighbor_hash (precomputed per row for Y-blend)
 ;   RAM[0x7805] = saved x_hash (preserved across X-blend for Y-blend reuse)
+;   RAM[0x7100-0x74FF] = 32x32 minimap pixel cache (1024 dimmed biome colors)
 ;   RAM[0xFFB]  = key bitmask
 ;
 ; Seed expansion architecture:
@@ -888,90 +894,136 @@ RECTF r3, r4, r19, r18, r17
 LDI r3, 128
 RECTF r3, r4, r19, r18, r17
 
-; ===== Minimap Overlay (16x16) =====
-LDI r1, 0
+; ===== 32x32 Minimap Overlay (top-right, updated every 4 frames) =====
+; Covers 64-tile viewport at half resolution (1 pixel = 2 tiles).
+; Position: screen x=224..255, y=0..31.
+; Dimmed biome colors, border, and player center dot.
+; Pixel cache in RAM[0x7100..0x74FF] (32*32 = 1024 words).
+; Only recomputes biome hashes every 4 frames; repaints from cache every frame.
+
+; --- Recompute biome hashes every 4 frames (always on frame 1) ---
+LOAD r17, r13           ; r17 = frame_counter
+LDI r18, 1
+SUB r17, r18            ; r17 = frame_counter - 1 (so first frame fc=1 gives 0)
+LDI r18, 3
+AND r17, r18            ; r17 = (fc-1) & 3
+JNZ r17, mm_repaint     ; skip recompute if not frame 1,5,9,...
+
+; --- Compute 32x32 terrain into cache ---
+LDI r1, 0               ; my = 0
+LDI r20, 0x7100         ; cache base
 
 mm_y:
-  LDI r2, 0
+  LDI r2, 0             ; mx = 0
   mm_x:
+    ; World coords: each pixel covers 2 tiles
     MOV r3, r2
-    LDI r18, 4
+    LDI r18, 2
     MUL r3, r18
-    ADD r3, r14
+    ADD r3, r14          ; r3 = camera_x + mx*2
 
     MOV r4, r1
-    LDI r18, 4
+    LDI r18, 2
     MUL r4, r18
-    ADD r4, r15
+    ADD r4, r15          ; r4 = camera_y + my*2
 
-    ; Coarse hash for biome
+    ; Coarse hash for biome (same hash as main terrain)
     MOV r5, r3
     LDI r18, 3
-    SHR r5, r18
+    SHR r5, r18          ; world_x >> 3
     LDI r18, 99001
-    MUL r5, r18
+    MUL r5, r18          ; x_hash
 
     MOV r6, r4
     LDI r18, 3
-    SHR r6, r18
+    SHR r6, r18          ; world_y >> 3
     LDI r18, 79007
-    MUL r6, r18
+    MUL r6, r18          ; y_hash
 
-    XOR r5, r6
+    XOR r5, r6           ; coarse_hash
     LDI r18, 1103515245
-    MUL r5, r18
+    MUL r5, r18          ; mixed_hash
     LDI r18, 27
-    SHR r5, r18          ; biome 0..31
+    SHR r5, r18          ; biome index (0..31)
 
-    ; Dimmed minimap lookup from same table
+    ; Lookup biome color and dim to 50%
     MOV r18, r24
     ADD r18, r5
-    LOAD r17, r18
-
-    ; Dim the color (shift right 1 bit = 50% brightness)
+    LOAD r17, r18        ; r17 = biome base color
     LDI r18, 1
-    SHR r17, r18
+    SHR r17, r18         ; dim to 50% brightness
 
-    ; Screen pos: x = 240 + mx, y = my
-    MOV r3, r2
-    LDI r18, 240
-    ADD r3, r18
-    PSET r3, r1, r17
+    ; Store to cache
+    STORE r20, r17
+    ADD r20, r7          ; cache ptr++
 
-    ADD r2, r7
-    LDI r18, 16
+    ADD r2, r7           ; mx++
+    LDI r18, 32
     MOV r19, r2
     SUB r19, r18
     JZ r19, mm_next_row
     JMP mm_x
 
 mm_next_row:
-    ADD r1, r7
-    LDI r18, 16
+    ADD r1, r7           ; my++
+    LDI r18, 32
+    MOV r19, r1
+    SUB r19, r18
+    JZ r19, mm_repaint
+    JMP mm_y
+
+; --- Repaint minimap from cache to screen (every frame) ---
+mm_repaint:
+LDI r1, 0               ; my = 0
+LDI r20, 0x7100         ; cache base
+
+mm_pnt_y:
+  LDI r2, 0             ; mx = 0
+  mm_pnt_x:
+    ; Load cached color
+    LOAD r17, r20
+    ADD r20, r7
+
+    ; Screen position: x = 224 + mx, y = my
+    MOV r3, r2
+    LDI r18, 224
+    ADD r3, r18
+    PSET r3, r1, r17
+
+    ADD r2, r7           ; mx++
+    LDI r18, 32
+    MOV r19, r2
+    SUB r19, r18
+    JZ r19, mm_pnt_next
+    JMP mm_pnt_x
+
+mm_pnt_next:
+    ADD r1, r7           ; my++
+    LDI r18, 32
     MOV r19, r1
     SUB r19, r18
     JZ r19, mm_border
-    JMP mm_y
+    JMP mm_pnt_y
 
 ; --- Minimap border ---
 mm_border:
 LDI r17, 0xAAAAAA
 LDI r18, 1
-LDI r19, 16
+LDI r19, 32
 
-LDI r3, 240
+LDI r3, 224
 LDI r4, 0
-RECTF r3, r4, r19, r18, r17
-LDI r4, 15
-RECTF r3, r4, r19, r18, r17
+RECTF r3, r4, r19, r18, r17    ; top edge
+LDI r4, 31
+RECTF r3, r4, r19, r18, r17    ; bottom edge
 LDI r4, 0
-RECTF r3, r4, r18, r19, r17
+RECTF r3, r4, r18, r19, r17    ; left edge
 LDI r3, 255
-RECTF r3, r4, r18, r19, r17
+RECTF r3, r4, r18, r19, r17    ; right edge
 
-; --- Player dot ---
-LDI r3, 248
-LDI r4, 8
+; --- Player center dot ---
+LDI r3, 240
+LDI r4, 16
 LDI r17, 0xFFFFFF
 PSET r3, r4, r17
 

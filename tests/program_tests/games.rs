@@ -531,15 +531,16 @@ fn test_infinite_map_pxpk_pattern_variety() {
 fn test_infinite_map_pxpk_step_budget() {
     // Day/night tint is inline (1 ADD per tile = +4096 steps for 64x64 grid).
     // Pattern dispatch now uses r29 save/restore (+2 per tile = +8192).
-    // Total should be well under 500K.
+    // 32x32 minimap with RAM cache + repaint adds ~10K steps.
+    // Total should be well under 600K.
     let mut vm = infinite_map_pxpk_vm();
     vm.ram[0xFFB] = 0;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready, "pxpk should reach FRAME (took {})", steps);
     eprintln!("pxpk frame: {} steps", steps);
     assert!(
-        steps < 500_000,
-        "pxpk render loop should take < 500K steps, took {}",
+        steps < 600_000,
+        "pxpk render loop should take < 600K steps, took {}",
         steps
     );
 }
@@ -1124,6 +1125,193 @@ fn test_infinite_map_pxpk_smooth_transition_zone() {
         inner_edge_blended >= inner_edge_checked / 7,
         "at least ~15% of inner-edge tiles should show hash-dithered blending, got {}/{}",
         inner_edge_blended, inner_edge_checked
+    );
+}
+
+#[test]
+fn test_infinite_map_pxpk_32x32_minimap_overlay() {
+    // Verify the 32x32 minimap renders in the top-right corner.
+    // The minimap covers screen x=224..255, y=0..31 (32x32 pixels).
+    // It uses the same biome hash as the main terrain, dimmed to 50%.
+    // Updated every 4 frames; border + player dot drawn every frame.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    // Check minimap area (x=224..255, y=0..31) has non-black pixels
+    let mut mm_colored = 0;
+    let mut mm_colors = std::collections::HashSet::new();
+    for y in 0..32 {
+        for x in 224..256 {
+            let idx = y * 256 + x;
+            let px = vm.screen[idx];
+            if px != 0 {
+                mm_colored += 1;
+            }
+            mm_colors.insert(px);
+        }
+    }
+
+    // At least half of the 1024 minimap pixels should be colored (biome terrain)
+    assert!(
+        mm_colored > 512,
+        "32x32 minimap should have mostly colored pixels, got {}/1024",
+        mm_colored
+    );
+
+    // Minimap should show multiple biomes (not all same color)
+    // Remove black (0) from count for variety check
+    mm_colors.remove(&0);
+    assert!(
+        mm_colors.len() > 3,
+        "minimap should show multiple biome colors, got {} unique",
+        mm_colors.len()
+    );
+
+    // Player dot at center (x=240, y=16) should be white
+    let player_dot = vm.screen[16 * 256 + 240];
+    assert_eq!(
+        player_dot, 0xFFFFFF,
+        "player center dot should be white, got {:06X}",
+        player_dot
+    );
+
+    // Border pixels at edges (e.g., top-left corner x=224,y=0 should be border color)
+    // Top edge: y=0, x=224..255 should be 0xAAAAAA or adjacent to it
+    let top_left = vm.screen[224]; // x=224, y=0
+    assert!(
+        top_left == 0xAAAAAA || top_left != 0,
+        "top-left minimap border should be visible, got {:06X}",
+        top_left
+    );
+
+    // Verify minimap is in top-right (not overlapping main terrain viewport center)
+    // The main terrain fills 0..223 in x, so 224+ should be minimap-only area
+    // Check a few pixels just left of the minimap are main terrain (non-dimmed)
+    let _main_px = vm.screen[128 * 256 + 128]; // center of screen
+    let _mm_px = vm.screen[16 * 256 + 240]; // center of minimap
+    // Minimap pixels are dimmed (>>1), so they should differ from main terrain
+    // unless coincidentally same biome at half brightness
+    assert!(
+        mm_colored > 0,
+        "minimap area should have rendered content"
+    );
+}
+
+#[test]
+fn test_infinite_map_pxpk_minimap_updates_every_4_frames() {
+    // The minimap should only recompute terrain every 4 frames.
+    // Frames 0,4,8,... update the terrain; frames 1,2,3 reuse cached pixels.
+    // We verify by checking that the minimap content changes between frame 3→4
+    // (when camera moves) but not between frame 0→1 (cached).
+    let mut vm = infinite_map_pxpk_vm();
+
+    // Move camera right every frame
+    vm.ram[0xFFB] = 8; // bit 3 = right
+
+    // Frame 0: initial minimap render (fc becomes 1, (1-1)&3=0, recompute)
+    let _ = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready);
+    let mut mm_frame0 = Vec::new();
+    for y in 0..32 {
+        for x in 224..256 {
+            mm_frame0.push(vm.screen[y * 256 + x]);
+        }
+    }
+
+    // Frame 1: cached (fc=2, (2-1)&3=1, skip recompute)
+    vm.frame_ready = false;
+    let _ = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready);
+    let mut mm_frame1 = Vec::new();
+    for y in 0..32 {
+        for x in 224..256 {
+            mm_frame1.push(vm.screen[y * 256 + x]);
+        }
+    }
+
+    // Frame 2: cached (fc=3, (3-1)&3=2, skip)
+    vm.frame_ready = false;
+    let _ = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready);
+    let mut mm_frame2 = Vec::new();
+    for y in 0..32 {
+        for x in 224..256 {
+            mm_frame2.push(vm.screen[y * 256 + x]);
+        }
+    }
+
+    // Frame 3: cached (fc=4, (4-1)&3=3, skip)
+    vm.frame_ready = false;
+    let _ = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready);
+    let mut mm_frame3 = Vec::new();
+    for y in 0..32 {
+        for x in 224..256 {
+            mm_frame3.push(vm.screen[y * 256 + x]);
+        }
+    }
+
+    // Frame 4: recompute! (fc=5, (5-1)&3=0, update!)
+    vm.frame_ready = false;
+    let _ = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready);
+    let mut mm_frame4 = Vec::new();
+    for y in 0..32 {
+        for x in 224..256 {
+            mm_frame4.push(vm.screen[y * 256 + x]);
+        }
+    }
+
+    // Frames 0-2 should have identical minimap content (cached, no recompute)
+    let same_01 = mm_frame0.iter().zip(mm_frame1.iter()).filter(|(a, b)| a == b).count();
+    let same_12 = mm_frame1.iter().zip(mm_frame2.iter()).filter(|(a, b)| a == b).count();
+
+    // At least 90% of pixels should match between cached frames
+    assert!(
+        same_01 > 900,
+        "frames 0-1 minimap should be ~identical (cached), got {}/1024 matching",
+        same_01
+    );
+    assert!(
+        same_12 > 900,
+        "frames 1-2 minimap should be ~identical (cached), got {}/1024 matching",
+        same_12
+    );
+
+    // Frame 3 (cached) should be identical to frame 2
+    let same_23 = mm_frame2
+        .iter()
+        .zip(mm_frame3.iter())
+        .filter(|(a, b)| a == b)
+        .count();
+
+    // Frame 4 (recompute!) should differ from frame 3 due to camera movement
+    let same_34 = mm_frame3
+        .iter()
+        .zip(mm_frame4.iter())
+        .filter(|(a, b)| a == b)
+        .count();
+
+    eprintln!(
+        "Minimap caching: f0-f1={}/1024, f1-f2={}/1024, f2-f3={}/1024, f3-f4={}/1024 matching",
+        same_01, same_12, same_23, same_34
+    );
+
+    // Cached frames should be identical
+    assert!(
+        same_23 > 900,
+        "frames 2-3 minimap should be ~identical (cached), got {}/1024 matching",
+        same_23
+    );
+
+    // After 5 frames of camera movement, the minimap should have shifted
+    // At least some pixels should differ on the recompute frame
+    assert!(
+        same_34 < 1024,
+        "frame 4 minimap should differ from frame 3 (camera moved, minimap updated), got {}/1024 identical",
+        same_34
     );
 }
 

@@ -205,7 +205,7 @@ These are the next batch of work for the chain. Each should produce a working .a
 
 - [x] Biome transition blending for infinite_map_pxpk.asm -- smooth color gradients at biome boundaries using hash interpolation between neighboring biomes, eliminating hard checkerboard edges. Target: ~30-40K step budget impact within the 500K limit.
 - [x] Living weather system in living_map.asm -- add rain particles (blue dots falling from sky), lightning flashes (white screen flash at random intervals), and snow (white dots drifting down) driven by a weather_state variable cycling through clear/rain/storm/snow.
-- [ ] Mini-map overlay for infinite_map_pxpk.asm -- render a 32x32 pixel thumbnail of the surrounding terrain in the top-right corner, updated every 4 frames, using the same hash functions at reduced resolution.
+- [x] Mini-map overlay for infinite_map_pxpk.asm -- render a 32x32 pixel thumbnail of the surrounding terrain in the top-right corner, updated every 4 frames, using the same hash functions at reduced resolution.
 - [ ] Procedural tree sprites on terrain -- detect grass/forest biomes in infinite_map_pxpk.asm and overlay small tree shapes (brown trunk + green canopy) at deterministic hash-derived positions.
 - [ ] Water reflection animation -- water tiles mirror the color of the tile above them with a slight blue tint, creating a reflection effect that varies with frame_counter for ripple motion.
 - [ ] Day/night cycle with sky gradient -- extend the existing day/night tint system to also change the top 16 rows of the screen to a sky color that shifts from blue to orange to dark blue over the cycle.
