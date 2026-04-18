@@ -8,7 +8,8 @@
 ;   2. Per-tile variation via MUL fine hash + nibble lookup
 ;   3. 4 pattern strategies from coarse hash: flat, center, horiz, vert
 ;   4. Accent color via XOR_CHAIN (Pixelpack strategy 0xC) from coarse hash
-;   5. Net result: ~49-56 instructions/tile (flat=49, non-flat avg ~56)
+;   5. Day/night cycle: frame_counter-driven 4-phase tint (dawn/day/dusk/night)
+;   6. Net result: ~49-56 instructions/tile (flat=49, non-flat avg ~56)
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -356,26 +357,59 @@ STORE r12, r15
 LDI r17, 0
 FILL r17
 
-; ===== Precompute day/night tint =====
-MOV r18, r14
-LDI r19, 4
-SHR r18, r19
-LDI r19, 0xF
-AND r18, r19
-LDI r19, 8
-CMP r18, r19
-BGE r0, pre_tint_warm
-LDI r19, 0x0808
-MUL r18, r19
-NEG r18
-MOV r23, r18
-JMP pre_tint_done
-pre_tint_warm:
+; ===== Precompute day/night tint (cyclic, frame_counter-driven) =====
+; Cycle period = 256 frames (~4.3s at 60fps). 4 phases of 64 frames each.
+;   Phase 0 (dawn):  frac 0..63, warm orange rises:  +frac * 0x030100
+;   Phase 1 (day):   frac 0..63, warm fades:         +(63-frac) * 0x030100
+;   Phase 2 (dusk):  frac 0..63, deep orange rises:  +frac * 0x050100
+;   Phase 3 (night): frac 0..63, cool darkness rises: -(frac * 0x030204)
+; r23 = tint offset added to every tile base color inline.
+LOAD r17, r13           ; r17 = frame_counter
+LDI r18, 0xFF
+AND r17, r18            ; t = frame & 0xFF (0..255)
+MOV r18, r17
+LDI r19, 6
+SHR r18, r19            ; phase = t >> 6 (0..3)
+LDI r19, 0x3F
+AND r17, r19            ; frac = t & 0x3F (0..63)
+
+; Dispatch on phase (0=dawn, 1=day, 2=dusk, 3=night)
+JZ r18, tint_dawn
+LDI r19, 1
 SUB r18, r19
-LDI r19, 0x080000
-MUL r18, r19
-MOV r23, r18
-pre_tint_done:
+JZ r18, tint_day
+LDI r19, 1
+SUB r18, r19
+JZ r18, tint_dusk
+
+tint_night:
+  LDI r18, 0x030204
+  MUL r17, r18
+  NEG r17
+  MOV r23, r17
+  JMP tint_done
+
+tint_dawn:
+  LDI r18, 0x030100
+  MUL r17, r18
+  MOV r23, r17
+  JMP tint_done
+
+tint_day:
+  LDI r18, 63
+  SUB r18, r17           ; 63 - frac (fade out dawn warmth)
+  LDI r19, 0x030100
+  MUL r18, r19
+  MOV r23, r18
+  JMP tint_done
+
+tint_dusk:
+  LDI r18, 0x050100
+  MUL r17, r18
+  MOV r23, r17
+  JMP tint_done
+
+tint_done:
 
 ; ===== Render Viewport =====
 ; r14 = camera_x, r15 = camera_y
