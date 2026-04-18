@@ -4,7 +4,7 @@ fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let kernel_image = fs::read(kernel_path).expect("kernel");
-    let initramfs = fs::read(initramfs_path).ok();
+    let initramfs = std::fs::read(initramfs_path).ok();
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
 
@@ -12,7 +12,7 @@ fn main() {
         &kernel_image,
         initramfs.as_deref(),
         512,
-        500_000,
+        10_000_000,
         bootargs,
     );
 

@@ -1130,8 +1130,13 @@ impl RiscvVm {
             if _same_pc_count > 0 && count.is_multiple_of(500_000) {
                 eprintln!(
                     "[boot] count={} PC=0x{:08X} priv={:?} mstatus=0x{:08X} same_pc={}",
-                    count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.mstatus, _same_pc_count
+                    count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.mstatus,                    _same_pc_count
                 );
+            }
+            if count.is_multiple_of(2_000_000) && count > 0 {
+                eprintln!("[boot] PROGRESS {}M: PC=0x{:08X} priv={:?} SBI={} fwd={}",
+                    count / 1_000_000, vm.cpu.pc, vm.cpu.privilege,
+                    _sbi_call_count, _forward_count);
             }
             count += 1;
         }
