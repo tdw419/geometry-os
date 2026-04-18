@@ -8,8 +8,8 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 100
-  tests: 1110
+  opcodes: 99
+  tests: 1109
   programs: 50
   loc: 30612
 phases:
