@@ -2,8 +2,8 @@ use super::types::*;
 use super::Vm;
 
 impl Vm {
-    /// Handle extended opcodes (0x62-0x7A): IOCTL, env, process control,
-    /// signals, hypervisor, self-hosting, reactive formulas, inode ops.
+    /// Handle extended opcodes (0x62-0x7B): IOCTL, env, process control,
+    /// signals, hypervisor, self-hosting, reactive formulas, inode ops, trace.
     /// Returns false if halted, true otherwise.
     #[allow(unreachable_patterns)]
     pub(super) fn step_extended(&mut self, opcode: u32) -> bool {
@@ -922,6 +922,35 @@ impl Vm {
                     }
                 } else {
                     self.regs[0] = 0;
+                }
+            }
+
+            // SNAP_TRACE mode_reg  (0x7B) -- Toggle execution trace recording.
+            // Encoding: 0x7B, mode_reg
+            // mode_reg value: 0 = stop recording, 1 = start recording,
+            //                 2 = snapshot-and-clear (stops recording, r0 = entries captured)
+            // r0 = number of entries currently in buffer (after mode change)
+            0x7B => {
+                let mode_reg = self.fetch() as usize;
+                let mode = if mode_reg < NUM_REGS { self.regs[mode_reg] } else { 0 };
+                match mode {
+                    0 => {
+                        self.trace_recording = false;
+                        self.regs[0] = self.trace_buffer.len() as u32;
+                    }
+                    1 => {
+                        self.trace_recording = true;
+                        self.regs[0] = self.trace_buffer.len() as u32;
+                    }
+                    2 => {
+                        let count = self.trace_buffer.len();
+                        self.trace_recording = false;
+                        self.trace_buffer.clear();
+                        self.regs[0] = count as u32;
+                    }
+                    _ => {
+                        self.regs[0] = 0xFFFFFFFF; // invalid mode
+                    }
                 }
             }
 

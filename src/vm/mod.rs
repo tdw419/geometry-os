@@ -99,6 +99,11 @@ pub struct Vm {
     /// Reverse dependency index: dep_idx -> list of formula indices in self.formulas.
     /// Used to quickly find which formulas need recalculation when a cell changes.
     pub formula_dep_index: Vec<Vec<usize>>,
+    /// When true, every instruction execution is recorded to trace_buffer.
+    /// Off by default for zero-overhead forward execution.
+    pub trace_recording: bool,
+    /// Execution trace ring buffer (Phase 38a: Time-Travel Debugger).
+    pub trace_buffer: TraceBuffer,
 }
 
 impl Default for Vm {
@@ -164,6 +169,8 @@ impl Vm {
             key_buffer_tail: 0,
             formulas: Vec::new(),
             formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
+            trace_recording: false,
+            trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
         }
     }
 
@@ -228,6 +235,8 @@ impl Vm {
         for dep_list in self.formula_dep_index.iter_mut() {
             dep_list.clear();
         }
+        self.trace_recording = false;
+        self.trace_buffer.clear();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -239,6 +248,10 @@ impl Vm {
 }
 mod types;
 pub use types::*;
+
+// Execution trace ring buffer (Phase 38a)
+mod trace;
+pub use trace::*;
 
 // Opcode handler submodules
 mod ops_extended;
@@ -263,6 +276,13 @@ impl Vm {
         self.log_access(pc_addr, MemAccessKind::Read);
 
         let opcode = self.fetch();
+
+        // Execution trace: record (pc, regs, opcode) if recording is enabled.
+        // Zero overhead when off (single bool check).
+        if self.trace_recording {
+            self.trace_buffer.push(pc_addr as u32, &self.regs, opcode);
+        }
+
         match opcode {
             // HALT
             0x00 => {
@@ -543,7 +563,7 @@ impl Vm {
                     return false;
                 }
             }
-            0x62..=0x7A => {
+            0x62..=0x7B => {
                 if !self.step_extended(opcode) {
                     return false;
                 }

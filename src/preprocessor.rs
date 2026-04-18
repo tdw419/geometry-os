@@ -105,6 +105,10 @@ pub const OPCODES: &[&str] = &[
     "FORMULA",
     "FORMULACLEAR",
     "FORMULAREM",
+    "FMKDIR",
+    "FSTAT",
+    "FUNLINK",
+    "SNAP_TRACE",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

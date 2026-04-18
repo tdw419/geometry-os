@@ -1,4 +1,5 @@
 use super::types::*;
+use super::trace::*;
 use super::Vm;
 
 impl Vm {
@@ -261,6 +262,8 @@ impl Vm {
             key_buffer_tail: 0,
             formulas: Vec::new(),
             formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
+            trace_recording: false,
+            trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
         })
     }
 }

@@ -560,6 +560,10 @@ impl Vm {
                 let pr = ram(a + 1);
                 (format!("FUNLINK [{}]", reg(pr)), 2)
             }
+            0x7B => {
+                let mr = ram(a + 1);
+                (format!("SNAP_TRACE {}", reg(mr)), 2)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

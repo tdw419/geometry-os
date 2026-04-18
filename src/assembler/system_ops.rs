@@ -353,6 +353,15 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "SNAP_TRACE" => {
+            if tokens.len() < 2 {
+                return Err("SNAP_TRACE requires 1 argument: SNAP_TRACE mode_reg".to_string());
+            }
+            bytecode.push(0x7B);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }
