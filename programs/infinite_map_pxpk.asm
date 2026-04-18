@@ -450,10 +450,10 @@ render_y:
     MOV r17, r5
     LDI r18, 27
     SHR r17, r18         ; r17 = biome_type (0..31)
-    MOV r18, r5
-    LDI r20, 25
-    SHR r18, r20
-    ANDI r18, 3           ; r18 = pattern_type (0-3)
+    MOV r29, r5
+    LDI r18, 25
+    SHR r29, r18
+    ANDI r29, 3           ; r29 = pattern_type (0-3) -- saved from clobber
 
     ; ---- TABLE LOOKUP: biome color ----
     MOV r20, r24
@@ -482,8 +482,8 @@ render_y:
     ADD r17, r23          ; base += tint
     ; Accent: XOR tinted base with coarse_hash mask (XOR_CHAIN strategy)
     MOV r19, r5
-    LDI r20, 10
-    SHR r19, r20
+    LDI r18, 10
+    SHR r19, r18
     ANDI r19, 0x1F1F1F     ; 5 bits per channel mask
     XOR r19, r17          ; r19 = accent color (inherits tint via XOR of tinted base)
 
@@ -491,6 +491,7 @@ render_y:
     LDI r20, 2            ; shared by center/horiz/vert patterns
 
     ; ---- Pattern dispatch (flat=0, center=1, horiz=2, vert=3) ----
+    MOV r18, r29           ; restore pattern_type from r29
     JZ r18, pat_flat       ; 0: flat tile
     SUB r18, r7            ; pattern - 1
     JZ r18, pat_center     ; 1: center bright
