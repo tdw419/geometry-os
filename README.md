@@ -12,7 +12,7 @@ There is no compiler. No runtime. No garbage collector. You write the opcodes, t
 
 ## Programs
 
-49 programs included -- static art, animations, interactive games, and system utilities:
+50 programs included -- static art, animations, interactive games, and system utilities:
 
 **Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes
 
