@@ -18,7 +18,9 @@
 ;      X-direction: 4-tile transition zone (positions 0,1,6,7). Outer edges
 ;      (0,7) use 50/50 blend; inner edges (1,6) use 75/25 graduated blend
 ;      (base*3/4 + neighbor*1/4) for smooth gradient transitions.
-;      Y-direction: 2-tile edges (positions 0,7) with 50/50 blend.
+;      Y-direction: 4-tile transition zone (positions 0,1,6,7) with same
+;      graduated blending. Blend mode precomputed per row in RAM[0x7803],
+;      neighbor y_hash precomputed in RAM[0x7804] to minimize per-tile cost.
 ;      Corner tiles get sequential X+Y blend (bilinear-like).
 ;
 ; Memory layout:
@@ -27,6 +29,8 @@
 ;   RAM[0x7800] = camera_x
 ;   RAM[0x7801] = camera_y
 ;   RAM[0x7802] = frame_counter
+;   RAM[0x7803] = y_blend_mode (precomputed per row: 0=none, 1-4=blend types)
+;   RAM[0x7804] = y_neighbor_hash (precomputed per row for Y-blend)
 ;   RAM[0xFFB]  = key bitmask
 ;
 ; Seed expansion architecture:
@@ -448,6 +452,59 @@ render_y:
   LDI r18, 79007
   MUL r26, r18           ; r26 = (world_y >> 3) * 79007 (blend y_hash, reused per tile)
 
+  ; Precompute Y-blend mode per row (stored in RAM[0x7803])
+  ; Mode: 0=none, 1=50/50 top, 2=75/25 top, 3=75/25 bottom, 4=50/50 bottom
+  ; RAM[0x7804] = precomputed neighbor y_hash for Y-blend
+  MOV r18, r15
+  ADD r18, r1              ; r18 = world_y
+  ANDI r18, 7              ; r18 = local_y (0..7)
+  LDI r19, 0x7803          ; mode address
+  LDI r20, 0
+  STORE r19, r20           ; default: no blend
+  JNZ r18, ypre_b1
+  ; local_y == 0: 50/50 top
+  LDI r20, 1
+  STORE r19, r20
+  LDI r20, 0xFFFFFFF8      ; -8
+  JMP ypre_hash
+ypre_b1:
+  LDI r20, 1
+  SUB r18, r20
+  JNZ r18, ypre_b6
+  ; local_y == 1: 75/25 top
+  LDI r20, 2
+  STORE r19, r20
+  LDI r20, 0xFFFFFFF8      ; -8
+  JMP ypre_hash
+ypre_b6:
+  LDI r20, 5
+  SUB r18, r20
+  JNZ r18, ypre_b7
+  ; local_y == 6: 75/25 bottom
+  LDI r20, 3
+  STORE r19, r20
+  LDI r20, 8
+  JMP ypre_hash
+ypre_b7:
+  LDI r20, 1
+  SUB r18, r20
+  JNZ r18, ypre_done
+  ; local_y == 7: 50/50 bottom
+  LDI r20, 4
+  STORE r19, r20
+  LDI r20, 8
+ypre_hash:
+  MOV r22, r15
+  ADD r22, r1
+  ADD r22, r20             ; neighbor_y = world_y + offset
+  LDI r20, 3
+  SHR r22, r20
+  LDI r20, 79007
+  MUL r22, r20
+  LDI r20, 0x7804
+  STORE r20, r22
+ypre_done:
+
   render_x:
     ; World coordinates
     MOV r3, r14
@@ -455,16 +512,17 @@ render_y:
     MOV r4, r15
     ADD r4, r1           ; r4 = world_y
 
-    ; ---- Coarse hash for biome (unchanged from infinite_map.asm) ----
+    ; ---- Coarse hash for biome ----
     MOV r5, r3
     MOV r6, r4
     LDI r18, 3
     SHR r5, r18          ; r5 = world_x >> 3
     SHR r6, r18          ; r6 = world_y >> 3
     LDI r18, 99001
-    MUL r5, r18
+    MUL r5, r18          ; r5 = x_hash
     LDI r18, 79007
-    MUL r6, r18
+    MUL r6, r18          ; r6 = y_hash
+    MOV r21, r5          ; r21 = SAVE x_hash for Y-blend reuse
     XOR r5, r6           ; r5 = coarse_hash
     LDI r18, 1103515245
     MUL r5, r18          ; r5 = mixed_hash
@@ -488,7 +546,8 @@ render_y:
     ; Smooth gradient transitions at biome boundaries. Uses position-aware
     ; blend weights: outer edges (0,7) get 50/50 blend, inner edges (1,6)
     ; get 75/25 graduated blend. Both X and Y use 4-tile transition zones.
-    ; Corner tiles get sequential X+Y blend (bilinear-like).
+    ; Y-blend mode precomputed per row in RAM[0x7803], neighbor y_hash in
+    ; RAM[0x7804]. Corner tiles get sequential X+Y blend (bilinear-like).
 
     ; -- X-direction blend (4-tile graduated transition zone) --
     ; y_hash precomputed in r26 (shared across row)
@@ -570,54 +629,51 @@ xblend_50:
     ADD r17, r22             ; r17 = X-blended base color
 no_xblend:
 
-    ; -- Y-direction blend (2-tile edges with 50/50 blend) --
-    ; Y-hash computation is expensive, so we keep 2-tile edges to stay
-    ; within step budget. The X-direction 4-tile graduated zone provides
-    ; most of the visual improvement.
-    MOV r18, r4
-    ANDI r18, 7              ; r18 = local_y (position within 8-tile biome)
-    JNZ r18, yblend_chk_7
-    ; local_y == 0: blend with TOP neighbor (world_y - 8)
-    MOV r21, r4
-    LDI r18, 8
-    SUB r21, r18
-    JMP yblend_hash
-yblend_chk_7:
-    LDI r21, 1
-    SUB r18, r21             ; r18 = local_y - 7
-    JNZ r18, no_yblend       ; not at Y edge, skip
-    ; local_y == 7: blend with BOTTOM neighbor (world_y + 8)
-    MOV r21, r4
-    LDI r18, 8
-    ADD r21, r18
-yblend_hash:
-    ; Compute neighbor biome via coarse hash (Y direction)
-    MOV r18, r3
-    LDI r19, 3
-    SHR r18, r19             ; world_x >> 3
-    LDI r19, 99001
-    MUL r18, r19             ; x_hash part
-    MOV r22, r21
-    LDI r19, 3
-    SHR r22, r19             ; neighbor_y >> 3
-    LDI r19, 79007
-    MUL r22, r19             ; y_hash part
-    XOR r18, r22             ; neighbor coarse hash
-    LDI r19, 1103515245
-    MUL r18, r19             ; neighbor mixed hash
-    LDI r19, 27
-    SHR r18, r19             ; neighbor biome index (0..31)
+    ; -- Y-direction blend (4-tile graduated transition zone) --
+    ; Uses precomputed blend mode (RAM[0x7803]) and neighbor y_hash (RAM[0x7804]).
+    ; Mode: 0=none, 1=50/50 top, 2=75/25 top, 3=75/25 bottom, 4=50/50 bottom.
+    ; Hash uses saved x_hash (r21) XOR precomputed neighbor_y_hash.
+    LDI r18, 0x7803
+    LOAD r18, r18           ; r18 = y_blend_mode
+    JZ r18, no_yblend       ; mode 0 = no blend
+    ; Load precomputed neighbor y_hash
+    LDI r26, 0x7804
+    LOAD r26, r26           ; r26 = neighbor_y_hash
+    ; Compute neighbor biome: saved_x_hash XOR neighbor_y_hash → LCG → biome index
+    MOV r22, r21            ; r22 = saved x_hash
+    XOR r22, r26            ; neighbor coarse hash
+    LDI r26, 1103515245
+    MUL r22, r26            ; neighbor mixed hash
+    LDI r26, 27
+    SHR r22, r26            ; neighbor biome index (0..31)
     ; Lookup neighbor biome base color
     MOV r26, r24
-    ADD r26, r18
-    LOAD r26, r26            ; r26 = neighbor biome base color
-    ; 50/50 masked average blend (applied on top of X-blended color)
+    ADD r26, r22
+    LOAD r26, r26           ; r26 = neighbor biome base color
+    ; Dispatch on blend mode: bit 1 selects 50/50 (0) vs 75/25 (1)
+    ANDI r18, 2
+    JNZ r18, yblend_75
+    ; 50/50 blend (modes 1 and 4)
     ANDI r17, 0xFEFEFE
     LDI r18, 1
-    SHR r17, r18             ; current >> 1
+    SHR r17, r18            ; current >> 1
     ANDI r26, 0xFEFEFE
-    SHR r26, r18             ; neighbor >> 1
-    ADD r17, r26             ; r17 = X+Y blended base color
+    SHR r26, r18            ; neighbor >> 1
+    ADD r17, r26            ; 50/50 blend
+    JMP no_yblend
+yblend_75:
+    ; 75/25 graduated blend (modes 2 and 3)
+    MOV r22, r17            ; save base
+    ANDI r17, 0xFEFEFE
+    LDI r18, 1
+    SHR r17, r18            ; base >> 1 (50%)
+    ANDI r22, 0xFCFCFC
+    LDI r18, 2
+    SHR r22, r18            ; base >> 2 (25%)
+    ADD r17, r22            ; base*3/4
+    ANDI r26, 0xFCFCFC
+    SHR r26, r18            ; neighbor >> 2 (25%)
+    ADD r17, r26            ; base*3/4 + neighbor*1/4
 no_yblend:
 
     ; ---- Fine hash: MUL-based per-tile seeding (Pixelpack strategy) ----
@@ -703,9 +759,14 @@ no_shimmer:
     ; ---- Coastline foam (water tiles adjacent to land) ----
     ; Check left neighbor biome via coarse_hash(world_x-1, world_y).
     ; If neighbor is land (biome >= 2), add +0x303030 foam tint to base_color.
-    ; Water base colors (0x000044 / 0x0000BB) + 0x303030 = safe (< 0xFF/channel).
+    ; Optimization: when world_x & 7 != 0, left neighbor is same biome column →
+    ; same biome as current water tile → skip hash computation entirely.
     JZ r31, no_foam          ; not water, skip entirely
-    MOV r18, r3              ; world_x
+    MOV r18, r3
+    ANDI r18, 7              ; world_x & 7
+    JNZ r18, no_foam         ; not at X biome boundary → same biome, skip
+    ; At biome boundary: compute left neighbor hash
+    MOV r18, r3
     SUB r18, r7              ; r18 = world_x - 1 (left neighbor)
     MOV r21, r18
     LDI r18, 3
