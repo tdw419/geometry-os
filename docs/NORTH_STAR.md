@@ -2,18 +2,19 @@
 
 ## The One Rule
 
-**Every change must move Geometry OS closer to being a real operating system.**
+**Every change must make Geometry OS more capable or more alive.**
 
-A real OS has: memory protection, a filesystem, proper scheduling, IPC, device abstraction, a shell, and programs that use all of it. If a change doesn't advance one of those, it's not the priority.
+A real OS has: memory protection, a filesystem, proper scheduling, IPC, device abstraction, a shell, and programs that use all of it. A living OS also has rich visual programs that prove the VM can express complex, beautiful things.
 
 ## Priority Hierarchy
 
 1. **Kernel features** (syscalls, memory protection, scheduling, IPC) -- this IS the OS
 2. **Programs that prove kernel features work** -- a syscall without a program using it is vaporware
-3. **Filesystem and persistence** -- programs need to store and load data
-4. **Shell and user interface** -- the user needs to interact with the OS
-5. **Standard library** -- raises the floor for all programs
-6. **Assembler/VM quality-of-life** -- only when it unblocks something above
+3. **Visual programs** (infinite terrain, weather, particles, animations) -- prove the VM is expressive
+4. **Filesystem and persistence** -- programs need to store and load data
+5. **Shell and user interface** -- the user needs to interact with the OS
+6. **Standard library** -- raises the floor for all programs
+7. **Assembler/VM quality-of-life** -- only when it unblocks something above
 
 ## DO
 
