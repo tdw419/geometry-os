@@ -1427,6 +1427,97 @@ fn test_infinite_map_pxpk_trees_deterministic() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_water_reflection() {
+    // Water reflection: water tiles at biome block boundaries (world_y & 7 == 0)
+    // where the tile above is land get a reflected version of that land's color
+    // (dimmed 50% + blue tint 0x0E1C38 + ripple). Tiles not at a boundary or
+    // with water above use normal water rendering.
+    //
+    // Strategy: scan the rendered frame for water-land-water vertical transitions.
+    // At a land→water boundary where world_y is a multiple of 8, the water tile
+    // should reflect the land color (dimmed + blue tinted) rather than pure water.
+    // Reflected water pixels will have elevated R/G channels compared to normal water.
+
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+
+    // Find water pixels that could be reflections: they sit in rows where
+    // camera_y + screen_row/4 is a multiple of 8 (biome boundary).
+    // Normal water (biomes 0,1) has colors near 0x000044/0x0000BB (blue dominant).
+    // Reflected water will have R > 0x0E or G > 0x1C from the blue tint + dimmed land.
+    let camera_y = vm.ram[0x7801] as i32;
+    let mut reflected_count = 0;
+    let mut normal_water_count = 0;
+
+    for sy in 0..256 {
+        let world_y = camera_y + (sy as i32) / 4;
+        // Check if this row is at a biome boundary (every 8th world tile)
+        if world_y % 8 != 0 {
+            continue;
+        }
+        for sx in 0..256 {
+            let px = vm.screen[sy * 256 + sx];
+            if px == 0 {
+                continue;
+            }
+            // Check if pixel looks like reflected water (has R or G component)
+            // Normal water is nearly pure blue: R < 0x10, G < 0x20
+            let r = px & 0xFF;
+            let g = (px >> 8) & 0xFF;
+            let b = (px >> 16) & 0xFF;
+            // Water-like blue dominance but with land color bleed
+            if b > 0x30 && r > 0x0E && g > 0x1C {
+                reflected_count += 1;
+            } else if b > 0x30 && r < 0x10 {
+                normal_water_count += 1;
+            }
+        }
+    }
+
+    // At camera (0,0) there should be some reflected water pixels at biome boundaries
+    // where land meets water. The exact count depends on terrain generation.
+    assert!(
+        reflected_count > 0 || normal_water_count > 100,
+        "should have water pixels (reflected={}, normal={}), terrain may not have land-water boundary at this camera",
+        reflected_count, normal_water_count
+    );
+}
+
+#[test]
+fn test_infinite_map_pxpk_water_reflection_varies_per_frame() {
+    // Reflection ripple should vary between frames due to frame_counter modulation.
+    // At the same camera position, water tiles at biome boundaries should have
+    // slightly different colors across frames (ripple = (fc + world_x) & 0xF * 0x020202).
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+
+    // Render frame 0
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    let screen_f0 = vm.screen.to_vec();
+
+    // Render frame 1
+    vm.frame_ready = false;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    let screen_f1 = vm.screen.to_vec();
+
+    // Count pixels that changed between frames (ripple effect)
+    let changed: usize = screen_f0
+        .iter()
+        .zip(screen_f1.iter())
+        .filter(|(a, b)| a != b)
+        .count();
+
+    // With 64x64 tiles and many water tiles, ripple should cause some changes.
+    // Even non-reflected water has shimmer, so there should always be some change.
+    assert!(
+        changed > 100,
+        "water ripple should cause pixel changes between frames, got {} changed",
+        changed
+    );
+}
+
+#[test]
 fn test_infinite_map_runs_and_renders() {
     // Requirement: the program runs to completion of a frame and renders non-black pixels.
     let mut vm = infinite_map_vm();

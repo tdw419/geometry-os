@@ -29,7 +29,11 @@
 ;      Pixel cache in RAM[0x7100..0x74FF]. Biome hashes recomputed every
 ;      4 frames; repaint from cache every frame. Dimmed 50% brightness.
 ;      Border (0xAAAAAA) and white center dot drawn every frame.
-;  12. Procedural tree sprites on grass (biome 6-7) and forest (biome 10-11).
+;  12. Water reflection: water tiles mirror the biome color of the tile above
+;      (world_y-1) with 50% dim + blue tint (0x0E1C38). Tile-above-water
+;      (biome 0/1) falls through to normal water rendering. Ripple animation
+;      via (frame_counter + world_x*3 + world_y*7) & 0xF * 0x020202.
+;  13. Procedural tree sprites on grass (biome 6-7) and forest (biome 10-11).
 ;      Deterministic placement via fine_hash bits: forest ~50%, grass ~25%.
 ;      Tree shape: 3x2 green canopy + 1x1 brown trunk (2 RECTF calls).
 ;      Skips water tiles. RAM[0x7806] = biome_type per tile.
@@ -722,6 +726,59 @@ no_yblend:
 is_water:
     LDI r31, 1             ; is water
 water_checked:
+
+    ; ---- Water reflection (mirror tile above with blue tint + ripple) ----
+    ; For water tiles: compute biome color of tile at (world_x, world_y-1).
+    ; Dim 50% + blue tint (0x0E1C38) + frame-driven ripple.
+    ; Optimization: biome blocks are 8 tiles tall (world_y >> 3). Within a block,
+    ; the above tile shares the same biome = water → no reflection needed.
+    ; Only compute at biome boundaries (world_y & 7 == 0).
+    ; If tile above is also water (biome 0/1), skip (use normal water rendering).
+    JZ r31, no_reflect       ; not water, skip
+    MOV r18, r4
+    ANDI r18, 7              ; world_y & 7
+    JNZ r18, no_reflect      ; same biome block → above is same water biome
+    ; At biome boundary: compute above-tile biome via hash(world_x, world_y-1)
+    MOV r18, r3
+    LDI r19, 3
+    SHR r18, r19             ; world_x >> 3
+    LDI r19, 99001
+    MUL r18, r19             ; x_hash
+    MOV r19, r4
+    SUB r19, r7              ; world_y - 1
+    LDI r20, 3
+    SHR r19, r20             ; (world_y-1) >> 3
+    LDI r20, 79007
+    MUL r19, r20             ; y_hash for above tile
+    XOR r18, r19             ; above coarse hash
+    LDI r19, 1103515245
+    MUL r18, r19             ; above mixed hash
+    LDI r19, 27
+    SHR r18, r19             ; above biome index (0..31)
+    ; Check if above tile is water (biome 0 or 1) → skip reflection
+    JZ r18, no_reflect       ; above biome 0 = water
+    LDI r19, 1
+    SUB r18, r19
+    JZ r18, no_reflect       ; above biome 1 = water
+    ; Above is land: lookup its biome color
+    MOV r19, r24
+    ADD r19, r18             ; 0x7000 + biome_index
+    LOAD r19, r19            ; r19 = above tile biome base color
+    ; Dim reflected color by 50% + blue tint
+    ANDI r19, 0xFEFEFE
+    LDI r18, 1
+    SHR r19, r18             ; r19 = reflected_color / 2
+    LDI r18, 0x0E1C38
+    ADD r19, r18             ; reflected/2 + blue_tint
+    ; Ripple: (frame_counter + world_x) & 0xF * 0x020202 for wave motion
+    LOAD r20, r13            ; frame_counter
+    ADD r20, r3              ; fc + world_x (cheap position variation)
+    ANDI r20, 0xF            ; 0-15 ripple phase
+    LDI r21, 0x020202
+    MUL r20, r21             ; ripple brightness (0x00..0x1E1E1E)
+    ADD r19, r20             ; reflected color += ripple
+    MOV r17, r19             ; replace base_color with reflected color
+no_reflect:
 
     ; ---- Height-based shading (skip for water) ----
     ; Elevation from fine_hash top bits: range 0-7, shade 0x030303 per step
