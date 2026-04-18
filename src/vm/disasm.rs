@@ -564,6 +564,10 @@ impl Vm {
                 let mr = ram(a + 1);
                 (format!("SNAP_TRACE {}", reg(mr)), 2)
             }
+            0x7C => {
+                let fr = ram(a + 1);
+                (format!("REPLAY {}", reg(fr)), 2)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

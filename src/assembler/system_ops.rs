@@ -362,6 +362,15 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "REPLAY" => {
+            if tokens.len() < 2 {
+                return Err("REPLAY requires 1 argument: REPLAY frame_idx_reg".to_string());
+            }
+            bytecode.push(0x7C);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

@@ -2,7 +2,7 @@ use super::types::*;
 use super::Vm;
 
 impl Vm {
-    /// Handle extended opcodes (0x62-0x7B): IOCTL, env, process control,
+    /// Handle extended opcodes (0x62-0x7C): IOCTL, env, process control,
     /// signals, hypervisor, self-hosting, reactive formulas, inode ops, trace.
     /// Returns false if halted, true otherwise.
     #[allow(unreachable_patterns)]
@@ -954,12 +954,32 @@ impl Vm {
                 }
             }
 
+            // REPLAY frame_idx_reg  (0x7C) -- Load a checkpoint screen onto the live display.
+            // Encoding: 0x7C, frame_idx_reg
+            // frame_idx: 0 = most recent checkpoint, 1 = second most recent, etc.
+            // On success: r0 = frame_count (number of available checkpoints), frame_ready = true
+            // On failure: r0 = 0xFFFFFFFF
+            0x7C => {
+                let idx_reg = self.fetch() as usize;
+                let frame_idx = if idx_reg < NUM_REGS { self.regs[idx_reg] as usize } else { 0 };
+
+                match self.frame_checkpoints.replay_frame(frame_idx) {
+                    Some(screen) => {
+                        self.screen.copy_from_slice(&screen);
+                        self.frame_ready = true;
+                        self.regs[0] = self.frame_checkpoints.len() as u32;
+                    }
+                    None => {
+                        self.regs[0] = 0xFFFFFFFF;
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
                 return false;
             }
-            _ => {}
         }
         true
     }

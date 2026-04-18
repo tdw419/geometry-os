@@ -573,7 +573,7 @@ impl Vm {
                     return false;
                 }
             }
-            0x62..=0x7B => {
+            0x62..=0x7C => {
                 if !self.step_extended(opcode) {
                     return false;
                 }

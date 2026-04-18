@@ -338,7 +338,7 @@ impl RiscvVm {
 
         // Also set initial_boot_params for compatibility (some kernel paths
         // read it directly).
-        let ibp_phys: u64 = 0x00C7A178;
+        let ibp_phys: u64 = 0x00C7A380;
         vm.bus.write_word(ibp_phys, dtb_addr as u32).ok();
 
         // 8. Set CPU state for boot.
@@ -451,16 +451,16 @@ impl RiscvVm {
         //   PA 0x0040495E: sw a5, 12(s1)  -- writes &_start (0xC0000000) to phys_addr
         //   PA 0x00404968: sw a1, 20(s1)  -- writes PAGE_OFFSET - _start (0) to va_pa_offset
         //
-        // kernel_map struct is at VA 0xC0C79E90 (PA 0x00C79E90), layout:
+        // kernel_map struct is at VA 0xC0C79E90 (PA 0x00C7A098), layout:
         //   offset 0: page_offset, 4: virt_addr, 8: virt_offset,
         //   12: phys_addr (need 0), 16: size, 20: va_pa_offset (need 0xC0000000), 24: va_kernel_pa_offset
         //
         // The assertion `slli a5, a5, 10; beqz a5` at PA 0x00404972 still passes
         // because a5=0xC0000000 << 10 overflows to 0 in 32-bit.
-        let setup_vm_phys_addr_store: u64 = 0x0040495E; // C.SW a5, 12(s1) (2 bytes)
-        let setup_vm_va_kernel_pa_store: u64 = 0x00404964; // SW a6, 24(s1) (4 bytes!)
-        let setup_vm_va_pa_offset_store: u64 = 0x00404968; // C.SW a1, 20(s1) (2 bytes)
-        let kernel_map_phys: u64 = 0x00C79E90;
+        let setup_vm_phys_addr_store: u64 = 0x00404AB2; // C.SW a5, 12(s1) (2 bytes)
+        let setup_vm_va_kernel_pa_store: u64 = 0x00404AB8; // SW a6, 24(s1) (4 bytes!)
+        let setup_vm_va_pa_offset_store: u64 = 0x00404ABC; // C.SW a1, 20(s1) (2 bytes)
+        let kernel_map_phys: u64 = 0x00C7A098;
 
         // Verify the instructions match before patching (safety check).
         // The two C.SW instructions are 16-bit; the SW a6,24(s1) is 32-bit.
@@ -666,8 +666,9 @@ impl RiscvVm {
         let mut _last_unique_pc: u32 = 0;
         let mut _same_pc_count: u64 = 0;
         let mut _trampoline_patched: bool = true; // Boot page table already provides initial mapping
-        let mut _panic_breakpoint: bool = false;
-        let mut _last_satp: u32 = vm.cpu.csr.satp; // Already set by setup
+    let mut _panic_breakpoint: bool = false;
+    let mut _last_satp: u32 = vm.cpu.csr.satp; // Already set by setup
+    let mut kernel_map_protected: bool = false;
         let dtb_early_va_expected: u32 = (dtb_addr.wrapping_add(0xC0000000)) as u32;
         let dtb_early_pa_expected: u32 = dtb_addr as u32;
         let dtb_early_va_pa: u64 = 0x00801008;
@@ -690,7 +691,7 @@ impl RiscvVm {
             // Check every 100 instructions (cheap: 2 reads + branch).
             // Stop watching once phys_ram_base is set (DTB parsing succeeded).
             if count % 100 == 0 {
-                let prb = vm.bus.read_word(0x00C79EACu64).unwrap_or(0);
+                let prb = vm.bus.read_word(0x00C7A0B4u64).unwrap_or(0);
                 if prb == 0 {
                     // DTB parsing hasn't succeeded yet -- protect the pointers
                     let cur_va = vm.bus.read_word(dtb_early_va_pa).unwrap_or(0);
@@ -864,15 +865,28 @@ impl RiscvVm {
 
                         // Also verify kernel_map wasn't corrupted by the kernel
                         // re-running setup_vm or other init code.
-                        let km_phys: u64 = 0x00C79E90;
+                        let km_phys: u64 = 0x00C7A098;
                         let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
                         let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
                         let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
                         if km_pa != 0 || km_vapo != 0xC0000000 || km_vkpo != 0x00000000 {
                             eprintln!("[boot] WARNING: kernel_map corrupted! pa=0x{:X} vapo=0x{:X} vkpo=0x{:X}, re-patching", km_pa, km_vapo, km_vkpo);
-                            vm.bus.write_word(km_phys + 12, 0x00000000).ok();
-                            vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
-                            vm.bus.write_word(km_phys + 24, 0x00000000).ok();
+                        }
+                        // Always re-patch kernel_map after each SATP change.
+                        vm.bus.write_word(km_phys + 12, 0x00000000).ok();
+                        vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
+                        vm.bus.write_word(km_phys + 24, 0x00000000).ok();
+
+                        // Protect kernel_map and phys_ram_base from future corruption.
+                        // Only add to protected list once (first SATP change).
+                        if !kernel_map_protected {
+                            for offset in [12u64, 20, 24] {
+                                vm.bus.protected_addrs.push((km_phys + offset, 0));
+                            }
+                            // Also protect phys_ram_base
+                            vm.bus.protected_addrs.push((0x00C7A0B4, 0));
+                            kernel_map_protected = true;
+                            eprintln!("[boot] Protected kernel_map and phys_ram_base from future writes");
                         }
 
                         // Re-set _dtb_early_va and _dtb_early_pa.
@@ -1200,7 +1214,7 @@ impl RiscvVm {
                     }
                 }
                 // Also read phys_ram_base
-                let prb_pa = 0x00C79EACu64;
+                let prb_pa = 0x00C7A0B4u64;
                 let prb = vm.bus.read_word(prb_pa).unwrap_or(0);
                 eprintln!("[boot]   phys_ram_base=0x{:08X}", prb);
                 // Check _dtb_early_va and _dtb_early_pa (the ACTUAL DTB pointers)
@@ -1297,7 +1311,7 @@ impl RiscvVm {
             _sbi_call_count, _ecall_m_count, _forward_count, _mmode_trap_count
         );
         // Post-boot state
-        let prb = vm.bus.read_word(0x00C79EACu64).unwrap_or(0);
+        let prb = vm.bus.read_word(0x00C7A0B4u64).unwrap_or(0);
         let deva = vm.bus.read_word(0x00801008).unwrap_or(0);
         let depa = vm.bus.read_word(0x0080100C).unwrap_or(0);
         eprintln!("[boot] Post-boot: phys_ram_base=0x{:08X} _dtb_early_va=0x{:08X} _dtb_early_pa=0x{:08X}",

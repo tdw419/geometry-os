@@ -125,6 +125,51 @@ impl TraceBuffer {
         let idx = (self.head + self.capacity - 1 - index) % self.capacity;
         Some(&self.entries[idx])
     }
+
+    /// Replay backward from a given step number.
+    /// Returns entries in reverse chronological order (newest first) starting
+    /// at or before the given step number. Limited to `limit` entries.
+    /// If step > current step_counter, starts from the most recent entry.
+    pub fn replay_from(&self, step: u64, limit: usize) -> Vec<TraceEntry> {
+        if self.len == 0 {
+            return Vec::new();
+        }
+
+        // Find the starting index: the most recent entry with step_number <= step
+        let start_idx = if step >= self.step_counter {
+            // Start from most recent
+            0
+        } else {
+            // Walk from newest backward to find first entry with step_number <= step
+            let mut found = 0;
+            for i in 0..self.len {
+                if let Some(entry) = self.get_recent(i) {
+                    if entry.step_number <= step {
+                        found = i;
+                        break;
+                    }
+                }
+            }
+            found
+        };
+
+        let limit = limit.min(self.len - start_idx);
+        let mut result = Vec::with_capacity(limit);
+        for i in start_idx..(start_idx + limit) {
+            if let Some(entry) = self.get_recent(i) {
+                result.push(entry.clone());
+            }
+        }
+        result
+    }
+
+    /// Iterate over entries from newest to oldest (reverse order).
+    pub fn iter_rev(&self) -> TraceRevIter<'_> {
+        TraceRevIter {
+            buffer: self,
+            pos: 0,
+        }
+    }
 }
 
 /// Iterator over trace entries from oldest to newest.
@@ -142,6 +187,25 @@ impl<'a> Iterator for TraceIter<'a> {
             return None;
         }
         let idx = (self.start + self.pos) % self.buffer.capacity;
+        self.pos += 1;
+        Some(&self.buffer.entries[idx])
+    }
+}
+
+/// Iterator over trace entries from newest to oldest.
+pub struct TraceRevIter<'a> {
+    buffer: &'a TraceBuffer,
+    pos: usize,
+}
+
+impl<'a> Iterator for TraceRevIter<'a> {
+    type Item = &'a TraceEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= self.buffer.len {
+            return None;
+        }
+        let idx = (self.buffer.head + self.buffer.capacity - 1 - self.pos) % self.buffer.capacity;
         self.pos += 1;
         Some(&self.buffer.entries[idx])
     }
@@ -242,6 +306,12 @@ impl FrameCheckBuffer {
             pos: 0,
             start,
         }
+    }
+
+    /// Replay a frame: return a cloned screen buffer for the Nth most recent checkpoint.
+    /// Returns None if index >= len.
+    pub fn replay_frame(&self, index: usize) -> Option<Vec<u32>> {
+        self.get_recent(index).map(|cp| cp.screen.clone())
     }
 }
 

@@ -109,6 +109,7 @@ pub const OPCODES: &[&str] = &[
     "FSTAT",
     "FUNLINK",
     "SNAP_TRACE",
+    "REPLAY",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

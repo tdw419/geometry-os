@@ -491,7 +491,7 @@ fn test_frame_checkpoint_captured_on_frame_opcode() {
     assert!(oldest.step_number < vm.frame_checkpoints.get_recent(1).unwrap().step_number);
 }
 
-#[test]
+// --- Phase 38c: Backward Replay tests ---
 
 #[test]
 fn test_frame_check_not_captured_when_recording_off() {
@@ -571,4 +571,294 @@ fn test_frame_check_step_numbers_monotonic() {
     for window in steps.windows(2) {
         assert!(window[1] > window[0], "step numbers must be monotonic");
     }
+}
+
+// --- Phase 38c: Backward Replay ---
+
+#[test]
+fn test_replay_from_basic() {
+    let mut buf = TraceBuffer::new(100);
+    let regs = [0u32; 32];
+
+    // Push 10 entries with PCs 0..10
+    for i in 0..10u32 {
+        buf.push(i, &regs, 0x01);
+    }
+
+    // Replay from step 9 (newest), limit 3 -> entries with step 9, 8, 7
+    let entries = buf.replay_from(9, 3);
+    assert_eq!(entries.len(), 3);
+    assert_eq!(entries[0].pc, 9); // newest first
+    assert_eq!(entries[1].pc, 8);
+    assert_eq!(entries[2].pc, 7);
+}
+
+#[test]
+fn test_replay_from_middle() {
+    let mut buf = TraceBuffer::new(100);
+    let regs = [0u32; 32];
+
+    for i in 0..10u32 {
+        buf.push(i, &regs, 0x01);
+    }
+
+    // Replay from step 5, limit 3 -> entries with step 5, 4, 3
+    let entries = buf.replay_from(5, 3);
+    assert_eq!(entries.len(), 3);
+    assert_eq!(entries[0].pc, 5);
+    assert_eq!(entries[1].pc, 4);
+    assert_eq!(entries[2].pc, 3);
+}
+
+#[test]
+fn test_replay_from_empty_buffer() {
+    let buf = TraceBuffer::new(100);
+    let entries = buf.replay_from(0, 10);
+    assert!(entries.is_empty());
+}
+
+#[test]
+fn test_replay_from_step_beyond_counter() {
+    let mut buf = TraceBuffer::new(100);
+    let regs = [0u32; 32];
+
+    for i in 0..5u32 {
+        buf.push(i, &regs, 0x01);
+    }
+
+    // Step 999 is beyond counter (5), should start from newest
+    let entries = buf.replay_from(999, 3);
+    assert_eq!(entries.len(), 3);
+    assert_eq!(entries[0].pc, 4); // newest
+    assert_eq!(entries[1].pc, 3);
+    assert_eq!(entries[2].pc, 2);
+}
+
+#[test]
+fn test_replay_from_wrapped_buffer() {
+    let mut buf = TraceBuffer::new(5);
+    let regs = [0u32; 32];
+
+    // Push 10 entries into a 5-capacity buffer
+    // Entries 5..10 survive (PCs 5..9)
+    for i in 0..10u32 {
+        buf.push(i, &regs, 0x01);
+    }
+
+    let entries = buf.replay_from(8, 2);
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].pc, 8);
+    assert_eq!(entries[1].pc, 7);
+}
+
+#[test]
+fn test_replay_from_limit_exceeds_buffer() {
+    let mut buf = TraceBuffer::new(100);
+    let regs = [0u32; 32];
+
+    for i in 0..5u32 {
+        buf.push(i, &regs, 0x01);
+    }
+
+    // Limit 100 but only 5 entries
+    let entries = buf.replay_from(4, 100);
+    assert_eq!(entries.len(), 5);
+    assert_eq!(entries[0].pc, 4);
+    assert_eq!(entries[4].pc, 0);
+}
+
+#[test]
+fn test_iter_rev() {
+    let mut buf = TraceBuffer::new(100);
+    let regs = [0u32; 32];
+
+    for i in 0..5u32 {
+        buf.push(i, &regs, 0x01);
+    }
+
+    // iter_rev should go newest to oldest: 4, 3, 2, 1, 0
+    let pcs: Vec<u32> = buf.iter_rev().map(|e| e.pc).collect();
+    assert_eq!(pcs, vec![4, 3, 2, 1, 0]);
+}
+
+#[test]
+fn test_replay_frame_basic() {
+    let mut buf = FrameCheckBuffer::new(10);
+
+    // Push 3 frames with different colors
+    let screen1 = vec![0x111111u32; 65536];
+    let screen2 = vec![0x222222u32; 65536];
+    let screen3 = vec![0x333333u32; 65536];
+
+    buf.push(10, 1, &screen1);
+    buf.push(20, 2, &screen2);
+    buf.push(30, 3, &screen3);
+
+    // Replay frame 0 (newest) -> screen3
+    let replayed = buf.replay_frame(0).unwrap();
+    assert_eq!(replayed[0], 0x333333);
+
+    // Replay frame 2 (oldest) -> screen1
+    let replayed = buf.replay_frame(2).unwrap();
+    assert_eq!(replayed[0], 0x111111);
+
+    // Out of bounds
+    assert!(buf.replay_frame(3).is_none());
+}
+
+#[test]
+fn test_replay_frame_empty() {
+    let buf = FrameCheckBuffer::new(10);
+    assert!(buf.replay_frame(0).is_none());
+}
+
+#[test]
+fn test_replay_frame_wrapped() {
+    let mut buf = FrameCheckBuffer::new(3);
+
+    for i in 0..6u32 {
+        let screen = vec![i; 65536];
+        buf.push(i as u64, i + 1, &screen);
+    }
+
+    // Buffer has frames 4,5,6 (frame_count 5,6,7)
+    // replay_frame(0) = newest = pixel val 5
+    let newest = buf.replay_frame(0).unwrap();
+    assert_eq!(newest[0], 5);
+
+    // replay_frame(2) = oldest = pixel val 3
+    let oldest = buf.replay_frame(2).unwrap();
+    assert_eq!(oldest[0], 3);
+}
+
+// --- REPLAY opcode (0x7C) integration tests ---
+
+#[test]
+fn test_replay_opcode_success() {
+    let mut vm = Vm::new();
+    // Set up trace recording and capture 3 frames
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 1
+        SNAP_TRACE r1
+        LDI r5, 0xFF0000
+        SCREENP r5, r5, r5
+        FRAME
+        LDI r5, 0x00FF00
+        SCREENP r5, r5, r5
+        FRAME
+        LDI r5, 0x0000FF
+        SCREENP r5, r5, r5
+        FRAME
+        LDI r1, 0
+        SNAP_TRACE r1
+        LDI r2, 0
+        REPLAY r2
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // REPLAY with index 0 should load the most recent checkpoint
+    // r0 should be the frame count (3)
+    assert_eq!(vm.regs[0], 3, "r0 should be frame_count after REPLAY");
+    assert!(vm.frame_ready, "frame_ready should be set");
+}
+
+#[test]
+fn test_replay_opcode_invalid_index() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 1
+        SNAP_TRACE r1
+        FRAME
+        LDI r1, 0
+        SNAP_TRACE r1
+        LDI r2, 99
+        REPLAY r2
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Index 99 is out of bounds (only 1 frame checkpoint)
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "r0 should be 0xFFFFFFFF for invalid index"
+    );
+}
+
+#[test]
+fn test_replay_opcode_no_checkpoints() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r2, 0
+        REPLAY r2
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // No trace recording was on, so no checkpoints
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "r0 should be 0xFFFFFFFF with no checkpoints"
+    );
+}
+
+#[test]
+fn test_checkpoint_replay_pipeline() {
+    // Full pipeline: record frames -> stop -> replay each frame -> verify screen
+    let mut vm = Vm::new();
+    vm.trace_recording = true;
+
+    // Manually create 3 distinct frames
+    for color in [0x111111u32, 0x222222, 0x333333].iter() {
+        vm.screen[0] = *color;
+        vm.screen[65535] = *color;
+        let step = vm.trace_buffer.step_counter();
+        vm.frame_count = vm.frame_count.wrapping_add(1);
+        vm.frame_checkpoints
+            .push(step, vm.frame_count, &vm.screen);
+    }
+
+    vm.trace_recording = false;
+    assert_eq!(vm.frame_checkpoints.len(), 3);
+
+    // Now set screen to something else
+    vm.screen[0] = 0xDEAD;
+    vm.screen[65535] = 0xDEAD;
+
+    // Replay frame 2 (oldest, color 0x111111)
+    let replayed = vm.frame_checkpoints.replay_frame(2).unwrap();
+    assert_eq!(replayed[0], 0x111111);
+    assert_eq!(replayed[65535], 0x111111);
+
+    // Replay frame 0 (newest, color 0x333333)
+    let replayed = vm.frame_checkpoints.replay_frame(0).unwrap();
+    assert_eq!(replayed[0], 0x333333);
+    assert_eq!(replayed[65535], 0x333333);
 }
