@@ -1,6 +1,6 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::csr;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -27,7 +27,9 @@ fn main() {
     let mut trace_count = 0u32;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // Detect trap at fw_addr
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
@@ -36,14 +38,20 @@ fn main() {
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 8;
 
-            if cause_code == 9 { // ECALL_S
+            if cause_code == 9 {
+                // ECALL_S
                 ecall_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -99,8 +107,12 @@ fn main() {
                 entered_trampoline = true;
                 eprintln!("[!] FIRST TRAMPOLINE RE-ENTRY at count={}, PC=0x{:08X} RA=0x{:08X} SP=0x{:08X}",
                     count, vm.cpu.pc, vm.cpu.x[1], vm.cpu.x[2]);
-                eprintln!("    SATP=0x{:08X} STVEC=0x{:08X} SSTATUS=0x{:08X}",
-                    vm.cpu.csr.satp, vm.cpu.csr.stvec, vm.cpu.csr.read(csr::SSTATUS));
+                eprintln!(
+                    "    SATP=0x{:08X} STVEC=0x{:08X} SSTATUS=0x{:08X}",
+                    vm.cpu.csr.satp,
+                    vm.cpu.csr.stvec,
+                    vm.cpu.csr.read(csr::SSTATUS)
+                );
                 // Start tracing
                 tracing = true;
                 trace_count = 0;
@@ -129,8 +141,10 @@ fn main() {
         count += 1;
 
         if count - last_progress >= 500_000 {
-            eprintln!("Progress: count={} PC=0x{:08X} SATP=0x{:08X} ECALLs={} traps={}",
-                count, vm.cpu.pc, vm.cpu.csr.satp, ecall_count, trap_count);
+            eprintln!(
+                "Progress: count={} PC=0x{:08X} SATP=0x{:08X} ECALLs={} traps={}",
+                count, vm.cpu.pc, vm.cpu.csr.satp, ecall_count, trap_count
+            );
             last_progress = count;
         }
     }
@@ -144,15 +158,20 @@ fn main() {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);
         println!("UART:\n{}", s);
     }
-    println!("Final: PC=0x{:08X} SATP=0x{:08X} STVEC=0x{:08X}",
-        vm.cpu.pc, vm.cpu.csr.satp, vm.cpu.csr.stvec);
+    println!(
+        "Final: PC=0x{:08X} SATP=0x{:08X} STVEC=0x{:08X}",
+        vm.cpu.pc, vm.cpu.csr.satp, vm.cpu.csr.stvec
+    );
 
     // Print trace buffer
     if !trace_buffer.is_empty() {
         println!("\n=== TRACE AROUND FIRST TRAMPOLINE RE-ENTRY ===");
         for (c, pc, instr) in &trace_buffer {
             let op = geometry_os::riscv::decode::decode(*instr);
-            println!("  count={} PC=0x{:08X} instr=0x{:08X} => {:?}", c, pc, instr, op);
+            println!(
+                "  count={} PC=0x{:08X} instr=0x{:08X} => {:?}",
+                c, pc, instr, op
+            );
         }
     }
 }

@@ -16,17 +16,24 @@ fn try_boot(earlycon: &str, label: &str) {
         512,
         20_000_000u64,
         &bootargs,
-    ).unwrap();
+    )
+    .unwrap();
     let elapsed = start.elapsed();
-    
+
     println!("\n=== {} ===", label);
-    println!("Boot: {} instructions in {:?}", result.instructions, elapsed);
-    println!("PC: 0x{:08X} Priv: {:?} SATP: 0x{:08X}", vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp);
-    
+    println!(
+        "Boot: {} instructions in {:?}",
+        result.instructions, elapsed
+    );
+    println!(
+        "PC: 0x{:08X} Priv: {:?} SATP: 0x{:08X}",
+        vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp
+    );
+
     // Check for SBI calls
     let tx = vm.bus.uart.drain_tx();
     let sbi_out = &vm.bus.sbi.console_output;
-    
+
     if !tx.is_empty() {
         let s = String::from_utf8_lossy(&tx);
         println!("UART ({} bytes):\n{}", tx.len(), s);
@@ -37,7 +44,7 @@ fn try_boot(earlycon: &str, label: &str) {
     }
     if tx.is_empty() && sbi_out.is_empty() {
         println!("No output at all!");
-        
+
         // Try to find panic string on stack
         let sp = vm.cpu.x[2];
         for i in 0..40 {
@@ -50,7 +57,9 @@ fn try_boot(earlycon: &str, label: &str) {
                     let b = vm.bus.read_word(word as u64 + j as u64).unwrap_or(0);
                     let bytes = b.to_le_bytes();
                     for &byte in &bytes {
-                        if byte == 0 { break; }
+                        if byte == 0 {
+                            break;
+                        }
                         if byte >= 0x20 && byte < 0x7f {
                             chars.push(byte as char);
                         } else {
@@ -60,7 +69,12 @@ fn try_boot(earlycon: &str, label: &str) {
                 }
                 if chars.len() > 4 {
                     let s: String = chars.iter().collect();
-                    if s.contains("panic") || s.contains("fatal") || s.contains("error") || s.contains("BUG") || s.contains("die") {
+                    if s.contains("panic")
+                        || s.contains("fatal")
+                        || s.contains("error")
+                        || s.contains("BUG")
+                        || s.contains("die")
+                    {
                         println!("  SP[{:2}] = 0x{:08X} -> \"{}\"", i * 4, word, s);
                     }
                 }

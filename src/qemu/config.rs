@@ -125,10 +125,7 @@ impl QemuConfig {
 
         // Disk
         if let Some(ref disk) = self.disk {
-            cmd.args([
-                "-drive",
-                &format!("file={},format=raw,if=virtio", disk),
-            ]);
+            cmd.args(["-drive", &format!("file={},format=raw,if=virtio", disk)]);
         }
 
         // Network
@@ -164,10 +161,8 @@ mod tests {
 
     #[test]
     fn test_config_parse_full() {
-        let cfg = QemuConfig::parse(
-            "arch=x86_64 kernel=bzImage ram=512M disk=rootfs.ext4",
-        )
-        .expect("operation should succeed");
+        let cfg = QemuConfig::parse("arch=x86_64 kernel=bzImage ram=512M disk=rootfs.ext4")
+            .expect("operation should succeed");
         assert_eq!(cfg.arch, "x86_64");
         assert_eq!(cfg.kernel.as_deref(), Some("bzImage"));
         assert_eq!(cfg.ram.as_deref(), Some("512M"));
@@ -205,7 +200,8 @@ mod tests {
 
     #[test]
     fn test_config_parse_extra_args() {
-        let cfg = QemuConfig::parse("arch=riscv64 custom=foo").expect("config parse should succeed");
+        let cfg =
+            QemuConfig::parse("arch=riscv64 custom=foo").expect("config parse should succeed");
         assert_eq!(cfg.extra_args, vec!["custom=foo"]);
     }
 
@@ -244,11 +240,10 @@ mod tests {
 
     #[test]
     fn test_build_command_riscv64() {
-        let cfg =
-            QemuConfig::parse("arch=riscv64 kernel=Image ram=256M").expect("config parse should succeed");
+        let cfg = QemuConfig::parse("arch=riscv64 kernel=Image ram=256M")
+            .expect("config parse should succeed");
         let cmd = cfg.build_command().expect("command build should succeed");
-        let args: Vec<String> =
-            cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
+        let args: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
         assert!(args.contains(&"-nographic".to_string()));
         assert!(args.contains(&"mon:stdio".to_string()));
         assert!(args.contains(&"-machine".to_string()));
@@ -261,11 +256,14 @@ mod tests {
 
     #[test]
     fn test_build_command_with_disk() {
-        let cfg = QemuConfig::parse("arch=riscv64 disk=rootfs.ext4").expect("config parse should succeed");
+        let cfg = QemuConfig::parse("arch=riscv64 disk=rootfs.ext4")
+            .expect("config parse should succeed");
         let cmd = cfg.build_command().expect("command build should succeed");
-        let args: Vec<String> =
-            cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
-        let drive_arg = args.iter().find(|a| a.contains("rootfs.ext4")).expect("expected element should exist");
+        let args: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
+        let drive_arg = args
+            .iter()
+            .find(|a| a.contains("rootfs.ext4"))
+            .expect("expected element should exist");
         assert!(drive_arg.contains("format=raw"));
         assert!(drive_arg.contains("if=virtio"));
     }
@@ -274,8 +272,7 @@ mod tests {
     fn test_build_command_with_net_none() {
         let cfg = QemuConfig::parse("arch=riscv64 net=none").expect("config parse should succeed");
         let cmd = cfg.build_command().expect("command build should succeed");
-        let args: Vec<String> =
-            cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
+        let args: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().into()).collect();
         assert!(args.contains(&"none".to_string()));
     }
 

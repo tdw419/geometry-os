@@ -22,7 +22,8 @@ fn main() {
         )
         .unwrap();
 
-        println!("[{}] PC=0x{:08X} instrs={} SBI={} UART={}",
+        println!(
+            "[{}] PC=0x{:08X} instrs={} SBI={} UART={}",
             bootargs,
             vm.cpu.pc,
             boot_result.instructions,

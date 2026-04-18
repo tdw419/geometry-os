@@ -1,6 +1,6 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
 use geometry_os::riscv::csr;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -8,8 +8,12 @@ fn main() {
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
     let (mut vm, fw_addr, _, _) = RiscvVm::boot_linux_setup(
-        &kernel_image, initramfs.as_deref(), 256, "console=ttyS0 loglevel=8",
-    ).unwrap();
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        "console=ttyS0 loglevel=8",
+    )
+    .unwrap();
     let fw = fw_addr as u32;
 
     let max = 200_000u64;
@@ -21,11 +25,21 @@ fn main() {
             let code = mcause & !(1u32 << 31);
             if code == csr::CAUSE_ECALL_S {
                 let r = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
-                if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                if let Some((a0, a1)) = r {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
                 count += 1;
                 continue;
@@ -38,9 +52,11 @@ fn main() {
                         vm.cpu.csr.scause = mcause;
                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP)) | (spp << csr::MSTATUS_SPP);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                            | (spp << csr::MSTATUS_SPP);
                         let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE)) | (sie << csr::MSTATUS_SPIE);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                            | (sie << csr::MSTATUS_SPIE);
                         vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
                         vm.cpu.pc = stvec;
                         vm.cpu.privilege = Privilege::Supervisor;
@@ -54,11 +70,21 @@ fn main() {
                 continue;
             }
             let r = vm.bus.sbi.handle_ecall(
-                vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                &mut vm.bus.uart, &mut vm.bus.clint,
+                vm.cpu.x[17],
+                vm.cpu.x[16],
+                vm.cpu.x[10],
+                vm.cpu.x[11],
+                vm.cpu.x[12],
+                vm.cpu.x[13],
+                vm.cpu.x[14],
+                vm.cpu.x[15],
+                &mut vm.bus.uart,
+                &mut vm.bus.clint,
             );
-            if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+            if let Some((a0, a1)) = r {
+                vm.cpu.x[10] = a0;
+                vm.cpu.x[11] = a1;
+            }
             vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             count += 1;
             continue;
@@ -78,7 +104,7 @@ fn main() {
             let b1 = vm.bus.read_byte(pa + 1).unwrap_or(0xFF);
             let half = (b1 as u16) << 8 | b0 as u16;
             let va = base_va + off;
-            
+
             // Decode compressed vs regular
             let is_compressed = (half & 0x3) != 0x3;
             if is_compressed {
@@ -91,7 +117,7 @@ fn main() {
             }
         }
     }
-    
+
     // Also check: what's the instruction at 0xC00010B2?
     eprintln!("\n=== Registers at count {} ===", count);
     for i in 0..32 {

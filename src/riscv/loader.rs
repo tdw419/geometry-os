@@ -53,7 +53,9 @@ impl std::fmt::Display for LoadError {
         match self {
             LoadError::TooShort => write!(f, "image too short for ELF header"),
             LoadError::NotElf => write!(f, "not an ELF file (bad magic)"),
-            LoadError::UnsupportedClass => write!(f, "unsupported ELF class (not 32-bit or 64-bit)"),
+            LoadError::UnsupportedClass => {
+                write!(f, "unsupported ELF class (not 32-bit or 64-bit)")
+            }
             LoadError::WrongEndian => write!(f, "expected little-endian ELF"),
             LoadError::WrongMachine => write!(f, "expected RISC-V ELF (EM_RISCV)"),
             LoadError::NoLoadSegments => write!(f, "no PT_LOAD segments in ELF"),
@@ -145,24 +147,34 @@ pub(crate) fn parse_elf_header(image: &[u8], class: u8) -> ElfHeader {
             let phoff = u32::from_le_bytes([image[28], image[29], image[30], image[31]]) as usize;
             let phentsize = u16::from_le_bytes([image[42], image[43]]) as usize;
             let phnum = u16::from_le_bytes([image[44], image[45]]) as usize;
-            ElfHeader { entry, phoff, phentsize, phnum }
+            ElfHeader {
+                entry,
+                phoff,
+                phentsize,
+                phnum,
+            }
         }
         ELFCLASS64 => {
             // ELF64 entry is 8 bytes at offset 24; truncate to 32 bits.
             let entry = u64::from_le_bytes([
-                image[24], image[25], image[26], image[27],
-                image[28], image[29], image[30], image[31],
+                image[24], image[25], image[26], image[27], image[28], image[29], image[30],
+                image[31],
             ]) as u32;
             // phoff is 8 bytes at offset 32.
             let phoff = u64::from_le_bytes([
-                image[32], image[33], image[34], image[35],
-                image[36], image[37], image[38], image[39],
+                image[32], image[33], image[34], image[35], image[36], image[37], image[38],
+                image[39],
             ]) as usize;
             // phentsize is 2 bytes at offset 54.
             let phentsize = u16::from_le_bytes([image[54], image[55]]) as usize;
             // phnum is 2 bytes at offset 56.
             let phnum = u16::from_le_bytes([image[56], image[57]]) as usize;
-            ElfHeader { entry, phoff, phentsize, phnum }
+            ElfHeader {
+                entry,
+                phoff,
+                phentsize,
+                phnum,
+            }
         }
         _ => unreachable!("validated in validate_elf_header"),
     }
@@ -170,11 +182,14 @@ pub(crate) fn parse_elf_header(image: &[u8], class: u8) -> ElfHeader {
 
 /// Parse a single program header entry.
 pub(crate) fn parse_phdr(image: &[u8], offset: usize, class: u8) -> Option<ElfPhdr> {
-    if offset + match class {
-        ELFCLASS32 => 32,
-        ELFCLASS64 => 56,
-        _ => return None,
-    } > image.len() {
+    if offset
+        + match class {
+            ELFCLASS32 => 32,
+            ELFCLASS64 => 56,
+            _ => return None,
+        }
+        > image.len()
+    {
         return None;
     }
 
@@ -196,28 +211,23 @@ pub(crate) fn parse_phdr(image: &[u8], offset: usize, class: u8) -> Option<ElfPh
                 p_type: u32::from_le_bytes([seg[0], seg[1], seg[2], seg[3]]),
                 // p_offset is 8 bytes at offset 8.
                 p_offset: u64::from_le_bytes([
-                    seg[8], seg[9], seg[10], seg[11],
-                    seg[12], seg[13], seg[14], seg[15],
+                    seg[8], seg[9], seg[10], seg[11], seg[12], seg[13], seg[14], seg[15],
                 ]) as usize,
                 // p_vaddr is 8 bytes at offset 16; truncate to 32 bits.
                 p_vaddr: u64::from_le_bytes([
-                    seg[16], seg[17], seg[18], seg[19],
-                    seg[20], seg[21], seg[22], seg[23],
+                    seg[16], seg[17], seg[18], seg[19], seg[20], seg[21], seg[22], seg[23],
                 ]) as u32,
                 // p_paddr is 8 bytes at offset 24; truncate to 32 bits.
                 p_paddr: u64::from_le_bytes([
-                    seg[24], seg[25], seg[26], seg[27],
-                    seg[28], seg[29], seg[30], seg[31],
+                    seg[24], seg[25], seg[26], seg[27], seg[28], seg[29], seg[30], seg[31],
                 ]) as u32,
                 // p_filesz is 8 bytes at offset 32.
                 p_filesz: u64::from_le_bytes([
-                    seg[32], seg[33], seg[34], seg[35],
-                    seg[36], seg[37], seg[38], seg[39],
+                    seg[32], seg[33], seg[34], seg[35], seg[36], seg[37], seg[38], seg[39],
                 ]) as usize,
                 // p_memsz is 8 bytes at offset 40.
                 p_memsz: u64::from_le_bytes([
-                    seg[40], seg[41], seg[42], seg[43],
-                    seg[44], seg[45], seg[46], seg[47],
+                    seg[40], seg[41], seg[42], seg[43], seg[44], seg[45], seg[46], seg[47],
                 ]) as usize,
             })
         }
@@ -400,12 +410,7 @@ pub fn load_auto(bus: &mut Bus, image: &[u8], default_base: u64) -> Result<LoadI
 mod tests {
     use super::*;
 
-    fn make_elf_header(
-        entry: u32,
-        machine: u16,
-        class: u8,
-        endian: u8,
-    ) -> Vec<u8> {
+    fn make_elf_header(entry: u32, machine: u16, class: u8, endian: u8) -> Vec<u8> {
         let mut hdr = vec![0u8; 52];
         // Magic.
         hdr[0..4].copy_from_slice(&ELF_MAGIC.to_le_bytes());
@@ -428,11 +433,7 @@ mod tests {
         hdr
     }
 
-    fn make_elf_with_segment(
-        entry: u32,
-        paddr: u32,
-        data: &[u8],
-    ) -> Vec<u8> {
+    fn make_elf_with_segment(entry: u32, paddr: u32, data: &[u8]) -> Vec<u8> {
         let mut img = make_elf_header(entry, EM_RISCV, 1, 1);
         // Update phnum = 1.
         img[44..46].copy_from_slice(&1u16.to_le_bytes());
@@ -498,7 +499,10 @@ mod tests {
         let img = make_elf64_with_segment(0x1000, 0x1000, &[0x13, 0x00, 0x00, 0x00]);
         let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x1000);
-        assert_eq!(bus.read_byte(0x1000).expect("operation should succeed"), 0x13);
+        assert_eq!(
+            bus.read_byte(0x1000).expect("operation should succeed"),
+            0x13
+        );
     }
 
     #[test]
@@ -533,8 +537,16 @@ mod tests {
         let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
         // Verify the data was loaded.
-        assert_eq!(bus.read_byte(0x8000_0000).expect("operation should succeed"), 0x13);
-        assert_eq!(bus.read_byte(0x8000_0003).expect("operation should succeed"), 0x00);
+        assert_eq!(
+            bus.read_byte(0x8000_0000)
+                .expect("operation should succeed"),
+            0x13
+        );
+        assert_eq!(
+            bus.read_byte(0x8000_0003)
+                .expect("operation should succeed"),
+            0x00
+        );
     }
 
     #[test]
@@ -577,8 +589,16 @@ mod tests {
 
         let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
-        assert_eq!(bus.read_word(0x8000_0000).expect("operation should succeed"), 0x0000_0013);
-        assert_eq!(bus.read_word(0x8000_1000).expect("operation should succeed"), 0xEFBE_ADDE);
+        assert_eq!(
+            bus.read_word(0x8000_0000)
+                .expect("operation should succeed"),
+            0x0000_0013
+        );
+        assert_eq!(
+            bus.read_word(0x8000_1000)
+                .expect("operation should succeed"),
+            0xEFBE_ADDE
+        );
     }
 
     #[test]
@@ -596,7 +616,11 @@ mod tests {
         let data: &[u8] = &[0x13, 0x01, 0xA0, 0x23]; // some instruction
         let info = load_raw(&mut bus, data, 0x8000_0000).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
-        assert_eq!(bus.read_byte(0x8000_0000).expect("operation should succeed"), 0x13);
+        assert_eq!(
+            bus.read_byte(0x8000_0000)
+                .expect("operation should succeed"),
+            0x13
+        );
     }
 
     #[test]
@@ -622,7 +646,11 @@ mod tests {
         let data: &[u8] = &[0x13, 0x00, 0x00, 0x00];
         let info = load_auto(&mut bus, data, 0x8000_0000).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
-        assert_eq!(bus.read_byte(0x8000_0000).expect("operation should succeed"), 0x13);
+        assert_eq!(
+            bus.read_byte(0x8000_0000)
+                .expect("operation should succeed"),
+            0x13
+        );
     }
 
     #[test]
@@ -654,7 +682,11 @@ mod tests {
 
         let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x8000_0000);
-        assert_eq!(bus.read_byte(0x8000_0000).expect("operation should succeed"), 0xAB);
+        assert_eq!(
+            bus.read_byte(0x8000_0000)
+                .expect("operation should succeed"),
+            0xAB
+        );
     }
 
     #[test]
@@ -721,8 +753,14 @@ mod tests {
         let img = make_elf64_with_segment(0x1000, 0x1000, data);
         let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x1000);
-        assert_eq!(bus.read_byte(0x1000).expect("operation should succeed"), 0x13);
-        assert_eq!(bus.read_byte(0x1003).expect("operation should succeed"), 0x00);
+        assert_eq!(
+            bus.read_byte(0x1000).expect("operation should succeed"),
+            0x13
+        );
+        assert_eq!(
+            bus.read_byte(0x1003).expect("operation should succeed"),
+            0x00
+        );
         assert_eq!(info.highest_addr, 0x1004);
     }
 
@@ -785,7 +823,13 @@ mod tests {
 
         let info = load_elf(&mut bus, &img).expect("operation should succeed");
         assert_eq!(info.entry, 0x1000);
-        assert_eq!(bus.read_byte(0x1000).expect("operation should succeed"), 0x13);
-        assert_eq!(bus.read_byte(0x2000).expect("operation should succeed"), 0xDE);
+        assert_eq!(
+            bus.read_byte(0x1000).expect("operation should succeed"),
+            0x13
+        );
+        assert_eq!(
+            bus.read_byte(0x2000).expect("operation should succeed"),
+            0xDE
+        );
     }
 }

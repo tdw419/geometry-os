@@ -1,8 +1,8 @@
 //! Diagnostic: dump page table state at the third SATP change.
 
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
 use geometry_os::riscv::mmu::{self, AccessType};
+use geometry_os::riscv::RiscvVm;
 
 fn pte_flags(pte: u32) -> String {
     let mut s = String::new();
@@ -40,10 +40,10 @@ fn main() {
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
             satp_count += 1;
-                eprintln!(
-                    "[diag] SATP #{} at count={}: 0x{:08X} -> 0x{:08X}",
-                    satp_count, count, last_satp, cur_satp
-                );
+            eprintln!(
+                "[diag] SATP #{} at count={}: 0x{:08X} -> 0x{:08X}",
+                satp_count, count, last_satp, cur_satp
+            );
 
             if satp_count == 3 {
                 let new_ppn = cur_satp & 0x003F_FFFF;
@@ -60,12 +60,18 @@ fn main() {
                         if is_leaf {
                             eprintln!(
                                 "[diag] L1[{}] = 0x{:08X} MEGAPAGE PA 0x{:08X} {}",
-                                l1_idx, l1_pte, ppn << 22, pte_flags(l1_pte)
+                                l1_idx,
+                                l1_pte,
+                                ppn << 22,
+                                pte_flags(l1_pte)
                             );
                         } else {
                             eprintln!(
                                 "[diag] L1[{}] = 0x{:08X} -> L2 PA 0x{:08X} {}",
-                                l1_idx, l1_pte, ppn << 12, pte_flags(l1_pte)
+                                l1_idx,
+                                l1_pte,
+                                ppn << 12,
+                                pte_flags(l1_pte)
                             );
                         }
                     }
@@ -75,7 +81,10 @@ fn main() {
                 let test_va: u32 = 0xC0210F14;
                 let vpn2 = (test_va >> 22) as u64;
                 let vpn1 = ((test_va >> 12) & 0x3FF) as u64;
-                eprintln!("\n[diag] Walk VA 0x{:08X} (vpn2={} vpn1={})", test_va, vpn2, vpn1);
+                eprintln!(
+                    "\n[diag] Walk VA 0x{:08X} (vpn2={} vpn1={})",
+                    test_va, vpn2, vpn1
+                );
                 let l1_pte = vm.bus.read_word(pg_dir_phys + vpn2 * 4).unwrap_or(0);
                 eprintln!("[diag] L1[{}] = 0x{:08X}", vpn2, l1_pte);
                 if l1_pte & 1 == 0 {
@@ -88,11 +97,17 @@ fn main() {
                 } else {
                     let l2_base = (((l1_pte >> 10) & 0x3FF_FFF) as u64) << 12;
                     let l2_pte = vm.bus.read_word(l2_base + vpn1 * 4).unwrap_or(0);
-                    eprintln!("[diag] L2[{}] at PA 0x{:08X} = 0x{:08X}", vpn1, l2_base + vpn1 * 4, l2_pte);
+                    eprintln!(
+                        "[diag] L2[{}] at PA 0x{:08X} = 0x{:08X}",
+                        vpn1,
+                        l2_base + vpn1 * 4,
+                        l2_pte
+                    );
                     if l2_pte & 1 == 0 {
                         eprintln!("[diag] NOT MAPPED (L2 V=0)");
                     } else {
-                        let pa = (((l2_pte >> 10) & 0x3FF_FFF) as u64) << 12 | ((test_va as u64) & 0xFFF);
+                        let pa = (((l2_pte >> 10) & 0x3FF_FFF) as u64) << 12
+                            | ((test_va as u64) & 0xFFF);
                         eprintln!("[diag] -> PA 0x{:08X}", pa);
                     }
                 }
@@ -120,7 +135,10 @@ fn main() {
                 let old_pg_dir = (old_ppn as u64) * 4096;
                 eprintln!("\n[diag] Old pg_dir at PA 0x{:08X}:", old_pg_dir);
                 for l1_idx in [776u32, 784] {
-                    let l1_pte = vm.bus.read_word(old_pg_dir + (l1_idx as u64) * 4).unwrap_or(0);
+                    let l1_pte = vm
+                        .bus
+                        .read_word(old_pg_dir + (l1_idx as u64) * 4)
+                        .unwrap_or(0);
                     eprintln!("[diag] OLD L1[{}] = 0x{:08X}", l1_idx, l1_pte);
                 }
 
@@ -158,6 +176,9 @@ fn main() {
     }
 
     if satp_count < 3 {
-        eprintln!("[diag] Only {} SATP changes in {} instructions", satp_count, count);
+        eprintln!(
+            "[diag] Only {} SATP changes in {} instructions",
+            satp_count, count
+        );
     }
 }

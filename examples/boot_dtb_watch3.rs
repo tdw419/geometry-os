@@ -1,8 +1,8 @@
 //! Diagnostic: Watch _dtb_early_va every 1000 instructions to see when/how it gets corrupted.
 //! Run: cargo run --example boot_dtb_watch3
 
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{Privilege, StepResult};
+use geometry_os::riscv::RiscvVm;
 use std::time::Instant;
 
 fn main() {
@@ -11,12 +11,14 @@ fn main() {
     let ir_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let initramfs_data = if std::path::Path::new(ir_path).exists() {
         Some(std::fs::read(ir_path).unwrap())
-    } else { None };
+    } else {
+        None
+    };
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_data, initramfs_data.as_deref(), 512, bootargs,
-    ).expect("boot_linux_setup failed");
+    let (mut vm, fw_addr, _entry, dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_data, initramfs_data.as_deref(), 512, bootargs)
+            .expect("boot_linux_setup failed");
 
     let fw_addr_u32 = fw_addr as u32;
     let dtb_va_expected = (dtb_addr.wrapping_add(0xC0000000)) as u32;
@@ -30,7 +32,9 @@ fn main() {
     let mut restore_count = 0u32;
 
     loop {
-        if count >= max_instr { break; }
+        if count >= max_instr {
+            break;
+        }
 
         let result = vm.step();
         match result {
@@ -101,7 +105,10 @@ fn main() {
         if count > 200000 && count % 1000 == 0 {
             let prb = vm.bus.read_word(0x00C79EAC).unwrap_or(0);
             if prb != 0 {
-                eprintln!("[{}] phys_ram_base SET to 0x{:08X}! PC=0x{:08X}", count, prb, vm.cpu.pc);
+                eprintln!(
+                    "[{}] phys_ram_base SET to 0x{:08X}! PC=0x{:08X}",
+                    count, prb, vm.cpu.pc
+                );
                 // Continue running to see what happens next
             }
         }
@@ -112,13 +119,24 @@ fn main() {
     }
 
     let prb = vm.bus.read_word(0x00C79EAC).unwrap_or(0);
-    eprintln!("\n=== FINAL: {} instr, PC=0x{:08X}, phys_ram_base=0x{:08X}, restores={} ===",
-        count, vm.cpu.pc, prb, restore_count);
+    eprintln!(
+        "\n=== FINAL: {} instr, PC=0x{:08X}, phys_ram_base=0x{:08X}, restores={} ===",
+        count, vm.cpu.pc, prb, restore_count
+    );
 
     let mut uart = Vec::new();
-    loop { match vm.bus.uart.read_byte(0) { 0 => break, b => uart.push(b) } }
+    loop {
+        match vm.bus.uart.read_byte(0) {
+            0 => break,
+            b => uart.push(b),
+        }
+    }
     if !uart.is_empty() {
-        eprintln!("UART ({} bytes): {}", uart.len(), String::from_utf8_lossy(&uart));
+        eprintln!(
+            "UART ({} bytes): {}",
+            uart.len(),
+            String::from_utf8_lossy(&uart)
+        );
     } else {
         eprintln!("No UART output");
     }

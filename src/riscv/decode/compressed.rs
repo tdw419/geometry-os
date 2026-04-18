@@ -8,7 +8,7 @@
 // This is critical: the same funct3 value maps to different instructions in different
 // bit[1:0] groups.
 
-use super::operation::{Operation, sign_extend};
+use super::operation::{sign_extend, Operation};
 
 /// Check if a 16-bit halfword is a compressed instruction.
 /// Returns true if bits[1:0] != 0b11 (not a 32-bit instruction).
@@ -36,9 +36,17 @@ pub fn decode_c(halfword: u16) -> Operation {
                 let nzuimm = c_addi4spn_imm(w);
                 if nzuimm == 0 {
                     // HINT: treat as NOP (write to x0, which is discarded)
-                    Operation::Addi { rd: 0, rs1: 0, imm: 0 }
+                    Operation::Addi {
+                        rd: 0,
+                        rs1: 0,
+                        imm: 0,
+                    }
                 } else {
-                    Operation::Addi { rd, rs1: 2, imm: nzuimm }
+                    Operation::Addi {
+                        rd,
+                        rs1: 2,
+                        imm: nzuimm,
+                    }
                 }
             }
             // C.LW: load word from rs1' + offset
@@ -110,9 +118,17 @@ pub fn decode_c(halfword: u16) -> Operation {
                         // C.SRLI (func=00) or C.SRAI (func=01)
                         let shamt = (((w >> 12) & 1) << 5) | ((w >> 2) & 0x1F);
                         if func == 0b00 {
-                            Operation::Srli { rd, rs1: rd, shamt: shamt as u8 }
+                            Operation::Srli {
+                                rd,
+                                rs1: rd,
+                                shamt: shamt as u8,
+                            }
                         } else {
-                            Operation::Srai { rd, rs1: rd, shamt: shamt as u8 }
+                            Operation::Srai {
+                                rd,
+                                rs1: rd,
+                                shamt: shamt as u8,
+                            }
                         }
                     }
                     0b10 => {
@@ -175,7 +191,11 @@ pub fn decode_c(halfword: u16) -> Operation {
             0b000 => {
                 let rd = ((w >> 7) & 0x1F) as u8;
                 let shamt = (((w >> 12) & 1) << 5) | ((w >> 2) & 0x1F);
-                Operation::Slli { rd, rs1: rd, shamt: shamt as u8 }
+                Operation::Slli {
+                    rd,
+                    rs1: rd,
+                    shamt: shamt as u8,
+                }
             }
             // C.LDSP (RV64) / C.LWSP
             0b010 => {
@@ -192,7 +212,11 @@ pub fn decode_c(halfword: u16) -> Operation {
                 if bit12 == 0 {
                     if rs2 == 0 {
                         // C.JR: jalr x0, rd, 0
-                        Operation::Jalr { rd: 0, rs1: rd, imm: 0 }
+                        Operation::Jalr {
+                            rd: 0,
+                            rs1: rd,
+                            imm: 0,
+                        }
                     } else {
                         // C.MV: add rd, x0, rs2
                         Operation::Add { rd, rs1: 0, rs2 }
@@ -202,7 +226,11 @@ pub fn decode_c(halfword: u16) -> Operation {
                     Operation::Ebreak
                 } else if rs2 == 0 {
                     // C.JALR: jalr x1, rd, 0
-                    Operation::Jalr { rd: 1, rs1: rd, imm: 0 }
+                    Operation::Jalr {
+                        rd: 1,
+                        rs1: rd,
+                        imm: 0,
+                    }
                 } else {
                     // C.ADD: add rd, rd, rs2
                     Operation::Add { rd, rs1: rd, rs2 }
@@ -248,14 +276,13 @@ fn c_addi4spn_imm(w: u32) -> i32 {
         | (((w >> 9) & 0x1) << 8)        // inst[9]  -> nzimm[8]
         | (((w >> 10) & 0x1) << 9)       // inst[10] -> nzimm[9]
         | (((w >> 11) & 0x1) << 4)       // inst[11] -> nzimm[4]
-        | (((w >> 12) & 0x1) << 5);      // inst[12] -> nzimm[5]
+        | (((w >> 12) & 0x1) << 5); // inst[12] -> nzimm[5]
     imm as i32
 }
 
 /// C.ADDI / C.LI / C.ADDIW immediate: imm[5:4|12|2:6|3] (sign-extended 6-bit)
 fn c_addi_imm(w: u32) -> i32 {
-    let raw = (((w >> 12) & 0x1) << 5)
-        | ((w >> 2) & 0x1F);
+    let raw = (((w >> 12) & 0x1) << 5) | ((w >> 2) & 0x1F);
     sign_extend(raw, 6)
 }
 
@@ -279,9 +306,7 @@ fn c_addi16sp_imm(w: u32) -> i32 {
 
 /// C.LUI immediate: nzimm[17|12:2] (not sign-extended, 32-bit)
 fn c_lui_imm(w: u32) -> u32 {
-    
-    (((w >> 12) & 0x1) << 17)
-        | (((w >> 2) & 0x1F) << 12)
+    (((w >> 12) & 0x1) << 17) | (((w >> 2) & 0x1F) << 12)
 }
 
 /// C.ANDI immediate: imm[5:4|12|2:6|3] (same encoding as C.ADDI, sign-extended 6-bit)

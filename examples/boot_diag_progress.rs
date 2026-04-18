@@ -1,6 +1,5 @@
 /// Diagnostic: trace early boot progress and find where the kernel gets stuck.
 /// Run for 5M instructions with periodic status reports.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -31,7 +30,9 @@ fn main() {
         }
 
         // Handle M-mode trap forwarding (same as boot_linux)
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
 
@@ -39,19 +40,26 @@ fn main() {
                 // ECALL_M -> SBI call
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
                     vm.cpu.x[11] = a1;
                 }
                 if sbi_count <= 20 {
-                    println!("[diag] SBI #{} at count={} PC=0x{:08X} a7=0x{:X} a6=0x{:X}",
-                        sbi_count, count, vm.cpu.csr.mepc, vm.cpu.x[17], vm.cpu.x[16]);
+                    println!(
+                        "[diag] SBI #{} at count={} PC=0x{:08X} a7=0x{:X} a6=0x{:X}",
+                        sbi_count, count, vm.cpu.csr.mepc, vm.cpu.x[17], vm.cpu.x[16]
+                    );
                 }
             } else {
                 // Forward non-ECALL_M traps to S-mode
@@ -87,8 +95,10 @@ fn main() {
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
             satp_changes += 1;
-            println!("[diag] SATP change #{}: 0x{:08X} -> 0x{:08X} at count={} PC=0x{:08X}",
-                satp_changes, last_satp, cur_satp, count, vm.cpu.pc);
+            println!(
+                "[diag] SATP change #{}: 0x{:08X} -> 0x{:08X} at count={} PC=0x{:08X}",
+                satp_changes, last_satp, cur_satp, count, vm.cpu.pc
+            );
             last_satp = cur_satp;
         }
 
@@ -113,10 +123,17 @@ fn main() {
         count += 1;
     }
 
-    println!("\n[diag] Final: count={} PC=0x{:08X} priv={:?} SATP=0x{:08X}",
-        count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp);
-    println!("[diag] Total: satap_changes={} traps={} sbi_calls={} uart_chars={}",
-        satp_changes, trap_count, sbi_count, vm.bus.uart.tx_buf.len());
+    println!(
+        "\n[diag] Final: count={} PC=0x{:08X} priv={:?} SATP=0x{:08X}",
+        count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp
+    );
+    println!(
+        "[diag] Total: satap_changes={} traps={} sbi_calls={} uart_chars={}",
+        satp_changes,
+        trap_count,
+        sbi_count,
+        vm.bus.uart.tx_buf.len()
+    );
 
     if !vm.bus.uart.tx_buf.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);

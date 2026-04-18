@@ -1,6 +1,6 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::csr;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -9,9 +9,19 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
-    let (mut vm, boot_result) = RiscvVm::boot_linux(&kernel_image, initramfs.as_deref(), 256, 30_000_000, bootargs).unwrap();
+    let (mut vm, boot_result) = RiscvVm::boot_linux(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        30_000_000,
+        bootargs,
+    )
+    .unwrap();
 
-    println!("Boot: {} instr, PC=0x{:08X}", boot_result.instructions, vm.cpu.pc);
+    println!(
+        "Boot: {} instr, PC=0x{:08X}",
+        boot_result.instructions, vm.cpu.pc
+    );
     println!("UART output: {} chars", vm.bus.uart.tx_buf.len());
     if !vm.bus.uart.tx_buf.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);
@@ -27,5 +37,8 @@ fn main() {
     println!("Privilege: {:?}", vm.cpu.privilege);
 
     // Check a few key registers
-    println!("SP=0x{:08X} TP=0x{:08X} RA=0x{:08X}", vm.cpu.x[2], vm.cpu.x[4], vm.cpu.x[1]);
+    println!(
+        "SP=0x{:08X} TP=0x{:08X} RA=0x{:08X}",
+        vm.cpu.x[2], vm.cpu.x[4], vm.cpu.x[1]
+    );
 }

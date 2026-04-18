@@ -16,9 +16,7 @@ pub(super) fn try_parse(
     match opcode {
         "PSET" => {
             if tokens.len() < 4 {
-                return Err(
-                    "PSET requires 3 arguments: PSET x_reg, y_reg, color_reg".to_string(),
-                );
+                return Err("PSET requires 3 arguments: PSET x_reg, y_reg, color_reg".to_string());
             }
             bytecode.push(0x40);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -65,9 +63,7 @@ pub(super) fn try_parse(
 
         "TEXT" => {
             if tokens.len() < 4 {
-                return Err(
-                    "TEXT requires 3 arguments: TEXT x_reg, y_reg, addr_reg".to_string(),
-                );
+                return Err("TEXT requires 3 arguments: TEXT x_reg, y_reg, addr_reg".to_string());
             }
             bytecode.push(0x44);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -78,9 +74,7 @@ pub(super) fn try_parse(
 
         "LINE" => {
             if tokens.len() < 6 {
-                return Err(
-                    "LINE requires 5 arguments: LINE x0r, y0r, x1r, y1r, cr".to_string(),
-                );
+                return Err("LINE requires 5 arguments: LINE x0r, y0r, x1r, y1r, cr".to_string());
             }
             bytecode.push(0x45);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -93,9 +87,7 @@ pub(super) fn try_parse(
 
         "CIRCLE" => {
             if tokens.len() < 5 {
-                return Err(
-                    "CIRCLE requires 4 arguments: CIRCLE xr, yr, rr, cr".to_string(),
-                );
+                return Err("CIRCLE requires 4 arguments: CIRCLE xr, yr, rr, cr".to_string());
             }
             bytecode.push(0x46);
             bytecode.push(parse_reg(tokens[1])? as u32);

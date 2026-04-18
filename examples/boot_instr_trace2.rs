@@ -1,7 +1,7 @@
-/// Trace the last 100 instructions before count 500K to see what the kernel is doing.
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
 use geometry_os::riscv::decode;
+/// Trace the last 100 instructions before count 500K to see what the kernel is doing.
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -22,7 +22,9 @@ fn main() {
     let mut unique_pcs: std::collections::HashSet<u32> = std::collections::HashSet::new();
 
     while count < max {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // Handle M-mode trap forwarding
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
@@ -30,11 +32,16 @@ fn main() {
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -67,7 +74,10 @@ fn main() {
         vm.step();
 
         if vm.cpu.csr.satp != last_satp {
-            println!("[trace] SATP: 0x{:08X} -> 0x{:08X} at count={}", last_satp, vm.cpu.csr.satp, count);
+            println!(
+                "[trace] SATP: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, vm.cpu.csr.satp, count
+            );
             last_satp = vm.cpu.csr.satp;
         }
 
@@ -79,7 +89,10 @@ fn main() {
             same_pc += 1;
             if same_pc == 1000 {
                 // Disassemble a few instructions around the spinning PC
-                println!("[trace] SPIN at PC=0x{:08X} ({} consecutive), count={}", vm.cpu.pc, same_pc, count);
+                println!(
+                    "[trace] SPIN at PC=0x{:08X} ({} consecutive), count={}",
+                    vm.cpu.pc, same_pc, count
+                );
                 // Read the instruction at PC and nearby
                 for offset in -4i64..=8i64 {
                     let addr = (vm.cpu.pc as i64 + offset * 4) as u64;
@@ -100,10 +113,16 @@ fn main() {
         count += 1;
     }
 
-    println!("\n[trace] Done: count={} unique_pcs={} ecall_count={}", 
-        count, unique_pcs.len(), vm.cpu.ecall_count);
-    println!("[trace] Final PC=0x{:08X} priv={:?} SATP=0x{:08X}", 
-        vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp);
+    println!(
+        "\n[trace] Done: count={} unique_pcs={} ecall_count={}",
+        count,
+        unique_pcs.len(),
+        vm.cpu.ecall_count
+    );
+    println!(
+        "[trace] Final PC=0x{:08X} priv={:?} SATP=0x{:08X}",
+        vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp
+    );
 
     // Disassemble last few instructions
     println!("\n[trace] Instructions at final PC:");

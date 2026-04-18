@@ -74,8 +74,13 @@ fn main() {
             let mode = satp & 0x1;
             let asid = (satp >> 22) & 0x1FF;
             let ppn = (satp >> 1) & 0x3FFFFF;
-            println!("\nsatp: mode={} asid={} ppn=0x{:08X} (pt_base=0x{:08X})",
-                mode, asid, ppn, ppn << 12);
+            println!(
+                "\nsatp: mode={} asid={} ppn=0x{:08X} (pt_base=0x{:08X})",
+                mode,
+                asid,
+                ppn,
+                ppn << 12
+            );
 
             // Try to translate mtval through the page tables manually
             let va = vm.cpu.csr.mtval;
@@ -83,7 +88,10 @@ fn main() {
             let vpn0 = (va >> 12) & 0x3FF;
             let offset = va & 0xFFF;
             println!("\nManual SV32 translation of mtval 0x{:08X}:", va);
-            println!("  VPN[1]=0x{:03X} VPN[0]=0x{:03X} offset=0x{:03X}", vpn1, vpn0, offset);
+            println!(
+                "  VPN[1]=0x{:03X} VPN[0]=0x{:03X} offset=0x{:03X}",
+                vpn1, vpn0, offset
+            );
 
             let pt_base = (ppn as u64) << 12;
             println!("  Page table base: 0x{:08X}", pt_base as u32);
@@ -106,14 +114,21 @@ fn main() {
                         println!("  L2 PTE at 0x{:08X}: 0x{:08X}", l2_addr as u32, l2_entry);
                         let l2_valid = (l2_entry & 1) != 0;
                         let l2_ppn = (l2_entry >> 10) & 0x3FFFFF;
-                        println!("    V={} PPN=0x{:08X} (PA=0x{:08X})",
-                            l2_valid, l2_ppn, (l2_ppn << 12) | offset);
+                        println!(
+                            "    V={} PPN=0x{:08X} (PA=0x{:08X})",
+                            l2_valid,
+                            l2_ppn,
+                            (l2_ppn << 12) | offset
+                        );
                     }
                 } else if l1_valid {
                     // Megapage
                     let l1_ppn = (l1_entry >> 10) & 0x3FFFFF;
-                    println!("    Megapage! PPN=0x{:08X} (PA=0x{:08X})",
-                        l1_ppn, ((l1_ppn << 12) | ((vpn0 as u32) << 12)) | offset);
+                    println!(
+                        "    Megapage! PPN=0x{:08X} (PA=0x{:08X})",
+                        l1_ppn,
+                        ((l1_ppn << 12) | ((vpn0 as u32) << 12)) | offset
+                    );
                 }
             }
 
@@ -121,7 +136,8 @@ fn main() {
             let mut bridge = geometry_os::riscv::bridge::UartBridge::new();
             let mut canvas = vec![0u32; 128 * 80];
             bridge.drain_uart_to_canvas(&mut vm.bus, &mut canvas);
-            let text: String = canvas.iter()
+            let text: String = canvas
+                .iter()
                 .filter(|&&c| c >= 32 && c < 127)
                 .map(|&c| char::from_u32(c).unwrap_or('?'))
                 .collect();

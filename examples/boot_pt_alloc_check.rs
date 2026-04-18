@@ -13,13 +13,13 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            bootargs,
-        ).expect("boot setup failed");
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        bootargs,
+    )
+    .expect("boot setup failed");
 
     let fw_addr_u32 = _fw_addr as u32;
     let max_instr: u64 = 752_000;
@@ -37,7 +37,11 @@ fn main() {
     for i in 0..10u32 {
         let val = vm.bus.read_word(new_pt_base + (i as u64) * 4).unwrap_or(0);
         if val != 0 {
-            eprintln!("[init] PA 0x{:08X} = 0x{:08X}", new_pt_base + (i as u64) * 4, val);
+            eprintln!(
+                "[init] PA 0x{:08X} = 0x{:08X}",
+                new_pt_base + (i as u64) * 4,
+                val
+            );
         }
     }
 
@@ -57,7 +61,10 @@ fn main() {
                     }
                 }
                 vm.cpu.tlb.flush_all();
-                eprintln!("[satp] Changed to 0x{:08X} pg_dir=0x{:08X} at count={}", cur_satp, pg_dir_phys, count);
+                eprintln!(
+                    "[satp] Changed to 0x{:08X} pg_dir=0x{:08X} at count={}",
+                    cur_satp, pg_dir_phys, count
+                );
                 if pg_dir_phys == new_pt_base {
                     saw_new_pt_satp = true;
                 }
@@ -66,7 +73,9 @@ fn main() {
         }
 
         // Trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 4;
@@ -103,7 +112,10 @@ fn main() {
                 let val = vm.bus.read_word(new_pt_base + (i as u64) * 4).unwrap_or(0);
                 if val != 0 && !saw_new_pt_write {
                     saw_new_pt_write = true;
-                    eprintln!("[watch] count={} First write to new PT: L1[{}] = 0x{:08X}", count, i, val);
+                    eprintln!(
+                        "[watch] count={} First write to new PT: L1[{}] = 0x{:08X}",
+                        count, i, val
+                    );
                 }
             }
         }
@@ -112,7 +124,10 @@ fn main() {
 
         if let StepResult::FetchFault = step_result {
             if count > 750_000 {
-                eprintln!("[fault] count={} FETCH_FAULT: PC=0x{:08X} sepc=0x{:08X}", count, vm.cpu.pc, vm.cpu.csr.sepc);
+                eprintln!(
+                    "[fault] count={} FETCH_FAULT: PC=0x{:08X} sepc=0x{:08X}",
+                    count, vm.cpu.pc, vm.cpu.csr.sepc
+                );
                 // Dump L1 entries of the new page table
                 eprintln!("\nNew page table L1[768..776] after SATP switch:");
                 for i in 768..776u32 {
@@ -120,7 +135,10 @@ fn main() {
                     if val != 0 {
                         let ppn = (val >> 10) & 0x3FFFFF;
                         let flags = val & 0x3FF;
-                        eprintln!("  L1[{}] = 0x{:08X} PPN=0x{:06X} flags=0x{:03X}", i, val, ppn, flags);
+                        eprintln!(
+                            "  L1[{}] = 0x{:08X} PPN=0x{:06X} flags=0x{:03X}",
+                            i, val, ppn, flags
+                        );
                     }
                 }
                 // Check if the fixmap entries are present

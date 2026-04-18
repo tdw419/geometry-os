@@ -1,7 +1,7 @@
+use geometry_os::riscv::cpu::StepResult;
 /// Diagnostic: trace exactly when RA changes to 0x3FFFF000
 /// and what instruction causes it.
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::StepResult;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -58,18 +58,25 @@ fn main() {
         }
 
         // M-mode trap handler (same as boot_linux)
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
 
             if cause_code == 9 {
                 // ECALL_S -> SBI call
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -102,9 +109,7 @@ fn main() {
 
         let step_result = vm.step();
         match step_result {
-            StepResult::FetchFault
-            | StepResult::LoadFault
-            | StepResult::StoreFault => {
+            StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
                 if vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Supervisor {
                     smode_fault_count += 1;
                     if smode_fault_count <= 3 {
@@ -126,18 +131,31 @@ fn main() {
                         let vpn1 = ((fault_va >> 22) & 0x3FF) as u64;
                         let vpn0 = ((fault_va >> 12) & 0x3FF) as u64;
                         let l1_pte = vm.bus.read_word(pg_dir_phys + vpn1 * 4).unwrap_or(0);
-                        eprintln!("[diag]   fault VA=0x{:08X} VPN1={} VPN0={} SATP=0x{:08X}", fault_va, vpn1, vpn0, satp);
-                        eprintln!("[diag]   pg_dir_phys=0x{:08X} L1[{}]=0x{:08X}", pg_dir_phys, vpn1, l1_pte);
+                        eprintln!(
+                            "[diag]   fault VA=0x{:08X} VPN1={} VPN0={} SATP=0x{:08X}",
+                            fault_va, vpn1, vpn0, satp
+                        );
+                        eprintln!(
+                            "[diag]   pg_dir_phys=0x{:08X} L1[{}]=0x{:08X}",
+                            pg_dir_phys, vpn1, l1_pte
+                        );
                         if (l1_pte & (1 << 0)) != 0 && (l1_pte & 0xE) != 0 {
                             // megapage
                             let l1_ppn = (l1_pte & 0xFFFFFC00) >> 10;
-                            eprintln!("[diag]   megapage PPN=0x{:08X} (phys would be 0x{:08X})", l1_ppn, l1_ppn << 12);
+                            eprintln!(
+                                "[diag]   megapage PPN=0x{:08X} (phys would be 0x{:08X})",
+                                l1_ppn,
+                                l1_ppn << 12
+                            );
                         } else if (l1_pte & (1 << 0)) != 0 {
                             // L2 pointer
                             let l1_ppn = (l1_pte & 0xFFFFFC00) >> 10;
                             let l2_addr = (l1_ppn as u64) << 12;
                             let l2_pte = vm.bus.read_word(l2_addr + vpn0 * 4).unwrap_or(0);
-                            eprintln!("[diag]   L2 base PA=0x{:08X} L2[{}]=0x{:08X}", l2_addr, vpn0, l2_pte);
+                            eprintln!(
+                                "[diag]   L2 base PA=0x{:08X} L2[{}]=0x{:08X}",
+                                l2_addr, vpn0, l2_pte
+                            );
                         }
                     }
                 }
@@ -151,7 +169,10 @@ fn main() {
         if cur_ra != last_ra {
             if !ra_traced && cur_ra == 0x3FFFF000 {
                 ra_traced = true;
-                eprintln!("[diag] *** RA changed to 0x{:08X} at count={} ***", cur_ra, count);
+                eprintln!(
+                    "[diag] *** RA changed to 0x{:08X} at count={} ***",
+                    cur_ra, count
+                );
                 eprintln!("[diag]   previous RA was 0x{:08X}", last_ra);
                 eprintln!("[diag]   PC=0x{:08X} SP=0x{:08X}", vm.cpu.pc, vm.cpu.x[2]);
                 // Disassemble the instruction at PC
@@ -164,7 +185,10 @@ fn main() {
         // Check if SP changed drastically
         let cur_sp = vm.cpu.x[2];
         if (cur_sp as i32 - last_sp as i32).abs() > 0x10000 {
-            eprintln!("[diag] SP jumped: 0x{:08X} -> 0x{:08X} at count={}, PC=0x{:08X}", last_sp, cur_sp, count, vm.cpu.pc);
+            eprintln!(
+                "[diag] SP jumped: 0x{:08X} -> 0x{:08X} at count={}, PC=0x{:08X}",
+                last_sp, cur_sp, count, vm.cpu.pc
+            );
             last_sp = cur_sp;
         } else {
             last_sp = cur_sp;
@@ -174,8 +198,13 @@ fn main() {
     }
 
     if !ra_traced {
-        eprintln!("[diag] RA never became 0x3FFFF000 within {} instructions", max_instructions);
-        eprintln!("[diag] Final: PC=0x{:08X} RA=0x{:08X} SP=0x{:08X} SATP=0x{:08X} smode_faults={}",
-            vm.cpu.pc, vm.cpu.x[1], vm.cpu.x[2], vm.cpu.csr.satp, smode_fault_count);
+        eprintln!(
+            "[diag] RA never became 0x3FFFF000 within {} instructions",
+            max_instructions
+        );
+        eprintln!(
+            "[diag] Final: PC=0x{:08X} RA=0x{:08X} SP=0x{:08X} SATP=0x{:08X} smode_faults={}",
+            vm.cpu.pc, vm.cpu.x[1], vm.cpu.x[2], vm.cpu.csr.satp, smode_fault_count
+        );
     }
 }

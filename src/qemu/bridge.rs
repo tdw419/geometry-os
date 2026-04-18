@@ -35,8 +35,8 @@ impl QemuBridge {
 
         let mut child = cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                let (binary, _) = arch_to_qemu(&config.arch)
-                    .unwrap_or(("qemu-system-unknown", None));
+                let (binary, _) =
+                    arch_to_qemu(&config.arch).unwrap_or(("qemu-system-unknown", None));
                 format!(
                     "QEMU not found: '{}'. Install with: sudo apt install qemu-system-{}",
                     binary, config.arch

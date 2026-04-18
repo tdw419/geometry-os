@@ -7,13 +7,12 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    use geometry_os::riscv::RiscvVm;
     use geometry_os::riscv::cpu::Privilege;
     use geometry_os::riscv::csr;
+    use geometry_os::riscv::RiscvVm;
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_image, initramfs.as_deref(), 256, bootargs
-    ).unwrap();
+    let (mut vm, fw_addr, _entry, _dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
 
     let fw_addr_u32 = fw_addr as u32;
 
@@ -63,11 +62,16 @@ fn main() {
             if cause_code == csr::CAUSE_ECALL_S {
                 sbi_call_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -98,11 +102,16 @@ fn main() {
                 }
             } else {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -133,8 +142,15 @@ fn main() {
 
         // Report every 1M instructions
         if count % 1_000_000 == 0 {
-            eprintln!("[track] count={:7}M PC=0x{:08X} same_pc={} ecall={} sbi={} fwd={}",
-                count / 1_000_000, vm.cpu.pc, same_pc_count, vm.cpu.ecall_count, sbi_call_count, forward_count);
+            eprintln!(
+                "[track] count={:7}M PC=0x{:08X} same_pc={} ecall={} sbi={} fwd={}",
+                count / 1_000_000,
+                vm.cpu.pc,
+                same_pc_count,
+                vm.cpu.ecall_count,
+                sbi_call_count,
+                forward_count
+            );
         }
     }
 
@@ -142,7 +158,10 @@ fn main() {
     eprintln!("\n=== Major PC transitions (stayed >100 instructions) ===");
     for (cnt, pc, dur) in &pc_transitions {
         if *dur > 100 {
-            eprintln!("  count={:8}: PC=0x{:08X} stayed {} instructions", cnt, pc, dur);
+            eprintln!(
+                "  count={:8}: PC=0x{:08X} stayed {} instructions",
+                cnt, pc, dur
+            );
         }
     }
 
@@ -152,7 +171,10 @@ fn main() {
     eprintln!("SATP=0x{:08X}", vm.cpu.csr.read(csr::SATP));
     eprintln!("SSTATUS=0x{:08X}", vm.cpu.csr.read(csr::SSTATUS));
     eprintln!("STVEC=0x{:08X}", vm.cpu.csr.read(csr::STVEC));
-    eprintln!("ECALL_count={} SBI_calls={} forwards={}", vm.cpu.ecall_count, sbi_call_count, forward_count);
+    eprintln!(
+        "ECALL_count={} SBI_calls={} forwards={}",
+        vm.cpu.ecall_count, sbi_call_count, forward_count
+    );
     eprintln!("UART tx: {} chars", vm.bus.uart.tx_buf.len());
     eprintln!("SBI console: {} chars", vm.bus.sbi.console_output.len());
     if !vm.bus.sbi.console_output.is_empty() {

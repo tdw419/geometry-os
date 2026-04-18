@@ -1,6 +1,5 @@
 /// Trace the last instructions before PC drops below 0xC0000000 (leaves kernel VA space).
 /// Dump register state at the transition point.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -33,8 +32,10 @@ fn main() {
         // Track SATP changes
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[{}] SATP: 0x{:08X} -> 0x{:08X} (PC=0x{:08X})",
-                count, last_satp, cur_satp, vm.cpu.pc);
+            eprintln!(
+                "[{}] SATP: 0x{:08X} -> 0x{:08X} (PC=0x{:08X})",
+                count, last_satp, cur_satp, vm.cpu.pc
+            );
             last_satp = cur_satp;
         }
 
@@ -59,16 +60,26 @@ fn main() {
                 eprintln!("PC went from 0x{:08X} to 0x{:08X}", pc, next_pc);
                 eprintln!("\nRegister state:");
                 for i in (0..32).step_by(4) {
-                    eprintln!("  x{}={:08X} x{}={:08X} x{}={:08X} x{}={:08X}",
-                        i, vm.cpu.x[i],
-                        i+1, vm.cpu.x[i+1],
-                        i+2, vm.cpu.x[i+2],
-                        i+3, vm.cpu.x[i+3]);
+                    eprintln!(
+                        "  x{}={:08X} x{}={:08X} x{}={:08X} x{}={:08X}",
+                        i,
+                        vm.cpu.x[i],
+                        i + 1,
+                        vm.cpu.x[i + 1],
+                        i + 2,
+                        vm.cpu.x[i + 2],
+                        i + 3,
+                        vm.cpu.x[i + 3]
+                    );
                 }
-                eprintln!("  mepc=0x{:08X} mcause=0x{:08X} sepc=0x{:08X} scause=0x{:08X}",
-                    vm.cpu.csr.mepc, vm.cpu.csr.mcause, vm.cpu.csr.sepc, vm.cpu.csr.scause);
-                eprintln!("  satp=0x{:08X} stvec=0x{:08X} mtvec=0x{:08X}",
-                    vm.cpu.csr.satp, vm.cpu.csr.stvec, vm.cpu.csr.mtvec);
+                eprintln!(
+                    "  mepc=0x{:08X} mcause=0x{:08X} sepc=0x{:08X} scause=0x{:08X}",
+                    vm.cpu.csr.mepc, vm.cpu.csr.mcause, vm.cpu.csr.sepc, vm.cpu.csr.scause
+                );
+                eprintln!(
+                    "  satp=0x{:08X} stvec=0x{:08X} mtvec=0x{:08X}",
+                    vm.cpu.csr.satp, vm.cpu.csr.stvec, vm.cpu.csr.mtvec
+                );
 
                 eprintln!("\nLast 50 instructions before transition:");
                 let start = ring.len().saturating_sub(50);
@@ -84,7 +95,9 @@ fn main() {
                     eprintln!("  [{}] 0x{:08X}: {:08X}", count, npc, nw);
                     count += 1;
                     vm.step();
-                    if vm.bus.sbi.shutdown_requested { break; }
+                    if vm.bus.sbi.shutdown_requested {
+                        break;
+                    }
                 }
                 break;
             }
@@ -96,6 +109,9 @@ fn main() {
     }
 
     if !transition_found {
-        eprintln!("No transition found in {} instructions. Final PC=0x{:08X}", count, vm.cpu.pc);
+        eprintln!(
+            "No transition found in {} instructions. Final PC=0x{:08X}",
+            count, vm.cpu.pc
+        );
     }
 }

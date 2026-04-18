@@ -5,24 +5,35 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    use geometry_os::riscv::RiscvVm;
-    use geometry_os::riscv::cpu::{StepResult, Privilege};
+    use geometry_os::riscv::cpu::{Privilege, StepResult};
     use geometry_os::riscv::csr;
+    use geometry_os::riscv::RiscvVm;
 
-    let (mut vm, fw_addr, _, _) = 
+    let (mut vm, fw_addr, _, _) =
         RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
     let fw_addr_u32 = fw_addr as u32;
 
     // Check the handler table BEFORE the crash (at 16M instructions)
-    let check_points = [5_000_000u64, 10_000_000, 15_000_000, 16_500_000, 16_900_000, 16_990_000, 16_992_000, 16_993_000];
-    
+    let check_points = [
+        5_000_000u64,
+        10_000_000,
+        15_000_000,
+        16_500_000,
+        16_900_000,
+        16_990_000,
+        16_992_000,
+        16_993_000,
+    ];
+
     let max_instructions = 17_200_000u64;
     let mut count = 0u64;
     let mut next_check = 0;
 
     while count < max_instructions {
-        if vm.bus.sbi.shutdown_requested { break; }
-        
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
+
         // Check handler table at checkpoints
         if next_check < check_points.len() && count == check_points[next_check] {
             let mut nonzero = 0u32;
@@ -32,13 +43,18 @@ fn main() {
                 match vm.bus.read_word(addr) {
                     Ok(val) => {
                         total += 1;
-                        if val != 0 { nonzero += 1; }
+                        if val != 0 {
+                            nonzero += 1;
+                        }
                     }
                     Err(_) => {}
                 }
                 addr += 4;
             }
-            eprintln!("[{}] handler table at 0xC1400A80: {}/{} nonzero", count, nonzero, total);
+            eprintln!(
+                "[{}] handler table at 0xC1400A80: {}/{} nonzero",
+                count, nonzero, total
+            );
             if nonzero > 0 {
                 // Show the nonzero entries
                 addr = 0xC1400A80u64;
@@ -59,12 +75,25 @@ fn main() {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == csr::CAUSE_ECALL_S {
-                let r = vm.bus.sbi.handle_ecall(vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint);
-                if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                let r = vm.bus.sbi.handle_ecall(
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
+                );
+                if let Some((a0, a1)) = r {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
-                count += 1; continue;
+                count += 1;
+                continue;
             } else if cause_code != csr::CAUSE_ECALL_M {
                 let mpp = (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB;
                 if mpp != 3 {
@@ -74,29 +103,49 @@ fn main() {
                         vm.cpu.csr.scause = mcause;
                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP)) | (spp << csr::MSTATUS_SPP);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                            | (spp << csr::MSTATUS_SPP);
                         let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE)) | (sie << csr::MSTATUS_SPIE);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                            | (sie << csr::MSTATUS_SPIE);
                         vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
                         vm.cpu.pc = stvec;
                         vm.cpu.privilege = Privilege::Supervisor;
                         vm.cpu.tlb.flush_all();
-                        count += 1; continue;
+                        count += 1;
+                        continue;
                     }
                 }
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
-                count += 1; continue;
+                count += 1;
+                continue;
             }
-            let r = vm.bus.sbi.handle_ecall(vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                &mut vm.bus.uart, &mut vm.bus.clint);
-            if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+            let r = vm.bus.sbi.handle_ecall(
+                vm.cpu.x[17],
+                vm.cpu.x[16],
+                vm.cpu.x[10],
+                vm.cpu.x[11],
+                vm.cpu.x[12],
+                vm.cpu.x[13],
+                vm.cpu.x[14],
+                vm.cpu.x[15],
+                &mut vm.bus.uart,
+                &mut vm.bus.clint,
+            );
+            if let Some((a0, a1)) = r {
+                vm.cpu.x[10] = a0;
+                vm.cpu.x[11] = a1;
+            }
             vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
-            count += 1; continue;
+            count += 1;
+            continue;
         }
 
         let result = vm.step();
-        if matches!(result, StepResult::Ebreak) { eprintln!("EBREAK at {}", count); break; }
+        if matches!(result, StepResult::Ebreak) {
+            eprintln!("EBREAK at {}", count);
+            break;
+        }
         count += 1;
     }
     eprintln!("DONE count={}", count);

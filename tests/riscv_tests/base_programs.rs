@@ -87,9 +87,9 @@ fn test_rv32_jal_function_call() {
         addi(1, 0, 21), // x1 = 21
         jal(5, 12),     // call function (skip 3 instr), x5 = 0x80000008
         ecall(),        // inst 2: return here, x1 should be 42
-        addi(0, 0, 0), // inst 3: padding (NOP)
-        add(1, 1, 1),  // inst 4: double x1
-        jalr(0, 5, 0), // inst 5: return to x5
+        addi(0, 0, 0),  // inst 3: padding (NOP)
+        add(1, 1, 1),   // inst 4: double x1
+        jalr(0, 5, 0),  // inst 5: return to x5
     ]);
     run(&mut vm, 100);
     assert_eq!(vm.cpu.x[1], 42);
@@ -119,12 +119,12 @@ fn test_rv32_memory_roundtrip() {
         ori(1, 1, 0x0EF), // x1 = 0xDEADB0EF (low 12 bits must have bit 11 = 0)
         sw(1, 5, 0),
         addi(2, 0, 0xCA),
-        sh(2, 5, 4),     // store half at offset 4
+        sh(2, 5, 4), // store half at offset 4
         addi(3, 0, 0x42),
-        sb(3, 5, 6),     // store byte at offset 6
-        lw(10, 5, 0),    // x10 = 0xDEADBEEF
-        lhu(11, 5, 4),   // x11 = 0x00CA
-        lbu(12, 5, 6),   // x12 = 0x42
+        sb(3, 5, 6),   // store byte at offset 6
+        lw(10, 5, 0),  // x10 = 0xDEADBEEF
+        lhu(11, 5, 4), // x11 = 0x00CA
+        lbu(12, 5, 6), // x12 = 0x42
         ecall(),
     ]);
     run(&mut vm, 100);

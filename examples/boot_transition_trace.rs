@@ -1,8 +1,8 @@
 // Trace the exact transition from BSS clear to the fault
 // Captures instructions around the PC jump to 0x00000000
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -11,15 +11,13 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, result) = RiscvVm::boot_linux(
-        &kernel,
-        initramfs.as_deref(),
-        512,
-        0,
-        bootargs,
-    ).unwrap();
+    let (mut vm, result) =
+        RiscvVm::boot_linux(&kernel, initramfs.as_deref(), 512, 0, bootargs).unwrap();
 
-    println!("Entry: 0x{:08X}, DTB: 0x{:08X}", result.entry, result.dtb_addr);
+    println!(
+        "Entry: 0x{:08X}, DTB: 0x{:08X}",
+        result.entry, result.dtb_addr
+    );
     println!("RAM base: 0x{:08X}", vm.bus.mem.ram_base);
 
     // Track the last N instructions before a PC jump to low addresses
@@ -42,19 +40,30 @@ fn main() {
 
         // Detect when PC jumps to a low address (< 0x10000) or we get a fault
         if vm.cpu.pc < 0x10000 && pc_before >= 0xC0000000 {
-            println!("\n=== PC jumped from 0x{:08X} to 0x{:08X} at step {} ===",
-                     pc_before, vm.cpu.pc, count);
+            println!(
+                "\n=== PC jumped from 0x{:08X} to 0x{:08X} at step {} ===",
+                pc_before, vm.cpu.pc, count
+            );
             println!("Instruction at 0x{:08X}: 0x{:08X}", pc_before, instr_word);
-            println!("mcause: 0x{:08X}, mepc: 0x{:08X}",
-                     vm.cpu.csr.mcause, vm.cpu.csr.mepc);
-            println!("satp: 0x{:08X}, mstatus: 0x{:08X}",
-                     vm.cpu.csr.satp, vm.cpu.csr.mstatus);
-            println!("mtvec: 0x{:08X}, stvec: 0x{:08X}",
-                     vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC),
-                     vm.cpu.csr.read(geometry_os::riscv::csr::STVEC));
+            println!(
+                "mcause: 0x{:08X}, mepc: 0x{:08X}",
+                vm.cpu.csr.mcause, vm.cpu.csr.mepc
+            );
+            println!(
+                "satp: 0x{:08X}, mstatus: 0x{:08X}",
+                vm.cpu.csr.satp, vm.cpu.csr.mstatus
+            );
+            println!(
+                "mtvec: 0x{:08X}, stvec: 0x{:08X}",
+                vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC),
+                vm.cpu.csr.read(geometry_os::riscv::csr::STVEC)
+            );
             println!("\nLast {} instructions before jump:", history_size);
             for (step, pc, word, x5) in &history {
-                println!("  [{:>6}] PC=0x{:08X} instr=0x{:08X} x5=0x{:08X}", step, pc, word, x5);
+                println!(
+                    "  [{:>6}] PC=0x{:08X} instr=0x{:08X} x5=0x{:08X}",
+                    step, pc, word, x5
+                );
             }
             break;
         }
@@ -62,25 +71,40 @@ fn main() {
         // Also detect FetchFault
         if matches!(step_result, StepResult::FetchFault) {
             println!("\n=== FetchFault at step {} ===", count);
-            println!("PC before: 0x{:08X}, PC after: 0x{:08X}", pc_before, vm.cpu.pc);
-            println!("mcause: 0x{:08X}, mepc: 0x{:08X}",
-                     vm.cpu.csr.mcause, vm.cpu.csr.mepc);
+            println!(
+                "PC before: 0x{:08X}, PC after: 0x{:08X}",
+                pc_before, vm.cpu.pc
+            );
+            println!(
+                "mcause: 0x{:08X}, mepc: 0x{:08X}",
+                vm.cpu.csr.mcause, vm.cpu.csr.mepc
+            );
             println!("\nLast {} instructions:", history_size);
             for (step, pc, word, x5) in &history {
-                println!("  [{:>6}] PC=0x{:08X} instr=0x{:08X} x5=0x{:08X}", step, pc, word, x5);
+                println!(
+                    "  [{:>6}] PC=0x{:08X} instr=0x{:08X} x5=0x{:08X}",
+                    step, pc, word, x5
+                );
             }
             break;
         }
 
         // Detect PC loop (same PC 100 times in a row)
         if vm.cpu.pc == pc_before {
-            let loop_count = history.iter().rev()
+            let loop_count = history
+                .iter()
+                .rev()
                 .take_while(|(_, pc, _, _)| *pc == vm.cpu.pc)
                 .count();
             if loop_count >= 100 {
-                println!("\n=== PC loop at 0x{:08X} after {} steps ===", vm.cpu.pc, count);
-                println!("mcause: 0x{:08X}, mepc: 0x{:08X}",
-                         vm.cpu.csr.mcause, vm.cpu.csr.mepc);
+                println!(
+                    "\n=== PC loop at 0x{:08X} after {} steps ===",
+                    vm.cpu.pc, count
+                );
+                println!(
+                    "mcause: 0x{:08X}, mepc: 0x{:08X}",
+                    vm.cpu.csr.mcause, vm.cpu.csr.mepc
+                );
                 break;
             }
         }
@@ -89,11 +113,20 @@ fn main() {
     println!("\n=== Final state after {} steps ===", count);
     println!("PC: 0x{:08X}", vm.cpu.pc);
     println!("Privilege: {:?}", vm.cpu.privilege);
-    println!("mcause: 0x{:08X}, mepc: 0x{:08X}", vm.cpu.csr.mcause, vm.cpu.csr.mepc);
+    println!(
+        "mcause: 0x{:08X}, mepc: 0x{:08X}",
+        vm.cpu.csr.mcause, vm.cpu.csr.mepc
+    );
     println!("satp: 0x{:08X}", vm.cpu.csr.satp);
     println!("mstatus: 0x{:08X}", vm.cpu.csr.mstatus);
-    println!("mtvec: 0x{:08X}", vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC));
-    println!("stvec: 0x{:08X}", vm.cpu.csr.read(geometry_os::riscv::csr::STVEC));
+    println!(
+        "mtvec: 0x{:08X}",
+        vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC)
+    );
+    println!(
+        "stvec: 0x{:08X}",
+        vm.cpu.csr.read(geometry_os::riscv::csr::STVEC)
+    );
 
     // UART output
     let mut out = Vec::new();

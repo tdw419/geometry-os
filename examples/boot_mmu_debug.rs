@@ -1,5 +1,4 @@
 /// Debug MMU translation for a specific VA during boot.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -21,7 +20,9 @@ fn main() {
     let mut mmu_log_shown = false;
 
     while count < max_instructions {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if !trampoline_patched
             && vm.cpu.pc == 0x10EE
@@ -44,11 +45,16 @@ fn main() {
 
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[mmu] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!(
+                "[mmu] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
         }
         last_satp = cur_satp;
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code != 11 {
@@ -74,9 +80,16 @@ fn main() {
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             } else {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -108,13 +121,19 @@ fn main() {
                 let l1_leaf = (l1_pte & 0xE) != 0;
                 let l1_ppn_hi = (l1_pte >> 20) & 0xFFF;
 
-                eprintln!("[mmu] L1[{}] at PA 0x{:08X} = 0x{:08X} (V={} leaf={} PPN_hi=0x{:03X})",
-                    vpn1, l1_addr, l1_pte, l1_v, l1_leaf, l1_ppn_hi);
+                eprintln!(
+                    "[mmu] L1[{}] at PA 0x{:08X} = 0x{:08X} (V={} leaf={} PPN_hi=0x{:03X})",
+                    vpn1, l1_addr, l1_pte, l1_v, l1_leaf, l1_ppn_hi
+                );
 
                 if l1_v != 0 && l1_leaf {
-                    let expected_pa = ((l1_ppn_hi as u64) << 22) | ((vpn0 as u64) << 12) | (offset as u64);
+                    let expected_pa =
+                        ((l1_ppn_hi as u64) << 22) | ((vpn0 as u64) << 12) | (offset as u64);
                     let mem_val = vm.bus.read_word(expected_pa).unwrap_or(0);
-                    eprintln!("[mmu] Megapage -> expected PA=0x{:08X}, mem=0x{:08X}", expected_pa, mem_val);
+                    eprintln!(
+                        "[mmu] Megapage -> expected PA=0x{:08X}, mem=0x{:08X}",
+                        expected_pa, mem_val
+                    );
                 }
 
                 // TLB lookup
@@ -123,15 +142,20 @@ fn main() {
                 if let Some((ppn, flags)) = vm.cpu.tlb.lookup(combined_vpn, asid) {
                     let tlb_pa = ((ppn as u64) << 12) | (offset as u64);
                     let tlb_val = vm.bus.read_word(tlb_pa).unwrap_or(0);
-                    eprintln!("[mmu] TLB hit: PPN=0x{:06X} flags=0x{:02X} -> PA=0x{:08X} mem=0x{:08X}",
-                        ppn, flags, tlb_pa, tlb_val);
+                    eprintln!(
+                        "[mmu] TLB hit: PPN=0x{:06X} flags=0x{:02X} -> PA=0x{:08X} mem=0x{:08X}",
+                        ppn, flags, tlb_pa, tlb_val
+                    );
                 } else {
                     eprintln!("[mmu] TLB miss (will do page table walk)");
                 }
 
                 // Check what the bus reads at the PC directly (physical = virtual since bus doesn't do MMU)
                 let direct_val = vm.bus.read_word(pc as u64).unwrap_or(0);
-                eprintln!("[mmu] Direct bus read at VA=0x{:08X} (no MMU) = 0x{:08X}", pc, direct_val);
+                eprintln!(
+                    "[mmu] Direct bus read at VA=0x{:08X} (no MMU) = 0x{:08X}",
+                    pc, direct_val
+                );
             }
         }
 

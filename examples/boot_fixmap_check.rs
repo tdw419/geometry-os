@@ -11,13 +11,13 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            bootargs,
-        ).expect("boot setup failed");
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        bootargs,
+    )
+    .expect("boot setup failed");
 
     let max_instr: u64 = 180_000;
     let mut count: u64 = 0;
@@ -45,7 +45,9 @@ fn main() {
             last_satp = cur_satp;
         }
 
-        if vm.cpu.pc == (_fw_addr as u32) && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == (_fw_addr as u32)
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 4;
@@ -87,19 +89,33 @@ fn main() {
     // Check L1[630] for VA 0x9DBFF000
     let l1_idx: u32 = 0x9DBFF000 >> 22;
     eprintln!("VA 0x9DBFF000: L1 index = {}", l1_idx);
-    let l1_pte = vm.bus.read_word(pg_dir_phys + (l1_idx as u64) * 4).unwrap_or(0);
+    let l1_pte = vm
+        .bus
+        .read_word(pg_dir_phys + (l1_idx as u64) * 4)
+        .unwrap_or(0);
     eprintln!("L1[{}] = 0x{:08X} (V={})", l1_idx, l1_pte, (l1_pte & 1));
 
     // Also check nearby indices
     for idx in 628..635 {
-        let pte = vm.bus.read_word(pg_dir_phys + (idx as u64) * 4).unwrap_or(0);
+        let pte = vm
+            .bus
+            .read_word(pg_dir_phys + (idx as u64) * 4)
+            .unwrap_or(0);
         if pte != 0 {
             let va_base = (idx as u64) << 22;
             let ppn = ((pte >> 10) & 0x3FFFFF) as u64;
             let pa_base = ppn << 2;
-            eprintln!("L1[{}] = 0x{:08X} -> VA 0x{:08X} PA 0x{:08X} (V={} R={} W={} X={})",
-                idx, pte, va_base, pa_base,
-                (pte >> 0) & 1, (pte >> 1) & 1, (pte >> 2) & 1, (pte >> 3) & 1);
+            eprintln!(
+                "L1[{}] = 0x{:08X} -> VA 0x{:08X} PA 0x{:08X} (V={} R={} W={} X={})",
+                idx,
+                pte,
+                va_base,
+                pa_base,
+                (pte >> 0) & 1,
+                (pte >> 1) & 1,
+                (pte >> 2) & 1,
+                (pte >> 3) & 1
+            );
         }
     }
 
@@ -112,7 +128,16 @@ fn main() {
     // kernel_map
     let km_phys: u64 = 0x00C79E90;
     eprintln!("\nkernel_map:");
-    eprintln!("  phys_addr          = 0x{:08X}", vm.bus.read_word(km_phys + 12).unwrap_or(0));
-    eprintln!("  va_pa_offset       = 0x{:08X}", vm.bus.read_word(km_phys + 20).unwrap_or(0));
-    eprintln!("  va_kernel_pa_offset = 0x{:08X}", vm.bus.read_word(km_phys + 24).unwrap_or(0));
+    eprintln!(
+        "  phys_addr          = 0x{:08X}",
+        vm.bus.read_word(km_phys + 12).unwrap_or(0)
+    );
+    eprintln!(
+        "  va_pa_offset       = 0x{:08X}",
+        vm.bus.read_word(km_phys + 20).unwrap_or(0)
+    );
+    eprintln!(
+        "  va_kernel_pa_offset = 0x{:08X}",
+        vm.bus.read_word(km_phys + 24).unwrap_or(0)
+    );
 }

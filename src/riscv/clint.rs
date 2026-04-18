@@ -30,7 +30,7 @@ impl Default for Clint {
 }
 
 impl Clint {
-        /// Create a new CLINT with mtime=0 and mtimecmp=max (no timer interrupt).
+    /// Create a new CLINT with mtime=0 and mtimecmp=max (no timer interrupt).
     pub fn new() -> Self {
         Self {
             mtime: 0,
@@ -137,7 +137,7 @@ mod tests {
         assert!(!clint.tick()); // mtime=2
         assert!(!clint.tick()); // mtime=3
         assert!(!clint.tick()); // mtime=4
-        assert!(clint.tick());  // mtime=5 >= mtimecmp=5
+        assert!(clint.tick()); // mtime=5 >= mtimecmp=5
         assert!(clint.timer_pending());
     }
 

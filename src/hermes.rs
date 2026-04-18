@@ -1,16 +1,16 @@
 // hermes.rs -- Local LLM agent loop (Ollama) for Geometry OS
 
+use crate::assembler;
+use crate::canvas::{
+    ensure_scroll, handle_terminal_command, list_asm_files, read_canvas_line, source_from_canvas,
+    write_line_to_canvas,
+};
+use crate::preprocessor;
+use crate::save::save_screen_png;
+use crate::vm;
 use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use crate::vm;
-use crate::assembler;
-use crate::preprocessor;
-use crate::save::save_screen_png;
-use crate::canvas::{
-    ensure_scroll, handle_terminal_command, list_asm_files, read_canvas_line,
-    source_from_canvas, write_line_to_canvas,
-};
 
 /// instead of stdout. This is the visual/canvas version of run_hermes_loop().
 #[allow(clippy::too_many_arguments)]
@@ -25,13 +25,12 @@ pub fn run_hermes_canvas(
     breakpoints: &mut HashSet<u32>,
 ) {
     *output_row = write_line_to_canvas(
-        canvas_buffer, *output_row,
+        canvas_buffer,
+        *output_row,
         "[hermes] Starting agent loop...",
     );
-    *output_row = write_line_to_canvas(
-        canvas_buffer, *output_row,
-        "[hermes] Press Escape to stop.",
-    );
+    *output_row =
+        write_line_to_canvas(canvas_buffer, *output_row, "[hermes] Press Escape to stop.");
     ensure_scroll(*output_row, scroll_offset);
 
     let mut conversation_history = initial_prompt.to_string();
@@ -43,7 +42,8 @@ pub fn run_hermes_canvas(
         let full_system = format!("{}\n\n{}", HERMES_SYSTEM_PROMPT, ctx);
 
         *output_row = write_line_to_canvas(
-            canvas_buffer, *output_row,
+            canvas_buffer,
+            *output_row,
             &format!("[hermes] --- iteration {} ---", iteration + 1),
         );
         ensure_scroll(*output_row, scroll_offset);
@@ -53,7 +53,8 @@ pub fn run_hermes_canvas(
             Some(r) => r,
             None => {
                 *output_row = write_line_to_canvas(
-                    canvas_buffer, *output_row,
+                    canvas_buffer,
+                    *output_row,
                     "[hermes] LLM call failed. Stopping.",
                 );
                 ensure_scroll(*output_row, scroll_offset);
@@ -85,7 +86,8 @@ pub fn run_hermes_canvas(
 
         if commands.trim().is_empty() {
             *output_row = write_line_to_canvas(
-                canvas_buffer, *output_row,
+                canvas_buffer,
+                *output_row,
                 "[hermes] LLM returned no commands. Stopping.",
             );
             ensure_scroll(*output_row, scroll_offset);
@@ -96,10 +98,8 @@ pub fn run_hermes_canvas(
         for cmd_line in commands.lines() {
             let trimmed = cmd_line.trim();
             if !trimmed.is_empty() {
-                *output_row = write_line_to_canvas(
-                    canvas_buffer, *output_row,
-                    &format!("  > {}", trimmed),
-                );
+                *output_row =
+                    write_line_to_canvas(canvas_buffer, *output_row, &format!("  > {}", trimmed));
             }
         }
         ensure_scroll(*output_row, scroll_offset);
@@ -110,7 +110,9 @@ pub fn run_hermes_canvas(
 
         for cmd_line in commands.lines() {
             let cmd_line = cmd_line.trim();
-            if cmd_line.is_empty() { continue; }
+            if cmd_line.is_empty() {
+                continue;
+            }
 
             // Handle write command for creating .asm files
             if let Some(ref mut wb) = write_buffer {
@@ -146,7 +148,9 @@ pub fn run_hermes_canvas(
 
             // Execute command through the GUI terminal handler
             let cmd_parts: Vec<&str> = cmd_line.split_whitespace().collect();
-            if cmd_parts.is_empty() { continue; }
+            if cmd_parts.is_empty() {
+                continue;
+            }
             let cmd_word = cmd_parts[0].to_lowercase();
 
             match cmd_word.as_str() {
@@ -197,13 +201,15 @@ pub fn run_hermes_canvas(
             match std::fs::write(&wb.0, &wb.1) {
                 Ok(()) => {
                     *output_row = write_line_to_canvas(
-                        canvas_buffer, *output_row,
+                        canvas_buffer,
+                        *output_row,
                         &format!("Wrote {}", wb.0),
                     );
                 }
                 Err(e) => {
                     *output_row = write_line_to_canvas(
-                        canvas_buffer, *output_row,
+                        canvas_buffer,
+                        *output_row,
                         &format!("Write error: {}", e),
                     );
                 }
@@ -211,7 +217,8 @@ pub fn run_hermes_canvas(
         }
 
         *output_row = write_line_to_canvas(
-            canvas_buffer, *output_row,
+            canvas_buffer,
+            *output_row,
             "[hermes] Loop complete. Type another prompt or 'stop'.",
         );
         ensure_scroll(*output_row, scroll_offset);
@@ -221,7 +228,8 @@ pub fn run_hermes_canvas(
         // (No stdin blocking in GUI mode -- we just run and return)
         if iteration >= 2 {
             *output_row = write_line_to_canvas(
-                canvas_buffer, *output_row,
+                canvas_buffer,
+                *output_row,
                 "[hermes] Max iterations reached.",
             );
             break;
@@ -234,13 +242,9 @@ pub fn run_hermes_canvas(
         );
     }
 
-    *output_row = write_line_to_canvas(
-        canvas_buffer, *output_row,
-        "[hermes] Agent loop ended.",
-    );
+    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "[hermes] Agent loop ended.");
     ensure_scroll(*output_row, scroll_offset);
 }
-
 
 pub const HERMES_SYSTEM_PROMPT: &str = r#"You are an agent inside the Geometry OS terminal. You drive a bytecode VM by issuing geo> commands.
 
@@ -349,7 +353,11 @@ the write command:
 After your commands run, you'll see the output and can issue more commands.
 Think step by step but only output commands."#;
 
-pub fn build_hermes_context(vm: &vm::Vm, source_text: &str, loaded_file: &Option<PathBuf>) -> String {
+pub fn build_hermes_context(
+    vm: &vm::Vm,
+    source_text: &str,
+    loaded_file: &Option<PathBuf>,
+) -> String {
     let mut ctx = String::new();
 
     // VM state
@@ -390,7 +398,6 @@ pub fn build_hermes_context(vm: &vm::Vm, source_text: &str, loaded_file: &Option
 }
 
 pub fn call_ollama(system_prompt: &str, user_message: &str) -> Option<String> {
-
     // Build the JSON payload
     // Escape strings for JSON
     let esc_sys = system_prompt
@@ -542,7 +549,9 @@ pub fn run_hermes_loop(
         let mut output_capture = String::new();
         for cmd_line in commands.lines() {
             let cmd_line = cmd_line.trim();
-            if cmd_line.is_empty() { continue; }
+            if cmd_line.is_empty() {
+                continue;
+            }
 
             // Handle write command for creating .asm files
             if let Some(ref mut wb) = write_buffer {
@@ -579,16 +588,23 @@ pub fn run_hermes_loop(
 
             // Skip non-geo commands
             let cmd_parts: Vec<&str> = cmd_line.split_whitespace().collect();
-            if cmd_parts.is_empty() { continue; }
+            if cmd_parts.is_empty() {
+                continue;
+            }
             let cmd_word = cmd_parts[0].to_lowercase();
 
             // Only execute known geo> commands
             match cmd_word.as_str() {
-                "load" | "run" | "regs" | "peek" | "poke" | "screen" | "save" | "reset" | "list" | "ls" | "png" => {
+                "load" | "run" | "regs" | "peek" | "poke" | "screen" | "save" | "reset"
+                | "list" | "ls" | "png" => {
                     println!("geo> {}", cmd_line);
                     // Capture output by redirecting through a helper
                     execute_cli_command(
-                        cmd_line, vm, source_text, loaded_file, canvas_assembled,
+                        cmd_line,
+                        vm,
+                        source_text,
+                        loaded_file,
+                        canvas_assembled,
                         &mut output_capture,
                     );
                 }
@@ -623,7 +639,11 @@ pub fn run_hermes_loop(
         conversation_history = format!(
             "Previous commands output:\n{}\n\nUser instruction: {}",
             output_capture,
-            if answer.is_empty() { "continue" } else { &answer }
+            if answer.is_empty() {
+                "continue"
+            } else {
+                &answer
+            }
         );
     }
 
@@ -640,7 +660,9 @@ pub fn execute_cli_command(
     output: &mut String,
 ) {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
-    if parts.is_empty() { return; }
+    if parts.is_empty() {
+        return;
+    }
     let command = parts[0].to_lowercase();
 
     match command.as_str() {
@@ -648,33 +670,50 @@ pub fn execute_cli_command(
             let files = list_asm_files("programs");
             if files.is_empty() {
                 let msg = "  (no .asm files in programs/)".to_string();
-                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
             } else {
                 for f in &files {
-                    let name = Path::new(f).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| f.clone());
+                    let name = Path::new(f)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| f.clone());
                     let msg = format!("  {}", name);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
                 let msg = format!("  {} programs", files.len());
-                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
             }
         }
         "load" => {
             if parts.len() < 2 {
                 let msg = "Usage: load <file>".to_string();
-                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
                 return;
             }
             let mut filename = parts[1..].join(" ");
-            if !filename.ends_with(".asm") { filename.push_str(".asm"); }
+            if !filename.ends_with(".asm") {
+                filename.push_str(".asm");
+            }
             let path = Path::new(&filename);
             let path = if path.exists() {
                 path.to_path_buf()
             } else {
                 let prefixed = Path::new("programs").join(&filename);
-                if prefixed.exists() { prefixed } else {
+                if prefixed.exists() {
+                    prefixed
+                } else {
                     let msg = format!("File not found: {}", filename);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                     return;
                 }
             };
@@ -683,19 +722,31 @@ pub fn execute_cli_command(
                     let lines = src.lines().count();
                     *source_text = src;
                     *loaded_file = Some(path.clone());
-                    let msg = format!("Loaded {} ({} lines)", path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), lines);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    let msg = format!(
+                        "Loaded {} ({} lines)",
+                        path.file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default(),
+                        lines
+                    );
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
                 Err(e) => {
                     let msg = format!("Error: {}", e);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
             }
         }
         "run" => {
             if source_text.is_empty() {
                 let msg = "No source loaded.".to_string();
-                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
                 return;
             }
             // Abstraction Layer: Preprocess macros and variables
@@ -706,30 +757,46 @@ pub fn execute_cli_command(
                 Ok(asm_result) => {
                     let ram_len = vm.ram.len();
                     let load_addr = 0usize;
-                    for v in vm.ram[load_addr..ram_len.min(load_addr + 4096)].iter_mut() { *v = 0; }
+                    for v in vm.ram[load_addr..ram_len.min(load_addr + 4096)].iter_mut() {
+                        *v = 0;
+                    }
                     for (i, &pixel) in asm_result.pixels.iter().enumerate() {
                         let addr = load_addr + i;
-                        if addr < ram_len { vm.ram[addr] = pixel; }
+                        if addr < ram_len {
+                            vm.ram[addr] = pixel;
+                        }
                     }
                     vm.pc = load_addr as u32;
                     vm.halted = false;
-                    let msg = format!("Assembled {} bytes at 0x{:04X}", asm_result.pixels.len(), load_addr);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    let msg = format!(
+                        "Assembled {} bytes at 0x{:04X}",
+                        asm_result.pixels.len(),
+                        load_addr
+                    );
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
 
                     for _ in 0..10_000_000 {
-                        if !vm.step() { break; }
+                        if !vm.step() {
+                            break;
+                        }
                     }
                     let msg = if vm.halted {
                         format!("Halted at PC=0x{:04X}", vm.pc)
                     } else {
                         format!("Running... PC=0x{:04X}", vm.pc)
                     };
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                     *canvas_assembled = true;
                 }
                 Err(e) => {
                     let msg = format!("{}", e);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
             }
         }
@@ -740,58 +807,90 @@ pub fn execute_cli_command(
                     let i = row_group * 8 + col;
                     line.push_str(&format!("r{:02}={:08X} ", i, vm.regs[i]));
                 }
-                println!("{}", line); output.push_str(&line); output.push('\n');
+                println!("{}", line);
+                output.push_str(&line);
+                output.push('\n');
             }
-            let line = format!("PC={:04X} SP={:04X} LR={:04X}", vm.pc, vm.regs[30], vm.regs[31]);
-            println!("{}", line); output.push_str(&line); output.push('\n');
+            let line = format!(
+                "PC={:04X} SP={:04X} LR={:04X}",
+                vm.pc, vm.regs[30], vm.regs[31]
+            );
+            println!("{}", line);
+            output.push_str(&line);
+            output.push('\n');
         }
         "peek" => {
             if parts.len() < 2 {
                 let msg = "Usage: peek <addr>".to_string();
-                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
                 return;
             }
-            match u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+            match u32::from_str_radix(
+                parts[1].trim_start_matches("0x").trim_start_matches("0X"),
+                16,
+            ) {
                 Ok(addr) if (addr as usize) < vm.ram.len() => {
                     let val = vm.ram[addr as usize];
                     let msg = format!("RAM[0x{:04X}] = 0x{:08X}", addr, val);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
                 Ok(addr) => {
                     let msg = format!("Address 0x{:04X} out of range", addr);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
                 Err(_) => {
                     let msg = "Invalid address".to_string();
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
             }
         }
         "poke" => {
             if parts.len() < 3 {
                 let msg = "Usage: poke <addr> <val>".to_string();
-                println!("{}", msg); output.push_str(&msg); output.push('\n');
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
                 return;
             }
             let addr_str = parts[1].trim_start_matches("0x").trim_start_matches("0X");
             let val_str = parts[2].trim_start_matches("0x").trim_start_matches("0X");
-            match (u32::from_str_radix(addr_str, 16), u32::from_str_radix(val_str, 16)) {
+            match (
+                u32::from_str_radix(addr_str, 16),
+                u32::from_str_radix(val_str, 16),
+            ) {
                 (Ok(addr), Ok(val)) if (addr as usize) < vm.ram.len() => {
                     vm.ram[addr as usize] = val;
                     let msg = format!("RAM[0x{:04X}] <- 0x{:08X}", addr, val);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
                 _ => {
                     let msg = "Usage: poke <hex_addr> <hex_val>".to_string();
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
             }
         }
         "screen" => {
             let start = if parts.len() >= 2 {
-                u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16)
-                    .unwrap_or(0) as usize
-            } else { 0 };
+                u32::from_str_radix(
+                    parts[1].trim_start_matches("0x").trim_start_matches("0X"),
+                    16,
+                )
+                .unwrap_or(0) as usize
+            } else {
+                0
+            };
             for row in 0..4 {
                 let mut line = String::new();
                 for col in 0..4 {
@@ -802,11 +901,17 @@ pub fn execute_cli_command(
                         line.push_str("------ ");
                     }
                 }
-                println!("{}", line); output.push_str(&line); output.push('\n');
+                println!("{}", line);
+                output.push_str(&line);
+                output.push('\n');
             }
         }
         "save" => {
-            let filename = if parts.len() >= 2 { parts[1].to_string() } else { "output.ppm".to_string() };
+            let filename = if parts.len() >= 2 {
+                parts[1].to_string()
+            } else {
+                "output.ppm".to_string()
+            };
             match std::fs::File::create(&filename) {
                 Ok(mut f) => {
                     let header = "P6\n256 256\n255\n".to_string();
@@ -819,24 +924,36 @@ pub fn execute_cli_command(
                         let _ = f.write_all(&[r as u8, g as u8, b as u8]);
                     }
                     let msg = format!("Saved screen to {}", filename);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
                 Err(e) => {
                     let msg = format!("Error saving: {}", e);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
             }
         }
         "png" => {
-            let filename = if parts.len() >= 2 { parts[1].to_string() } else { "screenshot.png".to_string() };
+            let filename = if parts.len() >= 2 {
+                parts[1].to_string()
+            } else {
+                "screenshot.png".to_string()
+            };
             match save_screen_png(&filename, &vm.screen) {
                 Ok(()) => {
                     let msg = format!("Saved screenshot to {}", filename);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
                 Err(e) => {
                     let msg = format!("Error saving PNG: {}", e);
-                    println!("{}", msg); output.push_str(&msg); output.push('\n');
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
                 }
             }
         }
@@ -844,11 +961,15 @@ pub fn execute_cli_command(
             vm.reset();
             *canvas_assembled = false;
             let msg = "VM reset".to_string();
-            println!("{}", msg); output.push_str(&msg); output.push('\n');
+            println!("{}", msg);
+            output.push_str(&msg);
+            output.push('\n');
         }
         _ => {
             let msg = format!("Unknown: {} (skipped)", command);
-            println!("{}", msg); output.push_str(&msg); output.push('\n');
+            println!("{}", msg);
+            output.push_str(&msg);
+            output.push('\n');
         }
     }
 }

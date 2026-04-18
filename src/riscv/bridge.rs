@@ -97,7 +97,12 @@ impl UartBridge {
 
     /// Extract a string from the canvas starting at (row, col) for `max_len` chars.
     /// Stops at row boundary or null characters.
-    pub fn read_canvas_string(canvas_buffer: &[u32], row: usize, col: usize, max_len: usize) -> String {
+    pub fn read_canvas_string(
+        canvas_buffer: &[u32],
+        row: usize,
+        col: usize,
+        max_len: usize,
+    ) -> String {
         let mut s = String::new();
         let mut c = col;
         let mut r = row;
@@ -341,10 +346,18 @@ mod tests {
         // SW x2, 0(x1)        -> store 'A' to UART THR
         //   encoding: 0x00208023
         // EBREAK
-        vm.bus.write_word(base, 0x100000B7).expect("operation should succeed");
-        vm.bus.write_word(base + 4, 0x04100113).expect("operation should succeed");
-        vm.bus.write_word(base + 8, 0x00208023).expect("operation should succeed");
-        vm.bus.write_word(base + 12, 0x00100073).expect("operation should succeed");
+        vm.bus
+            .write_word(base, 0x100000B7)
+            .expect("operation should succeed");
+        vm.bus
+            .write_word(base + 4, 0x04100113)
+            .expect("operation should succeed");
+        vm.bus
+            .write_word(base + 8, 0x00208023)
+            .expect("operation should succeed");
+        vm.bus
+            .write_word(base + 12, 0x00100073)
+            .expect("operation should succeed");
 
         vm.cpu.pc = base as u32;
         for _ in 0..10 {

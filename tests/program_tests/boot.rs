@@ -1,7 +1,5 @@
 use super::*;
 
-
-
 // ── PHASE 30: BOOT SEQUENCE & INIT ────────────────────────────
 
 #[test]
@@ -16,7 +14,10 @@ fn test_shutdown_kernel_mode_halts_all() {
     let result = vm.step();
     assert!(!result, "SHUTDOWN should return false");
     assert!(vm.halted, "SHUTDOWN should halt the VM");
-    assert!(vm.shutdown_requested, "SHUTDOWN should set shutdown_requested");
+    assert!(
+        vm.shutdown_requested,
+        "SHUTDOWN should set shutdown_requested"
+    );
 }
 
 #[test]
@@ -30,8 +31,14 @@ fn test_shutdown_user_mode_returns_error() {
 
     vm.step(); // SHUTDOWN (should fail, not halt)
     assert!(!vm.halted, "SHUTDOWN in user mode should not halt");
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "SHUTDOWN in user mode should set r0 to error");
-    assert!(!vm.shutdown_requested, "SHUTDOWN in user mode should not set shutdown_requested");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "SHUTDOWN in user mode should set r0 to error"
+    );
+    assert!(
+        !vm.shutdown_requested,
+        "SHUTDOWN in user mode should not set shutdown_requested"
+    );
 }
 
 #[test]
@@ -57,19 +64,26 @@ fn test_shutdown_kills_child_processes() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
     vm.pc = 0;
     vm.mode = geometry_os::vm::CpuMode::Kernel;
 
     // Run until SHUTDOWN
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert!(vm.shutdown_requested, "SHUTDOWN should be requested");
     assert!(vm.halted, "VM should be halted");
     // Both children should be halted
     for proc in &vm.processes {
-        assert!(proc.is_halted(), "child process should be halted after SHUTDOWN");
+        assert!(
+            proc.is_halted(),
+            "child process should be halted after SHUTDOWN"
+        );
     }
 }
 
@@ -91,8 +105,7 @@ fn test_shutdown_disassembles() {
 
 #[test]
 fn test_init_asm_assembles() {
-    let source = std::fs::read_to_string("programs/init.asm")
-        .expect("init.asm should exist");
+    let source = std::fs::read_to_string("programs/init.asm").expect("init.asm should exist");
     assemble(&source, 0).expect("init.asm should assemble cleanly");
 }
 
@@ -102,9 +115,16 @@ fn test_boot_creates_init_process() {
     let pid = vm.boot().expect("boot should succeed");
     assert_eq!(pid, 1, "init process should get PID 1");
     assert!(vm.booted, "VM should be marked as booted");
-    assert_eq!(vm.processes.len(), 1, "should have exactly one child process");
+    assert_eq!(
+        vm.processes.len(),
+        1,
+        "should have exactly one child process"
+    );
     assert_eq!(vm.processes[0].pid, 1);
-    assert!(!vm.processes[0].is_halted(), "init process should be running");
+    assert!(
+        !vm.processes[0].is_halted(),
+        "init process should be running"
+    );
     assert_eq!(vm.processes[0].priority, 2, "init gets priority 2");
     assert_eq!(vm.processes[0].mode, geometry_os::vm::CpuMode::User);
 }
@@ -149,12 +169,16 @@ fn test_shutdown_clears_pipes() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
     vm.pc = 0;
     vm.mode = geometry_os::vm::CpuMode::Kernel;
 
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert!(vm.shutdown_requested);
     assert!(vm.pipes.is_empty(), "SHUTDOWN should clear all pipes");

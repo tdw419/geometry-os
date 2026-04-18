@@ -1,6 +1,6 @@
 use super::*;
-use geometry_os::riscv::csr;
 use geometry_os::riscv::clint;
+use geometry_os::riscv::csr;
 use geometry_os::riscv::plic;
 
 // ============================================================
@@ -16,16 +16,30 @@ fn test_clint_timer_trap_and_mret() {
     let base = 0x8000_0000u64;
 
     // Main code (3 instructions)
-    vm.bus.write_word(base, addi(5, 0, 42)).expect("operation should succeed");      // 0x00
-    vm.bus.write_word(base + 4, addi(6, 0, 99)).expect("operation should succeed");   // 0x04
-    vm.bus.write_word(base + 8, nop()).expect("operation should succeed");             // 0x08
+    vm.bus
+        .write_word(base, addi(5, 0, 42))
+        .expect("operation should succeed"); // 0x00
+    vm.bus
+        .write_word(base + 4, addi(6, 0, 99))
+        .expect("operation should succeed"); // 0x04
+    vm.bus
+        .write_word(base + 8, nop())
+        .expect("operation should succeed"); // 0x08
 
     // Trap handler: save mepc, advance by 4, restore, mret
     let handler = 0x8000_0200u64;
-    vm.bus.write_word(handler, csrrw(10, 0, CSR_MEPC)).expect("operation should succeed");
-    vm.bus.write_word(handler + 4, addi(10, 10, 4)).expect("operation should succeed");
-    vm.bus.write_word(handler + 8, csrrw(0, 10, CSR_MEPC)).expect("operation should succeed");
-    vm.bus.write_word(handler + 12, mret()).expect("operation should succeed");
+    vm.bus
+        .write_word(handler, csrrw(10, 0, CSR_MEPC))
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(handler + 4, addi(10, 10, 4))
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(handler + 8, csrrw(0, 10, CSR_MEPC))
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(handler + 12, mret())
+        .expect("operation should succeed");
 
     // Enable MTIE + MIE, set mtvec, timer fires at mtime=4
     vm.cpu.csr.mie = 1 << 7;
@@ -63,11 +77,21 @@ fn test_clint_software_interrupt_trap() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
 
-    vm.bus.write_word(base, nop()).expect("operation should succeed");
-    vm.bus.write_word(base + 4, nop()).expect("operation should succeed");
-    vm.bus.write_word(0x8000_0200, csrrw(10, 0, CSR_MEPC)).expect("operation should succeed");
-    vm.bus.write_word(0x8000_0204, csrrw(0, 10, CSR_MEPC)).expect("operation should succeed");
-    vm.bus.write_word(0x8000_0208, mret()).expect("operation should succeed");
+    vm.bus
+        .write_word(base, nop())
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(base + 4, nop())
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(0x8000_0200, csrrw(10, 0, CSR_MEPC))
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(0x8000_0204, csrrw(0, 10, CSR_MEPC))
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(0x8000_0208, mret())
+        .expect("operation should succeed");
 
     vm.cpu.csr.mie = 1 << 3; // MSIE
     vm.cpu.csr.mtvec = 0x8000_0200;
@@ -87,14 +111,22 @@ fn test_plic_external_interrupt_to_trap() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
 
-    vm.bus.write_word(base, nop()).expect("operation should succeed");
+    vm.bus
+        .write_word(base, nop())
+        .expect("operation should succeed");
 
     // Handler: save mepc, claim from PLIC via MMIO, complete, restore, mret
     // Use direct bus.write_word for PLIC claim/complete instead of CPU instructions
     // to avoid needing LUI+ADDI+LW+SW encoding issues.
-    vm.bus.write_word(0x8000_0200, csrrw(10, 0, CSR_MEPC)).expect("operation should succeed");
-    vm.bus.write_word(0x8000_0204, csrrw(0, 10, CSR_MEPC)).expect("operation should succeed");
-    vm.bus.write_word(0x8000_0208, mret()).expect("operation should succeed");
+    vm.bus
+        .write_word(0x8000_0200, csrrw(10, 0, CSR_MEPC))
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(0x8000_0204, csrrw(0, 10, CSR_MEPC))
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(0x8000_0208, mret())
+        .expect("operation should succeed");
 
     vm.cpu.csr.mie = 1 << 11; // MEIE
     vm.cpu.csr.mtvec = 0x8000_0200;
@@ -121,11 +153,15 @@ fn test_plic_external_interrupt_to_trap() {
 fn test_interrupt_masked_by_mie() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
-    vm.bus.write_word(base, nop()).expect("operation should succeed");
-    vm.bus.write_word(base + 4, nop()).expect("operation should succeed");
+    vm.bus
+        .write_word(base, nop())
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(base + 4, nop())
+        .expect("operation should succeed");
     vm.cpu.csr.mtvec = 0x8000_0200;
     vm.cpu.csr.mie = 1 << 7; // MTIE
-    vm.cpu.csr.mstatus = 0;  // MIE=0!
+    vm.cpu.csr.mstatus = 0; // MIE=0!
     vm.bus.clint.mtimecmp = 0;
     vm.step();
     assert_eq!(vm.cpu.pc, 0x8000_0004); // no trap
@@ -135,19 +171,37 @@ fn test_interrupt_masked_by_mie() {
 #[test]
 fn test_clint_mtime_mmio_full() {
     let mut vm = RiscvVm::new(4096);
-    vm.bus.write_word(clint::MTIME_ADDR, 0xDEAD_BEEF).expect("operation should succeed");
-    vm.bus.write_word(clint::MTIME_ADDR + 4, 0x1234_5678).expect("operation should succeed");
+    vm.bus
+        .write_word(clint::MTIME_ADDR, 0xDEAD_BEEF)
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(clint::MTIME_ADDR + 4, 0x1234_5678)
+        .expect("operation should succeed");
     assert_eq!(vm.bus.clint.mtime, 0x1234_5678_DEAD_BEEF);
-    assert_eq!(vm.bus.read_word(clint::MTIME_ADDR).expect("operation should succeed"), 0xDEAD_BEEF);
-    assert_eq!(vm.bus.read_word(clint::MTIME_ADDR + 4).expect("operation should succeed"), 0x1234_5678);
+    assert_eq!(
+        vm.bus
+            .read_word(clint::MTIME_ADDR)
+            .expect("operation should succeed"),
+        0xDEAD_BEEF
+    );
+    assert_eq!(
+        vm.bus
+            .read_word(clint::MTIME_ADDR + 4)
+            .expect("operation should succeed"),
+        0x1234_5678
+    );
 }
 
 /// CLINT mtimecmp full 64-bit MMIO through the bus.
 #[test]
 fn test_clint_mtimecmp_mmio_full() {
     let mut vm = RiscvVm::new(4096);
-    vm.bus.write_word(clint::MTIMECMP_BASE, 0x0000_0100).expect("operation should succeed");
-    vm.bus.write_word(clint::MTIMECMP_BASE + 4, 0x0000_0002).expect("operation should succeed");
+    vm.bus
+        .write_word(clint::MTIMECMP_BASE, 0x0000_0100)
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(clint::MTIMECMP_BASE + 4, 0x0000_0002)
+        .expect("operation should succeed");
     assert_eq!(vm.bus.clint.mtimecmp, 0x0000_0002_0000_0100);
 }
 
@@ -156,7 +210,9 @@ fn test_clint_mtimecmp_mmio_full() {
 fn test_plic_threshold_blocks_low_priority() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
-    vm.bus.write_word(base, nop()).expect("operation should succeed");
+    vm.bus
+        .write_word(base, nop())
+        .expect("operation should succeed");
     vm.cpu.csr.mie = 1 << 11; // MEIE
     vm.cpu.csr.mtvec = 0x8000_0200;
     vm.cpu.csr.mstatus = 1 << 3;
@@ -203,7 +259,9 @@ fn test_riscvvm_step_drives_timer_interrupt() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
     for i in 0..10u64 {
-        vm.bus.write_word(base + i * 4, nop()).expect("operation should succeed");
+        vm.bus
+            .write_word(base + i * 4, nop())
+            .expect("operation should succeed");
     }
     vm.cpu.pc = base as u32;
     vm.cpu.csr.mie = 1 << 7; // MTIE
@@ -214,7 +272,10 @@ fn test_riscvvm_step_drives_timer_interrupt() {
     vm.step(); // mtime 1->2
     vm.step(); // mtime 2->3
     vm.step(); // mtime 3->4, now 4>=4, MTIP set, trap fires
-    assert_eq!(vm.cpu.csr.mcause & csr::MCAUSE_INTERRUPT_BIT, csr::MCAUSE_INTERRUPT_BIT);
+    assert_eq!(
+        vm.cpu.csr.mcause & csr::MCAUSE_INTERRUPT_BIT,
+        csr::MCAUSE_INTERRUPT_BIT
+    );
     assert_eq!(vm.cpu.csr.mcause & !csr::MCAUSE_INTERRUPT_BIT, 7);
 }
 
@@ -223,10 +284,18 @@ fn test_riscvvm_step_drives_timer_interrupt() {
 fn test_supervisor_timer_with_delegation() {
     let mut vm = RiscvVm::new(4096);
     let base = 0x8000_0000u64;
-    vm.bus.write_word(base, nop()).expect("operation should succeed");
-    vm.bus.write_word(0x8000_0200, csrrw(10, 0, CSR_SEPC)).expect("operation should succeed");
-    vm.bus.write_word(0x8000_0204, csrrw(0, 10, CSR_SEPC)).expect("operation should succeed");
-    vm.bus.write_word(0x8000_0208, sret()).expect("operation should succeed");
+    vm.bus
+        .write_word(base, nop())
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(0x8000_0200, csrrw(10, 0, CSR_SEPC))
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(0x8000_0204, csrrw(0, 10, CSR_SEPC))
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(0x8000_0208, sret())
+        .expect("operation should succeed");
 
     vm.cpu.csr.mideleg = 1 << 5; // Delegate STI
     vm.cpu.csr.mie = 1 << 5; // STIE

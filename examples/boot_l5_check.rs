@@ -1,8 +1,8 @@
 //! Diagnostic: Check L1[5] page table entry at the time of the load fault at VA 0x01579004.
 //! Run: cargo run --example boot_l5_check
 
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -38,44 +38,59 @@ fn main() {
                 let scause = vm.cpu.csr.scause;
                 let stval = vm.cpu.csr.stval;
                 let sepc = vm.cpu.csr.sepc;
-                
+
                 if stval == 0x01579004 || stval == 0x01579000 {
-                    eprintln!("[{}] FAULT at sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X}", 
-                        count, sepc, scause, stval);
+                    eprintln!(
+                        "[{}] FAULT at sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X}",
+                        count, sepc, scause, stval
+                    );
                     eprintln!("  PC before step: 0x{:08X}", pc_before);
                     eprintln!("  SATP=0x{:08X}", vm.cpu.csr.satp);
-                    
+
                     let satp = vm.cpu.csr.satp;
                     let ppn = (satp & 0x3FFFFF) as u64;
                     let pg_dir_phys = ppn * 4096;
-                    
+
                     // Check L1[5] for VA 0x01579004
                     let vpn1 = ((0x01579004u32 >> 22) & 0x3FF) as u64;
                     let l5_addr = pg_dir_phys + vpn1 * 4;
                     let l5_entry = vm.bus.read_word(l5_addr).unwrap_or(0);
-                    eprintln!("  L1[{}] at PA 0x{:08X} = 0x{:08X}", vpn1, l5_addr, l5_entry);
-                    
+                    eprintln!(
+                        "  L1[{}] at PA 0x{:08X} = 0x{:08X}",
+                        vpn1, l5_addr, l5_entry
+                    );
+
                     if l5_entry & 1 != 0 {
                         let rwx = (l5_entry >> 1) & 0x7;
                         if rwx != 0 {
                             let l5_ppn = ((l5_entry >> 10) & 0x3FFFFF) as u64;
                             eprintln!("  L1[{}] MEGAPAGE: PA base = 0x{:08X}", vpn1, l5_ppn << 12);
-                            eprintln!("  VA 0x01579004 -> PA 0x{:08X}", (l5_ppn << 12) + (0x01579004 & 0x3FFFFF));
+                            eprintln!(
+                                "  VA 0x01579004 -> PA 0x{:08X}",
+                                (l5_ppn << 12) + (0x01579004 & 0x3FFFFF)
+                            );
                         } else {
                             // L2 table
                             let l2_ppn = ((l5_entry >> 10) & 0x3FFFFF) as u64;
                             let vpn0 = ((0x01579004u32 >> 12) & 0x3FF) as u64;
                             let l2_addr = l2_ppn * 4096 + vpn0 * 4;
                             let l2_entry = vm.bus.read_word(l2_addr).unwrap_or(0);
-                            eprintln!("  L2[{}] at PA 0x{:08X} = 0x{:08X}", vpn0, l2_addr, l2_entry);
+                            eprintln!(
+                                "  L2[{}] at PA 0x{:08X} = 0x{:08X}",
+                                vpn0, l2_addr, l2_entry
+                            );
                         }
                     } else {
                         eprintln!("  L1[{}] NOT VALID - this is the root cause!", vpn1);
                         // Check all L1[0..6]
                         for i in 0..8u64 {
                             let e = vm.bus.read_word(pg_dir_phys + i * 4).unwrap_or(0);
-                            eprintln!("  L1[{}] = 0x{:08X}{}", i, e, 
-                                if e & 1 != 0 { " [valid]" } else { " [INVALID]" });
+                            eprintln!(
+                                "  L1[{}] = 0x{:08X}{}",
+                                i,
+                                e,
+                                if e & 1 != 0 { " [valid]" } else { " [INVALID]" }
+                            );
                         }
                     }
                     break;

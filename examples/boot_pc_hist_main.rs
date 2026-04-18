@@ -12,17 +12,18 @@ fn main() {
         initramfs.as_deref(),
         256,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     let mut pc_hist: HashMap<u32, u64> = HashMap::new();
     let mut count = 0u64;
-    
+
     // Sample PCs for 5M instructions (starting after 5M warmup)
     while count < 10_000_000 {
         vm.bus.tick_clint();
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
         let _ = vm.step();
-        
+
         if count >= 5_000_000 {
             // Sample every 10th instruction
             if count % 10 == 0 {
@@ -31,7 +32,7 @@ fn main() {
         }
         count += 1;
     }
-    
+
     // Print top 30 most-executed PCs
     let mut sorted: Vec<_> = pc_hist.iter().collect();
     sorted.sort_by(|a, b| b.1.cmp(a.1));
@@ -39,6 +40,12 @@ fn main() {
     for (i, (pc, count)) in sorted.iter().take(30).enumerate() {
         let inst = vm.bus.read_word(**pc as u64).unwrap_or(0);
         let half = vm.bus.read_half(**pc as u64).unwrap_or(0);
-        eprintln!("{:3}. PC=0x{:08X}: {} hits  inst=0x{:08X}", i+1, pc, count, inst);
+        eprintln!(
+            "{:3}. PC=0x{:08X}: {} hits  inst=0x{:08X}",
+            i + 1,
+            pc,
+            count,
+            inst
+        );
     }
 }

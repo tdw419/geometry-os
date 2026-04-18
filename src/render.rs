@@ -1,9 +1,9 @@
 // render.rs -- Rendering pipeline for Geometry OS
 
-use std::collections::VecDeque;
-use crate::vm;
 use crate::font;
 use crate::preprocessor;
+use crate::vm;
+use std::collections::VecDeque;
 
 // ── Layout constants ─────────────────────────────────────────────
 pub const WIDTH: usize = 1024;
@@ -89,7 +89,10 @@ pub fn render(
         for col in 0..CANVAS_COLS {
             let ram_addr = log_row * CANVAS_COLS + col;
             let intensity = ram_intensity.get(ram_addr).copied().unwrap_or(0.0);
-            let kind = ram_kind.get(ram_addr).copied().unwrap_or(vm::MemAccessKind::Read);
+            let kind = ram_kind
+                .get(ram_addr)
+                .copied()
+                .unwrap_or(vm::MemAccessKind::Read);
 
             let val = canvas_buffer[log_row * CANVAS_COLS + col];
             let x0 = col * CANVAS_SCALE;
@@ -100,7 +103,11 @@ pub fn render(
             let use_pixel_font = val != 0 && (0x20..0x80).contains(&ascii_byte);
 
             // Determine cell base color (with intensity tint)
-            let mut tint_color = if kind == vm::MemAccessKind::Write { 0xFF00FF } else { 0x00FFFF };
+            let mut tint_color = if kind == vm::MemAccessKind::Write {
+                0xFF00FF
+            } else {
+                0x00FFFF
+            };
             let mut final_intensity = intensity;
 
             // PC trail: bytecode lives at CANVAS_BYTECODE_ADDR (0x1000), so subtract
@@ -188,7 +195,8 @@ pub fn render(
         }
 
         // Thumb (proportional to visible/total ratio, minimum 8px)
-        let thumb_ratio = (CANVAS_ROWS * CANVAS_SCALE) as f32 / (CANVAS_MAX_ROWS * CANVAS_SCALE) as f32;
+        let thumb_ratio =
+            (CANVAS_ROWS * CANVAS_SCALE) as f32 / (CANVAS_MAX_ROWS * CANVAS_SCALE) as f32;
         let thumb_height = ((sb_height as f32 * thumb_ratio).max(8.0)) as usize;
         let thumb_max_travel = sb_height - thumb_height;
         let thumb_y = if max_scroll > 0 {
@@ -223,17 +231,26 @@ pub fn render(
     for row in 0..32 {
         for col in 0..32 {
             let addr = ram_view_base + row * 32 + col;
-            if addr >= vm.ram.len() { break; }
+            if addr >= vm.ram.len() {
+                break;
+            }
 
             let raw_val = vm.ram[addr];
             let intensity = ram_intensity.get(addr).copied().unwrap_or(0.0);
-            let kind = ram_kind.get(addr).copied().unwrap_or(vm::MemAccessKind::Read);
+            let kind = ram_kind
+                .get(addr)
+                .copied()
+                .unwrap_or(vm::MemAccessKind::Read);
 
             // Base color is the RAM value (masked to 24-bit)
             let base_color = raw_val & 0xFFFFFF;
-            
+
             // Pulse tint
-            let tint_color = if kind == vm::MemAccessKind::Write { 0xFF00FF } else { 0x00FFFF };
+            let tint_color = if kind == vm::MemAccessKind::Write {
+                0xFF00FF
+            } else {
+                0x00FFFF
+            };
             let cell_color = if intensity > 0.01 {
                 lerp_color(base_color, tint_color, intensity)
             } else {
@@ -264,13 +281,20 @@ pub fn render(
 
         let raw_val = vm.ram[addr];
         let intensity = ram_intensity.get(addr).copied().unwrap_or(0.0);
-        let kind = ram_kind.get(addr).copied().unwrap_or(vm::MemAccessKind::Read);
+        let kind = ram_kind
+            .get(addr)
+            .copied()
+            .unwrap_or(vm::MemAccessKind::Read);
 
         // Base color: Dim gray if data exists, else black
         let base_color = if raw_val > 0 { 0x222222 } else { 0x050505 };
-        
+
         // Pulse tint
-        let tint_color = if kind == vm::MemAccessKind::Write { 0xFF00FF } else { 0x00FFFF };
+        let tint_color = if kind == vm::MemAccessKind::Write {
+            0xFF00FF
+        } else {
+            0x00FFFF
+        };
         let mut pixel_color = if intensity > 0.01 {
             lerp_color(base_color, tint_color, intensity)
         } else {
@@ -354,12 +378,16 @@ pub fn render(
     for &a in &inst_starts {
         if a < pc {
             before.push(a);
-            if before.len() > 4 { before.remove(0); }
+            if before.len() > 4 {
+                before.remove(0);
+            }
         } else if a == pc {
             found_pc = true;
         } else {
             after.push(a);
-            if after.len() >= 5 { break; }
+            if after.len() >= 5 {
+                break;
+            }
         }
     }
     display_addrs.extend_from_slice(&before);
@@ -391,7 +419,11 @@ pub fn render(
     // ── Status bar ───────────────────────────────────────────────
     let row_info = format!("row {}/{} ", cursor_row + 1, CANVAS_MAX_ROWS);
     let scroll_info = if scroll_offset > 0 || cursor_row >= CANVAS_ROWS {
-        format!("[scroll {}-{}] ", scroll_offset + 1, scroll_offset + CANVAS_ROWS)
+        format!(
+            "[scroll {}-{}] ",
+            scroll_offset + 1,
+            scroll_offset + CANVAS_ROWS
+        )
     } else {
         String::new()
     };

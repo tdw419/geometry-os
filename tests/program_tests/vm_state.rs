@@ -1,8 +1,6 @@
 use super::*;
 use std::collections::HashSet;
 
-
-
 // ── SAVE / LOAD ─────────────────────────────────────────────────
 
 #[test]
@@ -44,9 +42,9 @@ fn test_vm_save_load_preserves_rand_state_and_frame_count() {
     let mut vm = Vm::new();
     // Advance RNG by calling RAND twice (RAND rd is a 2-byte instruction)
     vm.ram[0] = 0x49; // RAND r0
-    vm.ram[1] = 0;    // reg arg
+    vm.ram[1] = 0; // reg arg
     vm.ram[2] = 0x49; // RAND r0 (second call)
-    vm.ram[3] = 0;    // reg arg
+    vm.ram[3] = 0; // reg arg
     vm.pc = 0;
     vm.step(); // first RAND -> pc=2
     vm.step(); // second RAND -> pc=4
@@ -68,18 +66,31 @@ fn test_vm_save_load_preserves_rand_state_and_frame_count() {
     vm.save_to_file(&tmp).expect("VM save should succeed");
 
     let loaded = Vm::load_from_file(&tmp).expect("VM load should succeed");
-    assert_eq!(loaded.rand_state, rng_state_before, "rand_state should be preserved");
-    assert_eq!(loaded.frame_count, frame_count_before, "frame_count should be preserved");
+    assert_eq!(
+        loaded.rand_state, rng_state_before,
+        "rand_state should be preserved"
+    );
+    assert_eq!(
+        loaded.frame_count, frame_count_before,
+        "frame_count should be preserved"
+    );
 
     // Verify the loaded RNG produces the same next value as the original would
     // Call RAND on both and compare
     let mut vm2 = vm;
     let mut loaded2 = loaded;
-    vm2.ram[0] = 0x49; vm2.ram[1] = 0; vm2.pc = 0;
-    loaded2.ram[0] = 0x49; loaded2.ram[1] = 0; loaded2.pc = 0;
+    vm2.ram[0] = 0x49;
+    vm2.ram[1] = 0;
+    vm2.pc = 0;
+    loaded2.ram[0] = 0x49;
+    loaded2.ram[1] = 0;
+    loaded2.pc = 0;
     vm2.step();
     loaded2.step();
-    assert_eq!(vm2.regs[0], loaded2.regs[0], "next RAND value should match after load");
+    assert_eq!(
+        vm2.regs[0], loaded2.regs[0],
+        "next RAND value should match after load"
+    );
 
     std::fs::remove_file(tmp).ok();
 }
@@ -109,7 +120,11 @@ fn test_vm_save_load_preserves_program_execution() {
     assert!(loaded.halted);
     // Spot-check a few screen pixels
     assert_eq!(loaded.screen[0], 0x0000FF, "top-left should be blue");
-    assert_eq!(loaded.screen[128 * 256 + 128], 0x0000FF, "center should be blue");
+    assert_eq!(
+        loaded.screen[128 * 256 + 128],
+        0x0000FF,
+        "center should be blue"
+    );
     assert_eq!(
         loaded.screen[255 * 256 + 255],
         0x0000FF,
@@ -122,10 +137,12 @@ fn test_vm_save_load_preserves_program_execution() {
 #[test]
 fn test_snake_assembles() {
     // Smoke test: snake.asm must assemble without errors
-    let source = std::fs::read_to_string("programs/snake.asm")
-        .expect("snake.asm not found");
+    let source = std::fs::read_to_string("programs/snake.asm").expect("snake.asm not found");
     let asm = assemble(&source, 0x1000).expect("snake.asm failed to assemble");
-    assert!(asm.pixels.len() > 100, "snake should be more than 100 words");
+    assert!(
+        asm.pixels.len() > 100,
+        "snake should be more than 100 words"
+    );
 }
 
 #[test]
@@ -135,7 +152,9 @@ fn test_breakpoint_halts_at_correct_address() {
     let source = "LDI r1, 42\nLDI r2, 99\nHALT";
     let asm = assemble(source, 0x1000).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[0x1000 + i] = v;
+    }
     vm.pc = 0x1000;
 
     // Figure out where LDI r2 starts by checking instruction sizes
@@ -148,7 +167,9 @@ fn test_breakpoint_halts_at_correct_address() {
     // Run with breakpoint check
     let mut hit = false;
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if breakpoints.contains(&vm.pc) {
             hit = true;
             break;
@@ -158,7 +179,10 @@ fn test_breakpoint_halts_at_correct_address() {
     assert!(hit, "should have hit breakpoint at 0x{:04X}", bp_addr);
     assert_eq!(vm.pc, bp_addr, "PC should be at breakpoint address");
     assert_eq!(vm.regs[1], 42, "r1 should be set before breakpoint");
-    assert_ne!(vm.regs[2], 99, "r2 should NOT be set yet (breakpoint before it)");
+    assert_ne!(
+        vm.regs[2], 99,
+        "r2 should NOT be set yet (breakpoint before it)"
+    );
 }
 
 #[test]
@@ -167,7 +191,9 @@ fn test_breakpoint_can_be_toggled() {
     let source = "LDI r1, 1\nLDI r2, 2\nLDI r3, 3\nHALT";
     let asm = assemble(source, 0x1000).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[0x1000 + i] = v;
+    }
     vm.pc = 0x1000;
 
     let (_, first_len) = vm.disassemble_at(0x1000);
@@ -179,7 +205,9 @@ fn test_breakpoint_can_be_toggled() {
     // Run: should hit breakpoint
     let mut hit_count = 0;
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if breakpoints.contains(&vm.pc) {
             hit_count += 1;
             break;
@@ -190,7 +218,9 @@ fn test_breakpoint_can_be_toggled() {
     // Remove breakpoint and continue to halt
     breakpoints.remove(&bp_addr);
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if breakpoints.contains(&vm.pc) {
             hit_count += 1;
         }
@@ -205,15 +235,22 @@ fn test_breakpoint_not_hit_if_address_skipped() {
     let source = "LDI r1, 10\nHALT";
     let asm = assemble(source, 0x1000).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[0x1000 + i] = v;
+    }
     vm.pc = 0x1000;
 
     let mut breakpoints: HashSet<u32> = HashSet::new();
     breakpoints.insert(0x2000); // unreachable address
 
     for _ in 0..1000 {
-        if !vm.step() { break; }
-        assert!(!breakpoints.contains(&vm.pc), "should never hit BP at 0x2000");
+        if !vm.step() {
+            break;
+        }
+        assert!(
+            !breakpoints.contains(&vm.pc),
+            "should never hit BP at 0x2000"
+        );
     }
     assert!(vm.halted);
 }
@@ -224,7 +261,9 @@ fn test_multiple_breakpoints() {
     let source = "LDI r1, 1\nLDI r2, 2\nLDI r3, 3\nLDI r4, 4\nHALT";
     let asm = assemble(source, 0x1000).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[0x1000 + i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[0x1000 + i] = v;
+    }
     vm.pc = 0x1000;
 
     // Calculate addresses of each LDI instruction
@@ -242,7 +281,9 @@ fn test_multiple_breakpoints() {
 
     let mut hits: Vec<u32> = Vec::new();
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if breakpoints.contains(&vm.pc) {
             hits.push(vm.pc);
             break;
@@ -255,7 +296,9 @@ fn test_multiple_breakpoints() {
     // Continue after first breakpoint
     hits.clear();
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if breakpoints.contains(&vm.pc) {
             hits.push(vm.pc);
             break;

@@ -11,13 +11,13 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            bootargs,
-        ).expect("boot setup failed");
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        bootargs,
+    )
+    .expect("boot setup failed");
 
     let fw_addr_u32 = _fw_addr as u32;
     let max_instr: u64 = 752_000;
@@ -46,7 +46,9 @@ fn main() {
             last_satp = cur_satp;
         }
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 4;
@@ -100,7 +102,10 @@ fn main() {
             let va_base = (idx as u64) << 22;
             let ppn = ((pte >> 10) & 0x3FFFFF) as u64;
             let is_leaf = (pte & 0xE) != 0 || (pte & 0xF0000000) != 0;
-            eprintln!("L1[{}] = 0x{:08X} VA 0x{:08X} PPN=0x{:06X} leaf={}", idx, pte, va_base, ppn, is_leaf);
+            eprintln!(
+                "L1[{}] = 0x{:08X} VA 0x{:08X} PPN=0x{:06X} leaf={}",
+                idx, pte, va_base, ppn, is_leaf
+            );
         }
     }
 
@@ -115,6 +120,12 @@ fn main() {
 
     // Check what the fixmap faulting address 0x9DBFF000 needs
     let fixmap_l1: u32 = 0x9DBFF000 >> 22;
-    let fixmap_pte = vm.bus.read_word(new_pg_dir + (fixmap_l1 as u64) * 4).unwrap_or(0);
-    eprintln!("\nFixmap VA 0x9DBFF000: L1[{}] = 0x{:08X}", fixmap_l1, fixmap_pte);
+    let fixmap_pte = vm
+        .bus
+        .read_word(new_pg_dir + (fixmap_l1 as u64) * 4)
+        .unwrap_or(0);
+    eprintln!(
+        "\nFixmap VA 0x9DBFF000: L1[{}] = 0x{:08X}",
+        fixmap_l1, fixmap_pte
+    );
 }

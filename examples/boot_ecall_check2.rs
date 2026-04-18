@@ -1,6 +1,6 @@
+use geometry_os::riscv::cpu::Privilege;
 /// Check if ECALLs from S-mode are happening and what a7 contains.
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::Privilege;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -32,11 +32,16 @@ fn main() {
             if cause_code == 11 {
                 // ECALL_M -> SBI call
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -81,21 +86,33 @@ fn main() {
 
         // Check for SATP changes
         if vm.cpu.csr.satp != last_satp {
-            println!("[diag] SATP: 0x{:08X} -> 0x{:08X} at count={}", last_satp, vm.cpu.csr.satp, count);
+            println!(
+                "[diag] SATP: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, vm.cpu.csr.satp, count
+            );
             last_satp = vm.cpu.csr.satp;
         }
 
         count += 1;
     }
 
-    println!("\n[diag] Total ECALLs (cpu.ecall_count): {}", vm.cpu.ecall_count);
-    println!("[diag] SBI console_output len: {}", vm.bus.sbi.console_output.len());
+    println!(
+        "\n[diag] Total ECALLs (cpu.ecall_count): {}",
+        vm.cpu.ecall_count
+    );
+    println!(
+        "[diag] SBI console_output len: {}",
+        vm.bus.sbi.console_output.len()
+    );
     println!("[diag] UART tx_buf len: {}", vm.bus.uart.tx_buf.len());
 
     if !ecall_a7_log.is_empty() {
         println!("\n[diag] First 30 ECALLs:");
         for (cnt, pc, a7, a0) in ecall_a7_log.iter().take(30) {
-            println!("  count={} pc=0x{:08X} a7=0x{:X} a0=0x{:X}", cnt, pc, a7, a0);
+            println!(
+                "  count={} pc=0x{:08X} a7=0x{:X} a0=0x{:X}",
+                cnt, pc, a7, a0
+            );
         }
     } else {
         println!("[diag] NO ECALLs detected in {} instructions!", max);

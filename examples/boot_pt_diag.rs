@@ -16,9 +16,13 @@ fn main() {
         512,
         20_000_000u64,
         bootargs,
-    ).unwrap();
+    )
+    .unwrap();
     let elapsed = start.elapsed();
-    println!("Boot: {} instructions in {:?}", result.instructions, elapsed);
+    println!(
+        "Boot: {} instructions in {:?}",
+        result.instructions, elapsed
+    );
     println!("PC: 0x{:08X}, Privilege: {:?}", vm.cpu.pc, vm.cpu.privilege);
     println!("SATP: 0x{:08X}", vm.cpu.csr.satp);
 
@@ -43,13 +47,19 @@ fn main() {
     let ra_vpn1 = (ra >> 22) & 0x3FF;
     let ra_l1_addr = pg_dir_phys + (ra_vpn1 as u64) * 4;
     let ra_l1_entry = vm.bus.read_word(ra_l1_addr).unwrap_or(0);
-    println!("RA L1[0x{:03X}] at PA 0x{:08X} = 0x{:08X}", ra_vpn1, ra_l1_addr, ra_l1_entry);
+    println!(
+        "RA L1[0x{:03X}] at PA 0x{:08X} = 0x{:08X}",
+        ra_vpn1, ra_l1_addr, ra_l1_entry
+    );
 
     // Read L1 entry for SP (VA 0xC1401E30 -> VPN1 = 0xC1401E30 >> 22 = 0xC14)
     let sp_vpn1 = (sp >> 22) & 0x3FF;
     let sp_l1_addr = pg_dir_phys + (sp_vpn1 as u64) * 4;
     let sp_l1_entry = vm.bus.read_word(sp_l1_addr).unwrap_or(0);
-    println!("SP L1[0x{:03X}] at PA 0x{:08X} = 0x{:08X}", sp_vpn1, sp_l1_addr, sp_l1_entry);
+    println!(
+        "SP L1[0x{:03X}] at PA 0x{:08X} = 0x{:08X}",
+        sp_vpn1, sp_l1_addr, sp_l1_entry
+    );
 
     // If L1 for RA is non-leaf (R=0,W=0,X=0), read L2
     let l1_rwx = ra_l1_entry & 0xE;
@@ -59,7 +69,10 @@ fn main() {
         let ra_vpn0 = (ra >> 12) & 0x3FF;
         let l2_addr = l2_base + (ra_vpn0 as u64) * 4;
         let l2_entry = vm.bus.read_word(l2_addr).unwrap_or(0);
-        println!("RA L2[0x{:03X}] at PA 0x{:08X} = 0x{:08X}", ra_vpn0, l2_addr, l2_entry);
+        println!(
+            "RA L2[0x{:03X}] at PA 0x{:08X} = 0x{:08X}",
+            ra_vpn0, l2_addr, l2_entry
+        );
         let l2_ppn_val = (l2_entry >> 10) & 0x3FFFFF;
         let final_pa = (l2_ppn_val as u64) * 4096 + ((ra & 0xFFF) as u64);
         println!("RA final PA: 0x{:08X}", final_pa);
@@ -82,7 +95,10 @@ fn main() {
         let sp_vpn0 = (sp >> 12) & 0x3FF;
         let l2_addr = l2_base + (sp_vpn0 as u64) * 4;
         let l2_entry = vm.bus.read_word(l2_addr).unwrap_or(0);
-        println!("SP L2[0x{:03X}] at PA 0x{:08X} = 0x{:08X}", sp_vpn0, l2_addr, l2_entry);
+        println!(
+            "SP L2[0x{:03X}] at PA 0x{:08X} = 0x{:08X}",
+            sp_vpn0, l2_addr, l2_entry
+        );
         let l2_ppn_val = (l2_entry >> 10) & 0x3FFFFF;
         let final_pa = (l2_ppn_val as u64) * 4096 + ((sp & 0xFFF) as u64);
         println!("SP final PA: 0x{:08X}", final_pa);
@@ -110,8 +126,10 @@ fn main() {
             let va = (i as u32) << 22;
             let pa = ppn * if r || w || x { 0x200000 } else { 4096 };
             let kind = if r || w || x { "mega" } else { "L2->" };
-            println!("  L1[{}] VA=0x{:08X} V={} R={} W={} X={} PPN=0x{:05X} {} PA=0x{:08X} raw=0x{:08X}",
-                i, va, v, r, w, x, ppn, kind, pa, entry);
+            println!(
+                "  L1[{}] VA=0x{:08X} V={} R={} W={} X={} PPN=0x{:05X} {} PA=0x{:08X} raw=0x{:08X}",
+                i, va, v, r, w, x, ppn, kind, pa, entry
+            );
         }
     }
 }

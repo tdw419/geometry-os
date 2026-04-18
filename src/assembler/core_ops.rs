@@ -100,14 +100,10 @@ pub(super) fn try_parse(
         }
 
         // Arithmetic: ADD, SUB, MUL, DIV, AND, OR, XOR, SHL, SHR, SAR, MOD
-        "ADD" | "SUB" | "MUL" | "DIV" | "AND" | "OR" | "XOR" | "SHL" | "SHR" | "SAR"
-        | "MOD" => {
+        "ADD" | "SUB" | "MUL" | "DIV" | "AND" | "OR" | "XOR" | "SHL" | "SHR" | "SAR" | "MOD" => {
             if tokens.len() < 3 {
                 let name = opcode;
-                return Err(format!(
-                    "{} requires 2 arguments: {} rd, rs",
-                    name, name
-                ));
+                return Err(format!("{} requires 2 arguments: {} rd, rs", name, name));
             }
             let op_byte = match opcode {
                 "ADD" => 0x20,
@@ -167,10 +163,7 @@ pub(super) fn try_parse(
         "JZ" | "JNZ" | "BLT" | "BGE" => {
             if tokens.len() < 3 {
                 let name = opcode;
-                return Err(format!(
-                    "{} requires 2 arguments: {} reg, addr",
-                    name, name
-                ));
+                return Err(format!("{} requires 2 arguments: {} reg, addr", name, name));
             }
             let op_byte = match opcode {
                 "JZ" => 0x31,

@@ -20,8 +20,7 @@ use super::mmu::{self, AccessType, Tlb, TranslateResult};
 
 /// Privilege level.
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Privilege {
     User = 0,
     Supervisor = 1,
@@ -29,10 +28,8 @@ pub enum Privilege {
     Machine = 3,
 }
 
-
 /// Result of a single step.
-#[derive(Debug, PartialEq, Eq)]
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum StepResult {
     /// Executed one instruction normally.
     Ok,
@@ -75,11 +72,7 @@ pub struct LastStepInfo {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SchedEvent {
     /// Context switch detected (tp register changed).
-    ContextSwitch {
-        old_tp: u32,
-        new_tp: u32,
-        pc: u32,
-    },
+    ContextSwitch { old_tp: u32, new_tp: u32, pc: u32 },
 }
 
 /// RV32I CPU state.
@@ -151,7 +144,12 @@ impl RiscvCpu {
     /// Per RISC-V spec: M-mode instruction fetches always use bare mode
     /// (no translation). For loads/stores in M-mode, translation depends on
     /// MPRV: when MPRV=0 (default), bare mode; when MPRV=1, uses MPP privilege.
-    fn translate_va(&mut self, va: u32, access: AccessType, bus: &mut Bus) -> Result<u64, StepResult> {
+    fn translate_va(
+        &mut self,
+        va: u32,
+        access: AccessType,
+        bus: &mut Bus,
+    ) -> Result<u64, StepResult> {
         // Determine the effective privilege for address translation.
         let effective_priv = if self.privilege == Privilege::Machine {
             if access == AccessType::Fetch {
@@ -178,7 +176,16 @@ impl RiscvCpu {
         let sum = (self.csr.mstatus >> csr::MSTATUS_SUM) & 1 != 0;
         let mxr = (self.csr.mstatus >> csr::MSTATUS_MXR) & 1 != 0;
         let satp = self.csr.satp;
-        match mmu::translate(va, access, effective_priv, sum, mxr, satp, bus, &mut self.tlb) {
+        match mmu::translate(
+            va,
+            access,
+            effective_priv,
+            sum,
+            mxr,
+            satp,
+            bus,
+            &mut self.tlb,
+        ) {
             TranslateResult::Ok(pa) => Ok(pa),
             TranslateResult::FetchFault
             | TranslateResult::LoadFault
@@ -228,7 +235,10 @@ impl RiscvCpu {
             }
             let old = self.csr.satp;
             if old != fixed_val {
-                bus.mmu_log.push(mmu::MmuEvent::SatpWrite { old, new: fixed_val });
+                bus.mmu_log.push(mmu::MmuEvent::SatpWrite {
+                    old,
+                    new: fixed_val,
+                });
                 // Flush TLB on SATP change to prevent stale translations.
                 // While software should SFENCE.VMA, many implementations flush
                 // on SATP write to avoid a window of stale entries.
@@ -256,7 +266,8 @@ impl RiscvCpu {
     pub(crate) fn deliver_trap(&mut self, cause: u32, tval: u32) {
         let trap_priv = self.csr.trap_target_priv(cause, self.privilege);
         let vector = self.csr.trap_vector(trap_priv);
-        self.csr.trap_enter(trap_priv, self.privilege, self.pc, cause);
+        self.csr
+            .trap_enter(trap_priv, self.privilege, self.pc, cause);
         match trap_priv {
             Privilege::Machine => self.csr.mtval = tval,
             Privilege::Supervisor => self.csr.stval = tval,
@@ -281,7 +292,8 @@ impl RiscvCpu {
         if let Some(cause) = self.csr.pending_interrupt(self.privilege) {
             let trap_priv = self.csr.trap_target_priv(cause, self.privilege);
             let vector = self.csr.trap_vector(trap_priv);
-            self.csr.trap_enter(trap_priv, self.privilege, self.pc, cause);
+            self.csr
+                .trap_enter(trap_priv, self.privilege, self.pc, cause);
             self.privilege = trap_priv;
             self.pc = vector;
             self.last_step = Some(LastStepInfo {

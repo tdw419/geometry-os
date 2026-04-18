@@ -1,8 +1,8 @@
 // Trace the last N instructions before the fault to understand the context
 // cargo run --example boot_pre_fault
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -65,22 +65,47 @@ fn main() {
                     }
                     0x63 => {
                         let names = ["beq", "bne", "", "blt", "bge", "", "bltu", "bgeu"];
-                        let name = if funct3 < 8 { names[funct3 as usize] } else { "?" };
+                        let name = if funct3 < 8 {
+                            names[funct3 as usize]
+                        } else {
+                            "?"
+                        };
                         format!("{} x{}, x{}", name, rs1, rs2)
                     }
                     0x03 => {
                         let names = ["lb", "lh", "lw", "", "lbu", "lhu"];
-                        let name = if funct3 < 6 { names[funct3 as usize] } else { "?" };
+                        let name = if funct3 < 6 {
+                            names[funct3 as usize]
+                        } else {
+                            "?"
+                        };
                         format!("{} x{}, ...", name, rd)
                     }
                     0x23 => {
                         let names = ["sb", "sh", "sw"];
-                        let name = if funct3 < 3 { names[funct3 as usize] } else { "?" };
+                        let name = if funct3 < 3 {
+                            names[funct3 as usize]
+                        } else {
+                            "?"
+                        };
                         format!("{} x{}, ...", name, rs2)
                     }
                     0x13 => {
-                        let names = ["addi", "slli", "slti", "sltiu", "xori", "srli/srai", "ori", "andi"];
-                        let name = if funct3 < 8 { names[funct3 as usize] } else { "?" };
+                        let names = [
+                            "addi",
+                            "slli",
+                            "slti",
+                            "sltiu",
+                            "xori",
+                            "srli/srai",
+                            "ori",
+                            "andi",
+                        ];
+                        let name = if funct3 < 8 {
+                            names[funct3 as usize]
+                        } else {
+                            "?"
+                        };
                         format!("{} x{}, x{}, ...", name, rd, rs1)
                     }
                     0x33 => {
@@ -111,15 +136,28 @@ fn main() {
                         } else {
                             let csr = (inst >> 20) & 0xFFF;
                             let csr_names = [
-                                (0x100, "sstatus"), (0x104, "sie"), (0x105, "stvec"),
-                                (0x141, "sepc"), (0x142, "scause"), (0x143, "stval"),
-                                (0x180, "satp"), (0x300, "mstatus"), (0x302, "medeleg"),
-                                (0x303, "mideleg"), (0x304, "mie"), (0x305, "mtvec"),
-                                (0x341, "mepc"), (0x342, "mcause"), (0x343, "mtval"),
+                                (0x100, "sstatus"),
+                                (0x104, "sie"),
+                                (0x105, "stvec"),
+                                (0x141, "sepc"),
+                                (0x142, "scause"),
+                                (0x143, "stval"),
+                                (0x180, "satp"),
+                                (0x300, "mstatus"),
+                                (0x302, "medeleg"),
+                                (0x303, "mideleg"),
+                                (0x304, "mie"),
+                                (0x305, "mtvec"),
+                                (0x341, "mepc"),
+                                (0x342, "mcause"),
+                                (0x343, "mtval"),
                                 (0x344, "mip"),
                             ];
-                            let csr_name = csr_names.iter().find(|(a, _)| *a == csr)
-                                .map(|(_, n)| *n).unwrap_or("???");
+                            let csr_name = csr_names
+                                .iter()
+                                .find(|(a, _)| *a == csr)
+                                .map(|(_, n)| *n)
+                                .unwrap_or("???");
                             let op = match funct3 {
                                 1 => "csrw",
                                 2 => "csrs",
@@ -133,7 +171,11 @@ fn main() {
                 };
 
                 // Mark the faulting instruction
-                let marker = if *addr == vm.cpu.csr.mepc { " <<< FAULT" } else { "" };
+                let marker = if *addr == vm.cpu.csr.mepc {
+                    " <<< FAULT"
+                } else {
+                    ""
+                };
                 println!(
                     "  [{:>6}] 0x{:08X}: 0x{:08X}  {}{}",
                     cnt, addr, inst, desc, marker

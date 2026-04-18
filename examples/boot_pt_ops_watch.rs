@@ -11,13 +11,13 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            bootargs,
-        ).expect("boot setup failed");
+    let (mut vm, fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        bootargs,
+    )
+    .expect("boot setup failed");
 
     let fw_addr_u32 = fw_addr as u32;
     let max_instr: u64 = 190_000;
@@ -30,7 +30,10 @@ fn main() {
 
     // Read initial value
     last_pt_ops_4_val = vm.bus.read_word(pt_ops_4_pa).unwrap_or(0);
-    eprintln!("[watch] Initial pt_ops[4] at PA 0x{:08X} = 0x{:08X}", pt_ops_4_pa, last_pt_ops_4_val);
+    eprintln!(
+        "[watch] Initial pt_ops[4] at PA 0x{:08X} = 0x{:08X}",
+        pt_ops_4_pa, last_pt_ops_4_val
+    );
 
     use geometry_os::riscv::cpu::StepResult;
 
@@ -56,7 +59,9 @@ fn main() {
         }
 
         // Trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 4;
@@ -109,7 +114,10 @@ fn main() {
                         "[fault] count={} FETCH_FAULT: PC=0x{:08X} sepc=0x{:08X}",
                         count, vm.cpu.pc, sepc
                     );
-                    eprintln!("[fault] pt_ops[4] at PA 0x{:08X} = 0x{:08X}", pt_ops_4_pa, last_pt_ops_4_val);
+                    eprintln!(
+                        "[fault] pt_ops[4] at PA 0x{:08X} = 0x{:08X}",
+                        pt_ops_4_pa, last_pt_ops_4_val
+                    );
                     break;
                 }
             }
@@ -129,6 +137,9 @@ fn main() {
     }
 
     eprintln!("\n=== Final State ===");
-    eprintln!("count={} PC=0x{:08X} priv={:?}", count, vm.cpu.pc, vm.cpu.privilege);
+    eprintln!(
+        "count={} PC=0x{:08X} priv={:?}",
+        count, vm.cpu.pc, vm.cpu.privilege
+    );
     eprintln!("pt_ops[4] = 0x{:08X}", last_pt_ops_4_val);
 }

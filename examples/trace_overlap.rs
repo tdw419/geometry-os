@@ -1,6 +1,6 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
 use geometry_os::riscv::csr;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -21,11 +21,21 @@ fn main() {
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == csr::CAUSE_ECALL_S {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
-                if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                if let Some((a0, a1)) = result {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
                 count += 1;
                 continue;
@@ -38,9 +48,11 @@ fn main() {
                         vm.cpu.csr.scause = mcause;
                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP)) | (spp << csr::MSTATUS_SPP);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                            | (spp << csr::MSTATUS_SPP);
                         let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE)) | (sie << csr::MSTATUS_SPIE);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                            | (sie << csr::MSTATUS_SPIE);
                         vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
                         vm.cpu.pc = stvec;
                         vm.cpu.privilege = Privilege::Supervisor;
@@ -54,11 +66,21 @@ fn main() {
                 continue;
             }
             let result = vm.bus.sbi.handle_ecall(
-                vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                &mut vm.bus.uart, &mut vm.bus.clint,
+                vm.cpu.x[17],
+                vm.cpu.x[16],
+                vm.cpu.x[10],
+                vm.cpu.x[11],
+                vm.cpu.x[12],
+                vm.cpu.x[13],
+                vm.cpu.x[14],
+                vm.cpu.x[15],
+                &mut vm.bus.uart,
+                &mut vm.bus.clint,
             );
-            if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+            if let Some((a0, a1)) = result {
+                vm.cpu.x[10] = a0;
+                vm.cpu.x[11] = a1;
+            }
             vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             count += 1;
             continue;
@@ -78,11 +100,16 @@ fn main() {
             // prb_reserve will adjust sp by -96, saved ra at sp_new + 92
             let future_sp_new = vm.cpu.x[2] - 96;
             let saved_ra_addr = future_sp_new + 92;
-            eprintln!("  After prb_reserve entry: sp_new=0x{:08X}, saved_ra at 0x{:08X}", 
-                future_sp_new, saved_ra_addr);
+            eprintln!(
+                "  After prb_reserve entry: sp_new=0x{:08X}, saved_ra at 0x{:08X}",
+                future_sp_new, saved_ra_addr
+            );
             eprintln!("  a0+0 = 0x{:08X}", vm.cpu.x[10]);
             eprintln!("  a0+8 = 0x{:08X}", vm.cpu.x[10] + 8);
-            eprintln!("  OVERLAP: a0+8 == saved_ra? {}", vm.cpu.x[10] + 8 == saved_ra_addr);
+            eprintln!(
+                "  OVERLAP: a0+8 == saved_ra? {}",
+                vm.cpu.x[10] + 8 == saved_ra_addr
+            );
         }
 
         vm.step();

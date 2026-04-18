@@ -1,9 +1,8 @@
 use super::*;
-use geometry_os::riscv::mmu;
-use geometry_os::riscv::csr;
-use geometry_os::riscv::plic;
 use crate::sv32::{make_pte, sfence_vma};
-
+use geometry_os::riscv::csr;
+use geometry_os::riscv::mmu;
+use geometry_os::riscv::plic;
 
 /// Bus sync_mip sets MEIP when PLIC has pending enabled interrupts.
 #[test]
@@ -25,7 +24,6 @@ fn test_bus_sync_mip_plic_clears_meip() {
     bus.sync_mip(&mut mip);
     assert_eq!(mip & (1 << 11), 0, "MEIP should be cleared");
 }
-
 
 // =====================================================================
 // Phase 36: MMU + Device Integration Test
@@ -62,8 +60,8 @@ impl MmuTestEnv {
         let vm = RiscvVm::new(ram_size);
         Self {
             vm,
-            root_ppn: 0x80001,   // PA 0x8000_1000
-            code_ppn: 0x80000,   // PA 0x8000_0000
+            root_ppn: 0x80001, // PA 0x8000_1000
+            code_ppn: 0x80000, // PA 0x8000_0000
         }
     }
 
@@ -76,22 +74,43 @@ impl MmuTestEnv {
         let uart_phys_ppn: u32 = 0x10000; // PA 0x1000_0000
 
         let root_pa = (root_ppn as u64) << 12;
-        self.vm.bus.write_word(root_pa + (0x200u64 * 4), make_pte(l2_code_ppn, mmu::PTE_V)).expect("operation should succeed");
+        self.vm
+            .bus
+            .write_word(root_pa + (0x200u64 * 4), make_pte(l2_code_ppn, mmu::PTE_V))
+            .expect("operation should succeed");
 
         let l2_code_pa = (l2_code_ppn as u64) << 12;
-        self.vm.bus.write_word(l2_code_pa, make_pte(code_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X)).expect("operation should succeed");
+        self.vm
+            .bus
+            .write_word(
+                l2_code_pa,
+                make_pte(code_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_X),
+            )
+            .expect("operation should succeed");
 
         if map_uart {
-            self.vm.bus.write_word(root_pa + (0x040u64 * 4), make_pte(l2_uart_ppn, mmu::PTE_V)).expect("operation should succeed");
+            self.vm
+                .bus
+                .write_word(root_pa + (0x040u64 * 4), make_pte(l2_uart_ppn, mmu::PTE_V))
+                .expect("operation should succeed");
             let l2_uart_pa = (l2_uart_ppn as u64) << 12;
-            self.vm.bus.write_word(l2_uart_pa, make_pte(uart_phys_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W)).expect("operation should succeed");
+            self.vm
+                .bus
+                .write_word(
+                    l2_uart_pa,
+                    make_pte(uart_phys_ppn, mmu::PTE_V | mmu::PTE_R | mmu::PTE_W),
+                )
+                .expect("operation should succeed");
         }
     }
 
     fn load_code(&mut self, code: &[u32]) {
         let code_base = (self.code_ppn as u64) << 12;
         for (i, &word) in code.iter().enumerate() {
-            self.vm.bus.write_word(code_base + (i as u64) * 4, word).expect("operation should succeed");
+            self.vm
+                .bus
+                .write_word(code_base + (i as u64) * 4, word)
+                .expect("operation should succeed");
         }
     }
 
@@ -118,10 +137,10 @@ impl MmuTestEnv {
         let satp_lo = (satp & 0xFFF) as i32;
         let mut code = vec![
             lui(1, 0x10000000),    // x1 = 0x1000_0000 (UART base VA)
-            lui(2, satp_hi),    // x2 = upper bits of satp
-            addi(2, 2, satp_lo), // x2 = satp (SV32, ASID=0, root PPN)
+            lui(2, satp_hi),       // x2 = upper bits of satp
+            addi(2, 2, satp_lo),   // x2 = satp (SV32, ASID=0, root PPN)
             csrrw(0, 2, CSR_SATP), // write satp
-            sfence_vma(0, 0),   // flush TLB
+            sfence_vma(0, 0),      // flush TLB
         ];
         for &b in text.as_bytes() {
             code.push(addi(3, 0, b as i32));
@@ -171,8 +190,10 @@ fn test_mmu_device_integration_no_output_without_mapping() {
 
     // Page fault should have been delivered.
     assert_eq!(
-        env.vm.cpu.csr.mcause, csr::CAUSE_STORE_PAGE_FAULT,
-        "Expected store page fault, got 0x{:X}", env.vm.cpu.csr.mcause
+        env.vm.cpu.csr.mcause,
+        csr::CAUSE_STORE_PAGE_FAULT,
+        "Expected store page fault, got 0x{:X}",
+        env.vm.cpu.csr.mcause
     );
 }
 
@@ -195,10 +216,17 @@ fn test_mmu_device_integration_tlb_cached_uart_writes() {
     assert_eq!(output, "ABC", "Expected 'ABC' on canvas");
 
     // TLB should have cached the UART mapping
-    assert!(env.vm.cpu.tlb.lookup(
-        mmu::va_to_vpn(0x1000_0000),
-        mmu::satp_asid(env.vm.cpu.csr.satp)
-    ).is_some(), "TLB should cache UART mapping");
+    assert!(
+        env.vm
+            .cpu
+            .tlb
+            .lookup(
+                mmu::va_to_vpn(0x1000_0000),
+                mmu::satp_asid(env.vm.cpu.csr.satp)
+            )
+            .is_some(),
+        "TLB should cache UART mapping"
+    );
 }
 
 /// Test that the RV32 Linux kernel can be loaded by our ELF loader.
@@ -206,35 +234,52 @@ fn test_mmu_device_integration_tlb_cached_uart_writes() {
 #[test]
 fn test_rv32_linux_kernel_loads() {
     use std::path::Path;
-    let kernel_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".geometry_os/fs/linux/rv32/vmlinux");
-    
+    let kernel_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(".geometry_os/fs/linux/rv32/vmlinux");
+
     if !kernel_path.exists() {
         eprintln!("Skipping: RV32 kernel not found at {:?}", kernel_path);
         return;
     }
-    
+
     let kernel_image = std::fs::read(&kernel_path).expect("Failed to read kernel");
-    assert!(kernel_image.len() > 1_000_000, "Kernel too small: {} bytes", kernel_image.len());
-    
+    assert!(
+        kernel_image.len() > 1_000_000,
+        "Kernel too small: {} bytes",
+        kernel_image.len()
+    );
+
     // Verify it's an ELF32 RISC-V file
-    assert_eq!(&kernel_image[0..4], &[0x7F, 0x45, 0x4C, 0x46], "Not ELF magic");
+    assert_eq!(
+        &kernel_image[0..4],
+        &[0x7F, 0x45, 0x4C, 0x46],
+        "Not ELF magic"
+    );
     assert_eq!(kernel_image[4], 1, "Not ELF32 (class != 1)");
     assert_eq!(kernel_image[5], 1, "Not little-endian");
-    
+
     let machine = u16::from_le_bytes([kernel_image[18], kernel_image[19]]);
     assert_eq!(machine, 243, "Not RISC-V (EM_RISCV = 243)");
-    
+
     // Create VM with 128MB RAM and attempt to load
     let mut vm = geometry_os::riscv::RiscvVm::new(128 * 1024 * 1024);
     let result = geometry_os::riscv::loader::load_elf(&mut vm.bus, &kernel_image);
-    
+
     match result {
         Ok(info) => {
-            eprintln!("Kernel loaded: entry=0x{:08X}, highest=0x{:08X}", 
-                      info.entry, info.highest_addr);
-            assert!(info.entry == 0xC0000000, "Entry point should be 0xC0000000, got 0x{:08X}", info.entry);
-            assert!(info.highest_addr > 0xC0000000, "Kernel should load above 0xC0000000");
+            eprintln!(
+                "Kernel loaded: entry=0x{:08X}, highest=0x{:08X}",
+                info.entry, info.highest_addr
+            );
+            assert!(
+                info.entry == 0xC0000000,
+                "Entry point should be 0xC0000000, got 0x{:08X}",
+                info.entry
+            );
+            assert!(
+                info.highest_addr > 0xC0000000,
+                "Kernel should load above 0xC0000000"
+            );
         }
         Err(e) => {
             // The kernel may be too large for the test RAM size
@@ -247,7 +292,6 @@ fn test_rv32_linux_kernel_loads() {
     }
 }
 
-
 /// Test SBI ECALL interception: ECALL from S-mode with valid SBI extension
 /// is handled by SBI (no trap), while non-SBI ECALL traps to M-mode.
 #[test]
@@ -257,8 +301,12 @@ fn test_sbi_ecall_interception() {
     use geometry_os::riscv::cpu::Privilege;
 
     // Write ECALL at entry point
-    vm.bus.write_word(base, ecall()).expect("operation should succeed");
-    vm.bus.write_word(base + 4, ebreak()).expect("operation should succeed");
+    vm.bus
+        .write_word(base, ecall())
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(base + 4, ebreak())
+        .expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Supervisor;
@@ -270,25 +318,45 @@ fn test_sbi_ecall_interception() {
     let r = vm.cpu.step(&mut vm.bus);
     assert_eq!(r, StepResult::Ok);
     // PC should advance past ECALL (no trap)
-    assert_eq!(vm.cpu.pc, (base as u32) + 4, "SBI call should advance PC normally");
+    assert_eq!(
+        vm.cpu.pc,
+        (base as u32) + 4,
+        "SBI call should advance PC normally"
+    );
     // Should still be in S-mode (no privilege change)
-    assert_eq!(vm.cpu.privilege, Privilege::Supervisor, "SBI call keeps S-mode");
+    assert_eq!(
+        vm.cpu.privilege,
+        Privilege::Supervisor,
+        "SBI call keeps S-mode"
+    );
     // a0 should be SBI_SUCCESS (0)
     assert_eq!(vm.cpu.x[10], 0, "a0 = SBI_SUCCESS");
     // Character should be in SBI console output
-    assert!(!vm.bus.sbi.console_output.is_empty(), "SBI should have console output");
-    assert_eq!(vm.bus.sbi.console_output[0], b'A', "first char should be 'A'");
+    assert!(
+        !vm.bus.sbi.console_output.is_empty(),
+        "SBI should have console output"
+    );
+    assert_eq!(
+        vm.bus.sbi.console_output[0], b'A',
+        "first char should be 'A'"
+    );
 
     // --- Test 2: Non-SBI ECALL (a7=0x999) should trap to M-mode ---
     vm.cpu.pc = base as u32;
     vm.cpu.csr.mtvec = (base as u32) + 0x400;
-    vm.bus.write_word(base + 0x400, ebreak()).expect("operation should succeed");
+    vm.bus
+        .write_word(base + 0x400, ebreak())
+        .expect("operation should succeed");
     vm.cpu.x[17] = 0x999; // Not an SBI extension
 
     let r = vm.cpu.step(&mut vm.bus);
     assert_eq!(r, StepResult::Ok);
     // Should trap to M-mode
-    assert_eq!(vm.cpu.privilege, Privilege::Machine, "non-SBI ECALL traps to M-mode");
+    assert_eq!(
+        vm.cpu.privilege,
+        Privilege::Machine,
+        "non-SBI ECALL traps to M-mode"
+    );
     assert_eq!(vm.cpu.pc, (base as u32) + 0x400, "should jump to mtvec");
     assert_eq!(vm.cpu.csr.mcause, 9, "mcause = ECALL-S");
 }
@@ -300,7 +368,9 @@ fn test_sbi_base_probe_from_smode() {
     let base = 0x8000_0000u64;
     use geometry_os::riscv::cpu::Privilege;
 
-    vm.bus.write_word(base, ecall()).expect("operation should succeed");
+    vm.bus
+        .write_word(base, ecall())
+        .expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Supervisor;
@@ -333,7 +403,9 @@ fn test_sbi_shutdown_from_smode() {
     let base = 0x8000_0000u64;
     use geometry_os::riscv::cpu::Privilege;
 
-    vm.bus.write_word(base, ecall()).expect("operation should succeed");
+    vm.bus
+        .write_word(base, ecall())
+        .expect("operation should succeed");
 
     vm.cpu.pc = base as u32;
     vm.cpu.privilege = Privilege::Supervisor;

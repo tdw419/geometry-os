@@ -2,9 +2,9 @@
 // Fault is at 0x804046C8 (should be 0xC04046C8 = alloc_pte_fixmap).
 // pt_ops pointer is at VA 0xC0801000. pt_ops[1] (set_pte) is at VA 0xC0801004.
 
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -28,7 +28,10 @@ fn main() {
         // SATP change handling
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[diag] SATP changed at count={}: 0x{:08X} -> 0x{:08X}", count, last_satp, cur_satp);
+            eprintln!(
+                "[diag] SATP changed at count={}: 0x{:08X} -> 0x{:08X}",
+                count, last_satp, cur_satp
+            );
             let mode = (cur_satp >> 31) & 1;
             if mode == 1 {
                 let ppn = cur_satp & 0x3FFFFF;
@@ -54,16 +57,23 @@ fn main() {
         }
 
         // M-mode trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -115,14 +125,19 @@ fn main() {
             let l1_770_ppn = l1_770 >> 10;
             let l1_770_flags = l1_770 & 0x3FF;
             let is_leaf = (l1_770 & (1 << 1)) != 0 || (l1_770 & (1 << 3)) != 0;
-            eprintln!("[diag] L1[770] (VA 0xC0800000): pte=0x{:08X} ppn=0x{:X} flags=0x{:03X} is_leaf={}",
-                l1_770, l1_770_ppn, l1_770_flags, is_leaf);
+            eprintln!(
+                "[diag] L1[770] (VA 0xC0800000): pte=0x{:08X} ppn=0x{:X} flags=0x{:03X} is_leaf={}",
+                l1_770, l1_770_ppn, l1_770_flags, is_leaf
+            );
 
             // Check what PA the MMU would translate VA 0xC0801004 to
             // VA 0xC0801004: VPN1=770, VPN0=1, offset=4
             if is_leaf {
                 let pa = (l1_770_ppn as u64) << 22 | 0x1004;
-                eprintln!("[diag] VA 0xC0801004 would map to PA 0x{:08X} (megapage)", pa);
+                eprintln!(
+                    "[diag] VA 0xC0801004 would map to PA 0x{:08X} (megapage)",
+                    pa
+                );
             } else {
                 // L2 table
                 let l2_base = (l1_770_ppn as u64) << 12;
@@ -130,7 +145,10 @@ fn main() {
                 let l2_entry = vm.bus.read_word(l2_entry_addr).unwrap_or(0);
                 let l2_ppn = l2_entry >> 10;
                 let pa = (l2_ppn as u64) << 12 | 0x004;
-                eprintln!("[diag] L2[1] at PA 0x{:08X}: pte=0x{:08X} ppn=0x{:X}", l2_entry_addr, l2_entry, l2_ppn);
+                eprintln!(
+                    "[diag] L2[1] at PA 0x{:08X}: pte=0x{:08X} ppn=0x{:X}",
+                    l2_entry_addr, l2_entry, l2_ppn
+                );
                 eprintln!("[diag] VA 0xC0801004 would map to PA 0x{:08X} (L2)", pa);
             }
 
@@ -140,8 +158,10 @@ fn main() {
             let pt_ops_ptr = vm.bus.read_word(pt_ops_pa).unwrap_or(0);
             let pt_ops_get = vm.bus.read_word(pt_ops_pa + 4).unwrap_or(0);
             let pt_ops_set = vm.bus.read_word(pt_ops_pa + 8).unwrap_or(0);
-            eprintln!("[diag] pt_ops at PA 0x{:08X}: ptr=0x{:08X} get=0x{:08X} set=0x{:08X}",
-                pt_ops_pa, pt_ops_ptr, pt_ops_get, pt_ops_set);
+            eprintln!(
+                "[diag] pt_ops at PA 0x{:08X}: ptr=0x{:08X} get=0x{:08X} set=0x{:08X}",
+                pt_ops_pa, pt_ops_ptr, pt_ops_get, pt_ops_set
+            );
 
             // Check if pt_ops points to a struct, and read that struct
             if pt_ops_ptr != 0 {
@@ -153,8 +173,15 @@ fn main() {
                 };
                 let struct_get = vm.bus.read_word(pt_ops_struct_pa).unwrap_or(0);
                 let struct_set = vm.bus.read_word(pt_ops_struct_pa + 4).unwrap_or(0);
-                eprintln!("[diag] pt_ops->get (at PA 0x{:08X}) = 0x{:08X}", pt_ops_struct_pa, struct_get);
-                eprintln!("[diag] pt_ops->set (at PA 0x{:08X}) = 0x{:08X}", pt_ops_struct_pa + 4, struct_set);
+                eprintln!(
+                    "[diag] pt_ops->get (at PA 0x{:08X}) = 0x{:08X}",
+                    pt_ops_struct_pa, struct_get
+                );
+                eprintln!(
+                    "[diag] pt_ops->set (at PA 0x{:08X}) = 0x{:08X}",
+                    pt_ops_struct_pa + 4,
+                    struct_set
+                );
 
                 // Disassemble what functions these should be
                 eprintln!("[diag] pt_ops->get should be early_pg_dir_pte_get or alloc_pte_early");
@@ -164,7 +191,11 @@ fn main() {
             // Check the raw value at the PA where pt_ops[1] should be
             // This is pt_ops_ptr + 4 in physical memory
             let raw_val = vm.bus.read_word(pt_ops_pa + 4).unwrap_or(0);
-            eprintln!("[diag] Raw word at pt_ops+4 (PA 0x{:08X}): 0x{:08X}", pt_ops_pa + 4, raw_val);
+            eprintln!(
+                "[diag] Raw word at pt_ops+4 (PA 0x{:08X}): 0x{:08X}",
+                pt_ops_pa + 4,
+                raw_val
+            );
 
             // Check if the ELF loader correctly loaded the .data section
             // The third segment has paddr=0x00800000, filesz=0xB7B4
@@ -183,7 +214,10 @@ fn main() {
             let file_offset = 0x428000u64 + (va_offset - 0xC0800000);
             if (va_offset - 0xC0800000) < 0xB7B4 {
                 if (file_offset as usize) + 16 <= kernel_image.len() {
-                    eprintln!("[diag] ELF file at offset 0x{:X} (for VA 0x{:08X}):", file_offset, va_offset);
+                    eprintln!(
+                        "[diag] ELF file at offset 0x{:X} (for VA 0x{:08X}):",
+                        file_offset, va_offset
+                    );
                     for i in 0..4 {
                         let off = file_offset + (i * 4) as u64;
                         let b = &kernel_image[off as usize..(off + 4) as usize];
@@ -204,8 +238,10 @@ fn main() {
         match step_result {
             StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
                 if count >= 186550 {
-                    eprintln!("[diag] Fault at count={}: PC=0x{:08X} scause=0x{:08X} sepc=0x{:08X}",
-                        count, vm.cpu.pc, vm.cpu.csr.scause, vm.cpu.csr.sepc);
+                    eprintln!(
+                        "[diag] Fault at count={}: PC=0x{:08X} scause=0x{:08X} sepc=0x{:08X}",
+                        count, vm.cpu.pc, vm.cpu.csr.scause, vm.cpu.csr.sepc
+                    );
                 }
             }
             StepResult::Ebreak => break,

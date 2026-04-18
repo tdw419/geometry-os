@@ -8,13 +8,13 @@ fn main() {
 
     // Test 1: Disable ALL fixups -- just boot with kernel_map patch only
     eprintln!("=== TEST 1: No fixups, just kernel_map patch ===");
-    let (mut vm1, fw_addr, _entry, dtb_addr) =
-        RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            "console=ttyS0 loglevel=8",
-        ).unwrap();
+    let (mut vm1, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        "console=ttyS0 loglevel=8",
+    )
+    .unwrap();
 
     // Disable auto_pte_fixup
     vm1.bus.auto_pte_fixup = false;
@@ -25,27 +25,38 @@ fn main() {
     let mut sbi_count: u64 = 0;
 
     while count < 2_000_000 {
-        if vm1.bus.sbi.shutdown_requested { break; }
+        if vm1.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // Detect trap at fw_addr
-        if vm1.cpu.pc == fw_addr_u32 && vm1.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm1.cpu.pc == fw_addr_u32
+            && vm1.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm1.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
 
-            if cause_code == 9 { // ECALL_S -> SBI call
+            if cause_code == 9 {
+                // ECALL_S -> SBI call
                 sbi_count += 1;
                 let result = vm1.bus.sbi.handle_ecall(
-                    vm1.cpu.x[17], vm1.cpu.x[16],
-                    vm1.cpu.x[10], vm1.cpu.x[11],
-                    vm1.cpu.x[12], vm1.cpu.x[13],
-                    vm1.cpu.x[14], vm1.cpu.x[15],
-                    &mut vm1.bus.uart, &mut vm1.bus.clint,
+                    vm1.cpu.x[17],
+                    vm1.cpu.x[16],
+                    vm1.cpu.x[10],
+                    vm1.cpu.x[11],
+                    vm1.cpu.x[12],
+                    vm1.cpu.x[13],
+                    vm1.cpu.x[14],
+                    vm1.cpu.x[15],
+                    &mut vm1.bus.uart,
+                    &mut vm1.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm1.cpu.x[10] = a0;
                     vm1.cpu.x[11] = a1;
                 }
-            } else if cause_code != 11 { // Not ECALL_M
+            } else if cause_code != 11 {
+                // Not ECALL_M
                 let mpp = (vm1.cpu.csr.mstatus >> 11) & 3;
                 if cause_code == 9 {
                     // ECALL_S handled above
@@ -61,7 +72,8 @@ fn main() {
                         let sie = (vm1.cpu.csr.mstatus >> 1) & 1;
                         vm1.cpu.csr.mstatus = (vm1.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                         vm1.cpu.csr.mstatus &= !(1 << 1);
-                        if cause_code == 7 { // Timer
+                        if cause_code == 7 {
+                            // Timer
                             vm1.bus.clint.mtimecmp = vm1.bus.clint.mtime + 100_000;
                         }
                         vm1.cpu.pc = stvec;
@@ -85,7 +97,9 @@ fn main() {
             geometry_os::riscv::cpu::StepResult::FetchFault
             | geometry_os::riscv::cpu::StepResult::LoadFault
             | geometry_os::riscv::cpu::StepResult::StoreFault => {
-                if vm1.cpu.privilege == geometry_os::riscv::cpu::Privilege::Supervisor && count < 1_000_000 {
+                if vm1.cpu.privilege == geometry_os::riscv::cpu::Privilege::Supervisor
+                    && count < 1_000_000
+                {
                     let ft = match step_result {
                         geometry_os::riscv::cpu::StepResult::FetchFault => "fetch",
                         geometry_os::riscv::cpu::StepResult::LoadFault => "load",
@@ -101,7 +115,10 @@ fn main() {
         // Log SATP changes
         let cur_satp = vm1.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[test1] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!(
+                "[test1] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
             // Dump first few L1 entries at the new page directory
             let ppn = cur_satp & 0x3FFFFF;
             let pg_dir = (ppn as u64) * 4096;
@@ -113,8 +130,10 @@ fn main() {
                 let w = (entry & 4) != 0;
                 let x = (entry & 8) != 0;
                 let ppn_val = (entry >> 10) & 0x3FFFFF;
-                eprintln!("[test1]   L1[{}] = 0x{:08X} V={} R={} W={} X={} PPN=0x{:06X}",
-                    i, entry, v, r, w, x, ppn_val);
+                eprintln!(
+                    "[test1]   L1[{}] = 0x{:08X} V={} R={} W={} X={} PPN=0x{:06X}",
+                    i, entry, v, r, w, x, ppn_val
+                );
             }
             last_satp = cur_satp;
         }
@@ -122,8 +141,19 @@ fn main() {
         count += 1;
     }
 
-    let sbi_str: String = vm1.bus.sbi.console_output.iter().map(|&b| b as char).collect();
-    eprintln!("[test1] Done: count={} SBI_calls={} SBI_output={} bytes", count, sbi_count, sbi_str.len());
+    let sbi_str: String = vm1
+        .bus
+        .sbi
+        .console_output
+        .iter()
+        .map(|&b| b as char)
+        .collect();
+    eprintln!(
+        "[test1] Done: count={} SBI_calls={} SBI_output={} bytes",
+        count,
+        sbi_count,
+        sbi_str.len()
+    );
     if !sbi_str.is_empty() {
         eprintln!("[test1] SBI output:\n{}", sbi_str);
     }

@@ -9,7 +9,13 @@ fn main() {
 
     use geometry_os::riscv::RiscvVm;
 
-    match RiscvVm::boot_linux(&kernel_image, initramfs.as_deref(), 256, 5_000_000, bootargs) {
+    match RiscvVm::boot_linux(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        5_000_000,
+        bootargs,
+    ) {
         Ok((vm, result)) => {
             eprintln!("=== RESULT ===");
             eprintln!("Instructions: {}", result.instructions);
@@ -24,7 +30,13 @@ fn main() {
             eprintln!("GP: 0x{:08X}", vm.cpu.x[3]);
 
             // Print UART output
-            let uart_output: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+            let uart_output: String = vm
+                .bus
+                .sbi
+                .console_output
+                .iter()
+                .map(|&b| b as char)
+                .collect();
             if !uart_output.is_empty() {
                 eprintln!("\n=== UART OUTPUT (first 2000 chars) ===");
                 eprintln!("{}", &uart_output[..uart_output.len().min(2000)]);
@@ -36,11 +48,18 @@ fn main() {
             eprintln!("Console output bytes: {}", vm.bus.sbi.console_output.len());
 
             // Print MMU log summary
-            let satp_writes: Vec<_> = vm.bus.mmu_log.iter().filter_map(|e| {
-                if let geometry_os::riscv::mmu::MmuEvent::SatpWrite { old, new } = e {
-                    Some((*old, *new))
-                } else { None }
-            }).collect();
+            let satp_writes: Vec<_> = vm
+                .bus
+                .mmu_log
+                .iter()
+                .filter_map(|e| {
+                    if let geometry_os::riscv::mmu::MmuEvent::SatpWrite { old, new } = e {
+                        Some((*old, *new))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             eprintln!("\n=== SATP WRITES ({}) ===", satp_writes.len());
             for (i, (old, new)) in satp_writes.iter().enumerate().take(20) {
                 eprintln!("  [{}] 0x{:08X} -> 0x{:08X}", i, old, new);

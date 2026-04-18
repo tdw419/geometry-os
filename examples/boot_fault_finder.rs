@@ -1,9 +1,9 @@
 // Detailed fault finder: trace what happens around the fault
 // cargo run --example boot_fault_finder
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
 use geometry_os::riscv::decode;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -14,13 +14,8 @@ fn main() {
     println!("=== Boot Fault Finder ===");
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, result) = RiscvVm::boot_linux(
-        &kernel,
-        initramfs.as_deref(),
-        512,
-        300_000,
-        bootargs,
-    ).unwrap();
+    let (mut vm, result) =
+        RiscvVm::boot_linux(&kernel, initramfs.as_deref(), 512, 300_000, bootargs).unwrap();
 
     println!("Instructions: {}", result.instructions);
     println!("Final PC: 0x{:08X}", vm.cpu.pc);
@@ -46,7 +41,10 @@ fn main() {
     let mode = (satp >> 31) & 1;
     let asid = (satp >> 22) & 0x1FF;
     let ppn = satp & 0x3FFFFF;
-    println!("\nsatp decode: mode={}, asid={}, ppn=0x{:X}", mode, asid, ppn);
+    println!(
+        "\nsatp decode: mode={}, asid={}, ppn=0x{:X}",
+        mode, asid, ppn
+    );
     let pt_phys = (ppn as u64) << 12;
     println!("Page table root physical addr: 0x{:08X}", pt_phys);
     println!("RAM base: 0x{:08X}", vm.bus.mem.ram_base);
@@ -63,8 +61,10 @@ fn main() {
                         let pte_flags = entry & 0x3FF;
                         let pte_ppn = (entry >> 10) & 0x3FFFFF;
                         let is_leaf = (entry & 0xE) != 0; // R|W|X != 0
-                        println!("  PTE[{:3}]: 0x{:08X}  flags=0x{:03X} ppn=0x{:X} leaf={}",
-                            vpn_idx, entry, pte_flags, pte_ppn, is_leaf);
+                        println!(
+                            "  PTE[{:3}]: 0x{:08X}  flags=0x{:03X} ppn=0x{:X} leaf={}",
+                            vpn_idx, entry, pte_flags, pte_ppn, is_leaf
+                        );
                     }
                 }
                 Err(_) => {}
@@ -108,9 +108,15 @@ fn main() {
 
     // Also check SBI console output
     if !vm.bus.sbi.console_output.is_empty() {
-        println!("\n--- SBI Console Output ({} bytes) ---", vm.bus.sbi.console_output.len());
+        println!(
+            "\n--- SBI Console Output ({} bytes) ---",
+            vm.bus.sbi.console_output.len()
+        );
         println!("{}", String::from_utf8_lossy(&vm.bus.sbi.console_output));
     }
 
-    println!("\nsbi shutdown_requested: {}", vm.bus.sbi.shutdown_requested);
+    println!(
+        "\nsbi shutdown_requested: {}",
+        vm.bus.sbi.shutdown_requested
+    );
 }

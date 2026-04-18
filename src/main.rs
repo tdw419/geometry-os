@@ -7,30 +7,30 @@
 // Test:  cargo test
 
 mod assembler;
-mod font;
-mod inode_fs;
-mod vfs;
-mod vm;
-mod preprocessor;
-mod keys;
-mod save;
-mod render;
+mod audio;
 mod canvas;
 mod cli;
+mod font;
 mod hermes;
-mod audio;
+mod inode_fs;
+mod keys;
+mod preprocessor;
+mod render;
+mod save;
+mod vfs;
+mod vm;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
-use keys::{key_to_ascii, key_to_ascii_shifted};
-use render::*;
+use audio::play_beep;
 use canvas::*;
 use cli::cli_main;
 use hermes::run_hermes_canvas;
-use save::{save_state, load_state, save_screen_png, save_full_buffer_png};
-use audio::play_beep;
+use keys::{key_to_ascii, key_to_ascii_shifted};
+use render::*;
+use save::{load_state, save_full_buffer_png, save_screen_png, save_state};
 
 // ── Memory map ───────────────────────────────────────────────────
 const KEYS_BITMASK_PORT: usize = 0xFFB;
@@ -152,8 +152,16 @@ fn main() {
     // Boot: write welcome banner + first prompt into canvas
     {
         term_output_row = write_line_to_canvas(&mut canvas_buffer, 0, "Geometry OS v1.0.0");
-        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "40 opcodes | 32 regs | 256x256");
-        term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "Type 'help' for commands.");
+        term_output_row = write_line_to_canvas(
+            &mut canvas_buffer,
+            term_output_row,
+            "40 opcodes | 32 regs | 256x256",
+        );
+        term_output_row = write_line_to_canvas(
+            &mut canvas_buffer,
+            term_output_row,
+            "Type 'help' for commands.",
+        );
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "");
         term_prompt_row = term_output_row;
         let _ = write_line_to_canvas(&mut canvas_buffer, term_output_row, "geo> ");
@@ -203,12 +211,24 @@ fn main() {
         // ── Handle input ─────────────────────────────────────────
         if is_running {
             let mut mask: u32 = 0;
-            if window.is_key_down(Key::Up)    || window.is_key_down(Key::W) { mask |= 1 << 0; }
-            if window.is_key_down(Key::Down)  || window.is_key_down(Key::S) { mask |= 1 << 1; }
-            if window.is_key_down(Key::Left)  || window.is_key_down(Key::A) { mask |= 1 << 2; }
-            if window.is_key_down(Key::Right) || window.is_key_down(Key::D) { mask |= 1 << 3; }
-            if window.is_key_down(Key::Space) { mask |= 1 << 4; }
-            if window.is_key_down(Key::Enter) { mask |= 1 << 5; }
+            if window.is_key_down(Key::Up) || window.is_key_down(Key::W) {
+                mask |= 1 << 0;
+            }
+            if window.is_key_down(Key::Down) || window.is_key_down(Key::S) {
+                mask |= 1 << 1;
+            }
+            if window.is_key_down(Key::Left) || window.is_key_down(Key::A) {
+                mask |= 1 << 2;
+            }
+            if window.is_key_down(Key::Right) || window.is_key_down(Key::D) {
+                mask |= 1 << 3;
+            }
+            if window.is_key_down(Key::Space) {
+                mask |= 1 << 4;
+            }
+            if window.is_key_down(Key::Enter) {
+                mask |= 1 << 5;
+            }
             vm.ram[KEYS_BITMASK_PORT] = mask;
 
             // ── Networking ───────────────────────────────────────
@@ -356,7 +376,8 @@ fn main() {
                                 &mut canvas_assembled,
                                 &mut breakpoints,
                             );
-                            term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "geo> ");
+                            term_output_row =
+                                write_line_to_canvas(&mut canvas_buffer, term_output_row, "geo> ");
                             ensure_scroll(term_output_row, &mut scroll_offset);
                             term_prompt_row = term_output_row - 1;
                             cursor_row = term_prompt_row;
@@ -510,9 +531,8 @@ fn main() {
                     // Save state to file
                     match save_state(SAVE_FILE, &vm, &canvas_buffer, canvas_assembled) {
                         Ok(()) => {
-                            let file_size = std::fs::metadata(SAVE_FILE)
-                                .map(|m| m.len())
-                                .unwrap_or(0);
+                            let file_size =
+                                std::fs::metadata(SAVE_FILE).map(|m| m.len()).unwrap_or(0);
                             status_msg = format!(
                                 "[saved: {} ({:.0}KB)]",
                                 SAVE_FILE,
@@ -529,9 +549,8 @@ fn main() {
                     let png_path = "screenshot.png";
                     match save_screen_png(png_path, &vm.screen) {
                         Ok(()) => {
-                            let file_size = std::fs::metadata(png_path)
-                                .map(|m| m.len())
-                                .unwrap_or(0);
+                            let file_size =
+                                std::fs::metadata(png_path).map(|m| m.len()).unwrap_or(0);
                             status_msg = format!(
                                 "[screenshot: {} ({:.0}KB)]",
                                 png_path,
@@ -550,13 +569,20 @@ fn main() {
                         let _ = std::fs::create_dir_all("/tmp/geo_frames");
                         status_msg = String::from("[RECORDING STARTED: /tmp/geo_frames/]");
                     } else {
-                        status_msg = format!("[RECORDING STOPPED: {} frames saved. Use ffmpeg to compile GIF]", frame_id);
+                        status_msg = format!(
+                            "[RECORDING STOPPED: {} frames saved. Use ffmpeg to compile GIF]",
+                            frame_id
+                        );
                     }
                 }
                 Key::PageUp => {
                     if mode == Mode::Terminal {
                         ram_view_base = ram_view_base.saturating_sub(1024);
-                        status_msg = format!("[RAM Inspector: 0x{:04X}-0x{:04X}]", ram_view_base, ram_view_base + 1023);
+                        status_msg = format!(
+                            "[RAM Inspector: 0x{:04X}-0x{:04X}]",
+                            ram_view_base,
+                            ram_view_base + 1023
+                        );
                     } else if scroll_offset > 0 {
                         scroll_offset = scroll_offset.saturating_sub(CANVAS_ROWS);
                         let new_cursor = scroll_offset + CANVAS_ROWS / 2;
@@ -568,13 +594,18 @@ fn main() {
                 Key::PageDown => {
                     if mode == Mode::Terminal {
                         ram_view_base = ram_view_base.saturating_add(1024).min(0xFC00);
-                        status_msg = format!("[RAM Inspector: 0x{:04X}-0x{:04X}]", ram_view_base, ram_view_base + 1023);
+                        status_msg = format!(
+                            "[RAM Inspector: 0x{:04X}-0x{:04X}]",
+                            ram_view_base,
+                            ram_view_base + 1023
+                        );
                     } else {
                         let max_scroll = CANVAS_MAX_ROWS.saturating_sub(CANVAS_ROWS);
                         if scroll_offset < max_scroll {
                             scroll_offset = (scroll_offset + CANVAS_ROWS).min(max_scroll);
                             let new_cursor = scroll_offset + CANVAS_ROWS / 2;
-                            if new_cursor > cursor_row || cursor_row >= scroll_offset + CANVAS_ROWS {
+                            if new_cursor > cursor_row || cursor_row >= scroll_offset + CANVAS_ROWS
+                            {
                                 cursor_row = new_cursor.min(CANVAS_MAX_ROWS - 1);
                             }
                         }
@@ -702,7 +733,11 @@ fn main() {
         // Process new accesses
         for access in &vm.access_log {
             if access.addr < ram_intensity.len() {
-                let boost = if access.kind == vm::MemAccessKind::Write { 1.5 } else { 1.0 };
+                let boost = if access.kind == vm::MemAccessKind::Write {
+                    1.5
+                } else {
+                    1.0
+                };
                 ram_intensity[access.addr] = boost;
                 ram_kind[access.addr] = access.kind;
             }
@@ -715,7 +750,7 @@ fn main() {
                 *val = 0.0;
             }
         }
-        
+
         // Track PC for trail
         if is_running {
             pc_history.push_back(vm.pc);

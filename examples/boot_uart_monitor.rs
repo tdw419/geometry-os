@@ -1,6 +1,6 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
 use geometry_os::riscv::csr;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -8,9 +8,13 @@ fn main() {
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, fw_addr, _, _) =
-        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256,
-            "console=ttyS0 earlycon=sbi panic=1 quiet").unwrap();
+    let (mut vm, fw_addr, _, _) = RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        "console=ttyS0 earlycon=sbi panic=1 quiet",
+    )
+    .unwrap();
     let fw_addr_u32 = fw_addr as u32;
 
     let max_count: u64 = 5_000_000;
@@ -21,7 +25,9 @@ fn main() {
     let mut trap_count = 0u32;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // M-mode trap handler (fw_addr)
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
@@ -40,8 +46,8 @@ fn main() {
                     vm.cpu.csr.scause = mcause;
                     vm.cpu.csr.stval = vm.cpu.csr.mtval;
                     let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                    vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
-                        | (spp << csr::MSTATUS_SPP);
+                    vm.cpu.csr.mstatus =
+                        (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP)) | (spp << csr::MSTATUS_SPP);
                     let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
                     vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
                         | (sie << csr::MSTATUS_SPIE);
@@ -95,7 +101,13 @@ fn main() {
             };
             let s = String::from_utf8_lossy(&new_data);
             let preview: String = s.chars().take(500).collect();
-            eprintln!("[UART@{}] (sbi={} uart={}) {}", count, sbi_len, vm.bus.uart.tx_buf.len(), preview);
+            eprintln!(
+                "[UART@{}] (sbi={} uart={}) {}",
+                count,
+                sbi_len,
+                vm.bus.uart.tx_buf.len(),
+                preview
+            );
             last_uart_len = uart_len;
         }
 
@@ -103,13 +115,22 @@ fn main() {
         count += 1;
 
         if count - last_progress >= 500_000 {
-            eprintln!("Progress: count={} PC=0x{:08X} UART={} SBI={} traps={}",
-                count, vm.cpu.pc, vm.bus.uart.tx_buf.len(), vm.bus.sbi.console_output.len(), trap_count);
+            eprintln!(
+                "Progress: count={} PC=0x{:08X} UART={} SBI={} traps={}",
+                count,
+                vm.cpu.pc,
+                vm.bus.uart.tx_buf.len(),
+                vm.bus.sbi.console_output.len(),
+                trap_count
+            );
             last_progress = count;
         }
     }
 
-    println!("=== DONE === count={} ecall_count={}", count, vm.cpu.ecall_count);
+    println!(
+        "=== DONE === count={} ecall_count={}",
+        count, vm.cpu.ecall_count
+    );
     println!("UART tx_buf: {} chars", vm.bus.uart.tx_buf.len());
     println!("SBI console: {} chars", vm.bus.sbi.console_output.len());
     if !vm.bus.sbi.console_output.is_empty() {

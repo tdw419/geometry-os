@@ -1,5 +1,5 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
 use std::io::Write;
 
 fn main() {
@@ -11,9 +11,18 @@ fn main() {
     // Use boot_linux() which has full handling
     let bootargs = "console=ttyS0 earlycon=sbi panic=1";
     let (mut vm, boot_result) = RiscvVm::boot_linux(
-        &kernel_image, initramfs.as_deref(), 256, 20_000_000, bootargs).unwrap();
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        20_000_000,
+        bootargs,
+    )
+    .unwrap();
 
-    eprintln!("Boot: {} instr, PC=0x{:08X}", boot_result.instructions, vm.cpu.pc);
+    eprintln!(
+        "Boot: {} instr, PC=0x{:08X}",
+        boot_result.instructions, vm.cpu.pc
+    );
     eprintln!("UART tx_buf: {} chars", vm.bus.uart.tx_buf.len());
     eprintln!("SBI console: {} chars", vm.bus.sbi.console_output.len());
     eprintln!("CPU ecall_count: {}", vm.cpu.ecall_count);
@@ -28,6 +37,8 @@ fn main() {
     }
 
     // Print boot result stats
-    eprintln!("\nBoot result: instructions={}, entry=0x{:08X}, dtb_addr=0x{:X}",
-        boot_result.instructions, boot_result.entry, boot_result.dtb_addr);
+    eprintln!(
+        "\nBoot result: instructions={}, entry=0x{:08X}, dtb_addr=0x{:X}",
+        boot_result.instructions, boot_result.entry, boot_result.dtb_addr
+    );
 }

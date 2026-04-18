@@ -12,7 +12,11 @@ fn main() {
     // Load kernel image.
     let kernel_image = match fs::read(kernel_path) {
         Ok(data) => {
-            println!("Kernel: {} bytes ({:.1} MB)", data.len(), data.len() as f64 / 1_048_576.0);
+            println!(
+                "Kernel: {} bytes ({:.1} MB)",
+                data.len(),
+                data.len() as f64 / 1_048_576.0
+            );
             data
         }
         Err(e) => {
@@ -24,7 +28,11 @@ fn main() {
     // Load initramfs.
     let initramfs = match fs::read(initramfs_path) {
         Ok(data) => {
-            println!("Initramfs: {} bytes ({:.1} KB)", data.len(), data.len() as f64 / 1024.0);
+            println!(
+                "Initramfs: {} bytes ({:.1} KB)",
+                data.len(),
+                data.len() as f64 / 1024.0
+            );
             Some(data)
         }
         Err(_) => {
@@ -59,7 +67,10 @@ fn main() {
     match result {
         Ok((mut vm, r)) => {
             let elapsed = start.elapsed();
-            println!("Boot result: {} instructions in {:?}", r.instructions, elapsed);
+            println!(
+                "Boot result: {} instructions in {:?}",
+                r.instructions, elapsed
+            );
             println!("Entry: 0x{:08X}, DTB: 0x{:08X}", r.entry, r.dtb_addr);
             println!("PC after boot: 0x{:08X}", vm.cpu.pc);
             println!("Privilege: {:?}", vm.cpu.privilege);

@@ -1,12 +1,12 @@
 // canvas.rs -- Canvas buffer helpers and terminal command handler for Geometry OS
 
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-use crate::vm;
 use crate::assembler;
 use crate::preprocessor;
-use crate::render::{CANVAS_COLS, CANVAS_MAX_ROWS, CANVAS_ROWS, CANVAS_BYTECODE_ADDR};
+use crate::render::{CANVAS_BYTECODE_ADDR, CANVAS_COLS, CANVAS_MAX_ROWS, CANVAS_ROWS};
 use crate::save::{load_state, save_state};
+use crate::vm;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 const SAVE_FILE: &str = "geometry_os.sav";
 
@@ -69,7 +69,6 @@ pub fn ensure_scroll(output_row: usize, scroll_offset: &mut usize) {
         *scroll_offset = output_row - CANVAS_ROWS + 1;
     }
 }
-
 
 pub fn source_from_canvas(canvas_buffer: &[u32]) -> String {
     let buffer_size = CANVAS_MAX_ROWS * CANVAS_COLS;
@@ -195,7 +194,8 @@ pub fn canvas_assemble(
     match assembler::assemble(&preprocessed_source, CANVAS_BYTECODE_ADDR) {
         Ok(asm_result) => {
             let ram_len = vm.ram.len();
-            for v in vm.ram[CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 4096)].iter_mut()
+            for v in
+                vm.ram[CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 4096)].iter_mut()
             {
                 *v = 0;
             }
@@ -277,24 +277,96 @@ pub fn handle_terminal_command(
     match command.as_str() {
         "help" | "?" => {
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Commands:");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  list              List .asm programs");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  load <file>       Load .asm onto canvas");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  run               Assemble canvas & run");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  edit              Switch to canvas editor");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  regs              Show register dump");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  peek <addr>       Read RAM[addr]");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  poke <addr> <val> Write RAM[addr]");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  step              Step one instruction");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  bp [addr]         Toggle/list breakpoints");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  bpc               Clear all breakpoints");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  trace [n]         Execute n steps with log");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  disasm [addr] [n] Disassemble n instrs");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  reset             Reset VM state");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  save [slot]       Save state to slot");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  load [slot]       Load state from slot");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  clear             Clear terminal");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  quit              Exit Geometry OS");
-            *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  hermes <prompt>   Ask local LLM for help");
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  list              List .asm programs",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  load <file>       Load .asm onto canvas",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  run               Assemble canvas & run",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  edit              Switch to canvas editor",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  regs              Show register dump",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  peek <addr>       Read RAM[addr]",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  poke <addr> <val> Write RAM[addr]",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  step              Step one instruction",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  bp [addr]         Toggle/list breakpoints",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  bpc               Clear all breakpoints",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  trace [n]         Execute n steps with log",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  disasm [addr] [n] Disassemble n instrs",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  reset             Reset VM state",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  save [slot]       Save state to slot",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  load [slot]       Load state from slot",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  clear             Clear terminal",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  quit              Exit Geometry OS",
+            );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  hermes <prompt>   Ask local LLM for help",
+            );
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
             ensure_scroll(*output_row, scroll_offset);
             (None, false, false)
@@ -302,14 +374,19 @@ pub fn handle_terminal_command(
         "list" | "ls" => {
             let files = list_asm_files("programs");
             if files.is_empty() {
-                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  (no .asm files in programs/)");
+                *output_row = write_line_to_canvas(
+                    canvas_buffer,
+                    *output_row,
+                    "  (no .asm files in programs/)",
+                );
             } else {
                 for f in &files {
                     let name = Path::new(f)
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_else(|| f.clone());
-                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("  {}", name));
+                    *output_row =
+                        write_line_to_canvas(canvas_buffer, *output_row, &format!("  {}", name));
                 }
                 *output_row = write_line_to_canvas(
                     canvas_buffer,
@@ -323,15 +400,22 @@ pub fn handle_terminal_command(
         }
         "load" => {
             if parts.len() < 2 {
-                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: load <file.asm> or load <slot>");
+                *output_row = write_line_to_canvas(
+                    canvas_buffer,
+                    *output_row,
+                    "Usage: load <file.asm> or load <slot>",
+                );
                 *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
                 ensure_scroll(*output_row, scroll_offset);
                 return (None, false, false);
             }
             let filename_arg = parts[1..].join(" ");
-            
+
             // If it ends in .asm or contains a path separator, assume source file
-            if filename_arg.ends_with(".asm") || filename_arg.contains('/') || filename_arg.contains('\\') {
+            if filename_arg.ends_with(".asm")
+                || filename_arg.contains('/')
+                || filename_arg.contains('\\')
+            {
                 let filename = filename_arg.clone();
                 let path = Path::new(&filename);
                 let path = if path.exists() {
@@ -358,7 +442,10 @@ pub fn handle_terminal_command(
                         let mut cc = 0usize;
                         load_source_to_canvas(canvas_buffer, &source, &mut cr, &mut cc);
                         *loaded_file = Some(path.clone());
-                        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                        let name = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default();
                         let lines = source.lines().count();
                         *output_row = write_line_to_canvas(
                             canvas_buffer,
@@ -396,12 +483,27 @@ pub fn handle_terminal_command(
                                 let mut cc = 0usize;
                                 load_source_to_canvas(canvas_buffer, &source, &mut cr, &mut cc);
                                 *loaded_file = Some(path.clone());
-                                *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("Loaded programs/{}", filename));
+                                *output_row = write_line_to_canvas(
+                                    canvas_buffer,
+                                    *output_row,
+                                    &format!("Loaded programs/{}", filename),
+                                );
                             } else {
-                                *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("Slot {} not found and could not read .asm", filename_arg));
+                                *output_row = write_line_to_canvas(
+                                    canvas_buffer,
+                                    *output_row,
+                                    &format!(
+                                        "Slot {} not found and could not read .asm",
+                                        filename_arg
+                                    ),
+                                );
                             }
                         } else {
-                            *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("Slot or file {} not found", filename_arg));
+                            *output_row = write_line_to_canvas(
+                                canvas_buffer,
+                                *output_row,
+                                &format!("Slot or file {} not found", filename_arg),
+                            );
                         }
                     }
                 }
@@ -428,8 +530,7 @@ pub fn handle_terminal_command(
             match assembler::assemble(&source, CANVAS_BYTECODE_ADDR) {
                 Ok(asm_result) => {
                     let ram_len = vm.ram.len();
-                    for v in vm.ram
-                        [CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 4096)]
+                    for v in vm.ram[CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 4096)]
                         .iter_mut()
                     {
                         *v = 0;
@@ -477,20 +578,15 @@ pub fn handle_terminal_command(
                     *canvas_assembled = true;
                 }
                 Err(e) => {
-                    *output_row = write_line_to_canvas(
-                        canvas_buffer,
-                        *output_row,
-                        &format!("{}", e),
-                    );
+                    *output_row =
+                        write_line_to_canvas(canvas_buffer, *output_row, &format!("{}", e));
                 }
             }
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
             ensure_scroll(*output_row, scroll_offset);
             (None, false, false)
         }
-        "edit" => {
-            (None, true, false)
-        }
+        "edit" => (None, true, false),
         "regs" => {
             for row_group in 0..4 {
                 let mut line = String::new();
@@ -503,7 +599,10 @@ pub fn handle_terminal_command(
             *output_row = write_line_to_canvas(
                 canvas_buffer,
                 *output_row,
-                &format!("PC={:04X} SP={:04X} LR={:04X}", vm.pc, vm.regs[30], vm.regs[31]),
+                &format!(
+                    "PC={:04X} SP={:04X} LR={:04X}",
+                    vm.pc, vm.regs[30], vm.regs[31]
+                ),
             );
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
             ensure_scroll(*output_row, scroll_offset);
@@ -511,12 +610,16 @@ pub fn handle_terminal_command(
         }
         "peek" => {
             if parts.len() < 2 {
-                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: peek <addr>");
+                *output_row =
+                    write_line_to_canvas(canvas_buffer, *output_row, "Usage: peek <addr>");
                 *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
                 ensure_scroll(*output_row, scroll_offset);
                 return (None, false, false);
             }
-            match u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+            match u32::from_str_radix(
+                parts[1].trim_start_matches("0x").trim_start_matches("0X"),
+                16,
+            ) {
                 Ok(addr) if (addr as usize) < vm.ram.len() => {
                     let val = vm.ram[addr as usize];
                     *output_row = write_line_to_canvas(
@@ -533,7 +636,8 @@ pub fn handle_terminal_command(
                     );
                 }
                 Err(_) => {
-                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Invalid address");
+                    *output_row =
+                        write_line_to_canvas(canvas_buffer, *output_row, "Invalid address");
                 }
             }
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
@@ -542,14 +646,18 @@ pub fn handle_terminal_command(
         }
         "poke" => {
             if parts.len() < 3 {
-                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: poke <addr> <val>");
+                *output_row =
+                    write_line_to_canvas(canvas_buffer, *output_row, "Usage: poke <addr> <val>");
                 *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
                 ensure_scroll(*output_row, scroll_offset);
                 return (None, false, false);
             }
             let addr_str = parts[1].trim_start_matches("0x").trim_start_matches("0X");
             let val_str = parts[2].trim_start_matches("0x").trim_start_matches("0X");
-            match (u32::from_str_radix(addr_str, 16), u32::from_str_radix(val_str, 16)) {
+            match (
+                u32::from_str_radix(addr_str, 16),
+                u32::from_str_radix(val_str, 16),
+            ) {
                 (Ok(addr), Ok(val)) if (addr as usize) < vm.ram.len() => {
                     vm.ram[addr as usize] = val;
                     *output_row = write_line_to_canvas(
@@ -559,7 +667,11 @@ pub fn handle_terminal_command(
                     );
                 }
                 _ => {
-                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: poke <hex_addr> <hex_val>");
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        "Usage: poke <hex_addr> <hex_val>",
+                    );
                 }
             }
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
@@ -568,7 +680,11 @@ pub fn handle_terminal_command(
         }
         "step" => {
             if vm.halted {
-                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "VM halted. Use reset to restart.");
+                *output_row = write_line_to_canvas(
+                    canvas_buffer,
+                    *output_row,
+                    "VM halted. Use reset to restart.",
+                );
             } else {
                 // Phase 45: Sync canvas buffer TO VM before execution
                 vm.canvas_buffer.copy_from_slice(canvas_buffer);
@@ -592,7 +708,8 @@ pub fn handle_terminal_command(
             if parts.len() < 2 {
                 // List breakpoints
                 if breakpoints.is_empty() {
-                    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "  No breakpoints set");
+                    *output_row =
+                        write_line_to_canvas(canvas_buffer, *output_row, "  No breakpoints set");
                 } else {
                     let mut sorted: Vec<u32> = breakpoints.iter().copied().collect();
                     sorted.sort();
@@ -605,7 +722,10 @@ pub fn handle_terminal_command(
                     }
                 }
             } else {
-                match u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+                match u32::from_str_radix(
+                    parts[1].trim_start_matches("0x").trim_start_matches("0X"),
+                    16,
+                ) {
                     Ok(addr) => {
                         if breakpoints.contains(&addr) {
                             breakpoints.remove(&addr);
@@ -624,7 +744,11 @@ pub fn handle_terminal_command(
                         }
                     }
                     Err(_) => {
-                        *output_row = write_line_to_canvas(canvas_buffer, *output_row, "Usage: bp <hex_addr>");
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            "Usage: bp <hex_addr>",
+                        );
                     }
                 }
             }
@@ -712,5 +836,3 @@ pub fn handle_terminal_command(
         }
     }
 }
-
-

@@ -12,20 +12,27 @@ fn main() {
         256,
         5_000_000,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     println!("\n=== Final state ===");
     println!("PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
     println!("Instructions: {}", br.instructions);
     println!("SATP=0x{:08X}", vm.cpu.csr.satp);
     println!("SBI output: {} bytes", vm.bus.sbi.console_output.len());
-    
-    let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+
+    let sbi_str: String = vm
+        .bus
+        .sbi
+        .console_output
+        .iter()
+        .map(|&b| b as char)
+        .collect();
     if !sbi_str.is_empty() {
         println!("\nSBI console output ({} bytes):", sbi_str.len());
         println!("{}", sbi_str);
     }
-    
+
     let uart_str: String = vm.bus.uart.tx_buf.iter().map(|&b| b as char).collect();
     if !uart_str.is_empty() {
         println!("\nUART output ({} bytes):", uart_str.len());
@@ -33,7 +40,7 @@ fn main() {
         let preview: String = uart_str.chars().take(500).collect();
         println!("{}", preview);
     }
-    
+
     println!("\n=== Key CSRs ===");
     println!("mstatus=0x{:08X}", vm.cpu.csr.mstatus);
     println!("mepc=0x{:08X}", vm.cpu.csr.mepc);

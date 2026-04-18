@@ -4,12 +4,24 @@ use geometry_os::riscv::RiscvVm;
 
 fn read_string(vm: &mut RiscvVm, va: u32, max_len: usize) -> String {
     let mut chars = Vec::new();
-    let pa = if va >= 0xC0000000 { (va - 0xC0000000) as u64 } else { va as u64 };
+    let pa = if va >= 0xC0000000 {
+        (va - 0xC0000000) as u64
+    } else {
+        va as u64
+    };
     for j in 0..max_len {
         if let Ok(b) = vm.bus.read_byte(pa + j as u64) {
-            if b == 0 { break; }
-            if b >= 0x20 && b < 0x7f { chars.push(b as char); } else { chars.push('.'); }
-        } else { break; }
+            if b == 0 {
+                break;
+            }
+            if b >= 0x20 && b < 0x7f {
+                chars.push(b as char);
+            } else {
+                chars.push('.');
+            }
+        } else {
+            break;
+        }
     }
     chars.iter().collect()
 }
@@ -25,7 +37,8 @@ fn main() {
         initramfs.as_deref(),
         256,
         "console=ttyS0 loglevel=8 earlycon=sbi",
-    ).unwrap();
+    )
+    .unwrap();
 
     eprintln!("[DIAG] DTB at PA 0x{:08X}", dtb_addr);
     eprintln!("[DIAG] fw_addr at PA 0x{:08X}", fw_addr);
@@ -37,13 +50,18 @@ fn main() {
     let mut panic_hit = false;
 
     while count < max_instructions {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // SATP change handling (same as boot.rs)
         {
             let cur_satp = vm.cpu.csr.satp;
             if cur_satp != last_satp {
-                eprintln!("\n[DIAG] SATP change: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+                eprintln!(
+                    "\n[DIAG] SATP change: 0x{:08X} -> 0x{:08X} at count={}",
+                    last_satp, cur_satp, count
+                );
                 let mode = (cur_satp >> 31) & 1;
                 if mode == 1 {
                     let ppn = cur_satp & 0x3FFFFF;
@@ -83,18 +101,28 @@ fn main() {
         }
 
         // Trap handling
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 // ECALL_M = SBI call
-                eprintln!("[DIAG] ECALL_M at count={}: a7={:#x} a6={:#x} a0={:#x}", count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]);
+                eprintln!(
+                    "[DIAG] ECALL_M at count={}: a7={:#x} a6={:#x} a0={:#x}",
+                    count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]
+                );
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -102,13 +130,21 @@ fn main() {
                 }
             } else if cause_code == 9 {
                 // ECALL_S = SBI call (delegated)
-                eprintln!("[DIAG] ECALL_S at count={}: a7={:#x} a6={:#x} a0={:#x}", count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]);
+                eprintln!(
+                    "[DIAG] ECALL_S at count={}: a7={:#x} a6={:#x} a0={:#x}",
+                    count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]
+                );
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -127,7 +163,9 @@ fn main() {
                         let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                         vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                         vm.cpu.csr.mstatus &= !(1 << 1);
-                        if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                        if cause_code == 7 {
+                            vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                        }
                         vm.cpu.pc = stvec;
                         vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
                         vm.cpu.tlb.flush_all();
@@ -143,7 +181,10 @@ fn main() {
         if vm.cpu.pc == 0xC000252E && !panic_hit {
             panic_hit = true;
             eprintln!("\n[DIAG] *** PANIC at count={} ***", count);
-            eprintln!("[DIAG] PC=0x{:08X} RA=0x{:08X} SP=0x{:08X}", vm.cpu.pc, vm.cpu.x[1], vm.cpu.x[2]);
+            eprintln!(
+                "[DIAG] PC=0x{:08X} RA=0x{:08X} SP=0x{:08X}",
+                vm.cpu.pc, vm.cpu.x[1], vm.cpu.x[2]
+            );
 
             // Save registers before calling read_string (borrow issue)
             let a0 = vm.cpu.x[10];
@@ -161,13 +202,21 @@ fn main() {
             // a2 = second vararg (pointer to phys_addr_t for %pap)
             let size_ptr = a2;
             let alloc_size = if size_ptr >= 0xC0000000 {
-                vm.bus.read_word((size_ptr - 0xC0000000) as u64).unwrap_or(0)
+                vm.bus
+                    .read_word((size_ptr - 0xC0000000) as u64)
+                    .unwrap_or(0)
             } else {
                 vm.bus.read_word(size_ptr as u64).unwrap_or(0)
             };
-            eprintln!("[DIAG] a2 (size_ptr) = 0x{:08X} -> *ptr = 0x{:08X} = {} bytes", a2, alloc_size, alloc_size);
+            eprintln!(
+                "[DIAG] a2 (size_ptr) = 0x{:08X} -> *ptr = 0x{:08X} = {} bytes",
+                a2, alloc_size, alloc_size
+            );
             // Also check a3, s0, s1 for additional args
-            eprintln!("[DIAG] a3 = 0x{:08X}, s0 = 0x{:08X}, s1 = 0x{:08X}", vm.cpu.x[13], vm.cpu.x[8], vm.cpu.x[9]);
+            eprintln!(
+                "[DIAG] a3 = 0x{:08X}, s0 = 0x{:08X}, s1 = 0x{:08X}",
+                vm.cpu.x[13], vm.cpu.x[8], vm.cpu.x[9]
+            );
 
             // Check kernel_map values
             let km_phys: u64 = 0x00C79E90;
@@ -179,13 +228,25 @@ fn main() {
                 km_po, km_pa, km_vapo, km_vkpo);
 
             // Check medeleg
-            eprintln!("[DIAG] medeleg=0x{:08X} stvec=0x{:08X} satp=0x{:08X}",
-                vm.cpu.csr.medeleg, vm.cpu.csr.stvec, vm.cpu.csr.satp);
+            eprintln!(
+                "[DIAG] medeleg=0x{:08X} stvec=0x{:08X} satp=0x{:08X}",
+                vm.cpu.csr.medeleg, vm.cpu.csr.stvec, vm.cpu.csr.satp
+            );
 
             // Check SBI console output
-            let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+            let sbi_str: String = vm
+                .bus
+                .sbi
+                .console_output
+                .iter()
+                .map(|&b| b as char)
+                .collect();
             if !sbi_str.is_empty() {
-                eprintln!("[DIAG] SBI output ({} bytes): {:?}", sbi_str.len(), sbi_str.chars().take(500).collect::<String>());
+                eprintln!(
+                    "[DIAG] SBI output ({} bytes): {:?}",
+                    sbi_str.len(),
+                    sbi_str.chars().take(500).collect::<String>()
+                );
             } else {
                 eprintln!("[DIAG] SBI output: EMPTY (0 bytes)");
             }
@@ -200,12 +261,27 @@ fn main() {
     }
 
     if !panic_hit {
-        eprintln!("[DIAG] No panic in {} instructions. PC=0x{:08X}", count, vm.cpu.pc);
+        eprintln!(
+            "[DIAG] No panic in {} instructions. PC=0x{:08X}",
+            count, vm.cpu.pc
+        );
     }
 
-    eprintln!("[DIAG] SBI calls: {} bytes", vm.bus.sbi.console_output.len());
-    let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+    eprintln!(
+        "[DIAG] SBI calls: {} bytes",
+        vm.bus.sbi.console_output.len()
+    );
+    let sbi_str: String = vm
+        .bus
+        .sbi
+        .console_output
+        .iter()
+        .map(|&b| b as char)
+        .collect();
     if !sbi_str.is_empty() {
-        eprintln!("[DIAG] SBI console: {}", sbi_str.chars().take(1000).collect::<String>());
+        eprintln!(
+            "[DIAG] SBI console: {}",
+            sbi_str.chars().take(1000).collect::<String>()
+        );
     }
 }

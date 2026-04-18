@@ -1,6 +1,5 @@
 /// Diagnostic: add a write watchpoint at UART base (0x10000000) to see if
 /// the kernel ever writes to the UART MMIO registers.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -29,7 +28,9 @@ fn main() {
         }
 
         // Handle M-mode trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
@@ -37,18 +38,25 @@ fn main() {
             if cause_code == 9 || cause_code == 11 {
                 // ECALL_S or ECALL_M -> SBI
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
                     vm.cpu.x[11] = a1;
                 }
-                println!("[diag] ECALL cause={} a7=0x{:X} a6=0x{:X} at count={} PC=0x{:08X}",
-                    cause_code, vm.cpu.x[17], vm.cpu.x[16], count, vm.cpu.csr.mepc);
+                println!(
+                    "[diag] ECALL cause={} a7=0x{:X} a6=0x{:X} at count={} PC=0x{:08X}",
+                    cause_code, vm.cpu.x[17], vm.cpu.x[16], count, vm.cpu.csr.mepc
+                );
             } else if mpp != 3 {
                 let stvec = vm.cpu.csr.stvec & !0x3u32;
                 if stvec != 0 {
@@ -73,8 +81,10 @@ fn main() {
         // Check for UART write watchpoint hit
         if vm.bus.write_watch_hit {
             uart_write_count += 1;
-            println!("[diag] UART write #{}: val=0x{:08X} at count={} PC=0x{:08X} priv={:?}",
-                uart_write_count, vm.bus.write_watch_val, count, vm.cpu.pc, vm.cpu.privilege);
+            println!(
+                "[diag] UART write #{}: val=0x{:08X} at count={} PC=0x{:08X} priv={:?}",
+                uart_write_count, vm.bus.write_watch_val, count, vm.cpu.pc, vm.cpu.privilege
+            );
             // Reset watchpoint for next hit
             vm.bus.write_watch_hit = false;
         }
@@ -83,8 +93,14 @@ fn main() {
 
         // Periodic report
         if count - last_report >= 2_000_000 {
-            println!("[diag] count={} PC=0x{:08X} priv={:?} uart_writes={} tx_buf={}",
-                count, vm.cpu.pc, vm.cpu.privilege, uart_write_count, vm.bus.uart.tx_buf.len());
+            println!(
+                "[diag] count={} PC=0x{:08X} priv={:?} uart_writes={} tx_buf={}",
+                count,
+                vm.cpu.pc,
+                vm.cpu.privilege,
+                uart_write_count,
+                vm.bus.uart.tx_buf.len()
+            );
             last_report = count;
         }
 
@@ -92,10 +108,16 @@ fn main() {
     }
 
     println!("\n[diag] === FINAL ===");
-    println!("Instructions: {} UART writes: {} TX buf: {} chars",
-        count, uart_write_count, vm.bus.uart.tx_buf.len());
-    println!("PC=0x{:08X} priv={:?} SATP=0x{:08X}",
-        vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp);
+    println!(
+        "Instructions: {} UART writes: {} TX buf: {} chars",
+        count,
+        uart_write_count,
+        vm.bus.uart.tx_buf.len()
+    );
+    println!(
+        "PC=0x{:08X} priv={:?} SATP=0x{:08X}",
+        vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp
+    );
 
     if !vm.bus.uart.tx_buf.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);

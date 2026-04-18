@@ -7,9 +7,9 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
 
-    use geometry_os::riscv::RiscvVm;
-    use geometry_os::riscv::cpu::{StepResult, Privilege};
+    use geometry_os::riscv::cpu::{Privilege, StepResult};
     use geometry_os::riscv::mmu::AccessType;
+    use geometry_os::riscv::RiscvVm;
 
     let (mut vm, fw_addr, _, _) =
         RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
@@ -19,7 +19,9 @@ fn main() {
     let mut trampoline_patched = false;
 
     while count < 177_460 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if !trampoline_patched
             && vm.cpu.pc == 0x10EE
@@ -37,10 +39,22 @@ fn main() {
             if cause_code != 11 {
                 let mpp = (vm.cpu.csr.mstatus >> 0xC) & 3;
                 if cause_code == 9 {
-                    let r = vm.bus.sbi.handle_ecall(vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint);
-                    if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                    let r = vm.bus.sbi.handle_ecall(
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
+                    );
+                    if let Some((a0, a1)) = r {
+                        vm.cpu.x[10] = a0;
+                        vm.cpu.x[11] = a1;
+                    }
                     vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
                 } else if mpp != 3 {
                     let stvec = vm.cpu.csr.stvec & !0x3u32;
@@ -58,13 +72,29 @@ fn main() {
                         vm.cpu.tlb.flush_all();
                         count += 1;
                         continue;
-                    } else { vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4); }
-                } else { vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4); }
+                    } else {
+                        vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
+                    }
+                } else {
+                    vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
+                }
             } else {
-                let r = vm.bus.sbi.handle_ecall(vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint);
-                if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                let r = vm.bus.sbi.handle_ecall(
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
+                );
+                if let Some((a0, a1)) = r {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             }
             count += 1;
@@ -86,8 +116,20 @@ fn main() {
     let mxr = (vm.cpu.csr.mstatus >> 19) & 1 != 0;
     let satp = vm.cpu.csr.satp;
 
-    eprintln!("\n=== Manual MMU translate for VA 0x{:08X} (Load, S-mode) ===", fault_va);
-    let result = geometry_os::riscv::mmu::translate(fault_va, AccessType::Load, Privilege::Supervisor, sum, mxr, satp, &mut vm.bus, &mut vm.cpu.tlb);
+    eprintln!(
+        "\n=== Manual MMU translate for VA 0x{:08X} (Load, S-mode) ===",
+        fault_va
+    );
+    let result = geometry_os::riscv::mmu::translate(
+        fault_va,
+        AccessType::Load,
+        Privilege::Supervisor,
+        sum,
+        mxr,
+        satp,
+        &mut vm.bus,
+        &mut vm.cpu.tlb,
+    );
     match result {
         geometry_os::riscv::mmu::TranslateResult::Ok(pa) => eprintln!("  -> OK, PA=0x{:08X}", pa),
         geometry_os::riscv::mmu::TranslateResult::LoadFault => eprintln!("  -> LOAD FAULT"),
@@ -96,8 +138,20 @@ fn main() {
     }
 
     // Also try fetch
-    eprintln!("\n=== Manual MMU translate for VA 0x{:08X} (Fetch, S-mode) ===", fault_va);
-    let result2 = geometry_os::riscv::mmu::translate(fault_va, AccessType::Fetch, Privilege::Supervisor, sum, mxr, satp, &mut vm.bus, &mut vm.cpu.tlb);
+    eprintln!(
+        "\n=== Manual MMU translate for VA 0x{:08X} (Fetch, S-mode) ===",
+        fault_va
+    );
+    let result2 = geometry_os::riscv::mmu::translate(
+        fault_va,
+        AccessType::Fetch,
+        Privilege::Supervisor,
+        sum,
+        mxr,
+        satp,
+        &mut vm.bus,
+        &mut vm.cpu.tlb,
+    );
     match result2 {
         geometry_os::riscv::mmu::TranslateResult::Ok(pa) => eprintln!("  -> OK, PA=0x{:08X}", pa),
         geometry_os::riscv::mmu::TranslateResult::LoadFault => eprintln!("  -> LOAD FAULT"),
@@ -109,9 +163,14 @@ fn main() {
     eprintln!("\n=== Executing faulting instruction ===");
     let step_result = vm.step();
     eprintln!("Step result: {:?}", step_result);
-    eprintln!("PC after: 0x{:08X}, priv: {:?}", vm.cpu.pc, vm.cpu.privilege);
-    eprintln!("scause=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
-        vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec);
+    eprintln!(
+        "PC after: 0x{:08X}, priv: {:?}",
+        vm.cpu.pc, vm.cpu.privilege
+    );
+    eprintln!(
+        "scause=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
+        vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec
+    );
 
     // MMU log
     let log_len = vm.bus.mmu_log.len();

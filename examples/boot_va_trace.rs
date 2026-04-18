@@ -1,6 +1,6 @@
-use std::fs;
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -8,9 +8,13 @@ fn main() {
     let kernel_image = fs::read(kernel_path).unwrap();
     let initramfs = fs::read(initramfs_path).ok();
 
-    let (mut vm, fw_addr, _, _) =
-        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256,
-            "console=ttyS0 earlycon=sbi panic=1 quiet").unwrap();
+    let (mut vm, fw_addr, _, _) = RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        "console=ttyS0 earlycon=sbi panic=1 quiet",
+    )
+    .unwrap();
     let fw_addr_u32 = fw_addr as u32;
 
     let max_count = 500_000u64;
@@ -19,21 +23,29 @@ fn main() {
     let mut transitions = 0u32;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // Trap forwarding
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 8;
-            
-            if cause_code == 9 { // ECALL_S
+
+            if cause_code == 9 {
+                // ECALL_S
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -61,21 +73,27 @@ fn main() {
 
         let old_pc = vm.cpu.pc;
         let _ = vm.step();
-        
+
         // Detect VA<->PA transition
         let now_va = vm.cpu.pc >= 0xC0000000;
         if now_va != in_va_range {
             transitions += 1;
             let prev_pc_str = if in_va_range { "VA" } else { "PA" };
             let new_pc_str = if now_va { "VA" } else { "PA" };
-            println!("[TRANSITION #{}] count={}: {} 0x{:08X} -> {} 0x{:08X} (old_pc=0x{:08X})",
-                transitions, count, prev_pc_str, old_pc, new_pc_str, vm.cpu.pc, old_pc);
+            println!(
+                "[TRANSITION #{}] count={}: {} 0x{:08X} -> {} 0x{:08X} (old_pc=0x{:08X})",
+                transitions, count, prev_pc_str, old_pc, new_pc_str, vm.cpu.pc, old_pc
+            );
             in_va_range = now_va;
-            if transitions >= 5 { break; }
+            if transitions >= 5 {
+                break;
+            }
         }
-        
+
         count += 1;
     }
-    println!("\nFinal: count={} PC=0x{:08X} SP=0x{:08X} transitions={}",
-        count, vm.cpu.pc, vm.cpu.x[2], transitions);
+    println!(
+        "\nFinal: count={} PC=0x{:08X} SP=0x{:08X} transitions={}",
+        count, vm.cpu.pc, vm.cpu.x[2], transitions
+    );
 }

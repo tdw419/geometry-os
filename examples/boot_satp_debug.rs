@@ -24,7 +24,13 @@ fn main() {
             let mode = (new >> 31) & 1;
             let ppn = (new >> 22) & 0x1FF;
             let asid = new & 0x3FFFFF;
-            println!("    MODE={} PPN={} (root=0x{:08X}) ASID={}", mode, ppn, ppn << 12, asid);
+            println!(
+                "    MODE={} PPN={} (root=0x{:08X}) ASID={}",
+                mode,
+                ppn,
+                ppn << 12,
+                asid
+            );
         }
     }
 
@@ -35,7 +41,9 @@ fn main() {
         if let geometry_os::riscv::mmu::MmuEvent::PageTableWalk { va, pa, ptes } = event {
             println!("  VA=0x{:08X} -> PA=0x{:08X} PTEs={:?}", va, pa, ptes);
             count += 1;
-            if count >= 10 { break; }
+            if count >= 10 {
+                break;
+            }
         }
     }
 
@@ -49,8 +57,14 @@ fn main() {
         let pte_addr = pt_root + (i as u64) * 4;
         let pte = vm.bus.read_word(pte_addr).unwrap_or(0);
         if pte != 0 {
-            println!("  L1[{}] = 0x{:08X} (V={} RWX={:03b} PPN=0x{:08X})",
-                i, pte, pte & 1, (pte >> 1) & 7, (pte >> 10) << 12);
+            println!(
+                "  L1[{}] = 0x{:08X} (V={} RWX={:03b} PPN=0x{:08X})",
+                i,
+                pte,
+                pte & 1,
+                (pte >> 1) & 7,
+                (pte >> 10) << 12
+            );
         }
     }
 
@@ -61,11 +75,17 @@ fn main() {
     println!("\nL1[770] at PA=0x{:08X} = 0x{:08X}", l1_pte_addr, l1_pte);
     let l1_ppn = (l1_pte >> 10) << 2; // bits [31:10] shifted right by 10, gives physical page number
     let l2_base = (l1_pte as u64 >> 10) << 12;
-    println!("  L1 PPN bits: 0x{:08X}, L2 base PA: 0x{:08X}", l1_ppn, l2_base);
-    
+    println!(
+        "  L1 PPN bits: 0x{:08X}, L2 base PA: 0x{:08X}",
+        l1_ppn, l2_base
+    );
+
     // Check L2 entry for the faulting VA (VPN1=189)
     let l2_idx = 189;
     let l2_pte_addr = l2_base + (l2_idx as u64) * 4;
     let l2_pte = vm.bus.read_word(l2_pte_addr).unwrap_or(0);
-    println!("  L2[{}] at PA=0x{:08X} = 0x{:08X}", l2_idx, l2_pte_addr, l2_pte);
+    println!(
+        "  L2[{}] at PA=0x{:08X} = 0x{:08X}",
+        l2_idx, l2_pte_addr, l2_pte
+    );
 }

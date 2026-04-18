@@ -1,5 +1,5 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -7,9 +7,13 @@ fn main() {
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, fw_addr, _, _) =
-        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256,
-            "console=ttyS0 earlycon=sbi panic=1 quiet").unwrap();
+    let (mut vm, fw_addr, _, _) = RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        "console=ttyS0 earlycon=sbi panic=1 quiet",
+    )
+    .unwrap();
     let fw_addr_u32 = fw_addr as u32;
 
     let max_count: u64 = 300_000;
@@ -21,7 +25,9 @@ fn main() {
     let mut memset_start_count = 0u64;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // M-mode trap handler
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
@@ -30,11 +36,16 @@ fn main() {
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 8;
             if cause_code == 9 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -87,10 +98,16 @@ fn main() {
         if !hit_memset && vm.cpu.pc == 0x000010B2 {
             hit_memset = true;
             memset_start_count = count;
-            eprintln!("[MEMSET] First entry at count={}, PC=0x{:08X}", count, vm.cpu.pc);
+            eprintln!(
+                "[MEMSET] First entry at count={}, PC=0x{:08X}",
+                count, vm.cpu.pc
+            );
             eprintln!("  x13 (start) = 0x{:08X} ({})", vm.cpu.x[13], vm.cpu.x[13]);
             eprintln!("  x14 (end)   = 0x{:08X} ({})", vm.cpu.x[14], vm.cpu.x[14]);
-            eprintln!("  Iterations  = {}", (vm.cpu.x[14].wrapping_sub(vm.cpu.x[13])) / 4);
+            eprintln!(
+                "  Iterations  = {}",
+                (vm.cpu.x[14].wrapping_sub(vm.cpu.x[13])) / 4
+            );
             eprintln!("  RA  = 0x{:08X}", vm.cpu.x[1]);
             eprintln!("  SP  = 0x{:08X}", vm.cpu.x[2]);
             eprintln!("  SATP= 0x{:08X}", vm.cpu.csr.satp);
@@ -99,7 +116,12 @@ fn main() {
             // Also check what's around x13/x14 - what memory range is being cleared?
             let start = vm.cpu.x[13];
             let end = vm.cpu.x[14];
-            eprintln!("  Clearing range: 0x{:08X} - 0x{:08X} ({} bytes)", start, end, end.wrapping_sub(start));
+            eprintln!(
+                "  Clearing range: 0x{:08X} - 0x{:08X} ({} bytes)",
+                start,
+                end,
+                end.wrapping_sub(start)
+            );
         }
 
         let _ = vm.step();
@@ -112,8 +134,16 @@ fn main() {
 
     if hit_memset {
         let memset_iters = count - memset_start_count;
-        eprintln!("[MEMSET] Ran for {} iterations ({} bytes cleared)",
-            memset_iters, memset_iters * 4);
+        eprintln!(
+            "[MEMSET] Ran for {} iterations ({} bytes cleared)",
+            memset_iters,
+            memset_iters * 4
+        );
     }
-    println!("Done: count={} PC=0x{:08X} UART={}", count, vm.cpu.pc, vm.bus.uart.tx_buf.len());
+    println!(
+        "Done: count={} PC=0x{:08X} UART={}",
+        count,
+        vm.cpu.pc,
+        vm.bus.uart.tx_buf.len()
+    );
 }

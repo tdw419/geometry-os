@@ -122,7 +122,11 @@ impl RiscvVm {
                 }
             }
         }
-        if highest == 0 { None } else { Some(highest) }
+        if highest == 0 {
+            None
+        } else {
+            Some(highest)
+        }
     }
 
     /// Convert a virtual entry point to physical using ELF segment mappings.
@@ -138,11 +142,11 @@ impl RiscvVm {
             let phdr = crate::riscv::loader::parse_phdr(image, off, class)?;
             if phdr.p_type == 1
                 && entry_vaddr >= phdr.p_vaddr
-                    && entry_vaddr < phdr.p_vaddr.wrapping_add(phdr.p_memsz as u32)
-                {
-                    let offset = entry_vaddr - phdr.p_vaddr;
-                    return Some(phdr.p_paddr.wrapping_add(offset));
-                }
+                && entry_vaddr < phdr.p_vaddr.wrapping_add(phdr.p_memsz as u32)
+            {
+                let offset = entry_vaddr - phdr.p_vaddr;
+                return Some(phdr.p_paddr.wrapping_add(offset));
+            }
         }
         None
     }
@@ -188,8 +192,7 @@ impl RiscvVm {
         bootargs: &str,
     ) -> Result<(Self, u64, u32, u64), loader::LoadError> {
         // 1. Calculate minimum RAM size from kernel's physical address ranges.
-        let highest_paddr = Self::parse_elf_highest_paddr(kernel_image)
-            .unwrap_or(64 * 1024 * 1024);
+        let highest_paddr = Self::parse_elf_highest_paddr(kernel_image).unwrap_or(64 * 1024 * 1024);
         let min_ram_size = highest_paddr as usize + 4 * 1024 * 1024; // extra for initrd/dtb
 
         let caller_ram_size = (ram_size_mb as u64) * 1024 * 1024;
@@ -270,8 +273,13 @@ impl RiscvVm {
             ..Default::default()
         };
         let dtb_blob = dtb::generate_dtb(&dtb_config);
-        eprintln!("[boot] DTB generated: {} bytes, mem_base=0x{:08X}, mem_size=0x{:08X} ({}MB)",
-                  dtb_blob.len(), mem_base, mem_size, mem_size / (1024*1024));
+        eprintln!(
+            "[boot] DTB generated: {} bytes, mem_base=0x{:08X}, mem_size=0x{:08X} ({}MB)",
+            dtb_blob.len(),
+            mem_base,
+            mem_size,
+            mem_size / (1024 * 1024)
+        );
 
         let dtb_addr = ((initrd_end.unwrap_or(load_info.highest_addr) + 0xFFF) & !0xFFF) as u64;
         for (i, &byte) in dtb_blob.iter().enumerate() {
@@ -296,7 +304,10 @@ impl RiscvVm {
         let dtb_early_pa_pa: u64 = 0x0080100C; // _dtb_early_pa at VA 0xC080100C
         vm.bus.write_word(dtb_early_va_pa, dtb_va).ok();
         vm.bus.write_word(dtb_early_pa_pa, dtb_addr as u32).ok();
-        eprintln!("[boot] Pre-set _dtb_early_va = 0x{:08X}, _dtb_early_pa = 0x{:08X}", dtb_va, dtb_addr as u32);
+        eprintln!(
+            "[boot] Pre-set _dtb_early_va = 0x{:08X}, _dtb_early_pa = 0x{:08X}",
+            dtb_va, dtb_addr as u32
+        );
 
         // Also set initial_boot_params for compatibility (some kernel paths
         // read it directly).
@@ -419,9 +430,9 @@ impl RiscvVm {
         //
         // The assertion `slli a5, a5, 10; beqz a5` at PA 0x00404972 still passes
         // because a5=0xC0000000 << 10 overflows to 0 in 32-bit.
-        let setup_vm_phys_addr_store: u64 = 0x0040495E;     // C.SW a5, 12(s1) (2 bytes)
-        let setup_vm_va_kernel_pa_store: u64 = 0x00404964;  // SW a6, 24(s1) (4 bytes!)
-        let setup_vm_va_pa_offset_store: u64 = 0x00404968;  // C.SW a1, 20(s1) (2 bytes)
+        let setup_vm_phys_addr_store: u64 = 0x0040495E; // C.SW a5, 12(s1) (2 bytes)
+        let setup_vm_va_kernel_pa_store: u64 = 0x00404964; // SW a6, 24(s1) (4 bytes!)
+        let setup_vm_va_pa_offset_store: u64 = 0x00404968; // C.SW a1, 20(s1) (2 bytes)
         let kernel_map_phys: u64 = 0x00C79E90;
 
         // Verify the instructions match before patching (safety check).
@@ -432,18 +443,20 @@ impl RiscvVm {
         if sw_a5_12 == 0xC4DC && sw_a6_24 == 0x0104AC23 && sw_a1_20 == 0xC8CC {
             // NOP the sw a5, 12(s1) -- prevents writing wrong phys_addr
             vm.bus.write_half(setup_vm_phys_addr_store, 0x0001).ok(); // C.NOP
-            // NOP the sw a6, 24(s1) -- prevents writing wrong va_kernel_pa_offset
-            vm.bus.write_word(setup_vm_va_kernel_pa_store, 0x00000013).ok(); // 32-bit NOP
-            // NOP the sw a1, 20(s1) -- prevents writing wrong va_pa_offset
+                                                                      // NOP the sw a6, 24(s1) -- prevents writing wrong va_kernel_pa_offset
+            vm.bus
+                .write_word(setup_vm_va_kernel_pa_store, 0x00000013)
+                .ok(); // 32-bit NOP
+                       // NOP the sw a1, 20(s1) -- prevents writing wrong va_pa_offset
             vm.bus.write_half(setup_vm_va_pa_offset_store, 0x0001).ok(); // C.NOP
-            // Pre-set correct values in kernel_map struct.
-            // phys_addr: the kernel's physical base address. Correct: 0.
-            // va_pa_offset: used as __va_to_pa(va) = va - va_pa_offset for VAs >= virt_addr.
-            //   Correct: 0xC0000000 (PAGE_OFFSET), so VA 0xC0000000 -> PA 0.
-            // va_kernel_pa_offset: used in setup_vm to relocate fixmap function pointers
-            //   (pt_ops[0] and pt_ops[4]). The kernel does: func_ptr + va_kernel_pa_offset.
-            //   Must be 0 so function pointers remain as correct VAs.
-            //   If set to 0xC0000000, the addition wraps (e.g., 0xC04046C8 + 0xC0000000 = 0x804046C8).
+                                                                         // Pre-set correct values in kernel_map struct.
+                                                                         // phys_addr: the kernel's physical base address. Correct: 0.
+                                                                         // va_pa_offset: used as __va_to_pa(va) = va - va_pa_offset for VAs >= virt_addr.
+                                                                         //   Correct: 0xC0000000 (PAGE_OFFSET), so VA 0xC0000000 -> PA 0.
+                                                                         // va_kernel_pa_offset: used in setup_vm to relocate fixmap function pointers
+                                                                         //   (pt_ops[0] and pt_ops[4]). The kernel does: func_ptr + va_kernel_pa_offset.
+                                                                         //   Must be 0 so function pointers remain as correct VAs.
+                                                                         //   If set to 0xC0000000, the addition wraps (e.g., 0xC04046C8 + 0xC0000000 = 0x804046C8).
             vm.bus.write_word(kernel_map_phys + 12, 0x00000000).ok(); // phys_addr = 0
             vm.bus.write_word(kernel_map_phys + 20, 0xC0000000).ok(); // va_pa_offset = 0xC0000000
             vm.bus.write_word(kernel_map_phys + 24, 0x00000000).ok(); // va_kernel_pa_offset = 0
@@ -550,8 +563,12 @@ impl RiscvVm {
                     // DTB parsing hasn't succeeded yet -- protect the pointers
                     let cur_va = vm.bus.read_word(dtb_early_va_pa).unwrap_or(0);
                     if cur_va != dtb_early_va_expected {
-                        vm.bus.write_word(dtb_early_va_pa, dtb_early_va_expected).ok();
-                        vm.bus.write_word(dtb_early_pa_pa, dtb_early_pa_expected).ok();
+                        vm.bus
+                            .write_word(dtb_early_va_pa, dtb_early_va_expected)
+                            .ok();
+                        vm.bus
+                            .write_word(dtb_early_pa_pa, dtb_early_pa_expected)
+                            .ok();
                         _dtb_watchdog_triggers += 1;
                         if _dtb_watchdog_triggers <= 5 {
                             eprintln!("[boot] DTB watchdog #{} at count={}: restored _dtb_early_va from 0x{:08X} to 0x{:08X}",
@@ -559,7 +576,10 @@ impl RiscvVm {
                         }
                     }
                 } else if _dtb_watchdog_triggers > 0 {
-                    eprintln!("[boot] phys_ram_base set to 0x{:08X} at count={} (DTB parsing succeeded)", prb, count);
+                    eprintln!(
+                        "[boot] phys_ram_base set to 0x{:08X} at count={} (DTB parsing succeeded)",
+                        prb, count
+                    );
                     _dtb_watchdog_triggers = 0;
                 }
             }
@@ -575,7 +595,10 @@ impl RiscvVm {
             {
                 let cur_satp = vm.cpu.csr.satp;
                 if cur_satp != _last_satp {
-                    eprintln!("[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", _last_satp, cur_satp, count);
+                    eprintln!(
+                        "[boot] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                        _last_satp, cur_satp, count
+                    );
                     let mode = (cur_satp >> 31) & 1;
                     if mode == 1 {
                         let ppn = cur_satp & 0x3FFFFF;
@@ -588,9 +611,9 @@ impl RiscvVm {
                         // Also map low RAM for DTB/initramfs access: L1[0..5]
                         let device_l1_entries: &[u32] = &[
                             0, 1, 2, 3, 4, 5,  // Low RAM (0x0-0x17FFFFF) for DTB/initramfs
-                            8,                   // CLINT at 0x02000000
-                            48,                  // PLIC at 0x0C000000
-                            64,                  // UART at 0x10000000
+                            8,  // CLINT at 0x02000000
+                            48, // PLIC at 0x0C000000
+                            64, // UART at 0x10000000
                         ];
                         let identity_pte: u32 = 0x0000_00CF; // V+R+W+X+A+D, U=0
 
@@ -604,7 +627,10 @@ impl RiscvVm {
                             }
                         }
                         vm.cpu.tlb.flush_all();
-                        eprintln!("[boot] Injected device identity mappings into pg_dir at PA 0x{:08X}", pg_dir_phys);
+                        eprintln!(
+                            "[boot] Injected device identity mappings into pg_dir at PA 0x{:08X}",
+                            pg_dir_phys
+                        );
 
                         // Fix broken or missing page table entries in the kernel
                         // linear mapping range (L1[768..777], VA 0xC0000000-0xC1BFFFFF).
@@ -629,7 +655,7 @@ impl RiscvVm {
                             let ppn = (entry >> 10) & 0x3FFFFF;
                             let needs_fix = !is_valid                    // Unmapped
                                 || (is_non_leaf && ppn == 0)         // Broken L2 at PA 0
-                                || is_non_leaf;                       // Any non-leaf -- force megapage
+                                || is_non_leaf; // Any non-leaf -- force megapage
                             if !needs_fix {
                                 continue;
                             }
@@ -668,7 +694,9 @@ impl RiscvVm {
                         // overflows into _dtb_early_va (0xC0801008) and
                         // _dtb_early_pa (0xC080100C). We must restore them
                         // before soc_early_init reads _dtb_early_va.
-                        vm.bus.write_word(0x00801008, (dtb_addr.wrapping_add(0xC0000000)) as u32).ok();
+                        vm.bus
+                            .write_word(0x00801008, (dtb_addr.wrapping_add(0xC0000000)) as u32)
+                            .ok();
                         vm.bus.write_word(0x0080100C, dtb_addr as u32).ok();
                         eprintln!("[boot] Re-set _dtb_early_va/pa after pt_ops overflow");
                     }
@@ -695,41 +723,53 @@ impl RiscvVm {
                 // If MPP=Supervisor or MPP=User, the trap came from a lower
                 // privilege and OpenSBI would reflect it to S-mode.
                 if cause_code != csr::CAUSE_ECALL_M {
-                    let mpp = (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK)
-                        >> csr::MSTATUS_MPP_LSB;
+                    let mpp = (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB;
 
-                if (cause_code as usize) < 32 {
-                    _trap_counts[cause_code as usize] += 1;
-                }
-                if mpp == 3 {
-                    _mmode_trap_count += 1;
-                }
+                    if (cause_code as usize) < 32 {
+                        _trap_counts[cause_code as usize] += 1;
+                    }
+                    if mpp == 3 {
+                        _mmode_trap_count += 1;
+                    }
 
-                // Log first few illegal instructions for debugging.
-                if cause_code == 2 && _forward_count < 5 {
-                    let mepc_val = vm.cpu.csr.mepc;
-                    let stvec_val = vm.cpu.csr.stvec;
-                    let inst = vm.bus.read_word(mepc_val as u64).unwrap_or(0);
-                    // Also check a few surrounding addresses
-                    let inst_m4 = vm.bus.read_word((mepc_val as u64).saturating_sub(4)).unwrap_or(0);
-                    let inst_p4 = vm.bus.read_word(mepc_val as u64 + 4).unwrap_or(0);
-                    eprintln!("[boot] Illegal instruction #{} at count={}: mepc=0x{:08X} stvec=0x{:08X} satap=0x{:08X}",
+                    // Log first few illegal instructions for debugging.
+                    if cause_code == 2 && _forward_count < 5 {
+                        let mepc_val = vm.cpu.csr.mepc;
+                        let stvec_val = vm.cpu.csr.stvec;
+                        let inst = vm.bus.read_word(mepc_val as u64).unwrap_or(0);
+                        // Also check a few surrounding addresses
+                        let inst_m4 = vm
+                            .bus
+                            .read_word((mepc_val as u64).saturating_sub(4))
+                            .unwrap_or(0);
+                        let inst_p4 = vm.bus.read_word(mepc_val as u64 + 4).unwrap_or(0);
+                        eprintln!("[boot] Illegal instruction #{} at count={}: mepc=0x{:08X} stvec=0x{:08X} satap=0x{:08X}",
                         _forward_count + 1, count, mepc_val, stvec_val, vm.cpu.csr.satp);
-                    eprintln!("[boot]   PA[{}-4]=0x{:08X} PA[{}]=0x{:08X} PA[{}+4]=0x{:08X}",
-                        mepc_val, inst_m4, mepc_val, inst, mepc_val, inst_p4);
-                    eprintln!("[boot]   priv={:?} mpp={}", vm.cpu.privilege,
-                        (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB);
-                }
+                        eprintln!(
+                            "[boot]   PA[{}-4]=0x{:08X} PA[{}]=0x{:08X} PA[{}+4]=0x{:08X}",
+                            mepc_val, inst_m4, mepc_val, inst, mepc_val, inst_p4
+                        );
+                        eprintln!(
+                            "[boot]   priv={:?} mpp={}",
+                            vm.cpu.privilege,
+                            (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB
+                        );
+                    }
 
                     // ECALL_S from S-mode is an SBI call -- handle it directly.
                     if cause_code == csr::CAUSE_ECALL_S {
                         _sbi_call_count += 1;
                         let result = vm.bus.sbi.handle_ecall(
-                            vm.cpu.x[17], vm.cpu.x[16],
-                            vm.cpu.x[10], vm.cpu.x[11],
-                            vm.cpu.x[12], vm.cpu.x[13],
-                            vm.cpu.x[14], vm.cpu.x[15],
-                            &mut vm.bus.uart, &mut vm.bus.clint,
+                            vm.cpu.x[17],
+                            vm.cpu.x[16],
+                            vm.cpu.x[10],
+                            vm.cpu.x[11],
+                            vm.cpu.x[12],
+                            vm.cpu.x[13],
+                            vm.cpu.x[14],
+                            vm.cpu.x[15],
+                            &mut vm.bus.uart,
+                            &mut vm.bus.clint,
                         );
                         if let Some((a0_val, a1_val)) = result {
                             vm.cpu.x[10] = a0_val;
@@ -746,7 +786,8 @@ impl RiscvVm {
                         // setup_vm() may clear them. When the kernel faults on a low
                         // address, inject the identity megapage on demand.
                         let fault_addr = vm.cpu.csr.mtval;
-                        let is_page_fault = cause_code == 12 || cause_code == 13 || cause_code == 15;
+                        let is_page_fault =
+                            cause_code == 12 || cause_code == 13 || cause_code == 15;
                         if is_page_fault && fault_addr < 0x0200_0000 {
                             let satp = vm.cpu.csr.satp;
                             let pg_dir_ppn = (satp & 0x3FFFFF) as u64;
@@ -776,10 +817,12 @@ impl RiscvVm {
                                         vm.cpu.csr.scause = mcause;
                                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus
+                                            & !(1 << csr::MSTATUS_SPP))
                                             | (spp << csr::MSTATUS_SPP);
                                         let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
-                                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus
+                                            & !(1 << csr::MSTATUS_SPIE))
                                             | (sie << csr::MSTATUS_SPIE);
                                         vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
                                         vm.cpu.pc = stvec;
@@ -804,11 +847,13 @@ impl RiscvVm {
                                 // Set S-mode trap entry state in mstatus.
                                 // SPP = previous privilege (1=S, 0=U) from MPP.
                                 let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                                vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                                vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus
+                                    & !(1 << csr::MSTATUS_SPP))
                                     | (spp << csr::MSTATUS_SPP);
                                 // SPIE = SIE (save current SIE), SIE = 0 (disable S interrupts)
                                 let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
-                                vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                                vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus
+                                    & !(1 << csr::MSTATUS_SPIE))
                                     | (sie << csr::MSTATUS_SPIE);
                                 vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
 
@@ -833,9 +878,9 @@ impl RiscvVm {
                             }
                             // stvec not set yet -- fall through to skip instruction.
                         }
-                    // MPP=3: trap came from M-mode. Fall through to skip.
-                    // This handles device probes to unmapped addresses (e.g.,
-                    // 0xFFFFFFF0 PLIC/DTB probes) during early M-mode boot.
+                        // MPP=3: trap came from M-mode. Fall through to skip.
+                        // This handles device probes to unmapped addresses (e.g.,
+                        // 0xFFFFFFF0 PLIC/DTB probes) during early M-mode boot.
                     }
                 }
 
@@ -892,7 +937,9 @@ impl RiscvVm {
                     let mut chars = Vec::new();
                     for j in 0..200 {
                         let b = vm.bus.read_byte(fmt_pa as u64 + j as u64).unwrap_or(0);
-                        if b == 0 { break; }
+                        if b == 0 {
+                            break;
+                        }
                         if b >= 0x20 && b < 0x7f {
                             chars.push(b as char);
                         } else {
@@ -913,19 +960,46 @@ impl RiscvVm {
                 // memblock.memory.cnt (at offset 48) and memblock.reserved.cnt (at offset 52)
                 let mem_cnt = vm.bus.read_word(memblock_pa + 48).unwrap_or(0);
                 let res_cnt = vm.bus.read_word(memblock_pa + 52).unwrap_or(0);
-                eprintln!("[boot]   memblock: memory.regions={} reserved.regions={}", mem_cnt, res_cnt);
+                eprintln!(
+                    "[boot]   memblock: memory.regions={} reserved.regions={}",
+                    mem_cnt, res_cnt
+                );
                 // Read total memory and reserved memory from memblock
                 // memblock.memory.regions[0] starts at offset 0 (base, size pairs)
                 for ri in 0..mem_cnt.min(4) {
-                    let base = vm.bus.read_word(memblock_pa + (ri * 16) as u64).unwrap_or(0);
-                    let size = vm.bus.read_word(memblock_pa + (ri * 16 + 4) as u64).unwrap_or(0);
-                    eprintln!("[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)", ri, base, size, size / (1024*1024));
+                    let base = vm
+                        .bus
+                        .read_word(memblock_pa + (ri * 16) as u64)
+                        .unwrap_or(0);
+                    let size = vm
+                        .bus
+                        .read_word(memblock_pa + (ri * 16 + 4) as u64)
+                        .unwrap_or(0);
+                    eprintln!(
+                        "[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)",
+                        ri,
+                        base,
+                        size,
+                        size / (1024 * 1024)
+                    );
                 }
                 for ri in 0..res_cnt.min(8) {
-                    let base = vm.bus.read_word(memblock_pa + (0x200 + ri * 16) as u64).unwrap_or(0);
-                    let size = vm.bus.read_word(memblock_pa + (0x200 + ri * 16 + 4) as u64).unwrap_or(0);
+                    let base = vm
+                        .bus
+                        .read_word(memblock_pa + (0x200 + ri * 16) as u64)
+                        .unwrap_or(0);
+                    let size = vm
+                        .bus
+                        .read_word(memblock_pa + (0x200 + ri * 16 + 4) as u64)
+                        .unwrap_or(0);
                     if size > 0 {
-                        eprintln!("[boot]   reserved[{}]: base=0x{:08X} size=0x{:08X} ({}KB)", ri, base, size, size / 1024);
+                        eprintln!(
+                            "[boot]   reserved[{}]: base=0x{:08X} size=0x{:08X} ({}KB)",
+                            ri,
+                            base,
+                            size,
+                            size / 1024
+                        );
                     }
                 }
                 // Also read phys_ram_base
@@ -936,32 +1010,45 @@ impl RiscvVm {
                 let deva = vm.bus.read_word(0x00801008).unwrap_or(0);
                 let depa = vm.bus.read_word(0x0080100C).unwrap_or(0);
                 let expected_dtb_va = dtb_addr.wrapping_add(0xC0000000) as u32;
-                eprintln!("[boot]   _dtb_early_va=0x{:08X} (expect 0x{:08X})", deva, expected_dtb_va);
-                eprintln!("[boot]   _dtb_early_pa=0x{:08X} (expect 0x{:08X})", depa, dtb_addr as u32);
+                eprintln!(
+                    "[boot]   _dtb_early_va=0x{:08X} (expect 0x{:08X})",
+                    deva, expected_dtb_va
+                );
+                eprintln!(
+                    "[boot]   _dtb_early_pa=0x{:08X} (expect 0x{:08X})",
+                    depa, dtb_addr as u32
+                );
                 // Check initial_boot_params (VA 0xC0C7A178, PA 0x00C7A178)
                 let ibp_pa = 0x00C7A178u64;
                 let ibp = vm.bus.read_word(ibp_pa).unwrap_or(0);
-                eprintln!("[boot]   initial_boot_params=0x{:08X} (expect DTB PA 0x{:08X})", ibp, dtb_addr as u32);
+                eprintln!(
+                    "[boot]   initial_boot_params=0x{:08X} (expect DTB PA 0x{:08X})",
+                    ibp, dtb_addr as u32
+                );
                 // Verify DTB at the address initial_boot_params points to
                 if ibp != 0 {
                     let dtb_magic_pa = ibp as u64;
                     let dtb_magic = vm.bus.read_word(dtb_magic_pa).unwrap_or(0);
                     // DTB magic 0xD00DFEED in BE = 0xEDFE0DD0 in LE read
-                    eprintln!("[boot]   DTB at 0x{:08X}: magic=0x{:08X} (expect 0xEDFE0DD0)", ibp, dtb_magic);
+                    eprintln!(
+                        "[boot]   DTB at 0x{:08X}: magic=0x{:08X} (expect 0xEDFE0DD0)",
+                        ibp, dtb_magic
+                    );
                 }
                 // Dump register state
                 for i in 0..32 {
-                    let name = ["zero","ra","sp","gp","tp","t0","t1","t2","s0","s1","a0","a1","a2","a3","a4","a5",
-                                "a6","a7","s2","s3","s4","s5","s6","s7","s8","s9","s10","s11","t3","t4","t5","t6"][i];
+                    let name = [
+                        "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1",
+                        "a2", "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
+                        "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
+                    ][i];
                     eprintln!("[boot]   x{} ({}) = 0x{:08X}", i, name, vm.cpu.x[i]);
                 }
             }
 
             match step_result {
                 StepResult::Ok => {}
-                StepResult::FetchFault
-                | StepResult::LoadFault
-                | StepResult::StoreFault => {
+                StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
                     // Log S-mode faults for debugging (first 20).
                     if vm.cpu.privilege == cpu::Privilege::Supervisor && _smode_fault_count < 20 {
                         _smode_fault_count += 1;
@@ -990,14 +1077,18 @@ impl RiscvVm {
                 _same_pc_count = 0;
             }
             if _same_pc_count > 0 && count.is_multiple_of(500_000) {
-                eprintln!("[boot] count={} PC=0x{:08X} priv={:?} mstatus=0x{:08X} same_pc={}",
-                    count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.mstatus, _same_pc_count);
+                eprintln!(
+                    "[boot] count={} PC=0x{:08X} priv={:?} mstatus=0x{:08X} same_pc={}",
+                    count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.mstatus, _same_pc_count
+                );
             }
             count += 1;
         }
 
-        eprintln!("[boot] Done: SBI_calls={} ECALL_M={} forwards={} mmode_traps={}",
-            _sbi_call_count, _ecall_m_count, _forward_count, _mmode_trap_count);
+        eprintln!(
+            "[boot] Done: SBI_calls={} ECALL_M={} forwards={} mmode_traps={}",
+            _sbi_call_count, _ecall_m_count, _forward_count, _mmode_trap_count
+        );
         // Post-boot state
         let prb = vm.bus.read_word(0x00C79EACu64).unwrap_or(0);
         let deva = vm.bus.read_word(0x00801008).unwrap_or(0);
@@ -1009,7 +1100,10 @@ impl RiscvVm {
         let memblock_pa = memblock_va - 0xC0000000;
         let mem_cnt = vm.bus.read_word(memblock_pa + 48).unwrap_or(0);
         let res_cnt = vm.bus.read_word(memblock_pa + 52).unwrap_or(0);
-        eprintln!("[boot] Post-boot: memblock memory.cnt={} reserved.cnt={}", mem_cnt, res_cnt);
+        eprintln!(
+            "[boot] Post-boot: memblock memory.cnt={} reserved.cnt={}",
+            mem_cnt, res_cnt
+        );
         for (i, c) in _trap_counts.iter().enumerate() {
             if *c > 0 {
                 eprintln!("[boot]   cause {}: {} occurrences", i, c);

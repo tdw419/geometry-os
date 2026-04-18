@@ -6,7 +6,7 @@
 //
 // See docs/RISCV_HYPERVISOR.md §Instruction Decode.
 
-use super::operation::{Operation, sign_extend};
+use super::operation::{sign_extend, Operation};
 
 /// Decode a 32-bit instruction word into a fully-resolved Operation.
 pub fn decode(word: u32) -> Operation {

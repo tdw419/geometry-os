@@ -1,5 +1,5 @@
-use super::Vm;
 use super::types::*;
+use super::Vm;
 
 impl Vm {
     /// Allocate `count` contiguous physical pages. Returns start page index or None.
@@ -8,7 +8,9 @@ impl Vm {
     pub(super) fn alloc_pages(&mut self, count: usize) -> Option<usize> {
         'outer: for start in 2..=(NUM_RAM_PAGES - count) {
             for i in 0..count {
-                if self.allocated_pages & (1u64 << (start + i)) != 0 { continue 'outer; }
+                if self.allocated_pages & (1u64 << (start + i)) != 0 {
+                    continue 'outer;
+                }
             }
             for i in 0..count {
                 self.allocated_pages |= 1u64 << (start + i);
@@ -50,9 +52,13 @@ impl Vm {
             Some(pd) => {
                 let vpage = (vaddr as usize) / PAGE_SIZE;
                 let offset = (vaddr as usize) % PAGE_SIZE;
-                if vpage >= pd.len() { return None; }
+                if vpage >= pd.len() {
+                    return None;
+                }
                 let ppage = pd[vpage] as usize;
-                if ppage >= NUM_PAGES { return None; } // PAGE_UNMAPPED sentinel
+                if ppage >= NUM_PAGES {
+                    return None;
+                } // PAGE_UNMAPPED sentinel
                 Some(ppage * PAGE_SIZE + offset)
             }
         }
@@ -100,9 +106,13 @@ impl Vm {
         // Extract old physical page from current page directory
         let old_phys = match &self.current_page_dir {
             Some(pd) => {
-                if vpage >= pd.len() || vpage >= NUM_PAGES { return false; }
+                if vpage >= pd.len() || vpage >= NUM_PAGES {
+                    return false;
+                }
                 let p = pd[vpage] as usize;
-                if p >= NUM_PAGES { return false; }
+                if p >= NUM_PAGES {
+                    return false;
+                }
                 p
             }
             None => return false,

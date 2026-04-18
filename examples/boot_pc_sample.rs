@@ -1,6 +1,5 @@
 /// Diagnostic: sample PCs every 1000 instructions to understand
 /// what code the kernel is executing after the fault.
-
 use geometry_os::riscv::RiscvVm;
 use std::collections::HashMap;
 
@@ -30,16 +29,23 @@ fn main() {
         }
 
         // Handle M-mode trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -91,7 +97,12 @@ fn main() {
     let mut sorted_pages: Vec<_> = page_histogram.iter().collect();
     sorted_pages.sort_by(|a, b| b.1.cmp(a.1));
     for &(page, cnt) in &sorted_pages {
-        println!("  Page 0x{:08X}: {} samples ({:.1}%)", page, cnt, *cnt as f64 / pc_samples.len() as f64 * 100.0);
+        println!(
+            "  Page 0x{:08X}: {} samples ({:.1}%)",
+            page,
+            cnt,
+            *cnt as f64 / pc_samples.len() as f64 * 100.0
+        );
     }
 
     // Show first 20 and last 20 samples

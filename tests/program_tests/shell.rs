@@ -3,10 +3,10 @@ use super::*;
 #[test]
 fn test_readln_no_key_yields() {
     let mut vm = Vm::new();
-    vm.regs[0] = 0x200;  // buf addr
-    vm.regs[1] = 64;     // max len
-    vm.regs[2] = 0x300;  // pos addr
-    vm.ram[0x300] = 0;   // pos = 0
+    vm.regs[0] = 0x200; // buf addr
+    vm.regs[1] = 64; // max len
+    vm.regs[2] = 0x300; // pos addr
+    vm.ram[0x300] = 0; // pos = 0
     step_readln(&mut vm, 0); // no key
     assert_eq!(vm.regs[0], 0, "READLN should return 0 when no key");
     assert!(vm.yielded, "READLN should yield when no key available");
@@ -44,9 +44,9 @@ fn test_readln_enter_terminates() {
     vm.ram[0x300] = 0;
 
     // Pre-load "Hi" at buffer
-    vm.ram[0x200] = 72;  // H
+    vm.ram[0x200] = 72; // H
     vm.ram[0x201] = 105; // i
-    vm.ram[0x300] = 2;   // pos = 2
+    vm.ram[0x300] = 2; // pos = 2
 
     // Send Enter (13)
     step_readln(&mut vm, 13);
@@ -73,17 +73,15 @@ fn test_readln_backspace() {
 fn test_readln_max_len() {
     let mut vm = Vm::new();
     vm.regs[0] = 0x200;
-    vm.regs[1] = 2;      // max len = 2
+    vm.regs[1] = 2; // max len = 2
     vm.regs[2] = 0x300;
-    vm.ram[0x300] = 2;   // already at max
+    vm.ram[0x300] = 2; // already at max
 
     // Try to add another char -- should be rejected
     step_readln(&mut vm, 88); // 'X'
     assert_eq!(vm.ram[0x300], 2, "Position should stay at max");
     assert_eq!(vm.ram[0x202], 0, "Buffer at pos 2 should not be written");
 }
-
-
 
 // ── READLN non-printable discard test ────────────────────────
 
@@ -101,8 +99,6 @@ fn test_readln_non_printable_discarded() {
     assert_eq!(vm.ram[0xFFF], 0, "Key should be consumed");
 }
 
-
-
 // ── READLN buffer full test ──────────────────────────────────
 
 #[test]
@@ -118,8 +114,6 @@ fn test_readln_buffer_full_no_overflow() {
     assert_eq!(vm.ram[0x202], 0, "Buffer at pos 2 should not be written");
 }
 
-
-
 // ── WAITPID opcode ──────────────────────────────────────────────
 
 #[test]
@@ -127,7 +121,10 @@ fn test_waitpid_not_running() {
     let mut vm = Vm::new();
     vm.regs[1] = 42; // PID that doesn't exist
     step_waitpid(&mut vm);
-    assert_eq!(vm.regs[0], 1, "WAITPID should return 1 for non-existent PID");
+    assert_eq!(
+        vm.regs[0], 1,
+        "WAITPID should return 1 for non-existent PID"
+    );
 }
 
 #[test]
@@ -147,10 +144,12 @@ fn test_waitpid_still_running() {
         yielded: false,
         kernel_stack: Vec::new(),
         msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: 0,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
     vm.regs[1] = 1; // PID of running process
     step_waitpid(&mut vm);
@@ -175,17 +174,17 @@ fn test_waitpid_halted_process() {
         yielded: false,
         kernel_stack: Vec::new(),
         msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: 0,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
     vm.regs[1] = 1;
     step_waitpid(&mut vm);
     assert_eq!(vm.regs[0], 1, "WAITPID should return 1 for halted PID");
 }
-
-
 
 // ── Shell assembly test ─────────────────────────────────────────
 
@@ -194,7 +193,11 @@ fn test_shell_assembles() {
     let source = std::fs::read_to_string("programs/shell.asm")
         .unwrap_or_else(|e| panic!("failed to read shell.asm: {}", e));
     let result = assemble(&source, 0);
-    assert!(result.is_ok(), "shell.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "shell.asm should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -205,8 +208,6 @@ fn test_readln_waitpid_assembler_entries() {
     assert_eq!(result.pixels[4], 0x69, "WAITPID opcode");
     assert_eq!(result.pixels[6], 0x00, "HALT opcode");
 }
-
-
 
 // ── CHDIR/GETCWD opcode tests ────────────────────────────────
 
@@ -263,8 +264,6 @@ fn test_getcwd_default_root() {
     assert_eq!(vm.ram[0x200] as u8, b'/' as u8);
 }
 
-
-
 // ── EXECP assembler test ─────────────────────────────────────
 
 #[test]
@@ -276,8 +275,6 @@ fn test_execp_assembles() {
     assert_eq!(result.pixels[2], 1, "stdin_fd reg");
     assert_eq!(result.pixels[3], 2, "stdout_fd reg");
 }
-
-
 
 // ── CHDIR/GETCWD assembler test ──────────────────────────────
 
@@ -291,8 +288,6 @@ fn test_chdir_getcwd_assembles() {
     assert_eq!(result.pixels[3], 1, "buf reg");
     assert_eq!(result.pixels[4], 0x00, "HALT");
 }
-
-
 
 // ============================================================
 // Phase 29: Shell opcodes -- GETPID, GETENV, SETENV
@@ -330,28 +325,41 @@ fn test_getpid_returns_pid_in_spawned_process() {
     vm.ram[0x201] = 0x00; // HALT
 
     // At address 0: LDI r1, 0x200; SPAWN r1; HALT
-    vm.ram[0] = 0x10;    // LDI r1, imm16
-    vm.ram[1] = 1;       // r1
-    vm.ram[2] = 0x200;   // address
-    vm.ram[3] = 0x4D;    // SPAWN
-    vm.ram[4] = 1;       // r1
-    vm.ram[5] = 0x00;    // HALT
+    vm.ram[0] = 0x10; // LDI r1, imm16
+    vm.ram[1] = 1; // r1
+    vm.ram[2] = 0x200; // address
+    vm.ram[3] = 0x4D; // SPAWN
+    vm.ram[4] = 1; // r1
+    vm.ram[5] = 0x00; // HALT
 
     // Run main process to completion
-    for _ in 0..20 { if !vm.step() { break; } }
+    for _ in 0..20 {
+        if !vm.step() {
+            break;
+        }
+    }
 
     let child_pid = vm.ram[0xFFA];
-    assert!(child_pid > 0 && child_pid != 0xFFFFFFFF, "SPAWN should set RAM[0xFFA] to a valid PID, got {}", child_pid);
+    assert!(
+        child_pid > 0 && child_pid != 0xFFFFFFFF,
+        "SPAWN should set RAM[0xFFA] to a valid PID, got {}",
+        child_pid
+    );
     assert_eq!(vm.processes.len(), 1);
 
     // Run the child process through the scheduler
     for _ in 0..20 {
         vm.step_all_processes();
-        if vm.processes[0].is_halted() { break; }
+        if vm.processes[0].is_halted() {
+            break;
+        }
     }
 
     let child = &vm.processes[0];
-    assert_eq!(child.regs[0], child_pid, "Child GETPID should return its spawned PID");
+    assert_eq!(
+        child.regs[0], child_pid,
+        "Child GETPID should return its spawned PID"
+    );
 }
 
 #[test]
@@ -393,8 +401,8 @@ fn test_setenv_and_getenv_roundtrip() {
     vm.regs[2] = 0x1100; // val addr
 
     vm.ram[0] = 0x64; // SETENV
-    vm.ram[1] = 1;    // key_reg
-    vm.ram[2] = 2;    // val_reg
+    vm.ram[1] = 1; // key_reg
+    vm.ram[2] = 2; // val_reg
     vm.step();
     assert_eq!(vm.regs[0], 0, "SETENV should return 0 on success");
 
@@ -404,8 +412,8 @@ fn test_setenv_and_getenv_roundtrip() {
     vm.regs[3] = 0x2000; // output buffer
     vm.pc = 10;
     vm.ram[10] = 0x63; // GETENV
-    vm.ram[11] = 1;    // key_reg
-    vm.ram[12] = 3;    // val_reg
+    vm.ram[11] = 1; // key_reg
+    vm.ram[12] = 3; // val_reg
     vm.step();
     assert_eq!(vm.regs[0], 4, "GETENV should return length 4 for '/bin'");
 
@@ -414,7 +422,10 @@ fn test_setenv_and_getenv_roundtrip() {
     for i in 0..4 {
         result.push((vm.ram[0x2000 + i] & 0xFF) as u8 as char);
     }
-    assert_eq!(result, "/bin", "GETENV should write '/bin' to output buffer");
+    assert_eq!(
+        result, "/bin",
+        "GETENV should write '/bin' to output buffer"
+    );
 }
 
 #[test]
@@ -428,7 +439,10 @@ fn test_getenv_not_found() {
     vm.ram[1] = 1;
     vm.ram[2] = 2;
     vm.step();
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "GETENV should return 0xFFFFFFFF when key not found");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "GETENV should return 0xFFFFFFFF when key not found"
+    );
 }
 
 #[test]
@@ -465,7 +479,10 @@ fn test_setenv_overwrite() {
     vm.ram[21] = 1;
     vm.ram[22] = 3;
     vm.step();
-    assert_eq!(vm.regs[0], 10, "GETENV should return length 10 for '/home/user'");
+    assert_eq!(
+        vm.regs[0], 10,
+        "GETENV should return length 10 for '/home/user'"
+    );
 
     let mut result = String::new();
     for i in 0..10 {
@@ -553,16 +570,16 @@ fn test_env_vars_persist_across_processes() {
     // Child at 0x200: GETENV r1, r2; HALT
     write_string(&mut vm.ram, 0x300, "USER"); // key for child to look up
     vm.ram[0x200] = 0x63; // GETENV
-    vm.ram[0x201] = 1;    // key_reg (r1)
-    vm.ram[0x202] = 2;    // val_reg (r2)
+    vm.ram[0x201] = 1; // key_reg (r1)
+    vm.ram[0x202] = 2; // val_reg (r2)
     vm.ram[0x203] = 0x00; // HALT
 
     // SPAWN at address 5
     vm.regs[1] = 0x200;
     vm.pc = 5;
-    vm.ram[5] = 0x4D;  // SPAWN
-    vm.ram[6] = 1;     // r1 = child addr
-    vm.ram[7] = 0x00;  // HALT
+    vm.ram[5] = 0x4D; // SPAWN
+    vm.ram[6] = 1; // r1 = child addr
+    vm.ram[7] = 0x00; // HALT
     vm.step(); // SPAWN
 
     // Set child's r1 to key addr, r2 to output buffer
@@ -571,7 +588,9 @@ fn test_env_vars_persist_across_processes() {
 
     for _ in 0..20 {
         vm.step_all_processes();
-        if vm.processes[0].is_halted() { break; }
+        if vm.processes[0].is_halted() {
+            break;
+        }
     }
 
     let child = &vm.processes[0];
@@ -581,5 +600,8 @@ fn test_env_vars_persist_across_processes() {
     for i in 0..5 {
         result.push((vm.ram[0x400 + i] & 0xFF) as u8 as char);
     }
-    assert_eq!(result, "alice", "Child should read 'alice' from parent's env");
+    assert_eq!(
+        result, "alice",
+        "Child should read 'alice' from parent's env"
+    );
 }

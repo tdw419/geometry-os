@@ -6,12 +6,19 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    use geometry_os::riscv::RiscvVm;
-    use geometry_os::riscv::cpu::{StepResult, Privilege};
+    use geometry_os::riscv::cpu::{Privilege, StepResult};
     use geometry_os::riscv::decode::Operation;
+    use geometry_os::riscv::RiscvVm;
 
     // Boot to 17M
-    let (mut vm, _) = RiscvVm::boot_linux(&kernel_image, initramfs.as_deref(), 256, 17_000_000, bootargs).unwrap();
+    let (mut vm, _) = RiscvVm::boot_linux(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        17_000_000,
+        bootargs,
+    )
+    .unwrap();
 
     // Continue stepping and count ECALLs
     let mut ecall_count: u64 = 0;
@@ -28,8 +35,10 @@ fn main() {
                 let a0 = vm.cpu.x[10];
                 ecall_details.push((count, last.pc, a7, a0));
                 if ecall_details.len() <= 10 {
-                    println!("[{}] ECALL at PC=0x{:08X} priv={:?} a7=0x{:X} a0=0x{:X}",
-                        count, last.pc, vm.cpu.privilege, a7, a0);
+                    println!(
+                        "[{}] ECALL at PC=0x{:08X} priv={:?} a7=0x{:X} a0=0x{:X}",
+                        count, last.pc, vm.cpu.privilege, a7, a0
+                    );
                 }
                 // Check if SBI handled it
                 if !vm.bus.sbi.console_output.is_empty() {
@@ -49,7 +58,10 @@ fn main() {
     }
 
     println!("\nTotal ECALLs: {}", ecall_count);
-    println!("SBI console output: {} bytes", vm.bus.sbi.console_output.len());
+    println!(
+        "SBI console output: {} bytes",
+        vm.bus.sbi.console_output.len()
+    );
     if !vm.bus.sbi.console_output.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
         let preview: String = s.chars().take(200).collect();

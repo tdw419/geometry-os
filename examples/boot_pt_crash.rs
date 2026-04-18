@@ -1,6 +1,6 @@
+use geometry_os::riscv::cpu::StepResult;
 /// Check what the kernel's page table L1[768] looks like at the crash point.
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::StepResult;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -51,16 +51,23 @@ fn main() {
         }
 
         // M-mode trap handler
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 9 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -99,60 +106,86 @@ fn main() {
             let satp = vm.cpu.csr.satp;
             let ppn = satp & 0x3FFFFF;
             let pg_dir_phys = (ppn as u64) * 4096;
-            
+
             eprintln!("[diag] CRASH ANALYSIS at count={}", count);
-            eprintln!("[diag] PC=0x{:08X} RA=0x{:08X} SP=0x{:08X}", vm.cpu.pc, vm.cpu.x[1], vm.cpu.x[2]);
-            eprintln!("[diag] SATP=0x{:08X} pg_dir_phys=0x{:08X}", satp, pg_dir_phys);
-            
+            eprintln!(
+                "[diag] PC=0x{:08X} RA=0x{:08X} SP=0x{:08X}",
+                vm.cpu.pc, vm.cpu.x[1], vm.cpu.x[2]
+            );
+            eprintln!(
+                "[diag] SATP=0x{:08X} pg_dir_phys=0x{:08X}",
+                satp, pg_dir_phys
+            );
+
             // Check L1[768] which covers VA 0xC0000000-0xC01FFFFF
             // The crash is at PC=0xC003F9CC
             let l1_768 = vm.bus.read_word(pg_dir_phys + 768 * 4).unwrap_or(0);
-            eprintln!("[diag] L1[768] (covers 0xC0000000-0xC01FFFFF) = 0x{:08X}", l1_768);
-            
+            eprintln!(
+                "[diag] L1[768] (covers 0xC0000000-0xC01FFFFF) = 0x{:08X}",
+                l1_768
+            );
+
             let l1_ppn = (l1_768 & 0xFFFFFC00) >> 10;
-            eprintln!("[diag]   L1[768] PPN = 0x{:08X} (phys = 0x{:08X})", l1_ppn, (l1_ppn as u64) << 12);
-            
+            eprintln!(
+                "[diag]   L1[768] PPN = 0x{:08X} (phys = 0x{:08X})",
+                l1_ppn,
+                (l1_ppn as u64) << 12
+            );
+
             // Check if it's a megapage or L2 pointer
             let is_leaf = (l1_768 & 0xE) != 0;
             eprintln!("[diag]   is_leaf={}, V={}", is_leaf, (l1_768 & 1) != 0);
-            
+
             if !is_leaf && (l1_768 & 1) != 0 {
                 // L2 pointer - dump first few L2 entries
                 let l2_base = (l1_ppn as u64) << 12;
                 eprintln!("[diag]   L2 table at PA 0x{:08X}", l2_base);
-                
+
                 // VA 0xC003F9CC: VPN0 = (0xC003F9CC >> 12) & 0x3FF = 0x03F
                 let vpn0_crash = (0xC003F9CC >> 12) & 0x3FF;
-                eprintln!("[diag]   crash VPN0 = {} (0x{:03X})", vpn0_crash, vpn0_crash);
-                
+                eprintln!(
+                    "[diag]   crash VPN0 = {} (0x{:03X})",
+                    vpn0_crash, vpn0_crash
+                );
+
                 for i in 0..64 {
                     let l2_entry = vm.bus.read_word(l2_base + i * 4).unwrap_or(0);
                     if l2_entry != 0 || i <= 3 {
                         let l2_ppn = (l2_entry & 0xFFFFFC00) >> 10;
-                        eprintln!("[diag]   L2[{}] = 0x{:08X} PPN=0x{:08X} V={} R={} W={} X={}", 
-                            i, l2_entry, l2_ppn,
+                        eprintln!(
+                            "[diag]   L2[{}] = 0x{:08X} PPN=0x{:08X} V={} R={} W={} X={}",
+                            i,
+                            l2_entry,
+                            l2_ppn,
                             (l2_entry & 1) != 0,
                             (l2_entry & 2) != 0,
                             (l2_entry & 4) != 0,
-                            (l2_entry & 8) != 0);
+                            (l2_entry & 8) != 0
+                        );
                     }
                 }
-                
+
                 // Also read the physical memory at the crash VA
                 // With fixup, if L2[63] has PPN with virtual offset, the PA should be computed correctly
                 let l2_crash = vm.bus.read_word(l2_base + vpn0_crash * 4).unwrap_or(0);
-                eprintln!("[diag]   L2[{}] (for crash VA) = 0x{:08X}", vpn0_crash, l2_crash);
+                eprintln!(
+                    "[diag]   L2[{}] (for crash VA) = 0x{:08X}",
+                    vpn0_crash, l2_crash
+                );
             }
-            
+
             // Check what's at physical address 0x3F9CC (where crash VA 0xC003F9CC should map)
             let pa_direct = 0x3F9CCu64;
             let val_at_pa = vm.bus.read_word(pa_direct).unwrap_or(0);
-            eprintln!("[diag]   word at PA 0x{:08X} = 0x{:08X}", pa_direct, val_at_pa);
-            
+            eprintln!(
+                "[diag]   word at PA 0x{:08X} = 0x{:08X}",
+                pa_direct, val_at_pa
+            );
+
             // Check what's at physical address 0x003F9CC
             let val_at_pa2 = vm.bus.read_word(0x003F9CC).unwrap_or(0);
             eprintln!("[diag]   word at PA 0x003F9CC = 0x{:08X}", val_at_pa2);
-            
+
             break;
         }
     }

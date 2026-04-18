@@ -1,7 +1,5 @@
 use super::*;
 
-
-
 // === SPAWN/KILL opcode tests ===
 
 #[test]
@@ -20,8 +18,14 @@ fn test_spawn_creates_child_process() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // RAM[0xFFA] should contain the process ID (1)
     assert_eq!(vm.ram[0xFFA], 1, "SPAWN should return PID 1");
@@ -51,8 +55,14 @@ fn test_spawn_max_processes() {
 
     let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // Should have 8 processes, 9th spawn should have returned 0xFFFFFFFF
     assert_eq!(vm.processes.len(), 8);
@@ -76,8 +86,14 @@ fn test_kill_halts_child_process() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // KILL should have returned 1 (success)
     assert_eq!(vm.ram[0xFFA], 1, "KILL should return 1 on success");
@@ -107,9 +123,15 @@ fn test_step_all_processes() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
     // Run main process to completion
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.processes.len(), 2);
 
@@ -136,27 +158,47 @@ fn test_active_process_count() {
     let mut vm = Vm::new();
     assert_eq!(vm.active_process_count(), 0);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1, mode: geometry_os::vm::CpuMode::Kernel,
-        page_dir: None, segfaulted: false,
-        priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
-                kernel_stack: Vec::new(),
-                msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: 0,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        pc: 0,
+        regs: [0; 32],
+        state: geometry_os::vm::ProcessState::Ready,
+        pid: 1,
+        mode: geometry_os::vm::CpuMode::Kernel,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 0,
+        sleep_until: 0,
+        yielded: false,
+        kernel_stack: Vec::new(),
+        msg_queue: Vec::new(),
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
     assert_eq!(vm.active_process_count(), 1);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0, regs: [0; 32], state: geometry_os::vm::ProcessState::Zombie, pid: 2, mode: geometry_os::vm::CpuMode::Kernel,
-        page_dir: None, segfaulted: false,
-        priority: 1, slice_remaining: 0, sleep_until: 0, yielded: false,
-                kernel_stack: Vec::new(),
-                msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: 0,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        pc: 0,
+        regs: [0; 32],
+        state: geometry_os::vm::ProcessState::Zombie,
+        pid: 2,
+        mode: geometry_os::vm::CpuMode::Kernel,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 0,
+        sleep_until: 0,
+        yielded: false,
+        kernel_stack: Vec::new(),
+        msg_queue: Vec::new(),
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
     assert_eq!(vm.active_process_count(), 1);
 }
@@ -168,14 +210,12 @@ fn test_spawn_assembles() {
     // SPAWN r1 = 0x4D, r1
     assert_eq!(asm.pixels[0], 0x4D);
     assert_eq!(asm.pixels[1], 1); // r1
-    // KILL r2 = 0x4E, r2
+                                  // KILL r2 = 0x4E, r2
     assert_eq!(asm.pixels[2], 0x4E);
     assert_eq!(asm.pixels[3], 2); // r2
-    // HALT
+                                  // HALT
     assert_eq!(asm.pixels[4], 0x00);
 }
-
-
 
 // === Copy-on-Write (COW) Fork Tests ===
 
@@ -193,16 +233,31 @@ fn test_cow_fork_shares_physical_pages() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
 
-    let pd = vm.processes[0].page_dir.as_ref().expect("operation should succeed");
+    let pd = vm.processes[0]
+        .page_dir
+        .as_ref()
+        .expect("operation should succeed");
     // With COW, child's virtual page 0 maps to parent's physical page 4 (0x1000/1024=4)
     assert_eq!(pd[0], 4, "child vpage 0 should share parent's phys page 4");
     assert_eq!(pd[1], 5, "child vpage 1 should share parent's phys page 5");
     // Ref count on shared pages should be >= 1 (child's reference)
-    assert!(vm.page_ref_count[4] >= 1, "phys page 4 should have ref count >= 1");
-    assert!(vm.page_ref_count[5] >= 1, "phys page 5 should have ref count >= 1");
+    assert!(
+        vm.page_ref_count[4] >= 1,
+        "phys page 4 should have ref count >= 1"
+    );
+    assert!(
+        vm.page_ref_count[5] >= 1,
+        "phys page 5 should have ref count >= 1"
+    );
     // COW flag should be set
     assert_ne!(vm.page_cow & (1u64 << 4), 0, "phys page 4 should be COW");
     assert_ne!(vm.page_cow & (1u64 << 5), 0, "phys page 5 should be COW");
@@ -224,29 +279,49 @@ fn test_cow_write_triggers_page_copy() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
 
     // Run main to spawn child
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.processes.len(), 1);
 
-    let pd_before = vm.processes[0].page_dir.as_ref().expect("operation should succeed").clone();
+    let pd_before = vm.processes[0]
+        .page_dir
+        .as_ref()
+        .expect("operation should succeed")
+        .clone();
     let shared_phys_page = pd_before[0]; // vpage 0 -> phys page 4 (0x1000/1024=4)
 
     // Run child to completion
     for _ in 0..100 {
         vm.step_all_processes();
-        if vm.processes.iter().all(|p| p.is_halted()) { break; }
+        if vm.processes.iter().all(|p| p.is_halted()) {
+            break;
+        }
     }
 
-    let pd_after = vm.processes[0].page_dir.as_ref().expect("operation should succeed");
+    let pd_after = vm.processes[0]
+        .page_dir
+        .as_ref()
+        .expect("operation should succeed");
     // After writing to vpage 0 (STORE r0, r2 where r0=0, virtual addr 0 -> vpage 0),
     // the child should have a NEW private physical page (COW resolved)
-    assert_ne!(pd_after[0], shared_phys_page,
-        "child should have a new private page after COW write");
+    assert_ne!(
+        pd_after[0], shared_phys_page,
+        "child should have a new private page after COW write"
+    );
     // The new page should NOT be COW
-    assert_eq!(vm.page_cow & (1u64 << pd_after[0] as u64), 0,
-        "new private page should not be COW");
+    assert_eq!(
+        vm.page_cow & (1u64 << pd_after[0] as u64),
+        0,
+        "new private page should not be COW"
+    );
 }
 
 #[test]
@@ -267,28 +342,44 @@ fn test_cow_isolation_between_children() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
 
     // Run main
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.processes.len(), 2);
 
     // Run children to completion
     for _ in 0..200 {
         vm.step_all_processes();
-        if vm.processes.iter().all(|p| p.is_halted()) { break; }
+        if vm.processes.iter().all(|p| p.is_halted()) {
+            break;
+        }
     }
 
     assert!(!vm.processes[0].segfaulted, "child 1 should not segfault");
     assert!(!vm.processes[1].segfaulted, "child 2 should not segfault");
 
-    let pd1 = vm.processes[0].page_dir.as_ref().expect("operation should succeed");
-    let pd2 = vm.processes[1].page_dir.as_ref().expect("operation should succeed");
+    let pd1 = vm.processes[0]
+        .page_dir
+        .as_ref()
+        .expect("operation should succeed");
+    let pd2 = vm.processes[1]
+        .page_dir
+        .as_ref()
+        .expect("operation should succeed");
 
     // After COW resolution, children should have DIFFERENT physical pages
     // (they both wrote to the same shared page, triggering separate copies)
-    assert_ne!(pd1[0], pd2[0],
-        "children should have different physical pages after COW writes");
+    assert_ne!(
+        pd1[0], pd2[0],
+        "children should have different physical pages after COW writes"
+    );
 }
 
 #[test]
@@ -306,22 +397,39 @@ fn test_cow_read_does_not_trigger_copy() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
 
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
 
-    let pd_before = vm.processes[0].page_dir.as_ref().expect("operation should succeed").clone();
+    let pd_before = vm.processes[0]
+        .page_dir
+        .as_ref()
+        .expect("operation should succeed")
+        .clone();
 
     // Run child (only reads, no writes)
     for _ in 0..100 {
         vm.step_all_processes();
-        if vm.processes.iter().all(|p| p.is_halted()) { break; }
+        if vm.processes.iter().all(|p| p.is_halted()) {
+            break;
+        }
     }
 
-    let pd_after = vm.processes[0].page_dir.as_ref().expect("operation should succeed");
+    let pd_after = vm.processes[0]
+        .page_dir
+        .as_ref()
+        .expect("operation should succeed");
     // Page mapping should be unchanged (no COW resolution for reads)
-    assert_eq!(pd_after[0], pd_before[0],
-        "read-only child should still share the same physical page");
+    assert_eq!(
+        pd_after[0], pd_before[0],
+        "read-only child should still share the same physical page"
+    );
 }
 
 #[test]
@@ -340,7 +448,9 @@ fn test_cow_kill_decrements_ref_count() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
 
     // Before spawn: phys page 4 ref count = 0 (not allocated by main process)
     assert_eq!(vm.page_ref_count[4], 0);
@@ -351,16 +461,26 @@ fn test_cow_kill_decrements_ref_count() {
     vm.step();
 
     // After spawn: phys page 4 ref count should be >= 1 (from child's COW mapping)
-    assert!(vm.page_ref_count[4] >= 1, "ref count should be >= 1 after COW fork");
+    assert!(
+        vm.page_ref_count[4] >= 1,
+        "ref count should be >= 1 after COW fork"
+    );
     let ref_after_spawn = vm.page_ref_count[4];
 
     // Step 3: LDI r2, 1 (pc 5->8)
     // Step 4: KILL r2 (pc 8->10) -- decrements ref counts
     // Step 5: HALT (pc 10->11, returns false)
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
 
     // After kill: ref count on page 4 should be decremented
-    assert!(vm.page_ref_count[4] < ref_after_spawn, "ref count should decrease after child killed");
+    assert!(
+        vm.page_ref_count[4] < ref_after_spawn,
+        "ref count should decrease after child killed"
+    );
 }
 
 #[test]
@@ -375,8 +495,14 @@ fn test_window_manager_spawns_child() {
     // Run for 3 frames: primary should have spawned a child and written bounds
     let vm = compile_run_multiproc("programs/window_manager.asm", 3);
     // Child should be alive
-    assert!(!vm.processes.is_empty(), "primary should have spawned a child process");
-    assert!(!vm.processes[0].is_halted(), "child should still be running");
+    assert!(
+        !vm.processes.is_empty(),
+        "primary should have spawned a child process"
+    );
+    assert!(
+        !vm.processes[0].is_halted(),
+        "child should still be running"
+    );
     // Bounds protocol: RAM[0xF00..0xF03] should be populated
     assert_ne!(vm.ram[0xF02], 0, "win_w should be non-zero");
     assert_ne!(vm.ram[0xF03], 0, "win_h should be non-zero");
@@ -388,7 +514,10 @@ fn test_window_manager_draws_border() {
     let vm = compile_run_multiproc("programs/window_manager.asm", 5);
     let green = 0x00FF00u32;
     let green_count = vm.screen.iter().filter(|&&p| p == green).count();
-    assert!(green_count > 0, "window border (green pixels) should be visible");
+    assert!(
+        green_count > 0,
+        "window border (green pixels) should be visible"
+    );
 }
 
 #[test]
@@ -403,17 +532,36 @@ fn test_window_manager_ball_inside_window() {
     let ball_color = 0xFF4444u32;
     let screen = &vm.screen;
     let ball_pixels: Vec<(usize, usize)> = (0..256usize)
-        .flat_map(|y| (0..256usize).filter_map(move |x| {
-            if screen[y * 256 + x] == ball_color { Some((x, y)) } else { None }
-        }))
+        .flat_map(|y| {
+            (0..256usize).filter_map(move |x| {
+                if screen[y * 256 + x] == ball_color {
+                    Some((x, y))
+                } else {
+                    None
+                }
+            })
+        })
         .collect();
-    assert!(!ball_pixels.is_empty(), "red ball should be visible on screen");
+    assert!(
+        !ball_pixels.is_empty(),
+        "red ball should be visible on screen"
+    );
     // All ball pixels must be inside the window
     for (x, y) in &ball_pixels {
-        assert!(*x >= win_x && *x < win_x + win_w,
-            "ball pixel x={} outside window x={}..{}", x, win_x, win_x + win_w);
-        assert!(*y >= win_y && *y < win_y + win_h,
-            "ball pixel y={} outside window y={}..{}", y, win_y, win_y + win_h);
+        assert!(
+            *x >= win_x && *x < win_x + win_w,
+            "ball pixel x={} outside window x={}..{}",
+            x,
+            win_x,
+            win_x + win_w
+        );
+        assert!(
+            *y >= win_y && *y < win_y + win_h,
+            "ball pixel y={} outside window y={}..{}",
+            y,
+            win_y,
+            win_y + win_h
+        );
     }
 }
 
@@ -439,23 +587,40 @@ child_loop:
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
 
     // Run main to spawn child
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.processes.len(), 1, "should have 1 child process");
     assert!(!vm.processes[0].segfaulted, "child should not segfault");
-    assert!(!vm.processes[0].is_halted(), "child should not halt immediately");
+    assert!(
+        !vm.processes[0].is_halted(),
+        "child should not halt immediately"
+    );
 
     // Run child: JMP child_loop (0x610) -> STORE -> HALT
     for _ in 0..200 {
         vm.step_all_processes();
-        if vm.processes.iter().all(|p| p.is_halted()) { break; }
+        if vm.processes.iter().all(|p| p.is_halted()) {
+            break;
+        }
     }
     // Child should have executed successfully -- no segfault, and it halted
     // (meaning it executed JMP child_loop -> STORE -> HALT correctly)
-    assert!(!vm.processes[0].segfaulted, "child should not segfault after running");
-    assert!(vm.processes[0].is_halted(), "child should have reached HALT via JMP");
+    assert!(
+        !vm.processes[0].segfaulted,
+        "child should not segfault after running"
+    );
+    assert!(
+        vm.processes[0].is_halted(),
+        "child should have reached HALT via JMP"
+    );
 }
 
 #[test]
@@ -472,11 +637,20 @@ fn test_peek_reads_screen_pixel() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // r4 should contain the red pixel color we wrote
-    assert_eq!(vm.regs[4], 0xFF0000, "PEEK should read back the pixel color");
+    assert_eq!(
+        vm.regs[4], 0xFF0000,
+        "PEEK should read back the pixel color"
+    );
 }
 
 #[test]
@@ -492,8 +666,14 @@ fn test_peek_out_of_bounds_returns_zero() {
     ";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // r4 should be 0 because (300, 10) is out of bounds
     assert_eq!(vm.regs[4], 0, "PEEK out-of-bounds should return 0");
@@ -551,11 +731,20 @@ wall_done:
     ";
     let asm = assemble(source2, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..10000 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..10000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // Wall pixel should be red (non-zero)
-    assert_ne!(vm.regs[8], 0, "PEEK at wall should return non-zero (wall color)");
+    assert_ne!(
+        vm.regs[8], 0,
+        "PEEK at wall should return non-zero (wall color)"
+    );
     // Empty pixel above wall should be 0
     assert_eq!(vm.regs[9], 0, "PEEK above wall should return 0 (empty)");
 }
@@ -573,8 +762,8 @@ fn test_peek_assembles() {
 
 #[test]
 fn test_peek_bounce_assembles() {
-    let source = std::fs::read_to_string("programs/peek_bounce.asm")
-        .expect("peek_bounce.asm should exist");
+    let source =
+        std::fs::read_to_string("programs/peek_bounce.asm").expect("peek_bounce.asm should exist");
     assemble(&source, 0).expect("peek_bounce.asm should assemble cleanly");
 }
 
@@ -596,10 +785,20 @@ fn test_peek_bounce_bounces_off_walls() {
                 break;
             }
         }
-        if found { break; }
+        if found {
+            break;
+        }
     }
     assert!(found, "white ball should be visible on screen");
     // Ball must be within the playable area (inside the 4px border walls)
-    assert!(ball_x >= 4 && ball_x <= 251, "ball x={} should be inside borders", ball_x);
-    assert!(ball_y >= 4 && ball_y <= 251, "ball y={} should be inside borders", ball_y);
+    assert!(
+        ball_x >= 4 && ball_x <= 251,
+        "ball x={} should be inside borders",
+        ball_x
+    );
+    assert!(
+        ball_y >= 4 && ball_y <= 251,
+        "ball y={} should be inside borders",
+        ball_y
+    );
 }

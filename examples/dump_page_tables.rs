@@ -12,7 +12,8 @@ fn main() {
         256,
         177_400,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Dump trampoline_pg_dir (PA 0x01484000)
     println!("trampoline_pg_dir (PA 0x01484000):");
@@ -24,8 +25,10 @@ fn main() {
             let ppn = (pte >> 10) & 0x3FFFFF;
             let pa = (ppn as u64) << 12;
             let va_start = (i as u32) * 2 * 1024 * 1024;
-            println!("  L1[{}] = 0x{:08X} V={} RWX={:03b} PPN=0x{:06X} PA=0x{:08X} VA=0x{:08X}",
-                i, pte, v, rwx, ppn, pa, va_start);
+            println!(
+                "  L1[{}] = 0x{:08X} V={} RWX={:03b} PPN=0x{:06X} PA=0x{:08X} VA=0x{:08X}",
+                i, pte, v, rwx, ppn, pa, va_start
+            );
         }
     }
 
@@ -38,8 +41,10 @@ fn main() {
             let ppn = (pte >> 10) & 0x3FFFFF;
             let pa = (ppn as u64) << 12;
             let va_start = (i as u32) * 2 * 1024 * 1024;
-            println!("  L1[{}] = 0x{:08X} V={} RWX={:03b} PPN=0x{:06X} PA=0x{:08X} VA=0x{:08X}",
-                i, pte, v, rwx, ppn, pa, va_start);
+            println!(
+                "  L1[{}] = 0x{:08X} V={} RWX={:03b} PPN=0x{:06X} PA=0x{:08X} VA=0x{:08X}",
+                i, pte, v, rwx, ppn, pa, va_start
+            );
         }
     }
 
@@ -52,13 +57,20 @@ fn main() {
             let ppn = (pte >> 10) & 0x3FFFFF;
             let pa = (ppn as u64) << 12;
             let va_start = (i as u32) * 2 * 1024 * 1024;
-            println!("  L1[{}] = 0x{:08X} V={} RWX={:03b} PPN=0x{:06X} PA=0x{:08X} VA=0x{:08X}",
-                i, pte, v, rwx, ppn, pa, va_start);
+            println!(
+                "  L1[{}] = 0x{:08X} V={} RWX={:03b} PPN=0x{:06X} PA=0x{:08X} VA=0x{:08X}",
+                i, pte, v, rwx, ppn, pa, va_start
+            );
         }
     }
 
     println!("\nCurrent SATP = 0x{:08X}", vm.cpu.csr.satp);
-    println!("Current PC = 0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
-    println!("scause=0x{:08X} sepc=0x{:08X} stval=0x{:08X}", 
-        vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval);
+    println!(
+        "Current PC = 0x{:08X} priv={:?}",
+        vm.cpu.pc, vm.cpu.privilege
+    );
+    println!(
+        "scause=0x{:08X} sepc=0x{:08X} stval=0x{:08X}",
+        vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval
+    );
 }

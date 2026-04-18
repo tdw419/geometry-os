@@ -1,8 +1,8 @@
 //! Diagnostic: compare early_pg_dir vs swapper_pg_dir L1 entries.
 //! Run: cargo run --example boot_pt_compare
 
-use std::fs;
 use geometry_os::riscv::{cpu::Privilege, cpu::StepResult, RiscvVm};
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -48,8 +48,11 @@ fn main() {
                     vm.cpu.tlb.flush_all();
 
                     pg_dirs_seen.push(pg_dir_phys);
-                    eprintln!("[diag] SATP changed to pg_dir PA 0x{:08X} at count={}", pg_dir_phys, count);
-                    
+                    eprintln!(
+                        "[diag] SATP changed to pg_dir PA 0x{:08X} at count={}",
+                        pg_dir_phys, count
+                    );
+
                     // Dump kernel mapping L1 entries (768+) for this page directory
                     dump_kernel_l1(&mut vm, pg_dir_phys);
                 }
@@ -64,11 +67,16 @@ fn main() {
 
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -111,7 +119,10 @@ fn main() {
                         eprintln!("[diag] First S-mode fault at count={}", count);
                         // Dump all known page directories' kernel mappings
                         for &pg_dir in &pg_dirs_seen {
-                            eprintln!("\n[diag] === Page directory at PA 0x{:08X} (AFTER boot) ===", pg_dir);
+                            eprintln!(
+                                "\n[diag] === Page directory at PA 0x{:08X} (AFTER boot) ===",
+                                pg_dir
+                            );
                             dump_kernel_l1(&mut vm, pg_dir);
                         }
                     }
@@ -141,7 +152,11 @@ fn dump_kernel_l1(vm: &mut RiscvVm, pg_dir_phys: u64) {
                 if is_leaf {
                     eprintln!(
                         "  L1[{:4}] = 0x{:08X} MEGAPAGE PPN=0x{:06X} flags=0x{:02X} PA=0x{:08X}",
-                        i, pte, ppn, flags, ppn << 22
+                        i,
+                        pte,
+                        ppn,
+                        flags,
+                        ppn << 22
                     );
                 } else {
                     let l2_pa = (ppn as u64) << 12;
@@ -168,7 +183,10 @@ fn dump_kernel_l1(vm: &mut RiscvVm, pg_dir_phys: u64) {
                         }
                     }
                     if l2_count > 0 {
-                        eprintln!("    ... (showed {} of possibly more non-zero entries)", l2_count);
+                        eprintln!(
+                            "    ... (showed {} of possibly more non-zero entries)",
+                            l2_count
+                        );
                     } else {
                         eprintln!("    (all L2 entries are zero)");
                     }

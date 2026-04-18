@@ -1,8 +1,8 @@
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 /// Diagnostic: trace x6 through the S-mode trap handler to find where it gets zeroed.
 /// The handler runs ~64 instructions after the load page fault, then C.JALR x1,x6,0
 /// jumps to x6=0. This traces every write to x6 and the instruction that loads x6.
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -37,11 +37,16 @@ fn main() {
             if cause_code == 11 {
                 // ECALL_S = SBI call
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -83,12 +88,20 @@ fn main() {
                     first_fault_count = Some(count);
                     eprintln!("[FAULT {}] type={:?} PC=0x{:08X} sepc=0x{:08X} scause=0x{:X} stval=0x{:08X}",
                         count, step_result, pc_before, vm.cpu.csr.sepc, vm.cpu.csr.scause, vm.cpu.csr.stval);
-                    eprintln!("[FAULT] x6=0x{:08X} sscratch=0x{:08X} sp=0x{:08X}",
-                        vm.cpu.x[6], vm.cpu.csr.sscratch, vm.cpu.x[2]);
-                    eprintln!("[FAULT] stvec=0x{:08X} satp=0x{:08X}", vm.cpu.csr.stvec, vm.cpu.csr.satp);
+                    eprintln!(
+                        "[FAULT] x6=0x{:08X} sscratch=0x{:08X} sp=0x{:08X}",
+                        vm.cpu.x[6], vm.cpu.csr.sscratch, vm.cpu.x[2]
+                    );
+                    eprintln!(
+                        "[FAULT] stvec=0x{:08X} satp=0x{:08X}",
+                        vm.cpu.csr.stvec, vm.cpu.csr.satp
+                    );
                 }
             }
-            StepResult::Ebreak => { eprintln!("[EBREAK] count={}", count); break; }
+            StepResult::Ebreak => {
+                eprintln!("[EBREAK] count={}", count);
+                break;
+            }
             _ => {}
         }
 
@@ -104,21 +117,29 @@ fn main() {
             if handler_steps <= 100 {
                 // Disassemble the instruction at pc_before for context
                 if handler_steps <= 80 {
-                    eprintln!("[H{:03}] PC=0x{:08X} x6=0x{:08X} x5=0x{:08X} sp=0x{:08X}",
-                        handler_steps, pc_before, vm.cpu.x[6], vm.cpu.x[5], vm.cpu.x[2]);
+                    eprintln!(
+                        "[H{:03}] PC=0x{:08X} x6=0x{:08X} x5=0x{:08X} sp=0x{:08X}",
+                        handler_steps, pc_before, vm.cpu.x[6], vm.cpu.x[5], vm.cpu.x[2]
+                    );
                 }
             }
 
             // Check for the crash: jump to x6=0
             if handler_steps > 60 && vm.cpu.pc == 0 && vm.cpu.privilege == Privilege::Supervisor {
-                eprintln!("[CRASH] Jumped to 0x00000000 at handler step {}!", handler_steps);
+                eprintln!(
+                    "[CRASH] Jumped to 0x00000000 at handler step {}!",
+                    handler_steps
+                );
                 eprintln!("[CRASH] x6=0x{:08X} x1=0x{:08X}", vm.cpu.x[6], vm.cpu.x[1]);
                 break;
             }
 
             // Safety limit
             if handler_steps > 200 {
-                eprintln!("[LIMIT] Handler ran {} steps without crashing", handler_steps);
+                eprintln!(
+                    "[LIMIT] Handler ran {} steps without crashing",
+                    handler_steps
+                );
                 break;
             }
         }

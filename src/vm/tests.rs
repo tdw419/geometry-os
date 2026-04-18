@@ -10,7 +10,9 @@ fn run_program(bytecode: &[u32], max_steps: usize) -> Vm {
     vm.pc = 0;
     vm.halted = false;
     for _ in 0..max_steps {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     vm
 }
@@ -23,7 +25,9 @@ fn test_canvas_ram_mapping_store() {
     // STORE 0x8000 (first cell) with 'H' (0x48)
     vm.regs[1] = 0x8000;
     vm.regs[2] = 0x48;
-    vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // STORE r1, r2
     vm.pc = 0;
     vm.step();
     assert_eq!(vm.canvas_buffer[0], 0x48);
@@ -34,9 +38,11 @@ fn test_canvas_ram_mapping_store() {
 fn test_canvas_ram_mapping_load() {
     let mut vm = Vm::new();
     vm.canvas_buffer[10] = 0x58; // 'X'
-    // LOAD r3, 0x800A
+                                 // LOAD r3, 0x800A
     vm.regs[1] = 0x800A;
-    vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+    vm.ram[0] = 0x11;
+    vm.ram[1] = 3;
+    vm.ram[2] = 1; // LOAD r3, r1
     vm.pc = 0;
     vm.step();
     assert_eq!(vm.regs[3], 0x58);
@@ -48,7 +54,9 @@ fn test_canvas_ram_mapping_user_mode() {
     vm.mode = CpuMode::User;
     vm.regs[1] = 0x8000;
     vm.regs[2] = 0x48;
-    vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // STORE r1, r2
     vm.pc = 0;
     assert!(vm.step()); // Should NOT segfault
     assert_eq!(vm.canvas_buffer[0], 0x48);
@@ -102,13 +110,23 @@ fn test_load_reads_ram() {
     // LOAD r3, r1      (load r3 <- RAM[0x2000])
     // HALT
     let mut vm = Vm::new();
-    vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 0x2000; // LDI r1, 0x2000
-    vm.ram[3] = 0x12; vm.ram[4] = 1; vm.ram[5] = 2;       // STORE r1, r2
-    vm.ram[6] = 0x11; vm.ram[7] = 3; vm.ram[8] = 1;       // LOAD r3, r1
-    vm.ram[9] = 0x00;                                       // HALT
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000; // LDI r1, 0x2000
+    vm.ram[3] = 0x12;
+    vm.ram[4] = 1;
+    vm.ram[5] = 2; // STORE r1, r2
+    vm.ram[6] = 0x11;
+    vm.ram[7] = 3;
+    vm.ram[8] = 1; // LOAD r3, r1
+    vm.ram[9] = 0x00; // HALT
     vm.regs[2] = 0xABCDEF;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[3], 0xABCDEF);
 }
 
@@ -120,13 +138,25 @@ fn test_store_then_load_roundtrip() {
     // STORE r5, r6
     // LOAD r7, r5
     // HALT
-    vm.ram[0] = 0x10; vm.ram[1] = 5; vm.ram[2] = 0x500;
-    vm.ram[3] = 0x10; vm.ram[4] = 6; vm.ram[5] = 999;
-    vm.ram[6] = 0x12; vm.ram[7] = 5; vm.ram[8] = 6;
-    vm.ram[9] = 0x11; vm.ram[10] = 7; vm.ram[11] = 5;
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x500;
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 6;
+    vm.ram[5] = 999;
+    vm.ram[6] = 0x12;
+    vm.ram[7] = 5;
+    vm.ram[8] = 6;
+    vm.ram[9] = 0x11;
+    vm.ram[10] = 7;
+    vm.ram[11] = 5;
     vm.ram[12] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[7], 999);
 }
 
@@ -145,10 +175,16 @@ fn test_add_wrapping_overflow() {
     vm.regs[1] = 0xFFFFFFFF;
     vm.regs[2] = 1;
     // ADD r1, r2; HALT
-    vm.ram[0] = 0x20; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x20;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 0); // wrapping add
 }
 
@@ -157,10 +193,16 @@ fn test_sub_basic() {
     let mut vm = Vm::new();
     vm.regs[1] = 50;
     vm.regs[2] = 20;
-    vm.ram[0] = 0x21; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x21;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 30);
 }
 
@@ -169,10 +211,16 @@ fn test_sub_wrapping_underflow() {
     let mut vm = Vm::new();
     vm.regs[1] = 0;
     vm.regs[2] = 1;
-    vm.ram[0] = 0x21; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x21;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 0xFFFFFFFF); // wrapping sub
 }
 
@@ -181,10 +229,16 @@ fn test_mul_basic() {
     let mut vm = Vm::new();
     vm.regs[1] = 6;
     vm.regs[2] = 7;
-    vm.ram[0] = 0x22; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x22;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 42);
 }
 
@@ -193,10 +247,16 @@ fn test_div_basic() {
     let mut vm = Vm::new();
     vm.regs[1] = 100;
     vm.regs[2] = 7;
-    vm.ram[0] = 0x23; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x23;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 14); // 100 / 7 = 14 (integer division)
 }
 
@@ -205,10 +265,16 @@ fn test_div_by_zero_no_panic() {
     let mut vm = Vm::new();
     vm.regs[1] = 42;
     vm.regs[2] = 0;
-    vm.ram[0] = 0x23; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x23;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 42); // unchanged, no panic
 }
 
@@ -217,10 +283,16 @@ fn test_mod_basic() {
     let mut vm = Vm::new();
     vm.regs[1] = 100;
     vm.regs[2] = 7;
-    vm.ram[0] = 0x29; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x29;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 2); // 100 % 7 = 2
 }
 
@@ -229,10 +301,16 @@ fn test_mod_by_zero_no_panic() {
     let mut vm = Vm::new();
     vm.regs[1] = 42;
     vm.regs[2] = 0;
-    vm.ram[0] = 0x29; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x29;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 42); // unchanged
 }
 
@@ -240,10 +318,15 @@ fn test_mod_by_zero_no_panic() {
 fn test_neg() {
     let mut vm = Vm::new();
     vm.regs[5] = 1;
-    vm.ram[0] = 0x2A; vm.ram[1] = 5;
+    vm.ram[0] = 0x2A;
+    vm.ram[1] = 5;
     vm.ram[2] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[5], 0xFFFFFFFF); // -1 in two's complement
 }
 
@@ -251,10 +334,15 @@ fn test_neg() {
 fn test_neg_zero() {
     let mut vm = Vm::new();
     vm.regs[5] = 0;
-    vm.ram[0] = 0x2A; vm.ram[1] = 5;
+    vm.ram[0] = 0x2A;
+    vm.ram[1] = 5;
     vm.ram[2] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[5], 0);
 }
 
@@ -265,10 +353,16 @@ fn test_and() {
     let mut vm = Vm::new();
     vm.regs[1] = 0xFF00FF;
     vm.regs[2] = 0x0F0F0F;
-    vm.ram[0] = 0x24; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x24;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 0x0F000F);
 }
 
@@ -277,10 +371,16 @@ fn test_or() {
     let mut vm = Vm::new();
     vm.regs[1] = 0xF00000;
     vm.regs[2] = 0x000F00;
-    vm.ram[0] = 0x25; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x25;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 0xF00F00);
 }
 
@@ -289,10 +389,16 @@ fn test_xor() {
     let mut vm = Vm::new();
     vm.regs[1] = 0xFF00FF;
     vm.regs[2] = 0xFF00FF;
-    vm.ram[0] = 0x26; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x26;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 0); // XOR self = 0
 }
 
@@ -301,10 +407,16 @@ fn test_shl() {
     let mut vm = Vm::new();
     vm.regs[1] = 1;
     vm.regs[2] = 8;
-    vm.ram[0] = 0x27; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x27;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 256);
 }
 
@@ -313,10 +425,16 @@ fn test_shl_mod_32() {
     let mut vm = Vm::new();
     vm.regs[1] = 1;
     vm.regs[2] = 32; // shift by 32 -> effectively shift by 0 (mod 32)
-    vm.ram[0] = 0x27; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x27;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 1); // 1 << 32 = 1 (mod 32 = 0)
 }
 
@@ -325,10 +443,16 @@ fn test_shr() {
     let mut vm = Vm::new();
     vm.regs[1] = 256;
     vm.regs[2] = 4;
-    vm.ram[0] = 0x28; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x28;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 16);
 }
 
@@ -337,10 +461,16 @@ fn test_sar_sign_preserving() {
     let mut vm = Vm::new();
     vm.regs[1] = 0x80000000; // MSB set (negative in i32)
     vm.regs[2] = 4;
-    vm.ram[0] = 0x2B; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x2B;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     // 0x80000000 >> 4 (arithmetic) = 0xF8000000
     assert_eq!(vm.regs[1], 0xF8000000);
 }
@@ -352,10 +482,16 @@ fn test_cmp_less_than() {
     let mut vm = Vm::new();
     vm.regs[1] = 5;
     vm.regs[2] = 10;
-    vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2; // CMP r1, r2
+    vm.ram[0] = 0x50;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // CMP r1, r2
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[0], 0xFFFFFFFF); // -1 (less than)
 }
 
@@ -364,10 +500,16 @@ fn test_cmp_equal() {
     let mut vm = Vm::new();
     vm.regs[1] = 42;
     vm.regs[2] = 42;
-    vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x50;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[0], 0); // equal
 }
 
@@ -376,10 +518,16 @@ fn test_cmp_greater_than() {
     let mut vm = Vm::new();
     vm.regs[1] = 10;
     vm.regs[2] = 5;
-    vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x50;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[0], 1); // greater than
 }
 
@@ -387,12 +535,20 @@ fn test_cmp_greater_than() {
 fn test_jz_taken() {
     // LDI r1, 0; JZ r1, 100; HALT -> should jump to 100
     let mut vm = Vm::new();
-    vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 0; // LDI r1, 0
-    vm.ram[3] = 0x31; vm.ram[4] = 1; vm.ram[5] = 100; // JZ r1, 100
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0; // LDI r1, 0
+    vm.ram[3] = 0x31;
+    vm.ram[4] = 1;
+    vm.ram[5] = 100; // JZ r1, 100
     vm.ram[6] = 0x00; // HALT (should not reach)
     vm.ram[100] = 0x00; // HALT at target
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.pc, 101); // halted at 101 (fetched HALT at 100)
 }
 
@@ -400,34 +556,55 @@ fn test_jz_taken() {
 fn test_jz_not_taken() {
     // LDI r1, 1; JZ r1, 100; HALT -> should not jump
     let mut vm = Vm::new();
-    vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 1; // LDI r1, 1
-    vm.ram[3] = 0x31; vm.ram[4] = 1; vm.ram[5] = 100; // JZ r1, 100
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 1; // LDI r1, 1
+    vm.ram[3] = 0x31;
+    vm.ram[4] = 1;
+    vm.ram[5] = 100; // JZ r1, 100
     vm.ram[6] = 0x00; // HALT (should reach)
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.pc, 7); // halted at HALT
 }
 
 #[test]
 fn test_jnz_taken() {
     let mut vm = Vm::new();
-    vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 5; // LDI r1, 5
-    vm.ram[3] = 0x32; vm.ram[4] = 1; vm.ram[5] = 100; // JNZ r1, 100
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 5; // LDI r1, 5
+    vm.ram[3] = 0x32;
+    vm.ram[4] = 1;
+    vm.ram[5] = 100; // JNZ r1, 100
     vm.ram[6] = 0x00; // HALT
     vm.ram[100] = 0x00; // HALT at target
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.pc, 101);
 }
 
 #[test]
 fn test_jmp_unconditional() {
     let mut vm = Vm::new();
-    vm.ram[0] = 0x30; vm.ram[1] = 50; // JMP 50
+    vm.ram[0] = 0x30;
+    vm.ram[1] = 50; // JMP 50
     vm.ram[2] = 0x00; // HALT (should not reach)
     vm.ram[50] = 0x00; // HALT at target
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.pc, 51);
 }
 
@@ -437,12 +614,20 @@ fn test_blt_taken() {
     let mut vm = Vm::new();
     vm.regs[1] = 3;
     vm.regs[2] = 10;
-    vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2; // CMP r1, r2
-    vm.ram[3] = 0x35; vm.ram[4] = 0; vm.ram[5] = 50; // BLT r0, 50
+    vm.ram[0] = 0x50;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // CMP r1, r2
+    vm.ram[3] = 0x35;
+    vm.ram[4] = 0;
+    vm.ram[5] = 50; // BLT r0, 50
     vm.ram[6] = 0x00; // HALT
     vm.ram[50] = 0x00; // HALT at target
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.pc, 51);
 }
 
@@ -452,12 +637,20 @@ fn test_bge_taken() {
     let mut vm = Vm::new();
     vm.regs[1] = 10;
     vm.regs[2] = 3;
-    vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2; // CMP r1, r2
-    vm.ram[3] = 0x36; vm.ram[4] = 0; vm.ram[5] = 50; // BGE r0, 50
+    vm.ram[0] = 0x50;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // CMP r1, r2
+    vm.ram[3] = 0x36;
+    vm.ram[4] = 0;
+    vm.ram[5] = 50; // BGE r0, 50
     vm.ram[6] = 0x00; // HALT
     vm.ram[50] = 0x00; // HALT at target
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.pc, 51);
 }
 
@@ -469,12 +662,19 @@ fn test_call_ret() {
     // at 10: LDI r5, 99; RET
     // at 16: HALT (return lands here)
     let mut vm = Vm::new();
-    vm.ram[0] = 0x33; vm.ram[1] = 10;         // CALL 10
-    vm.ram[2] = 0x00;                            // HALT (return target)
-    vm.ram[10] = 0x10; vm.ram[11] = 5; vm.ram[12] = 99; // LDI r5, 99
-    vm.ram[13] = 0x34;                           // RET
+    vm.ram[0] = 0x33;
+    vm.ram[1] = 10; // CALL 10
+    vm.ram[2] = 0x00; // HALT (return target)
+    vm.ram[10] = 0x10;
+    vm.ram[11] = 5;
+    vm.ram[12] = 99; // LDI r5, 99
+    vm.ram[13] = 0x34; // RET
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[5], 99);
     assert!(vm.halted);
 }
@@ -485,10 +685,16 @@ fn test_call_ret() {
 fn test_mov() {
     let mut vm = Vm::new();
     vm.regs[3] = 0xDEADBEEF;
-    vm.ram[0] = 0x51; vm.ram[1] = 7; vm.ram[2] = 3; // MOV r7, r3
+    vm.ram[0] = 0x51;
+    vm.ram[1] = 7;
+    vm.ram[2] = 3; // MOV r7, r3
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[7], 0xDEADBEEF);
     assert_eq!(vm.regs[3], 0xDEADBEEF); // source unchanged
 }
@@ -501,30 +707,48 @@ fn test_push_pop_roundtrip() {
     let mut vm = Vm::new();
     let mut pc = 0u32;
     // LDI r30, 0xFF00
-    vm.ram[pc as usize] = 0x10; pc += 1;
-    vm.ram[pc as usize] = 30; pc += 1;
-    vm.ram[pc as usize] = 0xFF00; pc += 1;
+    vm.ram[pc as usize] = 0x10;
+    pc += 1;
+    vm.ram[pc as usize] = 30;
+    pc += 1;
+    vm.ram[pc as usize] = 0xFF00;
+    pc += 1;
     // LDI r5, 42
-    vm.ram[pc as usize] = 0x10; pc += 1;
-    vm.ram[pc as usize] = 5; pc += 1;
-    vm.ram[pc as usize] = 42; pc += 1;
+    vm.ram[pc as usize] = 0x10;
+    pc += 1;
+    vm.ram[pc as usize] = 5;
+    pc += 1;
+    vm.ram[pc as usize] = 42;
+    pc += 1;
     // PUSH r5
-    vm.ram[pc as usize] = 0x60; pc += 1;
-    vm.ram[pc as usize] = 5; pc += 1;
+    vm.ram[pc as usize] = 0x60;
+    pc += 1;
+    vm.ram[pc as usize] = 5;
+    pc += 1;
     // LDI r5, 0 (clobber)
-    vm.ram[pc as usize] = 0x10; pc += 1;
-    vm.ram[pc as usize] = 5; pc += 1;
-    vm.ram[pc as usize] = 0; pc += 1;
+    vm.ram[pc as usize] = 0x10;
+    pc += 1;
+    vm.ram[pc as usize] = 5;
+    pc += 1;
+    vm.ram[pc as usize] = 0;
+    pc += 1;
     // POP r6
-    vm.ram[pc as usize] = 0x61; pc += 1;
-    vm.ram[pc as usize] = 6; pc += 1;
+    vm.ram[pc as usize] = 0x61;
+    pc += 1;
+    vm.ram[pc as usize] = 6;
+    pc += 1;
     // HALT
-    vm.ram[pc as usize] = 0x00; pc += 1;
+    vm.ram[pc as usize] = 0x00;
+    pc += 1;
 
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[6], 42); // got value back from stack
-    assert_eq!(vm.regs[5], 0);  // r5 was clobbered
+    assert_eq!(vm.regs[5], 0); // r5 was clobbered
     assert_eq!(vm.regs[30], 0xFF00); // SP restored
 }
 
@@ -536,10 +760,16 @@ fn test_cmp_signed_negative_vs_positive() {
     let mut vm = Vm::new();
     vm.regs[1] = 0xFFFFFFFF; // -1 as i32
     vm.regs[2] = 5;
-    vm.ram[0] = 0x50; vm.ram[1] = 1; vm.ram[2] = 2;
+    vm.ram[0] = 0x50;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[0], 0xFFFFFFFF); // -1 < 5 in signed
 }
 
@@ -551,7 +781,11 @@ fn test_frame_increments_ticks() {
     vm.ram[0] = 0x02; // FRAME
     vm.ram[1] = 0x00; // HALT
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.frame_ready);
     assert_eq!(vm.frame_count, 1);
     assert_eq!(vm.ram[0xFFE], 1);
@@ -563,10 +797,15 @@ fn test_frame_increments_ticks() {
 fn test_fill() {
     let mut vm = Vm::new();
     vm.regs[1] = 0x00FF00; // green
-    vm.ram[0] = 0x42; vm.ram[1] = 1; // FILL r1
+    vm.ram[0] = 0x42;
+    vm.ram[1] = 1; // FILL r1
     vm.ram[2] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     // Every pixel should be green
     assert!(vm.screen.iter().all(|&p| p == 0x00FF00));
 }
@@ -574,13 +813,20 @@ fn test_fill() {
 #[test]
 fn test_pset_pixel() {
     let mut vm = Vm::new();
-    vm.regs[1] = 10;  // x
-    vm.regs[2] = 20;  // y
+    vm.regs[1] = 10; // x
+    vm.regs[2] = 20; // y
     vm.regs[3] = 0xFF0000; // red
-    vm.ram[0] = 0x40; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; // PSET r1, r2, r3
+    vm.ram[0] = 0x40;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3; // PSET r1, r2, r3
     vm.ram[4] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.screen[20 * 256 + 10], 0xFF0000);
 }
 
@@ -590,10 +836,15 @@ fn test_pset_pixel() {
 fn test_ikey_reads_and_clears() {
     let mut vm = Vm::new();
     vm.ram[0xFFF] = 65; // 'A' in keyboard port
-    vm.ram[0] = 0x48; vm.ram[1] = 5; // IKEY r5
+    vm.ram[0] = 0x48;
+    vm.ram[1] = 5; // IKEY r5
     vm.ram[2] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[5], 65);
     assert_eq!(vm.ram[0xFFF], 0); // port cleared
 }
@@ -602,10 +853,15 @@ fn test_ikey_reads_and_clears() {
 fn test_ikey_no_key() {
     let mut vm = Vm::new();
     vm.ram[0xFFF] = 0; // no key
-    vm.ram[0] = 0x48; vm.ram[1] = 5; // IKEY r5
+    vm.ram[0] = 0x48;
+    vm.ram[1] = 5; // IKEY r5
     vm.ram[2] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[5], 0);
 }
 
@@ -615,10 +871,15 @@ fn test_ikey_no_key() {
 fn test_rand_changes_state() {
     let mut vm = Vm::new();
     let initial_state = vm.rand_state;
-    vm.ram[0] = 0x49; vm.ram[1] = 5; // RAND r5
+    vm.ram[0] = 0x49;
+    vm.ram[1] = 5; // RAND r5
     vm.ram[2] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_ne!(vm.rand_state, initial_state); // state changed
     assert_ne!(vm.regs[5], 0); // probably nonzero (LCG seeded with DEADBEEF)
 }
@@ -628,12 +889,18 @@ fn test_rand_changes_state() {
 #[test]
 fn test_beep_sets_state() {
     let mut vm = Vm::new();
-    vm.regs[1] = 440;  // freq
-    vm.regs[2] = 200;  // duration
-    vm.ram[0] = 0x03; vm.ram[1] = 1; vm.ram[2] = 2; // BEEP r1, r2
+    vm.regs[1] = 440; // freq
+    vm.regs[2] = 200; // duration
+    vm.ram[0] = 0x03;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // BEEP r1, r2
     vm.ram[3] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.beep, Some((440, 200)));
 }
 
@@ -651,13 +918,25 @@ fn test_memcpy_copies_words() {
     vm.regs[2] = 100;
     vm.regs[3] = 5;
     // MEMCPY r1, r2, r3
-    vm.ram[0] = 0x04; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3;
+    vm.ram[0] = 0x04;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
     vm.ram[4] = 0x00; // HALT
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     // Verify dst has the data
     for i in 0..5 {
-        assert_eq!(vm.ram[200 + i], 1000 + i as u32, "MEMCPY failed at offset {}", i);
+        assert_eq!(
+            vm.ram[200 + i],
+            1000 + i as u32,
+            "MEMCPY failed at offset {}",
+            i
+        );
     }
 }
 
@@ -668,12 +947,22 @@ fn test_memcpy_zero_len_is_noop() {
     vm.ram[200] = 0xBEEF;
     vm.regs[1] = 200; // dst
     vm.regs[2] = 100; // src
-    vm.regs[3] = 0;   // len = 0
-    vm.ram[0] = 0x04; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3;
+    vm.regs[3] = 0; // len = 0
+    vm.ram[0] = 0x04;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
     vm.ram[4] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
-    assert_eq!(vm.ram[200], 0xBEEF, "MEMCPY with len=0 should not overwrite dst");
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(
+        vm.ram[200], 0xBEEF,
+        "MEMCPY with len=0 should not overwrite dst"
+    );
 }
 
 // ── Loop: verify backward jumps work at base_addr 0 ─────────────
@@ -692,23 +981,45 @@ fn test_backward_jump_loop_at_addr_zero() {
     let mut vm = Vm::new();
     let mut pc = 0usize;
     // LDI r1, 0
-    vm.ram[pc] = 0x10; vm.ram[pc+1] = 1; vm.ram[pc+2] = 0; pc += 3;
+    vm.ram[pc] = 0x10;
+    vm.ram[pc + 1] = 1;
+    vm.ram[pc + 2] = 0;
+    pc += 3;
     // LDI r2, 1
-    vm.ram[pc] = 0x10; vm.ram[pc+1] = 2; vm.ram[pc+2] = 1; pc += 3;
+    vm.ram[pc] = 0x10;
+    vm.ram[pc + 1] = 2;
+    vm.ram[pc + 2] = 1;
+    pc += 3;
     // LDI r3, 5
-    vm.ram[pc] = 0x10; vm.ram[pc+1] = 3; vm.ram[pc+2] = 5; pc += 3;
+    vm.ram[pc] = 0x10;
+    vm.ram[pc + 1] = 3;
+    vm.ram[pc + 2] = 5;
+    pc += 3;
     let loop_addr = pc as u32;
     // ADD r1, r2
-    vm.ram[pc] = 0x20; vm.ram[pc+1] = 1; vm.ram[pc+2] = 2; pc += 3;
+    vm.ram[pc] = 0x20;
+    vm.ram[pc + 1] = 1;
+    vm.ram[pc + 2] = 2;
+    pc += 3;
     // CMP r1, r3
-    vm.ram[pc] = 0x50; vm.ram[pc+1] = 1; vm.ram[pc+2] = 3; pc += 3;
+    vm.ram[pc] = 0x50;
+    vm.ram[pc + 1] = 1;
+    vm.ram[pc + 2] = 3;
+    pc += 3;
     // BLT r0, loop_addr
-    vm.ram[pc] = 0x35; vm.ram[pc+1] = 0; vm.ram[pc+2] = loop_addr; pc += 3;
+    vm.ram[pc] = 0x35;
+    vm.ram[pc + 1] = 0;
+    vm.ram[pc + 2] = loop_addr;
+    pc += 3;
     // HALT
     vm.ram[pc] = 0x00;
 
     vm.pc = 0;
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 5);
     assert!(vm.halted);
 }
@@ -722,23 +1033,45 @@ fn test_backward_jump_loop_at_addr_0x1000() {
     let base = 0x1000usize;
     let mut pc = base;
     // LDI r1, 0
-    vm.ram[pc] = 0x10; vm.ram[pc+1] = 1; vm.ram[pc+2] = 0; pc += 3;
+    vm.ram[pc] = 0x10;
+    vm.ram[pc + 1] = 1;
+    vm.ram[pc + 2] = 0;
+    pc += 3;
     // LDI r2, 1
-    vm.ram[pc] = 0x10; vm.ram[pc+1] = 2; vm.ram[pc+2] = 1; pc += 3;
+    vm.ram[pc] = 0x10;
+    vm.ram[pc + 1] = 2;
+    vm.ram[pc + 2] = 1;
+    pc += 3;
     // LDI r3, 5
-    vm.ram[pc] = 0x10; vm.ram[pc+1] = 3; vm.ram[pc+2] = 5; pc += 3;
+    vm.ram[pc] = 0x10;
+    vm.ram[pc + 1] = 3;
+    vm.ram[pc + 2] = 5;
+    pc += 3;
     let loop_addr = pc as u32;
     // ADD r1, r2
-    vm.ram[pc] = 0x20; vm.ram[pc+1] = 1; vm.ram[pc+2] = 2; pc += 3;
+    vm.ram[pc] = 0x20;
+    vm.ram[pc + 1] = 1;
+    vm.ram[pc + 2] = 2;
+    pc += 3;
     // CMP r1, r3
-    vm.ram[pc] = 0x50; vm.ram[pc+1] = 1; vm.ram[pc+2] = 3; pc += 3;
+    vm.ram[pc] = 0x50;
+    vm.ram[pc + 1] = 1;
+    vm.ram[pc + 2] = 3;
+    pc += 3;
     // BLT r0, loop_addr -- label resolved to 0x1000 + offset
-    vm.ram[pc] = 0x35; vm.ram[pc+1] = 0; vm.ram[pc+2] = loop_addr; pc += 3;
+    vm.ram[pc] = 0x35;
+    vm.ram[pc + 1] = 0;
+    vm.ram[pc + 2] = loop_addr;
+    pc += 3;
     // HALT
     vm.ram[pc] = 0x00;
 
     vm.pc = base as u32;
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 5);
     assert!(vm.halted);
 }
@@ -751,10 +1084,17 @@ fn test_peek_reads_screen() {
     vm.screen[30 * 256 + 15] = 0xABCDEF;
     vm.regs[1] = 15; // x
     vm.regs[2] = 30; // y
-    vm.ram[0] = 0x6D; vm.ram[1] = 3; vm.ram[2] = 1; vm.ram[3] = 2; // PEEK r3, r1, r2 (dest=r3, x=r1=15, y=r2=30)
+    vm.ram[0] = 0x6D;
+    vm.ram[1] = 3;
+    vm.ram[2] = 1;
+    vm.ram[3] = 2; // PEEK r3, r1, r2 (dest=r3, x=r1=15, y=r2=30)
     vm.ram[4] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[3], 0xABCDEF);
 }
 
@@ -763,10 +1103,17 @@ fn test_peek_out_of_bounds_returns_zero() {
     let mut vm = Vm::new();
     vm.regs[1] = 300; // x out of bounds
     vm.regs[2] = 300; // y out of bounds
-    vm.ram[0] = 0x6D; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3;
+    vm.ram[0] = 0x6D;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
     vm.ram[4] = 0x00;
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[3], 0);
 }
 
@@ -779,19 +1126,37 @@ fn test_memcpy_copies_memory() {
     }
     vm.regs[1] = 0x3000; // dst
     vm.regs[2] = 0x2000; // src
-    vm.regs[3] = 5;      // len
-    vm.ram[0] = 0x04; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; // MEMCPY r1, r2, r3
+    vm.regs[3] = 5; // len
+    vm.ram[0] = 0x04;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3; // MEMCPY r1, r2, r3
     vm.ram[4] = 0x00; // HALT
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // Verify destination has the copied data
     for i in 0..5 {
-        assert_eq!(vm.ram[0x3000 + i], (100 + i) as u32, "MEMCPY dest[{}] should be {}", i, 100 + i);
+        assert_eq!(
+            vm.ram[0x3000 + i],
+            (100 + i) as u32,
+            "MEMCPY dest[{}] should be {}",
+            i,
+            100 + i
+        );
     }
     // Source should be unchanged
     for i in 0..5 {
-        assert_eq!(vm.ram[0x2000 + i], (100 + i) as u32, "MEMCPY src[{}] should be unchanged", i);
+        assert_eq!(
+            vm.ram[0x2000 + i],
+            (100 + i) as u32,
+            "MEMCPY src[{}] should be unchanged",
+            i
+        );
     }
 }
 
@@ -802,10 +1167,18 @@ fn test_memcpy_assembles_and_runs() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     // Write source data
-    for i in 0..5 { vm.ram[0x2000 + i] = (42 + i) as u32; }
-    for (i, &w) in asm.pixels.iter().enumerate() { vm.ram[i] = w; }
+    for i in 0..5 {
+        vm.ram[0x2000 + i] = (42 + i) as u32;
+    }
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = w;
+    }
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     for i in 0..5 {
         assert_eq!(vm.ram[0x3000 + i], (42 + i) as u32);
@@ -820,7 +1193,9 @@ fn test_screen_ram_store() {
     // STORE to screen addr 0x10000 (pixel 0,0) with color 0xFF0000
     vm.regs[1] = 0x10000; // addr
     vm.regs[2] = 0xFF0000; // value (red)
-    vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // STORE r1, r2
     vm.pc = 0;
     vm.step();
     assert_eq!(vm.screen[0], 0xFF0000);
@@ -833,7 +1208,9 @@ fn test_screen_ram_load() {
     vm.screen[256 * 10 + 5] = 0xABCDEF;
     // LOAD from screen addr 0x10000 + 256*10 + 5
     vm.regs[1] = 0x10000 + 256 * 10 + 5;
-    vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+    vm.ram[0] = 0x11;
+    vm.ram[1] = 3;
+    vm.ram[2] = 1; // LOAD r3, r1
     vm.pc = 0;
     vm.step();
     assert_eq!(vm.regs[3], 0xABCDEF);
@@ -841,13 +1218,16 @@ fn test_screen_ram_load() {
 
 #[test]
 fn test_screen_ram_store_then_load_roundtrip() {
-    let vm = run_program(&[
-        0x10, 1, 0x10050,       // LDI r1, 0x10050
-        0x10, 2, 0x00FF00,      // LDI r2, 0x00FF00
-        0x12, 1, 2,             // STORE r1, r2
-        0x11, 4, 1,             // LOAD r4, r1
-        0x00,                   // HALT
-    ], 100);
+    let vm = run_program(
+        &[
+            0x10, 1, 0x10050, // LDI r1, 0x10050
+            0x10, 2, 0x00FF00, // LDI r2, 0x00FF00
+            0x12, 1, 2, // STORE r1, r2
+            0x11, 4, 1,    // LOAD r4, r1
+            0x00, // HALT
+        ],
+        100,
+    );
     assert!(vm.halted);
     assert_eq!(vm.regs[4], 0x00FF00);
     assert_eq!(vm.screen[0x50], 0x00FF00);
@@ -861,7 +1241,9 @@ fn test_screen_ram_does_not_corrupt_normal_ram() {
     // Store to screen address
     vm.regs[1] = 0x10000;
     vm.regs[2] = 0xFF0000;
-    vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // STORE r1, r2
     vm.pc = 0;
     vm.step();
     // Normal RAM should be unchanged
@@ -879,9 +1261,15 @@ fn test_screen_ram_load_matches_peek() {
     // Read via LOAD from screen-mapped address
     let screen_addr = (SCREEN_RAM_BASE + 30 * 256 + 15) as u32;
     vm.regs[1] = screen_addr;
-    vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+    vm.ram[0] = 0x11;
+    vm.ram[1] = 3;
+    vm.ram[2] = 1; // LOAD r3, r1
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     let load_value = vm.regs[3];
 
     // Reset halted state for second instruction sequence
@@ -890,10 +1278,17 @@ fn test_screen_ram_load_matches_peek() {
     // Read via PEEK opcode
     vm.regs[1] = 15; // x
     vm.regs[2] = 30; // y
-    vm.ram[4] = 0x6D; vm.ram[5] = 4; vm.ram[6] = 1; vm.ram[7] = 2; // PEEK r4, r1, r2
+    vm.ram[4] = 0x6D;
+    vm.ram[5] = 4;
+    vm.ram[6] = 1;
+    vm.ram[7] = 2; // PEEK r4, r1, r2
     vm.ram[8] = 0x00;
     vm.pc = 4;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     let peek_value = vm.regs[4];
 
     assert_eq!(load_value, 0x123456);
@@ -909,9 +1304,15 @@ fn test_screen_ram_store_matches_pixel() {
     let screen_addr = (SCREEN_RAM_BASE + 20 * 256 + 10) as u32;
     vm.regs[1] = screen_addr;
     vm.regs[2] = 0xFF0000; // red
-    vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // STORE r1, r2
     vm.pc = 0;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
 
     // Verify via screen buffer directly
     assert_eq!(vm.screen[20 * 256 + 10], 0xFF0000);
@@ -922,10 +1323,17 @@ fn test_screen_ram_store_matches_pixel() {
     // Verify via PEEK opcode
     vm.regs[1] = 10; // x
     vm.regs[2] = 20; // y
-    vm.ram[3] = 0x6D; vm.ram[4] = 5; vm.ram[5] = 1; vm.ram[6] = 2; // PEEK r5, r1, r2
+    vm.ram[3] = 0x6D;
+    vm.ram[4] = 5;
+    vm.ram[5] = 1;
+    vm.ram[6] = 2; // PEEK r5, r1, r2
     vm.ram[7] = 0x00;
     vm.pc = 3;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[5], 0xFF0000);
 }
 
@@ -936,7 +1344,9 @@ fn test_screen_ram_boundary_first_and_last_pixel() {
     // First pixel: address 0x10000
     vm.regs[1] = SCREEN_RAM_BASE as u32;
     vm.regs[2] = 0x111111;
-    vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // STORE r1, r2
     vm.pc = 0;
     vm.step();
     assert_eq!(vm.screen[0], 0x111111);
@@ -945,20 +1355,26 @@ fn test_screen_ram_boundary_first_and_last_pixel() {
     let last_addr = (SCREEN_RAM_BASE + SCREEN_SIZE - 1) as u32;
     vm.regs[1] = last_addr;
     vm.regs[2] = 0x222222;
-    vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // STORE r1, r2
     vm.pc = 0;
     vm.step();
     assert_eq!(vm.screen[SCREEN_SIZE - 1], 0x222222);
 
     // Read back via LOAD
     vm.regs[1] = SCREEN_RAM_BASE as u32;
-    vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+    vm.ram[0] = 0x11;
+    vm.ram[1] = 3;
+    vm.ram[2] = 1; // LOAD r3, r1
     vm.pc = 0;
     vm.step();
     assert_eq!(vm.regs[3], 0x111111);
 
     vm.regs[1] = last_addr;
-    vm.ram[0] = 0x11; vm.ram[1] = 3; vm.ram[2] = 1; // LOAD r3, r1
+    vm.ram[0] = 0x11;
+    vm.ram[1] = 3;
+    vm.ram[2] = 1; // LOAD r3, r1
     vm.pc = 0;
     vm.step();
     assert_eq!(vm.regs[3], 0x222222);
@@ -971,7 +1387,9 @@ fn test_screen_ram_user_mode_allowed() {
     // User-mode store to screen should work (screen is not I/O)
     vm.regs[1] = 0x10000;
     vm.regs[2] = 0x00FF00;
-    vm.ram[0] = 0x12; vm.ram[1] = 1; vm.ram[2] = 2; // STORE r1, r2
+    vm.ram[0] = 0x12;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // STORE r1, r2
     vm.pc = 0;
     assert!(vm.step()); // Should NOT segfault
     assert_eq!(vm.screen[0], 0x00FF00);
@@ -1070,7 +1488,10 @@ fn test_asmself_full_write_compile_execute() {
     // After bootstrap: ASMSELF assembled canvas code, JMP went to 0x1000,
     // new code ran LDI r0, 99 then HALT
     assert!(vm.halted, "VM should halt after executing assembled code");
-    assert_eq!(vm.ram[0xFFD], 4, "ASMSELF should report 4 words of bytecode");
+    assert_eq!(
+        vm.ram[0xFFD], 4,
+        "ASMSELF should report 4 words of bytecode"
+    );
     assert_eq!(vm.regs[0], 99, "r0 should be 99 after assembled code runs");
 }
 
@@ -1137,7 +1558,10 @@ fn test_asmself_with_preprocessor_macros() {
     vm.step();
 
     // Should succeed (preprocessor expands VAR and GET)
-    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF with macros should succeed");
+    assert_ne!(
+        vm.ram[0xFFD], 0xFFFFFFFF,
+        "ASMSELF with macros should succeed"
+    );
     assert!(vm.ram[0xFFD] > 0, "Should produce some bytecode");
 }
 
@@ -1194,10 +1618,7 @@ fn test_store_writes_successor_to_canvas_then_asmself_executes() {
     // The successor code (LDI r0, 99; HALT) should have executed
     assert!(vm.halted, "VM should halt after self-written code executes");
     assert_eq!(vm.regs[0], 99, "r0 should be 99 after successor runs");
-    assert_ne!(
-        vm.ram[0xFFD], 0xFFFFFFFF,
-        "ASMSELF should have succeeded"
-    );
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should have succeeded");
 }
 
 // ── RUNNEXT tests (Phase 48: Self-Execution Opcode) ──────────
@@ -1255,7 +1676,10 @@ fn test_runnext_executes_newly_assembled_code() {
     vm.step(); // LDI r0, 77
     vm.step(); // HALT
 
-    assert_eq!(vm.regs[0], 77, "r0 should be 77 after RUNNEXT executes new code");
+    assert_eq!(
+        vm.regs[0], 77,
+        "r0 should be 77 after RUNNEXT executes new code"
+    );
     assert!(vm.halted, "VM should halt after new code's HALT");
 }
 
@@ -1281,9 +1705,14 @@ fn test_runnext_registers_inherited_by_new_code() {
     vm.step();
 
     // Execute new code
-    for _ in 0..10 { vm.step(); }
+    for _ in 0..10 {
+        vm.step();
+    }
 
-    assert_eq!(vm.regs[0], 12345, "r0 should equal r5's value from before RUNNEXT");
+    assert_eq!(
+        vm.regs[0], 12345,
+        "r0 should equal r5's value from before RUNNEXT"
+    );
 }
 
 #[test]
@@ -1324,12 +1753,17 @@ fn test_chained_self_modification() {
 
     // Execute the chain
     for _ in 0..100 {
-        if vm.halted { break; }
+        if vm.halted {
+            break;
+        }
         vm.step();
     }
 
     assert!(vm.halted, "VM should halt after Gen B executes");
-    assert_eq!(vm.regs[0], 999, "r0 should be 999 -- proof Gen B ran after Gen A assembled it");
+    assert_eq!(
+        vm.regs[0], 999,
+        "r0 should be 999 -- proof Gen B ran after Gen A assembled it"
+    );
 }
 
 #[test]
@@ -1357,7 +1791,9 @@ fn test_runnext_full_write_compile_execute_cycle() {
     assert_eq!(vm.pc, 0x1000);
 
     // Execute the new code (LDI r1, 42; ADD r0, r1; HALT)
-    for _ in 0..20 { vm.step(); }
+    for _ in 0..20 {
+        vm.step();
+    }
 
     // r0 was 100, r1 becomes 42, r0 = r0 + r1 = 142
     assert_eq!(vm.regs[0], 142, "r0 should be 100 + 42 = 142");
@@ -1373,9 +1809,16 @@ fn test_self_writer_demo_assembles() {
     // Verify the self_writer.asm program assembles without errors
     let source = include_str!("../../programs/self_writer.asm");
     let result = crate::assembler::assemble(source, 0x1000);
-    assert!(result.is_ok(), "self_writer.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "self_writer.asm should assemble: {:?}",
+        result.err()
+    );
     let asm = result.expect("operation should succeed");
-    assert!(asm.pixels.len() > 50, "self_writer should produce substantial bytecode");
+    assert!(
+        asm.pixels.len() > 50,
+        "self_writer should produce substantial bytecode"
+    );
 }
 
 #[test]
@@ -1404,7 +1847,9 @@ fn test_self_writer_successor_different_from_parent() {
     assert_eq!(vm.pc, 0x1000, "RUNNEXT should set PC to 0x1000");
 
     // Execute successor: LDI r0, 42; HALT
-    for _ in 0..20 { vm.step(); }
+    for _ in 0..20 {
+        vm.step();
+    }
 
     assert_eq!(vm.regs[0], 42, "successor should set r0 to 42");
     assert!(vm.halted, "successor should halt");
@@ -1457,7 +1902,9 @@ fn test_self_writer_two_generation_chain() {
     vm.step(); // RUNNEXT
     assert_eq!(vm.pc, 0x1000);
 
-    for _ in 0..20 { vm.step(); }
+    for _ in 0..20 {
+        vm.step();
+    }
     assert_eq!(vm.regs[0], 77, "Gen B should set r0 to 77");
 }
 
@@ -1483,11 +1930,16 @@ fn test_self_writer_successor_modifies_canvas() {
     assert_eq!(vm.pc, 0x1000);
 
     // Run Gen B
-    for _ in 0..50 { vm.step(); }
+    for _ in 0..50 {
+        vm.step();
+    }
 
     // Verify Gen B wrote 'X' to canvas row 2
     let row2_start = 2 * 32; // 0x8040 - 0x8000 = 64
-    assert_eq!(vm.canvas_buffer[row2_start], 88, "Gen B should write 'X' to canvas row 2");
+    assert_eq!(
+        vm.canvas_buffer[row2_start], 88,
+        "Gen B should write 'X' to canvas row 2"
+    );
     assert!(vm.halted, "Gen B should halt");
 }
 
@@ -1512,9 +1964,14 @@ fn test_self_writer_registers_inherited_across_generations() {
     assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF);
     vm.step(); // RUNNEXT
 
-    for _ in 0..50 { vm.step(); }
+    for _ in 0..50 {
+        vm.step();
+    }
     assert_eq!(vm.regs[0], 101, "r0 should be 0 + r5(100) + 1 = 101");
-    assert_eq!(vm.regs[5], 100, "r5 should still be 100 (inherited from Gen A)");
+    assert_eq!(
+        vm.regs[5], 100,
+        "r5 should still be 100 (inherited from Gen A)"
+    );
 }
 
 #[test]
@@ -1540,31 +1997,49 @@ fn test_infinite_map_assembles_and_runs() {
     vm.frame_ready = false;
     let mut steps = 0u32;
     for _ in 0..1_000_000 {
-        if vm.frame_ready { break; }
+        if vm.frame_ready {
+            break;
+        }
         let keep_going = vm.step();
         steps += 1;
-        if !keep_going { break; }
+        if !keep_going {
+            break;
+        }
     }
 
-    assert!(vm.frame_ready, "should reach FRAME within 1M steps (took {})", steps);
+    assert!(
+        vm.frame_ready,
+        "should reach FRAME within 1M steps (took {})",
+        steps
+    );
     eprintln!("First frame rendered in {} steps", steps);
-    eprintln!("camera_x = {}, camera_y = {}", vm.ram[0x7800], vm.ram[0x7801]);
+    eprintln!(
+        "camera_x = {}, camera_y = {}",
+        vm.ram[0x7800], vm.ram[0x7801]
+    );
     assert_eq!(vm.ram[0x7800], 1, "camera should have moved right by 1");
 
     // Screen should not be all black
     let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
-    eprintln!("Non-black pixels: {}/{}", non_black, 256*256);
+    eprintln!("Non-black pixels: {}/{}", non_black, 256 * 256);
     assert!(non_black > 0, "screen should have rendered terrain");
 
     // Second frame: press Down
     vm.frame_ready = false;
     vm.ram[0xFFB] = 2; // Down
     for _ in 0..1_000_000 {
-        if vm.frame_ready { break; }
+        if vm.frame_ready {
+            break;
+        }
         let keep_going = vm.step();
-        if !keep_going { break; }
+        if !keep_going {
+            break;
+        }
     }
-    eprintln!("After 2nd frame: camera_x={}, camera_y={}", vm.ram[0x7800], vm.ram[0x7801]);
+    eprintln!(
+        "After 2nd frame: camera_x={}, camera_y={}",
+        vm.ram[0x7800], vm.ram[0x7801]
+    );
     assert!(vm.frame_ready, "second frame should render");
     assert_eq!(vm.ram[0x7801], 1, "camera should have moved down by 1");
 
@@ -1572,16 +2047,27 @@ fn test_infinite_map_assembles_and_runs() {
     vm.frame_ready = false;
     vm.ram[0xFFB] = 5;
     for _ in 0..1_000_000 {
-        if vm.frame_ready { break; }
+        if vm.frame_ready {
+            break;
+        }
         let keep_going = vm.step();
-        if !keep_going { break; }
+        if !keep_going {
+            break;
+        }
     }
-    eprintln!("After 3rd frame (left+up): camera_x={}, camera_y={}", vm.ram[0x7800], vm.ram[0x7801]);
+    eprintln!(
+        "After 3rd frame (left+up): camera_x={}, camera_y={}",
+        vm.ram[0x7800], vm.ram[0x7801]
+    );
     assert_eq!(vm.ram[0x7800], 0, "camera should have moved left back to 0");
     assert_eq!(vm.ram[0x7801], 0, "camera should have moved up back to 0");
 
     // Verify frame counter incremented
-    assert!(vm.ram[0x7802] >= 3, "frame_counter should be >= 3 (was {})", vm.ram[0x7802]);
+    assert!(
+        vm.ram[0x7802] >= 3,
+        "frame_counter should be >= 3 (was {})",
+        vm.ram[0x7802]
+    );
     eprintln!("Frame counter: {}", vm.ram[0x7802]);
 
     // Verify water animation: run 2 frames without moving, check screen changes
@@ -1589,9 +2075,13 @@ fn test_infinite_map_assembles_and_runs() {
     vm.frame_ready = false;
     vm.ram[0xFFB] = 0;
     for _ in 0..1_000_000 {
-        if vm.frame_ready { break; }
+        if vm.frame_ready {
+            break;
+        }
         let keep_going = vm.step();
-        if !keep_going { break; }
+        if !keep_going {
+            break;
+        }
     }
     let screen_f4: Vec<u32> = vm.screen.to_vec();
 
@@ -1599,18 +2089,32 @@ fn test_infinite_map_assembles_and_runs() {
     vm.frame_ready = false;
     vm.ram[0xFFB] = 0;
     for _ in 0..1_000_000 {
-        if vm.frame_ready { break; }
+        if vm.frame_ready {
+            break;
+        }
         let keep_going = vm.step();
-        if !keep_going { break; }
+        if !keep_going {
+            break;
+        }
     }
     let screen_f5: Vec<u32> = vm.screen.to_vec();
 
     // Count pixels that changed between frames (water animation)
-    let changed: usize = screen_f4.iter().zip(screen_f5.iter())
-        .filter(|(a, b)| a != b).count();
-    eprintln!("Pixels changed between frames 4-5: {}/{}", changed, 256*256);
+    let changed: usize = screen_f4
+        .iter()
+        .zip(screen_f5.iter())
+        .filter(|(a, b)| a != b)
+        .count();
+    eprintln!(
+        "Pixels changed between frames 4-5: {}/{}",
+        changed,
+        256 * 256
+    );
     // With ~25% water tiles and animation, expect some pixels to change
-    assert!(changed > 0, "water animation should cause pixel changes between frames");
+    assert!(
+        changed > 0,
+        "water animation should cause pixel changes between frames"
+    );
 }
 
 #[test]
@@ -1634,8 +2138,12 @@ fn test_infinite_map_visual_analysis() {
     vm.ram[0xFFB] = 0;
     vm.frame_ready = false;
     for _ in 0..1_000_000 {
-        if vm.frame_ready { break; }
-        if !vm.step() { break; }
+        if vm.frame_ready {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Count unique colors (structures + animation create many)
@@ -1644,7 +2152,10 @@ fn test_infinite_map_visual_analysis() {
         *color_counts.entry(pixel).or_insert(0) += 1;
     }
     eprintln!("At (100,100): {} unique colors", color_counts.len());
-    assert!(color_counts.len() >= 5, "should see multiple biomes at (100,100)");
+    assert!(
+        color_counts.len() >= 5,
+        "should see multiple biomes at (100,100)"
+    );
 
     // Check biome contiguity by sampling tile-top-left pixels
     // and masking per-tile variation. v10 BPE/LINEAR uses table lookups
@@ -1666,31 +2177,45 @@ fn test_infinite_map_visual_analysis() {
             prev_base = base;
         }
     }
-    eprintln!("At (100,100) row 32: {} biome zone boundaries across 64 tiles", biome_zones);
+    eprintln!(
+        "At (100,100) row 32: {} biome zone boundaries across 64 tiles",
+        biome_zones
+    );
 
     // With 8-tile zones, expect ~8 boundaries. Per-tile hash would give ~64.
     // v10 BPE/LINEAR adds per-tile multi-channel variation via ADD, which can
     // cause cross-byte carries (e.g. B=0xFC + 0x0C carries into G). This makes
     // some same-biome tiles round to different bases, inflating zone count.
     // Allow up to 40 (vs 20 in v9) -- still far below per-tile-random ~64.
-    assert!(biome_zones < 40,
+    assert!(
+        biome_zones < 40,
         "biomes should be contiguous, got {} zone boundaries (expected <40)",
         biome_zones
     );
     let screen1 = vm.screen.to_vec();
     vm.frame_ready = false;
     for _ in 0..1_000_000 {
-        if vm.frame_ready { break; }
-        if !vm.step() { break; }
+        if vm.frame_ready {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
     }
     // Note: frame counter advanced, so water animation differs. Check non-water.
-    let non_water_same = screen1.iter().zip(vm.screen.iter())
+    let non_water_same = screen1
+        .iter()
+        .zip(vm.screen.iter())
         .filter(|(&a, &b)| {
             let a_water = (a & 0xFF) > 0 && ((a >> 16) & 0xFF) == 0 && ((a >> 8) & 0xFF) < 0x20;
             !a_water && a == b
-        }).count();
+        })
+        .count();
     // Non-water tiles should be identical (deterministic terrain)
-    eprintln!("Non-water pixels identical across frames: {}", non_water_same);
+    eprintln!(
+        "Non-water pixels identical across frames: {}",
+        non_water_same
+    );
 }
 
 // ── Inode Filesystem Opcodes (Phase 43) ──────────────────────────
@@ -1710,7 +2235,9 @@ fn run_program_with_string(bytecode: &[u32], max_steps: usize, str_addr: usize, 
     vm.pc = 0;
     vm.halted = false;
     for _ in 0..max_steps {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     vm
 }
@@ -1754,13 +2281,18 @@ fn test_funlink_removes_file() {
     vm.ram[100 + path.len()] = 0;
 
     // LDI r1, 100; FUNLINK r1; HALT
-    vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 100;
-    vm.ram[3] = 0x7A; vm.ram[4] = 1;
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 100;
+    vm.ram[3] = 0x7A;
+    vm.ram[4] = 1;
     vm.ram[5] = 0x00;
     vm.pc = 0;
     vm.halted = false;
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert_eq!(vm.regs[0], 1); // success
     assert_eq!(vm.inode_fs.resolve("/del_me.txt"), None);
@@ -1773,22 +2305,30 @@ fn test_fstat_returns_inode_metadata() {
     vm.inode_fs.write_inode(ino, 0, &[10, 20, 30]);
 
     // LDI r1, <ino>; LDI r2, 200; FSTAT r1, r2; HALT
-    vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = ino;
-    vm.ram[3] = 0x10; vm.ram[4] = 2; vm.ram[5] = 200;
-    vm.ram[6] = 0x79; vm.ram[7] = 1; vm.ram[8] = 2;
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = ino;
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 2;
+    vm.ram[5] = 200;
+    vm.ram[6] = 0x79;
+    vm.ram[7] = 1;
+    vm.ram[8] = 2;
     vm.ram[9] = 0x00;
     vm.pc = 0;
     vm.halted = false;
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert_eq!(vm.regs[0], 1); // success
-    assert_eq!(vm.ram[200], ino);         // ino
-    assert_eq!(vm.ram[201], 1);           // itype = Regular
-    assert_eq!(vm.ram[202], 3);           // size
-    assert_eq!(vm.ram[203], 0);           // ref_count
-    assert_eq!(vm.ram[204], 1);           // parent = root
-    assert_eq!(vm.ram[205], 0);           // num_children
+    assert_eq!(vm.ram[200], ino); // ino
+    assert_eq!(vm.ram[201], 1); // itype = Regular
+    assert_eq!(vm.ram[202], 3); // size
+    assert_eq!(vm.ram[203], 0); // ref_count
+    assert_eq!(vm.ram[204], 1); // parent = root
+    assert_eq!(vm.ram[205], 0); // num_children
 }
 
 #[test]

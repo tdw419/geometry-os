@@ -1,8 +1,8 @@
 //! Diagnostic: Check if kernel reaches setup_arch and early_init_dt_scan
 //! Run: cargo run --example boot_setup_check
 
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{Privilege, StepResult};
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -10,12 +10,14 @@ fn main() {
     let ir_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let initramfs_data = if std::path::Path::new(ir_path).exists() {
         Some(std::fs::read(ir_path).unwrap())
-    } else { None };
+    } else {
+        None
+    };
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_data, initramfs_data.as_deref(), 512, bootargs,
-    ).expect("boot_linux_setup failed");
+    let (mut vm, fw_addr, _entry, dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_data, initramfs_data.as_deref(), 512, bootargs)
+            .expect("boot_linux_setup failed");
 
     let fw_addr_u32 = fw_addr as u32;
     let dtb_va_expected = (dtb_addr.wrapping_add(0xC0000000)) as u32;
@@ -33,7 +35,9 @@ fn main() {
     let mut sbi_count = 0u64;
 
     loop {
-        if count >= max_instr { break; }
+        if count >= max_instr {
+            break;
+        }
         let result = vm.step();
         match result {
             StepResult::Ok => {}
@@ -52,16 +56,25 @@ fn main() {
         if !reached_early_init_dt_scan && vm.cpu.pc == early_init_dt_scan_call {
             reached_early_init_dt_scan = true;
             // Print a0 (DTB pointer) at the call
-            eprintln!("[{}] Calling early_init_dt_scan(a0=0x{:08X}) at PC=0x{:08X}", count, vm.cpu.x[10], vm.cpu.pc);
+            eprintln!(
+                "[{}] Calling early_init_dt_scan(a0=0x{:08X}) at PC=0x{:08X}",
+                count, vm.cpu.x[10], vm.cpu.pc
+            );
         }
         if !reached_fdt_check_header && vm.cpu.pc == fdt_check_header {
             reached_fdt_check_header = true;
-            eprintln!("[{}] Entered fdt_check_header(a0=0x{:08X})", count, vm.cpu.x[10]);
+            eprintln!(
+                "[{}] Entered fdt_check_header(a0=0x{:08X})",
+                count, vm.cpu.x[10]
+            );
             // Read what a0 points to
             let dtb_ptr = vm.cpu.x[10] as u64;
             let w0 = vm.bus.read_word(dtb_ptr).unwrap_or(0);
             let w4 = vm.bus.read_word(dtb_ptr + 4).unwrap_or(0);
-            eprintln!("[{}]   DTB at 0x{:08X}: magic=0x{:08X} size_word=0x{:08X}", count, dtb_ptr, w0, w4);
+            eprintln!(
+                "[{}]   DTB at 0x{:08X}: magic=0x{:08X} size_word=0x{:08X}",
+                count, dtb_ptr, w0, w4
+            );
         }
 
         // Trap handling
@@ -77,9 +90,16 @@ fn main() {
             } else if cause_code == 11 {
                 sbi_count += 1;
                 if sbi_count <= 5 {
-                    eprintln!("[{}] SBI: a7=0x{:02X} a6={} a0=0x{:08X}", count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]);
+                    eprintln!(
+                        "[{}] SBI: a7=0x{:02X} a6={} a0=0x{:08X}",
+                        count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]
+                    );
                 }
-                if vm.cpu.x[17] == 0x02 && vm.cpu.x[16] == 0 && vm.cpu.x[10] != 0 && vm.cpu.x[10] != 0xFF {
+                if vm.cpu.x[17] == 0x02
+                    && vm.cpu.x[16] == 0
+                    && vm.cpu.x[10] != 0
+                    && vm.cpu.x[10] != 0xFF
+                {
                     eprint!("{}", vm.cpu.x[10] as u8 as char);
                     use std::io::Write;
                     std::io::stderr().flush().ok();
@@ -115,7 +135,9 @@ fn main() {
     }
 
     eprintln!("\nFinal: {} instr, PC=0x{:08X}", count, vm.cpu.pc);
-    eprintln!("reached_setup_arch={}, reached_early_init_dt_scan={}, reached_fdt_check_header={}",
-        reached_setup_arch, reached_early_init_dt_scan, reached_fdt_check_header);
+    eprintln!(
+        "reached_setup_arch={}, reached_early_init_dt_scan={}, reached_fdt_check_header={}",
+        reached_setup_arch, reached_early_init_dt_scan, reached_fdt_check_header
+    );
     eprintln!("sbi_count={}", sbi_count);
 }

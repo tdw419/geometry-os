@@ -18,15 +18,27 @@ fn main() {
     let test_addr: u64 = 0x01484000;
     vm.bus.write_word(test_addr, 0xDEADBEEF).ok();
     let readback = vm.bus.read_word(test_addr).unwrap_or(0);
-    println!("Write 0xDEADBEEF at PA 0x{:08X}, readback: 0x{:08X} {}",
-        test_addr, readback, if readback == 0xDEADBEEF { "OK" } else { "FAIL" });
+    println!(
+        "Write 0xDEADBEEF at PA 0x{:08X}, readback: 0x{:08X} {}",
+        test_addr,
+        readback,
+        if readback == 0xDEADBEEF { "OK" } else { "FAIL" }
+    );
 
     // Write at early_pg_dir
     let test_addr2: u64 = 0x00802000;
     vm.bus.write_word(test_addr2, 0xCAFEBABE).ok();
     let readback2 = vm.bus.read_word(test_addr2).unwrap_or(0);
-    println!("Write 0xCAFEBABE at PA 0x{:08X}, readback: 0x{:08X} {}",
-        test_addr2, readback2, if readback2 == 0xCAFEBABE { "OK" } else { "FAIL" });
+    println!(
+        "Write 0xCAFEBABE at PA 0x{:08X}, readback: 0x{:08X} {}",
+        test_addr2,
+        readback2,
+        if readback2 == 0xCAFEBABE {
+            "OK"
+        } else {
+            "FAIL"
+        }
+    );
 
     // Test 2: Check if our boot page table entries are readable
     let boot_pt_ppn = (vm.cpu.csr.satp & 0x3FFFFF) as u64; // PPN from initial SATP
@@ -54,20 +66,30 @@ fn main() {
     let mut relocate_done = false;
 
     while count < max {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let cause_code = vm.cpu.csr.mcause & !(1u32 << 31);
             if cause_code == 9 || cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
-                    vm.cpu.x[10] = a0; vm.cpu.x[11] = a1;
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
                 }
             } else {
                 let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
@@ -91,15 +113,19 @@ fn main() {
         // Detect setup_vm return (PC near 0xC00010F6)
         if !setup_vm_done && vm.cpu.pc >= 0xC00010F0 && vm.cpu.pc <= 0xC0001100 {
             setup_vm_done = true;
-            println!("[setup_vm return] count={} PC=0x{:08X} SATP=0x{:08X}",
-                count, vm.cpu.pc, vm.cpu.csr.satp);
+            println!(
+                "[setup_vm return] count={} PC=0x{:08X} SATP=0x{:08X}",
+                count, vm.cpu.pc, vm.cpu.csr.satp
+            );
         }
 
         // Detect relocate_enable_mmu return (PC near 0xC00010FA)
         if setup_vm_done && !relocate_done && vm.cpu.pc >= 0xC00010F8 && vm.cpu.pc <= 0xC0001100 {
             relocate_done = true;
-            println!("[relocate_enable_mmu return] count={} PC=0x{:08X} SATP=0x{:08X}",
-                count, vm.cpu.pc, vm.cpu.csr.satp);
+            println!(
+                "[relocate_enable_mmu return] count={} PC=0x{:08X} SATP=0x{:08X}",
+                count, vm.cpu.pc, vm.cpu.csr.satp
+            );
         }
 
         let _ = vm.step();
@@ -129,5 +155,8 @@ fn main() {
         }
     }
 
-    println!("\nPC=0x{:08X} SATP=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.csr.satp, vm.cpu.privilege);
+    println!(
+        "\nPC=0x{:08X} SATP=0x{:08X} priv={:?}",
+        vm.cpu.pc, vm.cpu.csr.satp, vm.cpu.privilege
+    );
 }

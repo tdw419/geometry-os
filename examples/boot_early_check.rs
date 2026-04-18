@@ -5,21 +5,24 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    use geometry_os::riscv::RiscvVm;
     use geometry_os::riscv::cpu::{Privilege, StepResult};
     use geometry_os::riscv::csr;
+    use geometry_os::riscv::RiscvVm;
 
     // Boot with a small limit to see early behavior
     let (mut vm, boot_result) = RiscvVm::boot_linux(
         &kernel_image,
         initramfs.as_deref(),
         256,
-        1_000_000,  // 1M instructions - early boot
+        1_000_000, // 1M instructions - early boot
         bootargs,
     )
     .unwrap();
 
-    println!("After 1M instr: PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
+    println!(
+        "After 1M instr: PC=0x{:08X} priv={:?}",
+        vm.cpu.pc, vm.cpu.privilege
+    );
     println!("SBI console: {} chars", vm.bus.sbi.console_output.len());
     println!("UART tx: {} chars", vm.bus.uart.tx_buf.len());
     println!("mstatus: 0x{:08X}", vm.cpu.csr.mstatus);
@@ -27,7 +30,10 @@ fn main() {
     println!("sstatus (mstatus): 0x{:08X}", vm.cpu.csr.mstatus);
     println!("satp: 0x{:08X}", vm.cpu.csr.satp);
     println!("stvec: 0x{:08X}", vm.cpu.csr.stvec);
-    println!("sstatus.SIE: {}", (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1);
+    println!(
+        "sstatus.SIE: {}",
+        (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1
+    );
 
     // Check if SIE bit is being blocked
     let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
@@ -44,7 +50,10 @@ fn main() {
     )
     .unwrap();
 
-    println!("\nAfter 5M instr: PC=0x{:08X} priv={:?}", vm2.cpu.pc, vm2.cpu.privilege);
+    println!(
+        "\nAfter 5M instr: PC=0x{:08X} priv={:?}",
+        vm2.cpu.pc, vm2.cpu.privilege
+    );
     println!("SBI console: {} chars", vm2.bus.sbi.console_output.len());
     println!("UART tx: {} chars", vm2.bus.uart.tx_buf.len());
     println!("satp: 0x{:08X}", vm2.cpu.csr.satp);
@@ -60,7 +69,10 @@ fn main() {
     )
     .unwrap();
 
-    println!("\nAfter 10M instr: PC=0x{:08X} priv={:?}", vm3.cpu.pc, vm3.cpu.privilege);
+    println!(
+        "\nAfter 10M instr: PC=0x{:08X} priv={:?}",
+        vm3.cpu.pc, vm3.cpu.privilege
+    );
     println!("SBI console: {} chars", vm3.bus.sbi.console_output.len());
     println!("UART tx: {} chars", vm3.bus.uart.tx_buf.len());
 

@@ -14,13 +14,14 @@ fn main() {
         initramfs.as_deref(),
         512,
         bootargs,
-    ).unwrap();
+    )
+    .unwrap();
 
     let (mut vm, fw_addr, entry, _dtb_addr) = setup_result;
 
     // Use boot_linux_setup and run our own loop
     // We need to replicate the MRET setup from boot_linux
-    use geometry_os::riscv::cpu::{StepResult, Privilege};
+    use geometry_os::riscv::cpu::{Privilege, StepResult};
     use geometry_os::riscv::csr;
 
     vm.cpu.csr.write(csr::MEPC, entry);
@@ -58,7 +59,10 @@ fn main() {
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
             satp_count += 1;
-            println!("[{}] SATP changed: 0x{:08X} -> 0x{:08X} (change #{})", count, last_satp, cur_satp, satp_count);
+            println!(
+                "[{}] SATP changed: 0x{:08X} -> 0x{:08X} (change #{})",
+                count, last_satp, cur_satp, satp_count
+            );
             last_satp = cur_satp;
 
             if satp_count == 3 && !trace_after_third {
@@ -73,20 +77,32 @@ fn main() {
             let inst = vm.bus.read_word(pc as u64).unwrap_or(0);
 
             // Disassemble a few key patterns
-            let desc = if inst == 0x00000013 { "NOP".to_string() }
-                else if (inst & 0x7F) == 0x73 && ((inst >> 20) & 0xFF) == 0x302 { format!("ECALL_S (SBI) a7={}", vm.cpu.x[17]) }
-                else if (inst & 0x7F) == 0x6F { format!("JAL x{}", (inst >> 7) & 0x1F) }
-                else if (inst & 0x7F) == 0x67 { format!("JALR x{}", (inst >> 7) & 0x1F) }
-                else if inst == 0x00008067 { "RET".to_string() }
-                else { format!("0x{:08X}", inst) };
+            let desc = if inst == 0x00000013 {
+                "NOP".to_string()
+            } else if (inst & 0x7F) == 0x73 && ((inst >> 20) & 0xFF) == 0x302 {
+                format!("ECALL_S (SBI) a7={}", vm.cpu.x[17])
+            } else if (inst & 0x7F) == 0x6F {
+                format!("JAL x{}", (inst >> 7) & 0x1F)
+            } else if (inst & 0x7F) == 0x67 {
+                format!("JALR x{}", (inst >> 7) & 0x1F)
+            } else if inst == 0x00008067 {
+                "RET".to_string()
+            } else {
+                format!("0x{:08X}", inst)
+            };
 
             // Log every instruction for the first 200, then only branches/SBI
-            if trace_count < 200 || (inst & 0x7F) == 0x6F || (inst & 0x7F) == 0x67 || (inst & 0x7F) == 0x73 {
+            if trace_count < 200
+                || (inst & 0x7F) == 0x6F
+                || (inst & 0x7F) == 0x67
+                || (inst & 0x7F) == 0x73
+            {
                 println!("  [{:6}] PC=0x{:08X} {}", trace_count, pc, desc);
             }
 
             // Check for UART writes (sw to 0x10000000)
-            if (inst & 0x7F) == 0x23 { // SW
+            if (inst & 0x7F) == 0x23 {
+                // SW
                 let imm = ((inst >> 25) << 5) | ((inst >> 7) & 0x1F);
                 let rs1 = (inst >> 15) & 0x1F;
                 let rs1_val = vm.cpu.x[rs1 as usize];
@@ -95,7 +111,10 @@ fn main() {
                     let rs2 = (inst >> 20) & 0x1F;
                     let byte_val = (vm.cpu.x[rs2 as usize] & 0xFF) as u8;
                     if byte_val >= 0x20 && byte_val < 0x7f {
-                        println!("  [{:6}] *** UART write: '{}' (0x{:02X})", trace_count, byte_val as char, byte_val);
+                        println!(
+                            "  [{:6}] *** UART write: '{}' (0x{:02X})",
+                            trace_count, byte_val as char, byte_val
+                        );
                     } else {
                         println!("  [{:6}] *** UART write: 0x{:02X}", trace_count, byte_val);
                     }
@@ -113,10 +132,11 @@ fn main() {
         // Check for fault
         match step_result {
             StepResult::Ok | StepResult::Ecall | StepResult::Ebreak => {}
-            StepResult::FetchFault
-            | StepResult::LoadFault
-            | StepResult::StoreFault => {
-                println!("[{}] FAULT at PC=0x{:08X} priv={:?}", count, vm.cpu.pc, vm.cpu.privilege);
+            StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
+                println!(
+                    "[{}] FAULT at PC=0x{:08X} priv={:?}",
+                    count, vm.cpu.pc, vm.cpu.privilege
+                );
                 break;
             }
         }
@@ -124,7 +144,10 @@ fn main() {
 
     let elapsed = start.elapsed();
     println!("\nDone: {} instructions in {:?}", max_instr, elapsed);
-    println!("Final PC: 0x{:08X} SATP: 0x{:08X}", vm.cpu.pc, vm.cpu.csr.satp);
+    println!(
+        "Final PC: 0x{:08X} SATP: 0x{:08X}",
+        vm.cpu.pc, vm.cpu.csr.satp
+    );
 
     // Check SBI output
     if !vm.bus.sbi.console_output.is_empty() {

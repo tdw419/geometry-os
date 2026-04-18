@@ -15,19 +15,20 @@ fn main() {
         512,
         20_000_000u64,
         bootargs,
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     println!("PC: 0x{:08X} SP: 0x{:08X}", vm.cpu.pc, vm.cpu.x[2]);
-    
+
     // panic() saves registers on the stack. Let's dump the stack frame.
     // panic() is at 0xC000252E. The stack should contain saved RA (caller of panic).
     // In RISC-V calling convention, s0 (fp) points to the current frame.
     // Let's look at the stack from SP upward.
     let sp = vm.cpu.x[2] as u64;
     let s0 = vm.cpu.x[8] as u64; // frame pointer
-    
+
     println!("SP: 0x{:08X} s0/fp: 0x{:08X}", sp, s0);
-    
+
     // Dump first 100 words of stack
     println!("\nStack dump (SP to SP+400):");
     for i in 0..100 {
@@ -47,14 +48,16 @@ fn main() {
             } else {
                 String::new()
             };
-            
+
             // Try to read as string if in .rodata range
             let mut str_note = String::new();
             if word >= 0xC0C00000 && word < 0xC1400000 {
                 let mut chars = Vec::new();
                 for j in 0..80 {
                     let b = vm.bus.read_byte((word as u64) + j as u64).unwrap_or(0);
-                    if b == 0 { break; }
+                    if b == 0 {
+                        break;
+                    }
                     if b >= 0x20 && b < 0x7f {
                         chars.push(b as char);
                     } else {
@@ -66,11 +69,18 @@ fn main() {
                     str_note = format!(" -> \"{}\"", s);
                 }
             }
-            
-            println!("  SP[{:3}] = 0x{:08X}{}{}{}", i * 4, word, note, str_note, "");
+
+            println!(
+                "  SP[{:3}] = 0x{:08X}{}{}{}",
+                i * 4,
+                word,
+                note,
+                str_note,
+                ""
+            );
         }
     }
-    
+
     // Also scan the kernel .data/.rodata for common panic strings
     println!("\nSearching for known panic strings in kernel memory...");
     let panic_strings = [
@@ -84,7 +94,7 @@ fn main() {
         "page fault",
         "__pa",
     ];
-    
+
     for ps in &panic_strings {
         let pattern_bytes = ps.as_bytes();
         // Scan .rodata region (VA 0xC0C00000 to VA 0xC1400000, PA 0x00C00000 to 0x01000000)
@@ -113,7 +123,9 @@ fn main() {
                         let mut chars = Vec::new();
                         for j in 0..200 {
                             let b = vm.bus.read_byte(addr + j as u64).unwrap_or(0);
-                            if b == 0 { break; }
+                            if b == 0 {
+                                break;
+                            }
                             if b >= 0x20 && b < 0x7f {
                                 chars.push(b as char);
                             } else {

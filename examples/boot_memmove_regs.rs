@@ -12,7 +12,7 @@ fn main() {
         &kernel_image,
         initramfs.as_deref(),
         256,
-        260000,  // Just before __memmove
+        260000, // Just before __memmove
         bootargs,
     )
     .unwrap();
@@ -36,7 +36,10 @@ fn main() {
             println!("a1=0x{:08X} (src)", vm.cpu.x[11]);
             println!("a2=0x{:08X} (n/len)", vm.cpu.x[12]);
             println!("a3=0x{:08X} (t1)", vm.cpu.x[13]);
-            println!("a4=0x{:08X} (src_end? actual src ptr in loop)", vm.cpu.x[14]);
+            println!(
+                "a4=0x{:08X} (src_end? actual src ptr in loop)",
+                vm.cpu.x[14]
+            );
             println!("t0=0x{:08X}", vm.cpu.x[5]);
             println!("t1=0x{:08X}", vm.cpu.x[6]);
             println!("t2=0x{:08X}", vm.cpu.x[7]);
@@ -48,15 +51,23 @@ fn main() {
             println!("ra=0x{:08X}", vm.cpu.x[1]);
             println!("s9=0x{:08X} (buffer in vsnprintf)", vm.cpu.x[25]);
             println!("s11=0x{:08X}", vm.cpu.x[27]);
-            
+
             // Calculate memmove size
             let dst = vm.cpu.x[29]; // t4
             let end = vm.cpu.x[30]; // t5
             if dst > end {
-                println!("\n*** BACKWARD COPY: dst=0x{:08X} end=0x{:08X} size=0x{:08X} ({}) ***",
-                    dst, end, dst - end, dst - end);
+                println!(
+                    "\n*** BACKWARD COPY: dst=0x{:08X} end=0x{:08X} size=0x{:08X} ({}) ***",
+                    dst,
+                    end,
+                    dst - end,
+                    dst - end
+                );
             } else {
-                println!("\n*** FORWARD COPY: dst=0x{:08X} end=0x{:08X} ***", dst, end);
+                println!(
+                    "\n*** FORWARD COPY: dst=0x{:08X} end=0x{:08X} ***",
+                    dst, end
+                );
             }
             break;
         }

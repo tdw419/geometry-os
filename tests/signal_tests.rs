@@ -24,7 +24,9 @@ fn vm_with_child(child_pc: u32) -> Vm {
         exit_code: 0,
         parent_pid: 0,
         pending_signals: Vec::new(),
-        signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
     vm.current_pid = 1;
     vm
@@ -35,8 +37,8 @@ fn test_exit_opcode_halts_child() {
     let mut vm = vm_with_child(0x100);
     // EXIT r0: opcode 0x6F, arg = r0
     vm.ram[0x100] = 0x6F; // EXIT
-    vm.ram[0x101] = 0;    // r0 (exit code register)
-    vm.regs[0] = 42;       // exit code = 42
+    vm.ram[0x101] = 0; // r0 (exit code register)
+    vm.regs[0] = 42; // exit code = 42
     vm.pc = 0x100;
 
     vm.step();
@@ -51,14 +53,17 @@ fn test_exit_main_process_halts() {
     let mut vm = Vm::new();
     // EXIT r0 on main process (pid 0)
     vm.ram[0] = 0x6F; // EXIT
-    vm.ram[1] = 0;    // r0
+    vm.ram[1] = 0; // r0
     vm.regs[0] = 5;
     vm.pc = 0;
 
     vm.step();
 
     assert!(vm.halted, "main process should halt on EXIT");
-    assert_eq!(vm.step_exit_code, None, "main process should not set step_exit_code");
+    assert_eq!(
+        vm.step_exit_code, None,
+        "main process should not set step_exit_code"
+    );
     assert!(!vm.step_zombie, "main process should not become zombie");
 }
 
@@ -67,7 +72,7 @@ fn test_waitpid_returns_exit_code() {
     let mut vm = vm_with_child(0x100);
     // Make child exit with code 7
     vm.ram[0x100] = 0x6F; // EXIT
-    vm.ram[0x101] = 0;    // r0
+    vm.ram[0x101] = 0; // r0
     vm.regs[0] = 7;
     vm.current_pid = 1;
     vm.pc = 0x100;
@@ -86,7 +91,7 @@ fn test_waitpid_returns_exit_code() {
 
     // Now WAITPID should reap the zombie
     vm.regs[1] = 1; // target PID
-    // WAITPID r1: opcode 0x69, arg = r1
+                    // WAITPID r1: opcode 0x69, arg = r1
     vm.ram[0] = 0x69;
     vm.ram[1] = 1; // r1
     vm.pc = 0;
@@ -136,9 +141,15 @@ fn test_signal_term_halts_process() {
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGNAL should succeed");
-    assert!(vm.processes[0].is_halted(), "child should be halted by SIGTERM");
+    assert!(
+        vm.processes[0].is_halted(),
+        "child should be halted by SIGTERM"
+    );
     assert_eq!(vm.processes[0].exit_code, 1, "SIGTERM sets exit code 1");
-    assert!(vm.processes[0].state == geometry_os::vm::ProcessState::Zombie, "child should be zombie");
+    assert!(
+        vm.processes[0].state == geometry_os::vm::ProcessState::Zombie,
+        "child should be zombie"
+    );
 }
 
 #[test]
@@ -159,7 +170,10 @@ fn test_signal_stop_halts_process() {
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGNAL should succeed");
-    assert!(vm.processes[0].is_halted(), "child should be halted by SIGSTOP");
+    assert!(
+        vm.processes[0].is_halted(),
+        "child should be halted by SIGSTOP"
+    );
     assert_eq!(vm.processes[0].exit_code, 2, "SIGSTOP sets exit code 2");
 }
 
@@ -181,7 +195,10 @@ fn test_signal_user_ignored_by_default() {
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGNAL should succeed");
-    assert!(!vm.processes[0].is_halted(), "USER1 should not halt by default");
+    assert!(
+        !vm.processes[0].is_halted(),
+        "USER1 should not halt by default"
+    );
 }
 
 #[test]
@@ -228,17 +245,20 @@ fn test_sigset_registers_handler() {
     vm.halted = false;
 
     // SIGSET r1, r2: set handler for signal 0 (TERM) to address 0x500
-    vm.regs[1] = 0;     // signal 0 = TERM
+    vm.regs[1] = 0; // signal 0 = TERM
     vm.regs[2] = 0x500; // handler address
     vm.ram[0x100] = 0x71; // SIGSET
-    vm.ram[0x101] = 1;    // r1
-    vm.ram[0x102] = 2;    // r2
+    vm.ram[0x101] = 1; // r1
+    vm.ram[0x102] = 2; // r2
     vm.pc = 0x100;
 
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGSET should succeed");
-    assert_eq!(vm.processes[0].signal_handlers[0], 0x500, "TERM handler should be 0x500");
+    assert_eq!(
+        vm.processes[0].signal_handlers[0], 0x500,
+        "TERM handler should be 0x500"
+    );
 }
 
 #[test]
@@ -248,8 +268,8 @@ fn test_sigset_ignore_signal() {
     vm.halted = false;
 
     // SIGSET r1, r2: ignore signal 1 (USER1)
-    vm.regs[1] = 1;            // signal 1
-    vm.regs[2] = 0xFFFFFFFF;   // ignore
+    vm.regs[1] = 1; // signal 1
+    vm.regs[2] = 0xFFFFFFFF; // ignore
     vm.ram[0x100] = 0x71;
     vm.ram[0x101] = 1;
     vm.ram[0x102] = 2;
@@ -258,7 +278,10 @@ fn test_sigset_ignore_signal() {
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGSET should succeed");
-    assert_eq!(vm.processes[0].signal_handlers[1], 0xFFFFFFFF, "USER1 should be ignored");
+    assert_eq!(
+        vm.processes[0].signal_handlers[1], 0xFFFFFFFF,
+        "USER1 should be ignored"
+    );
 }
 
 #[test]
@@ -276,7 +299,10 @@ fn test_sigset_main_process_fails() {
 
     vm.step();
 
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "SIGSET should fail for main process");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "SIGSET should fail for main process"
+    );
 }
 
 #[test]
@@ -303,7 +329,10 @@ fn test_signal_with_custom_handler() {
     vm.step();
 
     assert_eq!(vm.regs[0], 0, "SIGNAL should succeed");
-    assert!(!vm.processes[0].is_halted(), "custom handler should prevent halt");
+    assert!(
+        !vm.processes[0].is_halted(),
+        "custom handler should prevent halt"
+    );
     assert_eq!(vm.processes[0].pc, 0x500, "PC should jump to handler");
     assert_eq!(vm.processes[0].regs[0], 0, "r0 should be signal number (0)");
     assert_eq!(vm.processes[0].regs[1], 0, "r1 should be sender PID (0)");

@@ -4,11 +4,7 @@ use super::*;
 
 #[test]
 fn test_rv32_csrrw_mstatus() {
-    let mut vm = test_vm(&[
-        addi(1, 0, 0xAB),
-        csrrw(2, 1, CSR_MSTATUS),
-        ebreak(),
-    ]);
+    let mut vm = test_vm(&[addi(1, 0, 0xAB), csrrw(2, 1, CSR_MSTATUS), ebreak()]);
     run(&mut vm, 100);
     assert_eq!(vm.cpu.x[2], 0, "old mstatus should be 0");
     assert_eq!(vm.cpu.csr.mstatus, 0xAB, "mstatus should be 0xAB");
@@ -31,11 +27,7 @@ fn test_rv32_csrrw_swap() {
 
 #[test]
 fn test_rv32_csrrw_rd_zero() {
-    let mut vm = test_vm(&[
-        addi(1, 0, 0x77),
-        csrrw(0, 1, CSR_MCAUSE),
-        ebreak(),
-    ]);
+    let mut vm = test_vm(&[addi(1, 0, 0x77), csrrw(0, 1, CSR_MCAUSE), ebreak()]);
     run(&mut vm, 100);
     assert_eq!(vm.cpu.csr.mcause, 0x77);
     assert_eq!(vm.cpu.x[0], 0);
@@ -66,7 +58,10 @@ fn test_rv32_csrrs_rs1_zero_no_write() {
     ]);
     run(&mut vm, 100);
     assert_eq!(vm.cpu.x[2], 0xAB, "csrrs with rs1=0 should read");
-    assert_eq!(vm.cpu.csr.mstatus, 0xAB, "csrrs with rs1=0 should not write");
+    assert_eq!(
+        vm.cpu.csr.mstatus, 0xAB,
+        "csrrs with rs1=0 should not write"
+    );
 }
 
 #[test]
@@ -98,10 +93,7 @@ fn test_rv32_csrrc_rs1_zero_no_write() {
 
 #[test]
 fn test_rv32_csrrwi() {
-    let mut vm = test_vm(&[
-        csrrwi(1, 5, CSR_MCAUSE),
-        ebreak(),
-    ]);
+    let mut vm = test_vm(&[csrrwi(1, 5, CSR_MCAUSE), ebreak()]);
     run(&mut vm, 100);
     assert_eq!(vm.cpu.x[1], 0, "old mcause should be 0");
     assert_eq!(vm.cpu.csr.mcause, 5, "mcause should be 5");
@@ -164,7 +156,10 @@ fn test_rv32_csr_sstatus_view() {
         ebreak(),
     ]);
     run(&mut vm, 100);
-    assert_eq!(vm.cpu.x[3], 0xC0122, "sstatus should be masked view of mstatus");
+    assert_eq!(
+        vm.cpu.x[3], 0xC0122,
+        "sstatus should be masked view of mstatus"
+    );
 }
 
 #[test]
@@ -199,4 +194,3 @@ fn test_rv32_csr_mepc_alignment() {
 // ============================================================
 // Phase 35: Privilege mode transitions
 // ============================================================
-

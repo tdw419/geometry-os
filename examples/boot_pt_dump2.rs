@@ -1,7 +1,6 @@
 /// Diagnostic: dump the kernel's page table at SATP 0x80000802 and check
 /// which L1 entries are populated. Also check what instruction the kernel
 /// is actually executing (via PA computed from page table).
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -26,16 +25,23 @@ fn main() {
         }
 
         // Handle M-mode trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -88,7 +94,10 @@ fn main() {
     let pt_root_ppn = (satp_val & 0x003F_FFFF) as u64;
     let pt_root_phys = pt_root_ppn * 4096;
 
-    println!("\n[pt] Page table at PA 0x{:08X} (SATP=0x{:08X})", pt_root_phys as u32, satp_val);
+    println!(
+        "\n[pt] Page table at PA 0x{:08X} (SATP=0x{:08X})",
+        pt_root_phys as u32, satp_val
+    );
     println!("[pt] Non-zero L1 entries:");
 
     let mut populated = 0;
@@ -115,9 +124,14 @@ fn main() {
 
     // Check the specific PC region
     println!("\n[kernel] Final state:");
-    println!("  PC=0x{:08X} priv={:?} SATP=0x{:08X}", vm.cpu.pc, vm.cpu.privilege, satp_val);
-    println!("  scause=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
-        vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec);
+    println!(
+        "  PC=0x{:08X} priv={:?} SATP=0x{:08X}",
+        vm.cpu.pc, vm.cpu.privilege, satp_val
+    );
+    println!(
+        "  scause=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
+        vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec
+    );
     println!("  ecall_count={}", vm.cpu.ecall_count);
 
     // Try to compute the PA for the current PC and read the instruction
@@ -130,7 +144,10 @@ fn main() {
         if is_leaf {
             let pa = (l1_ppn << 12) | (pc & 0x3FFFFF);
             if let Ok(word) = vm.bus.read_word(pa) {
-                println!("  Instruction at PC: VA=0x{:08X} -> PA=0x{:08X} -> 0x{:08X}", pc as u32, pa as u32, word);
+                println!(
+                    "  Instruction at PC: VA=0x{:08X} -> PA=0x{:08X} -> 0x{:08X}",
+                    pc as u32, pa as u32, word
+                );
             }
         } else {
             let vpn0 = ((pc >> 12) & 0x3FF) as u64;
@@ -143,15 +160,24 @@ fn main() {
                         pc as u32, pa as u32, pa as u32, word);
                 }
             } else {
-                println!("  L2[{}] at PA 0x{:08X}: unreadable!", vpn0 as u32, l2_addr as u32);
+                println!(
+                    "  L2[{}] at PA 0x{:08X}: unreadable!",
+                    vpn0 as u32, l2_addr as u32
+                );
             }
         }
     }
 
     // Check CLINT
-    println!("\n[clint] mtime=0x{:016X} mtimecmp=0x{:016X}",
-        vm.bus.clint.mtime, vm.bus.clint.mtimecmp);
+    println!(
+        "\n[clint] mtime=0x{:016X} mtimecmp=0x{:016X}",
+        vm.bus.clint.mtime, vm.bus.clint.mtimecmp
+    );
 
     // UART and SBI
-    println!("[uart] tx_buf={} sbi_console={}", vm.bus.uart.tx_buf.len(), vm.bus.sbi.console_output.len());
+    println!(
+        "[uart] tx_buf={} sbi_console={}",
+        vm.bus.uart.tx_buf.len(),
+        vm.bus.sbi.console_output.len()
+    );
 }

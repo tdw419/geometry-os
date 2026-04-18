@@ -1,9 +1,8 @@
+use geometry_os::riscv::cpu::StepResult;
 /// Diagnose the illegal instruction loop during Linux boot.
 /// The boot gets to ~177K instructions then hits illegal instructions at mepc=0x00000004.
 /// This traces the instructions leading up to the first illegal instruction.
-
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::StepResult;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -61,9 +60,13 @@ fn main() {
             for l1_idx in 0..1024u64 {
                 let l1_addr = pt_base + l1_idx * 4;
                 let l1_pte = vm.bus.read_word(l1_addr).unwrap_or(0);
-                if l1_pte == 0 { continue; }
+                if l1_pte == 0 {
+                    continue;
+                }
                 let is_leaf = (l1_pte & 0xE) != 0;
-                if !is_leaf { continue; }
+                if !is_leaf {
+                    continue;
+                }
 
                 let ppn_hi = ((l1_pte >> 20) & 0xFFF) as u32;
                 let flags = (l1_pte & 0xFF) as u32;
@@ -74,16 +77,22 @@ fn main() {
                     vm.cpu.tlb.insert(vpn_combined, asid as u16, eff_ppn, flags);
                 }
             }
-            eprintln!("[diag] TLB warmed SATP=0x{:08X} at count={}", cur_satp, count);
+            eprintln!(
+                "[diag] TLB warmed SATP=0x{:08X} at count={}",
+                cur_satp, count
+            );
         }
         last_satp = cur_satp;
 
         // Trap forwarding (same as boot_linux)
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
 
-            if cause_code != 11 { // not ECALL_M
+            if cause_code != 11 {
+                // not ECALL_M
                 let mpp = (vm.cpu.csr.mstatus & 0x300) >> 8;
 
                 if mpp != 3 {
@@ -129,11 +138,16 @@ fn main() {
             } else {
                 // ECALL_M = SBI call
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -145,7 +159,11 @@ fn main() {
         }
 
         // Track PC transitions in a ring buffer (last 30 steps)
-        pc_trace.push((count, vm.cpu.pc, vm.bus.read_word(vm.cpu.pc as u64).unwrap_or(0)));
+        pc_trace.push((
+            count,
+            vm.cpu.pc,
+            vm.bus.read_word(vm.cpu.pc as u64).unwrap_or(0),
+        ));
         if pc_trace.len() > 30 {
             pc_trace.remove(0);
         }
@@ -160,8 +178,10 @@ fn main() {
             let unique_pcs: std::collections::HashSet<u32> =
                 pc_trace.iter().map(|(_, pc, _)| *pc).collect();
             if unique_pcs.len() <= 3 {
-                eprintln!("[diag] Stuck at count={}. Unique PCs: {:?}",
-                    count, unique_pcs);
+                eprintln!(
+                    "[diag] Stuck at count={}. Unique PCs: {:?}",
+                    count, unique_pcs
+                );
                 eprintln!("[diag] Last 20 PC transitions:");
                 for (c, pc, insn) in &pc_trace[pc_trace.len().saturating_sub(20)..] {
                     eprintln!("  count={} PC=0x{:08X} insn=0x{:08X}", c, pc, insn);
@@ -179,7 +199,10 @@ fn main() {
     eprintln!("STVEC: 0x{:08X}", vm.cpu.csr.stvec);
     eprintln!("MEPC: 0x{:08X}", vm.cpu.csr.mepc);
     eprintln!("MCAUSE: 0x{:08X}", vm.cpu.csr.mcause);
-    eprintln!("SBI console output: {} chars", vm.bus.sbi.console_output.len());
+    eprintln!(
+        "SBI console output: {} chars",
+        vm.bus.sbi.console_output.len()
+    );
 
     eprintln!("\nTrap log (first 5):");
     for t in &trap_log {
@@ -195,7 +218,10 @@ fn main() {
     let final_insn = vm.bus.read_word(vm.cpu.pc as u64).unwrap_or(0);
     let final_raw16 = vm.bus.read_byte(vm.cpu.pc as u64).unwrap_or(0) as u16
         | ((vm.bus.read_byte(vm.cpu.pc as u64 + 1).unwrap_or(0) as u16) << 8);
-    eprintln!("\nFinal instruction: 0x{:08X} (raw16=0x{:04X})", final_insn, final_raw16);
+    eprintln!(
+        "\nFinal instruction: 0x{:08X} (raw16=0x{:04X})",
+        final_insn, final_raw16
+    );
 
     // Check if this is a compressed instruction
     let bits01 = final_raw16 & 0x3;
@@ -203,7 +229,7 @@ fn main() {
     eprintln!("  bits[1:0] = 0b{:02b}, funct3 = 0b{:03b}", bits01, funct3);
 
     // Decode the compressed instruction to see what it should be
-    use geometry_os::riscv::decode::{is_compressed, decode_c, decode};
+    use geometry_os::riscv::decode::{decode, decode_c, is_compressed};
     if is_compressed(final_raw16) {
         let op = decode_c(final_raw16);
         eprintln!("  Compressed decode: {:?}", op);

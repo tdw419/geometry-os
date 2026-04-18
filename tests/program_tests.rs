@@ -6,13 +6,12 @@
 use geometry_os::assembler::{assemble, assemble_with_lib};
 use geometry_os::vm::Vm;
 
-
 /// Helper: assemble a .asm file and run it in the VM
 pub fn compile_run(asm_path: &str) -> Vm {
     let source = std::fs::read_to_string(asm_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", asm_path, e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed for {}: {}", asm_path, e));
+    let asm =
+        assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed for {}: {}", asm_path, e));
     let mut vm = Vm::new();
     // Load bytecode at address 0
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -30,7 +29,6 @@ pub fn compile_run(asm_path: &str) -> Vm {
     }
     vm
 }
-
 
 /// Helper: assemble a .asm file with library include support and run it in the VM
 pub fn compile_run_with_lib(asm_path: &str) -> Vm {
@@ -54,7 +52,6 @@ pub fn compile_run_with_lib(asm_path: &str) -> Vm {
     vm
 }
 
-
 /// Helper: assemble inline source with lib includes and run in VM
 pub fn run_inline_with_lib(source: &str) -> Vm {
     let asm = assemble_with_lib(source, 0, Some("."))
@@ -75,12 +72,11 @@ pub fn run_inline_with_lib(source: &str) -> Vm {
     vm
 }
 
-
 pub fn compile_run_interactive(asm_path: &str, steps: usize) -> Vm {
     let source = std::fs::read_to_string(asm_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", asm_path, e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed for {}: {}", asm_path, e));
+    let asm =
+        assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed for {}: {}", asm_path, e));
     let mut vm = Vm::new();
     for (i, &pixel) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() {
@@ -90,12 +86,15 @@ pub fn compile_run_interactive(asm_path: &str, steps: usize) -> Vm {
     vm.pc = 0;
     vm.halted = false;
     for _ in 0..steps {
-        if !vm.step() { break; }
-        if vm.frame_ready { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
     }
     vm
 }
-
 
 // === Window Manager (SPAWN + shared RAM bounds protocol) ===
 
@@ -104,21 +103,29 @@ pub fn compile_run_interactive(asm_path: &str, steps: usize) -> Vm {
 pub fn compile_run_multiproc(asm_path: &str, frames: usize) -> Vm {
     let source = std::fs::read_to_string(asm_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", asm_path, e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed for {}: {}", asm_path, e));
+    let asm =
+        assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed for {}: {}", asm_path, e));
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = v; }
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
     }
     let mut frame_count = 0;
     for _ in 0..50_000_000 {
-        if vm.halted { break; }
-        if !vm.step() { break; }
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
         vm.step_all_processes();
         if vm.frame_ready {
             vm.frame_ready = false;
             frame_count += 1;
-            if frame_count >= frames { break; }
+            if frame_count >= frames {
+                break;
+            }
         }
     }
     vm
@@ -135,7 +142,6 @@ pub fn vm_with_vfs() -> (Vm, tempfile::TempDir) {
     (vm, dir)
 }
 
-
 /// Helper: write a null-terminated string into VM RAM at given address
 pub fn write_string_to_ram(vm: &mut Vm, addr: usize, s: &str) {
     for (i, ch) in s.bytes().enumerate() {
@@ -143,7 +149,6 @@ pub fn write_string_to_ram(vm: &mut Vm, addr: usize, s: &str) {
     }
     vm.ram[addr + s.len()] = 0;
 }
-
 
 /// Helper: load bytecode at address 0 and set up for execution
 pub fn load_and_run(vm: &mut Vm, bytecode: &[u32], max_cycles: usize) {
@@ -159,7 +164,6 @@ pub fn load_and_run(vm: &mut Vm, bytecode: &[u32], max_cycles: usize) {
     }
 }
 
-
 /// Helper: write a null-terminated ASCII string into RAM at `addr`
 pub fn write_string(ram: &mut [u32], addr: usize, s: &str) {
     for (i, ch) in s.chars().enumerate() {
@@ -171,7 +175,6 @@ pub fn write_string(ram: &mut [u32], addr: usize, s: &str) {
         ram[addr + s.len()] = 0; // null terminator
     }
 }
-
 
 // ── READLN opcode ───────────────────────────────────────────────
 
@@ -194,29 +197,29 @@ pub fn step_waitpid(vm: &mut Vm) {
 
 #[path = "program_tests/basic_programs.rs"]
 pub mod basic_programs;
-#[path = "program_tests/opcodes.rs"]
-pub mod opcodes;
-#[path = "program_tests/vm_state.rs"]
-pub mod vm_state;
-#[path = "program_tests/multiprocess.rs"]
-pub mod multiprocess;
-#[path = "program_tests/kernel.rs"]
-pub mod kernel;
-#[path = "program_tests/filesystem.rs"]
-pub mod filesystem;
-#[path = "program_tests/scheduling.rs"]
-pub mod scheduling;
-#[path = "program_tests/ipc.rs"]
-pub mod ipc;
-#[path = "program_tests/devices.rs"]
-pub mod devices;
-#[path = "program_tests/shell.rs"]
-pub mod shell;
 #[path = "program_tests/boot.rs"]
 pub mod boot;
-#[path = "program_tests/hypervisor.rs"]
-pub mod hypervisor;
+#[path = "program_tests/devices.rs"]
+pub mod devices;
+#[path = "program_tests/filesystem.rs"]
+pub mod filesystem;
 #[path = "program_tests/games.rs"]
 pub mod games;
+#[path = "program_tests/hypervisor.rs"]
+pub mod hypervisor;
+#[path = "program_tests/ipc.rs"]
+pub mod ipc;
+#[path = "program_tests/kernel.rs"]
+pub mod kernel;
+#[path = "program_tests/multiprocess.rs"]
+pub mod multiprocess;
+#[path = "program_tests/opcodes.rs"]
+pub mod opcodes;
+#[path = "program_tests/scheduling.rs"]
+pub mod scheduling;
 #[path = "program_tests/self_host.rs"]
 pub mod self_host;
+#[path = "program_tests/shell.rs"]
+pub mod shell;
+#[path = "program_tests/vm_state.rs"]
+pub mod vm_state;

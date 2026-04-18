@@ -6,14 +6,13 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    use geometry_os::riscv::RiscvVm;
     use geometry_os::riscv::cpu::Privilege;
     use geometry_os::riscv::csr;
     use geometry_os::riscv::decode;
+    use geometry_os::riscv::RiscvVm;
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_image, initramfs.as_deref(), 256, bootargs
-    ).unwrap();
+    let (mut vm, fw_addr, _entry, _dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
     let fw_addr_u32 = fw_addr as u32;
 
     // Disassemble the entire trap handler from 0xC08EFF1C to 0xC08EFFD4
@@ -26,17 +25,23 @@ fn main() {
             // Extract the halfword at the actual address
             let offset = (addr - aligned) as usize;
             let halfword = ((word >> (offset * 8)) & 0xFFFF) as u16;
-            
+
             let is_compressed = decode::is_compressed(halfword);
             let (op, inst_len) = if is_compressed {
                 (decode::decode_c(halfword), 2u32)
             } else {
                 (decode::decode(word), 4u32)
             };
-            
-            let marker = if addr == 0xC08EFFD2 { " <<< JUMP TO ZERO" } else { "" };
-            eprintln!("  0x{:08X}: halfword=0x{:04X} (compressed={}) len={} {:?}{}",
-                addr, halfword, is_compressed, inst_len, op, marker);
+
+            let marker = if addr == 0xC08EFFD2 {
+                " <<< JUMP TO ZERO"
+            } else {
+                ""
+            };
+            eprintln!(
+                "  0x{:08X}: halfword=0x{:04X} (compressed={}) len={} {:?}{}",
+                addr, halfword, is_compressed, inst_len, op, marker
+            );
             addr += inst_len as u64;
         } else {
             break;
@@ -66,11 +71,16 @@ fn main() {
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == csr::CAUSE_ECALL_S {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -100,11 +110,16 @@ fn main() {
                 }
             } else {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -120,7 +135,10 @@ fn main() {
 
         // Look for the specific crash
         if vm.cpu.pc == 0 && pc_before != 0 {
-            eprintln!("\n*** CRASH: instruction at 0x{:08X} jumped to 0x00000000 ***", pc_before);
+            eprintln!(
+                "\n*** CRASH: instruction at 0x{:08X} jumped to 0x00000000 ***",
+                pc_before
+            );
             // Disassemble the crashing instruction
             let aligned = pc_before as u64 & !3;
             if let Ok(word) = vm.bus.read_word(aligned) {
@@ -135,12 +153,21 @@ fn main() {
                     eprintln!("  32-bit: word=0x{:08X} -> {:?}", word, op);
                 }
             }
-            
+
             // Dump registers at crash point
             eprintln!("  Registers at crash:");
-            eprintln!("    ra=0x{:08X} sp=0x{:08X} tp=0x{:08X}", vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[4]);
-            eprintln!("    t0=0x{:08X} t1=0x{:08X} t2=0x{:08X}", vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7]);
-            eprintln!("    a0=0x{:08X} a1=0x{:08X} a2=0x{:08X}", vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12]);
+            eprintln!(
+                "    ra=0x{:08X} sp=0x{:08X} tp=0x{:08X}",
+                vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[4]
+            );
+            eprintln!(
+                "    t0=0x{:08X} t1=0x{:08X} t2=0x{:08X}",
+                vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7]
+            );
+            eprintln!(
+                "    a0=0x{:08X} a1=0x{:08X} a2=0x{:08X}",
+                vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12]
+            );
             eprintln!("    s0=0x{:08X} s1=0x{:08X}", vm.cpu.x[8], vm.cpu.x[9]);
             break;
         }

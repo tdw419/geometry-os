@@ -12,12 +12,21 @@ fn main() {
         "console=ttyS0 earlycon=htif panic=1",
     ] {
         eprintln!("\n=== Testing: {} ===", bootargs);
-        let result = RiscvVm::boot_linux(&kernel_image, initramfs.as_deref(), 256, 5_000_000, bootargs);
+        let result = RiscvVm::boot_linux(
+            &kernel_image,
+            initramfs.as_deref(),
+            256,
+            5_000_000,
+            bootargs,
+        );
         match result {
             Ok((vm, br)) => {
                 eprintln!("  Instructions: {}", br.instructions);
                 eprintln!("  ECALL count: {}", vm.cpu.ecall_count);
-                eprintln!("  Console output: {} bytes", vm.bus.sbi.console_output.len());
+                eprintln!(
+                    "  Console output: {} bytes",
+                    vm.bus.sbi.console_output.len()
+                );
                 if !vm.bus.sbi.console_output.is_empty() {
                     let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
                     let preview: String = s.chars().take(300).collect();

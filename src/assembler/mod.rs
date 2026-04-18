@@ -12,13 +12,13 @@
 //   label:             ; labels for jumps
 //   JMP label          ; jump to label
 
-mod includes;
-mod instructions;
 mod core_ops;
+mod formula_ops;
 mod graphics_ops;
 mod immediate_ops;
+mod includes;
+mod instructions;
 mod system_ops;
-mod formula_ops;
 
 #[derive(Debug)]
 pub struct AsmError {
@@ -40,7 +40,11 @@ pub struct AsmResult {
 
 /// Assemble source with an optional library search path for .include directives.
 /// When `lib_dir` is Some, .include "file.asm" will look in that directory.
-pub fn assemble_with_lib(source: &str, base_addr: usize, lib_dir: Option<&str>) -> Result<AsmResult, AsmError> {
+pub fn assemble_with_lib(
+    source: &str,
+    base_addr: usize,
+    lib_dir: Option<&str>,
+) -> Result<AsmResult, AsmError> {
     // Pre-process: resolve .include directives by inlining file contents
     let expanded = includes::resolve_includes(source, lib_dir, 0)?;
     assemble_inner(&expanded, base_addr)
@@ -66,13 +70,23 @@ fn assemble_inner(source: &str, base_addr: usize) -> Result<AsmResult, AsmError>
         if line.to_lowercase().starts_with("#define") {
             let tokens: Vec<&str> = line.split_whitespace().collect();
             if tokens.len() < 3 {
-                return Err(AsmError { line: line_num + 1, message: "#define requires NAME and VALUE".into() });
+                return Err(AsmError {
+                    line: line_num + 1,
+                    message: "#define requires NAME and VALUE".into(),
+                });
             }
             let name = tokens[1].to_string();
             // Constant value can be a literal or another constant
             match parse_imm(tokens[2], &constants) {
-                Ok(val) => { constants.insert(name, val); }
-                Err(e) => { return Err(AsmError { line: line_num + 1, message: format!("invalid constant {}: {}", name, e) }); }
+                Ok(val) => {
+                    constants.insert(name, val);
+                }
+                Err(e) => {
+                    return Err(AsmError {
+                        line: line_num + 1,
+                        message: format!("invalid constant {}: {}", name, e),
+                    });
+                }
             }
         }
     }
@@ -86,24 +100,47 @@ fn assemble_inner(source: &str, base_addr: usize) -> Result<AsmResult, AsmError>
 
         // Strip inline comment before any further processing so that colons
         // inside comments are not misidentified as label delimiters.
-        let line = if let Some(c) = line.find(';') { line[..c].trim() } else { line };
-        if line.is_empty() { continue; }
+        let line = if let Some(c) = line.find(';') {
+            line[..c].trim()
+        } else {
+            line
+        };
+        if line.is_empty() {
+            continue;
+        }
 
         // .org addr -- advance bytecode position (pad with zeros)
         if line.to_lowercase().starts_with(".org") {
             let tokens: Vec<&str> = line.split_whitespace().collect();
             if tokens.len() < 2 {
-                return Err(AsmError { line: line_num + 1, message: ".org requires an address".into() });
+                return Err(AsmError {
+                    line: line_num + 1,
+                    message: ".org requires an address".into(),
+                });
             }
             match parse_imm(tokens[1], &constants) {
                 Ok(addr) => {
                     let target = addr as usize;
                     if target < bytecode.len() {
-                        return Err(AsmError { line: line_num + 1, message: format!(".org 0x{:X} is behind current position 0x{:X}", target, bytecode.len()) });
+                        return Err(AsmError {
+                            line: line_num + 1,
+                            message: format!(
+                                ".org 0x{:X} is behind current position 0x{:X}",
+                                target,
+                                bytecode.len()
+                            ),
+                        });
                     }
-                    while bytecode.len() < target { bytecode.push(0); }
+                    while bytecode.len() < target {
+                        bytecode.push(0);
+                    }
                 }
-                Err(e) => return Err(AsmError { line: line_num + 1, message: format!("invalid .org address: {}", e) }),
+                Err(e) => {
+                    return Err(AsmError {
+                        line: line_num + 1,
+                        message: format!("invalid .org address: {}", e),
+                    })
+                }
             }
             continue;
         }
@@ -113,13 +150,21 @@ fn assemble_inner(source: &str, base_addr: usize) -> Result<AsmResult, AsmError>
             let rest = line[5..].trim();
             let parts: Vec<&str> = rest.split(',').collect();
             if parts.is_empty() {
-                return Err(AsmError { line: line_num + 1, message: ".byte requires at least one value".into() });
+                return Err(AsmError {
+                    line: line_num + 1,
+                    message: ".byte requires at least one value".into(),
+                });
             }
             for part in parts {
                 let val_str = part.trim();
                 match parse_imm(val_str, &constants) {
                     Ok(v) => bytecode.push(v & 0xFF),
-                    Err(e) => return Err(AsmError { line: line_num + 1, message: format!("invalid .byte value '{}': {}", val_str, e) }),
+                    Err(e) => {
+                        return Err(AsmError {
+                            line: line_num + 1,
+                            message: format!("invalid .byte value '{}': {}", val_str, e),
+                        })
+                    }
                 }
             }
             continue;
@@ -128,10 +173,15 @@ fn assemble_inner(source: &str, base_addr: usize) -> Result<AsmResult, AsmError>
         // .str "text" -- emit null-terminated string (each char as a u32 word)
         if line.to_lowercase().starts_with(".str") {
             let rest = line[4..].trim();
-            if !((rest.starts_with('"') && rest.ends_with('"')) || (rest.starts_with('\'') && rest.ends_with('\''))) {
-                return Err(AsmError { line: line_num + 1, message: ".str requires a quoted string: .str \"text\"".into() });
+            if !((rest.starts_with('"') && rest.ends_with('"'))
+                || (rest.starts_with('\'') && rest.ends_with('\'')))
+            {
+                return Err(AsmError {
+                    line: line_num + 1,
+                    message: ".str requires a quoted string: .str \"text\"".into(),
+                });
             }
-            let s = &rest[1..rest.len()-1];
+            let s = &rest[1..rest.len() - 1];
             for ch in s.bytes() {
                 bytecode.push(ch as u32);
             }
@@ -148,14 +198,32 @@ fn assemble_inner(source: &str, base_addr: usize) -> Result<AsmResult, AsmError>
                 continue;
             }
             // Parse instruction after label on same line
-            if let Err(e) = instructions::parse_instruction(rest, &mut bytecode, &mut label_refs, line_num + 1, &constants) {
-                return Err(AsmError { line: line_num + 1, message: e });
+            if let Err(e) = instructions::parse_instruction(
+                rest,
+                &mut bytecode,
+                &mut label_refs,
+                line_num + 1,
+                &constants,
+            ) {
+                return Err(AsmError {
+                    line: line_num + 1,
+                    message: e,
+                });
             }
             continue;
         }
 
-        if let Err(e) = instructions::parse_instruction(line, &mut bytecode, &mut label_refs, line_num + 1, &constants) {
-            return Err(AsmError { line: line_num + 1, message: e });
+        if let Err(e) = instructions::parse_instruction(
+            line,
+            &mut bytecode,
+            &mut label_refs,
+            line_num + 1,
+            &constants,
+        ) {
+            return Err(AsmError {
+                line: line_num + 1,
+                message: e,
+            });
         }
     }
 
@@ -189,7 +257,10 @@ pub(crate) fn parse_reg(s: &str) -> Result<usize, String> {
 }
 
 /// Parse immediate value: "10", "0xFF", "0b1010"
-pub(crate) fn parse_imm(s: &str, constants: &std::collections::HashMap<String, u32>) -> Result<u32, String> {
+pub(crate) fn parse_imm(
+    s: &str,
+    constants: &std::collections::HashMap<String, u32>,
+) -> Result<u32, String> {
     let s = s.trim();
 
     // Check constants first
@@ -202,7 +273,8 @@ pub(crate) fn parse_imm(s: &str, constants: &std::collections::HashMap<String, u
     } else if s.starts_with("0b") || s.starts_with("0B") {
         u32::from_str_radix(&s[2..], 2).map_err(|_| format!("invalid binary: {}", s))
     } else {
-        s.parse::<u32>().map_err(|_| format!("invalid number or undefined constant: {}", s))
+        s.parse::<u32>()
+            .map_err(|_| format!("invalid number or undefined constant: {}", s))
     }
 }
 
@@ -232,7 +304,10 @@ mod tests {
     fn test_multiple_lines() {
         let src = "LDI r0, 10\nLDI r1, 20\nADD r0, r1\nHALT";
         let result = assemble(src, 0).expect("assembly should succeed");
-        assert_eq!(result.pixels, vec![0x10, 0, 10, 0x10, 1, 20, 0x20, 0, 1, 0x00]);
+        assert_eq!(
+            result.pixels,
+            vec![0x10, 0, 10, 0x10, 1, 20, 0x20, 0, 1, 0x00]
+        );
     }
 
     #[test]
@@ -248,8 +323,8 @@ mod tests {
         let result = assemble(src, 0).expect("assembly should succeed");
         assert_eq!(result.pixels[0..3], vec![0x10, 0, 1]); // LDI r0, 1
         assert_eq!(result.pixels[3], 0x31); // JZ
-        assert_eq!(result.pixels[4], 0);    // r0
-        assert_eq!(result.pixels[5], 0);    // -> start (bytecode addr 0)
+        assert_eq!(result.pixels[4], 0); // r0
+        assert_eq!(result.pixels[5], 0); // -> start (bytecode addr 0)
     }
 
     #[test]
@@ -290,7 +365,10 @@ mod tests {
     fn test_define_constants() {
         let src = "#define SCREEN_WIDTH 256\n#define COLOR 0xFF0000\nLDI r0, SCREEN_WIDTH\nLDI r1, COLOR\nFILL r1";
         let result = assemble(src, 0).expect("assembly should succeed");
-        assert_eq!(result.pixels, vec![0x10, 0, 256, 0x10, 1, 0xFF0000, 0x42, 1]);
+        assert_eq!(
+            result.pixels,
+            vec![0x10, 0, 256, 0x10, 1, 0xFF0000, 0x42, 1]
+        );
     }
 
     #[test]

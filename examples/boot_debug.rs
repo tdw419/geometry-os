@@ -12,7 +12,8 @@ fn main() {
         256,
         0,
         bootargs,
-    ).unwrap();
+    )
+    .unwrap();
 
     // Write a minimal M-mode trap handler at 0x08000000:
     // csrr t0, mepc    # read faulting PC
@@ -27,16 +28,25 @@ fn main() {
         0x30200073, // mret
     ];
     for (i, &inst) in handler.iter().enumerate() {
-        vm.bus.write_word(handler_addr + i as u64 * 4, inst).unwrap();
+        vm.bus
+            .write_word(handler_addr + i as u64 * 4, inst)
+            .unwrap();
     }
 
     // Set MTVEC to handler address (direct mode, not vector)
-    vm.cpu.csr.write(geometry_os::riscv::csr::MTVEC, handler_addr as u32);
+    vm.cpu
+        .csr
+        .write(geometry_os::riscv::csr::MTVEC, handler_addr as u32);
 
     // Verify
-    println!("MTVEC set to: 0x{:08X}", vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC));
-    println!("Handler at 0x{:08X}: {:08X} {:08X} {:08X} {:08X}",
-             handler_addr, handler[0], handler[1], handler[2], handler[3]);
+    println!(
+        "MTVEC set to: 0x{:08X}",
+        vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC)
+    );
+    println!(
+        "Handler at 0x{:08X}: {:08X} {:08X} {:08X} {:08X}",
+        handler_addr, handler[0], handler[1], handler[2], handler[3]
+    );
 
     // Reset PC to kernel start
     vm.cpu.pc = 0x00000000;
@@ -68,8 +78,10 @@ fn main() {
             exception_count += 1;
             if exception_count <= 3 || exception_count % 1000 == 0 {
                 let mepc = vm.cpu.csr.read(geometry_os::riscv::csr::MEPC);
-                println!("  Exception #{} at step {}: cause={}, mepc=0x{:08X}",
-                         exception_count, count, mcause as i32, mepc);
+                println!(
+                    "  Exception #{} at step {}: cause={}, mepc=0x{:08X}",
+                    exception_count, count, mcause as i32, mepc
+                );
             }
         }
 
@@ -78,9 +90,16 @@ fn main() {
             let ips = (count as f64) / elapsed.as_secs_f64();
             let priv_level = vm.cpu.privilege;
             let mcause = vm.cpu.csr.read(geometry_os::riscv::csr::MCAUSE);
-            println!("[{:5.1}s] {}M instrs, PC=0x{:08X}, priv={:?}, UART={}, excepts={}, mcause={}",
-                     elapsed.as_secs_f64(), count / 1_000_000, vm.cpu.pc, priv_level,
-                     total_uart, exception_count, mcause as i32);
+            println!(
+                "[{:5.1}s] {}M instrs, PC=0x{:08X}, priv={:?}, UART={}, excepts={}, mcause={}",
+                elapsed.as_secs_f64(),
+                count / 1_000_000,
+                vm.cpu.pc,
+                priv_level,
+                total_uart,
+                exception_count,
+                mcause as i32
+            );
         }
 
         match result {
@@ -89,7 +108,10 @@ fn main() {
                 break;
             }
             geometry_os::riscv::cpu::StepResult::FetchFault => {
-                println!("FetchFault at PC=0x{:08X}, {} instructions", vm.cpu.pc, count);
+                println!(
+                    "FetchFault at PC=0x{:08X}, {} instructions",
+                    vm.cpu.pc, count
+                );
                 break;
             }
             _ => {}
@@ -97,21 +119,33 @@ fn main() {
     }
 
     let elapsed = start.elapsed();
-    println!("\nDone: {}M instructions in {:?}", count / 1_000_000, elapsed);
+    println!(
+        "\nDone: {}M instructions in {:?}",
+        count / 1_000_000,
+        elapsed
+    );
     println!("Final PC: 0x{:08X}", vm.cpu.pc);
     println!("Privilege: {:?}", vm.cpu.privilege);
     println!("Total UART bytes: {}", total_uart);
     println!("Total exceptions: {}", exception_count);
-    println!("Instructions/sec: {:.0}", count as f64 / elapsed.as_secs_f64());
+    println!(
+        "Instructions/sec: {:.0}",
+        count as f64 / elapsed.as_secs_f64()
+    );
 
     // Print UART output
     let mut found = false;
     for row in 0..128 {
         let s = geometry_os::riscv::bridge::UartBridge::read_canvas_string(&canvas, row, 0, 80);
         if !s.is_empty() {
-            if !found { println!("\n=== UART Output ==="); found = true; }
+            if !found {
+                println!("\n=== UART Output ===");
+                found = true;
+            }
             println!("  {:3}: {}", row, s);
         }
     }
-    if !found { println!("\n(no UART output)"); }
+    if !found {
+        println!("\n(no UART output)");
+    }
 }

@@ -7,7 +7,7 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    use geometry_os::riscv::{RiscvVm, mmu, cpu, csr};
+    use geometry_os::riscv::{cpu, csr, mmu, RiscvVm};
 
     let (mut vm, fw_addr, _entry, _dtb_addr) =
         RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
@@ -38,7 +38,10 @@ fn main() {
             if mtime != last_mtime {
                 if !timer_fired {
                     timer_fired = true;
-                    eprintln!("[CLINT] First mtime change at step {}: mtime_lo={}", step, mtime);
+                    eprintln!(
+                        "[CLINT] First mtime change at step {}: mtime_lo={}",
+                        step, mtime
+                    );
                 }
                 last_mtime = mtime;
             }
@@ -56,12 +59,22 @@ fn main() {
                 trap_step = step;
                 trap_pc_before = pc_history.last().map(|h| h.1).unwrap_or(0);
                 eprintln!("\n=== FIRST TRAP at step {} ===", step);
-                eprintln!("mcause=0x{:08X} cause_code={} MPP={}", mcause, cause_code, mpp);
-                eprintln!("mepc=0x{:08X} mtval=0x{:08X}", 
-                    vm.cpu.csr.read(csr::MEPC), vm.cpu.csr.read(csr::MTVAL));
-                eprintln!("sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
-                    vm.cpu.csr.read(csr::SEPC), vm.cpu.csr.read(csr::SCAUSE),
-                    vm.cpu.csr.read(csr::STVAL), vm.cpu.csr.read(csr::STVEC));
+                eprintln!(
+                    "mcause=0x{:08X} cause_code={} MPP={}",
+                    mcause, cause_code, mpp
+                );
+                eprintln!(
+                    "mepc=0x{:08X} mtval=0x{:08X}",
+                    vm.cpu.csr.read(csr::MEPC),
+                    vm.cpu.csr.read(csr::MTVAL)
+                );
+                eprintln!(
+                    "sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
+                    vm.cpu.csr.read(csr::SEPC),
+                    vm.cpu.csr.read(csr::SCAUSE),
+                    vm.cpu.csr.read(csr::STVAL),
+                    vm.cpu.csr.read(csr::STVEC)
+                );
                 eprintln!("satp=0x{:08X}", vm.cpu.csr.read(csr::SATP));
                 eprintln!("PC before trap: 0x{:08X}", trap_pc_before);
 
@@ -83,11 +96,16 @@ fn main() {
                 eprintln!("\nDecoding instruction at PC=0x{:08X}:", trap_pc_before);
                 let satp = vm.cpu.csr.read(csr::SATP);
                 if mmu::satp_mode_enabled(satp) {
-                    match mmu::translate(trap_pc_before, mmu::AccessType::Fetch,
-                        cpu::Privilege::Supervisor, 
+                    match mmu::translate(
+                        trap_pc_before,
+                        mmu::AccessType::Fetch,
+                        cpu::Privilege::Supervisor,
                         (mstatus >> 18) & 1 != 0,
                         (mstatus >> 19) & 1 != 0,
-                        satp, &mut vm.bus, &mut vm.cpu.tlb) {
+                        satp,
+                        &mut vm.bus,
+                        &mut vm.cpu.tlb,
+                    ) {
                         mmu::TranslateResult::Ok(pa) => {
                             if let Ok(word) = vm.bus.read_word(pa) {
                                 eprintln!("  PA=0x{:08X} word=0x{:08X}", pa, word);
@@ -115,11 +133,16 @@ fn main() {
             // Handle the trap (same as boot_linux)
             if cause_code == 9 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -162,17 +185,32 @@ fn main() {
                 cpu::Privilege::User => 0u8,
             };
             if prev_priv != curr_priv {
-                eprintln!("[PRIV_CHANGE] step={}: {:?} -> {:?} PC=0x{:08X}",
-                    step, 
-                    match prev_priv { 3 => "M", 1 => "S", 0 => "U", _ => "?" },
-                    match curr_priv { 3 => "M", 1 => "S", 0 => "U", _ => "?" },
-                    vm.cpu.pc);
+                eprintln!(
+                    "[PRIV_CHANGE] step={}: {:?} -> {:?} PC=0x{:08X}",
+                    step,
+                    match prev_priv {
+                        3 => "M",
+                        1 => "S",
+                        0 => "U",
+                        _ => "?",
+                    },
+                    match curr_priv {
+                        3 => "M",
+                        1 => "S",
+                        0 => "U",
+                        _ => "?",
+                    },
+                    vm.cpu.pc
+                );
             }
         }
     }
 
     if first_trap {
-        eprintln!("No traps in {} steps. Final PC=0x{:08X}", max_steps, vm.cpu.pc);
+        eprintln!(
+            "No traps in {} steps. Final PC=0x{:08X}",
+            max_steps, vm.cpu.pc
+        );
     }
 
     // UART output

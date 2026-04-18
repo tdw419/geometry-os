@@ -1,8 +1,8 @@
 //! Diagnostic: dump page table state at the fetch fault stall point.
 //! Run: cargo run --example boot_fault_pt_diag
 
-use std::fs;
 use geometry_os::riscv::{cpu::Privilege, cpu::StepResult, RiscvVm};
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";

@@ -53,7 +53,7 @@ pub fn play_beep(freq: u32, dur_ms: u32) {
     wav.extend_from_slice(&byte_rate.to_le_bytes());
     wav.extend_from_slice(&2u16.to_le_bytes()); // block align
     wav.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
-    // data chunk
+                                                 // data chunk
     wav.extend_from_slice(b"data");
     wav.extend_from_slice(&(data_size as u32).to_le_bytes());
 

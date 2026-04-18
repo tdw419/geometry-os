@@ -9,6 +9,7 @@
 ;   3. 4 pattern strategies from coarse hash: flat, center, horiz, vert
 ;   4. Accent color via XOR_CHAIN (Pixelpack strategy 0xC) from coarse hash
 ;   5. Day/night cycle: frame_counter-driven 4-phase tint (dawn/day/dusk/night)
+;      Uses frac>>3 for safe packed-RGB addition without per-channel overflow
 ;   6. Net result: ~49-56 instructions/tile (flat=49, non-flat avg ~56)
 ;
 ; Memory layout:
@@ -359,10 +360,12 @@ FILL r17
 
 ; ===== Precompute day/night tint (cyclic, frame_counter-driven) =====
 ; Cycle period = 256 frames (~4.3s at 60fps). 4 phases of 64 frames each.
-;   Phase 0 (dawn):  frac 0..63, warm orange rises:  +frac * 0x030100
-;   Phase 1 (day):   frac 0..63, warm fades:         +(63-frac) * 0x030100
-;   Phase 2 (dusk):  frac 0..63, deep orange rises:  +frac * 0x050100
-;   Phase 3 (night): frac 0..63, cool darkness rises: -(frac * 0x030204)
+; Uses frac>>3 (0..7) for safe packed-RGB addition (no per-channel overflow).
+; Safety: max biome+BPE channel = 233; tint adds at most 21 → 254 < 256.
+;   Phase 0 (dawn):  frac_shr * 0x030100 → R+21, G+7 (warm orange)
+;   Phase 1 (day):   (63-frac)>>3 * 0x030100 → fade out dawn warmth
+;   Phase 2 (dusk):  frac_shr * 0x030000 → R+21 (amber glow)
+;   Phase 3 (night): frac_shr * 0x000103 → G+7, B+21 (cool blue shift)
 ; r23 = tint offset added to every tile base color inline.
 LOAD r17, r13           ; r17 = frame_counter
 LDI r18, 0xFF
@@ -372,6 +375,8 @@ LDI r19, 6
 SHR r18, r19            ; phase = t >> 6 (0..3)
 LDI r19, 0x3F
 AND r17, r19            ; frac = t & 0x3F (0..63)
+LDI r19, 3
+SHR r17, r19            ; frac_shr = frac >> 3 (0..7)
 
 ; Dispatch on phase (0=dawn, 1=day, 2=dusk, 3=night)
 JZ r18, tint_dawn
@@ -383,9 +388,8 @@ SUB r18, r19
 JZ r18, tint_dusk
 
 tint_night:
-  LDI r18, 0x030204
+  LDI r18, 0x000103
   MUL r17, r18
-  NEG r17
   MOV r23, r17
   JMP tint_done
 
@@ -397,14 +401,16 @@ tint_dawn:
 
 tint_day:
   LDI r18, 63
-  SUB r18, r17           ; 63 - frac (fade out dawn warmth)
+  SUB r18, r17           ; 63 - frac (full frac, not shifted)
+  LDI r19, 3
+  SHR r18, r19           ; (63-frac)>>3 = fade-out frac_shr
   LDI r19, 0x030100
   MUL r18, r19
   MOV r23, r18
   JMP tint_done
 
 tint_dusk:
-  LDI r18, 0x050100
+  LDI r18, 0x030000
   MUL r17, r18
   MOV r23, r17
   JMP tint_done

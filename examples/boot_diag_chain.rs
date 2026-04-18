@@ -20,14 +20,20 @@ fn main() {
 
     match result {
         Ok((mut vm, boot_result)) => {
-            eprintln!("[diag] Boot result: instructions={}, entry=0x{:08X}, dtb_addr=0x{:08X}",
-                boot_result.instructions, boot_result.entry, boot_result.dtb_addr);
+            eprintln!(
+                "[diag] Boot result: instructions={}, entry=0x{:08X}, dtb_addr=0x{:08X}",
+                boot_result.instructions, boot_result.entry, boot_result.dtb_addr
+            );
 
             // Print UART output
             let sbi_output = &vm.bus.sbi.console_output;
             if !sbi_output.is_empty() {
                 let s = String::from_utf8_lossy(sbi_output);
-                eprintln!("[diag] SBI console output ({} bytes):\n{}", sbi_output.len(), s);
+                eprintln!(
+                    "[diag] SBI console output ({} bytes):\n{}",
+                    sbi_output.len(),
+                    s
+                );
             }
 
             let uart_tx = vm.bus.uart.drain_tx();
@@ -37,8 +43,14 @@ fn main() {
             }
 
             // Final state
-            eprintln!("[diag] Final PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
-            eprintln!("[diag] satap=0x{:08X} stvec=0x{:08X}", vm.cpu.csr.satp, vm.cpu.csr.stvec);
+            eprintln!(
+                "[diag] Final PC=0x{:08X} priv={:?}",
+                vm.cpu.pc, vm.cpu.privilege
+            );
+            eprintln!(
+                "[diag] satap=0x{:08X} stvec=0x{:08X}",
+                vm.cpu.csr.satp, vm.cpu.csr.stvec
+            );
         }
         Err(e) => {
             eprintln!("[diag] Boot error: {:?}", e);

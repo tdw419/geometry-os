@@ -72,7 +72,7 @@ impl Default for Uart {
 }
 
 impl Uart {
-        /// Create a new UART with empty TX/RX buffers and THRE bit set.
+    /// Create a new UART with empty TX/RX buffers and THRE bit set.
     pub fn new() -> Self {
         Self {
             ier: 0,

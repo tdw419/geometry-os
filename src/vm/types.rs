@@ -87,14 +87,12 @@ pub const PROCESS_PAGES: usize = 4; // 4096 words = 16KB per process
 
 /// CPU privilege mode: Kernel (full access) or User (restricted).
 /// VM starts in Kernel mode for backward compatibility.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CpuMode {
     #[default]
     Kernel,
     User,
 }
-
 
 /// Process priority levels for the preemptive scheduler (Phase 26).
 /// Higher priority = more CPU time slices per round.
@@ -151,7 +149,7 @@ pub struct Pipe {
 }
 
 impl Pipe {
-            /// Create a new pipe with the given reader/writer PIDs.
+    /// Create a new pipe with the given reader/writer PIDs.
     pub fn new(read_pid: u32, write_pid: u32) -> Self {
         Pipe {
             buffer: [0; PIPE_BUFFER_SIZE],
@@ -186,12 +184,12 @@ impl Pipe {
         Some(val)
     }
 
-            /// Returns true if the pipe buffer is empty.
+    /// Returns true if the pipe buffer is empty.
     pub fn is_empty(&self) -> bool {
         self.count == 0
     }
 
-            /// Returns true if the pipe buffer is full.
+    /// Returns true if the pipe buffer is full.
     #[allow(dead_code)]
     pub fn is_full(&self) -> bool {
         self.count >= PIPE_BUFFER_SIZE
@@ -208,7 +206,7 @@ pub struct Message {
 }
 
 impl Message {
-            /// Create a new message with the given sender PID and payload.
+    /// Create a new message with the given sender PID and payload.
     pub fn new(sender: u32, data: [u32; MSG_WORDS]) -> Self {
         Message { sender, data }
     }
@@ -271,7 +269,6 @@ pub enum ProcessState {
     Stopped,
 }
 
-
 /// VMA (Virtual Memory Area) type, analogous to Linux vm_area_struct.
 /// Each VMA describes a contiguous range of virtual pages with a purpose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -305,9 +302,14 @@ pub struct Vma {
 }
 
 impl Vma {
-            /// Create a new virtual memory area.
+    /// Create a new virtual memory area.
     pub fn new(vtype: VmaType, start_page: usize, current_end: usize, max_end: usize) -> Self {
-        Vma { vtype, start_page, current_end, max_end }
+        Vma {
+            vtype,
+            start_page,
+            current_end,
+            max_end,
+        }
     }
 
     /// Does this VMA contain the given virtual page number?
@@ -323,7 +325,9 @@ impl Vma {
 
     /// Can this VMA grow to cover `vpage`?
     pub fn can_grow_to(&self, vpage: usize) -> bool {
-        if !self.contains_page(vpage) { return false; }
+        if !self.contains_page(vpage) {
+            return false;
+        }
         match self.vtype {
             VmaType::Code => false, // code is fixed
             VmaType::Heap => vpage > self.current_end && vpage <= self.max_end,
@@ -444,8 +448,7 @@ impl Process {
     /// Convenience: is this process halted (zombie, segfaulted, or stopped)?
     /// The scheduler skips halted processes.
     pub fn is_halted(&self) -> bool {
-        matches!(self.state, ProcessState::Zombie | ProcessState::Stopped)
-            || self.segfaulted
+        matches!(self.state, ProcessState::Zombie | ProcessState::Stopped) || self.segfaulted
     }
 
     /// Is this process in a runnable state (Ready or Running)?
@@ -472,7 +475,12 @@ impl Process {
             Vma::new(VmaType::Code, 0, PROCESS_PAGES - 2, PROCESS_PAGES - 2),
             // Stack: page 3 (top of user space), can grow down to page 2
             // Stack grows downward so start_page > max_end is intentional for Stack
-            Vma::new(VmaType::Stack, PROCESS_PAGES - 1, PROCESS_PAGES - 1, PROCESS_PAGES - 2),
+            Vma::new(
+                VmaType::Stack,
+                PROCESS_PAGES - 1,
+                PROCESS_PAGES - 1,
+                PROCESS_PAGES - 2,
+            ),
             // Heap: page 4 onward, initially empty (max_end == PROCESS_PAGES so no growth)
             // brk() extends max_end to allow demand allocation
             Vma::new(VmaType::Heap, PROCESS_PAGES, PROCESS_PAGES, PROCESS_PAGES),
@@ -508,8 +516,7 @@ pub struct MemAccess {
 }
 /// Hypervisor execution mode.
 /// QEMU mode spawns a subprocess; Native mode uses the built-in RISC-V interpreter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HypervisorMode {
     /// Use QEMU subprocess for guest execution (any architecture).
     #[default]

@@ -2,9 +2,9 @@
 // The kernel faults trying to call alloc_pte_fixmap at 0x804046C8 (should be 0xC04046C8).
 // We trace the last N PCs before the fault to find the jalr that loads the corrupted address.
 
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -28,7 +28,10 @@ fn main() {
         // SATP change handling (same as boot_linux)
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[diag] SATP changed at count={}: 0x{:08X} -> 0x{:08X}", count, last_satp, cur_satp);
+            eprintln!(
+                "[diag] SATP changed at count={}: 0x{:08X} -> 0x{:08X}",
+                count, last_satp, cur_satp
+            );
             let mode = (cur_satp >> 31) & 1;
             if mode == 1 {
                 let ppn = cur_satp & 0x3FFFFF;
@@ -50,14 +53,20 @@ fn main() {
                     let l1_769_addr = pg_dir_phys + 769 * 4;
                     let l1_769 = vm.bus.read_word(l1_769_addr).unwrap_or(0);
                     let ppn = l1_769 >> 10;
-                    eprintln!("[diag] L1[769] at PA 0x{:08X}: pte=0x{:08X} ppn=0x{:X}", l1_769_addr, l1_769, ppn);
+                    eprintln!(
+                        "[diag] L1[769] at PA 0x{:08X}: pte=0x{:08X} ppn=0x{:X}",
+                        l1_769_addr, l1_769, ppn
+                    );
 
                     // Check kernel_map
                     let km_phys: u64 = 0x00C79E90;
                     let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
                     let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
                     let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
-                    eprintln!("[diag] kernel_map: pa=0x{:X} vapo=0x{:X} vkpo=0x{:X}", km_pa, km_vapo, km_vkpo);
+                    eprintln!(
+                        "[diag] kernel_map: pa=0x{:X} vapo=0x{:X} vkpo=0x{:X}",
+                        km_pa, km_vapo, km_vkpo
+                    );
 
                     // Try to read the pt_ops pointer.
                     // In the kernel, pt_ops is a static variable. It's typically in .data or .bss.
@@ -71,24 +80,35 @@ fn main() {
 
                     // For now, let's check the L1[768] entry too (0xC0000000 mapping)
                     let l1_768 = vm.bus.read_word(pg_dir_phys + 768 * 4).unwrap_or(0);
-                    eprintln!("[diag] L1[768]: pte=0x{:08X} ppn=0x{:X}", l1_768, l1_768 >> 10);
+                    eprintln!(
+                        "[diag] L1[768]: pte=0x{:08X} ppn=0x{:X}",
+                        l1_768,
+                        l1_768 >> 10
+                    );
                 }
             }
             last_satp = cur_satp;
         }
 
         // M-mode trap forwarding (same as boot_linux)
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 // ECALL_M - SBI call
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -191,5 +211,8 @@ fn main() {
         count += 1;
     }
 
-    eprintln!("[diag] Done at count={}, smode_faults={}", count, smode_fault_count);
+    eprintln!(
+        "[diag] Done at count={}, smode_faults={}",
+        count, smode_fault_count
+    );
 }

@@ -5,17 +5,11 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 panic=1";
 
-    use geometry_os::riscv::RiscvVm;
     use geometry_os::riscv::cpu::StepResult;
+    use geometry_os::riscv::RiscvVm;
 
-    let (mut vm, _) = RiscvVm::boot_linux(
-        &kernel_image,
-        initramfs.as_deref(),
-        256,
-        200000,
-        bootargs,
-    )
-    .unwrap();
+    let (mut vm, _) =
+        RiscvVm::boot_linux(&kernel_image, initramfs.as_deref(), 256, 200000, bootargs).unwrap();
 
     let mut count = 200000u64;
     let loop_pc: u32 = 0xC08E5D6A;
@@ -46,8 +40,10 @@ fn main() {
 
         // Track backward copy loop entry
         if vm.cpu.pc == loop_pc && prev_pc != loop_pc && in_memmove {
-            println!("  backward loop at count={}: t3=0x{:08X} t4=0x{:08X} t5=0x{:08X} t6=0x{:08X}",
-                count, vm.cpu.x[28], vm.cpu.x[29], vm.cpu.x[30], vm.cpu.x[31]);
+            println!(
+                "  backward loop at count={}: t3=0x{:08X} t4=0x{:08X} t5=0x{:08X} t6=0x{:08X}",
+                count, vm.cpu.x[28], vm.cpu.x[29], vm.cpu.x[30], vm.cpu.x[31]
+            );
         }
 
         // Track __memmove return

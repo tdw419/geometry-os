@@ -2,8 +2,8 @@
 //! This tells us whether the kernel's page table is correct before our fixup touches it.
 //! Run: cargo run --example boot_pt_pre_fixup
 
-use std::fs;
 use geometry_os::riscv::{cpu::Privilege, cpu::StepResult, RiscvVm};
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -40,8 +40,10 @@ fn main() {
             if mode == 1 {
                 let ppn = cur_satp & 0x3FFFFF;
                 let pg_dir_phys = (ppn as u64) * 4096;
-                eprintln!("\n[pre_fixup] SATP #{} changed to pg_dir PA 0x{:08X} at count={}",
-                    satp_change_count, pg_dir_phys, count);
+                eprintln!(
+                    "\n[pre_fixup] SATP #{} changed to pg_dir PA 0x{:08X} at count={}",
+                    satp_change_count, pg_dir_phys, count
+                );
                 eprintln!("[pre_fixup] L1 entries (raw kernel PTEs, NO fixup applied):");
                 for i in 0..1024u32 {
                     let addr = pg_dir_phys + (i as u64) * 4;
@@ -54,8 +56,13 @@ fn main() {
                                 eprintln!("  L1[{:4}] = 0x{:08X} MEGAPAGE PPN=0x{:06X} flags=0x{:02X} PA=0x{:08X}",
                                     i, pte, pte_ppn, flags, (pte_ppn as u64) << 22);
                             } else {
-                                eprintln!("  L1[{:4}] = 0x{:08X} L2@PA=0x{:08X} flags=0x{:02X}",
-                                    i, pte, (pte_ppn as u64) << 12, flags);
+                                eprintln!(
+                                    "  L1[{:4}] = 0x{:08X} L2@PA=0x{:08X} flags=0x{:02X}",
+                                    i,
+                                    pte,
+                                    (pte_ppn as u64) << 12,
+                                    flags
+                                );
                             }
                         }
                     }
@@ -76,11 +83,16 @@ fn main() {
 
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -118,7 +130,10 @@ fn main() {
             StepResult::Ok => {}
             StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
                 if vm.cpu.privilege == Privilege::Supervisor {
-                    eprintln!("[pre_fixup] First fault at count={}: PC=0x{:08X}", count, vm.cpu.pc);
+                    eprintln!(
+                        "[pre_fixup] First fault at count={}: PC=0x{:08X}",
+                        count, vm.cpu.pc
+                    );
                     break;
                 }
             }

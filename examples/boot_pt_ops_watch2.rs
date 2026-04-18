@@ -11,13 +11,13 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            bootargs,
-        ).expect("boot setup failed");
+    let (mut vm, fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        bootargs,
+    )
+    .expect("boot setup failed");
 
     let fw_addr_u32 = fw_addr as u32;
     let max_instr: u64 = 178_000;
@@ -52,7 +52,9 @@ fn main() {
         }
 
         // Trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 4;
@@ -93,7 +95,10 @@ fn main() {
             let cur_val = vm.bus.read_word(pt_ops_4_pa).unwrap_or(0);
             if cur_val == 0xC04046C0 && !found_correct {
                 found_correct = true;
-                eprintln!("[watch] count={} pt_ops[4] set to 0x{:08X} (correct) PC=0x{:08X}", count, cur_val, prev_pc);
+                eprintln!(
+                    "[watch] count={} pt_ops[4] set to 0x{:08X} (correct) PC=0x{:08X}",
+                    count, cur_val, prev_pc
+                );
             }
             if cur_val != last_val {
                 eprintln!(

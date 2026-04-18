@@ -2,8 +2,8 @@
 //! We intercept at the instruction level: detect when the kernel writes SATP,
 //! dump the page table, then let the fixup proceed.
 
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -20,7 +20,10 @@ fn main() {
     let totalsize = vm.bus.read_word(dtb_addr + 4).unwrap_or(0);
     let off_mem_rsvmap = vm.bus.read_word(dtb_addr + 16).unwrap_or(0);
     let off_dt_struct = vm.bus.read_word(dtb_addr + 8).unwrap_or(0);
-    eprintln!("totalsize={} off_mem_rsvmap=0x{:X} off_dt_struct=0x{:X}", totalsize, off_mem_rsvmap, off_dt_struct);
+    eprintln!(
+        "totalsize={} off_mem_rsvmap=0x{:X} off_dt_struct=0x{:X}",
+        totalsize, off_mem_rsvmap, off_dt_struct
+    );
 
     // Read reservation map entries
     let rsvmap_base = dtb_addr + off_mem_rsvmap as u64;
@@ -31,7 +34,13 @@ fn main() {
             | ((vm.bus.read_word(entry_addr).unwrap_or(0) as u64) << 32);
         let size = vm.bus.read_word(entry_addr as u64 + 12).unwrap_or(0) as u64
             | ((vm.bus.read_word(entry_addr as u64 + 8).unwrap_or(0) as u64) << 32);
-        eprintln!("  [{}] addr=0x{:08X} size=0x{:08X} ({}KB)", i, addr, size, size / 1024);
+        eprintln!(
+            "  [{}] addr=0x{:08X} size=0x{:08X} ({}KB)",
+            i,
+            addr,
+            size,
+            size / 1024
+        );
         if addr == 0 && size == 0 {
             eprintln!("  (terminator)");
             break;
@@ -42,7 +51,10 @@ fn main() {
     // The kernel's final pg_dir at PA 0x01485000 shouldn't exist yet
     let pg_dir_phys: u64 = 0x01485000;
     let first_word = vm.bus.read_word(pg_dir_phys).unwrap_or(0);
-    eprintln!("\nPre-boot: word at PA 0x{:08X} = 0x{:08X}", pg_dir_phys, first_word);
+    eprintln!(
+        "\nPre-boot: word at PA 0x{:08X} = 0x{:08X}",
+        pg_dir_phys, first_word
+    );
 
     let fw_addr_u32 = fw_addr as u32;
     let mut count: u64 = 0;
@@ -70,7 +82,10 @@ fn main() {
                 dumped = true;
                 let new_ppn = cur_satp & 0x003F_FFFF;
                 let pg_dir_phys2 = (new_ppn as u64) * 4096;
-                eprintln!("[diag] SATP PPN=0x{:05X} -> pg_dir PA 0x{:08X}", new_ppn, pg_dir_phys2);
+                eprintln!(
+                    "[diag] SATP PPN=0x{:05X} -> pg_dir PA 0x{:08X}",
+                    new_ppn, pg_dir_phys2
+                );
 
                 // Dump all non-zero L1 entries
                 eprintln!("\n[diag] L1 entries at PA 0x{:08X}:", pg_dir_phys2);
@@ -97,10 +112,7 @@ fn main() {
                 let km_voff = vm.bus.read_word(km_phys + 8).unwrap_or(0);
                 let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
                 let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
-                eprintln!(
-                    "\n[diag] kernel_map at PA 0x{:08X}:",
-                    km_phys
-                );
+                eprintln!("\n[diag] kernel_map at PA 0x{:08X}:", km_phys);
                 eprintln!(
                     "  phys_addr=0x{:X} virt_addr=0x{:X} virt_offset=0x{:X} va_pa_offset=0x{:X} va_kernel_pa_offset=0x{:X}",
                     km_pa, km_va, km_voff, km_vapo, km_vkpo

@@ -12,14 +12,13 @@ fn main() {
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            512,
-            bootargs,
-        )
-        .expect("setup failed");
+    let (mut vm, fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        512,
+        bootargs,
+    )
+    .expect("setup failed");
 
     let fw_addr_u32 = fw_addr as u32;
     let mut count: u64 = 0;
@@ -90,11 +89,16 @@ fn main() {
             if cause_code == 9 {
                 // ECALL_S - handle as SBI
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -143,7 +147,8 @@ fn main() {
             );
             eprintln!(
                 "[WATCH] ra=0x{:08X} (should be saved to sp+12=0x{:08X})",
-                vm.cpu.x[1], (watch_sp - 16 + 12)
+                vm.cpu.x[1],
+                (watch_sp - 16 + 12)
             );
         }
 

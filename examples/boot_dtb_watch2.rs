@@ -7,14 +7,13 @@ fn main() {
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            "console=ttyS0 loglevel=8",
-        )
-        .unwrap();
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        "console=ttyS0 loglevel=8",
+    )
+    .unwrap();
 
     let target_pa: u64 = 0x00801008;
     let mut last_val = vm.bus.read_word(target_pa).unwrap_or(0);
@@ -30,8 +29,10 @@ fn main() {
                     count, target_pa, last_val, cur, vm.cpu.pc, vm.cpu.x[2]
                 );
                 // Disassemble the instruction at PC
-                eprintln!("  a0=0x{:08X} a1=0x{:08X} s0=0x{:08X} s1=0x{:08X}",
-                    vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[8], vm.cpu.x[9]);
+                eprintln!(
+                    "  a0=0x{:08X} a1=0x{:08X} s0=0x{:08X} s1=0x{:08X}",
+                    vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[8], vm.cpu.x[9]
+                );
                 break;
             }
         }

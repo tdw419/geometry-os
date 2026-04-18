@@ -17,8 +17,11 @@ fn main() {
     let mut nonzero_count = 0;
     for i in 0..256u64 {
         if let Ok(val) = vm.bus.read_word(0x003F000 + i * 4) {
-            if val == 0 { zero_count += 1; }
-            else { nonzero_count += 1; }
+            if val == 0 {
+                zero_count += 1;
+            } else {
+                nonzero_count += 1;
+            }
             if i < 20 {
                 println!("  PA 0x{:08X}: 0x{:08X}", 0x003F000 + i * 4, val);
             }
@@ -59,13 +62,22 @@ fn main() {
     let satp = vm.cpu.csr.satp;
     let ppn = satp & 0x3FFFFF;
     let pg_dir = (ppn as u64) * 4096;
-    println!("\n=== Boot page table (SATP=0x{:08X}, pg_dir=0x{:08X}) ===", satp, pg_dir);
+    println!(
+        "\n=== Boot page table (SATP=0x{:08X}, pg_dir=0x{:08X}) ===",
+        satp, pg_dir
+    );
     for i in 768..777u32 {
         if let Ok(pte) = vm.bus.read_word(pg_dir + (i * 4) as u64) {
             let full_ppn = (pte >> 10) & 0x3FFFFF;
             let ppn_hi = (full_ppn >> 10) & 0xFFF;
-            println!("  L1[{}] = 0x{:08X} PPN=0x{:06X} ppn_hi=0x{:03X} -> PA_base=0x{:08X}",
-                i, pte, full_ppn, ppn_hi, (ppn_hi as u64) << 22);
+            println!(
+                "  L1[{}] = 0x{:08X} PPN=0x{:06X} ppn_hi=0x{:03X} -> PA_base=0x{:08X}",
+                i,
+                pte,
+                full_ppn,
+                ppn_hi,
+                (ppn_hi as u64) << 22
+            );
         }
     }
 
@@ -79,18 +91,33 @@ fn main() {
             let e_phoff = u32::from_le_bytes(kernel_image[28..32].try_into().unwrap());
             let e_phentsize = u16::from_le_bytes(kernel_image[42..44].try_into().unwrap());
             let e_phnum = u16::from_le_bytes(kernel_image[44..46].try_into().unwrap());
-            println!("  phoff={} phentsize={} phnum={}", e_phoff, e_phentsize, e_phnum);
+            println!(
+                "  phoff={} phentsize={} phnum={}",
+                e_phoff, e_phentsize, e_phnum
+            );
 
             for p in 0..e_phnum {
                 let ph_off = e_phoff as usize + p as usize * e_phentsize as usize;
                 if ph_off + 32 <= kernel_image.len() {
-                    let p_type = u32::from_le_bytes(kernel_image[ph_off..ph_off+4].try_into().unwrap());
-                    if p_type == 1 { // PT_LOAD
-                        let p_offset = u32::from_le_bytes(kernel_image[ph_off+4..ph_off+8].try_into().unwrap());
-                        let p_vaddr = u32::from_le_bytes(kernel_image[ph_off+8..ph_off+12].try_into().unwrap());
-                        let p_paddr = u32::from_le_bytes(kernel_image[ph_off+12..ph_off+16].try_into().unwrap());
-                        let p_filesz = u32::from_le_bytes(kernel_image[ph_off+16..ph_off+20].try_into().unwrap());
-                        let p_memsz = u32::from_le_bytes(kernel_image[ph_off+20..ph_off+24].try_into().unwrap());
+                    let p_type =
+                        u32::from_le_bytes(kernel_image[ph_off..ph_off + 4].try_into().unwrap());
+                    if p_type == 1 {
+                        // PT_LOAD
+                        let p_offset = u32::from_le_bytes(
+                            kernel_image[ph_off + 4..ph_off + 8].try_into().unwrap(),
+                        );
+                        let p_vaddr = u32::from_le_bytes(
+                            kernel_image[ph_off + 8..ph_off + 12].try_into().unwrap(),
+                        );
+                        let p_paddr = u32::from_le_bytes(
+                            kernel_image[ph_off + 12..ph_off + 16].try_into().unwrap(),
+                        );
+                        let p_filesz = u32::from_le_bytes(
+                            kernel_image[ph_off + 16..ph_off + 20].try_into().unwrap(),
+                        );
+                        let p_memsz = u32::from_le_bytes(
+                            kernel_image[ph_off + 20..ph_off + 24].try_into().unwrap(),
+                        );
                         println!("  LOAD: offset=0x{:X} vaddr=0x{:08X} paddr=0x{:08X} filesz=0x{:X} memsz=0x{:X}",
                             p_offset, p_vaddr, p_paddr, p_filesz, p_memsz);
                         // Check if 0x003F9CC is in this segment

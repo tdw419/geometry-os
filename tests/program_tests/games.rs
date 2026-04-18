@@ -1,15 +1,12 @@
 use super::*;
 
-
-
 // ── SPRITE OPCODE ───────────────────────────────────────────────
 
 #[test]
 fn test_sprite_opcode() {
     let source = std::fs::read_to_string("programs/sprite_demo.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -22,25 +19,46 @@ fn test_sprite_opcode() {
 
     // Run until first FRAME (game loop programs never halt)
     for _ in 0..10_000_000 {
-        if !vm.step() { break; }
-        if vm.frame_ready { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
     }
 
     // Sprite data should be written to RAM at 0x3000
     // Eye pixels patched at offset 9 (index 1,1) and 14 (index 6,1)
-    assert_eq!(vm.ram[0x3009], 0x00AAFF, "eye pixel at RAM[0x3009] should be 0x00AAFF");
-    assert_eq!(vm.ram[0x300E], 0x00AAFF, "eye pixel at RAM[0x300E] should be 0x00AAFF");
+    assert_eq!(
+        vm.ram[0x3009], 0x00AAFF,
+        "eye pixel at RAM[0x3009] should be 0x00AAFF"
+    );
+    assert_eq!(
+        vm.ram[0x300E], 0x00AAFF,
+        "eye pixel at RAM[0x300E] should be 0x00AAFF"
+    );
     // Shirt rows (offsets 32-47 = 0x3020..0x302F) should be shirt blue
-    assert_eq!(vm.ram[0x3020], 0x3355AA, "shirt pixel at RAM[0x3020] should be 0x3355AA");
+    assert_eq!(
+        vm.ram[0x3020], 0x3355AA,
+        "shirt pixel at RAM[0x3020] should be 0x3355AA"
+    );
     // Corner transparent pixels should remain 0
-    assert_eq!(vm.ram[0x3000], 0, "top-left corner of sprite should be transparent");
-    assert_eq!(vm.ram[0x3007], 0, "top-right corner of sprite should be transparent");
+    assert_eq!(
+        vm.ram[0x3000], 0,
+        "top-left corner of sprite should be transparent"
+    );
+    assert_eq!(
+        vm.ram[0x3007], 0,
+        "top-right corner of sprite should be transparent"
+    );
     // Screen should have been rendered (player starts at 124,100 — some pixel nearby is non-zero)
     let player_x = 124usize;
     let player_y = 100usize;
-    let row_has_pixels = (player_x..player_x + 8)
-        .any(|x| vm.screen[player_y * 256 + x] != 0);
-    assert!(row_has_pixels, "screen should have sprite pixels at player start position");
+    let row_has_pixels = (player_x..player_x + 8).any(|x| vm.screen[player_y * 256 + x] != 0);
+    assert!(
+        row_has_pixels,
+        "screen should have sprite pixels at player start position"
+    );
 }
 
 #[test]
@@ -99,18 +117,28 @@ fn test_sprite_transparent_skips_zero() {
     // (5, 5) should be green
     assert_eq!(vm.screen[5 * 256 + 5], 0x00FF00, "(5,5) should be green");
     // (6, 5) should still be white (transparent)
-    assert_eq!(vm.screen[5 * 256 + 6], 0xFFFFFF, "(6,5) should be white (transparent)");
+    assert_eq!(
+        vm.screen[5 * 256 + 6],
+        0xFFFFFF,
+        "(6,5) should be white (transparent)"
+    );
     // (7, 5) should be blue
     assert_eq!(vm.screen[5 * 256 + 7], 0x0000FF, "(7,5) should be blue");
     // (5, 6) should still be white (transparent)
-    assert_eq!(vm.screen[6 * 256 + 5], 0xFFFFFF, "(5,6) should be white (transparent)");
+    assert_eq!(
+        vm.screen[6 * 256 + 5],
+        0xFFFFFF,
+        "(5,6) should be white (transparent)"
+    );
     // (6, 6) should be red
     assert_eq!(vm.screen[6 * 256 + 6], 0xFF0000, "(6,6) should be red");
     // (7, 6) should still be white (transparent)
-    assert_eq!(vm.screen[6 * 256 + 7], 0xFFFFFF, "(7,6) should be white (transparent)");
+    assert_eq!(
+        vm.screen[6 * 256 + 7],
+        0xFFFFFF,
+        "(7,6) should be white (transparent)"
+    );
 }
-
-
 
 // ── BREAKOUT ──────────────────────────────────────────────────
 
@@ -118,8 +146,7 @@ fn test_sprite_transparent_skips_zero() {
 fn test_breakout_initializes() {
     let source = std::fs::read_to_string("programs/breakout.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -131,7 +158,9 @@ fn test_breakout_initializes() {
 
     // Run until first FRAME (init complete, entered game loop)
     for _ in 0..50_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if vm.frame_ready {
             vm.frame_ready = false;
             break;
@@ -142,9 +171,18 @@ fn test_breakout_initializes() {
     assert_eq!(vm.ram[0x3000], 0xFF0000, "brick 0 should be red (row 0)");
     assert_eq!(vm.ram[0x3007], 0xFF0000, "brick 7 should be red (row 0)");
     assert_eq!(vm.ram[0x3008], 0xFF8800, "brick 8 should be orange (row 1)");
-    assert_eq!(vm.ram[0x300F], 0xFF8800, "brick 15 should be orange (row 1)");
-    assert_eq!(vm.ram[0x3010], 0xFFDD00, "brick 16 should be yellow (row 2)");
-    assert_eq!(vm.ram[0x3017], 0xFFDD00, "brick 23 should be yellow (row 2)");
+    assert_eq!(
+        vm.ram[0x300F], 0xFF8800,
+        "brick 15 should be orange (row 1)"
+    );
+    assert_eq!(
+        vm.ram[0x3010], 0xFFDD00,
+        "brick 16 should be yellow (row 2)"
+    );
+    assert_eq!(
+        vm.ram[0x3017], 0xFFDD00,
+        "brick 23 should be yellow (row 2)"
+    );
     assert_eq!(vm.ram[0x3018], 0x00CC44, "brick 24 should be green (row 3)");
     assert_eq!(vm.ram[0x301F], 0x00CC44, "brick 31 should be green (row 3)");
 
@@ -160,27 +198,30 @@ fn test_breakout_initializes() {
 #[test]
 fn test_breakout_assembles() {
     // Smoke test: breakout.asm must assemble without errors
-    let source = std::fs::read_to_string("programs/breakout.asm")
-        .expect("breakout.asm not found");
+    let source = std::fs::read_to_string("programs/breakout.asm").expect("breakout.asm not found");
     let asm = assemble(&source, 0x1000).expect("breakout.asm failed to assemble");
-    assert!(asm.pixels.len() > 200, "breakout should be more than 200 words");
+    assert!(
+        asm.pixels.len() > 200,
+        "breakout should be more than 200 words"
+    );
 }
 
 #[test]
 fn test_tetris_assembles() {
     // Smoke test: tetris.asm must assemble without errors
-    let source = std::fs::read_to_string("programs/tetris.asm")
-        .expect("tetris.asm not found");
+    let source = std::fs::read_to_string("programs/tetris.asm").expect("tetris.asm not found");
     let asm = assemble(&source, 0).expect("tetris.asm failed to assemble");
-    assert!(asm.pixels.len() > 500, "tetris should be more than 500 words");
+    assert!(
+        asm.pixels.len() > 500,
+        "tetris should be more than 500 words"
+    );
 }
 
 #[test]
 fn test_tetris_initializes() {
     let source = std::fs::read_to_string("programs/tetris.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -192,7 +233,9 @@ fn test_tetris_initializes() {
 
     // Run until first FRAME (init complete)
     for _ in 0..200_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if vm.frame_ready {
             vm.frame_ready = false;
             break;
@@ -233,14 +276,11 @@ fn test_tetris_initializes() {
     assert_eq!(vm.ram[0x4104], 4, "I-piece rot1 row0 should be 0b0100");
 }
 
-
-
 // ── MAZE ───────────────────────────────────────────────────────
 
 #[test]
 fn test_maze_assembles() {
-    let source = std::fs::read_to_string("programs/maze.asm")
-        .expect("maze.asm not found");
+    let source = std::fs::read_to_string("programs/maze.asm").expect("maze.asm not found");
     let asm = assemble(&source, 0).expect("maze.asm failed to assemble");
     assert!(asm.pixels.len() > 300, "maze should be more than 300 words");
 }
@@ -249,8 +289,7 @@ fn test_maze_assembles() {
 fn test_maze_initializes() {
     let source = std::fs::read_to_string("programs/maze.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -262,7 +301,9 @@ fn test_maze_initializes() {
 
     // Run until first FRAME (init + generate + render complete)
     for _ in 0..500_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if vm.frame_ready {
             vm.frame_ready = false;
             break;
@@ -270,7 +311,10 @@ fn test_maze_initializes() {
     }
 
     // Top border (row 0) should be all walls
-    assert_eq!(vm.ram[0x5000], 0xFFFFFFFF, "top border row should be all walls");
+    assert_eq!(
+        vm.ram[0x5000], 0xFFFFFFFF,
+        "top border row should be all walls"
+    );
 
     // Row 1 should have passages carved (not all walls)
     assert_ne!(
@@ -300,8 +344,7 @@ fn test_maze_peek_collision_blocks_wall() {
     // Top border is always a wall, so player must not move
     let source = std::fs::read_to_string("programs/maze.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -313,7 +356,9 @@ fn test_maze_peek_collision_blocks_wall() {
 
     // Run until first FRAME
     for _ in 0..500_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if vm.frame_ready {
             vm.frame_ready = false;
             break;
@@ -329,7 +374,9 @@ fn test_maze_peek_collision_blocks_wall() {
 
     // Run until next FRAME
     for _ in 0..100_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if vm.frame_ready {
             vm.frame_ready = false;
             break;
@@ -337,18 +384,23 @@ fn test_maze_peek_collision_blocks_wall() {
     }
 
     // Player must still be at (0,0) -- blocked by wall
-    assert_eq!(vm.ram[0x5310], 0, "player_x should still be 0 after blocked move");
-    assert_eq!(vm.ram[0x5311], 0, "player_y should still be 0 after blocked move");
+    assert_eq!(
+        vm.ram[0x5310], 0,
+        "player_x should still be 0 after blocked move"
+    );
+    assert_eq!(
+        vm.ram[0x5311], 0,
+        "player_y should still be 0 after blocked move"
+    );
 }
-
 
 // ── INFINITE MAP ──────────────────────────────────────────────
 
 /// Helper: assemble infinite_map.asm, load into a fresh VM, return it.
 /// The VM is ready to step but has not been run yet.
 fn infinite_map_vm() -> Vm {
-    let source = std::fs::read_to_string("programs/infinite_map.asm")
-        .expect("infinite_map.asm not found");
+    let source =
+        std::fs::read_to_string("programs/infinite_map.asm").expect("infinite_map.asm not found");
     let asm = assemble(&source, 0).expect("infinite_map.asm failed to assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
@@ -364,8 +416,12 @@ fn infinite_map_vm() -> Vm {
 fn step_until_frame(vm: &mut Vm, max_steps: u32) -> u32 {
     vm.frame_ready = false;
     for i in 0..max_steps {
-        if vm.frame_ready { return i; }
-        if !vm.step() { return i; }
+        if vm.frame_ready {
+            return i;
+        }
+        if !vm.step() {
+            return i;
+        }
     }
     max_steps
 }
@@ -373,12 +429,16 @@ fn step_until_frame(vm: &mut Vm, max_steps: u32) -> u32 {
 #[test]
 fn test_infinite_map_assembles() {
     // Requirement: infinite_map.asm assembles without errors and produces bytecode.
-    let source = std::fs::read_to_string("programs/infinite_map.asm")
-        .expect("infinite_map.asm not found");
+    let source =
+        std::fs::read_to_string("programs/infinite_map.asm").expect("infinite_map.asm not found");
     let asm = assemble(&source, 0).expect("infinite_map.asm should assemble");
     assert!(!asm.pixels.is_empty(), "should produce non-empty bytecode");
     // The program is ~530 lines of asm; expect a substantial bytecode output.
-    assert!(asm.pixels.len() > 500, "bytecode should be >500 words, got {}", asm.pixels.len());
+    assert!(
+        asm.pixels.len() > 500,
+        "bytecode should be >500 words, got {}",
+        asm.pixels.len()
+    );
 }
 
 #[test]
@@ -388,7 +448,11 @@ fn test_infinite_map_pxpk_assembles() {
     let asm = assemble(&source, 0).expect("infinite_map_pxpk.asm should assemble");
     assert!(!asm.pixels.is_empty(), "should produce non-empty bytecode");
     // pxpk version is ~635 lines; expect similar bytecode size
-    assert!(asm.pixels.len() > 400, "bytecode should be >400 words, got {}", asm.pixels.len());
+    assert!(
+        asm.pixels.len() > 400,
+        "bytecode should be >400 words, got {}",
+        asm.pixels.len()
+    );
 }
 
 /// Helper: assemble infinite_map_pxpk.asm, load into VM.
@@ -410,10 +474,18 @@ fn test_infinite_map_pxpk_runs_and_renders() {
     let mut vm = infinite_map_pxpk_vm();
     vm.ram[0xFFB] = 0;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "pxpk should reach FRAME within 1M steps (took {})", steps);
+    assert!(
+        vm.frame_ready,
+        "pxpk should reach FRAME within 1M steps (took {})",
+        steps
+    );
     let non_black: usize = vm.screen.iter().filter(|&&p| p != 0).count();
-    assert!(non_black > 50000,
-        "pxpk screen should have mostly colored pixels, got {}/{}", non_black, 256 * 256);
+    assert!(
+        non_black > 50000,
+        "pxpk screen should have mostly colored pixels, got {}/{}",
+        non_black,
+        256 * 256
+    );
 }
 
 #[test]
@@ -423,7 +495,11 @@ fn test_infinite_map_pxpk_camera_moves() {
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready, "pxpk should reach FRAME (took {})", steps);
     // Camera should have moved -- y position in RAM[0x7801] should be > 0
-    assert!(vm.ram[0x7801] > 0, "camera y should have moved down, got {}", vm.ram[0x7801]);
+    assert!(
+        vm.ram[0x7801] > 0,
+        "camera y should have moved down, got {}",
+        vm.ram[0x7801]
+    );
 }
 
 #[test]
@@ -444,7 +520,11 @@ fn test_infinite_map_pxpk_pattern_variety() {
             }
         }
     }
-    assert!(colors.len() > 5, "pxpk should produce varied tile colors, got {} unique", colors.len());
+    assert!(
+        colors.len() > 5,
+        "pxpk should produce varied tile colors, got {} unique",
+        colors.len()
+    );
 }
 
 #[test]
@@ -457,8 +537,81 @@ fn test_infinite_map_pxpk_step_budget() {
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready, "pxpk should reach FRAME (took {})", steps);
     eprintln!("pxpk frame: {} steps", steps);
-    assert!(steps < 500_000,
-        "pxpk render loop should take < 500K steps, took {}", steps);
+    assert!(
+        steps < 500_000,
+        "pxpk render loop should take < 500K steps, took {}",
+        steps
+    );
+}
+
+#[test]
+fn test_infinite_map_pxpk_day_night_tint() {
+    // Verify the day/night tint produces visible color shifts across frames.
+    // The tint cycles with period 256, 4 phases of 64 frames:
+    //   Dawn (0-63): warm R+21 G+7, Day (64-127): fade to neutral,
+    //   Dusk (128-191): amber R+21, Night (192-255): cool G+7 B+21
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+
+    // Frame 0: dawn phase, frac=0 → tint=0 (start of dawn, not yet warm)
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+    let screen_dawn_start = vm.screen.to_vec();
+    let _avg_r_start: u32 = screen_dawn_start
+        .iter()
+        .map(|&p| (p >> 16) & 0xFF)
+        .sum::<u32>();
+
+    // Run more frames to reach peak dawn (frame ~56, frac_shr=7)
+    for _ in 0..56 {
+        vm.frame_ready = false;
+        let _ = step_until_frame(&mut vm, 1_000_000);
+    }
+    assert!(vm.frame_ready);
+    let screen_dawn_peak = vm.screen.to_vec();
+
+    // Run to night phase (frame 192+, frac=0 → tint=0)
+    for _ in 0..136 {
+        vm.frame_ready = false;
+        let _ = step_until_frame(&mut vm, 1_000_000);
+    }
+    assert!(vm.frame_ready);
+    let screen_night_start = vm.screen.to_vec();
+
+    // Count pixels that differ between dawn peak and night start
+    let diff_count = screen_dawn_peak
+        .iter()
+        .zip(screen_night_start.iter())
+        .filter(|(a, b)| a != b)
+        .count();
+
+    // The tint should produce measurable differences
+    eprintln!(
+        "Dawn peak vs night start: {}/{} pixels differ",
+        diff_count,
+        256 * 256
+    );
+    assert!(
+        diff_count > 1000,
+        "day/night tint should change visible pixels, got {} diffs",
+        diff_count
+    );
+
+    // Verify tint doesn't break biome count (biomes still distinguishable)
+    let mut colors = std::collections::HashSet::new();
+    for y in [0, 32, 64, 128, 200] {
+        for x in [0, 32, 64, 128, 200] {
+            let idx = (y as usize) * 256 + (x as usize);
+            if idx < screen_dawn_peak.len() {
+                colors.insert(screen_dawn_peak[idx]);
+            }
+        }
+    }
+    assert!(
+        colors.len() > 5,
+        "biomes should still be varied during dawn, got {} unique colors",
+        colors.len()
+    );
 }
 
 #[test]
@@ -470,17 +623,28 @@ fn test_infinite_map_runs_and_renders() {
     vm.ram[0xFFB] = 0;
 
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "should reach FRAME within 1M steps (took {})", steps);
+    assert!(
+        vm.frame_ready,
+        "should reach FRAME within 1M steps (took {})",
+        steps
+    );
 
     // Screen should have rendered terrain -- not all black.
     let non_black: usize = vm.screen.iter().filter(|&&p| p != 0).count();
-    assert!(non_black > 0, "screen should have non-black pixels after rendering, got 0/{}", 256 * 256);
+    assert!(
+        non_black > 0,
+        "screen should have non-black pixels after rendering, got 0/{}",
+        256 * 256
+    );
 
     // With 64x64 tiles covering the full 256x256 screen, nearly all pixels should be colored.
     // Water at (0,0) still produces non-black blue pixels.
-    assert!(non_black > 50000,
+    assert!(
+        non_black > 50000,
         "most of the screen should be colored, got {}/{} non-black pixels",
-        non_black, 256 * 256);
+        non_black,
+        256 * 256
+    );
 }
 
 #[test]
@@ -491,33 +655,65 @@ fn test_infinite_map_camera_moves_on_key_input() {
     // --- Frame 1: press Right (bit 3 = 8) ---
     vm.ram[0xFFB] = 8;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 1 should render within 1M steps (took {})", steps);
-    assert_eq!(vm.ram[0x7800], 1, "camera_x should be 1 after pressing Right");
-    assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 (no vertical input)");
+    assert!(
+        vm.frame_ready,
+        "frame 1 should render within 1M steps (took {})",
+        steps
+    );
+    assert_eq!(
+        vm.ram[0x7800], 1,
+        "camera_x should be 1 after pressing Right"
+    );
+    assert_eq!(
+        vm.ram[0x7801], 0,
+        "camera_y should be 0 (no vertical input)"
+    );
 
     // --- Frame 2: press Down (bit 1 = 2) ---
     vm.ram[0xFFB] = 2;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 2 should render within 1M steps (took {})", steps);
+    assert!(
+        vm.frame_ready,
+        "frame 2 should render within 1M steps (took {})",
+        steps
+    );
     assert_eq!(vm.ram[0x7800], 1, "camera_x should still be 1");
-    assert_eq!(vm.ram[0x7801], 1, "camera_y should be 1 after pressing Down");
+    assert_eq!(
+        vm.ram[0x7801], 1,
+        "camera_y should be 1 after pressing Down"
+    );
 
     // --- Frame 3: press Up+Left (bits 0+2 = 5) ---
     vm.ram[0xFFB] = 5;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 3 should render within 1M steps (took {})", steps);
-    assert_eq!(vm.ram[0x7800], 0, "camera_x should be 0 after pressing Left");
+    assert!(
+        vm.frame_ready,
+        "frame 3 should render within 1M steps (took {})",
+        steps
+    );
+    assert_eq!(
+        vm.ram[0x7800], 0,
+        "camera_x should be 0 after pressing Left"
+    );
     assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after pressing Up");
 
     // --- Frame 4: no keys, camera stays ---
     vm.ram[0xFFB] = 0;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 4 should render within 1M steps (took {})", steps);
+    assert!(
+        vm.frame_ready,
+        "frame 4 should render within 1M steps (took {})",
+        steps
+    );
     assert_eq!(vm.ram[0x7800], 0, "camera_x should stay 0 with no input");
     assert_eq!(vm.ram[0x7801], 0, "camera_y should stay 0 with no input");
 
     // Frame counter should have incremented each frame.
-    assert!(vm.ram[0x7802] >= 4, "frame_counter should be >= 4, got {}", vm.ram[0x7802]);
+    assert!(
+        vm.ram[0x7802] >= 4,
+        "frame_counter should be >= 4, got {}",
+        vm.ram[0x7802]
+    );
 }
 
 #[test]
@@ -529,16 +725,27 @@ fn test_infinite_map_camera_moves_multiple_steps() {
     for frame in 1..=5 {
         vm.ram[0xFFB] = 8; // Right
         let steps = step_until_frame(&mut vm, 1_000_000);
-        assert!(vm.frame_ready, "frame {} should render (took {} steps)", frame, steps);
+        assert!(
+            vm.frame_ready,
+            "frame {} should render (took {} steps)",
+            frame, steps
+        );
     }
-    assert_eq!(vm.ram[0x7800], 5, "camera_x should be 5 after 5 Right presses");
+    assert_eq!(
+        vm.ram[0x7800], 5,
+        "camera_x should be 5 after 5 Right presses"
+    );
     assert_eq!(vm.ram[0x7801], 0, "camera_y should still be 0");
 
     // Now hold Down+Right for 3 frames.
     for frame in 6..=8 {
         vm.ram[0xFFB] = 8 | 2; // Right + Down = 10
         let steps = step_until_frame(&mut vm, 1_000_000);
-        assert!(vm.frame_ready, "frame {} should render (took {} steps)", frame, steps);
+        assert!(
+            vm.frame_ready,
+            "frame {} should render (took {} steps)",
+            frame, steps
+        );
     }
     assert_eq!(vm.ram[0x7800], 8, "camera_x should be 5+3=8");
     assert_eq!(vm.ram[0x7801], 3, "camera_y should be 0+3=3");
@@ -565,12 +772,19 @@ fn test_infinite_map_screen_differs_per_camera_position() {
     let screen_far = vm.screen.clone();
 
     // The two screens should be significantly different.
-    let same: usize = screen_origin.iter().zip(screen_far.iter())
-        .filter(|(a, b)| a == b).count();
+    let same: usize = screen_origin
+        .iter()
+        .zip(screen_far.iter())
+        .filter(|(a, b)| a == b)
+        .count();
     let total = 256 * 256;
     // At most 10% of pixels should be identical between two distant camera positions.
-    assert!(same < total / 10,
-        "screens at (0,0) vs (50,50) should be mostly different, but {}/{} pixels match", same, total);
+    assert!(
+        same < total / 10,
+        "screens at (0,0) vs (50,50) should be mostly different, but {}/{} pixels match",
+        same,
+        total
+    );
 }
 
 #[test]
@@ -581,30 +795,71 @@ fn test_infinite_map_diagonal_keys_move_camera() {
     // --- Frame 1: press Up+Right diagonal (bit 4 = 16) ---
     vm.ram[0xFFB] = 16;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 1 should render within 1M steps (took {})", steps);
-    assert_eq!(vm.ram[0x7800], 1, "camera_x should be 1 after Up+Right diagonal");
-    assert_eq!(vm.ram[0x7801], u32::MAX, "camera_y should wrap to u32::MAX after Up+Right diagonal");
+    assert!(
+        vm.frame_ready,
+        "frame 1 should render within 1M steps (took {})",
+        steps
+    );
+    assert_eq!(
+        vm.ram[0x7800], 1,
+        "camera_x should be 1 after Up+Right diagonal"
+    );
+    assert_eq!(
+        vm.ram[0x7801],
+        u32::MAX,
+        "camera_y should wrap to u32::MAX after Up+Right diagonal"
+    );
 
     // --- Frame 2: press Down+Right diagonal (bit 5 = 32) ---
     vm.ram[0xFFB] = 32;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 2 should render within 1M steps (took {})", steps);
-    assert_eq!(vm.ram[0x7800], 2, "camera_x should be 2 after Down+Right diagonal");
-    assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Down+Right diagonal");
+    assert!(
+        vm.frame_ready,
+        "frame 2 should render within 1M steps (took {})",
+        steps
+    );
+    assert_eq!(
+        vm.ram[0x7800], 2,
+        "camera_x should be 2 after Down+Right diagonal"
+    );
+    assert_eq!(
+        vm.ram[0x7801], 0,
+        "camera_y should be 0 after Down+Right diagonal"
+    );
 
     // --- Frame 3: press Down+Left diagonal (bit 6 = 64) ---
     vm.ram[0xFFB] = 64;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 3 should render within 1M steps (took {})", steps);
-    assert_eq!(vm.ram[0x7800], 1, "camera_x should be 1 after Down+Left diagonal");
-    assert_eq!(vm.ram[0x7801], 1, "camera_y should be 1 after Down+Left diagonal");
+    assert!(
+        vm.frame_ready,
+        "frame 3 should render within 1M steps (took {})",
+        steps
+    );
+    assert_eq!(
+        vm.ram[0x7800], 1,
+        "camera_x should be 1 after Down+Left diagonal"
+    );
+    assert_eq!(
+        vm.ram[0x7801], 1,
+        "camera_y should be 1 after Down+Left diagonal"
+    );
 
     // --- Frame 4: press Up+Left diagonal (bit 7 = 128) ---
     vm.ram[0xFFB] = 128;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 4 should render within 1M steps (took {})", steps);
-    assert_eq!(vm.ram[0x7800], 0, "camera_x should be 0 after Up+Left diagonal");
-    assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Up+Left diagonal");
+    assert!(
+        vm.frame_ready,
+        "frame 4 should render within 1M steps (took {})",
+        steps
+    );
+    assert_eq!(
+        vm.ram[0x7800], 0,
+        "camera_x should be 0 after Up+Left diagonal"
+    );
+    assert_eq!(
+        vm.ram[0x7801], 0,
+        "camera_y should be 0 after Up+Left diagonal"
+    );
 }
 
 #[test]
@@ -616,19 +871,39 @@ fn test_infinite_map_diagonal_accumulates() {
     for frame in 1..=3 {
         vm.ram[0xFFB] = 32; // Down+Right
         let steps = step_until_frame(&mut vm, 1_000_000);
-        assert!(vm.frame_ready, "frame {} should render (took {} steps)", frame, steps);
+        assert!(
+            vm.frame_ready,
+            "frame {} should render (took {} steps)",
+            frame, steps
+        );
     }
-    assert_eq!(vm.ram[0x7800], 3, "camera_x should be 3 after 3 Down+Right diagonals");
-    assert_eq!(vm.ram[0x7801], 3, "camera_y should be 3 after 3 Down+Right diagonals");
+    assert_eq!(
+        vm.ram[0x7800], 3,
+        "camera_x should be 3 after 3 Down+Right diagonals"
+    );
+    assert_eq!(
+        vm.ram[0x7801], 3,
+        "camera_y should be 3 after 3 Down+Right diagonals"
+    );
 
     // Hold Up+Left diagonal for 2 frames to partially reverse.
     for frame in 4..=5 {
         vm.ram[0xFFB] = 128; // Up+Left
         let steps = step_until_frame(&mut vm, 1_000_000);
-        assert!(vm.frame_ready, "frame {} should render (took {} steps)", frame, steps);
+        assert!(
+            vm.frame_ready,
+            "frame {} should render (took {} steps)",
+            frame, steps
+        );
     }
-    assert_eq!(vm.ram[0x7800], 1, "camera_x should be 3-2=1 after 2 Up+Left diagonals");
-    assert_eq!(vm.ram[0x7801], 1, "camera_y should be 3-2=1 after 2 Up+Left diagonals");
+    assert_eq!(
+        vm.ram[0x7800], 1,
+        "camera_x should be 3-2=1 after 2 Up+Left diagonals"
+    );
+    assert_eq!(
+        vm.ram[0x7801], 1,
+        "camera_y should be 3-2=1 after 2 Up+Left diagonals"
+    );
 }
 
 #[test]
@@ -639,9 +914,19 @@ fn test_infinite_map_cardinal_and_diagonal_combined() {
 
     vm.ram[0xFFB] = 8 | 32; // Right + Down+Right diagonal = 40
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame should render within 1M steps (took {})", steps);
-    assert_eq!(vm.ram[0x7800], 2, "camera_x should be 2 (Right + Down+Right diagonal)");
-    assert_eq!(vm.ram[0x7801], 1, "camera_y should be 1 (Down+Right diagonal only)");
+    assert!(
+        vm.frame_ready,
+        "frame should render within 1M steps (took {})",
+        steps
+    );
+    assert_eq!(
+        vm.ram[0x7800], 2,
+        "camera_x should be 2 (Right + Down+Right diagonal)"
+    );
+    assert_eq!(
+        vm.ram[0x7801], 1,
+        "camera_y should be 1 (Down+Right diagonal only)"
+    );
 }
 
 #[test]
@@ -655,12 +940,18 @@ fn test_infinite_map_render_loop_instruction_count() {
     vm.ram[0xFFB] = 0; // no input
 
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "should reach FRAME within 1M steps (took {})", steps);
+    assert!(
+        vm.frame_ready,
+        "should reach FRAME within 1M steps (took {})",
+        steps
+    );
 
     // The render loop should be well under 500K steps for a single frame.
-    assert!(steps < 500_000,
+    assert!(
+        steps < 500_000,
         "render loop should take < 500K steps, took {} (possible performance regression)",
-        steps);
+        steps
+    );
 }
 
 #[test]
@@ -678,24 +969,42 @@ fn test_infinite_map_player_cursor_visible() {
 
     // Top arm: pixel (127, 124)
     let px = vm.screen[124 * 256 + 127];
-    assert_eq!(px, white, "top arm pixel (127,124) should be white cursor, got {:#X}", px);
+    assert_eq!(
+        px, white,
+        "top arm pixel (127,124) should be white cursor, got {:#X}",
+        px
+    );
 
     // Bottom arm: pixel (127, 128)
     let px = vm.screen[128 * 256 + 127];
-    assert_eq!(px, white, "bottom arm pixel (127,128) should be white cursor, got {:#X}", px);
+    assert_eq!(
+        px, white,
+        "bottom arm pixel (127,128) should be white cursor, got {:#X}",
+        px
+    );
 
     // Left arm: pixel (124, 127)
     let px = vm.screen[127 * 256 + 124];
-    assert_eq!(px, white, "left arm pixel (124,127) should be white cursor, got {:#X}", px);
+    assert_eq!(
+        px, white,
+        "left arm pixel (124,127) should be white cursor, got {:#X}",
+        px
+    );
 
     // Right arm: pixel (130, 127)
     let px = vm.screen[127 * 256 + 130];
-    assert_eq!(px, white, "right arm pixel (130,127) should be white cursor, got {:#X}", px);
+    assert_eq!(
+        px, white,
+        "right arm pixel (130,127) should be white cursor, got {:#X}",
+        px
+    );
 
     // Center pixel (127,127) should NOT be cursor -- it's a gap showing terrain
     let center_px = vm.screen[127 * 256 + 127];
-    assert_ne!(center_px, white,
-        "center pixel (127,127) should be terrain (cursor gap), not cursor color");
+    assert_ne!(
+        center_px, white,
+        "center pixel (127,127) should be terrain (cursor gap), not cursor color"
+    );
 }
 
 #[test]
@@ -717,8 +1026,11 @@ fn test_infinite_map_player_cursor_pulses() {
     let yellow: u32 = 0xFFFF00;
     // Top arm should be yellow now
     let px = vm.screen[124 * 256 + 127];
-    assert_eq!(px, yellow,
-        "cursor should pulse to yellow on frame 17, got {:#X}", px);
+    assert_eq!(
+        px, yellow,
+        "cursor should pulse to yellow on frame 17, got {:#X}",
+        px
+    );
 }
 
 #[test]
@@ -741,8 +1053,10 @@ fn test_infinite_map_minimap_overlay() {
             }
         }
     }
-    assert!(interior_non_black > 0,
-        "minimap interior should have non-black biome pixels, got 0/196");
+    assert!(
+        interior_non_black > 0,
+        "minimap interior should have non-black biome pixels, got 0/196"
+    );
 
     // 2. Border frame: all 4 edges should be entirely gray (0xAAAAAA).
     //    The border is drawn AFTER biome pixels, so it overwrites them completely.
@@ -751,36 +1065,51 @@ fn test_infinite_map_minimap_overlay() {
     // Top edge: y=0, x=240..255
     for x in 240..256 {
         let px = vm.screen[0 * 256 + x];
-        assert_eq!(px, border_color,
-            "top border pixel ({},0) should be gray, got {:#X}", x, px);
+        assert_eq!(
+            px, border_color,
+            "top border pixel ({},0) should be gray, got {:#X}",
+            x, px
+        );
     }
 
     // Bottom edge: y=15, x=240..255
     for x in 240..256 {
         let px = vm.screen[15 * 256 + x];
-        assert_eq!(px, border_color,
-            "bottom border pixel ({},15) should be gray, got {:#X}", x, px);
+        assert_eq!(
+            px, border_color,
+            "bottom border pixel ({},15) should be gray, got {:#X}",
+            x, px
+        );
     }
 
     // Left edge: x=240, y=0..15
     for y in 0..16 {
         let px = vm.screen[y * 256 + 240];
-        assert_eq!(px, border_color,
-            "left border pixel (240,{}) should be gray, got {:#X}", y, px);
+        assert_eq!(
+            px, border_color,
+            "left border pixel (240,{}) should be gray, got {:#X}",
+            y, px
+        );
     }
 
     // Right edge: x=255, y=0..15
     for y in 0..16 {
         let px = vm.screen[y * 256 + 255];
-        assert_eq!(px, border_color,
-            "right border pixel (255,{}) should be gray, got {:#X}", y, px);
+        assert_eq!(
+            px, border_color,
+            "right border pixel (255,{}) should be gray, got {:#X}",
+            y, px
+        );
     }
 
     // 3. Player dot at center of minimap (248, 8) should be white.
     //    Drawn AFTER border, so it overwrites the border pixel.
     let player_dot = vm.screen[8 * 256 + 248];
-    assert_eq!(player_dot, 0xFFFFFF,
-        "player dot at (248,8) should be white, got {:#X}", player_dot);
+    assert_eq!(
+        player_dot, 0xFFFFFF,
+        "player dot at (248,8) should be white, got {:#X}",
+        player_dot
+    );
 
     // 4. Minimap terrain changes when camera moves significantly.
     //    The minimap samples every 4th tile with 8-tile zone boundaries,
@@ -800,7 +1129,10 @@ fn test_infinite_map_minimap_overlay() {
         step_until_frame(&mut vm, 1_000_000);
         assert!(vm.frame_ready);
     }
-    assert_eq!(vm.ram[0x7800], 10, "camera should have moved 10 tiles right");
+    assert_eq!(
+        vm.ram[0x7800], 10,
+        "camera should have moved 10 tiles right"
+    );
 
     let mut frame2_interior: Vec<u32> = Vec::new();
     for y in 1..15 {
@@ -829,28 +1161,56 @@ fn test_infinite_map_diagonal_scroll() {
     // Frame 1: Up + Right (bits 0 + 3 = 9)
     vm.ram[0xFFB] = 9;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 1 should render within 1M steps (took {})", steps);
+    assert!(
+        vm.frame_ready,
+        "frame 1 should render within 1M steps (took {})",
+        steps
+    );
     assert_eq!(vm.ram[0x7800], 1, "camera_x should be 1 after Up+Right");
-    assert_eq!(vm.ram[0x7801], u32::MAX, "camera_y should wrap to u32::MAX after Up+Right");
+    assert_eq!(
+        vm.ram[0x7801],
+        u32::MAX,
+        "camera_y should wrap to u32::MAX after Up+Right"
+    );
 
     // Frame 2: Down + Left (bits 1 + 2 = 6) -- reverses frame 1
     vm.ram[0xFFB] = 6;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 2 should render within 1M steps (took {})", steps);
+    assert!(
+        vm.frame_ready,
+        "frame 2 should render within 1M steps (took {})",
+        steps
+    );
     assert_eq!(vm.ram[0x7800], 0, "camera_x should be 0 after Down+Left");
     assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Down+Left");
 
     // Frame 3: Up + Left (bits 0 + 2 = 5) -- both decrease
     vm.ram[0xFFB] = 5;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 3 should render within 1M steps (took {})", steps);
-    assert_eq!(vm.ram[0x7800], u32::MAX, "camera_x should wrap to u32::MAX after Up+Left");
-    assert_eq!(vm.ram[0x7801], u32::MAX, "camera_y should wrap to u32::MAX after Up+Left");
+    assert!(
+        vm.frame_ready,
+        "frame 3 should render within 1M steps (took {})",
+        steps
+    );
+    assert_eq!(
+        vm.ram[0x7800],
+        u32::MAX,
+        "camera_x should wrap to u32::MAX after Up+Left"
+    );
+    assert_eq!(
+        vm.ram[0x7801],
+        u32::MAX,
+        "camera_y should wrap to u32::MAX after Up+Left"
+    );
 
     // Frame 4: Down + Right (bits 1 + 3 = 10) -- reverses frame 3
     vm.ram[0xFFB] = 10;
     let steps = step_until_frame(&mut vm, 1_000_000);
-    assert!(vm.frame_ready, "frame 4 should render within 1M steps (took {})", steps);
+    assert!(
+        vm.frame_ready,
+        "frame 4 should render within 1M steps (took {})",
+        steps
+    );
     assert_eq!(vm.ram[0x7800], 0, "camera_x should be 0 after Down+Right");
     assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Down+Right");
 }

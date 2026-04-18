@@ -11,13 +11,13 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            bootargs,
-        ).expect("boot setup failed");
+    let (mut vm, fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        bootargs,
+    )
+    .expect("boot setup failed");
 
     let fw_addr_u32 = fw_addr as u32;
     let max_instr: u64 = 200_000;
@@ -50,7 +50,9 @@ fn main() {
         }
 
         // Trap handling (same as boot_linux)
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
@@ -81,9 +83,16 @@ fn main() {
             } else {
                 // ECALL_M -> SBI
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -105,12 +114,18 @@ fn main() {
         }
 
         let step_result = vm.step();
-        if let StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault = step_result {
+        if let StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault = step_result
+        {
             if count >= 185_000 {
                 eprintln!("[diag] FAULT at count={}: {:?}", count, step_result);
-                eprintln!("  PC=0x{:08X} sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X}",
-                    vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.scause, vm.cpu.csr.stval);
-                eprintln!("  stvec=0x{:08X} satp=0x{:08X} priv={:?}", vm.cpu.csr.stvec, vm.cpu.csr.satp, vm.cpu.privilege);
+                eprintln!(
+                    "  PC=0x{:08X} sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X}",
+                    vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.scause, vm.cpu.csr.stval
+                );
+                eprintln!(
+                    "  stvec=0x{:08X} satp=0x{:08X} priv={:?}",
+                    vm.cpu.csr.stvec, vm.cpu.csr.satp, vm.cpu.privilege
+                );
 
                 // Dump last 30 PCs
                 eprintln!("\n  Last {} PCs before fault:", pc_history.len());
@@ -128,8 +143,14 @@ fn main() {
                 // If stval is in the 0x80xxxxxx range, check where that value came from
                 let stval = vm.cpu.csr.stval;
                 if stval >= 0x80000000 && stval < 0xC0000000 {
-                    eprintln!("\n  stval 0x{:08X} is in the 0x80xxxxxx range (should be 0xC0xxxxxx)", stval);
-                    eprintln!("  Difference from expected VA: 0x{:08X}", 0xC0000000u32.wrapping_sub(stval) as i32);
+                    eprintln!(
+                        "\n  stval 0x{:08X} is in the 0x80xxxxxx range (should be 0xC0xxxxxx)",
+                        stval
+                    );
+                    eprintln!(
+                        "  Difference from expected VA: 0x{:08X}",
+                        0xC0000000u32.wrapping_sub(stval) as i32
+                    );
                     // Check if stval = PA + 0x80000000
                     let possible_pa = stval.wrapping_sub(0x80000000);
                     eprintln!("  If PA+0x80000000: possible PA = 0x{:08X}", possible_pa);
@@ -145,8 +166,10 @@ fn main() {
                     // Read via MMU (use the bus directly at the physical address)
                     let table_pa = 0x00C00AA4 + (scause as u64) * 4;
                     let entry = vm.bus.read_word(table_pa).unwrap_or(0);
-                    eprintln!("\n  excp_vect_table[{}] (VA 0x{:08X}, PA 0x{:08X}) = 0x{:08X}",
-                        scause, table_va, table_pa, entry);
+                    eprintln!(
+                        "\n  excp_vect_table[{}] (VA 0x{:08X}, PA 0x{:08X}) = 0x{:08X}",
+                        scause, table_va, table_pa, entry
+                    );
                 }
 
                 found = true;
@@ -158,12 +181,18 @@ fn main() {
     }
 
     if !found {
-        eprintln!("[diag] No fault found in range. Final PC=0x{:08X}", vm.cpu.pc);
+        eprintln!(
+            "[diag] No fault found in range. Final PC=0x{:08X}",
+            vm.cpu.pc
+        );
     }
 
     // Print SBI output
     if !vm.bus.sbi.console_output.is_empty() {
-        eprintln!("\n[diag] SBI console output ({} bytes):", vm.bus.sbi.console_output.len());
+        eprintln!(
+            "\n[diag] SBI console output ({} bytes):",
+            vm.bus.sbi.console_output.len()
+        );
         let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
         eprintln!("{}", s);
     }

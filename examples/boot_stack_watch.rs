@@ -1,8 +1,8 @@
 // Trace the first call to create_pgd_mapping in detail
 // Watch sp and ra at every instruction to understand the tail call behavior
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -11,13 +11,8 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, result) = RiscvVm::boot_linux(
-        &kernel,
-        initramfs.as_deref(),
-        512,
-        0,
-        bootargs,
-    ).unwrap();
+    let (mut vm, result) =
+        RiscvVm::boot_linux(&kernel, initramfs.as_deref(), 512, 0, bootargs).unwrap();
 
     let max_instr = 254_920u64; // Just past first create_pgd_mapping
     let mut count = 0u64;
@@ -45,29 +40,43 @@ fn main() {
             if target == create_pgd && rd == 1 && entry_count == 0 {
                 in_create_pgd = true;
                 entry_count = count;
-                println!(">>> ENTER create_pgd_mapping at step {}, sp=0x{:08X}, ra=0x{:08X}", count, sp, ra);
+                println!(
+                    ">>> ENTER create_pgd_mapping at step {}, sp=0x{:08X}, ra=0x{:08X}",
+                    count, sp, ra
+                );
             }
         }
 
         if in_create_pgd {
             // Log every instruction in the first call
             let compressed = (instr & 0x3) != 0x3;
-            let mark = if pc == 0xC0C04DF6 { " <--- C.JR a5 (tail call to pt_ops)" }
-                       else if pc == 0xC0C04E0A { " <--- C.JR a5 (tail call 2)" }
-                       else if pc == 0xC0C04E24 { " <--- C.JR a5 (tail call 3)" }
-                       else if pc == 0xC0C04E60 { " <--- ret" }
-                       else { "" };
+            let mark = if pc == 0xC0C04DF6 {
+                " <--- C.JR a5 (tail call to pt_ops)"
+            } else if pc == 0xC0C04E0A {
+                " <--- C.JR a5 (tail call 2)"
+            } else if pc == 0xC0C04E24 {
+                " <--- C.JR a5 (tail call 3)"
+            } else if pc == 0xC0C04E60 {
+                " <--- ret"
+            } else {
+                ""
+            };
 
             // Only log interesting instructions
             if mark != "" || pc <= create_pgd + 20 || pc >= 0xC0C04E60 - 10 {
-                println!("[{}] 0x{:08X}: 0x{:08X}{}  sp=0x{:08X} ra=0x{:08X} a5=0x{:08X}",
-                         count, pc, instr, mark, sp, ra, a5);
+                println!(
+                    "[{}] 0x{:08X}: 0x{:08X}{}  sp=0x{:08X} ra=0x{:08X} a5=0x{:08X}",
+                    count, pc, instr, mark, sp, ra, a5
+                );
             }
 
             // Check if we've returned past create_pgd_mapping
             if pc < create_pgd || pc > 0xC0C04F00 {
                 if pc != a5 && count > entry_count + 10 {
-                    println!(">>> LEFT create_pgd_mapping at step {}, PC=0x{:08X}", count, pc);
+                    println!(
+                        ">>> LEFT create_pgd_mapping at step {}, PC=0x{:08X}",
+                        count, pc
+                    );
                     println!("    sp=0x{:08X} ra=0x{:08X}", sp, ra);
                     in_create_pgd = false;
                     break;
@@ -84,5 +93,8 @@ fn main() {
         }
     }
 
-    println!("\n=== Stopped at step {}, PC=0x{:08X} ===", count, vm.cpu.pc);
+    println!(
+        "\n=== Stopped at step {}, PC=0x{:08X} ===",
+        count, vm.cpu.pc
+    );
 }

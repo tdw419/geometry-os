@@ -8,8 +8,7 @@ pub const CANVAS_COLS: usize = 32;
 pub const CANVAS_MAX_ROWS: usize = 128;
 
 /// Virtual cursor position for the canvas text surface.
-#[derive(Debug, Clone, Copy)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Cursor {
     pub row: usize,
     pub col: usize,

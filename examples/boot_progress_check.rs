@@ -1,6 +1,5 @@
 /// Diagnostic: Check if the kernel is making forward progress
 /// by sampling PCs every N instructions and checking for loops.
-
 use geometry_os::riscv::RiscvVm;
 use std::collections::HashSet;
 
@@ -63,11 +62,9 @@ fn main() {
                         vm.cpu.csr.scause = mcause;
                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus =
-                            (vm.cpu.csr.mstatus & !(1 << 5)) | (spp << 5);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (spp << 5);
                         let sie = (vm.cpu.csr.mstatus >> 1) & 1;
-                        vm.cpu.csr.mstatus =
-                            (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                         vm.cpu.csr.mstatus &= !(1 << 1);
                         vm.cpu.pc = stvec;
                         vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
@@ -127,10 +124,7 @@ fn main() {
 
     println!(
         "\n[diag] Final: count={} PC=0x{:08X} ecall={} traps={}",
-        count,
-        vm.cpu.pc,
-        vm.cpu.ecall_count,
-        trap_count
+        count, vm.cpu.pc, vm.cpu.ecall_count, trap_count
     );
     println!(
         "[diag] Unique PCs sampled: {} out of {} samples",
@@ -158,10 +152,18 @@ fn main() {
     // Show UART and SBI output
     if !vm.bus.sbi.console_output.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
-        println!("[diag] SBI console output ({} bytes):\n{}", vm.bus.sbi.console_output.len(), s);
+        println!(
+            "[diag] SBI console output ({} bytes):\n{}",
+            vm.bus.sbi.console_output.len(),
+            s
+        );
     }
     if !vm.bus.uart.tx_buf.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);
-        println!("[diag] UART tx_buf ({} bytes):\n{}", vm.bus.uart.tx_buf.len(), s);
+        println!(
+            "[diag] UART tx_buf ({} bytes):\n{}",
+            vm.bus.uart.tx_buf.len(),
+            s
+        );
     }
 }

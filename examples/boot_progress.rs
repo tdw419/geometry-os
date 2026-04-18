@@ -11,7 +11,8 @@ fn main() {
         initramfs.as_deref(),
         256,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     let max = 500_000u64;
     let sample_interval = 50_000u64;
@@ -25,8 +26,10 @@ fn main() {
         count += 1;
 
         if count % sample_interval == 0 {
-            eprintln!("[{}] PC=0x{:08X} priv={:?} scause=0x{:08X} sepc=0x{:08X}",
-                count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.scause, vm.cpu.csr.sepc);
+            eprintln!(
+                "[{}] PC=0x{:08X} priv={:?} scause=0x{:08X} sepc=0x{:08X}",
+                count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.scause, vm.cpu.csr.sepc
+            );
         }
         if count > max - 20 {
             last_pcs.push((count, vm.cpu.pc));
@@ -38,5 +41,9 @@ fn main() {
         eprintln!("  [{}] PC=0x{:08X}", c, pc);
     }
 
-    eprintln!("\nUART: {} bytes, SBI: {} bytes", vm.bus.uart.tx_buf.len(), vm.bus.sbi.console_output.len());
+    eprintln!(
+        "\nUART: {} bytes, SBI: {} bytes",
+        vm.bus.uart.tx_buf.len(),
+        vm.bus.sbi.console_output.len()
+    );
 }

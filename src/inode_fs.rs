@@ -28,7 +28,7 @@ pub enum InodeType {
 }
 
 impl InodeType {
-        /// Convert a raw u32 to an InodeType, returning None for invalid values.
+    /// Convert a raw u32 to an InodeType, returning None for invalid values.
     pub fn from_u32(v: u32) -> Option<Self> {
         match v {
             1 => Some(InodeType::Regular),
@@ -39,7 +39,7 @@ impl InodeType {
         }
     }
 
-        /// Convert this InodeType to its raw u32 representation.
+    /// Convert this InodeType to its raw u32 representation.
     pub fn to_u32(self) -> u32 {
         self as u32
     }
@@ -173,7 +173,11 @@ impl InodeFs {
             return 0;
         }
 
-        let parent_ino = match self.resolve(if parent_path.is_empty() { "/" } else { parent_path }) {
+        let parent_ino = match self.resolve(if parent_path.is_empty() {
+            "/"
+        } else {
+            parent_path
+        }) {
             Some(ino) => ino,
             None => return 0,
         };
@@ -227,7 +231,11 @@ impl InodeFs {
             return 0;
         }
 
-        let parent_ino = match self.resolve(if parent_path.is_empty() { "/" } else { parent_path }) {
+        let parent_ino = match self.resolve(if parent_path.is_empty() {
+            "/"
+        } else {
+            parent_path
+        }) {
             Some(ino) => ino,
             None => return 0,
         };
@@ -271,7 +279,9 @@ impl InodeFs {
 
         // Can't remove directories with children (except . and ..)
         if inode.itype == InodeType::Directory {
-            let user_children: usize = inode.children.iter()
+            let user_children: usize = inode
+                .children
+                .iter()
                 .filter(|(name, _)| *name != "." && *name != "..")
                 .count();
             if user_children > 0 {
@@ -285,7 +295,11 @@ impl InodeFs {
             None => return false,
         };
 
-        let parent_ino = match self.resolve(if parent_path.is_empty() { "/" } else { parent_path }) {
+        let parent_ino = match self.resolve(if parent_path.is_empty() {
+            "/"
+        } else {
+            parent_path
+        }) {
             Some(ino) => ino,
             None => return false,
         };
@@ -369,7 +383,9 @@ impl InodeFs {
             None => return false,
         };
 
-        let user_children: u32 = inode.children.iter()
+        let user_children: u32 = inode
+            .children
+            .iter()
             .filter(|(name, _)| *name != "." && *name != "..")
             .count() as u32;
 
@@ -427,7 +443,9 @@ impl InodeFs {
         let mut addr = 0usize;
         let mut count = 0u32;
 
-        let mut entries: Vec<&String> = inode.children.keys()
+        let mut entries: Vec<&String> = inode
+            .children
+            .keys()
             .filter(|name| *name != "." && *name != "..")
             .collect();
         entries.sort();
@@ -642,12 +660,12 @@ mod tests {
 
         let mut buf = vec![0u32; 10];
         assert!(fs.fstat(ino, &mut buf));
-        assert_eq!(buf[0], ino);         // ino
-        assert_eq!(buf[1], 1);           // itype = Regular
-        assert_eq!(buf[2], 3);           // size
-        assert_eq!(buf[3], 0);           // ref_count
-        assert_eq!(buf[4], 1);           // parent = root
-        assert_eq!(buf[5], 0);           // num_children (not a dir)
+        assert_eq!(buf[0], ino); // ino
+        assert_eq!(buf[1], 1); // itype = Regular
+        assert_eq!(buf[2], 3); // size
+        assert_eq!(buf[3], 0); // ref_count
+        assert_eq!(buf[4], 1); // parent = root
+        assert_eq!(buf[5], 0); // num_children (not a dir)
     }
 
     #[test]
@@ -657,11 +675,13 @@ mod tests {
         fs.create("/mydir/file1.txt");
         fs.create("/mydir/file2.txt");
 
-        let dir_ino = fs.resolve("/mydir").expect("path resolution should succeed");
+        let dir_ino = fs
+            .resolve("/mydir")
+            .expect("path resolution should succeed");
         let mut buf = vec![0u32; 10];
         assert!(fs.fstat(dir_ino, &mut buf));
-        assert_eq!(buf[1], 2);  // itype = Directory
-        assert_eq!(buf[5], 2);  // num_children = 2 (file1, file2)
+        assert_eq!(buf[1], 2); // itype = Directory
+        assert_eq!(buf[5], 2); // num_children = 2 (file1, file2)
     }
 
     #[test]
@@ -679,7 +699,11 @@ mod tests {
         fs.create("/home/user/file.txt");
 
         assert!(fs.chdir("/home/user"));
-        assert_eq!(fs.get_cwd(), fs.resolve("/home/user").expect("path resolution should succeed"));
+        assert_eq!(
+            fs.get_cwd(),
+            fs.resolve("/home/user")
+                .expect("path resolution should succeed")
+        );
 
         // Relative path from cwd
         assert_eq!(fs.resolve("file.txt"), fs.resolve("/home/user/file.txt"));
@@ -781,7 +805,9 @@ mod tests {
     fn test_write_directory_fails() {
         let mut fs = InodeFs::new();
         fs.mkdir("/mydir");
-        let dir_ino = fs.resolve("/mydir").expect("path resolution should succeed");
+        let dir_ino = fs
+            .resolve("/mydir")
+            .expect("path resolution should succeed");
         let data = vec![1u32, 2, 3];
         assert_eq!(fs.write_inode(dir_ino, 0, &data), 0);
     }
@@ -809,7 +835,9 @@ mod tests {
         fs.mkdir("/home/user");
 
         // "." should resolve to the directory itself
-        let user_ino = fs.resolve("/home/user").expect("path resolution should succeed");
+        let user_ino = fs
+            .resolve("/home/user")
+            .expect("path resolution should succeed");
         assert_eq!(fs.resolve("/home/user/."), Some(user_ino));
 
         // ".." should resolve to parent

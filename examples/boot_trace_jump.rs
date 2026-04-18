@@ -11,13 +11,13 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            bootargs,
-        ).expect("boot setup failed");
+    let (mut vm, fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        bootargs,
+    )
+    .expect("boot setup failed");
 
     let fw_addr_u32 = fw_addr as u32;
     // Run until 186555 (the known fault count) minus some margin
@@ -53,7 +53,9 @@ fn main() {
         }
 
         // Handle trap forwarding (same as boot_linux)
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 4;
@@ -92,21 +94,33 @@ fn main() {
                 let pc = vm.cpu.pc;
                 let sepc = vm.cpu.csr.sepc;
                 let stval = vm.cpu.csr.stval;
-                eprintln!("[fault] count={} FETCH_FAULT: PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X}", count, pc, sepc, stval);
+                eprintln!(
+                    "[fault] count={} FETCH_FAULT: PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X}",
+                    count, pc, sepc, stval
+                );
                 // Dump the last few PC transitions
                 eprintln!("[fault] Last {} PC transitions:", pc_history.len().min(5));
                 for (c, old_pc, new_pc) in pc_history.iter().rev().take(5) {
                     // Read instruction at old_pc
                     let instr = vm.bus.read_word(*old_pc as u64).unwrap_or(0);
-                    eprintln!("  count={} PC: 0x{:08X} -> 0x{:08X} (instr=0x{:08X})", c, old_pc, new_pc, instr);
+                    eprintln!(
+                        "  count={} PC: 0x{:08X} -> 0x{:08X} (instr=0x{:08X})",
+                        c, old_pc, new_pc, instr
+                    );
                 }
                 // Read instruction at the address BEFORE sepc (the branch that caused the jump)
                 let prev_instr_addr = sepc.wrapping_sub(4);
                 let prev_instr = vm.bus.read_word(prev_instr_addr as u64).unwrap_or(0);
-                eprintln!("[fault] Instruction before sepc: addr=0x{:08X} instr=0x{:08X}", prev_instr_addr, prev_instr);
+                eprintln!(
+                    "[fault] Instruction before sepc: addr=0x{:08X} instr=0x{:08X}",
+                    prev_instr_addr, prev_instr
+                );
                 // Also check 2 bytes before (compressed instruction)
                 let prev_half = vm.bus.read_half(prev_instr_addr as u64).unwrap_or(0);
-                eprintln!("[fault] Halfword before sepc: addr=0x{:08X} half=0x{:04X}", prev_instr_addr, prev_half);
+                eprintln!(
+                    "[fault] Halfword before sepc: addr=0x{:08X} half=0x{:04X}",
+                    prev_instr_addr, prev_half
+                );
                 // Check what's in registers
                 eprintln!("[fault] Registers: a0=0x{:08X} a1=0x{:08X} ra=0x{:08X} sp=0x{:08X} gp=0x{:08X} tp=0x{:08X} t0=0x{:08X}",
                     vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[3], vm.cpu.x[4], vm.cpu.x[5]);
@@ -115,8 +129,10 @@ fn main() {
             StepResult::LoadFault | StepResult::StoreFault => {
                 // S-mode page faults during boot are expected, continue
                 if count > 186_500 {
-                    eprintln!("[fault] count={} {:?}: PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X}",
-                        count, step_result, vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.stval);
+                    eprintln!(
+                        "[fault] count={} {:?}: PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X}",
+                        count, step_result, vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.stval
+                    );
                 }
             }
             StepResult::Ebreak => break,
@@ -138,6 +154,9 @@ fn main() {
 
     // Final state
     eprintln!("\n=== Final State ===");
-    eprintln!("count={} PC=0x{:08X} priv={:?}", count, vm.cpu.pc, vm.cpu.privilege);
+    eprintln!(
+        "count={} PC=0x{:08X} priv={:?}",
+        count, vm.cpu.pc, vm.cpu.privilege
+    );
     eprintln!("SATP=0x{:08X} SP=0x{:08X}", vm.cpu.csr.satp, vm.cpu.x[2]);
 }

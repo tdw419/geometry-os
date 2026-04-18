@@ -1,6 +1,6 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::csr;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -21,7 +21,9 @@ fn main() {
     let mut pc_drops: Vec<(u64, u32, u32)> = Vec::new(); // (count, old_pc, new_pc)
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // Detect trap at fw_addr (M-mode trap handler)
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
@@ -29,14 +31,20 @@ fn main() {
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 8;
 
-            if cause_code == 9 { // ECALL_S
+            if cause_code == 9 {
+                // ECALL_S
                 ecall_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -63,8 +71,10 @@ fn main() {
 
         // Watch for SATP changes - inject identity mappings for device regions
         if vm.cpu.csr.satp != last_satp {
-            eprintln!("[SATP] count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
-                count, last_satp, vm.cpu.csr.satp, vm.cpu.pc);
+            eprintln!(
+                "[SATP] count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
+                count, last_satp, vm.cpu.csr.satp, vm.cpu.pc
+            );
             let cur_satp = vm.cpu.csr.satp;
             let mode = (cur_satp >> 31) & 1;
             if mode == 1 {
@@ -97,23 +107,33 @@ fn main() {
         if old_pc >= 0xC0000000 && new_pc < 0x00100000 && new_pc > 0 {
             pc_drops.push((count, old_pc, new_pc));
             if pc_drops.len() <= 5 {
-                eprintln!("[PC DROP] count={}: 0x{:08X} -> 0x{:08X} RA=0x{:08X} SP=0x{:08X}",
-                    count, old_pc, new_pc, vm.cpu.x[1], vm.cpu.x[2]);
+                eprintln!(
+                    "[PC DROP] count={}: 0x{:08X} -> 0x{:08X} RA=0x{:08X} SP=0x{:08X}",
+                    count, old_pc, new_pc, vm.cpu.x[1], vm.cpu.x[2]
+                );
             }
         }
 
         count += 1;
 
         if count - last_progress >= 500_000 {
-            eprintln!("Progress: count={} PC=0x{:08X} SP=0x{:08X} SATP=0x{:08X} ECALLs={}",
-                count, vm.cpu.pc, vm.cpu.x[2], vm.cpu.csr.satp, ecall_count);
+            eprintln!(
+                "Progress: count={} PC=0x{:08X} SP=0x{:08X} SATP=0x{:08X} ECALLs={}",
+                count, vm.cpu.pc, vm.cpu.x[2], vm.cpu.csr.satp, ecall_count
+            );
             last_progress = count;
         }
     }
 
     println!("=== DONE === count={} ECALLs={}", count, ecall_count);
-    println!("PC=0x{:08X} SP=0x{:08X} RA=0x{:08X}", vm.cpu.pc, vm.cpu.x[2], vm.cpu.x[1]);
-    println!("SATP=0x{:08X} STVEC=0x{:08X}", vm.cpu.csr.satp, vm.cpu.csr.stvec);
+    println!(
+        "PC=0x{:08X} SP=0x{:08X} RA=0x{:08X}",
+        vm.cpu.pc, vm.cpu.x[2], vm.cpu.x[1]
+    );
+    println!(
+        "SATP=0x{:08X} STVEC=0x{:08X}",
+        vm.cpu.csr.satp, vm.cpu.csr.stvec
+    );
     println!("UART: {} chars", vm.bus.uart.tx_buf.len());
     if !vm.bus.uart.tx_buf.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);

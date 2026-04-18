@@ -7,9 +7,9 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::PathBuf;
 #[cfg(test)]
 use std::path::Path;
+use std::path::PathBuf;
 
 /// Maximum open file descriptors per process
 pub const MAX_FDS: usize = 16;
@@ -56,7 +56,7 @@ impl Default for FdTable {
 }
 
 impl FdTable {
-        /// Create a new fd table with reserved slots for stdin/stdout/stderr.
+    /// Create a new fd table with reserved slots for stdin/stdout/stderr.
     pub fn new() -> Self {
         let mut fds = Vec::with_capacity(MAX_FDS);
         for _ in 0..MAX_FDS {
@@ -138,22 +138,14 @@ impl Vfs {
 
     /// Get or create the fd table for a given PID.
     fn fd_table(&mut self, pid: u32) -> &mut FdTable {
-        self.fd_tables
-            .entry(pid)
-            .or_default()
+        self.fd_tables.entry(pid).or_default()
     }
 
     /// Open a file. Returns fd number or FD_ERROR.
     ///
     /// `name_addr` reads a null-terminated filename from RAM.
     /// `mode`: 0=read, 1=write, 2=append.
-    pub fn fopen(
-        &mut self,
-        ram: &[u32],
-        name_addr: u32,
-        mode: u32,
-        pid: u32,
-    ) -> u32 {
+    pub fn fopen(&mut self, ram: &[u32], name_addr: u32, mode: u32, pid: u32) -> u32 {
         let filename = match Self::read_string(ram, name_addr as usize) {
             Some(s) => s,
             None => return FD_ERROR,
@@ -175,7 +167,11 @@ impl Vfs {
             FOPEN_READ => fs::File::open(&filepath),
             FOPEN_WRITE => fs::File::create(&filepath),
             FOPEN_APPEND => {
-                match fs::OpenOptions::new().append(true).create(true).open(&filepath) {
+                match fs::OpenOptions::new()
+                    .append(true)
+                    .create(true)
+                    .open(&filepath)
+                {
                     Ok(f) => Ok(f),
                     Err(_) => fs::File::create(&filepath),
                 }
@@ -207,14 +203,7 @@ impl Vfs {
 
     /// Read from a file descriptor into RAM.
     /// Returns number of bytes read (each RAM cell holds one byte in low 8 bits).
-    pub fn fread(
-        &mut self,
-        ram: &mut [u32],
-        fd: u32,
-        buf_addr: u32,
-        len: u32,
-        pid: u32,
-    ) -> u32 {
+    pub fn fread(&mut self, ram: &mut [u32], fd: u32, buf_addr: u32, len: u32, pid: u32) -> u32 {
         let table = self.fd_table(pid);
         let open_file = match table.fds.get_mut(fd as usize) {
             Some(Some(f)) => f,
@@ -243,14 +232,7 @@ impl Vfs {
 
     /// Write from RAM to a file descriptor.
     /// Returns number of bytes written.
-    pub fn fwrite(
-        &mut self,
-        ram: &[u32],
-        fd: u32,
-        buf_addr: u32,
-        len: u32,
-        pid: u32,
-    ) -> u32 {
+    pub fn fwrite(&mut self, ram: &[u32], fd: u32, buf_addr: u32, len: u32, pid: u32) -> u32 {
         let table = self.fd_table(pid);
         let open_file = match table.fds.get_mut(fd as usize) {
             Some(Some(f)) => f,

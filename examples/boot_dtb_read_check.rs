@@ -1,135 +1,211 @@
-//! Diagnostic: Verify DTB is readable at the address _dtb_early_va points to.
+//! Check if the kernel actually reads the DTB by watching for reads from the DTB area.
+//! Also check if the DTB identity mapping works.
 //! Run: cargo run --example boot_dtb_read_check
 
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{Privilege, StepResult};
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
-    let kernel_data = std::fs::read(kernel_path).unwrap();
     let ir_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
-    let initramfs_data = if std::path::Path::new(ir_path).exists() {
-        Some(std::fs::read(ir_path).unwrap())
-    } else { None };
+    let kernel_data = std::fs::read(kernel_path).expect("kernel");
+    let initramfs_data = std::path::Path::new(ir_path)
+        .exists()
+        .then(|| std::fs::read(ir_path).unwrap());
 
-    let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
+    eprintln!("[dtb_read] Starting boot...");
     let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_data, initramfs_data.as_deref(), 512, bootargs,
-    ).expect("boot_linux_setup failed");
+        &kernel_data,
+        initramfs_data.as_deref(),
+        512,
+        "console=ttyS0 earlycon=sbi loglevel=7",
+    )
+    .expect("boot_linux_setup failed");
 
-    // Verify DTB is at PA dtb_addr
-    let dtb_magic = vm.bus.read_word(dtb_addr).unwrap_or(0);
-    eprintln!("DTB at PA 0x{:08X}: first word = 0x{:08X} (expect 0xEDFE0DD0 for FDT magic)", dtb_addr, dtb_magic);
+    vm.bus.auto_pte_fixup = false;
 
-    // Check _dtb_early_va PA
-    let dtb_early_va = vm.bus.read_word(0x00801008).unwrap_or(0);
-    let dtb_early_pa = vm.bus.read_word(0x0080100C).unwrap_or(0);
-    eprintln!("_dtb_early_va=0x{:08X} (expect VA of DTB = 0x{:08X})", dtb_early_va, dtb_addr.wrapping_add(0xC0000000) as u32);
-    eprintln!("_dtb_early_pa=0x{:08X} (expect PA of DTB = 0x{:08X})", dtb_early_pa, dtb_addr as u32);
-
-    // Read a few bytes from the DTB to verify content
-    let mut hdr = Vec::new();
-    for i in 0..28 {
-        let b = vm.bus.read_byte(dtb_addr + i).unwrap_or(0);
-        hdr.push(b);
-    }
-    eprintln!("DTB header bytes: {:02X?}", hdr);
-
-    // The DTB magic in big-endian is 0xD00DFEED
-    // In little-endian u32 read: 0xEDFE0DD0
-    if dtb_magic == 0xEDFE0DD0 {
-        eprintln!("DTB magic OK!");
-        // Read totalsize (bytes 4-7)
-        let totalsize = vm.bus.read_word(dtb_addr + 4).unwrap_or(0);
-        eprintln!("DTB totalsize: {} bytes", totalsize);
-    }
-
-    // Now run boot and check at various points
+    let dtb_va = ((dtb_addr.wrapping_add(0xC0000000)) & 0xFFFFFFFF) as u32;
+    let dtb_pa = dtb_addr as u32;
     let fw_addr_u32 = fw_addr as u32;
-    let dtb_va_expected = (dtb_addr.wrapping_add(0xC0000000)) as u32;
-    let dtb_pa_expected = dtb_addr as u32;
-    let max_instr = 1_000_000u64;
     let mut count = 0u64;
-    let check_points: Vec<u64> = vec![177_000, 177_300, 177_400, 178_000, 179_000, 180_000, 200_000, 500_000];
-    let mut check_idx = 0;
+    let mut last_satp: u32 = vm.cpu.csr.satp;
+    let mut dtb_reads = 0u64;
+    let mut last_dtb_count = 0u64;
 
-    loop {
-        if count >= max_instr { break; }
-        let result = vm.step();
-        match result {
-            StepResult::Ok => {}
-            StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
-                eprintln!("[{}] Fault at PC=0x{:08X}", count, vm.cpu.pc);
-                break;
-            }
-            _ => {}
+    // Watch for the first 20 reads from DTB VA range (0xC1579000-0xC1579FFF)
+    // or DTB PA range (0x01579000-0x01579FFF)
+    while count < 300_000 {
+        if vm.bus.sbi.shutdown_requested {
+            break;
         }
 
+        // M-mode trap handling (simplified)
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
-            if (mcause >> 31) & 1 == 1 {
-                vm.cpu.csr.mepc = vm.cpu.csr.stvec;
-                vm.cpu.csr.mstatus = 1u32 << 7;
-                let _ = vm.cpu.csr.trap_return(Privilege::Machine);
-                vm.cpu.pc = vm.cpu.csr.mepc;
-                vm.cpu.privilege = Privilege::Supervisor;
-            } else if cause_code == 11 {
-                let a7 = vm.cpu.x[17];
-                let a6 = vm.cpu.x[16];
-                let a0 = vm.cpu.x[10];
-                if a7 == 0x02 && a6 == 0 && a0 != 0 && a0 != 0xFF {
-                    eprint!("{}", a0 as u8 as char);
-                    use std::io::Write;
-                    std::io::stderr().flush().ok();
-                }
-                vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
-            } else {
-                vm.cpu.csr.mepc = vm.cpu.csr.stvec;
-                vm.cpu.csr.mstatus = 1u32 << 7;
-                let _ = vm.cpu.csr.trap_return(Privilege::Machine);
-                vm.cpu.pc = vm.cpu.csr.mepc;
-                vm.cpu.privilege = Privilege::Supervisor;
-            }
-        }
+            let mpp = (vm.cpu.csr.mstatus >> 11) & 3;
 
-        // Watchdog
-        if count % 100 == 0 {
-            let prb = vm.bus.read_word(0x00C79EACu64).unwrap_or(0);
-            if prb == 0 {
-                let cur_va = vm.bus.read_word(0x00801008).unwrap_or(0);
-                if cur_va != dtb_va_expected {
-                    vm.bus.write_word(0x00801008, dtb_va_expected).ok();
-                    vm.bus.write_word(0x0080100C, dtb_pa_expected).ok();
-                    eprintln!("[{}] RESTORED _dtb_early_va", count);
+            if cause_code == 9 {
+                // ECALL_S = SBI call
+                let result = vm.bus.sbi.handle_ecall(
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
+                );
+                if let Some((a0, a1)) = result {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
+            } else if cause_code != 11 && mpp != 3 {
+                // Forward to S-mode
+                let stvec = vm.cpu.csr.stvec & !0x3u32;
+                if stvec != 0 {
+                    vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                    vm.cpu.csr.scause = mcause;
+                    vm.cpu.csr.stval = vm.cpu.csr.mtval;
+                    let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                    vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 8)) | (spp << 8);
+                    let sie = (vm.cpu.csr.mstatus >> 1) & 1;
+                    vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
+                    vm.cpu.csr.mstatus &= !(1 << 1);
+                    if cause_code == 7 {
+                        vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                    }
+                    vm.cpu.pc = stvec;
+                    vm.cpu.privilege = Privilege::Supervisor;
+                    vm.cpu.tlb.flush_all();
+                    count += 1;
+                    continue;
                 }
             }
-        }
-
-        // Checkpoints
-        if check_idx < check_points.len() && count == check_points[check_idx] {
-            let prb = vm.bus.read_word(0x00C79EACu64).unwrap_or(0);
-            let deva = vm.bus.read_word(0x00801008).unwrap_or(0);
-            let depa = vm.bus.read_word(0x0080100C).unwrap_or(0);
-            // Read DTB through the PA (bypassing MMU) to verify it's still there
-            let dtb_word0 = vm.bus.read_word(dtb_addr).unwrap_or(0);
-            // Read what _dtb_early_va points to (at PA)
-            if deva != 0 {
-                let dtb_va_pa = (deva as u64).wrapping_sub(0xC0000000);
-                let read_via_va = vm.bus.read_word(dtb_va_pa).unwrap_or(0);
-                eprintln!("[{}] PC=0x{:08X} satp=0x{:08X} prb=0x{:08X} deva=0x{:08X} DTB[0]=0x{:08X} DTB_via_va[0]=0x{:08X}",
-                    count, vm.cpu.pc, vm.cpu.csr.satp, prb, deva, dtb_word0, read_via_va);
-            } else {
-                eprintln!("[{}] PC=0x{:08X} satp=0x{:08X} prb=0x{:08X} deva=0x{:08X} DTB[0]=0x{:08X}",
-                    count, vm.cpu.pc, vm.cpu.csr.satp, prb, deva, dtb_word0);
-            }
-            check_idx += 1;
+            vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
         }
 
         vm.bus.tick_clint();
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
+
+        let pc_before = vm.cpu.pc;
+        let result = vm.step();
         count += 1;
+
+        // Check if PC is in DTB VA range
+        let pc = vm.cpu.pc;
+        if pc >= dtb_va && pc < dtb_va + 0x1000 && vm.cpu.privilege == Privilege::Supervisor {
+            dtb_reads += 1;
+            if dtb_reads <= 20 && dtb_reads > last_dtb_count {
+                eprintln!(
+                    "[dtb_read] #{} at count={}: PC=0x{:08X} (DTB VA range 0x{:08X}-0x{:08X})",
+                    dtb_reads,
+                    count,
+                    pc,
+                    dtb_va,
+                    dtb_va + 0x1000
+                );
+            }
+            last_dtb_count = dtb_reads;
+        }
+
+        match result {
+            StepResult::Ebreak => break,
+            StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
+                if count < 200_000 {
+                    let ft = match result {
+                        StepResult::FetchFault => "fetch",
+                        StepResult::LoadFault => "load",
+                        _ => "store",
+                    };
+                    eprintln!("[dtb_read] {} fault at count={}: PC=0x{:08X} scause=0x{:08X} stval=0x{:08X} priv={:?}",
+                        ft, count, vm.cpu.pc, vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.privilege);
+                }
+            }
+            _ => {}
+        }
+
+        // SATP change handling
+        let cur_satp = vm.cpu.csr.satp;
+        if cur_satp != last_satp {
+            eprintln!(
+                "[dtb_read] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
+            // Inject identity mappings
+            let ppn = cur_satp & 0x3FFFFF;
+            let pg_dir_phys = (ppn as u64) * 4096;
+            for i in 0..64u32 {
+                let addr = pg_dir_phys + (i as u64) * 4;
+                let existing = vm.bus.read_word(addr).unwrap_or(0);
+                if (existing & 1) == 0 {
+                    vm.bus.write_word(addr, 0x0000_00CF | (i << 20)).ok();
+                }
+            }
+            for &l1_idx in &[8u32, 48, 64] {
+                let addr = pg_dir_phys + (l1_idx as u64) * 4;
+                let existing = vm.bus.read_word(addr).unwrap_or(0);
+                if (existing & 1) == 0 {
+                    vm.bus.write_word(addr, 0x0000_00CF | (l1_idx << 20)).ok();
+                }
+            }
+            vm.cpu.tlb.flush_all();
+            // Fix kernel PT
+            for l1_scan in 768..780u32 {
+                let scan_addr = pg_dir_phys + (l1_scan as u64) * 4;
+                let entry = vm.bus.read_word(scan_addr).unwrap_or(0);
+                let is_valid = (entry & 1) != 0;
+                let is_non_leaf = is_valid && (entry & 0xE) == 0;
+                let needs_fix = !is_valid || is_non_leaf;
+                if !needs_fix {
+                    continue;
+                }
+                let pa_offset = l1_scan - 768;
+                vm.bus
+                    .write_word(scan_addr, 0x0000_00CF | (pa_offset << 20))
+                    .ok();
+            }
+            vm.cpu.tlb.flush_all();
+            // Restore DTB pointers
+            vm.bus.write_word(0x00801008, dtb_va).ok();
+            vm.bus.write_word(0x0080100C, dtb_pa).ok();
+            eprintln!(
+                "[dtb_read] Restored DTB pointers: va=0x{:08X} pa=0x{:08X}",
+                dtb_va, dtb_pa
+            );
+
+            // Verify: read first 4 bytes of DTB at VA
+            let dtb_magic = vm.bus.read_word(dtb_va as u64).unwrap_or(0);
+            eprintln!(
+                "[dtb_read] DTB magic at VA 0x{:08X}: 0x{:08X} (expect 0xD00DFEED)",
+                dtb_va, dtb_magic
+            );
+
+            last_satp = cur_satp;
+        }
     }
 
-    eprintln!("\nFinal: {} instr, PC=0x{:08X}", count, vm.cpu.pc);
+    let sbi_str: String = vm
+        .bus
+        .sbi
+        .console_output
+        .iter()
+        .map(|&b| b as char)
+        .collect();
+    eprintln!(
+        "\n[dtb_read] Done: count={} dtb_reads={} ecall_count={}",
+        count, dtb_reads, vm.cpu.ecall_count
+    );
+    eprintln!(
+        "[dtb_read] PC=0x{:08X} priv={:?}",
+        vm.cpu.pc, vm.cpu.privilege
+    );
+    if !sbi_str.is_empty() {
+        eprintln!("[dtb_read] Console: {}", &sbi_str[..sbi_str.len().min(500)]);
+    } else {
+        eprintln!("[dtb_read] No console output");
+    }
 }

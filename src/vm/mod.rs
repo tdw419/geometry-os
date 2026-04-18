@@ -1,4 +1,3 @@
-
 #[derive(Debug)]
 pub struct Vm {
     pub ram: Vec<u32>,
@@ -102,8 +101,6 @@ pub struct Vm {
     pub formula_dep_index: Vec<Vec<usize>>,
 }
 
-
-
 impl Default for Vm {
     fn default() -> Self {
         Self::new()
@@ -111,7 +108,7 @@ impl Default for Vm {
 }
 
 impl Vm {
-        /// Create a new VM with zeroed RAM, registers, and screen buffer.
+    /// Create a new VM with zeroed RAM, registers, and screen buffer.
     pub fn new() -> Self {
         Vm {
             ram: vec![0; RAM_SIZE],
@@ -184,7 +181,7 @@ impl Vm {
         true
     }
 
-        /// Reset the VM to initial state (zeroed RAM, registers, screen, halted=false).
+    /// Reset the VM to initial state (zeroed RAM, registers, screen, halted=false).
     #[allow(dead_code)]
     pub fn reset(&mut self) {
         for r in self.ram.iter_mut() {
@@ -244,17 +241,16 @@ mod types;
 pub use types::*;
 
 // Opcode handler submodules
-mod ops_memory;
-mod ops_graphics;
-mod ops_syscall;
 mod ops_extended;
+mod ops_graphics;
+mod ops_memory;
+mod ops_syscall;
 
 mod formula;
 mod io;
 mod memory;
 
 impl Vm {
-
     /// Execute one instruction. Returns false if halted.
     pub fn step(&mut self) -> bool {
         if self.halted || self.pc as usize >= self.ram.len() {
@@ -318,9 +314,10 @@ impl Vm {
                 }
             }
             0x10..=0x1F => {
-                if !self.step_memory(opcode) { return false; }
+                if !self.step_memory(opcode) {
+                    return false;
+                }
             }
-
 
             // ADD rd, rs  -- rd = rd + rs
             0x20 => {
@@ -432,7 +429,6 @@ impl Vm {
                 }
             }
 
-
             // JMP addr
             0x30 => {
                 let addr = self.fetch();
@@ -509,7 +505,10 @@ impl Vm {
                                 self.ram[addr] = self.regs[reg];
                                 self.regs[30] = new_sp;
                             }
-                            None => { self.trigger_segfault(); return false; }
+                            None => {
+                                self.trigger_segfault();
+                                return false;
+                            }
                             _ => {}
                         }
                     }
@@ -526,19 +525,28 @@ impl Vm {
                             self.regs[reg] = self.ram[addr];
                             self.regs[30] = sp + 1;
                         }
-                        None => { self.trigger_segfault(); return false; }
+                        None => {
+                            self.trigger_segfault();
+                            return false;
+                        }
                         _ => {}
                     }
                 }
             }
             0x40..=0x51 => {
-                if !self.step_graphics(opcode) { return false; }
+                if !self.step_graphics(opcode) {
+                    return false;
+                }
             }
             0x52..=0x5F => {
-                if !self.step_syscall(opcode) { return false; }
+                if !self.step_syscall(opcode) {
+                    return false;
+                }
             }
             0x62..=0x7A => {
-                if !self.step_extended(opcode) { return false; }
+                if !self.step_extended(opcode) {
+                    return false;
+                }
             }
             // Unknown opcode: halt
             _ => {
@@ -550,10 +558,9 @@ impl Vm {
     }
 }
 
-mod scheduler;
 mod boot;
 mod disasm;
+mod scheduler;
 
 #[cfg(test)]
 mod tests;
-

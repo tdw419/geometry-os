@@ -22,8 +22,13 @@ fn main() {
             bootargs,
         )
         .unwrap();
-        println!("[{}] PC=0x{:08X} SBI={} UART={}", 
-            bootargs, vm.cpu.pc, vm.bus.sbi.console_output.len(), vm.bus.uart.tx_buf.len());
+        println!(
+            "[{}] PC=0x{:08X} SBI={} UART={}",
+            bootargs,
+            vm.cpu.pc,
+            vm.bus.sbi.console_output.len(),
+            vm.bus.uart.tx_buf.len()
+        );
     }
 
     // Try with 5M to see if it gets past the memmove
@@ -35,6 +40,10 @@ fn main() {
         "loglevel=0 quiet",
     )
     .unwrap();
-    println!("\n[loglevel=0 quiet, 5M] PC=0x{:08X} SBI={} UART={}",
-        vm.cpu.pc, vm.bus.sbi.console_output.len(), vm.bus.uart.tx_buf.len());
+    println!(
+        "\n[loglevel=0 quiet, 5M] PC=0x{:08X} SBI={} UART={}",
+        vm.cpu.pc,
+        vm.bus.sbi.console_output.len(),
+        vm.bus.uart.tx_buf.len()
+    );
 }

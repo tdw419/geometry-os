@@ -6,14 +6,24 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    use geometry_os::riscv::RiscvVm;
     use geometry_os::riscv::cpu::{Privilege, StepResult};
     use geometry_os::riscv::csr;
     use geometry_os::riscv::mmu;
+    use geometry_os::riscv::RiscvVm;
 
-    let (mut vm, boot_result) = RiscvVm::boot_linux(&kernel_image, initramfs.as_deref(), 256, 20_000_000, bootargs).unwrap();
+    let (mut vm, boot_result) = RiscvVm::boot_linux(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        20_000_000,
+        bootargs,
+    )
+    .unwrap();
 
-    println!("Boot: {} instr, PC=0x{:08X}", boot_result.instructions, vm.cpu.pc);
+    println!(
+        "Boot: {} instr, PC=0x{:08X}",
+        boot_result.instructions, vm.cpu.pc
+    );
     println!("UART output: {} chars", vm.bus.uart.tx_buf.len());
     if !vm.bus.uart.tx_buf.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);
@@ -23,7 +33,7 @@ fn main() {
 
     // Check final TLB size
     println!("TLB entries: {}", vm.cpu.tlb.valid_count());
-    
+
     // Check the PTE
     let satp = vm.cpu.csr.read(csr::SATP);
     let ppn = satp & 0x3FFFFF;

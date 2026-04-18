@@ -19,9 +19,7 @@ pub(super) fn try_parse(
     match opcode {
         "ASM" => {
             if tokens.len() < 3 {
-                return Err(
-                    "ASM requires 2 arguments: ASM src_addr_reg, dest_addr_reg".to_string(),
-                );
+                return Err("ASM requires 2 arguments: ASM src_addr_reg, dest_addr_reg".to_string());
             }
             bytecode.push(0x4B);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -63,9 +61,7 @@ pub(super) fn try_parse(
 
         "OPEN" => {
             if tokens.len() < 3 {
-                return Err(
-                    "OPEN requires 2 arguments: OPEN path_reg, mode_reg".to_string(),
-                );
+                return Err("OPEN requires 2 arguments: OPEN path_reg, mode_reg".to_string());
             }
             bytecode.push(0x54);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -75,9 +71,7 @@ pub(super) fn try_parse(
 
         "READ" => {
             if tokens.len() < 4 {
-                return Err(
-                    "READ requires 3 arguments: READ fd_reg, buf_reg, len_reg".to_string(),
-                );
+                return Err("READ requires 3 arguments: READ fd_reg, buf_reg, len_reg".to_string());
             }
             bytecode.push(0x55);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -89,7 +83,7 @@ pub(super) fn try_parse(
         "WRITE" => {
             if tokens.len() < 4 {
                 return Err(
-                    "WRITE requires 3 arguments: WRITE fd_reg, buf_reg, len_reg".to_string(),
+                    "WRITE requires 3 arguments: WRITE fd_reg, buf_reg, len_reg".to_string()
                 );
             }
             bytecode.push(0x56);
@@ -146,9 +140,7 @@ pub(super) fn try_parse(
 
         "SETPRIORITY" => {
             if tokens.len() < 2 {
-                return Err(
-                    "SETPRIORITY requires 1 argument: SETPRIORITY priority_reg".to_string(),
-                );
+                return Err("SETPRIORITY requires 1 argument: SETPRIORITY priority_reg".to_string());
             }
             bytecode.push(0x5C);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -157,9 +149,7 @@ pub(super) fn try_parse(
 
         "PIPE" => {
             if tokens.len() < 3 {
-                return Err(
-                    "PIPE requires 2 arguments: PIPE read_fd_reg, write_fd_reg".to_string(),
-                );
+                return Err("PIPE requires 2 arguments: PIPE read_fd_reg, write_fd_reg".to_string());
             }
             bytecode.push(0x5D);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -184,7 +174,7 @@ pub(super) fn try_parse(
         "IOCTL" => {
             if tokens.len() < 4 {
                 return Err(
-                    "IOCTL requires 3 arguments: IOCTL fd_reg, cmd_reg, arg_reg".to_string(),
+                    "IOCTL requires 3 arguments: IOCTL fd_reg, cmd_reg, arg_reg".to_string()
                 );
             }
             bytecode.push(0x62);
@@ -250,8 +240,7 @@ pub(super) fn try_parse(
         "READLN" => {
             if tokens.len() != 4 {
                 return Err(
-                    "READLN requires 3 arguments: READLN buf_reg, max_len_reg, pos_reg"
-                        .to_string(),
+                    "READLN requires 3 arguments: READLN buf_reg, max_len_reg, pos_reg".to_string(),
                 );
             }
             bytecode.push(0x68);
@@ -337,9 +326,7 @@ pub(super) fn try_parse(
 
         "SIGSET" => {
             if tokens.len() < 3 {
-                return Err(
-                    "SIGSET requires 2 arguments: SIGSET sig_reg handler_reg".to_string(),
-                );
+                return Err("SIGSET requires 2 arguments: SIGSET sig_reg handler_reg".to_string());
             }
             bytecode.push(0x71);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -349,9 +336,7 @@ pub(super) fn try_parse(
 
         "HYPERVISOR" => {
             if tokens.len() < 2 {
-                return Err(
-                    "HYPERVISOR requires 1 argument: HYPERVISOR addr_reg".to_string(),
-                );
+                return Err("HYPERVISOR requires 1 argument: HYPERVISOR addr_reg".to_string());
             }
             bytecode.push(0x72);
             bytecode.push(parse_reg(tokens[1])? as u32);

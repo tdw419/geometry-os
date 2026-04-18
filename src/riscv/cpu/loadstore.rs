@@ -8,7 +8,7 @@ use super::super::bus::Bus;
 use super::super::csr;
 use super::super::decode::Operation;
 use super::super::mmu::AccessType;
-use super::{RiscvCpu, StepResult, sign_extend_byte, sign_extend_half};
+use super::{sign_extend_byte, sign_extend_half, RiscvCpu, StepResult};
 
 impl RiscvCpu {
     /// Execute a load instruction (LB, LH, LW, LBU, LHU).

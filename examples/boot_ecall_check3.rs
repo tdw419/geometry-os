@@ -1,6 +1,6 @@
+use geometry_os::riscv::cpu::Privilege;
 /// Detailed PC trace after SATP change to understand kernel boot flow.
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::Privilege;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -34,11 +34,16 @@ fn main() {
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -71,21 +76,34 @@ fn main() {
         vm.step();
 
         if vm.cpu.ecall_count > prev_ecall_count {
-            println!("[ecall] count={} ecall={} a7=0x{:X} a6=0x{:X} a0=0x{:X}",
-                count, vm.cpu.ecall_count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]);
+            println!(
+                "[ecall] count={} ecall={} a7=0x{:X} a6=0x{:X} a0=0x{:X}",
+                count, vm.cpu.ecall_count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]
+            );
             prev_ecall_count = vm.cpu.ecall_count;
         }
 
         let uart_len = vm.bus.uart.tx_buf.len();
         if uart_len > prev_uart_len {
             let text: String = vm.bus.uart.tx_buf[prev_uart_len..]
-                .iter().map(|&b| if b >= 0x20 && b < 0x7F { b as char } else { '.' }).collect();
+                .iter()
+                .map(|&b| {
+                    if b >= 0x20 && b < 0x7F {
+                        b as char
+                    } else {
+                        '.'
+                    }
+                })
+                .collect();
             println!("[uart] count={} text={:?}", count, text);
             prev_uart_len = uart_len;
         }
 
         if vm.cpu.csr.satp != last_satp {
-            println!("[satp] count={} SATP: 0x{:08X} -> 0x{:08X}", count, last_satp, vm.cpu.csr.satp);
+            println!(
+                "[satp] count={} SATP: 0x{:08X} -> 0x{:08X}",
+                count, last_satp, vm.cpu.csr.satp
+            );
             last_satp = vm.cpu.csr.satp;
             if !started_tracing {
                 satp_changed_at = count;
@@ -98,9 +116,15 @@ fn main() {
         if started_tracing && trace_count < trace_max {
             // Sample every 100th instruction
             if (count - satp_changed_at) % 100 == 0 {
-                println!("[pc] +{} count={} PC=0x{:08X} priv={:?} sp=0x{:08X} ra=0x{:08X}",
-                    count - satp_changed_at, count, vm.cpu.pc, vm.cpu.privilege,
-                    vm.cpu.x[2], vm.cpu.x[1]);
+                println!(
+                    "[pc] +{} count={} PC=0x{:08X} priv={:?} sp=0x{:08X} ra=0x{:08X}",
+                    count - satp_changed_at,
+                    count,
+                    vm.cpu.pc,
+                    vm.cpu.privilege,
+                    vm.cpu.x[2],
+                    vm.cpu.x[1]
+                );
                 trace_count += 1;
             }
         }
@@ -108,6 +132,10 @@ fn main() {
         count += 1;
     }
 
-    println!("[boot] FINAL: count={} ecall={} uart={}", 
-        count, vm.cpu.ecall_count, vm.bus.uart.tx_buf.len());
+    println!(
+        "[boot] FINAL: count={} ecall={} uart={}",
+        count,
+        vm.cpu.ecall_count,
+        vm.bus.uart.tx_buf.len()
+    );
 }

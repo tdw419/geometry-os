@@ -1,8 +1,8 @@
 //! Diagnostic: dump ALL L1 entries in the page directory at the stall point.
 //! Run: cargo run --example boot_pt_full_dump
 
-use std::fs;
 use geometry_os::riscv::{cpu::Privilege, cpu::StepResult, RiscvVm};
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -56,11 +56,16 @@ fn main() {
 
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -117,7 +122,11 @@ fn main() {
                                     let flags = pte & 0xFF;
                                     let is_leaf = (pte & 0xE) != 0;
                                     let va_start = if is_leaf {
-                                        format!("megapage VA 0x{:08X}-0x{:08X}", i * 0x200000, (i + 1) * 0x200000)
+                                        format!(
+                                            "megapage VA 0x{:08X}-0x{:08X}",
+                                            i * 0x200000,
+                                            (i + 1) * 0x200000
+                                        )
                                     } else {
                                         format!("L2 table at PA 0x{:08X}", ppn * 4096)
                                     };

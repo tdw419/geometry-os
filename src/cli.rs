@@ -1,13 +1,13 @@
 // cli.rs -- Headless CLI mode for Geometry OS
 
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use crate::vm;
 use crate::assembler;
-use crate::preprocessor;
-use crate::save::{save_state, load_state};
 use crate::canvas::list_asm_files;
 use crate::hermes::run_hermes_loop;
+use crate::preprocessor;
+use crate::save::{load_state, save_state};
+use crate::vm;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
 const SAVE_FILE: &str = "geometry_os.sav";
 
@@ -97,7 +97,10 @@ pub fn cli_main(extra_args: &[String]) {
                     continue;
                 }
                 let filename_arg = parts[1..].join(" ");
-                if filename_arg.ends_with(".asm") || filename_arg.contains('/') || filename_arg.contains('\\') {
+                if filename_arg.ends_with(".asm")
+                    || filename_arg.contains('/')
+                    || filename_arg.contains('\\')
+                {
                     let filename = filename_arg.clone();
                     let path = Path::new(&filename);
                     let path = if path.exists() {
@@ -118,7 +121,9 @@ pub fn cli_main(extra_args: &[String]) {
                             loaded_file = Some(path.clone());
                             println!(
                                 "Loaded {} ({} lines)",
-                                path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+                                path.file_name()
+                                    .map(|n| n.to_string_lossy().into_owned())
+                                    .unwrap_or_default(),
                                 lines
                             );
                         }
@@ -147,7 +152,10 @@ pub fn cli_main(extra_args: &[String]) {
                                     loaded_file = Some(path.clone());
                                     println!("Loaded programs/{}", filename);
                                 } else {
-                                    println!("Slot {} not found and could not read .asm", filename_arg);
+                                    println!(
+                                        "Slot {} not found and could not read .asm",
+                                        filename_arg
+                                    );
                                 }
                             } else {
                                 println!("Slot or file {} not found", filename_arg);
@@ -364,7 +372,10 @@ pub fn cli_main(extra_args: &[String]) {
                         }
                     }
                 } else {
-                    match u32::from_str_radix(parts[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+                    match u32::from_str_radix(
+                        parts[1].trim_start_matches("0x").trim_start_matches("0X"),
+                        16,
+                    ) {
                         Ok(addr) => {
                             if let Some(pos) = cli_breakpoints.iter().position(|&a| a == addr) {
                                 cli_breakpoints.remove(pos);
@@ -412,7 +423,10 @@ pub fn cli_main(extra_args: &[String]) {
                         if reg_info.is_empty() {
                             reg_info = " (no regs changed)".to_string();
                         }
-                        println!("{:04} {:04X} {:30} -> {:04X}{}", i, addr_before, mnemonic, vm.pc, reg_info);
+                        println!(
+                            "{:04} {:04X} {:30} -> {:04X}{}",
+                            i, addr_before, mnemonic, vm.pc, reg_info
+                        );
                         if cli_breakpoints.contains(&vm.pc) {
                             println!("BREAK @ PC=0x{:04X}", vm.pc);
                             break;
@@ -423,8 +437,7 @@ pub fn cli_main(extra_args: &[String]) {
             "disasm" => {
                 // disasm [addr] [count] — defaults to PC, 10 lines
                 let start_addr = if parts.len() >= 2 {
-                    u32::from_str_radix(parts[1].trim_start_matches("0x"), 16)
-                        .unwrap_or(vm.pc)
+                    u32::from_str_radix(parts[1].trim_start_matches("0x"), 16).unwrap_or(vm.pc)
                 } else {
                     vm.pc
                 };
@@ -435,7 +448,9 @@ pub fn cli_main(extra_args: &[String]) {
                 };
                 let mut addr = start_addr;
                 for _ in 0..count {
-                    if addr as usize >= vm.ram.len() { break; }
+                    if addr as usize >= vm.ram.len() {
+                        break;
+                    }
                     let (mnemonic, len) = vm.disassemble_at(addr);
                     let marker = if addr == vm.pc { ">" } else { " " };
                     println!(" {}{:04X} {}", marker, addr, mnemonic);
@@ -456,7 +471,13 @@ pub fn cli_main(extra_args: &[String]) {
                     continue;
                 }
                 let user_prompt = parts[1..].join(" ");
-                run_hermes_loop(&user_prompt, &mut vm, &mut source_text, &mut loaded_file, &mut canvas_assembled);
+                run_hermes_loop(
+                    &user_prompt,
+                    &mut vm,
+                    &mut source_text,
+                    &mut loaded_file,
+                    &mut canvas_assembled,
+                );
             }
             "quit" | "exit" => {
                 break;

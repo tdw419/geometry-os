@@ -105,16 +105,9 @@ pub enum TranslateResult {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MmuEvent {
     /// SATP register written.
-    SatpWrite {
-        old: u32,
-        new: u32,
-    },
+    SatpWrite { old: u32, new: u32 },
     /// Walk completed successfully.
-    PageTableWalk {
-        va: u32,
-        pa: u64,
-        ptes: Vec<u32>,
-    },
+    PageTableWalk { va: u32, pa: u64, ptes: Vec<u32> },
     /// Walk failed with a page fault.
     PageFault {
         va: u32,
@@ -122,10 +115,7 @@ pub enum MmuEvent {
         ptes: Vec<u32>,
     },
     /// Translation hit in the TLB.
-    TlbHit {
-        va: u32,
-        pa: u64,
-    },
+    TlbHit { va: u32, pa: u64 },
 }
 
 // ---- TLB ----
@@ -165,7 +155,7 @@ impl Default for Tlb {
 }
 
 impl Tlb {
-        /// Create a new empty TLB.
+    /// Create a new empty TLB.
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),
@@ -196,10 +186,8 @@ impl Tlb {
     /// If an entry already exists for this key, it is updated (not duplicated).
     pub fn insert(&mut self, vpn: u32, asid: u16, ppn: u32, flags: u32) {
         let insert_asid = if (flags & PTE_G) != 0 { 0 } else { asid };
-        self.entries.insert(
-            (vpn, insert_asid),
-            TlbEntry { ppn, flags },
-        );
+        self.entries
+            .insert((vpn, insert_asid), TlbEntry { ppn, flags });
     }
 
     /// Flush all TLB entries.
@@ -214,9 +202,8 @@ impl Tlb {
 
     /// Flush entries for a specific ASID (non-global only).
     pub fn flush_asid(&mut self, asid: u16) {
-        self.entries.retain(|&(_, a), entry| {
-            a != asid || (entry.flags & PTE_G) != 0
-        });
+        self.entries
+            .retain(|&(_, a), entry| a != asid || (entry.flags & PTE_G) != 0);
     }
 
     /// Flush entries matching both a specific VPN and ASID.
@@ -323,7 +310,8 @@ pub fn translate(
             // OpenSBI normally provides these mappings. We emulate this here.
             // Cover up to 64MB to handle kernel data/BSS segments that live at
             // physical addresses 4-22MB.
-            if va < 0x0400_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
+            if va < 0x0400_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map
+            {
                 let flags = PTE_V | PTE_R | PTE_W | PTE_X | PTE_A | PTE_D;
                 tlb.insert(combined_vpn, asid, va >> 12, flags);
                 return TranslateResult::Ok(va as u64);
@@ -396,7 +384,8 @@ pub fn translate(
                 ptes: vec![l1_pte],
             });
             // Fallback: identity-map low addresses for S/U-mode when enabled.
-            if va < 0x0400_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map {
+            if va < 0x0400_0000 && effective_priv != Privilege::Machine && bus.low_addr_identity_map
+            {
                 let flags = PTE_V | PTE_R | PTE_W | PTE_X | PTE_A | PTE_D;
                 tlb.insert(combined_vpn, asid, va >> 12, flags);
                 return TranslateResult::Ok(va as u64);
@@ -520,7 +509,16 @@ mod tests {
     fn bare_mode_identity() {
         let mut tlb = Tlb::new();
         let mut bus = Bus::new(0x8000_0000, 8192);
-        let result = translate(0x8000_0000, AccessType::Fetch, Privilege::Machine, false, false, 0, &mut bus, &mut tlb);
+        let result = translate(
+            0x8000_0000,
+            AccessType::Fetch,
+            Privilege::Machine,
+            false,
+            false,
+            0,
+            &mut bus,
+            &mut tlb,
+        );
         assert_eq!(result, TranslateResult::Ok(0x8000_0000));
     }
 
@@ -563,8 +561,14 @@ mod tests {
         let mut tlb = Tlb::new();
         tlb.insert(0x100, 1, 0xAAA, PTE_V | PTE_R);
         tlb.insert(0x100, 2, 0xBBB, PTE_V | PTE_R);
-        assert_eq!(tlb.lookup(0x100, 1).expect("operation should succeed").0, 0xAAA);
-        assert_eq!(tlb.lookup(0x100, 2).expect("operation should succeed").0, 0xBBB);
+        assert_eq!(
+            tlb.lookup(0x100, 1).expect("operation should succeed").0,
+            0xAAA
+        );
+        assert_eq!(
+            tlb.lookup(0x100, 2).expect("operation should succeed").0,
+            0xBBB
+        );
         assert!(tlb.lookup(0x100, 3).is_none());
     }
 
@@ -584,12 +588,22 @@ mod tests {
         // Map 0x1000 to 0x5000 via megapage
         let l1_addr = 0x0;
         let pte = (0x5u32 << 20) | PTE_V | PTE_R | PTE_X;
-        bus.write_word(l1_addr, pte).expect("operation should succeed");
-        
+        bus.write_word(l1_addr, pte)
+            .expect("operation should succeed");
+
         let satp = make_satap(1, 0, 0);
-        let result = translate(0x1000, AccessType::Fetch, Privilege::Supervisor, false, false, satp, &mut bus, &mut tlb);
+        let result = translate(
+            0x1000,
+            AccessType::Fetch,
+            Privilege::Supervisor,
+            false,
+            false,
+            satp,
+            &mut bus,
+            &mut tlb,
+        );
         assert!(matches!(result, TranslateResult::Ok(0x0140_1000)));
-        
+
         assert_eq!(bus.mmu_log.len(), 1);
         if let MmuEvent::PageTableWalk { va, pa, ptes } = &bus.mmu_log[0] {
             assert_eq!(*va, 0x1000);

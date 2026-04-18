@@ -4,9 +4,9 @@
 // So va_kernel_pa_offset must be 0.
 //
 // Also check what the kernel_map struct looks like in the original (unpatched) kernel.
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -29,7 +29,9 @@ fn main() {
         let initrd_addr = ((load_info.highest_addr + 0xFFF) & !0xFFF) as u64;
         for (i, &byte) in initrd_data.iter().enumerate() {
             let addr = initrd_addr + i as u64;
-            if vm.bus.write_byte(addr, byte).is_err() { break; }
+            if vm.bus.write_byte(addr, byte).is_err() {
+                break;
+            }
         }
     }
 
@@ -46,7 +48,9 @@ fn main() {
     let dtb_addr = 0x01579000u64;
     for (i, &byte) in dtb_blob.iter().enumerate() {
         let addr = dtb_addr + i as u64;
-        if vm.bus.write_byte(addr, byte).is_err() { break; }
+        if vm.bus.write_byte(addr, byte).is_err() {
+            break;
+        }
     }
 
     // Set up firmware
@@ -58,8 +62,11 @@ fn main() {
     let entry: u32 = load_info.entry;
     vm.cpu.csr.mepc = entry;
     vm.cpu.csr.mstatus = 1u32 << 11; // MPP = S
-    vm.cpu.csr.mstatus |= 1 << 7;    // MPIE = 1
-    let restored = vm.cpu.csr.trap_return(geometry_os::riscv::cpu::Privilege::Machine);
+    vm.cpu.csr.mstatus |= 1 << 7; // MPIE = 1
+    let restored = vm
+        .cpu
+        .csr
+        .trap_return(geometry_os::riscv::cpu::Privilege::Machine);
     vm.cpu.pc = vm.cpu.csr.mepc;
     vm.cpu.privilege = restored;
     vm.cpu.x[10] = 0;
@@ -93,18 +100,28 @@ fn main() {
             last_satp = cur_satp;
         }
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
-                if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                if let Some((a0, a1)) = result {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
             } else {
                 let mpp = (vm.cpu.csr.mstatus & 0x3000) >> 12;
                 if mpp != 3 && (vm.cpu.csr.stvec & !0x3) != 0 {
@@ -116,7 +133,9 @@ fn main() {
                     let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                     vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                     vm.cpu.csr.mstatus &= !(1 << 1);
-                    if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                    if cause_code == 7 {
+                        vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                    }
                     vm.cpu.pc = vm.cpu.csr.stvec & !0x3;
                     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
                     vm.cpu.tlb.flush_all();
@@ -143,7 +162,10 @@ fn main() {
             let pa_val = vm.bus.read_word(km_phys + 12).unwrap_or(0);
             let vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
             let vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
-            eprintln!("count={}: phys_addr=0x{:X} vapo=0x{:X} vkpo=0x{:X}", count, pa_val, vapo, vkpo);
+            eprintln!(
+                "count={}: phys_addr=0x{:X} vapo=0x{:X} vkpo=0x{:X}",
+                count, pa_val, vapo, vkpo
+            );
         }
 
         count += 1;

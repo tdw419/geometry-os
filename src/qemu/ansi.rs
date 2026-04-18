@@ -102,8 +102,7 @@ impl AnsiHandler {
                     _ => {
                         if (0x20..0x7F).contains(&b) {
                             if self.cursor.row < CANVAS_MAX_ROWS {
-                                let idx =
-                                    self.cursor.row * CANVAS_COLS + self.cursor.col;
+                                let idx = self.cursor.row * CANVAS_COLS + self.cursor.col;
                                 if idx < canvas_buffer.len() {
                                     canvas_buffer[idx] = b as u32;
                                 }
@@ -114,45 +113,43 @@ impl AnsiHandler {
                     }
                 }
             }
-            AnsiState::Escape => {
-                match b {
-                    b'[' => {
-                        self.state = AnsiState::Csi;
-                        self.csi_params.clear();
-                    }
-                    b'7' => {
-                        self.saved_cursor = self.cursor;
-                        self.state = AnsiState::Normal;
-                    }
-                    b'8' => {
-                        self.cursor = self.saved_cursor;
-                        self.state = AnsiState::Normal;
-                    }
-                    b'D' => {
-                        self.cursor.newline();
-                        self.auto_scroll(canvas_buffer);
-                        self.state = AnsiState::Normal;
-                    }
-                    b'M' => {
-                        if self.cursor.row > self.scroll_top {
-                            self.cursor.row -= 1;
-                        } else {
-                            self.scroll_down(canvas_buffer);
-                        }
-                        self.state = AnsiState::Normal;
-                    }
-                    b'c' => {
-                        self.cursor = Cursor::new();
-                        self.saved_cursor = Cursor::new();
-                        self.scroll_top = 0;
-                        self.scroll_bottom = CANVAS_MAX_ROWS - 1;
-                        self.state = AnsiState::Normal;
-                    }
-                    _ => {
-                        self.state = AnsiState::Normal;
-                    }
+            AnsiState::Escape => match b {
+                b'[' => {
+                    self.state = AnsiState::Csi;
+                    self.csi_params.clear();
                 }
-            }
+                b'7' => {
+                    self.saved_cursor = self.cursor;
+                    self.state = AnsiState::Normal;
+                }
+                b'8' => {
+                    self.cursor = self.saved_cursor;
+                    self.state = AnsiState::Normal;
+                }
+                b'D' => {
+                    self.cursor.newline();
+                    self.auto_scroll(canvas_buffer);
+                    self.state = AnsiState::Normal;
+                }
+                b'M' => {
+                    if self.cursor.row > self.scroll_top {
+                        self.cursor.row -= 1;
+                    } else {
+                        self.scroll_down(canvas_buffer);
+                    }
+                    self.state = AnsiState::Normal;
+                }
+                b'c' => {
+                    self.cursor = Cursor::new();
+                    self.saved_cursor = Cursor::new();
+                    self.scroll_top = 0;
+                    self.scroll_bottom = CANVAS_MAX_ROWS - 1;
+                    self.state = AnsiState::Normal;
+                }
+                _ => {
+                    self.state = AnsiState::Normal;
+                }
+            },
             AnsiState::Csi => {
                 if b == b'?' {
                     self.state = AnsiState::CsiPrivate;
@@ -242,20 +239,20 @@ impl AnsiHandler {
             }
             b'G' => {
                 let params = self.parse_params(&[1]);
-                self.cursor.col =
-                    (params[0] as usize).saturating_sub(1).min(CANVAS_COLS - 1);
+                self.cursor.col = (params[0] as usize).saturating_sub(1).min(CANVAS_COLS - 1);
             }
             b'd' => {
                 let params = self.parse_params(&[1]);
-                self.cursor.row =
-                    (params[0] as usize).saturating_sub(1).min(CANVAS_MAX_ROWS - 1);
+                self.cursor.row = (params[0] as usize)
+                    .saturating_sub(1)
+                    .min(CANVAS_MAX_ROWS - 1);
             }
             b'H' | b'f' => {
                 let params = self.parse_params(&[1, 1]);
-                self.cursor.row =
-                    (params[0] as usize).saturating_sub(1).min(CANVAS_MAX_ROWS - 1);
-                self.cursor.col =
-                    (params[1] as usize).saturating_sub(1).min(CANVAS_COLS - 1);
+                self.cursor.row = (params[0] as usize)
+                    .saturating_sub(1)
+                    .min(CANVAS_MAX_ROWS - 1);
+                self.cursor.col = (params[1] as usize).saturating_sub(1).min(CANVAS_COLS - 1);
             }
             b'J' => {
                 let params = self.parse_params(&[0]);
@@ -432,8 +429,7 @@ impl AnsiHandler {
                 // SGR (color/style) -- ignore, we only render text
             }
             b'r' => {
-                let params =
-                    self.parse_params(&[1, CANVAS_MAX_ROWS as u32]);
+                let params = self.parse_params(&[1, CANVAS_MAX_ROWS as u32]);
                 self.scroll_top = (params[0] as usize).saturating_sub(1);
                 self.scroll_bottom = (params[1] as usize)
                     .saturating_sub(1)
@@ -458,11 +454,7 @@ impl AnsiHandler {
     }
 
     /// Handle a private CSI sequence (ESC [ ? ...).
-    fn handle_csi_private(
-        &mut self,
-        final_byte: u8,
-        _canvas_buffer: &mut [u32],
-    ) {
+    fn handle_csi_private(&mut self, final_byte: u8, _canvas_buffer: &mut [u32]) {
         match final_byte {
             b'h' | b'l' | b'J' => {
                 // DEC private mode set/reset, erase scrollback -- ignore
@@ -527,8 +519,6 @@ impl AnsiHandler {
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

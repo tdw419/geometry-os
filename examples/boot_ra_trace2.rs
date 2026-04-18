@@ -1,6 +1,6 @@
 /// Trace every instruction between count 178300 and the first S-mode fault.
 /// Goal: find the exact instruction that sets RA to 0x3FFFF000.
-use geometry_os::riscv::{RiscvVm, cpu::StepResult, cpu::Privilege};
+use geometry_os::riscv::{cpu::Privilege, cpu::StepResult, RiscvVm};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -56,11 +56,16 @@ fn main() {
                 let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
                 if cause_code == 9 {
                     let result = vm.bus.sbi.handle_ecall(
-                        vm.cpu.x[17], vm.cpu.x[16],
-                        vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13],
-                        vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint,
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
                     );
                     if let Some((a0, a1)) = result {
                         vm.cpu.x[10] = a0;
@@ -87,11 +92,16 @@ fn main() {
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             } else {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -111,7 +121,13 @@ fn main() {
             // Log every instruction
             println!(
                 "{:6} PC=0x{:08X} RA=0x{:08X} SP=0x{:08X} A0=0x{:08X} A3=0x{:08X} A7=0x{:08X}",
-                count, vm.cpu.pc, vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[10], vm.cpu.x[13], vm.cpu.x[17]
+                count,
+                vm.cpu.pc,
+                vm.cpu.x[1],
+                vm.cpu.x[2],
+                vm.cpu.x[10],
+                vm.cpu.x[13],
+                vm.cpu.x[17]
             );
         }
 
@@ -121,15 +137,25 @@ fn main() {
             StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
                 if vm.cpu.privilege == Privilege::Supervisor {
                     smode_faults += 1;
-                    println!("\n=== S-mode fault #{} at count={} ===", smode_faults, count);
-                    println!("  PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
-                        vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec);
-                    println!("  scause=0x{:08X} satp=0x{:08X}", vm.cpu.csr.scause, vm.cpu.csr.satp);
+                    println!(
+                        "\n=== S-mode fault #{} at count={} ===",
+                        smode_faults, count
+                    );
+                    println!(
+                        "  PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
+                        vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec
+                    );
+                    println!(
+                        "  scause=0x{:08X} satp=0x{:08X}",
+                        vm.cpu.csr.scause, vm.cpu.csr.satp
+                    );
                     println!("  RA=0x{:08X} SP=0x{:08X} A0-A7: {:08X} {:08X} {:08X} {:08X} {:08X} {:08X} {:08X} {:08X}",
                         vm.cpu.x[1], vm.cpu.x[2],
                         vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12], vm.cpu.x[13],
                         vm.cpu.x[14], vm.cpu.x[15], vm.cpu.x[16], vm.cpu.x[17]);
-                    if smode_faults >= 2 { break; }
+                    if smode_faults >= 2 {
+                        break;
+                    }
                 }
             }
             StepResult::Ebreak => break,

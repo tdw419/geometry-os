@@ -1,8 +1,8 @@
 //! Diagnostic: Watch L1[5] at PA 0x00802014 to see when it gets cleared.
 //! Run: cargo run --example boot_l5_watch
 
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -43,7 +43,10 @@ fn main() {
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
             satp_changes += 1;
-            eprintln!("[{}] SATP changed: 0x{:08X} -> 0x{:08X}", count, last_satp, cur_satp);
+            eprintln!(
+                "[{}] SATP changed: 0x{:08X} -> 0x{:08X}",
+                count, last_satp, cur_satp
+            );
             // Check L1[5] right after SATP change
             let l5 = vm.bus.read_word(l5_pa).unwrap_or(0);
             eprintln!("  L1[5] immediately after: 0x{:08X}", l5);
@@ -55,8 +58,10 @@ fn main() {
             let l5 = vm.bus.read_word(l5_pa).unwrap_or(0);
             if l5 != last_l5 {
                 l5_changes += 1;
-                eprintln!("[{}] L1[5] changed: 0x{:08X} -> 0x{:08X} (PC was 0x{:08X})",
-                    count, last_l5, l5, pc_before);
+                eprintln!(
+                    "[{}] L1[5] changed: 0x{:08X} -> 0x{:08X} (PC was 0x{:08X})",
+                    count, last_l5, l5, pc_before
+                );
                 // Also show a few surrounding L1 entries
                 for i in 0..8u64 {
                     let e = vm.bus.read_word(0x00802000 + i * 4).unwrap_or(0);
@@ -77,7 +82,10 @@ fn main() {
             StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
                 let stval = vm.cpu.csr.stval;
                 if stval == 0x01579004 || stval == 0x01579000 {
-                    eprintln!("[{}] FAULT stval=0x{:08X} scause=0x{:08X}", count, stval, vm.cpu.csr.scause);
+                    eprintln!(
+                        "[{}] FAULT stval=0x{:08X} scause=0x{:08X}",
+                        count, stval, vm.cpu.csr.scause
+                    );
                     // Check L1[5] at fault time
                     let l5 = vm.bus.read_word(l5_pa).unwrap_or(0);
                     eprintln!("  L1[5] at fault: 0x{:08X}", l5);
@@ -133,5 +141,8 @@ fn main() {
     }
 
     eprintln!("\nFinal: {} instr, PC=0x{:08X}", count, vm.cpu.pc);
-    eprintln!("SATP changes: {}, L1[5] changes: {}", satp_changes, l5_changes);
+    eprintln!(
+        "SATP changes: {}, L1[5] changes: {}",
+        satp_changes, l5_changes
+    );
 }

@@ -10,7 +10,10 @@ fn main() {
 
     // Use boot_linux_setup to inspect state BEFORE running
     let result = geometry_os::riscv::RiscvVm::boot_linux_setup(
-        &kernel_image, initramfs.as_deref(), 512, bootargs,
+        &kernel_image,
+        initramfs.as_deref(),
+        512,
+        bootargs,
     );
 
     match result {
@@ -39,9 +42,9 @@ fn main() {
             for i in 0..4 {
                 let off = 0x1000 + i * 4;
                 let b0 = kernel_image[off];
-                let b1 = kernel_image[off+1];
-                let b2 = kernel_image[off+2];
-                let b3 = kernel_image[off+3];
+                let b1 = kernel_image[off + 1];
+                let b2 = kernel_image[off + 2];
+                let b3 = kernel_image[off + 3];
                 let word = u32::from_le_bytes([b0, b1, b2, b3]);
                 eprintln!("  File[0x{:04X}]: 0x{:08X}", off, word);
             }
@@ -58,7 +61,9 @@ fn main() {
             // Now run 1000 instructions and check again
             eprintln!("\n--- Running 1000 instructions ---");
             for _ in 0..1000 {
-                if vm.bus.sbi.shutdown_requested { break; }
+                if vm.bus.sbi.shutdown_requested {
+                    break;
+                }
                 vm.step();
             }
             eprintln!("[post-1K] pc: 0x{:08X}", vm.cpu.pc);

@@ -1,5 +1,4 @@
 /// Run until 177500 instructions, then trace 100 steps with MMU translation logging.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -15,12 +14,16 @@ fn main() {
 
     // Run to 177500
     for _ in 0..177500 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         vm.step();
     }
 
-    eprintln!("At count=177500: PC=0x{:08X} priv={:?} satp=0x{:08X}",
-        vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp);
+    eprintln!(
+        "At count=177500: PC=0x{:08X} priv={:?} satp=0x{:08X}",
+        vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp
+    );
 
     // Now manually trace: translate VA through MMU and read the instruction
     for i in 0..100 {
@@ -34,12 +37,12 @@ fn main() {
         let offset = (pc & 0xFFF) as u64;
         let satp_ppn = (satp & 0x3FFFFF) as u64;
         let root_phys = satp_ppn << 12;
-        
+
         let l1_pte = vm.bus.read_word(root_phys + vpn1 * 4).unwrap_or(0);
         let l1_v = l1_pte & 1;
         let l1_rwx = (l1_pte >> 1) & 7;
         let l1_ppn_raw = ((l1_pte & 0xFFFF_FC00) >> 10) as u32;
-        
+
         // Apply fixup
         let page_offset_ppn: u32 = 0xC000_0000 >> 12;
         let l1_ppn = if vm.bus.auto_pte_fixup && l1_ppn_raw >= page_offset_ppn {
@@ -50,7 +53,7 @@ fn main() {
 
         let mut computed_pa: u64 = 0;
         let mut pa_desc = String::new();
-        
+
         if l1_v != 0 && l1_rwx == 7 {
             // Megapage
             let ppn_hi = (l1_ppn >> 10) & 0xFFF;
@@ -78,13 +81,16 @@ fn main() {
         }
 
         let word_at_pa = vm.bus.read_word(computed_pa).unwrap_or(0);
-        
+
         // Actually step
         vm.step();
         let next_pc = vm.cpu.pc;
 
         // Only print if something interesting happens
-        if word_at_pa == 0 || computed_pa > 0x100_000_000 || !pa_desc.contains("megapage") && !pa_desc.contains("L2 ppn") {
+        if word_at_pa == 0
+            || computed_pa > 0x100_000_000
+            || !pa_desc.contains("megapage") && !pa_desc.contains("L2 ppn")
+        {
             eprintln!("[{}] PC=0x{:08X} priv={:?} SATP=0x{:08X} -> {} PA=0x{:08X} word=0x{:08X} next_pc=0x{:08X}",
                 177500 + i, pc, priv_level, satp, pa_desc, computed_pa, word_at_pa, next_pc);
         }

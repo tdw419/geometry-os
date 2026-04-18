@@ -1,8 +1,8 @@
 //! Diagnostic: Trace the fault at PC=0xC0210F14 to understand what exception occurs.
 //! Run: cargo run --example boot_fault_trace2
 
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -37,36 +37,58 @@ fn main() {
         match result {
             StepResult::Ok => {}
             StepResult::FetchFault => {
-                eprintln!("[{}] FETCH FAULT: was at PC=0x{:08X}, now PC=0x{:08X}", count, pc_before, vm.cpu.pc);
-                eprintln!("  scause=0x{:08X} stval=0x{:08X} sepc=0x{:08X}", 
-                    vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.sepc);
-                eprintln!("  stvec=0x{:08X} privilege={:?}", vm.cpu.csr.stvec, vm.cpu.privilege);
-                
+                eprintln!(
+                    "[{}] FETCH FAULT: was at PC=0x{:08X}, now PC=0x{:08X}",
+                    count, pc_before, vm.cpu.pc
+                );
+                eprintln!(
+                    "  scause=0x{:08X} stval=0x{:08X} sepc=0x{:08X}",
+                    vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.sepc
+                );
+                eprintln!(
+                    "  stvec=0x{:08X} privilege={:?}",
+                    vm.cpu.csr.stvec, vm.cpu.privilege
+                );
+
                 // The kernel's trap handler should handle this. If it faults again
                 // at the same address, that's a problem.
                 let handler_pc = vm.cpu.pc;
                 let mut handler_count = 0u64;
                 loop {
-                    if handler_count > 500 { 
-                        eprintln!("  Trap handler loop detected after {} iterations", handler_count);
+                    if handler_count > 500 {
+                        eprintln!(
+                            "  Trap handler loop detected after {} iterations",
+                            handler_count
+                        );
                         break;
                     }
                     let hr = vm.step();
                     handler_count += 1;
                     count += 1;
-                    if count >= max_instr { break; }
-                    
+                    if count >= max_instr {
+                        break;
+                    }
+
                     match hr {
                         StepResult::Ok => {
                             // Check if we returned from the handler
                             if vm.cpu.pc < 0xC0210000 || vm.cpu.pc > 0xC0220000 {
-                                eprintln!("  Returned from handler after {} instr to PC=0x{:08X}", handler_count, vm.cpu.pc);
+                                eprintln!(
+                                    "  Returned from handler after {} instr to PC=0x{:08X}",
+                                    handler_count, vm.cpu.pc
+                                );
                                 break;
                             }
                         }
                         StepResult::FetchFault | StepResult::LoadFault | StepResult::StoreFault => {
-                            eprintln!("  FAULT IN HANDLER at PC=0x{:08X} count={}", vm.cpu.pc, handler_count);
-                            eprintln!("    scause=0x{:08X} stval=0x{:08X}", vm.cpu.csr.scause, vm.cpu.csr.stval);
+                            eprintln!(
+                                "  FAULT IN HANDLER at PC=0x{:08X} count={}",
+                                vm.cpu.pc, handler_count
+                            );
+                            eprintln!(
+                                "    scause=0x{:08X} stval=0x{:08X}",
+                                vm.cpu.csr.scause, vm.cpu.csr.stval
+                            );
                             break;
                         }
                         _ => {}
@@ -79,14 +101,24 @@ fn main() {
                 }
             }
             StepResult::LoadFault => {
-                eprintln!("[{}] LOAD FAULT: was at PC=0x{:08X}, now PC=0x{:08X}", count, pc_before, vm.cpu.pc);
-                eprintln!("  scause=0x{:08X} stval=0x{:08X} sepc=0x{:08X}", 
-                    vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.sepc);
+                eprintln!(
+                    "[{}] LOAD FAULT: was at PC=0x{:08X}, now PC=0x{:08X}",
+                    count, pc_before, vm.cpu.pc
+                );
+                eprintln!(
+                    "  scause=0x{:08X} stval=0x{:08X} sepc=0x{:08X}",
+                    vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.sepc
+                );
             }
             StepResult::StoreFault => {
-                eprintln!("[{}] STORE FAULT: was at PC=0x{:08X}, now PC=0x{:08X}", count, pc_before, vm.cpu.pc);
-                eprintln!("  scause=0x{:08X} stval=0x{:08X} sepc=0x{:08X}", 
-                    vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.sepc);
+                eprintln!(
+                    "[{}] STORE FAULT: was at PC=0x{:08X}, now PC=0x{:08X}",
+                    count, pc_before, vm.cpu.pc
+                );
+                eprintln!(
+                    "  scause=0x{:08X} stval=0x{:08X} sepc=0x{:08X}",
+                    vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.sepc
+                );
             }
             _ => {}
         }

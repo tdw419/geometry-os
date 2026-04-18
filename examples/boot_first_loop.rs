@@ -5,17 +5,11 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 panic=1";
 
-    use geometry_os::riscv::RiscvVm;
     use geometry_os::riscv::cpu::StepResult;
+    use geometry_os::riscv::RiscvVm;
 
-    let (mut vm, _) = RiscvVm::boot_linux(
-        &kernel_image,
-        initramfs.as_deref(),
-        256,
-        200000,
-        bootargs,
-    )
-    .unwrap();
+    let (mut vm, _) =
+        RiscvVm::boot_linux(&kernel_image, initramfs.as_deref(), 256, 200000, bootargs).unwrap();
 
     let mut count = 200000u64;
     let loop_pc: u32 = 0xC08E5D6A;
@@ -49,6 +43,9 @@ fn main() {
     }
 
     if !found {
-        println!("Loop at 0x{:08X} not found. Final PC: 0x{:08X}", loop_pc, vm.cpu.pc);
+        println!(
+            "Loop at 0x{:08X} not found. Final PC: 0x{:08X}",
+            loop_pc, vm.cpu.pc
+        );
     }
 }

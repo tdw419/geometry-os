@@ -7,7 +7,8 @@ fn dump_l2_table(vm: &mut RiscvVm, pa: u64, label: &str) {
     let mut valid_count = 0;
     let mut zero_count = 0;
     let mut other_count = 0;
-    for i in 0..64 { // Show first 64 entries
+    for i in 0..64 {
+        // Show first 64 entries
         let addr = pa + (i as u64) * 4;
         let pte = vm.bus.read_word(addr).unwrap_or(0);
         if pte != 0 {
@@ -17,7 +18,10 @@ fn dump_l2_table(vm: &mut RiscvVm, pa: u64, label: &str) {
             let x = (pte >> 3) & 1;
             let u = (pte >> 4) & 1;
             let ppn = (pte >> 10) & 0x3FFFFF;
-            eprintln!("  [{:3}] = 0x{:08X} V={} R={} W={} X={} U={} PPN=0x{:06X}", i, pte, v, r, w, x, u, ppn);
+            eprintln!(
+                "  [{:3}] = 0x{:08X} V={} R={} W={} X={} U={} PPN=0x{:06X}",
+                i, pte, v, r, w, x, u, ppn
+            );
             valid_count += 1;
         } else {
             zero_count += 1;
@@ -27,9 +31,14 @@ fn dump_l2_table(vm: &mut RiscvVm, pa: u64, label: &str) {
     for i in 64..1024 {
         let addr = pa + (i as u64) * 4;
         let pte = vm.bus.read_word(addr).unwrap_or(0);
-        if pte != 0 { other_count += 1; }
+        if pte != 0 {
+            other_count += 1;
+        }
     }
-    eprintln!("  Summary: {} non-zero (shown), {} more non-zero (not shown), {} zero", valid_count, other_count, zero_count);
+    eprintln!(
+        "  Summary: {} non-zero (shown), {} more non-zero (not shown), {} zero",
+        valid_count, other_count, zero_count
+    );
 }
 
 fn check_kernel_code_at_pa0(vm: &mut RiscvVm) {
@@ -37,7 +46,7 @@ fn check_kernel_code_at_pa0(vm: &mut RiscvVm) {
     for i in 0..16 {
         let addr = (i as u64) * 4;
         let w = vm.bus.read_word(addr).unwrap_or(0);
-        eprintln!("  PA[0x{:03X}] = 0x{:08X}", i*4, w);
+        eprintln!("  PA[0x{:03X}] = 0x{:08X}", i * 4, w);
     }
 }
 
@@ -52,7 +61,8 @@ fn main() {
         initramfs.as_deref(),
         256,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Save original kernel code at PA 0
     let mut orig_code: Vec<u32> = Vec::new();
@@ -68,29 +78,39 @@ fn main() {
     let mut satp_change_count = 0u32;
 
     while count < max_instructions {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // SATP change handling
         {
             let cur_satp = vm.cpu.csr.satp;
             if cur_satp != last_satp {
                 satp_change_count += 1;
-                eprintln!("\n[DIAG] SATP change #{}: 0x{:08X} -> 0x{:08X} at count={}", satp_change_count, last_satp, cur_satp, count);
+                eprintln!(
+                    "\n[DIAG] SATP change #{}: 0x{:08X} -> 0x{:08X} at count={}",
+                    satp_change_count, last_satp, cur_satp, count
+                );
                 let mode = (cur_satp >> 31) & 1;
                 if mode == 1 {
                     let ppn = cur_satp & 0x3FFFFF;
                     let pg_dir_phys = (ppn as u64) * 4096;
 
                     // Before fixup: dump L1 entries and any L2 tables at PA 0
-                    eprintln!("[DIAG] Page table at PA 0x{:08X}, L1 entries [768..779]:", pg_dir_phys);
+                    eprintln!(
+                        "[DIAG] Page table at PA 0x{:08X}, L1 entries [768..779]:",
+                        pg_dir_phys
+                    );
                     for l1_idx in 768..780u32 {
                         let addr = pg_dir_phys + (l1_idx as u64) * 4;
                         let entry = vm.bus.read_word(addr).unwrap_or(0);
                         let is_valid = (entry & 1) != 0;
                         let is_non_leaf = is_valid && (entry & 0xE) == 0;
                         let ppn_val = (entry >> 10) & 0x3FFFFF;
-                        eprintln!("  L1[{}] = 0x{:08X} valid={} non_leaf={} PPN=0x{:06X}",
-                            l1_idx, entry, is_valid, is_non_leaf, ppn_val);
+                        eprintln!(
+                            "  L1[{}] = 0x{:08X} valid={} non_leaf={} PPN=0x{:06X}",
+                            l1_idx, entry, is_valid, is_non_leaf, ppn_val
+                        );
 
                         // If non-leaf entry points to PA 0, dump the L2 table
                         if is_non_leaf && ppn_val == 0 {
@@ -147,7 +167,9 @@ fn main() {
         }
 
         // Trap handling (same as boot.rs)
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
@@ -155,11 +177,16 @@ fn main() {
             } else if cause_code == 9 {
                 // ECALL_S = SBI call (delegated)
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -178,7 +205,9 @@ fn main() {
                         let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                         vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                         vm.cpu.csr.mstatus &= !(1 << 1);
-                        if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                        if cause_code == 7 {
+                            vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                        }
                         vm.cpu.pc = stvec;
                         vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
                         vm.cpu.tlb.flush_all();
@@ -201,8 +230,14 @@ fn main() {
                 let mut chars = Vec::new();
                 for j in 0..200 {
                     let b = vm.bus.read_byte(fmt_pa as u64 + j as u64).unwrap_or(0);
-                    if b == 0 { break; }
-                    if b >= 0x20 && b < 0x7f { chars.push(b as char); } else { break; }
+                    if b == 0 {
+                        break;
+                    }
+                    if b >= 0x20 && b < 0x7f {
+                        chars.push(b as char);
+                    } else {
+                        break;
+                    }
                 }
                 let s: String = chars.iter().collect();
                 eprintln!("[DIAG] FMT: \"{}\"", s);
@@ -216,5 +251,8 @@ fn main() {
         count += 1;
     }
 
-    eprintln!("\n[DIAG] Final: count={} PC=0x{:08X} SATP=0x{:08X}", count, vm.cpu.pc, vm.cpu.csr.satp);
+    eprintln!(
+        "\n[DIAG] Final: count={} PC=0x{:08X} SATP=0x{:08X}",
+        count, vm.cpu.pc, vm.cpu.csr.satp
+    );
 }

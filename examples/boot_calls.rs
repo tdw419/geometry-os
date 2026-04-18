@@ -1,15 +1,14 @@
-
-use std::fs;
-use std::collections::HashSet;
 use geometry_os::riscv::RiscvVm;
+use std::collections::HashSet;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
-    
+
     let kernel_image = fs::read(kernel_path).unwrap();
     let initramfs = fs::read(initramfs_path).ok();
-    
+
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
     let (mut vm, _r) = RiscvVm::boot_linux(
         &kernel_image,
@@ -17,17 +16,18 @@ fn main() {
         256,
         50_000_000,
         bootargs,
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     // Run for 50M more steps, collect unique PCs
     let pc_start = vm.cpu.pc;
     let mut unique_pcs: HashSet<u32> = HashSet::new();
     let mut call_targets: HashSet<u32> = HashSet::new();
-    
+
     for _ in 0..50_000_000 {
         let pc = vm.cpu.pc;
         unique_pcs.insert(pc);
-        
+
         // Track function calls (JAL with rd != 0)
         if let Some(ref last) = vm.cpu.last_step {
             use geometry_os::riscv::decode::Operation;
@@ -39,22 +39,23 @@ fn main() {
                 _ => {}
             }
         }
-        
+
         vm.step();
     }
-    
+
     let pc_end = vm.cpu.pc;
     println!("Start PC: 0x{:08X}", pc_start);
     println!("End PC: 0x{:08X}", pc_end);
     println!("Unique PCs: {}", unique_pcs.len());
     println!("Function calls to {} unique targets", call_targets.len());
-    
+
     // Find kernel symbols for call targets
     let nm = std::process::Command::new("riscv64-linux-gnu-nm")
         .args(["-n", ".geometry_os/build/linux-6.14/vmlinux"])
-        .output().unwrap();
+        .output()
+        .unwrap();
     let nm_out = String::from_utf8_lossy(&nm.stdout);
-    
+
     for target in call_targets.iter().take(20) {
         let t = *target as u64;
         let mut best = String::new();
@@ -72,9 +73,12 @@ fn main() {
         }
         println!("  call 0x{:08X} -> {} +{}", target, best, t - best_addr);
     }
-    
-    println!("
-SBI: {} bytes", vm.bus.sbi.console_output.len());
+
+    println!(
+        "
+SBI: {} bytes",
+        vm.bus.sbi.console_output.len()
+    );
     let uart: Vec<u8> = vm.bus.uart.drain_tx();
     println!("UART: {} bytes", uart.len());
 }

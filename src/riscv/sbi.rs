@@ -55,7 +55,7 @@ pub struct Sbi {
 }
 
 impl Sbi {
-        /// Create a new SBI handler with empty console output.
+    /// Create a new SBI handler with empty console output.
     pub fn new() -> Self {
         Self {
             console_output: Vec::new(),
@@ -145,7 +145,8 @@ impl Sbi {
             SBI_EXT_BASE => {
                 match a6 {
                     // SBI_BASE_GET_SPEC_VERSION (0)
-                    0 => Some((2, 0)), // version 2.0
+                    // Encoded as (major << 16 | minor). OpenSBI returns v1.0.
+                    0 => Some((0x00010000, 0)), // version 1.0
                     // SBI_BASE_GET_IMPL_ID (1)
                     1 => Some((0, 0)), // implementation ID 0 = "BBL/OpenSBI"
                     // SBI_BASE_GET_IMPL_VERSION (2)
@@ -224,15 +225,26 @@ impl Default for Sbi {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::clint::Clint;
+    use super::*;
 
     #[test]
     fn test_sbi_console_putchar() {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
         let mut clint = Clint::new();
-        let result = sbi.handle_ecall(SBI_CONSOLE_PUTCHAR, 0, b'A' as u32, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        let result = sbi.handle_ecall(
+            SBI_CONSOLE_PUTCHAR,
+            0,
+            b'A' as u32,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert!(result.is_some());
         let (a0, a1) = result.expect("operation should succeed");
         assert_eq!(a0, SBI_SUCCESS as u32);
@@ -245,7 +257,18 @@ mod tests {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
         let mut clint = Clint::new();
-        sbi.handle_ecall(SBI_CONSOLE_PUTCHAR, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        sbi.handle_ecall(
+            SBI_CONSOLE_PUTCHAR,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert!(sbi.console_output.is_empty());
     }
 
@@ -255,7 +278,18 @@ mod tests {
         let mut uart = Uart::new();
         let mut clint = Clint::new();
         // Legacy SBI_CONSOLE_GETCHAR uses a6!=0 (e.g., a6=1)
-        let result = sbi.handle_ecall(SBI_CONSOLE_GETCHAR, 1, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        let result = sbi.handle_ecall(
+            SBI_CONSOLE_GETCHAR,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert!(result.is_some());
         let (a0, _) = result.expect("operation should succeed");
         assert_eq!(a0, 0xFFFFFFFF); // -1 = no char
@@ -267,7 +301,18 @@ mod tests {
         let mut uart = Uart::new();
         let mut clint = Clint::new();
         // SBI v0.2 console putchar: a7=0x02, a6=0, a0=char
-        let result = sbi.handle_ecall(SBI_CONSOLE_GETCHAR, 0, b'X' as u32, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        let result = sbi.handle_ecall(
+            SBI_CONSOLE_GETCHAR,
+            0,
+            b'X' as u32,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert!(result.is_some());
         let (a0, _) = result.expect("operation should succeed");
         assert_eq!(a0, SBI_SUCCESS as u32);
@@ -306,7 +351,18 @@ mod tests {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
         let mut clint = Clint::new();
-        sbi.handle_ecall(SBI_EXT_SYSTEM_RESET, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        sbi.handle_ecall(
+            SBI_EXT_SYSTEM_RESET,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert!(sbi.shutdown_requested);
     }
 
@@ -317,7 +373,18 @@ mod tests {
         let mut clint = Clint::new();
 
         // Probe known extension
-        let result = sbi.handle_ecall(SBI_EXT_BASE, 3, SBI_EXT_CONSOLE_PUTCHAR, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        let result = sbi.handle_ecall(
+            SBI_EXT_BASE,
+            3,
+            SBI_EXT_CONSOLE_PUTCHAR,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert_eq!(result, Some((1, 0))); // available
 
         // Probe unknown extension
@@ -331,7 +398,18 @@ mod tests {
         let mut uart = Uart::new();
         let mut clint = Clint::new();
         // Test with 64-bit value: a0=low bits, a1=high bits
-        let result = sbi.handle_ecall(SBI_SET_TIMER, 0, 0xDEAD, 0xBEEF, 0, 0, 0, 0, &mut uart, &mut clint);
+        let result = sbi.handle_ecall(
+            SBI_SET_TIMER,
+            0,
+            0xDEAD,
+            0xBEEF,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert_eq!(result, Some((SBI_SUCCESS as u32, 0)));
         assert_eq!(clint.mtimecmp, 0xBEEF0000DEAD);
     }
@@ -342,7 +420,18 @@ mod tests {
         let mut uart = Uart::new();
         let mut clint = Clint::new();
         // SBI v0.2 timer extension: a0=low, a1=high
-        let result = sbi.handle_ecall(SBI_EXT_TIMER, 0, 0xCAFE, 0xF00D, 0, 0, 0, 0, &mut uart, &mut clint);
+        let result = sbi.handle_ecall(
+            SBI_EXT_TIMER,
+            0,
+            0xCAFE,
+            0xF00D,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert_eq!(result, Some((SBI_SUCCESS as u32, 0)));
         assert_eq!(clint.mtimecmp, 0xF00D0000CAFE);
     }

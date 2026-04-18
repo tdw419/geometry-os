@@ -13,13 +13,13 @@ fn main() {
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
     // Use boot_linux_setup to get the VM without running the loop.
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            bootargs,
-        ).expect("boot setup failed");
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        bootargs,
+    )
+    .expect("boot setup failed");
 
     // Run until the second SATP change (early_pg_dir).
     // From the boot log, the second change is at ~177334.
@@ -36,7 +36,10 @@ fn main() {
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
             satp_changes.push((count, last_satp, cur_satp));
-            eprintln!("[diag] SATP changed at count={}: 0x{:08X} -> 0x{:08X}", count, last_satp, cur_satp);
+            eprintln!(
+                "[diag] SATP changed at count={}: 0x{:08X} -> 0x{:08X}",
+                count, last_satp, cur_satp
+            );
 
             // On second SATP change, inject device mappings (same as boot_linux)
             let mode = (cur_satp >> 31) & 1;
@@ -63,7 +66,10 @@ fn main() {
         count += 1;
     }
 
-    eprintln!("[diag] Stopped at count={}, SATP=0x{:08X}, PC=0x{:08X}", count, vm.cpu.csr.satp, vm.cpu.pc);
+    eprintln!(
+        "[diag] Stopped at count={}, SATP=0x{:08X}, PC=0x{:08X}",
+        count, vm.cpu.csr.satp, vm.cpu.pc
+    );
 
     // Now check the page table for excp_vect_table region.
     let satp = vm.cpu.csr.satp;
@@ -99,7 +105,10 @@ fn main() {
             } else {
                 // Points to L2 page table
                 let l2_phys = (l1_pte as u64 & 0xFFFFF000);
-                eprintln!("  L1[{}] = 0x{:08X} -> L2 table at PA 0x{:08X}", i, l1_pte, l2_phys);
+                eprintln!(
+                    "  L1[{}] = 0x{:08X} -> L2 table at PA 0x{:08X}",
+                    i, l1_pte, l2_phys
+                );
             }
         } else {
             eprintln!("  L1[{}] = 0x{:08X} -> NOT VALID", i, l1_pte);
@@ -118,20 +127,33 @@ fn main() {
         let l2_phys = (l1_771 as u64) & 0xFFFFF000;
         // excp_vect_table VA 0xC0C00AA4 -> VPN2 = (0xC0C00AA4 >> 12) & 0x3FF = 0x0AA4
         let vpn2: u32 = (0xC0C00AA4 >> 12) & 0x3FF;
-        eprintln!("[diag] L2 table at PA 0x{:08X}, checking VPN2={} (for excp_vect_table)", l2_phys, vpn2);
+        eprintln!(
+            "[diag] L2 table at PA 0x{:08X}, checking VPN2={} (for excp_vect_table)",
+            l2_phys, vpn2
+        );
         let l2_addr = l2_phys + (vpn2 as u64) * 4;
         let l2_pte = vm.bus.read_word(l2_addr).unwrap_or(0);
         let l2_ppn = (l2_pte >> 10) & 0x3FFFFF;
         let l2_pa = (l2_ppn as u64) << 12;
-        eprintln!("[diag] L2[{}] = 0x{:08X} -> PA 0x{:08X}", vpn2, l2_pte, l2_pa);
+        eprintln!(
+            "[diag] L2[{}] = 0x{:08X} -> PA 0x{:08X}",
+            vpn2, l2_pte, l2_pa
+        );
 
         // Read the value at that physical address
         let value = vm.bus.read_word(l2_pa + (0xAA4 & 0xFFF)).unwrap_or(0);
-        eprintln!("[diag] Value at PA 0x{:08X} (excp_vect_table[0]) = 0x{:08X}", l2_pa + (0xAA4 & 0xFFF), value);
+        eprintln!(
+            "[diag] Value at PA 0x{:08X} (excp_vect_table[0]) = 0x{:08X}",
+            l2_pa + (0xAA4 & 0xFFF),
+            value
+        );
         eprintln!("[diag] Expected: 0xC020B7F8 (do_trap_unknown)");
 
         // Also check excp_vect_table[12] (scause=12, instruction page fault)
-        let entry_12 = vm.bus.read_word(l2_pa + (0xAA4 & 0xFFF) + 12 * 4).unwrap_or(0);
+        let entry_12 = vm
+            .bus
+            .read_word(l2_pa + (0xAA4 & 0xFFF) + 12 * 4)
+            .unwrap_or(0);
         eprintln!("[diag] excp_vect_table[12] = 0x{:08X}", entry_12);
 
         // Dump a few surrounding L2 entries
@@ -141,14 +163,22 @@ fn main() {
             let pte = vm.bus.read_word(addr).unwrap_or(0);
             if pte != 0 {
                 let p = (pte >> 10) & 0x3FFFFF;
-                eprintln!("  L2[{}] = 0x{:08X} -> PA 0x{:08X}", j, pte, (p as u64) << 12);
+                eprintln!(
+                    "  L2[{}] = 0x{:08X} -> PA 0x{:08X}",
+                    j,
+                    pte,
+                    (p as u64) << 12
+                );
             }
         }
     }
 
     // Also check: read directly from PA 0x00C00AA4 (where excp_vect_table should be)
     let direct_value = vm.bus.read_word(0x00C00AA4).unwrap_or(0);
-    eprintln!("[diag] Direct read from PA 0x00C00AA4 = 0x{:08X}", direct_value);
+    eprintln!(
+        "[diag] Direct read from PA 0x00C00AA4 = 0x{:08X}",
+        direct_value
+    );
     eprintln!("[diag] Expected: 0xC020B7F8 (do_trap_unknown)");
 
     // Check kernel_map values
@@ -156,6 +186,8 @@ fn main() {
     let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
     let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
     let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
-    eprintln!("[diag] kernel_map: phys_addr=0x{:X}, va_pa_offset=0x{:X}, va_kernel_pa_offset=0x{:X}",
-        km_pa, km_vapo, km_vkpo);
+    eprintln!(
+        "[diag] kernel_map: phys_addr=0x{:X}, va_pa_offset=0x{:X}, va_kernel_pa_offset=0x{:X}",
+        km_pa, km_vapo, km_vkpo
+    );
 }

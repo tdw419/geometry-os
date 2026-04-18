@@ -22,22 +22,22 @@ fn test_open_read_write_close_opcodes() {
     //   HALT
 
     // Set registers
-    vm.regs[1] = 0x1000;  // path address
-    vm.regs[2] = 1;       // write mode
-    vm.regs[3] = 0x1100;  // write buffer
-    vm.regs[4] = 4;       // write length
-    vm.regs[5] = 0;       // read mode
-    vm.regs[6] = 0x1200;  // read buffer
-    vm.regs[7] = 4;       // read length
+    vm.regs[1] = 0x1000; // path address
+    vm.regs[2] = 1; // write mode
+    vm.regs[3] = 0x1100; // write buffer
+    vm.regs[4] = 4; // write length
+    vm.regs[5] = 0; // read mode
+    vm.regs[6] = 0x1200; // read buffer
+    vm.regs[7] = 4; // read length
 
     let program = vec![
-        0x54, 1, 2,       // OPEN r1, r2  -> r0 = fd
-        0x56, 0, 3, 4,    // WRITE r0, r3, r4  -> r0 = bytes written
-        0x57, 0,          // CLOSE r0
-        0x54, 1, 5,       // OPEN r1, r5  -> r0 = fd (read mode)
-        0x55, 0, 6, 7,    // READ r0, r6, r7  -> r0 = bytes read
-        0x57, 0,          // CLOSE r0
-        0x00,             // HALT
+        0x54, 1, 2, // OPEN r1, r2  -> r0 = fd
+        0x56, 0, 3, 4, // WRITE r0, r3, r4  -> r0 = bytes written
+        0x57, 0, // CLOSE r0
+        0x54, 1, 5, // OPEN r1, r5  -> r0 = fd (read mode)
+        0x55, 0, 6, 7, // READ r0, r6, r7  -> r0 = bytes read
+        0x57, 0,    // CLOSE r0
+        0x00, // HALT
     ];
 
     load_and_run(&mut vm, &program, 100);
@@ -60,14 +60,17 @@ fn test_open_nonexistent_file_returns_error() {
     vm.regs[2] = 0; // read mode
 
     let program = vec![
-        0x54, 1, 2,  // OPEN r1, r2
-        0x00,        // HALT
+        0x54, 1, 2,    // OPEN r1, r2
+        0x00, // HALT
     ];
 
     load_and_run(&mut vm, &program, 100);
 
     // r0 should be FD_ERROR (0xFFFFFFFF) since file doesn't exist
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "opening nonexistent file should return error");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "opening nonexistent file should return error"
+    );
 }
 
 #[test]
@@ -76,12 +79,15 @@ fn test_close_invalid_fd_returns_error() {
     vm.regs[0] = 99; // invalid fd
 
     let program = vec![
-        0x57, 0,  // CLOSE r0 (invalid fd)
+        0x57, 0, // CLOSE r0 (invalid fd)
         0x00,
     ];
 
     load_and_run(&mut vm, &program, 100);
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "closing invalid fd should return error");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "closing invalid fd should return error"
+    );
 }
 
 #[test]
@@ -107,14 +113,14 @@ fn test_seek_opcode() {
     vm.regs[9] = 0; // SEEK_SET
 
     let program = vec![
-        0x54, 1, 2,       // OPEN r1, r2 (write)
-        0x56, 0, 3, 4,    // WRITE r0, r3, r4
-        0x57, 0,          // CLOSE r0
-        0x54, 1, 5,       // OPEN r1, r5 (read)
-        0x58, 0, 8, 9,    // SEEK r0, r8, r9 (offset=4, whence=SET)
-        0x55, 0, 6, 7,    // READ r0, r6, r7
-        0x57, 0,          // CLOSE r0
-        0x00,             // HALT
+        0x54, 1, 2, // OPEN r1, r2 (write)
+        0x56, 0, 3, 4, // WRITE r0, r3, r4
+        0x57, 0, // CLOSE r0
+        0x54, 1, 5, // OPEN r1, r5 (read)
+        0x58, 0, 8, 9, // SEEK r0, r8, r9 (offset=4, whence=SET)
+        0x55, 0, 6, 7, // READ r0, r6, r7
+        0x57, 0,    // CLOSE r0
+        0x00, // HALT
     ];
 
     load_and_run(&mut vm, &program, 100);
@@ -136,7 +142,7 @@ fn test_ls_opcode() {
     vm.regs[1] = 0x2000; // buffer for listing
 
     let program = vec![
-        0x59, 1,  // LS r1
+        0x59, 1, // LS r1
         0x00,
     ];
 
@@ -151,11 +157,16 @@ fn test_ls_opcode() {
     let mut addr = 0x2000;
     for _ in 0..10 {
         let ch = (vm.ram[addr] & 0xFF) as u8;
-        if ch == 0 { break; }
+        if ch == 0 {
+            break;
+        }
         let mut name = String::new();
         loop {
             let c = (vm.ram[addr] & 0xFF) as u8;
-            if c == 0 { addr += 1; break; }
+            if c == 0 {
+                addr += 1;
+                break;
+            }
             name.push(c as char);
             addr += 1;
         }
@@ -196,7 +207,7 @@ fn test_vfs_path_traversal_blocked() {
     vm.regs[2] = 0;
 
     let program = vec![
-        0x54, 1, 2,  // OPEN r1, r2
+        0x54, 1, 2, // OPEN r1, r2
         0x00,
     ];
 
@@ -207,10 +218,13 @@ fn test_vfs_path_traversal_blocked() {
 #[test]
 fn test_cat_asm_assembles() {
     use geometry_os::assembler::assemble;
-    let source = std::fs::read_to_string("programs/cat.asm")
-        .expect("cat.asm should exist");
+    let source = std::fs::read_to_string("programs/cat.asm").expect("cat.asm should exist");
     let result = assemble(&source, 0);
-    assert!(result.is_ok(), "cat.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "cat.asm should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -218,11 +232,11 @@ fn test_cat_asm_reads_and_displays_file() {
     let (mut vm, _dir) = vm_with_vfs();
 
     // Create hello.txt in the VFS directory
-    std::fs::write(vm.vfs.base_dir.join("hello.txt"), b"Hello from file!").expect("filesystem operation failed");
+    std::fs::write(vm.vfs.base_dir.join("hello.txt"), b"Hello from file!")
+        .expect("filesystem operation failed");
 
     use geometry_os::assembler::assemble;
-    let source = std::fs::read_to_string("programs/cat.asm")
-        .expect("cat.asm should exist");
+    let source = std::fs::read_to_string("programs/cat.asm").expect("cat.asm should exist");
     let result = assemble(&source, 0).expect("cat.asm should assemble");
 
     // Load bytecode into RAM at 0x100 (after the filename data at 0x1000)
@@ -235,7 +249,9 @@ fn test_cat_asm_reads_and_displays_file() {
 
     // Run enough steps to complete
     for _ in 0..1000 {
-        if vm.halted { break; }
+        if vm.halted {
+            break;
+        }
         vm.step();
     }
 
@@ -245,14 +261,21 @@ fn test_cat_asm_reads_and_displays_file() {
     let expected = b"Hello from file!";
     for (i, &ch) in expected.iter().enumerate() {
         assert_eq!(
-            vm.ram[0x2000 + i] & 0xFF, ch as u32,
+            vm.ram[0x2000 + i] & 0xFF,
+            ch as u32,
             "buffer[{}] should be '{}' but got '{}'",
-            i, ch as char, (vm.ram[0x2000 + i] & 0xFF) as u8 as char
+            i,
+            ch as char,
+            (vm.ram[0x2000 + i] & 0xFF) as u8 as char
         );
     }
 
     // Verify null terminator after content
-    assert_eq!(vm.ram[0x2000 + expected.len()] & 0xFF, 0, "should be null-terminated");
+    assert_eq!(
+        vm.ram[0x2000 + expected.len()] & 0xFF,
+        0,
+        "should be null-terminated"
+    );
 }
 
 #[test]
@@ -261,8 +284,7 @@ fn test_cat_asm_nonexistent_file_halts_cleanly() {
 
     // Don't create any file -- cat.asm should handle open error gracefully
     use geometry_os::assembler::assemble;
-    let source = std::fs::read_to_string("programs/cat.asm")
-        .expect("cat.asm should exist");
+    let source = std::fs::read_to_string("programs/cat.asm").expect("cat.asm should exist");
     let result = assemble(&source, 0).expect("cat.asm should assemble");
 
     for (i, &word) in result.pixels.iter().enumerate() {
@@ -273,10 +295,15 @@ fn test_cat_asm_nonexistent_file_halts_cleanly() {
     vm.pc = 0x0100;
 
     for _ in 0..1000 {
-        if vm.halted { break; }
+        if vm.halted {
+            break;
+        }
         vm.step();
     }
 
     // Should halt gracefully (not crash)
-    assert!(vm.halted, "cat.asm should halt even when file doesn't exist");
+    assert!(
+        vm.halted,
+        "cat.asm should halt even when file doesn't exist"
+    );
 }

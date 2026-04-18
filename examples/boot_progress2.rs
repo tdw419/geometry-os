@@ -7,7 +7,9 @@ fn main() {
 
     use geometry_os::riscv::RiscvVm;
 
-    for max_instr in [1000, 5000, 10000, 50000, 100000, 200000, 300000, 400000, 500000] {
+    for max_instr in [
+        1000, 5000, 10000, 50000, 100000, 200000, 300000, 400000, 500000,
+    ] {
         let (mut vm, _) = RiscvVm::boot_linux(
             &kernel_image,
             initramfs.as_deref(),
@@ -16,9 +18,13 @@ fn main() {
             bootargs,
         )
         .unwrap();
-        println!("{} instr: PC=0x{:08X} SP=0x{:08X} SBI={} UART={}",
-            max_instr, vm.cpu.pc, vm.cpu.x[2],
+        println!(
+            "{} instr: PC=0x{:08X} SP=0x{:08X} SBI={} UART={}",
+            max_instr,
+            vm.cpu.pc,
+            vm.cpu.x[2],
             vm.bus.sbi.console_output.len(),
-            vm.bus.uart.tx_buf.len());
+            vm.bus.uart.tx_buf.len()
+        );
     }
 }

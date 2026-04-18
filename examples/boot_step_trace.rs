@@ -1,5 +1,4 @@
 /// Trace every step from 177548 to 177570 with full register dump.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -15,7 +14,9 @@ fn main() {
 
     // Run to 177548
     for _ in 0..177548 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         vm.step();
     }
 
@@ -26,7 +27,7 @@ fn main() {
         let s0 = vm.cpu.x[8];
         let a0 = vm.cpu.x[10];
         let a1 = vm.cpu.x[11];
-        
+
         // Translate PC to PA and read instruction
         let vpn1 = ((pc >> 22) & 0x3FF) as u64;
         let vpn0 = ((pc >> 12) & 0x3FF) as u64;
@@ -58,11 +59,13 @@ fn main() {
             pc as u64
         };
         let word = vm.bus.read_word(pa).unwrap_or(0);
-        
+
         eprintln!("[{}] PC=0x{:08X} PA=0x{:08X} word=0x{:08X} SP=0x{:08X} RA=0x{:08X} S0=0x{:08X} A0=0x{:08X} A1=0x{:08X}",
             177548 + i, pc, pa, word, sp, ra, s0, a0, a1);
-        
+
         vm.step();
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
     }
 }

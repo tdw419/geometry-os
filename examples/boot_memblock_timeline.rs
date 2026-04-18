@@ -23,7 +23,8 @@ fn main() {
         initramfs.as_deref(),
         256,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     let max_instructions = 5_000_000u64;
     let fw_addr_u32 = fw_addr as u32;
@@ -35,19 +36,27 @@ fn main() {
     read_memblock(&mut vm, "Before boot");
 
     while count < max_instructions {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         {
             let cur_satp = vm.cpu.csr.satp;
             if cur_satp != last_satp {
                 satp_change_count += 1;
-                eprintln!("[DIAG] SATP change #{}: 0x{:08X} -> 0x{:08X} at count={}", satp_change_count, last_satp, cur_satp, count);
+                eprintln!(
+                    "[DIAG] SATP change #{}: 0x{:08X} -> 0x{:08X} at count={}",
+                    satp_change_count, last_satp, cur_satp, count
+                );
                 let mode = (cur_satp >> 31) & 1;
                 if mode == 1 {
                     let ppn = cur_satp & 0x3FFFFF;
                     let pg_dir_phys = (ppn as u64) * 4096;
 
                     // Read memblock BEFORE fixup
-                    read_memblock(&mut vm, format!("Before fixup (SATP change #{})", satp_change_count).as_str());
+                    read_memblock(
+                        &mut vm,
+                        format!("Before fixup (SATP change #{})", satp_change_count).as_str(),
+                    );
 
                     let device_l1_entries: &[u32] = &[0, 1, 2, 3, 4, 5, 8, 48, 64];
                     let identity_pte: u32 = 0x0000_00CF;
@@ -86,23 +95,33 @@ fn main() {
                     vm.cpu.tlb.flush_all();
 
                     // Read memblock AFTER fixup
-                    read_memblock(&mut vm, format!("After fixup (SATP change #{})", satp_change_count).as_str());
+                    read_memblock(
+                        &mut vm,
+                        format!("After fixup (SATP change #{})", satp_change_count).as_str(),
+                    );
                 }
                 last_satp = cur_satp;
             }
         }
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code != 11 {
                 let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
                 if cause_code == 9 {
                     let result = vm.bus.sbi.handle_ecall(
-                        vm.cpu.x[17], vm.cpu.x[16],
-                        vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13],
-                        vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint,
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
                     );
                     if let Some((a0_val, a1_val)) = result {
                         vm.cpu.x[10] = a0_val;
@@ -119,7 +138,9 @@ fn main() {
                         let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                         vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                         vm.cpu.csr.mstatus &= !(1 << 1);
-                        if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                        if cause_code == 7 {
+                            vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                        }
                         vm.cpu.pc = stvec;
                         vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
                         vm.cpu.tlb.flush_all();
@@ -130,11 +151,16 @@ fn main() {
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             } else {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;

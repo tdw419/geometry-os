@@ -16,9 +16,13 @@ fn main() {
         512,
         20_000_000u64,
         bootargs,
-    ).unwrap();
+    )
+    .unwrap();
     let elapsed = start.elapsed();
-    println!("Boot: {} instructions in {:?}", result.instructions, elapsed);
+    println!(
+        "Boot: {} instructions in {:?}",
+        result.instructions, elapsed
+    );
     println!("PC: 0x{:08X}, Privilege: {:?}", vm.cpu.pc, vm.cpu.privilege);
     println!("SATP: 0x{:08X}", vm.cpu.csr.satp);
 
@@ -38,9 +42,12 @@ fn main() {
     let l1_entry = vm.bus.read_word(pg_dir_phys + ra_vpn1 * 4).unwrap_or(0);
     let l1_ppn = ((l1_entry >> 10) & 0x3FFFFF) as u64;
     let is_leaf = (l1_entry & 0xE) != 0;
-    
-    println!("L1 entry for RA: 0x{:08X}, PPN=0x{:06X}, is_leaf={}", l1_entry, l1_ppn, is_leaf);
-    
+
+    println!(
+        "L1 entry for RA: 0x{:08X}, PPN=0x{:06X}, is_leaf={}",
+        l1_entry, l1_ppn, is_leaf
+    );
+
     if is_leaf {
         // Megapage
         let ppn_hi = (l1_ppn >> 10) & 0xFFF;
@@ -68,14 +75,14 @@ fn main() {
     // In S-mode, bus.read_word should translate through MMU
     // Let's also check if auto_pte_fixup is affecting things
     println!("\nauto_pte_fixup: {}", vm.bus.auto_pte_fixup);
-    
+
     // Check UART output
     let tx = vm.bus.uart.drain_tx();
     if !tx.is_empty() {
         let s = String::from_utf8_lossy(&tx);
         println!("\nUART output:\n{}", s);
     }
-    
+
     let sbi_out = &vm.bus.sbi.console_output;
     if !sbi_out.is_empty() {
         let s = String::from_utf8_lossy(sbi_out);

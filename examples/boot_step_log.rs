@@ -1,7 +1,7 @@
-/// Log the last 50 steps and the first 20 steps after SATP change.
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
 use geometry_os::riscv::decode;
+/// Log the last 50 steps and the first 20 steps after SATP change.
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -22,18 +22,25 @@ fn main() {
     let mut last_steps: Vec<String> = Vec::new();
 
     while count < max {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -67,9 +74,11 @@ fn main() {
 
         // Record step info from last_step
         if let Some(ref ls) = vm.cpu.last_step {
-            let desc = format!("{}: PC=0x{:08X} word=0x{:08X} len={} {:?} => PC=0x{:08X}",
-                count, ls.pc, ls.word, ls.inst_len, ls.op, ls.pc_after);
-            
+            let desc = format!(
+                "{}: PC=0x{:08X} word=0x{:08X} len={} {:?} => PC=0x{:08X}",
+                count, ls.pc, ls.word, ls.inst_len, ls.op, ls.pc_after
+            );
+
             // Keep last 50 steps
             if last_steps.len() >= 50 {
                 last_steps.remove(0);
@@ -79,15 +88,20 @@ fn main() {
 
         // Collect 30 steps after last SATP change
         if vm.cpu.csr.satp != last_satp {
-            println!("[trace] SATP: 0x{:08X} -> 0x{:08X} at count={}", last_satp, vm.cpu.csr.satp, count);
+            println!(
+                "[trace] SATP: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, vm.cpu.csr.satp, count
+            );
             last_satp = vm.cpu.csr.satp;
             collecting_post_satp = true;
             post_satp_steps.clear();
         }
         if collecting_post_satp && post_satp_steps.len() < 30 {
             if let Some(ref ls) = vm.cpu.last_step {
-                let desc = format!("  {} PC=0x{:08X} word=0x{:08X} len={} {:?} => PC=0x{:08X}",
-                    count, ls.pc, ls.word, ls.inst_len, ls.op, ls.pc_after);
+                let desc = format!(
+                    "  {} PC=0x{:08X} word=0x{:08X} len={} {:?} => PC=0x{:08X}",
+                    count, ls.pc, ls.word, ls.inst_len, ls.op, ls.pc_after
+                );
                 post_satp_steps.push(desc);
             }
         }
@@ -98,9 +112,15 @@ fn main() {
         count += 1;
     }
 
-    println!("\n[trace] Done: count={} ecall_count={}", count, vm.cpu.ecall_count);
+    println!(
+        "\n[trace] Done: count={} ecall_count={}",
+        count, vm.cpu.ecall_count
+    );
     println!("[trace] UART tx_buf: {} chars", vm.bus.uart.tx_buf.len());
-    println!("[trace] SBI console: {} chars", vm.bus.sbi.console_output.len());
+    println!(
+        "[trace] SBI console: {} chars",
+        vm.bus.sbi.console_output.len()
+    );
 
     if !post_satp_steps.is_empty() {
         println!("\n[trace] Steps after final SATP change:");

@@ -1,5 +1,5 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -7,13 +7,13 @@ fn main() {
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, fw_addr_u64, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            "console=ttyS0 loglevel=8",
-        ).unwrap();
+    let (mut vm, fw_addr_u64, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        "console=ttyS0 loglevel=8",
+    )
+    .unwrap();
 
     let fw_addr = fw_addr_u64 as u32;
     let mut count: u64 = 0;
@@ -22,7 +22,9 @@ fn main() {
     let target_satp_changes = 3;
 
     while count < 2_000_000 && satp_count < target_satp_changes {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if vm.cpu.pc == fw_addr && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
@@ -30,11 +32,16 @@ fn main() {
 
             if cause_code == 9 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -57,8 +64,10 @@ fn main() {
         let current_satp = vm.cpu.csr.satp;
         if current_satp != last_satp {
             satp_count += 1;
-            eprintln!("[satp] #{}: 0x{:08X} -> 0x{:08X} at count={}", 
-                      satp_count, last_satp, current_satp, count);
+            eprintln!(
+                "[satp] #{}: 0x{:08X} -> 0x{:08X} at count={}",
+                satp_count, last_satp, current_satp, count
+            );
             last_satp = current_satp;
         }
 
@@ -84,8 +93,17 @@ fn main() {
             let w = (l1_pte >> 2) & 1;
             let x = (l1_pte >> 3) & 1;
             let ppn = (l1_pte >> 10) & 0xFFFFF;
-            eprintln!("[pt]   L1[{}]: 0x{:08X} V={} R={} W={} X={} PPN=0x{:05X} (PA=0x{:08X})",
-                      i, l1_pte, v, r, w, x, ppn, ppn as u64 * 4096);
+            eprintln!(
+                "[pt]   L1[{}]: 0x{:08X} V={} R={} W={} X={} PPN=0x{:05X} (PA=0x{:08X})",
+                i,
+                l1_pte,
+                v,
+                r,
+                w,
+                x,
+                ppn,
+                ppn as u64 * 4096
+            );
             valid_count += 1;
         }
     }
@@ -110,9 +128,15 @@ fn main() {
                 if l2_pte != 0 && ((l2_pte >> 0) & 1) == 1 {
                     let l2_ppn2 = (l2_pte >> 10) & 0xFFFFF;
                     let va = ((i as u64) << 22) | ((j as u64) << 12);
-                    if l2_valid < 10 || j == 528 { // Show first 10 + VPN0=528 (for 0xC0210F14)
-                        eprintln!("[pt]   L2[{}]: 0x{:08X} -> PA 0x{:08X} (VA 0x{:08X})",
-                                  j, l2_pte, l2_ppn2 as u64 * 4096, va);
+                    if l2_valid < 10 || j == 528 {
+                        // Show first 10 + VPN0=528 (for 0xC0210F14)
+                        eprintln!(
+                            "[pt]   L2[{}]: 0x{:08X} -> PA 0x{:08X} (VA 0x{:08X})",
+                            j,
+                            l2_pte,
+                            l2_ppn2 as u64 * 4096,
+                            va
+                        );
                     }
                     l2_valid += 1;
                 }

@@ -1,8 +1,8 @@
 // Detailed fault diagnostic for Linux boot
 // cargo run --example boot_debug_fault
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -40,8 +40,8 @@ fn main() {
             trap_count += 1;
 
             // Only print interesting traps (not timer interrupts)
-            let is_timer = (mcause & 0x80000000) != 0
-                && ((mcause & 0xFF) == 5 || (mcause & 0xFF) == 7);
+            let is_timer =
+                (mcause & 0x80000000) != 0 && ((mcause & 0xFF) == 5 || (mcause & 0xFF) == 7);
 
             if !is_timer && trap_count <= 20 {
                 println!(
@@ -66,8 +66,11 @@ fn main() {
                 // Print key registers
                 println!("  Key registers:");
                 for i in [1, 2, 8, 9, 10, 11, 15, 17, 28, 29, 30, 31] {
-                    let names = ["zero","ra","sp","gp","tp","t0","t1","t2","s0","s1","a0","a1","a2","a3","a4","a5","a6","a7",
-                                 "s2","s3","s4","s5","s6","s7","s8","s9","s10","s11","t3","t4","t5","t6"];
+                    let names = [
+                        "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1",
+                        "a2", "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
+                        "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
+                    ];
                     println!("    x{:2} ({:>3}): 0x{:08X}", i, names[i], vm.cpu.x[i]);
                 }
 
@@ -78,7 +81,10 @@ fn main() {
 
                 // If PC went to 0, it's a fatal loop - stop
                 if vm.cpu.pc == 0 || vm.cpu.pc < 0x100 {
-                    println!("\n  FATAL: PC jumped to 0x{:08X} - infinite trap loop!", vm.cpu.pc);
+                    println!(
+                        "\n  FATAL: PC jumped to 0x{:08X} - infinite trap loop!",
+                        vm.cpu.pc
+                    );
                     break;
                 }
             }

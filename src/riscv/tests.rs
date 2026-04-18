@@ -70,8 +70,12 @@ fn fuzzer_lui_direct() {
 
     let lui_word: u32 = 0x87EE50B7; // LUI x1, 0x87EE5000
     let ebreak_word: u32 = 0x00100073;
-    vm.bus.write_word(ram_base, lui_word).expect("operation should succeed");
-    vm.bus.write_word(ram_base + 4, ebreak_word).expect("operation should succeed");
+    vm.bus
+        .write_word(ram_base, lui_word)
+        .expect("operation should succeed");
+    vm.bus
+        .write_word(ram_base + 4, ebreak_word)
+        .expect("operation should succeed");
 
     // Step 1: LUI
     let r1 = vm.step();
@@ -95,7 +99,9 @@ fn verified_boot_synthetic_kernel() {
     let mut canvas = make_canvas();
 
     // Boot the kernel.
-    let result = vm.boot_guest(&kernel, 1, 10_000).expect("operation should succeed");
+    let result = vm
+        .boot_guest(&kernel, 1, 10_000)
+        .expect("operation should succeed");
 
     // Should have executed some instructions and stopped at EBREAK.
     assert!(result.instructions > 0);
@@ -123,11 +129,18 @@ fn boot_sets_dtb_in_a1() {
 
     // x10 should be 0 (hartid), x11 should be DTB address.
     assert_eq!(vm.cpu.x[10], 0, "a0 should be 0 (hartid)");
-    assert!(vm.cpu.x[11] > 0, "a1 should be DTB address, got {}", vm.cpu.x[11]);
+    assert!(
+        vm.cpu.x[11] > 0,
+        "a1 should be DTB address, got {}",
+        vm.cpu.x[11]
+    );
 
     // Verify the DTB is actually at that address (starts with FDT magic).
     let dtb_addr = vm.cpu.x[11] as u64;
-    let byte0 = vm.bus.read_byte(dtb_addr).expect("operation should succeed");
+    let byte0 = vm
+        .bus
+        .read_byte(dtb_addr)
+        .expect("operation should succeed");
     // FDT magic is 0xD00DFEED stored big-endian, first byte is 0xD0.
     assert_eq!(byte0, 0xD0, "DTB should start with FDT magic byte (0xD0)");
 }
@@ -137,7 +150,9 @@ fn boot_raw_binary_at_default_base() {
     // Raw (non-ELF) binary should load at 0x8000_0000.
     let kernel = build_uart_program("OK");
     let mut vm = RiscvVm::new(64 * 1024);
-    let result = vm.boot_guest(&kernel, 1, 100).expect("operation should succeed");
+    let result = vm
+        .boot_guest(&kernel, 1, 100)
+        .expect("operation should succeed");
 
     assert_eq!(result.entry, 0x8000_0000);
 }
@@ -188,7 +203,9 @@ fn boot_elf_kernel() {
     let mut bridge = UartBridge::new();
     let mut canvas = make_canvas();
 
-    let result = vm.boot_guest(&img, 1, 10_000).expect("operation should succeed");
+    let result = vm
+        .boot_guest(&img, 1, 10_000)
+        .expect("operation should succeed");
     assert_eq!(result.entry, 0x8000_0000);
 
     bridge.drain_uart_to_canvas(&mut vm.bus, &mut canvas);
@@ -204,18 +221,42 @@ fn boot_dtb_is_valid_fdt() {
     let _ = vm.boot_guest(&kernel, 128, 100);
 
     let dtb_addr = vm.cpu.x[11] as u64;
-    let b0 = vm.bus.read_byte(dtb_addr).expect("operation should succeed");
-    let b1 = vm.bus.read_byte(dtb_addr + 1).expect("operation should succeed");
-    let b2 = vm.bus.read_byte(dtb_addr + 2).expect("operation should succeed");
-    let b3 = vm.bus.read_byte(dtb_addr + 3).expect("operation should succeed");
+    let b0 = vm
+        .bus
+        .read_byte(dtb_addr)
+        .expect("operation should succeed");
+    let b1 = vm
+        .bus
+        .read_byte(dtb_addr + 1)
+        .expect("operation should succeed");
+    let b2 = vm
+        .bus
+        .read_byte(dtb_addr + 2)
+        .expect("operation should succeed");
+    let b3 = vm
+        .bus
+        .read_byte(dtb_addr + 3)
+        .expect("operation should succeed");
     let magic = u32::from_be_bytes([b0, b1, b2, b3]);
     assert_eq!(magic, 0xD00D_FEED, "DTB should have FDT magic");
 
     // Verify totalsize field matches.
-    let ts0 = vm.bus.read_byte(dtb_addr + 4).expect("operation should succeed");
-    let ts1 = vm.bus.read_byte(dtb_addr + 5).expect("operation should succeed");
-    let ts2 = vm.bus.read_byte(dtb_addr + 6).expect("operation should succeed");
-    let ts3 = vm.bus.read_byte(dtb_addr + 7).expect("operation should succeed");
+    let ts0 = vm
+        .bus
+        .read_byte(dtb_addr + 4)
+        .expect("operation should succeed");
+    let ts1 = vm
+        .bus
+        .read_byte(dtb_addr + 5)
+        .expect("operation should succeed");
+    let ts2 = vm
+        .bus
+        .read_byte(dtb_addr + 6)
+        .expect("operation should succeed");
+    let ts3 = vm
+        .bus
+        .read_byte(dtb_addr + 7)
+        .expect("operation should succeed");
     let totalsize = u32::from_be_bytes([ts0, ts1, ts2, ts3]) as usize;
     assert!(totalsize > 40, "DTB should be > 40 bytes");
 }
@@ -255,7 +296,9 @@ fn performance_mips_benchmark() {
     let mut vm = RiscvVm::new(64 * 1024);
 
     let start = std::time::Instant::now();
-    let result = vm.boot_guest(&code, 1, 100_000).expect("operation should succeed");
+    let result = vm
+        .boot_guest(&code, 1, 100_000)
+        .expect("operation should succeed");
     let elapsed = start.elapsed();
 
     let mips = result.instructions as f64 / elapsed.as_secs_f64() / 1_000_000.0;
@@ -285,10 +328,7 @@ fn performance_mips_benchmark() {
     #[cfg(debug_assertions)]
     {
         // In debug mode just log; the release build gate catches real regressions.
-        eprintln!(
-            "  (debug mode: skipping 1 MIPS gate, got {:.2} MIPS)",
-            mips
-        );
+        eprintln!("  (debug mode: skipping 1 MIPS gate, got {:.2} MIPS)", mips);
     }
 }
 
@@ -297,7 +337,9 @@ fn boot_guest_empty_image_runs_nop_loop() {
     // An empty raw binary loads at 0x8000_0000 with entry=0x8000_0000.
     // All-zero RAM decodes as ADDI x0, x0, 0 (NOP) so the CPU runs all N steps.
     let mut vm = RiscvVm::new(64 * 1024);
-    let result = vm.boot_guest(&[], 1, 100).expect("operation should succeed");
+    let result = vm
+        .boot_guest(&[], 1, 100)
+        .expect("operation should succeed");
     assert_eq!(result.instructions, 100);
     assert_eq!(result.entry, 0x8000_0000);
 }
@@ -330,10 +372,11 @@ fn test_linux_kernel_early_boot() {
     let (mut vm, result) = RiscvVm::boot_linux(
         &kernel_data,
         initramfs_data.as_deref(),
-        512, // 512MB RAM (kernel needs ~305MB)
+        512,       // 512MB RAM (kernel needs ~305MB)
         5_000_000, // 5M instructions
         bootargs,
-    ).expect("operation should succeed");
+    )
+    .expect("operation should succeed");
 
     let elapsed = start.elapsed();
     let mips = result.instructions as f64 / elapsed.as_secs_f64() / 1_000_000.0;
@@ -341,7 +384,10 @@ fn test_linux_kernel_early_boot() {
         "Linux boot: {} instructions in {:?} = {:.2} MIPS",
         result.instructions, elapsed, mips
     );
-    eprintln!("Entry: 0x{:08X}, DTB at: 0x{:08X}", result.entry, result.dtb_addr);
+    eprintln!(
+        "Entry: 0x{:08X}, DTB at: 0x{:08X}",
+        result.entry, result.dtb_addr
+    );
     eprintln!("PC: 0x{:08X}, Privilege: {:?}", vm.cpu.pc, vm.cpu.privilege);
     eprintln!("RAM base: 0x{:08X}", vm.bus.mem.ram_base);
 
@@ -361,8 +407,14 @@ fn test_linux_kernel_early_boot() {
     }
 
     // Check CSRs
-    eprintln!("mcause: 0x{:08X}, mepc: 0x{:08X}", vm.cpu.csr.mcause, vm.cpu.csr.mepc);
-    eprintln!("scause: 0x{:08X}, sepc: 0x{:08X}", vm.cpu.csr.scause, vm.cpu.csr.sepc);
+    eprintln!(
+        "mcause: 0x{:08X}, mepc: 0x{:08X}",
+        vm.cpu.csr.mcause, vm.cpu.csr.mepc
+    );
+    eprintln!(
+        "scause: 0x{:08X}, sepc: 0x{:08X}",
+        vm.cpu.csr.scause, vm.cpu.csr.sepc
+    );
     eprintln!("satp: 0x{:08X}", vm.cpu.csr.satp);
     eprintln!("mstatus: 0x{:08X}", vm.cpu.csr.mstatus);
 
@@ -372,16 +424,26 @@ fn test_linux_kernel_early_boot() {
         Ok(word) => {
             let hw = (word & 0xFFFF) as u16;
             let is_c = (hw & 0x3) != 0x3;
-            eprintln!("Instruction at mepc: word=0x{:08X}, low16=0x{:04X} compressed={}", word, hw, is_c);
+            eprintln!(
+                "Instruction at mepc: word=0x{:08X}, low16=0x{:04X} compressed={}",
+                word, hw, is_c
+            );
             if is_c {
-                eprintln!("  Decoded as: quadrant={}, funct3={}", hw & 0x3, (hw >> 13) & 0x7);
+                eprintln!(
+                    "  Decoded as: quadrant={}, funct3={}",
+                    hw & 0x3,
+                    (hw >> 13) & 0x7
+                );
             }
         }
         Err(_) => eprintln!("Could not read instruction at mepc 0x{:08X}", mepc_pa),
     }
 
     // The test "passes" as long as it doesn't panic -- we're measuring progress.
-    assert!(result.instructions > 0, "Should have executed some instructions");
+    assert!(
+        result.instructions > 0,
+        "Should have executed some instructions"
+    );
     // With ram_base=0, PC may be a physical address (below 0x02000000)
     // or a virtual address (0xC0xxxxxx) after MMU is enabled.
     eprintln!(
@@ -402,8 +464,7 @@ fn test_parse_first_load_paddr() {
 fn test_parse_elf_highest_paddr() {
     // Two PT_LOAD segments: paddr 0x0 with memsz 0x1000, paddr 0x100000 with memsz 0x2000
     let elf = make_test_elf_two_segments(
-        0x80000000, 0x00000000, 0x1000, 0x1000,
-        0x00100000, 0x2000, 0x2000,
+        0x80000000, 0x00000000, 0x1000, 0x1000, 0x00100000, 0x2000, 0x2000,
     );
     let result = RiscvVm::parse_elf_highest_paddr(&elf);
     assert_eq!(result, Some(0x102000));
@@ -422,8 +483,7 @@ fn test_elf_entry_vaddr_to_phys() {
 fn test_elf_entry_vaddr_to_phys_second_segment() {
     // Entry at vaddr 0x80101000, second segment vaddr=0x80100000, paddr=0x100000
     let elf = make_test_elf_two_segments(
-        0x80000000, 0x00000000, 0x1000, 0x1000,
-        0x00100000, 0x2000, 0x2000,
+        0x80000000, 0x00000000, 0x1000, 0x1000, 0x00100000, 0x2000, 0x2000,
     );
     let result = RiscvVm::elf_entry_vaddr_to_phys(&elf, 0x80101000);
     assert_eq!(result, Some(0x00101000));
@@ -440,11 +500,11 @@ fn make_test_elf(entry: u32, paddr: u64, filesz: u32, memsz: u32) -> Vec<u8> {
     elf.push(1); // EI_DATA: little-endian
     elf.extend_from_slice(&[0; 9]); // padding (EI_VERSION through EI_PAD)
     elf.extend_from_slice(&[0]); // EI_NIDENT padding
-    // e_type (2), e_machine (2), e_version (4)
+                                 // e_type (2), e_machine (2), e_version (4)
     elf.extend_from_slice(&2u16.to_le_bytes()); // e_type = ET_EXEC
     elf.extend_from_slice(&0xF3u16.to_le_bytes()); // e_machine = EM_RISCV
     elf.extend_from_slice(&1u32.to_le_bytes()); // e_version = 1
-    // e_entry (4)
+                                                // e_entry (4)
     elf.extend_from_slice(&entry.to_le_bytes());
     // e_phoff (4)
     elf.extend_from_slice(&52u32.to_le_bytes());
@@ -469,7 +529,7 @@ fn make_test_elf(entry: u32, paddr: u64, filesz: u32, memsz: u32) -> Vec<u8> {
     elf.extend_from_slice(&memsz.to_le_bytes()); // p_memsz
     elf.extend_from_slice(&[5, 0, 0, 0]); // p_flags = R+X
     elf.extend_from_slice(&0x1000u32.to_le_bytes()); // p_align
-    // Pad to filesz
+                                                     // Pad to filesz
     while elf.len() < 52 + 32 + filesz as usize {
         elf.push(0);
     }
@@ -479,8 +539,12 @@ fn make_test_elf(entry: u32, paddr: u64, filesz: u32, memsz: u32) -> Vec<u8> {
 /// Build a minimal ELF32 RISC-V image with two PT_LOAD segments.
 fn make_test_elf_two_segments(
     entry: u32,
-    paddr1: u64, filesz1: u32, memsz1: u32,
-    paddr2: u64, filesz2: u32, memsz2: u32,
+    paddr1: u64,
+    filesz1: u32,
+    memsz1: u32,
+    paddr2: u64,
+    filesz2: u32,
+    memsz2: u32,
 ) -> Vec<u8> {
     let vaddr1 = entry;
     let vaddr2 = 0x80100000u32;
@@ -514,7 +578,7 @@ fn make_test_elf_two_segments(
     elf.extend_from_slice(&memsz1.to_le_bytes()); // p_memsz
     elf.extend_from_slice(&[5, 0, 0, 0]); // p_flags = R+X
     elf.extend_from_slice(&0x1000u32.to_le_bytes()); // p_align
-    // Segment 2
+                                                     // Segment 2
     let seg2_offset = (52 + 32 + filesz1 as usize) as u32;
     elf.extend_from_slice(&1u32.to_le_bytes()); // p_type = PT_LOAD
     elf.extend_from_slice(&seg2_offset.to_le_bytes()); // p_offset

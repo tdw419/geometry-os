@@ -34,8 +34,9 @@ impl RiscvCpu {
                     let event = super::super::syscall::SyscallEvent {
                         nr,
                         name,
-                        args: [self.x[10], self.x[11], self.x[12],
-                               self.x[13], self.x[14], self.x[15]],
+                        args: [
+                            self.x[10], self.x[11], self.x[12], self.x[13], self.x[14], self.x[15],
+                        ],
                         ret: None,
                         pc: self.pc,
                     };
@@ -46,9 +47,7 @@ impl RiscvCpu {
 
                 // SBI interception: when an ECALL from S-mode or M-mode would
                 // trap, check if it's an SBI call (a7 = SBI extension ID).
-                if self.privilege == Privilege::Supervisor
-                    || self.privilege == Privilege::Machine
-                {
+                if self.privilege == Privilege::Supervisor || self.privilege == Privilege::Machine {
                     let a7 = self.x[17];
                     let a6 = self.x[16];
                     let a0 = self.x[10];
@@ -58,9 +57,18 @@ impl RiscvCpu {
                     let a4 = self.x[14];
                     let a5 = self.x[15];
 
-                    let sbi_result =
-                        bus.sbi
-                            .handle_ecall(a7, a6, a0, a1, a2, a3, a4, a5, &mut bus.uart, &mut bus.clint);
+                    let sbi_result = bus.sbi.handle_ecall(
+                        a7,
+                        a6,
+                        a0,
+                        a1,
+                        a2,
+                        a3,
+                        a4,
+                        a5,
+                        &mut bus.uart,
+                        &mut bus.clint,
+                    );
 
                     if let Some((ret_a0, ret_a1)) = sbi_result {
                         self.x[10] = ret_a0;
@@ -77,7 +85,8 @@ impl RiscvCpu {
                 // Not an SBI call -- deliver as a normal trap.
                 let trap_priv = self.csr.trap_target_priv(cause, self.privilege);
                 let vector = self.csr.trap_vector(trap_priv);
-                self.csr.trap_enter(trap_priv, self.privilege, self.pc, cause);
+                self.csr
+                    .trap_enter(trap_priv, self.privilege, self.pc, cause);
                 self.privilege = trap_priv;
                 self.pc = vector;
                 StepResult::Ok

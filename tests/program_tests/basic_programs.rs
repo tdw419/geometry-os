@@ -1,7 +1,5 @@
 use super::*;
 
-
-
 // ── FILL_SCREEN ──────────────────────────────────────────────────
 
 #[test]
@@ -13,14 +11,15 @@ fn test_fill_screen() {
     for i in 0..256 {
         for j in 0..256 {
             assert_eq!(
-                vm.screen[j * 256 + i], blue,
-                "pixel at ({}, {}) should be blue", i, j
+                vm.screen[j * 256 + i],
+                blue,
+                "pixel at ({}, {}) should be blue",
+                i,
+                j
             );
         }
     }
 }
-
-
 
 // ── BORDER ───────────────────────────────────────────────────────
 
@@ -33,40 +32,58 @@ fn test_border() {
     // Top border: row 0-3, all columns
     for x in 0..256 {
         for y in 0..4 {
-            assert_eq!(vm.screen[y * 256 + x], green,
-                "top border pixel at ({}, {}) should be green", x, y);
+            assert_eq!(
+                vm.screen[y * 256 + x],
+                green,
+                "top border pixel at ({}, {}) should be green",
+                x,
+                y
+            );
         }
     }
 
     // Bottom border: row 252-255
     for x in 0..256 {
         for y in 252..256 {
-            assert_eq!(vm.screen[y * 256 + x], green,
-                "bottom border pixel at ({}, {}) should be green", x, y);
+            assert_eq!(
+                vm.screen[y * 256 + x],
+                green,
+                "bottom border pixel at ({}, {}) should be green",
+                x,
+                y
+            );
         }
     }
 
     // Left border: col 0-3, rows 4-251
     for x in 0..4 {
         for y in 4..252 {
-            assert_eq!(vm.screen[y * 256 + x], green,
-                "left border pixel at ({}, {}) should be green", x, y);
+            assert_eq!(
+                vm.screen[y * 256 + x],
+                green,
+                "left border pixel at ({}, {}) should be green",
+                x,
+                y
+            );
         }
     }
 
     // Right border: col 252-255, rows 4-251
     for x in 252..256 {
         for y in 4..252 {
-            assert_eq!(vm.screen[y * 256 + x], green,
-                "right border pixel at ({}, {}) should be green", x, y);
+            assert_eq!(
+                vm.screen[y * 256 + x],
+                green,
+                "right border pixel at ({}, {}) should be green",
+                x,
+                y
+            );
         }
     }
 
     // Center pixel should be black
     assert_eq!(vm.screen[128 * 256 + 128], 0, "center should be black");
 }
-
-
 
 // ── DIAGONAL_LINE ────────────────────────────────────────────────
 
@@ -78,16 +95,19 @@ fn test_diagonal() {
 
     // Diagonal pixels at (i, i) for i in 0..255 should be green
     for i in 0..256 {
-        assert_eq!(vm.screen[i * 256 + i], green,
-            "diagonal pixel at ({}, {}) should be green", i, i);
+        assert_eq!(
+            vm.screen[i * 256 + i],
+            green,
+            "diagonal pixel at ({}, {}) should be green",
+            i,
+            i
+        );
     }
 
     // Off-diagonal pixels should be black
     assert_eq!(vm.screen[0 * 256 + 1], 0, "(1, 0) should be black");
     assert_eq!(vm.screen[1 * 256 + 0], 0, "(0, 1) should be black");
 }
-
-
 
 // ── GRADIENT ─────────────────────────────────────────────────────
 
@@ -107,13 +127,17 @@ fn test_gradient() {
     for x in 0..256u32 {
         let expected = x;
         for y in 0..256 {
-            assert_eq!(vm.screen[y * 256 + x as usize], expected,
-                "gradient pixel at ({}, {}) should be {}", x, y, expected);
+            assert_eq!(
+                vm.screen[y * 256 + x as usize],
+                expected,
+                "gradient pixel at ({}, {}) should be {}",
+                x,
+                y,
+                expected
+            );
         }
     }
 }
-
-
 
 // ── STRIPES ──────────────────────────────────────────────────────
 
@@ -126,22 +150,17 @@ fn test_stripes() {
 
     // Rows 0-15 should be red
     for y in 0..16 {
-        assert_eq!(vm.screen[y * 256 + 128], red,
-            "row {} should be red", y);
+        assert_eq!(vm.screen[y * 256 + 128], red, "row {} should be red", y);
     }
     // Rows 16-31 should be blue
     for y in 16..32 {
-        assert_eq!(vm.screen[y * 256 + 128], blue,
-            "row {} should be blue", y);
+        assert_eq!(vm.screen[y * 256 + 128], blue, "row {} should be blue", y);
     }
     // Rows 32-47 should be red again
     for y in 32..48 {
-        assert_eq!(vm.screen[y * 256 + 128], red,
-            "row {} should be red", y);
+        assert_eq!(vm.screen[y * 256 + 128], red, "row {} should be red", y);
     }
 }
-
-
 
 // ── NESTED_RECTS ─────────────────────────────────────────────────
 
@@ -154,19 +173,29 @@ fn test_nested_rects() {
     assert_eq!(vm.screen[0], 0xFF0000, "top-left should be red");
     assert_eq!(vm.screen[255], 0xFF0000, "top-right should be red");
     assert_eq!(vm.screen[255 * 256], 0xFF0000, "bottom-left should be red");
-    assert_eq!(vm.screen[255 * 256 + 255], 0xFF0000, "bottom-right should be red");
+    assert_eq!(
+        vm.screen[255 * 256 + 255],
+        0xFF0000,
+        "bottom-right should be red"
+    );
 
     // Inside green rectangle
-    assert_eq!(vm.screen[30 * 256 + 30], 0x00FF00, "(30,30) should be green");
+    assert_eq!(
+        vm.screen[30 * 256 + 30],
+        0x00FF00,
+        "(30,30) should be green"
+    );
 
     // Inside blue rectangle
     assert_eq!(vm.screen[50 * 256 + 50], 0x0000FF, "(50,50) should be blue");
 
     // Center should be white
-    assert_eq!(vm.screen[128 * 256 + 128], 0xFFFFFF, "center should be white");
+    assert_eq!(
+        vm.screen[128 * 256 + 128],
+        0xFFFFFF,
+        "center should be white"
+    );
 }
-
-
 
 // ── BLINK ─────────────────────────────────────────────────────────
 
@@ -174,8 +203,7 @@ fn test_nested_rects() {
 fn test_blink_with_keys() {
     let source = std::fs::read_to_string("programs/blink.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
     // Load program at address 0
@@ -195,11 +223,16 @@ fn test_blink_with_keys() {
     // Run until first poll cycle (need enough cycles for setup code)
     // Setup: ~30 instructions (constants + signature + initial PSET)
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // After setup, pixel should be green
-    assert_eq!(vm.screen[center_pixel], green, "initial pixel should be green");
+    assert_eq!(
+        vm.screen[center_pixel], green,
+        "initial pixel should be green"
+    );
 
     // Simulate 3 keypresses, each followed by enough cycles to process
     for toggle_num in 0..3 {
@@ -211,19 +244,31 @@ fn test_blink_with_keys() {
         // - Clear port, check toggle state, toggle pixel, increment counter
         // - Check if done, either loop back or halt
         for _ in 0..200 {
-            if !vm.step() { break; }
+            if !vm.step() {
+                break;
+            }
         }
 
         // Verify port was cleared (program acknowledges the key)
-        assert_eq!(vm.ram[key_port], 0, "port should be cleared after toggle {}", toggle_num + 1);
+        assert_eq!(
+            vm.ram[key_port],
+            0,
+            "port should be cleared after toggle {}",
+            toggle_num + 1
+        );
 
         // After each toggle, pixel alternates: green -> black -> green -> black
         let expected = if toggle_num % 2 == 0 { black } else { green };
         assert_eq!(
-            vm.screen[center_pixel], expected,
+            vm.screen[center_pixel],
+            expected,
             "after toggle {}, pixel should be {}",
             toggle_num + 1,
-            if toggle_num % 2 == 0 { "black" } else { "green" }
+            if toggle_num % 2 == 0 {
+                "black"
+            } else {
+                "green"
+            }
         );
     }
 
@@ -237,8 +282,6 @@ fn test_blink_with_keys() {
     assert_eq!(vm.ram[0x0203], 78, "N");
     assert_eq!(vm.ram[0x0204], 75, "K");
 }
-
-
 
 // ── SHIFT (SHL/SHR) ──────────────────────────────────────────────
 
@@ -266,8 +309,6 @@ fn test_shift_operations() {
     assert_eq!(vm.ram[0x0205], 16, "(1 SHL 8) SHR 4 should be 16");
 }
 
-
-
 // ── ASSEMBLER TESTS ──────────────────────────────────────────────
 
 #[test]
@@ -289,11 +330,14 @@ fn test_all_programs_assemble() {
         let source = std::fs::read_to_string(path)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", path, e));
         let result = assemble(&source, 0);
-        assert!(result.is_ok(), "{} should assemble: {:?}", path, result.err());
+        assert!(
+            result.is_ok(),
+            "{} should assemble: {:?}",
+            path,
+            result.err()
+        );
     }
 }
-
-
 
 // ── PUSH/POP ──────────────────────────────────────────────────────
 
@@ -316,13 +360,14 @@ fn test_push_pop() {
     assert_eq!(vm.ram[0x0206], 42, "SP should be balanced, push/pop 42");
 
     // Test 4: PUSH preserves value across register reuse
-    assert_eq!(vm.ram[0x0207], 777, "pushed value preserved after register clobber");
+    assert_eq!(
+        vm.ram[0x0207], 777,
+        "pushed value preserved after register clobber"
+    );
 
     // Test 5: Push 5 values (10,20,30,40,50), pop and sum = 150
     assert_eq!(vm.ram[0x0208], 150, "sum of 5 pushed values should be 150");
 }
-
-
 
 // ── PAINTER ────────────────────────────────────────────────────
 
@@ -330,8 +375,7 @@ fn test_push_pop() {
 fn test_painter() {
     let source = std::fs::read_to_string("programs/painter.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
     let mut vm = Vm::new();
 
     // Load program at address 0
@@ -349,11 +393,16 @@ fn test_painter() {
 
     // Run setup (~50 instructions: constants + signature + initial PSET)
     for _ in 0..200 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // After setup, cursor should be at (128, 128) drawn in cyan
-    assert_eq!(vm.screen[center_pixel], cyan, "initial cursor should be cyan at center");
+    assert_eq!(
+        vm.screen[center_pixel], cyan,
+        "initial cursor should be cyan at center"
+    );
     assert_eq!(vm.ram[0x0200], 80, "P");
     assert_eq!(vm.ram[0x0201], 65, "A");
     assert_eq!(vm.ram[0x0202], 73, "I");
@@ -365,62 +414,82 @@ fn test_painter() {
     // Inject 'D' key (68) to move cursor right by 4
     vm.ram[key_port] = 68;
     for _ in 0..300 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert_eq!(vm.ram[key_port], 0, "port should be cleared after D key");
 
     // Cursor should have moved to (132, 128) and drawn cyan there
     let moved_pixel = 128 * 256 + 132;
-    assert_eq!(vm.screen[moved_pixel], cyan,
-        "cursor should be at (132, 128) after D key");
+    assert_eq!(
+        vm.screen[moved_pixel], cyan,
+        "cursor should be at (132, 128) after D key"
+    );
 
     // Inject 'S' key (83) to move cursor down by 4
     vm.ram[key_port] = 83;
     for _ in 0..300 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert_eq!(vm.ram[key_port], 0, "port should be cleared after S key");
 
     // Cursor should be at (132, 132)
     let moved_pixel2 = 132 * 256 + 132;
-    assert_eq!(vm.screen[moved_pixel2], cyan,
-        "cursor should be at (132, 132) after S key");
+    assert_eq!(
+        vm.screen[moved_pixel2], cyan,
+        "cursor should be at (132, 132) after S key"
+    );
 
     // Inject 'W' key (87) to move cursor up by 4 (back to 128)
     vm.ram[key_port] = 87;
     for _ in 0..300 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Inject 'A' key (65) to move cursor left by 4 (back to 128)
     vm.ram[key_port] = 65;
     for _ in 0..300 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Cursor should be back at (128, 128)
-    assert_eq!(vm.screen[center_pixel], cyan,
-        "cursor should be back at (128, 128) after W+A");
+    assert_eq!(
+        vm.screen[center_pixel], cyan,
+        "cursor should be back at (128, 128) after W+A"
+    );
 
     // Now paint 5 pixels with Space (32)
     for paint_num in 0..5 {
         vm.ram[key_port] = 32; // Space
         for _ in 0..300 {
-            if !vm.step() { break; }
+            if !vm.step() {
+                break;
+            }
         }
-        assert_eq!(vm.ram[key_port], 0,
-            "port should be cleared after paint {}", paint_num + 1);
+        assert_eq!(
+            vm.ram[key_port],
+            0,
+            "port should be cleared after paint {}",
+            paint_num + 1
+        );
     }
 
     // After 5 paints, program should have halted
     assert!(vm.halted, "VM should halt after 5 paint operations");
 
     // The pixel at (128, 128) should be nonzero (painted)
-    assert_ne!(vm.screen[center_pixel], 0,
-        "pixel at cursor should be painted after space key");
+    assert_ne!(
+        vm.screen[center_pixel], 0,
+        "pixel at cursor should be painted after space key"
+    );
 }
-
-
 
 // ── CALCULATOR ──────────────────────────────────────────────────
 
@@ -531,8 +600,6 @@ fn test_calculator_subtract() {
     assert_eq!(vm.ram[0x0307], 0, "expect null terminator");
 }
 
-
-
 // ── Additional Program Tests (Sprint 1) ─────────────────────────
 
 #[test]
@@ -568,7 +635,10 @@ fn test_circles_program() {
             }
         }
     }
-    assert!(pixels_found, "circles.asm should draw circles around center");
+    assert!(
+        pixels_found,
+        "circles.asm should draw circles around center"
+    );
 }
 
 #[test]
@@ -624,14 +694,22 @@ fn test_scroll_demo_program() {
 #[test]
 fn test_painter_program() {
     // Painter writes a signature to RAM
-    let source = std::fs::read_to_string("programs/painter.asm").expect("filesystem operation failed");
+    let source =
+        std::fs::read_to_string("programs/painter.asm").expect("filesystem operation failed");
     let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
     // Run for enough steps to do initial RAM writes
-    for _ in 0..1000 { vm.step(); }
+    for _ in 0..1000 {
+        vm.step();
+    }
     // RAM[0x0200] should be 'P' (80)
-    assert_eq!(vm.ram[0x0200], 80, "painter.asm should write signature to RAM");
+    assert_eq!(
+        vm.ram[0x0200], 80,
+        "painter.asm should write signature to RAM"
+    );
 }
 
 #[test]
@@ -648,7 +726,10 @@ fn test_ball_program() {
             }
         }
     }
-    assert!(pixels_found, "ball.asm should draw a white ball near center");
+    assert!(
+        pixels_found,
+        "ball.asm should draw a white ball near center"
+    );
 }
 
 #[test]
@@ -665,5 +746,8 @@ fn test_fire_program() {
             }
         }
     }
-    assert!(pixels_found, "fire.asm should have fire pixels in bottom region");
+    assert!(
+        pixels_found,
+        "fire.asm should have fire pixels in bottom region"
+    );
 }

@@ -1,7 +1,5 @@
 use super::*;
 
-
-
 // ── LINE / CIRCLE / SCROLL ─────────────────────────────────────
 
 #[test]
@@ -9,12 +7,22 @@ fn test_line_opcode() {
     let source = "LDI r0, 0\nLDI r1, 0\nLDI r2, 255\nLDI r3, 255\nLDI r4, 0xFFFFFF\nLINE r0,r1,r2,r3,r4\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100_000 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // diagonal should have pixels set at corners
     assert_eq!(vm.screen[0], 0xFFFFFF, "top-left pixel should be white");
-    assert_eq!(vm.screen[255 * 256 + 255], 0xFFFFFF, "bottom-right pixel should be white");
+    assert_eq!(
+        vm.screen[255 * 256 + 255],
+        0xFFFFFF,
+        "bottom-right pixel should be white"
+    );
 }
 
 #[test]
@@ -22,31 +30,58 @@ fn test_circle_opcode() {
     let source = "LDI r0, 128\nLDI r1, 128\nLDI r2, 50\nLDI r3, 0xFF0000\nCIRCLE r0,r1,r2,r3\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100_000 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // top of circle: (128, 78) should be red
-    assert_eq!(vm.screen[78 * 256 + 128], 0xFF0000, "top of circle should be red");
+    assert_eq!(
+        vm.screen[78 * 256 + 128],
+        0xFF0000,
+        "top of circle should be red"
+    );
     // bottom: (128, 178)
-    assert_eq!(vm.screen[178 * 256 + 128], 0xFF0000, "bottom of circle should be red");
+    assert_eq!(
+        vm.screen[178 * 256 + 128],
+        0xFF0000,
+        "bottom of circle should be red"
+    );
 }
 
 #[test]
 fn test_scroll_opcode() {
-    let source = "LDI r0, 0\nLDI r1, 10\nLDI r2, 0xFFFFFF\nPSET r0,r1,r2\nLDI r3, 5\nSCROLL r3\nHALT";
+    let source =
+        "LDI r0, 0\nLDI r1, 10\nLDI r2, 0xFFFFFF\nPSET r0,r1,r2\nLDI r3, 5\nSCROLL r3\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100_000 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // pixel was at (0, 10), scroll 5 up -> should now be at (0, 5)
-    assert_eq!(vm.screen[5 * 256 + 0], 0xFFFFFF, "pixel should have scrolled to y=5");
+    assert_eq!(
+        vm.screen[5 * 256 + 0],
+        0xFFFFFF,
+        "pixel should have scrolled to y=5"
+    );
     // original location (0, 10) should still be white too (scrolled copy)
     // actually after scroll by 5, y=10 maps to y=5, and y=5 is now the pixel
-    assert_eq!(vm.screen[10 * 256 + 0], 0, "original y=10 should be 0 after scroll");
+    assert_eq!(
+        vm.screen[10 * 256 + 0],
+        0,
+        "original y=10 should be 0 after scroll"
+    );
 }
-
-
 
 // ── FRAME ──────────────────────────────────────────────────────
 
@@ -57,11 +92,15 @@ fn test_frame_opcode() {
     let source = "LDI r1, 0xFF0000\nFILL r1\nFRAME\nLDI r1, 0x0000FF\nFILL r1\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
     vm.pc = 0;
     // Run until first FRAME
     for _ in 0..10_000 {
-        if !vm.step() || vm.frame_ready { break; }
+        if !vm.step() || vm.frame_ready {
+            break;
+        }
     }
     assert!(vm.frame_ready, "FRAME should set frame_ready");
     // Screen should be red at this point
@@ -69,13 +108,13 @@ fn test_frame_opcode() {
     // Clear flag and run to halt
     vm.frame_ready = false;
     for _ in 0..10_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert!(vm.halted);
     assert_eq!(vm.screen[0], 0x0000FF, "screen should be blue after HALT");
 }
-
-
 
 // ── NEG / IKEY ──────────────────────────────────────────────────
 
@@ -84,8 +123,14 @@ fn test_neg_opcode() {
     let source = "LDI r1, 5\nNEG r1\nLDI r2, 3\nADD r2, r1\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..10_000 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..10_000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // r1 = -5 (0xFFFFFFFB), r2 = 3 + (-5) = -2 (0xFFFFFFFE)
     assert_eq!(vm.regs[1], 0xFFFFFFFB, "NEG 5 should give 0xFFFFFFFB");
@@ -97,16 +142,20 @@ fn test_ikey_opcode() {
     let source = "IKEY r1\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
     // Simulate key press: write ASCII 'A' (65) to keyboard port
     vm.ram[0xFFF] = 65;
-    for _ in 0..10_000 { if !vm.step() { break; } }
+    for _ in 0..10_000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[1], 65, "IKEY should read key code 65 into r1");
     assert_eq!(vm.ram[0xFFF], 0, "IKEY should clear the keyboard port");
 }
-
-
 
 // ── RAND ─────────────────────────────────────────────────────────
 
@@ -115,16 +164,26 @@ fn test_rand_opcode() {
     let source = "RAND r1\nRAND r2\nRAND r3\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // all three should be non-zero and different from each other
     assert_ne!(vm.regs[1], 0, "RAND should produce non-zero values");
-    assert_ne!(vm.regs[1], vm.regs[2], "consecutive RAND values should differ");
-    assert_ne!(vm.regs[2], vm.regs[3], "consecutive RAND values should differ");
+    assert_ne!(
+        vm.regs[1], vm.regs[2],
+        "consecutive RAND values should differ"
+    );
+    assert_ne!(
+        vm.regs[2], vm.regs[3],
+        "consecutive RAND values should differ"
+    );
 }
-
-
 
 // ── BEEP ────────────────────────────────────────────────────────
 
@@ -135,8 +194,14 @@ fn test_beep_opcode() {
     let source = "LDI r1, 440\nLDI r2, 50\nBEEP r1, r2\nLDI r3, 1\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[3], 1, "VM should execute past BEEP and set r3");
 }
@@ -148,8 +213,14 @@ fn test_sar_opcode() {
     let source = "LDI r1, 0xFFFFFFFC\nLDI r2, 1\nSAR r1, r2\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[1], 0xFFFFFFFE, "SAR -4, 1 should be -2");
 
@@ -157,8 +228,14 @@ fn test_sar_opcode() {
     let source = "LDI r1, 4\nLDI r2, 1\nSAR r1, r2\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[1], 2, "SAR 4, 1 should be 2");
 }
@@ -168,7 +245,7 @@ fn test_tilemap_opcode() {
     // TILEMAP xr, yr, mr, tr, gwr, ghr, twr, thr
     // Set up a 2x2 grid at (10, 10) with tile index 1
     // Tile 1 is a 2x2 red square.
-    
+
     let source = "
         #define MAP_ADDR 0x5000
         #define TILE_ADDR 0x6000
@@ -210,23 +287,33 @@ fn test_tilemap_opcode() {
         TILEMAP r10, r11, r12, r13, r14, r15, r16, r17
         HALT
     ";
-    
+
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
-    
+
     // Check pixels at (10,10) to (13,13)
     // Grid 2x2 * Tile 2x2 = 4x4 area
     for y in 10..14 {
         for x in 10..14 {
-            assert_eq!(vm.screen[y * 256 + x], 0xFF0000, "pixel at ({}, {}) should be red", x, y);
+            assert_eq!(
+                vm.screen[y * 256 + x],
+                0xFF0000,
+                "pixel at ({}, {}) should be red",
+                x,
+                y
+            );
         }
     }
 }
-
-
 
 // ── CMP / BLT / BGE ────────────────────────────────────────────
 
@@ -235,8 +322,14 @@ fn test_cmp_opcode_equal() {
     let source = "LDI r1, 42\nLDI r2, 42\nCMP r1, r2\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[0], 0, "CMP equal should set r0 = 0");
 }
@@ -246,8 +339,14 @@ fn test_cmp_opcode_less_than() {
     let source = "LDI r1, 10\nLDI r2, 20\nCMP r1, r2\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[0], 0xFFFFFFFF, "CMP less-than should set r0 = -1");
 }
@@ -257,8 +356,14 @@ fn test_cmp_opcode_greater_than() {
     let source = "LDI r1, 30\nLDI r2, 20\nCMP r1, r2\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[0], 1, "CMP greater-than should set r0 = 1");
 }
@@ -270,8 +375,14 @@ LDI r1, 10\nLDI r2, 20\nCMP r1, r2\nBLT r0, less\nLDI r3, 99\nHALT\n\
 less:\nLDI r3, 42\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[3], 42, "BLT should branch when r1 < r2");
 }
@@ -283,13 +394,17 @@ LDI r1, 20\nLDI r2, 10\nCMP r1, r2\nBGE r0, geq\nLDI r3, 99\nHALT\n\
 geq:\nLDI r3, 42\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[3], 42, "BGE should branch when r1 >= r2");
 }
-
-
 
 // ── MOD ─────────────────────────────────────────────────────────
 
@@ -298,8 +413,14 @@ fn test_mod_opcode() {
     let source = "LDI r1, 17\nLDI r2, 5\nMOD r1, r2\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     assert_eq!(vm.regs[1], 2, "17 MOD 5 should be 2");
 }
@@ -309,11 +430,20 @@ fn test_mod_opcode_zero_divisor() {
     let source = "LDI r1, 10\nLDI r2, 0\nMOD r1, r2\nHALT";
     let asm = assemble(source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
-    for (i, &v) in asm.pixels.iter().enumerate() { vm.ram[i] = v; }
-    for _ in 0..100 { if !vm.step() { break; } }
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted);
     // Division by zero leaves register unchanged (same behavior as DIV)
-    assert_eq!(vm.regs[1], 10, "MOD by zero should leave register unchanged");
+    assert_eq!(
+        vm.regs[1], 10,
+        "MOD by zero should leave register unchanged"
+    );
 }
 
 #[test]
@@ -325,15 +455,18 @@ fn test_screenp_reads_screen_pixel() {
 
     // SCREENP r0, r1, r2 (dest=r0, x=r1, y=r2)
     vm.ram[0] = 0x6D; // SCREENP
-    vm.ram[1] = 0;    // dest = r0
-    vm.ram[2] = 1;    // x = r1
-    vm.ram[3] = 2;    // y = r2
-    vm.regs[1] = 10;  // x = 10
-    vm.regs[2] = 20;  // y = 20
+    vm.ram[1] = 0; // dest = r0
+    vm.ram[2] = 1; // x = r1
+    vm.ram[3] = 2; // y = r2
+    vm.regs[1] = 10; // x = 10
+    vm.regs[2] = 20; // y = 20
     vm.pc = 0;
 
     vm.step();
-    assert_eq!(vm.regs[0], 42, "SCREENP should read screen pixel at (10,20)");
+    assert_eq!(
+        vm.regs[0], 42,
+        "SCREENP should read screen pixel at (10,20)"
+    );
 }
 
 #[test]
@@ -368,15 +501,13 @@ fn test_screenp_assembles() {
 fn test_screenp_disassembles() {
     let mut vm = Vm::new();
     vm.ram[0] = 0x6D; // SCREENP
-    vm.ram[1] = 5;    // r5
-    vm.ram[2] = 3;    // r3
-    vm.ram[3] = 7;    // r7
+    vm.ram[1] = 5; // r5
+    vm.ram[2] = 3; // r3
+    vm.ram[3] = 7; // r7
     let (mnemonic, len) = vm.disassemble_at(0);
     assert_eq!(mnemonic, "SCREENP r5, r3, r7");
     assert_eq!(len, 4);
 }
-
-
 
 // ============================================================
 // Tests for new immediate-form opcodes (TEXTI, STRO, CMPI, etc.)
@@ -388,11 +519,17 @@ fn test_texti_renders_inline_string() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     // "H" should be drawn at (10, 20) in white (0xFFFFFF)
     // Check that at least some pixels near (10,20) are non-black
     let mut found_white = false;
@@ -413,15 +550,21 @@ fn test_stro_stores_string_to_ram() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.ram[0x2000], 65); // 'A'
     assert_eq!(vm.ram[0x2001], 66); // 'B'
     assert_eq!(vm.ram[0x2002], 67); // 'C'
-    assert_eq!(vm.ram[0x2003], 0);  // null terminator
+    assert_eq!(vm.ram[0x2003], 0); // null terminator
 }
 
 #[test]
@@ -430,11 +573,17 @@ fn test_cmpi_less() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[0], 0xFFFFFFFF, "10 < 20 should set r0 to -1");
 }
 
@@ -444,11 +593,17 @@ fn test_cmpi_equal() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[0], 0, "42 == 42 should set r0 to 0");
 }
 
@@ -458,11 +613,17 @@ fn test_cmpi_greater() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[0], 1, "100 > 50 should set r0 to 1");
 }
 
@@ -472,11 +633,17 @@ fn test_cmpi_with_blt() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[5], 10, "loop should stop when r5 reaches 10");
     assert!(vm.halted);
 }
@@ -487,11 +654,17 @@ fn test_addi() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 15, "10 + 5 = 15");
 }
 
@@ -501,11 +674,17 @@ fn test_subi() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 70, "100 - 30 = 70");
 }
 
@@ -515,11 +694,17 @@ fn test_shli() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 48, "3 << 4 = 48");
 }
 
@@ -529,11 +714,17 @@ fn test_shri() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 0x0F, "0xFF >> 4 = 0x0F");
 }
 
@@ -543,11 +734,17 @@ fn test_andi() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 0x0B, "0xAB & 0x0F = 0x0B");
 }
 
@@ -557,11 +754,17 @@ fn test_ori() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 0xFF, "0xF0 | 0x0F = 0xFF");
 }
 
@@ -571,11 +774,17 @@ fn test_xori() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 0xF0, "0xFF ^ 0x0F = 0xF0");
 }
 
@@ -586,10 +795,16 @@ fn test_loads_stores() {
     let asm = assemble(src, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = w; }
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[2], 42, "LOADS should read back what STORES wrote");
 }

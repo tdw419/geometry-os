@@ -28,7 +28,12 @@ impl RiscvCpu {
                 StepResult::Ok
             }
             Operation::Slt { rd, rs1, rs2 } => {
-                self.alu_r(rd, rs1, rs2, |a, b| if (a as i32) < (b as i32) { 1 } else { 0 });
+                self.alu_r(
+                    rd,
+                    rs1,
+                    rs2,
+                    |a, b| if (a as i32) < (b as i32) { 1 } else { 0 },
+                );
                 self.pc = next_pc;
                 StepResult::Ok
             }

@@ -1,7 +1,5 @@
 use super::*;
 
-
-
 // ── ASM OPCODE ──────────────────────────────────────────────────
 
 #[test]
@@ -12,13 +10,16 @@ fn test_asm_opcode_basic() {
         vm.ram[0x0800 + i] = byte as u32;
     }
     vm.ram[0x0800 + source.len()] = 0;
-    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0).expect("assembly should succeed");
+    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0)
+        .expect("assembly should succeed");
     for (i, &word) in prog.pixels.iter().enumerate() {
         vm.ram[i] = word;
     }
     vm.pc = 0;
     for _ in 0..100_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert_eq!(vm.ram[0x1000], 0x10, "LDI opcode at dest");
     assert_eq!(vm.ram[0x1001], 0, "r0 register");
@@ -36,13 +37,16 @@ fn test_asm_opcode_error() {
         vm.ram[0x0800 + i] = byte as u32;
     }
     vm.ram[0x0800 + source.len()] = 0;
-    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0).expect("assembly should succeed");
+    let prog = assemble("LDI r5, 0x0800\nLDI r6, 0x1000\nASM r5, r6\nHALT\n", 0)
+        .expect("assembly should succeed");
     for (i, &word) in prog.pixels.iter().enumerate() {
         vm.ram[i] = word;
     }
     vm.pc = 0;
     for _ in 0..100_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert_eq!(vm.ram[0xFFD], 0xFFFFFFFF, "ASM error indicator");
 }
@@ -58,7 +62,11 @@ fn test_self_host_runs() {
     let vm = compile_run("programs/self_host.asm");
     assert_eq!(vm.screen[0], 3, "top-left should be green");
     assert_eq!(vm.screen[128 * 256 + 128], 3, "center should be green");
-    assert_eq!(vm.screen[255 * 256 + 255], 3, "bottom-right should be green");
+    assert_eq!(
+        vm.screen[255 * 256 + 255],
+        3,
+        "bottom-right should be green"
+    );
 }
 
 #[test]
@@ -88,7 +96,9 @@ fn test_phase48_registers_preserved_across_runnext() {
     // Write source text into canvas_buffer (ASMSELF reads canvas_buffer as text)
     // Each canvas row is 32 cells. Write chars sequentially, newlines as actual \n bytes.
     for (i, byte) in canvas_source.bytes().enumerate() {
-        if i >= vm.canvas_buffer.len() { break; }
+        if i >= vm.canvas_buffer.len() {
+            break;
+        }
         vm.canvas_buffer[i] = byte as u32;
     }
 
@@ -99,16 +109,24 @@ fn test_phase48_registers_preserved_across_runnext() {
 
     // Run until halt
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // r5 must be unchanged -- registers survive the transition
-    assert_eq!(vm.regs[5], 12345,
-        "r5 must be preserved across ASMSELF+RUNNEXT: got {}", vm.regs[5]);
+    assert_eq!(
+        vm.regs[5], 12345,
+        "r5 must be preserved across ASMSELF+RUNNEXT: got {}",
+        vm.regs[5]
+    );
 
     // r10 should be 12346 (new code read r5 and added 1)
-    assert_eq!(vm.regs[10], 12346,
-        "r10 should be 12346 (r5+1): got {}", vm.regs[10]);
+    assert_eq!(
+        vm.regs[10], 12346,
+        "r10 should be 12346 (r5+1): got {}",
+        vm.regs[10]
+    );
 
     assert!(vm.halted, "VM should have halted after new code finished");
 }
@@ -118,15 +136,17 @@ fn test_hello_texti_vs_original() {
     // TEXTI hello vs original hello -- TEXTI should be much smaller
     let src_texti = "TEXTI 90, 120, \"Hello, World!\"\nHALT";
     let texti_asm = assemble(src_texti, 0).expect("assembly should succeed");
-    let src_original = std::fs::read_to_string("programs/hello.asm").expect("filesystem operation failed");
+    let src_original =
+        std::fs::read_to_string("programs/hello.asm").expect("filesystem operation failed");
     let original_asm = assemble(&src_original, 0).expect("assembly should succeed");
     // TEXTI version should be much smaller
-    assert!(texti_asm.pixels.len() < original_asm.pixels.len() / 4,
+    assert!(
+        texti_asm.pixels.len() < original_asm.pixels.len() / 4,
         "TEXTI hello ({} words) should be < 1/4 of original ({} words)",
-        texti_asm.pixels.len(), original_asm.pixels.len());
+        texti_asm.pixels.len(),
+        original_asm.pixels.len()
+    );
 }
-
-
 
 // === Self Writer (Phase 49: Pixel Driving Pixels) ===
 
@@ -141,25 +161,26 @@ fn test_self_writer() {
     assert!(vm.halted, "self_writer should halt after successor runs");
 
     // r1 = 42 from successor (LDI r1, 42; HALT)
-    assert_eq!(vm.regs[1], 42,
-        "r1 should be 42: got {}", vm.regs[1]);
+    assert_eq!(vm.regs[1], 42, "r1 should be 42: got {}", vm.regs[1]);
 
     // ASMSELF should have succeeded (bytecode word count > 0, not error)
-    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF,
-        "ASMSELF should not report error");
-    assert!(vm.ram[0xFFD] > 0,
-        "ASMSELF should produce bytecode words");
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should not report error");
+    assert!(vm.ram[0xFFD] > 0, "ASMSELF should produce bytecode words");
 
     // Verify canvas buffer has the successor text written to it
     // First char should be 'L' (76) from "LDI r0, 42"
-    assert_eq!(vm.canvas_buffer[0], 76,
-        "canvas[0] should be 'L' (76): got {}", vm.canvas_buffer[0]);
+    assert_eq!(
+        vm.canvas_buffer[0], 76,
+        "canvas[0] should be 'L' (76): got {}",
+        vm.canvas_buffer[0]
+    );
     // Second char should be 'D' (68)
-    assert_eq!(vm.canvas_buffer[1], 68,
-        "canvas[1] should be 'D' (68): got {}", vm.canvas_buffer[1]);
+    assert_eq!(
+        vm.canvas_buffer[1], 68,
+        "canvas[1] should be 'D' (68): got {}",
+        vm.canvas_buffer[1]
+    );
 }
-
-
 
 // === Evolving Counter (Phase 49: Pixel Driving Pixels) ===
 
@@ -171,37 +192,56 @@ fn test_evolving_counter() {
     let vm = compile_run("programs/evolving_counter.asm");
 
     // Program is an infinite loop (FRAME+JMP), won't halt
-    assert!(!vm.halted, "evolving_counter should not halt (infinite animation)");
+    assert!(
+        !vm.halted,
+        "evolving_counter should not halt (infinite animation)"
+    );
 
     // After running, frame_count should be > 0 (many FRAME opcodes executed)
-    assert!(vm.frame_count > 0, "frame_count should be > 0: got {}", vm.frame_count);
+    assert!(
+        vm.frame_count > 0,
+        "frame_count should be > 0: got {}",
+        vm.frame_count
+    );
 
     // Canvas buffer positions 0-3 should contain ASCII digit characters ('0'-'9')
     for i in 0..4 {
         let val = vm.canvas_buffer[i];
-        assert!(val >= 0x30 && val <= 0x39,
+        assert!(
+            val >= 0x30 && val <= 0x39,
             "canvas[{}] should be ASCII digit (0x30-0x39): got 0x{:02X} ('{}')",
-            i, val, if val >= 0x20 && val < 0x7F { val as u8 as char } else { '?' });
+            i,
+            val,
+            if val >= 0x20 && val < 0x7F {
+                val as u8 as char
+            } else {
+                '?'
+            }
+        );
     }
 
     // Verify the 4 digits actually represent the frame count value
     // Extract the displayed number from canvas buffer
     let displayed = (vm.canvas_buffer[0] - 0x30) * 1000
-                  + (vm.canvas_buffer[1] - 0x30) * 100
-                  + (vm.canvas_buffer[2] - 0x30) * 10
-                  + (vm.canvas_buffer[3] - 0x30);
+        + (vm.canvas_buffer[1] - 0x30) * 100
+        + (vm.canvas_buffer[2] - 0x30) * 10
+        + (vm.canvas_buffer[3] - 0x30);
 
     // The displayed count should match the frame_count mod 10000
     // (4-digit display wraps at 10000)
     let expected = vm.frame_count % 10000;
-    assert_eq!(displayed, expected,
+    assert_eq!(
+        displayed,
+        expected,
         "canvas digits should show frame_count mod 10000: expected {}, got {} (digits: {}{}{}{})",
-        expected, displayed,
-        vm.canvas_buffer[0] - 0x30, vm.canvas_buffer[1] - 0x30,
-        vm.canvas_buffer[2] - 0x30, vm.canvas_buffer[3] - 0x30);
+        expected,
+        displayed,
+        vm.canvas_buffer[0] - 0x30,
+        vm.canvas_buffer[1] - 0x30,
+        vm.canvas_buffer[2] - 0x30,
+        vm.canvas_buffer[3] - 0x30
+    );
 }
-
-
 
 // === Register Dashboard (Phase 50: Pixel Driving Pixels) ===
 
@@ -214,20 +254,27 @@ fn test_register_dashboard() {
     // Run for limited steps (2000) so exactly 1 frame completes and r1 = 1.
     let source = std::fs::read_to_string("programs/register_dashboard.asm")
         .unwrap_or_else(|e| panic!("failed to read register_dashboard.asm: {}", e));
-    let asm = assemble(&source, 0)
-        .unwrap_or_else(|e| panic!("assembly failed: {}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {}", e));
     let mut vm = Vm::new();
     for (i, &pixel) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = pixel; }
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
     }
     // Run exactly enough steps for 1 frame (682 = 4 init + 87 loop body - 1 JMP + 16*37 sub)
     for _ in 0..682 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Program is an infinite animation loop (FRAME + JMP main_loop)
     assert!(!vm.halted, "register_dashboard should not halt");
-    assert!(vm.frame_count > 0, "frame_count should be > 0: got {}", vm.frame_count);
+    assert!(
+        vm.frame_count > 0,
+        "frame_count should be > 0: got {}",
+        vm.frame_count
+    );
 
     // After first FRAME, r1 = 1 (frame counter incremented once)
     // Verify r1's digits at canvas indices 0-3: "0001"
@@ -248,8 +295,14 @@ fn test_register_dashboard() {
 
     // r9 = NEG(r1) = 0xFFFFFFFF at canvas indices 32-35
     // 0xFFFFFFFF = 4294967295, last 4 decimal digits = "7295"
-    assert_eq!(vm.canvas_buffer[32], 0x37, "r9 thousands digit should be '7'");
-    assert_eq!(vm.canvas_buffer[33], 0x32, "r9 hundreds digit should be '2'");
+    assert_eq!(
+        vm.canvas_buffer[32], 0x37,
+        "r9 thousands digit should be '7'"
+    );
+    assert_eq!(
+        vm.canvas_buffer[33], 0x32,
+        "r9 hundreds digit should be '2'"
+    );
     assert_eq!(vm.canvas_buffer[34], 0x39, "r9 tens digit should be '9'");
     assert_eq!(vm.canvas_buffer[35], 0x35, "r9 ones digit should be '5'");
 
@@ -263,38 +316,51 @@ fn test_register_dashboard() {
     // Verify ALL 64 canvas positions (16 regs × 4 digits) contain ASCII digits
     for i in 0..64 {
         let val = vm.canvas_buffer[i];
-        assert!(val >= 0x30 && val <= 0x39,
+        assert!(
+            val >= 0x30 && val <= 0x39,
             "canvas[{}] should be ASCII digit (0x30-0x39): got 0x{:02X} ('{}')",
-            i, val, if val >= 0x20 && val < 0x7F { val as u8 as char } else { '?' });
+            i,
+            val,
+            if val >= 0x20 && val < 0x7F {
+                val as u8 as char
+            } else {
+                '?'
+            }
+        );
     }
 }
-
-
 
 // === Living Map (stateful world + simulated creatures) ===
 
 #[test]
 fn test_living_map_assembles() {
-    let source = std::fs::read_to_string("programs/living_map.asm")
-        .expect("living_map.asm should exist");
+    let source =
+        std::fs::read_to_string("programs/living_map.asm").expect("living_map.asm should exist");
     assemble(&source, 0).expect("living_map.asm should assemble cleanly");
 }
 
 #[test]
 fn test_living_map_runs() {
-    let source = std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let source =
+        std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
     let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = v; }
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     // Run for enough steps for several frames
     for _ in 0..2_000_000 {
-        if vm.halted { break; }
-        if !vm.step() { break; }
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Player at center of viewport
@@ -303,7 +369,11 @@ fn test_living_map_runs() {
 
     // Screen should have terrain
     let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
-    assert!(non_black > 100, "Expected terrain on screen, got {} non-black pixels", non_black);
+    assert!(
+        non_black > 100,
+        "Expected terrain on screen, got {} non-black pixels",
+        non_black
+    );
 
     // Should not halt
     assert!(!vm.halted, "living_map should not halt");
@@ -311,17 +381,24 @@ fn test_living_map_runs() {
 
 #[test]
 fn test_living_map_draws_terrain() {
-    let source = std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let source =
+        std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
     let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = v; }
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
     }
 
     // Run until first frame completes
     for _ in 0..1_000_000 {
-        if vm.halted { break; }
-        if !vm.step() { break; }
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
         if vm.frame_ready {
             vm.frame_ready = false;
             break;
@@ -329,21 +406,32 @@ fn test_living_map_draws_terrain() {
     }
 
     let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
-    assert!(non_black > 1000, "terrain should fill screen, got {} non-black pixels", non_black);
+    assert!(
+        non_black > 1000,
+        "terrain should fill screen, got {} non-black pixels",
+        non_black
+    );
 }
 
 #[test]
 fn test_living_map_draws_player() {
-    let source = std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let source =
+        std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
     let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = v; }
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
     }
 
     for _ in 0..1_000_000 {
-        if vm.halted { break; }
-        if !vm.step() { break; }
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
         if vm.frame_ready {
             vm.frame_ready = false;
             break;
@@ -352,35 +440,60 @@ fn test_living_map_draws_player() {
 
     // Player at pixel (128,128) as 4x4 white rectangle
     let white = 0xFFFFFFu32;
-    assert_eq!(vm.screen[128 * 256 + 128], white, "player top-left should be white");
-    assert_eq!(vm.screen[131 * 256 + 131], white, "player bottom-right should be white");
+    assert_eq!(
+        vm.screen[128 * 256 + 128],
+        white,
+        "player top-left should be white"
+    );
+    assert_eq!(
+        vm.screen[131 * 256 + 131],
+        white,
+        "player bottom-right should be white"
+    );
 }
 
 #[test]
 fn test_living_map_footstep_trail() {
-    let source = std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let source =
+        std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
     let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &v) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = v; }
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
     }
 
     // Press Right for several frames
     let mut frames = 0;
     for _ in 0..5_000_000 {
-        if vm.halted { break; }
+        if vm.halted {
+            break;
+        }
         vm.ram[0xFFB] = 8; // bit 3 = right
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if vm.frame_ready {
             vm.frame_ready = false;
             frames += 1;
-            if frames >= 10 { break; }
+            if frames >= 10 {
+                break;
+            }
         }
     }
 
     let state_count = vm.ram[0x7807];
-    assert!(state_count > 0, "should have footstep entries after moving, got state_count={}", state_count);
+    assert!(
+        state_count > 0,
+        "should have footstep entries after moving, got state_count={}",
+        state_count
+    );
 
     let cam_x = vm.ram[0x7800];
-    assert!(cam_x > 0, "camera should have moved right: camera_x={}", cam_x);
+    assert!(
+        cam_x > 0,
+        "camera should have moved right: camera_x={}",
+        cam_x
+    );
 }

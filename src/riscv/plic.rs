@@ -55,7 +55,7 @@ impl Default for Plic {
 }
 
 impl Plic {
-        /// Create a new PLIC with all interrupts disabled and zero priorities.
+    /// Create a new PLIC with all interrupts disabled and zero priorities.
     pub fn new() -> Self {
         Self {
             priority: [0u32; MAX_SOURCES],
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn claim_via_mmio() {
         let mut plic = Plic::new();
-plic.priority[IRQ_UART as usize] = 5;
+        plic.priority[IRQ_UART as usize] = 5;
         plic.enable = 1 << IRQ_UART;
         plic.signal(IRQ_UART);
         assert_eq!(plic.read(CTX0_CLAIM), Some(IRQ_UART));

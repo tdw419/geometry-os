@@ -1,7 +1,7 @@
 // Quick check: read phys_ram_base after setup_vm.
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -40,18 +40,28 @@ fn main() {
             last_satp = cur_satp;
         }
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
-                if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                if let Some((a0, a1)) = result {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
             } else {
                 let mpp = (vm.cpu.csr.mstatus & 0x3000) >> 12;
                 if mpp != 3 && (vm.cpu.csr.stvec & !0x3) != 0 {
@@ -63,7 +73,9 @@ fn main() {
                     let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                     vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                     vm.cpu.csr.mstatus &= !(1 << 1);
-                    if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                    if cause_code == 7 {
+                        vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                    }
                     vm.cpu.pc = vm.cpu.csr.stvec & !0x3;
                     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
                     vm.cpu.tlb.flush_all();
@@ -97,15 +109,20 @@ fn main() {
     }
     // Search for "memory" string in DTB
     let memory_str = b"memory";
-    if let Some(pos) = dtb_data.windows(memory_str.len()).position(|w| w == memory_str) {
+    if let Some(pos) = dtb_data
+        .windows(memory_str.len())
+        .position(|w| w == memory_str)
+    {
         eprintln!("Found 'memory' at DTB offset {}", pos);
         // Dump surrounding bytes
         let start = pos.saturating_sub(16);
         let end = (pos + 64).min(dtb_data.len());
         eprintln!("DTB bytes {}-{}:", start, end);
         for i in (start..end).step_by(16) {
-            let hex: String = dtb_data[i..std::cmp::min(i+16, end)]
-                .iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>()
+            let hex: String = dtb_data[i..std::cmp::min(i + 16, end)]
+                .iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>()
                 .join(" ");
             eprintln!("  {:04X}: {}", i, hex);
         }
@@ -118,22 +135,30 @@ fn main() {
     let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
     let km_vapo = vm.bus.read_word(km_phys + 20).unwrap_or(0);
     let km_vkpo = vm.bus.read_word(km_phys + 24).unwrap_or(0);
-    eprintln!("kernel_map: phys_addr=0x{:X} va_pa_offset=0x{:X} va_kernel_pa_offset=0x{:X}",
-        km_pa, km_vapo, km_vkpo);
+    eprintln!(
+        "kernel_map: phys_addr=0x{:X} va_pa_offset=0x{:X} va_kernel_pa_offset=0x{:X}",
+        km_pa, km_vapo, km_vkpo
+    );
 
     // Check early_pg_dir_pte_ops struct (at VA 0xC0404AA8 -> PA 0x00404AA8)
     let ops_get = vm.bus.read_word(0x00404AA8).unwrap_or(0);
     let ops_set = vm.bus.read_word(0x00404AAC).unwrap_or(0);
-    eprintln!("early_pg_dir_pte_ops at PA 0x00404AA8: get=0x{:08X} set=0x{:08X}", ops_get, ops_set);
+    eprintln!(
+        "early_pg_dir_pte_ops at PA 0x00404AA8: get=0x{:08X} set=0x{:08X}",
+        ops_get, ops_set
+    );
 
     // Check what's in the ELF at that file offset
     // Segment 2: vaddr=0xC0400000 paddr=0x00400000 filesz=0x27572 offset=0x400000
     // VA 0xC0404AA8 -> file offset = 0x400000 + (0xC0404AA8 - 0xC0400000) = 0x400000 + 0x4AA8 = 0x404AA8
     let file_off = 0x404AA8;
     if file_off as usize + 8 <= kernel_image.len() {
-        let b = &kernel_image[file_off..file_off+8];
+        let b = &kernel_image[file_off..file_off + 8];
         let v1 = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
         let v2 = u32::from_le_bytes([b[4], b[5], b[6], b[7]]);
-        eprintln!("ELF file at offset 0x{:X}: 0x{:08X} 0x{:08X}", file_off, v1, v2);
+        eprintln!(
+            "ELF file at offset 0x{:X}: 0x{:08X} 0x{:08X}",
+            file_off, v1, v2
+        );
     }
 }

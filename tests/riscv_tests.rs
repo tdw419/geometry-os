@@ -8,24 +8,24 @@
 
 #[path = "riscv_tests/base.rs"]
 pub mod base;
-#[path = "riscv_tests/csr.rs"]
-pub mod csr;
-#[path = "riscv_tests/privilege.rs"]
-pub mod privilege;
+#[path = "riscv_tests/base_programs.rs"]
+pub mod base_programs;
 #[path = "riscv_tests/clint.rs"]
 pub mod clint;
+#[path = "riscv_tests/csr.rs"]
+pub mod csr;
+#[path = "riscv_tests/integration.rs"]
+pub mod integration;
+#[path = "riscv_tests/privilege.rs"]
+pub mod privilege;
 #[path = "riscv_tests/sv32.rs"]
 pub mod sv32;
-#[path = "riscv_tests/sv32_tlb.rs"]
-pub mod sv32_tlb;
 #[path = "riscv_tests/sv32_faults.rs"]
 pub mod sv32_faults;
 #[path = "riscv_tests/sv32_interrupt.rs"]
 pub mod sv32_interrupt;
-#[path = "riscv_tests/integration.rs"]
-pub mod integration;
-#[path = "riscv_tests/base_programs.rs"]
-pub mod base_programs;
+#[path = "riscv_tests/sv32_tlb.rs"]
+pub mod sv32_tlb;
 
 use geometry_os::riscv::cpu::StepResult;
 use geometry_os::riscv::RiscvVm;
@@ -59,7 +59,9 @@ pub fn run(vm: &mut RiscvVm, max_steps: usize) {
 // ---- Encoding helpers ----
 
 pub fn r_type(funct7: u32, rs2: u8, rs1: u8, funct3: u32, rd: u8, opcode: u32) -> u32 {
-    (funct7 << 25) | ((rs2 as u32) << 20) | ((rs1 as u32) << 15)
+    (funct7 << 25)
+        | ((rs2 as u32) << 20)
+        | ((rs1 as u32) << 15)
         | (funct3 << 12)
         | ((rd as u32) << 7)
         | opcode
@@ -116,56 +118,152 @@ pub fn s_type(rs2: u8, rs1: u8, funct3: u32, imm: i32) -> u32 {
 }
 
 // Instruction shorthand
-pub fn ecall() -> u32 { i_type(0, 0, 0, 0, 0x73) }
-pub fn lui(rd: u8, imm: u32) -> u32 { u_type(imm, rd, 0x37) }
-pub fn auipc(rd: u8, imm: u32) -> u32 { u_type(imm, rd, 0x17) }
-pub fn add(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 0b000, rd, 0x33) }
-pub fn sub(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0b0100000, rs2, rs1, 0b000, rd, 0x33) }
-pub fn sll(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 0b001, rd, 0x33) }
-pub fn slt(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 0b010, rd, 0x33) }
-pub fn sltu(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 0b011, rd, 0x33) }
-pub fn xor_inst(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 0b100, rd, 0x33) }
-pub fn srl(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 0b101, rd, 0x33) }
-pub fn sra(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0b0100000, rs2, rs1, 0b101, rd, 0x33) }
-pub fn or_inst(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 0b110, rd, 0x33) }
-pub fn and_inst(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 0b111, rd, 0x33) }
-pub fn addi(rd: u8, rs1: u8, imm: i32) -> u32 { i_type(imm as u32, rs1, 0b000, rd, 0x13) }
-pub fn slti(rd: u8, rs1: u8, imm: i32) -> u32 { i_type(imm as u32, rs1, 0b010, rd, 0x13) }
-pub fn sltiu(rd: u8, rs1: u8, imm: i32) -> u32 { i_type(imm as u32, rs1, 0b011, rd, 0x13) }
-pub fn xori(rd: u8, rs1: u8, imm: i32) -> u32 { i_type(imm as u32, rs1, 0b100, rd, 0x13) }
-pub fn ori(rd: u8, rs1: u8, imm: i32) -> u32 { i_type(imm as u32, rs1, 0b110, rd, 0x13) }
-pub fn andi(rd: u8, rs1: u8, imm: i32) -> u32 { i_type(imm as u32, rs1, 0b111, rd, 0x13) }
-pub fn slli(rd: u8, rs1: u8, shamt: u32) -> u32 { i_type(shamt & 0x1F, rs1, 0b001, rd, 0x13) }
-pub fn srli(rd: u8, rs1: u8, shamt: u32) -> u32 { i_type(shamt & 0x1F, rs1, 0b101, rd, 0x13) }
-pub fn srai(rd: u8, rs1: u8, shamt: u32) -> u32 { i_type(0b0100000 << 5 | (shamt & 0x1F), rs1, 0b101, rd, 0x13) }
-pub fn lw(rd: u8, rs1: u8, off: i32) -> u32 { i_type(off as u32, rs1, 0b010, rd, 0x03) }
-pub fn lb(rd: u8, rs1: u8, off: i32) -> u32 { i_type(off as u32, rs1, 0b000, rd, 0x03) }
-pub fn lh(rd: u8, rs1: u8, off: i32) -> u32 { i_type(off as u32, rs1, 0b001, rd, 0x03) }
-pub fn lbu(rd: u8, rs1: u8, off: i32) -> u32 { i_type(off as u32, rs1, 0b100, rd, 0x03) }
-pub fn lhu(rd: u8, rs1: u8, off: i32) -> u32 { i_type(off as u32, rs1, 0b101, rd, 0x03) }
-pub fn sw(rs2: u8, rs1: u8, off: i32) -> u32 { s_type(rs2, rs1, 0b010, off) }
-pub fn sb(rs2: u8, rs1: u8, off: i32) -> u32 { s_type(rs2, rs1, 0b000, off) }
-pub fn sh(rs2: u8, rs1: u8, off: i32) -> u32 { s_type(rs2, rs1, 0b001, off) }
-pub fn beq(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b000, off) }
-pub fn bne(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b001, off) }
-pub fn blt(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b100, off) }
-pub fn bge(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b101, off) }
-pub fn bltu(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b110, off) }
-pub fn bgeu(rs1: u8, rs2: u8, off: i32) -> u32 { b_type(rs1, rs2, 0b111, off) }
-pub fn ebreak() -> u32 { i_type(1, 0, 0, 0, 0x73) }
+pub fn ecall() -> u32 {
+    i_type(0, 0, 0, 0, 0x73)
+}
+pub fn lui(rd: u8, imm: u32) -> u32 {
+    u_type(imm, rd, 0x37)
+}
+pub fn auipc(rd: u8, imm: u32) -> u32 {
+    u_type(imm, rd, 0x17)
+}
+pub fn add(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0, rs2, rs1, 0b000, rd, 0x33)
+}
+pub fn sub(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0b0100000, rs2, rs1, 0b000, rd, 0x33)
+}
+pub fn sll(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0, rs2, rs1, 0b001, rd, 0x33)
+}
+pub fn slt(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0, rs2, rs1, 0b010, rd, 0x33)
+}
+pub fn sltu(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0, rs2, rs1, 0b011, rd, 0x33)
+}
+pub fn xor_inst(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0, rs2, rs1, 0b100, rd, 0x33)
+}
+pub fn srl(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0, rs2, rs1, 0b101, rd, 0x33)
+}
+pub fn sra(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0b0100000, rs2, rs1, 0b101, rd, 0x33)
+}
+pub fn or_inst(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0, rs2, rs1, 0b110, rd, 0x33)
+}
+pub fn and_inst(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0, rs2, rs1, 0b111, rd, 0x33)
+}
+pub fn addi(rd: u8, rs1: u8, imm: i32) -> u32 {
+    i_type(imm as u32, rs1, 0b000, rd, 0x13)
+}
+pub fn slti(rd: u8, rs1: u8, imm: i32) -> u32 {
+    i_type(imm as u32, rs1, 0b010, rd, 0x13)
+}
+pub fn sltiu(rd: u8, rs1: u8, imm: i32) -> u32 {
+    i_type(imm as u32, rs1, 0b011, rd, 0x13)
+}
+pub fn xori(rd: u8, rs1: u8, imm: i32) -> u32 {
+    i_type(imm as u32, rs1, 0b100, rd, 0x13)
+}
+pub fn ori(rd: u8, rs1: u8, imm: i32) -> u32 {
+    i_type(imm as u32, rs1, 0b110, rd, 0x13)
+}
+pub fn andi(rd: u8, rs1: u8, imm: i32) -> u32 {
+    i_type(imm as u32, rs1, 0b111, rd, 0x13)
+}
+pub fn slli(rd: u8, rs1: u8, shamt: u32) -> u32 {
+    i_type(shamt & 0x1F, rs1, 0b001, rd, 0x13)
+}
+pub fn srli(rd: u8, rs1: u8, shamt: u32) -> u32 {
+    i_type(shamt & 0x1F, rs1, 0b101, rd, 0x13)
+}
+pub fn srai(rd: u8, rs1: u8, shamt: u32) -> u32 {
+    i_type(0b0100000 << 5 | (shamt & 0x1F), rs1, 0b101, rd, 0x13)
+}
+pub fn lw(rd: u8, rs1: u8, off: i32) -> u32 {
+    i_type(off as u32, rs1, 0b010, rd, 0x03)
+}
+pub fn lb(rd: u8, rs1: u8, off: i32) -> u32 {
+    i_type(off as u32, rs1, 0b000, rd, 0x03)
+}
+pub fn lh(rd: u8, rs1: u8, off: i32) -> u32 {
+    i_type(off as u32, rs1, 0b001, rd, 0x03)
+}
+pub fn lbu(rd: u8, rs1: u8, off: i32) -> u32 {
+    i_type(off as u32, rs1, 0b100, rd, 0x03)
+}
+pub fn lhu(rd: u8, rs1: u8, off: i32) -> u32 {
+    i_type(off as u32, rs1, 0b101, rd, 0x03)
+}
+pub fn sw(rs2: u8, rs1: u8, off: i32) -> u32 {
+    s_type(rs2, rs1, 0b010, off)
+}
+pub fn sb(rs2: u8, rs1: u8, off: i32) -> u32 {
+    s_type(rs2, rs1, 0b000, off)
+}
+pub fn sh(rs2: u8, rs1: u8, off: i32) -> u32 {
+    s_type(rs2, rs1, 0b001, off)
+}
+pub fn beq(rs1: u8, rs2: u8, off: i32) -> u32 {
+    b_type(rs1, rs2, 0b000, off)
+}
+pub fn bne(rs1: u8, rs2: u8, off: i32) -> u32 {
+    b_type(rs1, rs2, 0b001, off)
+}
+pub fn blt(rs1: u8, rs2: u8, off: i32) -> u32 {
+    b_type(rs1, rs2, 0b100, off)
+}
+pub fn bge(rs1: u8, rs2: u8, off: i32) -> u32 {
+    b_type(rs1, rs2, 0b101, off)
+}
+pub fn bltu(rs1: u8, rs2: u8, off: i32) -> u32 {
+    b_type(rs1, rs2, 0b110, off)
+}
+pub fn bgeu(rs1: u8, rs2: u8, off: i32) -> u32 {
+    b_type(rs1, rs2, 0b111, off)
+}
+pub fn ebreak() -> u32 {
+    i_type(1, 0, 0, 0, 0x73)
+}
 #[allow(dead_code)]
-pub fn fence() -> u32 { 0x0FF0000F }
-pub fn nop() -> u32 { addi(0, 0, 0) }
-pub fn mret() -> u32 { 0x30200073 }
-pub fn sret() -> u32 { 0x10200073 }
+pub fn fence() -> u32 {
+    0x0FF0000F
+}
+pub fn nop() -> u32 {
+    addi(0, 0, 0)
+}
+pub fn mret() -> u32 {
+    0x30200073
+}
+pub fn sret() -> u32 {
+    0x10200073
+}
 #[allow(dead_code)]
-pub fn and_(rd: u8, rs1: u8, rs2: u8) -> u32 { r_type(0, rs2, rs1, 7, rd, 0x33) }
-pub fn csrrw(rd: u8, rs1: u8, csr: u32) -> u32 { (csr << 20) | ((rs1 as u32) << 15) | (1u32 << 12) | ((rd as u32) << 7) | 0x73 }
-pub fn csrrs(rd: u8, rs1: u8, csr: u32) -> u32 { (csr << 20) | ((rs1 as u32) << 15) | (2u32 << 12) | ((rd as u32) << 7) | 0x73 }
-pub fn csrrc(rd: u8, rs1: u8, csr: u32) -> u32 { (csr << 20) | ((rs1 as u32) << 15) | (3u32 << 12) | ((rd as u32) << 7) | 0x73 }
-pub fn csrrwi(rd: u8, uimm: u8, csr: u32) -> u32 { (csr << 20) | ((uimm as u32) << 15) | (5u32 << 12) | ((rd as u32) << 7) | 0x73 }
-pub fn csrrsi(rd: u8, uimm: u8, csr: u32) -> u32 { (csr << 20) | ((uimm as u32) << 15) | (6u32 << 12) | ((rd as u32) << 7) | 0x73 }
-pub fn csrrci(rd: u8, uimm: u8, csr: u32) -> u32 { (csr << 20) | ((uimm as u32) << 15) | (7u32 << 12) | ((rd as u32) << 7) | 0x73 }
+pub fn and_(rd: u8, rs1: u8, rs2: u8) -> u32 {
+    r_type(0, rs2, rs1, 7, rd, 0x33)
+}
+pub fn csrrw(rd: u8, rs1: u8, csr: u32) -> u32 {
+    (csr << 20) | ((rs1 as u32) << 15) | (1u32 << 12) | ((rd as u32) << 7) | 0x73
+}
+pub fn csrrs(rd: u8, rs1: u8, csr: u32) -> u32 {
+    (csr << 20) | ((rs1 as u32) << 15) | (2u32 << 12) | ((rd as u32) << 7) | 0x73
+}
+pub fn csrrc(rd: u8, rs1: u8, csr: u32) -> u32 {
+    (csr << 20) | ((rs1 as u32) << 15) | (3u32 << 12) | ((rd as u32) << 7) | 0x73
+}
+pub fn csrrwi(rd: u8, uimm: u8, csr: u32) -> u32 {
+    (csr << 20) | ((uimm as u32) << 15) | (5u32 << 12) | ((rd as u32) << 7) | 0x73
+}
+pub fn csrrsi(rd: u8, uimm: u8, csr: u32) -> u32 {
+    (csr << 20) | ((uimm as u32) << 15) | (6u32 << 12) | ((rd as u32) << 7) | 0x73
+}
+pub fn csrrci(rd: u8, uimm: u8, csr: u32) -> u32 {
+    (csr << 20) | ((uimm as u32) << 15) | (7u32 << 12) | ((rd as u32) << 7) | 0x73
+}
 
 // CSR address constants
 pub const CSR_MSTATUS: u32 = 0x300;

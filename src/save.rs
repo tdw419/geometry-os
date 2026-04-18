@@ -1,9 +1,9 @@
 // save.rs -- Save/load state, PNG screenshot for Geometry OS
 
-use std::path::Path;
-use crate::vm;
-use crate::vfs;
 use crate::inode_fs;
+use crate::vfs;
+use crate::vm;
+use std::path::Path;
 
 pub fn save_screen_png(path: &str, screen: &[u32]) -> std::io::Result<()> {
     let file = std::fs::File::create(path)?;
@@ -15,8 +15,8 @@ pub fn save_screen_png(path: &str, screen: &[u32]) -> std::io::Result<()> {
     let mut raw_data = Vec::with_capacity(256 * 256 * 3);
     for pixel in screen {
         raw_data.push((pixel >> 16) as u8); // R
-        raw_data.push((pixel >> 8) as u8);  // G
-        raw_data.push(*pixel as u8);         // B
+        raw_data.push((pixel >> 8) as u8); // G
+        raw_data.push(*pixel as u8); // B
     }
     writer.write_image_data(&raw_data)?;
     Ok(())
@@ -32,8 +32,8 @@ pub fn save_full_buffer_png(path: &str, buffer: &[u32], w: usize, h: usize) -> s
     let mut raw_data = Vec::with_capacity(w * h * 3);
     for &pixel in buffer {
         raw_data.push((pixel >> 16) as u8); // R
-        raw_data.push((pixel >> 8) as u8);  // G
-        raw_data.push(pixel as u8);         // B
+        raw_data.push((pixel >> 8) as u8); // G
+        raw_data.push(pixel as u8); // B
     }
     writer.write_image_data(&raw_data)?;
     Ok(())
@@ -70,10 +70,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
     f.read_to_end(&mut data)?;
 
     // Read VM portion
-    let vm_min = 4 + 4 + 1 + 4
-        + vm::NUM_REGS * 4
-        + vm::RAM_SIZE * 4
-        + vm::SCREEN_SIZE * 4;
+    let vm_min = 4 + 4 + 1 + 4 + vm::NUM_REGS * 4 + vm::RAM_SIZE * 4 + vm::SCREEN_SIZE * 4;
     if data.len() < vm_min + 4 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -179,9 +176,9 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         formula_dep_index: vec![Vec::new(); vm::CANVAS_RAM_SIZE],
     };
 
-
     // Parse canvas trailer
-    let canvas_len = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
+    let canvas_len =
+        u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
     off += 4;
     if off + canvas_len * 4 + 1 > data.len() {
         return Err(std::io::Error::new(

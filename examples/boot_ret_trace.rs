@@ -1,5 +1,4 @@
 /// Trace the last 20 instructions before the kernel jumps to PA 0x00000000.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -23,7 +22,9 @@ fn main() {
     let ring_size = 30;
 
     while count < max_instructions {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if !trampoline_patched
             && vm.cpu.pc == 0x10EE
@@ -46,7 +47,9 @@ fn main() {
         let cur_satp = vm.cpu.csr.satp;
         last_satp = cur_satp;
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code != 11 {
@@ -72,9 +75,16 @@ fn main() {
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             } else {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -114,9 +124,18 @@ fn main() {
             0 => "U",
             _ => "?",
         };
-        eprintln!("  count={} priv={} PC=0x{:08X} insn@VA=0x{:08X}", c, priv_name, pc, insn);
+        eprintln!(
+            "  count={} priv={} PC=0x{:08X} insn@VA=0x{:08X}",
+            c, priv_name, pc, insn
+        );
     }
 
-    eprintln!("\nFinal: PC=0x{:08X} SATP=0x{:08X}", vm.cpu.pc, vm.cpu.csr.satp);
-    eprintln!("x[1](ra)=0x{:08X} x[5](t0)=0x{:08X}", vm.cpu.x[1], vm.cpu.x[5]);
+    eprintln!(
+        "\nFinal: PC=0x{:08X} SATP=0x{:08X}",
+        vm.cpu.pc, vm.cpu.csr.satp
+    );
+    eprintln!(
+        "x[1](ra)=0x{:08X} x[5](t0)=0x{:08X}",
+        vm.cpu.x[1], vm.cpu.x[5]
+    );
 }

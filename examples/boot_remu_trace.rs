@@ -1,5 +1,4 @@
 /// Trace register state during relocate_enable_mmu.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -20,7 +19,9 @@ fn main() {
     let mut last_satp: u32 = 0;
 
     while count < max_instructions {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if !trampoline_patched
             && vm.cpu.pc == 0x10EE
@@ -43,7 +44,9 @@ fn main() {
         let cur_satp = vm.cpu.csr.satp;
         last_satp = cur_satp;
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code != 11 {
@@ -69,9 +72,16 @@ fn main() {
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             } else {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -89,8 +99,10 @@ fn main() {
 
         // Also log when we enter _start_kernel area after return
         if pc >= 0x10F0 && pc <= 0x1120 && count > 177240 {
-            eprintln!("[post] count={} PC=0x{:08X} ra=0x{:08X} satp=0x{:08X} priv={:?}",
-                count, pc, vm.cpu.x[1], vm.cpu.csr.satp, vm.cpu.privilege);
+            eprintln!(
+                "[post] count={} PC=0x{:08X} ra=0x{:08X} satp=0x{:08X} priv={:?}",
+                count, pc, vm.cpu.x[1], vm.cpu.csr.satp, vm.cpu.privilege
+            );
         }
 
         let _ = vm.step();

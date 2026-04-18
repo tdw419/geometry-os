@@ -1,5 +1,5 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{Privilege, StepResult};
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -7,13 +7,13 @@ fn main() {
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            "console=ttyS0 loglevel=8",
-        ).unwrap();
+    let (mut vm, fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        "console=ttyS0 loglevel=8",
+    )
+    .unwrap();
 
     let fw_addr_u32 = fw_addr as u32;
     let mut count: u64 = 0;
@@ -25,7 +25,9 @@ fn main() {
     let mut last_log: u64 = 0;
 
     while count < 2_000_000 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
@@ -34,11 +36,16 @@ fn main() {
             if cause_code == 9 {
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -51,14 +58,14 @@ fn main() {
                     if (cause_code as usize) < 32 {
                         cause_counts[cause_code as usize] += 1;
                     }
-                    
+
                     // Log first few forwards in detail
                     if forward_count <= 10 {
                         let stvec = vm.cpu.csr.stvec & !0x3u32;
                         eprintln!("[fwd] #{} count={}: cause={} mepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X} mpp={}",
                             forward_count, count, cause_code, vm.cpu.csr.mepc, vm.cpu.csr.mtval, stvec, mpp);
                     }
-                    
+
                     let stvec = vm.cpu.csr.stvec & !0x3u32;
                     if stvec != 0 {
                         vm.cpu.csr.sepc = vm.cpu.csr.mepc;
@@ -100,17 +107,22 @@ fn main() {
         // Periodic status
         if count - last_log >= 500_000 {
             last_log = count;
-            eprintln!("[status] count={} PC=0x{:08X} priv={:?} forwards={} sbi={}",
-                count, vm.cpu.pc, vm.cpu.privilege, forward_count, sbi_count);
+            eprintln!(
+                "[status] count={} PC=0x{:08X} priv={:?} forwards={} sbi={}",
+                count, vm.cpu.pc, vm.cpu.privilege, forward_count, sbi_count
+            );
         }
 
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[test] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
-            
+            eprintln!(
+                "[test] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
+
             let ppn = cur_satp & 0x3FFFFF;
             let pg_dir_phys = (ppn as u64) * 4096;
-            
+
             // Identity mappings
             let identity_pte: u32 = 0x0000_00CF;
             for i in 0..64u32 {
@@ -129,9 +141,9 @@ fn main() {
                     vm.bus.write_word(addr, pte).ok();
                 }
             }
-            
+
             vm.cpu.tlb.flush_all();
-            
+
             // Verify kernel_map
             let km_phys: u64 = 0x00C79E90;
             let km_pa = vm.bus.read_word(km_phys + 12).unwrap_or(0);
@@ -141,15 +153,21 @@ fn main() {
                 vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
                 vm.bus.write_word(km_phys + 24, 0).ok();
             }
-            
+
             last_satp = cur_satp;
         }
 
         count += 1;
     }
 
-    eprintln!("\n[test] Done: count={} forwards={} sbi={}", count, forward_count, sbi_count);
-    eprintln!("[test] PC=0x{:08X} SATP=0x{:08X} panic={}", vm.cpu.pc, vm.cpu.csr.satp, panic_found);
+    eprintln!(
+        "\n[test] Done: count={} forwards={} sbi={}",
+        count, forward_count, sbi_count
+    );
+    eprintln!(
+        "[test] PC=0x{:08X} SATP=0x{:08X} panic={}",
+        vm.cpu.pc, vm.cpu.csr.satp, panic_found
+    );
     eprintln!("[test] Cause counts:");
     for (i, c) in cause_counts.iter().enumerate() {
         if *c > 0 {
@@ -166,8 +184,14 @@ fn main() {
             eprintln!("  cause {} ({}) : {} occurrences", i, name, c);
         }
     }
-    
-    let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+
+    let sbi_str: String = vm
+        .bus
+        .sbi
+        .console_output
+        .iter()
+        .map(|&b| b as char)
+        .collect();
     if !sbi_str.is_empty() {
         eprintln!("[test] SBI output (first 3000 chars):");
         let preview: String = sbi_str.chars().take(3000).collect();

@@ -17,15 +17,17 @@ fn main() {
             bootargs,
         )
         .unwrap();
-        
+
         let satp = vm.cpu.csr.satp;
         let pt_enabled = (satp >> 31) & 1;
         let ppn = satp & 0x003F_FFFF;
         let pt_root = (ppn as u64) << 12;
-        
-        println!("=== {} instr: PC=0x{:08X} SATP=0x{:08X} PT_root=0x{:08X} ===",
-            max_instr, vm.cpu.pc, satp, pt_root);
-        
+
+        println!(
+            "=== {} instr: PC=0x{:08X} SATP=0x{:08X} PT_root=0x{:08X} ===",
+            max_instr, vm.cpu.pc, satp, pt_root
+        );
+
         if pt_root != 0 {
             // Check a few key L1 entries
             for idx in [768, 769, 770, 771, 772, 773] {
@@ -36,8 +38,10 @@ fn main() {
                 if v != 0 {
                     if rwx != 0 {
                         let ppn_hi = (pte >> 20) & 0xFFF;
-                        println!("  L1[{}] = 0x{:08X} V=1 MEGAPAGE PA=0x{:06X}00000 RWX={:03b}",
-                            idx, pte, ppn_hi, rwx);
+                        println!(
+                            "  L1[{}] = 0x{:08X} V=1 MEGAPAGE PA=0x{:06X}00000 RWX={:03b}",
+                            idx, pte, ppn_hi, rwx
+                        );
                     } else {
                         let l2 = ((pte as u64) >> 10) << 12;
                         println!("  L1[{}] = 0x{:08X} V=1 NON-LEAF L2=0x{:08X}", idx, pte, l2);

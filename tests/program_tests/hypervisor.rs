@@ -1,8 +1,5 @@
 use super::*;
 
-
-
-
 // ── HYPERVISOR opcode tests (Phase 33) ─────────────────────────
 
 #[test]
@@ -19,10 +16,14 @@ fn test_hypervisor_assembler() {
 fn test_hypervisor_disassembles() {
     let mut vm = Vm::new();
     vm.ram[100] = 0x72; // HYPERVISOR
-    vm.ram[101] = 5;    // r5
+    vm.ram[101] = 5; // r5
     let (text, size) = vm.disassemble_at(100);
     assert_eq!(size, 2);
-    assert!(text.contains("HYPERVISOR"), "should contain HYPERVISOR, got: {}", text);
+    assert!(
+        text.contains("HYPERVISOR"),
+        "should contain HYPERVISOR, got: {}",
+        text
+    );
 }
 
 #[test]
@@ -43,7 +44,7 @@ fn test_hypervisor_sets_flag_and_config() {
 
     // Write HYPERVISOR r0 at address 0
     vm.ram[0] = 0x72; // HYPERVISOR
-    vm.ram[1] = 0;    // r0
+    vm.ram[1] = 0; // r0
 
     // Set r0 to config address
     vm.regs[0] = 0x1000;
@@ -68,7 +69,7 @@ fn test_hypervisor_invalid_string_returns_error() {
     let mut vm = Vm::new();
     // Write HYPERVISOR r0 pointing to empty (0) address -- no null-terminated string
     vm.ram[0] = 0x72; // HYPERVISOR
-    vm.ram[1] = 0;    // r0
+    vm.ram[1] = 0; // r0
     vm.regs[0] = 0x5000; // address with no string data (all zeros)
     vm.pc = 0;
 
@@ -79,8 +80,6 @@ fn test_hypervisor_invalid_string_returns_error() {
     // That's a valid config (but will fail parsing due to missing arch).
     // The opcode only reads the string and stores it. Parsing happens in QemuConfig.
 }
-
-
 
 // ── HYPERVISOR mode flag tests (Phase 37) ──────────────────────
 
@@ -105,7 +104,7 @@ fn test_hypervisor_mode_qemu_explicit() {
     vm.ram[0x1000 + config.len()] = 0;
 
     vm.ram[0] = 0x72; // HYPERVISOR
-    vm.ram[1] = 0;    // r0
+    vm.ram[1] = 0; // r0
     vm.regs[0] = 0x1000;
     vm.pc = 0;
     vm.step();
@@ -126,7 +125,7 @@ fn test_hypervisor_mode_native() {
     vm.ram[0x1000 + config.len()] = 0;
 
     vm.ram[0] = 0x72; // HYPERVISOR
-    vm.ram[1] = 0;    // r0
+    vm.ram[1] = 0; // r0
     vm.regs[0] = 0x1000;
     vm.pc = 0;
     vm.step();
@@ -147,7 +146,7 @@ fn test_hypervisor_mode_native_case_insensitive() {
     vm.ram[0x1000 + config.len()] = 0;
 
     vm.ram[0] = 0x72; // HYPERVISOR
-    vm.ram[1] = 0;    // r0
+    vm.ram[1] = 0; // r0
     vm.regs[0] = 0x1000;
     vm.pc = 0;
     vm.step();
@@ -168,7 +167,7 @@ fn test_hypervisor_mode_defaults_to_qemu_without_mode_param() {
     vm.ram[0x1000 + config.len()] = 0;
 
     vm.ram[0] = 0x72; // HYPERVISOR
-    vm.ram[1] = 0;    // r0
+    vm.ram[1] = 0; // r0
     vm.regs[0] = 0x1000;
     vm.pc = 0;
     vm.step();
@@ -222,8 +221,14 @@ fn test_hypervisor_resets_with_vm() {
 
     // Reset should clear hypervisor state
     vm.reset();
-    assert!(!vm.hypervisor_active, "reset should clear hypervisor_active");
-    assert!(vm.hypervisor_config.is_empty(), "reset should clear hypervisor_config");
+    assert!(
+        !vm.hypervisor_active,
+        "reset should clear hypervisor_active"
+    );
+    assert!(
+        vm.hypervisor_config.is_empty(),
+        "reset should clear hypervisor_config"
+    );
 }
 
 #[test]
@@ -232,19 +237,39 @@ fn test_shell_hypervisor_command() {
     let source = std::fs::read_to_string("programs/shell.asm")
         .unwrap_or_else(|e| panic!("failed to read shell.asm: {}", e));
     // Check the dispatcher includes hypervisor
-    assert!(source.contains("cmd_is_hypervisor"), "shell should have cmd_is_hypervisor");
-    assert!(source.contains("do_hypervisor"), "shell should have do_hypervisor handler");
-    assert!(source.contains("HYPERVISOR r0"), "shell should call HYPERVISOR opcode");
+    assert!(
+        source.contains("cmd_is_hypervisor"),
+        "shell should have cmd_is_hypervisor"
+    );
+    assert!(
+        source.contains("do_hypervisor"),
+        "shell should have do_hypervisor handler"
+    );
+    assert!(
+        source.contains("HYPERVISOR r0"),
+        "shell should call HYPERVISOR opcode"
+    );
     // Check data strings exist
-    assert!(source.contains("hypervisor_usage_msg"), "shell should have usage message");
-    assert!(source.contains("hypervisor_err_msg"), "shell should have error message");
-    assert!(source.contains("hypervisor_ok_msg"), "shell should have ok message");
+    assert!(
+        source.contains("hypervisor_usage_msg"),
+        "shell should have usage message"
+    );
+    assert!(
+        source.contains("hypervisor_err_msg"),
+        "shell should have error message"
+    );
+    assert!(
+        source.contains("hypervisor_ok_msg"),
+        "shell should have ok message"
+    );
     // Verify it assembles (already tested above but explicit)
     let result = assemble(&source, 0);
-    assert!(result.is_ok(), "shell.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "shell.asm should assemble: {:?}",
+        result.err()
+    );
 }
-
-
 
 // ── QEMU Bridge Integration Test (Phase 33) ─────────────────────────
 
@@ -257,7 +282,12 @@ fn test_qemu_boot_riscv_linux() {
     let qemu_check = std::process::Command::new("which")
         .arg("qemu-system-riscv64")
         .output();
-    if qemu_check.is_err() || !qemu_check.expect("operation should succeed").status.success() {
+    if qemu_check.is_err()
+        || !qemu_check
+            .expect("operation should succeed")
+            .status
+            .success()
+    {
         eprintln!("SKIP: qemu-system-riscv64 not found in PATH");
         return;
     }
@@ -275,8 +305,14 @@ fn test_qemu_boot_riscv_linux() {
     assert!(parsed.is_ok(), "config should parse: {:?}", parsed.err());
 
     // Build command (don't spawn yet, just verify it builds)
-    let cmd_result = parsed.expect("command build should succeed").build_command();
-    assert!(cmd_result.is_ok(), "command should build: {:?}", cmd_result.err());
+    let cmd_result = parsed
+        .expect("command build should succeed")
+        .build_command();
+    assert!(
+        cmd_result.is_ok(),
+        "command should build: {:?}",
+        cmd_result.err()
+    );
 
     // Spawn QEMU
     let bridge = QemuBridge::spawn(&config);

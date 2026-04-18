@@ -1,7 +1,5 @@
 use super::*;
 
-
-
 // ============================================================
 // Phase 27: IPC Tests
 // ============================================================
@@ -57,8 +55,8 @@ fn test_pipe_write_and_read() {
     // Create pipe via PIPE opcode
     // PIPE r5, r6 => [0x5D, 5, 6]
     vm.ram[0] = 0x5D; // PIPE
-    vm.ram[1] = 5;    // rd_read
-    vm.ram[2] = 6;    // rd_write
+    vm.ram[1] = 5; // rd_read
+    vm.ram[2] = 6; // rd_write
 
     // HALT
     vm.ram[3] = 0x00;
@@ -78,9 +76,9 @@ fn test_pipe_write_and_read() {
     vm.regs[11] = 3;
     vm.pc = 10;
     vm.ram[10] = 0x56; // WRITE
-    vm.ram[11] = 6;    // fd_reg
-    vm.ram[12] = 10;   // buf_reg
-    vm.ram[13] = 11;   // len_reg
+    vm.ram[11] = 6; // fd_reg
+    vm.ram[12] = 10; // buf_reg
+    vm.ram[13] = 11; // len_reg
     vm.ram[14] = 0x00; // HALT
     vm.halted = false;
     vm.step(); // WRITE
@@ -91,9 +89,9 @@ fn test_pipe_write_and_read() {
     vm.regs[12] = 0x1100;
     vm.pc = 20;
     vm.ram[20] = 0x55; // READ
-    vm.ram[21] = 5;    // fd_reg
-    vm.ram[22] = 12;   // buf_reg
-    vm.ram[23] = 11;   // len_reg
+    vm.ram[21] = 5; // fd_reg
+    vm.ram[22] = 12; // buf_reg
+    vm.ram[23] = 11; // len_reg
     vm.ram[24] = 0x00; // HALT
     vm.halted = false;
     vm.step(); // READ
@@ -146,15 +144,25 @@ fn test_msgsnd_delivers_to_target() {
 
     // Set up child process
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
-        mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
-        segfaulted: false, priority: 1, slice_remaining: 100,
-        sleep_until: 0, yielded: false,
-        kernel_stack: Vec::new(), msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: 0,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        pc: 0x200,
+        regs: [0; 32],
+        state: geometry_os::vm::ProcessState::Ready,
+        pid: 1,
+        mode: geometry_os::vm::CpuMode::Kernel,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 100,
+        sleep_until: 0,
+        yielded: false,
+        kernel_stack: Vec::new(),
+        msg_queue: Vec::new(),
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
 
     // Set up message data in main process registers
@@ -166,12 +174,16 @@ fn test_msgsnd_delivers_to_target() {
 
     // Create MSGSND bytecode: 0x5E, r5
     vm.ram[0] = 0x5E; // MSGSND
-    vm.ram[1] = 5;    // pid_reg = r5
+    vm.ram[1] = 5; // pid_reg = r5
     vm.ram[2] = 0x00; // HALT
 
     vm.step(); // MSGSND
     assert_eq!(vm.regs[0], 0, "MSGSND should succeed");
-    assert_eq!(vm.processes[0].msg_queue.len(), 1, "child should have 1 message");
+    assert_eq!(
+        vm.processes[0].msg_queue.len(),
+        1,
+        "child should have 1 message"
+    );
 
     let msg = &vm.processes[0].msg_queue[0];
     assert_eq!(msg.sender, 0, "sender should be PID 0 (main)");
@@ -187,9 +199,12 @@ fn test_msgsnd_to_nonexistent_pid_fails() {
     vm.mode = geometry_os::vm::CpuMode::Kernel;
     vm.regs[5] = 99; // nonexistent PID
     vm.ram[0] = 0x5E; // MSGSND
-    vm.ram[1] = 5;    // pid_reg
+    vm.ram[1] = 5; // pid_reg
     vm.step();
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "MSGSND to nonexistent PID should fail");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "MSGSND to nonexistent PID should fail"
+    );
 }
 
 #[test]
@@ -202,13 +217,25 @@ fn test_msgrcv_receives_message() {
     // Set up child with a pending message
     let msg = geometry_os::vm::Message::new(0, [100, 200, 300, 400]);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
-        mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
-        segfaulted: false, priority: 1, slice_remaining: 100,
-        sleep_until: 0, yielded: false,
-        kernel_stack: Vec::new(), msg_queue: vec![msg],
-        exit_code: 0, parent_pid: 0, 
-        pending_signals: Vec::new(), signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        pc: 0x200,
+        regs: [0; 32],
+        state: geometry_os::vm::ProcessState::Ready,
+        pid: 1,
+        mode: geometry_os::vm::CpuMode::Kernel,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 100,
+        sleep_until: 0,
+        yielded: false,
+        kernel_stack: Vec::new(),
+        msg_queue: vec![msg],
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
 
     // MSGRCV bytecode: 0x5F (no args)
@@ -221,7 +248,11 @@ fn test_msgrcv_receives_message() {
     assert_eq!(vm.regs[2], 200);
     assert_eq!(vm.regs[3], 300);
     assert_eq!(vm.regs[4], 400);
-    assert_eq!(vm.processes[0].msg_queue.len(), 0, "message should be consumed");
+    assert_eq!(
+        vm.processes[0].msg_queue.len(),
+        0,
+        "message should be consumed"
+    );
 }
 
 #[test]
@@ -232,21 +263,34 @@ fn test_msgrcv_blocks_when_empty() {
     vm.current_pid = 1;
 
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
-        mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
-        segfaulted: false, priority: 1, slice_remaining: 100,
-        sleep_until: 0, yielded: false,
-        kernel_stack: Vec::new(), msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: 0,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        pc: 0x200,
+        regs: [0; 32],
+        state: geometry_os::vm::ProcessState::Ready,
+        pid: 1,
+        mode: geometry_os::vm::CpuMode::Kernel,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 100,
+        sleep_until: 0,
+        yielded: false,
+        kernel_stack: Vec::new(),
+        msg_queue: Vec::new(),
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
 
     vm.ram[0x200] = 0x5F; // MSGRCV
     vm.pc = 0x200;
     vm.step(); // MSGRCV -- should block
-    assert!(vm.processes[0].state == geometry_os::vm::ProcessState::Blocked, "process should be blocked");
+    assert!(
+        vm.processes[0].state == geometry_os::vm::ProcessState::Blocked,
+        "process should be blocked"
+    );
     // PC should be rewound so it retries
     assert_eq!(vm.pc, 0x200, "PC should be rewound to retry MSGRCV");
 }
@@ -260,15 +304,25 @@ fn test_msgrcv_unblocks_on_msgsnd() {
 
     // Process A (PID 1): blocked on MSGRCV
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Ready, pid: 1,
-        mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
-        segfaulted: false, priority: 1, slice_remaining: 100,
-        sleep_until: 0, yielded: false,
-        kernel_stack: Vec::new(), msg_queue: Vec::new(),
-                                exit_code: 0,
-                                parent_pid: 0,
-                                pending_signals: Vec::new(),
-                                signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        pc: 0x200,
+        regs: [0; 32],
+        state: geometry_os::vm::ProcessState::Ready,
+        pid: 1,
+        mode: geometry_os::vm::CpuMode::Kernel,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 100,
+        sleep_until: 0,
+        yielded: false,
+        kernel_stack: Vec::new(),
+        msg_queue: Vec::new(),
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
 
     // First block process A
@@ -289,8 +343,15 @@ fn test_msgrcv_unblocks_on_msgsnd() {
     vm.ram[1] = 5;
     vm.step(); // MSGSND
     assert_eq!(vm.regs[0], 0, "MSGSND should succeed");
-    assert!(vm.processes[0].state != geometry_os::vm::ProcessState::Blocked, "target should be unblocked after MSGSND");
-    assert_eq!(vm.processes[0].msg_queue.len(), 1, "message should be in queue");
+    assert!(
+        vm.processes[0].state != geometry_os::vm::ProcessState::Blocked,
+        "target should be unblocked after MSGSND"
+    );
+    assert_eq!(
+        vm.processes[0].msg_queue.len(),
+        1,
+        "message should be in queue"
+    );
 }
 
 #[test]
@@ -312,22 +373,35 @@ fn test_blocked_process_skipped_by_scheduler() {
     }
     // Create a blocked process
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Blocked, pid: 1,
-        mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
-        segfaulted: false, priority: 1, slice_remaining: 100,
-        sleep_until: 0, yielded: false,
-        kernel_stack: Vec::new(), msg_queue: Vec::new(),
+        pc: 0x200,
+        regs: [0; 32],
+        state: geometry_os::vm::ProcessState::Blocked,
+        pid: 1,
+        mode: geometry_os::vm::CpuMode::Kernel,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 100,
+        sleep_until: 0,
+        yielded: false,
+        kernel_stack: Vec::new(),
+        msg_queue: Vec::new(),
         exit_code: 0,
         parent_pid: 0,
         pending_signals: Vec::new(),
-        signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
     // Run scheduler 50 times -- blocked process should not execute
     for _ in 0..50 {
         vm.step_all_processes();
     }
     assert_eq!(vm.ram[0x1000], 0, "blocked process should not have run");
-    assert!(vm.processes[0].state == geometry_os::vm::ProcessState::Blocked, "process should still be blocked");
+    assert!(
+        vm.processes[0].state == geometry_os::vm::ProcessState::Blocked,
+        "process should still be blocked"
+    );
 }
 
 #[test]
@@ -342,31 +416,44 @@ fn test_pipe_write_unblocks_blocked_reader() {
 
     // Process B (PID 1): blocked reading from pipe
     vm.processes.push(geometry_os::vm::SpawnedProcess {
-        pc: 0x200, regs: [0; 32], state: geometry_os::vm::ProcessState::Blocked, pid: 1,
-        mode: geometry_os::vm::CpuMode::Kernel, page_dir: None,
-        segfaulted: false, priority: 1, slice_remaining: 100,
-        sleep_until: 0, yielded: false,
-        kernel_stack: Vec::new(), msg_queue: Vec::new(),
+        pc: 0x200,
+        regs: [0; 32],
+        state: geometry_os::vm::ProcessState::Blocked,
+        pid: 1,
+        mode: geometry_os::vm::CpuMode::Kernel,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 100,
+        sleep_until: 0,
+        yielded: false,
+        kernel_stack: Vec::new(),
+        msg_queue: Vec::new(),
         exit_code: 0,
         parent_pid: 0,
         pending_signals: Vec::new(),
-        signal_handlers: [0; 4], vmas: Vec::new(), brk_pos: 0,
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
     });
 
     // Main process writes to the pipe
     vm.regs[5] = 0xC000; // write_fd
     vm.ram[0x1000] = 42; // data
     vm.regs[6] = 0x1000; // buf addr
-    vm.regs[7] = 1;      // len
-    vm.ram[0] = 0x56;    // WRITE
-    vm.ram[1] = 5;       // fd_reg
-    vm.ram[2] = 6;       // buf_reg
-    vm.ram[3] = 7;       // len_reg
+    vm.regs[7] = 1; // len
+    vm.ram[0] = 0x56; // WRITE
+    vm.ram[1] = 5; // fd_reg
+    vm.ram[2] = 6; // buf_reg
+    vm.ram[3] = 7; // len_reg
 
     vm.step(); // WRITE
 
     assert_eq!(vm.regs[0], 1, "should have written 1 word");
-    assert!(vm.processes[0].state != geometry_os::vm::ProcessState::Blocked, "reader should be unblocked after write");
+    assert!(
+        vm.processes[0].state != geometry_os::vm::ProcessState::Blocked,
+        "reader should be unblocked after write"
+    );
     assert_eq!(vm.pipes[0].count, 1, "pipe should have 1 word");
     assert_eq!(vm.pipes[0].buffer[0], 42, "pipe should contain 42");
 }
@@ -383,10 +470,10 @@ fn test_pipe_assembles() {
     assert!(result.is_ok(), "PIPE/MSGSND/MSGRCV should assemble");
     let bc = &result.expect("operation should succeed").pixels;
     assert_eq!(bc[0], 0x5D, "PIPE opcode");
-    assert_eq!(bc[1], 5,  "PIPE read reg");
-    assert_eq!(bc[2], 6,  "PIPE write reg");
+    assert_eq!(bc[1], 5, "PIPE read reg");
+    assert_eq!(bc[2], 6, "PIPE write reg");
     assert_eq!(bc[3], 0x5E, "MSGSND opcode");
-    assert_eq!(bc[4], 7,  "MSGSND pid reg");
+    assert_eq!(bc[4], 7, "MSGSND pid reg");
     assert_eq!(bc[5], 0x5F, "MSGRCV opcode");
     assert_eq!(bc[6], 0x00, "HALT");
 }
@@ -422,11 +509,11 @@ fn test_read_from_closed_pipe_returns_error() {
     vm.pipes[0].alive = false; // pre-close the pipe
     vm.regs[5] = 0x8000; // read fd for pipe 0
     vm.regs[6] = 0x2000; // buf addr
-    vm.regs[7] = 1;      // len
-    vm.ram[0] = 0x55;    // READ opcode
-    vm.ram[1] = 5;       // fd_reg
-    vm.ram[2] = 6;       // buf_reg
-    vm.ram[3] = 7;       // len_reg
+    vm.regs[7] = 1; // len
+    vm.ram[0] = 0x55; // READ opcode
+    vm.ram[1] = 5; // fd_reg
+    vm.ram[2] = 6; // buf_reg
+    vm.ram[3] = 7; // len_reg
     vm.step(); // READ
     assert_eq!(vm.regs[0], 0xFFFFFFFF, "read from closed pipe should fail");
 }

@@ -12,12 +12,13 @@ fn main() {
         initramfs.as_deref(),
         256,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     let mut count: u64 = 0;
     let max = 180_000u64;
     let trace_start = 177_000u64;
-    
+
     // Capture last N instructions as ring buffer
     let buf_size = 200;
     let mut trace_buf: Vec<(u64, u32, u8, u32, [u32; 32])> = Vec::new();
@@ -30,16 +31,16 @@ fn main() {
             geometry_os::riscv::cpu::Privilege::Supervisor => 1u8,
             geometry_os::riscv::cpu::Privilege::User => 2u8,
         };
-        
+
         // Save state before step
         let saved_pc = pc;
         let saved_priv = priv_level;
         let saved_satp = vm.cpu.csr.satp;
         let saved_regs = vm.cpu.x;
-        
+
         let result = vm.step();
         count += 1;
-        
+
         if count >= trace_start {
             // Log instruction
             if let Some(inst) = vm.bus.read_word(saved_pc as u64).ok() {
@@ -49,27 +50,35 @@ fn main() {
                 trace_buf.push((count, saved_pc, saved_priv, saved_satp, saved_regs));
             }
         }
-        
+
         // Check if we landed at a fault handler
         if count > 177_500 {
             let scause = vm.cpu.csr.scause;
             let sepc = vm.cpu.csr.sepc;
             if (scause & 0x1F) == 12 && sepc >= 0x3FFF0000 {
-                println!("FAULT detected at count={}: scause=0x{:08X} sepc=0x{:08X}", 
-                    count, scause, sepc);
+                println!(
+                    "FAULT detected at count={}: scause=0x{:08X} sepc=0x{:08X}",
+                    count, scause, sepc
+                );
                 fault_seen = true;
             }
         }
-        
+
         // Log SATP changes
         let cur_satp = vm.cpu.csr.satp;
         if count == 1 || cur_satp != saved_satp {
-            println!("[{}] SATP=0x{:08X} PC=0x{:08X} priv={}", count, cur_satp, saved_pc, saved_priv);
+            println!(
+                "[{}] SATP=0x{:08X} PC=0x{:08X} priv={}",
+                count, cur_satp, saved_pc, saved_priv
+            );
         }
     }
-    
+
     // Dump the trace
-    println!("\n=== Last {} instructions before fault ===", trace_buf.len());
+    println!(
+        "\n=== Last {} instructions before fault ===",
+        trace_buf.len()
+    );
     for (c, pc, priv_lvl, satp, regs) in &trace_buf {
         let priv_name = match priv_lvl {
             0 => "M",
@@ -77,7 +86,9 @@ fn main() {
             2 => "U",
             _ => "?",
         };
-        println!("[{}] PC=0x{:08X} {} SATP=0x{:08X} ra=0x{:08X} sp=0x{:08X}", 
-            c, pc, priv_name, satp, regs[1], regs[2]);
+        println!(
+            "[{}] PC=0x{:08X} {} SATP=0x{:08X} ra=0x{:08X} sp=0x{:08X}",
+            c, pc, priv_name, satp, regs[1], regs[2]
+        );
     }
 }

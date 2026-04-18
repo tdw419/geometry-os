@@ -3,8 +3,8 @@
 // Bank of RISC-V Control and Status Registers for M-mode and S-mode trap handling.
 // sstatus is a restricted view of mstatus per the RISC-V spec.
 
-use crate::riscv::cpu::Privilege;
 use super::constants::*;
+use crate::riscv::cpu::Privilege;
 
 /// Bank of RISC-V Control and Status Registers.
 ///
@@ -266,10 +266,7 @@ impl CsrBank {
         let sie_enabled = (self.mstatus >> MSTATUS_SIE) & 1 != 0;
 
         // Machine timer interrupt: MTIP pending, MTIE enabled, MIE enabled
-        if (self.mip >> INT_MTI) & 1 != 0
-            && (self.mie >> INT_MTI) & 1 != 0
-            && mie_enabled
-        {
+        if (self.mip >> INT_MTI) & 1 != 0 && (self.mie >> INT_MTI) & 1 != 0 && mie_enabled {
             return Some(MCAUSE_INTERRUPT_BIT | INT_MTI);
         }
 
@@ -283,10 +280,7 @@ impl CsrBank {
         }
 
         // Machine software interrupt
-        if (self.mip >> INT_MSI) & 1 != 0
-            && (self.mie >> INT_MSI) & 1 != 0
-            && mie_enabled
-        {
+        if (self.mip >> INT_MSI) & 1 != 0 && (self.mie >> INT_MSI) & 1 != 0 && mie_enabled {
             return Some(MCAUSE_INTERRUPT_BIT | INT_MSI);
         }
 
@@ -331,27 +325,34 @@ impl CsrBank {
 
     /// Push privilege state for a trap (xPP <- current, xPIE <- xIE, xIE <- 0).
     /// Used by ECALL/trap entry.
-    pub fn trap_enter(&mut self, trap_priv: Privilege, current_priv: Privilege, pc: u32, cause: u32) {
+    pub fn trap_enter(
+        &mut self,
+        trap_priv: Privilege,
+        current_priv: Privilege,
+        pc: u32,
+        cause: u32,
+    ) {
         match trap_priv {
             Privilege::Machine => {
                 // MPP <- current_priv, MPIE <- MIE, MIE <- 0
                 let mpp = (current_priv as u32 & 0x3) << MSTATUS_MPP_LSB;
                 self.mstatus = (self.mstatus & !MSTATUS_MPP_MASK) | mpp;
                 let mie = (self.mstatus >> MSTATUS_MIE) & 1;
-                self.mstatus = (self.mstatus & !(1 << MSTATUS_MPIE))
-                    | (mie << MSTATUS_MPIE);
+                self.mstatus = (self.mstatus & !(1 << MSTATUS_MPIE)) | (mie << MSTATUS_MPIE);
                 self.mstatus &= !(1 << MSTATUS_MIE);
                 self.mepc = pc & !1;
                 self.mcause = cause;
             }
             Privilege::Supervisor => {
                 // SPP <- current_priv (0=U, 1=S), SPIE <- SIE, SIE <- 0
-                let spp = if current_priv == Privilege::Supervisor { 1 } else { 0 };
-                self.mstatus = (self.mstatus & !(1 << MSTATUS_SPP))
-                    | (spp << MSTATUS_SPP);
+                let spp = if current_priv == Privilege::Supervisor {
+                    1
+                } else {
+                    0
+                };
+                self.mstatus = (self.mstatus & !(1 << MSTATUS_SPP)) | (spp << MSTATUS_SPP);
                 let sie = (self.mstatus >> MSTATUS_SIE) & 1;
-                self.mstatus = (self.mstatus & !(1 << MSTATUS_SPIE))
-                    | (sie << MSTATUS_SPIE);
+                self.mstatus = (self.mstatus & !(1 << MSTATUS_SPIE)) | (sie << MSTATUS_SPIE);
                 self.mstatus &= !(1 << MSTATUS_SIE);
                 self.sepc = pc & !1;
                 self.scause = cause;
@@ -369,8 +370,7 @@ impl CsrBank {
             Privilege::Machine => {
                 // Restore MIE from MPIE, set MPIE=1, restore MPP
                 let mpie = (self.mstatus >> MSTATUS_MPIE) & 1;
-                self.mstatus = (self.mstatus & !(1 << MSTATUS_MIE))
-                    | (mpie << MSTATUS_MIE);
+                self.mstatus = (self.mstatus & !(1 << MSTATUS_MIE)) | (mpie << MSTATUS_MIE);
                 self.mstatus |= 1 << MSTATUS_MPIE; // MPIE = 1
                 let mpp = ((self.mstatus & MSTATUS_MPP_MASK) >> MSTATUS_MPP_LSB) as u8;
                 self.mstatus &= !MSTATUS_MPP_MASK; // MPP = U (00)
@@ -384,8 +384,7 @@ impl CsrBank {
             Privilege::Supervisor => {
                 // Restore SIE from SPIE, set SPIE=1, restore SPP
                 let spie = (self.mstatus >> MSTATUS_SPIE) & 1;
-                self.mstatus = (self.mstatus & !(1 << MSTATUS_SIE))
-                    | (spie << MSTATUS_SIE);
+                self.mstatus = (self.mstatus & !(1 << MSTATUS_SIE)) | (spie << MSTATUS_SIE);
                 self.mstatus |= 1 << MSTATUS_SPIE; // SPIE = 1
                 let spp = (self.mstatus >> MSTATUS_SPP) & 1;
                 self.mstatus &= !(1 << MSTATUS_SPP); // SPP = 0 (U)
@@ -497,7 +496,12 @@ mod tests {
     fn trap_enter_saves_state() {
         let mut csr = CsrBank::new();
         csr.write(MSTATUS, 1 << MSTATUS_MIE); // MIE=1
-        csr.trap_enter(Privilege::Machine, Privilege::User, 0x80001000, CAUSE_ECALL_U);
+        csr.trap_enter(
+            Privilege::Machine,
+            Privilege::User,
+            0x80001000,
+            CAUSE_ECALL_U,
+        );
 
         assert_eq!(csr.mepc, 0x80001000);
         assert_eq!(csr.mcause, CAUSE_ECALL_U);
@@ -531,7 +535,12 @@ mod tests {
     fn trap_enter_supervisor() {
         let mut csr = CsrBank::new();
         csr.mstatus = 1 << MSTATUS_SIE; // SIE=1
-        csr.trap_enter(Privilege::Supervisor, Privilege::User, 0x80002000, CAUSE_ECALL_U);
+        csr.trap_enter(
+            Privilege::Supervisor,
+            Privilege::User,
+            0x80002000,
+            CAUSE_ECALL_U,
+        );
 
         assert_eq!(csr.sepc, 0x80002000);
         assert_eq!(csr.scause, CAUSE_ECALL_U);
@@ -631,7 +640,7 @@ mod tests {
 
         // Write to SIE should only affect S-mode bits
         assert!(csr.write(SIE, 1 << INT_SSI)); // Enable SSIE
-        // MIE should now have STI cleared and SSI set, MTI unchanged
+                                               // MIE should now have STI cleared and SSI set, MTI unchanged
         assert_eq!(csr.mie, (1 << INT_MTI) | (1 << INT_SSI));
     }
 
@@ -644,7 +653,7 @@ mod tests {
 
         // Write to SIP should only affect S-mode bits
         assert!(csr.write(SIP, 1 << INT_STI)); // Set STIP
-        // MIP should now have MSI unchanged, SSI cleared, STI set
+                                               // MIP should now have MSI unchanged, SSI cleared, STI set
         assert_eq!(csr.mip, (1 << INT_MSI) | (1 << INT_STI));
     }
 
@@ -667,7 +676,7 @@ mod tests {
     #[test]
     fn trap_target_priv_no_delegation() {
         let csr = CsrBank::new(); // No delegation set
-        // ECALL from U goes to M (no delegation)
+                                  // ECALL from U goes to M (no delegation)
         assert_eq!(
             csr.trap_target_priv(CAUSE_ECALL_U, Privilege::User),
             Privilege::Machine
@@ -707,7 +716,7 @@ mod tests {
     fn trap_target_priv_m_mode_always_traps_to_m() {
         let mut csr = CsrBank::new();
         csr.medeleg = 0xFFFF; // Delegate everything
-        // M-mode exception still goes to M
+                              // M-mode exception still goes to M
         assert_eq!(
             csr.trap_target_priv(CAUSE_ECALL_U, Privilege::Machine),
             Privilege::Machine
@@ -719,7 +728,7 @@ mod tests {
         let mut csr = CsrBank::new();
         csr.mip = 1 << INT_MTI; // Timer pending
         csr.mie = 1 << INT_MTI; // Timer enabled
-        // But MIE bit in mstatus is 0
+                                // But MIE bit in mstatus is 0
         assert!(csr.pending_interrupt(Privilege::Machine).is_none());
     }
 
@@ -729,7 +738,9 @@ mod tests {
         csr.mip = 1 << INT_MTI; // Timer pending
         csr.mie = 1 << INT_MTI; // Timer enabled
         csr.mstatus = 1 << MSTATUS_MIE; // Global MIE enabled
-        let cause = csr.pending_interrupt(Privilege::Machine).expect("operation should succeed");
+        let cause = csr
+            .pending_interrupt(Privilege::Machine)
+            .expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_MTI);
     }
 
@@ -739,7 +750,9 @@ mod tests {
         csr.mip = 1 << INT_SSI; // Software pending
         csr.mie = 1 << INT_SSI; // Software enabled
         csr.mstatus = 1 << MSTATUS_SIE; // SIE enabled
-        let cause = csr.pending_interrupt(Privilege::User).expect("operation should succeed");
+        let cause = csr
+            .pending_interrupt(Privilege::User)
+            .expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_SSI);
     }
 
@@ -755,7 +768,9 @@ mod tests {
         csr.mip = 1 << INT_MEI; // External interrupt pending
         csr.mie = 1 << INT_MEI; // MEIE enabled
         csr.mstatus = 1 << MSTATUS_MIE; // Global MIE enabled
-        let cause = csr.pending_interrupt(Privilege::Machine).expect("operation should succeed");
+        let cause = csr
+            .pending_interrupt(Privilege::Machine)
+            .expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_MEI);
     }
 
@@ -765,7 +780,9 @@ mod tests {
         csr.mip = 1 << INT_SEI; // Supervisor external pending
         csr.mie = 1 << INT_SEI; // SEIE enabled
         csr.mstatus = 1 << MSTATUS_SIE; // SIE enabled
-        let cause = csr.pending_interrupt(Privilege::User).expect("operation should succeed");
+        let cause = csr
+            .pending_interrupt(Privilege::User)
+            .expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_SEI);
     }
 
@@ -786,7 +803,9 @@ mod tests {
         csr.mip = (1 << INT_MTI) | (1 << INT_MEI);
         csr.mie = (1 << INT_MTI) | (1 << INT_MEI);
         csr.mstatus = 1 << MSTATUS_MIE;
-        let cause = csr.pending_interrupt(Privilege::Machine).expect("operation should succeed");
+        let cause = csr
+            .pending_interrupt(Privilege::Machine)
+            .expect("operation should succeed");
         assert_eq!(cause, MCAUSE_INTERRUPT_BIT | INT_MTI);
     }
 }

@@ -21,7 +21,12 @@ impl RiscvCpu {
         next_pc: u32,
     ) -> StepResult {
         match op {
-            Operation::LrW { rd, rs1, aq: _, rl: _ } => {
+            Operation::LrW {
+                rd,
+                rs1,
+                aq: _,
+                rl: _,
+            } => {
                 let va = self.get_reg(rs1);
                 let pa = match self.translate_va(va, AccessType::Load, bus) {
                     Ok(p) => p,
@@ -40,7 +45,13 @@ impl RiscvCpu {
                     }
                 }
             }
-            Operation::ScW { rd, rs1, rs2, aq: _, rl: _ } => {
+            Operation::ScW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => {
                 let va = self.get_reg(rs1);
                 let pa = match self.translate_va(va, AccessType::Store, bus) {
                     Ok(p) => p,
@@ -67,7 +78,13 @@ impl RiscvCpu {
                     StepResult::Ok
                 }
             }
-            Operation::AmoswapW { rd, rs1, rs2, aq: _, rl: _ } => {
+            Operation::AmoswapW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => {
                 let va = self.get_reg(rs1);
                 let pa = match self.translate_va(va, AccessType::Load, bus) {
                     Ok(p) => p,
@@ -98,34 +115,88 @@ impl RiscvCpu {
                     }
                 }
             }
-            Operation::AmoaddW { rd, rs1, rs2, aq: _, rl: _ } => {
-                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old.wrapping_add(new), next_pc)
-            }
-            Operation::AmoxorW { rd, rs1, rs2, aq: _, rl: _ } => {
-                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old ^ new, next_pc)
-            }
-            Operation::AmoandW { rd, rs1, rs2, aq: _, rl: _ } => {
-                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old & new, next_pc)
-            }
-            Operation::AmoorW { rd, rs1, rs2, aq: _, rl: _ } => {
-                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old | new, next_pc)
-            }
-            Operation::AmominW { rd, rs1, rs2, aq: _, rl: _ } => {
-                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| {
-                    if (old as i32) < (new as i32) { old } else { new }
-                }, next_pc)
-            }
-            Operation::AmomaxW { rd, rs1, rs2, aq: _, rl: _ } => {
-                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| {
-                    if (old as i32) > (new as i32) { old } else { new }
-                }, next_pc)
-            }
-            Operation::AmominuW { rd, rs1, rs2, aq: _, rl: _ } => {
-                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old.min(new), next_pc)
-            }
-            Operation::AmomaxuW { rd, rs1, rs2, aq: _, rl: _ } => {
-                self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old.max(new), next_pc)
-            }
+            Operation::AmoaddW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old.wrapping_add(new), next_pc),
+            Operation::AmoxorW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old ^ new, next_pc),
+            Operation::AmoandW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old & new, next_pc),
+            Operation::AmoorW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old | new, next_pc),
+            Operation::AmominW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => self.exec_amo_arith(
+                rd,
+                rs1,
+                rs2,
+                bus,
+                |old, new| {
+                    if (old as i32) < (new as i32) {
+                        old
+                    } else {
+                        new
+                    }
+                },
+                next_pc,
+            ),
+            Operation::AmomaxW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => self.exec_amo_arith(
+                rd,
+                rs1,
+                rs2,
+                bus,
+                |old, new| {
+                    if (old as i32) > (new as i32) {
+                        old
+                    } else {
+                        new
+                    }
+                },
+                next_pc,
+            ),
+            Operation::AmominuW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old.min(new), next_pc),
+            Operation::AmomaxuW {
+                rd,
+                rs1,
+                rs2,
+                aq: _,
+                rl: _,
+            } => self.exec_amo_arith(rd, rs1, rs2, bus, |old, new| old.max(new), next_pc),
 
             _ => unreachable!("execute_atomic called with non-atomic op"),
         }

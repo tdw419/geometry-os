@@ -1,6 +1,6 @@
 /// Trace instructions between setup_vm completion and first S-mode fault.
 /// Goal: understand why the kernel tries to execute at VA 0x3FFFF000.
-use geometry_os::riscv::{RiscvVm, cpu::StepResult};
+use geometry_os::riscv::{cpu::StepResult, RiscvVm};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -34,12 +34,17 @@ fn main() {
                     let ppn = cur_satp & 0x3FFFFF;
                     let pg_dir_phys = (ppn as u64) * 4096;
                     let l1_0_val = vm.bus.read_word(pg_dir_phys).unwrap_or(0);
-                    let already_patched = (l1_0_val & 0xCF) == 0xCF && ((l1_0_val >> 20) & 0xFFF) == 0;
+                    let already_patched =
+                        (l1_0_val & 0xCF) == 0xCF && ((l1_0_val >> 20) & 0xFFF) == 0;
                     if !already_patched {
-                        let l1_entries: &[u32] = &[0,1,2,3,4,5,6,7,8,9,10,16,32,48,64,80,96,112,127];
+                        let l1_entries: &[u32] = &[
+                            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 32, 48, 64, 80, 96, 112, 127,
+                        ];
                         for &l1_idx in l1_entries {
                             let pte = 0xCF | (l1_idx << 20);
-                            vm.bus.write_word(pg_dir_phys + (l1_idx * 4) as u64, pte).ok();
+                            vm.bus
+                                .write_word(pg_dir_phys + (l1_idx * 4) as u64, pte)
+                                .ok();
                         }
                         vm.cpu.tlb.flush_all();
                     }
@@ -49,7 +54,9 @@ fn main() {
         }
 
         // M-mode trap handler forwarding (same as boot_linux)
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code != 11 {
@@ -57,11 +64,16 @@ fn main() {
                 if cause_code == 9 {
                     sbi_count += 1;
                     let result = vm.bus.sbi.handle_ecall(
-                        vm.cpu.x[17], vm.cpu.x[16],
-                        vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13],
-                        vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint,
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
                     );
                     if let Some((a0, a1)) = result {
                         vm.cpu.x[10] = a0;
@@ -90,11 +102,16 @@ fn main() {
             } else {
                 // ECALL_M = SBI
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -132,33 +149,59 @@ fn main() {
                             _ => unreachable!(),
                         };
                         // Dump register state at first fault
-                        println!("=== FIRST S-mode {} fault #{} at count={} ===", fault_type, smode_fault_count, count);
-                        println!("  PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}", 
-                            vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec);
-                        println!("  scause=0x{:08X} satp=0x{:08X}", vm.cpu.csr.scause, vm.cpu.csr.satp);
-                        println!("  RA=0x{:08X} SP=0x{:08X} GP=0x{:08X} TP=0x{:08X}",
-                            vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[3], vm.cpu.x[4]);
-                        println!("  A0=0x{:08X} A1=0x{:08X} A2=0x{:08X} A3=0x{:08X} A4=0x{:08X}",
-                            vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14]);
-                        println!("  A5=0x{:08X} A6=0x{:08X} A7=0x{:08X}",
-                            vm.cpu.x[15], vm.cpu.x[16], vm.cpu.x[17]);
-                        println!("  S0=0x{:08X} S1=0x{:08X} T0=0x{:08X} T1=0x{:08X} T2=0x{:08X}",
-                            vm.cpu.x[8], vm.cpu.x[9], vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7]);
-                        
+                        println!(
+                            "=== FIRST S-mode {} fault #{} at count={} ===",
+                            fault_type, smode_fault_count, count
+                        );
+                        println!(
+                            "  PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
+                            vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec
+                        );
+                        println!(
+                            "  scause=0x{:08X} satp=0x{:08X}",
+                            vm.cpu.csr.scause, vm.cpu.csr.satp
+                        );
+                        println!(
+                            "  RA=0x{:08X} SP=0x{:08X} GP=0x{:08X} TP=0x{:08X}",
+                            vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[3], vm.cpu.x[4]
+                        );
+                        println!(
+                            "  A0=0x{:08X} A1=0x{:08X} A2=0x{:08X} A3=0x{:08X} A4=0x{:08X}",
+                            vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14]
+                        );
+                        println!(
+                            "  A5=0x{:08X} A6=0x{:08X} A7=0x{:08X}",
+                            vm.cpu.x[15], vm.cpu.x[16], vm.cpu.x[17]
+                        );
+                        println!(
+                            "  S0=0x{:08X} S1=0x{:08X} T0=0x{:08X} T1=0x{:08X} T2=0x{:08X}",
+                            vm.cpu.x[8], vm.cpu.x[9], vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7]
+                        );
+
                         // What's at the faulting address?
                         let sepc = vm.cpu.csr.sepc;
                         let instr = vm.bus.read_word(sepc as u64).unwrap_or(0);
                         println!("  Instruction at sepc: 0x{:08X}", instr);
-                        
+
                         // Check if 0x3FFFF000 is in any page table
                         let satp = vm.cpu.csr.satp;
                         let pg_dir_phys = ((satp & 0x3FFFFF) as u64) * 4096;
                         let vpn1 = (sepc >> 22) & 0x3FF;
                         println!("  sepc VPN1={} page_dir_phys=0x{:08X}", vpn1, pg_dir_phys);
-                        let l1_pte = vm.bus.read_word(pg_dir_phys + (vpn1 as u64) * 4).unwrap_or(0);
-                        println!("  L1[{}] = 0x{:08X} (V={} R={} W={} X={})", 
-                            vpn1, l1_pte, l1_pte & 1, (l1_pte >> 1) & 1, (l1_pte >> 2) & 1, (l1_pte >> 3) & 1);
-                        
+                        let l1_pte = vm
+                            .bus
+                            .read_word(pg_dir_phys + (vpn1 as u64) * 4)
+                            .unwrap_or(0);
+                        println!(
+                            "  L1[{}] = 0x{:08X} (V={} R={} W={} X={})",
+                            vpn1,
+                            l1_pte,
+                            l1_pte & 1,
+                            (l1_pte >> 1) & 1,
+                            (l1_pte >> 2) & 1,
+                            (l1_pte >> 3) & 1
+                        );
+
                         // Print last 20 trace entries
                         println!("\n--- Last 20 trace entries ---");
                         for entry in trace_buf.iter().rev().take(20) {

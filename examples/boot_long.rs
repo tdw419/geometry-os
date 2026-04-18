@@ -7,9 +7,19 @@ fn main() {
 
     use geometry_os::riscv::RiscvVm;
 
-    let (mut vm, result) = RiscvVm::boot_linux(&kernel_image, initramfs.as_deref(), 256, 200_000_000, bootargs).unwrap();
+    let (mut vm, result) = RiscvVm::boot_linux(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        200_000_000,
+        bootargs,
+    )
+    .unwrap();
 
-    println!("{} instructions, PC=0x{:08X} priv={:?}", result.instructions, vm.cpu.pc, vm.cpu.privilege);
+    println!(
+        "{} instructions, PC=0x{:08X} priv={:?}",
+        result.instructions, vm.cpu.pc, vm.cpu.privilege
+    );
     println!("UART output: {} chars", vm.bus.uart.tx_buf.len());
     if !vm.bus.uart.tx_buf.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);

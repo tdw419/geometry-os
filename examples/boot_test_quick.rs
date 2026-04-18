@@ -6,7 +6,7 @@ fn main() {
 
     let kernel_image = fs::read(kernel_path).expect("kernel");
     let initramfs = fs::read(initramfs_path).ok();
-    
+
     eprintln!("Kernel: {} bytes", kernel_image.len());
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
@@ -24,10 +24,19 @@ fn main() {
         Ok((mut vm, r)) => {
             let elapsed = start.elapsed();
             let mips = r.instructions as f64 / elapsed.as_secs_f64() / 1_000_000.0;
-            eprintln!("Boot: {} instructions in {:?} = {:.2} MIPS", r.instructions, elapsed, mips);
+            eprintln!(
+                "Boot: {} instructions in {:?} = {:.2} MIPS",
+                r.instructions, elapsed, mips
+            );
             eprintln!("PC: 0x{:08X}, Privilege: {:?}", vm.cpu.pc, vm.cpu.privilege);
-            eprintln!("mcause: 0x{:08X}, mepc: 0x{:08X}", vm.cpu.csr.mcause, vm.cpu.csr.mepc);
-            eprintln!("scause: 0x{:08X}, sepc: 0x{:08X}", vm.cpu.csr.scause, vm.cpu.csr.sepc);
+            eprintln!(
+                "mcause: 0x{:08X}, mepc: 0x{:08X}",
+                vm.cpu.csr.mcause, vm.cpu.csr.mepc
+            );
+            eprintln!(
+                "scause: 0x{:08X}, sepc: 0x{:08X}",
+                vm.cpu.csr.scause, vm.cpu.csr.sepc
+            );
             eprintln!("satp: 0x{:08X}", vm.cpu.csr.satp);
 
             // Drain UART

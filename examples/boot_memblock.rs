@@ -1,8 +1,8 @@
 //! Diagnostic: Read memblock struct from correct offsets.
 //! Run: cargo run --example boot_memblock
 
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -108,21 +108,36 @@ fn main() {
             let res_max = vm.bus.read_word(memblock_pa + 28).unwrap_or(0);
             let res_total = vm.bus.read_word(memblock_pa + 32).unwrap_or(0);
             eprintln!("[{}] PC=0x{:08X} prb=0x{:08X}", count, vm.cpu.pc, prb);
-            eprintln!("  memblock: bottom_up={} current_limit=0x{:08X}", 
+            eprintln!(
+                "  memblock: bottom_up={} current_limit=0x{:08X}",
                 vm.bus.read_word(memblock_pa).unwrap_or(0),
-                vm.bus.read_word(memblock_pa + 4).unwrap_or(0));
-            eprintln!("  memory: cnt={} max={} total_size=0x{:08X} regions_ptr=0x{:08X}",
-                mem_cnt, mem_max, mem_total, mem_regions_ptr);
-            eprintln!("  reserved: cnt={} max={} total_size=0x{:08X}",
-                res_cnt, res_max, res_total);
+                vm.bus.read_word(memblock_pa + 4).unwrap_or(0)
+            );
+            eprintln!(
+                "  memory: cnt={} max={} total_size=0x{:08X} regions_ptr=0x{:08X}",
+                mem_cnt, mem_max, mem_total, mem_regions_ptr
+            );
+            eprintln!(
+                "  reserved: cnt={} max={} total_size=0x{:08X}",
+                res_cnt, res_max, res_total
+            );
 
             // If memory has regions, read them
             if mem_cnt > 0 && mem_regions_ptr != 0 {
                 let regions_pa = (mem_regions_ptr as u64).wrapping_sub(0xC0000000);
                 for i in 0..mem_cnt.min(4) {
                     let base = vm.bus.read_word(regions_pa + (i * 16) as u64).unwrap_or(0);
-                    let size = vm.bus.read_word(regions_pa + (i * 16 + 4) as u64).unwrap_or(0);
-                    eprintln!("  memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)", i, base, size, size / (1024*1024));
+                    let size = vm
+                        .bus
+                        .read_word(regions_pa + (i * 16 + 4) as u64)
+                        .unwrap_or(0);
+                    eprintln!(
+                        "  memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)",
+                        i,
+                        base,
+                        size,
+                        size / (1024 * 1024)
+                    );
                 }
             }
         }

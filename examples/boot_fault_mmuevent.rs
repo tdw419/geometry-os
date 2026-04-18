@@ -7,8 +7,8 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
 
+    use geometry_os::riscv::cpu::{Privilege, StepResult};
     use geometry_os::riscv::RiscvVm;
-    use geometry_os::riscv::cpu::{StepResult, Privilege};
 
     let (mut vm, fw_addr, _, _) =
         RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
@@ -19,7 +19,9 @@ fn main() {
 
     // Run to count 177460 (just before the fault in boot_5m)
     while count < 177_460 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if !trampoline_patched
             && vm.cpu.pc == 0x10EE
@@ -38,10 +40,22 @@ fn main() {
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 // ECALL_M = SBI call
-                let r = vm.bus.sbi.handle_ecall(vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint);
-                if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                let r = vm.bus.sbi.handle_ecall(
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
+                );
+                if let Some((a0, a1)) = r {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             } else {
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
@@ -70,8 +84,10 @@ fn main() {
             StepResult::Ebreak => "EBREAK",
             StepResult::Ecall => "ECALL",
         };
-        eprintln!("[{}] PC=0x{:08X} -> 0x{:08X} priv={:?} result={} GP=0x{:08X}",
-            count, pc_before, vm.cpu.pc, vm.cpu.privilege, fault_str, vm.cpu.x[3]);
+        eprintln!(
+            "[{}] PC=0x{:08X} -> 0x{:08X} priv={:?} result={} GP=0x{:08X}",
+            count, pc_before, vm.cpu.pc, vm.cpu.privilege, fault_str, vm.cpu.x[3]
+        );
 
         // Print MMU events from this step
         for event in vm.bus.mmu_log.iter() {

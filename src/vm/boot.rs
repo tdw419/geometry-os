@@ -1,5 +1,5 @@
-use super::Vm;
 use super::types::*;
+use super::Vm;
 
 impl Vm {
     /// Boot the OS: load init.asm as PID 1, create boot.cfg if missing.
@@ -64,8 +64,7 @@ impl Vm {
         });
 
         // Set default environment
-        self.env_vars
-            .insert("SHELL".into(), "shell".into());
+        self.env_vars.insert("SHELL".into(), "shell".into());
         self.env_vars.insert("HOME".into(), "/".into());
         self.env_vars.insert("CWD".into(), "/".into());
         self.env_vars.insert("USER".into(), "root".into());

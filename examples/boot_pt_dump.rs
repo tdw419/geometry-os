@@ -1,6 +1,5 @@
 /// Diagnostic: check page table state after setup_vm and after relocate_enable_mmu.
 /// Run until the kernel returns from relocate_enable_mmu (PC in 0xC00010FA range).
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -20,23 +19,35 @@ fn main() {
     let mut satp_changes: u64 = 0;
 
     while count < max {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let cause_code = vm.cpu.csr.mcause & !(1u32 << 31);
             if cause_code == 9 || cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
-                    vm.cpu.x[10] = a0; vm.cpu.x[11] = a1;
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
                 }
-                println!("[diag] ECALL at count={}: cause={} a7=0x{:X} PC=0x{:08X}",
-                    count, cause_code, vm.cpu.x[17], vm.cpu.csr.mepc);
+                println!(
+                    "[diag] ECALL at count={}: cause={} a7=0x{:X} PC=0x{:08X}",
+                    count, cause_code, vm.cpu.x[17], vm.cpu.csr.mepc
+                );
             } else {
                 let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
                 if mpp != 3 {
@@ -61,8 +72,10 @@ fn main() {
             satp_changes += 1;
             let ppn = cur_satp & 0x3FFFFF;
             let pg_dir_phys = (ppn as u64) * 4096;
-            println!("[diag] SATP #{}: 0x{:08X} -> 0x{:08X} pg_dir=PA 0x{:08X} count={} PC=0x{:08X}",
-                satp_changes, last_satp, cur_satp, pg_dir_phys, count, vm.cpu.pc);
+            println!(
+                "[diag] SATP #{}: 0x{:08X} -> 0x{:08X} pg_dir=PA 0x{:08X} count={} PC=0x{:08X}",
+                satp_changes, last_satp, cur_satp, pg_dir_phys, count, vm.cpu.pc
+            );
 
             // Dump first 16 L1 entries of the new page table
             println!("[diag] Page table at PA 0x{:08X}:", pg_dir_phys);
@@ -74,8 +87,17 @@ fn main() {
                     let w = (pte >> 2) & 1;
                     let x = (pte >> 3) & 1;
                     let ppn = (pte >> 10) & 0x3FFFFF;
-                    println!("  L1[{:>3}] = 0x{:08X} V={} R={} W={} X={} PPN=0x{:05X} -> PA 0x{:08X}",
-                        i, pte, v, r, w, x, ppn, (ppn as u64) << 12);
+                    println!(
+                        "  L1[{:>3}] = 0x{:08X} V={} R={} W={} X={} PPN=0x{:05X} -> PA 0x{:08X}",
+                        i,
+                        pte,
+                        v,
+                        r,
+                        w,
+                        x,
+                        ppn,
+                        (ppn as u64) << 12
+                    );
                 }
             }
 
@@ -87,11 +109,22 @@ fn main() {
     }
 
     // Final state
-    println!("\n[diag] Final: count={} PC=0x{:08X} priv={:?} SATP=0x{:08X}",
-        count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp);
-    println!("SIE={} STVEC=0x{:08X}", (vm.cpu.csr.mstatus >> 1) & 1, vm.cpu.csr.stvec);
-    println!("UART: ier={} lcr={} lsr=0x{:02X} tx={}",
-        vm.bus.uart.ier, vm.bus.uart.lcr, vm.bus.uart.lsr, vm.bus.uart.tx_buf.len());
+    println!(
+        "\n[diag] Final: count={} PC=0x{:08X} priv={:?} SATP=0x{:08X}",
+        count, vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp
+    );
+    println!(
+        "SIE={} STVEC=0x{:08X}",
+        (vm.cpu.csr.mstatus >> 1) & 1,
+        vm.cpu.csr.stvec
+    );
+    println!(
+        "UART: ier={} lcr={} lsr=0x{:02X} tx={}",
+        vm.bus.uart.ier,
+        vm.bus.uart.lcr,
+        vm.bus.uart.lsr,
+        vm.bus.uart.tx_buf.len()
+    );
 
     // Check current page table
     let cur_ppn = vm.cpu.csr.satp & 0x3FFFFF;
@@ -105,8 +138,10 @@ fn main() {
             let w = (pte >> 2) & 1;
             let x = (pte >> 3) & 1;
             let ppn = (pte >> 10) & 0x3FFFFF;
-            println!("  L1[{:>3}] = 0x{:08X} V={} R={} W={} X={} PPN=0x{:05X}",
-                i, pte, v, r, w, x, ppn);
+            println!(
+                "  L1[{:>3}] = 0x{:08X} V={} R={} W={} X={} PPN=0x{:05X}",
+                i, pte, v, r, w, x, ppn
+            );
         }
     }
 }

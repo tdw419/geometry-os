@@ -1,15 +1,18 @@
 // Focused boot trace: what happens at the transition point
 // cargo run --example boot_focus
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let kernel = match fs::read(kernel_path) {
         Ok(d) => d,
-        Err(e) => { eprintln!("Error: {}", e); std::process::exit(1); }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
     };
     let initramfs = fs::read(initramfs_path).ok();
 
@@ -20,9 +23,13 @@ fn main() {
         512,
         0, // don't run any instructions in boot_linux
         bootargs,
-    ).unwrap();
+    )
+    .unwrap();
 
-    println!("Entry: 0x{:08X}, DTB: 0x{:08X}", result.entry, result.dtb_addr);
+    println!(
+        "Entry: 0x{:08X}, DTB: 0x{:08X}",
+        result.entry, result.dtb_addr
+    );
     println!("RAM base: 0x{:08X}", vm.bus.mem.ram_base);
 
     // Log all CSR writes and branches/jumps near the end
@@ -50,8 +57,10 @@ fn main() {
 
             // Detect satp change
             if satp != last_satp && last_satp == 0 {
-                println!("[{}] *** SATP CHANGED: 0x{:08X} -> 0x{:08X} at PC=0x{:08X}",
-                    count, last_satp, satp, pc);
+                println!(
+                    "[{}] *** SATP CHANGED: 0x{:08X} -> 0x{:08X} at PC=0x{:08X}",
+                    count, last_satp, satp, pc
+                );
                 satp_changed = true;
             }
             last_satp = satp;
@@ -67,20 +76,29 @@ fn main() {
             let mtvec = vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC);
             let mcause = vm.cpu.csr.mcause;
             let mepc = vm.cpu.csr.mepc;
-            println!("[{}] PC=0x{:08X} mtvec=0x{:08X} mcause=0x{:08X} mepc=0x{:08X} priv={:?}",
-                count, pc, mtvec, mcause, mepc, vm.cpu.privilege);
+            println!(
+                "[{}] PC=0x{:08X} mtvec=0x{:08X} mcause=0x{:08X} mepc=0x{:08X} priv={:?}",
+                count, pc, mtvec, mcause, mepc, vm.cpu.privilege
+            );
         }
 
         match step_result {
             StepResult::FetchFault => {
                 println!("[{}] FETCH FAULT at PC=0x{:08X}", count, vm.cpu.pc);
-                println!("  mcause=0x{:08X}, mepc=0x{:08X}, mtvec=0x{:08X}",
-                    vm.cpu.csr.mcause, vm.cpu.csr.mepc,
-                    vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC));
-                println!("  satp=0x{:08X}, mstatus=0x{:08X}",
-                    vm.cpu.csr.satp, vm.cpu.csr.mstatus);
-                println!("  stvec=0x{:08X}",
-                    vm.cpu.csr.read(geometry_os::riscv::csr::STVEC));
+                println!(
+                    "  mcause=0x{:08X}, mepc=0x{:08X}, mtvec=0x{:08X}",
+                    vm.cpu.csr.mcause,
+                    vm.cpu.csr.mepc,
+                    vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC)
+                );
+                println!(
+                    "  satp=0x{:08X}, mstatus=0x{:08X}",
+                    vm.cpu.csr.satp, vm.cpu.csr.mstatus
+                );
+                println!(
+                    "  stvec=0x{:08X}",
+                    vm.cpu.csr.read(geometry_os::riscv::csr::STVEC)
+                );
                 break;
             }
             StepResult::Ebreak => {
@@ -94,8 +112,10 @@ fn main() {
         if vm.cpu.pc == 0 {
             println!("[{}] PC jumped to 0x00000000!", count);
             println!("  prev_pc=0x{:08X}", prev_pc);
-            println!("  mcause=0x{:08X}, mepc=0x{:08X}",
-                vm.cpu.csr.mcause, vm.cpu.csr.mepc);
+            println!(
+                "  mcause=0x{:08X}, mepc=0x{:08X}",
+                vm.cpu.csr.mcause, vm.cpu.csr.mepc
+            );
             break;
         }
     }
@@ -104,9 +124,18 @@ fn main() {
     println!("Instructions: {}", count);
     println!("PC: 0x{:08X}", vm.cpu.pc);
     println!("Privilege: {:?}", vm.cpu.privilege);
-    println!("mcause: 0x{:08X}, mepc: 0x{:08X}", vm.cpu.csr.mcause, vm.cpu.csr.mepc);
-    println!("mtvec: 0x{:08X}", vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC));
-    println!("stvec: 0x{:08X}", vm.cpu.csr.read(geometry_os::riscv::csr::STVEC));
+    println!(
+        "mcause: 0x{:08X}, mepc: 0x{:08X}",
+        vm.cpu.csr.mcause, vm.cpu.csr.mepc
+    );
+    println!(
+        "mtvec: 0x{:08X}",
+        vm.cpu.csr.read(geometry_os::riscv::csr::MTVEC)
+    );
+    println!(
+        "stvec: 0x{:08X}",
+        vm.cpu.csr.read(geometry_os::riscv::csr::STVEC)
+    );
     println!("satp: 0x{:08X}", vm.cpu.csr.satp);
     println!("mstatus: 0x{:08X}", vm.cpu.csr.mstatus);
 
@@ -122,7 +151,7 @@ fn main() {
         println!("\n=== UART Output ({} bytes) ===", out.len());
         let s = String::from_utf8_lossy(&out);
         if s.len() > 2048 {
-            println!("... (truncated) ...{}", &s[s.len()-2048..]);
+            println!("... (truncated) ...{}", &s[s.len() - 2048..]);
         } else {
             println!("{}", s);
         }

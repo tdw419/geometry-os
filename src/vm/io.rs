@@ -1,5 +1,5 @@
-use super::Vm;
 use super::types::*;
+use super::Vm;
 
 impl Vm {
     /// Read a null-terminated string from RAM (one char per u32 word).
@@ -42,11 +42,13 @@ impl Vm {
 }
 
 impl Vm {
-
     pub(super) fn fetch(&mut self) -> u32 {
         let phys = match self.translate_va(self.pc) {
             Some(addr) if addr < self.ram.len() => addr,
-            _ => { self.trigger_segfault(); return 0; }
+            _ => {
+                self.trigger_segfault();
+                return 0;
+            }
         };
         let val = self.ram[phys];
         self.pc += 1;
@@ -117,7 +119,11 @@ impl Vm {
         if data.len() < min_size {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("save file too small: {} bytes (need {})", data.len(), min_size),
+                format!(
+                    "save file too small: {} bytes (need {})",
+                    data.len(),
+                    min_size
+                ),
             ));
         }
         if &data[0..4] != SAVE_MAGIC {
@@ -131,7 +137,10 @@ impl Vm {
         if !(1..=SAVE_VERSION).contains(&version) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("unsupported save version: {} (need 1-{})", version, SAVE_VERSION),
+                format!(
+                    "unsupported save version: {} (need 1-{})",
+                    version, SAVE_VERSION
+                ),
             ));
         }
 
@@ -180,9 +189,7 @@ impl Vm {
         }
 
         // v2 fields: rand_state + frame_count (default if v1 save)
-        let (rand_state, frame_count) = if version >= 2
-            && offset + 8 <= data.len()
-        {
+        let (rand_state, frame_count) = if version >= 2 && offset + 8 <= data.len() {
             let rs = u32::from_le_bytes([
                 data[offset],
                 data[offset + 1],

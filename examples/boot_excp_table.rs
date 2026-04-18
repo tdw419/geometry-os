@@ -1,8 +1,7 @@
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 /// Diagnostic: Check the exception handler table at excp_vect_table (0xC0C00AA4)
 /// and understand why it contains 0x3FFFF000 instead of a valid handler address.
-
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -20,7 +19,9 @@ fn main() {
     let fw_addr_u32 = fw_addr as u32;
 
     while count < max {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // Handle M-mode trap forwarding
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
@@ -28,13 +29,21 @@ fn main() {
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
-                if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                if let Some((a0, a1)) = result {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
             } else {
                 let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
                 if mpp != 3 {
@@ -62,7 +71,10 @@ fn main() {
         // SATP change detection + fixup
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satap {
-            println!("[diag] SATP change: 0x{:08X} -> 0x{:08X} at count={}", last_satap, cur_satp, count);
+            println!(
+                "[diag] SATP change: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satap, cur_satp, count
+            );
             let mode = (cur_satp >> 31) & 1;
             if mode == 1 {
                 let ppn = cur_satp & 0x3FFFFF;
@@ -77,7 +89,9 @@ fn main() {
                 for i in 0..1024u32 {
                     let l1_addr = pg_dir_phys + (i as u64) * 4;
                     if let Ok(l1_pte) = vm.bus.read_word(l1_addr) {
-                        if (l1_pte & PTE_V) == 0 { continue; }
+                        if (l1_pte & PTE_V) == 0 {
+                            continue;
+                        }
                         let l1_ppn = (l1_pte & PPN_MASK) >> 10;
                         if l1_ppn >= PAGE_OFFSET_PPN {
                             let fixed_ppn = l1_ppn - PAGE_OFFSET_PPN;
@@ -85,13 +99,19 @@ fn main() {
                             vm.bus.write_word(l1_addr, fixed_pte).ok();
                         }
                         if (l1_pte & LEAF_FLAGS) == 0 {
-                            let final_ppn = if l1_ppn >= PAGE_OFFSET_PPN { l1_ppn - PAGE_OFFSET_PPN } else { l1_ppn };
+                            let final_ppn = if l1_ppn >= PAGE_OFFSET_PPN {
+                                l1_ppn - PAGE_OFFSET_PPN
+                            } else {
+                                l1_ppn
+                            };
                             let l2_base = (final_ppn as u64) << 12;
                             if l2_base < 0x1000_0000 {
                                 for j in 0..1024u32 {
                                     let l2_addr = l2_base + (j as u64) * 4;
                                     if let Ok(l2_pte) = vm.bus.read_word(l2_addr) {
-                                        if (l2_pte & PTE_V) == 0 { continue; }
+                                        if (l2_pte & PTE_V) == 0 {
+                                            continue;
+                                        }
                                         let l2_ppn = (l2_pte & PPN_MASK) >> 10;
                                         if l2_ppn >= PAGE_OFFSET_PPN {
                                             let fixed = l2_ppn - PAGE_OFFSET_PPN;
@@ -107,34 +127,52 @@ fn main() {
 
                 // Inject identity mappings
                 let identity_pte: u32 = 0x0000_00CF;
-                let l1_entries: &[u32] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 32, 48, 64, 80, 96, 112, 127];
+                let l1_entries: &[u32] = &[
+                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 32, 48, 64, 80, 96, 112, 127,
+                ];
                 let l1_0 = vm.bus.read_word(pg_dir_phys).unwrap_or(0);
                 if !((l1_0 & 0xCF) == 0xCF && ((l1_0 >> 20) & 0xFFF) == 0) {
                     for &idx in l1_entries {
-                        vm.bus.write_word(pg_dir_phys + (idx * 4) as u64, identity_pte | (idx << 20)).ok();
+                        vm.bus
+                            .write_word(pg_dir_phys + (idx * 4) as u64, identity_pte | (idx << 20))
+                            .ok();
                     }
                     let existing = vm.bus.read_word(pg_dir_phys + 776 * 4).unwrap_or(0);
                     if (existing & 1) == 0 {
-                        vm.bus.write_word(pg_dir_phys + 776 * 4, identity_pte | (8u32 << 20)).ok();
+                        vm.bus
+                            .write_word(pg_dir_phys + 776 * 4, identity_pte | (8u32 << 20))
+                            .ok();
                     }
                     vm.cpu.tlb.flush_all();
-                    println!("[diag] Injected identity mappings at pg_dir PA 0x{:08X}", pg_dir_phys);
+                    println!(
+                        "[diag] Injected identity mappings at pg_dir PA 0x{:08X}",
+                        pg_dir_phys
+                    );
                 }
 
                 // Dump the page table entries for the excp_vect_table region
                 // VA 0xC0C00AA4 -> VPN1 = 0xC0C00AA4 >> 22 = 772, VPN0 = (0xC0C00AA4 >> 12) & 0x3FF = 0x0AA = 170
                 let vpn1 = 0xC0C0_0AA4u32 >> 22;
                 let vpn0 = (0xC0C0_0AA4u32 >> 12) & 0x3FF;
-                println!("[diag] excp_vect_table VA=0xC0C00AA4: VPN1={} VPN0={}", vpn1, vpn0);
+                println!(
+                    "[diag] excp_vect_table VA=0xC0C00AA4: VPN1={} VPN0={}",
+                    vpn1, vpn0
+                );
                 if let Ok(l1_pte) = vm.bus.read_word(pg_dir_phys + (vpn1 * 4) as u64) {
                     let l1_ppn = (l1_pte >> 10) & 0x3FFFFF;
                     let is_leaf = (l1_pte & 0xE) != 0;
-                    println!("[diag]   L1[{}]=0x{:08X} PPN=0x{:X} leaf={}", vpn1, l1_pte, l1_ppn, is_leaf);
+                    println!(
+                        "[diag]   L1[{}]=0x{:08X} PPN=0x{:X} leaf={}",
+                        vpn1, l1_pte, l1_ppn, is_leaf
+                    );
                     if !is_leaf {
                         let l2_addr = (l1_ppn as u64) << 12;
                         if let Ok(l2_pte) = vm.bus.read_word(l2_addr + (vpn0 * 4) as u64) {
                             let l2_ppn = (l2_pte >> 10) & 0x3FFFFF;
-                            println!("[diag]     L2[{}]=0x{:08X} PPN=0x{:X}", vpn0, l2_pte, l2_ppn);
+                            println!(
+                                "[diag]     L2[{}]=0x{:08X} PPN=0x{:X}",
+                                vpn0, l2_pte, l2_ppn
+                            );
                             // The physical address of excp_vect_table
                             let pa = (l2_ppn as u64) << 12 | (0xAA4 & 0xFFF);
                             println!("[diag]     excp_vect_table PA = 0x{:08X}", pa);
@@ -192,8 +230,10 @@ fn main() {
             let l1_ppn = (l1_pte >> 10) & 0x3FFFFF;
             let flags = l1_pte & 0x3FF;
             let is_leaf = (l1_pte & 0xE) != 0;
-            println!("[diag] L1[{}] = 0x{:08X} PPN=0x{:06X} flags=0x{:03X} leaf={}",
-                i, l1_pte, l1_ppn, flags, is_leaf);
+            println!(
+                "[diag] L1[{}] = 0x{:08X} PPN=0x{:06X} flags=0x{:03X} leaf={}",
+                i, l1_pte, l1_ppn, flags, is_leaf
+            );
         }
     }
 }

@@ -17,8 +17,10 @@ fn main() {
             bootargs,
         )
         .unwrap();
-        println!("After {} instr: PC=0x{:08X} SP=0x{:08X} RA=0x{:08X} TP=0x{:08X}",
-            max_instr, vm.cpu.pc, vm.cpu.x[2], vm.cpu.x[1], vm.cpu.x[4]);
+        println!(
+            "After {} instr: PC=0x{:08X} SP=0x{:08X} RA=0x{:08X} TP=0x{:08X}",
+            max_instr, vm.cpu.pc, vm.cpu.x[2], vm.cpu.x[1], vm.cpu.x[4]
+        );
     }
 
     // Also check what _start expects for the stack

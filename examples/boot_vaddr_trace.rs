@@ -1,8 +1,8 @@
-/// Disassemble instructions at virtual addresses using MMU translation.
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
 use geometry_os::riscv::decode;
 use geometry_os::riscv::mmu::{self, AccessType, TranslateResult};
+/// Disassemble instructions at virtual addresses using MMU translation.
+use geometry_os::riscv::RiscvVm;
 
 fn read_instruction(vm: &mut RiscvVm, vaddr: u32) -> Option<u32> {
     // Translate virtual to physical via MMU

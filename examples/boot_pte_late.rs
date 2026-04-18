@@ -11,13 +11,13 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) =
-        geometry_os::riscv::RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            bootargs,
-        ).expect("boot setup failed");
+    let (mut vm, fw_addr, _entry, _dtb_addr) = geometry_os::riscv::RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        bootargs,
+    )
+    .expect("boot setup failed");
 
     let fw_addr_u32 = fw_addr as u32;
     let max_instr: u64 = 186_500;
@@ -46,7 +46,9 @@ fn main() {
             last_satp = cur_satp;
         }
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
@@ -61,7 +63,9 @@ fn main() {
                     let sie = (vm.cpu.csr.mstatus >> 1) & 1;
                     vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                     vm.cpu.csr.mstatus &= !(1 << 1);
-                    if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                    if cause_code == 7 {
+                        vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                    }
                     vm.cpu.pc = stvec;
                     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
                     vm.cpu.tlb.flush_all();
@@ -71,11 +75,21 @@ fn main() {
             }
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
-                if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                if let Some((a0, a1)) = result {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
             }
             vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
         }
@@ -86,7 +100,10 @@ fn main() {
         count += 1;
     }
 
-    eprintln!("[diag] Stopped at count={}, PC=0x{:08X}, SATP=0x{:08X}", count, vm.cpu.pc, vm.cpu.csr.satp);
+    eprintln!(
+        "[diag] Stopped at count={}, PC=0x{:08X}, SATP=0x{:08X}",
+        count, vm.cpu.pc, vm.cpu.csr.satp
+    );
 
     // Check PTEs
     let satp = vm.cpu.csr.satp;
@@ -95,7 +112,10 @@ fn main() {
     eprintln!("[diag] Page directory at PA 0x{:08X}", pg_dir_phys);
 
     // Check L1 entries that the kernel might have modified
-    eprintln!("\n[diag] L1 entries for kernel VA range (at count={}):", count);
+    eprintln!(
+        "\n[diag] L1 entries for kernel VA range (at count={}):",
+        count
+    );
     for i in 768..780 {
         let l1_addr = pg_dir_phys + (i as u64) * 4;
         let l1_pte = vm.bus.read_word(l1_addr).unwrap_or(0);
@@ -110,11 +130,16 @@ fn main() {
             if is_leaf {
                 let va_start = (i as u64) << 22;
                 let pa_start = (ppn1 as u64) << 22;
-                eprintln!("  L1[{}] = 0x{:08X} -> megapage VA 0x{:08X} -> PA 0x{:08X} (RWX={}{})",
-                    i, l1_pte, va_start, pa_start, r, x);
+                eprintln!(
+                    "  L1[{}] = 0x{:08X} -> megapage VA 0x{:08X} -> PA 0x{:08X} (RWX={}{})",
+                    i, l1_pte, va_start, pa_start, r, x
+                );
             } else {
                 let l2_phys = (l1_pte as u64) & 0xFFFFF000;
-                eprintln!("  L1[{}] = 0x{:08X} -> L2 table at PA 0x{:08X}", i, l1_pte, l2_phys);
+                eprintln!(
+                    "  L1[{}] = 0x{:08X} -> L2 table at PA 0x{:08X}",
+                    i, l1_pte, l2_phys
+                );
             }
         } else {
             eprintln!("  L1[{}] = 0x{:08X} -> NOT VALID", i, l1_pte);
@@ -145,7 +170,12 @@ fn main() {
         let l2_pa = (l2_ppn << 12) + (0xC04047DC & 0xFFF);
         let inst = vm.bus.read_word(l2_pa).unwrap_or(0);
         eprintln!("  L1[769] points to L2 table at PA 0x{:08X}", l2_phys);
-        eprintln!("  L2[{}] = 0x{:08X} -> PA 0x{:08X}", vpn2, l2_pte, l2_ppn << 12);
+        eprintln!(
+            "  L2[{}] = 0x{:08X} -> PA 0x{:08X}",
+            vpn2,
+            l2_pte,
+            l2_ppn << 12
+        );
         eprintln!("  PA 0x{:08X} -> inst = 0x{:08X}", l2_pa, inst);
         eprintln!("  Expected: 0x1101 (addi sp, sp, -32)");
     }
@@ -153,7 +183,10 @@ fn main() {
     // Also check L1[769] changes: check at count=180000 vs now
     // Read what the kernel binary has at PA 0x004047DC
     let direct = vm.bus.read_word(0x004047DC).unwrap_or(0);
-    eprintln!("\n  Direct read PA 0x004047DC = 0x{:08X} (should be 0x1101)", direct);
+    eprintln!(
+        "\n  Direct read PA 0x004047DC = 0x{:08X} (should be 0x1101)",
+        direct
+    );
 
     // Check if the kernel has modified PTEs between 180K and 186K
     // The kernel's create_pgd_mapping function modifies page tables
@@ -176,7 +209,10 @@ fn main() {
     let km_vo = vm.bus.read_word(km_phys + 8).unwrap_or(0);
     let km_sz = vm.bus.read_word(km_phys + 16).unwrap_or(0);
     eprintln!("\n[diag] kernel_map at PA 0x{:08X}:", km_phys);
-    eprintln!("  page_offset (0)  = 0x{:08X}", vm.bus.read_word(km_phys + 0).unwrap_or(0));
+    eprintln!(
+        "  page_offset (0)  = 0x{:08X}",
+        vm.bus.read_word(km_phys + 0).unwrap_or(0)
+    );
     eprintln!("  virt_addr (4)    = 0x{:08X}", km_va);
     eprintln!("  virt_offset (8)  = 0x{:08X}", km_vo);
     eprintln!("  phys_addr (12)   = 0x{:08X}", km_pa);

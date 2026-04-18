@@ -13,7 +13,8 @@ fn main() {
         256,
         1_000_000,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     println!("\n=== Final state ===");
     println!("PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
@@ -21,19 +22,27 @@ fn main() {
     println!("SBI output: {} bytes", vm.bus.sbi.console_output.len());
     println!("UART TX: {} bytes", vm.bus.uart.tx_buf.len());
     println!("SBI calls: {}", vm.bus.sbi.console_output.len());
-    
-    let sbi_str: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+
+    let sbi_str: String = vm
+        .bus
+        .sbi
+        .console_output
+        .iter()
+        .map(|&b| b as char)
+        .collect();
     println!("SBI output text: {:?}", sbi_str);
-    
+
     let uart_str: String = vm.bus.uart.tx_buf.iter().map(|&b| b as char).collect();
     println!("UART output text: {:?}", uart_str);
-    
+
     println!("\n=== Register dump (first 32) ===");
     for i in 0..32 {
         print!("x{:02}=0x{:08X} ", i, vm.cpu.x[i]);
-        if (i + 1) % 4 == 0 { println!(); }
+        if (i + 1) % 4 == 0 {
+            println!();
+        }
     }
-    
+
     println!("\n=== Key CSRs ===");
     println!("mstatus=0x{:08X}", vm.cpu.csr.mstatus);
     println!("mepc=0x{:08X}", vm.cpu.csr.mepc);

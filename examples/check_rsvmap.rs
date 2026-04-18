@@ -22,7 +22,10 @@ fn main() {
     let off_mem_rsvmap = u32::from_be_bytes([dtb[16], dtb[17], dtb[18], dtb[19]]);
 
     eprintln!("DTB: magic=0x{:08X} totalsize={}", magic, totalsize);
-    eprintln!("  off_mem_rsvmap={} (0x{:X})", off_mem_rsvmap, off_mem_rsvmap);
+    eprintln!(
+        "  off_mem_rsvmap={} (0x{:X})",
+        off_mem_rsvmap, off_mem_rsvmap
+    );
 
     // Parse memory reservation map
     eprintln!("\nMemory Reservation Map (mem_rsvmap):");
@@ -33,14 +36,16 @@ fn main() {
             eprintln!("  ERROR: ran past end of DTB at offset {}", pos);
             break;
         }
-        let addr = u64::from_be_bytes(dtb[pos..pos+8].try_into().unwrap());
-        let size = u64::from_be_bytes(dtb[pos+8..pos+16].try_into().unwrap());
+        let addr = u64::from_be_bytes(dtb[pos..pos + 8].try_into().unwrap());
+        let size = u64::from_be_bytes(dtb[pos + 8..pos + 16].try_into().unwrap());
         if addr == 0 && size == 0 {
             eprintln!("  [terminator]");
             break;
         }
-        eprintln!("  entry {}: addr=0x{:016X} size=0x{:016X} ({} bytes)",
-                  entry_count, addr, size, size);
+        eprintln!(
+            "  entry {}: addr=0x{:016X} size=0x{:016X} ({} bytes)",
+            entry_count, addr, size, size
+        );
         pos += 16;
         entry_count += 1;
     }

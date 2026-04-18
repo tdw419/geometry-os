@@ -1,6 +1,5 @@
 /// Trace the last 200 steps before PC transitions to low address.
 /// Log RA (x1) changes to find where it gets set to 0.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -16,7 +15,9 @@ fn main() {
 
     // Run to 177300
     for _ in 0..177300 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         vm.step();
     }
 
@@ -28,28 +29,40 @@ fn main() {
     for i in 0..300 {
         let pc = vm.cpu.pc;
         let ra = vm.cpu.x[1];
-        
+
         vm.step();
         let next_pc = vm.cpu.pc;
         let next_ra = vm.cpu.x[1];
-        
+
         // Detect RA changes
         if ra != next_ra && i > 100 {
-            eprintln!("[{}] RA changed: 0x{:08X} -> 0x{:08X} at PC=0x{:08X} next=0x{:08X}",
-                177300 + i, ra, next_ra, pc, next_pc);
+            eprintln!(
+                "[{}] RA changed: 0x{:08X} -> 0x{:08X} at PC=0x{:08X} next=0x{:08X}",
+                177300 + i,
+                ra,
+                next_ra,
+                pc,
+                next_pc
+            );
         }
-        
+
         // Detect transition to low address
         if pc >= 0xC0000000 && next_pc < 0xC0000000 {
             eprintln!("\n=== TRANSITION at count={} ===", 177300 + i + 1);
             eprintln!("PC: 0x{:08X} -> 0x{:08X}", pc, next_pc);
-            eprintln!("RA=0x{:08X} SP=0x{:08X} GP=0x{:08X} TP=0x{:08X}",
-                vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[3], vm.cpu.x[4]);
-            eprintln!("A0=0x{:08X} A1=0x{:08X} A2=0x{:08X} A3=0x{:08X}",
-                vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12], vm.cpu.x[13]);
-            eprintln!("T0=0x{:08X} T1=0x{:08X} T2=0x{:08X} S0=0x{:08X}",
-                vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7], vm.cpu.x[8]);
-            
+            eprintln!(
+                "RA=0x{:08X} SP=0x{:08X} GP=0x{:08X} TP=0x{:08X}",
+                vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[3], vm.cpu.x[4]
+            );
+            eprintln!(
+                "A0=0x{:08X} A1=0x{:08X} A2=0x{:08X} A3=0x{:08X}",
+                vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12], vm.cpu.x[13]
+            );
+            eprintln!(
+                "T0=0x{:08X} T1=0x{:08X} T2=0x{:08X} S0=0x{:08X}",
+                vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7], vm.cpu.x[8]
+            );
+
             // Disassemble the instruction at PC (the ret)
             // Read the word at the translated PA
             let vpn1 = ((pc >> 22) & 0x3FF) as u64;
@@ -83,11 +96,11 @@ fn main() {
             }
             let word = vm.bus.read_word(pa).unwrap_or(0);
             eprintln!("Instruction at PA 0x{:08X}: 0x{:08X}", pa, word);
-            
+
             // Use objdump to disassemble
             break;
         }
-        
+
         prev_ra = next_ra;
         prev_pc = next_pc;
     }

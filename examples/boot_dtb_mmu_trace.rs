@@ -2,8 +2,8 @@
 //! Uses MMU translate to check what the kernel would see.
 //! Run: cargo run --example boot_dtb_mmu_trace
 
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -16,13 +16,9 @@ fn main() {
     };
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_data,
-        initramfs_data.as_deref(),
-        512,
-        bootargs,
-    )
-    .expect("boot_linux_setup failed");
+    let (mut vm, fw_addr, _entry, dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_data, initramfs_data.as_deref(), 512, bootargs)
+            .expect("boot_linux_setup failed");
 
     let fw_addr_u32 = fw_addr as u32;
     let dtb_va = (dtb_addr.wrapping_add(0xC0000000)) as u32;
@@ -50,9 +46,7 @@ fn main() {
                 // Print scause/stval for context
                 eprintln!(
                     "  scause=0x{:08X} stval=0x{:08X} sepc=0x{:08X}",
-                    vm.cpu.csr.scause,
-                    vm.cpu.csr.stval,
-                    vm.cpu.csr.sepc
+                    vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.sepc
                 );
                 break;
             }
@@ -86,13 +80,19 @@ fn main() {
                     let pa = (l1_ppn << 12) | (va as u64 & 0x3FFFFF);
                     eprintln!("  MEGAPAGE: VA 0x{:08X} -> PA 0x{:08X}", va, pa);
                     let w0 = vm.bus.read_word(pa).unwrap_or(0);
-                    eprintln!("  Word at PA 0x{:08X}: 0x{:08X} (expect 0xEDFE0DD0)", pa, w0);
+                    eprintln!(
+                        "  Word at PA 0x{:08X}: 0x{:08X} (expect 0xEDFE0DD0)",
+                        pa, w0
+                    );
                 } else {
                     // L2 table
                     let l2_ppn = ((l1_entry >> 10) & 0x3FFFFF) as u64;
                     let l2_addr = l2_ppn * 4096 + vpn0 * 4;
                     let l2_entry = vm.bus.read_word(l2_addr).unwrap_or(0);
-                    eprintln!("  L2[{}]=0x{:08X} (addr=PA 0x{:08X})", vpn0, l2_entry, l2_addr);
+                    eprintln!(
+                        "  L2[{}]=0x{:08X} (addr=PA 0x{:08X})",
+                        vpn0, l2_entry, l2_addr
+                    );
                     if l2_entry & 1 != 0 {
                         let leaf_ppn = ((l2_entry >> 10) & 0x3FFFFF) as u64;
                         let offset = va as u64 & 0xFFF;
@@ -115,7 +115,10 @@ fn main() {
         if in_fdt_check {
             fdt_check_instr_count += 1;
             if fdt_check_instr_count > 200 {
-                eprintln!("[{}] fdt_check_header took too many instructions, bailing", count);
+                eprintln!(
+                    "[{}] fdt_check_header took too many instructions, bailing",
+                    count
+                );
                 break;
             }
             // Check if we returned (PC moved past fdt_check_header)

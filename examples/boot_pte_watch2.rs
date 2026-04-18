@@ -8,13 +8,12 @@ fn main() {
     let initramfs = std::fs::read(initramfs_path).ok();
     let bootargs = "console=ttyS0 earlycon=sbi panic=1";
 
-    use geometry_os::riscv::RiscvVm;
     use geometry_os::riscv::cpu::{Privilege, StepResult};
     use geometry_os::riscv::csr;
+    use geometry_os::riscv::RiscvVm;
 
-    let (mut vm, fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_image, initramfs.as_deref(), 256, bootargs
-    ).unwrap();
+    let (mut vm, fw_addr, _entry, _dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 256, bootargs).unwrap();
 
     let fw_addr_u32 = fw_addr as u32;
 
@@ -27,8 +26,12 @@ fn main() {
     let watch_idx: u64 = 770;
     let watch_pte_addr = pt_base + watch_idx * 4;
     let initial_pte = vm.bus.read_word(watch_pte_addr).unwrap_or(0);
-    eprintln!("[watch] PTE[770] at 0x{:08X} initial=0x{:08X} V={}",
-        watch_pte_addr, initial_pte, initial_pte & 1);
+    eprintln!(
+        "[watch] PTE[770] at 0x{:08X} initial=0x{:08X} V={}",
+        watch_pte_addr,
+        initial_pte,
+        initial_pte & 1
+    );
 
     let mut last_known_pte = initial_pte;
     let mut count: u64 = 0;
@@ -53,11 +56,16 @@ fn main() {
             if cause_code == csr::CAUSE_ECALL_S {
                 sbi_call_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -89,11 +97,16 @@ fn main() {
             } else {
                 // ECALL_M: SBI call
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -110,24 +123,39 @@ fn main() {
             let current_pte = vm.bus.read_word(watch_pte_addr).unwrap_or(0);
             if current_pte != last_known_pte {
                 eprintln!("\n[watch] *** PTE[770] CORRUPTION at count={} ***", count);
-                eprintln!("[watch] was 0x{:08X} now 0x{:08X}", last_known_pte, current_pte);
+                eprintln!(
+                    "[watch] was 0x{:08X} now 0x{:08X}",
+                    last_known_pte, current_pte
+                );
                 eprintln!("[watch] PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
 
                 // Dump all registers
-                let names = ["zero","ra","sp","gp","tp","t0","t1","t2","s0","s1",
-                    "a0","a1","a2","a3","a4","a5","a6","a7","s2","s3",
-                    "s4","s5","s6","s7","s8","s9","s10","s11","t3","t4","t5","t6"];
+                let names = [
+                    "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2",
+                    "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9",
+                    "s10", "s11", "t3", "t4", "t5", "t6",
+                ];
                 for i in 0..32 {
                     eprintln!("  x{:2} ({:4}) = 0x{:08X}", i, names[i], vm.cpu.x[i]);
                 }
-                eprintln!("[watch] sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
-                    vm.cpu.csr.sepc, vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.stvec);
-                eprintln!("[watch] SATP=0x{:08X} SSTATUS=0x{:08X}",
-                    vm.cpu.csr.read(csr::SATP), vm.cpu.csr.read(csr::SSTATUS));
-                eprintln!("[watch] ECALL_count={} SBI_calls={} forwards={}",
-                    vm.cpu.ecall_count, sbi_call_count, forward_count);
+                eprintln!(
+                    "[watch] sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
+                    vm.cpu.csr.sepc, vm.cpu.csr.scause, vm.cpu.csr.stval, vm.cpu.csr.stvec
+                );
+                eprintln!(
+                    "[watch] SATP=0x{:08X} SSTATUS=0x{:08X}",
+                    vm.cpu.csr.read(csr::SATP),
+                    vm.cpu.csr.read(csr::SSTATUS)
+                );
+                eprintln!(
+                    "[watch] ECALL_count={} SBI_calls={} forwards={}",
+                    vm.cpu.ecall_count, sbi_call_count, forward_count
+                );
                 eprintln!("[watch] UART tx: {} chars", vm.bus.uart.tx_buf.len());
-                eprintln!("[watch] SBI console: {} chars", vm.bus.sbi.console_output.len());
+                eprintln!(
+                    "[watch] SBI console: {} chars",
+                    vm.bus.sbi.console_output.len()
+                );
 
                 // Dump PTEs around the corruption
                 eprintln!("[watch] PTEs 760-780:");
@@ -135,7 +163,14 @@ fn main() {
                     let addr = pt_base + i * 4;
                     let pte = vm.bus.read_word(addr).unwrap_or(0);
                     let marker = if i == 770 { " <<<" } else { "" };
-                    eprintln!("  L1[{}] @ 0x{:08X} = 0x{:08X} V={}{}", i, addr, pte, pte & 1, marker);
+                    eprintln!(
+                        "  L1[{}] @ 0x{:08X} = 0x{:08X} V={}{}",
+                        i,
+                        addr,
+                        pte,
+                        pte & 1,
+                        marker
+                    );
                 }
 
                 // Show the last 50 chars of any output
@@ -160,8 +195,10 @@ fn main() {
         // Progress report every 2M instructions
         if count % 2_000_000 == 0 {
             let pte = vm.bus.read_word(watch_pte_addr).unwrap_or(0);
-            eprintln!("[watch] count={:8} PC=0x{:08X} priv={:?} PTE[770]=0x{:08X} ecall={} sbi={}",
-                count, vm.cpu.pc, vm.cpu.privilege, pte, vm.cpu.ecall_count, sbi_call_count);
+            eprintln!(
+                "[watch] count={:8} PC=0x{:08X} priv={:?} PTE[770]=0x{:08X} ecall={} sbi={}",
+                count, vm.cpu.pc, vm.cpu.privilege, pte, vm.cpu.ecall_count, sbi_call_count
+            );
         }
     }
 }

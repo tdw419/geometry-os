@@ -1,4 +1,4 @@
-use geometry_os::riscv::{RiscvVm, cpu, mmu, csr};
+use geometry_os::riscv::{cpu, csr, mmu, RiscvVm};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -11,7 +11,8 @@ fn main() {
         initramfs.as_deref(),
         256,
         "console=ttyS0 loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Use the boot_linux loop logic but with tracing
     let fw_addr_u32 = _fw_addr as u32;
@@ -20,7 +21,9 @@ fn main() {
     let trace_from: u64 = 177_300; // Just before first SATP switch
 
     while count < max {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // SATP change hook (same as boot_linux)
         let cur_satp = vm.cpu.csr.satp;
@@ -36,11 +39,16 @@ fn main() {
                 if cause_code == csr::CAUSE_ECALL_S {
                     // SBI call
                     let result = vm.bus.sbi.handle_ecall(
-                        vm.cpu.x[17], vm.cpu.x[16],
-                        vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13],
-                        vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint,
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
                     );
                     if let Some((a0, a1)) = result {
                         vm.cpu.x[10] = a0;
@@ -63,8 +71,10 @@ fn main() {
                         vm.cpu.privilege = cpu::Privilege::Supervisor;
                         vm.cpu.tlb.flush_all();
                         if count >= trace_from {
-                            eprintln!("[{}] FORWARD to stvec=0x{:08X} scause=0x{:08X} sepc=0x{:08X}", 
-                                count, stvec, mcause, vm.cpu.csr.mepc);
+                            eprintln!(
+                                "[{}] FORWARD to stvec=0x{:08X} scause=0x{:08X} sepc=0x{:08X}",
+                                count, stvec, mcause, vm.cpu.csr.mepc
+                            );
                         }
                         count += 1;
                         continue;
@@ -74,11 +84,16 @@ fn main() {
 
             if cause_code == csr::CAUSE_ECALL_M {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -105,7 +120,16 @@ fn main() {
             let satp = vm.cpu.csr.satp;
             let sum = (vm.cpu.csr.mstatus >> 19) & 1 != 0;
             let mxr = (vm.cpu.csr.mstatus >> 19) & 1 != 0;
-            let inst_str = match mmu::translate(pc, mmu::AccessType::Fetch, vm.cpu.privilege, sum, mxr, satp, &mut vm.bus, &mut vm.cpu.tlb) {
+            let inst_str = match mmu::translate(
+                pc,
+                mmu::AccessType::Fetch,
+                vm.cpu.privilege,
+                sum,
+                mxr,
+                satp,
+                &mut vm.bus,
+                &mut vm.cpu.tlb,
+            ) {
                 mmu::TranslateResult::Ok(pa) => {
                     match vm.bus.read_half(pa) {
                         Ok(hw) => {
@@ -120,18 +144,20 @@ fn main() {
                         }
                         Err(_) => "???".into(),
                     }
-                },
+                }
                 _ => "FAULT".into(),
             };
-            
+
             // Log key state changes
             let ra = vm.cpu.x[1];
             let sp = vm.cpu.x[2];
             let satp_val = vm.cpu.csr.satp;
-            
+
             if count <= 177_350 || count % 100 == 0 || ra >= 0x3FFF0000 {
-                eprintln!("[{}] PC=0x{:08X} {} inst={} ra=0x{:08X} sp=0x{:08X} SATP=0x{:08X}", 
-                    count, pc, priv_name, inst_str, ra, sp, satp_val);
+                eprintln!(
+                    "[{}] PC=0x{:08X} {} inst={} ra=0x{:08X} sp=0x{:08X} SATP=0x{:08X}",
+                    count, pc, priv_name, inst_str, ra, sp, satp_val
+                );
             }
         }
 
@@ -140,8 +166,10 @@ fn main() {
 
         if let geometry_os::riscv::cpu::StepResult::FetchFault = step_result {
             if count >= trace_from {
-                eprintln!("[{}] *** FETCH FAULT *** PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X}", 
-                    count, vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.stval);
+                eprintln!(
+                    "[{}] *** FETCH FAULT *** PC=0x{:08X} sepc=0x{:08X} stval=0x{:08X}",
+                    count, vm.cpu.pc, vm.cpu.csr.sepc, vm.cpu.csr.stval
+                );
                 // Dump all regs
                 for i in 0..32 {
                     eprintln!("  x{}=0x{:08X}", i, vm.cpu.x[i]);

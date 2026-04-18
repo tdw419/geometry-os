@@ -9,7 +9,11 @@ fn main() {
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
 
     let result = geometry_os::riscv::RiscvVm::boot_linux(
-        &kernel_image, initramfs.as_deref(), 512, 2_000_000, bootargs,
+        &kernel_image,
+        initramfs.as_deref(),
+        512,
+        2_000_000,
+        bootargs,
     );
 
     match result {
@@ -35,8 +39,10 @@ fn main() {
             }
             eprintln!("[diag] Syscall log entries: {}", vm.bus.syscall_log.len());
             for (i, evt) in vm.bus.syscall_log.iter().take(10).enumerate() {
-                eprintln!("[syscall] #{}: {}({}) = {:?} at PC=0x{:08X}",
-                    i, evt.name, evt.nr, evt.ret, evt.pc);
+                eprintln!(
+                    "[syscall] #{}: {}({}) = {:?} at PC=0x{:08X}",
+                    i, evt.name, evt.nr, evt.ret, evt.pc
+                );
             }
             // Check what instruction is at current PC
             let inst = vm.bus.read_word(vm.cpu.pc as u64).unwrap_or(0);

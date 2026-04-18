@@ -97,14 +97,24 @@ fn test_rv32_sra() {
 
 #[test]
 fn test_rv32_or() {
-    let mut vm = test_vm(&[addi(1, 0, 0xF0), addi(2, 0, 0x0F), or_inst(3, 1, 2), ecall()]);
+    let mut vm = test_vm(&[
+        addi(1, 0, 0xF0),
+        addi(2, 0, 0x0F),
+        or_inst(3, 1, 2),
+        ecall(),
+    ]);
     run(&mut vm, 100);
     assert_eq!(vm.cpu.x[3], 0xFF);
 }
 
 #[test]
 fn test_rv32_and() {
-    let mut vm = test_vm(&[addi(1, 0, 0xFF), addi(2, 0, 0x0F), and_inst(3, 1, 2), ecall()]);
+    let mut vm = test_vm(&[
+        addi(1, 0, 0xFF),
+        addi(2, 0, 0x0F),
+        and_inst(3, 1, 2),
+        ecall(),
+    ]);
     run(&mut vm, 100);
     assert_eq!(vm.cpu.x[3], 0x0F);
 }
@@ -277,9 +287,9 @@ fn test_rv32_beq_taken() {
     let mut vm = test_vm(&[
         addi(1, 0, 5),
         addi(2, 0, 5),
-        beq(1, 2, 8),   // taken
-        addi(3, 0, 0),  // skipped
-        addi(3, 0, 0),  // skipped
+        beq(1, 2, 8),  // taken
+        addi(3, 0, 0), // skipped
+        addi(3, 0, 0), // skipped
         addi(4, 0, 42),
         ecall(),
     ]);
@@ -321,7 +331,7 @@ fn test_rv32_blt_signed() {
     let mut vm = test_vm(&[
         addi(1, 0, -5i32 as i32),
         addi(2, 0, 3),
-        blt(1, 2, 8),   // -5 < 3 signed -> taken
+        blt(1, 2, 8), // -5 < 3 signed -> taken
         addi(3, 0, 0),
         addi(3, 0, 0),
         addi(4, 0, 1),
@@ -336,7 +346,7 @@ fn test_rv32_bge_not_taken_signed() {
     let mut vm = test_vm(&[
         addi(1, 0, -1i32 as i32),
         addi(2, 0, 1),
-        bge(1, 2, 8),   // -1 >= 1? No -> not taken
+        bge(1, 2, 8), // -1 >= 1? No -> not taken
         addi(3, 0, 42),
         addi(4, 0, 0),
         ecall(),
@@ -350,7 +360,7 @@ fn test_rv32_bgeu() {
     let mut vm = test_vm(&[
         addi(1, 0, -1i32 as i32),
         addi(2, 0, 1),
-        bgeu(1, 2, 8),  // 0xFFFFFFFF >= 1 unsigned -> taken
+        bgeu(1, 2, 8), // 0xFFFFFFFF >= 1 unsigned -> taken
         addi(3, 0, 0),
         addi(3, 0, 0),
         addi(4, 0, 42),
@@ -365,7 +375,7 @@ fn test_rv32_bltu() {
     let mut vm = test_vm(&[
         addi(1, 0, 1),
         addi(2, 0, -1i32 as i32),
-        bltu(1, 2, 8),  // 1 < 0xFFFFFFFF unsigned -> taken
+        bltu(1, 2, 8), // 1 < 0xFFFFFFFF unsigned -> taken
         addi(3, 0, 0),
         addi(3, 0, 0),
         addi(4, 0, 42),
@@ -400,7 +410,7 @@ fn test_rv32_sb_lb_sign_extend() {
         auipc(2, 0x0),
         addi(2, 2, 100),
         sb(1, 2, 0),
-        lb(3, 2, 0),      // sign-extended -> 0xFFFFFFFE
+        lb(3, 2, 0), // sign-extended -> 0xFFFFFFFE
         ecall(),
     ]);
     run(&mut vm, 100);
@@ -427,8 +437,8 @@ fn test_rv32_sh_lh_sign_extend() {
         addi(1, 0, -1), // 0xFFFFFFFF
         auipc(2, 0x0),
         addi(2, 2, 100),
-        sh(1, 2, 0),    // store 0xFFFF
-        lh(3, 2, 0),    // sign-extended -> 0xFFFFFFFF
+        sh(1, 2, 0), // store 0xFFFF
+        lh(3, 2, 0), // sign-extended -> 0xFFFFFFFF
         ecall(),
     ]);
     run(&mut vm, 100);
@@ -442,7 +452,7 @@ fn test_rv32_lhu() {
         auipc(2, 0x0),
         addi(2, 2, 100),
         sh(1, 2, 0),
-        lhu(3, 2, 0),   // unsigned -> 0x0000FFFF
+        lhu(3, 2, 0), // unsigned -> 0x0000FFFF
         ecall(),
     ]);
     run(&mut vm, 100);
@@ -456,7 +466,7 @@ fn test_rv32_lbu() {
         auipc(2, 0x0),
         addi(2, 2, 100),
         sb(1, 2, 0),
-        lbu(3, 2, 0),   // unsigned -> 0xFE
+        lbu(3, 2, 0), // unsigned -> 0xFE
         ecall(),
     ]);
     run(&mut vm, 100);
@@ -524,4 +534,3 @@ fn test_rv32_x0_load() {
     run(&mut vm, 100);
     assert_eq!(vm.cpu.x[0], 0);
 }
-

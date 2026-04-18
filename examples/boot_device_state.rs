@@ -1,6 +1,5 @@
 /// Diagnostic: count ALL writes in device MMIO ranges.
 /// This tells us if the kernel is trying to access any devices.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -32,20 +31,30 @@ fn main() {
     // Actually, let me just run and check the UART/clint state afterward.
 
     while count < max {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let cause_code = vm.cpu.csr.mcause & !(1u32 << 31);
             if cause_code == 9 || cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
-                    vm.cpu.x[10] = a0; vm.cpu.x[11] = a1;
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
                 }
             } else {
                 let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
@@ -72,11 +81,19 @@ fn main() {
 
     // Check device state
     println!("=== After {} instructions ===", count);
-    println!("UART: ier={} lcr={} lsr=0x{:02X} mcr={} fcr={}",
-        vm.bus.uart.ier, vm.bus.uart.lcr, vm.bus.uart.lsr,
-        vm.bus.uart.mcr, vm.bus.uart.fcr);
+    println!(
+        "UART: ier={} lcr={} lsr=0x{:02X} mcr={} fcr={}",
+        vm.bus.uart.ier, vm.bus.uart.lcr, vm.bus.uart.lsr, vm.bus.uart.mcr, vm.bus.uart.fcr
+    );
     println!("UART tx_buf: {} chars", vm.bus.uart.tx_buf.len());
-    println!("PC=0x{:08X} priv={:?} SATP=0x{:08X}", vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp);
-    println!("SIE={} STVEC=0x{:08X} MEDELEG=0x{:08X}",
-        (vm.cpu.csr.mstatus >> 1) & 1, vm.cpu.csr.stvec, vm.cpu.csr.medeleg);
+    println!(
+        "PC=0x{:08X} priv={:?} SATP=0x{:08X}",
+        vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp
+    );
+    println!(
+        "SIE={} STVEC=0x{:08X} MEDELEG=0x{:08X}",
+        (vm.cpu.csr.mstatus >> 1) & 1,
+        vm.cpu.csr.stvec,
+        vm.cpu.csr.medeleg
+    );
 }

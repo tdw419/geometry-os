@@ -66,9 +66,9 @@ impl RiscvCpu {
             | Operation::Lhu { .. } => self.execute_load(op, bus, next_pc),
 
             // ---- Stores (delegate to loadstore.rs) ----
-            Operation::Sb { .. }
-            | Operation::Sh { .. }
-            | Operation::Sw { .. } => self.execute_store(op, bus, next_pc),
+            Operation::Sb { .. } | Operation::Sh { .. } | Operation::Sw { .. } => {
+                self.execute_store(op, bus, next_pc)
+            }
 
             // ---- ALU: R-type + I-type + M extension (delegate to alu.rs) ----
             Operation::Add { .. }

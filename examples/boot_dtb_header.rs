@@ -9,12 +9,14 @@ fn main() {
     let ir_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
     let initramfs_data = if std::path::Path::new(ir_path).exists() {
         Some(std::fs::read(ir_path).unwrap())
-    } else { None };
+    } else {
+        None
+    };
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, _fw, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_data, initramfs_data.as_deref(), 512, bootargs,
-    ).expect("boot_linux_setup failed");
+    let (mut vm, _fw, _entry, dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_data, initramfs_data.as_deref(), 512, bootargs)
+            .expect("boot_linux_setup failed");
 
     // Read DTB header from PA
     let pa = dtb_addr as u64;
@@ -67,25 +69,28 @@ fn main() {
     for i in 0..10 {
         let entry_addr = u64::from_be_bytes([
             vm.bus.read_byte(addr).unwrap_or(0),
-            vm.bus.read_byte(addr+1).unwrap_or(0),
-            vm.bus.read_byte(addr+2).unwrap_or(0),
-            vm.bus.read_byte(addr+3).unwrap_or(0),
-            vm.bus.read_byte(addr+4).unwrap_or(0),
-            vm.bus.read_byte(addr+5).unwrap_or(0),
-            vm.bus.read_byte(addr+6).unwrap_or(0),
-            vm.bus.read_byte(addr+7).unwrap_or(0),
+            vm.bus.read_byte(addr + 1).unwrap_or(0),
+            vm.bus.read_byte(addr + 2).unwrap_or(0),
+            vm.bus.read_byte(addr + 3).unwrap_or(0),
+            vm.bus.read_byte(addr + 4).unwrap_or(0),
+            vm.bus.read_byte(addr + 5).unwrap_or(0),
+            vm.bus.read_byte(addr + 6).unwrap_or(0),
+            vm.bus.read_byte(addr + 7).unwrap_or(0),
         ]);
         let entry_size = u64::from_be_bytes([
-            vm.bus.read_byte(addr+8).unwrap_or(0),
-            vm.bus.read_byte(addr+9).unwrap_or(0),
-            vm.bus.read_byte(addr+10).unwrap_or(0),
-            vm.bus.read_byte(addr+11).unwrap_or(0),
-            vm.bus.read_byte(addr+12).unwrap_or(0),
-            vm.bus.read_byte(addr+13).unwrap_or(0),
-            vm.bus.read_byte(addr+14).unwrap_or(0),
-            vm.bus.read_byte(addr+15).unwrap_or(0),
+            vm.bus.read_byte(addr + 8).unwrap_or(0),
+            vm.bus.read_byte(addr + 9).unwrap_or(0),
+            vm.bus.read_byte(addr + 10).unwrap_or(0),
+            vm.bus.read_byte(addr + 11).unwrap_or(0),
+            vm.bus.read_byte(addr + 12).unwrap_or(0),
+            vm.bus.read_byte(addr + 13).unwrap_or(0),
+            vm.bus.read_byte(addr + 14).unwrap_or(0),
+            vm.bus.read_byte(addr + 15).unwrap_or(0),
         ]);
-        eprintln!("  [{}] addr=0x{:016X} size=0x{:016X}", i, entry_addr, entry_size);
+        eprintln!(
+            "  [{}] addr=0x{:016X} size=0x{:016X}",
+            i, entry_addr, entry_size
+        );
         if entry_addr == 0 && entry_size == 0 {
             eprintln!("  (terminator)");
             break;
@@ -99,9 +104,9 @@ fn main() {
     for i in 0..20 {
         let token = u32::from_be_bytes([
             vm.bus.read_byte(saddr).unwrap_or(0),
-            vm.bus.read_byte(saddr+1).unwrap_or(0),
-            vm.bus.read_byte(saddr+2).unwrap_or(0),
-            vm.bus.read_byte(saddr+3).unwrap_or(0),
+            vm.bus.read_byte(saddr + 1).unwrap_or(0),
+            vm.bus.read_byte(saddr + 2).unwrap_or(0),
+            vm.bus.read_byte(saddr + 3).unwrap_or(0),
         ]);
         let name: String = match token {
             0x00000001 => "FDT_BEGIN_NODE".into(),
@@ -109,10 +114,21 @@ fn main() {
             0x00000003 => "FDT_PROP".into(),
             0x00000004 => "FDT_NOP".into(),
             0x00000009 => "FDT_END".into(),
-            _ => if token & 0xFF000000 == 0 { format!("string: {:?}", String::from_utf8_lossy(&token.to_be_bytes()).trim_end_matches('\0')) } else { format!("0x{:08X}", token) },
+            _ => {
+                if token & 0xFF000000 == 0 {
+                    format!(
+                        "string: {:?}",
+                        String::from_utf8_lossy(&token.to_be_bytes()).trim_end_matches('\0')
+                    )
+                } else {
+                    format!("0x{:08X}", token)
+                }
+            }
         };
         eprintln!("  [{}] 0x{:08X} = {}", i, token, name);
         saddr += 4;
-        if token == 0x00000009 { break; }
+        if token == 0x00000009 {
+            break;
+        }
     }
 }

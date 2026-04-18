@@ -1,6 +1,5 @@
 /// Diagnostic: count ALL S-mode faults over 5M instructions.
 /// Also count unique faulting addresses to understand the pattern.
-
 use geometry_os::riscv::RiscvVm;
 use std::collections::HashSet;
 
@@ -30,16 +29,23 @@ fn main() {
         }
 
         // Handle M-mode trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -77,8 +83,10 @@ fn main() {
         if vm.cpu.ecall_count > prev_ecall {
             ecall_count += 1;
             if ecall_count <= 5 {
-                println!("[ecall #{}] count={} PC=0x{:08X} a7=0x{:X} a0=0x{:X}",
-                    ecall_count, count, vm.cpu.pc, vm.cpu.x[17], vm.cpu.x[10]);
+                println!(
+                    "[ecall #{}] count={} PC=0x{:08X} a7=0x{:X} a0=0x{:X}",
+                    ecall_count, count, vm.cpu.pc, vm.cpu.x[17], vm.cpu.x[10]
+                );
             }
         }
 
@@ -92,8 +100,10 @@ fn main() {
             fault_addrs.insert(vm.cpu.csr.stval);
 
             if fault_count <= 10 {
-                println!("[fault #{}] count={} scause={} sepc=0x{:08X} stval=0x{:08X}",
-                    fault_count, count, cause, vm.cpu.csr.sepc, vm.cpu.csr.stval);
+                println!(
+                    "[fault #{}] count={} scause={} sepc=0x{:08X} stval=0x{:08X}",
+                    fault_count, count, cause, vm.cpu.csr.sepc, vm.cpu.csr.stval
+                );
             }
         }
 
@@ -108,17 +118,34 @@ fn main() {
     println!("SBI console: {} chars", vm.bus.sbi.console_output.len());
 
     println!("\nFault causes:");
-    let cause_names = ["insn_misaligned", "insn_access", "illegal_insn", "breakpoint",
-        "load_misaligned", "load_access", "store_misaligned", "store_access",
-        "ecall_u", "ecall_s", "ecall_m", "insn_page_fault",
-        "load_page_fault", "store_page_fault", "reserved14", "reserved15"];
+    let cause_names = [
+        "insn_misaligned",
+        "insn_access",
+        "illegal_insn",
+        "breakpoint",
+        "load_misaligned",
+        "load_access",
+        "store_misaligned",
+        "store_access",
+        "ecall_u",
+        "ecall_s",
+        "ecall_m",
+        "insn_page_fault",
+        "load_page_fault",
+        "store_page_fault",
+        "reserved14",
+        "reserved15",
+    ];
     for i in 0..16 {
         if fault_causes[i] > 0 {
             println!("  cause {} ({}): {}", i, cause_names[i], fault_causes[i]);
         }
     }
 
-    println!("\nUnique faulting addresses (stval): {} total", fault_addrs.len());
+    println!(
+        "\nUnique faulting addresses (stval): {} total",
+        fault_addrs.len()
+    );
     let mut sorted: Vec<_> = fault_addrs.iter().collect();
     sorted.sort();
     for &addr in &sorted {

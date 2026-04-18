@@ -1,6 +1,5 @@
 /// Dump the page table at early_pg_dir (PA 0x00802000) to see what's actually mapped.
 /// Also check the boot page table and the kernel's setup_vm output.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -17,8 +16,10 @@ fn main() {
     // After setup, dump the boot page table
     let boot_pt_ppn = vm.cpu.csr.satp & 0x3FFFFF;
     let boot_pt_phys = (boot_pt_ppn as u64) << 12;
-    eprintln!("=== Boot page table (SATAP=0x{:08X}, PPN=0x{:06X}, PA=0x{:08X}) ===",
-        vm.cpu.csr.satp, boot_pt_ppn, boot_pt_phys);
+    eprintln!(
+        "=== Boot page table (SATAP=0x{:08X}, PPN=0x{:06X}, PA=0x{:08X}) ===",
+        vm.cpu.csr.satp, boot_pt_ppn, boot_pt_phys
+    );
 
     eprintln!("\nBoot PT L1[0..10] (identity mapping):");
     for i in 0..10 {
@@ -29,8 +30,18 @@ fn main() {
         let x = (val >> 3) & 1;
         let u = (val >> 4) & 1;
         let ppn = (val >> 10) & 0xFFF_FFFF;
-        eprintln!("  L1[{}] = 0x{:08X}  V={} R={} W={} X={} U={} PPN=0x{:06X} -> PA 0x{:08X}",
-            i, val, v, r, w, x, u, ppn, ppn << 12);
+        eprintln!(
+            "  L1[{}] = 0x{:08X}  V={} R={} W={} X={} U={} PPN=0x{:06X} -> PA 0x{:08X}",
+            i,
+            val,
+            v,
+            r,
+            w,
+            x,
+            u,
+            ppn,
+            ppn << 12
+        );
     }
 
     eprintln!("\nBoot PT L1[768..776] (kernel VA 0xC0000000+):");
@@ -42,8 +53,18 @@ fn main() {
         let x = (val >> 3) & 1;
         let u = (val >> 4) & 1;
         let ppn = (val >> 10) & 0xFFF_FFFF;
-        eprintln!("  L1[{}] = 0x{:08X}  V={} R={} W={} X={} U={} PPN=0x{:06X} -> PA 0x{:08X}",
-            i, val, v, r, w, x, u, ppn, ppn << 12);
+        eprintln!(
+            "  L1[{}] = 0x{:08X}  V={} R={} W={} X={} U={} PPN=0x{:06X} -> PA 0x{:08X}",
+            i,
+            val,
+            v,
+            r,
+            w,
+            x,
+            u,
+            ppn,
+            ppn << 12
+        );
     }
 
     // Now run until the kernel switches to early_pg_dir
@@ -52,34 +73,62 @@ fn main() {
     let mut last_satp: u32 = vm.cpu.csr.satp;
 
     while count < 200_000 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("\n[{}] SATP changed: 0x{:08X} -> 0x{:08X} (PC=0x{:08X})",
-                count, last_satp, cur_satp, vm.cpu.pc);
+            eprintln!(
+                "\n[{}] SATP changed: 0x{:08X} -> 0x{:08X} (PC=0x{:08X})",
+                count, last_satp, cur_satp, vm.cpu.pc
+            );
 
             // Dump the new page table root
             let new_ppn = cur_satp & 0x3FFFFF;
             let new_phys = (new_ppn as u64) << 12;
             eprintln!("New page table at PA 0x{:08X}:", new_phys);
-            eprintln!("  L1[768] = 0x{:08X}", vm.bus.read_word(new_phys + 768 * 4).unwrap_or(0));
-            eprintln!("  L1[769] = 0x{:08X}", vm.bus.read_word(new_phys + 769 * 4).unwrap_or(0));
-            eprintln!("  L1[770] = 0x{:08X}", vm.bus.read_word(new_phys + 770 * 4).unwrap_or(0));
-            eprintln!("  L1[0]   = 0x{:08X}", vm.bus.read_word(new_phys + 0 * 4).unwrap_or(0));
-            eprintln!("  L1[1]   = 0x{:08X}", vm.bus.read_word(new_phys + 1 * 4).unwrap_or(0));
-            eprintln!("  L1[2]   = 0x{:08X}", vm.bus.read_word(new_phys + 2 * 4).unwrap_or(0));
+            eprintln!(
+                "  L1[768] = 0x{:08X}",
+                vm.bus.read_word(new_phys + 768 * 4).unwrap_or(0)
+            );
+            eprintln!(
+                "  L1[769] = 0x{:08X}",
+                vm.bus.read_word(new_phys + 769 * 4).unwrap_or(0)
+            );
+            eprintln!(
+                "  L1[770] = 0x{:08X}",
+                vm.bus.read_word(new_phys + 770 * 4).unwrap_or(0)
+            );
+            eprintln!(
+                "  L1[0]   = 0x{:08X}",
+                vm.bus.read_word(new_phys + 0 * 4).unwrap_or(0)
+            );
+            eprintln!(
+                "  L1[1]   = 0x{:08X}",
+                vm.bus.read_word(new_phys + 1 * 4).unwrap_or(0)
+            );
+            eprintln!(
+                "  L1[2]   = 0x{:08X}",
+                vm.bus.read_word(new_phys + 2 * 4).unwrap_or(0)
+            );
 
             // Check what the identity injection did
             let l1_0_val = vm.bus.read_word(new_phys).unwrap_or(0);
-            eprintln!("  L1[0] V={} R={} PPN=0x{:06X}",
-                l1_0_val & 1, (l1_0_val >> 1) & 1, (l1_0_val >> 10) & 0xFFF_FFFF);
+            eprintln!(
+                "  L1[0] V={} R={} PPN=0x{:06X}",
+                l1_0_val & 1,
+                (l1_0_val >> 1) & 1,
+                (l1_0_val >> 10) & 0xFFF_FFFF
+            );
 
             last_satp = cur_satp;
         }
 
         // Trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             // Skip trap forwarding for now
         }
 
@@ -104,8 +153,15 @@ fn main() {
         let v = (val >> 0) & 1;
         let r = (val >> 1) & 1;
         let ppn = (val >> 10) & 0xFFF_FFFF;
-        eprintln!("  L1[{}] = 0x{:08X}  V={} R={} PPN=0x{:06X} -> PA 0x{:08X}",
-            i, val, v, r, ppn, ppn << 12);
+        eprintln!(
+            "  L1[{}] = 0x{:08X}  V={} R={} PPN=0x{:06X} -> PA 0x{:08X}",
+            i,
+            val,
+            v,
+            r,
+            ppn,
+            ppn << 12
+        );
     }
 
     // Check what PA 0xC000308Au32 actually maps to through the current SATP
@@ -115,7 +171,10 @@ fn main() {
     let offset = 0xC000308Au32 & 0xFFF;
     eprintln!("VPN1={}, VPN0={}, offset={}", vpn1, vpn0, offset);
 
-    let l1_pte = vm.bus.read_word(final_phys + (vpn1 as u64) * 4).unwrap_or(0);
+    let l1_pte = vm
+        .bus
+        .read_word(final_phys + (vpn1 as u64) * 4)
+        .unwrap_or(0);
     eprintln!("L1[{}] = 0x{:08X}", vpn1, l1_pte);
     let l1_v = l1_pte & 1;
     let l1_ppn = (l1_pte >> 10) & 0xFFF_FFFF;

@@ -1,8 +1,7 @@
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 /// Diagnostic: Log the first 50 S-mode faults in detail.
 /// Also track when/how many faults happen.
-
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -34,17 +33,25 @@ fn main() {
             if cause_code == 11 {
                 // ECALL_M -> SBI
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
                     vm.cpu.x[11] = a1;
                 }
-                println!("[diag] SBI ecall_m at count={} mepc=0x{:08X}", count, vm.cpu.csr.mepc);
+                println!(
+                    "[diag] SBI ecall_m at count={} mepc=0x{:08X}",
+                    count, vm.cpu.csr.mepc
+                );
             } else {
                 let mpp = (vm.cpu.csr.mstatus & 0x1800) >> 11;
                 if mpp != 3 {
@@ -72,8 +79,10 @@ fn main() {
         // SATP change detection + fixup (matching boot_linux)
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            println!("[diag] SATP change: 0x{:08X} -> 0x{:08X} at count={} PC=0x{:08X}",
-                last_satp, cur_satp, count, vm.cpu.pc);
+            println!(
+                "[diag] SATP change: 0x{:08X} -> 0x{:08X} at count={} PC=0x{:08X}",
+                last_satp, cur_satp, count, vm.cpu.pc
+            );
 
             let mode = (cur_satp >> 31) & 1;
             if mode == 1 {
@@ -90,7 +99,9 @@ fn main() {
                 for i in 0..1024u32 {
                     let l1_addr = pg_dir_phys + (i as u64) * 4;
                     if let Ok(l1_pte) = vm.bus.read_word(l1_addr) {
-                        if (l1_pte & PTE_V) == 0 { continue; }
+                        if (l1_pte & PTE_V) == 0 {
+                            continue;
+                        }
                         let l1_ppn = (l1_pte & PPN_MASK) >> 10;
                         if l1_ppn >= PAGE_OFFSET_PPN {
                             let fixed_ppn = l1_ppn - PAGE_OFFSET_PPN;
@@ -109,7 +120,9 @@ fn main() {
                                 for j in 0..1024u32 {
                                     let l2_addr = l2_base + (j as u64) * 4;
                                     if let Ok(l2_pte) = vm.bus.read_word(l2_addr) {
-                                        if (l2_pte & PTE_V) == 0 { continue; }
+                                        if (l2_pte & PTE_V) == 0 {
+                                            continue;
+                                        }
                                         let l2_ppn = (l2_pte & PPN_MASK) >> 10;
                                         if l2_ppn >= PAGE_OFFSET_PPN {
                                             let fixed = l2_ppn - PAGE_OFFSET_PPN;
@@ -125,22 +138,30 @@ fn main() {
 
                 // Inject identity mappings
                 let identity_pte: u32 = 0x0000_00CF;
-                let l1_entries_to_map: &[u32] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                    16, 32, 48, 64, 80, 96, 112, 127];
+                let l1_entries_to_map: &[u32] = &[
+                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 32, 48, 64, 80, 96, 112, 127,
+                ];
                 let l1_0_val = vm.bus.read_word(pg_dir_phys).unwrap_or(0);
                 let already_patched = (l1_0_val & 0xCF) == 0xCF && ((l1_0_val >> 20) & 0xFFF) == 0;
                 if !already_patched {
                     for &l1_idx in l1_entries_to_map {
                         let pte = identity_pte | (l1_idx << 20);
-                        vm.bus.write_word(pg_dir_phys + (l1_idx * 4) as u64, pte).ok();
+                        vm.bus
+                            .write_word(pg_dir_phys + (l1_idx * 4) as u64, pte)
+                            .ok();
                     }
                     // Kernel VA range: L1[776] -> PA 0x200000
                     let existing = vm.bus.read_word(pg_dir_phys + 776 * 4).unwrap_or(0);
                     if (existing & 1) == 0 {
-                        vm.bus.write_word(pg_dir_phys + 776 * 4, identity_pte | (8u32 << 20)).ok();
+                        vm.bus
+                            .write_word(pg_dir_phys + 776 * 4, identity_pte | (8u32 << 20))
+                            .ok();
                     }
                     vm.cpu.tlb.flush_all();
-                    println!("[diag] Injected identity mappings at pg_dir PA 0x{:08X}", pg_dir_phys);
+                    println!(
+                        "[diag] Injected identity mappings at pg_dir PA 0x{:08X}",
+                        pg_dir_phys
+                    );
                 }
             }
             last_satp = cur_satp;
@@ -176,14 +197,22 @@ fn main() {
         count += 1;
 
         if count % 5_000_000 == 0 {
-            println!("[diag] count={} PC=0x{:08X} ecall={} faults={} sbi_console={} uart={}",
-                count, vm.cpu.pc, vm.cpu.ecall_count, fault_count,
-                vm.bus.sbi.console_output.len(), vm.bus.uart.tx_buf.len());
+            println!(
+                "[diag] count={} PC=0x{:08X} ecall={} faults={} sbi_console={} uart={}",
+                count,
+                vm.cpu.pc,
+                vm.cpu.ecall_count,
+                fault_count,
+                vm.bus.sbi.console_output.len(),
+                vm.bus.uart.tx_buf.len()
+            );
         }
     }
 
-    println!("\n[diag] Final: count={} PC=0x{:08X} ecall={} faults={}",
-        count, vm.cpu.pc, vm.cpu.ecall_count, fault_count);
+    println!(
+        "\n[diag] Final: count={} PC=0x{:08X} ecall={} faults={}",
+        count, vm.cpu.pc, vm.cpu.ecall_count, fault_count
+    );
     if !vm.bus.sbi.console_output.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
         println!("[diag] SBI output:\n{}", s);

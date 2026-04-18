@@ -1,7 +1,7 @@
+use geometry_os::riscv::cpu::{Privilege, StepResult};
+use geometry_os::riscv::csr;
 /// Check what's on the kernel stack at the time of the fault
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
-use geometry_os::riscv::csr;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -18,24 +18,48 @@ fn main() {
     let max_count = 178_500u64;
     let mut count: u64 = 0;
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == csr::CAUSE_ECALL_M {
                 let r = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint);
-                if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
+                );
+                if let Some((a0, a1)) = r {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
             } else {
                 let mpp = (vm.cpu.csr.mstatus & csr::MSTATUS_MPP_MASK) >> csr::MSTATUS_MPP_LSB;
                 if cause_code == csr::CAUSE_ECALL_S {
                     let r = vm.bus.sbi.handle_ecall(
-                        vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint);
-                    if let Some((a0, a1)) = r { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
+                    );
+                    if let Some((a0, a1)) = r {
+                        vm.cpu.x[10] = a0;
+                        vm.cpu.x[11] = a1;
+                    }
                 } else if mpp != 3 {
                     let stvec = vm.cpu.csr.stvec & !0x3u32;
                     if stvec != 0 {
@@ -43,9 +67,11 @@ fn main() {
                         vm.cpu.csr.scause = mcause;
                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP)) | (spp << csr::MSTATUS_SPP);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                            | (spp << csr::MSTATUS_SPP);
                         let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
-                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE)) | (sie << csr::MSTATUS_SPIE);
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                            | (sie << csr::MSTATUS_SPIE);
                         vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
                         vm.cpu.pc = stvec;
                         vm.cpu.privilege = Privilege::Supervisor;
@@ -64,9 +90,12 @@ fn main() {
     }
 
     eprintln!("=== State at count {} ===", count);
-    eprintln!("PC=0x{:08X} SP=0x{:08X} RA=0x{:08X}", vm.cpu.pc, vm.cpu.x[2], vm.cpu.x[1]);
+    eprintln!(
+        "PC=0x{:08X} SP=0x{:08X} RA=0x{:08X}",
+        vm.cpu.pc, vm.cpu.x[2], vm.cpu.x[1]
+    );
     eprintln!("S0=0x{:08X} (frame pointer)", vm.cpu.x[8]);
-    
+
     // Dump stack contents around SP
     let sp = vm.cpu.x[2];
     eprintln!("\nStack (SP=0x{:08X}):", sp);
@@ -78,8 +107,14 @@ fn main() {
         let addr = sp_pa.wrapping_add((offset as i64 * 4) as u64);
         let val = vm.bus.read_word(addr).unwrap_or(0);
         let marker = if offset == 0 { " <-- SP" } else { "" };
-        eprintln!("  [SP{:+3}] VA 0x{:08X} PA 0x{:08X} = 0x{:08X}{}", 
-            offset * 4, sp.wrapping_add((offset * 4) as u32), addr, val, marker);
+        eprintln!(
+            "  [SP{:+3}] VA 0x{:08X} PA 0x{:08X} = 0x{:08X}{}",
+            offset * 4,
+            sp.wrapping_add((offset * 4) as u32),
+            addr,
+            val,
+            marker
+        );
     }
 
     // Also dump around S0 (frame pointer)
@@ -91,11 +126,17 @@ fn main() {
         let val = vm.bus.read_word(addr).unwrap_or(0);
         let marker = if offset == 0 { " <-- S0" } else { "" };
         if val != 0 {
-            eprintln!("  [S0{:+3}] VA 0x{:08X} PA 0x{:08X} = 0x{:08X}{}", 
-                offset * 4, s0.wrapping_add((offset * 4) as u32), addr, val, marker);
+            eprintln!(
+                "  [S0{:+3}] VA 0x{:08X} PA 0x{:08X} = 0x{:08X}{}",
+                offset * 4,
+                s0.wrapping_add((offset * 4) as u32),
+                addr,
+                val,
+                marker
+            );
         }
     }
-    
+
     // The fault is at sepc=0x3FFFF000, which means RA=0x3FFFF000
     // Let's search for 0x3FFFF000 in the stack region
     eprintln!("\nSearching for 0x3FFFF000 in stack region (PA 0x14018000-0x14020000):");

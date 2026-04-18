@@ -6,13 +6,13 @@ fn main() {
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, _fw_addr, _entry, dtb_addr) =
-        RiscvVm::boot_linux_setup(
-            &kernel_image,
-            initramfs.as_deref(),
-            256,
-            "console=ttyS0 loglevel=8",
-        ).unwrap();
+    let (mut vm, _fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_image,
+        initramfs.as_deref(),
+        256,
+        "console=ttyS0 loglevel=8",
+    )
+    .unwrap();
 
     eprintln!("DTB at PA 0x{:08X}", dtb_addr);
 
@@ -36,7 +36,10 @@ fn main() {
         vm.bus.read_byte(dtb_addr + 11).unwrap(),
     ]);
 
-    eprintln!("magic=0x{:08X} totalsize={} struct_offset=0x{:X}", magic, totalsize, off_dt_struct);
+    eprintln!(
+        "magic=0x{:08X} totalsize={} struct_offset=0x{:X}",
+        magic, totalsize, off_dt_struct
+    );
 
     // Find the memory node by scanning for "memory" string
     let mut memory_reg_found = false;
@@ -60,7 +63,9 @@ fn main() {
             loop {
                 let b = vm.bus.read_byte(pos).unwrap();
                 pos += 1;
-                if b == 0 { break; }
+                if b == 0 {
+                    break;
+                }
                 if b >= 0x20 && b < 0x7f {
                     name.push(b as char);
                 }
@@ -108,7 +113,9 @@ fn main() {
                         loop {
                             let b = vm.bus.read_byte(name_pos).unwrap();
                             name_pos += 1;
-                            if b == 0 { break; }
+                            if b == 0 {
+                                break;
+                            }
                             if b >= 0x20 && b < 0x7f {
                                 prop_name.push(b as char);
                             }
@@ -124,7 +131,12 @@ fn main() {
                             }
                             let addr = u64::from_be_bytes(addr_parts);
                             let size = u64::from_be_bytes(size_parts);
-                            eprintln!("  reg: addr=0x{:08X} size=0x{:08X} ({}MB)", addr, size, size / (1024 * 1024));
+                            eprintln!(
+                                "  reg: addr=0x{:08X} size=0x{:08X} ({}MB)",
+                                addr,
+                                size,
+                                size / (1024 * 1024)
+                            );
                             memory_reg_found = true;
                         } else {
                             eprintln!("  prop \"{}\" len={}", prop_name, prop_len);

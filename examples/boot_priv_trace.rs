@@ -1,5 +1,4 @@
 /// Trace PC values between trampoline patch and first illegal instruction.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -23,7 +22,9 @@ fn main() {
     let mut trap_count: u64 = 0;
 
     while count < max_instructions {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if !trampoline_patched
             && vm.cpu.pc == 0x10EE
@@ -46,7 +47,9 @@ fn main() {
         let cur_satp = vm.cpu.csr.satp;
         last_satp = cur_satp;
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code != 11 {
@@ -67,8 +70,10 @@ fn main() {
                         vm.cpu.tlb.flush_all();
                         trap_count += 1;
                         if trap_count <= 3 {
-                            eprintln!("[trap#{}] count={} mepc=0x{:08X} cause={} mpp={}",
-                                trap_count, count, vm.cpu.csr.sepc, cause_code, mpp);
+                            eprintln!(
+                                "[trap#{}] count={} mepc=0x{:08X} cause={} mpp={}",
+                                trap_count, count, vm.cpu.csr.sepc, cause_code, mpp
+                            );
                         }
                         count += 1;
                         continue;
@@ -77,9 +82,16 @@ fn main() {
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             } else {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -91,22 +103,35 @@ fn main() {
         // Log first time we see User mode
         if first_user_pc.is_none() && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::User {
             first_user_pc = Some((count, vm.cpu.pc));
-            eprintln!("[user] First User mode at count={}, PC=0x{:08X}", count, vm.cpu.pc);
-            eprintln!("  x[10]=0x{:08X} x[11]=0x{:08X} x[1]=0x{:08X}", vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[1]);
+            eprintln!(
+                "[user] First User mode at count={}, PC=0x{:08X}",
+                count, vm.cpu.pc
+            );
+            eprintln!(
+                "  x[10]=0x{:08X} x[11]=0x{:08X} x[1]=0x{:08X}",
+                vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[1]
+            );
         }
 
         // Log privilege transitions
         if vm.cpu.privilege != geometry_os::riscv::cpu::Privilege::Supervisor
-            && count > 177200 && count < 177600
+            && count > 177200
+            && count < 177600
         {
             if count % 1000 == 0 {
-                eprintln!("[priv] count={} priv={:?} PC=0x{:08X}", count, vm.cpu.privilege, vm.cpu.pc);
+                eprintln!(
+                    "[priv] count={} priv={:?} PC=0x{:08X}",
+                    count, vm.cpu.privilege, vm.cpu.pc
+                );
             }
         }
 
         // Log when PC is at a low address (< 0x10000)
         if count > 177200 && vm.cpu.pc < 0x10000 {
-            eprintln!("[low] count={} priv={:?} PC=0x{:08X}", count, vm.cpu.privilege, vm.cpu.pc);
+            eprintln!(
+                "[low] count={} priv={:?} PC=0x{:08X}",
+                count, vm.cpu.privilege, vm.cpu.pc
+            );
         }
 
         last_pc = vm.cpu.pc;

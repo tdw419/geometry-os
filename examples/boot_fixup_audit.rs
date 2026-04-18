@@ -1,6 +1,5 @@
 /// Diagnostic: Check what the kernel's early_pg_dir looks like BEFORE and AFTER fixup.
 /// We'll manually walk the page table at PA 0x00802000.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -23,16 +22,23 @@ fn main() {
         }
 
         // Handle M-mode trap forwarding
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 11 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16],
-                    vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -66,7 +72,10 @@ fn main() {
         let cur_satp = vm.cpu.csr.satp;
         if count == 177330 {
             // Just before the SATP change to early_pg_dir
-            println!("[pre-fixup] count={} PC=0x{:08X} SATP=0x{:08X}", count, vm.cpu.pc, cur_satp);
+            println!(
+                "[pre-fixup] count={} PC=0x{:08X} SATP=0x{:08X}",
+                count, vm.cpu.pc, cur_satp
+            );
 
             // Read early_pg_dir BEFORE fixup (PA 0x00802000)
             println!("\n[pre-fixup] early_pg_dir at PA 0x00802000 (BEFORE fixup):");
@@ -80,10 +89,19 @@ fn main() {
                         let va_start = (i as u64) << 22;
                         let va_end = va_start | 0x3FFFFF;
                         let expected_ppn = if ppn >= 0xC0000 { ppn - 0xC0000 } else { ppn };
-                        println!("  L1[{:3}] VA 0x{:08X}-0x{:08X}: PTE=0x{:08X} PPN=0x{:05X} {} {}",
-                            i, va_start as u32, va_end as u32, pte, ppn,
+                        println!(
+                            "  L1[{:3}] VA 0x{:08X}-0x{:08X}: PTE=0x{:08X} PPN=0x{:05X} {} {}",
+                            i,
+                            va_start as u32,
+                            va_end as u32,
+                            pte,
+                            ppn,
                             if is_leaf { "(mega)" } else { "(L2)" },
-                            if ppn >= 0xC0000 { format!("NEEDS_FIXUP -> PPN=0x{:05X}", expected_ppn) } else { String::new() }
+                            if ppn >= 0xC0000 {
+                                format!("NEEDS_FIXUP -> PPN=0x{:05X}", expected_ppn)
+                            } else {
+                                String::new()
+                            }
                         );
                     }
                 }
@@ -94,7 +112,10 @@ fn main() {
 
         // After the fixup
         if count == 177335 {
-            println!("\n[post-fixup] count={} PC=0x{:08X} SATP=0x{:08X}", count, vm.cpu.pc, vm.cpu.csr.satp);
+            println!(
+                "\n[post-fixup] count={} PC=0x{:08X} SATP=0x{:08X}",
+                count, vm.cpu.pc, vm.cpu.csr.satp
+            );
             println!("[post-fixup] early_pg_dir at PA 0x00802000 (AFTER fixup):");
             let pg_dir_phys: u64 = 0x00802000;
             for i in 0..1024u32 {
@@ -105,9 +126,15 @@ fn main() {
                         let is_leaf = (pte & 0xE) != 0;
                         let va_start = (i as u64) << 22;
                         let va_end = va_start | 0x3FFFFF;
-                        println!("  L1[{:3}] VA 0x{:08X}-0x{:08X}: PTE=0x{:08X} PPN=0x{:05X} {}",
-                            i, va_start as u32, va_end as u32, pte, ppn,
-                            if is_leaf { "(mega)" } else { "(L2)" });
+                        println!(
+                            "  L1[{:3}] VA 0x{:08X}-0x{:08X}: PTE=0x{:08X} PPN=0x{:05X} {}",
+                            i,
+                            va_start as u32,
+                            va_end as u32,
+                            pte,
+                            ppn,
+                            if is_leaf { "(mega)" } else { "(L2)" }
+                        );
                     }
                 }
             }

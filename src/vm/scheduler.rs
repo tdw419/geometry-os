@@ -1,5 +1,5 @@
-use super::Vm;
 use super::types::*;
+use super::Vm;
 
 impl Vm {
     /// Run preemptive scheduler for all child processes.
@@ -34,7 +34,9 @@ impl Vm {
         });
         if all_exhausted {
             for proc in &mut procs {
-                if proc.is_halted() { continue; }
+                if proc.is_halted() {
+                    continue;
+                }
                 if proc.sleep_until > 0 && self.sched_tick < proc.sleep_until {
                     continue;
                 }
@@ -50,10 +52,14 @@ impl Vm {
 
         for idx in indices {
             let proc = &mut procs[idx];
-            if proc.is_halted() { continue; }
+            if proc.is_halted() {
+                continue;
+            }
 
             // Skip blocked processes (waiting for pipe data or message)
-            if proc.state == ProcessState::Blocked { continue; }
+            if proc.state == ProcessState::Blocked {
+                continue;
+            }
 
             // Skip sleeping processes whose sleep hasnt expired
             if proc.sleep_until > 0 && self.sched_tick < proc.sleep_until {
@@ -94,7 +100,11 @@ impl Vm {
             // Save process state back
             proc.pc = self.pc;
             proc.regs = self.regs;
-            proc.state = if !still_running || self.halted || self.segfault { ProcessState::Zombie } else { ProcessState::Ready };
+            proc.state = if !still_running || self.halted || self.segfault {
+                ProcessState::Zombie
+            } else {
+                ProcessState::Ready
+            };
             proc.mode = self.mode;
             proc.page_dir = self.current_page_dir.take();
             proc.vmas = std::mem::take(&mut self.current_vmas);
@@ -151,7 +161,7 @@ impl Vm {
         self.processes = procs;
     }
 
-        /// Count active (non-halted) child processes
+    /// Count active (non-halted) child processes
     #[allow(dead_code)]
     pub fn active_process_count(&self) -> usize {
         self.processes.iter().filter(|p| !p.is_halted()).count()

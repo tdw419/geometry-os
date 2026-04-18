@@ -27,9 +27,7 @@ pub(super) fn try_parse(
             if !((s.starts_with('"') && s.ends_with('"'))
                 || (s.starts_with('\'') && s.ends_with('\'')))
             {
-                return Err(
-                    "TEXTI requires a quoted string: TEXTI x, y, \"text\"".to_string(),
-                );
+                return Err("TEXTI requires a quoted string: TEXTI x, y, \"text\"".to_string());
             }
             let text = &s[1..s.len() - 1];
             bytecode.push(0x13);
@@ -54,9 +52,7 @@ pub(super) fn try_parse(
             if !((s.starts_with('"') && s.ends_with('"'))
                 || (s.starts_with('\'') && s.ends_with('\'')))
             {
-                return Err(
-                    "STRO requires a quoted string: STRO addr_reg, \"text\"".to_string(),
-                );
+                return Err("STRO requires a quoted string: STRO addr_reg, \"text\"".to_string());
             }
             let text = &s[1..s.len() - 1];
             bytecode.push(0x14);
@@ -105,10 +101,7 @@ pub(super) fn try_parse(
         "SHLI" | "SHRI" | "SARI" | "ADDI" | "SUBI" | "ANDI" | "ORI" | "XORI" => {
             if tokens.len() < 3 {
                 let name = opcode;
-                return Err(format!(
-                    "{} requires 2 arguments: {} reg, imm",
-                    name, name
-                ));
+                return Err(format!("{} requires 2 arguments: {} reg, imm", name, name));
             }
             let op_byte = match opcode {
                 "SHLI" => 0x18,

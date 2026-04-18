@@ -1,5 +1,4 @@
 /// Check page table mappings after 250K instructions of Linux boot.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -20,7 +19,9 @@ fn main() {
     let mut last_satp: u32 = 0;
 
     while count < max_instructions {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if !trampoline_patched
             && vm.cpu.pc == 0x10EE
@@ -48,9 +49,13 @@ fn main() {
             for l1_idx in 0..1024u64 {
                 let l1_addr = pt_base + l1_idx * 4;
                 let l1_pte = vm.bus.read_word(l1_addr).unwrap_or(0);
-                if l1_pte == 0 { continue; }
+                if l1_pte == 0 {
+                    continue;
+                }
                 let is_leaf = (l1_pte & 0xE) != 0;
-                if !is_leaf { continue; }
+                if !is_leaf {
+                    continue;
+                }
                 let ppn_hi = ((l1_pte >> 20) & 0xFFF) as u32;
                 let flags = (l1_pte & 0xFF) as u32;
                 for vpn0 in 0..512u32 {
@@ -62,7 +67,9 @@ fn main() {
         }
         last_satp = cur_satp;
 
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code != 11 {
@@ -88,9 +95,16 @@ fn main() {
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             } else {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0_val, a1_val)) = result {
                     vm.cpu.x[10] = a0_val;
@@ -103,7 +117,10 @@ fn main() {
         count += 1;
     }
 
-    eprintln!("Final state: PC=0x{:08X} SATP=0x{:08X}", vm.cpu.pc, vm.cpu.csr.satp);
+    eprintln!(
+        "Final state: PC=0x{:08X} SATP=0x{:08X}",
+        vm.cpu.pc, vm.cpu.csr.satp
+    );
 
     // Manual page table walk
     let satp = vm.cpu.csr.satp;
@@ -112,8 +129,12 @@ fn main() {
     let asid = ((satp >> 22) & 0x1FF) as u16;
 
     let check_vas = [
-        0xC003CEE4u32, 0xC0000000u32, 0xC0001000u32, 0xC0001084u32,
-        0xC0210F14u32, 0xC00010EEu32,
+        0xC003CEE4u32,
+        0xC0000000u32,
+        0xC0001000u32,
+        0xC0001084u32,
+        0xC0210F14u32,
+        0xC00010EEu32,
     ];
 
     for va in &check_vas {
@@ -127,8 +148,10 @@ fn main() {
         let l1_is_leaf = (l1_pte & 0xE) != 0;
         let l1_ppn = (l1_pte >> 10) & 0x3FFFFF;
 
-        eprintln!("\nVA=0x{:08X} VPN={} L1[{}] PTE=0x{:08X} V={} leaf={}",
-            va, vpn, l1_idx, l1_pte, l1_v, l1_is_leaf);
+        eprintln!(
+            "\nVA=0x{:08X} VPN={} L1[{}] PTE=0x{:08X} V={} leaf={}",
+            va, vpn, l1_idx, l1_pte, l1_v, l1_is_leaf
+        );
 
         if l1_v != 0 && !l1_is_leaf {
             let l2_base = (l1_ppn as u64) << 12;
@@ -139,7 +162,10 @@ fn main() {
             let l2_ppn = (l2_pte >> 10) & 0x3FFFFF;
             let offset = va & 0xFFF;
 
-            eprintln!("  L2[{}] PTE=0x{:08X} V={} leaf={}", l2_idx, l2_pte, l2_v, l2_is_leaf);
+            eprintln!(
+                "  L2[{}] PTE=0x{:08X} V={} leaf={}",
+                l2_idx, l2_pte, l2_v, l2_is_leaf
+            );
 
             if l2_v != 0 && l2_is_leaf {
                 let pa = ((l2_ppn as u64) << 12) | (offset as u64);
@@ -158,8 +184,10 @@ fn main() {
             let offset = va & 0xFFF;
             let pa = ((ppn as u64) << 12) | (offset as u64);
             let val = vm.bus.read_word(pa).unwrap_or(0);
-            eprintln!("  TLB: PPN=0x{:06X} flags=0x{:02X} -> PA=0x{:08X} mem=0x{:08X}",
-                ppn, flags, pa, val);
+            eprintln!(
+                "  TLB: PPN=0x{:06X} flags=0x{:02X} -> PA=0x{:08X} mem=0x{:08X}",
+                ppn, flags, pa, val
+            );
         }
     }
 

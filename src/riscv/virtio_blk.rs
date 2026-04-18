@@ -65,7 +65,6 @@ const DEFAULT_SECTORS: u64 = 2048; // 1MB disk
 /// Config capacity high word offset.
 const CONFIG_CAPACITY_HI: u64 = CONFIG + 4;
 
-
 /// Virtio block request header (16 bytes).
 ///   type: u32 (0=read, 1=write)
 ///   reserved: u32
@@ -118,7 +117,7 @@ impl Default for VirtioBlk {
 }
 
 impl VirtioBlk {
-        /// Create a new virtio block device with a zeroed disk of default size.
+    /// Create a new virtio block device with a zeroed disk of default size.
     pub fn new() -> Self {
         Self {
             disk: vec![0u8; (DEFAULT_SECTORS * SECTOR_SIZE) as usize],
@@ -283,7 +282,10 @@ mod tests {
     #[test]
     fn write_read_status() {
         let mut dev = VirtioBlk::new();
-        dev.write(VIRTIO_BASE + STATUS, VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER);
+        dev.write(
+            VIRTIO_BASE + STATUS,
+            VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER,
+        );
         assert_eq!(
             dev.read(VIRTIO_BASE + STATUS),
             Some(VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER)
@@ -294,7 +296,9 @@ mod tests {
     fn config_capacity() {
         let dev = VirtioBlk::new();
         let lo = dev.read(VIRTIO_BASE + CONFIG).expect("read should succeed");
-        let hi = dev.read(VIRTIO_BASE + CONFIG + 4).expect("read should succeed");
+        let hi = dev
+            .read(VIRTIO_BASE + CONFIG + 4)
+            .expect("read should succeed");
         let capacity = lo as u64 | ((hi as u64) << 32);
         assert_eq!(capacity, DEFAULT_SECTORS);
     }

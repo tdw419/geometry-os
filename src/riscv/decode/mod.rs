@@ -6,13 +6,13 @@
 //   - decode_c(halfword: u16) -> Operation
 //   - is_compressed(halfword: u16) -> bool
 
+mod compressed;
 mod operation;
 mod rv32i;
-mod compressed;
 
+pub use compressed::{decode_c, is_compressed};
 pub use operation::Operation;
 pub use rv32i::decode;
-pub use compressed::{decode_c, is_compressed};
 
 #[cfg(test)]
 mod tests;
