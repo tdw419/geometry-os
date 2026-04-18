@@ -758,9 +758,8 @@ fn test_particles_program() {
     // First, verify it assembles.
     let source = std::fs::read_to_string("programs/particles.asm")
         .expect("failed to read programs/particles.asm");
-    let asm = assemble(&source, 0)
-        .expect("particles.asm should assemble");
-    
+    let asm = assemble(&source, 0).expect("particles.asm should assemble");
+
     // Run enough steps to initialize 100 particles + process one frame
     let mut vm = Vm::new();
     for (i, &w) in asm.pixels.iter().enumerate() {
@@ -770,20 +769,28 @@ fn test_particles_program() {
     }
     vm.pc = 0;
     vm.halted = false;
-    
+
     // Run until we see at least one FRAME
     let mut frames_seen = 0;
     for _ in 0..200_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if vm.frame_ready {
             vm.frame_ready = false;
             frames_seen += 1;
-            if frames_seen >= 3 { break; }
+            if frames_seen >= 3 {
+                break;
+            }
         }
     }
-    
-    assert!(frames_seen > 0, "particles.asm should reach at least one FRAME, got {} frames in 200K steps", frames_seen);
-    
+
+    assert!(
+        frames_seen > 0,
+        "particles.asm should reach at least one FRAME, got {} frames in 200K steps",
+        frames_seen
+    );
+
     // After running, there should be colored pixels on screen (not all black).
     let mut colored_pixels = 0;
     for y in 0..256 {
@@ -796,6 +803,61 @@ fn test_particles_program() {
     assert!(
         colored_pixels > 0,
         "particles.asm should have visible colored pixels, found {} after {} frames",
-        colored_pixels, frames_seen
+        colored_pixels,
+        frames_seen
+    );
+}
+
+#[test]
+fn test_plasma() {
+    // Plasma is an infinite animation -- run until first FRAME completes
+    let source = std::fs::read_to_string("programs/plasma.asm").expect("read plasma.asm");
+    let asm = geometry_os::assembler::assemble(&source, 0).expect("assemble plasma");
+    let mut vm = geometry_os::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until frame_ready (first complete frame)
+    let mut frames_seen = 0;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= 1 {
+                break;
+            }
+        }
+    }
+
+    assert!(
+        frames_seen >= 1,
+        "plasma.asm should produce at least 1 frame in 10M steps"
+    );
+
+    // Screen should have diverse colors from the plasma sine wave computation
+    let mut colors = std::collections::HashSet::new();
+    for y in 0..256 {
+        for x in 0..256 {
+            colors.insert(vm.screen[y * 256 + x]);
+        }
+    }
+    assert!(
+        colors.len() > 100,
+        "plasma should produce 100+ unique colors, got {}",
+        colors.len()
+    );
+
+    // No black pixels (sine table range is 128-255, colors are always bright)
+    assert!(
+        !colors.contains(&0),
+        "plasma should have no black pixels (sine table minimum is 128)"
     );
 }
