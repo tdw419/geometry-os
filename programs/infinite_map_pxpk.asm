@@ -14,13 +14,14 @@
 ;   7. Height-based shading from fine_hash top bits (0-7 * 0x030303 per tile)
 ;   8. Animated water shimmer: center pattern + frame_counter cycling accent
 ;   9. Coastline foam: water tiles adjacent to land get +0x303030 white blend
-;  10. Biome boundary blending: graduated hash interpolation at biome edges.
-;      X-direction: 4-tile transition zone (positions 0,1,6,7). Outer edges
-;      (0,7) use 50/50 blend; inner edges (1,6) use 75/25 graduated blend
-;      (base*3/4 + neighbor*1/4) for smooth gradient transitions.
-;      Y-direction: 4-tile transition zone (positions 0,1,6,7) with same
-;      graduated blending. Blend mode precomputed per row in RAM[0x7803],
-;      neighbor y_hash precomputed in RAM[0x7804] to minimize per-tile cost.
+;  10. Biome boundary blending: efficient hash interpolation at biome edges.
+;      X-direction: 3-tile graduated transition (positions 0,1,7).
+;      Position 0: 50/50 blend LEFT + cache neighbor color for position 1.
+;      Position 1: 75/25 graduated blend LEFT (uses cached color, no hash).
+;      Position 7: 50/50 blend RIGHT. Total ~30K step overhead.
+;      Y-direction: 2-tile blend (positions 0,7) with 50/50 blend.
+;      Blend mode stored in r16 (key bitmask register, unused during render).
+;      Neighbor y_hash cached in RAM[0x7804] for per-tile Y-blend.
 ;      Corner tiles get sequential X+Y blend (bilinear-like).
 ;
 ; Memory layout:
@@ -29,8 +30,10 @@
 ;   RAM[0x7800] = camera_x
 ;   RAM[0x7801] = camera_y
 ;   RAM[0x7802] = frame_counter
-;   RAM[0x7803] = y_blend_mode (precomputed per row: 0=none, 1-4=blend types)
+;   RAM[0x7803] = (unused, was y_blend_mode)
 ;   RAM[0x7804] = y_neighbor_hash (precomputed per row for Y-blend)
+;   RAM[0x7805] = cached left neighbor biome color (for X position 1 blend)
+;   r16 = y_blend_mode during render (0=none, 1=top blend, 2=bottom blend)
 ;   RAM[0xFFB]  = key bitmask
 ;
 ; Seed expansion architecture:
@@ -452,47 +455,26 @@ render_y:
   LDI r18, 79007
   MUL r26, r18           ; r26 = (world_y >> 3) * 79007 (blend y_hash, reused per tile)
 
-  ; Precompute Y-blend mode per row (stored in RAM[0x7803])
-  ; Mode: 0=none, 1=50/50 top, 2=75/25 top, 3=75/25 bottom, 4=50/50 bottom
+  ; Precompute Y-blend mode per row (stored in r16, not RAM)
+  ; r16 = y_blend_mode (0=none, 1=top 50/50, 2=bottom 50/50)
   ; RAM[0x7804] = precomputed neighbor y_hash for Y-blend
+  ; r16 is the key bitmask register, safe to reuse during render loop.
   MOV r18, r15
   ADD r18, r1              ; r18 = world_y
   ANDI r18, 7              ; r18 = local_y (0..7)
-  LDI r19, 0x7803          ; mode address
-  LDI r20, 0
-  STORE r19, r20           ; default: no blend
-  JNZ r18, ypre_b1
-  ; local_y == 0: 50/50 top
-  LDI r20, 1
-  STORE r19, r20
-  LDI r20, 0xFFFFFFF8      ; -8
+  LDI r16, 0               ; default: no Y-blend
+  JNZ r18, ypre_chk7
+  ; local_y == 0: blend with TOP neighbor
+  LDI r16, 1
+  LDI r20, 0xFFFFFFF8      ; -8 offset
   JMP ypre_hash
-ypre_b1:
+ypre_chk7:
   LDI r20, 1
   SUB r18, r20
-  JNZ r18, ypre_b6
-  ; local_y == 1: 75/25 top
-  LDI r20, 2
-  STORE r19, r20
-  LDI r20, 0xFFFFFFF8      ; -8
-  JMP ypre_hash
-ypre_b6:
-  LDI r20, 5
-  SUB r18, r20
-  JNZ r18, ypre_b7
-  ; local_y == 6: 75/25 bottom
-  LDI r20, 3
-  STORE r19, r20
-  LDI r20, 8
-  JMP ypre_hash
-ypre_b7:
-  LDI r20, 1
-  SUB r18, r20
-  JNZ r18, ypre_done
-  ; local_y == 7: 50/50 bottom
-  LDI r20, 4
-  STORE r19, r20
-  LDI r20, 8
+  JNZ r18, ypre_done       ; local_y 1-6: no blend
+  ; local_y == 7: blend with BOTTOM neighbor
+  LDI r16, 2
+  LDI r20, 8               ; +8 offset
 ypre_hash:
   MOV r22, r15
   ADD r22, r1
