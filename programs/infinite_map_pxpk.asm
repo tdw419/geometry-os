@@ -14,6 +14,8 @@
 ;   7. Height-based shading from fine_hash top bits (0-7 * 0x030303 per tile)
 ;   8. Animated water shimmer: center pattern + frame_counter cycling accent
 ;   9. Coastline foam: water tiles adjacent to land get +0x303030 white blend
+;  10. Biome boundary blending: masked average with neighbor biome at edges
+;      (local_x == 0 or 7), precomputed y_hash shared per row. ~45K step cost.
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -434,6 +436,14 @@ render_y:
   LDI r2, 0             ; tx = 0
   LDI r28, 0            ; screen_x accumulator
 
+  ; Precompute y-part of blend neighbor hash (shared across row)
+  MOV r26, r15
+  ADD r26, r1            ; r26 = world_y for this row
+  LDI r18, 3
+  SHR r26, r18           ; world_y >> 3
+  LDI r18, 79007
+  MUL r26, r18           ; r26 = (world_y >> 3) * 79007 (blend y_hash, reused per tile)
+
   render_x:
     ; World coordinates
     MOV r3, r14
@@ -469,6 +479,51 @@ render_y:
     MOV r20, r24
     ADD r20, r17          ; r20 = 0x7000 + biome_index
     LOAD r17, r20         ; r17 = biome base color
+
+    ; ---- Biome boundary blending (X-direction smooth transitions) ----
+    ; At biome edges (local_x == 0 or 7), blend base color with the
+    ; neighboring biome using masked average: ((A & 0xFEFEFE)>>1) + ((B & 0xFEFEFE)>>1).
+    ; This eliminates hard checkerboard edges with per-channel average ±1 error.
+    MOV r18, r3
+    ANDI r18, 7              ; r18 = local_x (position within 8-tile biome)
+    JNZ r18, blend_chk_r
+    ; local_x == 0: blend with LEFT neighbor (world_x - 8)
+    MOV r21, r3
+    LDI r18, 8
+    SUB r21, r18             ; neighbor world_x
+    JMP blend_hash
+blend_chk_r:
+    LDI r22, 7
+    SUB r18, r22             ; local_x - 7
+    JNZ r18, no_blend        ; not at edge, skip
+    ; local_x == 7: blend with RIGHT neighbor (world_x + 8)
+    MOV r21, r3
+    LDI r18, 8
+    ADD r21, r18             ; neighbor world_x
+blend_hash:
+    ; Compute neighbor biome index via coarse hash
+    ; y_hash already precomputed in r26 (shared across row)
+    LDI r18, 3
+    SHR r21, r18             ; neighbor_x >> 3
+    LDI r18, 99001
+    MUL r21, r18
+    XOR r21, r26             ; XOR with precomputed y_hash
+    LDI r18, 1103515245
+    MUL r21, r18             ; neighbor mixed hash
+    LDI r18, 27
+    SHR r21, r18             ; neighbor biome index (0..31)
+    ; Lookup neighbor biome base color (use r22 since r26 holds precomputed y_hash)
+    MOV r22, r24
+    ADD r22, r21
+    LOAD r22, r22            ; r22 = neighbor biome base color
+    ; Masked average: ((r17 & 0xFEFEFE)>>1) + ((r22 & 0xFEFEFE)>>1)
+    ANDI r17, 0xFEFEFE
+    LDI r18, 1
+    SHR r17, r18             ; base >> 1
+    ANDI r22, 0xFEFEFE
+    SHR r22, r18             ; neighbor >> 1
+    ADD r17, r22             ; r17 = blended base color
+no_blend:
 
     ; ---- Fine hash: MUL-based per-tile seeding (Pixelpack strategy) ----
     ; r6 = world_x * 374761393 XOR world_y * 668265263

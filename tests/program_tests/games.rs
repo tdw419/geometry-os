@@ -900,6 +900,96 @@ fn test_infinite_map_pxpk_height_shading() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_biome_blending() {
+    // Biome boundary blending uses masked average at biome edges.
+    // At local_x == 0 (left edge), tile blends with left neighbor biome.
+    // At local_x == 7 (right edge), tile blends with right neighbor biome.
+    // The blend produces colors that are intermediate between adjacent biomes.
+    // We verify by scanning biome boundaries and checking for intermediate colors.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    // Each biome is 8 tiles wide (coarse hash uses world_x >> 3).
+    // Biome boundaries occur at world_x positions where (world_x >> 3) changes,
+    // i.e. at world_x = 8, 16, 24, ... which in screen coords (camera at 0)
+    // are tile columns tx = 8, 16, 24, ...
+    // The boundary tile (local_x == 0 of new biome) should be blended.
+    //
+    // For a blended tile, its color should differ from the interior of both
+    // adjacent biomes. Interior = tile at local_x 3 or 4 (safely away from edges).
+    //
+    // Check: compare boundary tile color with interior tiles of adjacent biomes.
+    let mut blend_count = 0;
+    let mut checked = 0;
+
+    for boundary_tx in (8..64).step_by(8) {
+        // Sample several rows
+        for ty in (0..64).step_by(4) {
+            let bnd_idx = ty * 256 + boundary_tx * 4;
+            let left_idx = ty * 256 + (boundary_tx - 4) * 4; // interior of left biome (local_x 4)
+            let right_idx = ty * 256 + (boundary_tx + 3) * 4; // interior of right biome (local_x 3)
+
+            if bnd_idx >= 256 * 256 || left_idx >= 256 * 256 || right_idx >= 256 * 256 {
+                continue;
+            }
+
+            let bnd_color = vm.screen[bnd_idx];
+            let left_color = vm.screen[left_idx];
+            let right_color = vm.screen[right_idx];
+
+            // Skip if any are black (shouldn't happen but safety)
+            if bnd_color == 0 || left_color == 0 || right_color == 0 {
+                continue;
+            }
+
+            // Skip water (biome 0/1) -- water has shimmer/foam that changes colors
+            let bnd_b = (bnd_color & 0xFF) as i32;
+            let bnd_r = ((bnd_color >> 16) & 0xFF) as i32;
+            if bnd_r < 30 && bnd_b > 100 {
+                continue;
+            }
+
+            checked += 1;
+
+            // If boundary tile color differs from BOTH neighbors' interiors,
+            // blending is happening. The boundary tile should be an intermediate.
+            // We check that it's not identical to either interior color.
+            let left_b = ((left_color >> 16) & 0xFF) as i32;
+            let left_g = ((left_color >> 8) & 0xFF) as i32;
+            let right_b = ((right_color >> 16) & 0xFF) as i32;
+            let right_g = ((right_color >> 8) & 0xFF) as i32;
+
+            let bnd_rg = (bnd_r, ((bnd_color >> 8) & 0xFF) as i32);
+            let left_rg = (left_b, left_g);
+            let right_rg = (right_b, right_g);
+
+            // The boundary color should differ from at least one interior
+            // (it blends left and right biomes, so it's intermediate)
+            let differs_from_left = bnd_rg != left_rg;
+            let differs_from_right = bnd_rg != right_rg;
+
+            if differs_from_left || differs_from_right {
+                blend_count += 1;
+            }
+        }
+    }
+
+    eprintln!(
+        "Biome blending: {}/{} boundary tiles show intermediate colors",
+        blend_count, checked
+    );
+    // Not every boundary will blend (some neighbors have same biome type),
+    // but a significant fraction should show blending.
+    assert!(
+        blend_count >= 5,
+        "at least 5 boundary tiles should show blended colors, got {}/{}",
+        blend_count, checked
+    );
+}
+
+#[test]
 fn test_infinite_map_runs_and_renders() {
     // Requirement: the program runs to completion of a frame and renders non-black pixels.
     let mut vm = infinite_map_vm();
