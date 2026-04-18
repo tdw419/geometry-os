@@ -751,3 +751,51 @@ fn test_fire_program() {
         "fire.asm should have fire pixels in bottom region"
     );
 }
+
+#[test]
+fn test_particles_program() {
+    // Particles.asm: 100 particles that drift, bounce, and fade.
+    // First, verify it assembles.
+    let source = std::fs::read_to_string("programs/particles.asm")
+        .expect("failed to read programs/particles.asm");
+    let asm = assemble(&source, 0)
+        .expect("particles.asm should assemble");
+    
+    // Run enough steps to initialize 100 particles + process one frame
+    let mut vm = Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    
+    // Run until we see at least one FRAME
+    let mut frames_seen = 0;
+    for _ in 0..200_000 {
+        if !vm.step() { break; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= 3 { break; }
+        }
+    }
+    
+    assert!(frames_seen > 0, "particles.asm should reach at least one FRAME, got {} frames in 200K steps", frames_seen);
+    
+    // After running, there should be colored pixels on screen (not all black).
+    let mut colored_pixels = 0;
+    for y in 0..256 {
+        for x in 0..256 {
+            if vm.screen[y * 256 + x] != 0 {
+                colored_pixels += 1;
+            }
+        }
+    }
+    assert!(
+        colored_pixels > 0,
+        "particles.asm should have visible colored pixels, found {} after {} frames",
+        colored_pixels, frames_seen
+    );
+}
