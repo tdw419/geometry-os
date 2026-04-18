@@ -545,6 +545,124 @@ fn test_infinite_map_pxpk_step_budget() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_tint_phase_analysis() {
+    // Track individual pixels across frames to verify tint deltas.
+    // For flat (pattern 0) non-water tiles, color = biome + BPE + tint.
+    // The tint delta should be exactly the computed tint offset.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+
+    // Render frame 0 (dawn start, frac=0, tint=0)
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    let screen_f0 = vm.screen.to_vec();
+
+    // Advance to frame 56 (dawn peak, frac_shr=7, tint=7*0x030100=0x00150700)
+    for _ in 0..56 {
+        vm.frame_ready = false;
+        let _ = step_until_frame(&mut vm, 1_000_000);
+    }
+    let screen_f56 = vm.screen.to_vec();
+
+    // Expected tint at frame 56: phase=0 (dawn), frac=56, frac_shr=7
+    // tint = 7 * 0x030100 = 0x00150700 = R+21, G+7, B+0
+    let tint_r: i32 = 21;
+    let tint_g: i32 = 7;
+
+    // Find flat non-water tiles by looking for 4x4 uniform blocks at tile boundaries
+    // where the color has moderate R (not water which is low R high B)
+    let tile_size = 4;
+    let mut matching_tiles = 0usize;
+    let mut r_deltas: Vec<i32> = Vec::new();
+    let mut g_deltas: Vec<i32> = Vec::new();
+
+    for ty in (0..256).step_by(tile_size) {
+        for tx in (0..256).step_by(tile_size) {
+            let idx = ty * 256 + tx;
+            let c0 = screen_f0[idx];
+            let c56 = screen_f56[idx];
+
+            let r0 = ((c0 >> 16) & 0xFF) as i32;
+            let g0 = ((c0 >> 8) & 0xFF) as i32;
+            let b0 = (c0 & 0xFF) as i32;
+
+            // Skip water (low R, high B) and black (unrendered)
+            if r0 < 30 || b0 > 180 {
+                continue;
+            }
+
+            // Check it's a flat tile: all 4 corners of the 4x4 block are same color
+            let corners = [(tx, ty), (tx + 3, ty), (tx, ty + 3), (tx + 3, ty + 3)];
+            let mut flat = true;
+            for &(cx, cy) in &corners {
+                if cx < 256 && cy < 256 {
+                    let ci = cy * 256 + cx;
+                    if screen_f0[ci] != c0 {
+                        flat = false;
+                        break;
+                    }
+                }
+            }
+            if !flat {
+                continue;
+            }
+
+            let r56 = ((c56 >> 16) & 0xFF) as i32;
+            let g56 = ((c56 >> 8) & 0xFF) as i32;
+
+            r_deltas.push(r56 - r0);
+            g_deltas.push(g56 - g0);
+            matching_tiles += 1;
+        }
+    }
+
+    eprintln!(
+        "Found {} flat non-water tiles, checking tint deltas",
+        matching_tiles
+    );
+    assert!(
+        matching_tiles > 100,
+        "should find many flat tiles, got {}",
+        matching_tiles
+    );
+
+    // The vast majority of flat tiles should show the expected R and G tint delta
+    let r_match = r_deltas.iter().filter(|&&d| d == tint_r).count();
+    let g_match = g_deltas.iter().filter(|&&d| d == tint_g).count();
+
+    eprintln!(
+        "R delta: {}/{} tiles match expected +{}",
+        r_match,
+        r_deltas.len(),
+        tint_r
+    );
+    eprintln!(
+        "G delta: {}/{} tiles match expected +{}",
+        g_match,
+        g_deltas.len(),
+        tint_g
+    );
+
+    // At least 80% of flat tiles should match the exact tint delta
+    // (some won't match due to water tile edges or 8-bit wraparound)
+    assert!(
+        r_match > matching_tiles * 80 / 100,
+        "expected >{} flat tiles with R+{}, got {}/{}",
+        matching_tiles * 80 / 100,
+        tint_r,
+        r_match,
+        matching_tiles
+    );
+    assert!(
+        g_match > matching_tiles * 80 / 100,
+        "expected >{} flat tiles with G+{}, got {}/{}",
+        matching_tiles * 80 / 100,
+        tint_g,
+        g_match,
+        matching_tiles
+    );
+}
+
+#[test]
 fn test_infinite_map_pxpk_day_night_tint() {
     // Verify the day/night tint produces visible color shifts across frames.
     // The tint cycles with period 256, 4 phases of 64 frames:
