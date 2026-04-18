@@ -528,7 +528,8 @@ height_skip:
     ; Water: force center pattern + spatially-varying wave animation.
     ; Shimmer phase = (frame_counter + fine_hash_nibble) & 0xF gives
     ; position-dependent wave offset, so adjacent tiles ripple differently.
-    ; Accent shifted by wave*0x11 for blue+green channel cycling.
+    ; Base color gets subtle wave (blue shift), accent gets stronger wave.
+    ; Water base (0x000044 / 0x0000BB) has room for +0x22 blue safely.
     JZ r31, no_shimmer     ; not water
     LDI r29, 1             ; force center pattern for water
     LOAD r18, r13          ; frame_counter
@@ -536,6 +537,13 @@ height_skip:
     ANDI r30, 0xF          ; fine_hash nibble (spatial variation)
     ADD r18, r30           ; wave_phase = fc + spatial
     ANDI r18, 0xF          ; 0-15 shimmer phase
+    ; Base wave: subtle blue swell (wave_phase & 0x3) * 4 → +0/+4/+8/+12 blue
+    MOV r30, r18
+    ANDI r30, 0x3          ; 0-3 (4-step base swell)
+    LDI r21, 4
+    MUL r30, r21           ; base_swell (0/4/8/12, blue-channel only)
+    ADD r17, r30           ; base_color += swell (all water pixels breathe)
+    ; Accent wave: stronger cycling (wave_phase * 0x11 → blue+green modulation)
     LDI r30, 0x11
     MUL r18, r30           ; wave * 0x11 (blue+green channel cycling)
     XOR r19, r18           ; accent ^= shimmer wave
