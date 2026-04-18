@@ -737,49 +737,106 @@ impl RiscvVm {
                         }
                         // Fall through to mepc+4 / MRET to return to S-mode.
                     } else if mpp != 3 {
-                        // Trap came from S-mode or U-mode -- forward to S-mode.
-                        let stvec = vm.cpu.csr.stvec & !0x3u32; // direct mode
-                        if stvec != 0 {
-                            // Copy M-mode trap info to S-mode CSRs.
-                            vm.cpu.csr.sepc = vm.cpu.csr.mepc;
-                            vm.cpu.csr.scause = mcause;
-                            vm.cpu.csr.stval = vm.cpu.csr.mtval;
-
-                            // Set S-mode trap entry state in mstatus.
-                            // SPP = previous privilege (1=S, 0=U) from MPP.
-                            let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                            vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
-                                | (spp << csr::MSTATUS_SPP);
-                            // SPIE = SIE (save current SIE), SIE = 0 (disable S interrupts)
-                            let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
-                            vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
-                                | (sie << csr::MSTATUS_SPIE);
-                            vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
-
-                            // For timer interrupts: advance mtimecmp to prevent
-                            // immediate re-trap. Without this, MTIP stays pending
-                            // after forwarding, and the next vm.step() traps back
-                            // to M-mode before the S-mode handler can execute.
-                            // The kernel will set its own mtimecmp via SBI_SET_TIMER.
-                            if cause_code == csr::INT_MTI {
-                                vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                        // Trap came from S-mode or U-mode.
+                        // Check for demand-paged identity mapping at low addresses.
+                        //
+                        // The kernel's page table doesn't include identity mappings for
+                        // low physical addresses (DTB at ~21MB, initramfs, device regions).
+                        // Our SATP-change fixup injects these, but the kernel's own
+                        // setup_vm() may clear them. When the kernel faults on a low
+                        // address, inject the identity megapage on demand.
+                        let fault_addr = vm.cpu.csr.mtval;
+                        let is_page_fault = cause_code == 12 || cause_code == 13 || cause_code == 15;
+                        if is_page_fault && fault_addr < 0x0200_0000 {
+                            let satp = vm.cpu.csr.satp;
+                            let pg_dir_ppn = (satp & 0x3FFFFF) as u64;
+                            if pg_dir_ppn > 0 {
+                                let pg_dir_phys = pg_dir_ppn * 4096;
+                                let vpn1 = ((fault_addr >> 22) & 0x3FF) as u64;
+                                let l1_addr = pg_dir_phys + vpn1 * 4;
+                                let existing = vm.bus.read_word(l1_addr).unwrap_or(0);
+                                if (existing & 1) == 0 {
+                                    // Inject identity megapage: VA -> PA (same)
+                                    let pte: u32 = 0x0000_00CF | ((vpn1 as u32) << 20);
+                                    vm.bus.write_word(l1_addr, pte).ok();
+                                    vm.cpu.tlb.flush_all();
+                                    if _smode_fault_count < 10 {
+                                        eprintln!("[boot] On-demand identity map: L1[{}] at PA 0x{:08X} = 0x{:08X} (fault VA=0x{:08X})",
+                                            vpn1, l1_addr, pte, fault_addr);
+                                    }
+                                    // Retry the faulting instruction instead of forwarding
+                                    // to S-mode. MRET will return to mepc (the faulting PC).
+                                    // Fall through to mepc+4/MRET below.
+                                } else {
+                                    // L1 entry exists but fault still occurred -- might be
+                                    // an L2 entry issue. Forward to S-mode handler.
+                                    let stvec = vm.cpu.csr.stvec & !0x3u32;
+                                    if stvec != 0 {
+                                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                                        vm.cpu.csr.scause = mcause;
+                                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
+                                        let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                                            | (spp << csr::MSTATUS_SPP);
+                                        let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
+                                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                                            | (sie << csr::MSTATUS_SPIE);
+                                        vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
+                                        vm.cpu.pc = stvec;
+                                        vm.cpu.privilege = cpu::Privilege::Supervisor;
+                                        vm.cpu.tlb.flush_all();
+                                        _forward_count += 1;
+                                        _smode_fault_count += 1;
+                                        count += 1;
+                                        continue;
+                                    }
+                                }
                             }
+                        } else {
+                            // Not a low-address page fault -- forward to S-mode.
+                            let stvec = vm.cpu.csr.stvec & !0x3u32; // direct mode
+                            if stvec != 0 {
+                                // Copy M-mode trap info to S-mode CSRs.
+                                vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                                vm.cpu.csr.scause = mcause;
+                                vm.cpu.csr.stval = vm.cpu.csr.mtval;
 
-                            // Jump to S-mode trap vector in Supervisor mode.
-                            vm.cpu.pc = stvec;
-                            vm.cpu.privilege = cpu::Privilege::Supervisor;
+                                // Set S-mode trap entry state in mstatus.
+                                // SPP = previous privilege (1=S, 0=U) from MPP.
+                                let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                                vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
+                                    | (spp << csr::MSTATUS_SPP);
+                                // SPIE = SIE (save current SIE), SIE = 0 (disable S interrupts)
+                                let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
+                                vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
+                                    | (sie << csr::MSTATUS_SPIE);
+                                vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
 
-                            // Flush TLB -- address space context changed.
-                            vm.cpu.tlb.flush_all();
-                            _forward_count += 1;
-                            count += 1;
-                            continue;
+                                // For timer interrupts: advance mtimecmp to prevent
+                                // immediate re-trap. Without this, MTIP stays pending
+                                // after forwarding, and the next vm.step() traps back
+                                // to M-mode before the S-mode handler can execute.
+                                // The kernel will set its own mtimecmp via SBI_SET_TIMER.
+                                if cause_code == csr::INT_MTI {
+                                    vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
+                                }
+
+                                // Jump to S-mode trap vector in Supervisor mode.
+                                vm.cpu.pc = stvec;
+                                vm.cpu.privilege = cpu::Privilege::Supervisor;
+
+                                // Flush TLB -- address space context changed.
+                                vm.cpu.tlb.flush_all();
+                                _forward_count += 1;
+                                count += 1;
+                                continue;
+                            }
+                            // stvec not set yet -- fall through to skip instruction.
                         }
-                        // stvec not set yet -- fall through to skip instruction.
-                    }
                     // MPP=3: trap came from M-mode. Fall through to skip.
                     // This handles device probes to unmapped addresses (e.g.,
                     // 0xFFFFFFF0 PLIC/DTB probes) during early M-mode boot.
+                    }
                 }
 
                 // ECALL_M: Handle as SBI call, then skip instruction.

@@ -1647,17 +1647,20 @@ fn test_infinite_map_visual_analysis() {
     assert!(color_counts.len() >= 5, "should see multiple biomes at (100,100)");
 
     // Check biome contiguity by sampling tile-top-left pixels
-    // and masking the water animation (low 5 blue bits change per tile)
-    // For contiguity, compare the "base biome" by rounding colors
+    // and masking per-tile variation. v10 BPE/LINEAR uses table lookups
+    // that affect all three channels (±12 per channel from 2 nibble lookups).
+    // Mask covers: BPE variation (low 6 bits per channel = 0x3F3F3F),
+    // accent animation (low nibble shifts = within BPE mask),
+    // and water shimmer (low 5 blue bits = within BPE mask).
     let mut biome_zones = 0;
     let mut prev_base: u32 = 0;
     for tx in 0..64 {
         let px = tx * 4;
         let py = 128; // tile row 32 - middle of screen
         let color = vm.screen[py * 256 + px];
-        // Round to base biome: mask out animation (low 5 bits of blue)
-        // and G-channel per-tile variation (bits 11:8 from fine hash XOR)
-        let base = color & !0xF1F;
+        // Round to base biome: mask out BPE per-tile variation + animation
+        // 7 bits per channel covers BPE pair lookups (±0x18 + wrapping borrows)
+        let base = color & !0x7F7F7F;
         if tx == 0 || base != prev_base {
             biome_zones += 1;
             prev_base = base;
@@ -1666,11 +1669,14 @@ fn test_infinite_map_visual_analysis() {
     eprintln!("At (100,100) row 32: {} biome zone boundaries across 64 tiles", biome_zones);
 
     // With 8-tile zones, expect ~8 boundaries. Per-tile hash would give ~64.
-    // Allow up to 20 to account for structures overriding colors
-    assert!(biome_zones < 20,
-        "biomes should be contiguous, got {} zone boundaries (expected <20)", biome_zones);
-
-    // Verify the terrain is deterministic: same camera = same screen
+    // v10 BPE/LINEAR adds per-tile multi-channel variation via ADD, which can
+    // cause cross-byte carries (e.g. B=0xFC + 0x0C carries into G). This makes
+    // some same-biome tiles round to different bases, inflating zone count.
+    // Allow up to 40 (vs 20 in v9) -- still far below per-tile-random ~64.
+    assert!(biome_zones < 40,
+        "biomes should be contiguous, got {} zone boundaries (expected <40)",
+        biome_zones
+    );
     let screen1 = vm.screen.to_vec();
     vm.frame_ready = false;
     for _ in 0..1_000_000 {

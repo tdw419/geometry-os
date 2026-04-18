@@ -1,4 +1,4 @@
-; infinite_map.asm -- Infinite scrolling procedural terrain (v6)
+; infinite_map.asm -- Infinite scrolling procedural terrain (v10)
 ;
 ; Arrow keys / WASD scroll through infinite procedurally generated terrain.
 ; Diagonal keys (bits 4-7) allow single-key diagonal scrolling.
@@ -8,18 +8,21 @@
 ; Day/night tint: camera_x position shifts color warmth -- west is cooler,
 ; east is warmer. 16 zones, subtle top-nibble adjustments per channel.
 ; Biome-aware pattern overlay: each biome gets a deterministic texture type
-; (horizontal/vertical/center/corner) with animated accent color via
-; frame_counter XOR. Makes terrain look like what it represents.
+; (horizontal/vertical/center/corner/diagonal/dither/topedge) with animated
+; accent color via frame_counter XOR. Makes terrain look like what it represents.
 ; Pure math -- no stored world data, truly infinite.
 ;
+; v10: BPE/LINEAR color variation. The fine_hash seed is decoded through a
+; Pixelpack-style BPE variation table. Two nibbles each index into a 16-entry
+; table of pre-computed RGB offsets, and the results are linearly combined
+; (ADDed) with the base biome color. This gives 16x16=256 unique per-tile
+; color variations (up from 16 with the old G-channel XOR), producing much
+; richer visual texture within each biome zone.
+;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
-; Renders via RECTF + 1 PSET accent per tile. ~440K instructions/frame (44% of 1M budget).
+; Renders via RECTF + 1 PSET accent per tile. ~410K instructions/frame.
 ; Player cursor: pulsing white/yellow crosshair at screen center (127,127).
 ;   4 arms (3px each) with 1px center gap. Pulses every 16 frames.
-; Optimized: day/night tint precomputed once per frame (was per-tile ~40K savings),
-; screen position via incrementing accumulators (was MUL per-tile ~8K savings),
-; viewport (64x64 tiles) exactly fills 256x256 screen -- no off-screen tiles,
-;   so bounds checks removed (was 4 dead ops/tile = 16K savings).
 ;
 ; Memory:
 ;   RAM[0x7800] = camera_x (tile coordinates)
@@ -27,6 +30,8 @@
 ;   RAM[0x7802] = frame_counter (increments each frame)
 ;   RAM[0xFFB]  = key bitmask (host writes each frame)
 ;   RAM[0x7900-0x791F] = pattern table (32 biome -> pattern type mappings)
+;   RAM[0x7A00-0x7A1F] = color table (32 biome -> base color mappings)
+;   RAM[0x7B00-0x7B0F] = BPE variation table (16 entries, Pixelpack seed expansion)
 ;
 ; Pattern types (2-bit per biome):
 ;   0=horizontal: water(0-1), beach(2), desert(3-4), snow(19-21) -- ripple/drift
@@ -235,6 +240,60 @@ STORE r20, r17           ; 30: biolum dark
 ADD r20, r7
 LDI r17, 0x110022
 STORE r20, r17           ; 31: void
+
+; ===== BPE Variation Table (16 entries at 0x7B00-0x7B0F) =====
+; Pixelpack-style seed expansion: fine_hash nibbles index into this table,
+; and results are linearly combined (ADDed) with the base biome color.
+; Two nibble lookups give 16x16=256 unique per-tile color variations.
+; Entries are packed (R_offset, G_offset, B_offset) small RGB triplets.
+LDI r20, 0x7B00
+LDI r17, 0x000000    ; 0: neutral
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x040404    ; 1: all brighten +4
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x080808    ; 2: all brighten +8
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x0C0C0C    ; 3: all brighten +12
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x080008    ; 4: warm shift (R+B)
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x000808    ; 5: cool shift (G+B)
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x080800    ; 6: gold shift (R+G)
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x0C0400    ; 7: red bias
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x000C04    ; 8: teal bias
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x040C00    ; 9: green bias
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0xF80404    ; 10: R-dark (wrap subtract 8 from R)
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x04F804    ; 11: G-dark (wrap subtract 8 from G)
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x0404F8    ; 12: B-dark (wrap subtract 8 from B)
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x0C0800    ; 13: warm heavy (R+G bias)
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x000C08    ; 14: cool heavy (G+B bias)
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x08040C    ; 15: balanced violet
+STORE r20, r17
 
 ; ===== Main Loop =====
 main_loop:
@@ -589,14 +648,31 @@ no_struct:
     AND r21, r18          ; shimmer = 0..31
     ADD r17, r21
 no_struct_not_water:
-    ; ---- Draw tile ----
+    ; ---- BPE/LINEAR: Pixelpack-style multi-channel color variation ----
+    ; Fine hash seed decoded through two nibble lookups into BPE table.
+    ; Each lookup selects a pre-computed RGB offset; results ADDed to base.
+    ; 16 x 16 = 256 unique per-tile color variations (was 16 with G-XOR).
+
+    ; Nibble 0 (bits 0-3): first BPE pair lookup
+    LDI r18, 0x7B00
+    MOV r19, r6
+    ANDI r19, 0xF
+    ADD r18, r19
+    LOAD r18, r18
+    ADD r17, r18
+
+    ; Nibble 1 (bits 4-7): second BPE pair lookup
+    LDI r18, 0x7B00
+    MOV r19, r6
+    LDI r20, 4
+    SHR r19, r20
+    ANDI r19, 0xF
+    ADD r18, r19
+    LOAD r18, r18
+    ADD r17, r18
+
+    ; ---- Apply precomputed day/night tint ----
 do_rect:
-    ; ---- G-channel variation from fine hash (same-biome tiles differ) ----
-    MOV r18, r6
-    LDI r19, 0xF00
-    AND r18, r19          ; fine_hash nibble in G-channel position
-    XOR r17, r18          ; subtle per-tile green variation
-    ; ---- Apply precomputed day/night tint (1 instruction vs ~15 before) ----
     ADD r17, r23
     ; Use screen position accumulators (no multiply needed)
     RECTF r26, r25, r9, r9, r17  ; fill 4x4 rect with color
