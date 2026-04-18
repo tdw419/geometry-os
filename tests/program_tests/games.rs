@@ -789,6 +789,53 @@ fn test_infinite_map_pxpk_water_animates() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_coastline_foam() {
+    // Coastline foam: water tiles with land left-neighbor get +0x303030 tint.
+    // This produces water pixels with elevated R+G channels (normally water has
+    // R<30, G<50). Foam water will have R>=0x30 or G>=0x30.
+    // At least some foam pixels should exist on any varied map.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    // Frame 0: tint=0. Water biome 0 base = 0x000044, biome 1 = 0x0000BB.
+    // Without foam: R < 30, B > 50. With foam: R >= 0x30 (48+) or G >= 0x30.
+    let mut water_total = 0usize;
+    let mut foam_pixels = 0usize;
+    for i in 0..256 * 256 {
+        let c = vm.screen[i];
+        let r = ((c >> 16) & 0xFF) as u32;
+        let g = ((c >> 8) & 0xFF) as u32;
+        let b = (c & 0xFF) as u32;
+        // Water: blue-dominant
+        if b > 50 && r < b / 2 {
+            water_total += 1;
+            // Foam lifts R and G significantly from base water
+            if r >= 0x30 || g >= 0x30 {
+                foam_pixels += 1;
+            }
+        }
+    }
+
+    eprintln!(
+        "Coastline foam: {}/{} water pixels have foam tint",
+        foam_pixels, water_total
+    );
+    assert!(
+        water_total > 50,
+        "should find water pixels, got {}",
+        water_total
+    );
+    // Some water tiles should border land and get foam
+    assert!(
+        foam_pixels > 0,
+        "at least 1 water pixel should have coastline foam, got {}/{}",
+        foam_pixels, water_total
+    );
+}
+
+#[test]
 fn test_infinite_map_pxpk_height_shading() {
     // Height shading adds 0x030303 * (fine_hash >> 28 & 7) to non-water tiles.
     // R-variation only affects blue channel (small ±12 values).

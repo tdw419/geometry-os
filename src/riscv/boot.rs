@@ -472,6 +472,24 @@ impl RiscvVm {
         // 3. SATP scan: fixes PTEs on page table switch
         vm.bus.auto_pte_fixup = true;
 
+        // Pre-set riscv_timebase to 10MHz (10000000).
+        // The kernel reads this from the DTB's timebase-frequency property.
+        // If DTB parsing fails (e.g., page table not yet set up for DTB VA),
+        // riscv_timebase stays 0 and calibrate_delay() produces lpj_fine=0,
+        // causing udelay() to loop forever. Pre-setting it ensures udelay
+        // works even if DTB parsing is delayed.
+        let riscv_timebase_pa: u64 = 0x00C79E54;
+        vm.bus.write_word(riscv_timebase_pa, 10_000_000).ok();
+
+        // Pre-set lpj_fine to a reasonable default.
+        // lpj_fine = loops_per_jiffy for fine-grained delays.
+        // With timebase=10MHz and HZ=100 (CONFIG_HZ), one jiffy = 10ms = 100000 ticks.
+        // A rough estimate: 100000 ticks * ~4 instructions/tick = 400000 loops/jiffy.
+        // This is an approximation — calibrate_delay() will refine it later.
+        // If DTB parsing succeeds, calibrate_delay() overwrites this with the correct value.
+        let lpj_fine_pa: u64 = 0x01482060;
+        vm.bus.write_word(lpj_fine_pa, 400_000).ok();
+
         // Enter S-mode via MRET.
         // mepc = VIRTUAL entry point (e.g., 0xC0000000).
         // The boot page table maps VA 0xC0000000 -> PA 0x0, so the kernel

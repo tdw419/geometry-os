@@ -13,6 +13,7 @@
 ;   6. Net result: ~49-56 instructions/tile (flat=49, non-flat avg ~56)
 ;   7. Height-based shading from fine_hash top bits (0-7 * 0x030303 per tile)
 ;   8. Animated water shimmer: center pattern + frame_counter cycling accent
+;   9. Coastline foam: water tiles adjacent to land get +0x303030 white blend
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -548,6 +549,38 @@ height_skip:
     MUL r18, r30           ; wave * 0x11 (blue+green channel cycling)
     XOR r19, r18           ; accent ^= shimmer wave
 no_shimmer:
+
+    ; ---- Coastline foam (water tiles adjacent to land) ----
+    ; Check left neighbor biome via coarse_hash(world_x-1, world_y).
+    ; If neighbor is land (biome >= 2), add +0x303030 foam tint to base_color.
+    ; Water base colors (0x000044 / 0x0000BB) + 0x303030 = safe (< 0xFF/channel).
+    JZ r31, no_foam          ; not water, skip entirely
+    MOV r18, r3              ; world_x
+    SUB r18, r7              ; r18 = world_x - 1 (left neighbor)
+    MOV r21, r18
+    LDI r18, 3
+    SHR r21, r18             ; (world_x-1) >> 3
+    LDI r18, 99001
+    MUL r21, r18
+    MOV r22, r4              ; world_y
+    LDI r18, 3
+    SHR r22, r18             ; world_y >> 3
+    LDI r18, 79007
+    MUL r22, r18
+    XOR r21, r22             ; neighbor coarse hash
+    LDI r18, 1103515245
+    MUL r21, r18             ; neighbor mixed hash
+    LDI r18, 27
+    SHR r21, r18             ; neighbor biome (0..31)
+    ; Water neighbor check: biome 0 or 1 = water → skip foam
+    JZ r21, no_foam          ; biome 0 = water
+    LDI r18, 1
+    SUB r21, r18
+    JZ r21, no_foam          ; biome 1 = water
+    ; Neighbor is land (biome >= 2) → add foam!
+    LDI r18, 0x303030
+    ADD r17, r18             ; base_color += foam tint
+no_foam:
 
     ; ---- Pre-load half-width constant for non-flat patterns ----
     LDI r20, 2            ; shared by center/horiz/vert patterns
