@@ -1656,7 +1656,8 @@ fn test_infinite_map_visual_analysis() {
         let py = 128; // tile row 32 - middle of screen
         let color = vm.screen[py * 256 + px];
         // Round to base biome: mask out animation (low 5 bits of blue)
-        let base = color & !0x1F;
+        // and G-channel per-tile variation (bits 11:8 from fine hash XOR)
+        let base = color & !0xF1F;
         if tx == 0 || base != prev_base {
             biome_zones += 1;
             prev_base = base;

@@ -281,20 +281,27 @@ impl RiscvVm {
             }
         }
 
-        // 7. Pre-set initial_boot_params (kernel expects OpenSBI to do this).
+        // 7. Pre-set DTB pointers that OpenSBI normally initializes.
         //
-        // The kernel's _start_kernel moves a1 (DTB PA) to a0 and passes it to
-        // setup_vm(). But setup_vm() does NOT save it to initial_boot_params.
-        // The kernel expects OpenSBI firmware to have already written the DTB
-        // physical address to initial_boot_params before the kernel starts.
-        // Without OpenSBI, we must do it ourselves.
+        // The kernel's setup_arch() reads _dtb_early_va and _dtb_early_pa
+        // (NOT initial_boot_params!) to pass to early_init_dt_scan().
+        // These are BSS variables -- zero in the binary. OpenSBI sets them
+        // before jumping to the kernel. Without OpenSBI, we must set them.
         //
-        // initial_boot_params is at VA 0xC0C7A178 (PA 0x00C7A178).
-        // It stores the DTB physical address. The kernel's early_init_dt_scan()
-        // reads this and converts to virtual via phys_to_virt().
+        // Without these, early_init_dt_scan() receives NULL, skips DTB
+        // parsing, and memblock_add() is never called. Result: memory.cnt=0
+        // and every memblock_alloc() panics with "Failed to allocate".
+        let dtb_va = (dtb_addr as u32).wrapping_add(0xC0000000);
+        let dtb_early_va_pa: u64 = 0x00801008; // _dtb_early_va at VA 0xC0801008
+        let dtb_early_pa_pa: u64 = 0x0080100C; // _dtb_early_pa at VA 0xC080100C
+        vm.bus.write_word(dtb_early_va_pa, dtb_va).ok();
+        vm.bus.write_word(dtb_early_pa_pa, dtb_addr as u32).ok();
+        eprintln!("[boot] Pre-set _dtb_early_va = 0x{:08X}, _dtb_early_pa = 0x{:08X}", dtb_va, dtb_addr as u32);
+
+        // Also set initial_boot_params for compatibility (some kernel paths
+        // read it directly).
         let ibp_phys: u64 = 0x00C7A178;
         vm.bus.write_word(ibp_phys, dtb_addr as u32).ok();
-        eprintln!("[boot] Pre-set initial_boot_params = 0x{:08X} (DTB PA)", dtb_addr as u32);
 
         // 8. Set CPU state for boot.
         vm.cpu.x[10] = 0; // a0 = hartid (0)
@@ -619,6 +626,15 @@ impl RiscvVm {
                             vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
                             vm.bus.write_word(km_phys + 24, 0x00000000).ok();
                         }
+
+                        // Re-set _dtb_early_va and _dtb_early_pa.
+                        // setup_vm()'s pt_ops write (16 bytes at 0xC0801000)
+                        // overflows into _dtb_early_va (0xC0801008) and
+                        // _dtb_early_pa (0xC080100C). We must restore them
+                        // before soc_early_init reads _dtb_early_va.
+                        vm.bus.write_word(0x00801008, (dtb_addr.wrapping_add(0xC0000000)) as u32).ok();
+                        vm.bus.write_word(0x0080100C, dtb_addr as u32).ok();
+                        eprintln!("[boot] Re-set _dtb_early_va/pa after pt_ops overflow");
                     }
                     _last_satp = cur_satp;
                 }
@@ -823,6 +839,12 @@ impl RiscvVm {
                 let prb_pa = 0x00C79EACu64;
                 let prb = vm.bus.read_word(prb_pa).unwrap_or(0);
                 eprintln!("[boot]   phys_ram_base=0x{:08X}", prb);
+                // Check _dtb_early_va and _dtb_early_pa (the ACTUAL DTB pointers)
+                let deva = vm.bus.read_word(0x00801008).unwrap_or(0);
+                let depa = vm.bus.read_word(0x0080100C).unwrap_or(0);
+                let expected_dtb_va = dtb_addr.wrapping_add(0xC0000000) as u32;
+                eprintln!("[boot]   _dtb_early_va=0x{:08X} (expect 0x{:08X})", deva, expected_dtb_va);
+                eprintln!("[boot]   _dtb_early_pa=0x{:08X} (expect 0x{:08X})", depa, dtb_addr as u32);
                 // Check initial_boot_params (VA 0xC0C7A178, PA 0x00C7A178)
                 let ibp_pa = 0x00C7A178u64;
                 let ibp = vm.bus.read_word(ibp_pa).unwrap_or(0);

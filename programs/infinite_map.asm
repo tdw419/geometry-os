@@ -756,6 +756,11 @@ color_void:
 
     ; ---- Draw tile ----
 do_rect:
+    ; ---- G-channel variation from fine hash (same-biome tiles differ) ----
+    MOV r18, r6
+    LDI r19, 0xF00
+    AND r18, r19          ; fine_hash nibble in G-channel position
+    XOR r17, r18          ; subtle per-tile green variation
     ; ---- Apply precomputed day/night tint (1 instruction vs ~15 before) ----
     ADD r17, r23
     ; Use screen position accumulators (no multiply needed)
