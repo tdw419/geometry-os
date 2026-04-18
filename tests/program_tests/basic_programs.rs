@@ -920,3 +920,59 @@ fn test_starfield() {
         colors.len()
     );
 }
+
+#[test]
+fn test_maze_gen() {
+    let source = std::fs::read_to_string("programs/maze_gen.asm").expect("read maze.asm");
+    let asm = geometry_os::assembler::assemble(&source, 0).expect("assemble maze");
+    let mut vm = geometry_os::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "maze_gen should halt after generation + drawing");
+
+    // Should have white wall pixels (outer boundary always exists)
+    let mut white_pixels = 0;
+    let mut green_pixels = 0;
+    for y in 0..256 {
+        for x in 0..256 {
+            let px = vm.screen[y * 256 + x];
+            if px == 0xFFFFFF {
+                white_pixels += 1;
+            }
+            if px == 0x00FF00 {
+                green_pixels += 1;
+            }
+        }
+    }
+    assert!(
+        white_pixels > 100,
+        "maze_gen should have 100+ white wall pixels, got {}",
+        white_pixels
+    );
+
+    // Should have green entrance and exit markers
+    assert!(
+        green_pixels > 0,
+        "maze_gen should have green entrance/exit markers"
+    );
+
+    // Should have open passages (black pixels inside cells, away from walls)
+    // Check pixel at (18, 18) -- inside cell (1,1), away from wall lines
+    let black_inside = vm.screen[18 * 256 + 18];
+    assert!(
+        black_inside == 0,
+        "maze_gen should have open (black) passages, got 0x{:08X} at (18,18)",
+        black_inside
+    );
+}
