@@ -472,6 +472,33 @@ impl RiscvVm {
         // 3. SATP scan: fixes PTEs on page table switch
         vm.bus.auto_pte_fixup = true;
 
+        // Pre-populate memblock with kernel image reservation.
+        //
+        // The kernel's early_init_dt_scan() parses the DTB mem_rsvmap and
+        // calls memblock_reserve(0, kernel_phys_end) BEFORE setup_vm().
+        // If DTB parsing fails (wrong DTB address, bad format), memblock
+        // has no reservations and memblock_alloc() returns PA 0 for page
+        // tables, overwriting the kernel image.
+        //
+        // Pre-populate the reservation directly to ensure it exists even
+        // if DTB parsing fails.
+        //
+        // memblock struct at VA 0xC0803448 (PA 0x00803448):
+        //   memory:  cnt@0 max@4 regions@8 (each 8 bytes: base u32 + size u32)
+        //   reserved: cnt@48 max@52 regions@56
+        //
+        // We write to the reserved regions array at the next available slot.
+        let memblock_pa: u64 = 0x00803448;
+        let res_cnt_addr = memblock_pa + 48;
+        let res_cnt = vm.bus.read_word(res_cnt_addr).unwrap_or(0);
+        let res_region_offset = 56 + (res_cnt as u64) * 8;
+        // Reserve PA 0 to kernel_phys_end (kernel image region)
+        vm.bus.write_word(memblock_pa + res_region_offset, 0).ok();           // base = 0
+        vm.bus.write_word(memblock_pa + res_region_offset + 4, kernel_phys_end as u32).ok(); // size
+        vm.bus.write_word(res_cnt_addr, res_cnt + 1).ok();                   // cnt++
+        eprintln!("[boot] Pre-populated memblock reserved: PA 0 - PA 0x{:08X} (slot {})", 
+            kernel_phys_end, res_cnt);
+
         // Pre-set riscv_timebase to 10MHz (10000000).
         // The kernel reads this from the DTB's timebase-frequency property.
         // If DTB parsing fails (e.g., page table not yet set up for DTB VA),
@@ -659,8 +686,15 @@ impl RiscvVm {
                         //    couldn't allocate page tables at the wrong address
                         //
                         // Fix: scan all L1 entries in the kernel range and replace
-                        // any that are unmapped, non-leaf with PPN=0, or otherwise
-                        // broken with correct megapage mappings.
+                        // any that are unmapped or have broken L2 pointers (PPN=0)
+                        // with correct megapage mappings.
+                        //
+                        // NOTE: We do NOT force all non-leaf entries to megapages.
+                        // The MMU now has a fallback that synthesizes megapage
+                        // translations when a non-leaf entry has PPN=0 (broken L2
+                        // pointer from uninitialized memblock). Forcing all
+                        // non-leaf entries to megapages breaks the kernel's own
+                        // demand paging, which may create valid L2 entries later.
                         let mega_flags: u32 = 0x0000_00CF; // V+R+W+X+A+D, U=0
                         let mut fixup_count = 0u32;
                         // Kernel linear mapping: L1[768..777] (9 entries, 36MB)
@@ -672,8 +706,7 @@ impl RiscvVm {
                             let is_non_leaf = is_valid && (entry & 0xE) == 0;
                             let ppn = (entry >> 10) & 0x3FFFFF;
                             let needs_fix = !is_valid                    // Unmapped
-                                || (is_non_leaf && ppn == 0)         // Broken L2 at PA 0
-                                || is_non_leaf; // Any non-leaf -- force megapage
+                                || (is_non_leaf && ppn == 0);         // Broken L2 at PA 0
                             if !needs_fix {
                                 continue;
                             }

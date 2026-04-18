@@ -373,7 +373,49 @@ pub fn translate(
     }
 
     // Non-leaf: follow pointer to level 2.
-    let l2_base = (fixup_ppn(pte_ppn(l1_pte)) as u64) << 12;
+    let l1_ppn = pte_ppn(l1_pte);
+    let fixed_l1_ppn = fixup_ppn(l1_ppn);
+
+    // Broken L2 pointer detection: if PPN is 0, the L2 table would be at PA 0x0
+    // (the start of the kernel image). This happens when the kernel's memblock
+    // allocator returns PA 0 because the DTB reservation wasn't processed
+    // before page table allocation. Instead of following the broken pointer
+    // (which would read kernel code as PTEs), synthesize a correct megapage
+    // translation: VA maps to PA = VPN[1] * 4MB + VPN[0] * 4KB + offset.
+    if fixed_l1_ppn == 0 && (l1_pte & PTE_V) != 0 {
+        // Compute the expected physical address for a linear mapping:
+        // VA 0xC0000000+ maps to PA 0x0+ (offset by PAGE_OFFSET).
+        // For non-kernel VAs (below PAGE_OFFSET), use identity mapping.
+        let pa_base: u64 = if vpn1 >= 768 {
+            // Kernel linear mapping: VA = PA + 0xC0000000
+            ((vpn1 - 768) as u64) << 22
+        } else {
+            // Low address: identity map
+            (vpn1 as u64) << 22
+        };
+        let pa = pa_base | ((vpn0 as u64) << 12) | (offset as u64);
+        let flags = PTE_V | PTE_R | PTE_W | PTE_X | PTE_A | PTE_D;
+
+        if let Some(fault) = check_permissions(flags, access_type, effective_priv, sum, mxr) {
+            bus.mmu_log.push(MmuEvent::PageFault {
+                va,
+                access: access_type,
+                ptes: vec![l1_pte],
+            });
+            return fault;
+        }
+
+        let eff_ppn = (pa >> 12) as u32;
+        tlb.insert(combined_vpn, asid, eff_ppn, flags);
+        bus.mmu_log.push(MmuEvent::PageTableWalk {
+            va,
+            pa,
+            ptes: vec![l1_pte],
+        });
+        return TranslateResult::Ok(pa);
+    }
+
+    let l2_base = (fixed_l1_ppn as u64) << 12;
     let l2_addr = l2_base | ((vpn0 as u64) << 2);
     let l2_pte = match bus.read_word(l2_addr) {
         Ok(w) => w,
