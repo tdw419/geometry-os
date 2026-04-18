@@ -1,6 +1,6 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  99 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5, watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  102 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5, watch it run.
 
 **Progress:** 49/50 phases complete, 1 in progress
 
@@ -1498,7 +1498,7 @@ This is marked "future" because it's a significant new feature. The core pixel-d
 
 ## Global Risks
 
-- Opcode space: 105 of ~256 slots used, plenty of room
+- Opcode space: 102 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing

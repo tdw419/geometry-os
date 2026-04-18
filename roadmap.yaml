@@ -1,6 +1,6 @@
 title: Geometry OS Roadmap
 version: 1.0.0
-description: 'Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  99 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5, watch it run.'
+description: 'Pixel-art virtual machine with built-in assembler, debugger, and live GUI.\n  102 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in\n  the built-in text editor, press F5, watch it run.'
 project_url: https://github.com/tdw419/geometry-os
 meta:
   language: Rust
@@ -8,10 +8,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 101
-  tests: 1167
-  programs: 55
-  loc: 31261
+  opcodes: 102
+  tests: 1179
+  programs: 56
+  loc: 31418
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -2937,7 +2937,7 @@ phases:
   scope_lines_total: 800
   test_target: 10
 global_risks:
-- 'Opcode space: 105 of ~256 slots used, plenty of room'
+- 'Opcode space: 102 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
