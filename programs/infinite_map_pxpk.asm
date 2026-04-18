@@ -56,6 +56,7 @@
 ;   RAM[0x7804] = y_neighbor_hash (precomputed per row for Y-blend)
 ;   RAM[0x7805] = saved x_hash (preserved across X-blend for Y-blend reuse)
 ;   RAM[0x7806] = biome_type (per-tile, for tree sprite check)
+;   RAM[0x7807] = prev_tile_elevation (carry-forward for contour right-edge check)
 ;   RAM[0x7100-0x74FF] = 32x32 minimap pixel cache (1024 dimmed biome colors)
 ;   RAM[0xFFB]  = key bitmask
 ;
@@ -469,6 +470,11 @@ LDI r27, 0              ; screen_y accumulator
 render_y:
   LDI r2, 0             ; tx = 0
   LDI r28, 0            ; screen_x accumulator
+
+  ; Reset contour carry-forward elevation for start of row
+  LDI r18, 0x7807
+  LDI r19, 0
+  STORE r18, r19            ; RAM[0x7807] = 0 (no left neighbor at row start)
 
   ; Precompute y-part of blend neighbor hash (shared across row)
   MOV r26, r15
@@ -929,8 +935,9 @@ tile_done:
     ; Subtle dark lines where fine_hash elevation changes by > 2 between
     ; adjacent tiles. Creates a topographic map effect.
     ; Elevation = (fine_hash >> 28) & 7 (0-7 range, same as height shading).
-    ; Skip water tiles (r31 != 0). Checks right and bottom neighbors.
-    JNZ r31, contour_done
+    ; Skip water tiles (r31 != 0). Right neighbor uses carry-forward from
+    ; RAM[0x7807] (avoids recomputing fine_hash). Bottom neighbor recomputes.
+    JNZ r31, contour_clr_skip
 
     ; Extract current elevation
     MOV r5, r6
@@ -938,33 +945,24 @@ tile_done:
     SHR r5, r18
     ANDI r5, 7              ; r5 = current_elevation (0-7)
 
-    ; -- Right neighbor contour --
-    MOV r18, r3
-    ADD r18, r7              ; world_x + 1
-    LDI r19, 374761393
-    MUL r18, r19             ; (wx+1) * seed_x
-    MOV r19, r4
-    LDI r20, 668265263
-    MUL r19, r20             ; wy * seed_y
-    XOR r18, r19             ; right fine_hash
-    LDI r19, 28
-    SHR r18, r19
-    ANDI r18, 7              ; r18 = right_elevation
+    ; -- Right neighbor contour (carry-forward from RAM[0x7807]) --
+    LDI r18, 0x7807
+    LOAD r18, r18            ; r18 = prev_tile_elevation
 
-    ; Check: current - right >= 3?
+    ; Check: |current - prev| >= 3? (single subtraction + sign test)
     MOV r19, r5
-    SUB r19, r18              ; current - right
+    SUB r19, r18              ; current - prev
     LDI r20, 3
-    SUB r19, r20              ; (current - right) - 3
+    SUB r19, r20              ; (current - prev) - 3
     LDI r20, 0x80000000
     AND r19, r20              ; sign bit check
-    JZ r19, contour_r_draw    ; non-negative → current >= right + 3
+    JZ r19, contour_r_draw    ; non-negative → current >= prev + 3
 
-    ; Check reverse: right - current >= 3?
+    ; Check reverse: prev - current >= 3?
     MOV r19, r18
-    SUB r19, r5               ; right - current
+    SUB r19, r5               ; prev - current
     LDI r20, 3
-    SUB r19, r20              ; (right - current) - 3
+    SUB r19, r20              ; (prev - current) - 3
     LDI r20, 0x80000000
     AND r19, r20
     JNZ r19, contour_bottom_chk  ; both diffs < 3 → skip
@@ -1022,6 +1020,18 @@ contour_b_draw:
     RECTF r28, r18, r9, r7, r17
 
 contour_done:
+    ; Store current elevation for next tile's right-edge contour check
+    LDI r18, 0x7807
+    STORE r18, r5             ; RAM[0x7807] = current_elevation
+    JMP contour_after
+
+contour_clr_skip:
+    ; Water tile: store elevation 0 so next tile compares correctly
+    LDI r18, 0x7807
+    LDI r19, 0
+    STORE r18, r19            ; RAM[0x7807] = 0 (water is flat)
+
+contour_after:
 
     ; ---- Tree sprites on grass/forest biomes ----
     ; Deterministic placement via fine_hash: forest ~50%, grass ~25%.
