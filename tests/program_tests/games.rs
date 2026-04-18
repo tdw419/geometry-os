@@ -532,15 +532,17 @@ fn test_infinite_map_pxpk_step_budget() {
     // Day/night tint is inline (1 ADD per tile = +4096 steps for 64x64 grid).
     // Pattern dispatch now uses r29 save/restore (+2 per tile = +8192).
     // 32x32 minimap with RAM cache + repaint adds ~10K steps.
-    // Total should be well under 600K.
+    // Sky gradient (4 bands x RECTF) adds ~30 steps.
+    // Elevation contour lines (per-tile neighbor check + selective RECTF) adds ~50-80K.
+    // Total should be under 800K with all visual features enabled.
     let mut vm = infinite_map_pxpk_vm();
     vm.ram[0xFFB] = 0;
-    let steps = step_until_frame(&mut vm, 1_000_000);
+    let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "pxpk should reach FRAME (took {})", steps);
     eprintln!("pxpk frame: {} steps", steps);
     assert!(
-        steps < 600_000,
-        "pxpk render loop should take < 600K steps, took {}",
+        steps < 800_000,
+        "pxpk render loop should take < 800K steps, took {}",
         steps
     );
 }
@@ -643,12 +645,12 @@ fn test_infinite_map_pxpk_tint_phase_analysis() {
         tint_g
     );
 
-    // At least 80% of flat tiles should match the exact tint delta
-    // (some won't match due to water tile edges or 8-bit wraparound)
+    // At least 75% of flat tiles should match the exact tint delta
+    // (some won't match due to water tile edges, contour lines, or 8-bit wraparound)
     assert!(
-        r_match > matching_tiles * 80 / 100,
+        r_match > matching_tiles * 75 / 100,
         "expected >{} flat tiles with R+{}, got {}/{}",
-        matching_tiles * 80 / 100,
+        matching_tiles * 75 / 100,
         tint_r,
         r_match,
         matching_tiles
