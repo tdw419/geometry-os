@@ -634,17 +634,18 @@ fn test_infinite_map_cardinal_and_diagonal_combined() {
 fn test_infinite_map_render_loop_instruction_count() {
     // Performance regression test: verify the render loop stays within budget.
     // After removing dead off-screen bounds checks (4 ops/tile = ~16K savings),
-    // a single frame runs in ~322K steps. Before the optimization it was ~338K.
-    // We allow some slack (350K) to account for variations in the pre-tint path.
+    // a single frame ran in ~322K steps.
+    // With biome-aware pattern overlay (1 accent PSET per tile): ~440K steps.
+    // We allow some slack (500K) to account for pattern overlay + animation.
     let mut vm = infinite_map_vm();
     vm.ram[0xFFB] = 0; // no input
 
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready, "should reach FRAME within 1M steps (took {})", steps);
 
-    // The render loop should be well under 350K steps for a single frame.
-    assert!(steps < 350_000,
-        "render loop should take < 350K steps, took {} (possible performance regression)",
+    // The render loop should be well under 500K steps for a single frame.
+    assert!(steps < 500_000,
+        "render loop should take < 500K steps, took {} (possible performance regression)",
         steps);
 }
 

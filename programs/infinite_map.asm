@@ -1,4 +1,4 @@
-; infinite_map.asm -- Infinite scrolling procedural terrain (v5)
+; infinite_map.asm -- Infinite scrolling procedural terrain (v6)
 ;
 ; Arrow keys / WASD scroll through infinite procedurally generated terrain.
 ; Diagonal keys (bits 4-7) allow single-key diagonal scrolling.
@@ -7,10 +7,13 @@
 ; Water tiles animate (shimmer) based on frame counter.
 ; Day/night tint: camera_x position shifts color warmth -- west is cooler,
 ; east is warmer. 16 zones, subtle top-nibble adjustments per channel.
+; Biome-aware pattern overlay: each biome gets a deterministic texture type
+; (horizontal/vertical/center/corner) with animated accent color via
+; frame_counter XOR. Makes terrain look like what it represents.
 ; Pure math -- no stored world data, truly infinite.
 ;
 ; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
-; Renders via RECTF. ~322K instructions/frame (32% of 1M budget).
+; Renders via RECTF + 1 PSET accent per tile. ~440K instructions/frame (44% of 1M budget).
 ; Player cursor: pulsing white/yellow crosshair at screen center (127,127).
 ;   4 arms (3px each) with 1px center gap. Pulses every 16 frames.
 ; Optimized: day/night tint precomputed once per frame (was per-tile ~40K savings),
@@ -23,6 +26,14 @@
 ;   RAM[0x7801] = camera_y (tile coordinates)
 ;   RAM[0x7802] = frame_counter (increments each frame)
 ;   RAM[0xFFB]  = key bitmask (host writes each frame)
+;   RAM[0x7900-0x791F] = pattern table (32 biome -> pattern type mappings)
+;
+; Pattern types (2-bit per biome):
+;   0=horizontal: water(0-1), beach(2), desert(3-4), snow(19-21) -- ripple/drift
+;   1=vertical: mountain(13-14), tundra(15), ruins(23), crystal(24-25) -- ridge/pillar
+;   2=center: oasis(5), grass(6-7), swamp(8-9), forest(10-11), mushroom(12),
+;             coral(22), biolum(29-30) -- canopy/dot
+;   3=corner: lava(16-17), volcanic(18), ash(26), deadlands(27-28), void(31) -- spark
 ;
 ; Biome distribution (21 biomes, types 0-31):
 ;   water(0-1), beach(2), desert(3-4), oasis(5), grass(6-7),
@@ -39,6 +50,84 @@ LDI r10, 0xFFB          ; key bitmask port
 LDI r11, 0x7800         ; camera_x address
 LDI r12, 0x7801         ; camera_y address
 LDI r13, 0x7802         ; frame_counter address
+
+; ===== Pattern Table (32 entries at 0x7900-0x791F) =====
+; 2-bit pattern per biome: 0=horizontal, 1=vertical, 2=center, 3=corner
+; Deterministic biome texture bias -- deserts horizontal, mountains vertical, etc.
+LDI r20, 0x7900
+LDI r17, 0              ; water(0) -> horizontal
+STORE r20, r17
+ADD r20, r7
+STORE r20, r17           ; water(1) -> horizontal
+ADD r20, r7
+STORE r20, r17           ; beach(2) -> horizontal
+ADD r20, r7
+STORE r20, r17           ; desert(3) -> horizontal
+ADD r20, r7
+STORE r20, r17           ; desert(4) -> horizontal
+ADD r20, r7
+LDI r17, 2
+STORE r20, r17           ; oasis(5) -> center
+ADD r20, r7
+STORE r20, r17           ; grass(6) -> center
+ADD r20, r7
+STORE r20, r17           ; grass(7) -> center
+ADD r20, r7
+STORE r20, r17           ; swamp(8) -> center
+ADD r20, r7
+STORE r20, r17           ; swamp(9) -> center
+ADD r20, r7
+STORE r20, r17           ; forest(10) -> center
+ADD r20, r7
+STORE r20, r17           ; forest(11) -> center
+ADD r20, r7
+STORE r20, r17           ; mushroom(12) -> center
+ADD r20, r7
+LDI r17, 1
+STORE r20, r17           ; mountain(13) -> vertical
+ADD r20, r7
+STORE r20, r17           ; mountain(14) -> vertical
+ADD r20, r7
+STORE r20, r17           ; tundra(15) -> vertical
+ADD r20, r7
+LDI r17, 3
+STORE r20, r17           ; lava(16) -> corner
+ADD r20, r7
+STORE r20, r17           ; lava(17) -> corner
+ADD r20, r7
+STORE r20, r17           ; volcanic(18) -> corner
+ADD r20, r7
+LDI r17, 0
+STORE r20, r17           ; snow(19) -> horizontal (drift)
+ADD r20, r7
+STORE r20, r17           ; snow(20) -> horizontal
+ADD r20, r7
+STORE r20, r17           ; snow(21) -> horizontal
+ADD r20, r7
+LDI r17, 2
+STORE r20, r17           ; coral(22) -> center
+ADD r20, r7
+LDI r17, 1
+STORE r20, r17           ; ruins(23) -> vertical (pillar)
+ADD r20, r7
+STORE r20, r17           ; crystal(24) -> vertical
+ADD r20, r7
+STORE r20, r17           ; crystal(25) -> vertical
+ADD r20, r7
+LDI r17, 3
+STORE r20, r17           ; ash(26) -> corner
+ADD r20, r7
+STORE r20, r17           ; deadlands(27) -> corner
+ADD r20, r7
+STORE r20, r17           ; deadlands(28) -> corner
+ADD r20, r7
+LDI r17, 2
+STORE r20, r17           ; biolum(29) -> center
+ADD r20, r7
+STORE r20, r17           ; biolum(30) -> center
+ADD r20, r7
+LDI r17, 3
+STORE r20, r17           ; void(31) -> corner
 
 ; ===== Main Loop =====
 main_loop:
@@ -672,7 +761,111 @@ do_rect:
     ; Use screen position accumulators (no multiply needed)
     RECTF r26, r25, r9, r9, r17  ; fill 4x4 rect with color
 
-    ; ---- Next tile (shared by on-screen and off-screen paths) ----
+    ; ---- Biome-aware pattern overlay (1 accent pixel per tile) ----
+    ; Look up pattern type from boot-initialized table
+    LDI r18, 0x7900
+    ADD r18, r5           ; r18 = pattern_table[biome_type]
+    LOAD r18, r18         ; r18 = pattern type (0-3)
+
+    ; Accent color: brighten base + animate via frame_counter
+    MOV r19, r17
+    LDI r20, 0x181818
+    ADD r19, r20          ; brighten
+    MOV r20, r22
+    LDI r21, 0xF
+    AND r20, r21          ; frame_counter & 0xF
+    LDI r21, 4
+    SHL r20, r21          ; shift into nibble range (0..0xF0)
+    ADD r19, r20          ; animated accent color
+
+    ; Dispatch on pattern type
+    ; Use fine_hash bit 0 for per-tile position variation
+    JZ r18, pat_horiz     ; pattern 0 = horizontal accent
+    LDI r20, 1
+    CMP r18, r20
+    JZ r0, pat_vert       ; pattern 1 = vertical accent
+    LDI r20, 2
+    CMP r18, r20
+    JZ r0, pat_center     ; pattern 2 = center dot
+    JMP pat_corner        ; pattern 3 = corner spark
+
+pat_horiz:
+    ; Horizontal accent: pixel at (screen_x + 1 or 2, screen_y + 2)
+    MOV r20, r25
+    LDI r21, 2
+    ADD r20, r21          ; y = screen_y + 2 (middle row)
+    MOV r18, r26
+    LDI r21, 1
+    ADD r18, r21          ; default col = screen_x + 1
+    MOV r21, r6
+    LDI r17, 1
+    AND r21, r17          ; fine_hash & 1
+    JZ r21, pat_h_draw
+    ADD r18, r7           ; col = screen_x + 2
+pat_h_draw:
+    PSET r18, r20, r19
+    JMP next_tile
+
+pat_vert:
+    ; Vertical accent: pixel at (screen_x + 2, screen_y + 1 or 2)
+    MOV r18, r26
+    LDI r21, 2
+    ADD r18, r21          ; x = screen_x + 2 (middle col)
+    MOV r21, r6
+    LDI r17, 1
+    AND r21, r17          ; fine_hash & 1
+    JZ r21, pat_v_hi
+    MOV r20, r25
+    LDI r21, 1
+    ADD r20, r21          ; y = screen_y + 1
+    JMP pat_v_draw
+pat_v_hi:
+    MOV r20, r25
+    LDI r21, 2
+    ADD r20, r21          ; y = screen_y + 2
+pat_v_draw:
+    PSET r18, r20, r19
+    JMP next_tile
+
+pat_center:
+    ; Center dot: pixel at (screen_x + 1 or 2, screen_y + 1 or 2)
+    MOV r18, r26
+    LDI r21, 1
+    ADD r18, r21          ; x = screen_x + 1
+    MOV r20, r25
+    ADD r20, r21          ; y = screen_y + 1
+    MOV r21, r6
+    LDI r17, 1
+    AND r21, r17          ; fine_hash & 1
+    JZ r21, pat_c_draw
+    ADD r18, r7           ; x = screen_x + 2
+    ADD r20, r7           ; y = screen_y + 2
+pat_c_draw:
+    PSET r18, r20, r19
+    JMP next_tile
+
+pat_corner:
+    ; Corner spark: pixel at (screen_x + 1 or 2, screen_y + 0 or 3)
+    MOV r18, r26
+    MOV r20, r25
+    MOV r21, r6
+    LDI r17, 1
+    AND r21, r17          ; fine_hash & 1
+    JZ r21, pat_cr_tl
+    LDI r21, 2
+    ADD r18, r21          ; x = screen_x + 2
+    LDI r21, 3
+    ADD r20, r21          ; y = screen_y + 3
+    JMP pat_cr_draw
+pat_cr_tl:
+    LDI r21, 1
+    ADD r18, r21          ; x = screen_x + 1
+    ; y = screen_y + 0 (already set)
+pat_cr_draw:
+    PSET r18, r20, r19
+    JMP next_tile
+
+    ; ---- Next tile ----
 next_tile:
     ADD r2, r7           ; tx++
     ADD r26, r9          ; screen_x += TILE_SIZE
