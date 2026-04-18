@@ -279,7 +279,7 @@ The convergence analysis from two independent possibility explorations both iden
 
 ## Priority Order for Phase 38
 
-- [ ] Phase 38a: Execution Trace Ring Buffer
+- [x] Phase 38a: Execution Trace Ring Buffer
 - [ ] Phase 38b: Frame Checkpointing
 - [ ] Phase 38c: Backward Replay
 - [ ] Phase 38d: Timeline Forking
