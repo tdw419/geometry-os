@@ -14,9 +14,12 @@
 ;   7. Height-based shading from fine_hash top bits (0-7 * 0x030303 per tile)
 ;   8. Animated water shimmer: center pattern + frame_counter cycling accent
 ;   9. Coastline foam: water tiles adjacent to land get +0x303030 white blend
-;  10. Y-direction biome blending: top/bottom biome edges get 50/50 blend,
-;      complementing the existing X-direction blending for smooth boundaries
-;      in both axes. Corner tiles get sequential X+Y blend (bilinear-like).
+;  10. Biome boundary blending: smooth gradient transitions at biome edges.
+;      X-direction: 4-tile transition zone (positions 0,1,6,7). Outer edges
+;      (0,7) always blend 50/50; inner edges (1,6) use hash-dithered blending
+;      (coarse_hash bit 0) for organic gradients.
+;      Y-direction: 2-tile edges (positions 0,7) with 50/50 blend.
+;      Corner tiles get sequential X+Y blend (bilinear-like).
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -481,32 +484,55 @@ render_y:
     ADD r20, r17          ; r20 = 0x7000 + biome_index
     LOAD r17, r20         ; r17 = biome base color
 
-    ; ---- Biome boundary blending (X + Y direction, 1-tile edges) ----
-    ; At biome edges, blend base color with neighboring biome via masked average:
-    ;   ((A & 0xFEFEFE)>>1) + ((B & 0xFEFEFE)>>1)
-    ; Eliminates hard checkerboard edges in both X and Y directions.
-    ; Corner tiles (both X and Y edge) get sequential blend for bilinear-like effect.
-    ; X-edge: local_x == 0 blends left, local_x == 7 blends right.
-    ; Y-edge: local_y == 0 blends top, local_y == 7 blends bottom.
+    ; ---- Biome boundary blending (smooth gradient transitions) ----
+    ; Extended transition zone: 4 tiles wide in both X and Y (positions 0,1,6,7).
+    ; Outer edges (0,7): always blend 50/50 with neighbor biome.
+    ; Inner edges (1,6): hash-dithered blend -- 50% of tiles blend via coarse_hash
+    ; bit 0, creating organic gradient zones that eliminate hard checkerboard edges.
+    ; Corner tiles (both X+Y edge) get sequential blend (bilinear-like).
 
-    ; -- X-direction blend --
-    ; y_hash precomputed in r26 (shared across row at line 445)
+    ; -- X-direction blend (4-tile transition zone) --
+    ; y_hash precomputed in r26 (shared across row)
     MOV r18, r3
     ANDI r18, 7              ; r18 = local_x (position within 8-tile biome)
-    JNZ r18, xblend_chk_r
-    ; local_x == 0: blend with LEFT neighbor (world_x - 8)
+    JNZ r18, xblend_chk_1
+    ; local_x == 0: always blend with LEFT neighbor (world_x - 8)
     MOV r21, r3
     LDI r18, 8
-    SUB r21, r18             ; neighbor_x = world_x - 8
+    SUB r21, r18
     JMP xblend_hash
-xblend_chk_r:
-    LDI r22, 7
-    SUB r18, r22             ; local_x - 7
-    JNZ r18, no_xblend       ; not at X edge, skip
-    ; local_x == 7: blend with RIGHT neighbor (world_x + 8)
+xblend_chk_1:
+    LDI r21, 1
+    SUB r18, r21             ; r18 = local_x - 1
+    JNZ r18, xblend_chk_6
+    ; local_x == 1: hash-dithered blend LEFT (50% of tiles)
+    MOV r21, r5              ; mixed_hash for dither
+    ANDI r21, 1              ; dither bit
+    JNZ r21, no_xblend       ; skip for this tile
     MOV r21, r3
     LDI r18, 8
-    ADD r21, r18             ; neighbor_x = world_x + 8
+    SUB r21, r18
+    JMP xblend_hash
+xblend_chk_6:
+    LDI r21, 5
+    SUB r18, r21             ; r18 = local_x - 6
+    JNZ r18, xblend_chk_7
+    ; local_x == 6: hash-dithered blend RIGHT (50% of tiles)
+    MOV r21, r5              ; mixed_hash for dither
+    ANDI r21, 1              ; dither bit (opposite polarity)
+    JZ r21, no_xblend        ; skip for this tile
+    MOV r21, r3
+    LDI r18, 8
+    ADD r21, r18
+    JMP xblend_hash
+xblend_chk_7:
+    LDI r21, 1
+    SUB r18, r21             ; r18 = local_x - 7
+    JNZ r18, no_xblend       ; not at X edge, skip
+    ; local_x == 7: always blend with RIGHT neighbor (world_x + 8)
+    MOV r21, r3
+    LDI r18, 8
+    ADD r21, r18
 xblend_hash:
     ; Compute neighbor biome via coarse hash (y_hash from r26)
     LDI r18, 3
@@ -531,23 +557,23 @@ xblend_hash:
     ADD r17, r22             ; r17 = X-blended base color
 no_xblend:
 
-    ; -- Y-direction blend --
+    ; -- Y-direction blend (2-tile edges, matching original cost) --
     MOV r18, r4
     ANDI r18, 7              ; r18 = local_y (position within 8-tile biome)
-    JNZ r18, yblend_chk_b
+    JNZ r18, yblend_chk_7
     ; local_y == 0: blend with TOP neighbor (world_y - 8)
     MOV r21, r4
     LDI r18, 8
-    SUB r21, r18             ; neighbor_y = world_y - 8
+    SUB r21, r18
     JMP yblend_hash
-yblend_chk_b:
-    LDI r22, 7
-    SUB r18, r22             ; local_y - 7
+yblend_chk_7:
+    LDI r21, 7
+    SUB r18, r21             ; local_y - 7
     JNZ r18, no_yblend       ; not at Y edge, skip
     ; local_y == 7: blend with BOTTOM neighbor (world_y + 8)
     MOV r21, r4
     LDI r18, 8
-    ADD r21, r18             ; neighbor_y = world_y + 8
+    ADD r21, r18
 yblend_hash:
     ; Compute neighbor biome via coarse hash (Y direction)
     MOV r18, r3

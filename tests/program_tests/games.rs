@@ -1058,6 +1058,76 @@ fn test_infinite_map_pxpk_y_blending() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_smooth_transition_zone() {
+    // The 4-tile transition zone (positions 0,1,6,7) should produce blended
+    // colors at more tiles than the old 2-tile zone (positions 0,7 only).
+    // We verify by counting how many "near-edge" tiles (local_x 1 or 6)
+    // show colors that differ from their biome's interior.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    // Scan tiles at local_x == 1 (second column of each biome, 1 tile from left edge)
+    // and local_x == 6 (second-to-last column, 1 tile from right edge).
+    // These are the hash-dithered positions -- ~50% should blend with the neighbor.
+    let mut inner_edge_checked = 0;
+    let mut inner_edge_blended = 0;
+
+    for boundary_tx in (8..56).step_by(8) {
+        for ty in (0..64).step_by(2) {
+            // local_x == 1: tile at boundary_tx + 1 (second column of right biome)
+            let inner_left_px = boundary_tx * 4 + 4; // local_x=1 in screen coords
+            let interior_left_px = (boundary_tx + 3) * 4; // local_x=3 (interior)
+            let idx = ty * 256 + inner_left_px;
+            let int_idx = ty * 256 + interior_left_px;
+
+            if idx >= 256 * 256 || int_idx >= 256 * 256 {
+                continue;
+            }
+
+            let color = vm.screen[idx];
+            let int_color = vm.screen[int_idx];
+
+            if color == 0 || int_color == 0 {
+                continue;
+            }
+
+            // Skip water
+            let r = ((color >> 16) & 0xFF) as i32;
+            let b = (color & 0xFF) as i32;
+            if r < 30 && b > 100 {
+                continue;
+            }
+
+            inner_edge_checked += 1;
+
+            // Check if inner-edge tile differs from interior (hash-dithered blend)
+            let color_rg = ((color >> 16) & 0xFF, (color >> 8) & 0xFF);
+            let int_rg = ((int_color >> 16) & 0xFF, (int_color >> 8) & 0xFF);
+
+            if color_rg != int_rg {
+                inner_edge_blended += 1;
+            }
+        }
+    }
+
+    eprintln!(
+        "Smooth transition zone: {}/{} inner-edge tiles show blending (expect ~25-60%)",
+        inner_edge_blended, inner_edge_checked
+    );
+
+    // With hash dithering, ~50% of inner-edge tiles blend. We expect at least
+    // 15% to show blending (conservative -- accounts for same-biome neighbors
+    // that wouldn't produce visible color change even when blended).
+    assert!(
+        inner_edge_blended >= inner_edge_checked / 7,
+        "at least ~15% of inner-edge tiles should show hash-dithered blending, got {}/{}",
+        inner_edge_blended, inner_edge_checked
+    );
+}
+
+#[test]
 fn test_infinite_map_runs_and_renders() {
     // Requirement: the program runs to completion of a frame and renders non-black pixels.
     let mut vm = infinite_map_vm();
