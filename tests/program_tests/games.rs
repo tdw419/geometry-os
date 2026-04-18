@@ -1316,6 +1316,117 @@ fn test_infinite_map_pxpk_minimap_updates_every_4_frames() {
 }
 
 #[test]
+fn test_infinite_map_pxpk_tree_sprites_on_grass_and_forest() {
+    // Verify tree sprites appear on grass (biome 6-7) and forest (biome 10-11) tiles.
+    // Trees are drawn as brown trunk (0x664422) + green canopy (0x228811) overlaid
+    // on the terrain tile. They use fine_hash for deterministic placement:
+    // grass ~25%, forest ~50%. We verify by scanning for tree pixels.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    // Tree colors
+    let canopy_color = 0x228811u32;
+    let trunk_color = 0x664422u32;
+
+    // Scan screen for tree pixels
+    let mut canopy_pixels = 0usize;
+    let mut trunk_pixels = 0usize;
+    for y in 0..256 {
+        for x in 0..256 {
+            let px = vm.screen[y * 256 + x];
+            if px == canopy_color {
+                canopy_pixels += 1;
+            }
+            if px == trunk_color {
+                trunk_pixels += 1;
+            }
+        }
+    }
+
+    eprintln!(
+        "Tree sprites: {} canopy pixels, {} trunk pixels",
+        canopy_pixels, trunk_pixels
+    );
+
+    // Should find some tree canopy pixels (forest ~50%, grass ~25% of their tiles)
+    assert!(
+        canopy_pixels > 0,
+        "should find tree canopy pixels (0x228811), got 0"
+    );
+
+    // Should find trunk pixels (1 per tree)
+    assert!(
+        trunk_pixels > 0,
+        "should find tree trunk pixels (0x664422), got 0"
+    );
+
+    // Trunk count should be proportional to canopy count
+    // Each tree has 6 canopy pixels (3x2) and 1 trunk pixel (1x1)
+    // So canopy_pixels / trunk_pixels should be ~6:1
+    let ratio = canopy_pixels as f64 / trunk_pixels.max(1) as f64;
+    assert!(
+        ratio > 3.0 && ratio < 12.0,
+        "canopy/trunk ratio should be ~6:1, got {:.1}",
+        ratio
+    );
+}
+
+#[test]
+fn test_infinite_map_pxpk_trees_deterministic() {
+    // Tree placement should be deterministic: same camera = same trees every frame.
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+
+    // Render frame 0
+    let _ = step_until_frame(&mut vm, 1_000_000);
+
+    // Capture tree pixel positions from frame 0
+    let mut tree_pixels_f0 = Vec::new();
+    for y in 0..256 {
+        for x in 0..256 {
+            let px = vm.screen[y * 256 + x];
+            if px == 0x228811 || px == 0x664422 {
+                tree_pixels_f0.push((x, y, px));
+            }
+        }
+    }
+
+    // Render another frame (frame 1, no camera movement)
+    vm.frame_ready = false;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+
+    // Tree pixel positions should be identical (same camera, deterministic hash)
+    let mut tree_pixels_f1 = Vec::new();
+    for y in 0..256 {
+        for x in 0..256 {
+            let px = vm.screen[y * 256 + x];
+            if px == 0x228811 || px == 0x664422 {
+                tree_pixels_f1.push((x, y, px));
+            }
+        }
+    }
+
+    assert_eq!(
+        tree_pixels_f0.len(),
+        tree_pixels_f1.len(),
+        "tree count should be deterministic across frames"
+    );
+
+    // Every tree pixel should match
+    let mismatches = tree_pixels_f0
+        .iter()
+        .zip(tree_pixels_f1.iter())
+        .filter(|(a, b)| a != b)
+        .count();
+    assert_eq!(
+        mismatches, 0,
+        "tree positions should be identical across frames with same camera"
+    );
+}
+
+#[test]
 fn test_infinite_map_runs_and_renders() {
     // Requirement: the program runs to completion of a frame and renders non-black pixels.
     let mut vm = infinite_map_vm();

@@ -29,6 +29,10 @@
 ;      Pixel cache in RAM[0x7100..0x74FF]. Biome hashes recomputed every
 ;      4 frames; repaint from cache every frame. Dimmed 50% brightness.
 ;      Border (0xAAAAAA) and white center dot drawn every frame.
+;  12. Procedural tree sprites on grass (biome 6-7) and forest (biome 10-11).
+;      Deterministic placement via fine_hash bits: forest ~50%, grass ~25%.
+;      Tree shape: 3x2 green canopy + 1x1 brown trunk (2 RECTF calls).
+;      Skips water tiles. RAM[0x7806] = biome_type per tile.
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -39,6 +43,7 @@
 ;   RAM[0x7803] = y_blend_mode (0=none, 1=top 50/50, 2=top 75/25, 3=bottom 75/25, 4=bottom 50/50)
 ;   RAM[0x7804] = y_neighbor_hash (precomputed per row for Y-blend)
 ;   RAM[0x7805] = saved x_hash (preserved across X-blend for Y-blend reuse)
+;   RAM[0x7806] = biome_type (per-tile, for tree sprite check)
 ;   RAM[0x7100-0x74FF] = 32x32 minimap pixel cache (1024 dimmed biome colors)
 ;   RAM[0xFFB]  = key bitmask
 ;
@@ -549,6 +554,8 @@ ypre_done:
     SHR r29, r18
     ANDI r29, 3           ; r29 = pattern_type (0-3) -- saved from clobber
     MOV r30, r17          ; save biome_type for water/height checks
+    LDI r18, 0x7806
+    STORE r18, r30         ; save biome_type to RAM for tree sprite check
 
     ; ---- TABLE LOOKUP: biome color ----
     MOV r20, r24
@@ -852,6 +859,63 @@ pat_horiz:
     JMP tile_done
 
 tile_done:
+
+    ; ---- Tree sprites on grass/forest biomes ----
+    ; Deterministic placement via fine_hash: forest ~50%, grass ~25%.
+    ; Tree shape: 3x2 green canopy at (sx+1, sy) + 1x1 brown trunk at (sx+2, sy+2).
+    ; RAM[0x7806] = biome_type (saved per tile during hash phase).
+    ; Fast reject: water (r31), then load biome and CMP against 4 targets.
+    JNZ r31, no_tree         ; water tiles skip
+
+    LDI r18, 0x7806
+    LOAD r18, r18            ; biome_type
+    LDI r20, 6
+    SUB r18, r20             ; biome - 6
+    JZ r18, tree_grass       ; biome == 6
+    LDI r20, 1
+    SUB r18, r20             ; biome - 7
+    JZ r18, tree_grass       ; biome == 7
+    LDI r20, 3
+    ADD r18, r20             ; biome - 4 (was biome-7, +3 = biome-4)
+    LDI r20, 6
+    SUB r18, r20             ; biome - 10
+    JZ r18, tree_forest      ; biome == 10
+    LDI r20, 1
+    SUB r18, r20             ; biome - 11
+    JZ r18, tree_forest      ; biome == 11
+    JMP no_tree
+
+tree_grass:
+    MOV r18, r6
+    ANDI r18, 0x3            ; ~25% density
+    JNZ r18, no_tree
+    JMP tree_draw
+
+tree_forest:
+    MOV r18, r6
+    ANDI r18, 0x1            ; ~50% density
+    JNZ r18, no_tree
+
+tree_draw:
+    ; Canopy: RECTF(sx+1, sy, 3, 2, canopy_green)
+    LDI r20, 0x228811
+    MOV r18, r28
+    ADD r18, r7               ; sx + 1
+    LDI r19, 3
+    LDI r21, 2
+    RECTF r18, r27, r19, r21, r20
+
+    ; Trunk: RECTF(sx+2, sy+2, 1, 1, trunk_brown)
+    LDI r20, 0x664422
+    MOV r18, r28
+    ADD r18, r7
+    ADD r18, r7               ; sx + 2
+    MOV r19, r27
+    ADD r19, r7
+    ADD r19, r7               ; sy + 2
+    RECTF r18, r19, r7, r7, r20
+
+no_tree:
 
     ; ---- Next tile ----
     ADD r2, r7            ; tx++
