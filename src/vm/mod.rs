@@ -104,6 +104,9 @@ pub struct Vm {
     pub trace_recording: bool,
     /// Execution trace ring buffer (Phase 38a: Time-Travel Debugger).
     pub trace_buffer: TraceBuffer,
+    /// Frame checkpoint ring buffer (Phase 38b: Frame Checkpointing).
+    /// Snapshots the full screen at every FRAME opcode when trace_recording is on.
+    pub frame_checkpoints: FrameCheckBuffer,
 }
 
 impl Default for Vm {
@@ -171,6 +174,7 @@ impl Vm {
             formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
             trace_recording: false,
             trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
+            frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
         }
     }
 
@@ -237,6 +241,7 @@ impl Vm {
         }
         self.trace_recording = false;
         self.trace_buffer.clear();
+        self.frame_checkpoints.clear();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -299,6 +304,11 @@ impl Vm {
                 self.ram[0xFFE] = self.frame_count;
                 self.frame_ready = true;
                 self.access_log.clear(); // Reset for next frame
+                // Phase 38b: snapshot screen if trace recording is on
+                if self.trace_recording {
+                    let step = self.trace_buffer.step_counter();
+                    self.frame_checkpoints.push(step, self.frame_count, &self.screen);
+                }
                 return true; // keep running (host checks frame_ready to pace rendering)
             }
 

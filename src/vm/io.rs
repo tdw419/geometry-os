@@ -264,6 +264,7 @@ impl Vm {
             formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
             trace_recording: false,
             trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
+            frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
         })
     }
 }

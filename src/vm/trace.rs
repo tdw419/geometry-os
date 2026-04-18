@@ -1,11 +1,20 @@
 // vm/trace.rs -- Execution Trace Ring Buffer (Phase 38a)
+//                 Frame Checkpointing (Phase 38b)
 //
 // Records every instruction execution to a fixed-size ring buffer.
 // Zero overhead when recording is off (one bool check per step).
 // Ring buffer allocated once, never grows. No heap allocation in the hot path.
+//
+// Phase 38b: Snapshots the full screen buffer at every FRAME opcode.
+// Combined with the trace ring buffer, you can reconstruct the screen
+// at any point without re-executing.
 
 /// Default ring buffer capacity (entries).
 pub const DEFAULT_TRACE_CAPACITY: usize = 10_000;
+
+/// Default frame checkpoint capacity (frames).
+/// At 256x256 screen (65536 u32s per frame), 60 frames ≈ 15MB.
+pub const DEFAULT_FRAME_CHECK_CAPACITY: usize = 60;
 
 /// A single recorded execution step.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,5 +144,123 @@ impl<'a> Iterator for TraceIter<'a> {
         let idx = (self.start + self.pos) % self.buffer.capacity;
         self.pos += 1;
         Some(&self.buffer.entries[idx])
+    }
+}
+
+// --- Phase 38b: Frame Checkpointing ---
+
+/// A snapshot of the screen buffer captured at a FRAME opcode.
+#[derive(Debug, Clone)]
+pub struct FrameCheckpoint {
+    /// Step number at which this frame was captured.
+    pub step_number: u64,
+    /// The frame_count value when this checkpoint was taken.
+    pub frame_count: u32,
+    /// Full screen buffer snapshot (256x256 = 65536 u32s).
+    pub screen: Vec<u32>,
+}
+
+/// Ring buffer of frame checkpoints.
+///
+/// Unlike TraceBuffer (which pre-allocates entries), this uses a Vec ring
+/// buffer because each frame is 256KB. Frames are only allocated when pushed
+/// (only when trace_recording is on and a FRAME opcode fires).
+#[derive(Debug)]
+pub struct FrameCheckBuffer {
+    entries: Vec<Option<FrameCheckpoint>>,
+    capacity: usize,
+    head: usize,  // next write position
+    len: usize,   // number of valid entries (up to capacity)
+}
+
+impl FrameCheckBuffer {
+    /// Create a new frame checkpoint buffer with the given capacity.
+    pub fn new(capacity: usize) -> Self {
+        let capacity = capacity.max(1);
+        FrameCheckBuffer {
+            entries: (0..capacity).map(|_| None).collect(),
+            capacity,
+            head: 0,
+            len: 0,
+        }
+    }
+
+    /// Push a new frame checkpoint into the ring buffer.
+    /// Overwrites the oldest entry if the buffer is full.
+    /// The `None` slot is reused; the `Some` slot's Vec is replaced.
+    pub fn push(&mut self, step_number: u64, frame_count: u32, screen: &[u32]) {
+        let checkpoint = FrameCheckpoint {
+            step_number,
+            frame_count,
+            screen: screen.to_vec(),
+        };
+        self.entries[self.head] = Some(checkpoint);
+        self.head = (self.head + 1) % self.capacity;
+        if self.len < self.capacity {
+            self.len += 1;
+        }
+    }
+
+    /// Number of valid frame checkpoints currently in the buffer.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether the buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Clear all frame checkpoints.
+    pub fn clear(&mut self) {
+        for entry in self.entries.iter_mut() {
+            entry.take();
+        }
+        self.head = 0;
+        self.len = 0;
+    }
+
+    /// Get the Nth most recent frame checkpoint (0 = newest).
+    /// Returns None if index >= len.
+    pub fn get_recent(&self, index: usize) -> Option<&FrameCheckpoint> {
+        if index >= self.len {
+            return None;
+        }
+        let idx = (self.head + self.capacity - 1 - index) % self.capacity;
+        self.entries[idx].as_ref()
+    }
+
+    /// Iterate over frame checkpoints from oldest to newest.
+    pub fn iter(&self) -> FrameCheckIter<'_> {
+        let start = if self.len < self.capacity {
+            0
+        } else {
+            self.head
+        };
+        FrameCheckIter {
+            buffer: self,
+            pos: 0,
+            start,
+        }
+    }
+}
+
+/// Iterator over frame checkpoints from oldest to newest.
+pub struct FrameCheckIter<'a> {
+    buffer: &'a FrameCheckBuffer,
+    pos: usize,
+    start: usize,
+}
+
+impl<'a> Iterator for FrameCheckIter<'a> {
+    type Item = &'a FrameCheckpoint;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= self.buffer.len {
+            return None;
+        }
+        let idx = (self.start + self.pos) % self.buffer.capacity;
+        self.pos += 1;
+        self.buffer.entries[idx].as_ref()
     }
 }

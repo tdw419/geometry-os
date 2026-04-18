@@ -339,3 +339,236 @@ fn test_trace_recording_cleared_on_vm_reset() {
     assert!(!vm.trace_recording, "trace_recording should be false after reset");
     assert_eq!(vm.trace_buffer.len(), 0, "trace buffer should be cleared after reset");
 }
+
+// --- Phase 38b: Frame Checkpointing tests ---
+
+use geometry_os::vm::{FrameCheckBuffer, FrameCheckpoint, DEFAULT_FRAME_CHECK_CAPACITY};
+
+#[test]
+fn test_frame_check_buffer_new() {
+    let buf = FrameCheckBuffer::new(10);
+    assert_eq!(buf.len(), 0);
+    assert!(buf.is_empty());
+}
+
+#[test]
+fn test_frame_check_buffer_push_single() {
+    let mut buf = FrameCheckBuffer::new(10);
+    let screen = vec![0x112233; 65536];
+    buf.push(100, 1, &screen);
+
+    assert_eq!(buf.len(), 1);
+    assert!(!buf.is_empty());
+
+    let cp = buf.get_recent(0).unwrap();
+    assert_eq!(cp.step_number, 100);
+    assert_eq!(cp.frame_count, 1);
+    assert_eq!(cp.screen[0], 0x112233);
+    assert_eq!(cp.screen.len(), 65536);
+}
+
+#[test]
+fn test_frame_check_buffer_push_multiple() {
+    let mut buf = FrameCheckBuffer::new(10);
+    let screen1 = vec![0x111111; 65536];
+    let screen2 = vec![0x222222; 65536];
+    let screen3 = vec![0x333333; 65536];
+
+    buf.push(10, 1, &screen1);
+    buf.push(20, 2, &screen2);
+    buf.push(30, 3, &screen3);
+
+    assert_eq!(buf.len(), 3);
+
+    // get_recent(0) = newest
+    assert_eq!(buf.get_recent(0).unwrap().frame_count, 3);
+    assert_eq!(buf.get_recent(0).unwrap().screen[0], 0x333333);
+    // get_recent(2) = oldest
+    assert_eq!(buf.get_recent(2).unwrap().frame_count, 1);
+    assert_eq!(buf.get_recent(2).unwrap().screen[0], 0x111111);
+    // Out of bounds
+    assert!(buf.get_recent(3).is_none());
+}
+
+#[test]
+fn test_frame_check_buffer_wrap_around() {
+    let capacity = 5;
+    let mut buf = FrameCheckBuffer::new(capacity);
+
+    // Push 8 frames into a 5-capacity buffer
+    for i in 0..8u32 {
+        let screen = vec![i as u32; 65536];
+        buf.push(i as u64 * 10, i + 1, &screen);
+    }
+
+    assert_eq!(buf.len(), 5); // capped at capacity
+
+    // Should have frames 3,4,5,6,7 (oldest 0,1,2 were overwritten)
+    // get_recent(0) = newest = frame_count 8
+    assert_eq!(buf.get_recent(0).unwrap().frame_count, 8);
+    // get_recent(4) = oldest = frame_count 4
+    assert_eq!(buf.get_recent(4).unwrap().frame_count, 4);
+    // Verify the screen pixel values match
+    assert_eq!(buf.get_recent(4).unwrap().screen[0], 3); // i=3 -> pixel val 3
+}
+
+#[test]
+fn test_frame_check_buffer_clear() {
+    let mut buf = FrameCheckBuffer::new(10);
+    let screen = vec![0u32; 65536];
+    buf.push(1, 1, &screen);
+    buf.push(2, 2, &screen);
+    assert_eq!(buf.len(), 2);
+
+    buf.clear();
+    assert_eq!(buf.len(), 0);
+    assert!(buf.is_empty());
+}
+
+#[test]
+fn test_frame_check_buffer_iter() {
+    let mut buf = FrameCheckBuffer::new(10);
+    for i in 0..3u32 {
+        let screen = vec![i; 65536];
+        buf.push(i as u64, i + 1, &screen);
+    }
+
+    // Iter should go oldest to newest: frame_count 1,2,3
+    let counts: Vec<u32> = buf.iter().map(|c| c.frame_count).collect();
+    assert_eq!(counts, vec![1, 2, 3]);
+}
+
+#[test]
+fn test_frame_check_buffer_iter_after_wrap() {
+    let mut buf = FrameCheckBuffer::new(3);
+    for i in 0..6u32 {
+        let screen = vec![i; 65536];
+        buf.push(i as u64, i + 1, &screen);
+    }
+
+    // Buffer has frames 4,5,6 (frame_count: 4,5,6)
+    let counts: Vec<u32> = buf.iter().map(|c| c.frame_count).collect();
+    assert_eq!(counts, vec![4, 5, 6]);
+}
+
+#[test]
+fn test_frame_check_minimum_capacity() {
+    let buf = FrameCheckBuffer::new(0);
+    assert_eq!(buf.len(), 0);
+
+    let mut buf = FrameCheckBuffer::new(0);
+    let screen = vec![42u32; 65536];
+    buf.push(1, 1, &screen);
+    assert_eq!(buf.len(), 1);
+}
+
+#[test]
+fn test_frame_checkpoint_captured_on_frame_opcode() {
+    let mut vm = Vm::new();
+    load_asm(&mut vm, "
+        LDI r1, 1
+        SNAP_TRACE r1
+        FRAME
+        FRAME
+        FRAME
+        HALT
+    ", 0x100);
+
+    loop {
+        if !vm.step() { break; }
+    }
+
+    // Should have captured 3 frame checkpoints
+    assert_eq!(vm.frame_checkpoints.len(), 3, "should have 3 frame checkpoints");
+
+    // Check frame_count values: 1, 2, 3
+    let oldest = vm.frame_checkpoints.get_recent(2).unwrap();
+    assert_eq!(oldest.frame_count, 1);
+    assert_eq!(vm.frame_checkpoints.get_recent(1).unwrap().frame_count, 2);
+    assert_eq!(vm.frame_checkpoints.get_recent(0).unwrap().frame_count, 3);
+
+    // Step numbers should be increasing
+    assert!(oldest.step_number < vm.frame_checkpoints.get_recent(1).unwrap().step_number);
+}
+
+#[test]
+
+#[test]
+fn test_frame_check_not_captured_when_recording_off() {
+    let mut vm = Vm::new();
+    load_asm(&mut vm, "
+        FRAME
+        FRAME
+        FRAME
+        HALT
+    ", 0x100);
+
+    loop {
+        if !vm.step() { break; }
+    }
+
+    // trace_recording is off by default, so no checkpoints
+    assert_eq!(vm.frame_checkpoints.len(), 0, "no checkpoints when recording is off");
+}
+
+#[test]
+fn test_frame_check_eviction_300_frames() {
+    // Use a small buffer capacity to test eviction
+    let mut vm = Vm::new();
+    vm.frame_checkpoints = FrameCheckBuffer::new(10);
+    vm.trace_recording = true;
+
+    // Simulate 300 frames: each FRAME opcode captures a checkpoint
+    // The buffer holds 10, so only the last 10 should remain
+    for i in 0..300u32 {
+        // Write a unique value to screen[0] to identify each frame
+        vm.screen[0] = i;
+        // Manually trigger the frame checkpoint logic
+        let step = vm.trace_buffer.step_counter();
+        vm.frame_count = vm.frame_count.wrapping_add(1);
+        vm.frame_checkpoints.push(step, vm.frame_count, &vm.screen);
+    }
+
+    assert_eq!(vm.frame_checkpoints.len(), 10);
+
+    // Newest checkpoint should be frame 300
+    assert_eq!(vm.frame_checkpoints.get_recent(0).unwrap().frame_count, 300);
+    assert_eq!(vm.frame_checkpoints.get_recent(0).unwrap().screen[0], 299);
+
+    // Oldest checkpoint should be frame 291
+    assert_eq!(vm.frame_checkpoints.get_recent(9).unwrap().frame_count, 291);
+    assert_eq!(vm.frame_checkpoints.get_recent(9).unwrap().screen[0], 290);
+
+    // Iter should be oldest to newest
+    let counts: Vec<u32> = vm.frame_checkpoints.iter().map(|c| c.frame_count).collect();
+    assert_eq!(counts.len(), 10);
+    assert_eq!(counts[0], 291);
+    assert_eq!(counts[9], 300);
+}
+
+#[test]
+fn test_frame_check_cleared_on_reset() {
+    let mut vm = Vm::new();
+    vm.trace_recording = true;
+    let screen = vec![42u32; 65536];
+    vm.frame_checkpoints.push(1, 1, &screen);
+    assert_eq!(vm.frame_checkpoints.len(), 1);
+
+    vm.reset();
+
+    assert_eq!(vm.frame_checkpoints.len(), 0, "frame checkpoints should be cleared after reset");
+}
+
+#[test]
+fn test_frame_check_step_numbers_monotonic() {
+    let mut buf = FrameCheckBuffer::new(5);
+    for i in 0..8u64 {
+        let screen = vec![0u32; 65536];
+        buf.push(i * 100, (i + 1) as u32, &screen);
+    }
+
+    let steps: Vec<u64> = buf.iter().map(|c| c.step_number).collect();
+    for window in steps.windows(2) {
+        assert!(window[1] > window[0], "step numbers must be monotonic");
+    }
+}

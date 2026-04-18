@@ -176,6 +176,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         formula_dep_index: vec![Vec::new(); vm::CANVAS_RAM_SIZE],
         trace_recording: false,
         trace_buffer: vm::TraceBuffer::new(vm::DEFAULT_TRACE_CAPACITY),
+        frame_checkpoints: vm::FrameCheckBuffer::new(vm::DEFAULT_FRAME_CHECK_CAPACITY),
     };
 
     // Parse canvas trailer
