@@ -1332,3 +1332,189 @@ fn test_infinite_map_diagonal_scroll() {
     assert_eq!(vm.ram[0x7800], 0, "camera_x should be 0 after Down+Right");
     assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Down+Right");
 }
+
+// ── GAME OF LIFE ──────────────────────────────────────────────
+
+/// Helper: assemble game_of_life.asm and return a fresh VM ready to run
+fn game_of_life_vm() -> Vm {
+    let source =
+        std::fs::read_to_string("programs/game_of_life.asm").expect("game_of_life.asm not found");
+    let asm = assemble(&source, 0).expect("game_of_life.asm failed to assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_game_of_life_assembles() {
+    let source =
+        std::fs::read_to_string("programs/game_of_life.asm").expect("game_of_life.asm not found");
+    let asm = assemble(&source, 0).expect("game_of_life.asm should assemble");
+    assert!(
+        asm.pixels.len() > 50,
+        "game_of_life bytecode should be >50 words, got {}",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_game_of_life_block_survives() {
+    // The block at grid (10,50) is a still life: 4 cells in a 2x2 square.
+    // Conway's rules preserve it forever -- each cell has exactly 3 alive neighbors.
+    let mut vm = game_of_life_vm();
+
+    // Run until first FRAME (one full generation computed + rendered)
+    let steps = step_until_frame(&mut vm, 10_000_000);
+    assert!(
+        vm.frame_ready,
+        "should reach FRAME within 10M steps (took {})",
+        steps
+    );
+
+    // Block cells at screen top-left corners: (40,200), (44,200), (40,204), (44,204)
+    // Each rendered as RECTF 4x4 with alive color 0x00FF00
+    let alive = 0x00FF00u32;
+    assert_eq!(
+        vm.screen[200 * 256 + 40],
+        alive,
+        "block cell (10,50) screen(40,200) should survive"
+    );
+    assert_eq!(
+        vm.screen[200 * 256 + 44],
+        alive,
+        "block cell (11,50) screen(44,200) should survive"
+    );
+    assert_eq!(
+        vm.screen[204 * 256 + 40],
+        alive,
+        "block cell (10,51) screen(40,204) should survive"
+    );
+    assert_eq!(
+        vm.screen[204 * 256 + 44],
+        alive,
+        "block cell (11,51) screen(44,204) should survive"
+    );
+}
+
+#[test]
+fn test_game_of_life_blinker_oscillates() {
+    // The blinker at grid (32,10) is a period-2 oscillator.
+    // Initial: horizontal -- cells (32,10), (33,10), (34,10)
+    // After gen 1: vertical -- cells (33,9), (33,10), (33,11)
+    // After gen 2: horizontal again
+    let mut vm = game_of_life_vm();
+    let alive = 0x00FF00u32;
+
+    // === Frame 0: gen 1 from initial horizontal -> vertical ===
+    let steps = step_until_frame(&mut vm, 10_000_000);
+    assert!(
+        vm.frame_ready,
+        "should reach frame 0 within 10M steps (took {})",
+        steps
+    );
+
+    // Vertical blinker: (132,36), (132,40), (132,44) should be alive
+    assert_eq!(
+        vm.screen[36 * 256 + 132],
+        alive,
+        "frame 0: vertical pos (132,36) should be alive"
+    );
+    assert_eq!(
+        vm.screen[40 * 256 + 132],
+        alive,
+        "frame 0: vertical pos (132,40) should be alive"
+    );
+    assert_eq!(
+        vm.screen[44 * 256 + 132],
+        alive,
+        "frame 0: vertical pos (132,44) should be alive"
+    );
+    // Horizontal ends should be dead
+    assert_eq!(
+        vm.screen[40 * 256 + 128],
+        0,
+        "frame 0: horizontal end (128,40) should be dead"
+    );
+    assert_eq!(
+        vm.screen[40 * 256 + 136],
+        0,
+        "frame 0: horizontal end (136,40) should be dead"
+    );
+
+    // Snapshot population for comparison
+    let _pop0: usize = vm.screen.iter().filter(|&&p| p == alive).count();
+
+    // === Frame 1: gen 2 from vertical -> horizontal ===
+    vm.frame_ready = false;
+    let steps2 = step_until_frame(&mut vm, 10_000_000);
+    assert!(
+        vm.frame_ready,
+        "should reach frame 1 within 10M steps (took {})",
+        steps2
+    );
+
+    // Horizontal blinker: (128,40), (132,40), (136,40) should be alive
+    assert_eq!(
+        vm.screen[40 * 256 + 128],
+        alive,
+        "frame 1: horizontal pos (128,40) should be alive"
+    );
+    assert_eq!(
+        vm.screen[40 * 256 + 132],
+        alive,
+        "frame 1: horizontal pos (132,40) should be alive"
+    );
+    assert_eq!(
+        vm.screen[40 * 256 + 136],
+        alive,
+        "frame 1: horizontal pos (136,40) should be alive"
+    );
+    // Vertical ends should be dead
+    assert_eq!(
+        vm.screen[36 * 256 + 132],
+        0,
+        "frame 1: vertical end (132,36) should be dead"
+    );
+    assert_eq!(
+        vm.screen[44 * 256 + 132],
+        0,
+        "frame 1: vertical end (132,44) should be dead"
+    );
+
+    // Verify blinker cells changed between frames (not just identical screenshots)
+    let pop1: usize = vm.screen.iter().filter(|&&p| p == alive).count();
+    assert!(
+        pop1 > 0,
+        "screen should have live pixels after frame 1 (got {})",
+        pop1
+    );
+}
+
+#[test]
+fn test_game_of_life_renders() {
+    // After one full generation, the screen must have both live and dead pixels.
+    let mut vm = game_of_life_vm();
+
+    let steps = step_until_frame(&mut vm, 10_000_000);
+    assert!(
+        vm.frame_ready,
+        "should reach FRAME within 10M steps (took {})",
+        steps
+    );
+
+    let non_black: usize = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(
+        non_black > 100,
+        "screen should have >100 live pixels after render, got {}",
+        non_black
+    );
+    assert!(
+        non_black < 50000,
+        "screen should have <50000 live pixels after render, got {}",
+        non_black
+    );
+}
