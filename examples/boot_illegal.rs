@@ -1,74 +1,141 @@
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
 use std::fs;
+use std::time::Instant;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
     let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
-
-    let kernel_image = fs::read(kernel_path).unwrap();
+    let kernel_image = fs::read(kernel_path).expect("kernel");
     let initramfs = fs::read(initramfs_path).ok();
 
-    let bootargs = "console=ttyS0 earlycon=sbi panic=1 quiet";
-    let (mut vm, _r) = RiscvVm::boot_linux(
+    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
         &kernel_image,
         initramfs.as_deref(),
-        256,
-        5_000_000,
-        bootargs,
-    )
-    .unwrap();
+        512,
+        "console=ttyS0 earlycon=uart8250,mmio32,0x10000000 loglevel=8",
+    ).unwrap();
 
-    // Step and look for illegal instruction traps
-    let mut illegal_count = 0u64;
-    let mut last_illegal_pc = 0u32;
-    let mut last_illegal_word = 0u32;
-    let mut last_mepc = 0u32;
+    let fw_addr_u32 = fw_addr as u32;
+    let mut count: u64 = 0;
+    let mut sbi_count: u64 = 0;
+    let mut last_satp: u32 = vm.cpu.csr.satp;
+    let mut illegal_count: u64 = 0;
 
-    for _ in 0..5_000_000 {
-        let pc_before = vm.cpu.pc;
-        vm.step();
+    let start = Instant::now();
 
-        // Check if we landed at trap handler
-        let fw_addr: u64 = 0xC0000000u64 + 0x940_000;
-        if vm.cpu.pc == fw_addr as u32 {
+    while count < 50_000_000 {
+        if vm.bus.sbi.shutdown_requested { break; }
+
+        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
-            if cause_code == 2 {
-                illegal_count += 1;
-                last_illegal_pc = vm.cpu.csr.mepc;
-                last_mepc = vm.cpu.csr.mepc;
-                // Read the instruction at mepc
-                if let Ok(word) = vm.bus.read_word(vm.cpu.csr.mepc as u64) {
-                    last_illegal_word = word;
+
+            if cause_code == 9 {
+                sbi_count += 1;
+                if sbi_count <= 5 {
+                    eprintln!("[sbi] #{} a7=0x{:02X} a6=0x{:02X} a0=0x{:08X}", 
+                        sbi_count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]);
+                }
+                let result = vm.bus.sbi.handle_ecall(
+                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
+                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
+                    &mut vm.bus.uart, &mut vm.bus.clint,
+                );
+                if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+            } else if cause_code != 11 {
+                let mpp = (vm.cpu.csr.mstatus >> 11) & 3;
+                if mpp != 3 {
+                    let stvec = vm.cpu.csr.stvec & !0x3u32;
+                    if stvec != 0 {
+                        vm.cpu.csr.sepc = vm.cpu.csr.mepc;
+                        vm.cpu.csr.scause = mcause;
+                        vm.cpu.csr.stval = vm.cpu.csr.mtval;
+                        let spp = if mpp == 1 { 1u32 } else { 0u32 };
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 8)) | (spp << 8);
+                        let sie = (vm.cpu.csr.mstatus >> 1) & 1;
+                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
+                        vm.cpu.csr.mstatus &= !(1 << 1);
+                        if cause_code == 7 { vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000; }
+                        vm.cpu.pc = stvec;
+                        vm.cpu.privilege = Privilege::Supervisor;
+                        vm.cpu.tlb.flush_all();
+                        count += 1;
+                        continue;
+                    }
+                }
+                
+                // Log illegal instructions with full page table analysis
+                if cause_code == 2 {
+                    illegal_count += 1;
+                    if illegal_count <= 10 {
+                        let mepc = vm.cpu.csr.mepc;
+                        eprintln!("[ILLEGAL #{}] count={}: mepc=0x{:08X} mpp={}", illegal_count, count, mepc, mpp);
+                        
+                        // Read instruction at mepc (physical address)
+                        let mepc_pa = if mepc >= 0xC0000000 { mepc - 0xC0000000 } else { mepc };
+                        let inst_pa = vm.bus.read_word(mepc_pa as u64).unwrap_or(0);
+                        eprintln!("  PA 0x{:08X}: instruction = 0x{:08X}", mepc_pa, inst_pa);
+                        
+                        // Check what should be there from the ELF
+                        // L1 index for the mepc VA
+                        let l1_idx = (mepc >> 22) & 0x3FF;
+                        let satp = vm.cpu.csr.satp;
+                        let pg_dir_ppn = satp & 0x3FFFFF;
+                        let pg_dir_phys = (pg_dir_ppn as u64) * 4096;
+                        let l1_entry = vm.bus.read_word(pg_dir_phys + (l1_idx as u64) * 4).unwrap_or(0);
+                        let is_leaf = (l1_entry & 0xE) != 0;
+                        let ppn1 = (l1_entry >> 10) & 0x3FFFFF;
+                        eprintln!("  L1[{}] = 0x{:08X} V={} leaf={} ppn1=0x{:06X}", 
+                            l1_idx, l1_entry, (l1_entry & 1) != 0, is_leaf, ppn1);
+                        
+                        if !is_leaf && (l1_entry & 1) != 0 {
+                            let l2_idx = (mepc >> 12) & 0x3FF;
+                            let l2_entry = vm.bus.read_word((ppn1 as u64) * 4096 + (l2_idx as u64) * 4).unwrap_or(0);
+                            let l2_ppn = (l2_entry >> 10) & 0x3FFFFF;
+                            eprintln!("  L2[{}] at PA 0x{:08X} = 0x{:08X} V={} leaf={} ppn=0x{:06X}",
+                                l2_idx, ppn1 * 4096, l2_entry, (l2_entry & 1) != 0,
+                                (l2_entry & 0xE) != 0, l2_ppn);
+                            // The final physical address
+                            let final_pa = (l2_ppn * 4096) + (mepc & 0xFFF);
+                            let inst_at_pa = vm.bus.read_word(final_pa as u64).unwrap_or(0);
+                            eprintln!("  Translated PA = 0x{:08X}, inst = 0x{:08X}", final_pa, inst_at_pa);
+                        }
+                        
+                        // Expected PA (from direct mapping)
+                        let expected_pa = mepc - 0xC0000000;
+                        let expected_inst = vm.bus.read_word(expected_pa as u64).unwrap_or(0);
+                        eprintln!("  Expected PA 0x{:08X}: inst = 0x{:08X}", expected_pa, expected_inst);
+                    }
                 }
             }
+            vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
         }
-    }
 
-    println!("Illegal instruction traps: {}", illegal_count);
-    println!("Last illegal at PC: 0x{:08X}", last_illegal_pc);
-    println!("Last illegal word: 0x{:08X}", last_illegal_word);
-    println!("Opcode: 0x{:02X}", last_illegal_word & 0x7F);
-
-    // Find symbol
-    let nm = std::process::Command::new("riscv64-linux-gnu-nm")
-        .args(["-n", ".geometry_os/build/linux-6.14/vmlinux"])
-        .output()
-        .unwrap();
-    let nm_out = String::from_utf8_lossy(&nm.stdout);
-    let pc = last_illegal_pc as u64;
-    let mut best_sym = String::new();
-    let mut best_addr = 0u64;
-    for line in nm_out.lines() {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 3 {
-            if let Ok(addr) = u64::from_str_radix(parts[0], 16) {
-                if addr <= pc && addr > best_addr {
-                    best_addr = addr;
-                    best_sym = parts[2].to_string();
-                }
-            }
+        // Log SATP changes
+        let cur_satp = vm.cpu.csr.satp;
+        if cur_satp != last_satp {
+            eprintln!("[SATP] 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            last_satp = cur_satp;
         }
+
+        vm.bus.tick_clint();
+        vm.bus.sync_mip(&mut vm.cpu.csr.mip);
+        match vm.step() {
+            StepResult::Ebreak => { eprintln!("[EBREAK] at count={}", count); break; }
+            _ => {}
+        }
+        count += 1;
     }
-    println!("Near symbol: {} (offset +{})", best_sym, pc - best_addr);
+    
+    let elapsed = start.elapsed();
+    eprintln!("[boot] Done: count={} sbi={} illegal={} time={:?}", count, sbi_count, illegal_count, elapsed);
+    
+    let tx = vm.bus.uart.drain_tx();
+    if !tx.is_empty() {
+        let s = String::from_utf8_lossy(&tx);
+        eprintln!("[UART] ({} bytes): {}", tx.len(), &s[..s.len().min(2000)]);
+    } else {
+        eprintln!("[UART] No output");
+    }
 }
