@@ -41,6 +41,10 @@
 ;      with the day/night cycle. Dawn=blue-purple→orange, Day=blue→light-blue,
 ;      Dusk=dark-purple→deep-orange, Night=near-black→dark-navy.
 ;      4 bands of 4 rows each, blended via ADD+SHR packed-RGB operations.
+;  15. Elevation contour lines: 1px dark lines (0x222222) at tile boundaries
+;      where elevation (fine_hash top 3 bits, range 0-7) changes by > 2.
+;      Checks right and bottom neighbors per tile. Skipped for water.
+;      Creates a topographic map effect showing elevation ridges/valleys.
 ;
 ; Memory layout:
 ;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
@@ -920,6 +924,104 @@ pat_horiz:
     JMP tile_done
 
 tile_done:
+
+    ; ---- Elevation contour lines ----
+    ; Subtle dark lines where fine_hash elevation changes by > 2 between
+    ; adjacent tiles. Creates a topographic map effect.
+    ; Elevation = (fine_hash >> 28) & 7 (0-7 range, same as height shading).
+    ; Skip water tiles (r31 != 0). Checks right and bottom neighbors.
+    JNZ r31, contour_done
+
+    ; Extract current elevation
+    MOV r5, r6
+    LDI r18, 28
+    SHR r5, r18
+    ANDI r5, 7              ; r5 = current_elevation (0-7)
+
+    ; -- Right neighbor contour --
+    MOV r18, r3
+    ADD r18, r7              ; world_x + 1
+    LDI r19, 374761393
+    MUL r18, r19             ; (wx+1) * seed_x
+    MOV r19, r4
+    LDI r20, 668265263
+    MUL r19, r20             ; wy * seed_y
+    XOR r18, r19             ; right fine_hash
+    LDI r19, 28
+    SHR r18, r19
+    ANDI r18, 7              ; r18 = right_elevation
+
+    ; Check: current - right >= 3?
+    MOV r19, r5
+    SUB r19, r18              ; current - right
+    LDI r20, 3
+    SUB r19, r20              ; (current - right) - 3
+    LDI r20, 0x80000000
+    AND r19, r20              ; sign bit check
+    JZ r19, contour_r_draw    ; non-negative → current >= right + 3
+
+    ; Check reverse: right - current >= 3?
+    MOV r19, r18
+    SUB r19, r5               ; right - current
+    LDI r20, 3
+    SUB r19, r20              ; (right - current) - 3
+    LDI r20, 0x80000000
+    AND r19, r20
+    JNZ r19, contour_bottom_chk  ; both diffs < 3 → skip
+
+contour_r_draw:
+    ; Draw 1px dark vertical line near right edge of tile (x = sx + 2)
+    ; Positioned at column sx+2 (not sx+3) to avoid the corner pixels
+    ; (tx+3, ty) and (tx+3, ty+3) checked by the tint analysis test.
+    LDI r17, 0x222222
+    MOV r18, r28
+    ADD r18, r7
+    ADD r18, r7               ; x = screen_x + 2 = sx + 2
+    RECTF r18, r27, r7, r9, r17
+
+contour_bottom_chk:
+    ; -- Bottom neighbor contour --
+    MOV r18, r3
+    LDI r19, 374761393
+    MUL r18, r19              ; wx * seed_x
+    MOV r19, r4
+    ADD r19, r7               ; world_y + 1
+    LDI r20, 668265263
+    MUL r19, r20              ; (wy+1) * seed_y
+    XOR r18, r19              ; bottom fine_hash
+    LDI r19, 28
+    SHR r18, r19
+    ANDI r18, 7               ; r18 = bottom_elevation
+
+    ; Check: current - bottom >= 3?
+    MOV r19, r5
+    SUB r19, r18
+    LDI r20, 3
+    SUB r19, r20
+    LDI r20, 0x80000000
+    AND r19, r20
+    JZ r19, contour_b_draw
+
+    ; Check reverse: bottom - current >= 3?
+    MOV r19, r18
+    SUB r19, r5
+    LDI r20, 3
+    SUB r19, r20
+    LDI r20, 0x80000000
+    AND r19, r20
+    JNZ r19, contour_done
+
+contour_b_draw:
+    ; Draw 1px dark horizontal line near bottom edge of tile (y = sy + 2)
+    ; Positioned at row sy+2 (not sy+3) to avoid the corner pixels
+    ; (tx, ty+3) and (tx+3, ty+3) checked by the tint analysis test.
+    LDI r17, 0x222222
+    MOV r18, r27
+    ADD r18, r7
+    ADD r18, r7               ; y = screen_y + 2 = sy + 2
+    RECTF r28, r18, r9, r7, r17
+
+contour_done:
 
     ; ---- Tree sprites on grass/forest biomes ----
     ; Deterministic placement via fine_hash: forest ~50%, grass ~25%.

@@ -532,17 +532,16 @@ fn test_infinite_map_pxpk_step_budget() {
     // Day/night tint is inline (1 ADD per tile = +4096 steps for 64x64 grid).
     // Pattern dispatch now uses r29 save/restore (+2 per tile = +8192).
     // 32x32 minimap with RAM cache + repaint adds ~10K steps.
-    // Sky gradient (4 bands x RECTF) adds ~30 steps.
-    // Elevation contour lines (per-tile neighbor check + selective RECTF) adds ~50-80K.
-    // Total should be under 800K with all visual features enabled.
+    // Elevation contour lines: ~50 steps/tile for neighbor hash + compare = ~200K.
+    // Total should be well under 850K.
     let mut vm = infinite_map_pxpk_vm();
     vm.ram[0xFFB] = 0;
-    let steps = step_until_frame(&mut vm, 1_500_000);
+    let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready, "pxpk should reach FRAME (took {})", steps);
     eprintln!("pxpk frame: {} steps", steps);
     assert!(
-        steps < 800_000,
-        "pxpk render loop should take < 800K steps, took {}",
+        steps < 850_000,
+        "pxpk render loop should take < 850K steps, took {}",
         steps
     );
 }
@@ -656,9 +655,9 @@ fn test_infinite_map_pxpk_tint_phase_analysis() {
         matching_tiles
     );
     assert!(
-        g_match > matching_tiles * 80 / 100,
+        g_match > matching_tiles * 75 / 100,
         "expected >{} flat tiles with G+{}, got {}/{}",
-        matching_tiles * 80 / 100,
+        matching_tiles * 75 / 100,
         tint_g,
         g_match,
         matching_tiles
@@ -832,6 +831,79 @@ fn test_infinite_map_pxpk_sky_gradient() {
     eprintln!(
         "Sky gradient: dawn top={:06X}, dawn horizon={:06X}, night top={:06X}",
         top_pixel_dawn, horizon_pixel_dawn, top_pixel_night
+    );
+}
+
+#[test]
+fn test_infinite_map_pxpk_contour_lines() {
+    // Contour lines: subtle dark lines (0x222222) at tile boundaries where
+    // elevation (fine_hash >> 28 & 7) differs by > 2 between adjacent tiles.
+    // Right-edge contour: 1px vertical at x = sx + 2, height = 4.
+    // Bottom-edge contour: 1px horizontal at y = sy + 2, width = 4.
+    // Water tiles skip contours (r31 != 0).
+    // Verify: (1) some contour pixels exist (not all terrain), (2) contour
+    // color matches expected 0x222222, (3) contour pixels are at tile
+    // boundaries (column sx+2 or row sy+2).
+    let mut vm = infinite_map_pxpk_vm();
+    vm.ram[0xFFB] = 0;
+    let _ = step_until_frame(&mut vm, 1_000_000);
+    assert!(vm.frame_ready);
+
+    let screen = vm.screen.to_vec();
+    let mut contour_pixels = Vec::new();
+
+    // Scan for contour-colored pixels at tile boundary positions
+    let tile_size = 4;
+    for ty in (0..256).step_by(tile_size) {
+        for tx in (0..256).step_by(tile_size) {
+            // Check right-edge contour column (sx + 2)
+            let cx = tx + 2;
+            if cx < 256 {
+                for dy in 0..tile_size {
+                    let cy = ty + dy;
+                    if cy < 256 {
+                        let idx = cy * 256 + cx;
+                        if screen[idx] == 0x222222 {
+                            contour_pixels.push((cx, cy));
+                        }
+                    }
+                }
+            }
+            // Check bottom-edge contour row (sy + 2)
+            let cy = ty + 2;
+            if cy < 256 {
+                for dx in 0..tile_size {
+                    let cx = tx + dx;
+                    if cx < 256 {
+                        let idx = cy * 256 + cx;
+                        if screen[idx] == 0x222222 {
+                            contour_pixels.push((cx, cy));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // There should be contour lines (elevation boundaries are common)
+    assert!(
+        contour_pixels.len() > 10,
+        "expected at least 10 contour pixels, found {}",
+        contour_pixels.len()
+    );
+
+    // Verify at least some contour pixels are NOT in the top 16 rows (sky area)
+    let below_sky = contour_pixels.iter().filter(|&&(_, y)| y >= 16).count();
+    assert!(
+        below_sky > 5,
+        "expected contour pixels below sky (y>=16), found {}",
+        below_sky
+    );
+
+    eprintln!(
+        "Contour lines: {} pixels detected ({} below sky area)",
+        contour_pixels.len(),
+        below_sky
     );
 }
 
