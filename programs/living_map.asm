@@ -41,6 +41,54 @@ STORE r17, r18          ; state_count = 0
 LDI r17, 0x7808
 STORE r17, r18          ; state_head = 0
 
+; ===== Initialize weather =====
+LDI r17, 0x7809
+LDI r18, 0
+STORE r17, r18          ; weather_state = 0 (clear)
+LDI r17, 0x780A
+LDI r18, 200
+STORE r17, r18          ; weather_timer = 200
+LDI r17, 0x780B
+LDI r18, 60
+STORE r17, r18          ; lightning_countdown = 60
+LDI r17, 0x780C
+LDI r18, 0
+STORE r17, r18          ; lightning_flash = 0
+
+; ===== Initialize rain particles (32 at 0x7010) =====
+LDI r23, 0x7010
+LDI r24, 32
+init_rain:
+  RAND r25
+  LDI r18, 0xFF
+  AND r25, r18
+  STORE r23, r25          ; x = random 0..255
+  ADD r23, r7
+  RAND r25
+  LDI r18, 0xFF
+  AND r25, r18
+  STORE r23, r25          ; y = random 0..255
+  ADD r23, r7
+  SUB r24, r7
+  JNZ r24, init_rain
+
+; ===== Initialize snow particles (32 at 0x7050) =====
+LDI r23, 0x7050
+LDI r24, 32
+init_snow:
+  RAND r25
+  LDI r18, 0xFF
+  AND r25, r18
+  STORE r23, r25          ; x = random 0..255
+  ADD r23, r7
+  RAND r25
+  LDI r18, 0xFF
+  AND r25, r18
+  STORE r23, r25          ; y = random 0..255
+  ADD r23, r7
+  SUB r24, r7
+  JNZ r24, init_snow
+
 ; ===== Initialize player position =====
 LDI r17, 0x7803
 LDI r18, 32
@@ -207,6 +255,9 @@ LDI r23, 0x7008         ; creature 2 base
 CALL update_creature
 
 skip_creatures:
+
+; ===== Update Weather =====
+CALL weather_update
 
 ; --- Clear screen to black ---
 LDI r17, 0
@@ -513,6 +564,9 @@ LOAD r4, r17
 LDI r17, 0xCC33FF        ; purple
 CALL draw_creature
 
+; ===== Render Weather =====
+CALL render_weather
+
 ; ===== Render Player =====
 LDI r3, 128
 LDI r4, 128
@@ -622,4 +676,312 @@ draw_creature:
   RECTF r3, r4, r9, r9, r17
 
 dc_done:
+  RET
+
+
+; ===== Subroutine: weather_update =====
+; Updates weather state, moves particles, triggers lightning
+; Uses: r17-r25 (all pushed/popped)
+weather_update:
+  PUSH r17
+  PUSH r18
+  PUSH r19
+  PUSH r20
+  PUSH r21
+  PUSH r22
+  PUSH r23
+  PUSH r24
+  PUSH r25
+
+  ; r7 = 1 (constant, DO NOT MODIFY)
+
+  ; --- Decrement weather timer ---
+  LDI r17, 0x780A
+  LOAD r18, r17
+  SUB r18, r7
+  STORE r17, r18            ; weather_timer--
+
+  JNZ r18, wu_no_change
+
+  ; --- Change weather ---
+  RAND r18
+  LDI r19, 3
+  AND r18, r19              ; 0..3
+  LDI r17, 0x7809
+  STORE r17, r18            ; weather_state = random
+
+  ; Reset timer: 150 + (rand & 0x7F) = 150..305
+  RAND r19
+  LDI r17, 0x7F
+  AND r19, r17
+  LDI r17, 150
+  ADD r19, r17
+  LDI r17, 0x780A
+  STORE r17, r19
+
+  ; Reset lightning countdown
+  LDI r17, 0x780B
+  RAND r18
+  LDI r19, 0x3F
+  AND r18, r19
+  LDI r19, 40
+  ADD r18, r19              ; 40..103
+  STORE r17, r18
+
+  ; Clear lightning flash
+  LDI r17, 0x780C
+  LDI r18, 0
+  STORE r17, r18
+
+wu_no_change:
+  ; --- Read weather state ---
+  LDI r17, 0x7809
+  LOAD r20, r17             ; r20 = weather_state
+
+  ; --- Update rain particles (rain=1 or storm=2) ---
+  LDI r18, 1
+  CMP r20, r18
+  JZ r0, wu_do_rain
+  LDI r18, 2
+  CMP r20, r18
+  JNZ r0, wu_skip_rain
+
+wu_do_rain:
+  LDI r21, 0x7010           ; rain particle base
+  LDI r22, 32               ; count
+
+wu_rain_loop:
+  LOAD r23, r21             ; x
+  ADD r21, r7               ; advance to y slot
+  LOAD r24, r21             ; y
+
+  ; Move y down by 2
+  LDI r25, 2
+  ADD r24, r25
+
+  ; Check y >= 256 -> respawn
+  LDI r17, 256
+  CMP r24, r17
+  BLT r0, wu_rain_ok
+
+  RAND r23
+  LDI r17, 0xFF
+  AND r23, r17              ; new x = random
+  LDI r24, 0                ; new y = 0
+
+wu_rain_ok:
+  STORE r21, r24            ; store y
+  SUB r21, r7               ; back to x slot
+  STORE r21, r23            ; store x
+  ADD r21, r7               ; to y
+  ADD r21, r7               ; to next particle x
+
+  SUB r22, r7
+  JNZ r22, wu_rain_loop
+
+wu_skip_rain:
+
+  ; --- Storm: lightning logic ---
+  LDI r18, 2
+  CMP r20, r18
+  JNZ r0, wu_skip_lightning
+
+  ; Decrement flash frames if active
+  LDI r17, 0x780C
+  LOAD r18, r17
+  JZ r18, wu_no_flash
+  SUB r18, r7
+  STORE r17, r18            ; flash_frames--
+  JMP wu_skip_lightning
+
+wu_no_flash:
+  ; Decrement lightning countdown
+  LDI r17, 0x780B
+  LOAD r18, r17
+  SUB r18, r7
+  STORE r17, r18            ; countdown--
+  JNZ r18, wu_skip_lightning
+
+  ; Trigger lightning bolt!
+  LDI r17, 0x780C
+  LDI r18, 3                ; visible for 3 frames
+  STORE r17, r18
+  ; Reset countdown
+  LDI r17, 0x780B
+  RAND r18
+  LDI r19, 0x3F
+  AND r18, r19
+  LDI r19, 40
+  ADD r18, r19
+  STORE r17, r18
+
+wu_skip_lightning:
+
+  ; --- Snow: update snow particles (snow=3) ---
+  LDI r18, 3
+  CMP r20, r18
+  JNZ r0, wu_skip_snow
+
+  LDI r21, 0x7050           ; snow particle base
+  LDI r22, 32               ; count
+
+wu_snow_loop:
+  LOAD r23, r21             ; x
+  ADD r21, r7               ; to y slot
+  LOAD r24, r21             ; y
+
+  ; Move y down by 1
+  ADD r24, r7
+
+  ; Horizontal drift: random -1, 0, +1
+  RAND r25
+  LDI r17, 3
+  AND r25, r17              ; 0..2
+  LDI r17, 1
+  SUB r25, r17              ; -1, 0, 1
+  ADD r23, r25
+
+  ; Wrap x to 0..255
+  LDI r17, 0xFF
+  AND r23, r17
+
+  ; Check y >= 256 -> respawn
+  LDI r17, 256
+  CMP r24, r17
+  BLT r0, wu_snow_ok
+
+  RAND r23
+  LDI r17, 0xFF
+  AND r23, r17
+  LDI r24, 0
+
+wu_snow_ok:
+  STORE r21, r24            ; store y
+  SUB r21, r7               ; back to x
+  STORE r21, r23            ; store x
+  ADD r21, r7               ; to y
+  ADD r21, r7               ; to next particle x
+
+  SUB r22, r7
+  JNZ r22, wu_snow_loop
+
+wu_skip_snow:
+
+  POP r25
+  POP r24
+  POP r23
+  POP r22
+  POP r21
+  POP r20
+  POP r19
+  POP r18
+  POP r17
+  RET
+
+
+; ===== Subroutine: render_weather =====
+; Draws weather particles and lightning on screen
+; Uses: r17-r25 (all pushed/popped)
+render_weather:
+  PUSH r17
+  PUSH r18
+  PUSH r19
+  PUSH r20
+  PUSH r21
+  PUSH r22
+  PUSH r23
+  PUSH r24
+  PUSH r25
+
+  ; r7 = 1 (constant, DO NOT MODIFY)
+
+  LDI r17, 0x7809
+  LOAD r20, r17             ; r20 = weather_state
+
+  ; --- Lightning bolt (storm, flash > 0) ---
+  LDI r18, 2
+  CMP r20, r18
+  JNZ r0, rw_no_lightning
+
+  LDI r17, 0x780C
+  LOAD r18, r17             ; flash_frames
+  JZ r18, rw_no_lightning
+
+  ; Draw lightning bolt: LINE from near top-center to random bottom
+  RAND r23
+  LDI r17, 0xFF
+  AND r23, r17              ; end_x = random 0..255
+  LDI r21, 128              ; start_x = 128 (center)
+  LDI r22, 0                ; start_y = top
+  LDI r24, 180              ; end_y = 180
+  LDI r25, 0xFFFFFF         ; white
+  LINE r21, r22, r23, r24, r25
+
+  ; Second branch from end of first bolt
+  RAND r21
+  LDI r17, 0xFE
+  AND r21, r17              ; branch end_x
+  LDI r22, 180              ; start_y of branch
+  LDI r24, 240              ; end_y of branch
+  LINE r23, r22, r21, r24, r25
+
+rw_no_lightning:
+
+  ; --- Rain particles (rain=1 or storm=2) ---
+  LDI r18, 1
+  CMP r20, r18
+  JZ r0, rw_do_rain
+  LDI r18, 2
+  CMP r20, r18
+  JNZ r0, rw_skip_rain
+
+rw_do_rain:
+  LDI r21, 0x7010
+  LDI r22, 32
+
+rw_rain_draw:
+  LOAD r23, r21             ; x
+  ADD r21, r7
+  LOAD r24, r21             ; y
+
+  LDI r17, 0x4488FF         ; light blue rain
+  PSET r23, r24, r17
+
+  ADD r21, r7               ; next particle
+  SUB r22, r7
+  JNZ r22, rw_rain_draw
+
+rw_skip_rain:
+
+  ; --- Snow particles (snow=3) ---
+  LDI r18, 3
+  CMP r20, r18
+  JNZ r0, rw_skip_snow
+
+  LDI r21, 0x7050
+  LDI r22, 32
+
+rw_snow_draw:
+  LOAD r23, r21             ; x
+  ADD r21, r7
+  LOAD r24, r21             ; y
+
+  LDI r17, 0xEEEEFF         ; light snowflake
+  PSET r23, r24, r17
+
+  ADD r21, r7               ; next particle
+  SUB r22, r7
+  JNZ r22, rw_snow_draw
+
+rw_skip_snow:
+
+  POP r25
+  POP r24
+  POP r23
+  POP r22
+  POP r21
+  POP r20
+  POP r19
+  POP r18
+  POP r17
   RET

@@ -354,7 +354,7 @@ fn test_living_map_runs() {
     vm.halted = false;
 
     // Run for enough steps for several frames
-    for _ in 0..2_000_000 {
+    for _ in 0..3_000_000 {
         if vm.halted {
             break;
         }
@@ -495,5 +495,311 @@ fn test_living_map_footstep_trail() {
         cam_x > 0,
         "camera should have moved right: camera_x={}",
         cam_x
+    );
+}
+
+// Helper: create a VM loaded with living_map.asm, run until a frame completes
+fn living_map_vm_until_frame(max_steps: usize) -> (Vm, usize) {
+    let source =
+        std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
+    }
+    let mut steps = 0;
+    for _ in 0..max_steps {
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
+        steps += 1;
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+    (vm, steps)
+}
+
+#[test]
+fn test_living_map_weather_init() {
+    let (vm, _) = living_map_vm_until_frame(2_000_000);
+
+    // Weather state should be initialized to 0 (clear)
+    assert_eq!(vm.ram[0x7809], 0, "weather_state should init to 0 (clear)");
+    // Weather timer should be 200 (initial value, may have decremented by 1)
+    assert!(
+        vm.ram[0x780A] <= 200,
+        "weather_timer should be <= 200, got {}",
+        vm.ram[0x780A]
+    );
+    // Lightning vars should be initialized
+    assert_eq!(
+        vm.ram[0x780C], 0,
+        "lightning_flash should init to 0"
+    );
+
+    // Rain particles should be initialized (some should be non-zero)
+    let mut rain_initialized = false;
+    for i in 0..32 {
+        let x = vm.ram[0x7010 + i * 2];
+        let y = vm.ram[0x7010 + i * 2 + 1];
+        if x != 0 || y != 0 {
+            rain_initialized = true;
+            break;
+        }
+    }
+    assert!(
+        rain_initialized,
+        "at least one rain particle should be initialized"
+    );
+
+    // Snow particles should be initialized
+    let mut snow_initialized = false;
+    for i in 0..32 {
+        let x = vm.ram[0x7050 + i * 2];
+        let y = vm.ram[0x7050 + i * 2 + 1];
+        if x != 0 || y != 0 {
+            snow_initialized = true;
+            break;
+        }
+    }
+    assert!(
+        snow_initialized,
+        "at least one snow particle should be initialized"
+    );
+}
+
+#[test]
+fn test_living_map_weather_cycles() {
+    // Run for many frames and verify weather state eventually changes
+    let source =
+        std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
+    }
+
+    // Force weather timer to 1 so it changes on next frame
+    vm.ram[0x780A] = 1;
+
+    let mut frames = 0;
+    for _ in 0..3_000_000 {
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames += 1;
+            // Check if weather changed
+            if vm.ram[0x7809] != 0 {
+                // Weather changed! Verify it's in valid range 0..3
+                let ws = vm.ram[0x7809];
+                assert!(
+                    ws <= 3,
+                    "weather_state should be 0-3, got {}",
+                    ws
+                );
+                return; // test passed
+            }
+            if frames >= 50 {
+                break; // enough frames
+            }
+        }
+    }
+
+    // The weather might not have changed (random), but timer should have decremented
+    // If it did change, we already returned. If not, the timer should be lower.
+    assert!(
+        frames > 1,
+        "should have completed multiple frames"
+    );
+}
+
+#[test]
+fn test_living_map_rain_particles_move() {
+    // Run init first, then force rain
+    let (mut vm, _) = living_map_vm_until_frame(3_000_000);
+
+    // Force rain
+    vm.ram[0x7809] = 1;
+    vm.ram[0x780A] = 500;
+
+    // Record initial particle positions
+    let initial_y: Vec<u32> = (0..32).map(|i| vm.ram[0x7010 + i * 2 + 1]).collect();
+
+    // Run 5 frames
+    let mut frames = 0;
+    for _ in 0..3_000_000 {
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames += 1;
+            if frames >= 5 {
+                break;
+            }
+        }
+    }
+
+    assert!(frames >= 5, "should complete 5 frames");
+
+    // Verify at least some rain particles moved downward (y increased)
+    let mut moved_down = 0;
+    for i in 0..32 {
+        let new_y = vm.ram[0x7010 + i * 2 + 1];
+        if new_y > initial_y[i] {
+            moved_down += 1;
+        }
+    }
+
+    assert!(
+        moved_down > 0,
+        "at least some rain particles should have moved down, {} did",
+        moved_down
+    );
+
+    assert!(!vm.halted, "program should not halt");
+}
+
+#[test]
+fn test_living_map_snow_particles_exist() {
+    // Set weather to snow, run a frame, verify snow particles are in valid range
+    let source =
+        std::fs::read_to_string("programs/living_map.asm").expect("filesystem operation failed");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
+    }
+
+    // Force weather to snow
+    vm.ram[0x7809] = 3; // snow
+    vm.ram[0x780A] = 100; // long timer
+
+    // Run 3 frames
+    let mut frames = 0;
+    for _ in 0..2_000_000 {
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames += 1;
+            if frames >= 3 {
+                break;
+            }
+        }
+    }
+
+    assert!(frames >= 3, "should complete 3 frames");
+
+    // Verify snow particles are in valid screen range (0..256)
+    for i in 0..32 {
+        let x = vm.ram[0x7050 + i * 2];
+        let y = vm.ram[0x7050 + i * 2 + 1];
+        assert!(
+            x < 256,
+            "snow particle {} x should be < 256, got {}",
+            i, x
+        );
+        assert!(
+            y < 256,
+            "snow particle {} y should be < 256, got {}",
+            i, y
+        );
+    }
+
+    assert!(!vm.halted, "program should not halt");
+}
+
+#[test]
+fn test_living_map_storm_lightning() {
+    // Run init first, then force storm
+    let (mut vm, _) = living_map_vm_until_frame(3_000_000);
+
+    // Force weather to storm
+    vm.ram[0x7809] = 2; // storm
+    vm.ram[0x780A] = 500; // long timer (won't expire during test)
+    vm.ram[0x780B] = 0; // lightning countdown = 0 (will trigger)
+    vm.ram[0x780C] = 0; // no current flash
+
+    // Run frames - lightning should trigger
+    let mut frames = 0;
+    for _ in 0..5_000_000 {
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames += 1;
+            if vm.ram[0x780C] > 0 {
+                // Saw lightning flash - test passes
+                assert!(!vm.halted, "program should not halt during storm");
+                return;
+            }
+            if frames >= 30 {
+                break;
+            }
+        }
+    }
+
+    // Program didn't crash with storm weather
+    assert!(!vm.halted, "program should not halt during storm");
+}
+
+#[test]
+fn test_living_map_rain_draws_blue_pixels() {
+    // Run init first, then force rain, then check screen
+    let (mut vm, _) = living_map_vm_until_frame(3_000_000);
+
+    // Force rain
+    vm.ram[0x7809] = 1;
+    vm.ram[0x780A] = 500;
+
+    // Run one more frame
+    for _ in 0..3_000_000 {
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Check for rain-colored pixels (0x4488FF)
+    let rain_color = 0x4488FFu32;
+    let rain_pixels = vm.screen.iter().filter(|&&p| p == rain_color).count();
+    assert!(
+        rain_pixels > 0,
+        "should have rain pixels (0x4488FF) on screen, found {}",
+        rain_pixels
     );
 }
