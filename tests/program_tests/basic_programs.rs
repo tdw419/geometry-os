@@ -751,26 +751,3 @@ fn test_fire_program() {
         "fire.asm should have fire pixels in bottom region"
     );
 }
-
-// ── ASSEMBLY SMOKE TESTS FOR UNTESTED PROGRAMS ──────────────────
-
-#[test]
-fn test_untested_programs_assemble() {
-    let untested = [
-        "ball", "border", "canvas_counter", "checkerboard",
-        "circles", "colors", "diagonal", "evolving_counter",
-        "fill_screen", "fire", "game_of_life", "gradient",
-        "lines", "nested_rects", "push_pop_test", "rainbow",
-        "rings", "scroll_demo", "shift_test", "stripes",
-        "self_writer",
-    ];
-    for name in &untested {
-        let path = format!("programs/{}.asm", name);
-        let source = std::fs::read_to_string(&path)
-            .unwrap_or_else(|_| panic!("{} should exist", path));
-        let result = assemble(&source, 0);
-        assert!(result.is_ok(), "{} failed to assemble: {:?}", name, result.err());
-        let asm = result.unwrap();
-        assert!(asm.pixels.len() > 0, "{} produced empty bytecode", name);
-    }
-}

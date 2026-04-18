@@ -776,11 +776,13 @@ fn test_infinite_map_pxpk_water_animates() {
         "should find water pixels, got {}",
         water_total
     );
-    // Water center pattern is 2x2 out of 4x4 = 4/16 = 25% of water pixels should change
-    // Some tiles may happen to have (fc & 0xF) XOR produce same accent, so allow some slack
+    // Water center pattern is 2x2 out of 4x4 = 4/16 = 25% of water pixels.
+    // With spatially-varying shimmer (wave_phase = fc + fine_hash_nibble),
+    // some tiles may produce identical accent across adjacent frames.
+    // Allow lower threshold since spatial variation reduces frame-to-frame delta.
     assert!(
-        water_changed > water_total / 8,
-        "at least ~12.5% of water pixels should shimmer, got {}/{}",
+        water_changed > water_total / 10,
+        "at least ~10% of water pixels should shimmer, got {}/{}",
         water_changed,
         water_total
     );

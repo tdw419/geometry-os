@@ -480,20 +480,31 @@ render_y:
     MUL r21, r18
     XOR r6, r21           ; r6 = fine_hash (THE SEED, 32 bits of goodness)
 
-    ; ---- Height-based shading (skip for water biomes 0,1) ----
+    ; ---- Single water check (biome 0 or 1) ----
+    ; Sets r31=1 for water, r31=0 for land. Used by height skip and shimmer.
+    MOV r31, r30           ; biome_type
+    JZ r31, is_water       ; biome 0 = water
+    LDI r18, 1
+    SUB r31, r18
+    JZ r31, is_water       ; biome 1 = water
+    LDI r31, 0             ; not water
+    JMP water_checked
+is_water:
+    LDI r31, 1             ; is water
+water_checked:
+
+    ; ---- Height-based shading (skip for water) ----
     ; Elevation from fine_hash top bits: range 0-7, shade 0x030303 per step
     ; Applied before R-variation and tint. Max +21/channel, safe for Snow biome.
-    MOV r18, r30           ; biome_type
-    JZ r18, height_skip    ; biome 0 = water, skip
-    LDI r31, 1
-    SUB r18, r31
-    JZ r18, height_skip    ; biome 1 = water, skip
+    JZ r31, height_apply
+    JMP height_skip        ; water = flat, no height shading
+height_apply:
     MOV r18, r6            ; fine_hash
-    LDI r31, 28
-    SHR r18, r31           ; top 4 bits (0-15)
+    LDI r30, 28
+    SHR r18, r30           ; top 4 bits (0-15)
     ANDI r18, 0x7          ; clamp to 0-7
-    LDI r31, 0x030303
-    MUL r18, r31           ; height_shade = 0..0x151515
+    LDI r30, 0x030303
+    MUL r18, r30           ; height_shade = 0..0x151515
     ADD r17, r18           ; base_color += height_shade
 height_skip:
 
@@ -513,22 +524,21 @@ height_skip:
     ANDI r19, 0x1F1F1F     ; 5 bits per channel mask
     XOR r19, r17          ; r19 = accent color (inherits tint via XOR of tinted base)
 
-    ; ---- Water shimmer (animated accent cycling for water biomes 0,1) ----
-    ; Override pattern to center + XOR accent with (frame_counter & 0xF) << 4
-    ; This gives 16 distinct shimmer phases cycling blue-channel accent each frame.
-    MOV r18, r30           ; biome_type
-    JZ r18, water_shimmer  ; biome 0
-    LDI r31, 1
-    SUB r18, r31
-    JZ r18, water_shimmer  ; biome 1
-    JMP no_shimmer
-water_shimmer:
+    ; ---- Water shimmer (animated wave for water biomes) ----
+    ; Water: force center pattern + spatially-varying wave animation.
+    ; Shimmer phase = (frame_counter + fine_hash_nibble) & 0xF gives
+    ; position-dependent wave offset, so adjacent tiles ripple differently.
+    ; Accent shifted by wave*0x11 for blue+green channel cycling.
+    JZ r31, no_shimmer     ; not water
     LDI r29, 1             ; force center pattern for water
     LOAD r18, r13          ; frame_counter
+    MOV r30, r6
+    ANDI r30, 0xF          ; fine_hash nibble (spatial variation)
+    ADD r18, r30           ; wave_phase = fc + spatial
     ANDI r18, 0xF          ; 0-15 shimmer phase
-    LDI r31, 16
-    MUL r18, r31           ; << 4 (blue-channel cycling offset)
-    XOR r19, r18           ; accent ^= shimmer
+    LDI r30, 0x11
+    MUL r18, r30           ; wave * 0x11 (blue+green channel cycling)
+    XOR r19, r18           ; accent ^= shimmer wave
 no_shimmer:
 
     ; ---- Pre-load half-width constant for non-flat patterns ----
