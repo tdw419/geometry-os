@@ -1037,6 +1037,81 @@ impl Vm {
                 }
             }
 
+            // PIXEL_HISTORY mode_reg  (0x84) -- Query pixel write history.
+            // Encoding: 0x84, mode_reg
+            // mode_reg value: 0 = count total entries in log (r0 = count)
+            //                 1 = count writes to pixel (r1=x, r2=y, r0 = count)
+            //                 2 = get N most recent writes to pixel into RAM
+            //                     (r1=x, r2=y, r3=max_count, r4=buf_addr, r0 = entries written)
+            //                     Each entry: 6 words (x, y, step_lo, step_hi, opcode, color)
+            //                 3 = get entry at absolute index into RAM
+            //                     (r1=index, r2=buf_addr, r0 = 0 on success, 0xFFFFFFFF on error)
+            //                     Entry format: 6 words (x, y, step_lo, step_hi, opcode, color)
+            // r0 = result (count, entries written, or error)
+            0x84 => {
+                let mode_reg = self.fetch() as usize;
+                let mode = if mode_reg < NUM_REGS {
+                    self.regs[mode_reg]
+                } else {
+                    0
+                };
+                match mode {
+                    0 => {
+                        // Count total entries in log
+                        self.regs[0] = self.pixel_write_log.len() as u32;
+                    }
+                    1 => {
+                        // Count writes to specific pixel (r1=x, r2=y)
+                        let x = self.regs[1] as u16;
+                        let y = self.regs[2] as u16;
+                        self.regs[0] = self.pixel_write_log.count_at(x, y) as u32;
+                    }
+                    2 => {
+                        // Get N most recent writes to pixel into RAM
+                        let x = self.regs[1] as u16;
+                        let y = self.regs[2] as u16;
+                        let max_count = self.regs[3] as usize;
+                        let buf_addr = self.regs[4] as usize;
+                        if max_count == 0 || buf_addr + max_count * 6 > self.ram.len() {
+                            self.regs[0] = 0xFFFFFFFF;
+                        } else {
+                            let entries = self.pixel_write_log.recent_at(x, y, max_count);
+                            for (i, entry) in entries.iter().enumerate() {
+                                let base = buf_addr + i * 6;
+                                self.ram[base] = entry.x as u32;
+                                self.ram[base + 1] = entry.y as u32;
+                                self.ram[base + 2] = entry.step_lo;
+                                self.ram[base + 3] = entry.step_hi;
+                                self.ram[base + 4] = entry.opcode as u32;
+                                self.ram[base + 5] = entry.color;
+                            }
+                            self.regs[0] = entries.len() as u32;
+                        }
+                    }
+                    3 => {
+                        // Get entry at absolute index into RAM
+                        let index = self.regs[1] as usize;
+                        let buf_addr = self.regs[2] as usize;
+                        if buf_addr + 6 > self.ram.len() {
+                            self.regs[0] = 0xFFFFFFFF;
+                        } else if let Some(entry) = self.pixel_write_log.get_at(index) {
+                            self.ram[buf_addr] = entry.x as u32;
+                            self.ram[buf_addr + 1] = entry.y as u32;
+                            self.ram[buf_addr + 2] = entry.step_lo;
+                            self.ram[buf_addr + 3] = entry.step_hi;
+                            self.ram[buf_addr + 4] = entry.opcode as u32;
+                            self.ram[buf_addr + 5] = entry.color;
+                            self.regs[0] = 0;
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    }
+                    _ => {
+                        self.regs[0] = 0xFFFFFFFF; // invalid mode
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;

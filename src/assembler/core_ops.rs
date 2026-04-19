@@ -114,6 +114,15 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "PIXEL_HISTORY" => {
+            if tokens.len() < 2 {
+                return Err("PIXEL_HISTORY requires 1 argument: PIXEL_HISTORY mode_reg".to_string());
+            }
+            bytecode.push(0x84);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         "MEMCPY" => {
             if tokens.len() < 4 {
                 return Err(

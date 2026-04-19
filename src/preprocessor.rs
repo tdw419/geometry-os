@@ -117,6 +117,7 @@ pub const OPCODES: &[&str] = &[
     "SOCKRECV",
     "DISCONNECT",
     "TRACE_READ",
+    "PIXEL_HISTORY",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

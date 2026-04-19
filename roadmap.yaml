@@ -10,9 +10,9 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 108
-  tests: 1294
-  programs: 62
+  opcodes: 109
+  tests: 1334
+  programs: 63
   loc: 36489
 phases:
 - id: phase-1
@@ -3061,6 +3061,43 @@ phases:
   technical_notes: 'Implementation in src/vm/mod.rs (opcode 0x83) + src/vm/trace.rs (3 new query methods). TraceBuffer already existed with 10K-entry ring buffer from Phase 38a. Entry format: [step_lo, step_hi, pc, r0..r15, opcode] = 20 u32 words.'
   scope_lines_total: 50
   test_target: 10
+- id: phase-54
+  title: Pixel Write History
+  status: complete
+  goal: Enable programs to query which instructions wrote to specific pixels
+  description: 'PIXEL_HISTORY opcode (0x84) provides 4 modes for introspecting pixel write
+    history: query total entries, count writes to a specific pixel, retrieve recent writes
+    to a pixel into RAM, and get entry by absolute index. This is the foundation for
+    pixel-level time-travel debugging -- programs can analyze their own rendering
+    history to build debuggers and visual tracebacks from within the VM.'
+  deliverables:
+  - name: PixelWriteLog ring buffer
+    description: '50K-entry ring buffer in src/vm/trace.rs recording every PSET/PSETI when trace_recording is on. Each entry: x, y, step_lo, step_hi, opcode, color (20 bytes).'
+    status: done
+    tasks: []
+  - name: PSET/PSETI write logging
+    description: 'PSET (0x40) and PSETI (0x41) now record pixel writes to pixel_write_log when trace_recording is enabled. Zero overhead when off.'
+    status: done
+    tasks: []
+  - name: PIXEL_HISTORY opcode (0x84)
+    description: 'Query pixel write history from assembly. Mode 0: total entry count. Mode 1: count writes to pixel (r1=x, r2=y). Mode 2: get N most recent writes to pixel into RAM (6 words per entry). Mode 3: get entry at absolute index.'
+    status: done
+    tasks: []
+  - name: Assembler and disassembler support
+    description: 'PIXEL_HISTORY recognized by assembler (core_ops.rs), disassembler (disasm.rs), and preprocessor OPCODES list.'
+    status: done
+    tasks: []
+  - name: PIXEL_HISTORY tests
+    description: '13 unit tests covering PSET recording, PSETI recording, no-recording-when-off, ring buffer overflow, reset clearing, all 4 query modes, invalid mode, buffer overflow check, assembler, and disassembler.'
+    status: done
+    tasks: []
+  - name: Demo program
+    description: 'programs/pixel_history_demo.asm demonstrates writing 3 colors to same pixel and querying the history.'
+    status: done
+    tasks: []
+  technical_notes: 'Implementation in src/vm/ops_extended.rs (opcode 0x84) + src/vm/trace.rs (PixelWriteLog, PixelWriteEntry). pixel_write_log field on Vm struct. Dispatch in mod.rs step() via dedicated 0x84 arm delegating to step_extended().'
+  scope_lines_total: 200
+  test_target: 13
 global_risks:
 - 'Opcode space: 107 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard

@@ -116,6 +116,9 @@ pub struct Vm {
     /// Saved VM snapshots for timeline forking (Phase 38d).
     /// Max 16 snapshots; each captures full RAM + screen + registers.
     pub snapshots: Vec<VmSnapshot>,
+    /// Pixel write history log (Phase 54: Pixel Write History).
+    /// Records every PSET/PSETI when trace_recording is on.
+    pub pixel_write_log: PixelWriteLog,
     /// Active TCP connections (Phase 41: Networking).
     /// Up to 8 simultaneous connections, indexed by fd.
     pub tcp_connections: Vec<Option<std::net::TcpStream>>,
@@ -190,6 +193,7 @@ impl Vm {
             trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
             frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
             snapshots: Vec::new(),
+            pixel_write_log: PixelWriteLog::new(DEFAULT_PIXEL_WRITE_CAPACITY),
             tcp_connections: (0..MAX_TCP_CONNECTIONS).map(|_| None).collect(),
         }
     }
@@ -261,6 +265,7 @@ impl Vm {
         self.trace_buffer.clear();
         self.frame_checkpoints.clear();
         self.snapshots.clear();
+        self.pixel_write_log.clear();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -739,6 +744,13 @@ impl Vm {
                     _ => {
                         self.regs[0] = 0xFFFFFFFF; // invalid mode
                     }
+                }
+            }
+            // PIXEL_HISTORY mode_reg  (0x84) -- Query pixel write history.
+            // Delegates to step_extended which has the full implementation.
+            0x84 => {
+                if !self.step_extended(opcode) {
+                    return false;
                 }
             }
             // Unknown opcode: halt

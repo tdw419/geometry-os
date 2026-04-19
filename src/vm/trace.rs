@@ -388,6 +388,207 @@ impl<'a> Iterator for FrameCheckIter<'a> {
 /// At 256KB per snapshot (64K u32 RAM), 16 snapshots = 4MB total.
 pub const MAX_SNAPSHOTS: usize = 16;
 
+// --- Phase 54: Pixel Write History ---
+
+/// Default pixel write log capacity (entries).
+/// Each entry is 20 bytes (x: u16, y: u16, step_lo: u32, step_hi: u32, opcode: u8, color: u32).
+/// 50K entries = ~1MB. Records individual pixel writes from PSET/PSETI.
+pub const DEFAULT_PIXEL_WRITE_CAPACITY: usize = 50_000;
+
+/// A single recorded pixel write event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PixelWriteEntry {
+    /// X coordinate of the pixel written (0-255).
+    pub x: u16,
+    /// Y coordinate of the pixel written (0-255).
+    pub y: u16,
+    /// Step number when this write occurred (low 32 bits).
+    pub step_lo: u32,
+    /// Step number when this write occurred (high 32 bits).
+    pub step_hi: u32,
+    /// The opcode that caused this write (e.g., 0x40 for PSET, 0x41 for PSETI).
+    pub opcode: u8,
+    /// The color value written to the pixel.
+    pub color: u32,
+}
+
+impl PixelWriteEntry {
+    /// Get the full step number as u64.
+    pub fn step(&self) -> u64 {
+        (self.step_hi as u64) << 32 | (self.step_lo as u64)
+    }
+}
+
+/// Fixed-size ring buffer of pixel write events.
+///
+/// Records every individual pixel write (PSET/PSETI) when trace recording is on.
+/// Zero overhead when off (one bool check per PSET). Ring buffer allocated once,
+/// never grows. Bulk operations (FILL, RECTF, etc.) are NOT logged per-pixel --
+/// they record a single "region marker" entry at the origin pixel.
+#[derive(Debug)]
+pub struct PixelWriteLog {
+    entries: Vec<PixelWriteEntry>,
+    capacity: usize,
+    head: usize, // next write position
+    len: usize,  // number of valid entries (up to capacity)
+}
+
+#[allow(dead_code)]
+impl PixelWriteLog {
+    /// Create a new pixel write log with the given capacity.
+    pub fn new(capacity: usize) -> Self {
+        let capacity = capacity.max(1);
+        PixelWriteLog {
+            entries: (0..capacity)
+                .map(|_| PixelWriteEntry {
+                    x: 0,
+                    y: 0,
+                    step_lo: 0,
+                    step_hi: 0,
+                    opcode: 0,
+                    color: 0,
+                })
+                .collect(),
+            capacity,
+            head: 0,
+            len: 0,
+        }
+    }
+
+    /// Record a pixel write event.
+    /// Only call this when trace recording is on.
+    #[inline]
+    pub fn push(&mut self, x: u16, y: u16, step: u64, opcode: u8, color: u32) {
+        let entry = &mut self.entries[self.head];
+        entry.x = x;
+        entry.y = y;
+        entry.step_lo = step as u32;
+        entry.step_hi = (step >> 32) as u32;
+        entry.opcode = opcode;
+        entry.color = color;
+
+        self.head = (self.head + 1) % self.capacity;
+        if self.len < self.capacity {
+            self.len += 1;
+        }
+    }
+
+    /// Number of valid entries currently in the buffer.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether the buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Clear all entries.
+    pub fn clear(&mut self) {
+        self.head = 0;
+        self.len = 0;
+    }
+
+    /// Get entry by absolute index (0 = oldest).
+    /// Returns None if index >= len.
+    pub fn get_at(&self, index: usize) -> Option<&PixelWriteEntry> {
+        if index >= self.len {
+            return None;
+        }
+        let start = if self.len < self.capacity {
+            0
+        } else {
+            self.head
+        };
+        let idx = (start + index) % self.capacity;
+        Some(&self.entries[idx])
+    }
+
+    /// Count writes to a specific pixel (x, y).
+    pub fn count_at(&self, x: u16, y: u16) -> usize {
+        self.iter().filter(|e| e.x == x && e.y == y).count()
+    }
+
+    /// Get the N most recent writes to a specific pixel (x, y).
+    /// Returns entries in reverse chronological order (newest first).
+    /// Limits results to `max_results`.
+    pub fn recent_at(&self, x: u16, y: u16, max_results: usize) -> Vec<PixelWriteEntry> {
+        let mut result = Vec::with_capacity(max_results);
+        for entry in self.iter_rev() {
+            if entry.x == x && entry.y == y {
+                result.push(entry.clone());
+                if result.len() >= max_results {
+                    break;
+                }
+            }
+        }
+        result
+    }
+
+    /// Iterate over entries from oldest to newest.
+    pub fn iter(&self) -> PixelWriteIter<'_> {
+        let start = if self.len < self.capacity {
+            0
+        } else {
+            self.head
+        };
+        PixelWriteIter {
+            log: self,
+            pos: 0,
+            start,
+        }
+    }
+
+    /// Iterate over entries from newest to oldest.
+    pub fn iter_rev(&self) -> PixelWriteRevIter<'_> {
+        PixelWriteRevIter {
+            log: self,
+            pos: 0,
+        }
+    }
+}
+
+/// Iterator over pixel write entries from oldest to newest.
+pub struct PixelWriteIter<'a> {
+    log: &'a PixelWriteLog,
+    pos: usize,
+    start: usize,
+}
+
+impl<'a> Iterator for PixelWriteIter<'a> {
+    type Item = &'a PixelWriteEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= self.log.len {
+            return None;
+        }
+        let idx = (self.start + self.pos) % self.log.capacity;
+        self.pos += 1;
+        Some(&self.log.entries[idx])
+    }
+}
+
+/// Iterator over pixel write entries from newest to oldest.
+pub struct PixelWriteRevIter<'a> {
+    log: &'a PixelWriteLog,
+    pos: usize,
+}
+
+impl<'a> Iterator for PixelWriteRevIter<'a> {
+    type Item = &'a PixelWriteEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= self.log.len {
+            return None;
+        }
+        let idx = (self.log.head + self.log.capacity - 1 - self.pos) % self.log.capacity;
+        self.pos += 1;
+        Some(&self.log.entries[idx])
+    }
+}
+
+// --- Phase 38d: Timeline Forking ---
+
 /// A complete snapshot of VM state, used for timeline forking.
 ///
 /// Captures everything needed to restore the VM to an exact prior state:

@@ -624,6 +624,10 @@ impl Vm {
                 let mr = ram(a + 1);
                 (format!("TRACE_READ {}", reg(mr)), 2)
             }
+            0x84 => {
+                let mr = ram(a + 1);
+                (format!("PIXEL_HISTORY {}", reg(mr)), 2)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

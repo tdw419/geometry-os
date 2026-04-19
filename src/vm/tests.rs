@@ -2368,3 +2368,272 @@ fn test_disassemble_funlink() {
     assert_eq!(text, "FUNLINK [r3]");
     assert_eq!(len, 2);
 }
+
+// --- Phase 54: Pixel Write History Tests ---
+
+#[test]
+fn test_pixel_write_log_pset_records() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = true;
+
+    // LDI r1, 10  (x=10)
+    vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 10;
+    // LDI r2, 20  (y=20)
+    vm.ram[3] = 0x10; vm.ram[4] = 2; vm.ram[5] = 20;
+    // LDI r3, 0xFF0000  (color=red)
+    vm.ram[6] = 0x10; vm.ram[7] = 3; vm.ram[8] = 0xFF0000;
+    // PSET r1, r2, r3
+    vm.ram[9] = 0x40; vm.ram[10] = 1; vm.ram[11] = 2; vm.ram[12] = 3;
+
+    for _ in 0..4 { vm.step(); } // 3x LDI + PSET
+
+    assert_eq!(vm.pixel_write_log.len(), 1);
+    let entry = vm.pixel_write_log.get_at(0).unwrap();
+    assert_eq!(entry.x, 10);
+    assert_eq!(entry.y, 20);
+    assert_eq!(entry.opcode, 0x40);
+    assert_eq!(entry.color, 0xFF0000);
+    assert_eq!(vm.screen[20 * 256 + 10], 0xFF0000);
+}
+
+#[test]
+fn test_pixel_write_log_pseti_records() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = true;
+
+    // PSETI 50, 60, 0x00FF00
+    vm.ram[0] = 0x41; vm.ram[1] = 50; vm.ram[2] = 60; vm.ram[3] = 0x00FF00;
+
+    vm.step();
+
+    assert_eq!(vm.pixel_write_log.len(), 1);
+    let entry = vm.pixel_write_log.get_at(0).unwrap();
+    assert_eq!(entry.x, 50);
+    assert_eq!(entry.y, 60);
+    assert_eq!(entry.opcode, 0x41);
+    assert_eq!(entry.color, 0x00FF00);
+}
+
+#[test]
+fn test_pixel_write_log_no_recording_when_off() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = false;
+
+    // PSETI 10, 10, 5
+    vm.ram[0] = 0x41; vm.ram[1] = 10; vm.ram[2] = 10; vm.ram[3] = 5;
+    vm.step();
+
+    assert_eq!(vm.pixel_write_log.len(), 0);
+    // But the pixel should still be set
+    assert_eq!(vm.screen[10 * 256 + 10], 5);
+}
+
+#[test]
+fn test_pixel_write_log_ring_buffer_overflow() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = true;
+
+    // Write more pixels than the buffer capacity
+    let cap = crate::vm::DEFAULT_PIXEL_WRITE_CAPACITY;
+    for i in 0..(cap as u32 + 100) {
+        vm.ram[0] = 0x41; // PSETI
+        vm.ram[1] = (i % 256) as u32;
+        vm.ram[2] = ((i / 256) % 256) as u32;
+        vm.ram[3] = i;
+        vm.pc = 0;
+        vm.step();
+    }
+
+    // Buffer should be at capacity (old entries overwritten)
+    assert_eq!(vm.pixel_write_log.len(), cap);
+}
+
+#[test]
+fn test_pixel_write_log_cleared_on_reset() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = true;
+
+    vm.ram[0] = 0x41; vm.ram[1] = 5; vm.ram[2] = 5; vm.ram[3] = 1;
+    vm.step();
+    assert_eq!(vm.pixel_write_log.len(), 1);
+
+    vm.reset();
+    assert_eq!(vm.pixel_write_log.len(), 0);
+}
+
+#[test]
+fn test_pixel_history_count_total() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = true;
+
+    // Write 3 pixels
+    for i in 0..3u32 {
+        vm.ram[0] = 0x41; vm.ram[1] = i; vm.ram[2] = 0; vm.ram[3] = 1;
+        vm.pc = 0;
+        vm.step();
+    }
+
+    // PIXEL_HISTORY r0 (mode 0 = count total)
+    vm.regs[0] = 0;
+    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 3);
+}
+
+#[test]
+fn test_pixel_history_count_at_pixel() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = true;
+
+    // Write to (10,10) twice and (20,20) once
+    for _ in 0..2 {
+        vm.ram[0] = 0x41; vm.ram[1] = 10; vm.ram[2] = 10; vm.ram[3] = 1;
+        vm.pc = 0;
+        vm.step();
+    }
+    vm.ram[0] = 0x41; vm.ram[1] = 20; vm.ram[2] = 20; vm.ram[3] = 2;
+    vm.pc = 0;
+    vm.step();
+
+    // PIXEL_HISTORY r0 (mode 1 = count at pixel)
+    vm.regs[0] = 1; // mode
+    vm.regs[1] = 10; // x
+    vm.regs[2] = 10; // y
+    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 2);
+
+    // Check (20,20)
+    vm.regs[0] = 1;
+    vm.regs[1] = 20;
+    vm.regs[2] = 20;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 1);
+}
+
+#[test]
+fn test_pixel_history_get_recent() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = true;
+
+    // Write 3 different colors to (5,5)
+    for c in [0xFF0000u32, 0x00FF00, 0x0000FF] {
+        vm.ram[0] = 0x41; vm.ram[1] = 5; vm.ram[2] = 5; vm.ram[3] = c;
+        vm.pc = 0;
+        vm.step();
+    }
+
+    // PIXEL_HISTORY r0 (mode 2 = get recent)
+    vm.regs[0] = 2; // mode
+    vm.regs[1] = 5;  // x
+    vm.regs[2] = 5;  // y
+    vm.regs[3] = 10; // max_count
+    vm.regs[4] = 0x1000; // buf_addr
+    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 3); // 3 entries
+
+    // Entries are in reverse chronological order (newest first)
+    // First entry should be blue (0x0000FF)
+    assert_eq!(vm.ram[0x1000 + 5], 0x0000FF);
+    // Second should be green (0x00FF00)
+    assert_eq!(vm.ram[0x1006 + 5], 0x00FF00);
+    // Third should be red (0xFF0000)
+    assert_eq!(vm.ram[0x100C + 5], 0xFF0000);
+}
+
+#[test]
+fn test_pixel_history_get_at_index() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = true;
+
+    // Write 2 pixels
+    vm.ram[0] = 0x41; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0xAA;
+    vm.step();
+    vm.ram[0] = 0x41; vm.ram[1] = 3; vm.ram[2] = 4; vm.ram[3] = 0xBB;
+    vm.pc = 0;
+    vm.step();
+
+    // PIXEL_HISTORY r0 (mode 3 = get at index)
+    vm.regs[0] = 3; // mode
+    vm.regs[1] = 1; // index (second entry)
+    vm.regs[2] = 0x2000; // buf_addr
+    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0); // success
+    assert_eq!(vm.ram[0x2000], 3); // x
+    assert_eq!(vm.ram[0x2001], 4); // y
+    assert_eq!(vm.ram[0x2004], 0x41); // opcode = PSETI
+    assert_eq!(vm.ram[0x2005], 0xBB); // color
+}
+
+#[test]
+fn test_pixel_history_invalid_mode() {
+    let mut vm = crate::vm::Vm::new();
+
+    vm.regs[0] = 99; // invalid mode
+    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF);
+}
+
+#[test]
+fn test_pixel_history_disassembler() {
+    let mut vm = crate::vm::Vm::new();
+    vm.ram[0] = 0x84;
+    vm.ram[1] = 5;
+    let (text, len) = vm.disassemble_at(0);
+    assert_eq!(text, "PIXEL_HISTORY r5");
+    assert_eq!(len, 2);
+}
+
+#[test]
+fn test_pixel_history_assembler() {
+    let src = "LDI r1, 0\nPIXEL_HISTORY r1\nHALT";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(result.is_ok());
+    let bytecode = result.unwrap();
+    // LDI r1, 0 = [0x10, 1, 0]
+    assert_eq!(bytecode.pixels[0], 0x10);
+    assert_eq!(bytecode.pixels[1], 1);
+    assert_eq!(bytecode.pixels[2], 0);
+    // PIXEL_HISTORY r1 = [0x84, 1]
+    assert_eq!(bytecode.pixels[3], 0x84);
+    assert_eq!(bytecode.pixels[4], 1);
+    // HALT = [0x00]
+    assert_eq!(bytecode.pixels[5], 0x00);
+}
+
+#[test]
+fn test_pixel_history_buf_overflow_check() {
+    let mut vm = crate::vm::Vm::new();
+    vm.trace_recording = true;
+
+    // Write one pixel
+    vm.ram[0] = 0x41; vm.ram[1] = 10; vm.ram[2] = 10; vm.ram[3] = 5;
+    vm.step();
+
+    // Try mode 2 with buffer addr that would overflow RAM
+    vm.regs[0] = 2; // mode
+    vm.regs[1] = 10; // x
+    vm.regs[2] = 10; // y
+    vm.regs[3] = 1; // max_count
+    vm.regs[4] = 0xFFFF0; // buf_addr (too close to end for 6 words)
+    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF); // error
+}

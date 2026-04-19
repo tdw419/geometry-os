@@ -18,6 +18,15 @@ impl Vm {
                     let color = self.regs[cr];
                     if x < 256 && y < 256 {
                         self.screen[y * 256 + x] = color;
+                        if self.trace_recording {
+                            self.pixel_write_log.push(
+                                x as u16,
+                                y as u16,
+                                self.trace_buffer.step_counter(),
+                                0x40,
+                                color,
+                            );
+                        }
                     }
                 }
             }
@@ -29,6 +38,15 @@ impl Vm {
                 let color = self.fetch();
                 if x < 256 && y < 256 {
                     self.screen[y * 256 + x] = color;
+                    if self.trace_recording {
+                        self.pixel_write_log.push(
+                            x as u16,
+                            y as u16,
+                            self.trace_buffer.step_counter(),
+                            0x41,
+                            color,
+                        );
+                    }
                 }
             }
 
