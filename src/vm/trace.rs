@@ -47,6 +47,7 @@ pub struct TraceBuffer {
     step_counter: u64, // monotonically increasing step counter
 }
 
+#[allow(dead_code)]
 impl TraceBuffer {
     /// Create a new ring buffer with the given capacity.
     pub fn new(capacity: usize) -> Self {
@@ -178,6 +179,7 @@ impl TraceBuffer {
 }
 
 /// Iterator over trace entries from oldest to newest.
+#[allow(dead_code)]
 pub struct TraceIter<'a> {
     buffer: &'a TraceBuffer,
     pos: usize,
@@ -198,6 +200,7 @@ impl<'a> Iterator for TraceIter<'a> {
 }
 
 /// Iterator over trace entries from newest to oldest.
+#[allow(dead_code)]
 pub struct TraceRevIter<'a> {
     buffer: &'a TraceBuffer,
     pos: usize,
@@ -220,6 +223,7 @@ impl<'a> Iterator for TraceRevIter<'a> {
 
 /// A snapshot of the screen buffer captured at a FRAME opcode.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct FrameCheckpoint {
     /// Step number at which this frame was captured.
     pub step_number: u64,
@@ -242,6 +246,7 @@ pub struct FrameCheckBuffer {
     len: usize,  // number of valid entries (up to capacity)
 }
 
+#[allow(dead_code)]
 impl FrameCheckBuffer {
     /// Create a new frame checkpoint buffer with the given capacity.
     pub fn new(capacity: usize) -> Self {
@@ -321,6 +326,7 @@ impl FrameCheckBuffer {
 }
 
 /// Iterator over frame checkpoints from oldest to newest.
+#[allow(dead_code)]
 pub struct FrameCheckIter<'a> {
     buffer: &'a FrameCheckBuffer,
     pos: usize,
@@ -356,6 +362,7 @@ pub const MAX_SNAPSHOTS: usize = 16;
 /// Size: ~384KB per snapshot (64K RAM words + 64K screen words + overhead).
 /// Delta compression can reduce this later; for now, keep it simple.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct VmSnapshot {
     /// Full RAM contents (65536 u32 words = 256KB).
     pub ram: Vec<u32>,

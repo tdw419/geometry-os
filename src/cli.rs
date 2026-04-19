@@ -753,6 +753,7 @@ pub fn cli_main(extra_args: &[String]) {
 // ── Trap analysis helpers ──
 
 struct TrapEntry {
+    #[allow(dead_code)]
     cause: u64,
     epc: u64,
     tval: u64,

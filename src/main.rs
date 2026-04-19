@@ -47,7 +47,7 @@ const KEY_PORT: usize = 0xFFF;
 const SAVE_FILE: &str = "geometry_os.sav";
 
 // ── Terminal mode ──────────────────────────────────────────────────
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum Mode {
     Terminal,
     Editor,
@@ -234,6 +234,14 @@ fn main() {
             canvas_assembled = saved_assembled;
             status_msg = String::from("[state restored from geometry_os.sav]");
         }
+    }
+
+    // ── Unix socket command channel (for AI/remote control) ─────
+    let cmd_sock_path = "/tmp/geo_cmd.sock";
+    let _ = std::fs::remove_file(cmd_sock_path);
+    let cmd_listener = std::os::unix::net::UnixListener::bind(cmd_sock_path).ok();
+    if let Some(ref l) = cmd_listener {
+        l.set_nonblocking(true).ok();
     }
 
     // ── Main loop ────────────────────────────────────────────────
@@ -486,7 +494,7 @@ fn main() {
                                     // Auto-decode .rts.png files to temp files
                                     config_str = resolve_qemu_pixel_paths(&config_str);
                                     match QemuBridge::spawn(&config_str) {
-                                        Ok(mut bridge) => {
+                                        Ok(bridge) => {
                                             // Clear canvas for QEMU terminal output
                                             canvas_buffer.fill(0);
                                             scroll_offset = 0;
@@ -955,6 +963,138 @@ fn main() {
             let _ = status_msg; // suppress unused warning (break follows)
             let _ = is_running;
             break;
+        }
+
+        // ── Process Unix socket commands (AI control) ──────────
+        if let Some(ref listener) = cmd_listener {
+            while let Ok((mut stream, _)) = listener.accept() {
+                use std::io::{Read, Write};
+                let mut buf = [0u8; 4096];
+                let mut response = String::new();
+                if let Ok(n) = stream.read(&mut buf) {
+                    let cmd = String::from_utf8_lossy(&buf[..n]);
+                    for line in cmd.lines() {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.is_empty() {
+                            continue;
+                        }
+                        match parts[0] {
+                            "save" => {
+                                match save_state(
+                                    SAVE_FILE, &vm, &canvas_buffer, canvas_assembled,
+                                ) {
+                                    Ok(()) => status_msg = "[saved]".into(),
+                                    Err(e) => status_msg = format!("[save error: {}]", e),
+                                }
+                            }
+                            "screenshot" => {
+                                let path = parts.get(1).map(|s| *s).unwrap_or("screenshot.png");
+                                match save_full_buffer_png(path, &buffer, WIDTH, HEIGHT) {
+                                    Ok(()) => status_msg = format!("[screenshot: {}]", path),
+                                    Err(e) => status_msg = format!("[screenshot error: {}]", e),
+                                }
+                            }
+                            "canvas" => {
+                                let mut out = String::new();
+                                for row in 0..CANVAS_MAX_ROWS {
+                                    let mut ln = String::new();
+                                    for col in 0..CANVAS_COLS {
+                                        let val = canvas_buffer[row * CANVAS_COLS + col];
+                                        if val > 0 && val < 128 {
+                                            ln.push(val as u8 as char);
+                                        } else {
+                                            ln.push(' ');
+                                        }
+                                    }
+                                    let trimmed = ln.trim_end();
+                                    if !trimmed.is_empty() {
+                                        out.push_str(&format!("{}|{}\n", row, trimmed));
+                                    }
+                                }
+                                response.push_str(&out);
+                            }
+                            "assemble" | "asm" => {
+                                canvas_assemble(
+                                    &canvas_buffer, &mut vm, &mut canvas_assembled,
+                                    &mut status_msg,
+                                );
+                            }
+                            "run" => {
+                                if vm.halted {
+                                    vm.pc = if canvas_assembled {
+                                        CANVAS_BYTECODE_ADDR as u32
+                                    } else {
+                                        0
+                                    };
+                                    vm.halted = false;
+                                }
+                                hit_breakpoint = false;
+                                is_running = !is_running;
+                            }
+                            "type" => {
+                                // Type text onto canvas. Use \\n (literal backslash-n)
+                                // for newline since socket protocol strips actual newlines.
+                                if line.len() > 5 {
+                                    let text = line[5..].replace("\\n", "\n");
+                                    for ch in text.chars() {
+                                        if ch == '\n' {
+                                            cursor_col = 0;
+                                            cursor_row += 1;
+                                            if cursor_row >= CANVAS_MAX_ROWS {
+                                                cursor_row = CANVAS_MAX_ROWS - 1;
+                                            }
+                                        } else if cursor_col < CANVAS_COLS {
+                                            canvas_buffer[cursor_row * CANVAS_COLS + cursor_col] =
+                                                ch as u32;
+                                            cursor_col += 1;
+                                            // Auto-wrap at end of line
+                                            if cursor_col >= CANVAS_COLS {
+                                                cursor_col = 0;
+                                                cursor_row += 1;
+                                                if cursor_row >= CANVAS_MAX_ROWS {
+                                                    cursor_row = CANVAS_MAX_ROWS - 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            "clear" => {
+                                canvas_buffer.fill(0);
+                                cursor_row = 0;
+                                cursor_col = 0;
+                                scroll_offset = 0;
+                                term_output_row = 0;
+                            }
+                            "status" => {
+                                response.push_str(&format!(
+                                    "mode={:?} running={} assembled={} pc=0x{:04X} cursor=({},{})\n",
+                                    mode, is_running, canvas_assembled, vm.pc, cursor_row, cursor_col
+                                ));
+                            }
+                            "screen" => {
+                                let mut out = String::new();
+                                for y in 0..256 {
+                                    let mut row = String::new();
+                                    for x in 0..256 {
+                                        let px = vm.screen[y * 256 + x];
+                                        row.push_str(&format!("{:06x} ", px));
+                                    }
+                                    out.push_str(row.trim_end());
+                                    out.push('\n');
+                                }
+                                response.push_str(&out);
+                            }
+                            _ => {
+                                response.push_str(&format!("[unknown: {}]\n", line));
+                            }
+                        }
+                    }
+                }
+                if !response.is_empty() {
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            }
         }
 
         // ── Update Visual Debugger intensities ──────────────────

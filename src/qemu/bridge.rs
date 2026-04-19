@@ -26,6 +26,7 @@ pub struct QemuBridge {
     alive: bool,
 }
 
+#[allow(dead_code)]
 impl QemuBridge {
     /// Spawn a QEMU process from a config string.
     /// Config format: "arch=riscv64 kernel=linux.img ram=256M"
@@ -47,7 +48,7 @@ impl QemuBridge {
         })?;
 
         let stdin = child.stdin.take().ok_or("failed to open QEMU stdin")?;
-        let mut stdout = child.stdout.take().ok_or("failed to open QEMU stdout")?;
+        let stdout = child.stdout.take().ok_or("failed to open QEMU stdout")?;
 
         // Set stdout to non-blocking so read doesn't hang the CLI loop
         use std::os::unix::io::AsRawFd;

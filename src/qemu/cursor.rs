@@ -41,6 +41,7 @@ impl Cursor {
     }
 
     /// Clamp cursor position to valid canvas bounds.
+    #[allow(dead_code)]
     pub fn clamp(&mut self) {
         if self.row >= CANVAS_MAX_ROWS {
             self.row = CANVAS_MAX_ROWS - 1;

@@ -39,6 +39,7 @@ impl Default for AnsiHandler {
     }
 }
 
+#[allow(dead_code)]
 impl AnsiHandler {
     /// Create a new ANSI handler with default state.
     pub fn new() -> Self {
