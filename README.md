@@ -6,25 +6,27 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 108 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling with memory protection, virtual filesystem, in-memory inode filesystem, device drivers, TCP networking, a Unix-like shell, and an integrated text editor where you type assembly directly into the VM's memory and execute it live. It also includes a native RISC-V RV32I interpreter with SV32 virtual memory, capable of booting a real Linux kernel.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 109 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling with memory protection, virtual filesystem, in-memory inode filesystem, device drivers, TCP networking, a Unix-like shell, and an integrated text editor where you type assembly directly into the VM's memory and execute it live. It also includes a native RISC-V RV32I interpreter with SV32 virtual memory, capable of booting a real Linux kernel.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
 ## Programs
 
-61 programs included -- static art, animations, interactive games, and system utilities:
+63 programs included -- static art, animations, interactive games, and system utilities:
 
-**Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes
+**Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes, plasma, starfield, wirecube
 
-**Animations:** fire (scrolling fire effect), scroll_demo
+**Animations:** fire (scrolling fire effect), scroll_demo, particles, game_of_life
 
 **Interactive:** blink, painter (freehand drawing), calculator (4-function)
 
-**Games:** snake, ball (bouncing ball), breakout (4 rows of bricks, 3 lives), tetris (7 tetrominoes, rotation, line clearing), maze (randomly generated, WASD to navigate), peek_bounce (collision detection demo)
+**Games:** snake, ball (bouncing ball), breakout (4 rows of bricks, 3 lives), tetris (7 tetrominoes, rotation, line clearing), maze (randomly generated, WASD to navigate), peek_bounce (collision detection demo), roguelike
 
-**Advanced:** window_manager (multi-process demo), sprite_demo, self_host (VM assembles and runs its own code), multiproc (multi-process scheduling), mandelbrot (fractal renderer using fixed-point arithmetic)
+**Advanced:** window_manager (multi-process demo), sprite_demo, self_host (VM assembles and runs its own code), self_writer (program that writes new programs), multiproc (multi-process scheduling), mandelbrot (fractal renderer using fixed-point arithmetic), evolving_counter, code_evolution, living_map, infinite_map, infinite_map_pxpk, register_dashboard, canvas_counter, canvas_grid_writer, replay_demo, pixel_history_demo
 
-**System:** shell (Unix-like command shell), init (PID 1 init process), cat (file reader), pipe_test (IPC demo), pipe_demo (pipe communication), device_test (device driver demo), net_demo (TCP networking demo), stdlib_test, preprocessor_test, preprocessor_advanced_test, sprint_c_test, shift_test, push_pop_test
+**System:** shell (Unix-like command shell), init (PID 1 init process), cat (file reader), pipe_test (IPC demo), pipe_demo (pipe communication), device_test (device driver demo), net_demo (TCP networking demo), stdlib_test, preprocessor_test, preprocessor_advanced_test, sprint_c_test, shift_test, push_pop_test, fork_demo, maze_gen
+
+**Audio:** music_demo, sfx_demo
 
 ## Build & Run
 
@@ -48,7 +50,7 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
-## The Instruction Set (108 opcodes)
+## The Instruction Set (109 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -202,6 +204,88 @@ Device files provide uniform access to hardware. OPEN `/dev/screen`, `/dev/keybo
 | SIGNAL | pid_reg, sig_reg | Send signal to process (SIGTERM=0, SIGKILL=1, SIGUSR=2, SIGALRM=3) |
 | SIGSET | sig_reg, handler_reg | Set signal handler address for signal type |
 
+### Immediate Variants
+
+Short-form opcodes that take an immediate value instead of a register, saving an LDI+operation to two instructions.
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| ADDI   | rd, imm | rd = rd + imm |
+| SUBI   | rd, imm | rd = rd - imm |
+| ANDI   | rd, imm | rd = rd AND imm |
+| ORI    | rd, imm | rd = rd OR imm |
+| XORI   | rd, imm | rd = rd XOR imm |
+| SHLI   | rd, imm | Shift left by imm |
+| SHRI   | rd, imm | Shift right by imm |
+| SARI   | rd, imm | Arithmetic shift right by imm (sign-preserving) |
+| CMPI   | rd, imm | Compare register with immediate: r0 = -1/0/1 |
+| TEXTI  | x, y, str... | Draw inline string at (x,y), count follows as next word |
+| STRO   | addr_reg, str... | Store inline string to RAM at addr_reg |
+
+### Memory
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| MEMCPY | dest_reg, src_reg, len_reg | Copy len words from src to dest |
+| LOADS  | rd, offset | Load from stack: rd = RAM[SP + offset] (signed) |
+| STORES | offset, rs | Store to stack: RAM[SP + offset] = rs (signed) |
+
+### Extended Filesystem
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| FMKDIR  | path_reg | Create directory |
+| FUNLINK | path_reg | Delete file or empty directory |
+| FSTAT   | info_reg, path_reg | Get file info (size, type) into RAM at info_reg |
+
+### TCP Networking
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| CONNECT    | host_reg, port_lo, port_hi | Open TCP connection, fd in r0 |
+| SOCKSEND   | fd_reg, buf_reg, len_reg, timeout_reg | Send data on TCP socket, bytes sent in r0 |
+| SOCKRECV   | fd_reg, buf_reg, len_reg, timeout_reg | Receive data on TCP socket, bytes read in r0 |
+| DISCONNECT | fd_reg | Close TCP connection |
+
+### Self-Assembly & Execution
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| ASMSELF | | Assemble code from canvas text editor at current cursor, write bytecode to RAM[0x1000] |
+| RUNNEXT | | Execute assembled code (after ASMSELF), jumps to RAM[0x1000] |
+| FORK    | addr_reg | Create child process sharing parent's address space (no COW) |
+
+### Formula Engine
+
+Cell-based reactive computation. FORMULA defines a cell whose value is computed from dependencies. When any dependency changes, all downstream cells recompute automatically.
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| FORMULA      | tile, op, dep_count, dep1, dep2, ... | Define a formula cell (ops: ADD, SUB, MUL, DIV, AND, OR, XOR, NOT, COPY, MAX, MIN, MOD, SHL, SHR) |
+| FORMULACLEAR | | Clear all formula cells |
+| FORMULAREM   | tile_reg | Remove a formula cell |
+
+### Audio
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| NOTE | wave_reg, freq_reg, dur_reg | Play musical note (wave: 0=square, 1=sawtooth, 2=triangle, 3=noise; freq in Hz; dur in ms) |
+
+### Tracing & Time-Travel Debugging
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| SNAP_TRACE    | mode_reg | Snapshot execution trace (mode: 0=start recording, 1=stop) |
+| REPLAY        | frame_reg | Replay VM state to a previous snapshot frame |
+| TRACE_READ    | dest_reg | Read trace buffer: writes recent opcode history to RAM at dest_reg |
+| PIXEL_HISTORY | dest_reg | Read pixel write history: writes recent pixel changes to RAM at dest_reg |
+
+### Hypervisor
+
+| Opcode | Args | Description |
+|--------|------|-------------|
+| HYPERVISOR | cmd_reg | RISC-V hypervisor control (boot, query status, etc.) |
+
 ## Memory-Mapped I/O
 
 | Port  | Address | Description |
@@ -302,7 +386,7 @@ child:
 │  └──────────────┘  └──────────────────┘     │
 └──────────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 108 opcodes, 8 concurrent processes
+VM: 32 registers, 65536-word RAM, 109 opcodes, 8 concurrent processes
 Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
 
@@ -317,10 +401,10 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 
 ## Stats
 
-- 36,489 lines of Rust
-- 108 opcodes (4 networking opcodes added in Phase 41)
-- 62 programs
-- 1294 tests
+- 37,205 lines of Rust
+- 109 opcodes
+- 63 programs
+- 1,330 tests
 - MIT licensed
 
 ## License
