@@ -9,8 +9,8 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 102
-  tests: 1192
-  programs: 58
+  tests: 1195
+  programs: 59
   loc: 31747
 phases:
 - id: phase-1

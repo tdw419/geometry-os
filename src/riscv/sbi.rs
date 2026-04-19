@@ -44,6 +44,10 @@ const SBI_EXT_SYSTEM_RESET: u32 = 0x53525354; // "SRST"
 const SBI_EXT_TIMER: u32 = 0x54494D45; // "TIME"
 const SBI_EXT_IPI: u32 = 0x735049; // "sPI" (note: lowercase to avoid confusion)
 const SBI_EXT_RFENCE: u32 = 0x52464E43; // "RFNC"
+const SBI_EXT_DBCN: u32 = 0x4442434E; // "DBCN"
+const SBI_DBCN_CONSOLE_WRITE: u32 = 0;
+const SBI_DBCN_CONSOLE_READ: u32 = 1;
+const SBI_DBCN_CONSOLE_WRITE_BYTE: u32 = 2;
 
 /// SBI device: handles ECALL-based SBI calls and HTIF memory-mapped I/O.
 pub struct Sbi {
@@ -55,6 +59,10 @@ pub struct Sbi {
     /// Log of SBI ECALL arguments (a7, a6, a0) for debugging.
     #[allow(dead_code)]
     pub ecall_log: Vec<(u32, u32, u32)>,
+    /// Pending DBCN console write: (physical_address, num_bytes).
+    /// Set by handle_ecall when DBCN_CONSOLE_WRITE is called.
+    /// The caller must read from bus memory and fulfill the request.
+    pub dbcn_pending_write: Option<(u64, usize)>,
 }
 
 impl Sbi {
@@ -64,6 +72,7 @@ impl Sbi {
             console_output: Vec::new(),
             shutdown_requested: false,
             ecall_log: Vec::new(),
+            dbcn_pending_write: None,
         }
     }
 
@@ -155,8 +164,10 @@ impl Sbi {
             SBI_EXT_BASE => {
                 match a6 {
                     // SBI_BASE_GET_SPEC_VERSION (0)
-                    // Encoded as (major << 16 | minor). OpenSBI returns v1.0.
-                    0 => Some((0, 0x00010000)), // a0=success, a1=version 1.0
+                    // Encoded as (major << 24 | minor). Report v2.0 so the kernel
+                    // probes DBCN (Debug Console) extension for earlycon output.
+                    // Note: major shift is 24 (not 16) per SBI spec v0.2+.
+                    0 => Some((0, 0x02000000)), // a0=success, a1=version 2.0
                     // SBI_BASE_GET_IMPL_ID (1)
                     1 => Some((0, 0)), // a0=success, a1=implementation ID 0
                     // SBI_BASE_GET_IMPL_VERSION (2)
@@ -219,9 +230,41 @@ impl Sbi {
                 }
             }
             // RFENCE extension - remote fence operations (single-hart, NOP)
-            SBI_EXT_RFENCE => Some((SBI_SUCCESS as u32, 0)),
+            SBI_EXT_RFENCE => Some((SBI_SUCCESS as u32, 0)), // single-hart, NOP
             // IPI extension - inter-processor interrupts (single-hart, NOP)
             SBI_EXT_IPI => Some((SBI_SUCCESS as u32, 0)),
+            // DBCN extension - Debug Console (SBI v2.0)
+            // On RV32: a0=num_bytes, a1=low32(phys_addr), a2=high32(phys_addr)
+            // We store the request for the caller to fulfill via bus memory read.
+            SBI_EXT_DBCN => {
+                match a6 {
+                    SBI_DBCN_CONSOLE_WRITE => {
+                        // Store pending DBCN write request for caller to fulfill
+                        let num_bytes = a0 as usize;
+                        let base_low = _a1 as u64;
+                        let base_high = (_a2 as u64) << 32;
+                        let phys_addr = base_high | base_low;
+                        self.dbcn_pending_write = Some((phys_addr, num_bytes));
+                        // Return "not supported" as placeholder -- caller replaces
+                        // with actual result after reading memory
+                        None
+                    }
+                    SBI_DBCN_CONSOLE_READ => {
+                        // No input available
+                        Some((SBI_ERR_FAILURE as u32, 0))
+                    }
+                    SBI_DBCN_CONSOLE_WRITE_BYTE => {
+                        // Write single byte: a0 = byte value
+                        let ch = a0 as u8;
+                        if ch != 0 {
+                            uart.write_byte(0, ch);
+                            self.console_output.push(ch);
+                        }
+                        Some((SBI_SUCCESS as u32, 0))
+                    }
+                    _ => Some((SBI_ERR_NOT_SUPPORTED as u32, 0)),
+                }
+            }
             _ => None, // Not an SBI call
         }
     }
@@ -335,7 +378,7 @@ mod tests {
         let mut uart = Uart::new();
         let mut clint = Clint::new();
         let result = sbi.handle_ecall(SBI_EXT_BASE, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
-        assert_eq!(result, Some((0, 0x00010000))); // a0=success, a1=version 1.0
+        assert_eq!(result, Some((0, 0x02000000))); // a0=success, a1=version 2.0
     }
 
     #[test]

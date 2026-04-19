@@ -7,6 +7,7 @@
 use super::cpu::{self, StepResult};
 use super::csr;
 use super::loader;
+use super::sbi::SBI_SUCCESS;
 use super::{dtb, BootResult, RiscvVm};
 
 #[allow(dead_code)]
@@ -1075,7 +1076,25 @@ impl RiscvVm {
                             &mut vm.bus.uart,
                             &mut vm.bus.clint,
                         );
-                        if let Some((a0_val, a1_val)) = result {
+                        // Handle DBCN pending write: read from guest memory
+                        if let Some((phys_addr, num_bytes)) = vm.bus.sbi.dbcn_pending_write.take() {
+                            let mut buf = vec![0u8; num_bytes];
+                            for (i, byte) in buf.iter_mut().enumerate() {
+                                match vm.bus.read_byte(phys_addr + i as u64) {
+                                    Ok(b) => *byte = b,
+                                    Err(_) => break,
+                                }
+                            }
+                            for &b in &buf {
+                                if b != 0 {
+                                    vm.bus.uart.write_byte(0, b);
+                                    vm.bus.sbi.console_output.push(b);
+                                }
+                            }
+                            // DBCN write returns (success, num_bytes_written)
+                            vm.cpu.x[10] = SBI_SUCCESS as u32;
+                            vm.cpu.x[11] = buf.len() as u32;
+                        } else if let Some((a0_val, a1_val)) = result {
                             vm.cpu.x[10] = a0_val;
                             vm.cpu.x[11] = a1_val;
                         }
@@ -1206,7 +1225,24 @@ impl RiscvVm {
                         &mut vm.bus.uart,
                         &mut vm.bus.clint,
                     );
-                    if let Some((a0_val, a1_val)) = result {
+                    // Handle DBCN pending write: read from guest memory
+                    if let Some((phys_addr, num_bytes)) = vm.bus.sbi.dbcn_pending_write.take() {
+                        let mut buf = vec![0u8; num_bytes];
+                        for (i, byte) in buf.iter_mut().enumerate() {
+                            match vm.bus.read_byte(phys_addr + i as u64) {
+                                Ok(b) => *byte = b,
+                                Err(_) => break,
+                            }
+                        }
+                        for &b in &buf {
+                            if b != 0 {
+                                vm.bus.uart.write_byte(0, b);
+                                vm.bus.sbi.console_output.push(b);
+                            }
+                        }
+                        vm.cpu.x[10] = SBI_SUCCESS as u32;
+                        vm.cpu.x[11] = buf.len() as u32;
+                    } else if let Some((a0_val, a1_val)) = result {
                         vm.cpu.x[10] = a0_val; // a0 = error code
                         vm.cpu.x[11] = a1_val; // a1 = return value
                     }

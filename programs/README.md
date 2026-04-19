@@ -5,6 +5,7 @@ This directory contains assembly programs for the Geometry OS virtual machine. Y
 ## Games
 - **breakout.asm**: Classic brick-breaker game. Move paddle with A/D or arrows, launch ball with W or Space.
 - **maze.asm**: Randomly generated maze navigation. WASD to move, R to restart with a new maze.
+- **roguelike.asm**: Procedural dungeon crawler with random room placement, L-shaped corridors, WASD movement, and stairs to descend deeper.
 - **snake.asm**: Snake game on a 32x32 grid. WASD to control direction.
 - **tetris.asm**: Full Tetris implementation. A/D to move, W to rotate, S to soft drop.
 

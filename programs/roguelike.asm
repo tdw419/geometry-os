@@ -1,12 +1,12 @@
 ; roguelike.asm -- Procedural Dungeon Crawler
 ;
 ; Controls: WASD to move, R to regenerate dungeon
-; Goal: find the golden stairs (bright tile) to descend deeper
+; Goal: find the golden stairs to descend deeper
 ;
 ; Screen: 256x256, dungeon 32x32 tiles at 8px each
 ; Uses TILEMAP opcode for efficient whole-screen rendering
 ;
-; Algorithm: Random room placement with overlap check + L-corridors
+; Algorithm: Random room placement + L-shaped corridors
 ;   1. Fill 32x32 grid with walls
 ;   2. Place up to 7 random rooms (4-9 wide, 3-7 tall)
 ;   3. Connect room centers with L-shaped corridors
@@ -26,7 +26,8 @@
 ;   0x5533          stairs_y
 ;   0x5534          dungeon_level
 ;   0x5535          game_state (0=play, 1=descend)
-;   0x5540..0x555F  text strings for HUD
+;   0x5540..0x555F  text strings
+;   0x5560..0x5563  temp: cx_i, cy_i, cx_j, cy_j
 
 #define MAP_BASE   0x5000
 #define TILE_BASE  0x5400
@@ -48,87 +49,72 @@
 ; ── Entry Point ──────────────────────────────────────────────
 
 restart:
-  LDI r30, 0x8000       ; stack pointer
-  CALL init_tiles        ; set up tile pixel data
-  CALL init_text         ; store HUD text strings
-  CALL generate_dungeon  ; procedural dungeon generation
-  CALL render            ; draw initial frame
+  LDI r30, 0x8000
+  CALL init_tiles
+  CALL init_text
+  CALL generate_dungeon
+  CALL render
 
 ; ── Main Game Loop ───────────────────────────────────────────
 
 game_loop:
-  ; Check game state
   LDI r4, STATE
   LOAD r1, r4
   LDI r9, 1
   CMP r1, r9
-  JZ r0, descend_screen  ; found stairs
-
-  ; Read keyboard
+  JZ r0, descend_screen
   IKEY r7
-  JZ r7, idle           ; no key, just frame
-
-  ; W = up
+  JZ r7, idle
   LDI r6, 87
   CMP r7, r6
   JZ r0, try_up
   LDI r6, 119
   CMP r7, r6
   JZ r0, try_up
-
-  ; S = down
   LDI r6, 83
   CMP r7, r6
   JZ r0, try_down
   LDI r6, 115
   CMP r7, r6
   JZ r0, try_down
-
-  ; A = left
   LDI r6, 65
   CMP r7, r6
   JZ r0, try_left
   LDI r6, 97
   CMP r7, r6
   JZ r0, try_left
-
-  ; D = right
   LDI r6, 68
   CMP r7, r6
   JZ r0, try_right
   LDI r6, 100
   CMP r7, r6
   JZ r0, try_right
-
-  ; R = restart same level
   LDI r6, 82
   CMP r7, r6
   JZ r0, restart
   LDI r6, 114
   CMP r7, r6
   JZ r0, restart
-
   JMP idle
 
-; ── Movement Handlers ────────────────────────────────────────
-; Collision: check map tile before moving
+; ── Movement ─────────────────────────────────────────────────
 
 try_up:
   LDI r4, P_X
-  LOAD r2, r4            ; r2 = px
-  LDI r4, P_Y
-  LOAD r1, r4
-  LDI r9, 1
-  SUB r1, r9             ; r1 = py - 1
-  CALL get_tile           ; r1 = map[py-1][px]
-  LDI r9, TILE_WALL
-  CMP r1, r9
-  JZ r0, idle            ; wall, block
+  LOAD r2, r4
   LDI r4, P_Y
   LOAD r1, r4
   LDI r9, 1
   SUB r1, r9
-  STORE r4, r1           ; move player up
+  CALL get_tile
+  LDI r9, TILE_WALL
+  CMP r1, r9
+  JZ r0, idle
+  LDI r4, P_Y
+  LOAD r1, r4
+  LDI r9, 1
+  SUB r1, r9
+  STORE r4, r1
   CALL check_stairs
   JMP do_move
 
@@ -138,7 +124,7 @@ try_down:
   LDI r4, P_Y
   LOAD r1, r4
   LDI r9, 1
-  ADD r1, r9             ; r1 = py + 1
+  ADD r1, r9
   CALL get_tile
   LDI r9, TILE_WALL
   CMP r1, r9
@@ -155,7 +141,7 @@ try_left:
   LDI r4, P_X
   LOAD r1, r4
   LDI r9, 1
-  SUB r1, r9             ; r1 = px - 1
+  SUB r1, r9
   LDI r4, P_Y
   LOAD r2, r4
   CALL get_tile
@@ -174,7 +160,7 @@ try_right:
   LDI r4, P_X
   LOAD r1, r4
   LDI r9, 1
-  ADD r1, r9             ; r1 = px + 1
+  ADD r1, r9
   LDI r4, P_Y
   LOAD r2, r4
   CALL get_tile
@@ -191,7 +177,6 @@ try_right:
 
 do_move:
   CALL render
-  ; Step sound
   LDI r5, 220
   LDI r6, 25
   BEEP r5, r6
@@ -203,7 +188,7 @@ idle:
 ; ── Descend Screen ───────────────────────────────────────────
 
 descend_screen:
-  LDI r1, 0x001a00     ; dark green bg
+  LDI r1, 0x001a00
   FILL r1
   LDI r10, 0x5540
   LDI r11, 50
@@ -216,7 +201,6 @@ descend_screen:
   FRAME
   IKEY r7
   JZ r7, descend_screen
-  ; Increment level
   LDI r4, DLEVEL
   LOAD r1, r4
   LDI r9, 1
@@ -228,17 +212,12 @@ descend_screen:
 ; SUBROUTINES
 ; ─────────────────────────────────────────────────────────────
 
-; ── init_tiles -- fill tile pixel data with solid colors ─────
-; Tile 1 (floor): 0x2A2A4E dark purple-gray (64 pixels)
-; Tile 2 (wall):  0x4A6A8A steel blue (64 pixels)
-; Tile 3 (stairs): 0xD4A017 gold (64 pixels)
+; ── init_tiles ───────────────────────────────────────────────
 
 init_tiles:
   PUSH r31
-
-  ; Floor tile
   LDI r10, 0
-it_floor:
+it_fl:
   LDI r4, TILE_BASE
   ADD r4, r10
   LDI r1, 0x2A2A4E
@@ -247,45 +226,40 @@ it_floor:
   ADD r10, r9
   LDI r6, 64
   CMP r10, r6
-  BLT r0, it_floor
-
-  ; Wall tile with checkerboard pattern
+  BLT r0, it_fl
   LDI r10, 0
-it_wall:
+it_wl:
   LDI r4, TILE_BASE
   LDI r9, 64
   ADD r4, r9
-  ADD r4, r10         ; addr = TILE_BASE + 64 + idx
-  ; Compute checkerboard: (row XOR col) AND 1
+  ADD r4, r10
   LDI r1, 0
-  ADD r1, r10         ; r1 = pixel index
+  ADD r1, r10
   LDI r2, 0
-  ADD r2, r10         ; r2 = copy of idx
+  ADD r2, r10
   LDI r9, 8
   LDI r3, 0
   ADD r3, r1
-  DIV r3, r9          ; r3 = row (idx / 8)
+  DIV r3, r9
   LDI r9, 8
-  MOD r2, r9          ; r2 = col (idx % 8)
-  XOR r2, r3          ; r2 = row XOR col
+  MOD r2, r9
+  XOR r2, r3
   LDI r9, 1
-  AND r2, r9          ; r2 = 0 or 1
-  JZ r2, it_wall_dk
-  LDI r1, 0x5A7AAA    ; lighter blue
-  JMP it_wall_st
-it_wall_dk:
-  LDI r1, 0x3A5A7A    ; darker blue
-it_wall_st:
+  AND r2, r9
+  JZ r2, it_wd
+  LDI r1, 0x5A7AAA
+  JMP it_ws
+it_wd:
+  LDI r1, 0x3A5A7A
+it_ws:
   STORE r4, r1
   LDI r9, 1
   ADD r10, r9
   LDI r6, 64
   CMP r10, r6
-  BLT r0, it_wall
-
-  ; Stairs tile - all gold
+  BLT r0, it_wl
   LDI r10, 0
-it_stair:
+it_st:
   LDI r4, TILE_BASE
   LDI r9, 128
   ADD r4, r9
@@ -296,15 +270,13 @@ it_stair:
   ADD r10, r9
   LDI r6, 64
   CMP r10, r6
-  BLT r0, it_stair
-
+  BLT r0, it_st
   POP r31
   RET
 
-; ── init_text -- store HUD text strings ──────────────────────
+; ── init_text ────────────────────────────────────────────────
 
 init_text:
-  ; "DESCENDED!" at 0x5540
   LDI r4, 0x5540
   LDI r1, 68
   STORE r4, r1
@@ -338,8 +310,6 @@ init_text:
   LDI r4, 0x554A
   LDI r1, 0
   STORE r4, r1
-
-  ; "PRESS R" at 0x5550
   LDI r4, 0x5550
   LDI r1, 80
   STORE r4, r1
@@ -364,21 +334,17 @@ init_text:
   LDI r4, 0x5557
   LDI r1, 0
   STORE r4, r1
-
   RET
 
 ; ── generate_dungeon ────────────────────────────────────────
-; Builds a random dungeon with rooms and corridors
-; Uses r20-r29 as scratch registers
 
 generate_dungeon:
   PUSH r31
-
-  ; Step 1: Fill entire map with walls
-  LDI r10, 0            ; y counter
-gd_fill_y:
-  LDI r11, 0            ; x counter
-gd_fill_x:
+  ; Fill map with walls
+  LDI r10, 0
+gd_fy:
+  LDI r11, 0
+gd_fx:
   LDI r4, MAP_BASE
   LDI r9, MAP_W
   MUL r9, r10
@@ -390,65 +356,50 @@ gd_fill_x:
   ADD r11, r9
   LDI r6, MAP_W
   CMP r11, r6
-  BLT r0, gd_fill_x
+  BLT r0, gd_fx
   LDI r9, 1
   ADD r10, r9
   LDI r6, MAP_H
   CMP r10, r6
-  BLT r0, gd_fill_y
-
-  ; Step 2: Place rooms
+  BLT r0, gd_fy
+  ; Place rooms
   LDI r1, 0
   LDI r4, ROOM_COUNT
-  STORE r4, r1          ; room_count = 0
-  LDI r25, 0            ; attempts counter
-
-gd_room_loop:
-  ; Check if we have enough rooms (target 7)
+  STORE r4, r1
+  LDI r25, 0
+gd_rl:
   LDI r4, ROOM_COUNT
   LOAD r1, r4
   LDI r9, 7
   CMP r1, r9
-  BGE r0, gd_rooms_done
-
-  ; Check attempts limit (60)
+  BGE r0, gd_rd
   LDI r9, 60
   CMP r25, r9
-  BGE r0, gd_rooms_done
-
+  BGE r0, gd_rd
   LDI r9, 1
-  ADD r25, r9           ; attempts++
-
-  ; Random room width (4-9)
+  ADD r25, r9
   RAND r20
   LDI r9, 6
-  MOD r20, r9           ; 0-5
+  MOD r20, r9
   LDI r9, 4
-  ADD r20, r9           ; 4-9
-
-  ; Random room height (3-7)
+  ADD r20, r9
   RAND r21
   LDI r9, 5
-  MOD r21, r9           ; 0-4
+  MOD r21, r9
   LDI r9, 3
-  ADD r21, r9           ; 3-7
-
-  ; Random room position (x, y)
-  ; x range: 1 to (MAP_W - width - 1)
+  ADD r21, r9
   RAND r22
   LDI r9, MAP_W
   LDI r26, 0
   ADD r26, r20
-  SUB r9, r26           ; MAP_W - width
+  SUB r9, r26
   LDI r26, 2
-  SUB r9, r26           ; -2 for border
+  SUB r9, r26
   LDI r26, 1
-  ADD r9, r26           ; ensure positive
+  ADD r9, r26
   MOD r22, r9
   LDI r9, 1
-  ADD r22, r9           ; x = 1 +
-
-  ; y range: 1 to (MAP_H - height - 1)
+  ADD r22, r9
   RAND r23
   LDI r9, MAP_H
   LDI r26, 0
@@ -460,29 +411,19 @@ gd_room_loop:
   ADD r9, r26
   MOD r23, r9
   LDI r9, 1
-  ADD r23, r9           ; y = 1 +
-
-  ; Check overlap with existing rooms (1-tile border)
+  ADD r23, r9
   CALL check_room_overlap
-  JNZ r1, gd_room_loop  ; overlap found, try again
-
-  ; Carve room into map
+  JNZ r1, gd_rl
   CALL carve_room
-
-  ; Store room data at rooms[room_count]
   LDI r4, ROOM_COUNT
-  LOAD r1, r4           ; r1 = room index
+  LOAD r1, r4
   LDI r9, 4
-  MUL r1, r9            ; r1 = byte offset
-
-  ; room[i].x = r22
+  MUL r1, r9
   LDI r4, ROOM_BASE
   ADD r4, r1
   LDI r9, 0
   ADD r9, r22
   STORE r4, r9
-
-  ; room[i].y = r23
   LDI r4, ROOM_BASE
   ADD r4, r1
   LDI r9, 1
@@ -490,8 +431,6 @@ gd_room_loop:
   LDI r9, 0
   ADD r9, r23
   STORE r4, r9
-
-  ; room[i].w = r20
   LDI r4, ROOM_BASE
   ADD r4, r1
   LDI r9, 2
@@ -499,8 +438,6 @@ gd_room_loop:
   LDI r9, 0
   ADD r9, r20
   STORE r4, r9
-
-  ; room[i].h = r21
   LDI r4, ROOM_BASE
   ADD r4, r1
   LDI r9, 3
@@ -508,98 +445,157 @@ gd_room_loop:
   LDI r9, 0
   ADD r9, r21
   STORE r4, r9
-
-  ; Increment room_count
   LDI r4, ROOM_COUNT
   LOAD r1, r4
   LDI r9, 1
   ADD r1, r9
   STORE r4, r1
-
-  JMP gd_room_loop
-
-gd_rooms_done:
-
-  ; Step 3: Connect rooms with L-shaped corridors
+  JMP gd_rl
+gd_rd:
+  ; Connect rooms
   LDI r4, ROOM_COUNT
-  LOAD r24, r4           ; r24 = total rooms
+  LOAD r24, r4
   LDI r9, 2
   CMP r24, r9
-  BLT r0, gd_connect_done ; need at least 2 rooms
-
-  LDI r25, 0             ; i = 0
-gd_connect:
-  ; Loop while i < rooms - 1
+  BLT r0, gd_cd
+  LDI r25, 0
+gd_cl:
   LDI r9, 1
-  SUB r24, r9            ; r24 = rooms - 1
-  CMP r25, r24
-  BGE r0, gd_connect_done
-
-  ; Get center of room i
-  CALL get_room_center    ; r20 = cx, r21 = cy for room i
-  ; Save center of room i
-  LDI r22, 0
-  ADD r22, r20           ; r22 = cx_i
-  LDI r23, 0
-  ADD r23, r21           ; r23 = cy_i
-
-  ; Get center of room i+1
-  LDI r9, 1
-  ADD r25, r9            ; temporarily increment i
-  CALL get_room_center    ; r20 = cx, r21 = cy for room i+1
-  LDI r9, 1
-  SUB r25, r9            ; restore i
-
-  ; Carve horizontal corridor from (r22, r23) to (r20, r23)
-  ; (at y of room i, from cx_i to cx_i+1)
-  LDI r20_h, 0
-  ADD r20_h, r22         ; use r20 for start x
-  ; Actually r20 was overwritten. Let me restructure.
-  ; I need to be more careful with register allocation here.
-
-  JMP gd_connect_done
-
-gd_connect_done:
-
-  ; Step 4: Place stairs in last room
-  LDI r4, ROOM_COUNT
-  LOAD r1, r4
-  JZ r1, gd_no_rooms     ; safety: no rooms placed
-
-  LDI r9, 1
-  SUB r1, r9             ; last room index
+  LDI r26, 0
+  ADD r26, r24
+  SUB r26, r9
+  CMP r25, r26
+  BGE r0, gd_cd
+  ; Center of room i
+  MOV r1, r25
   LDI r9, 4
   MUL r1, r9
   LDI r4, ROOM_BASE
   ADD r4, r1
-  LOAD r20, r4           ; last room x
+  LOAD r20, r4
   LDI r4, ROOM_BASE
   ADD r4, r1
   LDI r9, 1
   ADD r4, r9
-  LOAD r21, r4           ; last room y
+  LOAD r21, r4
   LDI r4, ROOM_BASE
   ADD r4, r1
   LDI r9, 2
   ADD r4, r9
-  LOAD r26, r4           ; last room w
+  LOAD r26, r4
   LDI r4, ROOM_BASE
   ADD r4, r1
   LDI r9, 3
   ADD r4, r9
-  LOAD r27, r4           ; last room h
-  ; center
+  LOAD r27, r4
   LDI r9, 2
   SHR r26, r9
-  ADD r20, r26           ; cx = x + w/2
+  ADD r20, r26
   LDI r9, 2
   SHR r27, r9
-  ADD r21, r27           ; cy = y + h/2
+  ADD r21, r27
+  LDI r4, 0x5560
+  LDI r9, 0
+  ADD r9, r20
+  STORE r4, r9
+  LDI r4, 0x5561
+  LDI r9, 0
+  ADD r9, r21
+  STORE r4, r9
+  ; Center of room i+1
+  MOV r1, r25
+  LDI r9, 1
+  ADD r1, r9
+  LDI r9, 4
+  MUL r1, r9
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LOAD r20, r4
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LDI r9, 1
+  ADD r4, r9
+  LOAD r21, r4
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LDI r9, 2
+  ADD r4, r9
+  LOAD r26, r4
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LDI r9, 3
+  ADD r4, r9
+  LOAD r27, r4
+  LDI r9, 2
+  SHR r26, r9
+  ADD r20, r26
+  LDI r9, 2
+  SHR r27, r9
+  ADD r21, r27
+  LDI r4, 0x5562
+  LDI r9, 0
+  ADD r9, r20
+  STORE r4, r9
+  LDI r4, 0x5563
+  LDI r9, 0
+  ADD r9, r21
+  STORE r4, r9
+  ; Horizontal corridor
+  LDI r4, 0x5560
+  LOAD r20, r4
+  LDI r4, 0x5562
+  LOAD r22, r4
+  LDI r4, 0x5561
+  LOAD r21, r4
+  CALL carve_h_corridor
+  ; Vertical corridor
+  LDI r4, 0x5561
+  LOAD r20, r4
+  LDI r4, 0x5563
+  LOAD r22, r4
+  LDI r4, 0x5562
+  LOAD r21, r4
+  CALL carve_v_corridor
+  LDI r9, 1
+  ADD r25, r9
+  JMP gd_cl
+gd_cd:
+  ; Place stairs in last room
+  LDI r4, ROOM_COUNT
+  LOAD r1, r4
+  JZ r1, gd_nr
+  LDI r9, 1
+  SUB r1, r9
+  LDI r9, 4
+  MUL r1, r9
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LOAD r20, r4
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LDI r9, 1
+  ADD r4, r9
+  LOAD r21, r4
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LDI r9, 2
+  ADD r4, r9
+  LOAD r26, r4
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LDI r9, 3
+  ADD r4, r9
+  LOAD r27, r4
+  LDI r9, 2
+  SHR r26, r9
+  ADD r20, r26
+  LDI r9, 2
+  SHR r27, r9
+  ADD r21, r27
   LDI r4, STAIRS_X
   STORE r4, r20
   LDI r4, STAIRS_Y
   STORE r4, r21
-  ; Set stairs tile in map
   LDI r4, MAP_BASE
   LDI r9, MAP_W
   MUL r9, r21
@@ -607,29 +603,25 @@ gd_connect_done:
   ADD r4, r20
   LDI r1, TILE_STAIR
   STORE r4, r1
-
-gd_no_rooms:
-
-  ; Step 5: Place player in first room (or center if no rooms)
+gd_nr:
+  ; Place player in first room
   LDI r4, ROOM_COUNT
   LOAD r1, r4
-  JZ r1, gd_no_rooms_p  ; no rooms
-
-  ; First room center
+  JZ r1, gd_fb
   LDI r4, ROOM_BASE
-  LOAD r20, r4           ; room[0].x
+  LOAD r20, r4
   LDI r4, ROOM_BASE
   LDI r9, 1
   ADD r4, r9
-  LOAD r21, r4           ; room[0].y
+  LOAD r21, r4
   LDI r4, ROOM_BASE
   LDI r9, 2
   ADD r4, r9
-  LOAD r26, r4           ; room[0].w
+  LOAD r26, r4
   LDI r4, ROOM_BASE
   LDI r9, 3
   ADD r4, r9
-  LOAD r27, r4           ; room[0].h
+  LOAD r27, r4
   LDI r9, 2
   SHR r26, r9
   ADD r20, r26
@@ -640,22 +632,253 @@ gd_no_rooms:
   STORE r4, r20
   LDI r4, P_Y
   STORE r4, r21
-  JMP gd_init_done
-
-gd_no_rooms_p:
-  ; Fallback: place player at center
+  JMP gd_dn
+gd_fb:
   LDI r1, 16
   LDI r4, P_X
   STORE r4, r1
   LDI r1, 16
   LDI r4, P_Y
   STORE r4, r1
-
-gd_init_done:
-  ; Reset game state
+gd_dn:
   LDI r1, 0
   LDI r4, STATE
   STORE r4, r1
-
   POP r31
+  RET
+
+; ── check_room_overlap ──────────────────────────────────────
+; Input: r22=x, r23=y, r20=w, r21=h
+; Output: r1=0 no overlap, r1=1 overlap
+
+check_room_overlap:
+  LDI r4, ROOM_COUNT
+  LOAD r10, r4
+  LDI r1, 0
+  JZ r10, cro_ok
+  LDI r11, 0
+cro_lp:
+  MOV r9, r10
+  CMP r11, r9
+  BGE r0, cro_ok
+  MOV r1, r11
+  LDI r9, 4
+  MUL r1, r9
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LOAD r12, r4
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LDI r9, 1
+  ADD r4, r9
+  LOAD r13, r4
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LDI r9, 2
+  ADD r4, r9
+  LOAD r14, r4
+  LDI r4, ROOM_BASE
+  ADD r4, r1
+  LDI r9, 3
+  ADD r4, r9
+  LOAD r15, r4
+  LDI r1, 0
+  ADD r1, r22
+  LDI r9, 0
+  ADD r9, r12
+  LDI r16, 0
+  ADD r16, r14
+  LDI r5, 1
+  ADD r16, r5
+  ADD r9, r16
+  CMP r1, r9
+  BGE r0, cro_nx
+  LDI r1, 0
+  ADD r1, r22
+  LDI r9, 0
+  ADD r9, r20
+  LDI r5, 1
+  ADD r9, r5
+  ADD r1, r9
+  LDI r9, 0
+  ADD r9, r12
+  CMP r9, r1
+  BGE r0, cro_nx
+  LDI r1, 0
+  ADD r1, r23
+  LDI r9, 0
+  ADD r9, r13
+  LDI r16, 0
+  ADD r16, r15
+  LDI r5, 1
+  ADD r16, r5
+  ADD r9, r16
+  CMP r1, r9
+  BGE r0, cro_nx
+  LDI r1, 0
+  ADD r1, r23
+  LDI r9, 0
+  ADD r9, r21
+  LDI r5, 1
+  ADD r9, r5
+  ADD r1, r9
+  LDI r9, 0
+  ADD r9, r13
+  CMP r9, r1
+  BGE r0, cro_nx
+  LDI r1, 1
+  RET
+cro_nx:
+  LDI r9, 1
+  ADD r11, r9
+  JMP cro_lp
+cro_ok:
+  LDI r1, 0
+  RET
+
+; ── carve_room ──────────────────────────────────────────────
+; Input: r22=x, r23=y, r20=w, r21=h
+
+carve_room:
+  LDI r10, 0
+cr_y:
+  LDI r11, 0
+cr_x:
+  LDI r4, MAP_BASE
+  LDI r9, MAP_W
+  MUL r9, r23
+  ADD r4, r9
+  LDI r9, MAP_W
+  MUL r9, r10
+  ADD r4, r9
+  LDI r9, 0
+  ADD r9, r22
+  ADD r4, r9
+  ADD r4, r11
+  LDI r1, TILE_FLOOR
+  STORE r4, r1
+  LDI r9, 1
+  ADD r11, r9
+  CMP r11, r20
+  BLT r0, cr_x
+  LDI r9, 1
+  ADD r10, r9
+  CMP r10, r21
+  BLT r0, cr_y
+  RET
+
+; ── carve_h_corridor ────────────────────────────────────────
+; Input: r20=from_x, r22=to_x, r21=y
+
+carve_h_corridor:
+ch_lp:
+  LDI r4, MAP_BASE
+  LDI r9, MAP_W
+  MUL r9, r21
+  ADD r4, r9
+  ADD r4, r20
+  LDI r1, TILE_FLOOR
+  STORE r4, r1
+  CMP r20, r22
+  JZ r0, ch_dn
+  BLT r0, ch_rt
+  LDI r9, 1
+  SUB r20, r9
+  JMP ch_lp
+ch_rt:
+  LDI r9, 1
+  ADD r20, r9
+  JMP ch_lp
+ch_dn:
+  RET
+
+; ── carve_v_corridor ────────────────────────────────────────
+; Input: r20=from_y, r22=to_y, r21=x
+
+carve_v_corridor:
+cv_lp:
+  LDI r4, MAP_BASE
+  LDI r9, MAP_W
+  MUL r9, r20
+  ADD r4, r9
+  ADD r4, r21
+  LDI r1, TILE_FLOOR
+  STORE r4, r1
+  CMP r20, r22
+  JZ r0, cv_dn
+  BLT r0, cv_d2
+  LDI r9, 1
+  SUB r20, r9
+  JMP cv_lp
+cv_d2:
+  LDI r9, 1
+  ADD r20, r9
+  JMP cv_lp
+cv_dn:
+  RET
+
+; ── get_tile ─────────────────────────────────────────────────
+; Input: r2=x, r1=y  Output: r1 = map[y*32+x]
+
+get_tile:
+  LDI r9, MAP_W
+  MUL r1, r9
+  LDI r4, MAP_BASE
+  ADD r4, r1
+  ADD r4, r2
+  LOAD r1, r4
+  RET
+
+; ── check_stairs ────────────────────────────────────────────
+
+check_stairs:
+  LDI r4, P_X
+  LOAD r1, r4
+  LDI r4, STAIRS_X
+  LOAD r2, r4
+  CMP r1, r2
+  JNZ r0, cs_dn
+  LDI r4, P_Y
+  LOAD r1, r4
+  LDI r4, STAIRS_Y
+  LOAD r2, r4
+  CMP r1, r2
+  JNZ r0, cs_dn
+  LDI r1, 1
+  LDI r4, STATE
+  STORE r4, r1
+  LDI r5, 660
+  LDI r6, 150
+  BEEP r5, r6
+cs_dn:
+  RET
+
+; ── render ──────────────────────────────────────────────────
+
+render:
+  LDI r1, 0
+  LDI r2, 0
+  LDI r3, MAP_BASE
+  LDI r4, TILE_BASE
+  LDI r5, MAP_W
+  LDI r6, MAP_H
+  LDI r7, TILE_SZ
+  LDI r8, TILE_SZ
+  TILEMAP r1, r2, r3, r4, r5, r6, r7, r8
+  LDI r4, P_X
+  LOAD r1, r4
+  LDI r9, TILE_SZ
+  MUL r1, r9
+  LDI r9, 1
+  ADD r1, r9
+  LDI r4, P_Y
+  LOAD r2, r4
+  LDI r9, TILE_SZ
+  MUL r2, r9
+  LDI r9, 1
+  ADD r2, r9
+  LDI r22, 6
+  LDI r23, 6
+  LDI r24, 0x00FF88
+  RECTF r1, r2, r22, r23, r24
   RET

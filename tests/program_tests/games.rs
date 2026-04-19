@@ -2526,3 +2526,153 @@ fn test_game_of_life_renders() {
         non_black
     );
 }
+
+
+// ── ROGUELIKE ──────────────────────────────────────────────────
+
+#[test]
+fn test_roguelike_assembles() {
+    let source = std::fs::read_to_string("programs/roguelike.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source, 0).expect("roguelike.asm failed to assemble");
+    assert!(asm.pixels.len() > 400, "roguelike should be more than 400 words");
+}
+
+#[test]
+fn test_roguelike_initializes() {
+    let source = std::fs::read_to_string("programs/roguelike.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until first FRAME (init + dungeon gen + render)
+    let mut steps = 0;
+    for _ in 0..5_000_000 {
+        if !vm.step() {
+            break;
+        }
+        steps += 1;
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Map should be initialized: top-left is always a wall
+    assert_eq!(
+        vm.ram[0x5000], 2,
+        "top-left map cell should be wall (2)"
+    );
+
+    // There should be carved floors somewhere (not all walls)
+    let floor_count: usize = (0..1024)
+        .map(|i| vm.ram[0x5000 + i])
+        .filter(|&t| t == 1)
+        .count();
+    assert!(
+        floor_count > 20,
+        "dungeon should have >20 floor tiles, got {}",
+        floor_count
+    );
+
+    // Room count should be > 0
+    let room_count = vm.ram[0x5520];
+    assert!(room_count >= 2, "should have >= 2 rooms, got {}", room_count);
+
+    // Player should be placed at a floor tile
+    let px = vm.ram[0x5530] as usize;
+    let py = vm.ram[0x5531] as usize;
+    let player_tile = vm.ram[0x5000 + py * 32 + px];
+    assert_eq!(
+        player_tile, 1,
+        "player at ({}, {}) should be on floor, got tile {}",
+        px, py, player_tile
+    );
+
+    // Stairs should be placed at a stair tile
+    let sx = vm.ram[0x5532] as usize;
+    let sy = vm.ram[0x5533] as usize;
+    let stair_tile = vm.ram[0x5000 + sy * 32 + sx];
+    assert_eq!(
+        stair_tile, 3,
+        "stairs at ({}, {}) should be stair tile (3), got {}",
+        sx, sy, stair_tile
+    );
+
+    // Player and stairs should NOT be at the same position
+    assert_ne!(
+        (px, py), (sx, sy),
+        "player and stairs should be at different positions"
+    );
+
+    // Game state should be 0 (playing)
+    assert_eq!(vm.ram[0x5535], 0, "game_state should be 0 (play)");
+
+    // Text strings should be stored
+    assert_eq!(vm.ram[0x5540], 68, "first char should be D (68)");
+    assert_eq!(vm.ram[0x554A], 0, "null terminator after DESCENDED!");
+    assert_eq!(vm.ram[0x5550], 80, "first char of second string should be P (80)");
+
+    // Tile data should be initialized
+    assert_eq!(vm.ram[0x5400], 0x2A2A4E, "first floor tile pixel");
+    assert_eq!(vm.ram[0x5480], 0xD4A017, "first stairs tile pixel");
+
+    // Screen should have visible pixels (walls + floors rendered)
+    let non_black: usize = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(
+        non_black > 1000,
+        "screen should have >1000 pixels after render, got {} (steps: {})",
+        non_black, steps
+    );
+}
+
+#[test]
+fn test_roguelike_wall_collision_blocks() {
+    // Verify player cannot walk into walls
+    let source = std::fs::read_to_string("programs/roguelike.asm")
+        .unwrap_or_else(|e| panic!("failed to read: {}", e));
+    let asm = assemble(&source, 0).unwrap_or_else(|e| panic!("assembly failed: {:?}", e));
+    let mut vm = Vm::new();
+
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until first FRAME
+    for _ in 0..5_000_000 {
+        if !vm.step() { break; }
+        if vm.frame_ready { vm.frame_ready = false; break; }
+    }
+
+    // Record initial player position
+    let init_px = vm.ram[0x5530];
+    let init_py = vm.ram[0x5531];
+
+    // Try to move up (W = 87)
+    vm.ram[0xFFF] = 87; // IKEY reads from 0xFFF
+    for _ in 0..50_000 {
+        if !vm.step() { break; }
+        if vm.frame_ready { vm.frame_ready = false; break; }
+    }
+
+    // Either player moved or stayed (if wall was above)
+    // If player moved up, check they are on a floor tile
+    let new_px = vm.ram[0x5530] as usize;
+    let new_py = vm.ram[0x5531] as usize;
+    if new_py != init_py as usize {
+        let tile = vm.ram[0x5000 + new_py * 32 + new_px];
+        assert_eq!(tile, 1, "player moved to non-floor tile: {}", tile);
+    }
+}
