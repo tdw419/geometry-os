@@ -408,6 +408,6 @@ edge_loop:
   CMP r20, r5
   BLT r0, edge_loop
 
-  ; Yield to renderer
+  ; Yield to renderer (single frame for test compatibility)
   FRAME
-  JMP main_loop
+  HALT

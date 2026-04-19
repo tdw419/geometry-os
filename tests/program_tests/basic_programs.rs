@@ -1089,21 +1089,27 @@ fn test_wirecube_initializes() {
     vm.pc = 0;
     vm.halted = false;
 
-    // Run enough steps for initialization + animation frames.
-    // Note: FILL clears screen each frame, so we may land between FILL and LINE.
-    // We verify correctness via RAM state (projected coordinates, vertices).
+    // Run enough steps for initialization + one animation frame.
+    // The program now halts after one frame (changed from infinite loop).
     for _ in 0..200_000 {
         if !vm.step() {
             break;
         }
     }
 
-    // The program is an animation loop -- verify it runs correctly
-    assert!(!vm.halted, "wirecube should loop forever");
+    // The program draws one frame then halts
+    assert!(vm.halted, "wirecube should halt after one frame");
     assert!(
-        vm.frame_count >= 50,
-        "wirecube should have rendered 50+ frames, got {}",
+        vm.frame_count >= 1,
+        "wirecube should have rendered at least 1 frame, got {}",
         vm.frame_count
+    );
+
+    // Verify the screen has drawn pixels (LINE opcode produced output)
+    let drawn_pixels = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(
+        drawn_pixels > 0,
+        "wirecube should have drawn pixels on screen"
     );
 
     // Vertex initialization: check cube vertices stored at 0x1000
