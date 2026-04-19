@@ -635,9 +635,58 @@ pub fn cli_main(extra_args: &[String]) {
                         }
                         None => println!("[qemu] Not running"),
                     },
+                    "traps" => {
+                        let n: usize = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(20);
+                        let log_path = std::env::temp_dir().join("geo_qemu_trace.log");
+                        match std::fs::read_to_string(&log_path) {
+                            Ok(content) => {
+                                let lines: Vec<&str> = content.lines().collect();
+                                let total = lines.len();
+                                if total == 0 {
+                                    println!("[qemu] Trace log is empty (boot with trace=int to enable)");
+                                } else {
+                                    // Count trap types
+                                    let mut counts: std::collections::HashMap<&str, usize> =
+                                        std::collections::HashMap::new();
+                                    for line in &lines {
+                                        if let Some(idx) = line.find("desc=") {
+                                            let desc = &line[idx + 5..];
+                                            *counts.entry(desc).or_insert(0) += 1;
+                                        }
+                                    }
+                                    println!(
+                                        "[qemu] Trace log: {} entries, {} trap types",
+                                        total,
+                                        counts.len()
+                                    );
+                                    // Show top trap types
+                                    let mut sorted: Vec<_> = counts.iter().collect();
+                                    sorted.sort_by(|a, b| b.1.cmp(a.1));
+                                    for (desc, count) in sorted.iter().take(5) {
+                                        println!("  {:>6}x {}", count, desc);
+                                    }
+                                    // Show last N entries
+                                    println!("\nLast {} entries:", n.min(total));
+                                    for line in lines.iter().rev().take(n).rev() {
+                                        // Shorten: just show cause and desc
+                                        if let Some(idx) = line.find("cause:") {
+                                            let short = &line[idx..];
+                                            println!("  {}", short);
+                                        } else {
+                                            println!("  {}", line);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                println!("[qemu] No trace log found (boot with trace=int to enable)");
+                            }
+                        }
+                    }
                     _ => {
-                        println!("Usage: qemu <boot|kill|status>");
-                        println!("  qemu boot arch=riscv64 kernel=Image ram=256M");
+                        println!("Usage: qemu <boot|kill|status|traps>");
+                        println!("  qemu boot arch=riscv64 kernel=Image ram=256M [trace=int]");
+                        println!("  qemu traps [20]              -- show last N trap entries");
                     }
                 }
             }

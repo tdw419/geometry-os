@@ -39,6 +39,7 @@ pub struct QemuConfig {
     pub initrd: Option<String>,
     pub append: Option<String>,
     pub net: Option<String>,
+    pub trace: Option<String>,
     pub extra_args: Vec<String>,
 }
 
@@ -83,6 +84,7 @@ impl QemuConfig {
                     }
                 }
                 "net" | "nic" => cfg.net = Some(val),
+                "trace" => cfg.trace = Some(val),
                 _ => cfg.extra_args.push(token.to_string()),
             }
         }
@@ -151,6 +153,34 @@ impl QemuConfig {
             } else {
                 cmd.args(["-netdev", &format!("user,id=net0,{}", net)]);
                 cmd.args(["-device", "virtio-net-device,netdev=net0"]);
+            }
+        }
+
+        // Trace/debug: trace=int enables interrupt/exception logging
+        if let Some(ref trace) = self.trace {
+            let log_path = std::env::temp_dir().join("geo_qemu_trace.log");
+            match trace.as_str() {
+                "int" | "interrupts" => {
+                    cmd.arg("-d").arg("int");
+                    cmd.arg("-D").arg(&log_path);
+                }
+                "in_asm" | "asm" => {
+                    cmd.arg("-d").arg("in_asm");
+                    cmd.arg("-D").arg(&log_path);
+                }
+                "exec" => {
+                    cmd.arg("-d").arg("exec");
+                    cmd.arg("-D").arg(&log_path);
+                }
+                "cpu" => {
+                    cmd.arg("-d").arg("cpu");
+                    cmd.arg("-D").arg(&log_path);
+                }
+                _ => {
+                    // Pass through as -d <val>
+                    cmd.arg("-d").arg(trace);
+                    cmd.arg("-D").arg(&log_path);
+                }
             }
         }
 
