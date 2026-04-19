@@ -105,6 +105,15 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "TRACE_READ" => {
+            if tokens.len() < 2 {
+                return Err("TRACE_READ requires 1 argument: TRACE_READ mode_reg".to_string());
+            }
+            bytecode.push(0x83);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         "MEMCPY" => {
             if tokens.len() < 4 {
                 return Err(

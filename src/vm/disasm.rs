@@ -620,6 +620,10 @@ impl Vm {
                 let fr = ram(a + 1);
                 (format!("DISCONNECT {}", reg(fr)), 2)
             }
+            0x83 => {
+                let mr = ram(a + 1);
+                (format!("TRACE_READ {}", reg(mr)), 2)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

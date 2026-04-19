@@ -1273,3 +1273,310 @@ fn test_snapshots_cleared_on_reset() {
         "snapshots should be cleared on reset"
     );
 }
+
+// --- TRACE_READ opcode (0x83) integration tests ---
+
+#[test]
+fn test_trace_read_query_count_empty() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 0
+        TRACE_READ r1
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // r0 should be 0 (empty trace buffer)
+    assert_eq!(vm.regs[0], 0, "trace buffer should be empty");
+}
+
+#[test]
+fn test_trace_read_query_count_after_recording() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 1
+        SNAP_TRACE r1
+        LDI r2, 42
+        LDI r3, 99
+        LDI r1, 0
+        TRACE_READ r1
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Should have recorded 2 instructions (LDI r2, LDI r3)
+    assert!(
+        vm.regs[0] >= 2,
+        "should have at least 2 entries, got {}",
+        vm.regs[0]
+    );
+}
+
+#[test]
+fn test_trace_read_entry_at_index() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 1
+        SNAP_TRACE r1
+        LDI r4, 42
+        LDI r5, 99
+        LDI r1, 0
+        SNAP_TRACE r1
+        ; Read the first entry (index 0 = oldest) into RAM at 0x7000
+        LDI r1, 1       ; mode = 1 (read entry)
+        LDI r2, 0       ; index = 0
+        LDI r3, 0x7000  ; dest
+        TRACE_READ r1
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // r0 should be 0 (success)
+    assert_eq!(vm.regs[0], 0, "read should succeed");
+
+    // Verify data was written: check the opcode field at 0x7000+19
+    assert_eq!(vm.ram[0x7000 + 19], 0x10, "opcode should be LDI (0x10)");
+}
+
+#[test]
+fn test_trace_read_entry_valid_data() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 1
+        SNAP_TRACE r1
+        LDI r2, 42
+        LDI r3, 99
+        LDI r1, 0
+        SNAP_TRACE r1
+        ; Read entry 0 (oldest) into RAM at 0x7000
+        LDI r1, 1       ; mode = 1 (read entry)
+        LDI r2, 0       ; index = 0 (oldest entry)
+        LDI r3, 0x7000  ; dest address
+        TRACE_READ r1
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // r0 should be 0 (success)
+    assert_eq!(vm.regs[0], 0, "read should succeed");
+
+    // Check that data was written at 0x7000
+    // Format: [step_lo, step_hi, pc, r0..r15, opcode]
+    let step_lo = vm.ram[0x7000];
+    let step_hi = vm.ram[0x7001];
+    let pc = vm.ram[0x7002];
+    let opcode = vm.ram[0x7000 + 19];
+
+    // step_number should be 0 (first traced instruction starts at step 0)
+    assert_eq!(step_lo, 0, "first entry step_number should be 0");
+    assert_eq!(step_hi, 0, "first entry step_number hi should be 0");
+    // PC should be the LDI r2 instruction (first traced instruction)
+    // After LDI r1,1 (3 words) and SNAP_TRACE r1 (2 words) = 5 words
+    // So LDI r2 starts at 0x100 + 5 = 0x105
+    assert_eq!(pc, 0x100 + 5, "PC should be the LDI r2 instruction");
+    assert_eq!(opcode, 0x10, "opcode should be LDI (0x10)");
+}
+
+#[test]
+fn test_trace_read_entry_out_of_range() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 1
+        SNAP_TRACE r1
+        LDI r2, 42
+        LDI r1, 0
+        SNAP_TRACE r1
+        ; Try to read entry 999 (doesn't exist)
+        LDI r1, 1
+        LDI r2, 999     ; index = 999
+        LDI r3, 0x7000  ; dest address
+        TRACE_READ r1
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // r0 should be 0xFFFFFFFF (error: index out of range)
+    assert_eq!(
+        vm.regs[0],
+        0xFFFFFFFF,
+        "should return error for out-of-range index"
+    );
+}
+
+#[test]
+fn test_trace_read_count_opcode() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 1
+        SNAP_TRACE r1
+        LDI r2, 42
+        LDI r3, 99
+        ADD r4, r2, r3
+        LDI r1, 0
+        SNAP_TRACE r1
+        ; Count how many LDI (0x10) opcodes were recorded
+        LDI r1, 2
+        LDI r2, 0x10     ; target opcode = LDI
+        TRACE_READ r1
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Should have recorded 3 LDI instructions (LDI r2, LDI r3, ADD) -- wait, ADD is not LDI
+    // Actually: LDI r2, 42 (0x10), LDI r3, 99 (0x10), ADD r4, r2, r3 (not 0x10)
+    // Plus the SNAP_TRACE r1 instructions (0x7B) are NOT traced (trace happens before opcode execution,
+    // and the SNAP_TRACE itself is being executed). Actually, let me re-check.
+    // The trace records every instruction while recording is on. So:
+    // - LDI r2, 42 (0x10) -> recorded
+    // - LDI r3, 99 (0x10) -> recorded
+    // - ADD r4, r2, r3 (0x08) -> recorded
+    // - LDI r1, 0 (0x10) -> recorded
+    // So there should be 3 LDI entries.
+    assert_eq!(
+        vm.regs[0], 3,
+        "should find 3 LDI opcodes, got {}",
+        vm.regs[0]
+    );
+}
+
+#[test]
+fn test_trace_read_find_opcode_indices() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 1
+        SNAP_TRACE r1
+        LDI r2, 42
+        LDI r3, 99
+        ADD r4, r2, r3
+        LDI r1, 0
+        SNAP_TRACE r1
+        ; Find indices of LDI (0x10) entries
+        LDI r1, 3
+        LDI r2, 0x10     ; target opcode = LDI
+        LDI r3, 0x7000  ; dest address
+        TRACE_READ r1
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // r0 should be 3 (3 LDI entries found)
+    assert_eq!(vm.regs[0], 3, "should find 3 LDI indices");
+
+    // Indices should be written to RAM[0x7000..0x7002]
+    // Index 0 should be the first LDI (LDI r2, 42)
+    assert!(vm.ram[0x7000] < vm.ram[0x7001], "indices should be in order");
+    assert!(vm.ram[0x7001] < vm.ram[0x7002], "indices should be in order");
+}
+
+#[test]
+fn test_trace_read_invalid_mode() {
+    let mut vm = Vm::new();
+    load_asm(
+        &mut vm,
+        "
+        LDI r1, 99
+        TRACE_READ r1
+        HALT
+    ",
+        0x100,
+    );
+
+    loop {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // r0 should be 0xFFFFFFFF (invalid mode)
+    assert_eq!(
+        vm.regs[0],
+        0xFFFFFFFF,
+        "should return error for invalid mode"
+    );
+}
+
+#[test]
+fn test_trace_read_assembler() {
+    let result = assemble(
+        "
+        LDI r1, 0
+        TRACE_READ r1
+        HALT
+    ",
+        0x100,
+    );
+    assert!(result.is_ok(), "TRACE_READ should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_trace_read_disassembler() {
+    let mut vm = Vm::new();
+    vm.ram[0x100] = 0x83;
+    vm.ram[0x101] = 1; // TRACE_READ r1
+    let (mnemonic, len) = vm.disassemble_at(0x100);
+    assert_eq!(len, 2, "TRACE_READ should be 2 words");
+    assert_eq!(mnemonic, "TRACE_READ r1");
+}

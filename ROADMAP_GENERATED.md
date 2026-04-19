@@ -1,10 +1,10 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 107 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 108 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 52/52 phases complete, 0 in progress
+**Progress:** 53/53 phases complete, 0 in progress
 
-**Deliverables:** 222/222 complete
+**Deliverables:** 226/226 complete
 
 **Tasks:** 84/84 complete
 
@@ -64,6 +64,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 107 o
 | phase-50 Reactive Canvas: Live Cell Formulas | COMPLETE | 3/3 | 800 | 10 |
 | phase-51 TCP Networking | COMPLETE | 6/6 | 563 | 12 |
 | phase-52 Episodic Memory | COMPLETE | 3/3 | 689 | 12 |
+| phase-53 Trace Query Opcodes | COMPLETE | 4/4 | 50 | 10 |
 
 ## Dependencies
 
@@ -1545,6 +1546,23 @@ Episodic memory layer for Geometry OS. Stores program run outcomes in JSONL form
 ### Technical Notes
 
 Implementation in src/episode_log.rs (689 LOC). Zero external dependencies -- hand-rolled JSON. Includes opcode histogram and screen delta detection.
+
+## [x] phase-53: Trace Query Opcodes (COMPLETE)
+
+**Goal:** Enable assembly programs to query the execution trace buffer from within the VM
+
+TRACE_READ opcode (0x83) provides 4 modes for introspecting execution history: query count, read entry by index, count opcodes of a specific type, and find all indices matching a specific opcode. This is the foundation for pixel-level time-travel debugging -- programs can analyze their own execution traces to build debuggers, profilers, and visual histories from within the VM.
+
+### Deliverables
+
+- [x] **TRACE_READ opcode (0x83)** -- Query execution trace buffer from assembly. Mode 0: entry count. Mode 1: read entry to RAM (20 words). Mode 2: count opcode matches. Mode 3: find matching indices.
+- [x] **TraceBuffer query methods** -- Added get_at(), count_opcode(), and find_opcode_indices() to TraceBuffer in src/vm/trace.rs.
+- [x] **TRACE_READ tests** -- 10 unit tests covering all 4 modes, error cases, assembler, and disassembler.
+- [x] **Assembler and disassembler support** -- TRACE_READ recognized by assembler and disassembler. Added to preprocessor OPCODES list. Also fixed missing CONNECT/SOCKSEND/SOCKRECV/DISCONNECT from preprocessor.
+
+### Technical Notes
+
+Implementation in src/vm/mod.rs (opcode 0x83) + src/vm/trace.rs (3 new query methods). TraceBuffer already existed with 10K-entry ring buffer from Phase 38a. Entry format: [step_lo, step_hi, pc, r0..r15, opcode] = 20 u32 words.
 
 ## Global Risks
 

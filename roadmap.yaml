@@ -10,7 +10,7 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 107
+  opcodes: 108
   tests: 1294
   programs: 62
   loc: 36489
@@ -3032,6 +3032,35 @@ phases:
   technical_notes: 'Implementation in src/episode_log.rs (689 LOC). Zero external dependencies -- hand-rolled JSON. Includes opcode histogram and screen delta detection.'
   scope_lines_total: 689
   test_target: 12
+- id: phase-53
+  title: Trace Query Opcodes
+  status: complete
+  goal: Enable assembly programs to query the execution trace buffer from within the VM
+  description: 'TRACE_READ opcode (0x83) provides 4 modes for introspecting execution history:
+    query count, read entry by index, count opcodes of a specific type, and find all indices
+    matching a specific opcode. This is the foundation for pixel-level time-travel debugging
+    -- programs can analyze their own execution traces to build debuggers, profilers, and
+    visual histories from within the VM.'
+  deliverables:
+  - name: TRACE_READ opcode (0x83)
+    description: 'Query execution trace buffer from assembly. Mode 0: entry count. Mode 1: read entry to RAM (20 words). Mode 2: count opcode matches. Mode 3: find matching indices.'
+    status: done
+    tasks: []
+  - name: TraceBuffer query methods
+    description: 'Added get_at(), count_opcode(), and find_opcode_indices() to TraceBuffer in src/vm/trace.rs.'
+    status: done
+    tasks: []
+  - name: TRACE_READ tests
+    description: '10 unit tests covering all 4 modes, error cases, assembler, and disassembler.'
+    status: done
+    tasks: []
+  - name: Assembler and disassembler support
+    description: 'TRACE_READ recognized by assembler and disassembler. Added to preprocessor OPCODES list. Also fixed missing CONNECT/SOCKSEND/SOCKRECV/DISCONNECT from preprocessor.'
+    status: done
+    tasks: []
+  technical_notes: 'Implementation in src/vm/mod.rs (opcode 0x83) + src/vm/trace.rs (3 new query methods). TraceBuffer already existed with 10K-entry ring buffer from Phase 38a. Entry format: [step_lo, step_hi, pc, r0..r15, opcode] = 20 u32 words.'
+  scope_lines_total: 50
+  test_target: 10
 global_risks:
 - 'Opcode space: 107 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard

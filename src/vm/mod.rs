@@ -670,6 +670,77 @@ impl Vm {
             0x82 => {
                 self.op_disconnect();
             }
+            // TRACE_READ mode_reg  (0x83) -- Query execution trace buffer from assembly.
+            // Encoding: 0x83, mode_reg
+            // mode_reg value:
+            //   0 = query count: r0 = number of entries in trace buffer
+            //   1 = read entry: r2 = index (0=oldest), r3 = dest RAM address
+            //       Writes 20 words: [step_lo, step_hi, pc, r0..r15, opcode]
+            //       r0 = 0 on success, 0xFFFFFFFF if index out of range
+            //   2 = count opcode: r2 = target opcode, r0 = count of matching entries
+            //   3 = find opcode indices: r2 = target opcode, r3 = dest RAM address
+            //       Writes up to 256 entry indices (oldest to newest)
+            //       r0 = number of matches written
+            0x83 => {
+                let mode_reg = self.fetch() as usize;
+                let mode = if mode_reg < NUM_REGS {
+                    self.regs[mode_reg]
+                } else {
+                    0
+                };
+                match mode {
+                    0 => {
+                        // Query: return number of entries
+                        self.regs[0] = self.trace_buffer.len() as u32;
+                    }
+                    1 => {
+                        // Read entry at index into RAM
+                        let idx = self.regs[2] as usize;
+                        let dest = self.regs[3] as usize;
+                        if let Some(entry) = self.trace_buffer.get_at(idx) {
+                            let step_lo = (entry.step_number & 0xFFFFFFFF) as u32;
+                            let step_hi = ((entry.step_number >> 32) & 0xFFFFFFFF) as u32;
+                            if dest + 20 <= self.ram.len() {
+                                self.ram[dest] = step_lo;
+                                self.ram[dest + 1] = step_hi;
+                                self.ram[dest + 2] = entry.pc;
+                                for i in 0..16 {
+                                    self.ram[dest + 3 + i] = entry.regs[i];
+                                }
+                                self.ram[dest + 19] = entry.opcode;
+                                self.regs[0] = 0; // success
+                            } else {
+                                self.regs[0] = 0xFFFFFFFF; // dest out of range
+                            }
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF; // index out of range
+                        }
+                    }
+                    2 => {
+                        // Count entries with specific opcode
+                        let target = self.regs[2];
+                        self.regs[0] = self.trace_buffer.count_opcode(target) as u32;
+                    }
+                    3 => {
+                        // Find entries with specific opcode, write indices to RAM
+                        let target = self.regs[2];
+                        let dest = self.regs[3] as usize;
+                        let indices = self.trace_buffer.find_opcode_indices(target, 256);
+                        let count = indices.len().min(256);
+                        if dest + count <= self.ram.len() {
+                            for i in 0..count {
+                                self.ram[dest + i] = indices[i] as u32;
+                            }
+                            self.regs[0] = count as u32;
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF; // dest out of range
+                        }
+                    }
+                    _ => {
+                        self.regs[0] = 0xFFFFFFFF; // invalid mode
+                    }
+                }
+            }
             // Unknown opcode: halt
             _ => {
                 self.halted = true;

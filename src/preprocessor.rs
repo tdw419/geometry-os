@@ -112,6 +112,11 @@ pub const OPCODES: &[&str] = &[
     "REPLAY",
     "FORK",
     "NOTE",
+    "CONNECT",
+    "SOCKSEND",
+    "SOCKRECV",
+    "DISCONNECT",
+    "TRACE_READ",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

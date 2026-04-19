@@ -132,6 +132,42 @@ impl TraceBuffer {
         Some(&self.entries[idx])
     }
 
+    /// Get entry by absolute index (0 = oldest).
+    /// Used by TRACE_READ opcode for sequential access.
+    /// Returns None if index >= len.
+    pub fn get_at(&self, index: usize) -> Option<&TraceEntry> {
+        if index >= self.len {
+            return None;
+        }
+        let start = if self.len < self.capacity {
+            0
+        } else {
+            self.head
+        };
+        let idx = (start + index) % self.capacity;
+        Some(&self.entries[idx])
+    }
+
+    /// Count entries with a specific opcode.
+    pub fn count_opcode(&self, target: u32) -> usize {
+        self.iter().filter(|e| e.opcode == target).count()
+    }
+
+    /// Collect indices of entries with a specific opcode.
+    /// Returns at most `max_results` indices (oldest to newest).
+    pub fn find_opcode_indices(&self, target: u32, max_results: usize) -> Vec<usize> {
+        let mut result = Vec::with_capacity(max_results);
+        for (i, entry) in self.iter().enumerate() {
+            if entry.opcode == target {
+                result.push(i);
+                if result.len() >= max_results {
+                    break;
+                }
+            }
+        }
+        result
+    }
+
     /// Replay backward from a given step number.
     /// Returns entries in reverse chronological order (newest first) starting
     /// at or before the given step number. Limited to `limit` entries.
