@@ -1,14 +1,15 @@
-; roguelike.asm -- Procedural Dungeon Crawler
+; roguelike.asm -- Procedural Dungeon Crawler with Camera/Viewport
 ;
 ; Controls: WASD to move, R to regenerate dungeon
 ; Goal: find the golden stairs to descend deeper
 ;
-; Screen: 256x256, dungeon 32x32 tiles at 8px each
-; Uses TILEMAP opcode for efficient whole-screen rendering
+; Screen: 256x256, dungeon 64x64 tiles at 8px each
+; Camera follows player, shows 32x32 viewport
+; Uses TILEMAP opcode for efficient rendering
 ;
 ; Algorithm: Random room placement + L-shaped corridors
-;   1. Fill 32x32 grid with walls
-;   2. Place up to 7 random rooms (4-9 wide, 3-7 tall)
+;   1. Fill 64x64 grid with walls
+;   2. Place up to 12 random rooms (5-12 wide, 4-9 tall)
 ;   3. Connect room centers with L-shaped corridors
 ;   4. Place stairs in last room, player in first room
 ;
@@ -16,34 +17,45 @@
 ; Tile 0 is skipped by TILEMAP (transparent)
 ;
 ; Memory layout:
-;   0x5000..0x53FF  map[1024]        tile indices (32x32)
-;   0x5400..0x547F  tile_data[192]   pixel data (3 tiles x 8x8)
-;   0x5500..0x551F  rooms[32]        room data (8 rooms x 4 words)
-;   0x5520          room_count
-;   0x5530          player_x
-;   0x5531          player_y
-;   0x5532          stairs_x
-;   0x5533          stairs_y
-;   0x5534          dungeon_level
-;   0x5535          game_state (0=play, 1=descend)
-;   0x5540..0x555F  text strings
-;   0x5560..0x5563  temp: cx_i, cy_i, cx_j, cy_j
-
+;   0x5000..0x5FFF  map[4096]         tile indices (64x64)
+;   0x6000..0x607F  tile_data[192]    pixel data (3 tiles x 8x8)
+;   0x6100..0x612F  rooms[48]         room data (12 rooms x 4 words)
+;   0x6130          room_count
+;   0x6140          player_x
+;   0x6141          player_y
+;   0x6142          stairs_x
+;   0x6143          stairs_y
+;   0x6144          dungeon_level
+;   0x6145          game_state (0=play, 1=descend)
+;   0x6146          cam_x
+;   0x6147          cam_y
+;   0x6150          "@" + null
+;   0x6160..0x616A  "DESCENDED!" + null
+;   0x6180..0x6187  "PRESS R" + null
+;   0x6200..0x63FF  viewport[1024]    32x32 copy for rendering
+;   0x6400..0x6403  temp: cx_i, cy_i, cx_j, cy_j
+;
 #define MAP_BASE   0x5000
-#define TILE_BASE  0x5400
-#define ROOM_BASE  0x5500
-#define ROOM_COUNT 0x5520
-#define P_X        0x5530
-#define P_Y        0x5531
-#define STAIRS_X   0x5532
-#define STAIRS_Y   0x5533
-#define DLEVEL     0x5534
-#define STATE      0x5535
+#define TILE_BASE  0x6000
+#define ROOM_BASE  0x6100
+#define ROOM_COUNT 0x6130
+#define P_X        0x6140
+#define P_Y        0x6141
+#define STAIRS_X   0x6142
+#define STAIRS_Y   0x6143
+#define DLEVEL     0x6144
+#define STATE      0x6145
+#define CAM_X      0x6146
+#define CAM_Y      0x6147
+#define VP_BASE    0x6200
+#define TEMP_BASE  0x6400
 #define TILE_FLOOR 1
 #define TILE_WALL  2
 #define TILE_STAIR 3
-#define MAP_W      32
-#define MAP_H      32
+#define MAP_W      64
+#define MAP_H      64
+#define VP_W       32
+#define VP_H       32
 #define TILE_SZ    8
 
 ; ── Entry Point ──────────────────────────────────────────────
@@ -190,11 +202,11 @@ idle:
 descend_screen:
   LDI r1, 0x001a00
   FILL r1
-  LDI r10, 0x5540
+  LDI r10, 0x6160
   LDI r11, 50
   LDI r12, 110
   TEXT r11, r12, r10
-  LDI r10, 0x5550
+  LDI r10, 0x6180
   LDI r11, 50
   LDI r12, 150
   TEXT r11, r12, r10
@@ -216,6 +228,7 @@ descend_screen:
 
 init_tiles:
   PUSH r31
+  ; Floor tile (tile 1): dark brownish pixels
   LDI r10, 0
 it_fl:
   LDI r4, TILE_BASE
@@ -227,6 +240,7 @@ it_fl:
   LDI r6, 64
   CMP r10, r6
   BLT r0, it_fl
+  ; Wall tile (tile 2): checkerboard dark gray pattern
   LDI r10, 0
 it_wl:
   LDI r4, TILE_BASE
@@ -258,6 +272,7 @@ it_ws:
   LDI r6, 64
   CMP r10, r6
   BLT r0, it_wl
+  ; Stairs tile (tile 3): golden pixels
   LDI r10, 0
 it_st:
   LDI r4, TILE_BASE
@@ -277,61 +292,70 @@ it_st:
 ; ── init_text ────────────────────────────────────────────────
 
 init_text:
-  LDI r4, 0x5540
-  LDI r1, 68
+  ; "@" character at 0x6150
+  LDI r4, 0x6150
+  LDI r1, 64
   STORE r4, r1
-  LDI r4, 0x5541
-  LDI r1, 69
-  STORE r4, r1
-  LDI r4, 0x5542
-  LDI r1, 83
-  STORE r4, r1
-  LDI r4, 0x5543
-  LDI r1, 67
-  STORE r4, r1
-  LDI r4, 0x5544
-  LDI r1, 69
-  STORE r4, r1
-  LDI r4, 0x5545
-  LDI r1, 78
-  STORE r4, r1
-  LDI r4, 0x5546
-  LDI r1, 68
-  STORE r4, r1
-  LDI r4, 0x5547
-  LDI r1, 69
-  STORE r4, r1
-  LDI r4, 0x5548
-  LDI r1, 68
-  STORE r4, r1
-  LDI r4, 0x5549
-  LDI r1, 33
-  STORE r4, r1
-  LDI r4, 0x554A
+  LDI r4, 0x6151
   LDI r1, 0
   STORE r4, r1
-  LDI r4, 0x5550
-  LDI r1, 80
+  ; "DESCENDED!" at 0x6160
+  LDI r4, 0x6160
+  LDI r1, 68
   STORE r4, r1
-  LDI r4, 0x5551
-  LDI r1, 82
-  STORE r4, r1
-  LDI r4, 0x5552
+  LDI r4, 0x6161
   LDI r1, 69
   STORE r4, r1
-  LDI r4, 0x5553
+  LDI r4, 0x6162
   LDI r1, 83
   STORE r4, r1
-  LDI r4, 0x5554
-  LDI r1, 83
+  LDI r4, 0x6163
+  LDI r1, 67
   STORE r4, r1
-  LDI r4, 0x5555
-  LDI r1, 32
+  LDI r4, 0x6164
+  LDI r1, 69
   STORE r4, r1
-  LDI r4, 0x5556
+  LDI r4, 0x6165
+  LDI r1, 78
+  STORE r4, r1
+  LDI r4, 0x6166
+  LDI r1, 68
+  STORE r4, r1
+  LDI r4, 0x6167
+  LDI r1, 69
+  STORE r4, r1
+  LDI r4, 0x6168
+  LDI r1, 68
+  STORE r4, r1
+  LDI r4, 0x6169
+  LDI r1, 33
+  STORE r4, r1
+  LDI r4, 0x616A
+  LDI r1, 0
+  STORE r4, r1
+  ; "PRESS R" at 0x6180
+  LDI r4, 0x6180
+  LDI r1, 80
+  STORE r4, r1
+  LDI r4, 0x6181
   LDI r1, 82
   STORE r4, r1
-  LDI r4, 0x5557
+  LDI r4, 0x6182
+  LDI r1, 69
+  STORE r4, r1
+  LDI r4, 0x6183
+  LDI r1, 83
+  STORE r4, r1
+  LDI r4, 0x6184
+  LDI r1, 83
+  STORE r4, r1
+  LDI r4, 0x6185
+  LDI r1, 32
+  STORE r4, r1
+  LDI r4, 0x6186
+  LDI r1, 82
+  STORE r4, r1
+  LDI r4, 0x6187
   LDI r1, 0
   STORE r4, r1
   RET
@@ -362,7 +386,7 @@ gd_fx:
   LDI r6, MAP_H
   CMP r10, r6
   BLT r0, gd_fy
-  ; Place rooms
+  ; Place rooms (up to 12)
   LDI r1, 0
   LDI r4, ROOM_COUNT
   STORE r4, r1
@@ -370,23 +394,23 @@ gd_fx:
 gd_rl:
   LDI r4, ROOM_COUNT
   LOAD r1, r4
-  LDI r9, 7
+  LDI r9, 12
   CMP r1, r9
   BGE r0, gd_rd
-  LDI r9, 60
+  LDI r9, 100
   CMP r25, r9
   BGE r0, gd_rd
   LDI r9, 1
   ADD r25, r9
   RAND r20
-  LDI r9, 6
+  LDI r9, 8
   MOD r20, r9
-  LDI r9, 4
+  LDI r9, 5
   ADD r20, r9
   RAND r21
-  LDI r9, 5
+  LDI r9, 6
   MOD r21, r9
-  LDI r9, 3
+  LDI r9, 4
   ADD r21, r9
   RAND r22
   LDI r9, MAP_W
@@ -452,7 +476,7 @@ gd_rl:
   STORE r4, r1
   JMP gd_rl
 gd_rd:
-  ; Connect rooms
+  ; Connect rooms with L-shaped corridors
   LDI r4, ROOM_COUNT
   LOAD r24, r4
   LDI r9, 2
@@ -494,11 +518,13 @@ gd_cl:
   LDI r9, 2
   SHR r27, r9
   ADD r21, r27
-  LDI r4, 0x5560
+  LDI r4, TEMP_BASE
   LDI r9, 0
   ADD r9, r20
   STORE r4, r9
-  LDI r4, 0x5561
+  LDI r4, TEMP_BASE
+  LDI r9, 1
+  ADD r4, r9
   LDI r9, 0
   ADD r9, r21
   STORE r4, r9
@@ -532,28 +558,42 @@ gd_cl:
   LDI r9, 2
   SHR r27, r9
   ADD r21, r27
-  LDI r4, 0x5562
+  LDI r4, TEMP_BASE
+  LDI r9, 2
+  ADD r4, r9
   LDI r9, 0
   ADD r9, r20
   STORE r4, r9
-  LDI r4, 0x5563
+  LDI r4, TEMP_BASE
+  LDI r9, 3
+  ADD r4, r9
   LDI r9, 0
   ADD r9, r21
   STORE r4, r9
   ; Horizontal corridor
-  LDI r4, 0x5560
+  LDI r4, TEMP_BASE
   LOAD r20, r4
-  LDI r4, 0x5562
+  LDI r4, TEMP_BASE
+  LDI r9, 2
+  ADD r4, r9
   LOAD r22, r4
-  LDI r4, 0x5561
+  LDI r4, TEMP_BASE
+  LDI r9, 1
+  ADD r4, r9
   LOAD r21, r4
   CALL carve_h_corridor
   ; Vertical corridor
-  LDI r4, 0x5561
+  LDI r4, TEMP_BASE
+  LDI r9, 1
+  ADD r4, r9
   LOAD r20, r4
-  LDI r4, 0x5563
+  LDI r4, TEMP_BASE
+  LDI r9, 3
+  ADD r4, r9
   LOAD r22, r4
-  LDI r4, 0x5562
+  LDI r4, TEMP_BASE
+  LDI r9, 2
+  ADD r4, r9
   LOAD r21, r4
   CALL carve_v_corridor
   LDI r9, 1
@@ -634,10 +674,10 @@ gd_nr:
   STORE r4, r21
   JMP gd_dn
 gd_fb:
-  LDI r1, 16
+  LDI r1, 32
   LDI r4, P_X
   STORE r4, r1
-  LDI r1, 16
+  LDI r1, 32
   LDI r4, P_Y
   STORE r4, r1
 gd_dn:
@@ -818,7 +858,7 @@ cv_dn:
   RET
 
 ; ── get_tile ─────────────────────────────────────────────────
-; Input: r2=x, r1=y  Output: r1 = map[y*32+x]
+; Input: r2=x, r1=y  Output: r1 = map[y*64+x]
 
 get_tile:
   LDI r9, MAP_W
@@ -853,32 +893,150 @@ check_stairs:
 cs_dn:
   RET
 
+; ── compute_camera ──────────────────────────────────────────
+; Centers camera on player, clamps to map edges
+; Writes cam_x and cam_y to RAM
+
+compute_camera:
+  ; cam_x = player_x - 16
+  LDI r4, P_X
+  LOAD r1, r4
+  LDI r9, 16
+  SUB r1, r9
+  LDI r4, CAM_X
+  STORE r4, r1
+  ; Clamp cam_x >= 0
+  LDI r4, CAM_X
+  LOAD r1, r4
+  LDI r9, 0
+  CMP r1, r9
+  BGE r0, cam_x_hi
+  LDI r1, 0
+  LDI r4, CAM_X
+  STORE r4, r1
+cam_x_hi:
+  ; Clamp cam_x <= 32 (MAP_W - VP_W)
+  LDI r4, CAM_X
+  LOAD r1, r4
+  LDI r9, 32
+  CMP r1, r9
+  BLT r0, cam_y_start
+  LDI r1, 32
+  LDI r4, CAM_X
+  STORE r4, r1
+cam_y_start:
+  ; cam_y = player_y - 16
+  LDI r4, P_Y
+  LOAD r1, r4
+  LDI r9, 16
+  SUB r1, r9
+  LDI r4, CAM_Y
+  STORE r4, r1
+  ; Clamp cam_y >= 0
+  LDI r4, CAM_Y
+  LOAD r1, r4
+  LDI r9, 0
+  CMP r1, r9
+  BGE r0, cam_y_hi
+  LDI r1, 0
+  LDI r4, CAM_Y
+  STORE r4, r1
+cam_y_hi:
+  ; Clamp cam_y <= 32 (MAP_H - VP_H)
+  LDI r4, CAM_Y
+  LOAD r1, r4
+  LDI r9, 32
+  CMP r1, r9
+  BLT r0, cam_done
+  LDI r1, 32
+  LDI r4, CAM_Y
+  STORE r4, r1
+cam_done:
+  RET
+
+; ── copy_viewport ──────────────────────────────────────────
+; Copies 32x32 viewport from 64x64 map into viewport buffer
+; Uses camera position to determine which portion to copy
+
+copy_viewport:
+  PUSH r31
+  LDI r10, 0
+cv_outer:
+  ; Precompute source row base = MAP_BASE + (cam_y + vy) * 64 + cam_x
+  LDI r4, CAM_Y
+  LOAD r12, r4
+  ADD r12, r10
+  LDI r9, MAP_W
+  MUL r12, r9
+  LDI r4, CAM_X
+  LOAD r1, r4
+  ADD r12, r1
+  LDI r1, MAP_BASE
+  ADD r12, r1
+  ; Precompute dest row base = VP_BASE + vy * 32
+  LDI r13, VP_BASE
+  MOV r1, r10
+  LDI r9, VP_W
+  MUL r1, r9
+  ADD r13, r1
+  ; Inner loop: copy 32 tiles
+  LDI r11, 0
+cv_inner:
+  MOV r4, r12
+  ADD r4, r11
+  LOAD r1, r4
+  MOV r4, r13
+  ADD r4, r11
+  STORE r4, r1
+  LDI r9, 1
+  ADD r11, r9
+  LDI r6, VP_W
+  CMP r11, r6
+  BLT r0, cv_inner
+  ; Next row
+  LDI r9, 1
+  ADD r10, r9
+  LDI r6, VP_H
+  CMP r10, r6
+  BLT r0, cv_outer
+  POP r31
+  RET
+
 ; ── render ──────────────────────────────────────────────────
 
 render:
+  PUSH r31
+  CALL compute_camera
+  CALL copy_viewport
+  ; Clear screen to black
+  LDI r1, 0
+  FILL r1
+  ; Render 32x32 viewport using TILEMAP
   LDI r1, 0
   LDI r2, 0
-  LDI r3, MAP_BASE
+  LDI r3, VP_BASE
   LDI r4, TILE_BASE
-  LDI r5, MAP_W
-  LDI r6, MAP_H
+  LDI r5, VP_W
+  LDI r6, VP_H
   LDI r7, TILE_SZ
   LDI r8, TILE_SZ
   TILEMAP r1, r2, r3, r4, r5, r6, r7, r8
+  ; Draw player "@" relative to viewport
   LDI r4, P_X
   LOAD r1, r4
+  LDI r4, CAM_X
+  LOAD r2, r4
+  SUB r1, r2
   LDI r9, TILE_SZ
   MUL r1, r9
-  LDI r9, 1
-  ADD r1, r9
   LDI r4, P_Y
   LOAD r2, r4
+  LDI r4, CAM_Y
+  LOAD r3, r4
+  SUB r2, r3
   LDI r9, TILE_SZ
   MUL r2, r9
-  LDI r9, 1
-  ADD r2, r9
-  LDI r22, 6
-  LDI r23, 6
-  LDI r24, 0x00FF88
-  RECTF r1, r2, r22, r23, r24
+  LDI r3, 0x6150
+  TEXT r1, r2, r3
+  POP r31
   RET

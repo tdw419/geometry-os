@@ -2572,8 +2572,8 @@ fn test_roguelike_initializes() {
         "top-left map cell should be wall (2)"
     );
 
-    // There should be carved floors somewhere (not all walls)
-    let floor_count: usize = (0..1024)
+    // There should be carved floors somewhere (not all walls) -- 64x64 map
+    let floor_count: usize = (0..4096)
         .map(|i| vm.ram[0x5000 + i])
         .filter(|&t| t == 1)
         .count();
@@ -2583,14 +2583,14 @@ fn test_roguelike_initializes() {
         floor_count
     );
 
-    // Room count should be > 0
-    let room_count = vm.ram[0x5520];
+    // Room count should be > 0 (64x64 map, up to 12 rooms)
+    let room_count = vm.ram[0x6130];
     assert!(room_count >= 2, "should have >= 2 rooms, got {}", room_count);
 
-    // Player should be placed at a floor tile
-    let px = vm.ram[0x5530] as usize;
-    let py = vm.ram[0x5531] as usize;
-    let player_tile = vm.ram[0x5000 + py * 32 + px];
+    // Player should be placed at a floor tile (new addresses)
+    let px = vm.ram[0x6140] as usize;
+    let py = vm.ram[0x6141] as usize;
+    let player_tile = vm.ram[0x5000 + py * 64 + px];
     assert_eq!(
         player_tile, 1,
         "player at ({}, {}) should be on floor, got tile {}",
@@ -2598,9 +2598,9 @@ fn test_roguelike_initializes() {
     );
 
     // Stairs should be placed at a stair tile
-    let sx = vm.ram[0x5532] as usize;
-    let sy = vm.ram[0x5533] as usize;
-    let stair_tile = vm.ram[0x5000 + sy * 32 + sx];
+    let sx = vm.ram[0x6142] as usize;
+    let sy = vm.ram[0x6143] as usize;
+    let stair_tile = vm.ram[0x5000 + sy * 64 + sx];
     assert_eq!(
         stair_tile, 3,
         "stairs at ({}, {}) should be stair tile (3), got {}",
@@ -2614,16 +2614,17 @@ fn test_roguelike_initializes() {
     );
 
     // Game state should be 0 (playing)
-    assert_eq!(vm.ram[0x5535], 0, "game_state should be 0 (play)");
+    assert_eq!(vm.ram[0x6145], 0, "game_state should be 0 (play)");
 
-    // Text strings should be stored
-    assert_eq!(vm.ram[0x5540], 68, "first char should be D (68)");
-    assert_eq!(vm.ram[0x554A], 0, "null terminator after DESCENDED!");
-    assert_eq!(vm.ram[0x5550], 80, "first char of second string should be P (80)");
+    // Text strings should be stored ("@" at 0x6150, "DESCENDED!" at 0x6160, "PRESS R" at 0x6180)
+    assert_eq!(vm.ram[0x6150], 64, "first char should be @ (64)");
+    assert_eq!(vm.ram[0x6160], 68, "first char should be D (68)");
+    assert_eq!(vm.ram[0x616A], 0, "null terminator after DESCENDED!");
+    assert_eq!(vm.ram[0x6180], 80, "first char of PRESS R should be P (80)");
 
-    // Tile data should be initialized
-    assert_eq!(vm.ram[0x5400], 0x2A2A4E, "first floor tile pixel");
-    assert_eq!(vm.ram[0x5480], 0xD4A017, "first stairs tile pixel");
+    // Tile data should be initialized (moved to 0x6000)
+    assert_eq!(vm.ram[0x6000], 0x2A2A4E, "first floor tile pixel");
+    assert_eq!(vm.ram[0x6080], 0xD4A017, "first stairs tile pixel");
 
     // Screen should have visible pixels (walls + floors rendered)
     let non_black: usize = vm.screen.iter().filter(|&&p| p != 0).count();
@@ -2656,9 +2657,9 @@ fn test_roguelike_wall_collision_blocks() {
         if vm.frame_ready { vm.frame_ready = false; break; }
     }
 
-    // Record initial player position
-    let init_px = vm.ram[0x5530];
-    let init_py = vm.ram[0x5531];
+    // Record initial player position (new addresses)
+    let init_px = vm.ram[0x6140];
+    let init_py = vm.ram[0x6141];
 
     // Try to move up (W = 87)
     vm.ram[0xFFF] = 87; // IKEY reads from 0xFFF
@@ -2669,10 +2670,10 @@ fn test_roguelike_wall_collision_blocks() {
 
     // Either player moved or stayed (if wall was above)
     // If player moved up, check they are on a floor tile
-    let new_px = vm.ram[0x5530] as usize;
-    let new_py = vm.ram[0x5531] as usize;
+    let new_px = vm.ram[0x6140] as usize;
+    let new_py = vm.ram[0x6141] as usize;
     if new_py != init_py as usize {
-        let tile = vm.ram[0x5000 + new_py * 32 + new_px];
+        let tile = vm.ram[0x5000 + new_py * 64 + new_px];
         assert_eq!(tile, 1, "player moved to non-floor tile: {}", tile);
     }
 }
