@@ -238,7 +238,7 @@ fn test_sv32_megapage() {
     // PPN = 0 (identity: PA[31:22] = 0)
     let megapage_ppn = 0u32;
     bus.write_word(
-        ((1u64) << 12), // root at page 1, entry index 0
+        (1u64) << 12, // root at page 1, entry index 0
         make_pte(
             megapage_ppn,
             mmu::PTE_V | mmu::PTE_R | mmu::PTE_W | mmu::PTE_X,

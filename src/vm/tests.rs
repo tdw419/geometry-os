@@ -739,7 +739,6 @@ fn test_push_pop_roundtrip() {
     pc += 1;
     // HALT
     vm.ram[pc as usize] = 0x00;
-    pc += 1;
 
     vm.pc = 0;
     for _ in 0..100 {
@@ -911,7 +910,7 @@ fn test_memcpy_copies_words() {
     let mut vm = Vm::new();
     // Write some data to addresses 100-104
     for i in 0..5 {
-        vm.ram[100 + i] = (1000 + i as u32);
+        vm.ram[100 + i] = 1000 + i as u32;
     }
     // Set regs: r1=200 (dst), r2=100 (src), r3=5 (len)
     vm.regs[1] = 200;

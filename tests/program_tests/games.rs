@@ -747,7 +747,7 @@ fn test_infinite_map_pxpk_contour_lines() {
             }
             let px = vm.screen[cy * 256 + cx];
             let r = (px >> 16) & 0xFF;
-            let g = (px >> 8) & 0xFF;
+            let _g = (px >> 8) & 0xFF;
             let b = px & 0xFF;
             if !(b > 100 && b > r * 2) {
                 return false;

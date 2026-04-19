@@ -436,7 +436,7 @@ fn test_trace_recording_cleared_on_vm_reset() {
 
 // --- Phase 38b: Frame Checkpointing tests ---
 
-use geometry_os::vm::{FrameCheckBuffer, FrameCheckpoint, DEFAULT_FRAME_CHECK_CAPACITY};
+use geometry_os::vm::FrameCheckBuffer;
 
 #[test]
 fn test_frame_check_buffer_new() {
@@ -982,7 +982,7 @@ fn test_checkpoint_replay_pipeline() {
 
 // --- Phase 38d: Timeline Forking tests ---
 
-use geometry_os::vm::{VmSnapshot, MAX_SNAPSHOTS};
+use geometry_os::vm::MAX_SNAPSHOTS;
 
 #[test]
 fn test_snapshot_restore_roundtrip() {

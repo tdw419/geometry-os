@@ -1,4 +1,4 @@
-use super::sv32::{make_pte, make_satp, sfence_vma};
+use super::sv32::sfence_vma;
 use super::*;
 use geometry_os::riscv::mmu;
 

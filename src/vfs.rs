@@ -388,6 +388,7 @@ impl Vfs {
 
     /// Get the base directory path (for testing).
     #[cfg(test)]
+    #[allow(dead_code)]
     pub fn base_dir(&self) -> &Path {
         &self.base_dir
     }
