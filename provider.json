@@ -1,7 +1,7 @@
 {
   "base_url": "https://api.z.ai/api/coding/paas/v4/chat/completions",
   "model": "glm-5.1",
-  "api_key": "",
+  "api_key": "d5bf2db00043452fad10e4ac8c827352.ygRG8LtcRnpbpz2l",
   "max_tokens": 8192,
   "temperature": 0.3,
   "fallback": {
