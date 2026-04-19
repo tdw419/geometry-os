@@ -187,6 +187,7 @@ impl Sbi {
                                 | SBI_SHUTDOWN
                                 | SBI_EXT_RFENCE
                                 | SBI_EXT_IPI
+                                | SBI_EXT_DBCN
                         );
                         Some((0, if available { 1 } else { 0 }))
                     }
@@ -239,15 +240,16 @@ impl Sbi {
             SBI_EXT_DBCN => {
                 match a6 {
                     SBI_DBCN_CONSOLE_WRITE => {
-                        // Store pending DBCN write request for caller to fulfill
+                        // Store pending DBCN write request for caller to fulfill.
+                        // Return success immediately -- the caller (step function)
+                        // will read from guest memory and output to UART.
                         let num_bytes = a0 as usize;
                         let base_low = _a1 as u64;
                         let base_high = (_a2 as u64) << 32;
                         let phys_addr = base_high | base_low;
                         self.dbcn_pending_write = Some((phys_addr, num_bytes));
-                        // Return "not supported" as placeholder -- caller replaces
-                        // with actual result after reading memory
-                        None
+                        // Return success -- caller handles the actual write
+                        Some((SBI_SUCCESS as u32, num_bytes as u32))
                     }
                     SBI_DBCN_CONSOLE_READ => {
                         // No input available

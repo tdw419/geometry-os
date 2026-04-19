@@ -1499,12 +1499,12 @@ impl RiscvVm {
             }
             if count.is_multiple_of(2_000_000) && count > 0 {
                 eprintln!(
-                    "[boot] PROGRESS {}M: PC=0x{:08X} priv={:?} SBI={} fwd={}",
+                    "[boot] PROGRESS {}M: PC=0x{:08X} priv={:?} ecall={} sbi_out={}",
                     count / 1_000_000,
                     vm.cpu.pc,
                     vm.cpu.privilege,
-                    _sbi_call_count,
-                    _forward_count
+                    vm.cpu.ecall_count,
+                    vm.bus.sbi.console_output.len(),
                 );
             }
             count += 1;

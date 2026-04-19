@@ -11,7 +11,7 @@ fn main() {
         initramfs.as_deref(),
         256,
         20_000_000,
-        "console=ttyS0 earlycon=uart8250,mmio,0x10000000 loglevel=8",
+        "console=ttyS0 earlycon=sbi loglevel=8",
     ).unwrap();
     
     println!("UART write_count: {}", vm.bus.uart.write_count);

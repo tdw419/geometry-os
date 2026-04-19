@@ -57,6 +57,12 @@ impl RiscvCpu {
                     let a4 = self.x[14];
                     let a5 = self.x[15];
 
+                    // Debug: log all SBI calls
+                    if self.ecall_count <= 30 || a7 == 0x4442434E {
+                        eprintln!("[sbi] ECALL #{}: a7=0x{:08X} a6={} a0=0x{:08X} a1=0x{:08X}",
+                            self.ecall_count, a7, a6, a0, a1);
+                    }
+
                     let sbi_result = bus.sbi.handle_ecall(
                         a7,
                         a6,
@@ -73,6 +79,19 @@ impl RiscvCpu {
                     if let Some((ret_a0, ret_a1)) = sbi_result {
                         self.x[10] = ret_a0;
                         self.x[11] = ret_a1;
+
+                        // Handle DBCN pending write: read from guest memory
+                        if let Some((phys_addr, num_bytes)) = bus.sbi.dbcn_pending_write.take() {
+                            for i in 0..num_bytes {
+                                if let Ok(b) = bus.read_byte(phys_addr + i as u64) {
+                                    if b != 0 {
+                                        bus.uart.write_byte(0, b);
+                                        bus.sbi.console_output.push(b);
+                                    }
+                                }
+                            }
+                        }
+
                         self.pc = next_pc;
 
                         if bus.sbi.shutdown_requested {

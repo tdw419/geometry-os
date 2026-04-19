@@ -53,7 +53,19 @@ fn main() {
                             &mut vm.bus.uart,
                             &mut vm.bus.clint,
                         );
-                        if let Some((a0, a1)) = result {
+                        // Handle DBCN pending write
+                        if let Some((phys_addr, num_bytes)) = vm.bus.sbi.dbcn_pending_write.take() {
+                            for i in 0..num_bytes {
+                                if let Ok(b) = vm.bus.read_byte(phys_addr + i as u64) {
+                                    if b != 0 {
+                                        vm.bus.uart.write_byte(0, b);
+                                        vm.bus.sbi.console_output.push(b);
+                                    }
+                                }
+                            }
+                            vm.cpu.x[10] = 0; // SBI_SUCCESS
+                            vm.cpu.x[11] = num_bytes as u32;
+                        } else if let Some((a0, a1)) = result {
                             vm.cpu.x[10] = a0;
                             vm.cpu.x[11] = a1;
                         }
