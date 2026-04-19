@@ -150,7 +150,7 @@ pub fn query_episodes(program: &str, limit: usize) -> Vec<Episode> {
     let mut episodes: Vec<Episode> = content
         .lines()
         .filter(|l| !l.trim().is_empty())
-        .filter_map(|line| json_to_episode(line))
+        .filter_map(json_to_episode)
         .collect();
     // Most recent last in file, reverse for most recent first
     episodes.reverse();
@@ -279,13 +279,13 @@ fn parse_top_ops_array(json: &str) -> Vec<(u8, String, u64, f64)> {
     let bytes = json.as_bytes();
     let mut depth = 0i32;
     let mut end = start;
-    for i in start..bytes.len() {
-        match bytes[i] {
+    for (i, &byte) in bytes[start..].iter().enumerate() {
+        match byte {
             b'[' => depth += 1,
             b']' => {
                 depth -= 1;
                 if depth == 0 {
-                    end = i;
+                    end = start + i;
                     break;
                 }
             }
@@ -453,6 +453,7 @@ fn extract_json_bool(json: &str, key: &str) -> bool {
 /// Helper to build an episode from raw VM state after a run.
 /// Takes pre-formatted top opcodes from the caller (which has access to opcode_name).
 /// Uses raw values to avoid cross-crate type mismatches (lib vs bin Vm types).
+#[allow(clippy::too_many_arguments)]
 pub fn build_episode_raw(
     program: &str,
     total_ops: u64,

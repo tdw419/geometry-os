@@ -733,8 +733,8 @@ impl Vm {
                         let indices = self.trace_buffer.find_opcode_indices(target, 256);
                         let count = indices.len().min(256);
                         if dest + count <= self.ram.len() {
-                            for i in 0..count {
-                                self.ram[dest + i] = indices[i] as u32;
+                            for (i, &idx) in indices.iter().enumerate().take(count) {
+                                self.ram[dest + i] = idx as u32;
                             }
                             self.regs[0] = count as u32;
                         } else {

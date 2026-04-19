@@ -414,6 +414,7 @@ pub struct PixelWriteEntry {
 
 impl PixelWriteEntry {
     /// Get the full step number as u64.
+    #[allow(dead_code)]
     pub fn step(&self) -> u64 {
         (self.step_hi as u64) << 32 | (self.step_lo as u64)
     }

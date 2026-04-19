@@ -212,10 +212,10 @@ impl super::Vm {
                 }
                 Ok(n) => {
                     // Store received bytes into RAM
-                    for i in 0..n {
+                    for (i, &byte) in buf[..n].iter().enumerate() {
                         let idx = buf_addr + i;
                         if idx < self.ram.len() {
-                            self.ram[idx] = buf[i] as u32;
+                            self.ram[idx] = byte as u32;
                         }
                     }
                     self.regs[recv_reg] = n as u32;
@@ -263,6 +263,7 @@ impl super::Vm {
     }
 
     /// Get the number of active TCP connections (for diagnostics/testing).
+    #[allow(dead_code)]
     pub fn tcp_connection_count(&self) -> usize {
         self.tcp_connections.iter().filter(|c| c.is_some()).count()
     }
