@@ -42,10 +42,7 @@ fn main() {
     }
 
     // SBI ecall log
-    println!(
-        "SBI ecall_log: {} entries",
-        vm.bus.sbi.ecall_log.len()
-    );
+    println!("SBI ecall_log: {} entries", vm.bus.sbi.ecall_log.len());
     for (i, (a7, a6, a0)) in vm.bus.sbi.ecall_log.iter().take(30).enumerate() {
         println!("  [{}] a7=0x{:02X} a6={} a0=0x{:08X}", i, a7, a6, a0);
     }

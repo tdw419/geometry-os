@@ -1,6 +1,6 @@
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -19,7 +19,9 @@ fn main() {
     let mut dtb_early_va_expected: u32 = (dtb_addr.wrapping_add(0xC0000000)) as u32;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if count % 100 == 0 {
             let prb = vm.bus.read_word(0x00C7A0B4u64).unwrap_or(0);
@@ -58,7 +60,9 @@ fn main() {
                         let is_non_leaf = is_valid && (entry & 0xE) == 0;
                         let ppn = (entry >> 10) & 0x3FFFFF;
                         let needs_fix = !is_valid || (is_non_leaf && ppn == 0);
-                        if !needs_fix { continue; }
+                        if !needs_fix {
+                            continue;
+                        }
                         let pa_offset = l1_scan - 768;
                         let fixup_pte = mega_flags | (pa_offset << 20);
                         vm.bus.write_word(scan_addr, fixup_pte).ok();
@@ -136,14 +140,25 @@ fn main() {
                 x => &format!("func{}", x),
             }
         } else if *a7 == 0x01 {
-            if *a6 == 0 { "putchar" } else { "getchar" }
+            if *a6 == 0 {
+                "putchar"
+            } else {
+                "getchar"
+            }
         } else {
             ""
         };
-        println!("  #{}: ext={}({}) func={}({}) a0=0x{:X}", i, ext_name, a7, func_name, a6, a0);
+        println!(
+            "  #{}: ext={}({}) func={}({}) a0=0x{:X}",
+            i, ext_name, a7, func_name, a6, a0
+        );
     }
 
-    println!("\nTotal: {} instructions, {} SBI ECALLs", count, vm.bus.sbi.ecall_log.len());
+    println!(
+        "\nTotal: {} instructions, {} SBI ECALLs",
+        count,
+        vm.bus.sbi.ecall_log.len()
+    );
     println!("UART tx: {} bytes", vm.bus.uart.tx_buf.len());
     let tx = vm.bus.uart.drain_tx();
     if !tx.is_empty() {

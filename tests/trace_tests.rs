@@ -24,8 +24,10 @@ fn test_trace_buffer_new() {
 #[test]
 fn test_trace_buffer_push_single() {
     let mut buf = TraceBuffer::new(100);
-    let regs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-                17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+    let regs = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        26, 27, 28, 29, 30, 31, 32,
+    ];
     buf.push(0x100, &regs, 0x01);
 
     assert_eq!(buf.len(), 1);
@@ -163,16 +165,36 @@ fn test_trace_buffer_minimum_capacity() {
 #[test]
 fn test_trace_entry_equality() {
     let regs = [1u32; 16];
-    let a = TraceEntry { step_number: 5, pc: 100, regs, opcode: 0x01 };
-    let b = TraceEntry { step_number: 5, pc: 100, regs: [1u32; 16], opcode: 0x01 };
+    let a = TraceEntry {
+        step_number: 5,
+        pc: 100,
+        regs,
+        opcode: 0x01,
+    };
+    let b = TraceEntry {
+        step_number: 5,
+        pc: 100,
+        regs: [1u32; 16],
+        opcode: 0x01,
+    };
     assert_eq!(a, b);
 }
 
 #[test]
 fn test_trace_entry_inequality() {
     let regs = [1u32; 16];
-    let a = TraceEntry { step_number: 5, pc: 100, regs, opcode: 0x01 };
-    let b = TraceEntry { step_number: 6, pc: 100, regs: [1u32; 16], opcode: 0x01 };
+    let a = TraceEntry {
+        step_number: 5,
+        pc: 100,
+        regs,
+        opcode: 0x01,
+    };
+    let b = TraceEntry {
+        step_number: 6,
+        pc: 100,
+        regs: [1u32; 16],
+        opcode: 0x01,
+    };
     assert_ne!(a, b);
 }
 
@@ -181,29 +203,43 @@ fn test_trace_entry_inequality() {
 #[test]
 fn test_snap_trace_start_recording() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r1, 1
         SNAP_TRACE r1
         LDI r2, 42
         LDI r3, 99
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     // Run until halted
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Trace should have recorded LDI r2 and LDI r3 (2 instructions after SNAP_TRACE)
-    assert!(vm.trace_buffer.len() >= 2,
-        "should have at least 2 traced instructions, got {}", vm.trace_buffer.len());
-    assert!(vm.trace_recording, "recording should be on after SNAP_TRACE 1");
+    assert!(
+        vm.trace_buffer.len() >= 2,
+        "should have at least 2 traced instructions, got {}",
+        vm.trace_buffer.len()
+    );
+    assert!(
+        vm.trace_recording,
+        "recording should be on after SNAP_TRACE 1"
+    );
 }
 
 #[test]
 fn test_snap_trace_stop_recording() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r1, 1
         SNAP_TRACE r1
         LDI r2, 42
@@ -211,23 +247,32 @@ fn test_snap_trace_stop_recording() {
         SNAP_TRACE r1
         LDI r3, 99
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     let len_after_stop = vm.trace_buffer.len();
     // LDI r3 after stop should NOT be recorded
     // Only LDI r2 should be recorded (between start and stop)
-    assert!(len_after_stop >= 1, "should have at least 1 traced instruction");
+    assert!(
+        len_after_stop >= 1,
+        "should have at least 1 traced instruction"
+    );
     assert!(!vm.trace_recording, "recording should be off");
 }
 
 #[test]
 fn test_snap_trace_snapshot_and_clear() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r1, 1
         SNAP_TRACE r1
         LDI r2, 10
@@ -236,41 +281,66 @@ fn test_snap_trace_snapshot_and_clear() {
         LDI r1, 2
         SNAP_TRACE r1
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // r0 should hold the count of entries captured before clear
-    assert!(vm.regs[0] >= 3,
-        "r0 should have entry count (>=3), got {}", vm.regs[0]);
+    assert!(
+        vm.regs[0] >= 3,
+        "r0 should have entry count (>=3), got {}",
+        vm.regs[0]
+    );
     // Buffer should be cleared
-    assert_eq!(vm.trace_buffer.len(), 0, "buffer should be empty after clear");
-    assert!(!vm.trace_recording, "recording should be off after snapshot-clear");
+    assert_eq!(
+        vm.trace_buffer.len(),
+        0,
+        "buffer should be empty after clear"
+    );
+    assert!(
+        !vm.trace_recording,
+        "recording should be off after snapshot-clear"
+    );
 }
 
 #[test]
 fn test_snap_trace_invalid_mode() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r1, 99
         SNAP_TRACE r1
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // r0 should be 0xFFFFFFFF for invalid mode
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "invalid mode should return 0xFFFFFFFF");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "invalid mode should return 0xFFFFFFFF"
+    );
 }
 
 #[test]
 fn test_snap_trace_returns_entry_count() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r1, 1
         SNAP_TRACE r1
         LDI r2, 1
@@ -279,31 +349,48 @@ fn test_snap_trace_returns_entry_count() {
         LDI r1, 0
         SNAP_TRACE r1
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Second SNAP_TRACE (mode 0) returns count in r0
-    assert!(vm.regs[0] >= 3,
-        "r0 should have count of traced entries (>=3), got {}", vm.regs[0]);
+    assert!(
+        vm.regs[0] >= 3,
+        "r0 should have count of traced entries (>=3), got {}",
+        vm.regs[0]
+    );
 }
 
 #[test]
 fn test_trace_disabled_by_default() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r1, 42
         LDI r2, 99
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
-    assert_eq!(vm.trace_buffer.len(), 0, "no entries when trace is disabled");
+    assert_eq!(
+        vm.trace_buffer.len(),
+        0,
+        "no entries when trace is disabled"
+    );
     assert!(!vm.trace_recording);
 }
 
@@ -336,8 +423,15 @@ fn test_trace_recording_cleared_on_vm_reset() {
 
     vm.reset();
 
-    assert!(!vm.trace_recording, "trace_recording should be false after reset");
-    assert_eq!(vm.trace_buffer.len(), 0, "trace buffer should be cleared after reset");
+    assert!(
+        !vm.trace_recording,
+        "trace_recording should be false after reset"
+    );
+    assert_eq!(
+        vm.trace_buffer.len(),
+        0,
+        "trace buffer should be cleared after reset"
+    );
 }
 
 // --- Phase 38b: Frame Checkpointing tests ---
@@ -465,21 +559,31 @@ fn test_frame_check_minimum_capacity() {
 #[test]
 fn test_frame_checkpoint_captured_on_frame_opcode() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r1, 1
         SNAP_TRACE r1
         FRAME
         FRAME
         FRAME
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Should have captured 3 frame checkpoints
-    assert_eq!(vm.frame_checkpoints.len(), 3, "should have 3 frame checkpoints");
+    assert_eq!(
+        vm.frame_checkpoints.len(),
+        3,
+        "should have 3 frame checkpoints"
+    );
 
     // Check frame_count values: 1, 2, 3
     let oldest = vm.frame_checkpoints.get_recent(2).unwrap();
@@ -496,19 +600,29 @@ fn test_frame_checkpoint_captured_on_frame_opcode() {
 #[test]
 fn test_frame_check_not_captured_when_recording_off() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         FRAME
         FRAME
         FRAME
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // trace_recording is off by default, so no checkpoints
-    assert_eq!(vm.frame_checkpoints.len(), 0, "no checkpoints when recording is off");
+    assert_eq!(
+        vm.frame_checkpoints.len(),
+        0,
+        "no checkpoints when recording is off"
+    );
 }
 
 #[test]
@@ -556,7 +670,11 @@ fn test_frame_check_cleared_on_reset() {
 
     vm.reset();
 
-    assert_eq!(vm.frame_checkpoints.len(), 0, "frame checkpoints should be cleared after reset");
+    assert_eq!(
+        vm.frame_checkpoints.len(),
+        0,
+        "frame checkpoints should be cleared after reset"
+    );
 }
 
 #[test]
@@ -841,8 +959,7 @@ fn test_checkpoint_replay_pipeline() {
         vm.screen[65535] = *color;
         let step = vm.trace_buffer.step_counter();
         vm.frame_count = vm.frame_count.wrapping_add(1);
-        vm.frame_checkpoints
-            .push(step, vm.frame_count, &vm.screen);
+        vm.frame_checkpoints.push(step, vm.frame_count, &vm.screen);
     }
 
     vm.trace_recording = false;
@@ -953,15 +1070,21 @@ fn test_restore_from_middle() {
 #[test]
 fn test_fork_opcode_save() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r1, 42
         LDI r7, 0
         FORK r7
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     assert_eq!(vm.snapshots.len(), 1, "should have 1 snapshot");
@@ -972,16 +1095,22 @@ fn test_fork_opcode_save() {
 #[test]
 fn test_fork_opcode_list() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r7, 0
         FORK r7
         LDI r7, 2
         FORK r7
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     assert_eq!(vm.regs[0], 1, "should have 1 snapshot");
@@ -991,16 +1120,22 @@ fn test_fork_opcode_list() {
 #[test]
 fn test_fork_opcode_clear() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r7, 0
         FORK r7
         LDI r7, 3
         FORK r7
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     assert_eq!(vm.regs[0], 0, "clear should succeed");
@@ -1016,31 +1151,46 @@ fn test_fork_opcode_max_snapshots() {
     }
 
     assert_eq!(vm.snapshots.len(), MAX_SNAPSHOTS);
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r7, 0
         FORK r7
         HALT
-    ", 0x200);
+    ",
+        0x200,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "should fail when max snapshots reached");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "should fail when max snapshots reached"
+    );
     assert_eq!(vm.snapshots.len(), MAX_SNAPSHOTS, "should not exceed max");
 }
 
 #[test]
 fn test_fork_opcode_invalid_mode() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r7, 99
         FORK r7
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     assert_eq!(vm.regs[0], 0xFFFFFFFF, "invalid mode should return error");
@@ -1049,17 +1199,23 @@ fn test_fork_opcode_invalid_mode() {
 #[test]
 fn test_fork_opcode_invalid_slot() {
     let mut vm = Vm::new();
-    load_asm(&mut vm, "
+    load_asm(
+        &mut vm,
+        "
         LDI r7, 0
         FORK r7
         LDI r7, 1
         LDI r1, 5
         FORK r7
         HALT
-    ", 0x100);
+    ",
+        0x100,
+    );
 
     loop {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     assert_eq!(vm.regs[0], 0xFFFFFFFF, "invalid slot should return error");
@@ -1093,10 +1249,14 @@ fn test_fork_restore_api_roundtrip() {
 
 #[test]
 fn test_fork_demo_assembles() {
-    let source = std::fs::read_to_string("programs/fork_demo.asm")
-        .expect("fork_demo.asm should exist");
+    let source =
+        std::fs::read_to_string("programs/fork_demo.asm").expect("fork_demo.asm should exist");
     let result = assemble(&source, 0);
-    assert!(result.is_ok(), "fork_demo.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "fork_demo.asm should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -1107,5 +1267,9 @@ fn test_snapshots_cleared_on_reset() {
     assert_eq!(vm.snapshots.len(), 2);
 
     vm.reset();
-    assert_eq!(vm.snapshots.len(), 0, "snapshots should be cleared on reset");
+    assert_eq!(
+        vm.snapshots.len(),
+        0,
+        "snapshots should be cleared on reset"
+    );
 }

@@ -1,5 +1,5 @@
-use super::types::*;
 use super::trace::MAX_SNAPSHOTS;
+use super::types::*;
 use super::Vm;
 
 impl Vm {
@@ -934,7 +934,11 @@ impl Vm {
             // r0 = number of entries currently in buffer (after mode change)
             0x7B => {
                 let mode_reg = self.fetch() as usize;
-                let mode = if mode_reg < NUM_REGS { self.regs[mode_reg] } else { 0 };
+                let mode = if mode_reg < NUM_REGS {
+                    self.regs[mode_reg]
+                } else {
+                    0
+                };
                 match mode {
                     0 => {
                         self.trace_recording = false;

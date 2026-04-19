@@ -42,8 +42,8 @@ pub struct TraceEntry {
 pub struct TraceBuffer {
     entries: Vec<TraceEntry>,
     capacity: usize,
-    head: usize,   // next write position
-    len: usize,    // number of valid entries (up to capacity)
+    head: usize,       // next write position
+    len: usize,        // number of valid entries (up to capacity)
     step_counter: u64, // monotonically increasing step counter
 }
 
@@ -238,8 +238,8 @@ pub struct FrameCheckpoint {
 pub struct FrameCheckBuffer {
     entries: Vec<Option<FrameCheckpoint>>,
     capacity: usize,
-    head: usize,  // next write position
-    len: usize,   // number of valid entries (up to capacity)
+    head: usize, // next write position
+    len: usize,  // number of valid entries (up to capacity)
 }
 
 impl FrameCheckBuffer {

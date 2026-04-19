@@ -1,6 +1,6 @@
 // Find what exception triggered die() - trace S-mode traps
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = std::path::Path::new(".geometry_os/build/linux-6.14/vmlinux");
@@ -8,8 +8,13 @@ fn main() {
     let initramfs_path = std::path::Path::new(".geometry_os/fs/linux/rv32/initramfs.cpio.gz");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel, initramfs.as_deref(), 128, "console=ttyS0 earlycon=sbi loglevel=8").unwrap();
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel,
+        initramfs.as_deref(),
+        128,
+        "console=ttyS0 earlycon=sbi loglevel=8",
+    )
+    .unwrap();
 
     let mut count: u64 = 0;
     let max: u64 = 400_000;

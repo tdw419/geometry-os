@@ -1,6 +1,6 @@
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -9,9 +9,8 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_image, initramfs.as_deref(), 512, bootargs,
-    ).unwrap();
+    let (mut vm, fw_addr, _entry, _dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 512, bootargs).unwrap();
 
     let fw_addr_u32 = fw_addr as u32;
     let max_count: u64 = 10_000_000;
@@ -29,13 +28,18 @@ fn main() {
     let mut loop_detect: u64 = 0;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // Detect PC loop (same PC for 100+ consecutive instructions)
         if vm.cpu.pc == prev_pc {
             same_pc_count += 1;
             if same_pc_count == 100 && loop_detect == 0 {
-                eprintln!("[loop] Stuck at PC=0x{:08X} for 100+ instructions at count={}", vm.cpu.pc, count);
+                eprintln!(
+                    "[loop] Stuck at PC=0x{:08X} for 100+ instructions at count={}",
+                    vm.cpu.pc, count
+                );
                 loop_detect += 1;
             }
         } else {
@@ -52,11 +56,21 @@ fn main() {
                     ecall_s_count += 1;
                     sbi_count += 1;
                     let result = vm.bus.sbi.handle_ecall(
-                        vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint,
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
                     );
-                    if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                    if let Some((a0, a1)) = result {
+                        vm.cpu.x[10] = a0;
+                        vm.cpu.x[11] = a1;
+                    }
                 }
                 12 => fetch_fault_count += 1,
                 13 => load_fault_count += 1,
@@ -73,7 +87,10 @@ fn main() {
         // Track stvec changes
         let cur_stvec = vm.cpu.csr.stvec & !3;
         if cur_stvec != last_stvec && cur_stvec != 0 && count > 1000 {
-            eprintln!("[stvec] Changed to 0x{:08X} at count={} (prev=0x{:08X})", cur_stvec, count, last_stvec);
+            eprintln!(
+                "[stvec] Changed to 0x{:08X} at count={} (prev=0x{:08X})",
+                cur_stvec, count, last_stvec
+            );
             last_stvec = cur_stvec;
         }
 

@@ -1,8 +1,8 @@
 //! Check kernel page table entries for DTB VA access after setup_vm.
 //! cargo run --example check_dtb_pt
 
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{Privilege, StepResult};
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -12,13 +12,13 @@ fn main() {
         .exists()
         .then(|| std::fs::read(ir_path).unwrap());
 
-    let (mut vm, fw_addr, _entry, dtb_addr) =
-        RiscvVm::boot_linux_setup(
-            &kernel_data,
-            initramfs_data.as_deref(),
-            512,
-            "console=ttyS0 earlycon=sbi",
-        ).expect("setup failed");
+    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_data,
+        initramfs_data.as_deref(),
+        512,
+        "console=ttyS0 earlycon=sbi",
+    )
+    .expect("setup failed");
 
     let fw_u32 = fw_addr as u32;
     let dtb_va: u32 = dtb_addr.wrapping_add(0xC0000000) as u32;
@@ -74,7 +74,10 @@ fn main() {
 
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[{}] SATP: 0x{:08X} -> 0x{:08X}", count, last_satp, cur_satp);
+            eprintln!(
+                "[{}] SATP: 0x{:08X} -> 0x{:08X}",
+                count, last_satp, cur_satp
+            );
             last_satp = cur_satp;
         }
         count += 1;
@@ -84,7 +87,10 @@ fn main() {
     let satap = vm.cpu.csr.satp;
     let pg_dir_ppn = (satap & 0x3FFFFF) as u64;
     let pg_dir_phys = pg_dir_ppn * 4096;
-    eprintln!("\nFinal SATP: 0x{:08X}, pg_dir at PA 0x{:08X}", satap, pg_dir_phys);
+    eprintln!(
+        "\nFinal SATP: 0x{:08X}, pg_dir at PA 0x{:08X}",
+        satap, pg_dir_phys
+    );
 
     // Check L1[773] for DTB VA range
     let dtb_vpn1 = ((dtb_va >> 22) & 0x3FF) as u64; // should be 773
@@ -106,7 +112,12 @@ fn main() {
         eprintln!("  L2[{}] = 0x{:08X}", dtb_vpn0, l2_entry);
         let l2_ppn = (l2_entry >> 10) & 0x3FFFFF;
         let l2_valid = (l2_entry & 1) != 0;
-        eprintln!("  valid={} ppn=0x{:08X} -> PA=0x{:08X}", l2_valid, l2_ppn, l2_ppn << 12);
+        eprintln!(
+            "  valid={} ppn=0x{:08X} -> PA=0x{:08X}",
+            l2_valid,
+            l2_ppn,
+            l2_ppn << 12
+        );
     } else if is_valid && is_leaf {
         // Megapage
         eprintln!("  Megapage -> PA 0x{:08X}", ppn << 22);
@@ -131,7 +142,10 @@ fn main() {
     let mem_cnt = vm.bus.read_word(mb + 8).unwrap_or(0);
     let res_cnt = vm.bus.read_word(mb + 28).unwrap_or(0);
     let prb = vm.bus.read_word(0x00C79EAC).unwrap_or(0);
-    eprintln!("memblock: memory.cnt={} reserved.cnt={} phys_ram_base=0x{:08X}", mem_cnt, res_cnt, prb);
+    eprintln!(
+        "memblock: memory.cnt={} reserved.cnt={} phys_ram_base=0x{:08X}",
+        mem_cnt, res_cnt, prb
+    );
 
     // Check initial_boot_params
     let ibp = vm.bus.read_word(0x00C7A178).unwrap_or(0);

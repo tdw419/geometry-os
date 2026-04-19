@@ -7,11 +7,16 @@ fn main() {
     let initramfs_path = std::path::Path::new(".geometry_os/fs/linux/rv32/initramfs.cpio.gz");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel, initramfs.as_deref(), 128, "console=ttyS0 earlycon=sbi loglevel=8").unwrap();
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel,
+        initramfs.as_deref(),
+        128,
+        "console=ttyS0 earlycon=sbi loglevel=8",
+    )
+    .unwrap();
 
     println!("low_addr_identity_map = {}", vm.bus.low_addr_identity_map);
-    
+
     let mut count: u64 = 0;
     let max: u64 = 250_000;
     let mut prev_log_len = 0usize;
@@ -19,7 +24,7 @@ fn main() {
     while count < max {
         let _result = vm.step();
         count += 1;
-        
+
         // Check MMU log for identity map events
         let log_len = vm.bus.mmu_log.len();
         if log_len > prev_log_len {
@@ -44,6 +49,6 @@ fn main() {
             prev_log_len = log_len;
         }
     }
-    
+
     println!("[done] {} instr, PC=0x{:08X}", count, vm.cpu.pc);
 }

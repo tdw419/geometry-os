@@ -333,8 +333,13 @@ impl RiscvVm {
         // Instead, we protect these addresses at the bus level: writes are silently
         // dropped, and reads always return the correct values.
         vm.bus.protected_addrs.push((dtb_early_va_pa, dtb_va));
-        vm.bus.protected_addrs.push((dtb_early_pa_pa, dtb_addr as u32));
-        eprintln!("[boot] Protected DTB pointers at PA 0x{:08X} and 0x{:08X}", dtb_early_va_pa, dtb_early_pa_pa);
+        vm.bus
+            .protected_addrs
+            .push((dtb_early_pa_pa, dtb_addr as u32));
+        eprintln!(
+            "[boot] Protected DTB pointers at PA 0x{:08X} and 0x{:08X}",
+            dtb_early_va_pa, dtb_early_pa_pa
+        );
 
         // Also set initial_boot_params for compatibility (some kernel paths
         // read it directly).
@@ -621,7 +626,10 @@ impl RiscvVm {
         let dtb_virt_addr: u32 = dtb_addr.wrapping_add(0xC0000000) as u32;
         vm.bus.write_word(ibp_pa, dtb_phys_addr).ok(); // initial_boot_params = DTB PA
         vm.bus.write_word(ibp_pa_pa, dtb_phys_addr).ok(); // initial_boot_params_pa = DTB PA
-        eprintln!("[boot] Pre-set initial_boot_params=0x{:08X} (DTB at PA 0x{:08X})", dtb_phys_addr, dtb_phys_addr);
+        eprintln!(
+            "[boot] Pre-set initial_boot_params=0x{:08X} (DTB at PA 0x{:08X})",
+            dtb_phys_addr, dtb_phys_addr
+        );
         // Protect IBP immediately from kernel BSS clearing.
         vm.bus.protected_addrs.push((ibp_pa, dtb_phys_addr));
         vm.bus.protected_addrs.push((ibp_pa_pa, dtb_phys_addr));
@@ -749,14 +757,20 @@ impl RiscvVm {
         let mut _last_unique_pc: u32 = 0;
         let mut _same_pc_count: u64 = 0;
         let mut _trampoline_patched: bool = true; // Boot page table already provides initial mapping
-    let mut _panic_breakpoint: bool = false;
-    let mut _last_satp: u32 = vm.cpu.csr.satp; // Already set by setup
-    let mut kernel_map_protected: bool = false;
+        let mut _panic_breakpoint: bool = false;
+        let mut _last_satp: u32 = vm.cpu.csr.satp; // Already set by setup
+        let mut kernel_map_protected: bool = false;
         let dtb_early_va_expected: u32 = (dtb_addr.wrapping_add(0xC0000000)) as u32;
         let dtb_early_pa_expected: u32 = dtb_addr as u32;
         let dtb_early_va_pa: u64 = 0x00801008;
         let dtb_early_pa_pa: u64 = 0x0080100C;
         let mut _dtb_watchdog_triggers: u32 = 0;
+
+        // Memblock corruption tracker: snapshot the first 8 memblock regions
+        // and detect when they change from what we pre-populated.
+        let memblock_regions_pa: u64 = 0x0080348C; // memblock_memory_init_regions
+        let mut _last_memblock_snapshot: Vec<(u32, u32)> = Vec::new();
+        let mut _memblock_corruption_logged: bool = false;
         while count < max_instructions {
             // Check for SBI shutdown request
             if vm.bus.sbi.shutdown_requested {
@@ -798,6 +812,62 @@ impl RiscvVm {
                     );
                     _dtb_watchdog_triggers = 0;
                 }
+            }
+
+            // Memblock corruption tracker: check every 1K instructions in the danger zone.
+            // Snapshot first 8 memory regions and log when they change.
+            let check_interval = if count > 170_000 && count < 250_000 {
+                1_000
+            } else {
+                50_000
+            };
+            if count % check_interval == 0 && count > 0 && count < 500_000 {
+                let mem_cnt_addr: u64 = 0x00803450; // memblock.memory.cnt at offset 8 from memblock base 0x00803448
+                let mem_cnt = vm.bus.read_word(mem_cnt_addr).unwrap_or(0);
+                let mut snapshot: Vec<(u32, u32)> = Vec::new();
+                for ri in 0..mem_cnt.min(8) {
+                    let base = vm
+                        .bus
+                        .read_word(memblock_regions_pa + (ri as u64) * 8)
+                        .unwrap_or(0);
+                    let size = vm
+                        .bus
+                        .read_word(memblock_regions_pa + (ri as u64) * 8 + 4)
+                        .unwrap_or(0);
+                    snapshot.push((base, size));
+                }
+                if !_last_memblock_snapshot.is_empty() && snapshot != _last_memblock_snapshot {
+                    eprintln!(
+                        "[boot] MEMBLOCK CHANGED at count={} memory.cnt={}",
+                        count, mem_cnt
+                    );
+                    for ri in 0..snapshot.len().min(8) {
+                        let (b, s) = snapshot[ri];
+                        let (ob, os) = if ri < _last_memblock_snapshot.len() {
+                            _last_memblock_snapshot[ri]
+                        } else {
+                            (0, 0)
+                        };
+                        if b != ob || s != os {
+                            eprintln!("[boot]   memory[{}]: was base=0x{:08X} size=0x{:08X} -> now base=0x{:08X} size=0x{:08X}",
+                                ri, ob, os, b, s);
+                        }
+                    }
+                    // Log the first 20 instructions after change
+                    eprintln!(
+                        "[boot]   PC=0x{:08X} priv={:?} satp=0x{:08X}",
+                        vm.cpu.pc, vm.cpu.privilege, vm.cpu.csr.satp
+                    );
+                    // If memory[0] size went from 0x20000000 to something else, mark as corrupted
+                    if !snapshot.is_empty()
+                        && snapshot[0].1 != 0x20000000
+                        && _last_memblock_snapshot[0].1 == 0x20000000
+                    {
+                        _memblock_corruption_logged = true;
+                        eprintln!("[boot]   *** MEMORY[0] SIZE CORRUPTED: was 0x20000000 now 0x{:08X} ***", snapshot[0].1);
+                    }
+                }
+                _last_memblock_snapshot = snapshot;
             }
 
             // On SATP change, inject identity mappings for device regions.
@@ -941,7 +1011,8 @@ impl RiscvVm {
                                 vm.bus.write_word(l1_addr, fixup_pte).ok();
                                 eprintln!(
                                     "[boot] Added DTB L1 megapage: [{}] -> PA 0x{:08X}",
-                                    dtb_vpn1, (dtb_l1_offset as u64) << 22
+                                    dtb_vpn1,
+                                    (dtb_l1_offset as u64) << 22
                                 );
                             }
                             vm.cpu.tlb.flush_all();
@@ -988,7 +1059,9 @@ impl RiscvVm {
                             // Protect lpj_fine
                             vm.bus.protected_addrs.push((0x01482060, 400_000));
                             kernel_map_protected = true;
-                            eprintln!("[boot] Protected kernel_map and phys_ram_base from future writes");
+                            eprintln!(
+                                "[boot] Protected kernel_map and phys_ram_base from future writes"
+                            );
                         }
 
                         // Re-set _dtb_early_va and _dtb_early_pa.
@@ -1230,6 +1303,9 @@ impl RiscvVm {
             vm.bus.tick_clint_n(100);
             vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
+            // Update bus PC tracker for memblock write logging
+            vm.bus.current_pc = vm.cpu.pc;
+
             let step_result = vm.step();
 
             // Breakpoint: capture state when panic() is first entered
@@ -1439,12 +1515,36 @@ impl RiscvVm {
             "[boot] Post-boot: memblock memory.cnt={} reserved.cnt={}",
             mem_cnt, res_cnt
         );
+        // Dump memblock write log
+        if !vm.bus.memblock_write_log.is_empty() {
+            eprintln!(
+                "[boot] Memblock regions write log ({} writes):",
+                vm.bus.memblock_write_log.len()
+            );
+            for (i, (encoded, val)) in vm.bus.memblock_write_log.iter().enumerate() {
+                let pc = (encoded >> 32) as u32;
+                let addr = (encoded & 0xFFFFFFFF) as u64;
+                let offset = addr - 0x0080348Cu64;
+                let region_idx = offset / 8;
+                let field = if offset % 8 < 4 { "base" } else { "size" };
+                eprintln!(
+                    "[boot]   write #{}: PC=0x{:08X} PA=0x{:08X} val=0x{:08X} (region[{}] {})",
+                    i, pc, addr, val, region_idx, field
+                );
+            }
+        }
         if mem_cnt > 0 && mem_regions_ptr >= 0xC0000000 {
             let mr_pa = (mem_regions_ptr - 0xC0000000) as u64;
             for ri in 0..mem_cnt.min(4) {
                 let base = vm.bus.read_word(mr_pa + (ri * 8) as u64).unwrap_or(0);
                 let size = vm.bus.read_word(mr_pa + (ri * 8 + 4) as u64).unwrap_or(0);
-                eprintln!("[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)", ri, base, size, size / (1024 * 1024));
+                eprintln!(
+                    "[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)",
+                    ri,
+                    base,
+                    size,
+                    size / (1024 * 1024)
+                );
             }
         }
         for (i, c) in _trap_counts.iter().enumerate() {

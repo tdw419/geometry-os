@@ -1,6 +1,6 @@
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -9,9 +9,8 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_image, initramfs.as_deref(), 128, bootargs,
-    ).unwrap();
+    let (mut vm, fw_addr, _entry, dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 128, bootargs).unwrap();
 
     let fw_addr_u32 = fw_addr as u32;
     let max_count: u64 = 5_000_000;
@@ -26,7 +25,9 @@ fn main() {
     let mut dtb_watchdog_triggers: u32 = 0;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // DTB pointer watchdog
         if count % 100 == 0 {
@@ -50,8 +51,10 @@ fn main() {
             let cur_satp = vm.cpu.csr.satp;
             if cur_satp != last_satp {
                 satp_changes += 1;
-                eprintln!("[satp] #{} at count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
-                    satp_changes, count, last_satp, cur_satp, vm.cpu.pc);
+                eprintln!(
+                    "[satp] #{} at count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
+                    satp_changes, count, last_satp, cur_satp, vm.cpu.pc
+                );
                 let mode = (cur_satp >> 31) & 1;
                 if mode == 1 {
                     let ppn = cur_satp & 0x3FFFFF;
@@ -80,13 +83,18 @@ fn main() {
                         let is_non_leaf = is_valid && (entry & 0xE) == 0;
                         let ppn = (entry >> 10) & 0x3FFFFF;
                         let needs_fix = !is_valid || (is_non_leaf && ppn == 0);
-                        if !needs_fix { continue; }
+                        if !needs_fix {
+                            continue;
+                        }
                         fixup_count += 1;
                         let pa_offset = l1_scan - 768;
                         let fixup_pte = mega_flags | (pa_offset << 20);
                         vm.bus.write_word(scan_addr, fixup_pte).ok();
                         if fixup_count <= 10 {
-                            eprintln!("[fixup] L1[{}] 0x{:08X} -> 0x{:08X}", l1_scan, entry, fixup_pte);
+                            eprintln!(
+                                "[fixup] L1[{}] 0x{:08X} -> 0x{:08X}",
+                                l1_scan, entry, fixup_pte
+                            );
                         }
                     }
                     if fixup_count > 0 {
@@ -119,20 +127,40 @@ fn main() {
                     // ECALL_S = SBI call
                     ecall_s_count += 1;
                     let result = vm.bus.sbi.handle_ecall(
-                        vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint,
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
                     );
-                    if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                    if let Some((a0, a1)) = result {
+                        vm.cpu.x[10] = a0;
+                        vm.cpu.x[11] = a1;
+                    }
                 }
                 11 => {
                     // ECALL_M
                     let result = vm.bus.sbi.handle_ecall(
-                        vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                        vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                        &mut vm.bus.uart, &mut vm.bus.clint,
+                        vm.cpu.x[17],
+                        vm.cpu.x[16],
+                        vm.cpu.x[10],
+                        vm.cpu.x[11],
+                        vm.cpu.x[12],
+                        vm.cpu.x[13],
+                        vm.cpu.x[14],
+                        vm.cpu.x[15],
+                        &mut vm.bus.uart,
+                        &mut vm.bus.clint,
                     );
-                    if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                    if let Some((a0, a1)) = result {
+                        vm.cpu.x[10] = a0;
+                        vm.cpu.x[11] = a1;
+                    }
                 }
                 _ => {
                     // Forward non-SBI traps from S/U mode to S-mode handler
@@ -170,8 +198,14 @@ fn main() {
         if (0xC000252E..=0xC00027A0).contains(&vm.cpu.pc) && !panic_detected && count > 100_000 {
             panic_detected = true;
             panic_ra = vm.cpu.x[1]; // RA = caller of panic
-            eprintln!("\n!!! PANIC at count={} PC=0x{:08X} RA=0x{:08X} !!!", count, vm.cpu.pc, panic_ra);
-            eprintln!("    SP=0x{:08X} GP=0x{:08X} TP=0x{:08X}", vm.cpu.x[2], vm.cpu.x[3], vm.cpu.x[4]);
+            eprintln!(
+                "\n!!! PANIC at count={} PC=0x{:08X} RA=0x{:08X} !!!",
+                count, vm.cpu.pc, panic_ra
+            );
+            eprintln!(
+                "    SP=0x{:08X} GP=0x{:08X} TP=0x{:08X}",
+                vm.cpu.x[2], vm.cpu.x[3], vm.cpu.x[4]
+            );
             eprintln!("    S2=0x{:08X} S3=0x{:08X}", vm.cpu.x[18], vm.cpu.x[19]);
 
             // Read panic message from s2 (saved a0 = format string)
@@ -181,9 +215,13 @@ fn main() {
                 let mut msg = Vec::new();
                 for i in 0..200u64 {
                     if let Ok(b) = vm.bus.read_byte(pa + i) {
-                        if b == 0 { break; }
+                        if b == 0 {
+                            break;
+                        }
                         msg.push(b);
-                    } else { break; }
+                    } else {
+                        break;
+                    }
                 }
                 if let Ok(s) = String::from_utf8(msg) {
                     eprintln!("    PANIC MSG (s2): '{}'", s);
@@ -219,7 +257,10 @@ fn main() {
                         bytes.push(b);
                     }
                 }
-                eprintln!("    Caller bytes at PA 0x{:08X}: {:02X?}", caller_pa, &bytes);
+                eprintln!(
+                    "    Caller bytes at PA 0x{:08X}: {:02X?}",
+                    caller_pa, &bytes
+                );
 
                 // Also read a few instructions before the call to find the panic string setup
                 for i in (0..20).rev() {
@@ -244,7 +285,10 @@ fn main() {
             let memblock_pa: u64 = 0x00803448;
             let mem_cnt = vm.bus.read_word(memblock_pa + 8).unwrap_or(0);
             let res_cnt = vm.bus.read_word(memblock_pa + 28).unwrap_or(0);
-            eprintln!("    memblock: memory.cnt={} reserved.cnt={}", mem_cnt, res_cnt);
+            eprintln!(
+                "    memblock: memory.cnt={} reserved.cnt={}",
+                mem_cnt, res_cnt
+            );
             let prb = vm.bus.read_word(0x00C7A0B4u64).unwrap_or(0);
             eprintln!("    phys_ram_base=0x{:08X}", prb);
 
@@ -258,8 +302,13 @@ fn main() {
                 Privilege::Supervisor => "S",
                 Privilege::User => "U",
             };
-            eprintln!("[{}M] PC=0x{:08X} SBI={} priv={}",
-                count / 1_000_000, vm.cpu.pc, ecall_s_count, priv_str);
+            eprintln!(
+                "[{}M] PC=0x{:08X} SBI={} priv={}",
+                count / 1_000_000,
+                vm.cpu.pc,
+                ecall_s_count,
+                priv_str
+            );
         }
     }
 

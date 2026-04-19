@@ -1,8 +1,8 @@
 //! Check page table entries for DTB access and initial_boot_params state.
 //! cargo run --example check_pt_dtb
 
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -12,13 +12,13 @@ fn main() {
         .exists()
         .then(|| std::fs::read(ir_path).unwrap());
 
-    let (mut vm, fw_addr, entry, dtb_addr) =
-        RiscvVm::boot_linux_setup(
-            &kernel_data,
-            initramfs_data.as_deref(),
-            512,
-            "console=ttyS0 earlycon=sbi",
-        ).expect("setup failed");
+    let (mut vm, fw_addr, entry, dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_data,
+        initramfs_data.as_deref(),
+        512,
+        "console=ttyS0 earlycon=sbi",
+    )
+    .expect("setup failed");
 
     eprintln!("Entry: 0x{:08X}, DTB: 0x{:08X}", entry, dtb_addr);
 
@@ -35,13 +35,17 @@ fn main() {
 
     while count < max {
         // Trap handling (simplified from boot_linux)
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
 
-            if cause_code != 11 { // Not ECALL_M
+            if cause_code != 11 {
+                // Not ECALL_M
                 let mpp = (vm.cpu.csr.mstatus >> 11) & 3;
-                if mpp != 3 { // From S-mode or U-mode
+                if mpp != 3 {
+                    // From S-mode or U-mode
                     let stvec = vm.cpu.csr.stvec & !0x3u32;
                     if stvec != 0 {
                         vm.cpu.csr.sepc = vm.cpu.csr.mepc;
@@ -69,7 +73,10 @@ fn main() {
                             let pte: u32 = 0x0000_00CF | ((vpn1 as u32) << 20);
                             vm.bus.write_word(l1_addr, pte).ok();
                             vm.cpu.tlb.flush_all();
-                            eprintln!("[diag] On-demand identity map: L1[{}] for fault VA=0x{:08X}", vpn1, fault_addr);
+                            eprintln!(
+                                "[diag] On-demand identity map: L1[{}] for fault VA=0x{:08X}",
+                                vpn1, fault_addr
+                            );
                         }
                     }
                 }
@@ -84,7 +91,10 @@ fn main() {
         // Check SATP changes
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[diag] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!(
+                "[diag] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
 
             // Check initial_boot_params after SATP change
             let ibp = vm.bus.read_word(0x00C7A178).unwrap_or(0);
@@ -117,8 +127,15 @@ fn main() {
             // Check _dtb_early_va
             let deva = vm.bus.read_word(0x00801008).unwrap_or(0);
             let depa = vm.bus.read_word(0x0080100C).unwrap_or(0);
-            eprintln!("[diag]   _dtb_early_va: 0x{:08X} (expect 0x{:08X})", deva, dtb_addr.wrapping_add(0xC0000000));
-            eprintln!("[diag]   _dtb_early_pa: 0x{:08X} (expect 0x{:08X})", depa, dtb_addr);
+            eprintln!(
+                "[diag]   _dtb_early_va: 0x{:08X} (expect 0x{:08X})",
+                deva,
+                dtb_addr.wrapping_add(0xC0000000)
+            );
+            eprintln!(
+                "[diag]   _dtb_early_pa: 0x{:08X} (expect 0x{:08X})",
+                depa, dtb_addr
+            );
 
             // Check phys_ram_base
             let prb = vm.bus.read_word(0x00C79EAC).unwrap_or(0);
@@ -160,7 +177,9 @@ fn main() {
         }
 
         // Same trap handling
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             if cause_code != 11 {

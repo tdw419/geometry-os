@@ -40,7 +40,10 @@ fn main() {
     try_boot("Test 1: nosmp", "console=ttyS0 earlycon=sbi panic=1 nosmp");
 
     // Test 2: maxcpus=1
-    try_boot("Test 2: maxcpus=1", "console=ttyS0 earlycon=sbi panic=1 maxcpus=1");
+    try_boot(
+        "Test 2: maxcpus=1",
+        "console=ttyS0 earlycon=sbi panic=1 maxcpus=1",
+    );
 
     // Test 3: nosmp + nosoftlockup (disable watchdog that might kill idle)
     try_boot(

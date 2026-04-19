@@ -88,7 +88,7 @@ fn main() {
                     };
                     let cur_val = vm.bus.read_word(mepc_pa as u64).unwrap_or(0);
                     eprintln!("[ILLEGAL] count={} mepc=0x{:08X} PA=0x{:08X} orig=0x{:08X} cur=0x{:08X} {}",
-                        count, mepc, mepc_pa, 
+                        count, mepc, mepc_pa,
                         if mepc_pa == 0x30018 { orig_3018 } else { orig_D338 },
                         cur_val,
                         if cur_val == 0 { "ZERO (corrupted!)" } else { "OK" });

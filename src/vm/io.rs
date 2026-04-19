@@ -1,5 +1,5 @@
-use super::types::*;
 use super::trace::*;
+use super::types::*;
 use super::Vm;
 
 impl Vm {

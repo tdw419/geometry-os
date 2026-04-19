@@ -59,7 +59,10 @@ fn main() {
                     vm.bus.write_word(km_phys + 12, 0x00000000).ok();
                     vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
                     vm.bus.write_word(km_phys + 24, 0x00000000).ok();
-                    eprintln!("[boot] SATP changed to 0x{:08X} at count={}", cur_satp, count);
+                    eprintln!(
+                        "[boot] SATP changed to 0x{:08X} at count={}",
+                        cur_satp, count
+                    );
                 }
                 last_satp = cur_satp;
             }
@@ -86,9 +89,16 @@ fn main() {
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 8;
             if cause_code == 9 && mpp != 3 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -137,7 +147,10 @@ fn main() {
 
     // max_mapnr at VA 0xC148247C = PA 0x0148247C
     let max_mapnr = vm.bus.read_word(0x0148247C).unwrap_or(0);
-    eprintln!("max_mapnr (PA 0x0148247C) = 0x{:08X} ({})", max_mapnr, max_mapnr);
+    eprintln!(
+        "max_mapnr (PA 0x0148247C) = 0x{:08X} ({})",
+        max_mapnr, max_mapnr
+    );
 
     // mem_map at VA 0xC1482478 = PA 0x01482478
     let mem_map = vm.bus.read_word(0x01482478).unwrap_or(0);

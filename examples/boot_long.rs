@@ -1,6 +1,6 @@
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     // Suppress boot.rs eprintln by redirecting
@@ -10,9 +10,8 @@ fn main() {
     let initramfs = fs::read(initramfs_path).ok();
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
-    let (mut vm, fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
-        &kernel_image, initramfs.as_deref(), 512, bootargs,
-    ).unwrap();
+    let (mut vm, fw_addr, _entry, _dtb_addr) =
+        RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 512, bootargs).unwrap();
 
     let fw_addr_u32 = fw_addr as u32;
     let max_count: u64 = 50_000_000; // 50M instructions
@@ -26,7 +25,9 @@ fn main() {
     let start = std::time::Instant::now();
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let mcause = vm.cpu.csr.mcause;
@@ -34,11 +35,21 @@ fn main() {
             if cause_code == 9 {
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
-                if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                if let Some((a0, a1)) = result {
+                    vm.cpu.x[10] = a0;
+                    vm.cpu.x[11] = a1;
+                }
             }
             vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
         }
@@ -51,7 +62,10 @@ fn main() {
         if vm.cpu.pc == prev_pc {
             same_pc_count += 1;
             if same_pc_count == 1000 && !reported_loops.contains(&vm.cpu.pc) {
-                eprintln!("[LOOP] Stuck at PC=0x{:08X} for 1000+ instructions at count={}", vm.cpu.pc, count);
+                eprintln!(
+                    "[LOOP] Stuck at PC=0x{:08X} for 1000+ instructions at count={}",
+                    vm.cpu.pc, count
+                );
                 reported_loops.insert(vm.cpu.pc);
             }
         } else {
@@ -63,9 +77,20 @@ fn main() {
         if count == next_report {
             let elapsed = start.elapsed();
             let ips = count as f64 / elapsed.as_secs_f64();
-            let progress = if vm.cpu.pc != prev_report_pc { "NEW" } else { "SAME" };
-            eprintln!("[{}M] PC=0x{:08X} SBI={} elapsed={:.1}s ips={:.0} {}",
-                count / 1_000_000, vm.cpu.pc, sbi_count, elapsed.as_secs_f64(), ips, progress);
+            let progress = if vm.cpu.pc != prev_report_pc {
+                "NEW"
+            } else {
+                "SAME"
+            };
+            eprintln!(
+                "[{}M] PC=0x{:08X} SBI={} elapsed={:.1}s ips={:.0} {}",
+                count / 1_000_000,
+                vm.cpu.pc,
+                sbi_count,
+                elapsed.as_secs_f64(),
+                ips,
+                progress
+            );
             prev_report_pc = vm.cpu.pc;
             next_report += 5_000_000;
         }

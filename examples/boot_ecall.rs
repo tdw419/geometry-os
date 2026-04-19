@@ -1,6 +1,6 @@
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -20,7 +20,9 @@ fn main() {
     let mut dtb_early_va_expected: u32 = (dtb_addr.wrapping_add(0xC0000000)) as u32;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // DTB pointer watchdog
         if count % 100 == 0 {
@@ -39,8 +41,10 @@ fn main() {
             let cur_satp = vm.cpu.csr.satp;
             if cur_satp != last_satp {
                 satp_changes += 1;
-                eprintln!("[satp] #{} at count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
-                    satp_changes, count, last_satp, cur_satp, vm.cpu.pc);
+                eprintln!(
+                    "[satp] #{} at count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
+                    satp_changes, count, last_satp, cur_satp, vm.cpu.pc
+                );
                 let mode = (cur_satp >> 31) & 1;
                 if mode == 1 {
                     let ppn = cur_satp & 0x3FFFFF;
@@ -64,7 +68,9 @@ fn main() {
                         let is_non_leaf = is_valid && (entry & 0xE) == 0;
                         let ppn = (entry >> 10) & 0x3FFFFF;
                         let needs_fix = !is_valid || (is_non_leaf && ppn == 0);
-                        if !needs_fix { continue; }
+                        if !needs_fix {
+                            continue;
+                        }
                         let pa_offset = l1_scan - 768;
                         let fixup_pte = mega_flags | (pa_offset << 20);
                         vm.bus.write_word(scan_addr, fixup_pte).ok();
@@ -138,16 +144,23 @@ fn main() {
         // Detect panic entry
         if vm.cpu.pc == 0xC000252E && count > 200_000 {
             eprintln!("\n!!! PANIC at count={} !!!", count);
-            eprintln!("    RA=0x{:08X} A0=0x{:08X} total_ecalls={}", vm.cpu.x[1], vm.cpu.x[10], vm.cpu.ecall_count);
+            eprintln!(
+                "    RA=0x{:08X} A0=0x{:08X} total_ecalls={}",
+                vm.cpu.x[1], vm.cpu.x[10], vm.cpu.ecall_count
+            );
             let fmt = vm.cpu.x[10];
             if fmt > 0xC0000000 && fmt < 0xC2000000 {
                 let pa = (fmt - 0xC0000000) as u64;
                 let mut msg = Vec::new();
                 for i in 0..200u64 {
                     if let Ok(b) = vm.bus.read_byte(pa + i) {
-                        if b == 0 { break; }
+                        if b == 0 {
+                            break;
+                        }
                         msg.push(b);
-                    } else { break; }
+                    } else {
+                        break;
+                    }
                 }
                 if let Ok(s) = String::from_utf8(msg) {
                     eprintln!("    PANIC MSG: '{}'", s);
@@ -158,13 +171,22 @@ fn main() {
 
         count += 1;
         if count % 100_000 == 0 && count > 0 {
-            eprintln!("[{}K] PC=0x{:08X} ecall_count={} uart_tx={}",
-                count / 1000, vm.cpu.pc, vm.cpu.ecall_count, vm.bus.uart.tx_buf.len());
+            eprintln!(
+                "[{}K] PC=0x{:08X} ecall_count={} uart_tx={}",
+                count / 1000,
+                vm.cpu.pc,
+                vm.cpu.ecall_count,
+                vm.bus.uart.tx_buf.len()
+            );
         }
     }
 
-    eprintln!("\nTotal: {} instructions, {} ECALLs, uart_tx={}",
-        count, vm.cpu.ecall_count, vm.bus.uart.tx_buf.len());
+    eprintln!(
+        "\nTotal: {} instructions, {} ECALLs, uart_tx={}",
+        count,
+        vm.cpu.ecall_count,
+        vm.bus.uart.tx_buf.len()
+    );
     let tx = vm.bus.uart.drain_tx();
     eprintln!("UART: {} bytes", tx.len());
     if !tx.is_empty() {

@@ -1,6 +1,6 @@
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -29,7 +29,9 @@ fn main() {
     let mut seen_pcs: std::collections::HashSet<u32> = std::collections::HashSet::new();
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // DTB pointer watchdog
         if count % 100 == 0 {
@@ -48,8 +50,10 @@ fn main() {
             let cur_satp = vm.cpu.csr.satp;
             if cur_satp != last_satp {
                 satp_changes += 1;
-                eprintln!("[satp] #{} at count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
-                    satp_changes, count, last_satp, cur_satp, vm.cpu.pc);
+                eprintln!(
+                    "[satp] #{} at count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
+                    satp_changes, count, last_satp, cur_satp, vm.cpu.pc
+                );
                 let mode = (cur_satp >> 31) & 1;
                 if mode == 1 {
                     let ppn = cur_satp & 0x3FFFFF;
@@ -73,7 +77,9 @@ fn main() {
                         let is_non_leaf = is_valid && (entry & 0xE) == 0;
                         let ppn = (entry >> 10) & 0x3FFFFF;
                         let needs_fix = !is_valid || (is_non_leaf && ppn == 0);
-                        if !needs_fix { continue; }
+                        if !needs_fix {
+                            continue;
+                        }
                         let pa_offset = l1_scan - 768;
                         let fixup_pte = mega_flags | (pa_offset << 20);
                         vm.bus.write_word(scan_addr, fixup_pte).ok();
@@ -107,21 +113,41 @@ fn main() {
                         // ECALL_S = SBI call
                         sbi_count += 1;
                         let result = vm.bus.sbi.handle_ecall(
-                            vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                            vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                            &mut vm.bus.uart, &mut vm.bus.clint,
+                            vm.cpu.x[17],
+                            vm.cpu.x[16],
+                            vm.cpu.x[10],
+                            vm.cpu.x[11],
+                            vm.cpu.x[12],
+                            vm.cpu.x[13],
+                            vm.cpu.x[14],
+                            vm.cpu.x[15],
+                            &mut vm.bus.uart,
+                            &mut vm.bus.clint,
                         );
-                        if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                        if let Some((a0, a1)) = result {
+                            vm.cpu.x[10] = a0;
+                            vm.cpu.x[11] = a1;
+                        }
                     }
                     11 => {
                         // ECALL_M
                         ecall_m_count += 1;
                         let result = vm.bus.sbi.handle_ecall(
-                            vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                            vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                            &mut vm.bus.uart, &mut vm.bus.clint,
+                            vm.cpu.x[17],
+                            vm.cpu.x[16],
+                            vm.cpu.x[10],
+                            vm.cpu.x[11],
+                            vm.cpu.x[12],
+                            vm.cpu.x[13],
+                            vm.cpu.x[14],
+                            vm.cpu.x[15],
+                            &mut vm.bus.uart,
+                            &mut vm.bus.clint,
                         );
-                        if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                        if let Some((a0, a1)) = result {
+                            vm.cpu.x[10] = a0;
+                            vm.cpu.x[11] = a1;
+                        }
                     }
                     _ => {
                         // Forward traps from S/U to S-mode
@@ -179,8 +205,15 @@ fn main() {
                 Privilege::Supervisor => "S",
                 Privilege::User => "U",
             };
-            eprintln!("[{}K] PC=0x{:08X} SBI={} ecall_m={} fwd={} priv={}",
-                count / 1000, pc, sbi_count, ecall_m_count, forward_count, priv_str);
+            eprintln!(
+                "[{}K] PC=0x{:08X} SBI={} ecall_m={} fwd={} priv={}",
+                count / 1000,
+                pc,
+                sbi_count,
+                ecall_m_count,
+                forward_count,
+                priv_str
+            );
         }
 
         count += 1;
@@ -192,8 +225,10 @@ fn main() {
         eprintln!("  count={}: PC=0x{:08X} priv={}", c, p, pr);
     }
 
-    eprintln!("\nTotal: {} instructions, {} unique PCs, {} SBI calls, {} ECALL_M, {} forwards",
-        count, unique_pcs, sbi_count, ecall_m_count, forward_count);
+    eprintln!(
+        "\nTotal: {} instructions, {} unique PCs, {} SBI calls, {} ECALL_M, {} forwards",
+        count, unique_pcs, sbi_count, ecall_m_count, forward_count
+    );
 
     // Check what the final PC is
     eprintln!("Final: PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);

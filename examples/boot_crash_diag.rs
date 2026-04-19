@@ -1,7 +1,7 @@
 // Targeted diagnostic: capture register state around the pcpu_block_update_hint_alloc crash
-use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::csr;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -89,8 +89,8 @@ fn main() {
                     vm.cpu.csr.scause = mcause;
                     vm.cpu.csr.stval = vm.cpu.csr.mtval;
                     let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                    vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP))
-                        | (spp << csr::MSTATUS_SPP);
+                    vm.cpu.csr.mstatus =
+                        (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPP)) | (spp << csr::MSTATUS_SPP);
                     let sie = (vm.cpu.csr.mstatus >> csr::MSTATUS_SIE) & 1;
                     vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << csr::MSTATUS_SPIE))
                         | (sie << csr::MSTATUS_SPIE);
@@ -110,7 +110,10 @@ fn main() {
 
         // Detect the crash: S-mode load fault
         if in_watch_zone {
-            if matches!(step_result, StepResult::LoadFault | StepResult::FetchFault | StepResult::StoreFault) {
+            if matches!(
+                step_result,
+                StepResult::LoadFault | StepResult::FetchFault | StepResult::StoreFault
+            ) {
                 if vm.cpu.privilege == Privilege::Supervisor {
                     eprintln!("\n[CRASH] S-mode fault at count={}", count);
                     eprintln!("  PC (fault handler): 0x{:08X}", vm.cpu.pc);
@@ -122,12 +125,9 @@ fn main() {
                     eprintln!("  SATP: 0x{:08X}", vm.cpu.csr.satp);
                     eprintln!("\n  Register dump:");
                     let names = [
-                        "zero", "ra", "sp", "gp", "tp",
-                        "t0", "t1", "t2", "s0", "s1",
-                        "a0", "a1", "a2", "a3", "a4", "a5",
-                        "a6", "a7", "s2", "s3", "s4", "s5",
-                        "s6", "s7", "t3", "t4", "t5", "t6",
-                        "t7", "??", "??", "??",
+                        "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1",
+                        "a2", "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
+                        "t3", "t4", "t5", "t6", "t7", "??", "??", "??",
                     ];
                     for i in 0..32 {
                         eprintln!("    x{:2} ({:>4}): 0x{:08X}", i, names[i], vm.cpu.x[i]);
@@ -152,7 +152,10 @@ fn main() {
         // Check for SATP changes
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[watch] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!(
+                "[watch] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
             last_satp = cur_satp;
         }
 

@@ -372,7 +372,7 @@ fn test_linux_kernel_early_boot() {
     let (mut vm, result) = RiscvVm::boot_linux(
         &kernel_data,
         initramfs_data.as_deref(),
-        512,       // 512MB RAM (kernel needs ~305MB)
+        512,        // 512MB RAM (kernel needs ~305MB)
         20_000_000, // 20M instructions (calibrate_delay needs more time)
         bootargs,
     )

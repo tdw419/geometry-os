@@ -20,8 +20,10 @@ fn main() {
     let magic = u32::from_be_bytes([dtb_bytes[0], dtb_bytes[1], dtb_bytes[2], dtb_bytes[3]]);
     let totalsize = u32::from_be_bytes([dtb_bytes[4], dtb_bytes[5], dtb_bytes[6], dtb_bytes[7]]);
     let off_struct = u32::from_be_bytes([dtb_bytes[8], dtb_bytes[9], dtb_bytes[10], dtb_bytes[11]]);
-    let off_strings = u32::from_be_bytes([dtb_bytes[12], dtb_bytes[13], dtb_bytes[14], dtb_bytes[15]]);
-    let off_rsvmap = u32::from_be_bytes([dtb_bytes[16], dtb_bytes[17], dtb_bytes[18], dtb_bytes[19]]);
+    let off_strings =
+        u32::from_be_bytes([dtb_bytes[12], dtb_bytes[13], dtb_bytes[14], dtb_bytes[15]]);
+    let off_rsvmap =
+        u32::from_be_bytes([dtb_bytes[16], dtb_bytes[17], dtb_bytes[18], dtb_bytes[19]]);
     let version = u32::from_be_bytes([dtb_bytes[20], dtb_bytes[21], dtb_bytes[22], dtb_bytes[23]]);
 
     eprintln!("DTB at PA 0x{:08X}:", dtb_addr);
@@ -46,8 +48,14 @@ fn main() {
     // Check _dtb_early_va protection
     let stored_va = vm.bus.read_word(0x00801008).unwrap_or(0);
     let stored_pa = vm.bus.read_word(0x0080100C).unwrap_or(0);
-    eprintln!("Stored _dtb_early_va = 0x{:08X} (expected 0x{:08X})", stored_va, dtb_va);
-    eprintln!("Stored _dtb_early_pa = 0x{:08X} (expected 0x{:08X})", stored_pa, dtb_addr as u32);
+    eprintln!(
+        "Stored _dtb_early_va = 0x{:08X} (expected 0x{:08X})",
+        stored_va, dtb_va
+    );
+    eprintln!(
+        "Stored _dtb_early_pa = 0x{:08X} (expected 0x{:08X})",
+        stored_pa, dtb_addr as u32
+    );
 
     // Check what the kernel would see at the DTB VA through the MMU
     // Read the first 4 bytes of DTB via VA (simulate kernel access)
@@ -56,7 +64,10 @@ fn main() {
     let satp = vm.cpu.csr.satp;
     let pg_dir_ppn = (satp & 0x3FFFFF) as u64;
     let pg_dir_phys = pg_dir_ppn * 4096;
-    eprintln!("\nActive SATP = 0x{:08X}, pg_dir at PA 0x{:08X}", satp, pg_dir_phys);
+    eprintln!(
+        "\nActive SATP = 0x{:08X}, pg_dir at PA 0x{:08X}",
+        satp, pg_dir_phys
+    );
 
     // Walk page table for DTB VA
     let vpn1 = ((dtb_va >> 22) & 0x3FF) as u64;
@@ -64,7 +75,10 @@ fn main() {
     let l1_addr = pg_dir_phys + vpn1 * 4;
     let l1_entry = vm.bus.read_word(l1_addr).unwrap_or(0);
     eprintln!("DTB VA page walk: VPN1={} VPN0={}", vpn1, vpn0);
-    eprintln!("  L1[{}] at PA 0x{:08X} = 0x{:08X}", vpn1, l1_addr, l1_entry);
+    eprintln!(
+        "  L1[{}] at PA 0x{:08X} = 0x{:08X}",
+        vpn1, l1_addr, l1_entry
+    );
 
     let l1_valid = (l1_entry & 1) != 0;
     let l1_leaf = (l1_entry & 0xE) != 0;
@@ -73,7 +87,10 @@ fn main() {
         let ppn = ((l1_entry >> 10) & 0x3FFFFF) << 2; // 4MB aligned
         let offset = (dtb_va as u64) & 0x3FFFFF;
         let pa = (ppn as u64) << 10 | offset;
-        eprintln!("  -> Megapage, PA = 0x{:08X} (expected 0x{:08X})", pa, dtb_addr);
+        eprintln!(
+            "  -> Megapage, PA = 0x{:08X} (expected 0x{:08X})",
+            pa, dtb_addr
+        );
     } else if l1_valid {
         // L2 page table
         let l2_ppn = ((l1_entry >> 10) & 0x3FFFFF) as u64;
@@ -99,8 +116,14 @@ fn main() {
     let early_pg_dir_phys = early_pg_dir_ppn * 4096;
     let early_l1_addr = early_pg_dir_phys + vpn1 * 4;
     let early_l1_entry = vm.bus.read_word(early_l1_addr).unwrap_or(0);
-    eprintln!("\nEarly SATP 0x{:08X} (pg_dir PA 0x{:08X}):", early_satp, early_pg_dir_phys);
-    eprintln!("  L1[{}] at PA 0x{:08X} = 0x{:08X}", vpn1, early_l1_addr, early_l1_entry);
+    eprintln!(
+        "\nEarly SATP 0x{:08X} (pg_dir PA 0x{:08X}):",
+        early_satp, early_pg_dir_phys
+    );
+    eprintln!(
+        "  L1[{}] at PA 0x{:08X} = 0x{:08X}",
+        vpn1, early_l1_addr, early_l1_entry
+    );
 
     let early_l1_valid = (early_l1_entry & 1) != 0;
     let early_l1_leaf = (early_l1_entry & 0xE) != 0;
@@ -108,7 +131,10 @@ fn main() {
         let ppn = ((early_l1_entry >> 10) & 0x3FFFFF) << 2;
         let offset = (dtb_va as u64) & 0x3FFFFF;
         let pa = (ppn as u64) << 10 | offset;
-        eprintln!("  -> Megapage, PA = 0x{:08X} (expected 0x{:08X})", pa, dtb_addr);
+        eprintln!(
+            "  -> Megapage, PA = 0x{:08X} (expected 0x{:08X})",
+            pa, dtb_addr
+        );
     } else if early_l1_valid {
         let l2_ppn = ((early_l1_entry >> 10) & 0x3FFFFF) as u64;
         let l2_base = l2_ppn * 4096;
@@ -133,6 +159,12 @@ fn main() {
     let tramp_pg_dir_phys = tramp_pg_dir_ppn * 4096;
     let tramp_l1_addr = tramp_pg_dir_phys + vpn1 * 4;
     let tramp_l1_entry = vm.bus.read_word(tramp_l1_addr).unwrap_or(0);
-    eprintln!("\nTrampoline SATP 0x{:08X} (pg_dir PA 0x{:08X}):", tramp_satp, tramp_pg_dir_phys);
-    eprintln!("  L1[{}] at PA 0x{:08X} = 0x{:08X}", vpn1, tramp_l1_addr, tramp_l1_entry);
+    eprintln!(
+        "\nTrampoline SATP 0x{:08X} (pg_dir PA 0x{:08X}):",
+        tramp_satp, tramp_pg_dir_phys
+    );
+    eprintln!(
+        "  L1[{}] at PA 0x{:08X} = 0x{:08X}",
+        vpn1, tramp_l1_addr, tramp_l1_entry
+    );
 }

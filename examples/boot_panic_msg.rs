@@ -86,9 +86,14 @@ fn main() {
                     vm.bus.write_word(km_phys + 12, 0x00000000).ok();
                     vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
                     vm.bus.write_word(km_phys + 24, 0x00000000).ok();
-                    vm.bus.write_word(0x00801008, (_dtb_addr.wrapping_add(0xC0000000)) as u32).ok();
+                    vm.bus
+                        .write_word(0x00801008, (_dtb_addr.wrapping_add(0xC0000000)) as u32)
+                        .ok();
                     vm.bus.write_word(0x0080100C, _dtb_addr as u32).ok();
-                    eprintln!("[boot] SATP changed to 0x{:08X} at count={}", cur_satp, count);
+                    eprintln!(
+                        "[boot] SATP changed to 0x{:08X} at count={}",
+                        cur_satp, count
+                    );
                 }
                 last_satp = cur_satp;
             }
@@ -115,9 +120,16 @@ fn main() {
             if cause_code == 9 && mpp != 3 {
                 // ECALL_S = SBI call
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -156,7 +168,10 @@ fn main() {
             let a0 = vm.cpu.x[10]; // panic string
             let sp = vm.cpu.x[2];
             let ra = vm.cpu.x[1];
-            eprintln!("[PANIC] at count={}, a0=0x{:08X} RA=0x{:08X} SP=0x{:08X}", count, a0, ra, sp);
+            eprintln!(
+                "[PANIC] at count={}, a0=0x{:08X} RA=0x{:08X} SP=0x{:08X}",
+                count, a0, ra, sp
+            );
 
             // Read the panic string
             let str_pa = if a0 >= 0xC0000000 {
@@ -186,7 +201,12 @@ fn main() {
             } else {
                 sp as u64
             };
-            for (off, name) in [(12, "saved_RA"), (8, "saved_S0"), (4, "saved_S1"), (0, "saved_S2")] {
+            for (off, name) in [
+                (12, "saved_RA"),
+                (8, "saved_S0"),
+                (4, "saved_S1"),
+                (0, "saved_S2"),
+            ] {
                 let val = vm.bus.read_word(sp_pa + off as u64).unwrap_or(0);
                 eprintln!("[PANIC]   SP+{} ({}) = 0x{:08X}", off, name, val);
             }

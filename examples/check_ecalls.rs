@@ -7,8 +7,13 @@ fn main() {
     let initramfs_path = std::path::Path::new(".geometry_os/fs/linux/rv32/initramfs.cpio.gz");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel, initramfs.as_deref(), 128, "console=ttyS0 earlycon=sbi").unwrap();
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel,
+        initramfs.as_deref(),
+        128,
+        "console=ttyS0 earlycon=sbi",
+    )
+    .unwrap();
 
     let panic_loop: u32 = 0xC000278A;
     let mut count: u64 = 0;
@@ -20,7 +25,7 @@ fn main() {
         let pc = vm.cpu.pc;
         let _result = vm.step();
         count += 1;
-        
+
         // Check for ECALLs by watching ecall_count
         if vm.cpu.ecall_count > ecall_count {
             ecall_count = vm.cpu.ecall_count;
@@ -42,19 +47,28 @@ fn main() {
                     ecall_count, count, pc, ext, ext_name, func, vm.cpu.x[10], vm.cpu.x[11]);
             }
         }
-        
+
         if vm.cpu.pc >= panic_loop && vm.cpu.pc <= 0xC00027A0 {
-            println!("\n[panic] Hit panic loop at count={}, PC=0x{:08X}", count, vm.cpu.pc);
+            println!(
+                "\n[panic] Hit panic loop at count={}, PC=0x{:08X}",
+                count, vm.cpu.pc
+            );
             println!("[panic] Total ECALLs: {}", ecall_count);
             println!("[panic] Last 5 ECALLs:");
             for (ec_count, ec_pc, a7, a6, a0) in last_ecalls.iter().rev().take(5) {
-                println!("  count={} PC=0x{:08X} a7=0x{:X} a6=0x{:X} a0=0x{:X}", ec_count, ec_pc, a7, a6, a0);
+                println!(
+                    "  count={} PC=0x{:08X} a7=0x{:X} a6=0x{:X} a0=0x{:X}",
+                    ec_count, ec_pc, a7, a6, a0
+                );
             }
             break;
         }
     }
-    
+
     if count >= max {
-        println!("[info] Total instructions: {}, ECALLs: {}, PC=0x{:08X}", count, ecall_count, vm.cpu.pc);
+        println!(
+            "[info] Total instructions: {}, ECALLs: {}, PC=0x{:08X}",
+            count, ecall_count, vm.cpu.pc
+        );
     }
 }

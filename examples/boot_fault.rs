@@ -1,7 +1,7 @@
+use geometry_os::riscv::cpu::{Privilege, StepResult};
+use geometry_os::riscv::RiscvVm;
 use std::fs;
 use std::time::Instant;
-use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{Privilege, StepResult};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -21,7 +21,9 @@ fn main() {
     let mut last_satp: u32 = vm.cpu.csr.satp;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // Handle M-mode traps at fw_addr
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
@@ -30,9 +32,16 @@ fn main() {
             if !((mcause >> 31) & 1 == 1) && cause_code == 9 {
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -71,15 +80,20 @@ fn main() {
 
         // Track SATP changes
         if vm.cpu.csr.satp != last_satp {
-            eprintln!("[satp] 0x{:08X} -> 0x{:08X} at count={}", last_satp, vm.cpu.csr.satp, count);
+            eprintln!(
+                "[satp] 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, vm.cpu.csr.satp, count
+            );
             last_satp = vm.cpu.csr.satp;
         }
 
         // Check for panic
         if (0xC000252E..=0xC00027A0).contains(&vm.cpu.pc) && count > 1_000_000 && sbi_count == 0 {
             eprintln!("\n!!! PANIC at count={} PC=0x{:08X} !!!", count, vm.cpu.pc);
-            eprintln!("    sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X}",
-                vm.cpu.csr.sepc, vm.cpu.csr.scause, vm.cpu.csr.stval);
+            eprintln!(
+                "    sepc=0x{:08X} scause=0x{:08X} stval=0x{:08X}",
+                vm.cpu.csr.sepc, vm.cpu.csr.scause, vm.cpu.csr.stval
+            );
             eprintln!("    Page faults seen: {}", page_faults);
             // Read panic string from A0
             let ptr = vm.cpu.x[10];
@@ -88,9 +102,13 @@ fn main() {
                 let mut bytes = Vec::new();
                 for i in 0..128u64 {
                     if let Ok(b) = vm.bus.read_byte(pa + i) {
-                        if b == 0 { break; }
+                        if b == 0 {
+                            break;
+                        }
                         bytes.push(b);
-                    } else { break; }
+                    } else {
+                        break;
+                    }
                 }
                 if let Ok(s) = String::from_utf8(bytes) {
                     eprintln!("    Message: '{}'", &s[..s.len().min(200)]);
@@ -107,9 +125,18 @@ fn main() {
         count += 1;
 
         if count % 5_000_000 == 0 {
-            eprintln!("[{}M] PC=0x{:08X} SBI={} faults={}", count / 1_000_000, vm.cpu.pc, sbi_count, page_faults);
+            eprintln!(
+                "[{}M] PC=0x{:08X} SBI={} faults={}",
+                count / 1_000_000,
+                vm.cpu.pc,
+                sbi_count,
+                page_faults
+            );
         }
     }
 
-    eprintln!("\nTotal: {} instr, {} SBI, {} page_faults", count, sbi_count, page_faults);
+    eprintln!(
+        "\nTotal: {} instr, {} SBI, {} page_faults",
+        count, sbi_count, page_faults
+    );
 }

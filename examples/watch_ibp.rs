@@ -1,8 +1,8 @@
 //! Watch initial_boot_params through setup_vm().
 //! cargo run --example watch_ibp
 
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -12,13 +12,13 @@ fn main() {
         .exists()
         .then(|| std::fs::read(ir_path).unwrap());
 
-    let (mut vm, fw_addr, _entry, dtb_addr) =
-        RiscvVm::boot_linux_setup(
-            &kernel_data,
-            initramfs_data.as_deref(),
-            512,
-            "console=ttyS0 earlycon=sbi",
-        ).expect("setup failed");
+    let (mut vm, fw_addr, _entry, dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_data,
+        initramfs_data.as_deref(),
+        512,
+        "console=ttyS0 earlycon=sbi",
+    )
+    .expect("setup failed");
 
     let ibp_pa = 0x00C7A178u64;
     let deva_pa = 0x00801008u64;
@@ -103,11 +103,26 @@ fn main() {
     eprintln!("  PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
     eprintln!("  satp=0x{:08X}", vm.cpu.csr.satp);
     eprintln!("  stvec=0x{:08X}", vm.cpu.csr.stvec);
-    eprintln!("  initial_boot_params=0x{:08X}", vm.bus.read_word(ibp_pa).unwrap_or(0));
-    eprintln!("  _dtb_early_va=0x{:08X}", vm.bus.read_word(deva_pa).unwrap_or(0));
-    eprintln!("  _dtb_early_pa=0x{:08X}", vm.bus.read_word(depa_pa).unwrap_or(0));
-    eprintln!("  phys_ram_base=0x{:08X}", vm.bus.read_word(prb_pa).unwrap_or(0));
-    eprintln!("  memblock memory.cnt={}", vm.bus.read_word(mb_pa + 8).unwrap_or(0));
+    eprintln!(
+        "  initial_boot_params=0x{:08X}",
+        vm.bus.read_word(ibp_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "  _dtb_early_va=0x{:08X}",
+        vm.bus.read_word(deva_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "  _dtb_early_pa=0x{:08X}",
+        vm.bus.read_word(depa_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "  phys_ram_base=0x{:08X}",
+        vm.bus.read_word(prb_pa).unwrap_or(0)
+    );
+    eprintln!(
+        "  memblock memory.cnt={}",
+        vm.bus.read_word(mb_pa + 8).unwrap_or(0)
+    );
 
     // Try reading DTB at initial_boot_params address through current page table
     let ibp_val = vm.bus.read_word(ibp_pa).unwrap_or(0);

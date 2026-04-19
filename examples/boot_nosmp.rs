@@ -7,8 +7,13 @@ fn main() {
     let initramfs_path = std::path::Path::new(".geometry_os/fs/linux/rv32/initramfs.cpio.gz");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel, initramfs.as_deref(), 128, "console=ttyS0 earlycon=sbi loglevel=8").unwrap();
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel,
+        initramfs.as_deref(),
+        128,
+        "console=ttyS0 earlycon=sbi loglevel=8",
+    )
+    .unwrap();
 
     let panic_start: u32 = 0xC000252E;
     let panic_end: u32 = 0xC00027A4;
@@ -21,7 +26,7 @@ fn main() {
 
     while count < max {
         let pc = vm.cpu.pc;
-        
+
         // Detect stall
         if pc == last_pc {
             stall_count += 1;
@@ -33,10 +38,10 @@ fn main() {
             stall_count = 0;
         }
         last_pc = pc;
-        
+
         let _result = vm.step();
         count += 1;
-        
+
         // Track ECALLs
         if vm.cpu.ecall_count > ecall_count {
             ecall_count = vm.cpu.ecall_count;
@@ -51,10 +56,12 @@ fn main() {
                 0x00 => "SET_TIMER",
                 _ => "UNKNOWN",
             };
-            println!("[ecall] #{} at count={}, PC=0x{:08X}: ext=0x{:02X}({}) func={}",
-                ecall_count, count, pc, ext, ext_name, func);
+            println!(
+                "[ecall] #{} at count={}, PC=0x{:08X}: ext=0x{:02X}({}) func={}",
+                ecall_count, count, pc, ext, ext_name, func
+            );
         }
-        
+
         // Check for panic
         if !hit_panic && pc >= panic_start && pc < panic_end {
             hit_panic = true;
@@ -64,7 +71,9 @@ fn main() {
                 let mut s = String::new();
                 for j in 0..300 {
                     if let Ok(byte) = vm.bus.read_byte(pa + j as u64) {
-                        if byte == 0 { break; }
+                        if byte == 0 {
+                            break;
+                        }
                         if byte >= 0x20 && byte < 0x7F {
                             s.push(byte as char);
                         } else {
@@ -74,15 +83,24 @@ fn main() {
                 }
                 println!("[PANIC] at count={}, PC=0x{:08X}: \"{}\"", count, pc, s);
             } else {
-                println!("[PANIC] at count={}, PC=0x{:08X}: a0=0x{:08X} (not a string)", count, pc, a0);
+                println!(
+                    "[PANIC] at count={}, PC=0x{:08X}: a0=0x{:08X} (not a string)",
+                    count, pc, a0
+                );
             }
         }
-        
+
         // Progress reports
         if count % 500_000 == 0 {
-            println!("[progress] {} instr, PC=0x{:08X}, ECALLs={}", count, vm.cpu.pc, ecall_count);
+            println!(
+                "[progress] {} instr, PC=0x{:08X}, ECALLs={}",
+                count, vm.cpu.pc, ecall_count
+            );
         }
     }
-    
-    println!("[done] {} instr, PC=0x{:08X}, ECALLs={}, panic={}", count, vm.cpu.pc, ecall_count, hit_panic);
+
+    println!(
+        "[done] {} instr, PC=0x{:08X}, ECALLs={}, panic={}",
+        count, vm.cpu.pc, ecall_count, hit_panic
+    );
 }

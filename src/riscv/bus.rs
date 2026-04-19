@@ -50,6 +50,10 @@ pub struct Bus {
     pub write_watch_pc: u32,
     /// Debug: whether the watchpoint was hit.
     pub write_watch_hit: bool,
+    /// Debug: log of writes to memblock memory regions (PA 0x0080348C-0x00803A8C).
+    pub memblock_write_log: Vec<(u64, u32)>,
+    /// Debug: PC at the time of memblock write (set by boot loop before each step).
+    pub current_pc: u32,
     /// When true, the MMU identity-maps virtual addresses below 4MB
     /// (VA == PA) when the page table walk fails. This emulates OpenSBI
     /// firmware behavior for Linux boot, where per-CPU data, device
@@ -95,6 +99,8 @@ impl Bus {
             write_watch_val: 0,
             write_watch_pc: 0,
             write_watch_hit: false,
+            memblock_write_log: Vec::new(),
+            current_pc: 0,
             low_addr_identity_map: false,
             auto_pte_fixup: false,
             known_pt_pages: HashSet::new(),
@@ -146,6 +152,15 @@ impl Bus {
                 self.write_watch_hit = true;
                 self.write_watch_val = val;
             }
+        }
+        // Memblock regions write detector (PA 0x0080348C - 0x00803A8C)
+        // Log any write to the memblock memory regions array for debugging.
+        // Also captures current_pc set by the boot loop before each step.
+        if addr >= 0x0080348C && addr < 0x00803A8C && self.memblock_write_log.len() < 100 {
+            // Store PC in upper 32 bits: (PC << 32) | addr, val
+            // Since we only have Vec<(u64, u32)>, encode PC in the top of addr
+            let encoded_addr = ((self.current_pc as u64) << 32) | addr;
+            self.memblock_write_log.push((encoded_addr, val));
         }
         if Self::in_clint(addr) {
             if self.clint.write(addr, val) {

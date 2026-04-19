@@ -7,8 +7,13 @@ fn main() {
     let initramfs_path = std::path::Path::new(".geometry_os/fs/linux/rv32/initramfs.cpio.gz");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel, initramfs.as_deref(), 128, "console=ttyS0 earlycon=sbi").unwrap();
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel,
+        initramfs.as_deref(),
+        128,
+        "console=ttyS0 earlycon=sbi",
+    )
+    .unwrap();
 
     // The panic function starts around 0xC000252E
     // Let's catch when PC first enters the panic function
@@ -22,24 +27,30 @@ fn main() {
         if pc >= panic_start && pc < panic_end {
             // We just entered panic() for the first time
             println!("[panic-entry] count={}, PC=0x{:08X}", count, pc);
-            
+
             // Dump registers - especially the ones that carry panic arguments
-            println!("[regs] a0=0x{:08X} a1=0x{:08X} a2=0x{:08X}", 
-                vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12]);
-            println!("[regs] ra=0x{:08X} sp=0x{:08X} gp=0x{:08X} tp=0x{:08X}",
-                vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[3], vm.cpu.x[4]);
-            println!("[regs] t0=0x{:08X} t1=0x{:08X} t2=0x{:08X}",
-                vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7]);
-            
+            println!(
+                "[regs] a0=0x{:08X} a1=0x{:08X} a2=0x{:08X}",
+                vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12]
+            );
+            println!(
+                "[regs] ra=0x{:08X} sp=0x{:08X} gp=0x{:08X} tp=0x{:08X}",
+                vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[3], vm.cpu.x[4]
+            );
+            println!(
+                "[regs] t0=0x{:08X} t1=0x{:08X} t2=0x{:08X}",
+                vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7]
+            );
+
             // RA is the return address - tells us who called panic
             let ra = vm.cpu.x[1];
             println!("\n[caller] panic called from RA=0x{:08X}", ra);
-            
+
             // Disassemble the caller
             let caller_start = if ra > 40 { ra - 40 } else { 0 };
             let caller_end = ra + 20;
             println!("[disasm] Caller context (RA-40 to RA+20):");
-            
+
             // Walk back through stack frames
             // The caller's caller is on the stack
             let sp = vm.cpu.x[2];
@@ -48,11 +59,11 @@ fn main() {
                 let addr = (sp as u64) + (i as u64) * 4;
                 if let Ok(val) = vm.bus.read_word(addr) {
                     if val >= 0xC0000000 && val < 0xD0000000 {
-                        println!("  sp+{} = 0x{:08X}", i*4, val);
+                        println!("  sp+{} = 0x{:08X}", i * 4, val);
                     }
                 }
             }
-            
+
             // The panic format string is in a0
             let a0 = vm.cpu.x[10];
             if a0 >= 0xC0000000 && a0 < 0xD0000000 {
@@ -60,7 +71,9 @@ fn main() {
                 let mut s = String::new();
                 for j in 0..300 {
                     if let Ok(byte) = vm.bus.read_byte(pa + j as u64) {
-                        if byte == 0 { break; }
+                        if byte == 0 {
+                            break;
+                        }
                         if byte >= 0x20 && byte < 0x7F {
                             s.push(byte as char);
                         } else {
@@ -70,14 +83,17 @@ fn main() {
                 }
                 println!("\n[panic-msg] a0 string: \"{}\"", s);
             }
-            
+
             break;
         }
         let _result = vm.step();
         count += 1;
     }
-    
+
     if count >= max {
-        println!("[info] No panic in {} instructions. PC=0x{:08X}", max, vm.cpu.pc);
+        println!(
+            "[info] No panic in {} instructions. PC=0x{:08X}",
+            max, vm.cpu.pc
+        );
     }
 }

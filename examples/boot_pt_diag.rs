@@ -1,6 +1,6 @@
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::{Privilege, StepResult};
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -18,16 +18,25 @@ fn main() {
     let mut sbi_count: u64 = 0;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == Privilege::Machine {
             let cause_code = vm.cpu.csr.mcause & !(1u32 << 31);
             if !((vm.cpu.csr.mcause >> 31) & 1 == 1) && cause_code == 9 {
                 sbi_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -49,7 +58,8 @@ fn main() {
                     let pg_dir_ppn = (satp & 0x3FFFFF) as u64;
                     let pg_dir_phys = pg_dir_ppn * 4096;
 
-                    eprintln!("\n=== S-mode {} FAULT at count={} ===",
+                    eprintln!(
+                        "\n=== S-mode {} FAULT at count={} ===",
                         match step_result {
                             StepResult::LoadFault => "LOAD",
                             StepResult::StoreFault => "STORE",
@@ -74,14 +84,22 @@ fn main() {
 
                     eprintln!("\n  Page table walk for VA 0x{:08X}:", fault_va);
                     eprintln!("  L1[{}] at PA 0x{:08X} = 0x{:08X}", vpn1, l1_addr, l1_pte);
-                    eprintln!("    V={} R={} PPN=0x{:06X} (PA=0x{:08X})",
-                        l1_v, l1_r, l1_ppn, l1_ppn << 12);
+                    eprintln!(
+                        "    V={} R={} PPN=0x{:06X} (PA=0x{:08X})",
+                        l1_v,
+                        l1_r,
+                        l1_ppn,
+                        l1_ppn << 12
+                    );
 
                     if l1_v == 0 {
                         eprintln!("    *** L1 entry NOT VALID -- VA is not mapped at all! ***");
                     } else if l1_r != 0 {
                         // Megapage
-                        eprintln!("    MEGAPAGE: PA = 0x{:08X}", ((fault_va & 0x3FFFFF) | (l1_ppn << 12)));
+                        eprintln!(
+                            "    MEGAPAGE: PA = 0x{:08X}",
+                            ((fault_va & 0x3FFFFF) | (l1_ppn << 12))
+                        );
                     } else {
                         // L2 walk
                         let l2_base = l1_ppn as u64 * 4096;
@@ -96,8 +114,17 @@ fn main() {
                         let l2_a = (l2_pte >> 5) & 1; // accessed
 
                         eprintln!("  L2[{}] at PA 0x{:08X} = 0x{:08X}", vpn0, l2_addr, l2_pte);
-                        eprintln!("    V={} R={} W={} X={} D={} A={} PPN=0x{:06X} (PA=0x{:08X})",
-                            l2_v, l2_r, l2_w, l2_x, l2_d, l2_a, l2_ppn, l2_ppn << 12);
+                        eprintln!(
+                            "    V={} R={} W={} X={} D={} A={} PPN=0x{:06X} (PA=0x{:08X})",
+                            l2_v,
+                            l2_r,
+                            l2_w,
+                            l2_x,
+                            l2_d,
+                            l2_a,
+                            l2_ppn,
+                            l2_ppn << 12
+                        );
 
                         if l2_v == 0 {
                             eprintln!("    *** L2 entry NOT VALID -- page not allocated! ***");
@@ -105,7 +132,10 @@ fn main() {
                     }
 
                     // Also check a few surrounding L1 entries to see if vmalloc area is mapped
-                    eprintln!("\n  Surrounding L1 entries (swapper_pg_dir at PA 0x{:08X}):", pg_dir_phys);
+                    eprintln!(
+                        "\n  Surrounding L1 entries (swapper_pg_dir at PA 0x{:08X}):",
+                        pg_dir_phys
+                    );
                     for idx in (vpn1 as u32).saturating_sub(2)..=(vpn1 as u32 + 2) {
                         let addr = pg_dir_phys + (idx as u64) * 4;
                         let pte = vm.bus.read_word(addr).unwrap_or(0);
@@ -113,8 +143,10 @@ fn main() {
                         let r = (pte >> 1) & 1;
                         let ppn = ((pte >> 10) & 0x3FFFFF);
                         let marker = if idx == vpn1 as u32 { " <-- fault" } else { "" };
-                        eprintln!("    L1[{}] = 0x{:08X} V={} R={} PPN=0x{:06X}{}",
-                            idx, pte, v, r, ppn, marker);
+                        eprintln!(
+                            "    L1[{}] = 0x{:08X} V={} R={} PPN=0x{:06X}{}",
+                            idx, pte, v, r, ppn, marker
+                        );
                     }
 
                     // Check linear mapping entries (L1[768..])
@@ -125,8 +157,10 @@ fn main() {
                         let v = (pte >> 0) & 1;
                         let r = (pte >> 1) & 1;
                         let ppn = ((pte >> 10) & 0x3FFFFF);
-                        eprintln!("    L1[{}] = 0x{:08X} V={} R={} PPN=0x{:06X}",
-                            idx, pte, v, r, ppn);
+                        eprintln!(
+                            "    L1[{}] = 0x{:08X} V={} R={} PPN=0x{:06X}",
+                            idx, pte, v, r, ppn
+                        );
                     }
 
                     // Check how many known_pt_pages are registered
@@ -147,9 +181,13 @@ fn main() {
                 let mut bytes = Vec::new();
                 for i in 0..128u64 {
                     if let Ok(b) = vm.bus.read_byte(pa + i) {
-                        if b == 0 { break; }
+                        if b == 0 {
+                            break;
+                        }
                         bytes.push(b);
-                    } else { break; }
+                    } else {
+                        break;
+                    }
                 }
                 if let Ok(s) = String::from_utf8(bytes) {
                     eprintln!("\n!!! PANIC: '{}' !!!", &s[..s.len().min(200)]);

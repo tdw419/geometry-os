@@ -7,8 +7,13 @@ fn main() {
     let initramfs_path = std::path::Path::new(".geometry_os/fs/linux/rv32/initramfs.cpio.gz");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (mut vm, _fw_addr, _entry, _dtb_addr) =
-        RiscvVm::boot_linux_setup(&kernel, initramfs.as_deref(), 128, "console=ttyS0 earlyethcon=sbi").unwrap();
+    let (mut vm, _fw_addr, _entry, _dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel,
+        initramfs.as_deref(),
+        128,
+        "console=ttyS0 earlyethcon=sbi",
+    )
+    .unwrap();
 
     let udelay_start: u32 = 0xC020B0D0;
     let udelay_end: u32 = 0xC020B170;
@@ -40,8 +45,10 @@ fn main() {
             let ra = vm.cpu.x[1]; // return address
             ra_on_enter.push(ra);
             if udelay_enter_count <= 10 {
-                println!("[trace] udelay #{} at count={}, PC=0x{:08X}, RA=0x{:08X}, a0={}", 
-                    udelay_enter_count, count, vm.cpu.pc, ra, vm.cpu.x[10]);
+                println!(
+                    "[trace] udelay #{} at count={}, PC=0x{:08X}, RA=0x{:08X}, a0={}",
+                    udelay_enter_count, count, vm.cpu.pc, ra, vm.cpu.x[10]
+                );
                 // Show last 5 PCs before entry
                 let start = pc_history.len().saturating_sub(6);
                 for (i, hpc) in pc_history[start..].iter().enumerate() {
@@ -54,15 +61,24 @@ fn main() {
 
         // Check if stuck
         if udelay_enter_count > 100 {
-            println!("[trace] udelay called {} times in {} instructions", udelay_enter_count, count);
-            println!("[trace] Last 5 RAs: {:X?}", &ra_on_enter[ra_on_enter.len().saturating_sub(5)..]);
+            println!(
+                "[trace] udelay called {} times in {} instructions",
+                udelay_enter_count, count
+            );
+            println!(
+                "[trace] Last 5 RAs: {:X?}",
+                &ra_on_enter[ra_on_enter.len().saturating_sub(5)..]
+            );
             println!("[trace] Current PC = 0x{:08X}", vm.cpu.pc);
             break;
         }
     }
-    
+
     if udelay_enter_count <= 100 {
-        println!("[trace] Total instructions: {}, udelay calls: {}", count, udelay_enter_count);
+        println!(
+            "[trace] Total instructions: {}, udelay calls: {}",
+            count, udelay_enter_count
+        );
         println!("[trace] Final PC = 0x{:08X}", vm.cpu.pc);
     }
 }

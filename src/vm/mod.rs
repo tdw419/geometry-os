@@ -343,10 +343,11 @@ impl Vm {
                 self.ram[0xFFE] = self.frame_count;
                 self.frame_ready = true;
                 self.access_log.clear(); // Reset for next frame
-                // Phase 38b: snapshot screen if trace recording is on
+                                         // Phase 38b: snapshot screen if trace recording is on
                 if self.trace_recording {
                     let step = self.trace_buffer.step_counter();
-                    self.frame_checkpoints.push(step, self.frame_count, &self.screen);
+                    self.frame_checkpoints
+                        .push(step, self.frame_count, &self.screen);
                 }
                 return true; // keep running (host checks frame_ready to pace rendering)
             }

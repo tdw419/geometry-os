@@ -1,8 +1,8 @@
 // Test: run for 50M instructions WITHOUT auto_pte_fixup
 // to see if the kernel eventually reaches console output
-use geometry_os::riscv::RiscvVm;
-use geometry_os::riscv::cpu::{StepResult, Privilege};
+use geometry_os::riscv::cpu::{Privilege, StepResult};
 use geometry_os::riscv::csr;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -106,7 +106,10 @@ fn main() {
 
         let cur_satp = vm.cpu.csr.satp;
         if cur_satp != last_satp {
-            eprintln!("[test] SATP changed: 0x{:08X} -> 0x{:08X} at count={}", last_satp, cur_satp, count);
+            eprintln!(
+                "[test] SATP changed: 0x{:08X} -> 0x{:08X} at count={}",
+                last_satp, cur_satp, count
+            );
             last_satp = cur_satp;
         }
 
@@ -123,7 +126,10 @@ fn main() {
         if count % 5_000_000 == 0 {
             eprintln!(
                 "[test] {}M: PC=0x{:08X} SBI={} same_pc={}",
-                count / 1_000_000, vm.cpu.pc, sbi_count, same_pc
+                count / 1_000_000,
+                vm.cpu.pc,
+                sbi_count,
+                same_pc
             );
         }
 
@@ -138,7 +144,10 @@ fn main() {
         }
     }
 
-    eprintln!("\n[test] Done: {} instructions, {} SBI calls", count, sbi_count);
+    eprintln!(
+        "\n[test] Done: {} instructions, {} SBI calls",
+        count, sbi_count
+    );
     eprintln!("[test] UART: {} chars", vm.bus.uart.tx_buf.len());
     if !vm.bus.uart.tx_buf.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);

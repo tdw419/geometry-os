@@ -76,7 +76,10 @@ fn main() {
                     vm.bus.write_word(km_phys + 12, 0x00000000).ok();
                     vm.bus.write_word(km_phys + 20, 0xC0000000).ok();
                     vm.bus.write_word(km_phys + 24, 0x00000000).ok();
-                    eprintln!("[trace] SATP changed to 0x{:08X} at count={}", cur_satp, count);
+                    eprintln!(
+                        "[trace] SATP changed to 0x{:08X} at count={}",
+                        cur_satp, count
+                    );
                 }
                 last_satp = cur_satp;
             }
@@ -102,9 +105,16 @@ fn main() {
             let mpp = (vm.cpu.csr.mstatus & 0x300) >> 8;
             if cause_code == 9 && mpp != 3 {
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                    vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -142,15 +152,20 @@ fn main() {
             dtb_scan_called = true;
             dtb_scan_count += 1;
             dtb_scan_arg = vm.cpu.x[10];
-            eprintln!("[trace] early_init_dt_scan called at count={}, a0(DTB)=0x{:08X}", count, dtb_scan_arg);
+            eprintln!(
+                "[trace] early_init_dt_scan called at count={}, a0(DTB)=0x{:08X}",
+                count, dtb_scan_arg
+            );
         }
 
         // Watch for entry to init_unavailable_range
         if vm.cpu.pc == init_unavailable {
             init_unavail_count += 1;
             if init_unavail_count <= 3 {
-                eprintln!("[trace] init_unavailable_range called at count={}, a0=0x{:08X} a1=0x{:08X}",
-                    count, vm.cpu.x[10], vm.cpu.x[11]);
+                eprintln!(
+                    "[trace] init_unavailable_range called at count={}, a0=0x{:08X} a1=0x{:08X}",
+                    count, vm.cpu.x[10], vm.cpu.x[11]
+                );
             }
         }
 
@@ -163,8 +178,10 @@ fn main() {
     // Final state
     eprintln!("\n=== Final state at count={} ===", count);
     eprintln!("PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
-    eprintln!("dtb_scan_called={} dtb_scan_count={} dtb_scan_arg=0x{:08X}",
-        dtb_scan_called, dtb_scan_count, dtb_scan_arg);
+    eprintln!(
+        "dtb_scan_called={} dtb_scan_count={} dtb_scan_arg=0x{:08X}",
+        dtb_scan_called, dtb_scan_count, dtb_scan_arg
+    );
     eprintln!("init_unavail_count={}", init_unavail_count);
 
     // Key memory

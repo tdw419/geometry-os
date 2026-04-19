@@ -1,6 +1,6 @@
-use std::fs;
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::Privilege;
+use geometry_os::riscv::RiscvVm;
+use std::fs;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -26,7 +26,9 @@ fn main() {
     let mut _last_stvec: u32 = vm.cpu.csr.stvec;
 
     while count < max_count {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
 
         // DTB pointer watchdog
         if count % 100 == 0 {
@@ -45,8 +47,10 @@ fn main() {
             let cur_satp = vm.cpu.csr.satp;
             if cur_satp != last_satp {
                 satp_changes += 1;
-                eprintln!("[satp] #{} at count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
-                    satp_changes, count, last_satp, cur_satp, vm.cpu.pc);
+                eprintln!(
+                    "[satp] #{} at count={}: 0x{:08X} -> 0x{:08X} PC=0x{:08X}",
+                    satp_changes, count, last_satp, cur_satp, vm.cpu.pc
+                );
                 let mode = (cur_satp >> 31) & 1;
                 if mode == 1 {
                     let ppn = cur_satp & 0x3FFFFF;
@@ -70,7 +74,9 @@ fn main() {
                         let is_non_leaf = is_valid && (entry & 0xE) == 0;
                         let ppn = (entry >> 10) & 0x3FFFFF;
                         let needs_fix = !is_valid || (is_non_leaf && ppn == 0);
-                        if !needs_fix { continue; }
+                        if !needs_fix {
+                            continue;
+                        }
                         let pa_offset = l1_scan - 768;
                         let fixup_pte = mega_flags | (pa_offset << 20);
                         vm.bus.write_word(scan_addr, fixup_pte).ok();
@@ -101,20 +107,40 @@ fn main() {
                     9 => {
                         sbi_count += 1;
                         let result = vm.bus.sbi.handle_ecall(
-                            vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                            vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                            &mut vm.bus.uart, &mut vm.bus.clint,
+                            vm.cpu.x[17],
+                            vm.cpu.x[16],
+                            vm.cpu.x[10],
+                            vm.cpu.x[11],
+                            vm.cpu.x[12],
+                            vm.cpu.x[13],
+                            vm.cpu.x[14],
+                            vm.cpu.x[15],
+                            &mut vm.bus.uart,
+                            &mut vm.bus.clint,
                         );
-                        if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                        if let Some((a0, a1)) = result {
+                            vm.cpu.x[10] = a0;
+                            vm.cpu.x[11] = a1;
+                        }
                     }
                     11 => {
                         ecall_m_count += 1;
                         let result = vm.bus.sbi.handle_ecall(
-                            vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
-                            vm.cpu.x[12], vm.cpu.x[13], vm.cpu.x[14], vm.cpu.x[15],
-                            &mut vm.bus.uart, &mut vm.bus.clint,
+                            vm.cpu.x[17],
+                            vm.cpu.x[16],
+                            vm.cpu.x[10],
+                            vm.cpu.x[11],
+                            vm.cpu.x[12],
+                            vm.cpu.x[13],
+                            vm.cpu.x[14],
+                            vm.cpu.x[15],
+                            &mut vm.bus.uart,
+                            &mut vm.bus.clint,
                         );
-                        if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
+                        if let Some((a0, a1)) = result {
+                            vm.cpu.x[10] = a0;
+                            vm.cpu.x[11] = a1;
+                        }
                     }
                     _ => {
                         if mpp != 3 {
@@ -172,9 +198,13 @@ fn main() {
                 let mut msg = Vec::new();
                 for i in 0..200u64 {
                     if let Ok(b) = vm.bus.read_byte(pa + i) {
-                        if b == 0 { break; }
+                        if b == 0 {
+                            break;
+                        }
                         msg.push(b);
-                    } else { break; }
+                    } else {
+                        break;
+                    }
                 }
                 if let Ok(s) = String::from_utf8(msg) {
                     eprintln!("    PANIC MSG: '{}'", s);
@@ -185,9 +215,15 @@ fn main() {
 
         count += 1;
         if count % 100_000 == 0 && count > 0 {
-            eprintln!("[{}K] PC=0x{:08X} SBI={} medeleg=0x{:04X} stvec=0x{:08X} priv={:?}",
-                count / 1000, vm.cpu.pc, sbi_count, vm.cpu.csr.medeleg,
-                vm.cpu.csr.stvec, vm.cpu.privilege);
+            eprintln!(
+                "[{}K] PC=0x{:08X} SBI={} medeleg=0x{:04X} stvec=0x{:08X} priv={:?}",
+                count / 1000,
+                vm.cpu.pc,
+                sbi_count,
+                vm.cpu.csr.medeleg,
+                vm.cpu.csr.stvec,
+                vm.cpu.privilege
+            );
         }
     }
 
@@ -199,7 +235,10 @@ fn main() {
     for (c, v) in &stvec_log {
         eprintln!("  count={}: stvec=0x{:08X}", c, v);
     }
-    eprintln!("\nTotal: {} instructions, {} SBI calls, {} ECALL_M", count, sbi_count, ecall_m_count);
+    eprintln!(
+        "\nTotal: {} instructions, {} SBI calls, {} ECALL_M",
+        count, sbi_count, ecall_m_count
+    );
     let tx = vm.bus.uart.drain_tx();
     eprintln!("UART: {} bytes", tx.len());
 }
