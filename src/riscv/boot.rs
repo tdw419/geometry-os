@@ -206,7 +206,7 @@ impl RiscvVm {
         // which caused all physical addresses below 0xC0000000 to be silently discarded.
         let mut vm = Self::new_with_base(0, actual_ram_size);
         vm.bus.low_addr_identity_map = true; // Identity-map low addresses when page table walk fails (DTB, device regs)
-        vm.bus.auto_pte_fixup = false; // kernel_map is patched correctly below, so __pa() works and PTEs have correct physical PPNs
+        vm.bus.auto_pte_fixup = true; // setup_vm creates PTEs with VA-based PPNs, fixup converts them to PA-based
 
         // 3. Load kernel ELF at physical addresses (p_paddr).
         // The kernel's ELF has p_paddr = vaddr - PAGE_OFFSET, which are the correct
@@ -471,10 +471,12 @@ impl RiscvVm {
         }
 
         // With __pa() fixed for kernel_map, all PTEs have correct physical PPNs.
-        // auto_pte_fixup is DISABLED because the MMU-level fixup_ppn and
-        // write interception would incorrectly subtract PAGE_OFFSET from
-        // already-correct PPNs, corrupting page tables.
-        vm.bus.auto_pte_fixup = false;
+        // auto_pte_fixup is ENABLED because setup_vm() creates PTEs with VA-based
+        // PPNs (e.g., fixmap_pgd_next = VA of fixmap_pte = 0xC1483000, but the
+        // actual PA is 0x01483000). The fixup converts PPN >= 0xC0000 to
+        // PPN - 0xC0000, which is safe since all valid PA-based PPNs for 512MB
+        // RAM are < 0x20000 (well below 0xC0000).
+        vm.bus.auto_pte_fixup = true;
 
         // Pre-populate memblock with kernel image reservation.
         //
@@ -910,7 +912,12 @@ impl RiscvVm {
                         // the DTB, memblock_add() is never called, and
                         // max_mapnr stays 0.
                         {
-                            let dtb_va: u32 = (dtb_addr.wrapping_add(0xC0000000)) as u32;
+                            // IMPORTANT: _dtb_early_va must be an address the kernel can actually
+                            // READ through the MMU. The DTB is at a physical address beyond the
+                            // kernel image. The boot page table identity-maps low addresses (L1[0..63]),
+                            // so VA = PA works. Setting it to PA + PAGE_OFFSET would give an address
+                            // the boot page table doesn't correctly map for the DTB range.
+                            let dtb_va: u32 = dtb_addr as u32; // Use physical address (identity-mapped)
                             let dtb_vpn1 = ((dtb_va >> 22) & 0x3FF) as u64;
                             let dtb_vpn0 = ((dtb_va >> 12) & 0x3FF) as u64;
                             let l1_addr = pg_dir_phys + dtb_vpn1 * 4;
@@ -1282,11 +1289,11 @@ impl RiscvVm {
                     for ri in 0..mem_cnt.min(4) {
                         let base = vm
                             .bus
-                            .read_word(mem_regions_pa + (ri * 8) as u64)
+                            .read_word(mem_regions_pa + (ri * 12) as u64)
                             .unwrap_or(0);
                         let size = vm
                             .bus
-                            .read_word(mem_regions_pa + (ri * 8 + 4) as u64)
+                            .read_word(mem_regions_pa + (ri * 12 + 4) as u64)
                             .unwrap_or(0);
                         eprintln!(
                             "[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)",
@@ -1303,11 +1310,11 @@ impl RiscvVm {
                     for ri in 0..res_cnt.min(8) {
                         let base = vm
                             .bus
-                            .read_word(res_regions_pa + (ri * 8) as u64)
+                            .read_word(res_regions_pa + (ri * 12) as u64)
                             .unwrap_or(0);
                         let size = vm
                             .bus
-                            .read_word(res_regions_pa + (ri * 8 + 4) as u64)
+                            .read_word(res_regions_pa + (ri * 12 + 4) as u64)
                             .unwrap_or(0);
                         if size > 0 {
                             eprintln!(
@@ -1488,7 +1495,7 @@ impl RiscvVm {
                 let pc = (encoded >> 32) as u32;
                 let addr = (encoded & 0xFFFFFFFF) as u64;
                 let offset = addr - 0x0080348Cu64;
-                let region_idx = offset / 8;
+                let region_idx = offset / 12;
                 let field = if offset % 8 < 4 { "base" } else { "size" };
                 eprintln!(
                     "[boot]   write #{}: PC=0x{:08X} PA=0x{:08X} val=0x{:08X} (region[{}] {})",
@@ -1499,8 +1506,8 @@ impl RiscvVm {
         if mem_cnt > 0 && mem_regions_ptr >= 0xC0000000 {
             let mr_pa = (mem_regions_ptr - 0xC0000000) as u64;
             for ri in 0..mem_cnt.min(4) {
-                let base = vm.bus.read_word(mr_pa + (ri * 8) as u64).unwrap_or(0);
-                let size = vm.bus.read_word(mr_pa + (ri * 8 + 4) as u64).unwrap_or(0);
+                let base = vm.bus.read_word(mr_pa + (ri * 12) as u64).unwrap_or(0);
+                let size = vm.bus.read_word(mr_pa + (ri * 12 + 4) as u64).unwrap_or(0);
                 eprintln!(
                     "[boot]   memory[{}]: base=0x{:08X} size=0x{:08X} ({}MB)",
                     ri,
