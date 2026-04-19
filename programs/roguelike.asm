@@ -1,5 +1,5 @@
 ; roguelike.asm -- Procedural Dungeon Crawler with Combat, Enemies, Items
-; Controls: WASD to move, R to regenerate dungeon
+; Controls: WASD to move, U to undo, R to regenerate dungeon
 ; Goal: find stairs, fight enemies, collect items, descend deeper
 ;
 ; Memory layout:
@@ -33,6 +33,7 @@
 #define CAM_Y        0x624A
 #define KILLS        0x624B
 #define MSG_TIMER    0x624C
+#define UNDO_SLOT    0x624D
 #define ENEMY_BASE   0x6300
 #define ENEMY_COUNT  0x6380
 #define ITEM_BASE    0x6400
@@ -53,6 +54,13 @@
 #define MAX_ITEMS    16
 
 restart:
+  ; Clear undo history on restart
+  LDI r1, 3
+  FORK r1
+  ; Reset undo slot to 0
+  LDI r1, 0
+  LDI r4, UNDO_SLOT
+  STORE r4, r1
   LDI r30, 0x8000
   CALL init_tiles
   CALL init_text
@@ -127,9 +135,16 @@ gl_input:
   LDI r6, 114
   CMP r7, r6
   JZ r0, restart
+  LDI r6, 85
+  CMP r7, r6
+  JZ r0, try_undo
+  LDI r6, 117
+  CMP r7, r6
+  JZ r0, try_undo
   JMP idle
 
 try_up:
+  CALL save_undo
   LDI r4, P_X
   LOAD r2, r4
   LDI r4, P_Y
@@ -152,6 +167,7 @@ try_up:
   JMP do_move
 
 try_down:
+  CALL save_undo
   LDI r4, P_X
   LOAD r2, r4
   LDI r4, P_Y
@@ -174,6 +190,7 @@ try_down:
   JMP do_move
 
 try_left:
+  CALL save_undo
   LDI r4, P_X
   LOAD r2, r4
   LDI r4, P_Y
@@ -196,6 +213,7 @@ try_left:
   JMP do_move
 
 try_right:
+  CALL save_undo
   LDI r4, P_X
   LOAD r2, r4
   LDI r4, P_Y
@@ -224,6 +242,40 @@ do_move:
   BEEP r5, r6
 
 idle:
+  FRAME
+  JMP game_loop
+
+try_undo:
+  ; Check if we have any undo snapshots (FORK mode 2 = list count)
+  LDI r1, 2
+  FORK r1
+  ; r0 = count of saved snapshots
+  JZ r0, idle
+  ; Decrement undo slot to get the slot to restore
+  LDI r4, UNDO_SLOT
+  LOAD r1, r4
+  LDI r9, 1
+  SUB r1, r9
+  ; Clamp to 0 (underflow check)
+  LDI r9, 0xFFFFFFFF
+  CMP r1, r9
+  JNZ r0, undo_do_restore
+  LDI r1, 0
+undo_do_restore:
+  ; r1 = slot index. FORK mode 1 restores from slot in r1.
+  LDI r4, 1
+  FORK r4
+  ; r0 = 0 on success, 0xFFFFFFFF on error
+  LDI r9, 0xFFFFFFFF
+  CMP r0, r9
+  JZ r0, idle
+  ; Update undo slot to the restored position
+  LDI r4, UNDO_SLOT
+  STORE r4, r1
+  ; Flash screen blue briefly for undo feedback
+  LDI r1, 0x0044AA
+  FILL r1
+  CALL render
   FRAME
   JMP game_loop
 
@@ -276,6 +328,22 @@ death_screen:
 ; ─────────────────────────────────────────────────────────────
 ; SUBROUTINES
 ; ─────────────────────────────────────────────────────────────
+
+; ── save_undo ───────────────────────────────────────────────
+; Save a FORK snapshot before each player move.
+; Uses FORK mode 0 (save). Stores slot index in UNDO_SLOT.
+
+save_undo:
+  PUSH r31
+  ; FORK mode 0 = save snapshot to next slot
+  LDI r1, 0
+  FORK r1
+  ; r0 = slot index on success, 0xFFFFFFFF on error (max snapshots reached)
+  ; Save the slot index so try_undo knows where to restore from
+  LDI r4, UNDO_SLOT
+  STORE r4, r0
+  POP r31
+  RET
 
 ; ── init_tiles ───────────────────────────────────────────────
 

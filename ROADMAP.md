@@ -360,8 +360,8 @@ The convergence analysis from two independent possibility explorations both iden
 - [x] Phase 39a: NOTE Opcode with Waveform Selection
 - [x] Phase 39b: Sound Demo Programs
 - [x] Phase 40a: Dungeon Floor Generation
-- [ ] Phase 40b: Combat, Enemies, Items
-- [ ] Phase 40c: Time-Travel Undo
+- [x] Phase 40b: Combat, Enemies, Items
+- [x] Phase 40c: Time-Travel Undo
 
 ---
 
