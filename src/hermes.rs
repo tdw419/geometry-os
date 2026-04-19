@@ -1072,9 +1072,18 @@ fn build_build_context(vm: &vm::Vm) -> String {
     // Pixel Provenance -- trace data for the agent to reason about
     if !vm.pixel_write_log.is_empty() {
         ctx.push_str("\n## Pixel Provenance\n");
+        let pw_len = vm.pixel_write_log.len();
+        let pw_cap = vm.pixel_write_log.capacity();
+        let evicted = pw_len >= pw_cap;
         ctx.push_str(&format!(
-            "  {} pixel writes recorded. Use 'who_wrote <x> <y>' to query any pixel.\n",
-            vm.pixel_write_log.len()
+            "  {}/{} pixel writes{}. Use 'who_wrote <x> <y>' to query any pixel.\n",
+            pw_len,
+            pw_cap,
+            if evicted {
+                " -- OLDER WRITES EVICTED, early history may be incomplete"
+            } else {
+                ""
+            }
         ));
         ctx.push_str(&format!(
             "  {} frame checkpoints, {} VM snapshots, {} trace entries.\n",

@@ -479,9 +479,19 @@ impl PixelWriteLog {
         self.len
     }
 
+    /// Total capacity of the ring buffer.
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
     /// Whether the buffer is empty.
     pub fn is_empty(&self) -> bool {
         self.len == 0
+    }
+
+    /// Whether old entries have been evicted (buffer wrapped).
+    pub fn is_full(&self) -> bool {
+        self.len >= self.capacity
     }
 
     /// Clear all entries.
