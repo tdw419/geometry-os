@@ -53,7 +53,7 @@ impl ProviderConfig {
             .unwrap_or_else(|| "http://localhost:11434/api/chat".to_string());
         let model =
             extract_json_string(json, "model").unwrap_or_else(|| "qwen3.5-tools".to_string());
-        let api_key = extract_json_string(json, "api_key").unwrap_or_else(|| "".to_string());
+        let api_key = extract_json_string(json, "api_key").unwrap_or_default();
         let max_tokens = extract_json_number(json, "max_tokens").unwrap_or(8192);
         let temperature = extract_json_float(json, "temperature").unwrap_or(0.3);
 
@@ -66,7 +66,7 @@ impl ProviderConfig {
                     model: extract_json_string(fb_json, "model")
                         .unwrap_or_else(|| "qwen3.5-tools".to_string()),
                     api_key: extract_json_string(fb_json, "api_key")
-                        .unwrap_or_else(|| "".to_string()),
+                        .unwrap_or_default(),
                     max_tokens: extract_json_number(fb_json, "max_tokens").unwrap_or(8192),
                     temperature: extract_json_float(fb_json, "temperature").unwrap_or(0.3),
                     fallback: None,
