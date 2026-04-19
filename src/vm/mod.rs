@@ -9,7 +9,7 @@ pub struct Vm {
     pub frame_ready: bool,
     /// LCG state for RAND opcode
     pub rand_state: u32,
-    /// Incremented each time FRAME fires; mirrored to RAM[TICKS_PORT]
+    /// Incremented each time FRAME fires; mirrored to RAM\[0xFFE\]
     pub frame_count: u32,
     /// Set by BEEP opcode: (freq_hz, duration_ms). Consumed and cleared by host.
     pub beep: Option<(u32, u32)>,

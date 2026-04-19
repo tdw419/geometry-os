@@ -77,7 +77,7 @@ pub enum SchedEvent {
 
 /// RV32I CPU state.
 pub struct RiscvCpu {
-    /// General-purpose registers x[0..32]. x[0] is hardwired to zero.
+    /// General-purpose registers x0-x31. x0 is hardwired to zero.
     pub x: [u32; 32],
     /// Program counter.
     pub pc: u32,

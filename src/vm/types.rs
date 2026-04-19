@@ -37,33 +37,33 @@ pub struct Formula {
 /// Operations a formula can perform.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FormulaOp {
-    /// result = deps[0] + deps[1]
+    /// result = first dep + second dep
     Add,
-    /// result = deps[0] - deps[1]
+    /// result = first dep - second dep
     Sub,
-    /// result = deps[0] * deps[1]
+    /// result = first dep * second dep
     Mul,
-    /// result = deps[0] / deps[1] (0 on div-by-zero)
+    /// result = first dep / second dep (0 on div-by-zero)
     Div,
-    /// result = deps[0] & deps[1]
+    /// result = first dep & second dep
     And,
-    /// result = deps[0] | deps[1]
+    /// result = first dep | second dep
     Or,
-    /// result = deps[0] ^ deps[1]
+    /// result = first dep ^ second dep
     Xor,
-    /// result = !deps[0] (bitwise NOT, single dep)
+    /// result = !first dep (bitwise NOT, single dep)
     Not,
-    /// result = deps[0] (identity/copy, single dep)
+    /// result = first dep (identity/copy, single dep)
     Copy,
-    /// result = max(deps[0], deps[1])
+    /// result = max(first dep, second dep)
     Max,
-    /// result = min(deps[0], deps[1])
+    /// result = min(first dep, second dep)
     Min,
-    /// result = deps[0] % deps[1]
+    /// result = first dep % second dep
     Mod,
-    /// result = deps[0] << deps[1]
+    /// result = first dep << second dep
     Shl,
-    /// result = deps[0] >> deps[1]
+    /// result = first dep >> second dep
     Shr,
 }
 /// Maximum number of concurrently spawned child processes
@@ -248,7 +248,7 @@ impl Signal {
 ///   Running -> Blocked     (pipe read empty / MSGRCV empty)
 ///   Blocked -> Ready       (data available)
 ///   Running -> Zombie      (EXIT opcode or fatal signal)
-///   Zombie -> <gone>       (parent calls WAITPID, reaps exit code)
+///   Zombie -> gone         (parent calls WAITPID, reaps exit code)
 ///   Any -> Stopped         (SIGSTOP)
 ///   Stopped -> Ready       (SIGCONT -- future)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

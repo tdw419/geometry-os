@@ -45,34 +45,34 @@ pub fn satp_mode_enabled(satp: u32) -> bool {
     (satp >> 31) & 1 != 0
 }
 
-/// Extract ASID from satp (bits [30:22]).
+/// Extract ASID from satp (bits 30:22).
 pub fn satp_asid(satp: u32) -> u16 {
     ((satp >> 22) & 0x1FF) as u16
 }
 
-/// Extract root page table PPN from satp (bits [21:0]).
+/// Extract root page table PPN from satp (bits 21:0).
 pub fn satp_ppn(satp: u32) -> u32 {
     satp & 0x003F_FFFF
 }
 
 // ---- VA field extraction ----
 
-/// Extract VPN[1] from a virtual address (bits [31:22]).
+/// Extract VPN1 from a virtual address (bits 31:22).
 pub fn va_vpn1(va: u32) -> u32 {
     (va >> 22) & 0x3FF
 }
 
-/// Extract VPN[0] from a virtual address (bits [21:12]).
+/// Extract VPN0 from a virtual address (bits 21:12).
 pub fn va_vpn0(va: u32) -> u32 {
     (va >> 12) & 0x3FF
 }
 
-/// Extract page offset from a virtual address (bits [11:0]).
+/// Extract page offset from a virtual address (bits 11:0).
 pub fn va_offset(va: u32) -> u32 {
     va & 0xFFF
 }
 
-/// Combine VPN[1] and VPN[0] into a single VPN value for TLB lookup.
+/// Combine VPN1 and VPN0 into a single VPN value for TLB lookup.
 pub fn va_to_vpn(va: u32) -> u32 {
     (va >> 12) & 0xFFFFF // 20-bit combined VPN
 }

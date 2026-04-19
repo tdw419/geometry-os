@@ -11,7 +11,7 @@
 use super::operation::{sign_extend, Operation};
 
 /// Check if a 16-bit halfword is a compressed instruction.
-/// Returns true if bits[1:0] != 0b11 (not a 32-bit instruction).
+/// Returns true if bits 1:0 != 0b11 (not a 32-bit instruction).
 #[inline]
 pub fn is_compressed(halfword: u16) -> bool {
     halfword & 0x3 != 0x3
