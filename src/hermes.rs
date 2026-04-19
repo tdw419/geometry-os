@@ -1069,6 +1069,21 @@ fn build_build_context(vm: &vm::Vm) -> String {
         ctx.push_str("  (screen not initialized)\n");
     }
 
+    // Pixel Provenance -- trace data for the agent to reason about
+    if !vm.pixel_write_log.is_empty() {
+        ctx.push_str("\n## Pixel Provenance\n");
+        ctx.push_str(&format!(
+            "  {} pixel writes recorded. Use 'who_wrote <x> <y>' to query any pixel.\n",
+            vm.pixel_write_log.len()
+        ));
+        ctx.push_str(&format!(
+            "  {} frame checkpoints, {} VM snapshots, {} trace entries.\n",
+            vm.frame_checkpoints.len(),
+            vm.snapshots.len(),
+            vm.trace_buffer.len()
+        ));
+    }
+
     // List source files with line counts
     ctx.push_str("\n## Project Files\n");
     let mut total_lines = 0;
@@ -1929,6 +1944,175 @@ pub fn execute_cli_command(
             println!("{}", out);
             output.push_str(&out);
             output.push('\n');
+        }
+        "who_wrote" => {
+            // who_wrote <x> <y> -- pixel provenance query
+            // Shows which instructions wrote to pixel (x,y), newest first
+            if parts.len() < 3 {
+                let msg = "Usage: who_wrote <x> <y>".to_string();
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                return;
+            }
+            let x: u16 = match parts[1].parse() {
+                Ok(v) if v < 256 => v,
+                _ => {
+                    let msg = "x must be 0-255".to_string();
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                    return;
+                }
+            };
+            let y: u16 = match parts[2].parse() {
+                Ok(v) if v < 256 => v,
+                _ => {
+                    let msg = "y must be 0-255".to_string();
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                    return;
+                }
+            };
+            let total_writes = vm.pixel_write_log.count_at(x, y);
+            if total_writes == 0 {
+                let msg = format!("Pixel ({},{}) was never written (or trace was off)", x, y);
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                let color = vm.screen[y as usize * 256 + x as usize];
+                let msg2 = format!("  Current color: 0x{:08X} (likely initial/black)", color);
+                println!("{}", msg2);
+                output.push_str(&msg2);
+                output.push('\n');
+            } else {
+                let msg = format!("Pixel ({},{}) was written {} time(s):", x, y, total_writes);
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+
+                // Show last 10 writes (newest first)
+                let entries = vm.pixel_write_log.recent_at(x, y, 10);
+                for (i, entry) in entries.iter().enumerate() {
+                    let op_name = opcode_name(entry.opcode);
+                    let label = if i == 0 { "last" } else { "prev" };
+                    let msg = format!(
+                        "  [{}] {} at step {} wrote color 0x{:08X}",
+                        label,
+                        op_name,
+                        entry.step(),
+                        entry.color
+                    );
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                }
+
+                // Current value
+                let color = vm.screen[y as usize * 256 + x as usize];
+                let msg2 = format!("  Current color: 0x{:08X}", color);
+                println!("{}", msg2);
+                output.push_str(&msg2);
+                output.push('\n');
+            }
+        }
+        "trace" => {
+            // trace [x] [y] -- timeline provenance
+            // Without args: summary of trace data available
+            // With x,y: same as who_wrote (alias)
+            if parts.len() >= 3 {
+                // Alias for who_wrote
+                let x: u16 = match parts[1].parse() {
+                    Ok(v) if v < 256 => v,
+                    _ => {
+                        let msg = "x must be 0-255".to_string();
+                        println!("{}", msg);
+                        output.push_str(&msg);
+                        output.push('\n');
+                        return;
+                    }
+                };
+                let y: u16 = match parts[2].parse() {
+                    Ok(v) if v < 256 => v,
+                    _ => {
+                        let msg = "y must be 0-255".to_string();
+                        println!("{}", msg);
+                        output.push_str(&msg);
+                        output.push('\n');
+                        return;
+                    }
+                };
+                let total_writes = vm.pixel_write_log.count_at(x, y);
+                if total_writes == 0 {
+                    let msg = format!("Pixel ({},{}) was never written (or trace was off)", x, y);
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                } else {
+                    let entries = vm.pixel_write_log.recent_at(x, y, 10);
+                    let msg = format!(
+                        "Pixel ({},{}) -- {} writes, showing last {}:",
+                        x,
+                        y,
+                        total_writes,
+                        entries.len()
+                    );
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                    for (i, entry) in entries.iter().enumerate() {
+                        let op_name = opcode_name(entry.opcode);
+                        let label = if i == 0 { "last" } else { "prev" };
+                        let msg = format!(
+                            "  [{}] {} at step {} -> 0x{:08X}",
+                            label,
+                            op_name,
+                            entry.step(),
+                            entry.color
+                        );
+                        println!("{}", msg);
+                        output.push_str(&msg);
+                        output.push('\n');
+                    }
+                }
+            } else {
+                // Summary of trace data
+                let msg = format!(
+                    "Trace buffer: {} instruction entries",
+                    vm.trace_buffer.len()
+                );
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                let msg = format!(
+                    "Frame checkpoints: {} frames saved",
+                    vm.frame_checkpoints.len()
+                );
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                let msg = format!(
+                    "Pixel write log: {} entries (use 'who_wrote <x> <y>' to query)",
+                    vm.pixel_write_log.len()
+                );
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                let msg = format!(
+                    "Timeline forks: {} snapshots (use FORK opcode to save/restore)",
+                    vm.snapshots.len()
+                );
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                if vm.pixel_write_log.is_empty() {
+                    let msg = "Note: No pixel writes recorded. Run a program first (trace is auto-enabled during 'run').";
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                }
+            }
         }
         "rollback" => {
             let out = git_rollback();
