@@ -718,11 +718,58 @@ pub fn build_hermes_context(
 }
 
 /// Build context for the build agent (project files, git log, test status)
-fn build_build_context() -> String {
+/// Downsample 256x256 screen to ASCII art (48 cols x 24 rows).
+/// Uses luminance: 0.299*R + 0.587*G + 0.114*B mapped to 10-level grayscale ramp.
+fn screen_to_ascii(screen: &[u32]) -> String {
+    const COLS: usize = 48;
+    const ROWS: usize = 24;
+    const W: usize = 256;
+    const H: usize = 256;
+    const CELL_W: usize = W / COLS; // 5
+    const CELL_H: usize = H / ROWS; // ~10
+    const RAMP: &[u8] = b" .:-=+*#%@";
+
+    let mut out = String::with_capacity(ROWS * (COLS + 1));
+    for row in 0..ROWS {
+        for col in 0..COLS {
+            let sx = (col * CELL_W + CELL_W / 2).min(W - 1);
+            let sy = (row * CELL_H + CELL_H / 2).min(H - 1);
+            let px = screen[sy * W + sx];
+            if px == 0 {
+                out.push(' ');
+                continue;
+            }
+            let r = ((px >> 16) & 0xFF) as f32;
+            let g = ((px >> 8) & 0xFF) as f32;
+            let b = (px & 0xFF) as f32;
+            let lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            let idx = ((lum / 255.0) * (RAMP.len() - 1) as f32).round() as usize;
+            out.push(RAMP[idx.min(RAMP.len() - 1)] as char);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn build_build_context(vm: &vm::Vm) -> String {
     let mut ctx = String::new();
 
+    // Screen state -- let the AI see what it drew
+    ctx.push_str("## Current Screen (48x24 ASCII downsample of 256x256 framebuffer)\n");
+    if !vm.screen.is_empty() {
+        ctx.push_str("```\n");
+        ctx.push_str(&screen_to_ascii(&vm.screen));
+        ctx.push_str("```\n");
+        // Quick stats
+        let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+        let pct = (non_black as f64 / vm.screen.len() as f64 * 100.0) as u32;
+        ctx.push_str(&format!("  {}% pixels non-black, PC=0x{:04X}, halted={}\n", pct, vm.pc, vm.halted));
+    } else {
+        ctx.push_str("  (screen not initialized)\n");
+    }
+
     // List source files with line counts
-    ctx.push_str("## Project Files\n");
+    ctx.push_str("\n## Project Files\n");
     let mut total_lines = 0;
     let mut file_count = 0;
     if let Ok(rd) = std::fs::read_dir("src") {
@@ -926,6 +973,16 @@ pub fn run_hermes_loop(
     for iteration in 0..10 {
         // Build context
         let ctx = build_hermes_context(vm, source_text, loaded_file);
+        
+        // Debug: show if screen vision was included
+        let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+        println!("[hermes-vision] screen pixels non-zero: {}/{}", non_black, vm.screen.len());
+        if ctx.contains("## Screen") {
+            println!("[hermes-vision] Screen dump included in context");
+        } else {
+            println!("[hermes-vision] No screen data in context");
+        }
+        
         let full_system = format!("{}\n\n{}", HERMES_SYSTEM_PROMPT, ctx);
 
         println!("[hermes] --- iteration {} ---", iteration + 1);
@@ -1565,7 +1622,7 @@ pub fn run_build_loop(
     let mut conversation_history = initial_prompt.to_string();
 
     for iteration in 0..5 {
-        let ctx = build_build_context();
+        let ctx = build_build_context(vm);
         let full_system = format!("{}\n\n{}", HERMES_BUILD_SYSTEM_PROMPT, ctx);
 
         println!("[build] --- iteration {} ---", iteration + 1);
@@ -1744,7 +1801,7 @@ pub fn run_build_canvas(
     let mut conversation_history = initial_prompt.to_string();
 
     for iteration in 0..3 {
-        let ctx = build_build_context();
+        let ctx = build_build_context(vm);
         let full_system = format!("{}\n\n{}", HERMES_BUILD_SYSTEM_PROMPT, ctx);
 
         *output_row = write_line_to_canvas(
@@ -1952,4 +2009,50 @@ pub fn run_build_canvas(
 
     *output_row = write_line_to_canvas(canvas_buffer, *output_row, "[build] Agent loop ended.");
     ensure_scroll(*output_row, scroll_offset);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_screen_to_ascii_blank() {
+        let screen = vec![0u32; 256 * 256];
+        let ascii = screen_to_ascii(&screen);
+        // All spaces
+        assert!(ascii.trim().is_empty());
+        // Should be 24 rows
+        assert_eq!(ascii.lines().count(), 24);
+    }
+
+    #[test]
+    fn test_screen_to_ascii_full_white() {
+        let screen = vec![0xFFFFFFu32; 256 * 256];
+        let ascii = screen_to_ascii(&screen);
+        // All @ (max brightness)
+        for line in ascii.lines() {
+            assert!(line.chars().all(|c| c == '@'), "line not all @: {:?}", line);
+        }
+    }
+
+    #[test]
+    fn test_screen_to_ascii_single_pixel() {
+        let mut screen = vec![0u32; 256 * 256];
+        screen[125 * 256 + 122] = 0xFFFFFF; // center of cell (24, 12)
+        let ascii = screen_to_ascii(&screen);
+        // Should have exactly one non-space character
+        let non_space: Vec<_> = ascii.chars().filter(|&c| c != ' ' && c != '\n').collect();
+        assert_eq!(non_space.len(), 1, "expected 1 non-space char, got {}: {:?}", non_space.len(), non_space);
+    }
+
+    #[test]
+    fn test_screen_to_ascii_dimensions() {
+        let screen = vec![0u32; 256 * 256];
+        let ascii = screen_to_ascii(&screen);
+        let lines: Vec<&str> = ascii.lines().collect();
+        assert_eq!(lines.len(), 24, "expected 24 rows");
+        for line in &lines {
+            assert_eq!(line.len(), 48, "expected 48 cols");
+        }
+    }
 }
