@@ -126,8 +126,10 @@ impl super::Vm {
         let len_reg = self.fetch() as usize;
         let sent_reg = self.fetch() as usize;
 
-        if fd_reg >= super::NUM_REGS || buf_reg >= super::NUM_REGS
-            || len_reg >= super::NUM_REGS || sent_reg >= super::NUM_REGS
+        if fd_reg >= super::NUM_REGS
+            || buf_reg >= super::NUM_REGS
+            || len_reg >= super::NUM_REGS
+            || sent_reg >= super::NUM_REGS
         {
             self.regs[0] = NET_ERR_INVALID_FD;
             return;
@@ -185,8 +187,10 @@ impl super::Vm {
         let max_len_reg = self.fetch() as usize;
         let recv_reg = self.fetch() as usize;
 
-        if fd_reg >= super::NUM_REGS || buf_reg >= super::NUM_REGS
-            || max_len_reg >= super::NUM_REGS || recv_reg >= super::NUM_REGS
+        if fd_reg >= super::NUM_REGS
+            || buf_reg >= super::NUM_REGS
+            || max_len_reg >= super::NUM_REGS
+            || recv_reg >= super::NUM_REGS
         {
             self.regs[0] = NET_ERR_INVALID_FD;
             return;
@@ -321,11 +325,18 @@ mod tests {
         let (mut vm, port) = setup_echo_server();
 
         // LDI r1, 0x7000  (address of IP string)
-        vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 0x7000;
+        vm.ram[0] = 0x10;
+        vm.ram[1] = 1;
+        vm.ram[2] = 0x7000;
         // LDI r2, port
-        vm.ram[3] = 0x10; vm.ram[4] = 2; vm.ram[5] = port as u32;
+        vm.ram[3] = 0x10;
+        vm.ram[4] = 2;
+        vm.ram[5] = port as u32;
         // CONNECT r1, r2, r3
-        vm.ram[6] = 0x7F; vm.ram[7] = 1; vm.ram[8] = 2; vm.ram[9] = 3;
+        vm.ram[6] = 0x7F;
+        vm.ram[7] = 1;
+        vm.ram[8] = 2;
+        vm.ram[9] = 3;
         vm.pc = 0;
 
         vm.step(); // LDI r1
@@ -345,11 +356,18 @@ mod tests {
         vm.ram[0x7000] = 0; // null terminator immediately
 
         // LDI r1, 0x7000
-        vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 0x7000;
+        vm.ram[0] = 0x10;
+        vm.ram[1] = 1;
+        vm.ram[2] = 0x7000;
         // LDI r2, 80
-        vm.ram[3] = 0x10; vm.ram[4] = 2; vm.ram[5] = 80;
+        vm.ram[3] = 0x10;
+        vm.ram[4] = 2;
+        vm.ram[5] = 80;
         // CONNECT r1, r2, r3
-        vm.ram[6] = 0x7F; vm.ram[7] = 1; vm.ram[8] = 2; vm.ram[9] = 3;
+        vm.ram[6] = 0x7F;
+        vm.ram[7] = 1;
+        vm.ram[8] = 2;
+        vm.ram[9] = 3;
         vm.pc = 0;
 
         vm.step(); // LDI r1
@@ -371,11 +389,18 @@ mod tests {
         vm.ram[0x7000 + ip.len()] = 0;
 
         // LDI r1, 0x7000
-        vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 0x7000;
+        vm.ram[0] = 0x10;
+        vm.ram[1] = 1;
+        vm.ram[2] = 0x7000;
         // LDI r2, 19 (port 19 -- nothing listens here)
-        vm.ram[3] = 0x10; vm.ram[4] = 2; vm.ram[5] = 19;
+        vm.ram[3] = 0x10;
+        vm.ram[4] = 2;
+        vm.ram[5] = 19;
         // CONNECT r1, r2, r3
-        vm.ram[6] = 0x7F; vm.ram[7] = 1; vm.ram[8] = 2; vm.ram[9] = 3;
+        vm.ram[6] = 0x7F;
+        vm.ram[7] = 1;
+        vm.ram[8] = 2;
+        vm.ram[9] = 3;
         vm.pc = 0;
 
         vm.step(); // LDI r1
@@ -393,7 +418,10 @@ mod tests {
         vm.regs[2] = port as u32;
         vm.pc = 100;
         // CONNECT r1, r2, r3
-        vm.ram[100] = 0x7F; vm.ram[101] = 1; vm.ram[102] = 2; vm.ram[103] = 3;
+        vm.ram[100] = 0x7F;
+        vm.ram[101] = 1;
+        vm.ram[102] = 2;
+        vm.ram[103] = 3;
         vm.step(); // CONNECT
         assert_eq!(vm.regs[0], NET_OK);
         let fd = vm.regs[3];
@@ -409,7 +437,11 @@ mod tests {
         vm.regs[5] = 0x7100;
         vm.regs[6] = 5;
         vm.pc = 200;
-        vm.ram[200] = 0x80; vm.ram[201] = 4; vm.ram[202] = 5; vm.ram[203] = 6; vm.ram[204] = 7;
+        vm.ram[200] = 0x80;
+        vm.ram[201] = 4;
+        vm.ram[202] = 5;
+        vm.ram[203] = 6;
+        vm.ram[204] = 7;
         vm.step(); // SOCKSEND
         assert_eq!(vm.regs[0], NET_OK, "SOCKSEND should succeed");
         assert!(vm.regs[7] > 0, "Should have sent bytes");
@@ -421,7 +453,11 @@ mod tests {
         vm.regs[5] = 0x7200;
         vm.regs[6] = 100;
         vm.pc = 300;
-        vm.ram[300] = 0x81; vm.ram[301] = 4; vm.ram[302] = 5; vm.ram[303] = 6; vm.ram[304] = 8;
+        vm.ram[300] = 0x81;
+        vm.ram[301] = 4;
+        vm.ram[302] = 5;
+        vm.ram[303] = 6;
+        vm.ram[304] = 8;
         vm.step(); // SOCKRECV
         assert_eq!(vm.regs[0], NET_OK, "SOCKRECV should succeed");
         let received = vm.regs[8] as usize;
@@ -429,8 +465,14 @@ mod tests {
 
         // Verify echoed data
         for i in 0..received {
-            assert_eq!(vm.ram[0x7200 + i], msg[i] as u32,
-                "Byte {} mismatch: got {}, expected {}", i, vm.ram[0x7200 + i], msg[i]);
+            assert_eq!(
+                vm.ram[0x7200 + i],
+                msg[i] as u32,
+                "Byte {} mismatch: got {}, expected {}",
+                i,
+                vm.ram[0x7200 + i],
+                msg[i]
+            );
         }
     }
 
@@ -442,7 +484,10 @@ mod tests {
         vm.regs[1] = 0x7000;
         vm.regs[2] = port as u32;
         vm.pc = 100;
-        vm.ram[100] = 0x7F; vm.ram[101] = 1; vm.ram[102] = 2; vm.ram[103] = 3;
+        vm.ram[100] = 0x7F;
+        vm.ram[101] = 1;
+        vm.ram[102] = 2;
+        vm.ram[103] = 3;
         vm.step();
         assert_eq!(vm.regs[0], NET_OK);
         assert_eq!(vm.tcp_connection_count(), 1);
@@ -451,7 +496,8 @@ mod tests {
         let fd = vm.regs[3];
         vm.regs[4] = fd;
         vm.pc = 200;
-        vm.ram[200] = 0x82; vm.ram[201] = 4;
+        vm.ram[200] = 0x82;
+        vm.ram[201] = 4;
         vm.step();
         assert_eq!(vm.regs[0], NET_OK);
         assert_eq!(vm.tcp_connection_count(), 0);
@@ -464,7 +510,8 @@ mod tests {
         // DISCONNECT with fd=99 (out of range)
         vm.regs[1] = 99;
         vm.pc = 100;
-        vm.ram[100] = 0x82; vm.ram[101] = 1;
+        vm.ram[100] = 0x82;
+        vm.ram[101] = 1;
         vm.step();
         assert_eq!(vm.regs[0], NET_ERR_INVALID_FD);
     }
@@ -502,9 +549,15 @@ mod tests {
         // Use the first vm's RAM which already has 127.0.0.1 at 0x7000
         vm.regs[2] = extra_port as u32;
         vm.pc = 1000;
-        vm.ram[1000] = 0x7F; vm.ram[1001] = 1; vm.ram[1002] = 2; vm.ram[1003] = 20;
+        vm.ram[1000] = 0x7F;
+        vm.ram[1001] = 1;
+        vm.ram[1002] = 2;
+        vm.ram[1003] = 20;
         vm.step();
-        assert_eq!(vm.regs[0], NET_ERR_NO_SLOTS, "9th connection should fail with NO_SLOTS");
+        assert_eq!(
+            vm.regs[0], NET_ERR_NO_SLOTS,
+            "9th connection should fail with NO_SLOTS"
+        );
     }
 
     #[test]
@@ -516,7 +569,11 @@ mod tests {
         vm.regs[2] = 0x7100;
         vm.regs[3] = 5;
         vm.pc = 100;
-        vm.ram[100] = 0x80; vm.ram[101] = 1; vm.ram[102] = 2; vm.ram[103] = 3; vm.ram[104] = 4;
+        vm.ram[100] = 0x80;
+        vm.ram[101] = 1;
+        vm.ram[102] = 2;
+        vm.ram[103] = 3;
+        vm.ram[104] = 4;
         vm.step();
         assert_eq!(vm.regs[0], NET_ERR_INVALID_FD);
     }
@@ -530,7 +587,11 @@ mod tests {
         vm.regs[2] = 0x7200;
         vm.regs[3] = 100;
         vm.pc = 100;
-        vm.ram[100] = 0x81; vm.ram[101] = 1; vm.ram[102] = 2; vm.ram[103] = 3; vm.ram[104] = 4;
+        vm.ram[100] = 0x81;
+        vm.ram[101] = 1;
+        vm.ram[102] = 2;
+        vm.ram[103] = 3;
+        vm.ram[104] = 4;
         vm.step();
         assert_eq!(vm.regs[0], NET_ERR_INVALID_FD);
     }

@@ -542,10 +542,7 @@ impl PixelWriteLog {
 
     /// Iterate over entries from newest to oldest.
     pub fn iter_rev(&self) -> PixelWriteRevIter<'_> {
-        PixelWriteRevIter {
-            log: self,
-            pos: 0,
-        }
+        PixelWriteRevIter { log: self, pos: 0 }
     }
 }
 

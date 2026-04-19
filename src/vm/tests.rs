@@ -2377,15 +2377,26 @@ fn test_pixel_write_log_pset_records() {
     vm.trace_recording = true;
 
     // LDI r1, 10  (x=10)
-    vm.ram[0] = 0x10; vm.ram[1] = 1; vm.ram[2] = 10;
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 10;
     // LDI r2, 20  (y=20)
-    vm.ram[3] = 0x10; vm.ram[4] = 2; vm.ram[5] = 20;
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 2;
+    vm.ram[5] = 20;
     // LDI r3, 0xFF0000  (color=red)
-    vm.ram[6] = 0x10; vm.ram[7] = 3; vm.ram[8] = 0xFF0000;
+    vm.ram[6] = 0x10;
+    vm.ram[7] = 3;
+    vm.ram[8] = 0xFF0000;
     // PSET r1, r2, r3
-    vm.ram[9] = 0x40; vm.ram[10] = 1; vm.ram[11] = 2; vm.ram[12] = 3;
+    vm.ram[9] = 0x40;
+    vm.ram[10] = 1;
+    vm.ram[11] = 2;
+    vm.ram[12] = 3;
 
-    for _ in 0..4 { vm.step(); } // 3x LDI + PSET
+    for _ in 0..4 {
+        vm.step();
+    } // 3x LDI + PSET
 
     assert_eq!(vm.pixel_write_log.len(), 1);
     let entry = vm.pixel_write_log.get_at(0).unwrap();
@@ -2402,7 +2413,10 @@ fn test_pixel_write_log_pseti_records() {
     vm.trace_recording = true;
 
     // PSETI 50, 60, 0x00FF00
-    vm.ram[0] = 0x41; vm.ram[1] = 50; vm.ram[2] = 60; vm.ram[3] = 0x00FF00;
+    vm.ram[0] = 0x41;
+    vm.ram[1] = 50;
+    vm.ram[2] = 60;
+    vm.ram[3] = 0x00FF00;
 
     vm.step();
 
@@ -2420,7 +2434,10 @@ fn test_pixel_write_log_no_recording_when_off() {
     vm.trace_recording = false;
 
     // PSETI 10, 10, 5
-    vm.ram[0] = 0x41; vm.ram[1] = 10; vm.ram[2] = 10; vm.ram[3] = 5;
+    vm.ram[0] = 0x41;
+    vm.ram[1] = 10;
+    vm.ram[2] = 10;
+    vm.ram[3] = 5;
     vm.step();
 
     assert_eq!(vm.pixel_write_log.len(), 0);
@@ -2453,7 +2470,10 @@ fn test_pixel_write_log_cleared_on_reset() {
     let mut vm = crate::vm::Vm::new();
     vm.trace_recording = true;
 
-    vm.ram[0] = 0x41; vm.ram[1] = 5; vm.ram[2] = 5; vm.ram[3] = 1;
+    vm.ram[0] = 0x41;
+    vm.ram[1] = 5;
+    vm.ram[2] = 5;
+    vm.ram[3] = 1;
     vm.step();
     assert_eq!(vm.pixel_write_log.len(), 1);
 
@@ -2468,14 +2488,18 @@ fn test_pixel_history_count_total() {
 
     // Write 3 pixels
     for i in 0..3u32 {
-        vm.ram[0] = 0x41; vm.ram[1] = i; vm.ram[2] = 0; vm.ram[3] = 1;
+        vm.ram[0] = 0x41;
+        vm.ram[1] = i;
+        vm.ram[2] = 0;
+        vm.ram[3] = 1;
         vm.pc = 0;
         vm.step();
     }
 
     // PIXEL_HISTORY r0 (mode 0 = count total)
     vm.regs[0] = 0;
-    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.ram[0] = 0x84;
+    vm.ram[1] = 0;
     vm.pc = 0;
     vm.step();
 
@@ -2489,11 +2513,17 @@ fn test_pixel_history_count_at_pixel() {
 
     // Write to (10,10) twice and (20,20) once
     for _ in 0..2 {
-        vm.ram[0] = 0x41; vm.ram[1] = 10; vm.ram[2] = 10; vm.ram[3] = 1;
+        vm.ram[0] = 0x41;
+        vm.ram[1] = 10;
+        vm.ram[2] = 10;
+        vm.ram[3] = 1;
         vm.pc = 0;
         vm.step();
     }
-    vm.ram[0] = 0x41; vm.ram[1] = 20; vm.ram[2] = 20; vm.ram[3] = 2;
+    vm.ram[0] = 0x41;
+    vm.ram[1] = 20;
+    vm.ram[2] = 20;
+    vm.ram[3] = 2;
     vm.pc = 0;
     vm.step();
 
@@ -2501,7 +2531,8 @@ fn test_pixel_history_count_at_pixel() {
     vm.regs[0] = 1; // mode
     vm.regs[1] = 10; // x
     vm.regs[2] = 10; // y
-    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.ram[0] = 0x84;
+    vm.ram[1] = 0;
     vm.pc = 0;
     vm.step();
 
@@ -2524,18 +2555,22 @@ fn test_pixel_history_get_recent() {
 
     // Write 3 different colors to (5,5)
     for c in [0xFF0000u32, 0x00FF00, 0x0000FF] {
-        vm.ram[0] = 0x41; vm.ram[1] = 5; vm.ram[2] = 5; vm.ram[3] = c;
+        vm.ram[0] = 0x41;
+        vm.ram[1] = 5;
+        vm.ram[2] = 5;
+        vm.ram[3] = c;
         vm.pc = 0;
         vm.step();
     }
 
     // PIXEL_HISTORY r0 (mode 2 = get recent)
     vm.regs[0] = 2; // mode
-    vm.regs[1] = 5;  // x
-    vm.regs[2] = 5;  // y
+    vm.regs[1] = 5; // x
+    vm.regs[2] = 5; // y
     vm.regs[3] = 10; // max_count
     vm.regs[4] = 0x1000; // buf_addr
-    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.ram[0] = 0x84;
+    vm.ram[1] = 0;
     vm.pc = 0;
     vm.step();
 
@@ -2556,9 +2591,15 @@ fn test_pixel_history_get_at_index() {
     vm.trace_recording = true;
 
     // Write 2 pixels
-    vm.ram[0] = 0x41; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0xAA;
+    vm.ram[0] = 0x41;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0xAA;
     vm.step();
-    vm.ram[0] = 0x41; vm.ram[1] = 3; vm.ram[2] = 4; vm.ram[3] = 0xBB;
+    vm.ram[0] = 0x41;
+    vm.ram[1] = 3;
+    vm.ram[2] = 4;
+    vm.ram[3] = 0xBB;
     vm.pc = 0;
     vm.step();
 
@@ -2566,7 +2607,8 @@ fn test_pixel_history_get_at_index() {
     vm.regs[0] = 3; // mode
     vm.regs[1] = 1; // index (second entry)
     vm.regs[2] = 0x2000; // buf_addr
-    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.ram[0] = 0x84;
+    vm.ram[1] = 0;
     vm.pc = 0;
     vm.step();
 
@@ -2582,7 +2624,8 @@ fn test_pixel_history_invalid_mode() {
     let mut vm = crate::vm::Vm::new();
 
     vm.regs[0] = 99; // invalid mode
-    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.ram[0] = 0x84;
+    vm.ram[1] = 0;
     vm.pc = 0;
     vm.step();
 
@@ -2622,7 +2665,10 @@ fn test_pixel_history_buf_overflow_check() {
     vm.trace_recording = true;
 
     // Write one pixel
-    vm.ram[0] = 0x41; vm.ram[1] = 10; vm.ram[2] = 10; vm.ram[3] = 5;
+    vm.ram[0] = 0x41;
+    vm.ram[1] = 10;
+    vm.ram[2] = 10;
+    vm.ram[3] = 5;
     vm.step();
 
     // Try mode 2 with buffer addr that would overflow RAM
@@ -2631,9 +2677,708 @@ fn test_pixel_history_buf_overflow_check() {
     vm.regs[2] = 10; // y
     vm.regs[3] = 1; // max_count
     vm.regs[4] = 0xFFFF0; // buf_addr (too close to end for 6 words)
-    vm.ram[0] = 0x84; vm.ram[1] = 0;
+    vm.ram[0] = 0x84;
+    vm.ram[1] = 0;
     vm.pc = 0;
     vm.step();
 
     assert_eq!(vm.regs[0], 0xFFFFFFFF); // error
+}
+
+// ── Disassembler Tests ───────────────────────────────────────────
+
+/// Helper: create a VM, load a single instruction at address 0, disassemble it.
+/// Returns the mnemonic string and instruction length.
+fn disasm(bytecode: &[u32]) -> (String, usize) {
+    let mut vm = Vm::new();
+    for (i, &w) in bytecode.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
+    }
+    vm.disassemble_at(0)
+}
+
+#[test]
+fn test_disasm_halt() {
+    let (mnemonic, len) = disasm(&[0x00]);
+    assert_eq!(mnemonic, "HALT");
+    assert_eq!(len, 1);
+}
+
+#[test]
+fn test_disasm_nop() {
+    let (mnemonic, len) = disasm(&[0x01]);
+    assert_eq!(mnemonic, "NOP");
+    assert_eq!(len, 1);
+}
+
+#[test]
+fn test_disasm_frame() {
+    let (mnemonic, len) = disasm(&[0x02]);
+    assert_eq!(mnemonic, "FRAME");
+    assert_eq!(len, 1);
+}
+
+#[test]
+fn test_disasm_beep() {
+    let (mnemonic, len) = disasm(&[0x03, 3, 5]);
+    assert_eq!(mnemonic, "BEEP r3, r5");
+    assert_eq!(len, 3);
+}
+
+#[test]
+fn test_disasm_memcpy() {
+    let (mnemonic, len) = disasm(&[0x04, 1, 2, 3]);
+    assert_eq!(mnemonic, "MEMCPY r1, r2, r3");
+    assert_eq!(len, 4);
+}
+
+#[test]
+fn test_disasm_ldi() {
+    let (mnemonic, len) = disasm(&[0x10, 5, 0x1234]);
+    assert_eq!(mnemonic, "LDI r5, 0x1234");
+    assert_eq!(len, 3);
+}
+
+#[test]
+fn test_disasm_ldi_zero() {
+    let (mnemonic, len) = disasm(&[0x10, 0, 0]);
+    assert_eq!(mnemonic, "LDI r0, 0x0");
+    assert_eq!(len, 3);
+}
+
+#[test]
+fn test_disasm_load() {
+    let (mnemonic, len) = disasm(&[0x11, 7, 10]);
+    assert_eq!(mnemonic, "LOAD r7, [r10]");
+    assert_eq!(len, 3);
+}
+
+#[test]
+fn test_disasm_store() {
+    let (mnemonic, len) = disasm(&[0x12, 4, 8]);
+    assert_eq!(mnemonic, "STORE [r4], r8");
+    assert_eq!(len, 3);
+}
+
+#[test]
+fn test_disasm_texti() {
+    // TEXTI x, y, "AB"  (count=2, so 'A','B' follow)
+    let (mnemonic, len) = disasm(&[0x13, 10, 20, 2, 0x41, 0x42]);
+    assert_eq!(mnemonic, "TEXTI 10, 20, \"AB\"");
+    assert_eq!(len, 6); // 4 header + 2 chars
+}
+
+#[test]
+fn test_disasm_texti_long() {
+    // TEXTI with 40 chars, but capped at 32
+    let mut bc: Vec<u32> = vec![0x13, 0, 0, 40];
+    bc.extend((0..40).map(|i| (b'A' + (i % 26) as u8) as u32));
+    let (mnemonic, len) = disasm(&bc);
+    // "TEXTI 0, 0, \"" (14 chars) + 32 chars + "\"" (1 char) = 47 chars
+    assert_eq!(mnemonic.len(), 46);
+    assert_eq!(len, 44); // 4 header + 40 (full count, not capped for length)
+}
+
+#[test]
+fn test_disasm_stro() {
+    // STRO r1, "Hi" (count=2, then 'H','i')
+    let (mnemonic, len) = disasm(&[0x14, 1, 2, 0x48, 0x69]);
+    assert_eq!(mnemonic, "STRO r1, \"Hi\"");
+    assert_eq!(len, 5); // 3 header + 2 chars
+}
+
+#[test]
+fn test_disasm_cmpi() {
+    let (mnemonic, len) = disasm(&[0x15, 3, 42]);
+    assert_eq!(mnemonic, "CMPI r3, 42");
+    assert_eq!(len, 3);
+}
+
+#[test]
+fn test_disasm_loads() {
+    let (mnemonic, len) = disasm(&[0x16, 5, 0xFFFFFFFF]);
+    assert_eq!(mnemonic, "LOADS r5, -1");
+    assert_eq!(len, 3);
+}
+
+#[test]
+fn test_disasm_stores() {
+    let (mnemonic, len) = disasm(&[0x17, 10, 2]);
+    assert_eq!(mnemonic, "STORES 10, r2");
+    assert_eq!(len, 3);
+}
+
+#[test]
+fn test_disasm_shift_imms() {
+    // SHLI
+    let (m, l) = disasm(&[0x18, 1, 4]);
+    assert_eq!(m, "SHLI r1, 4");
+    assert_eq!(l, 3);
+    // SHRI
+    let (m, l) = disasm(&[0x19, 2, 8]);
+    assert_eq!(m, "SHRI r2, 8");
+    assert_eq!(l, 3);
+    // SARI
+    let (m, l) = disasm(&[0x1A, 3, 2]);
+    assert_eq!(m, "SARI r3, 2");
+    assert_eq!(l, 3);
+}
+
+#[test]
+fn test_disasm_alu_imms() {
+    let tests = vec![
+        (0x1B, "ADDI"),
+        (0x1C, "SUBI"),
+        (0x1D, "ANDI"),
+        (0x1E, "ORI"),
+        (0x1F, "XORI"),
+    ];
+    for (op, name) in tests {
+        let (m, l) = disasm(&[op, 7, 99]);
+        assert_eq!(m, format!("{} r7, 99", name));
+        assert_eq!(l, 3);
+    }
+}
+
+#[test]
+fn test_disasm_alu_regs() {
+    let tests = vec![
+        (0x20, "ADD"),
+        (0x21, "SUB"),
+        (0x22, "MUL"),
+        (0x23, "DIV"),
+        (0x24, "AND"),
+        (0x25, "OR"),
+        (0x26, "XOR"),
+        (0x27, "SHL"),
+        (0x28, "SHR"),
+        (0x29, "MOD"),
+        (0x2B, "SAR"),
+    ];
+    for (op, name) in tests {
+        let (m, l) = disasm(&[op, 1, 2]);
+        assert_eq!(m, format!("{} r1, r2", name));
+        assert_eq!(l, 3);
+    }
+}
+
+#[test]
+fn test_disasm_neg() {
+    let (m, l) = disasm(&[0x2A, 4]);
+    assert_eq!(m, "NEG r4");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_branches() {
+    // JMP
+    let (m, l) = disasm(&[0x30, 0x0100]);
+    assert_eq!(m, "JMP 0x0100");
+    assert_eq!(l, 2);
+
+    // JZ
+    let (m, l) = disasm(&[0x31, 5, 0x0200]);
+    assert_eq!(m, "JZ r5, 0x0200");
+    assert_eq!(l, 3);
+
+    // JNZ
+    let (m, l) = disasm(&[0x32, 3, 0x0050]);
+    assert_eq!(m, "JNZ r3, 0x0050");
+    assert_eq!(l, 3);
+
+    // CALL
+    let (m, l) = disasm(&[0x33, 0x0100]);
+    assert_eq!(m, "CALL 0x0100");
+    assert_eq!(l, 2);
+
+    // RET
+    let (m, l) = disasm(&[0x34]);
+    assert_eq!(m, "RET");
+    assert_eq!(l, 1);
+
+    // BLT
+    let (m, l) = disasm(&[0x35, 1, 0x0080]);
+    assert_eq!(m, "BLT r1, 0x0080");
+    assert_eq!(l, 3);
+
+    // BGE
+    let (m, l) = disasm(&[0x36, 0, 0x0040]);
+    assert_eq!(m, "BGE r0, 0x0040");
+    assert_eq!(l, 3);
+}
+
+#[test]
+fn test_disasm_graphics() {
+    // PSET
+    let (m, l) = disasm(&[0x40, 10, 20, 5]);
+    assert_eq!(m, "PSET r10, r20, r5");
+    assert_eq!(l, 4);
+
+    // PSETI
+    let (m, l) = disasm(&[0x41, 100, 200, 0xFF]);
+    assert_eq!(m, "PSETI 100, 200, 0xFF");
+    assert_eq!(l, 4);
+
+    // FILL
+    let (m, l) = disasm(&[0x42, 3]);
+    assert_eq!(m, "FILL r3");
+    assert_eq!(l, 2);
+
+    // RECTF
+    let (m, l) = disasm(&[0x43, 0, 0, 10, 20, 7]);
+    assert_eq!(m, "RECTF r0,r0,r10,r20,r7");
+    assert_eq!(l, 6);
+
+    // TEXT
+    let (m, l) = disasm(&[0x44, 5, 10, 15]);
+    assert_eq!(m, "TEXT r5,r10,[r15]");
+    assert_eq!(l, 4);
+
+    // LINE
+    let (m, l) = disasm(&[0x45, 0, 0, 100, 50, 9]);
+    assert_eq!(m, "LINE r0,r0,r100,r50,r9");
+    assert_eq!(l, 6);
+
+    // CIRCLE
+    let (m, l) = disasm(&[0x46, 128, 128, 50, 11]);
+    assert_eq!(m, "CIRCLE r128,r128,r50,r11");
+    assert_eq!(l, 5);
+
+    // SCROLL
+    let (m, l) = disasm(&[0x47, 3]);
+    assert_eq!(m, "SCROLL r3");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_input_random() {
+    // IKEY
+    let (m, l) = disasm(&[0x48, 0]);
+    assert_eq!(m, "IKEY r0");
+    assert_eq!(l, 2);
+
+    // RAND
+    let (m, l) = disasm(&[0x49, 7]);
+    assert_eq!(m, "RAND r7");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_sprite() {
+    let (m, l) = disasm(&[0x4A, 10, 20, 30, 8, 8]);
+    assert_eq!(m, "SPRITE r10, r20, r30, r8, r8");
+    assert_eq!(l, 6);
+}
+
+#[test]
+fn test_disasm_asm() {
+    let (m, l) = disasm(&[0x4B, 10, 20]);
+    assert_eq!(m, "ASM r10, r20");
+    assert_eq!(l, 3);
+}
+
+#[test]
+fn test_disasm_tilemap() {
+    let (m, l) = disasm(&[0x4C, 0, 0, 1, 2, 3, 4, 5, 6]);
+    assert_eq!(m, "TILEMAP r0, r0, r1, r2, r3, r4, r5, r6");
+    assert_eq!(l, 9);
+}
+
+#[test]
+fn test_disasm_process_ops() {
+    // SPAWN
+    let (m, l) = disasm(&[0x4D, 10]);
+    assert_eq!(m, "SPAWN r10");
+    assert_eq!(l, 2);
+
+    // KILL
+    let (m, l) = disasm(&[0x4E, 2]);
+    assert_eq!(m, "KILL r2");
+    assert_eq!(l, 2);
+
+    // PEEK
+    let (m, l) = disasm(&[0x4F, 100, 50, 3]);
+    assert_eq!(m, "PEEK r100, r50, r3");
+    assert_eq!(l, 4);
+}
+
+#[test]
+fn test_disasm_cmp_mov() {
+    // CMP
+    let (m, l) = disasm(&[0x50, 1, 2]);
+    assert_eq!(m, "CMP r1, r2");
+    assert_eq!(l, 3);
+
+    // MOV
+    let (m, l) = disasm(&[0x51, 3, 5]);
+    assert_eq!(m, "MOV r3, r5");
+    assert_eq!(l, 3);
+}
+
+#[test]
+fn test_disasm_stack() {
+    // PUSH
+    let (m, l) = disasm(&[0x60, 1]);
+    assert_eq!(m, "PUSH r1");
+    assert_eq!(l, 2);
+
+    // POP
+    let (m, l) = disasm(&[0x61, 2]);
+    assert_eq!(m, "POP r2");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_syscalls() {
+    // SYSCALL
+    let (m, l) = disasm(&[0x52, 1]);
+    assert_eq!(m, "SYSCALL 1");
+    assert_eq!(l, 2);
+
+    // RETK
+    let (m, l) = disasm(&[0x53]);
+    assert_eq!(m, "RETK");
+    assert_eq!(l, 1);
+}
+
+#[test]
+fn test_disasm_file_ops() {
+    // OPEN
+    let (m, l) = disasm(&[0x54, 1, 2]);
+    assert_eq!(m, "OPEN r1, r2");
+    assert_eq!(l, 3);
+
+    // READ
+    let (m, l) = disasm(&[0x55, 3, 4, 5]);
+    assert_eq!(m, "READ r3, r4, r5");
+    assert_eq!(l, 4);
+
+    // WRITE
+    let (m, l) = disasm(&[0x56, 3, 4, 5]);
+    assert_eq!(m, "WRITE r3, r4, r5");
+    assert_eq!(l, 4);
+
+    // CLOSE
+    let (m, l) = disasm(&[0x57, 1]);
+    assert_eq!(m, "CLOSE r1");
+    assert_eq!(l, 2);
+
+    // SEEK
+    let (m, l) = disasm(&[0x58, 0, 10, 20]);
+    assert_eq!(m, "SEEK r0, r10, r20");
+    assert_eq!(l, 4);
+
+    // LS
+    let (m, l) = disasm(&[0x59, 3]);
+    assert_eq!(m, "LS r3");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_scheduler() {
+    // YIELD
+    let (m, l) = disasm(&[0x5A]);
+    assert_eq!(m, "YIELD");
+    assert_eq!(l, 1);
+
+    // SLEEP
+    let (m, l) = disasm(&[0x5B, 5]);
+    assert_eq!(m, "SLEEP r5");
+    assert_eq!(l, 2);
+
+    // SETPRIORITY
+    let (m, l) = disasm(&[0x5C, 10]);
+    assert_eq!(m, "SETPRIORITY r10");
+    assert_eq!(l, 2);
+
+    // PIPE
+    let (m, l) = disasm(&[0x5D, 1, 2]);
+    assert_eq!(m, "PIPE r1, r2");
+    assert_eq!(l, 3);
+
+    // MSGSND
+    let (m, l) = disasm(&[0x5E, 3]);
+    assert_eq!(m, "MSGSND r3");
+    assert_eq!(l, 2);
+
+    // MSGRCV
+    let (m, l) = disasm(&[0x5F]);
+    assert_eq!(m, "MSGRCV");
+    assert_eq!(l, 1);
+}
+
+#[test]
+fn test_disasm_ioctl_env() {
+    // IOCTL
+    let (m, l) = disasm(&[0x62, 0, 1, 2]);
+    assert_eq!(m, "IOCTL r0, r1, r2");
+    assert_eq!(l, 4);
+
+    // GETENV
+    let (m, l) = disasm(&[0x63, 10, 11]);
+    assert_eq!(m, "GETENV r10, r11");
+    assert_eq!(l, 3);
+
+    // SETENV
+    let (m, l) = disasm(&[0x64, 20, 21]);
+    assert_eq!(m, "SETENV r20, r21");
+    assert_eq!(l, 3);
+}
+
+#[test]
+fn test_disasm_process_mgmt() {
+    // GETPID
+    let (m, l) = disasm(&[0x65]);
+    assert_eq!(m, "GETPID");
+    assert_eq!(l, 1);
+
+    // EXEC
+    let (m, l) = disasm(&[0x66, 5]);
+    assert_eq!(m, "EXEC r5");
+    assert_eq!(l, 2);
+
+    // WRITESTR
+    let (m, l) = disasm(&[0x67, 1, 2]);
+    assert_eq!(m, "WRITESTR r1, r2");
+    assert_eq!(l, 3);
+
+    // READLN
+    let (m, l) = disasm(&[0x68, 3, 4, 5]);
+    assert_eq!(m, "READLN r3, r4, r5");
+    assert_eq!(l, 4);
+
+    // WAITPID
+    let (m, l) = disasm(&[0x69, 1]);
+    assert_eq!(m, "WAITPID r1");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_screenp_shutdown_exit() {
+    // SCREENP
+    let (m, l) = disasm(&[0x6D, 3, 100, 200]);
+    assert_eq!(m, "SCREENP r3, r100, r200");
+    assert_eq!(l, 4);
+
+    // SHUTDOWN
+    let (m, l) = disasm(&[0x6E]);
+    assert_eq!(m, "SHUTDOWN");
+    assert_eq!(l, 1);
+
+    // EXIT
+    let (m, l) = disasm(&[0x6F, 42]);
+    assert_eq!(m, "EXIT r42");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_signal() {
+    // SIGNAL
+    let (m, l) = disasm(&[0x70, 1, 2]);
+    assert_eq!(m, "SIGNAL r1, r2");
+    assert_eq!(l, 3);
+
+    // SIGSET
+    let (m, l) = disasm(&[0x71, 3, 4]);
+    assert_eq!(m, "SIGSET r3, r4");
+    assert_eq!(l, 3);
+}
+
+#[test]
+fn test_disasm_hypervisor() {
+    let (m, l) = disasm(&[0x72, 10]);
+    assert_eq!(m, "HYPERVISOR r10");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_asmself_runnext() {
+    let (m, l) = disasm(&[0x73]);
+    assert_eq!(m, "ASMSELF");
+    assert_eq!(l, 1);
+
+    let (m, l) = disasm(&[0x74]);
+    assert_eq!(m, "RUNNEXT");
+    assert_eq!(l, 1);
+}
+
+#[test]
+fn test_disasm_formula() {
+    // FORMULA tile, op=ADD(0), dep_count=3
+    let (m, l) = disasm(&[0x75, 0, 0, 3, 0x100, 0x200, 0x300]);
+    assert_eq!(m, "FORMULA 0, ADD, 3");
+    assert_eq!(l, 7); // 4 header + 3 deps
+
+    // FORMULA tile, op=MUL(2), dep_count=1
+    let (m, l) = disasm(&[0x75, 5, 2, 1, 42]);
+    assert_eq!(m, "FORMULA 5, MUL, 1");
+    assert_eq!(l, 5);
+
+    // Unknown formula op
+    let (m, l) = disasm(&[0x75, 1, 99, 0]);
+    assert_eq!(m, "FORMULA 1, ???, 0");
+    assert_eq!(l, 4);
+}
+
+#[test]
+fn test_disasm_formula_ops_all() {
+    let ops = vec![
+        (0, "ADD"),
+        (1, "SUB"),
+        (2, "MUL"),
+        (3, "DIV"),
+        (4, "AND"),
+        (5, "OR"),
+        (6, "XOR"),
+        (7, "NOT"),
+        (8, "COPY"),
+        (9, "MAX"),
+        (10, "MIN"),
+        (11, "MOD"),
+        (12, "SHL"),
+        (13, "SHR"),
+    ];
+    for (code, name) in ops {
+        let (m, _l) = disasm(&[0x75, 0, code, 0]);
+        assert_eq!(
+            m,
+            format!("FORMULA 0, {}, 0", name),
+            "Formula op code {} should be {}",
+            code,
+            name
+        );
+    }
+}
+
+#[test]
+fn test_disasm_formulaclear() {
+    let (m, l) = disasm(&[0x76]);
+    assert_eq!(m, "FORMULACLEAR");
+    assert_eq!(l, 1);
+}
+
+#[test]
+fn test_disasm_formularem() {
+    let (m, l) = disasm(&[0x77, 42]);
+    assert_eq!(m, "FORMULAREM 42");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_vfs() {
+    // FMKDIR
+    let (m, l) = disasm(&[0x78, 10]);
+    assert_eq!(m, "FMKDIR [r10]");
+    assert_eq!(l, 2);
+
+    // FSTAT
+    let (m, l) = disasm(&[0x79, 1, 2]);
+    assert_eq!(m, "FSTAT r1, [r2]");
+    assert_eq!(l, 3);
+
+    // FUNLINK
+    let (m, l) = disasm(&[0x7A, 5]);
+    assert_eq!(m, "FUNLINK [r5]");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_snap_replay() {
+    // SNAP_TRACE
+    let (m, l) = disasm(&[0x7B, 3]);
+    assert_eq!(m, "SNAP_TRACE r3");
+    assert_eq!(l, 2);
+
+    // REPLAY
+    let (m, l) = disasm(&[0x7C, 5]);
+    assert_eq!(m, "REPLAY r5");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_fork_note() {
+    // FORK
+    let (m, l) = disasm(&[0x7D, 10]);
+    assert_eq!(m, "FORK r10");
+    assert_eq!(l, 2);
+
+    // NOTE
+    let (m, l) = disasm(&[0x7E, 1, 2, 3]);
+    assert_eq!(m, "NOTE r1, r2, r3");
+    assert_eq!(l, 4);
+}
+
+#[test]
+fn test_disasm_network() {
+    // CONNECT
+    let (m, l) = disasm(&[0x7F, 1, 2, 3]);
+    assert_eq!(m, "CONNECT r1, r2, r3");
+    assert_eq!(l, 4);
+
+    // SOCKSEND
+    let (m, l) = disasm(&[0x80, 0, 1, 2, 3]);
+    assert_eq!(m, "SOCKSEND r0, r1, r2, r3");
+    assert_eq!(l, 5);
+
+    // SOCKRECV
+    let (m, l) = disasm(&[0x81, 0, 1, 2, 3]);
+    assert_eq!(m, "SOCKRECV r0, r1, r2, r3");
+    assert_eq!(l, 5);
+
+    // DISCONNECT
+    let (m, l) = disasm(&[0x82, 5]);
+    assert_eq!(m, "DISCONNECT r5");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_trace_read_pixel_history() {
+    // TRACE_READ
+    let (m, l) = disasm(&[0x83, 7]);
+    assert_eq!(m, "TRACE_READ r7");
+    assert_eq!(l, 2);
+
+    // PIXEL_HISTORY
+    let (m, l) = disasm(&[0x84, 3]);
+    assert_eq!(m, "PIXEL_HISTORY r3");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_disasm_unknown_opcode() {
+    let (m, l) = disasm(&[0xFE]);
+    assert_eq!(m, "??? (0xFE)");
+    assert_eq!(l, 1);
+
+    let (m, l) = disasm(&[0xFF]);
+    assert_eq!(m, "??? (0xFF)");
+    assert_eq!(l, 1);
+}
+
+#[test]
+fn test_disasm_out_of_bounds() {
+    let vm = Vm::new();
+    let (m, l) = vm.disassemble_at(0xFFFFF);
+    assert_eq!(m, "???");
+    assert_eq!(l, 1);
+}
+
+#[test]
+fn test_disasm_execp_chdir_getcwd() {
+    // EXECP
+    let (m, l) = disasm(&[0x6A, 1, 2, 3]);
+    assert_eq!(m, "EXECP r1, r2, r3");
+    assert_eq!(l, 4);
+
+    // CHDIR
+    let (m, l) = disasm(&[0x6B, 5]);
+    assert_eq!(m, "CHDIR r5");
+    assert_eq!(l, 2);
+
+    // GETCWD
+    let (m, l) = disasm(&[0x6C, 3]);
+    assert_eq!(m, "GETCWD r3");
+    assert_eq!(l, 2);
 }

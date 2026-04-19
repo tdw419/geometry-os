@@ -1442,8 +1442,7 @@ fn test_trace_read_entry_out_of_range() {
 
     // r0 should be 0xFFFFFFFF (error: index out of range)
     assert_eq!(
-        vm.regs[0],
-        0xFFFFFFFF,
+        vm.regs[0], 0xFFFFFFFF,
         "should return error for out-of-range index"
     );
 }
@@ -1527,8 +1526,14 @@ fn test_trace_read_find_opcode_indices() {
 
     // Indices should be written to RAM[0x7000..0x7002]
     // Index 0 should be the first LDI (LDI r2, 42)
-    assert!(vm.ram[0x7000] < vm.ram[0x7001], "indices should be in order");
-    assert!(vm.ram[0x7001] < vm.ram[0x7002], "indices should be in order");
+    assert!(
+        vm.ram[0x7000] < vm.ram[0x7001],
+        "indices should be in order"
+    );
+    assert!(
+        vm.ram[0x7001] < vm.ram[0x7002],
+        "indices should be in order"
+    );
 }
 
 #[test]
@@ -1552,8 +1557,7 @@ fn test_trace_read_invalid_mode() {
 
     // r0 should be 0xFFFFFFFF (invalid mode)
     assert_eq!(
-        vm.regs[0],
-        0xFFFFFFFF,
+        vm.regs[0], 0xFFFFFFFF,
         "should return error for invalid mode"
     );
 }
@@ -1568,7 +1572,11 @@ fn test_trace_read_assembler() {
     ",
         0x100,
     );
-    assert!(result.is_ok(), "TRACE_READ should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "TRACE_READ should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]

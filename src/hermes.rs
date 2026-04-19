@@ -1566,6 +1566,10 @@ pub fn execute_cli_command(
                     }
                     vm.pc = load_addr as u32;
                     vm.halted = false;
+
+                    // Enable trace recording for pixel provenance + time-travel
+                    vm.trace_recording = true;
+
                     let msg = format!(
                         "Assembled {} bytes at 0x{:04X}",
                         asm_result.pixels.len(),
@@ -1580,6 +1584,9 @@ pub fn execute_cli_command(
                             break;
                         }
                     }
+
+                    // Stop recording (but keep data for queries)
+                    vm.trace_recording = false;
                     let msg = if vm.halted {
                         format!("Halted at PC=0x{:04X}", vm.pc)
                     } else {

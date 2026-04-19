@@ -59,7 +59,7 @@ impl Vm {
                         x,
                         y,
                         (4..4 + count.min(32))
-                            .map(|i| (ram(a + i + 3) & 0xFF) as u8 as char)
+                            .map(|i| (ram(a + i) & 0xFF) as u8 as char)
                             .collect::<String>()
                     ),
                     4 + count,
@@ -73,7 +73,7 @@ impl Vm {
                         "STRO {}, \"{}\"",
                         reg(ar),
                         (3..3 + count.min(32))
-                            .map(|i| (ram(a + i + 2) & 0xFF) as u8 as char)
+                            .map(|i| (ram(a + i) & 0xFF) as u8 as char)
                             .collect::<String>()
                     ),
                     3 + count,
