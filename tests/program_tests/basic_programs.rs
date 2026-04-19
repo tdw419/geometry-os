@@ -1107,14 +1107,14 @@ fn test_wirecube_initializes() {
     );
 
     // Vertex initialization: check cube vertices stored at 0x1000
-    // First vertex should be (120, 120, 120) = all positive
-    assert_eq!(vm.ram[0x1000], 120, "vertex 0 x should be 120");
-    assert_eq!(vm.ram[0x1001], 120, "vertex 0 y should be 120");
-    assert_eq!(vm.ram[0x1002], 120, "vertex 0 z should be 120");
+    // First vertex should be (80, 80, 80) = all positive
+    assert_eq!(vm.ram[0x1000], 80, "vertex 0 x should be 80");
+    assert_eq!(vm.ram[0x1001], 80, "vertex 0 y should be 80");
+    assert_eq!(vm.ram[0x1002], 80, "vertex 0 z should be 80");
 
-    // Last vertex (index 7 = 0b111) should be (-120, -120, -120)
-    // -120 in u32 = 0xFFFFFF88
-    assert_eq!(vm.ram[0x1017], 0xFFFFFF88, "vertex 7 z should be -120");
+    // Last vertex (index 7 = 0b111) should be (-80, -80, -80)
+    // -80 in u32 = 0xFFFFFFB0
+    assert_eq!(vm.ram[0x1017], 0xFFFFFFB0, "vertex 7 z should be -80");
 
     // At least some projected coordinates should be on-screen (0-255 range)
     let mut on_screen = 0;
