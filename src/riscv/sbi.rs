@@ -510,10 +510,32 @@ mod tests {
         let mut uart = Uart::new();
         let mut clint = Clint::new();
         // hart 0 (our CPU) should succeed
-        let r = sbi.handle_ecall(SBI_EXT_HART_STATE, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        let r = sbi.handle_ecall(
+            SBI_EXT_HART_STATE,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert_eq!(r, Some((SBI_SUCCESS as u32, 0)));
         // hart 1 (secondary) should fail -- we only emulate 1 hart
-        let r = sbi.handle_ecall(SBI_EXT_HART_STATE, 0, 1, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        let r = sbi.handle_ecall(
+            SBI_EXT_HART_STATE,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert_eq!(r, Some((SBI_ERR_FAILURE as u32, 0)));
     }
 
@@ -523,10 +545,32 @@ mod tests {
         let mut uart = Uart::new();
         let mut clint = Clint::new();
         // hart 0 should report started
-        let r = sbi.handle_ecall(SBI_EXT_HART_STATE, 2, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        let r = sbi.handle_ecall(
+            SBI_EXT_HART_STATE,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert_eq!(r, Some((0, 0)));
         // hart 1 should report not available
-        let r = sbi.handle_ecall(SBI_EXT_HART_STATE, 2, 1, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        let r = sbi.handle_ecall(
+            SBI_EXT_HART_STATE,
+            2,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut uart,
+            &mut clint,
+        );
         assert_eq!(r, Some((SBI_ERR_FAILURE as u32, 0)));
     }
 }

@@ -24,9 +24,15 @@ fn main() {
             256,
             10_000_000,
             bootargs,
-        ).unwrap();
-        
-        println!("[{}] UART_writes={} UART_buf={} SBI={}", 
-            bootargs, vm.bus.uart.write_count, vm.bus.uart.tx_buf.len(), vm.bus.sbi.console_output.len());
+        )
+        .unwrap();
+
+        println!(
+            "[{}] UART_writes={} UART_buf={} SBI={}",
+            bootargs,
+            vm.bus.uart.write_count,
+            vm.bus.uart.tx_buf.len(),
+            vm.bus.sbi.console_output.len()
+        );
     }
 }

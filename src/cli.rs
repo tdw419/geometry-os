@@ -4,9 +4,9 @@ use crate::assembler;
 use crate::canvas::list_asm_files;
 use crate::hermes::run_hermes_loop;
 use crate::preprocessor;
-use geometry_os::qemu::QemuBridge;
 use crate::save::{load_state, save_state};
 use crate::vm;
+use geometry_os::qemu::QemuBridge;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -34,9 +34,7 @@ fn resolve_pixel_paths(config: &str) -> String {
                             "[pixel] Decoded {} -> {} ({} bytes)",
                             value,
                             temp_path,
-                            std::fs::metadata(&temp_path)
-                                .map(|m| m.len())
-                                .unwrap_or(0)
+                            std::fs::metadata(&temp_path).map(|m| m.len()).unwrap_or(0)
                         );
                         result.replace_range(val_start..val_end, &temp_path);
                     }
@@ -105,7 +103,11 @@ pub fn cli_main(extra_args: &[String]) {
 
         // If QEMU is running and user types a non-qemu command, forward to QEMU stdin
         if let Some(ref mut bridge) = qemu_bridge {
-            if bridge.is_alive() && !cmd.starts_with("qemu") && !cmd.starts_with("quit") && !cmd.starts_with("exit") {
+            if bridge.is_alive()
+                && !cmd.starts_with("qemu")
+                && !cmd.starts_with("quit")
+                && !cmd.starts_with("exit")
+            {
                 // Forward the line to QEMU as stdin + newline
                 let _ = bridge.write_bytes(format!("{}\n", cmd).as_bytes());
                 // Give QEMU a moment to process
@@ -556,7 +558,9 @@ pub fn cli_main(extra_args: &[String]) {
                     "boot" => {
                         if parts.len() < 3 {
                             println!("Usage: qemu boot <config>");
-                            println!("  e.g. qemu boot arch=riscv64 kernel=/path/to/Image ram=256M");
+                            println!(
+                                "  e.g. qemu boot arch=riscv64 kernel=/path/to/Image ram=256M"
+                            );
                             println!("  e.g. qemu boot arch=riscv64 kernel=Image initrd=initrd.gz append='console=ttyS0'");
                             continue;
                         }
@@ -587,7 +591,9 @@ pub fn cli_main(extra_args: &[String]) {
                                         let drain_more = std::time::Duration::from_secs(2);
                                         let drain_start = std::time::Instant::now();
                                         while drain_start.elapsed() < drain_more {
-                                            std::thread::sleep(std::time::Duration::from_millis(100));
+                                            std::thread::sleep(std::time::Duration::from_millis(
+                                                100,
+                                            ));
                                             let more = bridge.read_output_text();
                                             if !more.is_empty() {
                                                 print!("{}", more);
@@ -598,7 +604,9 @@ pub fn cli_main(extra_args: &[String]) {
                                     }
                                 }
                                 if !got_output {
-                                    println!("[qemu] No output after 10s -- QEMU may still be booting");
+                                    println!(
+                                        "[qemu] No output after 10s -- QEMU may still be booting"
+                                    );
                                 }
                                 qemu_bridge = Some(bridge);
                                 println!("[qemu] Booted: {}", config_str);
@@ -636,57 +644,95 @@ pub fn cli_main(extra_args: &[String]) {
                         None => println!("[qemu] Not running"),
                     },
                     "traps" => {
-                        let n: usize = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(20);
-                        let log_path = std::env::temp_dir().join("geo_qemu_trace.log");
-                        match std::fs::read_to_string(&log_path) {
-                            Ok(content) => {
-                                let lines: Vec<&str> = content.lines().collect();
-                                let total = lines.len();
-                                if total == 0 {
-                                    println!("[qemu] Trace log is empty (boot with trace=int to enable)");
-                                } else {
-                                    // Count trap types
-                                    let mut counts: std::collections::HashMap<&str, usize> =
-                                        std::collections::HashMap::new();
-                                    for line in &lines {
-                                        if let Some(idx) = line.find("desc=") {
-                                            let desc = &line[idx + 5..];
-                                            *counts.entry(desc).or_insert(0) += 1;
+                        let sub = parts.get(2).map(|s| *s).unwrap_or("");
+                        if sub == "analyze" || sub == "ai" {
+                            // ── AI-driven behavioral analysis ──
+                            let log_path = std::env::temp_dir().join("geo_qemu_trace.log");
+                            match std::fs::read_to_string(&log_path) {
+                                Ok(content) => {
+                                    let lines: Vec<&str> = content.lines().collect();
+                                    let total = lines.len();
+                                    if total == 0 {
+                                        println!("[qemu] Trace log is empty (boot with trace=int to enable)");
+                                    } else {
+                                        // Parse all entries
+                                        let mut entries: Vec<TrapEntry> = Vec::with_capacity(total);
+                                        for line in &lines {
+                                            if let Some(r) = parse_trap_line(line) {
+                                                entries.push(r);
+                                            }
                                         }
-                                    }
-                                    println!(
-                                        "[qemu] Trace log: {} entries, {} trap types",
-                                        total,
-                                        counts.len()
-                                    );
-                                    // Show top trap types
-                                    let mut sorted: Vec<_> = counts.iter().collect();
-                                    sorted.sort_by(|a, b| b.1.cmp(a.1));
-                                    for (desc, count) in sorted.iter().take(5) {
-                                        println!("  {:>6}x {}", count, desc);
-                                    }
-                                    // Show last N entries
-                                    println!("\nLast {} entries:", n.min(total));
-                                    for line in lines.iter().rev().take(n).rev() {
-                                        // Shorten: just show cause and desc
-                                        if let Some(idx) = line.find("cause:") {
-                                            let short = &line[idx..];
-                                            println!("  {}", short);
+                                        let n = entries.len();
+                                        if n == 0 {
+                                            println!("[qemu] No parseable entries found");
                                         } else {
-                                            println!("  {}", line);
+                                            analyze_traps(&entries);
                                         }
                                     }
                                 }
+                                Err(_) => {
+                                    println!(
+                                        "[qemu] No trace log found (boot with trace=int to enable)"
+                                    );
+                                }
                             }
-                            Err(_) => {
-                                println!("[qemu] No trace log found (boot with trace=int to enable)");
+                        } else {
+                            // ── Raw trap view (original behavior) ──
+                            let n: usize =
+                                sub.parse().unwrap_or(if sub.is_empty() { 20 } else { 0 });
+                            let log_path = std::env::temp_dir().join("geo_qemu_trace.log");
+                            match std::fs::read_to_string(&log_path) {
+                                Ok(content) => {
+                                    let lines: Vec<&str> = content.lines().collect();
+                                    let total = lines.len();
+                                    if total == 0 {
+                                        println!("[qemu] Trace log is empty (boot with trace=int to enable)");
+                                    } else {
+                                        // Count trap types
+                                        let mut counts: std::collections::HashMap<&str, usize> =
+                                            std::collections::HashMap::new();
+                                        for line in &lines {
+                                            if let Some(idx) = line.find("desc=") {
+                                                let desc = &line[idx + 5..];
+                                                *counts.entry(desc).or_insert(0) += 1;
+                                            }
+                                        }
+                                        println!(
+                                            "[qemu] Trace log: {} entries, {} trap types",
+                                            total,
+                                            counts.len()
+                                        );
+                                        // Show top trap types
+                                        let mut sorted: Vec<_> = counts.iter().collect();
+                                        sorted.sort_by(|a, b| b.1.cmp(a.1));
+                                        for (desc, count) in sorted.iter().take(5) {
+                                            println!("  {:>6}x {}", count, desc);
+                                        }
+                                        // Show last N entries
+                                        println!("\nLast {} entries:", n.min(total));
+                                        for line in lines.iter().rev().take(n).rev() {
+                                            if let Some(idx) = line.find("cause:") {
+                                                let short = &line[idx..];
+                                                println!("  {}", short);
+                                            } else {
+                                                println!("  {}", line);
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                    println!(
+                                        "[qemu] No trace log found (boot with trace=int to enable)"
+                                    );
+                                }
                             }
                         }
                     }
                     _ => {
                         println!("Usage: qemu <boot|kill|status|traps>");
                         println!("  qemu boot arch=riscv64 kernel=Image ram=256M [trace=int]");
-                        println!("  qemu traps [20]              -- show last N trap entries");
+                        println!("  qemu traps [N]               -- show last N trap entries");
+                        println!("  qemu traps analyze           -- AI-driven behavioral analysis");
                     }
                 }
             }
@@ -701,5 +747,274 @@ pub fn cli_main(extra_args: &[String]) {
                 println!("Unknown: {} (try help)", command);
             }
         }
+    }
+}
+
+// ── Trap analysis helpers ──
+
+struct TrapEntry {
+    cause: u64,
+    epc: u64,
+    tval: u64,
+    desc: String,
+}
+
+/// Parse a single QEMU trap log line.
+/// Format: riscv_cpu_do_interrupt: hart:0, async:0, cause:XXXXXXXX, epc:0xXXXX, tval:0xXXXX, desc=XXXX
+fn parse_trap_line(line: &str) -> Option<TrapEntry> {
+    let cause = line.find("cause:").and_then(|i| {
+        let s = &line[i + 6..];
+        let end = s.find(',').unwrap_or(s.len());
+        u64::from_str_radix(s[..end].trim(), 16).ok()
+    })?;
+    let epc = line.find("epc:0x").and_then(|i| {
+        let s = &line[i + 6..];
+        let end = s.find(',').unwrap_or(s.len());
+        u64::from_str_radix(s[..end].trim(), 16).ok()
+    })?;
+    let tval = line.find("tval:0x").and_then(|i| {
+        let s = &line[i + 7..];
+        let end = s.find(',').unwrap_or(s.len());
+        u64::from_str_radix(s[..end].trim(), 16).ok()
+    })?;
+    let desc = line.find("desc=").map(|i| line[i + 5..].to_string())?;
+    Some(TrapEntry {
+        cause,
+        epc,
+        tval,
+        desc,
+    })
+}
+
+fn analyze_traps(entries: &[TrapEntry]) {
+    use std::collections::HashMap;
+
+    let n = entries.len();
+    println!("[qemu] Analyzing {} trap entries...", n);
+
+    // ── 1. Trap type distribution ──
+    let mut desc_counts: HashMap<&str, usize> = HashMap::new();
+    for e in entries {
+        *desc_counts.entry(&e.desc).or_insert(0) += 1;
+    }
+    let mut sorted_descs: Vec<_> = desc_counts.iter().collect();
+    sorted_descs.sort_by(|a, b| b.1.cmp(a.1));
+
+    println!("\n  TRAP DISTRIBUTION");
+    println!("  {:>10}  {:>6}  {}", "Count", "Pct", "Type");
+    println!("  {}", "-".repeat(40));
+    for (desc, count) in &sorted_descs {
+        let pct = **count as f64 / n as f64 * 100.0;
+        println!("  {:>10}  {:>5.1}%  {}", count, pct, desc);
+    }
+
+    // ── 2. Boot phase analysis (10 temporal windows) ──
+    println!("\n  BOOT PHASES (temporal windows)");
+    println!(
+        "  {:>6}  {:>8}  {:>8}  {:>8}  {:>8}  {:>8}  {:>6}",
+        "Phase", "user", "s_ecall", "store_pf", "load_pf", "exec_pf", "timer"
+    );
+    println!("  {}", "-".repeat(60));
+    let windows = 10;
+    let window_size = n / windows;
+    for w in 0..windows {
+        let start = w * window_size;
+        let end = if w < windows - 1 {
+            start + window_size
+        } else {
+            n
+        };
+        let chunk = &entries[start..end];
+        let mut wc: HashMap<&str, usize> = HashMap::new();
+        for e in chunk {
+            *wc.entry(&e.desc).or_insert(0) += 1;
+        }
+        println!(
+            "  {:>3}-{:<3}%  {:>8}  {:>8}  {:>8}  {:>8}  {:>8}  {:>6}",
+            w * 10,
+            (w + 1) * 10,
+            wc.get("user_ecall").unwrap_or(&0),
+            wc.get("supervisor_ecall").unwrap_or(&0),
+            wc.get("store_page_fault").unwrap_or(&0),
+            wc.get("load_page_fault").unwrap_or(&0),
+            wc.get("exec_page_fault").unwrap_or(&0),
+            wc.get("s_timer").unwrap_or(&0)
+        );
+    }
+
+    // ── 3. Boot transition markers ──
+    let first_user = entries.iter().position(|e| e.desc == "user_ecall");
+    let first_timer = entries.iter().position(|e| e.desc == "s_timer");
+
+    println!("\n  BOOT TRANSITIONS");
+    if let Some(idx) = first_user {
+        println!(
+            "  First user_ecall at #{} ({:.1}%) -- userspace starts",
+            format!("{}", idx),
+            idx as f64 / n as f64 * 100.0
+        );
+        // Pre-userspace summary
+        let pre: Vec<_> = entries[..idx].iter().collect();
+        let mut pre_counts: HashMap<&str, usize> = HashMap::new();
+        for e in &pre {
+            *pre_counts.entry(&e.desc).or_insert(0) += 1;
+        }
+        let mut pre_sorted: Vec<_> = pre_counts.iter().collect();
+        pre_sorted.sort_by(|a, b| b.1.cmp(a.1));
+        let summary: Vec<String> = pre_sorted
+            .iter()
+            .map(|(k, v)| format!("{}x {}", v, k))
+            .collect();
+        println!("  Kernel phase: {}", summary.join(", "));
+    }
+    if let Some(idx) = first_timer {
+        println!(
+            "  First s_timer at #{} ({:.1}%) -- scheduler active",
+            format!("{}", idx),
+            idx as f64 / n as f64 * 100.0
+        );
+    }
+
+    // ── 4. Top syscall hotspots (by 4K code page) ──
+    let mut page_counts: HashMap<u64, usize> = HashMap::new();
+    for e in entries {
+        if e.desc == "user_ecall" {
+            *page_counts.entry(e.epc & !0xFFF).or_insert(0) += 1;
+        }
+    }
+    let mut top_pages: Vec<_> = page_counts.iter().collect();
+    top_pages.sort_by(|a, b| b.1.cmp(a.1));
+
+    println!("\n  SYSCALL HOTSPOTS (top 10 code pages)");
+    println!("  {:>18}  {:>8}  {}", "Page", "Calls", "Role");
+    println!("  {}", "-".repeat(50));
+    for (page, count) in top_pages.iter().take(10) {
+        let role = classify_address(**page);
+        println!("  0x{:016X}  {:>8}  {}", page, count, role);
+    }
+    println!("  Total unique code pages: {}", page_counts.len());
+
+    // ── 5. Supervisor ecall sites ──
+    let mut s_epc_counts: HashMap<u64, usize> = HashMap::new();
+    for e in entries {
+        if e.desc == "supervisor_ecall" {
+            *s_epc_counts.entry(e.epc).or_insert(0) += 1;
+        }
+    }
+    let mut s_top: Vec<_> = s_epc_counts.iter().collect();
+    s_top.sort_by(|a, b| b.1.cmp(a.1));
+
+    if !s_top.is_empty() {
+        println!("\n  SBI/SYSCALL ENTRY POINTS (supervisor_ecall)");
+        for (epc, count) in s_top.iter().take(5) {
+            println!("  0x{:016X}  {:>6}x", epc, count);
+        }
+    }
+
+    // ── 6. Memory working set growth ──
+    println!("\n  MEMORY WORKING SET GROWTH");
+    println!(
+        "  {:>6}  {:>12}  {:>12}",
+        "Phase", "Total pages", "New pages"
+    );
+    println!("  {}", "-".repeat(36));
+    let ws_windows = 20;
+    let ws_size = n / ws_windows;
+    let mut seen_pages: std::collections::HashSet<u64> = std::collections::HashSet::new();
+    let mut prev = 0;
+    for w in 0..ws_windows {
+        let start = w * ws_size;
+        let end = if w < ws_windows - 1 {
+            start + ws_size
+        } else {
+            n
+        };
+        for e in &entries[start..end] {
+            if e.desc.contains("page_fault") {
+                seen_pages.insert(e.tval & !0xFFF);
+            }
+        }
+        let total = seen_pages.len();
+        println!(
+            "  {:>3}%    {:>12}  {:>12}",
+            (w + 1) * 5,
+            total,
+            total - prev
+        );
+        prev = total;
+    }
+
+    // ── 7. Anomalies ──
+    println!("\n  ANOMALIES");
+
+    // Illegal instructions
+    let illegals: Vec<_> = entries
+        .iter()
+        .filter(|e| e.desc == "illegal_instruction")
+        .collect();
+    if !illegals.is_empty() {
+        println!("  Illegal instructions: {}", illegals.len());
+        for e in illegals.iter().take(5) {
+            let opcode = (e.tval & 0x7F) as u8;
+            println!(
+                "    epc=0x{:016X}  tval=0x{:08X}  opcode=0x{:02X}",
+                e.epc, e.tval, opcode
+            );
+        }
+        if illegals.iter().any(|e| e.epc >= 0xFFFFFFFF80000000) {
+            println!("    -> Kernel probes for unsupported CPU extensions");
+        }
+    }
+
+    // Store page fault storms (5+ consecutive)
+    let mut storm_count = 0;
+    let mut i = 0;
+    while i < entries.len() {
+        if entries[i].desc == "store_page_fault" {
+            let start = i;
+            while i < entries.len() && entries[i].desc == "store_page_fault" {
+                i += 1;
+            }
+            if i - start >= 5 {
+                storm_count += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    if storm_count > 0 {
+        println!(
+            "  Store page fault storms (5+ consecutive): {}",
+            storm_count
+        );
+    }
+
+    // Breakpoints
+    let bps: Vec<_> = entries.iter().filter(|e| e.desc == "breakpoint").collect();
+    if !bps.is_empty() {
+        println!("  Breakpoints: {}", bps.len());
+        for e in &bps {
+            println!("    epc=0x{:016X}", e.epc);
+        }
+    }
+
+    if illegals.is_empty() && storm_count == 0 && bps.is_empty() {
+        println!("  None detected");
+    }
+}
+
+fn classify_address(addr: u64) -> &'static str {
+    if addr >= 0xFFFFFFFF80000000 {
+        "kernel (high mapping)"
+    } else if addr >= 0xFFFFFF0000000000 {
+        "kernel text"
+    } else if addr >= 0x7FF000000000 && addr <= 0x7FFFFFFFFFFF {
+        "user library (libc/ld)"
+    } else if addr >= 0x555500000000 && addr <= 0x5556FFFFFFFF {
+        "user binary (.text)"
+    } else if addr < 0x100000000 {
+        "lowmem"
+    } else {
+        "user process"
     }
 }

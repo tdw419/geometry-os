@@ -7,7 +7,8 @@ fn main() {
     let kernel_image = fs::read(kernel_path).expect("kernel");
     let initramfs = fs::read(initramfs_path).ok();
 
-    let bootargs = "console=ttyS0 earlycon=uart8250,mmio32,0x10000000 panic=5 nosmp maxcpus=1 loglevel=8";
+    let bootargs =
+        "console=ttyS0 earlycon=uart8250,mmio32,0x10000000 panic=5 nosmp maxcpus=1 loglevel=8";
     let (mut vm, _fw_addr, _entry, _dtb_addr) =
         RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 128, bootargs).unwrap();
 
@@ -34,9 +35,13 @@ fn main() {
                 let mut msg = Vec::new();
                 for i in 0..256 {
                     if let Ok(b) = vm.bus.read_byte(str_pa + i) {
-                        if b == 0 { break; }
+                        if b == 0 {
+                            break;
+                        }
                         msg.push(b);
-                    } else { break; }
+                    } else {
+                        break;
+                    }
                 }
                 eprintln!("[die] str: {}", String::from_utf8_lossy(&msg));
             }
@@ -54,7 +59,9 @@ fn main() {
                 }
                 // scause at offset 36
                 if let Ok(scause) = vm.bus.read_word(regs_pa + 36) {
-                    eprintln!("[die] pt_regs.scause=0x{:08X} ({})", scause,
+                    eprintln!(
+                        "[die] pt_regs.scause=0x{:08X} ({})",
+                        scause,
                         match scause {
                             2 => "illegal_instruction",
                             12 => "instruction_page_fault",
@@ -63,7 +70,8 @@ fn main() {
                             8 => "ecall_u",
                             9 => "ecall_s",
                             _ => "unknown",
-                        });
+                        }
+                    );
                 }
                 // stval at offset 40
                 if let Ok(stval) = vm.bus.read_word(regs_pa + 40) {
@@ -79,23 +87,39 @@ fn main() {
             let mut msg = Vec::new();
             for i in 0..80 {
                 if let Ok(b) = vm.bus.read_byte(pa + i) {
-                    if b == 0 { break; }
+                    if b == 0 {
+                        break;
+                    }
                     msg.push(b);
-                } else { break; }
+                } else {
+                    break;
+                }
             }
-            eprintln!("[printk] count={} fmt: {}", count, String::from_utf8_lossy(&msg));
+            eprintln!(
+                "[printk] count={} fmt: {}",
+                count,
+                String::from_utf8_lossy(&msg)
+            );
         }
 
         vm.step();
         count += 1;
 
         if count == 5_000_000 || count == 10_000_000 {
-            eprintln!("[{}M] PC=0x{:08X} uart_writes={}", count / 1_000_000, vm.cpu.pc, vm.bus.uart.write_count);
+            eprintln!(
+                "[{}M] PC=0x{:08X} uart_writes={}",
+                count / 1_000_000,
+                vm.cpu.pc,
+                vm.bus.uart.write_count
+            );
         }
     }
 
     eprintln!("Done: {} instructions", count);
-    eprintln!("Final PC=0x{:08X} uart_writes={}", vm.cpu.pc, vm.bus.uart.write_count);
+    eprintln!(
+        "Final PC=0x{:08X} uart_writes={}",
+        vm.cpu.pc, vm.bus.uart.write_count
+    );
     let tx = vm.bus.uart.drain_tx();
     eprintln!("UART: {} bytes", tx.len());
     if !tx.is_empty() {

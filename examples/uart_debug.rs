@@ -12,12 +12,13 @@ fn main() {
         256,
         20_000_000,
         "console=ttyS0 earlycon=sbi loglevel=8",
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     println!("UART write_count: {}", vm.bus.uart.write_count);
     println!("UART tx_buf: {} bytes", vm.bus.uart.tx_buf.len());
     println!("SBI console: {} bytes", vm.bus.sbi.console_output.len());
-    
+
     if vm.bus.uart.tx_buf.len() > 0 {
         let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);
         println!("UART output: {}", &s[..s.len().min(500)]);

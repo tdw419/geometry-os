@@ -1,5 +1,5 @@
-use geometry_os::riscv::RiscvVm;
 use geometry_os::riscv::cpu::StepResult;
+use geometry_os::riscv::RiscvVm;
 
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
@@ -14,13 +14,14 @@ fn main() {
         256,
         30_000_000,
         "console=ttyS0 earlycon=sbi loglevel=8",
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     // Check if we're already in the panic loop
     let panic_start = 0xC000252Eu32;
     let pc = vm.cpu.pc;
     println!("Current PC: 0x{:08X}", pc);
-    
+
     // Step a few and check if we enter panic
     let mut hit_panic = false;
     let mut pre_panic_pc = 0u32;
@@ -28,7 +29,10 @@ fn main() {
         let prev_pc = vm.cpu.pc;
         vm.step();
         if vm.cpu.pc == panic_start {
-            println!("Hit panic() at instruction {}! Called from PC=0x{:08X}", i, prev_pc);
+            println!(
+                "Hit panic() at instruction {}! Called from PC=0x{:08X}",
+                i, prev_pc
+            );
             println!("  a0 (arg0/format string ptr) = 0x{:08X}", vm.cpu.x[10]);
             println!("  a1 (arg1) = 0x{:08X}", vm.cpu.x[11]);
             println!("  ra (return addr) = 0x{:08X}", vm.cpu.x[1]);
@@ -37,11 +41,11 @@ fn main() {
             break;
         }
     }
-    
+
     if !hit_panic {
         println!("Did not hit panic entry in 100K instructions after 30M");
     }
-    
+
     println!("SBI console: {} bytes", vm.bus.sbi.console_output.len());
     println!("UART tx_buf: {} bytes", vm.bus.uart.tx_buf.len());
 }

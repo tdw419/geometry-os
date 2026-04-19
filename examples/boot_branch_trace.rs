@@ -17,7 +17,9 @@ fn main() {
 
     let mut count: u64 = 0;
     while count < 15_560_000 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         let _ = vm.step();
         count += 1;
     }
@@ -35,29 +37,34 @@ fn main() {
         if pc == 0xC040B070 {
             let s4 = vm.cpu.x[20];
             let s1 = vm.cpu.x[9];
-            eprintln!("[{}] Branch: start_offset(s4)={}, chunk=0x{:08X}", count, s4, s1);
+            eprintln!(
+                "[{}] Branch: start_offset(s4)={}, chunk=0x{:08X}",
+                count, s4, s1
+            );
             if s4 != 0 {
                 let pa = (s1 - 0xC0000000) as u64;
                 let so = vm.bus.read_word(pa + 68).unwrap();
                 eprintln!("  chunk[68] = 0x{:08X} (should be start_offset)", so);
             }
         }
-        
+
         // Second branch at c040b0ba: beqz s4, c040b118
         if pc == 0xC040B0BA {
             let s4 = vm.cpu.x[20];
             eprintln!("[{}] Branch: end_offset(s4)={}", count, s4);
         }
-        
+
         // pcpu_block_update_hint_alloc entry
         if pc == 0xC0080954 {
             let a0 = vm.cpu.x[10];
             let a1 = vm.cpu.x[11];
             let a2 = vm.cpu.x[12];
             let ra = vm.cpu.x[1];
-            eprintln!("[{}] pcpu_block_update_hint_alloc(0x{:08X}, 0x{:08X}, 0x{:08X}) ra=0x{:08X}",
-                count, a0, a1, a2, ra);
-            
+            eprintln!(
+                "[{}] pcpu_block_update_hint_alloc(0x{:08X}, 0x{:08X}, 0x{:08X}) ra=0x{:08X}",
+                count, a0, a1, a2, ra
+            );
+
             // Read the call site to determine which call this is
             // If ra = 0xC040B0B6, it's the start_offset call
             // If ra = 0xC040B160, it's the end_offset call

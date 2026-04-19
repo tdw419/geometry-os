@@ -24,17 +24,27 @@ fn main() {
         result.instructions, result.entry, result.dtb_addr
     );
     eprintln!("Final PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
-    eprintln!("SATP=0x{:08X} stvec=0x{:08X} sepc=0x{:08X} scause=0x{:08X}",
-        vm.cpu.csr.satp, vm.cpu.csr.stvec, vm.cpu.csr.sepc, vm.cpu.csr.scause);
-    eprintln!("mepc=0x{:08X} mcause=0x{:08X} medeleg=0x{:04X}",
-        vm.cpu.csr.mepc, vm.cpu.csr.mcause, vm.cpu.csr.medeleg);
-    eprintln!("MIE=0x{:08X} MIP=0x{:08X}",
-        vm.cpu.csr.mie, vm.cpu.csr.mip);
-    eprintln!("SP=0x{:08X} RA=0x{:08X} GP=0x{:08X} TP=0x{:08X}",
-        vm.cpu.x[2], vm.cpu.x[1], vm.cpu.x[3], vm.cpu.x[4]);
-    eprintln!("SBI console_output: {} bytes", vm.bus.sbi.console_output.len());
-    eprintln!("CLINT mtime=0x{:016X} mtimecmp=0x{:016X}",
-        vm.bus.clint.mtime, vm.bus.clint.mtimecmp);
+    eprintln!(
+        "SATP=0x{:08X} stvec=0x{:08X} sepc=0x{:08X} scause=0x{:08X}",
+        vm.cpu.csr.satp, vm.cpu.csr.stvec, vm.cpu.csr.sepc, vm.cpu.csr.scause
+    );
+    eprintln!(
+        "mepc=0x{:08X} mcause=0x{:08X} medeleg=0x{:04X}",
+        vm.cpu.csr.mepc, vm.cpu.csr.mcause, vm.cpu.csr.medeleg
+    );
+    eprintln!("MIE=0x{:08X} MIP=0x{:08X}", vm.cpu.csr.mie, vm.cpu.csr.mip);
+    eprintln!(
+        "SP=0x{:08X} RA=0x{:08X} GP=0x{:08X} TP=0x{:08X}",
+        vm.cpu.x[2], vm.cpu.x[1], vm.cpu.x[3], vm.cpu.x[4]
+    );
+    eprintln!(
+        "SBI console_output: {} bytes",
+        vm.bus.sbi.console_output.len()
+    );
+    eprintln!(
+        "CLINT mtime=0x{:016X} mtimecmp=0x{:016X}",
+        vm.bus.clint.mtime, vm.bus.clint.mtimecmp
+    );
 
     // Check if UART at 0x10000000 was written to directly (earlycon)
     // by reading the UART LSR (Line Status Register at offset 5)

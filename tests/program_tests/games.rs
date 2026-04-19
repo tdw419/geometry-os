@@ -2527,7 +2527,6 @@ fn test_game_of_life_renders() {
     );
 }
 
-
 // ── ROGUELIKE ──────────────────────────────────────────────────
 
 #[test]
@@ -2535,7 +2534,10 @@ fn test_roguelike_assembles() {
     let source = std::fs::read_to_string("programs/roguelike.asm")
         .unwrap_or_else(|e| panic!("failed to read: {}", e));
     let asm = assemble(&source, 0).expect("roguelike.asm failed to assemble");
-    assert!(asm.pixels.len() > 400, "roguelike should be more than 400 words");
+    assert!(
+        asm.pixels.len() > 400,
+        "roguelike should be more than 400 words"
+    );
 }
 
 #[test]
@@ -2567,10 +2569,7 @@ fn test_roguelike_initializes() {
     }
 
     // Map should be initialized: top-left is always a wall
-    assert_eq!(
-        vm.ram[0x5000], 2,
-        "top-left map cell should be wall (2)"
-    );
+    assert_eq!(vm.ram[0x5000], 2, "top-left map cell should be wall (2)");
 
     // There should be carved floors somewhere (not all walls) -- 64x64 map
     let floor_count: usize = (0..4096)
@@ -2585,7 +2584,11 @@ fn test_roguelike_initializes() {
 
     // Room count should be > 0 (64x64 map, up to 12 rooms)
     let room_count = vm.ram[0x6230];
-    assert!(room_count >= 2, "should have >= 2 rooms, got {}", room_count);
+    assert!(
+        room_count >= 2,
+        "should have >= 2 rooms, got {}",
+        room_count
+    );
 
     // Player should be placed at a floor tile (new addresses)
     let px = vm.ram[0x6240] as usize;
@@ -2609,7 +2612,8 @@ fn test_roguelike_initializes() {
 
     // Player and stairs should NOT be at the same position
     assert_ne!(
-        (px, py), (sx, sy),
+        (px, py),
+        (sx, sy),
         "player and stairs should be at different positions"
     );
 
@@ -2628,7 +2632,8 @@ fn test_roguelike_initializes() {
     assert!(
         non_black > 1000,
         "screen should have >1000 pixels after render, got {} (steps: {})",
-        non_black, steps
+        non_black,
+        steps
     );
 }
 
@@ -2650,8 +2655,13 @@ fn test_roguelike_wall_collision_blocks() {
 
     // Run until first FRAME
     for _ in 0..5_000_000 {
-        if !vm.step() { break; }
-        if vm.frame_ready { vm.frame_ready = false; break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
     }
 
     // Record initial player position (new addresses)
@@ -2661,8 +2671,13 @@ fn test_roguelike_wall_collision_blocks() {
     // Try to move up (W = 87)
     vm.ram[0xFFF] = 87; // IKEY reads from 0xFFF
     for _ in 0..50_000 {
-        if !vm.step() { break; }
-        if vm.frame_ready { vm.frame_ready = false; break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
     }
 
     // Either player moved or stayed (if wall was above)

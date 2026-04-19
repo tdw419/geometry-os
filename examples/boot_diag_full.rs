@@ -11,22 +11,28 @@ fn main() {
 
     let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
     let start = Instant::now();
-    
+
     let (mut vm, result) = RiscvVm::boot_linux(
         &kernel_image,
         initramfs.as_deref(),
         128,
         10_000_000,
         bootargs,
-    ).unwrap();
+    )
+    .unwrap();
 
     let elapsed = start.elapsed();
     eprintln!("\n=== boot_linux() Results ===");
-    eprintln!("Instructions: {} ({:.1}s)", result.instructions, elapsed.as_secs_f64());
-    
+    eprintln!(
+        "Instructions: {} ({:.1}s)",
+        result.instructions,
+        elapsed.as_secs_f64()
+    );
+
     // SBI calls
     eprintln!("SBI ecall_log: {} entries", vm.bus.sbi.ecall_log.len());
-    let mut sbi_types: std::collections::HashMap<(u32,u32), u32> = std::collections::HashMap::new();
+    let mut sbi_types: std::collections::HashMap<(u32, u32), u32> =
+        std::collections::HashMap::new();
     for &(a7, a6, _a0) in &vm.bus.sbi.ecall_log {
         *sbi_types.entry((a7, a6)).or_insert(0) += 1;
     }
@@ -43,6 +49,8 @@ fn main() {
     }
 
     // CPU state
-    eprintln!("\nCPU: PC=0x{:08X} SP=0x{:08X} SATP=0x{:08X}", 
-        vm.cpu.pc, vm.cpu.x[2], vm.cpu.csr.satp);
+    eprintln!(
+        "\nCPU: PC=0x{:08X} SP=0x{:08X} SATP=0x{:08X}",
+        vm.cpu.pc, vm.cpu.x[2], vm.cpu.csr.satp
+    );
 }

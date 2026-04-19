@@ -12,11 +12,12 @@ fn main() {
         256,
         20_000_000,
         "console=ttyS0 earlycon=sbi loglevel=8",
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     println!("SBI console: {} bytes", vm.bus.sbi.console_output.len());
     println!("UART tx_buf: {} bytes", vm.bus.uart.tx_buf.len());
-    
+
     // Print ALL ecalls
     println!("\nAll {} SBI ecalls:", vm.bus.sbi.ecall_log.len());
     let ext_names = {
@@ -38,15 +39,24 @@ fn main() {
         let name = ext_names.get(a7).unwrap_or(&"???");
         if *a7 == 0x10 && *a6 == 3 {
             let probe_name = ext_names.get(a0).unwrap_or(&"???");
-            println!("  [{}] a7=0x{:08X} ({}) a6={} PROBE a0=0x{:08X} ({})", i, a7, name, a6, a0, probe_name);
+            println!(
+                "  [{}] a7=0x{:08X} ({}) a6={} PROBE a0=0x{:08X} ({})",
+                i, a7, name, a6, a0, probe_name
+            );
         } else {
-            println!("  [{}] a7=0x{:08X} ({}) a6={} a0=0x{:08X}", i, a7, name, a6, a0);
+            println!(
+                "  [{}] a7=0x{:08X} ({}) a6={} a0=0x{:08X}",
+                i, a7, name, a6, a0
+            );
         }
     }
-    
+
     // Show first 200 chars of console output
     if !vm.bus.sbi.console_output.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
-        println!("\nConsole output (first 500 chars):\n{}", &s[..s.len().min(500)]);
+        println!(
+            "\nConsole output (first 500 chars):\n{}",
+            &s[..s.len().min(500)]
+        );
     }
 }

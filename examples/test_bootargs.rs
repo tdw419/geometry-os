@@ -20,12 +20,15 @@ fn main() {
             256,
             5_000_000,
             bootargs,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let sbi_out = vm.bus.sbi.console_output.len();
         let uart_out = vm.bus.uart.tx_buf.len();
         let sbi_ecalls = vm.bus.sbi.ecall_log.len();
-        println!("[{}] PC=0x{:08X} SBI={} UART={} ecalls={}", 
-            bootargs, vm.cpu.pc, sbi_out, uart_out, sbi_ecalls);
+        println!(
+            "[{}] PC=0x{:08X} SBI={} UART={} ecalls={}",
+            bootargs, vm.cpu.pc, sbi_out, uart_out, sbi_ecalls
+        );
     }
 }

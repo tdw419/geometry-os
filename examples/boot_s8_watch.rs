@@ -17,7 +17,9 @@ fn main() {
 
     let mut count: u64 = 0;
     while count < 15_560_000 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         let _ = vm.step();
         count += 1;
     }
@@ -30,15 +32,18 @@ fn main() {
         let _ = vm.step();
         step_count += 1;
         count += 1;
-        
+
         // Before jal to memblock_alloc_or_panic (chunk struct alloc)
         if pc == 0xC040AFBE {
             let s8 = vm.cpu.x[24];
             let s4 = vm.cpu.x[20];
-            eprintln!("[{}] Before jal memblock_alloc_or_panic (chunk alloc):", count);
+            eprintln!(
+                "[{}] Before jal memblock_alloc_or_panic (chunk alloc):",
+                count
+            );
             eprintln!("  s8=0x{:08X} s4=0x{:08X}", s8, s4);
         }
-        
+
         // After return from memblock_alloc_or_panic (chunk alloc)
         if pc == 0xC040AFC2 {
             let s8 = vm.cpu.x[24];
@@ -47,17 +52,20 @@ fn main() {
             eprintln!("[{}] After return (chunk alloc):", count);
             eprintln!("  s8=0x{:08X} s4=0x{:08X} a0=0x{:08X}", s8, s4, a0);
         }
-        
+
         // Before jal to memblock_alloc_or_panic (alloc_map alloc)
         if pc == 0xC040AFF4 {
             let s8 = vm.cpu.x[24];
-            eprintln!("[{}] Before jal memblock_alloc_or_panic (alloc_map): s8=0x{:08X}", count, s8);
+            eprintln!(
+                "[{}] Before jal memblock_alloc_or_panic (alloc_map): s8=0x{:08X}",
+                count, s8
+            );
         }
         if pc == 0xC040AFF8 {
             let s8 = vm.cpu.x[24];
             eprintln!("[{}] After return (alloc_map): s8=0x{:08X}", count, s8);
         }
-        
+
         // Before pcpu_init_md_blocks
         if pc == 0xC040B034 {
             let s8 = vm.cpu.x[24];
@@ -67,7 +75,9 @@ fn main() {
             let s8 = vm.cpu.x[24];
             eprintln!("[{}] After pcpu_init_md_blocks: s8=0x{:08X}", count, s8);
         }
-        
-        if vm.cpu.csr.scause != 0 { break; }
+
+        if vm.cpu.csr.scause != 0 {
+            break;
+        }
     }
 }

@@ -21,20 +21,29 @@ fn main() {
         }
         let pc = vm.cpu.pc;
 
-        if pc == 0xC040AF6E {
-            eprintln!("C.LUI entry: a5=0x{:08X}", vm.cpu.x[15]);
+        if pc == 0xC04006DA {
+            eprintln!("[{}] parse_early_param called", count);
         }
-        if pc == 0xC040AF70 {
-            eprintln!("C.LUI result: a5=0x{:08X}", vm.cpu.x[15]);
+        if pc == 0xC04149AE {
+            eprintln!("[{}] param_setup_earlycon called", count);
         }
-        if pc == 0xC040AF72 {
-            eprintln!(
-                "AND entry: a0=0x{:08X} a5=0x{:08X}",
-                vm.cpu.x[10], vm.cpu.x[15]
-            );
+        if pc == 0xC0414750 {
+            eprintln!("[{}] setup_earlycon called", count);
         }
-        if pc == 0xC040AF76 {
-            eprintln!("AND result: s8=0x{:08X}", vm.cpu.x[24]);
+        if pc == 0xC0414C9E {
+            eprintln!("[{}] early_sbi_setup called", count);
+        }
+        if pc == 0xC04146C0 {
+            eprintln!("[{}] earlycon_init called", count);
+        }
+        if pc == 0xC041BD4A {
+            eprintln!("[{}] early_init_dt_scan called", count);
+        }
+        if pc == 0xC0403C4C {
+            eprintln!("[{}] init_IRQ entered", count);
+        }
+        if pc == 0xC000252E {
+            eprintln!("[{}] PANIC", count);
         }
 
         let _ = vm.step();

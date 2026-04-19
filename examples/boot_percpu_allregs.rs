@@ -44,16 +44,18 @@ fn main() {
             );
 
             let names = [
-                "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
-                "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
-                "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
-                "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
+                "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2",
+                "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9",
+                "s10", "s11", "t3", "t4", "t5", "t6",
             ];
             for i in 0..32u32 {
                 let val = vm.cpu.x[i as usize];
                 if val >= 0xC0000000 {
                     let pa = val - 0xC0000000;
-                    eprintln!("  x[{:2}] {} = 0x{:08X}  PA=0x{:08X}", i, names[i as usize], val, pa);
+                    eprintln!(
+                        "  x[{:2}] {} = 0x{:08X}  PA=0x{:08X}",
+                        i, names[i as usize], val, pa
+                    );
                 } else {
                     eprintln!("  x[{:2}] {} = 0x{:08X}", i, names[i as usize], val);
                 }
@@ -66,7 +68,10 @@ fn main() {
             eprintln!("    s4 (block_idx) = 0x{:08X} ({})", s4, s4);
             eprintln!("    s11 (md_blocks) = 0x{:08X}", s11);
             let computed = s11.wrapping_add(s4.wrapping_mul(32));
-            eprintln!("    s11 + s4*32 = 0x{:08X}  (actual s2=0x{:08X})", computed, s2);
+            eprintln!(
+                "    s11 + s4*32 = 0x{:08X}  (actual s2=0x{:08X})",
+                computed, s2
+            );
 
             // Read md_blocks array if accessible
             if s11 >= 0xC0000000 && s11 < 0xD0000000 {

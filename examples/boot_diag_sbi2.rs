@@ -19,7 +19,8 @@ fn main() {
     let start = Instant::now();
 
     // Track unique SBI extension types
-    let mut sbi_types: std::collections::HashMap<(u32,u32), u32> = std::collections::HashMap::new();
+    let mut sbi_types: std::collections::HashMap<(u32, u32), u32> =
+        std::collections::HashMap::new();
 
     while count < max_count {
         if vm.bus.sbi.shutdown_requested {
@@ -47,9 +48,15 @@ fn main() {
         if count == next_report {
             let elapsed = start.elapsed();
             let ips = count as f64 / elapsed.as_secs_f64();
-            eprintln!("[{}M] PC=0x{:08X} SBI_calls={} UART_bytes={} priv={:?} ({:.0} IPS)",
-                count / 1_000_000, vm.cpu.pc, vm.bus.sbi.ecall_log.len(),
-                vm.bus.sbi.console_output.len(), vm.cpu.privilege, ips);
+            eprintln!(
+                "[{}M] PC=0x{:08X} SBI_calls={} UART_bytes={} priv={:?} ({:.0} IPS)",
+                count / 1_000_000,
+                vm.cpu.pc,
+                vm.bus.sbi.ecall_log.len(),
+                vm.bus.sbi.console_output.len(),
+                vm.cpu.privilege,
+                ips
+            );
             next_report += 1_000_000;
         }
     }
@@ -61,7 +68,11 @@ fn main() {
         *sbi_types.entry((a7, a6)).or_insert(0) += 1;
     }
 
-    eprintln!("\n=== Results ({}M instructions, {:.1}s) ===", count / 1_000_000, elapsed.as_secs_f64());
+    eprintln!(
+        "\n=== Results ({}M instructions, {:.1}s) ===",
+        count / 1_000_000,
+        elapsed.as_secs_f64()
+    );
     eprintln!("Total SBI calls: {}", vm.bus.sbi.ecall_log.len());
     eprintln!("SBI call types:");
     for ((a7, a6), cnt) in &sbi_types {
@@ -72,7 +83,10 @@ fn main() {
     eprintln!("\nFirst non-BASE calls:");
     for (i, &(a7, a6, a0)) in vm.bus.sbi.ecall_log.iter().enumerate() {
         if a7 != 0x10 || a6 != 3 {
-            eprintln!("  SBI #{}: a7=0x{:08X} a6=0x{:08X} a0=0x{:08X}", i, a7, a6, a0);
+            eprintln!(
+                "  SBI #{}: a7=0x{:08X} a6=0x{:08X} a0=0x{:08X}",
+                i, a7, a6, a0
+            );
         }
     }
 
@@ -84,5 +98,8 @@ fn main() {
         eprintln!("{}", &s[..s.len().min(5000)]);
     }
 
-    eprintln!("\nCPU: PC=0x{:08X} SATP=0x{:08X}", vm.cpu.pc, vm.cpu.csr.satp);
+    eprintln!(
+        "\nCPU: PC=0x{:08X} SATP=0x{:08X}",
+        vm.cpu.pc, vm.cpu.csr.satp
+    );
 }

@@ -194,8 +194,8 @@ impl DtbBuilder {
         Self::push_u32(&mut blob, off_dt_struct);
         Self::push_u32(&mut blob, off_dt_strings);
         Self::push_u32(&mut blob, off_mem_rsvmap);
-        Self::push_u32(&mut blob, header_size); // version
-        Self::push_u32(&mut blob, header_size); // last_comp_version
+        Self::push_u32(&mut blob, 17); // version (FDT format version 17)
+        Self::push_u32(&mut blob, 16); // last_comp_version (backward compatible to v16)
         Self::push_u32(&mut blob, 0); // boot_cpuid_phys
         Self::push_u32(&mut blob, strings_size);
         Self::push_u32(&mut blob, struct_size);

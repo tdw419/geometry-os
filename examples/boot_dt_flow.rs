@@ -15,13 +15,34 @@ fn main() {
     .unwrap();
 
     let mut count: u64 = 0;
-    while count < 20_000_000 {
+    while count < 500_000 {
         if vm.bus.sbi.shutdown_requested {
             break;
         }
         let pc = vm.cpu.pc;
 
-        // Check boot_command_line right after each parse_early_param call
+        // All relevant functions
+        if pc == 0xC041BD4A {
+            eprintln!("[{}] early_init_dt_scan", count);
+        }
+        if pc == 0xC041BC90 {
+            eprintln!("[{}] early_init_dt_verify", count);
+        }
+        if pc == 0xC041BD08 {
+            eprintln!("[{}] early_init_dt_scan_nodes", count);
+        }
+        if pc == 0xC041B798 {
+            eprintln!("[{}] early_init_dt_scan_chosen", count);
+        }
+        if pc == 0xC041BAE2 {
+            eprintln!("[{}] early_init_dt_scan_memory", count);
+        }
+        if pc == 0xC041B58E {
+            eprintln!("[{}] early_init_dt_scan_root", count);
+        }
+        if pc == 0xC01FB112 {
+            eprintln!("[{}] fdt_check_header", count);
+        }
         if pc == 0xC04006DA {
             let bcl_pa: u64 = 0x0800018;
             let mut s = Vec::new();
@@ -33,7 +54,7 @@ fn main() {
                 s.push(b);
             }
             eprintln!(
-                "[{}] parse_early_param: boot_command_line = \"{}\"",
+                "[{}] parse_early_param: bcl=\"{}\"",
                 count,
                 String::from_utf8_lossy(&s)
             );
@@ -41,9 +62,5 @@ fn main() {
 
         let _ = vm.step();
         count += 1;
-
-        if vm.cpu.csr.scause != 0 && vm.cpu.csr.scause != 8 && vm.cpu.csr.scause != 9 {
-            break;
-        }
     }
 }

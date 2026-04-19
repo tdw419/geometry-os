@@ -27,13 +27,13 @@ fn main() {
             }
         }
     }
-    
+
     // Simple FDT parser to find key properties
     eprintln!("DTB at PA 0x{:08X}, {} bytes", dtb_addr, dtb_bytes.len());
-    
+
     // Look for key strings in the DTB
     let dtb_str = String::from_utf8_lossy(&dtb_bytes);
-    
+
     // Find initrd-start and initrd-end
     if let Some(pos) = dtb_str.find("linux,initrd-start") {
         eprintln!("Found 'linux,initrd-start' at offset {}", pos);
@@ -47,17 +47,27 @@ fn main() {
     if let Some(pos) = dtb_str.find("memory@") {
         eprintln!("Found 'memory@' at offset {}", pos);
     }
-    
+
     // Read first few bytes of initramfs to verify it's loaded
     let initrd_start_offset = 0; // We need to find where initramfs was loaded
-    // Check the DTB's initrd-start value
-    // For now, let's just dump the DTB hex
+                                 // Check the DTB's initrd-start value
+                                 // For now, let's just dump the DTB hex
     eprintln!("\nDTB first 256 bytes (hex):");
     for i in (0..256).step_by(16) {
-        let hex: Vec<String> = dtb_bytes[i..std::cmp::min(i+16, dtb_bytes.len())]
-            .iter().map(|b| format!("{:02X}", b)).collect();
-        let ascii: String = dtb_bytes[i..std::cmp::min(i+16, dtb_bytes.len())]
-            .iter().map(|&b| if b >= 0x20 && b < 0x7f { b as char } else { '.' }).collect();
+        let hex: Vec<String> = dtb_bytes[i..std::cmp::min(i + 16, dtb_bytes.len())]
+            .iter()
+            .map(|b| format!("{:02X}", b))
+            .collect();
+        let ascii: String = dtb_bytes[i..std::cmp::min(i + 16, dtb_bytes.len())]
+            .iter()
+            .map(|&b| {
+                if b >= 0x20 && b < 0x7f {
+                    b as char
+                } else {
+                    '.'
+                }
+            })
+            .collect();
         eprintln!("  {:04X}: {} {}", i, hex.join(" "), ascii);
     }
 }

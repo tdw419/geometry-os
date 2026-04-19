@@ -14,7 +14,8 @@ fn main() {
         256,
         20_000_000,
         "console=ttyS0 earlycon=sbi loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     println!("Instructions: {}", br.instructions);
     println!("Entry: 0x{:08X}", br.entry);

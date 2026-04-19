@@ -9,7 +9,8 @@ fn main() {
     let kernel_image = fs::read(kernel_path).expect("kernel");
     let initramfs = fs::read(initramfs_path).ok();
 
-    let bootargs = "console=ttyS0 earlycon=uart8250,mmio32,0x10000000 panic=5 nosmp maxcpus=0 loglevel=8";
+    let bootargs =
+        "console=ttyS0 earlycon=uart8250,mmio32,0x10000000 panic=5 nosmp maxcpus=0 loglevel=8";
     let (mut vm, fw_addr, _entry, _dtb_addr) =
         RiscvVm::boot_linux_setup(&kernel_image, initramfs.as_deref(), 128, bootargs).unwrap();
 
@@ -39,17 +40,25 @@ fn main() {
         }
 
         // Check for ECALL at fw_addr
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
             let is_interrupt = (mcause >> 31) & 1 == 1;
             if !is_interrupt && cause_code == 9 {
                 // ECALL_S
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10],
-                    vm.cpu.x[11], vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((a0, a1)) = result {
                     vm.cpu.x[10] = a0;
@@ -100,7 +109,10 @@ fn main() {
     eprintln!("\nFunctions reached:");
     for (name, addr) in watch_addrs {
         let hit = hit_addrs.contains(*name);
-        let at = first_hits.get(*name).map(|c| format!("{}K", c / 1000)).unwrap_or("never".to_string());
+        let at = first_hits
+            .get(*name)
+            .map(|c| format!("{}K", c / 1000))
+            .unwrap_or("never".to_string());
         eprintln!("  {:40} addr=0x{:08X} hit={} at={}", name, addr, hit, at);
     }
 

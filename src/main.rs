@@ -325,8 +325,8 @@ fn main() {
                 }
                 // Forward printable characters and Enter to QEMU
                 if let Some(ref mut bridge) = qemu_bridge {
-                    let shift = window.is_key_down(Key::LeftShift)
-                        || window.is_key_down(Key::RightShift);
+                    let shift =
+                        window.is_key_down(Key::LeftShift) || window.is_key_down(Key::RightShift);
                     match key {
                         Key::Enter => {
                             let _ = bridge.write_bytes(b"\n");
@@ -482,10 +482,10 @@ fn main() {
                                     qemu_bridge = None;
                                     qemu_active = false;
 
-                        let mut config_str = parts[2..].join(" ");
-                            // Auto-decode .rts.png files to temp files
-                            config_str = resolve_qemu_pixel_paths(&config_str);
-                            match QemuBridge::spawn(&config_str) {
+                                    let mut config_str = parts[2..].join(" ");
+                                    // Auto-decode .rts.png files to temp files
+                                    config_str = resolve_qemu_pixel_paths(&config_str);
+                                    match QemuBridge::spawn(&config_str) {
                                         Ok(mut bridge) => {
                                             // Clear canvas for QEMU terminal output
                                             canvas_buffer.fill(0);
@@ -521,11 +521,8 @@ fn main() {
                                         status_msg = String::from("[QEMU] Killed");
                                         // Restore normal canvas
                                         canvas_buffer.fill(0);
-                                        term_output_row = write_line_to_canvas(
-                                            &mut canvas_buffer,
-                                            0,
-                                            "geo> ",
-                                        );
+                                        term_output_row =
+                                            write_line_to_canvas(&mut canvas_buffer, 0, "geo> ");
                                         term_prompt_row = 0;
                                         cursor_row = 0;
                                         cursor_col = 5;

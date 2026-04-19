@@ -24,7 +24,8 @@ fn main() {
     let magic = u32::from_be_bytes([dtb_bytes[0], dtb_bytes[1], dtb_bytes[2], dtb_bytes[3]]);
     let totalsize = u32::from_be_bytes([dtb_bytes[4], dtb_bytes[5], dtb_bytes[6], dtb_bytes[7]]);
     let off_struct = u32::from_be_bytes([dtb_bytes[8], dtb_bytes[9], dtb_bytes[10], dtb_bytes[11]]);
-    let off_strings = u32::from_be_bytes([dtb_bytes[12], dtb_bytes[13], dtb_bytes[14], dtb_bytes[15]]);
+    let off_strings =
+        u32::from_be_bytes([dtb_bytes[12], dtb_bytes[13], dtb_bytes[14], dtb_bytes[15]]);
 
     eprintln!("DTB at PA 0x{:08X}", dtb_addr);
     eprintln!("  magic:      0x{:08X} (expect 0xD00DFEED)", magic);
@@ -44,7 +45,10 @@ fn main() {
 
     while pos + 4 <= dtb_bytes.len() {
         let token = u32::from_be_bytes([
-            dtb_bytes[pos], dtb_bytes[pos + 1], dtb_bytes[pos + 2], dtb_bytes[pos + 3],
+            dtb_bytes[pos],
+            dtb_bytes[pos + 1],
+            dtb_bytes[pos + 2],
+            dtb_bytes[pos + 3],
         ]);
         match token {
             0x00000001 => {
@@ -90,10 +94,16 @@ fn main() {
             0x00000003 => {
                 // FDT_PROP: token(4) + len(4) + nameoff(4) + data(len)
                 let prop_len = u32::from_be_bytes([
-                    dtb_bytes[pos + 4], dtb_bytes[pos + 5], dtb_bytes[pos + 6], dtb_bytes[pos + 7],
+                    dtb_bytes[pos + 4],
+                    dtb_bytes[pos + 5],
+                    dtb_bytes[pos + 6],
+                    dtb_bytes[pos + 7],
                 ]) as usize;
                 let name_off = u32::from_be_bytes([
-                    dtb_bytes[pos + 8], dtb_bytes[pos + 9], dtb_bytes[pos + 10], dtb_bytes[pos + 11],
+                    dtb_bytes[pos + 8],
+                    dtb_bytes[pos + 9],
+                    dtb_bytes[pos + 10],
+                    dtb_bytes[pos + 11],
                 ]) as usize;
 
                 // Read property name from strings area
@@ -113,28 +123,51 @@ fn main() {
                 let val_end = val_start + prop_len;
                 if prop_name == "linux,initrd-start" && prop_len == 8 {
                     let addr = u64::from_be_bytes([
-                        dtb_bytes[val_start], dtb_bytes[val_start + 1],
-                        dtb_bytes[val_start + 2], dtb_bytes[val_start + 3],
-                        dtb_bytes[val_start + 4], dtb_bytes[val_start + 5],
-                        dtb_bytes[val_start + 6], dtb_bytes[val_start + 7],
+                        dtb_bytes[val_start],
+                        dtb_bytes[val_start + 1],
+                        dtb_bytes[val_start + 2],
+                        dtb_bytes[val_start + 3],
+                        dtb_bytes[val_start + 4],
+                        dtb_bytes[val_start + 5],
+                        dtb_bytes[val_start + 6],
+                        dtb_bytes[val_start + 7],
                     ]);
-                    eprintln!("{}[0x{:04X}] PROP '{}' = 0x{:016X}", indent, pos, prop_name, addr);
+                    eprintln!(
+                        "{}[0x{:04X}] PROP '{}' = 0x{:016X}",
+                        indent, pos, prop_name, addr
+                    );
                     found_initrd = true;
                 } else if prop_name == "linux,initrd-end" && prop_len == 8 {
                     let addr = u64::from_be_bytes([
-                        dtb_bytes[val_start], dtb_bytes[val_start + 1],
-                        dtb_bytes[val_start + 2], dtb_bytes[val_start + 3],
-                        dtb_bytes[val_start + 4], dtb_bytes[val_start + 5],
-                        dtb_bytes[val_start + 6], dtb_bytes[val_start + 7],
+                        dtb_bytes[val_start],
+                        dtb_bytes[val_start + 1],
+                        dtb_bytes[val_start + 2],
+                        dtb_bytes[val_start + 3],
+                        dtb_bytes[val_start + 4],
+                        dtb_bytes[val_start + 5],
+                        dtb_bytes[val_start + 6],
+                        dtb_bytes[val_start + 7],
                     ]);
-                    eprintln!("{}[0x{:04X}] PROP '{}' = 0x{:016X}", indent, pos, prop_name, addr);
+                    eprintln!(
+                        "{}[0x{:04X}] PROP '{}' = 0x{:016X}",
+                        indent, pos, prop_name, addr
+                    );
                 } else if prop_name == "bootargs" {
                     let val: Vec<u8> = dtb_bytes[val_start..val_end].to_vec();
                     let s = String::from_utf8_lossy(&val);
-                    eprintln!("{}[0x{:04X}] PROP '{}' = '{}'", indent, pos, prop_name, s.trim_end_matches('\0'));
+                    eprintln!(
+                        "{}[0x{:04X}] PROP '{}' = '{}'",
+                        indent,
+                        pos,
+                        prop_name,
+                        s.trim_end_matches('\0')
+                    );
                     found_bootargs = true;
                 } else {
-                    eprintln!("{}[0x{:04X}] PROP '{}' len={}", indent, pos, prop_name, prop_len);
+                    eprintln!(
+                        "{}[0x{:04X}] PROP '{}' len={}",
+                        indent, pos, prop_name, prop_len
+                    );
                 }
 
                 pos = val_end;
@@ -150,5 +183,8 @@ fn main() {
         }
     }
 
-    eprintln!("\nSummary: chosen={} initrd={} bootargs={}", found_chosen, found_initrd, found_bootargs);
+    eprintln!(
+        "\nSummary: chosen={} initrd={} bootargs={}",
+        found_chosen, found_initrd, found_bootargs
+    );
 }

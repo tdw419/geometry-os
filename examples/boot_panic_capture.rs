@@ -27,10 +27,16 @@ fn main() {
             if cause_code == 9 {
                 sbi_call_count += 1;
                 let result = vm.bus.sbi.handle_ecall(
-                    vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10],
-                    vm.cpu.x[11], vm.cpu.x[12], vm.cpu.x[13],
-                    vm.cpu.x[14], vm.cpu.x[15],
-                    &mut vm.bus.uart, &mut vm.bus.clint,
+                    vm.cpu.x[17],
+                    vm.cpu.x[16],
+                    vm.cpu.x[10],
+                    vm.cpu.x[11],
+                    vm.cpu.x[12],
+                    vm.cpu.x[13],
+                    vm.cpu.x[14],
+                    vm.cpu.x[15],
+                    &mut vm.bus.uart,
+                    &mut vm.bus.clint,
                 );
                 if let Some((phys_addr, num_bytes)) = vm.bus.sbi.dbcn_pending_write.take() {
                     let mut buf = vec![0u8; num_bytes.min(2048)];
@@ -41,7 +47,12 @@ fn main() {
                         }
                     }
                     let s = String::from_utf8_lossy(&buf);
-                    eprintln!("[DBCN #{}] {} bytes: {}", sbi_call_count, buf.len(), &s[..s.len().min(200)]);
+                    eprintln!(
+                        "[DBCN #{}] {} bytes: {}",
+                        sbi_call_count,
+                        buf.len(),
+                        &s[..s.len().min(200)]
+                    );
                     for &b in &buf {
                         if b != 0 {
                             vm.bus.uart.write_byte(0, b);
@@ -65,9 +76,18 @@ fn main() {
         if !panic_captured && vm.cpu.pc == 0xC000252E && vm.cpu.privilege == Privilege::Supervisor {
             panic_captured = true;
             let panic_fmt_va = vm.cpu.x[10];
-            eprintln!("[PANIC] Entered panic at count={}, PC=0x{:08X}", count, vm.cpu.pc);
-            eprintln!("[PANIC] a0(fmt)=0x{:08X} a1=0x{:08X} a2=0x{:08X}", panic_fmt_va, vm.cpu.x[11], vm.cpu.x[12]);
-            eprintln!("[PANIC] RA=0x{:08X} SP=0x{:08X} GP=0x{:08X}", vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[3]);
+            eprintln!(
+                "[PANIC] Entered panic at count={}, PC=0x{:08X}",
+                count, vm.cpu.pc
+            );
+            eprintln!(
+                "[PANIC] a0(fmt)=0x{:08X} a1=0x{:08X} a2=0x{:08X}",
+                panic_fmt_va, vm.cpu.x[11], vm.cpu.x[12]
+            );
+            eprintln!(
+                "[PANIC] RA=0x{:08X} SP=0x{:08X} GP=0x{:08X}",
+                vm.cpu.x[1], vm.cpu.x[2], vm.cpu.x[3]
+            );
 
             // Read format string via MMU translation
             let satp = vm.cpu.csr.satp;
@@ -79,7 +99,10 @@ fn main() {
                 let page_offset = (panic_fmt_va as u64) & 0xFFF;
 
                 let l1_entry = vm.bus.read_word(pg_dir_phys + vpn1 * 4).unwrap_or(0);
-                eprintln!("[PANIC] SATP=0x{:08X} pg_dir=0x{:08X} L1[{}]=0x{:08X}", satp, pg_dir_phys, vpn1, l1_entry);
+                eprintln!(
+                    "[PANIC] SATP=0x{:08X} pg_dir=0x{:08X} L1[{}]=0x{:08X}",
+                    satp, pg_dir_phys, vpn1, l1_entry
+                );
 
                 if (l1_entry & 1) != 0 {
                     if l1_entry & 0x10 != 0 {
@@ -88,9 +111,13 @@ fn main() {
                         let mut fmt = Vec::new();
                         for i in 0..512 {
                             if let Ok(b) = vm.bus.read_byte(phys + i) {
-                                if b == 0 { break; }
+                                if b == 0 {
+                                    break;
+                                }
                                 fmt.push(b);
-                            } else { break; }
+                            } else {
+                                break;
+                            }
                         }
                         eprintln!("[PANIC] fmt: {}", String::from_utf8_lossy(&fmt));
                     } else {
@@ -103,9 +130,13 @@ fn main() {
                             let mut fmt = Vec::new();
                             for i in 0..512 {
                                 if let Ok(b) = vm.bus.read_byte(phys + i) {
-                                    if b == 0 { break; }
+                                    if b == 0 {
+                                        break;
+                                    }
                                     fmt.push(b);
-                                } else { break; }
+                                } else {
+                                    break;
+                                }
                             }
                             eprintln!("[PANIC] fmt: {}", String::from_utf8_lossy(&fmt));
                         }
@@ -118,7 +149,10 @@ fn main() {
             let ra_vpn1 = ((ra as u64) >> 22) & 0x3FF;
             let satp2 = vm.cpu.csr.satp;
             let pg_dir_ppn2 = (satp2 & 0x3FFFFF) as u64;
-            let ra_l1 = vm.bus.read_word(pg_dir_ppn2 * 4096 + ra_vpn1 * 4).unwrap_or(0);
+            let ra_l1 = vm
+                .bus
+                .read_word(pg_dir_ppn2 * 4096 + ra_vpn1 * 4)
+                .unwrap_or(0);
             eprintln!("[PANIC] RA=0x{:08X} L1[{}]=0x{:08X}", ra, ra_vpn1, ra_l1);
         }
 
@@ -126,13 +160,21 @@ fn main() {
         count += 1;
 
         if count == report_at {
-            eprintln!("[{}M] PC=0x{:08X} SBI={}", count / 1_000_000, vm.cpu.pc, sbi_call_count);
+            eprintln!(
+                "[{}M] PC=0x{:08X} SBI={}",
+                count / 1_000_000,
+                vm.cpu.pc,
+                sbi_call_count
+            );
             report_at += 5_000_000;
         }
         prev_pc = vm.cpu.pc;
     }
 
-    eprintln!("\n=== Final: {} instructions, {} SBI calls ===", count, sbi_call_count);
+    eprintln!(
+        "\n=== Final: {} instructions, {} SBI calls ===",
+        count, sbi_call_count
+    );
     let tx = vm.bus.uart.drain_tx();
     eprintln!("UART: {} bytes", tx.len());
     if !tx.is_empty() {

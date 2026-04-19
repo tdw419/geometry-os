@@ -27,7 +27,7 @@ fn main() {
                 if output_str.len() > 1000 {
                     eprintln!("{}", &output_str[..500]);
                     eprintln!("... ({} bytes total) ...", output_str.len());
-                    eprintln!("{}", &output_str[output_str.len()-500..]);
+                    eprintln!("{}", &output_str[output_str.len() - 500..]);
                 } else {
                     eprintln!("{}", output_str);
                 }

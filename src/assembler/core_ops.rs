@@ -42,7 +42,9 @@ pub(super) fn try_parse(
 
         "NOTE" => {
             if tokens.len() < 4 {
-                return Err("NOTE requires 3 arguments: NOTE wave_reg, freq_reg, dur_reg".to_string());
+                return Err(
+                    "NOTE requires 3 arguments: NOTE wave_reg, freq_reg, dur_reg".to_string(),
+                );
             }
             bytecode.push(0x7E);
             bytecode.push(parse_reg(tokens[1])? as u32);

@@ -13,18 +13,32 @@ fn main() {
     match result {
         Ok((mut vm, stats)) => {
             let mut uart = Vec::new();
-            loop { match vm.bus.uart.read_byte(0) { 0 => break, b => uart.push(b) } }
+            loop {
+                match vm.bus.uart.read_byte(0) {
+                    0 => break,
+                    b => uart.push(b),
+                }
+            }
             let sbi = vm.bus.sbi.console_output.len();
             eprintln!("UART: {} bytes, SBI: {} bytes", uart.len(), sbi);
-            if !uart.is_empty() { 
+            if !uart.is_empty() {
                 let s = String::from_utf8_lossy(&uart);
                 eprintln!("UART: {}", &s[..s.len().min(500)]);
             }
             if sbi > 0 {
-                let s: String = vm.bus.sbi.console_output.iter().map(|&b| b as char).collect();
+                let s: String = vm
+                    .bus
+                    .sbi
+                    .console_output
+                    .iter()
+                    .map(|&b| b as char)
+                    .collect();
                 eprintln!("SBI: {}", &s[..s.len().min(500)]);
             }
-            eprintln!("Instructions: {}, PC: 0x{:08X}", stats.instructions, vm.cpu.pc);
+            eprintln!(
+                "Instructions: {}, PC: 0x{:08X}",
+                stats.instructions, vm.cpu.pc
+            );
         }
         Err(e) => eprintln!("Error: {:?}", e),
     }

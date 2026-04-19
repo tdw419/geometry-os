@@ -30,8 +30,10 @@ fn main() {
             let cause_code = mcause & !(1u32 << 31);
             if cause_code == 9 {
                 // ECALL_S that wasn't handled inline by step()
-                eprintln!("[diag] ECALL_S at fw_addr count={}: a7=0x{:08X} a6=0x{:08X} a0=0x{:08X}",
-                    count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]);
+                eprintln!(
+                    "[diag] ECALL_S at fw_addr count={}: a7=0x{:08X} a6=0x{:08X} a0=0x{:08X}",
+                    count, vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10]
+                );
             }
             vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
         }
@@ -56,14 +58,21 @@ fn main() {
     }
 
     let elapsed = start.elapsed();
-    eprintln!("\n=== Diagnostic Results ({} instructions, {:.1}s) ===", count, elapsed.as_secs_f64());
+    eprintln!(
+        "\n=== Diagnostic Results ({} instructions, {:.1}s) ===",
+        count,
+        elapsed.as_secs_f64()
+    );
     eprintln!("SBI ecall_log: {} entries", vm.bus.sbi.ecall_log.len());
-    
+
     // Show first 20 SBI calls
     for (i, &(a7, a6, a0)) in vm.bus.sbi.ecall_log.iter().take(20).enumerate() {
-        eprintln!("  SBI #{}: a7=0x{:08X} a6=0x{:08X} a0=0x{:08X}", i, a7, a6, a0);
+        eprintln!(
+            "  SBI #{}: a7=0x{:08X} a6=0x{:08X} a0=0x{:08X}",
+            i, a7, a6, a0
+        );
     }
-    
+
     // Show UART output
     let tx = vm.bus.uart.drain_tx();
     eprintln!("\nUART: {} bytes", tx.len());
@@ -71,10 +80,18 @@ fn main() {
         let s = String::from_utf8_lossy(&tx);
         eprintln!("{}", &s[..s.len().min(3000)]);
     }
-    
+
     // Show final CPU state
-    eprintln!("\nCPU: PC=0x{:08X} SP=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.x[2], vm.cpu.privilege);
-    eprintln!("SATP=0x{:08X} medeleg=0x{:04X}", vm.cpu.csr.satp, vm.cpu.csr.medeleg);
-    eprintln!("mcause=0x{:08X} sepc=0x{:08X} scause=0x{:08X}", 
-        vm.cpu.csr.mcause, vm.cpu.csr.sepc, vm.cpu.csr.scause);
+    eprintln!(
+        "\nCPU: PC=0x{:08X} SP=0x{:08X} priv={:?}",
+        vm.cpu.pc, vm.cpu.x[2], vm.cpu.privilege
+    );
+    eprintln!(
+        "SATP=0x{:08X} medeleg=0x{:04X}",
+        vm.cpu.csr.satp, vm.cpu.csr.medeleg
+    );
+    eprintln!(
+        "mcause=0x{:08X} sepc=0x{:08X} scause=0x{:08X}",
+        vm.cpu.csr.mcause, vm.cpu.csr.sepc, vm.cpu.csr.scause
+    );
 }

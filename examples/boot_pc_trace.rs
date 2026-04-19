@@ -16,7 +16,9 @@ fn main() {
 
     let mut count: u64 = 0;
     while count < 15_560_000 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         let _ = vm.step();
         count += 1;
     }
@@ -26,20 +28,20 @@ fn main() {
     let mut step_count: u64 = 0;
     while step_count < 500_000 {
         let pc = vm.cpu.pc;
-        
+
         if pc == 0xC040AF6C {
             tracing = true;
             eprintln!("ENTRY: a0=0x{:08X} a1=0x{:08X}", vm.cpu.x[10], vm.cpu.x[11]);
         }
-        
+
         if tracing {
             eprintln!("  PC=0x{:08X}", pc);
         }
-        
+
         let _ = vm.step();
         step_count += 1;
         count += 1;
-        
+
         if tracing && pc == 0xC040AFBE {
             tracing = false;
             eprintln!("s8=0x{:08X} s4=0x{:08X}", vm.cpu.x[24], vm.cpu.x[20]);

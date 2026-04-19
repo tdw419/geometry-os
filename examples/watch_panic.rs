@@ -13,15 +13,16 @@ fn main() {
         256,
         100, // minimal -- we step manually
         "console=ttyS0 earlycon=sbi loglevel=8",
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     let panic_start = 0xC000252Eu32;
     let max = 25_000_000u64;
     let mut count = 0u64;
-    
+
     // Check every N steps
     let check_interval = 10_000u64;
-    
+
     while count < max {
         // Run check_interval steps
         for _ in 0..check_interval {
@@ -36,7 +37,7 @@ fn main() {
                 println!("  a2 = 0x{:08X}", vm.cpu.x[12]);
                 println!("  ra = 0x{:08X}", vm.cpu.x[1]);
                 println!("  sp = 0x{:08X}", vm.cpu.x[2]);
-                
+
                 // Read the format string from guest memory
                 let mut s = String::new();
                 let mut addr = vm.cpu.x[10] as u64;
@@ -50,17 +51,20 @@ fn main() {
                     }
                 }
                 println!("  Panic message: \"{}\"", s);
-                
+
                 // Disassemble the call site
                 println!("\n  SBI ecalls so far: {}", vm.bus.sbi.ecall_log.len());
                 return;
             }
         }
-        
+
         if count % 5_000_000 == 0 {
             eprintln!("[{}] PC=0x{:08X}", count, vm.cpu.pc);
         }
     }
-    
-    println!("No panic in {} instructions. Final PC=0x{:08X}", count, vm.cpu.pc);
+
+    println!(
+        "No panic in {} instructions. Final PC=0x{:08X}",
+        count, vm.cpu.pc
+    );
 }

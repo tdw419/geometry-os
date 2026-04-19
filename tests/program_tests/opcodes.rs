@@ -224,7 +224,11 @@ fn test_note_opcode_sine() {
     }
     assert!(vm.halted);
     assert_eq!(vm.regs[4], 1, "VM should execute past NOTE and set r4");
-    assert_eq!(vm.note, Some((0, 440, 100)), "NOTE should set note field to (sine, 440, 100)");
+    assert_eq!(
+        vm.note,
+        Some((0, 440, 100)),
+        "NOTE should set note field to (sine, 440, 100)"
+    );
 }
 
 #[test]
@@ -241,7 +245,11 @@ fn test_note_opcode_square() {
         }
     }
     assert!(vm.halted);
-    assert_eq!(vm.note, Some((1, 880, 50)), "NOTE should set note field to (square, 880, 50)");
+    assert_eq!(
+        vm.note,
+        Some((1, 880, 50)),
+        "NOTE should set note field to (square, 880, 50)"
+    );
 }
 
 #[test]
@@ -258,7 +266,11 @@ fn test_note_opcode_triangle() {
         }
     }
     assert!(vm.halted);
-    assert_eq!(vm.note, Some((2, 220, 200)), "NOTE should set note field to (triangle, 220, 200)");
+    assert_eq!(
+        vm.note,
+        Some((2, 220, 200)),
+        "NOTE should set note field to (triangle, 220, 200)"
+    );
 }
 
 #[test]
@@ -275,7 +287,11 @@ fn test_note_opcode_sawtooth() {
         }
     }
     assert!(vm.halted);
-    assert_eq!(vm.note, Some((3, 110, 150)), "NOTE should set note field to (sawtooth, 110, 150)");
+    assert_eq!(
+        vm.note,
+        Some((3, 110, 150)),
+        "NOTE should set note field to (sawtooth, 110, 150)"
+    );
 }
 
 #[test]
@@ -292,7 +308,11 @@ fn test_note_opcode_noise() {
         }
     }
     assert!(vm.halted);
-    assert_eq!(vm.note, Some((4, 1000, 75)), "NOTE should set note field to (noise, 1000, 75)");
+    assert_eq!(
+        vm.note,
+        Some((4, 1000, 75)),
+        "NOTE should set note field to (noise, 1000, 75)"
+    );
 }
 
 #[test]
@@ -310,7 +330,11 @@ fn test_note_clamps_frequency() {
         }
     }
     assert!(vm.halted);
-    assert_eq!(vm.note, Some((0, 20, 100)), "NOTE freq=5 should clamp to 20");
+    assert_eq!(
+        vm.note,
+        Some((0, 20, 100)),
+        "NOTE freq=5 should clamp to 20"
+    );
 
     // Test upper clamp
     let source2 = "LDI r1, 0\nLDI r2, 99999\nLDI r3, 100\nNOTE r1, r2, r3\nHALT";
@@ -325,7 +349,11 @@ fn test_note_clamps_frequency() {
         }
     }
     assert!(vm2.halted);
-    assert_eq!(vm2.note, Some((0, 20000, 100)), "NOTE freq=99999 should clamp to 20000");
+    assert_eq!(
+        vm2.note,
+        Some((0, 20000, 100)),
+        "NOTE freq=99999 should clamp to 20000"
+    );
 }
 
 #[test]
@@ -361,7 +389,11 @@ fn test_note_clamps_waveform() {
         }
     }
     assert!(vm.halted);
-    assert_eq!(vm.note, Some((4, 440, 100)), "NOTE wave=99 should clamp to 4 (noise)");
+    assert_eq!(
+        vm.note,
+        Some((4, 440, 100)),
+        "NOTE wave=99 should clamp to 4 (noise)"
+    );
 }
 
 #[test]
@@ -470,7 +502,11 @@ fn test_music_demo_assembles_and_runs() {
         "last note should be square C4 half: waveform=1, freq=262, dur=800"
     );
     // Should have rendered at least 26 frames (one per note) + 1 final
-    assert!(vm.frame_count >= 26, "should have at least 26 frames, got {}", vm.frame_count);
+    assert!(
+        vm.frame_count >= 26,
+        "should have at least 26 frames, got {}",
+        vm.frame_count
+    );
 }
 
 #[test]

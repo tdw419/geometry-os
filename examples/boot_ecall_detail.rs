@@ -1,5 +1,4 @@
 /// Diagnostic: Check what the 7 ECALLs are by reading SBI ecall_log.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -59,6 +58,12 @@ fn main() {
         );
     }
     eprintln!("\nUART TX buffer: {} bytes", vm.bus.uart.tx_buf.len());
-    eprintln!("UART TX: {:?}", String::from_utf8_lossy(&vm.bus.uart.tx_buf));
-    eprintln!("\nConsole output: {}", String::from_utf8_lossy(&vm.bus.sbi.console_output));
+    eprintln!(
+        "UART TX: {:?}",
+        String::from_utf8_lossy(&vm.bus.uart.tx_buf)
+    );
+    eprintln!(
+        "\nConsole output: {}",
+        String::from_utf8_lossy(&vm.bus.sbi.console_output)
+    );
 }

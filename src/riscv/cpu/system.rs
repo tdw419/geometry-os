@@ -59,8 +59,10 @@ impl RiscvCpu {
 
                     // Debug: log all SBI calls
                     if self.ecall_count <= 30 || a7 == 0x4442434E {
-                        eprintln!("[sbi] ECALL #{}: a7=0x{:08X} a6={} a0=0x{:08X} a1=0x{:08X}",
-                            self.ecall_count, a7, a6, a0, a1);
+                        eprintln!(
+                            "[sbi] ECALL #{}: a7=0x{:08X} a6={} a0=0x{:08X} a1=0x{:08X}",
+                            self.ecall_count, a7, a6, a0, a1
+                        );
                     }
 
                     let sbi_result = bus.sbi.handle_ecall(

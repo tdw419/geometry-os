@@ -1,6 +1,5 @@
 /// Diagnostic: Trace PC every 10K instructions to find what the kernel is doing
 /// between SATP change (177K) and panic (330K).
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -71,7 +70,9 @@ fn main() {
         }
 
         // Check for M-mode trap at our handler
-        if vm.cpu.pc == fw_addr_u32 && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine {
+        if vm.cpu.pc == fw_addr_u32
+            && vm.cpu.privilege == geometry_os::riscv::cpu::Privilege::Machine
+        {
             trap_count += 1;
             let mcause = vm.cpu.csr.mcause;
             let cause_code = mcause & !(1u32 << 31);
@@ -108,7 +109,8 @@ fn main() {
                     let mpp = (vm.cpu.csr.mstatus >> 11) & 0x3;
                     if mpp != 3 {
                         let fault_addr = vm.cpu.csr.mtval;
-                        let is_page_fault = cause_code == 12 || cause_code == 13 || cause_code == 15;
+                        let is_page_fault =
+                            cause_code == 12 || cause_code == 13 || cause_code == 15;
                         if is_page_fault && fault_addr < 0xC000_0000 {
                             let satp = vm.cpu.csr.satp;
                             let pg_dir_ppn = (satp & 0x3FFFFF) as u64;
@@ -122,7 +124,10 @@ fn main() {
                                     vm.bus.write_word(l1_addr, pte).ok();
                                     vm.cpu.tlb.flush_all();
                                     if trap_count <= 10 {
-                                        eprintln!("  -> injected identity map L1[{}] = 0x{:08X}", vpn1, pte);
+                                        eprintln!(
+                                            "  -> injected identity map L1[{}] = 0x{:08X}",
+                                            vpn1, pte
+                                        );
                                     }
                                 } else {
                                     // Forward to S-mode
@@ -132,11 +137,11 @@ fn main() {
                                         vm.cpu.csr.scause = mcause;
                                         vm.cpu.csr.stval = vm.cpu.csr.mtval;
                                         let spp = if mpp == 1 { 1u32 } else { 0u32 };
-                                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5))
-                                            | (spp << 5);
+                                        vm.cpu.csr.mstatus =
+                                            (vm.cpu.csr.mstatus & !(1 << 5)) | (spp << 5);
                                         let sie = (vm.cpu.csr.mstatus >> 1) & 1;
-                                        vm.cpu.csr.mstatus = (vm.cpu.csr.mstatus & !(1 << 5))
-                                            | (sie << 5);
+                                        vm.cpu.csr.mstatus =
+                                            (vm.cpu.csr.mstatus & !(1 << 5)) | (sie << 5);
                                         vm.cpu.csr.mstatus &= !(1u32 << 1);
                                         vm.cpu.pc = stvec;
                                     }

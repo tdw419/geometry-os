@@ -321,7 +321,10 @@ impl RiscvVm {
         let dtb_early_pa_pa: u64 = 0x0080100C;
         vm.bus.write_word(dtb_early_va_pa, dtb_addr as u32).ok();
         vm.bus.write_word(dtb_early_pa_pa, dtb_addr as u32).ok();
-        eprintln!("[boot] Pre-set _dtb_early_va=0x{:08X}, _dtb_early_pa=0x{:08X}", dtb_addr as u32, dtb_addr as u32);
+        eprintln!(
+            "[boot] Pre-set _dtb_early_va=0x{:08X}, _dtb_early_pa=0x{:08X}",
+            dtb_addr as u32, dtb_addr as u32
+        );
 
         // Also set initial_boot_params for compatibility (some kernel paths
         // read it directly).
@@ -617,8 +620,12 @@ impl RiscvVm {
         vm.bus.protected_addrs.push((ibp_pa, dtb_phys_addr));
         vm.bus.protected_addrs.push((ibp_pa_pa, dtb_phys_addr));
         // Also protect _dtb_early_va and _dtb_early_pa from BSS clearing.
-        vm.bus.protected_addrs.push((dtb_early_va_pa, dtb_addr as u32));
-        vm.bus.protected_addrs.push((dtb_early_pa_pa, dtb_addr as u32));
+        vm.bus
+            .protected_addrs
+            .push((dtb_early_va_pa, dtb_addr as u32));
+        vm.bus
+            .protected_addrs
+            .push((dtb_early_pa_pa, dtb_addr as u32));
 
         // Pre-set loops_per_jiffy to skip calibrate_delay().
         // calibrate_delay() calls udelay() in a loop to measure CPU speed.
@@ -1440,11 +1447,16 @@ impl RiscvVm {
                             fault_type, count, vm.cpu.pc, vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec);
                         // Dump ALL registers + page table for first fault
                         if _smode_fault_count == 1 {
-                            let reg_names = ["zero","ra","sp","gp","tp","t0","t1","t2","s0","s1",
-                                "a0","a1","a2","a3","a4","a5","a6","a7","s2","s3",
-                                "s4","s5","s6","s7","s8","s9","s10","s11","t3","t4","t5","t6"];
+                            let reg_names = [
+                                "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0",
+                                "a1", "a2", "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5",
+                                "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
+                            ];
                             for i in 0..32 {
-                                eprintln!("[boot]   x{} ({}) = 0x{:08X}", i, reg_names[i], vm.cpu.x[i]);
+                                eprintln!(
+                                    "[boot]   x{} ({}) = 0x{:08X}",
+                                    i, reg_names[i], vm.cpu.x[i]
+                                );
                             }
                             // Dump kernel_map
                             let km_pa: u64 = 0x00C7A098;
@@ -1457,7 +1469,12 @@ impl RiscvVm {
                             let km_vkpo = vm.bus.read_word(km_pa + 24).unwrap_or(0xFFFF_FFFF);
                             eprintln!("[boot] kernel_map: page_offset=0x{:08X} virt_addr=0x{:08X} virt_offset=0x{:08X} phys_addr=0x{:08X} size=0x{:08X} va_pa_offset=0x{:08X} va_kernel_pa_offset=0x{:08X}",
                                 km_po, km_va, km_vo, km_ph, km_sz, km_vapo, km_vkpo);
-                            eprintln!("[boot] satp=0x{:08X} (ppn=0x{:08X} asid={})", vm.cpu.csr.satp, (vm.cpu.csr.satp & 0x003FFFFF), (vm.cpu.csr.satp >> 22) & 0x1FF);
+                            eprintln!(
+                                "[boot] satp=0x{:08X} (ppn=0x{:08X} asid={})",
+                                vm.cpu.csr.satp,
+                                (vm.cpu.csr.satp & 0x003FFFFF),
+                                (vm.cpu.csr.satp >> 22) & 0x1FF
+                            );
                             // Dump L1 entries for kernel linear mapping (768..896)
                             let satp_ppn = vm.cpu.csr.satp & 0x003FFFFF;
                             let l1_pa = (satp_ppn as u64) << 12;
@@ -1481,9 +1498,22 @@ impl RiscvVm {
                             for idx in start..end {
                                 let addr = l1_pa + (idx as u64) * 4;
                                 let pte = vm.bus.read_word(addr).unwrap_or(0xFFFF_FFFF);
-                                let tag = if pte == 0 { "EMPTY" } else if (pte & 1) != 0 && (pte & 0xE) != 0 { "LEAF" } else if (pte & 1) != 0 { "NONLEAF" } else { "?" };
-                                eprintln!("[boot]   L1[{}] = 0x{:08X} ({}) VA 0x{:08X}",
-                                    idx, pte, tag, (idx as u32) << 22);
+                                let tag = if pte == 0 {
+                                    "EMPTY"
+                                } else if (pte & 1) != 0 && (pte & 0xE) != 0 {
+                                    "LEAF"
+                                } else if (pte & 1) != 0 {
+                                    "NONLEAF"
+                                } else {
+                                    "?"
+                                };
+                                eprintln!(
+                                    "[boot]   L1[{}] = 0x{:08X} ({}) VA 0x{:08X}",
+                                    idx,
+                                    pte,
+                                    tag,
+                                    (idx as u32) << 22
+                                );
                             }
                         }
                     }

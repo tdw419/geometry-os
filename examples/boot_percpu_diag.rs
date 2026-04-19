@@ -20,7 +20,8 @@ fn main() {
         initramfs.as_deref(),
         256, // 256MB RAM (enough for 512MB test)
         "console=ttyS0 earlycon=sbi loglevel=8",
-    ).unwrap();
+    )
+    .unwrap();
 
     let fw_addr_u32 = _fw_addr as u32;
     let crash_va: u32 = 0xD77BA368; // The stval from the percpu crash
@@ -28,8 +29,14 @@ fn main() {
     let crash_vpn1 = (crash_va >> 22) & 0x3FF; // L1 index
     let crash_vpn0 = (crash_va >> 12) & 0x3FF; // L2 index
 
-    println!("[diag] Target VA: 0x{:08X}, expected PA: 0x{:08X}", crash_va, crash_pa);
-    println!("[diag] VPN1 (L1 index): {}, VPN0 (L2 index): {}", crash_vpn1, crash_vpn0);
+    println!(
+        "[diag] Target VA: 0x{:08X}, expected PA: 0x{:08X}",
+        crash_va, crash_pa
+    );
+    println!(
+        "[diag] VPN1 (L1 index): {}, VPN0 (L2 index): {}",
+        crash_vpn1, crash_vpn0
+    );
 
     let mut count: u64 = 0;
     let max: u64 = 20_000_000;
@@ -55,34 +62,61 @@ fn main() {
             if satp_changes <= 5 {
                 let ppn = cur_satp & 0x3FFFFF;
                 let pg_dir_pa = (ppn as u64) * 4096;
-                eprintln!("[diag] SATP changed to 0x{:08X} (pg_dir PA 0x{:08X}) at count={}", 
-                    cur_satp, pg_dir_pa, count);
+                eprintln!(
+                    "[diag] SATP changed to 0x{:08X} (pg_dir PA 0x{:08X}) at count={}",
+                    cur_satp, pg_dir_pa, count
+                );
 
                 // Dump L1 entry for our crash VA
                 let l1_addr = pg_dir_pa + (crash_vpn1 as u64) * 4;
                 let l1_entry = vm.bus.read_word(l1_addr).unwrap_or(0);
-                eprintln!("[diag]   L1[{}] at PA 0x{:08X} = 0x{:08X} (valid={} leaf={})", 
-                    crash_vpn1, l1_addr, l1_entry,
+                eprintln!(
+                    "[diag]   L1[{}] at PA 0x{:08X} = 0x{:08X} (valid={} leaf={})",
+                    crash_vpn1,
+                    l1_addr,
+                    l1_entry,
                     (l1_entry & 1) != 0,
-                    (l1_entry & 0xE) != 0);
+                    (l1_entry & 0xE) != 0
+                );
 
                 // Also dump L1 entries around the kernel linear mapping
                 eprintln!("[diag]   L1[768..800] (kernel linear mapping):");
                 for i in (768..800).step_by(4) {
-                    let addrs: Vec<u64> = (i..i+4).map(|j| pg_dir_pa + (j as u64) * 4).collect();
-                    let entries: Vec<u32> = addrs.iter().map(|&a| vm.bus.read_word(a).unwrap_or(0)).collect();
-                    eprintln!("[diag]     [{}..{}] = {:08X} {:08X} {:08X} {:08X}", 
-                        i, i+3, entries[0], entries[1], entries[2], entries[3]);
+                    let addrs: Vec<u64> = (i..i + 4).map(|j| pg_dir_pa + (j as u64) * 4).collect();
+                    let entries: Vec<u32> = addrs
+                        .iter()
+                        .map(|&a| vm.bus.read_word(a).unwrap_or(0))
+                        .collect();
+                    eprintln!(
+                        "[diag]     [{}..{}] = {:08X} {:08X} {:08X} {:08X}",
+                        i,
+                        i + 3,
+                        entries[0],
+                        entries[1],
+                        entries[2],
+                        entries[3]
+                    );
                 }
 
                 // Dump wider range to cover the crash VA's L1 entry
                 if crash_vpn1 >= 800 {
                     eprintln!("[diag]   L1[800..896] (extended linear mapping):");
                     for i in (800..896).step_by(4) {
-                        let addrs: Vec<u64> = (i..i+4).map(|j| pg_dir_pa + (j as u64) * 4).collect();
-                        let entries: Vec<u32> = addrs.iter().map(|&a| vm.bus.read_word(a).unwrap_or(0)).collect();
-                        eprintln!("[diag]     [{}..{}] = {:08X} {:08X} {:08X} {:08X}", 
-                            i, i+3, entries[0], entries[1], entries[2], entries[3]);
+                        let addrs: Vec<u64> =
+                            (i..i + 4).map(|j| pg_dir_pa + (j as u64) * 4).collect();
+                        let entries: Vec<u32> = addrs
+                            .iter()
+                            .map(|&a| vm.bus.read_word(a).unwrap_or(0))
+                            .collect();
+                        eprintln!(
+                            "[diag]     [{}..{}] = {:08X} {:08X} {:08X} {:08X}",
+                            i,
+                            i + 3,
+                            entries[0],
+                            entries[1],
+                            entries[2],
+                            entries[3]
+                        );
                     }
                 }
             }
@@ -106,8 +140,10 @@ fn main() {
                     0x48534F => "HSM",
                     _ => "???",
                 };
-                eprintln!("[ecall] #{} at count={}: ext=0x{:08X}({}) func={} a0=0x{:08X}", 
-                    last_ecall_count, count, a7, ext_name, a6, a0);
+                eprintln!(
+                    "[ecall] #{} at count={}: ext=0x{:08X}({}) func={} a0=0x{:08X}",
+                    last_ecall_count, count, a7, ext_name, a6, a0
+                );
             }
         }
 
@@ -121,11 +157,15 @@ fn main() {
             // Check for load/store/access fault (5, 7, 13, 15)
             if cause_code == 5 || cause_code == 7 || cause_code == 13 || cause_code == 15 {
                 let mpp = (vm.cpu.csr.mstatus >> 11) & 3;
-                if u64::from(mtval) == crash_va as u64 || (mtval >= 0xD7000000u32 && mtval < 0xD8000000u32) {
+                if u64::from(mtval) == crash_va as u64
+                    || (mtval >= 0xD7000000u32 && mtval < 0xD8000000u32)
+                {
                     fault_captured = true;
                     eprintln!("\n=== FAULT CAPTURED at count={} ===", count);
-                    eprintln!("  mcause=0x{:08X} (code={}), mtval=0x{:08X}, mepc=0x{:08X}", 
-                        mcause, cause_code, mtval, mepc);
+                    eprintln!(
+                        "  mcause=0x{:08X} (code={}), mtval=0x{:08X}, mepc=0x{:08X}",
+                        mcause, cause_code, mtval, mepc
+                    );
                     eprintln!("  mpp={}, satp=0x{:08X}", mpp, vm.cpu.csr.satp);
 
                     // Dump registers
@@ -136,9 +176,16 @@ fn main() {
                     }
 
                     // Dump the faulting instruction
-                    let fault_pa = if mepc >= 0xC0000000 { mepc - 0xC0000000 } else { mepc };
+                    let fault_pa = if mepc >= 0xC0000000 {
+                        mepc - 0xC0000000
+                    } else {
+                        mepc
+                    };
                     let inst = vm.bus.read_word(fault_pa as u64).unwrap_or(0);
-                    eprintln!("  Faulting instruction at PA 0x{:08X}: 0x{:08X}", fault_pa, inst);
+                    eprintln!(
+                        "  Faulting instruction at PA 0x{:08X}: 0x{:08X}",
+                        fault_pa, inst
+                    );
 
                     // Dump page table state for the fault address
                     let satp = vm.cpu.csr.satp;
@@ -148,11 +195,16 @@ fn main() {
                     let l1_addr = pg_dir_pa + (l1_idx as u64) * 4;
                     let l1_entry = vm.bus.read_word(l1_addr).unwrap_or(0);
                     eprintln!("\n  === PAGE TABLE WALK for VA 0x{:08X} ===", mtval as u32);
-                    eprintln!("  L1[{}] at PA 0x{:08X} = 0x{:08X}", l1_idx, l1_addr, l1_entry);
-                    eprintln!("    valid={} leaf={} ppn={}", 
+                    eprintln!(
+                        "  L1[{}] at PA 0x{:08X} = 0x{:08X}",
+                        l1_idx, l1_addr, l1_entry
+                    );
+                    eprintln!(
+                        "    valid={} leaf={} ppn={}",
                         (l1_entry & 1) != 0,
                         (l1_entry & 0xE) != 0,
-                        (l1_entry >> 10) & 0x3FFFFF);
+                        (l1_entry >> 10) & 0x3FFFFF
+                    );
 
                     if (l1_entry & 1) != 0 && (l1_entry & 0xE) == 0 {
                         // Non-leaf, walk L2
@@ -161,18 +213,28 @@ fn main() {
                         let l2_idx = ((mtval as u32) >> 12) & 0x3FF;
                         let l2_addr = l2_base + (l2_idx as u64) * 4;
                         let l2_entry = vm.bus.read_word(l2_addr).unwrap_or(0);
-                        eprintln!("  L2[{}] at PA 0x{:08X} = 0x{:08X}", l2_idx, l2_addr, l2_entry);
-                        eprintln!("    valid={} leaf={} ppn={}", 
+                        eprintln!(
+                            "  L2[{}] at PA 0x{:08X} = 0x{:08X}",
+                            l2_idx, l2_addr, l2_entry
+                        );
+                        eprintln!(
+                            "    valid={} leaf={} ppn={}",
                             (l2_entry & 1) != 0,
                             (l2_entry & 0xE) != 0,
-                            (l2_entry >> 10) & 0x3FFFFF);
+                            (l2_entry >> 10) & 0x3FFFFF
+                        );
 
                         // Dump surrounding L2 entries
                         for i in (l2_idx as i64 - 2).max(0)..=(l2_idx as i64 + 2).min(1023) {
                             let addr = l2_base + (i as u64) * 4;
                             let entry = vm.bus.read_word(addr).unwrap_or(0);
                             if i as u32 != l2_idx {
-                                eprintln!("    L2[{}] = 0x{:08X} (valid={})", i, entry, (entry & 1) != 0);
+                                eprintln!(
+                                    "    L2[{}] = 0x{:08X} (valid={})",
+                                    i,
+                                    entry,
+                                    (entry & 1) != 0
+                                );
                             }
                         }
                     }
@@ -189,10 +251,22 @@ fn main() {
                     if mem_regions_ptr >= 0xC0000000 {
                         let mem_regions_pa = (mem_regions_ptr - 0xC0000000) as u64;
                         for ri in 0..mem_cnt.min(16) {
-                            let base = vm.bus.read_word(mem_regions_pa + (ri as u64) * 12).unwrap_or(0);
-                            let size = vm.bus.read_word(mem_regions_pa + (ri as u64) * 12 + 4).unwrap_or(0);
-                            let flags = vm.bus.read_word(mem_regions_pa + (ri as u64) * 12 + 8).unwrap_or(0);
-                            eprintln!("  memory[{}]: base=0x{:08X} size=0x{:08X} flags=0x{:08X}", ri, base, size, flags);
+                            let base = vm
+                                .bus
+                                .read_word(mem_regions_pa + (ri as u64) * 12)
+                                .unwrap_or(0);
+                            let size = vm
+                                .bus
+                                .read_word(mem_regions_pa + (ri as u64) * 12 + 4)
+                                .unwrap_or(0);
+                            let flags = vm
+                                .bus
+                                .read_word(mem_regions_pa + (ri as u64) * 12 + 8)
+                                .unwrap_or(0);
+                            eprintln!(
+                                "  memory[{}]: base=0x{:08X} size=0x{:08X} flags=0x{:08X}",
+                                ri, base, size, flags
+                            );
                         }
                     }
 
@@ -201,10 +275,22 @@ fn main() {
                     if res_regions_ptr >= 0xC0000000 {
                         let res_regions_pa = (res_regions_ptr - 0xC0000000) as u64;
                         for ri in 0..res_cnt.min(16) {
-                            let base = vm.bus.read_word(res_regions_pa + (ri as u64) * 12).unwrap_or(0);
-                            let size = vm.bus.read_word(res_regions_pa + (ri as u64) * 12 + 4).unwrap_or(0);
-                            let flags = vm.bus.read_word(res_regions_pa + (ri as u64) * 12 + 8).unwrap_or(0);
-                            eprintln!("  reserved[{}]: base=0x{:08X} size=0x{:08X} flags=0x{:08X}", ri, base, size, flags);
+                            let base = vm
+                                .bus
+                                .read_word(res_regions_pa + (ri as u64) * 12)
+                                .unwrap_or(0);
+                            let size = vm
+                                .bus
+                                .read_word(res_regions_pa + (ri as u64) * 12 + 4)
+                                .unwrap_or(0);
+                            let flags = vm
+                                .bus
+                                .read_word(res_regions_pa + (ri as u64) * 12 + 8)
+                                .unwrap_or(0);
+                            eprintln!(
+                                "  reserved[{}]: base=0x{:08X} size=0x{:08X} flags=0x{:08X}",
+                                ri, base, size, flags
+                            );
                         }
                     }
 
@@ -221,10 +307,22 @@ fn main() {
                     // Check kernel_map state
                     eprintln!("\n  === KERNEL_MAP ===");
                     let km_phys: u64 = 0x00C7A098;
-                    for (name, offset) in [("page_offset", 0), ("virt_addr", 4), ("virt_offset", 8), 
-                        ("phys_addr", 12), ("size", 16), ("va_pa_offset", 20), ("va_kernel_pa_offset", 24)] {
+                    for (name, offset) in [
+                        ("page_offset", 0),
+                        ("virt_addr", 4),
+                        ("virt_offset", 8),
+                        ("phys_addr", 12),
+                        ("size", 16),
+                        ("va_pa_offset", 20),
+                        ("va_kernel_pa_offset", 24),
+                    ] {
                         let val = vm.bus.read_word(km_phys + offset).unwrap_or(0);
-                        eprintln!("  kernel_map.{} (PA 0x{:08X}) = 0x{:08X}", name, km_phys + offset, val);
+                        eprintln!(
+                            "  kernel_map.{} (PA 0x{:08X}) = 0x{:08X}",
+                            name,
+                            km_phys + offset,
+                            val
+                        );
                     }
 
                     // Check phys_ram_base
@@ -244,8 +342,14 @@ fn main() {
                 let mut s = String::new();
                 for j in 0..300 {
                     if let Ok(byte) = vm.bus.read_byte(pa + j) {
-                        if byte == 0 { break; }
-                        if byte >= 0x20 && byte < 0x7F { s.push(byte as char); } else { s.push('.'); }
+                        if byte == 0 {
+                            break;
+                        }
+                        if byte >= 0x20 && byte < 0x7F {
+                            s.push(byte as char);
+                        } else {
+                            s.push('.');
+                        }
                     }
                 }
                 eprintln!("[PANIC] at count={}, PC=0x{:08X}: \"{}\"", count, pc, s);
@@ -255,10 +359,18 @@ fn main() {
 
         // Progress
         if count % 5_000_000 == 0 {
-            eprintln!("[progress] {}M instr, PC=0x{:08X}, ECALLs={}, satp=0x{:08X}",
-                count / 1_000_000, vm.cpu.pc, last_ecall_count, vm.cpu.csr.satp);
+            eprintln!(
+                "[progress] {}M instr, PC=0x{:08X}, ECALLs={}, satp=0x{:08X}",
+                count / 1_000_000,
+                vm.cpu.pc,
+                last_ecall_count,
+                vm.cpu.csr.satp
+            );
         }
     }
 
-    println!("\n[done] {} instructions, fault_captured={}", count, fault_captured);
+    println!(
+        "\n[done] {} instructions, fault_captured={}",
+        count, fault_captured
+    );
 }

@@ -1,5 +1,4 @@
 /// Diagnostic: Track exactly when each ECALL happens and what the kernel is doing.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {

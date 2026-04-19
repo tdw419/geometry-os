@@ -1,6 +1,5 @@
 /// Diagnostic: High-frequency PC trace around the panic point (count 320K-340K).
 /// Also track ecall_count to verify ECALLs.
-
 use geometry_os::riscv::RiscvVm;
 
 fn main() {
@@ -83,5 +82,10 @@ fn main() {
         }
     }
 
-    eprintln!("\n[done] {} instr, ecall={}, uart={}", count, vm.cpu.ecall_count, vm.bus.uart.tx_buf.len());
+    eprintln!(
+        "\n[done] {} instr, ecall={}, uart={}",
+        count,
+        vm.cpu.ecall_count,
+        vm.bus.uart.tx_buf.len()
+    );
 }

@@ -13,12 +13,13 @@ fn main() {
         256,
         20_000_000,
         "console=ttyS0 earlycon=sbi loglevel=8",
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     println!("PC=0x{:08X}", vm.cpu.pc);
     println!("SBI console: {} bytes", vm.bus.sbi.console_output.len());
     println!("UART tx_buf: {} bytes", vm.bus.uart.tx_buf.len());
-    
+
     if !vm.bus.sbi.console_output.is_empty() {
         let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
         println!("SBI output (first 500 chars):");
@@ -29,7 +30,7 @@ fn main() {
         println!("UART output (first 500 chars):");
         println!("{}", &s[..s.len().min(500)]);
     }
-    
+
     // Check SBI ecall log
     println!("\nSBI ecall log (last 20):");
     for (i, (a7, a6, a0)) in vm.bus.sbi.ecall_log.iter().rev().take(20).enumerate() {

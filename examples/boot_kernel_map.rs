@@ -18,13 +18,13 @@ fn main() {
     // kernel_map is at VA 0xC0C7A098, PA = 0x00C7A098
     let km_va: u32 = 0xC0C7A098;
     let km_pa = (km_va - 0xC0000000) as u64;
-    
+
     eprintln!("kernel_map at PA 0x{:08X}:", km_pa);
     for off in (0..28).step_by(4) {
         let v = vm.bus.read_word(km_pa + off).unwrap_or(0xDEAD);
         eprintln!("  +{}: 0x{:08X}", off, v);
     }
-    
+
     // struct kernel_mapping {
     //   unsigned long page_offset;    // +0
     //   unsigned long virt_addr;      // +4
@@ -34,7 +34,7 @@ fn main() {
     //   unsigned long va_pa_offset;   // +20
     //   unsigned long va_kernel_pa_offset; // +24
     // }
-    
+
     let page_offset = vm.bus.read_word(km_pa).unwrap();
     let virt_addr = vm.bus.read_word(km_pa + 4).unwrap();
     let virt_offset = vm.bus.read_word(km_pa + 8).unwrap();
@@ -42,7 +42,7 @@ fn main() {
     let size = vm.bus.read_word(km_pa + 16).unwrap();
     let va_pa_offset = vm.bus.read_word(km_pa + 20).unwrap();
     let va_kernel_pa_offset = vm.bus.read_word(km_pa + 24).unwrap();
-    
+
     eprintln!("\nkernel_map fields:");
     eprintln!("  page_offset = 0x{:08X}", page_offset);
     eprintln!("  virt_addr = 0x{:08X}", virt_addr);
@@ -51,15 +51,17 @@ fn main() {
     eprintln!("  size = 0x{:08X}", size);
     eprintln!("  va_pa_offset = 0x{:08X}", va_pa_offset);
     eprintln!("  va_kernel_pa_offset = 0x{:08X}", va_kernel_pa_offset);
-    
+
     // Now run to 15.7M and check again
     let mut count: u64 = 0;
     while count < 15_600_000 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         let _ = vm.step();
         count += 1;
     }
-    
+
     eprintln!("\nAfter 15.6M instructions:");
     let va_pa_offset2 = vm.bus.read_word(km_pa + 20).unwrap();
     let phys_addr2 = vm.bus.read_word(km_pa + 12).unwrap();

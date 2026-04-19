@@ -17,7 +17,9 @@ fn main() {
 
     let mut count: u64 = 0;
     while count < 15_500_000 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         let _ = vm.step();
         count += 1;
     }
@@ -32,23 +34,23 @@ fn main() {
         if vm.cpu.csr.scause != 0 {
             let sp = vm.cpu.x[2];
             let sp_pa = (sp - 0xC0000000) as u64;
-            
+
             eprintln!("CRASH: PC=0x{:08X} stval=0x{:08X}", pc, vm.cpu.csr.stval);
             eprintln!("sp=0x{:08X}", sp);
-            
+
             // Dump stack frame (64 bytes)
             eprintln!("Stack frame:");
             for off in (0..64).step_by(4) {
                 let v = vm.bus.read_word(sp_pa + off).unwrap_or(0xDEAD);
                 eprintln!("  sp+{}: 0x{:08X}", off, v);
             }
-            
+
             // The saved ra is at sp+60
             let saved_ra = vm.bus.read_word(sp_pa + 60).unwrap_or(0);
             let saved_s0 = vm.bus.read_word(sp_pa + 56).unwrap_or(0);
             eprintln!("\nsaved ra=0x{:08X} (caller)", saved_ra);
             eprintln!("saved s0=0x{:08X} (prev frame)", saved_s0);
-            
+
             // Read chunk from s3
             let s3 = vm.cpu.x[19];
             let chunk_pa = (s3 - 0xC0000000) as u64;
@@ -73,11 +75,11 @@ fn main() {
                 let v = vm.bus.read_word(chunk_pa + off).unwrap_or(0xDEAD);
                 eprintln!("  +{}: 0x{:08X}", off, v);
             }
-            
+
             // Read pcpu_block_md chunk_md (embedded at offset 24? or 32?)
             // Actually chunk_md is inside the chunk struct. Let me find its offset.
             // struct pcpu_chunk has chunk_md as a field. The md_blocks pointer is separate.
-            
+
             break;
         }
     }

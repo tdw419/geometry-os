@@ -16,7 +16,9 @@ fn main() {
 
     let mut count: u64 = 0;
     while count < 15_560_000 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         let _ = vm.step();
         count += 1;
     }
@@ -24,17 +26,21 @@ fn main() {
     let mut step_count: u64 = 0;
     while step_count < 500_000 {
         let pc = vm.cpu.pc;
-        
+
         if pc == 0xC040AFBE {
-            eprintln!("Before jal: s8=0x{:08X} s4=0x{:08X} s2=0x{:08X}", 
-                vm.cpu.x[24], vm.cpu.x[20], vm.cpu.x[18]);
+            eprintln!(
+                "Before jal: s8=0x{:08X} s4=0x{:08X} s2=0x{:08X}",
+                vm.cpu.x[24], vm.cpu.x[20], vm.cpu.x[18]
+            );
         }
         if pc == 0xC040AFC2 {
-            eprintln!("After ret:  s8=0x{:08X} s4=0x{:08X} a0=0x{:08X}", 
-                vm.cpu.x[24], vm.cpu.x[20], vm.cpu.x[10]);
+            eprintln!(
+                "After ret:  s8=0x{:08X} s4=0x{:08X} a0=0x{:08X}",
+                vm.cpu.x[24], vm.cpu.x[20], vm.cpu.x[10]
+            );
             break;
         }
-        
+
         let _ = vm.step();
         step_count += 1;
         count += 1;

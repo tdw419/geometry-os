@@ -26,7 +26,10 @@ fn main() {
         let _ = vm.step();
         count += 1;
     }
-    eprintln!("Fast-forward to {} instructions, PC=0x{:08X}", count, vm.cpu.pc);
+    eprintln!(
+        "Fast-forward to {} instructions, PC=0x{:08X}",
+        count, vm.cpu.pc
+    );
 
     // Single-step and watch for the crash area or exceptions
     let watch_limit = 500_000;
@@ -45,7 +48,9 @@ fn main() {
             let x = &vm.cpu.x;
             eprintln!(
                 "@ {}M PC=0x{:08X} instr=0x{:08X}",
-                count as f64 / 1e6, pc, instr
+                count as f64 / 1e6,
+                pc,
+                instr
             );
             eprintln!(
                 "  a0=0x{:08X} a1=0x{:08X} a2=0x{:08X} a3=0x{:08X}",
