@@ -881,6 +881,8 @@ fn opcode_name(op: u8) -> &'static str {
         0x80 => "SOCKSEND",
         0x81 => "SOCKRECV",
         0x82 => "DISCONNECT",
+        0x83 => "TRACE_READ",
+        0x84 => "PIXEL_HISTORY",
         _ => "???",
     }
 }
