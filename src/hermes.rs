@@ -547,8 +547,12 @@ To compute x + y into a new register: LDI rd, 0 then ADD rd, rs (or MOV rd, rs t
 
 ## Full instruction set
 Data:     LDI reg, imm | LOAD reg, addr_r | STORE addr_r, reg | MOV rd, rs
+          LOADS reg, addr_r | STORES addr_r, reg (string ops)
 ALU:      ADD rd, rs | SUB rd, rs | MUL rd, rs | DIV rd, rs | MOD rd, rs
           AND rd, rs | OR rd, rs | XOR rd, rs | SHL rd, rs | SHR rd, rs | NEG rd
+          NOT rd | SAR rd, rs | MIN rd, rs | MAX rd, rs
+Immediate: ADDI rd, imm | SUBI rd, imm | CMPI rd, imm | ANDI rd, imm | ORI rd, imm
+          XORI rd, imm | SHLI rd, imm | SHRI rd, imm | SARI rd, imm
 Compare:  CMP rd, rs (sets r0 = -1 if rd<rs, 0 if ==, 1 if rd>rs)
 Branch:   JMP label | JZ reg, label | JNZ reg, label
           BLT r0, label (branch if r0==0xFFFFFFFF) | BGE r0, label (branch if r0!=0xFFFFFFFF)
@@ -559,7 +563,13 @@ Pixel:    PSET xr, yr, cr | PSETI x, y, color | FILL cr
           LINE x0r, y0r, x1r, y1r, cr | CIRCLE xr, yr, rr, cr
           SPRITE xr, yr, addr_r, wr, hr | PEEK xr, yr, dr
 Other:    SCROLL nr | IKEY reg | RAND reg | FRAME | BEEP freq_r, dur_r | NOTE wave_r, freq_r, dur_r
-          SPAWN reg | KILL reg | ASM src_r, dest_r
+          SPAWN reg | KILL reg | ASM src_r, dest_r | YIELD | SLEEP reg | GETPID reg
+          SIGNAL sig_reg, pid_reg | SIGSET handler_reg | WAITPID pid_reg
+          OPEN path_r, mode_r | READ fd_r, buf_r, len_r | WRITE fd_r, buf_r, len_r | CLOSE fd_r
+          SEEK fd_r, offset_r | IOCTL fd_r, cmd_r
+          MEMCPY dst_r, src_r, len_r
+          TEXTI xr, yr, addr_r, len_r | STRO addr_r, char_r | SCREENP xr, yr, dr
+          TILEMAP xr, yr, map_r, tw_r, th_r | REPLAY slot_r | SNAP_TRACE
           HALT | NOP
 
 ## Example: fill screen with blue gradient
@@ -619,18 +629,30 @@ Think step by step but only output commands."#;
 
 pub const HERMES_BUILD_SYSTEM_PROMPT: &str = r#"You are an agent that modifies the Geometry OS Rust source code to add features and fix bugs. You have full access to read source files, write changes, and run builds.
 
-## Project Structure
-- src/vm.rs -- VM: 64K RAM, 32 regs, 256x256 screen, all opcode handlers
-- src/assembler.rs -- text -> bytecode, two-pass with labels
+## Project Structure (modular)
+- src/vm/ -- Virtual Machine core (mod.rs, ops_extended.rs, ops_graphics.rs, ops_memory.rs, ops_syscall.rs, disasm.rs, scheduler.rs, formula.rs, memory.rs, io.rs, trace.rs, boot.rs, types.rs)
+- src/assembler/ -- Two-pass assembler (mod.rs, core_ops.rs, graphics_ops.rs, immediate_ops.rs, system_ops.rs, formula_ops.rs, instructions.rs, includes.rs)
+- src/riscv/ -- RISC-V RV32IMAC interpreter (mod.rs, boot.rs, bus.rs, mmu.rs, loader.rs, sbi.rs, syscall.rs, clint.rs, plic.rs, uart.rs, virtio_blk.rs, dtb.rs, bridge.rs, trace.rs, tests.rs)
+- src/qemu/ -- QEMU bridge (mod.rs, bridge.rs, config.rs, ansi.rs, cursor.rs)
 - src/main.rs -- GUI window, rendering, input, terminal mode
-- src/canvas.rs -- canvas buffer, terminal command handler, file loading
+- src/canvas.rs -- Canvas buffer, terminal command handler, file loading
 - src/hermes.rs -- LLM agent loop (this file)
 - src/cli.rs -- CLI mode (headless REPL)
-- src/preprocessor.rs -- macro expansion (VAR/SET/GET)
+- src/preprocessor.rs -- Macro expansion (VAR/SET/GET), .include/.lib directives
+- src/inode_fs.rs -- In-memory inode filesystem
+- src/vfs.rs -- Virtual filesystem layer
 - src/font.rs -- 8x8 VGA bitmaps
 - src/save.rs -- PNG/PPM save
-- src/lib.rs -- pub mod vm, assembler
-- tests/program_tests.rs -- integration tests
+- src/render.rs -- Rendering pipeline
+- src/audio.rs -- Sound (BEEP/NOTE opcodes)
+- src/keys.rs -- Keyboard input
+- src/pixel.rs -- Pixel color utilities
+- src/fuzzer.rs -- VM fuzzer
+- src/riscv_fuzzer.rs -- RISC-V fuzzer
+- src/lib.rs -- pub mod declarations
+- tests/program_tests/ -- Integration tests (basic_programs, opcodes, games, multiprocess, filesystem, shell, kernel, hypervisor, etc.)
+- tests/riscv_tests.rs -- RISC-V tests
+- tests/trace_tests.rs -- Trace tests
 
 ## Commands available
 - readfile <path>        Read a source file (shows up to 3000 chars)
@@ -644,7 +666,7 @@ pub const HERMES_BUILD_SYSTEM_PROMPT: &str = r#"You are an agent that modifies t
 
 ## Build workflow
 1. readfile to understand the code you need to modify
-2. shell grep -n "pattern" src/file.rs to find specific locations
+2. shell grep -rn "pattern" src/ to find specific locations (use -rn for recursive search across modules)
 3. write the modified file (use write + content + ENDWRITE)
 4. shell cargo build to verify compilation
 5. shell cargo test to verify all tests pass
@@ -654,8 +676,13 @@ pub const HERMES_BUILD_SYSTEM_PROMPT: &str = r#"You are an agent that modifies t
 - 64K u32 RAM, 32 registers (r0-r31)
 - r0 = CMP result register, r30 = SP, r31 = LR
 - All ALU ops: 2-argument form (ADD rd, rs means rd = rd + rs)
-- Adding a new opcode: add to vm.rs step(), vm.rs disassemble_at(), assembler.rs parse_instruction(), main.rs OPCODES array
-- Write tests in tests/program_tests.rs
+- Adding a new opcode:
+  1. Add bytecode handler in src/vm/ops_*.rs (pick the right file based on opcode category)
+  2. Add disassembler entry in src/vm/disasm.rs
+  3. Add assembler entry in src/assembler/*_ops.rs (pick the right file)
+  4. Add any needed preprocessor macros in src/preprocessor.rs
+  5. Write tests in tests/program_tests/
+- Write tests in tests/program_tests/ (organized by category: opcodes.rs, games.rs, filesystem.rs, etc.)
 
 ## Safety rules
 - ALL writes are sandboxed to the project root directory (no escaping via .. or absolute paths)
