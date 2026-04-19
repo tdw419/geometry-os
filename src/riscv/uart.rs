@@ -63,6 +63,8 @@ pub struct Uart {
     pub rx_buf: Vec<u8>,
     /// Output buffer (characters transmitted by guest).
     pub tx_buf: Vec<u8>,
+    /// Count of total THR writes (for debugging).
+    pub write_count: u64,
 }
 
 impl Default for Uart {
@@ -84,6 +86,7 @@ impl Uart {
             fcr: 0,
             rx_buf: Vec::new(),
             tx_buf: Vec::new(),
+            write_count: 0,
         }
     }
 
@@ -133,6 +136,7 @@ impl Uart {
             THR_RBR => {
                 // Transmit: add to output buffer.
                 self.tx_buf.push(val);
+                self.write_count += 1;
                 // In real hardware, THR would become not-empty, then empty
                 // after "transmitting". We're instant, so THRE stays set.
             }
