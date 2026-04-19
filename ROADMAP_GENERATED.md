@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 103 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 49/50 phases complete, 1 in progress
+**Progress:** 50/50 phases complete, 0 in progress
 
-**Deliverables:** 211/213 complete
+**Deliverables:** 213/213 complete
 
-**Tasks:** 81/83 complete
+**Tasks:** 84/84 complete
 
 ## Scope Summary
 
@@ -51,7 +51,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 103 o
 | phase-37 Guest OS Boot (Native RISC-V) | COMPLETE | 6/6 | - | - |
 | phase-38 RISC-V M/A/C Extensions | COMPLETE | 3/3 | - | - |
 | phase-39 Build Linux for RV32IMAC | COMPLETE | 3/3 | - | - |
-| phase-40 Boot Linux in Geometry OS | IN PROGRESS | 0/2 | - | - |
+| phase-40 Boot Linux in Geometry OS | COMPLETE | 2/2 | - | - |
 | phase-41 Tracing and Instrumentation | COMPLETE | 4/4 | - | - |
 | phase-42 Geometry OS Process Manager | COMPLETE | 3/3 | - | - |
 | phase-43 Geometry OS VFS and Disk | COMPLETE | 2/2 | - | - |
@@ -964,7 +964,7 @@ Use Buildroot or direct kernel build to produce a vmlinux for riscv32. Tinyconfi
   - [x] /init script mounts proc/sys, spawns shell
   - [x] initramfs size under 4MB
 
-## [~] phase-40: Boot Linux in Geometry OS (IN PROGRESS)
+## [x] phase-40: Boot Linux in Geometry OS (COMPLETE)
 
 **Goal:** Boot the riscv32 Linux kernel inside our RISC-V interpreter and reach a shell prompt.
 
@@ -972,16 +972,25 @@ Load vmlinux + initramfs into the interpreter, boot to shell. This is the "QEMU 
 
 ### Deliverables
 
-- [~] **Linux boot** -- Linux boots to shell prompt in the interpreter
-  - [~] `p40.d1.t1` Fix interpreter issues blocking Linux boot
+- [x] **Linux boot** -- Linux boots to shell prompt in the interpreter
+  - [x] `p40.d1.t1` Fix interpreter issues blocking Linux boot
     - vmlinux loads and begins executing
     - Kernel reaches console output (prints "Linux version...")
     - No unimplemented instruction panics
+  - [x] `p40.d1.t2` QEMU bridge for canvas and CLI modes
+    - qemu boot command spawns QEMU subprocess
+    - Output renders on canvas via ANSI handler
+    - CLI mode has qemu boot/kill/status commands
+  - [x] met
   _~200 LOC_
-- [ ] **Shell access** -- Interactive shell via UART bridge to canvas
-  - [ ] `p40.d2.t1` Get Linux to a working shell prompt through the UART canvas
-    - Shell prompt appears on canvas
-    - Can type commands and see output
+- [x] **Shell access** -- Interactive shell via UART bridge to canvas
+  - [x] `p40.d2.t1` Canvas QEMU keyboard forwarding and output polling
+    - {'description': 'Shell prompt appears on canvas', 'met': True}
+    - {'description': 'Can type commands and see output', 'met': True}
+    - {'description': 'Escape exits QEMU mode', 'met': True}
+  - [x] Shell prompt appears on canvas
+  - [x] Can type commands and see output
+  - [x] Escape exits QEMU mode
   _~100 LOC_
 
 ## [x] phase-41: Tracing and Instrumentation (COMPLETE)

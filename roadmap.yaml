@@ -10,10 +10,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 103
-  tests: 1197
+  opcodes: 107
+  tests: 1249
   programs: 59
-  loc: 32121
+  loc: 32666
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -1759,7 +1759,7 @@ phases:
       status: done
 - id: phase-40
   title: Boot Linux in Geometry OS
-  status: in_progress
+  status: complete
   goal: Boot the riscv32 Linux kernel inside our RISC-V interpreter and reach a shell prompt.
   priority: 55
   description: Load vmlinux + initramfs into the interpreter, boot to shell. This is the "QEMU bridge" moment -- running real Linux in our own emulator. Fix any interpreter bugs discovered during boot.
@@ -1793,16 +1793,26 @@ phases:
     - Non-blocking stdout polling enables responsive terminal interaction
   - name: Shell access
     description: Interactive shell via UART bridge to canvas
-    status: in_progress
+    status: done
     scope_lines: 100
+    acceptance_criteria:
+    - description: Shell prompt appears on canvas
+      met: true
+    - description: Can type commands and see output
+      met: true
+    - description: Escape exits QEMU mode
+      met: true
     tasks:
     - id: p40.d2.t1
       title: Canvas QEMU keyboard forwarding and output polling
-      status: in_progress
+      status: done
       acceptance_criteria:
-      - Shell prompt appears on canvas
-      - Can type commands and see output
-      - Escape exits QEMU mode
+      - description: Shell prompt appears on canvas
+        met: true
+      - description: Can type commands and see output
+        met: true
+      - description: Escape exits QEMU mode
+        met: true
   learnings:
   - Booting real kernels reveals interpreter bugs unit tests miss
   - Linux boot sequence teaches more than any textbook
