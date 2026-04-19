@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # Library deps (always available)
-# -- none needed, vm/assembler are pure Rust
+libc = "0.2"
 
 # GUI binary deps (only needed for native build)
 minifb = { version = "0.27", optional = true }

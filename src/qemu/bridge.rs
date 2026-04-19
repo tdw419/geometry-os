@@ -47,7 +47,15 @@ impl QemuBridge {
         })?;
 
         let stdin = child.stdin.take().ok_or("failed to open QEMU stdin")?;
-        let stdout = child.stdout.take().ok_or("failed to open QEMU stdout")?;
+        let mut stdout = child.stdout.take().ok_or("failed to open QEMU stdout")?;
+
+        // Set stdout to non-blocking so read doesn't hang the CLI loop
+        use std::os::unix::io::AsRawFd;
+        let fd = stdout.as_raw_fd();
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL, 0) };
+        if flags >= 0 {
+            unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) };
+        }
 
         Ok(QemuBridge {
             child,
@@ -92,6 +100,73 @@ impl QemuBridge {
         }
 
         total_read
+    }
+
+    /// Read available output from QEMU stdout as raw text (CLI mode).
+    /// Strips ANSI escape sequences and returns printable text.
+    /// Returns the text read (may be empty if no data available).
+    pub fn read_output_text(&mut self) -> String {
+        if !self.alive {
+            return String::new();
+        }
+
+        let mut tmp_buf = [0u8; 4096];
+        let mut result = String::new();
+
+        loop {
+            match self.stdout.read(&mut tmp_buf) {
+                Ok(0) => {
+                    self.alive = false;
+                    break;
+                }
+                Ok(n) => {
+                    let bytes = &tmp_buf[..n];
+                    // Strip ANSI escapes for display
+                    let mut i = 0;
+                    while i < bytes.len() {
+                        let b = bytes[i];
+                        if b == 0x1B {
+                            // Skip escape sequence
+                            i += 1;
+                            if i < bytes.len() && bytes[i] == b'[' {
+                                i += 1;
+                                while i < bytes.len() {
+                                    let c = bytes[i];
+                                    i += 1;
+                                    if c.is_ascii_alphabetic() || c == b'~' {
+                                        break;
+                                    }
+                                }
+                            } else if i < bytes.len() {
+                                i += 1; // skip the char after ESC
+                            }
+                        } else if b >= 0x20 && b < 0x7F {
+                            result.push(b as char);
+                            i += 1;
+                        } else if b == b'\n' {
+                            result.push('\n');
+                            i += 1;
+                        } else if b == b'\r' {
+                            i += 1;
+                        } else {
+                            i += 1; // skip other control chars
+                        }
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    break;
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                    continue;
+                }
+                Err(_) => {
+                    self.alive = false;
+                    break;
+                }
+            }
+        }
+
+        result
     }
 
     /// Write a byte to QEMU stdin.

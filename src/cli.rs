@@ -4,6 +4,7 @@ use crate::assembler;
 use crate::canvas::list_asm_files;
 use crate::hermes::run_hermes_loop;
 use crate::preprocessor;
+use geometry_os::qemu::QemuBridge;
 use crate::save::{load_state, save_state};
 use crate::vm;
 use std::io::{self, Write};
@@ -18,6 +19,7 @@ pub fn cli_main(extra_args: &[String]) {
     let mut source_text = String::new(); // holds the currently loaded source
     let mut cli_breakpoints: Vec<u32> = Vec::new();
     let mut canvas_buffer: Vec<u32> = vec![0; 4096];
+    let mut qemu_bridge: Option<QemuBridge> = None;
 
     // If extra args given, treat first as a file to load
     if !extra_args.is_empty() {
@@ -40,6 +42,17 @@ pub fn cli_main(extra_args: &[String]) {
 
     let stdin = io::stdin();
     loop {
+        // Poll QEMU output before showing prompt
+        if let Some(ref mut bridge) = qemu_bridge {
+            if bridge.is_alive() {
+                let output = bridge.read_output_text();
+                if !output.is_empty() {
+                    print!("{}", output);
+                    let _ = io::stdout().flush();
+                }
+            }
+        }
+
         print!("geo> ");
         let _ = io::stdout().flush();
 
@@ -50,6 +63,23 @@ pub fn cli_main(extra_args: &[String]) {
         let cmd = line.trim();
         if cmd.is_empty() {
             continue;
+        }
+
+        // If QEMU is running and user types a non-qemu command, forward to QEMU stdin
+        if let Some(ref mut bridge) = qemu_bridge {
+            if bridge.is_alive() && !cmd.starts_with("qemu") && !cmd.starts_with("quit") && !cmd.starts_with("exit") {
+                // Forward the line to QEMU as stdin + newline
+                let _ = bridge.write_bytes(format!("{}\n", cmd).as_bytes());
+                // Give QEMU a moment to process
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                // Read any output
+                let output = bridge.read_output_text();
+                if !output.is_empty() {
+                    print!("{}", output);
+                    let _ = io::stdout().flush();
+                }
+                continue;
+            }
         }
 
         let parts: Vec<&str> = cmd.split_whitespace().collect();
@@ -74,6 +104,9 @@ pub fn cli_main(extra_args: &[String]) {
                 println!("  bp [addr]         Toggle/list breakpoints");
                 println!("  bpc               Clear all breakpoints");
                 println!("  disasm [addr] [n] Disassemble n instrs");
+                println!("  qemu boot <cfg>   Boot QEMU VM (e.g. qemu boot arch=riscv64 kernel=Image ram=256M)");
+                println!("  qemu kill         Kill running QEMU");
+                println!("  qemu status       Show QEMU status");
                 println!("  quit              Exit");
             }
             "list" | "ls" => {
@@ -479,7 +512,88 @@ pub fn cli_main(extra_args: &[String]) {
                     &mut canvas_assembled,
                 );
             }
+            "qemu" => {
+                let subcmd = parts.get(1).copied().unwrap_or("");
+                match subcmd {
+                    "boot" => {
+                        if parts.len() < 3 {
+                            println!("Usage: qemu boot <config>");
+                            println!("  e.g. qemu boot arch=riscv64 kernel=/path/to/Image ram=256M");
+                            println!("  e.g. qemu boot arch=riscv64 kernel=Image initrd=initrd.gz append='console=ttyS0'");
+                            continue;
+                        }
+                        // Kill any existing QEMU first
+                        if let Some(ref mut bridge) = qemu_bridge {
+                            let _ = bridge.kill();
+                        }
+                        qemu_bridge = None;
+
+                        let config_str = parts[2..].join(" ");
+                        match QemuBridge::spawn(&config_str) {
+                            Ok(mut bridge) => {
+                                // Wait for QEMU to start producing output (OpenSBI takes ~2-3s)
+                                for _ in 0..30 {
+                                    std::thread::sleep(std::time::Duration::from_millis(100));
+                                    let output = bridge.read_output_text();
+                                    if !output.is_empty() {
+                                        print!("{}", output);
+                                        let _ = io::stdout().flush();
+                                        // Continue draining for a bit more
+                                        std::thread::sleep(std::time::Duration::from_millis(500));
+                                        let more = bridge.read_output_text();
+                                        if !more.is_empty() {
+                                            print!("{}", more);
+                                            let _ = io::stdout().flush();
+                                        }
+                                        break;
+                                    }
+                                }
+                                qemu_bridge = Some(bridge);
+                                println!("[qemu] Booted: {}", config_str);
+                                let _ = io::stdout().flush();
+                            }
+                            Err(e) => {
+                                println!("[qemu] Error: {}", e);
+                            }
+                        }
+                    }
+                    "kill" => {
+                        if let Some(ref mut bridge) = qemu_bridge {
+                            match bridge.kill() {
+                                Ok(()) => println!("[qemu] Killed"),
+                                Err(e) => println!("[qemu] Kill error: {}", e),
+                            }
+                            qemu_bridge = None;
+                        } else {
+                            println!("[qemu] No QEMU running");
+                        }
+                    }
+                    "status" => match qemu_bridge {
+                        Some(ref mut bridge) => {
+                            if bridge.is_alive() {
+                                let cursor = bridge.cursor();
+                                println!(
+                                    "[qemu] Running (cursor: row={}, col={})",
+                                    cursor.row, cursor.col
+                                );
+                            } else {
+                                println!("[qemu] Process exited");
+                                qemu_bridge = None;
+                            }
+                        }
+                        None => println!("[qemu] Not running"),
+                    },
+                    _ => {
+                        println!("Usage: qemu <boot|kill|status>");
+                        println!("  qemu boot arch=riscv64 kernel=Image ram=256M");
+                    }
+                }
+            }
             "quit" | "exit" => {
+                // Clean up QEMU
+                if let Some(ref mut bridge) = qemu_bridge {
+                    let _ = bridge.kill();
+                }
                 break;
             }
             _ => {
