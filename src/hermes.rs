@@ -12,6 +12,126 @@ use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+/// Get the project root directory (where Cargo.toml lives).
+fn get_project_root() -> PathBuf {
+    let mut dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    loop {
+        if dir.join("Cargo.toml").exists() {
+            return dir;
+        }
+        if !dir.pop() {
+            return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        }
+    }
+}
+
+/// Check if a path is safe to write (within the project root or /tmp).
+fn validate_write_path(filename: &str) -> Result<PathBuf, String> {
+    let path = Path::new(filename);
+    if filename.contains("..") {
+        return Err("Path traversal (..) not allowed".to_string());
+    }
+    if path.is_absolute() {
+        let root = get_project_root();
+        let canonical_root = root.canonicalize().unwrap_or(root);
+        let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if canonical_path.starts_with("/tmp") {
+            return Ok(path.to_path_buf());
+        }
+        if canonical_path.starts_with(&canonical_root) {
+            return Ok(path.to_path_buf());
+        }
+        return Err(format!("Write outside project root not allowed: {}", filename));
+    }
+    let root = get_project_root();
+    let resolved = root.join(path);
+    let canonical_root = root.canonicalize().unwrap_or(root);
+    let canonical_resolved = resolved.canonicalize().unwrap_or(resolved.clone());
+    if canonical_resolved.starts_with(&canonical_root) {
+        return Ok(resolved);
+    }
+    Err(format!(
+        "Write outside project root not allowed: {} (resolves to {:?})",
+        filename, canonical_resolved
+    ))
+}
+
+/// Safely write a file with path validation.
+fn safe_write_file(filename: &str, content: &str) -> Result<usize, String> {
+    let validated_path = validate_write_path(filename)?;
+    std::fs::write(&validated_path, content)
+        .map(|_| content.len())
+        .map_err(|e| format!("Write error for {}: {}", filename, e))
+}
+
+/// Get git diff stat of uncommitted changes.
+fn get_git_diff() -> String {
+    match std::process::Command::new("git")
+        .args(["diff", "--stat"])
+        .current_dir(&get_project_root())
+        .output()
+    {
+        Ok(output) => {
+            let out = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if out.is_empty() { "(no uncommitted changes)".to_string() } else { out }
+        }
+        Err(e) => format!("git diff failed: {}", e),
+    }
+}
+
+/// Auto-commit changes.
+fn auto_commit(message: &str) -> String {
+    let root = get_project_root();
+    let has_changes = std::process::Command::new("git")
+        .args(["diff", "--quiet"])
+        .current_dir(&root)
+        .output()
+        .map(|o| !o.status.success())
+        .unwrap_or(false);
+    if !has_changes {
+        let has_untracked = std::process::Command::new("git")
+            .args(["ls-files", "--others", "--exclude-standard"])
+            .current_dir(&root)
+            .output()
+            .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+            .unwrap_or(false);
+        if !has_untracked {
+            return "(no changes to commit)".to_string();
+        }
+    }
+    if let Err(e) = std::process::Command::new("git").args(["add", "-A"]).current_dir(&root).output() {
+        return format!("git add failed: {}", e);
+    }
+    let msg = format!("[build-agent] {}", if message.len() > 72 { &message[..72] } else { message });
+    match std::process::Command::new("git").args(["commit", "-m", &msg]).current_dir(&root).output() {
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if output.status.success() { format!("Committed: {}", msg) } else { format!("Commit failed: {}", stderr) }
+        }
+        Err(e) => format!("git commit failed: {}", e),
+    }
+}
+
+/// Rollback uncommitted changes.
+fn git_rollback() -> String {
+    let root = get_project_root();
+    let mut results = Vec::new();
+    match std::process::Command::new("git").args(["checkout", "--", "."]).current_dir(&root).output() {
+        Ok(output) if output.status.success() => results.push("Discarded tracked changes".to_string()),
+        Ok(output) => results.push(format!("checkout failed: {}", String::from_utf8_lossy(&output.stderr).trim())),
+        Err(e) => results.push(format!("checkout error: {}", e)),
+    }
+    match std::process::Command::new("git").args(["clean", "-fd"]).current_dir(&root).output() {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !stdout.is_empty() { results.push(format!("Removed: {}", stdout)); }
+        }
+        Ok(output) => results.push(format!("clean failed: {}", String::from_utf8_lossy(&output.stderr).trim())),
+        Err(e) => results.push(format!("clean error: {}", e)),
+    }
+    results.join("; ")
+}
+
 /// instead of stdout. This is the visual/canvas version of run_hermes_loop().
 #[allow(clippy::too_many_arguments)]
 pub fn run_hermes_canvas(
@@ -117,15 +237,15 @@ pub fn run_hermes_canvas(
             // Handle write command for creating .asm files
             if let Some(ref mut wb) = write_buffer {
                 if cmd_line == "ENDWRITE" {
-                    match std::fs::write(&wb.0, &wb.1) {
-                        Ok(()) => {
-                            let msg = format!("Wrote {}", wb.0);
+                    match safe_write_file(&wb.0, &wb.1) {
+                        Ok(bytes) => {
+                            let msg = format!("Wrote {} ({} bytes)", wb.0, bytes);
                             *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
                         }
                         Err(e) => {
-                            let msg = format!("Write error: {}", e);
+                            let msg = format!("Write blocked: {}", e);
                             *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
@@ -141,7 +261,14 @@ pub fn run_hermes_canvas(
 
             if cmd_line.starts_with("write ") {
                 if let Some(filename) = cmd_line.strip_prefix("write ").map(|s| s.trim()) {
-                    write_buffer = Some((filename.to_string(), String::new()));
+                    if let Err(e) = validate_write_path(filename) {
+                        let msg = format!("[hermes] Write blocked: {}", e);
+                        *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                        output_capture.push_str(&msg);
+                        output_capture.push('\n');
+                    } else {
+                        write_buffer = Some((filename.to_string(), String::new()));
+                    }
                 }
                 continue;
             }
@@ -198,19 +325,19 @@ pub fn run_hermes_canvas(
 
         // Handle unclosed write buffer
         if let Some(wb) = write_buffer {
-            match std::fs::write(&wb.0, &wb.1) {
-                Ok(()) => {
+            match safe_write_file(&wb.0, &wb.1) {
+                Ok(bytes) => {
                     *output_row = write_line_to_canvas(
                         canvas_buffer,
                         *output_row,
-                        &format!("Wrote {}", wb.0),
+                        &format!("Wrote {} ({} bytes)", wb.0, bytes),
                     );
                 }
                 Err(e) => {
                     *output_row = write_line_to_canvas(
                         canvas_buffer,
                         *output_row,
-                        &format!("Write error: {}", e),
+                        &format!("Write blocked: {}", e),
                     );
                 }
             }
@@ -373,6 +500,9 @@ pub const HERMES_BUILD_SYSTEM_PROMPT: &str = r#"You are an agent that modifies t
 - files                  List all .rs files with line counts
 - write <path>           Start writing a file (subsequent lines = content, ENDWRITE to finish)
 - shell <command>        Run a shell command (cargo build, cargo test, grep, etc.)
+- diff                   Show uncommitted changes (git diff --stat)
+- commit [message]       Auto-commit all changes (git add -A + commit)
+- rollback               Discard all uncommitted changes (git checkout + clean)
 - load/run/regs/peek/poke/screen/reset  Standard VM commands
 
 ## Build workflow
@@ -391,11 +521,16 @@ pub const HERMES_BUILD_SYSTEM_PROMPT: &str = r#"You are an agent that modifies t
 - Write tests in tests/program_tests.rs
 
 ## Safety rules
+- ALL writes are sandboxed to the project root directory (no escaping via .. or absolute paths)
+- /tmp writes are allowed for build artifacts
 - ALWAYS run shell cargo build after writing any Rust file
 - ALWAYS run shell cargo test to verify nothing breaks
 - Read files BEFORE modifying them -- understand the existing code
 - Do NOT modify Cargo.toml or add new dependencies
 - Keep changes minimal and focused on the requested feature
+- Use `diff` to review changes before committing
+- Use `commit <message>` to save progress
+- Use `rollback` to discard changes if something goes wrong
 
 ## Response format
 Respond with one command per line. No explanation, no markdown, no backticks.
@@ -672,15 +807,15 @@ pub fn run_hermes_loop(
             if let Some(ref mut wb) = write_buffer {
                 if cmd_line == "ENDWRITE" {
                     // Write the file
-                    match std::fs::write(&wb.0, &wb.1) {
-                        Ok(()) => {
-                            let msg = format!("Wrote {}", wb.0);
+                    match safe_write_file(&wb.0, &wb.1) {
+                        Ok(bytes) => {
+                            let msg = format!("Wrote {} ({} bytes)", wb.0, bytes);
                             println!("{}", msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
                         }
                         Err(e) => {
-                            let msg = format!("Write error: {}", e);
+                            let msg = format!("Write blocked: {}", e);
                             println!("{}", msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
@@ -696,7 +831,12 @@ pub fn run_hermes_loop(
 
             if cmd_line.starts_with("write ") {
                 if let Some(filename) = cmd_line.strip_prefix("write ").map(|s| s.trim()) {
-                    write_buffer = Some((filename.to_string(), String::new()));
+                    if let Err(e) = validate_write_path(filename) {
+                        println!("[hermes] Write blocked: {}", e);
+                        output_capture.push_str(&format!("[hermes] Write blocked: {}\n", e));
+                    } else {
+                        write_buffer = Some((filename.to_string(), String::new()));
+                    }
                 }
                 continue;
             }
@@ -731,9 +871,9 @@ pub fn run_hermes_loop(
 
         // Handle unclosed write buffer
         if let Some(wb) = write_buffer {
-            match std::fs::write(&wb.0, &wb.1) {
-                Ok(()) => println!("Wrote {}", wb.0),
-                Err(e) => println!("Write error: {}", e),
+            match safe_write_file(&wb.0, &wb.1) {
+                Ok(bytes) => println!("Wrote {} ({} bytes)", wb.0, bytes),
+                Err(e) => println!("Write blocked: {}", e),
             }
         }
 
@@ -1202,6 +1342,29 @@ pub fn execute_cli_command(
             output.push_str(&msg);
             output.push('\n');
         }
+        "diff" => {
+            let out = get_git_diff();
+            println!("{}", out);
+            output.push_str(&out);
+            output.push('\n');
+        }
+        "commit" => {
+            let msg = if parts.len() > 1 {
+                parts[1..].join(" ")
+            } else {
+                "build agent changes".to_string()
+            };
+            let out = auto_commit(&msg);
+            println!("{}", out);
+            output.push_str(&out);
+            output.push('\n');
+        }
+        "rollback" => {
+            let out = git_rollback();
+            println!("{}", out);
+            output.push_str(&out);
+            output.push('\n');
+        }
         _ => {
             let msg = format!("Unknown: {} (skipped)", command);
             println!("{}", msg);
@@ -1280,15 +1443,15 @@ pub fn run_build_loop(
             // Handle write buffer
             if let Some(ref mut wb) = write_buffer {
                 if cmd_line == "ENDWRITE" {
-                    match std::fs::write(&wb.0, &wb.1) {
-                        Ok(()) => {
-                            let msg = format!("Wrote {} ({} bytes)", wb.0, wb.1.len());
+                    match safe_write_file(&wb.0, &wb.1) {
+                        Ok(bytes) => {
+                            let msg = format!("Wrote {} ({} bytes)", wb.0, bytes);
                             println!("{}", msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
                         }
                         Err(e) => {
-                            let msg = format!("Write error: {}", e);
+                            let msg = format!("Write blocked: {}", e);
                             println!("{}", msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
@@ -1304,7 +1467,12 @@ pub fn run_build_loop(
 
             if cmd_line.starts_with("write ") {
                 if let Some(filename) = cmd_line.strip_prefix("write ").map(|s| s.trim()) {
-                    write_buffer = Some((filename.to_string(), String::new()));
+                    if let Err(e) = validate_write_path(filename) {
+                        println!("[build] Write blocked: {}", e);
+                        output_capture.push_str(&format!("[build] Write blocked: {}\n", e));
+                    } else {
+                        write_buffer = Some((filename.to_string(), String::new()));
+                    }
                 }
                 continue;
             }
@@ -1318,7 +1486,7 @@ pub fn run_build_loop(
 
             match cmd_word.as_str() {
                 "shell" | "readfile" | "files" | "load" | "run" | "regs" | "peek" | "poke"
-                | "screen" | "save" | "reset" | "list" | "ls" | "png" => {
+                | "screen" | "save" | "reset" | "list" | "ls" | "png" | "diff" | "commit" | "rollback" => {
                     println!("> {}", cmd_line);
                     let out = execute_build_command(
                         cmd_line,
@@ -1337,9 +1505,9 @@ pub fn run_build_loop(
 
         // Handle unclosed write buffer
         if let Some(wb) = write_buffer {
-            match std::fs::write(&wb.0, &wb.1) {
-                Ok(()) => println!("Wrote {} ({} bytes)", wb.0, wb.1.len()),
-                Err(e) => println!("Write error: {}", e),
+            match safe_write_file(&wb.0, &wb.1) {
+                Ok(bytes) => println!("Wrote {} ({} bytes)", wb.0, bytes),
+                Err(e) => println!("Write blocked: {}", e),
             }
         }
 
@@ -1477,15 +1645,15 @@ pub fn run_build_canvas(
             // Handle write buffer
             if let Some(ref mut wb) = write_buffer {
                 if cmd_line == "ENDWRITE" {
-                    match std::fs::write(&wb.0, &wb.1) {
-                        Ok(()) => {
-                            let msg = format!("Wrote {} ({} bytes)", wb.0, wb.1.len());
+                    match safe_write_file(&wb.0, &wb.1) {
+                        Ok(bytes) => {
+                            let msg = format!("Wrote {} ({} bytes)", wb.0, bytes);
                             *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
                         }
                         Err(e) => {
-                            let msg = format!("Write error: {}", e);
+                            let msg = format!("Write blocked: {}", e);
                             *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
@@ -1501,7 +1669,11 @@ pub fn run_build_canvas(
 
             if cmd_line.starts_with("write ") {
                 if let Some(filename) = cmd_line.strip_prefix("write ").map(|s| s.trim()) {
-                    write_buffer = Some((filename.to_string(), String::new()));
+                    if let Err(e) = validate_write_path(filename) {
+                        *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("[build] Write blocked: {}", e));
+                    } else {
+                        write_buffer = Some((filename.to_string(), String::new()));
+                    }
                 }
                 continue;
             }
@@ -1514,7 +1686,7 @@ pub fn run_build_canvas(
             let cmd_word = cmd_parts[0].to_lowercase();
 
             match cmd_word.as_str() {
-                "shell" | "readfile" | "files" => {
+                "shell" | "readfile" | "files" | "diff" | "commit" | "rollback" => {
                     let out = execute_build_command(
                         cmd_line,
                         vm,
@@ -1568,19 +1740,19 @@ pub fn run_build_canvas(
 
         // Handle unclosed write buffer
         if let Some(wb) = write_buffer {
-            match std::fs::write(&wb.0, &wb.1) {
-                Ok(()) => {
+            match safe_write_file(&wb.0, &wb.1) {
+                Ok(bytes) => {
                     *output_row = write_line_to_canvas(
                         canvas_buffer,
                         *output_row,
-                        &format!("Wrote {} ({} bytes)", wb.0, wb.1.len()),
+                        &format!("Wrote {} ({} bytes)", wb.0, bytes),
                     );
                 }
                 Err(e) => {
                     *output_row = write_line_to_canvas(
                         canvas_buffer,
                         *output_row,
-                        &format!("Write error: {}", e),
+                        &format!("Write blocked: {}", e),
                     );
                 }
             }
