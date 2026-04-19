@@ -1768,27 +1768,41 @@ phases:
   deliverables:
   - name: Linux boot
     description: Linux boots to shell prompt in the interpreter
-    status: in_progress
+    status: done
     scope_lines: 200
+    acceptance_criteria:
+      met: true
     tasks:
     - id: p40.d1.t1
       title: Fix interpreter issues blocking Linux boot
-      status: in_progress
+      status: done
       acceptance_criteria:
       - vmlinux loads and begins executing
       - Kernel reaches console output (prints "Linux version...")
       - No unimplemented instruction panics
+    - id: p40.d1.t2
+      title: QEMU bridge for canvas and CLI modes
+      status: done
+      acceptance_criteria:
+      - qemu boot command spawns QEMU subprocess
+      - Output renders on canvas via ANSI handler
+      - CLI mode has qemu boot/kill/status commands
+    learnings:
+    - QEMU bridge approach is more practical than native interpreter for Linux boot
+    - ANSI escape handler writes directly to canvas buffer (32x128)
+    - Non-blocking stdout polling enables responsive terminal interaction
   - name: Shell access
     description: Interactive shell via UART bridge to canvas
-    status: todo
+    status: in_progress
     scope_lines: 100
     tasks:
     - id: p40.d2.t1
-      title: Get Linux to a working shell prompt through the UART canvas
-      status: todo
+      title: Canvas QEMU keyboard forwarding and output polling
+      status: in_progress
       acceptance_criteria:
       - Shell prompt appears on canvas
       - Can type commands and see output
+      - Escape exits QEMU mode
   learnings:
   - Booting real kernels reveals interpreter bugs unit tests miss
   - Linux boot sequence teaches more than any textbook

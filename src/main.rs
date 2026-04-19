@@ -15,10 +15,13 @@ mod hermes;
 mod inode_fs;
 mod keys;
 mod preprocessor;
+mod qemu;
 mod render;
 mod save;
 mod vfs;
 mod vm;
+
+use qemu::QemuBridge;
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use std::collections::{HashSet, VecDeque};
@@ -48,6 +51,29 @@ const SAVE_FILE: &str = "geometry_os.sav";
 enum Mode {
     Terminal,
     Editor,
+}
+
+/// Auto-decode .rts.png pixel paths in a QEMU config string.
+/// Replaces kernel=/initrd=.rts.png with temp file paths.
+fn resolve_qemu_pixel_paths(config: &str) -> String {
+    let mut result = config.to_string();
+    for key in &["kernel", "initrd", "dtb", "drive"] {
+        if let Some(start) = result.find(&format!("{}=", key)) {
+            let val_start = start + key.len() + 1;
+            let val_end = result[val_start..]
+                .find(' ')
+                .map(|i| val_start + i)
+                .unwrap_or(result.len());
+            let value = &result[val_start..val_end];
+
+            if value.to_lowercase().ends_with(".rts.png") {
+                if let Ok(temp_path) = geometry_os::pixel::decode_rts_to_temp(value) {
+                    result.replace_range(val_start..val_end, &temp_path);
+                }
+            }
+        }
+    }
+    result
 }
 
 fn main() {
@@ -148,6 +174,11 @@ fn main() {
     let mut term_prompt_row: usize;
     // The "output row" for terminal -- where next line goes
     let mut term_output_row: usize;
+
+    // ── QEMU bridge state ───────────────────────────────────────
+    let mut qemu_bridge: Option<QemuBridge> = None;
+    let mut qemu_active: bool = false;
+    let mut qemu_exited: bool = false;
 
     // Boot: write welcome banner + first prompt into canvas
     {
@@ -259,6 +290,75 @@ fn main() {
                 continue;
             }
 
+            // ── QEMU exited: any key returns to terminal ──────────────
+            if qemu_exited {
+                qemu_exited = false;
+                // Restore normal canvas
+                canvas_buffer.fill(0);
+                term_output_row = write_line_to_canvas(&mut canvas_buffer, 0, "geo> ");
+                term_prompt_row = 0;
+                cursor_row = 0;
+                cursor_col = 5;
+                scroll_offset = 0;
+                status_msg = String::from("[TERM: type commands, Enter=run]");
+                continue;
+            }
+
+            // ── QEMU mode: forward all keys to QEMU stdin ────────────
+            if qemu_active {
+                if key == Key::Escape {
+                    // Exit QEMU mode
+                    if let Some(ref mut bridge) = qemu_bridge {
+                        let _ = bridge.kill();
+                    }
+                    qemu_bridge = None;
+                    qemu_active = false;
+                    status_msg = String::from("[QEMU] Exited");
+                    // Restore normal canvas
+                    canvas_buffer.fill(0);
+                    term_output_row = write_line_to_canvas(&mut canvas_buffer, 0, "geo> ");
+                    term_prompt_row = 0;
+                    cursor_row = 0;
+                    cursor_col = 5;
+                    scroll_offset = 0;
+                    continue;
+                }
+                // Forward printable characters and Enter to QEMU
+                if let Some(ref mut bridge) = qemu_bridge {
+                    let shift = window.is_key_down(Key::LeftShift)
+                        || window.is_key_down(Key::RightShift);
+                    match key {
+                        Key::Enter => {
+                            let _ = bridge.write_bytes(b"\n");
+                        }
+                        Key::Backspace => {
+                            let _ = bridge.write_bytes(b"\x08");
+                        }
+                        Key::Tab => {
+                            let _ = bridge.write_bytes(b"\t");
+                        }
+                        Key::Up => {
+                            let _ = bridge.write_bytes(b"\x1b[A");
+                        }
+                        Key::Down => {
+                            let _ = bridge.write_bytes(b"\x1b[B");
+                        }
+                        Key::Right => {
+                            let _ = bridge.write_bytes(b"\x1b[C");
+                        }
+                        Key::Left => {
+                            let _ = bridge.write_bytes(b"\x1b[D");
+                        }
+                        _ => {
+                            if let Some(ch) = key_to_ascii_shifted(key, shift) {
+                                let _ = bridge.write_bytes(&[ch as u8]);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
             // Escape: in editor mode, switch back to terminal. In terminal, quit.
             if key == Key::Escape {
                 if mode == Mode::Editor {
@@ -349,6 +449,121 @@ fn main() {
                         let raw = read_canvas_line(&canvas_buffer, term_prompt_row);
                         let cmd = raw.strip_prefix("geo> ").unwrap_or(&raw);
                         let cmd = cmd.trim();
+
+                        // ── QEMU command interception ────────────────────
+                        if cmd.starts_with("qemu") {
+                            let parts: Vec<&str> = cmd.split_whitespace().collect();
+                            let subcmd = parts.get(1).copied().unwrap_or("");
+                            match subcmd {
+                                "boot" => {
+                                    if parts.len() < 3 {
+                                        term_output_row = write_line_to_canvas(
+                                            &mut canvas_buffer,
+                                            term_output_row,
+                                            "Usage: qemu boot <config>",
+                                        );
+                                        term_output_row = write_line_to_canvas(
+                                            &mut canvas_buffer,
+                                            term_output_row,
+                                            "  e.g. qemu boot arch=riscv64 kernel=Image ram=256M",
+                                        );
+                                        term_output_row = write_line_to_canvas(
+                                            &mut canvas_buffer,
+                                            term_output_row,
+                                            "geo> ",
+                                        );
+                                        ensure_scroll(term_output_row, &mut scroll_offset);
+                                        continue;
+                                    }
+                                    // Kill any existing QEMU first
+                                    if let Some(ref mut bridge) = qemu_bridge {
+                                        let _ = bridge.kill();
+                                    }
+                                    qemu_bridge = None;
+                                    qemu_active = false;
+
+                        let mut config_str = parts[2..].join(" ");
+                            // Auto-decode .rts.png files to temp files
+                            config_str = resolve_qemu_pixel_paths(&config_str);
+                            match QemuBridge::spawn(&config_str) {
+                                        Ok(mut bridge) => {
+                                            // Clear canvas for QEMU terminal output
+                                            canvas_buffer.fill(0);
+                                            scroll_offset = 0;
+                                            qemu_active = true;
+                                            qemu_bridge = Some(bridge);
+                                            status_msg = String::from(
+                                                "[QEMU] Running -- Esc to exit, type to send",
+                                            );
+                                            continue;
+                                        }
+                                        Err(e) => {
+                                            term_output_row = write_line_to_canvas(
+                                                &mut canvas_buffer,
+                                                term_output_row,
+                                                &format!("[qemu] Error: {}", e),
+                                            );
+                                            term_output_row = write_line_to_canvas(
+                                                &mut canvas_buffer,
+                                                term_output_row,
+                                                "geo> ",
+                                            );
+                                            ensure_scroll(term_output_row, &mut scroll_offset);
+                                            continue;
+                                        }
+                                    }
+                                }
+                                "kill" => {
+                                    if let Some(ref mut bridge) = qemu_bridge {
+                                        let _ = bridge.kill();
+                                        qemu_bridge = None;
+                                        qemu_active = false;
+                                        status_msg = String::from("[QEMU] Killed");
+                                        // Restore normal canvas
+                                        canvas_buffer.fill(0);
+                                        term_output_row = write_line_to_canvas(
+                                            &mut canvas_buffer,
+                                            0,
+                                            "geo> ",
+                                        );
+                                        term_prompt_row = 0;
+                                        cursor_row = 0;
+                                        cursor_col = 5;
+                                        scroll_offset = 0;
+                                    } else {
+                                        status_msg = String::from("[QEMU] Not running");
+                                    }
+                                    continue;
+                                }
+                                "status" => {
+                                    if let Some(ref mut bridge) = qemu_bridge {
+                                        if bridge.is_alive() {
+                                            status_msg = String::from("[QEMU] Running");
+                                        } else {
+                                            status_msg = String::from("[QEMU] Exited");
+                                            qemu_bridge = None;
+                                        }
+                                    } else {
+                                        status_msg = String::from("[QEMU] Not running");
+                                    }
+                                    continue;
+                                }
+                                _ => {
+                                    term_output_row = write_line_to_canvas(
+                                        &mut canvas_buffer,
+                                        term_output_row,
+                                        "Usage: qemu <boot|kill|status>",
+                                    );
+                                    term_output_row = write_line_to_canvas(
+                                        &mut canvas_buffer,
+                                        term_output_row,
+                                        "geo> ",
+                                    );
+                                    ensure_scroll(term_output_row, &mut scroll_offset);
+                                    continue;
+                                }
+                            }
+                        }
 
                         // Output goes on the line after the prompt
                         term_output_row = term_prompt_row + 1;
@@ -681,6 +896,19 @@ fn main() {
                             &mut scroll_offset,
                         );
                     }
+                }
+            }
+        }
+
+        // ── QEMU output polling ────────────────────────────────────
+        if qemu_active {
+            if let Some(ref mut bridge) = qemu_bridge {
+                bridge.read_output(&mut canvas_buffer);
+                if !bridge.is_alive() {
+                    qemu_active = false;
+                    qemu_exited = true;
+                    qemu_bridge = None;
+                    status_msg = String::from("[QEMU] Process exited -- press any key");
                 }
             }
         }

@@ -367,6 +367,11 @@ pub fn handle_terminal_command(
                 *output_row,
                 "  hermes <prompt>   Ask local LLM for help",
             );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  qemu boot <cfg>   Boot QEMU VM on canvas",
+            );
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
             ensure_scroll(*output_row, scroll_offset);
             (None, false, false)

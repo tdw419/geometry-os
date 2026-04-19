@@ -1,4 +1,4 @@
-// Minimal diagnostic: capture the first fault forwarded to S-mode 
+// Minimal diagnostic: capture the first fault forwarded to S-mode
 // to find the REAL stval that leads to "Attempted to kill the idle task!"
 use geometry_os::riscv::RiscvVm;
 
@@ -8,7 +8,7 @@ fn main() {
     let kernel_image = std::fs::read(kernel_path).expect("kernel");
     let initramfs = std::fs::read(initramfs_path).ok();
 
-    let (vm, _br) = RiscvVm::boot_linux(
+    let (vm, br) = RiscvVm::boot_linux(
         &kernel_image,
         initramfs.as_deref(),
         256,
@@ -16,10 +16,9 @@ fn main() {
         "console=ttyS0 earlycon=sbi loglevel=8",
     ).unwrap();
 
-    // The boot_linux loop already ran. Check the boot result for panic info.
-    if let Some(br) = _br.panic_message {
-        println!("PANIC: {}", br);
-    }
+    println!("Instructions: {}", br.instructions);
+    println!("Entry: 0x{:08X}", br.entry);
+    println!("DTB addr: 0x{:016X}", br.dtb_addr);
     println!("ECALLs: {}", vm.cpu.ecall_count);
     println!("Final PC: 0x{:08X}", vm.cpu.pc);
     println!("UART output: {} bytes", vm.bus.sbi.console_output.len());
