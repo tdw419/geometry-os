@@ -6,7 +6,7 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 99 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling with memory protection, virtual filesystem, in-memory inode filesystem, device drivers, a Unix-like shell, and an integrated text editor where you type assembly directly into the VM's memory and execute it live. It also includes a native RISC-V RV32I interpreter with SV32 virtual memory, capable of booting a real Linux kernel.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 103 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling with memory protection, virtual filesystem, in-memory inode filesystem, device drivers, a Unix-like shell, and an integrated text editor where you type assembly directly into the VM's memory and execute it live. It also includes a native RISC-V RV32I interpreter with SV32 virtual memory, capable of booting a real Linux kernel.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
@@ -48,7 +48,7 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
-## The Instruction Set (99 opcodes)
+## The Instruction Set (103 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -302,7 +302,7 @@ child:
 │  └──────────────┘  └──────────────────┘     │
 └──────────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 99 opcodes, 8 concurrent processes
+VM: 32 registers, 65536-word RAM, 103 opcodes, 8 concurrent processes
 Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
 
@@ -317,10 +317,10 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 
 ## Stats
 
-- 30,611 lines of Rust
-- 99 opcodes
-- 50 programs
-- 1109 tests
+- 33,056 lines of Rust
+- 103 opcodes
+- 59 programs
+- 1251 tests
 - MIT licensed
 
 ## License
