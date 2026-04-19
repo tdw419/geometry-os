@@ -1449,10 +1449,7 @@ impl RiscvVm {
                                 "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
                             ];
                             for (i, name) in reg_names.iter().enumerate() {
-                                eprintln!(
-                                    "[boot]   x{} ({}) = 0x{:08X}",
-                                    i, name, vm.cpu.x[i]
-                                );
+                                eprintln!("[boot]   x{} ({}) = 0x{:08X}", i, name, vm.cpu.x[i]);
                             }
                             // Dump kernel_map
                             let km_pa: u64 = 0x00C7A098;

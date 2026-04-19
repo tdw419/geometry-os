@@ -258,6 +258,7 @@ impl Vm {
             hypervisor_active: false,
             hypervisor_config: String::new(),
             hypervisor_mode: HypervisorMode::default(),
+            opcode_histogram: [0; 256],
             key_buffer: vec![0; 16],
             key_buffer_head: 0,
             key_buffer_tail: 0,

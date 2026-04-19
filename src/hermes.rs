@@ -35,7 +35,10 @@ impl ProviderConfig {
             match std::fs::read_to_string(&config_path) {
                 Ok(contents) => Self::from_json(&contents),
                 Err(e) => {
-                    println!("[hermes] Could not read provider.json: {}. Using local Ollama.", e);
+                    println!(
+                        "[hermes] Could not read provider.json: {}. Using local Ollama.",
+                        e
+                    );
                     Self::local_ollama()
                 }
             }
@@ -48,10 +51,9 @@ impl ProviderConfig {
     pub fn from_json(json: &str) -> Self {
         let base_url = extract_json_string(json, "base_url")
             .unwrap_or_else(|| "http://localhost:11434/api/chat".to_string());
-        let model = extract_json_string(json, "model")
-            .unwrap_or_else(|| "qwen3.5-tools".to_string());
-        let api_key = extract_json_string(json, "api_key")
-            .unwrap_or_else(|| "".to_string());
+        let model =
+            extract_json_string(json, "model").unwrap_or_else(|| "qwen3.5-tools".to_string());
+        let api_key = extract_json_string(json, "api_key").unwrap_or_else(|| "".to_string());
         let max_tokens = extract_json_number(json, "max_tokens").unwrap_or(8192);
         let temperature = extract_json_float(json, "temperature").unwrap_or(0.3);
 
@@ -77,7 +79,14 @@ impl ProviderConfig {
         };
 
         println!("[hermes] Loaded provider: model={} url={}", model, base_url);
-        ProviderConfig { base_url, model, api_key, max_tokens, temperature, fallback }
+        ProviderConfig {
+            base_url,
+            model,
+            api_key,
+            max_tokens,
+            temperature,
+            fallback,
+        }
     }
 
     pub fn local_ollama() -> Self {
@@ -103,7 +112,9 @@ fn extract_json_string(json: &str, key: &str) -> Option<String> {
     let after_key = &json[start + pattern.len()..];
     let after_colon = after_key.trim_start().strip_prefix(':')?;
     let after_colon = after_colon.trim_start();
-    if !after_colon.starts_with('"') { return None; }
+    if !after_colon.starts_with('"') {
+        return None;
+    }
     let bytes = after_colon.as_bytes();
     let mut i = 1; // skip opening quote
     let mut result = String::new();
@@ -114,7 +125,10 @@ fn extract_json_string(json: &str, key: &str) -> Option<String> {
                 b'\\' => result.push('\\'),
                 b'n' => result.push('\n'),
                 b't' => result.push('\t'),
-                _ => { result.push(bytes[i] as char); result.push(bytes[i+1] as char); }
+                _ => {
+                    result.push(bytes[i] as char);
+                    result.push(bytes[i + 1] as char);
+                }
             }
             i += 2;
         } else if bytes[i] == b'"' {
@@ -134,7 +148,9 @@ fn extract_json_number(json: &str, key: &str) -> Option<u32> {
     let after_key = &json[start + pattern.len()..];
     let after_colon = after_key.trim_start().strip_prefix(':')?;
     let after_colon = after_colon.trim_start();
-    let end = after_colon.find(|c: char| !c.is_ascii_digit()).unwrap_or(after_colon.len());
+    let end = after_colon
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(after_colon.len());
     after_colon[..end].parse().ok()
 }
 
@@ -145,7 +161,9 @@ fn extract_json_float(json: &str, key: &str) -> Option<f32> {
     let after_key = &json[start + pattern.len()..];
     let after_colon = after_key.trim_start().strip_prefix(':')?;
     let after_colon = after_colon.trim_start();
-    let end = after_colon.find(|c: char| !c.is_ascii_digit() && c != '.').unwrap_or(after_colon.len());
+    let end = after_colon
+        .find(|c: char| !c.is_ascii_digit() && c != '.')
+        .unwrap_or(after_colon.len());
     after_colon[..end].parse().ok()
 }
 
@@ -178,7 +196,10 @@ fn validate_write_path(filename: &str) -> Result<PathBuf, String> {
         if canonical_path.starts_with(&canonical_root) {
             return Ok(path.to_path_buf());
         }
-        return Err(format!("Write outside project root not allowed: {}", filename));
+        return Err(format!(
+            "Write outside project root not allowed: {}",
+            filename
+        ));
     }
     let root = get_project_root();
     let resolved = root.join(path);
@@ -210,7 +231,11 @@ fn get_git_diff() -> String {
     {
         Ok(output) => {
             let out = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if out.is_empty() { "(no uncommitted changes)".to_string() } else { out }
+            if out.is_empty() {
+                "(no uncommitted changes)".to_string()
+            } else {
+                out
+            }
         }
         Err(e) => format!("git diff failed: {}", e),
     }
@@ -236,14 +261,33 @@ fn auto_commit(message: &str) -> String {
             return "(no changes to commit)".to_string();
         }
     }
-    if let Err(e) = std::process::Command::new("git").args(["add", "-A"]).current_dir(&root).output() {
+    if let Err(e) = std::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&root)
+        .output()
+    {
         return format!("git add failed: {}", e);
     }
-    let msg = format!("[build-agent] {}", if message.len() > 72 { &message[..72] } else { message });
-    match std::process::Command::new("git").args(["commit", "-m", &msg]).current_dir(&root).output() {
+    let msg = format!(
+        "[build-agent] {}",
+        if message.len() > 72 {
+            &message[..72]
+        } else {
+            message
+        }
+    );
+    match std::process::Command::new("git")
+        .args(["commit", "-m", &msg])
+        .current_dir(&root)
+        .output()
+    {
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            if output.status.success() { format!("Committed: {}", msg) } else { format!("Commit failed: {}", stderr) }
+            if output.status.success() {
+                format!("Committed: {}", msg)
+            } else {
+                format!("Commit failed: {}", stderr)
+            }
         }
         Err(e) => format!("git commit failed: {}", e),
     }
@@ -253,17 +297,35 @@ fn auto_commit(message: &str) -> String {
 fn git_rollback() -> String {
     let root = get_project_root();
     let mut results = Vec::new();
-    match std::process::Command::new("git").args(["checkout", "--", "."]).current_dir(&root).output() {
-        Ok(output) if output.status.success() => results.push("Discarded tracked changes".to_string()),
-        Ok(output) => results.push(format!("checkout failed: {}", String::from_utf8_lossy(&output.stderr).trim())),
+    match std::process::Command::new("git")
+        .args(["checkout", "--", "."])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            results.push("Discarded tracked changes".to_string())
+        }
+        Ok(output) => results.push(format!(
+            "checkout failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
         Err(e) => results.push(format!("checkout error: {}", e)),
     }
-    match std::process::Command::new("git").args(["clean", "-fd"]).current_dir(&root).output() {
+    match std::process::Command::new("git")
+        .args(["clean", "-fd"])
+        .current_dir(&root)
+        .output()
+    {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !stdout.is_empty() { results.push(format!("Removed: {}", stdout)); }
+            if !stdout.is_empty() {
+                results.push(format!("Removed: {}", stdout));
+            }
         }
-        Ok(output) => results.push(format!("clean failed: {}", String::from_utf8_lossy(&output.stderr).trim())),
+        Ok(output) => results.push(format!(
+            "clean failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
         Err(e) => results.push(format!("clean error: {}", e)),
     }
     results.join("; ")
@@ -618,6 +680,13 @@ skip2:
   JMP loop
 ```
 
+## Diagnostic discipline
+You are a DIAGNOSTIC agent, not a creative one. When something is wrong, your job is to FIND OUT WHY, not to paint over it.
+- If the framebuffer is 100% black after execution, do NOT write a new program. Read the opcode summary and diagnose.
+- If a program doesn't produce expected output, check registers with regs, peek at RAM with peek, examine the screen with screen.
+- Verify your assumptions before acting on them. A black screen means either (a) nothing was drawn, or (b) something was drawn then erased. The opcode summary tells you which.
+- NEVER replace a broken program with a new one. Fix the broken one. That's how you learn.
+
 ## Response format
 Respond with one geo> command per line. No explanation, no markdown, no backticks.
 Just the commands you want executed. You can also write new .asm programs by using
@@ -700,6 +769,148 @@ pub const HERMES_BUILD_SYSTEM_PROMPT: &str = r#"You are an agent that modifies t
 Respond with one command per line. No explanation, no markdown, no backticks.
 Just the commands you want executed, in order."#;
 
+/// Human-readable name for an opcode byte. Covers the full ISA.
+/// Used by the opcode execution summary in the diagnostic context.
+fn opcode_name(op: u8) -> &'static str {
+    match op {
+        0x00 => "HALT",
+        0x01 => "NOP",
+        0x02 => "FRAME",
+        0x03 => "BEEP",
+        0x04 => "MEMCPY",
+        0x05 => "RDUMP",
+        0x06 => "MDUMP",
+        // 0x07 reserved
+        0x08 => "CMP",
+        0x09 => "CMPI",
+        0x0A => "JEQ",
+        0x0B => "JNE",
+        0x0C => "JLT",
+        0x0D => "JGT",
+        0x0E => "JLE",
+        0x0F => "JGE",
+        0x10 => "LDI",
+        0x11 => "LOAD",
+        0x12 => "STORE",
+        0x13 => "TEXTI",
+        0x14 => "TEXT",
+        0x15 => "PUSH",
+        0x16 => "POP",
+        0x17 => "JMP",
+        0x18 => "JAL",
+        0x19 => "RET",
+        0x1A => "LDIH",
+        0x1B => "MOVS",
+        0x1C => "CMPU",
+        0x1D => "SPRINT",
+        0x1E => "NPRINT",
+        0x1F => "READC",
+        // 0x20-0x2F: ALU
+        0x20 => "ADD",
+        0x21 => "SUB",
+        0x22 => "MUL",
+        0x23 => "DIV",
+        0x24 => "AND",
+        0x25 => "OR",
+        0x26 => "XOR",
+        0x27 => "SHL",
+        0x28 => "SHR",
+        0x29 => "NOT",
+        0x2A => "NEG",
+        0x2B => "INC",
+        0x2C => "DEC",
+        0x2D => "MOD",
+        0x2E => "MIN",
+        0x2F => "MAX",
+        // 0x30-0x3F: more ALU/control
+        0x30 => "ADDI",
+        0x31 => "SUBI",
+        0x32 => "MULI",
+        0x33 => "DIVI",
+        0x34 => "ANDI",
+        0x35 => "ORI",
+        0x36 => "XORI",
+        0x37 => "SHLI",
+        0x38 => "SHRI",
+        0x39 => "SEXT8",
+        0x3A => "SEXT16",
+        0x3B => "CALL",
+        0x3C => "SYSCALL",
+        0x3D => "RETK",
+        0x3E => "RAND",
+        0x3F => "SEED",
+        // 0x40-0x4F: graphics
+        0x40 => "PLOT",
+        0x41 => "FILL",
+        0x42 => "LINE",
+        0x43 => "RECT",
+        0x44 => "CIRCLE",
+        0x45 => "GETPIX",
+        0x46 => "SPRITE",
+        0x47 => "SCROLL",
+        0x48 => "BLIT",
+        0x49 => "CLIP",
+        0x4A => "TRI",
+        0x4B => "POLY",
+        0x4C => "FILLRECT",
+        0x4D => "FMAP",
+        0x4E => "INVERT",
+        0x4F => "GRAY",
+        // 0x50-0x5F: I/O and extended
+        0x50 => "PRINT",
+        0x51 => "READLN",
+        0x52 => "IKEY",
+        0x53 => "CURSOR",
+        0x54 => "SPLAY",
+        0x55 => "NOTE",
+        0x56 => "SPATIAL_SPAWN",
+        0x57 => "SPATIAL_JOIN",
+        0x58 => "SPATIAL_YIELD",
+        0x59 => "SPATIAL_KILL",
+        0x5A => "SPATIAL_ID",
+        0x5B => "SETPRIORITY",
+        0x5C => "SLEEP",
+        0x5D => "EXIT",
+        0x5E => "PIPE",
+        0x5F => "MSG",
+        // 0x60-0x6F: filesystem and memory
+        0x60 => "FOPEN",
+        0x61 => "FCLOSE",
+        0x62 => "FREAD",
+        0x63 => "FWRITE",
+        0x64 => "FSEEK",
+        0x65 => "FTELL",
+        0x66 => "FLIST",
+        0x67 => "FMKDIR",
+        0x68 => "FRM",
+        0x69 => "DMAP",
+        0x6A => "DUNMAP",
+        0x6B => "CLONE",
+        0x6C => "MSGSND",
+        0x6D => "MSGRCV",
+        0x6E => "SETENV",
+        0x6F => "GETENV",
+        // 0x70-0x7F: extended/advanced
+        0x70 => "BOOT",
+        0x71 => "SHUTDOWN",
+        0x72 => "HYPERVISOR",
+        0x73 => "RUNNEXT",
+        0x74 => "ASMSELF",
+        0x75 => "FORMULA",
+        0x76 => "FMSET",
+        0x77 => "FMDEP",
+        0x78 => "FMREFRESH",
+        0x79 => "CANVAS_TEXT",
+        0x7A => "CANVAS_RECT",
+        0x7B => "CANVAS_FILL",
+        0x7C => "CANVAS_CLEAR",
+        0x7D => "CANVAS_COMMIT",
+        0x7E => "CANVAS_READ",
+        0x7F => "CANVAS_WRITE",
+        _ => "???",
+    }
+}
+
 pub fn build_hermes_context(
     vm: &vm::Vm,
     source_text: &str,
@@ -723,6 +934,55 @@ pub fn build_hermes_context(
         vm.pc, vm.regs[30], vm.regs[31]
     ));
     ctx.push_str(&format!("Halted: {}\n", vm.halted));
+
+    // Screen delta detection: warn if framebuffer is all zeros post-execution
+    if !vm.screen.is_empty() {
+        let non_black: usize = vm.screen.iter().filter(|&&p| p != 0).count();
+        if non_black == 0 && vm.halted {
+            ctx.push_str(
+                "\nWARNING: Framebuffer is 100% black after execution completed (halted).\n",
+            );
+            ctx.push_str("Possible causes: premature FILL/CLEAR before HALT, draw calls before screen init,\n");
+            ctx.push_str("or program halted mid-animation loop (strobe effect). Check opcode summary below.\n");
+        } else if non_black > 0 {
+            let pct = non_black as f64 / vm.screen.len() as f64 * 100.0;
+            ctx.push_str(&format!(
+                "\nFramebuffer: {}/{} pixels drawn ({:.1}%)\n",
+                non_black,
+                vm.screen.len(),
+                pct
+            ));
+        }
+    }
+
+    // Opcode execution summary: top opcodes by count (diagnostic for the AI agent)
+    let total_ops: u64 = vm.opcode_histogram.iter().sum();
+    if total_ops > 0 {
+        ctx.push_str(&format!(
+            "\n## Opcode Execution Summary ({} total instructions)\n",
+            total_ops
+        ));
+        // Collect (opcode, count) pairs, sort by count descending, show top 15
+        let mut ranked: Vec<(u8, u64)> = vm
+            .opcode_histogram
+            .iter()
+            .enumerate()
+            .filter(|(_, &c)| c > 0)
+            .map(|(op, &c)| (op as u8, c))
+            .collect();
+        ranked.sort_by(|a, b| b.1.cmp(&a.1));
+        for (op, count) in ranked.iter().take(15) {
+            let name = opcode_name(*op);
+            let pct = *count as f64 / total_ops as f64 * 100.0;
+            ctx.push_str(&format!(
+                "  {:04X} {:<12} {:>6} ({:.1}%)\n",
+                op, name, count, pct
+            ));
+        }
+        if ranked.len() > 15 {
+            ctx.push_str(&format!("  ... and {} more opcodes\n", ranked.len() - 15));
+        }
+    }
 
     // Loaded file
     if let Some(ref f) = loaded_file {
@@ -790,7 +1050,10 @@ fn build_build_context(vm: &vm::Vm) -> String {
         // Quick stats
         let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
         let pct = (non_black as f64 / vm.screen.len() as f64 * 100.0) as u32;
-        ctx.push_str(&format!("  {}% pixels non-black, PC=0x{:04X}, halted={}\n", pct, vm.pc, vm.halted));
+        ctx.push_str(&format!(
+            "  {}% pixels non-black, PC=0x{:04X}, halted={}\n",
+            pct, vm.pc, vm.halted
+        ));
     } else {
         ctx.push_str("  (screen not initialized)\n");
     }
@@ -860,7 +1123,11 @@ fn execute_build_command(
 
 /// Core LLM call -- provider-agnostic. Works with any OpenAI-compatible endpoint.
 /// Handles: Ollama, ZAI, OpenAI, Anthropic (via compatible layer), etc.
-pub fn call_llm(config: &ProviderConfig, system_prompt: &str, user_message: &str) -> Option<String> {
+pub fn call_llm(
+    config: &ProviderConfig,
+    system_prompt: &str,
+    user_message: &str,
+) -> Option<String> {
     // Escape strings for JSON
     let esc_sys = system_prompt
         .replace('\\', "\\\\")
@@ -907,10 +1174,7 @@ pub fn call_llm(config: &ProviderConfig, system_prompt: &str, user_message: &str
         curl_args.push(format!("Authorization: Bearer {}", config.api_key));
     }
 
-    let output = match std::process::Command::new("curl")
-        .args(&curl_args)
-        .output()
-    {
+    let output = match std::process::Command::new("curl").args(&curl_args).output() {
         Ok(o) => o,
         Err(e) => {
             println!("[hermes] curl failed: {}", e);
@@ -929,7 +1193,10 @@ pub fn call_llm(config: &ProviderConfig, system_prompt: &str, user_message: &str
         if let Some(e) = extract_json_string(&stdout, "message") {
             println!("[hermes] API error: {}", e);
         } else {
-            println!("[hermes] API error: {}...", &stdout[..stdout.len().min(200)]);
+            println!(
+                "[hermes] API error: {}...",
+                &stdout[..stdout.len().min(200)]
+            );
         }
         // Try fallback if available
         if let Some(ref fb) = config.fallback {
@@ -1000,16 +1267,20 @@ pub fn run_hermes_loop(
     for iteration in 0..10 {
         // Build context
         let ctx = build_hermes_context(vm, source_text, loaded_file);
-        
+
         // Debug: show if screen vision was included
         let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
-        println!("[hermes-vision] screen pixels non-zero: {}/{}", non_black, vm.screen.len());
+        println!(
+            "[hermes-vision] screen pixels non-zero: {}/{}",
+            non_black,
+            vm.screen.len()
+        );
         if ctx.contains("## Screen") {
             println!("[hermes-vision] Screen dump included in context");
         } else {
             println!("[hermes-vision] No screen data in context");
         }
-        
+
         let full_system = format!("{}\n\n{}", HERMES_SYSTEM_PROMPT, ctx);
 
         println!("[hermes] --- iteration {} ---", iteration + 1);
@@ -1747,7 +2018,8 @@ pub fn run_build_loop(
 
             match cmd_word.as_str() {
                 "shell" | "readfile" | "files" | "load" | "run" | "regs" | "peek" | "poke"
-                | "screen" | "save" | "reset" | "list" | "ls" | "png" | "diff" | "commit" | "rollback" => {
+                | "screen" | "save" | "reset" | "list" | "ls" | "png" | "diff" | "commit"
+                | "rollback" => {
                     println!("> {}", cmd_line);
                     let out = execute_build_command(
                         cmd_line,
@@ -1931,7 +2203,11 @@ pub fn run_build_canvas(
             if cmd_line.starts_with("write ") {
                 if let Some(filename) = cmd_line.strip_prefix("write ").map(|s| s.trim()) {
                     if let Err(e) = validate_write_path(filename) {
-                        *output_row = write_line_to_canvas(canvas_buffer, *output_row, &format!("[build] Write blocked: {}", e));
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            &format!("[build] Write blocked: {}", e),
+                        );
                     } else {
                         write_buffer = Some((filename.to_string(), String::new()));
                     }
@@ -2069,7 +2345,13 @@ mod tests {
         let ascii = screen_to_ascii(&screen);
         // Should have exactly one non-space character
         let non_space: Vec<_> = ascii.chars().filter(|&c| c != ' ' && c != '\n').collect();
-        assert_eq!(non_space.len(), 1, "expected 1 non-space char, got {}: {:?}", non_space.len(), non_space);
+        assert_eq!(
+            non_space.len(),
+            1,
+            "expected 1 non-space char, got {}: {:?}",
+            non_space.len(),
+            non_space
+        );
     }
 
     #[test]

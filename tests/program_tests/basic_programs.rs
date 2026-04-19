@@ -984,18 +984,22 @@ fn test_maze_gen() {
 #[test]
 fn test_mandelbrot_assembles() {
     // Verify the program assembles without errors
-    let source = std::fs::read_to_string("programs/mandelbrot.asm")
-        .expect("mandelbrot.asm should exist");
+    let source =
+        std::fs::read_to_string("programs/mandelbrot.asm").expect("mandelbrot.asm should exist");
     let result = assemble(&source, 0);
-    assert!(result.is_ok(), "mandelbrot.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "mandelbrot.asm should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]
 fn test_mandelbrot_renders() {
     // Mandelbrot is compute-heavy: 256*256 pixels * up to 64 iterations.
     // Use 200M cycles to ensure completion.
-    let source = std::fs::read_to_string("programs/mandelbrot.asm")
-        .expect("mandelbrot.asm should exist");
+    let source =
+        std::fs::read_to_string("programs/mandelbrot.asm").expect("mandelbrot.asm should exist");
     let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &pixel) in asm.pixels.iter().enumerate() {
@@ -1068,17 +1072,21 @@ fn test_mandelbrot_renders() {
 
 #[test]
 fn test_wirecube_assembles() {
-    let source = std::fs::read_to_string("programs/wirecube.asm")
-        .expect("wirecube.asm should exist");
+    let source =
+        std::fs::read_to_string("programs/wirecube.asm").expect("wirecube.asm should exist");
     let result = assemble(&source, 0);
-    assert!(result.is_ok(), "wirecube.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "wirecube.asm should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]
 fn test_wirecube_initializes() {
     // Run for enough steps to complete vertex/edge initialization + a few frames
-    let source = std::fs::read_to_string("programs/wirecube.asm")
-        .expect("wirecube.asm should exist");
+    let source =
+        std::fs::read_to_string("programs/wirecube.asm").expect("wirecube.asm should exist");
     let asm = assemble(&source, 0).expect("assembly should succeed");
     let mut vm = Vm::new();
     for (i, &pixel) in asm.pixels.iter().enumerate() {
