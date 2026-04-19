@@ -357,7 +357,7 @@ The convergence analysis from two independent possibility explorations both iden
 
 ## Priority Order for Phase 39-40
 
-- [ ] Phase 39a: NOTE Opcode with Waveform Selection
+- [x] Phase 39a: NOTE Opcode with Waveform Selection
 - [ ] Phase 39b: Sound Demo Programs
 - [ ] Phase 40a: Dungeon Floor Generation
 - [ ] Phase 40b: Combat, Enemies, Items
