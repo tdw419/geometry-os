@@ -409,6 +409,70 @@ fn test_beep_still_works_after_note() {
     assert!(vm.note.is_some(), "NOTE should set the note field");
 }
 
+// ── SOUND DEMO PROGRAMS (Phase 39b) ──────────────────────────────
+
+#[test]
+fn test_sfx_demo_assembles_and_runs() {
+    // sfx_demo.asm should assemble and run through all 10 SFX effects
+    let source =
+        std::fs::read_to_string("programs/sfx_demo.asm").expect("sfx_demo.asm should exist");
+    let asm = assemble(&source, 0).expect("sfx_demo.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
+    }
+    // Run until halted (should play 10 notes then halt)
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "sfx_demo should halt after playing all effects");
+    // The last SFX is triangle bass at (2, 55, 600)
+    assert_eq!(
+        vm.note,
+        Some((2, 55, 600)),
+        "last SFX should be triangle bass: waveform=2, freq=55, dur=600"
+    );
+    // Should have rendered exactly 10 frames (one per SFX)
+    assert!(
+        vm.frame_count >= 10,
+        "should have at least 10 frames, got {}",
+        vm.frame_count
+    );
+}
+
+#[test]
+fn test_music_demo_assembles_and_runs() {
+    // music_demo.asm should assemble and play Mary Had a Little Lamb
+    let source =
+        std::fs::read_to_string("programs/music_demo.asm").expect("music_demo.asm should exist");
+    let asm = assemble(&source, 0).expect("music_demo.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
+    }
+    // Run until halted (should play 26 notes then halt)
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "music_demo should halt after melody");
+    // The last note is C4 (262 Hz) half duration (800 ms), square wave (1)
+    assert_eq!(
+        vm.note,
+        Some((1, 262, 800)),
+        "last note should be square C4 half: waveform=1, freq=262, dur=800"
+    );
+    // Should have rendered at least 26 frames (one per note) + 1 final
+    assert!(vm.frame_count >= 26, "should have at least 26 frames, got {}", vm.frame_count);
+}
+
 #[test]
 fn test_sar_opcode() {
     // SAR rd, rs
