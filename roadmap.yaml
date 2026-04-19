@@ -13,7 +13,7 @@ meta:
   opcodes: 103
   tests: 1197
   programs: 59
-  loc: 31932
+  loc: 32121
 phases:
 - id: phase-1
   title: Core VM + Visual Programs

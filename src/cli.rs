@@ -12,6 +12,44 @@ use std::path::{Path, PathBuf};
 
 const SAVE_FILE: &str = "geometry_os.sav";
 
+/// Scan config string for kernel=/path.rts.png or initrd=/path.rts.png
+/// and auto-decode pixel images to temp files.
+fn resolve_pixel_paths(config: &str) -> String {
+    let mut result = config.to_string();
+    for key in &["kernel", "initrd", "dtb", "drive"] {
+        // Find key=value in the config string
+        if let Some(start) = result.find(&format!("{}=", key)) {
+            let val_start = start + key.len() + 1;
+            // Value runs until next space or end of string
+            let val_end = result[val_start..]
+                .find(' ')
+                .map(|i| val_start + i)
+                .unwrap_or(result.len());
+            let value = &result[val_start..val_end];
+
+            if value.to_lowercase().ends_with(".rts.png") {
+                match geometry_os::pixel::decode_rts_to_temp(value) {
+                    Ok(temp_path) => {
+                        println!(
+                            "[pixel] Decoded {} -> {} ({} bytes)",
+                            value,
+                            temp_path,
+                            std::fs::metadata(&temp_path)
+                                .map(|m| m.len())
+                                .unwrap_or(0)
+                        );
+                        result.replace_range(val_start..val_end, &temp_path);
+                    }
+                    Err(e) => {
+                        eprintln!("[pixel] Failed to decode {}: {}", value, e);
+                    }
+                }
+            }
+        }
+    }
+    result
+}
+
 pub fn cli_main(extra_args: &[String]) {
     let mut vm = vm::Vm::new();
     let mut canvas_assembled = false;
@@ -528,7 +566,9 @@ pub fn cli_main(extra_args: &[String]) {
                         }
                         qemu_bridge = None;
 
-                        let config_str = parts[2..].join(" ");
+                        let mut config_str = parts[2..].join(" ");
+                        // Auto-decode .rts.png files to temp files
+                        config_str = resolve_pixel_paths(&config_str);
                         match QemuBridge::spawn(&config_str) {
                             Ok(mut bridge) => {
                                 // Wait for QEMU to start producing output (OpenSBI takes ~2-3s)
