@@ -1065,3 +1065,62 @@ fn test_mandelbrot_renders() {
         "Interior of Mandelbrot set should be uniformly black"
     );
 }
+
+#[test]
+fn test_wirecube_assembles() {
+    let source = std::fs::read_to_string("programs/wirecube.asm")
+        .expect("wirecube.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "wirecube.asm should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_wirecube_initializes() {
+    // Run for enough steps to complete vertex/edge initialization + a few frames
+    let source = std::fs::read_to_string("programs/wirecube.asm")
+        .expect("wirecube.asm should exist");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run enough steps for initialization + a few animation frames
+    // The wirecube has heavy math (8 vertices * many multiplies) + FRAME loop
+    // 500K steps is enough for init + many frames of wireframe rendering
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    eprintln!("halted={}, pc={}, frame_count={}", vm.halted, vm.pc, vm.frame_count);
+    eprintln!("ram[0x1000]={}, ram[0x1020]={}", vm.ram[0x1000], vm.ram[0x1020]);
+
+    // Screen should have non-black pixels (the wireframe cube)
+    let mut non_black = 0;
+    for &pixel in &vm.screen {
+        if pixel != 0 {
+            non_black += 1;
+        }
+    }
+    assert!(
+        non_black > 20,
+        "wirecube should draw visible edges, got {} non-black pixels",
+        non_black
+    );
+
+    // Vertex initialization: check cube vertices stored at 0x1000
+    // First vertex should be (120, 120, 120) = all positive
+    assert_eq!(vm.ram[0x1000], 120, "vertex 0 x should be 120");
+    assert_eq!(vm.ram[0x1001], 120, "vertex 0 y should be 120");
+    assert_eq!(vm.ram[0x1002], 120, "vertex 0 z should be 120");
+
+    // Last vertex (index 7 = 0b111) should be (-120, -120, -120)
+    // -120 in u32 = 0xFFFFFF88
+    assert_eq!(vm.ram[0x1017], 0xFFFFFF88, "vertex 7 z should be -120");
+}
