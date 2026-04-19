@@ -304,9 +304,17 @@ fn c_addi16sp_imm(w: u32) -> i32 {
     sign_extend(raw, 10)
 }
 
-/// C.LUI immediate: nzimm[17|12:2] (not sign-extended, 32-bit)
+/// C.LUI immediate: nzimm[17|16:12] sign-extended from bit 17 to 32 bits.
+/// Per RISC-V spec: "loads the non-zero 6-bit immediate field into bits 17–12
+/// of the destination register, and sign-extends the result."
 fn c_lui_imm(w: u32) -> u32 {
-    (((w >> 12) & 0x1) << 17) | (((w >> 2) & 0x1F) << 12)
+    let nzimm = (((w >> 12) & 0x1) << 17) | (((w >> 2) & 0x1F) << 12);
+    // Sign-extend from bit 17: if bit 17 is set, fill bits 31:18 with 1s
+    if nzimm & (1 << 17) != 0 {
+        nzimm | 0xFFFC_0000
+    } else {
+        nzimm
+    }
 }
 
 /// C.ANDI immediate: imm[5:4|12|2:6|3] (same encoding as C.ADDI, sign-extended 6-bit)

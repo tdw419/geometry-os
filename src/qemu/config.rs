@@ -65,7 +65,23 @@ impl QemuConfig {
                 "disk" | "drive" | "hda" => cfg.disk = Some(val),
                 "bios" => cfg.bios = Some(val),
                 "initrd" => cfg.initrd = Some(val),
-                "append" | "cmdline" => cfg.append = Some(val),
+                "append" | "cmdline" => {
+                    // Append can accumulate multiple kernel params
+                    if let Some(ref mut existing) = cfg.append {
+                        existing.push(' ');
+                        existing.push_str(&val);
+                    } else {
+                        cfg.append = Some(val);
+                    }
+                }
+                "root" => {
+                    // root= is a kernel param, merge into append
+                    if let Some(ref mut append) = cfg.append {
+                        append.push_str(&format!(" root={}", val));
+                    } else {
+                        cfg.append = Some(format!("root={}", val));
+                    }
+                }
                 "net" | "nic" => cfg.net = Some(val),
                 _ => cfg.extra_args.push(token.to_string()),
             }
@@ -84,7 +100,7 @@ impl QemuConfig {
         let mut cmd = Command::new(binary);
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::inherit()); // Merge stderr to parent for visibility
 
         // Always use nographic serial mode
         cmd.arg("-nographic");

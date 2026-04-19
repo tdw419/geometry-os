@@ -1,8 +1,9 @@
 // pixel.rs -- Pixel image decode/encode for .rts.png format
 //
-// The .rts.png format stores binary data as RGBA pixels in Hilbert curve order.
+// The .rts.png format stores binary data as RGBA pixels.
+// Two layouts: Hilbert curve (small/medium) or linear (large files).
 // Each pixel = 4 bytes (R=byte0, G=byte1, B=byte2, A=byte3).
-// Original size and SHA256 are stored in PNG text chunks.
+// Original size, layout, and SHA256 are stored in PNG text chunks.
 
 use png::Decoder;
 use std::fs::File;
@@ -24,7 +25,7 @@ pub fn decode_rts_png(path: &str) -> Result<DecodedPixels, String> {
         .read_info()
         .map_err(|e| format!("PNG decode error for {}: {:?}", path, e))?;
 
-    // Read metadata
+    // Read metadata from PNG text chunks
     let info = reader.info().clone();
     let expected_size: usize = info
         .uncompressed_latin1_text
@@ -36,15 +37,16 @@ pub fn decode_rts_png(path: &str) -> Result<DecodedPixels, String> {
     let source_name = info
         .uncompressed_latin1_text
         .iter()
-        .find(|c| c.keyword == "source")
+        .find(|c| c.keyword == "source" || c.keyword == "original_file")
         .map(|c| c.text.clone())
         .unwrap_or_default();
 
-    let _expected_sha = info
+    let layout = info
         .uncompressed_latin1_text
         .iter()
-        .find(|c| c.keyword == "sha256")
-        .map(|c| c.text.clone());
+        .find(|c| c.keyword == "layout")
+        .map(|c| c.text.to_lowercase())
+        .unwrap_or_else(|| "hilbert".to_string());
 
     // Read pixels
     let total_pixels = (info.width as usize) * (info.height as usize);
@@ -53,28 +55,44 @@ pub fn decode_rts_png(path: &str) -> Result<DecodedPixels, String> {
         .next_frame(&mut pixel_buf)
         .map_err(|e| format!("PNG read error: {:?}", e))?;
 
-    // Inverse Hilbert: pixel (x,y) -> linear index
-    let grid_w = info.width as u32;
-    let grid_h = info.height as u32;
-    let grid_side = grid_w.max(grid_h);
-    let grid_order = 31 - grid_side.leading_zeros(); // log2
-
-    let mut output = Vec::with_capacity(expected_size);
-    let mut linear = 0u32;
-
-    while output.len() < expected_size && linear < total_pixels as u32 {
-        let (x, y) = d2xy(grid_order, linear);
-        if x < grid_h && y < grid_w {
-            let pixel_offset = ((x * grid_w + y) * 4) as usize;
-            if pixel_offset + 4 <= pixel_buf.len() {
-                output.push(pixel_buf[pixel_offset]); // R
-                output.push(pixel_buf[pixel_offset + 1]); // G
-                output.push(pixel_buf[pixel_offset + 2]); // B
-                output.push(pixel_buf[pixel_offset + 3]); // A
+    let mut output = if layout == "linear" {
+        // Linear layout: read pixels row by row, 4 bytes per pixel
+        let mut out = Vec::with_capacity(expected_size);
+        for chunk in pixel_buf.chunks_exact(4) {
+            out.push(chunk[0]); // R
+            out.push(chunk[1]); // G
+            out.push(chunk[2]); // B
+            out.push(chunk[3]); // A
+            if out.len() >= expected_size {
+                break;
             }
         }
-        linear += 1;
-    }
+        out
+    } else {
+        // Hilbert curve layout: inverse Hilbert to get linear byte order
+        let grid_w = info.width as u32;
+        let grid_h = info.height as u32;
+        let grid_side = grid_w.max(grid_h);
+        let grid_order = 31 - grid_side.leading_zeros();
+
+        let mut out = Vec::with_capacity(expected_size);
+        let mut linear = 0u32;
+
+        while out.len() < expected_size && linear < total_pixels as u32 {
+            let (x, y) = d2xy(grid_order, linear);
+            if x < grid_h && y < grid_w {
+                let pixel_offset = ((x * grid_w + y) * 4) as usize;
+                if pixel_offset + 4 <= pixel_buf.len() {
+                    out.push(pixel_buf[pixel_offset]); // R
+                    out.push(pixel_buf[pixel_offset + 1]); // G
+                    out.push(pixel_buf[pixel_offset + 2]); // B
+                    out.push(pixel_buf[pixel_offset + 3]); // A
+                }
+            }
+            linear += 1;
+        }
+        out
+    };
 
     output.truncate(expected_size);
 

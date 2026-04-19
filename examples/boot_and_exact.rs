@@ -21,29 +21,25 @@ fn main() {
         count += 1;
     }
 
-    // Trace ALL PCs from pcpu_alloc_first_chunk entry until jal
-    let mut tracing = false;
     let mut step_count: u64 = 0;
     while step_count < 500_000 {
         let pc = vm.cpu.pc;
         
-        if pc == 0xC040AF6C {
-            tracing = true;
-            eprintln!("ENTRY: a0=0x{:08X} a1=0x{:08X}", vm.cpu.x[10], vm.cpu.x[11]);
-        }
-        
-        if tracing {
-            eprintln!("  PC=0x{:08X}", pc);
+        // Right BEFORE the AND at 0xC040AF72
+        if pc == 0xC040AF72 {
+            eprintln!("BEFORE AND: a0=0x{:08X} a5=0x{:08X}", vm.cpu.x[10], vm.cpu.x[15]);
+            eprintln!("  Expected result: 0x{:08X}", vm.cpu.x[10] & vm.cpu.x[15]);
         }
         
         let _ = vm.step();
         step_count += 1;
         count += 1;
         
-        if tracing && pc == 0xC040AFBE {
-            tracing = false;
-            eprintln!("s8=0x{:08X} s4=0x{:08X}", vm.cpu.x[24], vm.cpu.x[20]);
-            break;
+        // Right AFTER: next PC should be 0xC040AF76
+        if pc == 0xC040AF72 {
+            eprintln!("AFTER AND: s8=0x{:08X} PC now=0x{:08X}", vm.cpu.x[24], vm.cpu.pc);
         }
+        
+        if vm.cpu.csr.scause != 0 { break; }
     }
 }

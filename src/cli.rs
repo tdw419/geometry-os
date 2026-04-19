@@ -571,22 +571,34 @@ pub fn cli_main(extra_args: &[String]) {
                         config_str = resolve_pixel_paths(&config_str);
                         match QemuBridge::spawn(&config_str) {
                             Ok(mut bridge) => {
-                                // Wait for QEMU to start producing output (OpenSBI takes ~2-3s)
-                                for _ in 0..30 {
-                                    std::thread::sleep(std::time::Duration::from_millis(100));
+                                // Drain QEMU boot output. OpenSBI starts ~1s,
+                                // kernel+rootfs can take 5-10s for first output.
+                                let boot_start = std::time::Instant::now();
+                                let drain_timeout = std::time::Duration::from_secs(10);
+                                let mut got_output = false;
+                                while boot_start.elapsed() < drain_timeout {
+                                    std::thread::sleep(std::time::Duration::from_millis(200));
                                     let output = bridge.read_output_text();
                                     if !output.is_empty() {
                                         print!("{}", output);
                                         let _ = io::stdout().flush();
-                                        // Continue draining for a bit more
-                                        std::thread::sleep(std::time::Duration::from_millis(500));
-                                        let more = bridge.read_output_text();
-                                        if !more.is_empty() {
-                                            print!("{}", more);
-                                            let _ = io::stdout().flush();
+                                        got_output = true;
+                                        // Once we get output, keep draining for 2 more seconds
+                                        let drain_more = std::time::Duration::from_secs(2);
+                                        let drain_start = std::time::Instant::now();
+                                        while drain_start.elapsed() < drain_more {
+                                            std::thread::sleep(std::time::Duration::from_millis(100));
+                                            let more = bridge.read_output_text();
+                                            if !more.is_empty() {
+                                                print!("{}", more);
+                                                let _ = io::stdout().flush();
+                                            }
                                         }
                                         break;
                                     }
+                                }
+                                if !got_output {
+                                    println!("[qemu] No output after 10s -- QEMU may still be booting");
                                 }
                                 qemu_bridge = Some(bridge);
                                 println!("[qemu] Booted: {}", config_str);
