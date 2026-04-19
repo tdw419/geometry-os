@@ -578,6 +578,48 @@ impl Vm {
                 let dr = ram(a + 3);
                 (format!("NOTE {}, {}, {}", reg(wr), reg(fr), reg(dr)), 4)
             }
+            0x7F => {
+                let ar = ram(a + 1);
+                let pr = ram(a + 2);
+                let fr = ram(a + 3);
+                (format!("CONNECT {}, {}, {}", reg(ar), reg(pr), reg(fr)), 4)
+            }
+            0x80 => {
+                let fr = ram(a + 1);
+                let br = ram(a + 2);
+                let lr = ram(a + 3);
+                let sr = ram(a + 4);
+                (
+                    format!(
+                        "SOCKSEND {}, {}, {}, {}",
+                        reg(fr),
+                        reg(br),
+                        reg(lr),
+                        reg(sr)
+                    ),
+                    5,
+                )
+            }
+            0x81 => {
+                let fr = ram(a + 1);
+                let br = ram(a + 2);
+                let mr = ram(a + 3);
+                let rr = ram(a + 4);
+                (
+                    format!(
+                        "SOCKRECV {}, {}, {}, {}",
+                        reg(fr),
+                        reg(br),
+                        reg(mr),
+                        reg(rr)
+                    ),
+                    5,
+                )
+            }
+            0x82 => {
+                let fr = ram(a + 1);
+                (format!("DISCONNECT {}", reg(fr)), 2)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

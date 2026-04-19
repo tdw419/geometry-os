@@ -877,6 +877,10 @@ fn opcode_name(op: u8) -> &'static str {
         0x7C => "REPLAY",
         0x7D => "FORK",
         0x7E => "NOTE",
+        0x7F => "CONNECT",
+        0x80 => "SOCKSEND",
+        0x81 => "SOCKRECV",
+        0x82 => "DISCONNECT",
         _ => "???",
     }
 }

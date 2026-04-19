@@ -180,6 +180,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         trace_buffer: vm::TraceBuffer::new(vm::DEFAULT_TRACE_CAPACITY),
         frame_checkpoints: vm::FrameCheckBuffer::new(vm::DEFAULT_FRAME_CHECK_CAPACITY),
         snapshots: Vec::new(),
+        tcp_connections: (0..vm::MAX_TCP_CONNECTIONS).map(|_| None).collect(),
     };
 
     // Parse canvas trailer

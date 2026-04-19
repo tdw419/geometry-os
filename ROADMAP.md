@@ -365,6 +365,38 @@ The convergence analysis from two independent possibility explorations both iden
 
 ---
 
+## Phase 41: TCP Networking
+
+**Goal:** Give Geometry OS programs the ability to make TCP connections. This is the single most important feature that separates a toy VM from a real OS. Every real OS has networking -- now Geometry OS does too.
+
+### Phase 41a: TCP Socket Opcodes
+
+**Goal:** Four new opcodes for TCP connect, send, receive, and disconnect. Programs can open TCP connections to any host:port, send and receive raw bytes, and close connections. All operations are non-blocking (except the initial connect).
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| CONNECT addr_reg, port_reg, fd_reg (0x7F) | Open TCP connection. Reads null-terminated IP string from RAM. Returns fd in fd_reg, status in r0. | src/vm/net.rs |
+| SOCKSEND fd_reg, buf_reg, len_reg, sent_reg (0x80) | Send bytes over TCP. One byte per u32 word (lower 8 bits). Non-blocking. | src/vm/net.rs |
+| SOCKRECV fd_reg, buf_reg, max_len_reg, recv_reg (0x81) | Receive bytes from TCP. Non-blocking. Returns NET_ERR_WOULD_BLOCK if no data. | src/vm/net.rs |
+| DISCONNECT fd_reg (0x82) | Close TCP connection and free slot. | src/vm/net.rs |
+| Connection pool | Up to 8 simultaneous TCP connections stored in Vm struct. Slots managed as fd indices. | src/vm/net.rs |
+| Error codes | NET_OK, NET_ERR_INVALID_FD, NET_ERR_CONNECT_FAILED, NET_ERR_SEND_FAILED, NET_ERR_RECV_FAILED, NET_ERR_NO_SLOTS, NET_ERR_WOULD_BLOCK, NET_ERR_CONNECTION_CLOSED | src/vm/net.rs |
+| Assembler support | CONNECT, SOCKSEND, SOCKRECV, DISCONNECT parsed and encoded | src/assembler/core_ops.rs |
+| Disassembler support | All 4 opcodes decoded with register arguments | src/vm/disasm.rs |
+| opcode_name entries | CONNECT, SOCKSEND, SOCKRECV, DISCONNECT in hermes.rs | src/hermes.rs |
+| Integration tests | 12 tests: connect success/fail/refused, send/recv roundtrip, disconnect, max connections, invalid fd, string parsing | src/vm/net.rs |
+| net_demo.asm | Connect to echo server, send message, receive echo, display on screen | programs/ |
+
+**Why this matters:** Networking is table stakes for any OS. With CONNECT/SOCKSEND/SOCKRECV/DISCONNECT, Geometry OS programs can talk to HTTP servers, chat services, game servers, and any TCP service. Combined with the existing pixel-native rendering, this opens the door to networked visual applications that no other pixel VM can do.
+
+---
+
+## Priority Order for Phase 41
+
+- [x] Phase 41a: TCP Socket Opcodes
+
+---
+
 ## Design Principles
 
 - **Pixels are the truth.** Everything visual should be expressible as pixel operations. The screen isn't an afterthought -- it's the primary interface.

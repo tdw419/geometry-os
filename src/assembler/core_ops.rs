@@ -53,6 +53,58 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "CONNECT" => {
+            if tokens.len() < 4 {
+                return Err(
+                    "CONNECT requires 3 arguments: CONNECT addr_reg, port_reg, fd_reg".to_string(),
+                );
+            }
+            bytecode.push(0x7F);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
+        "SOCKSEND" => {
+            if tokens.len() < 5 {
+                return Err(
+                    "SOCKSEND requires 4 arguments: SOCKSEND fd_reg, buf_reg, len_reg, sent_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0x80);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            Ok(Some(()))
+        }
+
+        "SOCKRECV" => {
+            if tokens.len() < 5 {
+                return Err(
+                    "SOCKRECV requires 4 arguments: SOCKRECV fd_reg, buf_reg, max_len_reg, recv_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0x81);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            Ok(Some(()))
+        }
+
+        "DISCONNECT" => {
+            if tokens.len() < 2 {
+                return Err("DISCONNECT requires 1 argument: DISCONNECT fd_reg".to_string());
+            }
+            bytecode.push(0x82);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         "MEMCPY" => {
             if tokens.len() < 4 {
                 return Err(

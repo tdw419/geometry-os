@@ -268,6 +268,7 @@ impl Vm {
             trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
             frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
             snapshots: Vec::new(),
+            tcp_connections: (0..super::MAX_TCP_CONNECTIONS).map(|_| None).collect(),
         })
     }
 }

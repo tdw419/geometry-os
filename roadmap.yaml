@@ -10,10 +10,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 107
-  tests: 1257
-  programs: 61
-  loc: 35040
+  opcodes: 111
+  tests: 1294
+  programs: 62
+  loc: 36489
 phases:
 - id: phase-1
   title: Core VM + Visual Programs

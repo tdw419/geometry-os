@@ -116,6 +116,9 @@ pub struct Vm {
     /// Saved VM snapshots for timeline forking (Phase 38d).
     /// Max 16 snapshots; each captures full RAM + screen + registers.
     pub snapshots: Vec<VmSnapshot>,
+    /// Active TCP connections (Phase 41: Networking).
+    /// Up to 8 simultaneous connections, indexed by fd.
+    pub tcp_connections: Vec<Option<std::net::TcpStream>>,
 }
 
 impl Default for Vm {
@@ -187,6 +190,7 @@ impl Vm {
             trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
             frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
             snapshots: Vec::new(),
+            tcp_connections: (0..MAX_TCP_CONNECTIONS).map(|_| None).collect(),
         }
     }
 
@@ -645,6 +649,27 @@ impl Vm {
                     self.note = Some((wave, freq, dur));
                 }
             }
+            // CONNECT addr_reg, port_reg, fd_reg  (0x7F) -- TCP connect
+            // Reads null-terminated IP string from RAM[addr_reg], connects to port.
+            // Returns fd in fd_reg, status in r0 (0=ok).
+            0x7F => {
+                self.op_connect();
+            }
+            // SOCKSEND fd_reg, buf_reg, len_reg, sent_reg  (0x80) -- TCP send
+            // Sends len bytes from RAM[buf_reg]. Returns bytes sent in sent_reg.
+            0x80 => {
+                self.op_socksend();
+            }
+            // SOCKRECV fd_reg, buf_reg, max_len_reg, recv_reg  (0x81) -- TCP recv
+            // Receives up to max_len bytes into RAM[buf_reg]. Returns bytes recv in recv_reg.
+            0x81 => {
+                self.op_sockrecv();
+            }
+            // DISCONNECT fd_reg  (0x82) -- TCP close
+            // Closes connection and frees slot. Status in r0.
+            0x82 => {
+                self.op_disconnect();
+            }
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
@@ -657,6 +682,8 @@ impl Vm {
 
 mod boot;
 mod disasm;
+mod net;
+pub(crate) use net::MAX_TCP_CONNECTIONS;
 mod scheduler;
 
 #[cfg(test)]
