@@ -286,6 +286,85 @@ The convergence analysis from two independent possibility explorations both iden
 
 ---
 
+## Phase 39: Sound Synthesis
+
+**Goal:** Replace the single sine-wave BEEP with a proper NOTE opcode supporting multiple waveforms and envelope control. Programs can make actual music -- square waves for retro sounds, noise for percussion, triangle for bass. The demoscene programs get soundtracks, games get SFX.
+
+### Phase 39a: NOTE Opcode with Waveform Selection
+
+**Goal:** New NOTE opcode that plays a note with selectable waveform, frequency, and duration. Extends audio.rs to synthesize square, triangle, sawtooth, and noise waveforms. The old BEEP opcode stays as a convenience wrapper.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| NOTE opcode (0x04) | NOTE wave_reg, freq_reg, dur_reg. wave_reg: 0=sine, 1=square, 2=triangle, 3=sawtooth, 4=noise. freq in Hz, dur in ms. | vm/mod.rs + audio.rs |
+| Waveform synthesis | Add square/triangle/sawtooth/noise generators to audio.rs alongside existing sine | audio.rs (~30 lines) |
+| Assembler support | `NOTE r1, r2, r3` in assembler | assembler |
+| Tests | Test each waveform, test clamping, test opcode encoding, test BEEP still works | ~20 lines |
+
+**Note:** MEMCPY was opcode 0x04. Check if MEMCPY can be moved or if NOTE gets 0x7E (next free). Do NOT collide with existing opcodes.
+
+### Phase 39b: Sound Demo Programs
+
+**Goal:** Two demo programs that prove the sound system works musically.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| sfx_demo.asm | Play a sequence of notes in different waveforms -- retro sound effects catalog | programs/ |
+| music_demo.asm | Play a simple melody (e.g. Mary Had a Little Lamb or Tetris theme) using square wave, with FRAME sync for visual accompany | programs/ |
+
+---
+
+## Phase 40: Roguelike
+
+**Goal:** A proper dungeon-crawling game that exercises every major subsystem: procedural generation for dungeon floors, keyboard input for movement, combat with enemies, item pickup, fog of war, and time-travel undo. This is the signature demo that proves Geometry OS is a real platform.
+
+### Phase 40a: Dungeon Floor Generation
+
+**Goal:** Procedural dungeon generation using the existing maze algorithm as a foundation. Rooms connected by corridors, rendered as a tilemap on the 64x64 screen.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| roguelike.asm | New program: player (@ in white), dungeon tiles, movement via IKEY | programs/ |
+| Dungeon gen | BSP or random rooms + corridors algorithm in assembly, using RAND for seeds | within roguelike.asm |
+| Tile rendering | Wall tiles (dark gray), floor tiles (brown), player (white @), stairs (yellow >) | within roguelike.asm |
+| Camera/viewport | 64x64 screen shows a portion of a larger dungeon (scroll with player movement) | within roguelike.asm |
+| Movement | WASD or arrow keys via IKEY, collision detection with walls | within roguelike.asm |
+
+### Phase 40b: Combat, Enemies, Items
+
+**Goal:** Add game mechanics -- enemies that move, health/stats, items to pick up, combat resolution. The game is now playable.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| Enemy spawning | Place enemies (red letters) at gen time in rooms, they patrol | within roguelike.asm |
+| Combat | Bump-to-attack: player moves into enemy = deals damage. Enemy moves into player = takes damage. Damage based on simple stats. | within roguelike.asm |
+| Health/HP display | Status bar at screen edge showing HP, floor number, score | within roguelike.asm |
+| Items | Health potions (green +), attack boosts, scattered in rooms | within roguelike.asm |
+| Stairs | Reach stairs (yellow >) to descend to next floor (regenerate dungeon, harder enemies) | within roguelike.asm |
+| SFX | NOTE opcode for hit sounds, pickup sounds, stair descend sound | within roguelike.asm |
+
+### Phase 40c: Time-Travel Undo
+
+**Goal:** Use the FORK opcode to implement undo. Before each player move, save a snapshot. Press U to undo -- restore the previous snapshot and re-render. The player can retry bad moves. This is the signature feature that no other retro game has.
+
+| Deliverable | Description | Scope |
+|---|---|---|
+| Undo system | Before each player turn: FORK save. Press U: FORK restore + re-render | within roguelike.asm |
+| Undo stack | Track multiple undo levels (up to 16 snapshots via FORK) | within roguelike.asm |
+| Visual feedback | Flash screen briefly on undo to show the rewind | within roguelike.asm |
+
+---
+
+## Priority Order for Phase 39-40
+
+- [ ] Phase 39a: NOTE Opcode with Waveform Selection
+- [ ] Phase 39b: Sound Demo Programs
+- [ ] Phase 40a: Dungeon Floor Generation
+- [ ] Phase 40b: Combat, Enemies, Items
+- [ ] Phase 40c: Time-Travel Undo
+
+---
+
 ## Design Principles
 
 - **Pixels are the truth.** Everything visual should be expressible as pixel operations. The screen isn't an afterthought -- it's the primary interface.
