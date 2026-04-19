@@ -1,10 +1,10 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 108 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 109 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 53/53 phases complete, 0 in progress
+**Progress:** 54/54 phases complete, 0 in progress
 
-**Deliverables:** 226/226 complete
+**Deliverables:** 232/232 complete
 
 **Tasks:** 84/84 complete
 
@@ -65,6 +65,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 108 o
 | phase-51 TCP Networking | COMPLETE | 6/6 | 563 | 12 |
 | phase-52 Episodic Memory | COMPLETE | 3/3 | 689 | 12 |
 | phase-53 Trace Query Opcodes | COMPLETE | 4/4 | 50 | 10 |
+| phase-54 Pixel Write History | COMPLETE | 6/6 | 200 | 13 |
 
 ## Dependencies
 
@@ -1564,9 +1565,28 @@ TRACE_READ opcode (0x83) provides 4 modes for introspecting execution history: q
 
 Implementation in src/vm/mod.rs (opcode 0x83) + src/vm/trace.rs (3 new query methods). TraceBuffer already existed with 10K-entry ring buffer from Phase 38a. Entry format: [step_lo, step_hi, pc, r0..r15, opcode] = 20 u32 words.
 
+## [x] phase-54: Pixel Write History (COMPLETE)
+
+**Goal:** Enable programs to query which instructions wrote to specific pixels
+
+PIXEL_HISTORY opcode (0x84) provides 4 modes for introspecting pixel write history: query total entries, count writes to a specific pixel, retrieve recent writes to a pixel into RAM, and get entry by absolute index. This is the foundation for pixel-level time-travel debugging -- programs can analyze their own rendering history to build debuggers and visual tracebacks from within the VM.
+
+### Deliverables
+
+- [x] **PixelWriteLog ring buffer** -- 50K-entry ring buffer in src/vm/trace.rs recording every PSET/PSETI when trace_recording is on. Each entry: x, y, step_lo, step_hi, opcode, color (20 bytes).
+- [x] **PSET/PSETI write logging** -- PSET (0x40) and PSETI (0x41) now record pixel writes to pixel_write_log when trace_recording is enabled. Zero overhead when off.
+- [x] **PIXEL_HISTORY opcode (0x84)** -- Query pixel write history from assembly. Mode 0: total entry count. Mode 1: count writes to pixel (r1=x, r2=y). Mode 2: get N most recent writes to pixel into RAM (6 words per entry). Mode 3: get entry at absolute index.
+- [x] **Assembler and disassembler support** -- PIXEL_HISTORY recognized by assembler (core_ops.rs), disassembler (disasm.rs), and preprocessor OPCODES list.
+- [x] **PIXEL_HISTORY tests** -- 13 unit tests covering PSET recording, PSETI recording, no-recording-when-off, ring buffer overflow, reset clearing, all 4 query modes, invalid mode, buffer overflow check, assembler, and disassembler.
+- [x] **Demo program** -- programs/pixel_history_demo.asm demonstrates writing 3 colors to same pixel and querying the history.
+
+### Technical Notes
+
+Implementation in src/vm/ops_extended.rs (opcode 0x84) + src/vm/trace.rs (PixelWriteLog, PixelWriteEntry). pixel_write_log field on Vm struct. Dispatch in mod.rs step() via dedicated 0x84 arm delegating to step_extended().
+
 ## Global Risks
 
-- Opcode space: 107 of ~256 slots used, plenty of room
+- Opcode space: 109 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
