@@ -1456,6 +1456,16 @@ impl RiscvVm {
                         };
                         eprintln!("[boot] S-mode {} fault at count={}: PC=0x{:08X} scause=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
                             fault_type, count, vm.cpu.pc, vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec);
+                        // Dump registers for first fault to diagnose the root cause
+                        if _smode_fault_count == 1 {
+                            eprintln!("[boot] Fault registers: a0=0x{:08X} a1=0x{:08X} a2=0x{:08X} a3=0x{:08X}",
+                                vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12], vm.cpu.x[13]);
+                            eprintln!("[boot] Fault registers: t0=0x{:08X} t1=0x{:08X} t2=0x{:08X} t3=0x{:08X}",
+                                vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7], vm.cpu.x[28]);
+                            eprintln!("[boot] Fault registers: s0=0x{:08X} s1=0x{:08X} ra=0x{:08X} sp=0x{:08X}",
+                                vm.cpu.x[8], vm.cpu.x[9], vm.cpu.x[1], vm.cpu.x[2]);
+                            eprintln!("[boot] Fault registers: gp=0x{:08X} tp=0x{:08X}", vm.cpu.x[3], vm.cpu.x[4]);
+                        }
                     }
                 }
                 StepResult::Ebreak => break,
