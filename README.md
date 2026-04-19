@@ -12,7 +12,7 @@ There is no compiler. No runtime. No garbage collector. You write the opcodes, t
 
 ## Programs
 
-50 programs included -- static art, animations, interactive games, and system utilities:
+60 programs included -- static art, animations, interactive games, and system utilities:
 
 **Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes
 
@@ -22,7 +22,7 @@ There is no compiler. No runtime. No garbage collector. You write the opcodes, t
 
 **Games:** snake, ball (bouncing ball), breakout (4 rows of bricks, 3 lives), tetris (7 tetrominoes, rotation, line clearing), maze (randomly generated, WASD to navigate), peek_bounce (collision detection demo)
 
-**Advanced:** window_manager (multi-process demo), sprite_demo, self_host (VM assembles and runs its own code), multiproc (multi-process scheduling)
+**Advanced:** window_manager (multi-process demo), sprite_demo, self_host (VM assembles and runs its own code), multiproc (multi-process scheduling), mandelbrot (fractal renderer using fixed-point arithmetic)
 
 **System:** shell (Unix-like command shell), init (PID 1 init process), cat (file reader), pipe_test (IPC demo), pipe_demo (pipe communication), device_test (device driver demo), stdlib_test, preprocessor_test, preprocessor_advanced_test, sprint_c_test, shift_test, push_pop_test
 

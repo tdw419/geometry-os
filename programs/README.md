@@ -10,6 +10,7 @@ This directory contains assembly programs for the Geometry OS virtual machine. Y
 - **tetris.asm**: Full Tetris implementation. A/D to move, W to rotate, S to soft drop.
 
 ## Demos & Animations
+- **mandelbrot.asm**: Mandelbrot set fractal renderer using fixed-point (8.8) arithmetic. Full 256x256 rendering with psychedelic color palette based on escape-time coloring.
 - **sprite_demo.asm**: Interactive 8x8 pixel-art character. Demonstrates `SPRITE` transparency, gravity, and floor collision. WASD to move/jump.
 - **ball.asm**: Bouncing ball with keyboard interaction (WASD). Demonstrates `CIRCLE` and `BEEP`.
 - **fire.asm**: Procedural scrolling fire animation using `SCROLL` and `FRAME`.

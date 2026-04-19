@@ -978,3 +978,90 @@ fn test_maze_gen() {
         black_inside
     );
 }
+
+// ── MANDELBROT ──────────────────────────────────────────────────
+
+#[test]
+fn test_mandelbrot_assembles() {
+    // Verify the program assembles without errors
+    let source = std::fs::read_to_string("programs/mandelbrot.asm")
+        .expect("mandelbrot.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "mandelbrot.asm should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_mandelbrot_renders() {
+    // Mandelbrot is compute-heavy: 256*256 pixels * up to 64 iterations.
+    // Use 200M cycles to ensure completion.
+    let source = std::fs::read_to_string("programs/mandelbrot.asm")
+        .expect("mandelbrot.asm should exist");
+    let asm = assemble(&source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..200_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "VM should halt within 200M cycles");
+
+    // Count distinct colors on screen
+    let mut colors = std::collections::HashSet::new();
+    for &pixel in &vm.screen {
+        colors.insert(pixel);
+    }
+
+    // Should have many distinct colors (palette cycling + black interior)
+    assert!(
+        colors.len() > 10,
+        "Mandelbrot should produce many colors, got {} distinct",
+        colors.len()
+    );
+
+    // Should have black pixels (interior of the set)
+    assert!(
+        colors.contains(&0),
+        "Mandelbrot should have black pixels (set interior)"
+    );
+
+    // Known point: center of main cardioid at (-0.5, 0) is inside the set
+    // Mapping: cx = px*3 - 640, cy = py*3 - 384
+    // cx = -0.5 (fixed: -128): px*3 = 512, px = 170
+    // cy = 0 (fixed: 0): py*3 = 384, py = 128
+    let center_pixel = vm.screen[128 * 256 + 170];
+    assert_eq!(
+        center_pixel, 0,
+        "Center of main cardioid (170, 128) should be black, got 0x{:08X}",
+        center_pixel
+    );
+
+    // Known outside point: far from the set
+    // cx = 0.3 (fixed: 77): px = (640+77)/3 = 239, cy = 0: py = 128
+    let outside_pixel = vm.screen[128 * 256 + 239];
+    assert_ne!(
+        outside_pixel, 0,
+        "Point (239, 128) should be outside the set (colored), got black"
+    );
+
+    // Interior of the set should be uniformly black in a small region
+    let mut interior_uniform = true;
+    for y in 125..131 {
+        for x in 167..173 {
+            if vm.screen[y * 256 + x] != 0 {
+                interior_uniform = false;
+                break;
+            }
+        }
+    }
+    assert!(
+        interior_uniform,
+        "Interior of Mandelbrot set should be uniformly black"
+    );
+}
