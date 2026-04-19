@@ -12,7 +12,7 @@ There is no compiler. No runtime. No garbage collector. You write the opcodes, t
 
 ## Programs
 
-60 programs included -- static art, animations, interactive games, and system utilities:
+61 programs included -- static art, animations, interactive games, and system utilities:
 
 **Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes
 
@@ -317,10 +317,10 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 
 ## Stats
 
-- 33,056 lines of Rust
+- 34,724 lines of Rust
 - 103 opcodes
-- 59 programs
-- 1251 tests
+- 61 programs
+- 1257 tests
 - MIT licensed
 
 ## License
