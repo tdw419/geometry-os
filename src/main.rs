@@ -30,7 +30,7 @@ use std::path::{Path, PathBuf};
 use audio::play_beep;
 use canvas::*;
 use cli::cli_main;
-use hermes::run_hermes_canvas;
+use hermes::{run_build_canvas, run_hermes_canvas};
 use keys::{key_to_ascii, key_to_ascii_shifted};
 use render::*;
 use save::{load_state, save_full_buffer_png, save_screen_png, save_state};
@@ -584,18 +584,33 @@ fn main() {
                             &mut breakpoints,
                         );
 
-                        // Handle hermes prompt if returned
+                        // Handle hermes/build prompt if returned
                         if let Some(prompt) = hermes_prompt {
-                            run_hermes_canvas(
-                                &prompt,
-                                &mut vm,
-                                &mut canvas_buffer,
-                                &mut term_output_row,
-                                &mut scroll_offset,
-                                &mut loaded_file,
-                                &mut canvas_assembled,
-                                &mut breakpoints,
-                            );
+                            if let Some(build_prompt) = prompt.strip_prefix("build:") {
+                                run_build_canvas(
+                                    build_prompt,
+                                    &mut vm,
+                                    &mut canvas_buffer,
+                                    &mut term_output_row,
+                                    &mut scroll_offset,
+                                    &mut loaded_file,
+                                    &mut canvas_assembled,
+                                    &mut breakpoints,
+                                );
+                            } else {
+                                let hermes_prompt_str =
+                                    prompt.strip_prefix("hermes:").unwrap_or(&prompt);
+                                run_hermes_canvas(
+                                    hermes_prompt_str,
+                                    &mut vm,
+                                    &mut canvas_buffer,
+                                    &mut term_output_row,
+                                    &mut scroll_offset,
+                                    &mut loaded_file,
+                                    &mut canvas_assembled,
+                                    &mut breakpoints,
+                                );
+                            }
                             term_output_row =
                                 write_line_to_canvas(&mut canvas_buffer, term_output_row, "geo> ");
                             ensure_scroll(term_output_row, &mut scroll_offset);
@@ -1084,6 +1099,317 @@ fn main() {
                                     out.push('\n');
                                 }
                                 response.push_str(&out);
+                            }
+                            "registers" | "regs" => {
+                                for i in 0..32 {
+                                    response.push_str(&format!("r{:02}={:08X}\n", i, vm.regs[i]));
+                                }
+                            }
+                            "disasm" => {
+                                let pc = vm.pc;
+                                // Try to decode around PC
+                                let bases = [0u32, CANVAS_BYTECODE_ADDR as u32];
+                                let mut inst_starts: std::collections::BTreeSet<u32> =
+                                    std::collections::BTreeSet::new();
+                                for &base in &bases {
+                                    if pc >= base && pc < base + 0x1000 {
+                                        let mut addr = base;
+                                        while addr <= pc + 30 {
+                                            if addr as usize >= vm.ram.len() {
+                                                break;
+                                            }
+                                            let op = vm.ram[addr as usize];
+                                            if op == 0 && addr > pc + 20 {
+                                                break;
+                                            }
+                                            inst_starts.insert(addr);
+                                            let (_, len) = vm.disassemble_at(addr);
+                                            if len == 0 {
+                                                break;
+                                            }
+                                            addr += len as u32;
+                                        }
+                                    }
+                                }
+                                let mut display_addrs: Vec<u32> = Vec::new();
+                                let mut before: Vec<u32> = Vec::new();
+                                let mut after: Vec<u32> = Vec::new();
+                                for &a in &inst_starts {
+                                    if a < pc {
+                                        before.push(a);
+                                        if before.len() > 4 {
+                                            before.remove(0);
+                                        }
+                                    } else if a == pc { /* skip, add later */
+                                    } else {
+                                        after.push(a);
+                                        if after.len() >= 5 {
+                                            break;
+                                        }
+                                    }
+                                }
+                                display_addrs.extend_from_slice(&before);
+                                if inst_starts.contains(&pc) {
+                                    display_addrs.push(pc);
+                                }
+                                display_addrs.extend_from_slice(&after);
+                                for &addr in &display_addrs {
+                                    let (mnemonic, _) = vm.disassemble_at(addr);
+                                    let marker = if addr == pc { ">" } else { " " };
+                                    response.push_str(&format!(
+                                        "{}{:04X} {}\n",
+                                        marker, addr, mnemonic
+                                    ));
+                                }
+                            }
+                            "vmscreen" => {
+                                // ASCII art of the 256x256 VM screen (compressed to 64x32)
+                                let scale_x = 4;
+                                let scale_y = 8;
+                                for y in 0..32 {
+                                    let mut row = String::new();
+                                    for x in 0..64 {
+                                        let sx = x * scale_x;
+                                        let sy = y * scale_y;
+                                        let mut lit = 0u32;
+                                        let mut total = 0u32;
+                                        for dy in 0..scale_y {
+                                            for dx in 0..scale_x {
+                                                let py = sy + dy;
+                                                let px = sx + dx;
+                                                if py < 256 && px < 256 {
+                                                    if vm.screen[py * 256 + px] != 0 {
+                                                        lit += 1;
+                                                    }
+                                                    total += 1;
+                                                }
+                                            }
+                                        }
+                                        let ratio = if total > 0 {
+                                            lit as f32 / total as f32
+                                        } else {
+                                            0.0
+                                        };
+                                        let ch = if ratio > 0.75 {
+                                            '#'
+                                        } else if ratio > 0.50 {
+                                            '@'
+                                        } else if ratio > 0.25 {
+                                            '+'
+                                        } else if ratio > 0.05 {
+                                            '.'
+                                        } else {
+                                            ' '
+                                        };
+                                        row.push(ch);
+                                    }
+                                    response.push_str(&(row.trim_end().to_string() + "\n"));
+                                }
+                            }
+                            "ram" => {
+                                let base = parts
+                                    .get(1)
+                                    .and_then(|s| {
+                                        usize::from_str_radix(s.trim_start_matches("0x"), 16).ok()
+                                    })
+                                    .unwrap_or(ram_view_base);
+                                let rows: usize =
+                                    parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(8);
+                                for r in 0..rows {
+                                    let mut line = format!("{:04X}: ", base + r * 16);
+                                    for c in 0..16 {
+                                        let addr = base + r * 16 + c;
+                                        if addr < vm.ram.len() {
+                                            line.push_str(&format!("{:08X} ", vm.ram[addr]));
+                                        }
+                                    }
+                                    response.push_str(&(line.trim_end().to_string() + "\n"));
+                                }
+                            }
+                            "vm_state" | "vmstate" => {
+                                // JSON-ish dump of key VM state
+                                response.push_str(&format!("pc=0x{:04X}\n", vm.pc));
+                                response.push_str(&format!("halted={}\n", vm.halted));
+                                response.push_str(&format!("running={}\n", is_running));
+                                response.push_str(&format!("assembled={}\n", canvas_assembled));
+                                for i in 0..32 {
+                                    response.push_str(&format!("r{:02}={:08X}\n", i, vm.regs[i]));
+                                }
+                            }
+                            "dashboard" | "dash" => {
+                                // Full ASCII dashboard of the GUI state
+                                let state_label = if is_running {
+                                    "RUNNING"
+                                } else if vm.halted {
+                                    "HALTED"
+                                } else {
+                                    "PAUSED"
+                                };
+
+                                response.push_str(&format!("╔════════════════════════════════════════════════════════════════╗\n"));
+                                response.push_str(&format!("║ Geometry OS Dashboard  {}  PC=0x{:04X}                              ║\n", state_label, vm.pc));
+                                response.push_str(&format!("╠════════════════════════════════════════════════════════════════╣\n"));
+
+                                // Registers (4 per row)
+                                response.push_str("║ REGS: ");
+                                for i in 0..32 {
+                                    response.push_str(&format!("r{:02}={:08X} ", i, vm.regs[i]));
+                                    if (i + 1) % 4 == 0 {
+                                        if i < 31 {
+                                            response.push_str("║\n║       ");
+                                        } else {
+                                            response.push_str("║\n");
+                                        }
+                                    }
+                                }
+
+                                response.push_str(&format!("╠════════════════════════════════════════════════════════════════╣\n"));
+
+                                // Disassembly
+                                let pc = vm.pc;
+                                let bases = [0u32, CANVAS_BYTECODE_ADDR as u32];
+                                let mut inst_starts2: std::collections::BTreeSet<u32> =
+                                    std::collections::BTreeSet::new();
+                                for &base in &bases {
+                                    if pc >= base && pc < base + 0x1000 {
+                                        let mut addr = base;
+                                        while addr <= pc + 30 {
+                                            if addr as usize >= vm.ram.len() {
+                                                break;
+                                            }
+                                            let op = vm.ram[addr as usize];
+                                            if op == 0 && addr > pc + 20 {
+                                                break;
+                                            }
+                                            inst_starts2.insert(addr);
+                                            let (_, len) = vm.disassemble_at(addr);
+                                            if len == 0 {
+                                                break;
+                                            }
+                                            addr += len as u32;
+                                        }
+                                    }
+                                }
+                                let mut da2: Vec<u32> = Vec::new();
+                                let mut b2: Vec<u32> = Vec::new();
+                                let mut a2: Vec<u32> = Vec::new();
+                                for &a in &inst_starts2 {
+                                    if a < pc {
+                                        b2.push(a);
+                                        if b2.len() > 2 {
+                                            b2.remove(0);
+                                        }
+                                    } else if a == pc {
+                                    } else {
+                                        a2.push(a);
+                                        if a2.len() >= 3 {
+                                            break;
+                                        }
+                                    }
+                                }
+                                da2.extend_from_slice(&b2);
+                                if inst_starts2.contains(&pc) {
+                                    da2.push(pc);
+                                }
+                                da2.extend_from_slice(&a2);
+
+                                response.push_str("║ DISASM:\n");
+                                for &addr in &da2 {
+                                    let (mnemonic, _) = vm.disassemble_at(addr);
+                                    let marker = if addr == pc { ">>" } else { "  " };
+                                    response.push_str(&format!(
+                                        "║ {} {:04X} {}\n",
+                                        marker, addr, mnemonic
+                                    ));
+                                }
+
+                                response.push_str(&format!("╠════════════════════════════════════════════════════════════════╣\n"));
+
+                                // VM Screen (ASCII art, compact 32x16)
+                                response.push_str("║ VM DISPLAY:\n");
+                                let sx = 8;
+                                let sy = 16;
+                                for y in 0..16 {
+                                    let mut row = String::new();
+                                    for x in 0..32 {
+                                        let mut lit = 0u32;
+                                        let mut total = 0u32;
+                                        for dy in 0..sy {
+                                            for dx in 0..sx {
+                                                let py = y * sy + dy;
+                                                let px = x * sx + dx;
+                                                if py < 256 && px < 256 {
+                                                    if vm.screen[py * 256 + px] != 0 {
+                                                        lit += 1;
+                                                    }
+                                                    total += 1;
+                                                }
+                                            }
+                                        }
+                                        let ratio = if total > 0 {
+                                            lit as f32 / total as f32
+                                        } else {
+                                            0.0
+                                        };
+                                        row.push(if ratio > 0.5 {
+                                            '#'
+                                        } else if ratio > 0.1 {
+                                            '.'
+                                        } else {
+                                            ' '
+                                        });
+                                    }
+                                    response.push_str(&format!("║ {}\n", row.trim_end()));
+                                }
+
+                                response.push_str(&format!("╠════════════════════════════════════════════════════════════════╣\n"));
+                                response.push_str(&format!("║ {}\n", status_msg));
+                                response.push_str(&format!("╚════════════════════════════════════════════════════════════════╝\n"));
+                            }
+                            "load" => {
+                                // Load an .asm file onto the canvas
+                                if let Some(path) = parts.get(1) {
+                                    match std::fs::read_to_string(path) {
+                                        Ok(source) => {
+                                            load_source_to_canvas(
+                                                &mut canvas_buffer,
+                                                &source,
+                                                &mut cursor_row,
+                                                &mut cursor_col,
+                                            );
+                                            scroll_offset = 0;
+                                            loaded_file = Some(PathBuf::from(path));
+                                            canvas_assembled = false;
+                                            status_msg = format!("[loaded: {}]", path);
+                                            response.push_str(&format!("[loaded: {}]\n", path));
+                                        }
+                                        Err(e) => {
+                                            response.push_str(&format!("[error: {}]\n", e));
+                                        }
+                                    }
+                                } else {
+                                    response.push_str("[usage: load <path>]\n");
+                                }
+                            }
+                            "step" => {
+                                // Single-step the VM
+                                if !is_running && canvas_assembled {
+                                    vm.step();
+                                    response.push_str(&format!("pc=0x{:04X}\n", vm.pc));
+                                } else if is_running {
+                                    response.push_str("[vm is running, pause first]\n");
+                                } else {
+                                    response.push_str("[not assembled]\n");
+                                }
+                            }
+                            "halt" => {
+                                is_running = false;
+                                vm.halted = true;
+                                status_msg = "[HALTED]".into();
+                            }
+                            "help" => {
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, help\n");
+                                response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             _ => {
                                 response.push_str(&format!("[unknown: {}]\n", line));

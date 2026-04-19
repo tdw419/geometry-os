@@ -456,12 +456,7 @@ fn build_build_context() -> String {
     if let Ok(rd) = std::fs::read_dir("src") {
         let mut entries: Vec<_> = rd
             .flatten()
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .map(|ext| ext == "rs")
-                    .unwrap_or(false)
-            })
+            .filter(|e| e.path().extension().map(|ext| ext == "rs").unwrap_or(false))
             .collect();
         entries.sort_by_key(|e| e.file_name());
         for entry in &entries {
@@ -1125,7 +1120,11 @@ pub fn execute_cli_command(
                     let msg = if out.status.success() {
                         format!("[exit 0] {}", combined.trim())
                     } else {
-                        format!("[exit {}] {}", out.status.code().unwrap_or(-1), combined.trim())
+                        format!(
+                            "[exit {}] {}",
+                            out.status.code().unwrap_or(-1),
+                            combined.trim()
+                        )
                     };
                     println!("{}", msg);
                     output.push_str(&msg);
@@ -1155,8 +1154,10 @@ pub fn execute_cli_command(
                     // Truncate to 3000 chars
                     let display = if content.len() > 3000 {
                         let truncated: String = content.chars().take(3000).collect();
-                        format!("{}...\n[{} lines, {} chars total, showing first 3000]", 
-                            truncated, total_lines, total_chars)
+                        format!(
+                            "{}...\n[{} lines, {} chars total, showing first 3000]",
+                            truncated, total_lines, total_chars
+                        )
                     } else {
                         content
                     };
@@ -1392,8 +1393,7 @@ pub fn run_build_canvas(
         *output_row,
         "[build] Starting self-build agent loop...",
     );
-    *output_row =
-        write_line_to_canvas(canvas_buffer, *output_row, "[build] Press Escape to stop.");
+    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "[build] Press Escape to stop.");
     ensure_scroll(*output_row, scroll_offset);
 
     let mut conversation_history = initial_prompt.to_string();
@@ -1480,15 +1480,13 @@ pub fn run_build_canvas(
                     match std::fs::write(&wb.0, &wb.1) {
                         Ok(()) => {
                             let msg = format!("Wrote {} ({} bytes)", wb.0, wb.1.len());
-                            *output_row =
-                                write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                            *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
                         }
                         Err(e) => {
                             let msg = format!("Write error: {}", e);
-                            *output_row =
-                                write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                            *output_row = write_line_to_canvas(canvas_buffer, *output_row, &msg);
                             output_capture.push_str(&msg);
                             output_capture.push('\n');
                         }
@@ -1526,8 +1524,11 @@ pub fn run_build_canvas(
                     );
                     // Show output on canvas (truncated)
                     for line in out.lines().take(5) {
-                        *output_row =
-                            write_line_to_canvas(canvas_buffer, *output_row, &format!("    {}", line));
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            &format!("    {}", line),
+                        );
                     }
                     if out.lines().count() > 5 {
                         *output_row = write_line_to_canvas(
@@ -1585,11 +1586,8 @@ pub fn run_build_canvas(
             }
         }
 
-        *output_row = write_line_to_canvas(
-            canvas_buffer,
-            *output_row,
-            "[build] Iteration complete.",
-        );
+        *output_row =
+            write_line_to_canvas(canvas_buffer, *output_row, "[build] Iteration complete.");
         ensure_scroll(*output_row, scroll_offset);
 
         // Feed output back

@@ -2,7 +2,7 @@
 
 use crate::assembler;
 use crate::canvas::list_asm_files;
-use crate::hermes::run_hermes_loop;
+use crate::hermes::{run_build_loop, run_hermes_loop};
 use crate::preprocessor;
 use crate::save::{load_state, save_state};
 use crate::vm;
@@ -147,6 +147,11 @@ pub fn cli_main(extra_args: &[String]) {
                 println!("  qemu boot <cfg>   Boot QEMU VM (e.g. qemu boot arch=riscv64 kernel=Image ram=256M)");
                 println!("  qemu kill         Kill running QEMU");
                 println!("  qemu status       Show QEMU status");
+                println!("  hermes <prompt>   Ask local LLM to write/run programs");
+                println!("  build <prompt>    Self-build: LLM modifies OS source code");
+                println!("  files             List Rust source files with line counts");
+                println!("  shell <command>   Run a host shell command");
+                println!("  readfile <path>   Read a host file");
                 println!("  quit              Exit");
             }
             "list" | "ls" => {
@@ -552,6 +557,23 @@ pub fn cli_main(extra_args: &[String]) {
                     &mut canvas_assembled,
                 );
             }
+            "build" => {
+                if parts.len() < 2 {
+                    println!("Usage: build <prompt>");
+                    println!("  Self-build: LLM reads Rust source, makes changes, runs tests.");
+                    println!("  The OS modifying itself from inside itself.");
+                    println!("  Requires Ollama running locally (qwen3.5-tools).");
+                    continue;
+                }
+                let user_prompt = parts[1..].join(" ");
+                run_build_loop(
+                    &user_prompt,
+                    &mut vm,
+                    &mut source_text,
+                    &mut loaded_file,
+                    &mut canvas_assembled,
+                );
+            }
             "qemu" => {
                 let subcmd = parts.get(1).copied().unwrap_or("");
                 match subcmd {
@@ -742,6 +764,80 @@ pub fn cli_main(extra_args: &[String]) {
                     let _ = bridge.kill();
                 }
                 break;
+            }
+            "files" => {
+                let mut entries = Vec::new();
+                if let Ok(rd) = std::fs::read_dir("src") {
+                    for entry in rd.flatten() {
+                        let p = entry.path();
+                        if p.extension().map(|e| e == "rs").unwrap_or(false) {
+                            if let Ok(content) = std::fs::read_to_string(&p) {
+                                let lines = content.lines().count();
+                                let name = p.file_name().unwrap().to_string_lossy();
+                                entries.push((name.to_string(), lines));
+                            }
+                        }
+                    }
+                }
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                let mut total = 0;
+                for (name, lines) in &entries {
+                    println!("  src/{:<25} {:>5} lines", name, lines);
+                    total += lines;
+                }
+                println!("  {} source files, {} total lines", entries.len(), total);
+            }
+            "shell" => {
+                let cmd_rest = parts[1..].join(" ");
+                if cmd_rest.is_empty() {
+                    println!("Usage: shell <command>");
+                    continue;
+                }
+                match std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(&cmd_rest)
+                    .current_dir(
+                        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                    )
+                    .output()
+                {
+                    Ok(out) => {
+                        let stdout = String::from_utf8_lossy(&out.stdout);
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        if !stdout.is_empty() {
+                            print!("{}", stdout);
+                        }
+                        if !stderr.is_empty() {
+                            eprint!("{}", stderr);
+                        }
+                        println!("[exit {}]", out.status.code().unwrap_or(-1));
+                    }
+                    Err(e) => println!("Shell error: {}", e),
+                }
+            }
+            "readfile" => {
+                if parts.len() < 2 {
+                    println!("Usage: readfile <path>");
+                    continue;
+                }
+                let path = parts[1..].join(" ");
+                match std::fs::read_to_string(&path) {
+                    Ok(content) => {
+                        let total_lines = content.lines().count();
+                        let total_chars = content.len();
+                        if content.len() > 3000 {
+                            let truncated: String = content.chars().take(3000).collect();
+                            println!("{}...", truncated);
+                            println!(
+                                "[{} lines, {} chars total, showing first 3000]",
+                                total_lines, total_chars
+                            );
+                        } else {
+                            print!("{}", content);
+                        }
+                    }
+                    Err(e) => println!("Error reading {}: {}", path, e),
+                }
             }
             _ => {
                 println!("Unknown: {} (try help)", command);

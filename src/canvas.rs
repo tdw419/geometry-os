@@ -826,7 +826,24 @@ pub fn handle_terminal_command(
             }
             let user_prompt = parts[1..].join(" ");
             // Return the prompt so main.rs can call run_hermes_canvas (avoids circular dep)
-            (Some(user_prompt), false, false)
+            (Some(format!("hermes:{}", user_prompt)), false, false)
+        }
+        "build" => {
+            if parts.len() < 2 {
+                *output_row =
+                    write_line_to_canvas(canvas_buffer, *output_row, "Usage: build <prompt>");
+                *output_row = write_line_to_canvas(
+                    canvas_buffer,
+                    *output_row,
+                    "  Self-build: LLM reads source, makes changes, runs tests.",
+                );
+                *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
+                ensure_scroll(*output_row, scroll_offset);
+                return (None, false, false);
+            }
+            let user_prompt = parts[1..].join(" ");
+            // Return the prompt so main.rs can call run_build_canvas (avoids circular dep)
+            (Some(format!("build:{}", user_prompt)), false, false)
         }
         "quit" | "exit" => (None, false, true),
         _ => {
