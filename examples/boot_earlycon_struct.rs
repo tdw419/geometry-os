@@ -16,7 +16,9 @@ fn main() {
 
     // Run to after earlycon setup (should be around 390K instructions)
     for _ in 0..500_000 {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         let _ = vm.step();
     }
 
@@ -33,7 +35,16 @@ fn main() {
     // Check what sbi_dbcn_console_write was registered as
     // The write function pointer should be at offset 16 of the console struct (struct console.write)
     // Let me also dump the UART output and SBI console output
-    eprintln!("\nSBI console output: {} bytes", vm.bus.sbi.console_output.len());
+    eprintln!(
+        "\nSBI console output: {} bytes",
+        vm.bus.sbi.console_output.len()
+    );
     let out = String::from_utf8_lossy(&vm.bus.sbi.console_output);
-    eprintln!("  \"{}\"", out.replace(|c: char| !c.is_ascii_graphic() && c != ' ' && c != '\n', "?"));
+    eprintln!(
+        "  \"{}\"",
+        out.replace(
+            |c: char| !c.is_ascii_graphic() && c != ' ' && c != '\n',
+            "?"
+        )
+    );
 }

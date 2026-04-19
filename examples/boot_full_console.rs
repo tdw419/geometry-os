@@ -18,17 +18,23 @@ fn main() {
     let max = 20_000_000u64;
     let mut count = 0u64;
     while count < max {
-        if vm.bus.sbi.shutdown_requested { break; }
+        if vm.bus.sbi.shutdown_requested {
+            break;
+        }
         let _ = vm.step();
         count += 1;
     }
 
     // Dump all console output
     let out = String::from_utf8_lossy(&vm.bus.sbi.console_output);
-    eprintln!("=== Console output ({} bytes, {} instructions) ===", vm.bus.sbi.console_output.len(), count);
+    eprintln!(
+        "=== Console output ({} bytes, {} instructions) ===",
+        vm.bus.sbi.console_output.len(),
+        count
+    );
     eprintln!("{}", out);
     eprintln!("=== END ===");
-    
+
     if vm.bus.sbi.shutdown_requested {
         eprintln!("\nKernel requested shutdown (SBI SRST).");
     }

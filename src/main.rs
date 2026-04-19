@@ -980,9 +980,7 @@ fn main() {
                         }
                         match parts[0] {
                             "save" => {
-                                match save_state(
-                                    SAVE_FILE, &vm, &canvas_buffer, canvas_assembled,
-                                ) {
+                                match save_state(SAVE_FILE, &vm, &canvas_buffer, canvas_assembled) {
                                     Ok(()) => status_msg = "[saved]".into(),
                                     Err(e) => status_msg = format!("[save error: {}]", e),
                                 }
@@ -1015,7 +1013,9 @@ fn main() {
                             }
                             "assemble" | "asm" => {
                                 canvas_assemble(
-                                    &canvas_buffer, &mut vm, &mut canvas_assembled,
+                                    &canvas_buffer,
+                                    &mut vm,
+                                    &mut canvas_assembled,
                                     &mut status_msg,
                                 );
                             }
