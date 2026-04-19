@@ -294,7 +294,7 @@ Pixel:    PSET xr, yr, cr | PSETI x, y, color | FILL cr
           RECTF xr, yr, wr, hr, cr | TEXT xr, yr, ar
           LINE x0r, y0r, x1r, y1r, cr | CIRCLE xr, yr, rr, cr
           SPRITE xr, yr, addr_r, wr, hr | PEEK xr, yr, dr
-Other:    SCROLL nr | IKEY reg | RAND reg | FRAME | BEEP freq_r, dur_r
+Other:    SCROLL nr | IKEY reg | RAND reg | FRAME | BEEP freq_r, dur_r | NOTE wave_r, freq_r, dur_r
           SPAWN reg | KILL reg | ASM src_r, dest_r
           HALT | NOP
 

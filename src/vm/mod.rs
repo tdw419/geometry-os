@@ -13,6 +13,9 @@ pub struct Vm {
     pub frame_count: u32,
     /// Set by BEEP opcode: (freq_hz, duration_ms). Consumed and cleared by host.
     pub beep: Option<(u32, u32)>,
+    /// Set by NOTE opcode: (waveform, freq_hz, duration_ms). Consumed by host.
+    /// waveform: 0=sine, 1=square, 2=triangle, 3=sawtooth, 4=noise.
+    pub note: Option<(u32, u32, u32)>,
     /// When true, log RAM accesses to access_log (off by default for performance)
     pub debug_mode: bool,
     /// Frame-scoped log of RAM accesses for the visual debugger
@@ -131,6 +134,7 @@ impl Vm {
             rand_state: 0xDEADBEEF,
             frame_count: 0,
             beep: None,
+            note: None,
             debug_mode: false,
             access_log: Vec::with_capacity(4096),
             processes: Vec::new(),
@@ -212,6 +216,7 @@ impl Vm {
         self.rand_state = 0xDEADBEEF;
         self.frame_count = 0;
         self.beep = None;
+        self.note = None;
         self.access_log.clear();
         self.processes.clear();
         self.mode = CpuMode::Kernel;
@@ -616,6 +621,20 @@ impl Vm {
             0x62..=0x7D => {
                 if !self.step_extended(opcode) {
                     return false;
+                }
+            }
+            // NOTE wave_reg, freq_reg, dur_reg -- play a note with selectable waveform
+            // wave_reg: 0=sine, 1=square, 2=triangle, 3=sawtooth, 4=noise
+            // freq in Hz (20-20000), dur in ms (1-5000)
+            0x7E => {
+                let wr = self.fetch() as usize;
+                let fr = self.fetch() as usize;
+                let dr = self.fetch() as usize;
+                if wr < NUM_REGS && fr < NUM_REGS && dr < NUM_REGS {
+                    let wave = self.regs[wr].min(4);
+                    let freq = self.regs[fr].clamp(20, 20000);
+                    let dur = self.regs[dr].clamp(1, 5000);
+                    self.note = Some((wave, freq, dur));
                 }
             }
             // Unknown opcode: halt

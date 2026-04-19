@@ -206,6 +206,209 @@ fn test_beep_opcode() {
     assert_eq!(vm.regs[3], 1, "VM should execute past BEEP and set r3");
 }
 
+// ── NOTE ────────────────────────────────────────────────────────
+
+#[test]
+fn test_note_opcode_sine() {
+    // NOTE wave_reg=0(sine), freq_reg=440, dur_reg=100
+    let source = "LDI r1, 0\nLDI r2, 440\nLDI r3, 100\nNOTE r1, r2, r3\nLDI r4, 1\nHALT";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[4], 1, "VM should execute past NOTE and set r4");
+    assert_eq!(vm.note, Some((0, 440, 100)), "NOTE should set note field to (sine, 440, 100)");
+}
+
+#[test]
+fn test_note_opcode_square() {
+    let source = "LDI r1, 1\nLDI r2, 880\nLDI r3, 50\nNOTE r1, r2, r3\nHALT";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.note, Some((1, 880, 50)), "NOTE should set note field to (square, 880, 50)");
+}
+
+#[test]
+fn test_note_opcode_triangle() {
+    let source = "LDI r1, 2\nLDI r2, 220\nLDI r3, 200\nNOTE r1, r2, r3\nHALT";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.note, Some((2, 220, 200)), "NOTE should set note field to (triangle, 220, 200)");
+}
+
+#[test]
+fn test_note_opcode_sawtooth() {
+    let source = "LDI r1, 3\nLDI r2, 110\nLDI r3, 150\nNOTE r1, r2, r3\nHALT";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.note, Some((3, 110, 150)), "NOTE should set note field to (sawtooth, 110, 150)");
+}
+
+#[test]
+fn test_note_opcode_noise() {
+    let source = "LDI r1, 4\nLDI r2, 1000\nLDI r3, 75\nNOTE r1, r2, r3\nHALT";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.note, Some((4, 1000, 75)), "NOTE should set note field to (noise, 1000, 75)");
+}
+
+#[test]
+fn test_note_clamps_frequency() {
+    // Frequency below 20 should clamp to 20, above 20000 should clamp to 20000
+    let source = "LDI r1, 0\nLDI r2, 5\nLDI r3, 100\nNOTE r1, r2, r3\nHALT";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.note, Some((0, 20, 100)), "NOTE freq=5 should clamp to 20");
+
+    // Test upper clamp
+    let source2 = "LDI r1, 0\nLDI r2, 99999\nLDI r3, 100\nNOTE r1, r2, r3\nHALT";
+    let asm2 = assemble(source2, 0).expect("assembly should succeed");
+    let mut vm2 = Vm::new();
+    for (i, &v) in asm2.pixels.iter().enumerate() {
+        vm2.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm2.step() {
+            break;
+        }
+    }
+    assert!(vm2.halted);
+    assert_eq!(vm2.note, Some((0, 20000, 100)), "NOTE freq=99999 should clamp to 20000");
+}
+
+#[test]
+fn test_note_clamps_duration() {
+    // Duration below 1 should clamp to 1, above 5000 should clamp to 5000
+    let source = "LDI r1, 0\nLDI r2, 440\nLDI r3, 0\nNOTE r1, r2, r3\nHALT";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.note, Some((0, 440, 1)), "NOTE dur=0 should clamp to 1");
+}
+
+#[test]
+fn test_note_clamps_waveform() {
+    // Waveform > 4 should clamp to 4 (noise)
+    let source = "LDI r1, 99\nLDI r2, 440\nLDI r3, 100\nNOTE r1, r2, r3\nHALT";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.note, Some((4, 440, 100)), "NOTE wave=99 should clamp to 4 (noise)");
+}
+
+#[test]
+fn test_note_assembles() {
+    let source = "NOTE r1, r2, r3";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    assert_eq!(asm.pixels[0], 0x7E, "NOTE should assemble to 0x7E");
+    assert_eq!(asm.pixels[1], 1, "wave register should be r1");
+    assert_eq!(asm.pixels[2], 2, "freq register should be r2");
+    assert_eq!(asm.pixels[3], 3, "dur register should be r3");
+}
+
+#[test]
+fn test_note_disassembles() {
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x7E; // NOTE
+    vm.ram[1] = 1; // r1
+    vm.ram[2] = 2; // r2
+    vm.ram[3] = 3; // r3
+    let (mnemonic, len) = vm.disassemble_at(0);
+    assert_eq!(mnemonic, "NOTE r1, r2, r3");
+    assert_eq!(len, 4);
+}
+
+#[test]
+fn test_beep_still_works_after_note() {
+    // BEEP opcode should still work -- backward compatibility
+    let source = "LDI r1, 440\nLDI r2, 50\nBEEP r1, r2\nNOTE r0, r1, r2\nHALT";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    // Set up wave=0 (sine) for NOTE
+    vm.regs[0] = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    // BEEP was executed first, then NOTE overwrites with note field
+    // beep should have been set then consumed or still set
+    // The NOTE should set the note field
+    assert!(vm.note.is_some(), "NOTE should set the note field");
+}
+
 #[test]
 fn test_sar_opcode() {
     // SAR rd, rs

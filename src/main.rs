@@ -719,6 +719,9 @@ fn main() {
         if let Some((freq, dur)) = vm.beep.take() {
             play_beep(freq, dur);
         }
+        if let Some((wave, freq, dur)) = vm.note.take() {
+            audio::play_note(audio::Waveform::from_u32(wave), freq, dur);
+        }
 
         // ── Shutdown check ────────────────────────────────────────
         if vm.shutdown_requested {

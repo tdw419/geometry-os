@@ -572,6 +572,12 @@ impl Vm {
                 let mr = ram(a + 1);
                 (format!("FORK {}", reg(mr)), 2)
             }
+            0x7E => {
+                let wr = ram(a + 1);
+                let fr = ram(a + 2);
+                let dr = ram(a + 3);
+                (format!("NOTE {}, {}, {}", reg(wr), reg(fr), reg(dr)), 4)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

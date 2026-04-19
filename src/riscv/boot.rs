@@ -309,37 +309,10 @@ impl RiscvVm {
         // Without these, early_init_dt_scan() receives NULL, skips DTB
         // parsing, and memblock_add() is never called. Result: memory.cnt=0
         // and every memblock_alloc() panics with "Failed to allocate".
-        let dtb_va = (dtb_addr as u32).wrapping_add(0xC0000000);
-        let dtb_early_va_pa: u64 = 0x00801008; // _dtb_early_va at VA 0xC0801008
-        let dtb_early_pa_pa: u64 = 0x0080100C; // _dtb_early_pa at VA 0xC080100C
-        vm.bus.write_word(dtb_early_va_pa, dtb_va).ok();
-        vm.bus.write_word(dtb_early_pa_pa, dtb_addr as u32).ok();
-        eprintln!(
-            "[boot] Pre-set _dtb_early_va = 0x{:08X}, _dtb_early_pa = 0x{:08X}",
-            dtb_va, dtb_addr as u32
-        );
-
-        // Protect _dtb_early_va and _dtb_early_pa from pt_ops overflow.
-        //
-        // The kernel's setup_vm() writes pt_ops function pointers at VA 0xC0801000
-        // (16 bytes, 4 function pointers). _dtb_early_va lives at VA 0xC0801008
-        // and _dtb_early_pa at VA 0xC0801008. The 16-byte pt_ops write overflows
-        // into these addresses, corrupting them. This causes early_init_dt_scan()
-        // to read a wrong DTB address, fail to parse the DTB, and leave
-        // phys_ram_base=0 and memblock memory.cnt=0.
-        //
-        // The periodic watchdog (every 100 instructions) is insufficient because
-        // the kernel may read the corrupted value between watchdog checks.
-        // Instead, we protect these addresses at the bus level: writes are silently
-        // dropped, and reads always return the correct values.
-        vm.bus.protected_addrs.push((dtb_early_va_pa, dtb_va));
-        vm.bus
-            .protected_addrs
-            .push((dtb_early_pa_pa, dtb_addr as u32));
-        eprintln!(
-            "[boot] Protected DTB pointers at PA 0x{:08X} and 0x{:08X}",
-            dtb_early_va_pa, dtb_early_pa_pa
-        );
+        // NOTE: PA 0x00801008 and 0x0080100C are pt_ops function pointers
+        // (get_pmd_virt and alloc_pmd), NOT DTB pointers. Do NOT write to them.
+        // _dtb_early_va and _dtb_early_pa do NOT exist in this kernel build.
+        // The kernel uses initial_boot_params for DTB access.
 
         // Also set initial_boot_params for compatibility (some kernel paths
         // read it directly).
@@ -623,7 +596,6 @@ impl RiscvVm {
         let ibp_pa: u64 = 0x00C7A380;
         let ibp_pa_pa: u64 = 0x00C7A3B0;
         let dtb_phys_addr: u32 = dtb_addr as u32;
-        let dtb_virt_addr: u32 = dtb_addr.wrapping_add(0xC0000000) as u32;
         vm.bus.write_word(ibp_pa, dtb_phys_addr).ok(); // initial_boot_params = DTB PA
         vm.bus.write_word(ibp_pa_pa, dtb_phys_addr).ok(); // initial_boot_params_pa = DTB PA
         eprintln!(
@@ -760,11 +732,6 @@ impl RiscvVm {
         let mut _panic_breakpoint: bool = false;
         let mut _last_satp: u32 = vm.cpu.csr.satp; // Already set by setup
         let mut kernel_map_protected: bool = false;
-        let dtb_early_va_expected: u32 = (dtb_addr.wrapping_add(0xC0000000)) as u32;
-        let dtb_early_pa_expected: u32 = dtb_addr as u32;
-        let dtb_early_va_pa: u64 = 0x00801008;
-        let dtb_early_pa_pa: u64 = 0x0080100C;
-        let mut _dtb_watchdog_triggers: u32 = 0;
 
         // Memblock corruption tracker: snapshot the first 8 memblock regions
         // and detect when they change from what we pre-populated.
@@ -775,43 +742,6 @@ impl RiscvVm {
             // Check for SBI shutdown request
             if vm.bus.sbi.shutdown_requested {
                 break;
-            }
-
-            // DTB pointer watchdog: continuously protect _dtb_early_va and _dtb_early_pa.
-            //
-            // The kernel's setup_vm() pt_ops writes 16 bytes at VA 0xC0801000, which
-            // clobbers _dtb_early_va (0xC0801008) and _dtb_early_pa (0xC080100C).
-            // This happens AFTER the final SATP switch, so the SATP-change re-set
-            // comes too late. Without this watchdog, phys_ram_base stays 0 and the
-            // kernel can't allocate memory.
-            //
-            // Check every 100 instructions (cheap: 2 reads + branch).
-            // Stop watching once phys_ram_base is set (DTB parsing succeeded).
-            if count % 100 == 0 {
-                let prb = vm.bus.read_word(0x00C7A0B4u64).unwrap_or(0);
-                if prb == 0 {
-                    // DTB parsing hasn't succeeded yet -- protect the pointers
-                    let cur_va = vm.bus.read_word(dtb_early_va_pa).unwrap_or(0);
-                    if cur_va != dtb_early_va_expected {
-                        vm.bus
-                            .write_word(dtb_early_va_pa, dtb_early_va_expected)
-                            .ok();
-                        vm.bus
-                            .write_word(dtb_early_pa_pa, dtb_early_pa_expected)
-                            .ok();
-                        _dtb_watchdog_triggers += 1;
-                        if _dtb_watchdog_triggers <= 5 {
-                            eprintln!("[boot] DTB watchdog #{} at count={}: restored _dtb_early_va from 0x{:08X} to 0x{:08X}",
-                                _dtb_watchdog_triggers, count, cur_va, dtb_early_va_expected);
-                        }
-                    }
-                } else if _dtb_watchdog_triggers > 0 {
-                    eprintln!(
-                        "[boot] phys_ram_base set to 0x{:08X} at count={} (DTB parsing succeeded)",
-                        prb, count
-                    );
-                    _dtb_watchdog_triggers = 0;
-                }
             }
 
             // Memblock corruption tracker: check every 1K instructions in the danger zone.
@@ -1064,16 +994,8 @@ impl RiscvVm {
                             );
                         }
 
-                        // Re-set _dtb_early_va and _dtb_early_pa.
-                        // setup_vm()'s pt_ops write (16 bytes at 0xC0801000)
-                        // overflows into _dtb_early_va (0xC0801008) and
-                        // _dtb_early_pa (0xC080100C). We must restore them
-                        // before soc_early_init reads _dtb_early_va.
-                        vm.bus
-                            .write_word(0x00801008, (dtb_addr.wrapping_add(0xC0000000)) as u32)
-                            .ok();
-                        vm.bus.write_word(0x0080100C, dtb_addr as u32).ok();
-                        eprintln!("[boot] Re-set _dtb_early_va/pa after pt_ops overflow");
+                        // NOTE: Do NOT write to PA 0x00801008/0x0080100C -- these are
+                        // pt_ops function pointers, not DTB pointers.
                     }
                     _last_satp = cur_satp;
                 }
@@ -1402,17 +1324,13 @@ impl RiscvVm {
                 let prb_pa = 0x00C7A0B4u64;
                 let prb = vm.bus.read_word(prb_pa).unwrap_or(0);
                 eprintln!("[boot]   phys_ram_base=0x{:08X}", prb);
-                // Check _dtb_early_va and _dtb_early_pa (the ACTUAL DTB pointers)
-                let deva = vm.bus.read_word(0x00801008).unwrap_or(0);
-                let depa = vm.bus.read_word(0x0080100C).unwrap_or(0);
-                let expected_dtb_va = dtb_addr.wrapping_add(0xC0000000) as u32;
+                // Check pt_ops (PA 0x00801000) -- these are function pointers, NOT DTB
+                let pt_ops_pa: u64 = 0x00801000;
+                let pt_get_pte = vm.bus.read_word(pt_ops_pa).unwrap_or(0);
+                let pt_get_pmd = vm.bus.read_word(pt_ops_pa + 8).unwrap_or(0);
                 eprintln!(
-                    "[boot]   _dtb_early_va=0x{:08X} (expect 0x{:08X})",
-                    deva, expected_dtb_va
-                );
-                eprintln!(
-                    "[boot]   _dtb_early_pa=0x{:08X} (expect 0x{:08X})",
-                    depa, dtb_addr as u32
+                    "[boot]   pt_ops: get_pte=0x{:08X} get_pmd=0x{:08X}",
+                    pt_get_pte, pt_get_pmd
                 );
                 // Check initial_boot_params (VA 0xC0C7A380, PA 0x00C7A380)
                 let ibp_pa = 0x00C7A380u64;
@@ -1456,15 +1374,53 @@ impl RiscvVm {
                         };
                         eprintln!("[boot] S-mode {} fault at count={}: PC=0x{:08X} scause=0x{:08X} sepc=0x{:08X} stval=0x{:08X} stvec=0x{:08X}",
                             fault_type, count, vm.cpu.pc, vm.cpu.csr.scause, vm.cpu.csr.sepc, vm.cpu.csr.stval, vm.cpu.csr.stvec);
-                        // Dump registers for first fault to diagnose the root cause
+                        // Dump ALL registers + page table for first fault
                         if _smode_fault_count == 1 {
-                            eprintln!("[boot] Fault registers: a0=0x{:08X} a1=0x{:08X} a2=0x{:08X} a3=0x{:08X}",
-                                vm.cpu.x[10], vm.cpu.x[11], vm.cpu.x[12], vm.cpu.x[13]);
-                            eprintln!("[boot] Fault registers: t0=0x{:08X} t1=0x{:08X} t2=0x{:08X} t3=0x{:08X}",
-                                vm.cpu.x[5], vm.cpu.x[6], vm.cpu.x[7], vm.cpu.x[28]);
-                            eprintln!("[boot] Fault registers: s0=0x{:08X} s1=0x{:08X} ra=0x{:08X} sp=0x{:08X}",
-                                vm.cpu.x[8], vm.cpu.x[9], vm.cpu.x[1], vm.cpu.x[2]);
-                            eprintln!("[boot] Fault registers: gp=0x{:08X} tp=0x{:08X}", vm.cpu.x[3], vm.cpu.x[4]);
+                            let reg_names = ["zero","ra","sp","gp","tp","t0","t1","t2","s0","s1",
+                                "a0","a1","a2","a3","a4","a5","a6","a7","s2","s3",
+                                "s4","s5","s6","s7","s8","s9","s10","s11","t3","t4","t5","t6"];
+                            for i in 0..32 {
+                                eprintln!("[boot]   x{} ({}) = 0x{:08X}", i, reg_names[i], vm.cpu.x[i]);
+                            }
+                            // Dump kernel_map
+                            let km_pa: u64 = 0x00C7A098;
+                            let km_po = vm.bus.read_word(km_pa).unwrap_or(0xFFFF_FFFF);
+                            let km_va = vm.bus.read_word(km_pa + 4).unwrap_or(0xFFFF_FFFF);
+                            let km_vo = vm.bus.read_word(km_pa + 8).unwrap_or(0xFFFF_FFFF);
+                            let km_ph = vm.bus.read_word(km_pa + 12).unwrap_or(0xFFFF_FFFF);
+                            let km_sz = vm.bus.read_word(km_pa + 16).unwrap_or(0xFFFF_FFFF);
+                            let km_vapo = vm.bus.read_word(km_pa + 20).unwrap_or(0xFFFF_FFFF);
+                            let km_vkpo = vm.bus.read_word(km_pa + 24).unwrap_or(0xFFFF_FFFF);
+                            eprintln!("[boot] kernel_map: page_offset=0x{:08X} virt_addr=0x{:08X} virt_offset=0x{:08X} phys_addr=0x{:08X} size=0x{:08X} va_pa_offset=0x{:08X} va_kernel_pa_offset=0x{:08X}",
+                                km_po, km_va, km_vo, km_ph, km_sz, km_vapo, km_vkpo);
+                            eprintln!("[boot] satp=0x{:08X} (ppn=0x{:08X} asid={})", vm.cpu.csr.satp, (vm.cpu.csr.satp & 0x003FFFFF), (vm.cpu.csr.satp >> 22) & 0x1FF);
+                            // Dump L1 entries for kernel linear mapping (768..896)
+                            let satp_ppn = vm.cpu.csr.satp & 0x003FFFFF;
+                            let l1_pa = (satp_ppn as u64) << 12;
+                            let vpn1 = (vm.cpu.csr.stval as u32) >> 22;
+                            eprintln!("[boot] L1 page table at PA 0x{:08X} (non-zero kernel entries 768..896):", l1_pa);
+                            for idx in 768..896u32 {
+                                let addr = l1_pa + (idx as u64) * 4;
+                                let pte = vm.bus.read_word(addr).unwrap_or(0xFFFF_FFFF);
+                                if pte != 0 {
+                                    let is_leaf = (pte & 0xE) != 0;
+                                    let ppn = (pte >> 10) & 0xFFFFF;
+                                    let tag = if is_leaf { "LEAF" } else { "NL" };
+                                    eprintln!("[boot]   L1[{}] = 0x{:08X} ({} PPN=0x{:05X} -> PA 0x{:08X}) VA 0x{:08X}",
+                                        idx, pte, tag, ppn, ppn << 12, idx << 22);
+                                }
+                            }
+                            // Also dump entries around the fault VPN1
+                            let start = vpn1.saturating_sub(2);
+                            let end = (vpn1 + 3).min(1024);
+                            eprintln!("[boot] L1 entries around fault VPN1=0x{:03X}:", vpn1);
+                            for idx in start..end {
+                                let addr = l1_pa + (idx as u64) * 4;
+                                let pte = vm.bus.read_word(addr).unwrap_or(0xFFFF_FFFF);
+                                let tag = if pte == 0 { "EMPTY" } else if (pte & 1) != 0 && (pte & 0xE) != 0 { "LEAF" } else if (pte & 1) != 0 { "NONLEAF" } else { "?" };
+                                eprintln!("[boot]   L1[{}] = 0x{:08X} ({}) VA 0x{:08X}",
+                                    idx, pte, tag, (idx as u32) << 22);
+                            }
                         }
                     }
                 }
@@ -1507,10 +1463,7 @@ impl RiscvVm {
         );
         // Post-boot state
         let prb = vm.bus.read_word(0x00C7A0B4u64).unwrap_or(0);
-        let deva = vm.bus.read_word(0x00801008).unwrap_or(0);
-        let depa = vm.bus.read_word(0x0080100C).unwrap_or(0);
-        eprintln!("[boot] Post-boot: phys_ram_base=0x{:08X} _dtb_early_va=0x{:08X} _dtb_early_pa=0x{:08X}",
-            prb, deva, depa);
+        eprintln!("[boot] Post-boot: phys_ram_base=0x{:08X}", prb);
         // Check memblock state
         // Linux 6.14 struct memblock layout (rv32):
         //   bottom_up(4) + current_limit(4) + memory(20) + reserved(20) [+ physmem(20)]

@@ -40,6 +40,17 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "NOTE" => {
+            if tokens.len() < 4 {
+                return Err("NOTE requires 3 arguments: NOTE wave_reg, freq_reg, dur_reg".to_string());
+            }
+            bytecode.push(0x7E);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
         "MEMCPY" => {
             if tokens.len() < 4 {
                 return Err(

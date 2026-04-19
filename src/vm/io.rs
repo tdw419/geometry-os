@@ -218,6 +218,7 @@ impl Vm {
             rand_state,
             frame_count,
             beep: None,
+            note: None,
             debug_mode: false,
             access_log: Vec::with_capacity(4096),
             processes: Vec::new(),

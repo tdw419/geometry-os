@@ -111,6 +111,7 @@ pub const OPCODES: &[&str] = &[
     "SNAP_TRACE",
     "REPLAY",
     "FORK",
+    "NOTE",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",
