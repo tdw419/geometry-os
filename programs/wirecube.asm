@@ -14,7 +14,7 @@
 ;                sy = (ry * scale) >> 8 + 128
 ;
 ; Vertices stored as signed 8.8 fixed-point at 0x1000-0x1017.
-; Coordinates are +/- 120 (fits in 8 bits, no overflow in multiply).
+; Coordinates are +/- 80 (fits on 256x256 screen at any rotation angle).
 ;
 ; Memory layout (word addresses):
 ;   0x1000-0x1017: 8 cube vertices (vx, vy, vz) in 8.8 fixed-point
@@ -41,8 +41,8 @@
 ; ============================================================
 
 ; --- Store 8 cube vertices at 0x1000 ---
-; Vertex i: x = bit2 ? -120 : 120, y = bit1 ? -120 : 120, z = bit0 ? -120 : 120
-; Using 120 keeps all multiply results within u32 range
+; Vertex i: x = bit2 ? -80 : 80, y = bit1 ? -80 : 80, z = bit0 ? -80 : 80
+; Using 80 keeps all projected vertices within 256x256 screen
 LDI r3, 0
 LDI r4, 0x1000
 
@@ -50,10 +50,10 @@ vert_init:
   MOV r5, r3
   ANDI r5, 4
   JNZ r5, xi_neg
-  LDI r5, 120
+  LDI r5, 80
   JMP xi_store
 xi_neg:
-  LDI r5, 0xFFFFFF88  ; -120 in u32
+  LDI r5, 0xFFFFFFB0  ; -80 in u32
 xi_store:
   STORE r4, r5
   ADDI r4, 1
@@ -61,10 +61,10 @@ xi_store:
   MOV r5, r3
   ANDI r5, 2
   JNZ r5, yi_neg
-  LDI r5, 120
+  LDI r5, 80
   JMP yi_store
 yi_neg:
-  LDI r5, 0xFFFFFF88
+  LDI r5, 0xFFFFFFB0
 yi_store:
   STORE r4, r5
   ADDI r4, 1
@@ -72,10 +72,10 @@ yi_store:
   MOV r5, r3
   ANDI r5, 1
   JNZ r5, zi_neg
-  LDI r5, 120
+  LDI r5, 80
   JMP zi_store
 zi_neg:
-  LDI r5, 0xFFFFFF88
+  LDI r5, 0xFFFFFFB0
 zi_store:
   STORE r4, r5
   ADDI r4, 1
@@ -264,7 +264,7 @@ vert_loop:
   ; Y-axis rotation:
   ; rx = (vx * cos_y - vz * sin_y) >> 8
   ; rz = (vx * sin_y + vz * cos_y) >> 8
-  ; With 8-bit coords and 8.8 sin/cos (max 256), products fit in u32
+  ; With 8-bit coords (80) and 8.8 sin/cos (max 256), products fit in u32
   MOV r12, r5
   MUL r12, r9       ; vx * cos_y
   MOV r13, r7
