@@ -4,7 +4,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 103 o
 
 **Progress:** 49/50 phases complete, 1 in progress
 
-**Deliverables:** 210/212 complete
+**Deliverables:** 211/213 complete
 
 **Tasks:** 81/83 complete
 
@@ -22,7 +22,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 103 o
 | phase-8 TICKS & Sound | COMPLETE | 5/5 | 4,322 | 46 |
 | phase-9 Debug Tools | COMPLETE | 5/5 | 4,500 | 48 |
 | phase-10 Extended Graphics | COMPLETE | 2/2 | 4,700 | 50 |
-| phase-11 Advanced Games | COMPLETE | 3/3 | 5,100 | 56 |
+| phase-11 Advanced Games | COMPLETE | 4/4 | 5,100 | 56 |
 | phase-12 Self-Hosting | COMPLETE | 2/2 | 5,500 | 54 |
 | phase-13 Close the Gaps | COMPLETE | 3/3 | - | - |
 | phase-14 Developer Experience | COMPLETE | 4/4 | - | - |
@@ -244,6 +244,10 @@ Instruction set extensions
 - [x] **maze.asm** -- Randomly generated maze with player navigation
   - [x] test_maze_assembles passes
   - [x] test_maze_initializes passes
+- [x] **roguelike.asm** -- Procedural dungeon crawler with 64x64 map, rooms, corridors, enemies, items, camera/viewport scrolling, combat
+  - [x] test_roguelike_assembles passes
+  - [x] test_roguelike_initializes passes
+  - [x] test_roguelike_wall_collision_blocks passes
 
 ## [x] phase-12: Self-Hosting (COMPLETE)
 

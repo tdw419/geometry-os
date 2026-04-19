@@ -1,50 +1,43 @@
-use std::fs;
-use std::time::Instant;
-
+use geometry_os::riscv::RiscvVm;
 fn main() {
     let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
-    let initramfs_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
-    let kernel_image = fs::read(kernel_path).expect("kernel");
-    let initramfs = fs::read(initramfs_path).ok();
-
-    // Use UART earlycon (direct MMIO writes to 0x10000000)
-    let bootargs = "console=ttyS0 earlycon=uart8250,mmio32,0x10000000 loglevel=8";
-
-    let start = Instant::now();
-    let (mut vm, result) = geometry_os::riscv::RiscvVm::boot_linux(
-        &kernel_image,
-        initramfs.as_deref(),
+    let kernel_data = std::fs::read(kernel_path).expect("kernel");
+    eprintln!("[uart_earlycon] Booting with earlycon=uart8250...");
+    let result = RiscvVm::boot_linux(
+        &kernel_data,
+        None,
         512,
-        50_000_000u64,
-        bootargs,
-    )
-    .unwrap();
-
-    let elapsed = start.elapsed();
-    println!(
-        "Boot: {} instructions in {:?}",
-        result.instructions, elapsed
+        50_000_000,
+        "console=ttyS0 earlycon=uart8250,mmio,0x10000000 loglevel=8 nosmp",
     );
-    println!("PC: 0x{:08X}, Privilege: {:?}", vm.cpu.pc, vm.cpu.privilege);
-    println!("SATP: 0x{:08X}", vm.cpu.csr.satp);
-
-    // SBI output
-    println!(
-        "\nSBI console output: {} bytes",
-        vm.bus.sbi.console_output.len()
-    );
-    if !vm.bus.sbi.console_output.is_empty() {
-        let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
-        println!("{}\n", s);
-    }
-
-    // UART output
-    let tx = vm.bus.uart.drain_tx();
-    println!("UART TX: {} bytes", tx.len());
-    if !tx.is_empty() {
-        let s = String::from_utf8_lossy(&tx);
-        println!("{}\n", s);
-    } else {
-        println!("No UART output");
+    match result {
+        Ok((mut vm, stats)) => {
+            let mut uart_output = Vec::new();
+            loop {
+                match vm.bus.uart.read_byte(0) {
+                    0 => break,
+                    b => uart_output.push(b),
+                }
+            }
+            let s = String::from_utf8_lossy(&uart_output);
+            eprintln!("UART output ({} bytes):", uart_output.len());
+            if uart_output.len() > 0 {
+                // Show first 500 and last 500 bytes
+                let output_str = s.to_string();
+                if output_str.len() > 1000 {
+                    eprintln!("{}", &output_str[..500]);
+                    eprintln!("... ({} bytes total) ...", output_str.len());
+                    eprintln!("{}", &output_str[output_str.len()-500..]);
+                } else {
+                    eprintln!("{}", output_str);
+                }
+            } else {
+                eprintln!("No UART output!");
+            }
+            eprintln!("PC: 0x{:08X}, Privilege: {:?}", vm.cpu.pc, vm.cpu.privilege);
+            eprintln!("SBI output: {} bytes", vm.bus.sbi.console_output.len());
+            eprintln!("Instructions: {}", stats.instructions);
+        }
+        Err(e) => eprintln!("Error: {:?}", e),
     }
 }

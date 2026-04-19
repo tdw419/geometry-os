@@ -13,7 +13,7 @@ meta:
   opcodes: 106
   tests: 1195
   programs: 59
-  loc: 31856
+  loc: 8174
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -330,6 +330,16 @@ phases:
     - description: test_maze_assembles passes
       met: true
     - description: test_maze_initializes passes
+      met: true
+  - name: roguelike.asm
+    description: Procedural dungeon crawler with 64x64 map, rooms, corridors, enemies, items, camera/viewport scrolling, combat
+    status: done
+    acceptance_criteria:
+    - description: test_roguelike_assembles passes
+      met: true
+    - description: test_roguelike_initializes passes
+      met: true
+    - description: test_roguelike_wall_collision_blocks passes
       met: true
   scope_lines_total: 5100
   test_target: 56

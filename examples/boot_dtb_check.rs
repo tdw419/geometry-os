@@ -1,83 +1,56 @@
-//! Verify DTB memory reservation map entries.
-//! Run: cargo run --example boot_dtb_check
-
-use geometry_os::riscv::{dtb::DtbConfig, loader};
-use std::fs;
-
+use geometry_os::riscv::RiscvVm;
 fn main() {
-    let kernel_image = fs::read(".geometry_os/build/linux-6.14/vmlinux").expect("kernel not found");
+    let kernel_path = ".geometry_os/build/linux-6.14/vmlinux";
+    let ir_path = ".geometry_os/fs/linux/rv32/initramfs.cpio.gz";
+    let kernel_data = std::fs::read(kernel_path).expect("kernel");
+    let initramfs_data = std::path::Path::new(ir_path)
+        .exists()
+        .then(|| std::fs::read(ir_path).unwrap());
 
-    let mut bus = geometry_os::riscv::bus::Bus::new(0, 256 * 1024 * 1024);
-    let load_info = loader::load_elf(&mut bus, &kernel_image).expect("load elf failed");
-    let kernel_phys_end = ((load_info.highest_addr + 0xFFF) & !0xFFF) as u64;
+    let (mut vm, fw_addr, entry, dtb_addr) = RiscvVm::boot_linux_setup(
+        &kernel_data,
+        initramfs_data.as_deref(),
+        512,
+        "console=ttyS0 earlycon=sbi loglevel=8 nosmp",
+    ).expect("setup");
 
-    eprintln!("Kernel highest_addr = 0x{:X}", load_info.highest_addr);
-    eprintln!(
-        "Kernel phys end (aligned) = 0x{:X} ({} KB)",
-        kernel_phys_end,
-        kernel_phys_end / 1024
-    );
-
-    let reserved_regions = vec![(0u64, kernel_phys_end)];
-    let dtb_config = DtbConfig {
-        ram_base: 0,
-        ram_size: 256 * 1024 * 1024,
-        reserved_regions,
-        ..Default::default()
-    };
-    let dtb = geometry_os::riscv::dtb::generate_dtb(&dtb_config);
-
-    eprintln!("DTB size: {} bytes", dtb.len());
-
-    // Parse DTB header
-    let magic = u32::from_be_bytes([dtb[0], dtb[1], dtb[2], dtb[3]]);
-    let off_mem_rsvmap = u32::from_be_bytes([dtb[16], dtb[17], dtb[18], dtb[19]]);
-
-    eprintln!(
-        "DTB magic=0x{:08X} off_mem_rsvmap={}",
-        magic, off_mem_rsvmap
-    );
-
-    // Parse memory reservation map
-    if off_mem_rsvmap > 0 {
-        let mut pos = off_mem_rsvmap as usize;
-        let mut entry_idx = 0;
-        loop {
-            let addr = u64::from_be_bytes([
-                dtb[pos],
-                dtb[pos + 1],
-                dtb[pos + 2],
-                dtb[pos + 3],
-                dtb[pos + 4],
-                dtb[pos + 5],
-                dtb[pos + 6],
-                dtb[pos + 7],
-            ]);
-            let size = u64::from_be_bytes([
-                dtb[pos + 8],
-                dtb[pos + 9],
-                dtb[pos + 10],
-                dtb[pos + 11],
-                dtb[pos + 12],
-                dtb[pos + 13],
-                dtb[pos + 14],
-                dtb[pos + 15],
-            ]);
-            if addr == 0 && size == 0 {
-                eprintln!("  [{}] TERMINATOR (0, 0)", entry_idx);
-                break;
-            }
-            eprintln!(
-                "  [{}] address=0x{:08X} size=0x{:08X} ({} KB)",
-                entry_idx,
-                addr,
-                size,
-                size / 1024
-            );
-            pos += 16;
-            entry_idx += 1;
-        }
-    } else {
-        eprintln!("  off_mem_rsvmap = 0 (NO memory reservations!)");
+    // Check DTB in memory
+    let dtb_magic = vm.bus.read_word(dtb_addr).expect("read");
+    eprintln!("DTB magic at PA 0x{:08X}: 0x{:08X} (expect 0xD00DFEED)", dtb_addr, dtb_magic);
+    
+    // Dump first 256 bytes of DTB as hex
+    eprintln!("DTB first 128 bytes:");
+    for i in 0..128 {
+        let b = vm.bus.read_byte(dtb_addr + i as u64).unwrap_or(0);
+        if (i % 16) == 0 { eprint!("\n  {:04X}: ", i); }
+        eprint!("{:02X} ", b);
     }
+    eprintln!();
+
+    // Search for "console" string in DTB
+    eprintln!("Searching for bootargs in DTB...");
+    let mut found = false;
+    for i in 0..4096 {
+        let b = vm.bus.read_byte(dtb_addr + i as u64).unwrap_or(0);
+        if b == b'c' {
+            let mut s = Vec::new();
+            for j in 0..60 {
+                let cb = vm.bus.read_byte(dtb_addr + i as u64 + j as u64).unwrap_or(0);
+                s.push(cb);
+                if cb == 0 { break; }
+            }
+            let str_s = String::from_utf8_lossy(&s);
+            if str_s.contains("console") || str_s.contains("nosmp") || str_s.contains("earlycon") {
+                eprintln!("  Found at offset {}: {:?}", i, str_s);
+                found = true;
+            }
+        }
+    }
+    if !found {
+        eprintln!("  No bootargs string found in DTB!");
+    }
+
+    // Check DTB size (total size field at offset 4)
+    let dtb_totalsize = vm.bus.read_word(dtb_addr + 4).expect("read");
+    eprintln!("DTB totalsize field: {}", dtb_totalsize);
 }

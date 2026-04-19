@@ -310,10 +310,18 @@ impl RiscvVm {
         // Without these, early_init_dt_scan() receives NULL, skips DTB
         // parsing, and memblock_add() is never called. Result: memory.cnt=0
         // and every memblock_alloc() panics with "Failed to allocate".
-        // NOTE: PA 0x00801008 and 0x0080100C are pt_ops function pointers
-        // (get_pmd_virt and alloc_pmd), NOT DTB pointers. Do NOT write to them.
-        // _dtb_early_va and _dtb_early_pa do NOT exist in this kernel build.
-        // The kernel uses initial_boot_params for DTB access.
+        // Set _dtb_early_va and _dtb_early_pa (BSS variables set by OpenSBI).
+        // The kernel's early_init_dt_scan() reads these FIRST, before
+        // initial_boot_params. If they're 0, DTB parsing is skipped entirely.
+        // _dtb_early_va: VA used to access DTB during early boot (before MMU fully set up).
+        // _dtb_early_pa: physical address of DTB.
+        // We use PA for _dtb_early_va because the boot page table identity-maps
+        // low addresses, so VA = PA works for the DTB range.
+        let dtb_early_va_pa: u64 = 0x00801008;
+        let dtb_early_pa_pa: u64 = 0x0080100C;
+        vm.bus.write_word(dtb_early_va_pa, dtb_addr as u32).ok();
+        vm.bus.write_word(dtb_early_pa_pa, dtb_addr as u32).ok();
+        eprintln!("[boot] Pre-set _dtb_early_va=0x{:08X}, _dtb_early_pa=0x{:08X}", dtb_addr as u32, dtb_addr as u32);
 
         // Also set initial_boot_params for compatibility (some kernel paths
         // read it directly).
@@ -608,6 +616,9 @@ impl RiscvVm {
         // Protect IBP immediately from kernel BSS clearing.
         vm.bus.protected_addrs.push((ibp_pa, dtb_phys_addr));
         vm.bus.protected_addrs.push((ibp_pa_pa, dtb_phys_addr));
+        // Also protect _dtb_early_va and _dtb_early_pa from BSS clearing.
+        vm.bus.protected_addrs.push((dtb_early_va_pa, dtb_addr as u32));
+        vm.bus.protected_addrs.push((dtb_early_pa_pa, dtb_addr as u32));
 
         // Pre-set loops_per_jiffy to skip calibrate_delay().
         // calibrate_delay() calls udelay() in a loop to measure CPU speed.

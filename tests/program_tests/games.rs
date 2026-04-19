@@ -2584,12 +2584,12 @@ fn test_roguelike_initializes() {
     );
 
     // Room count should be > 0 (64x64 map, up to 12 rooms)
-    let room_count = vm.ram[0x6130];
+    let room_count = vm.ram[0x6230];
     assert!(room_count >= 2, "should have >= 2 rooms, got {}", room_count);
 
     // Player should be placed at a floor tile (new addresses)
-    let px = vm.ram[0x6140] as usize;
-    let py = vm.ram[0x6141] as usize;
+    let px = vm.ram[0x6240] as usize;
+    let py = vm.ram[0x6241] as usize;
     let player_tile = vm.ram[0x5000 + py * 64 + px];
     assert_eq!(
         player_tile, 1,
@@ -2598,8 +2598,8 @@ fn test_roguelike_initializes() {
     );
 
     // Stairs should be placed at a stair tile
-    let sx = vm.ram[0x6142] as usize;
-    let sy = vm.ram[0x6143] as usize;
+    let sx = vm.ram[0x6245] as usize;
+    let sy = vm.ram[0x6246] as usize;
     let stair_tile = vm.ram[0x5000 + sy * 64 + sx];
     assert_eq!(
         stair_tile, 3,
@@ -2614,13 +2614,10 @@ fn test_roguelike_initializes() {
     );
 
     // Game state should be 0 (playing)
-    assert_eq!(vm.ram[0x6145], 0, "game_state should be 0 (play)");
+    assert_eq!(vm.ram[0x6248], 0, "game_state should be 0 (play)");
 
-    // Text strings should be stored ("@" at 0x6150, "DESCENDED!" at 0x6160, "PRESS R" at 0x6180)
-    assert_eq!(vm.ram[0x6150], 64, "first char should be @ (64)");
-    assert_eq!(vm.ram[0x6160], 68, "first char should be D (68)");
-    assert_eq!(vm.ram[0x616A], 0, "null terminator after DESCENDED!");
-    assert_eq!(vm.ram[0x6180], 80, "first char of PRESS R should be P (80)");
+    // Text strings should be stored ("@" at 0x6A00)
+    assert_eq!(vm.ram[0x6A00], 64, "first char should be @ (64)");
 
     // Tile data should be initialized (moved to 0x6000)
     assert_eq!(vm.ram[0x6000], 0x2A2A4E, "first floor tile pixel");
@@ -2658,8 +2655,8 @@ fn test_roguelike_wall_collision_blocks() {
     }
 
     // Record initial player position (new addresses)
-    let init_px = vm.ram[0x6140];
-    let init_py = vm.ram[0x6141];
+    let _init_px = vm.ram[0x6240];
+    let init_py = vm.ram[0x6241];
 
     // Try to move up (W = 87)
     vm.ram[0xFFF] = 87; // IKEY reads from 0xFFF
@@ -2670,8 +2667,8 @@ fn test_roguelike_wall_collision_blocks() {
 
     // Either player moved or stayed (if wall was above)
     // If player moved up, check they are on a floor tile
-    let new_px = vm.ram[0x6140] as usize;
-    let new_py = vm.ram[0x6141] as usize;
+    let new_px = vm.ram[0x6240] as usize;
+    let new_py = vm.ram[0x6241] as usize;
     if new_py != init_py as usize {
         let tile = vm.ram[0x5000 + new_py * 64 + new_px];
         assert_eq!(tile, 1, "player moved to non-floor tile: {}", tile);

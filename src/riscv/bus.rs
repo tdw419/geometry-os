@@ -194,6 +194,13 @@ impl Bus {
     /// Read a byte. Routes to device MMIO or RAM.
     /// Takes &mut self because device reads can have side effects.
     pub fn read_byte(&mut self, addr: u64) -> Result<u8, MemoryError> {
+        // Write-protected address check: return the appropriate byte from protected value.
+        for &(pa, protected_val) in &self.protected_addrs {
+            if addr >= pa && addr < pa + 4 {
+                let byte_off = (addr - pa) as usize;
+                return Ok(((protected_val >> (byte_off * 8)) & 0xFF) as u8);
+            }
+        }
         if Self::in_clint(addr) {
             let word = self
                 .clint
@@ -226,6 +233,12 @@ impl Bus {
 
     /// Write a byte. Routes to device MMIO or RAM.
     pub fn write_byte(&mut self, addr: u64, val: u8) -> Result<(), MemoryError> {
+        // Write-protected address check: silently drop writes to protected addresses.
+        for &(pa, _protected_val) in &self.protected_addrs {
+            if addr >= pa && addr < pa + 4 {
+                return Ok(());
+            }
+        }
         // Debug write watchpoint (byte-level)
         if let Some(watch) = self.write_watch_addr {
             if addr >= watch && addr < watch + 4 && !self.write_watch_hit {
@@ -268,6 +281,13 @@ impl Bus {
 
     /// Read a 16-bit half-word. Routes to device MMIO or RAM.
     pub fn read_half(&mut self, addr: u64) -> Result<u16, MemoryError> {
+        // Write-protected address check: return the appropriate half from protected value.
+        for &(pa, protected_val) in &self.protected_addrs {
+            if addr >= pa && addr < pa + 4 {
+                let half_off = ((addr - pa) >> 1) as usize;
+                return Ok(((protected_val >> (half_off * 16)) & 0xFFFF) as u16);
+            }
+        }
         if Self::in_clint(addr) {
             let word = self
                 .clint
@@ -284,6 +304,12 @@ impl Bus {
 
     /// Write a 16-bit half-word. Routes to device MMIO or RAM.
     pub fn write_half(&mut self, addr: u64, val: u16) -> Result<(), MemoryError> {
+        // Write-protected address check: silently drop writes to protected addresses.
+        for &(pa, _protected_val) in &self.protected_addrs {
+            if addr >= pa && addr < pa + 4 {
+                return Ok(());
+            }
+        }
         if Self::in_clint(addr) {
             let word_addr = addr & !3;
             let half_off = ((addr >> 1) & 1) as usize;
