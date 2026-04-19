@@ -266,6 +266,63 @@ fn episode_to_json(ep: &Episode) -> String {
     json
 }
 
+/// Parse the top_ops JSON array: `"top_ops":[[opcode,"MNEMONIC",count,pct],...]`
+/// Returns empty vec if parsing fails (non-fatal -- episodes are still usable without opcodes).
+fn parse_top_ops_array(json: &str) -> Vec<(u8, String, u64, f64)> {
+    // Find the "top_ops" key, then extract the array content between [ and ]
+    let marker = "\"top_ops\":[";
+    let start = match json.find(marker) {
+        Some(s) => s + marker.len() - 1, // points at the opening [
+        None => return Vec::new(),
+    };
+    // Find matching ] -- scan for bracket balance
+    let bytes = json.as_bytes();
+    let mut depth = 0i32;
+    let mut end = start;
+    for i in start..bytes.len() {
+        match bytes[i] {
+            b'[' => depth += 1,
+            b']' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = i;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    if end <= start + 1 {
+        return Vec::new(); // empty array
+    }
+    let array_content = &json[start + 1..end]; // inside outer brackets
+
+    // Split on ],[ to get individual entries like 0,"HALT",1,0.02
+    let mut result = Vec::new();
+    for entry in array_content.split("],[") {
+        // Strip leading [ and trailing ] from first/last entries
+        let entry = entry.trim_start_matches('[').trim_end_matches(']');
+        // Parse: opcode,"NAME",count,pct
+        let parts: Vec<&str> = entry.split(',').collect();
+        if parts.len() < 4 {
+            continue;
+        }
+        let opcode = match parts[0].parse::<u8>() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        // Name is quoted: "HALT" -- strip quotes
+        let name = parts[1].trim_matches('"').to_string();
+        let count = match parts[2].parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let pct = parts[3].parse::<f64>().unwrap_or(0.0);
+        result.push((opcode, name, count, pct));
+    }
+    result
+}
+
 fn json_to_episode(line: &str) -> Option<Episode> {
     // Minimal JSON parser for our known format
     let ts = extract_json_string_val(line, "\"ts\"")?;
@@ -282,8 +339,8 @@ fn json_to_episode(line: &str) -> Option<Episode> {
     let total = extract_json_u64(line, "\"total\"")? as usize;
     let pct = extract_json_f64(line, "\"pct\"").unwrap_or(0.0);
 
-    // Parse top_ops array (skip for now, not critical for recall)
-    let top_opcodes = Vec::new();
+    // Parse top_ops array: [[opcode,"MNEMONIC",count,pct], ...]
+    let top_opcodes = parse_top_ops_array(line);
 
     Some(Episode {
         timestamp: ts,
@@ -572,5 +629,61 @@ mod tests {
         ] {
             assert_eq!(Outcome::from_str(outcome.as_str()), outcome);
         }
+    }
+
+    #[test]
+    fn test_parse_top_ops_array() {
+        let json = r#"{"ts":"2026-04-19","prog":"test.asm","ops":100,"pc":16,"halted":true,"screen":{"non_zero":50,"total":65536,"pct":0.1},"top_ops":[[66,"FILL",80,80.0],[0,"HALT",1,1.0]],"outcome":"success"}"#;
+        let ops = parse_top_ops_array(json);
+        assert_eq!(ops.len(), 2);
+        assert_eq!(ops[0], (66, "FILL".to_string(), 80, 80.0));
+        assert_eq!(ops[1], (0, "HALT".to_string(), 1, 1.0));
+    }
+
+    #[test]
+    fn test_parse_top_ops_array_empty() {
+        let json = r#"{"ts":"2026-04-19","prog":"test.asm","ops":0,"pc":0,"halted":true,"screen":{"non_zero":0,"total":65536,"pct":0.0},"top_ops":[],"outcome":"success"}"#;
+        let ops = parse_top_ops_array(json);
+        assert!(ops.is_empty());
+    }
+
+    #[test]
+    fn test_parse_top_ops_array_missing() {
+        let json = r#"{"ts":"2026-04-19","prog":"test.asm","ops":0,"pc":0}"#;
+        let ops = parse_top_ops_array(json);
+        assert!(ops.is_empty());
+    }
+
+    #[test]
+    fn test_episode_roundtrip_preserves_top_ops() {
+        let episode = Episode {
+            timestamp: "2026-04-19".to_string(),
+            program: "test.asm".to_string(),
+            total_ops: 4820,
+            top_opcodes: vec![
+                (0x42, "FILL".to_string(), 2000, 41.5),
+                (0x00, "HALT".to_string(), 1, 0.02),
+                (0x30, "JMP".to_string(), 500, 10.4),
+            ],
+            screen_state: ScreenState {
+                non_black_pixels: 5000,
+                total_pixels: 65536,
+                drawn_pct: 7.6,
+            },
+            final_pc: 0x0042,
+            halted: true,
+            fix: None,
+            outcome: Outcome::Success,
+        };
+
+        let json = episode_to_json(&episode);
+        let parsed = json_to_episode(&json).expect("parse failed");
+        assert_eq!(parsed.top_opcodes.len(), 3);
+        assert_eq!(
+            parsed.top_opcodes[0],
+            (0x42, "FILL".to_string(), 2000, 41.5)
+        );
+        assert_eq!(parsed.top_opcodes[1], (0x00, "HALT".to_string(), 1, 0.0));
+        assert_eq!(parsed.top_opcodes[2], (0x30, "JMP".to_string(), 500, 10.4));
     }
 }
