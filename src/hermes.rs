@@ -12,6 +12,143 @@ use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+// --- Provider Configuration ---
+
+/// LLM provider configuration. Loaded from provider.json in the project root.
+/// Falls back to local Ollama if no config found.
+#[derive(Clone)]
+pub struct ProviderConfig {
+    pub base_url: String,
+    pub model: String,
+    pub api_key: String,
+    pub max_tokens: u32,
+    pub temperature: f32,
+    pub fallback: Option<Box<ProviderConfig>>,
+}
+
+impl ProviderConfig {
+    /// Load from provider.json next to Cargo.toml, or use local Ollama defaults.
+    pub fn load() -> Self {
+        let root = get_project_root();
+        let config_path = root.join("provider.json");
+        if config_path.exists() {
+            match std::fs::read_to_string(&config_path) {
+                Ok(contents) => Self::from_json(&contents),
+                Err(e) => {
+                    println!("[hermes] Could not read provider.json: {}. Using local Ollama.", e);
+                    Self::local_ollama()
+                }
+            }
+        } else {
+            println!("[hermes] No provider.json found. Using local Ollama.");
+            Self::local_ollama()
+        }
+    }
+
+    pub fn from_json(json: &str) -> Self {
+        let base_url = extract_json_string(json, "base_url")
+            .unwrap_or_else(|| "http://localhost:11434/api/chat".to_string());
+        let model = extract_json_string(json, "model")
+            .unwrap_or_else(|| "qwen3.5-tools".to_string());
+        let api_key = extract_json_string(json, "api_key")
+            .unwrap_or_else(|| "".to_string());
+        let max_tokens = extract_json_number(json, "max_tokens").unwrap_or(8192);
+        let temperature = extract_json_float(json, "temperature").unwrap_or(0.3);
+
+        let fallback = if let Some(fb_start) = json.find("\"fallback\"") {
+            if let Some(obj_start) = json[fb_start..].find('{') {
+                let fb_json = &json[fb_start + obj_start..];
+                Some(Box::new(ProviderConfig {
+                    base_url: extract_json_string(fb_json, "base_url")
+                        .unwrap_or_else(|| "http://localhost:11434/api/chat".to_string()),
+                    model: extract_json_string(fb_json, "model")
+                        .unwrap_or_else(|| "qwen3.5-tools".to_string()),
+                    api_key: extract_json_string(fb_json, "api_key")
+                        .unwrap_or_else(|| "".to_string()),
+                    max_tokens: extract_json_number(fb_json, "max_tokens").unwrap_or(8192),
+                    temperature: extract_json_float(fb_json, "temperature").unwrap_or(0.3),
+                    fallback: None,
+                }))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        println!("[hermes] Loaded provider: model={} url={}", model, base_url);
+        ProviderConfig { base_url, model, api_key, max_tokens, temperature, fallback }
+    }
+
+    pub fn local_ollama() -> Self {
+        ProviderConfig {
+            base_url: "http://localhost:11434/api/chat".to_string(),
+            model: "qwen3.5-tools".to_string(),
+            api_key: String::new(),
+            max_tokens: 8192,
+            temperature: 0.3,
+            fallback: None,
+        }
+    }
+
+    pub fn label(&self) -> String {
+        format!("{} @ {}", self.model, self.base_url)
+    }
+}
+
+/// Extract a string value from JSON by key. Minimal parser.
+fn extract_json_string(json: &str, key: &str) -> Option<String> {
+    let pattern = format!("\"{}\"", key);
+    let start = json.find(&pattern)?;
+    let after_key = &json[start + pattern.len()..];
+    let after_colon = after_key.trim_start().strip_prefix(':')?;
+    let after_colon = after_colon.trim_start();
+    if !after_colon.starts_with('"') { return None; }
+    let bytes = after_colon.as_bytes();
+    let mut i = 1; // skip opening quote
+    let mut result = String::new();
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 1 < bytes.len() {
+            match bytes[i + 1] {
+                b'"' => result.push('"'),
+                b'\\' => result.push('\\'),
+                b'n' => result.push('\n'),
+                b't' => result.push('\t'),
+                _ => { result.push(bytes[i] as char); result.push(bytes[i+1] as char); }
+            }
+            i += 2;
+        } else if bytes[i] == b'"' {
+            break;
+        } else {
+            result.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    Some(result)
+}
+
+/// Extract a numeric value from JSON by key.
+fn extract_json_number(json: &str, key: &str) -> Option<u32> {
+    let pattern = format!("\"{}\"", key);
+    let start = json.find(&pattern)?;
+    let after_key = &json[start + pattern.len()..];
+    let after_colon = after_key.trim_start().strip_prefix(':')?;
+    let after_colon = after_colon.trim_start();
+    let end = after_colon.find(|c: char| !c.is_ascii_digit()).unwrap_or(after_colon.len());
+    after_colon[..end].parse().ok()
+}
+
+/// Extract a float value from JSON by key.
+fn extract_json_float(json: &str, key: &str) -> Option<f32> {
+    let pattern = format!("\"{}\"", key);
+    let start = json.find(&pattern)?;
+    let after_key = &json[start + pattern.len()..];
+    let after_colon = after_key.trim_start().strip_prefix(':')?;
+    let after_colon = after_colon.trim_start();
+    let end = after_colon.find(|c: char| !c.is_ascii_digit() && c != '.').unwrap_or(after_colon.len());
+    after_colon[..end].parse().ok()
+}
+
 /// Get the project root directory (where Cargo.toml lives).
 fn get_project_root() -> PathBuf {
     let mut dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -647,8 +784,9 @@ fn execute_build_command(
     output
 }
 
-pub fn call_ollama(system_prompt: &str, user_message: &str) -> Option<String> {
-    // Build the JSON payload
+/// Core LLM call -- provider-agnostic. Works with any OpenAI-compatible endpoint.
+/// Handles: Ollama, ZAI, OpenAI, Anthropic (via compatible layer), etc.
+pub fn call_llm(config: &ProviderConfig, system_prompt: &str, user_message: &str) -> Option<String> {
     // Escape strings for JSON
     let esc_sys = system_prompt
         .replace('\\', "\\\\")
@@ -661,9 +799,10 @@ pub fn call_ollama(system_prompt: &str, user_message: &str) -> Option<String> {
         .replace('\n', "\\n")
         .replace('\t', "\\t");
 
+    // Build OpenAI-compatible payload
     let payload = format!(
-        r#"{{"model":"qwen3.5-tools","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false}}"#,
-        esc_sys, esc_user
+        r#"{{"model":"{}","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false,"max_tokens":{},"temperature":{}}}"#,
+        config.model, esc_sys, esc_user, config.max_tokens, config.temperature
     );
 
     // Write payload to temp file to avoid shell escaping issues
@@ -676,17 +815,26 @@ pub fn call_ollama(system_prompt: &str, user_message: &str) -> Option<String> {
         }
     }
 
+    // Build curl args -- add Authorization header if API key present
+    let mut curl_args = vec![
+        "-s".to_string(),
+        "-X".to_string(),
+        "POST".to_string(),
+        config.base_url.clone(),
+        "-d".to_string(),
+        format!("@{}", tmp_path),
+        "-H".to_string(),
+        "Content-Type: application/json".to_string(),
+        "--max-time".to_string(),
+        "120".to_string(),
+    ];
+    if !config.api_key.is_empty() {
+        curl_args.push("-H".to_string());
+        curl_args.push(format!("Authorization: Bearer {}", config.api_key));
+    }
+
     let output = match std::process::Command::new("curl")
-        .args([
-            "-s",
-            "-X",
-            "POST",
-            "http://localhost:11434/api/chat",
-            "-d",
-            &format!("@{}", tmp_path),
-            "-H",
-            "Content-Type: application/json",
-        ])
+        .args(&curl_args)
         .output()
     {
         Ok(o) => o,
@@ -696,19 +844,37 @@ pub fn call_ollama(system_prompt: &str, user_message: &str) -> Option<String> {
         }
     };
 
-    // Parse response -- extract message.content
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // Simple JSON extraction: find "content":"..."`
-    // Look for the content field in the response
+
+    // Check for HTTP errors
+    if !output.status.success() {
+        println!("[hermes] curl exit code: {}", output.status);
+    }
+    if stdout.contains("\"error\"") {
+        // Try to extract error message
+        if let Some(e) = extract_json_string(&stdout, "message") {
+            println!("[hermes] API error: {}", e);
+        } else {
+            println!("[hermes] API error: {}...", &stdout[..stdout.len().min(200)]);
+        }
+        // Try fallback if available
+        if let Some(ref fb) = config.fallback {
+            println!("[hermes] Trying fallback: {}", fb.label());
+            return call_llm(fb, system_prompt, user_message);
+        }
+        return None;
+    }
+
+    // Parse response -- extract message.content (works for both Ollama and OpenAI formats)
+    // Try "content" field (Ollama format: {"message":{"content":"..."}})
+    // Also works for OpenAI format: {"choices":[{"message":{"content":"..."}}]}
     if let Some(start) = stdout.find(r#""content":""#) {
         let content_start = start + r#""content":""#.len();
-        // Find the closing quote (handle escaped quotes)
         let mut i = content_start;
         let mut result = String::new();
         let bytes = stdout.as_bytes();
         while i < bytes.len() {
             if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                // Escaped character
                 match bytes[i + 1] {
                     b'n' => result.push('\n'),
                     b't' => result.push('\t'),
@@ -730,8 +896,19 @@ pub fn call_ollama(system_prompt: &str, user_message: &str) -> Option<String> {
         Some(result)
     } else {
         println!("[hermes] Could not parse LLM response");
+        // Try fallback if available
+        if let Some(ref fb) = config.fallback {
+            println!("[hermes] Trying fallback: {}", fb.label());
+            return call_llm(fb, system_prompt, user_message);
+        }
         None
     }
+}
+
+/// Backward-compatible wrapper: load provider config and call LLM.
+pub fn call_ollama(system_prompt: &str, user_message: &str) -> Option<String> {
+    let config = ProviderConfig::load();
+    call_llm(&config, system_prompt, user_message)
 }
 
 pub fn run_hermes_loop(

@@ -1,0 +1,14 @@
+{
+  "base_url": "https://api.z.ai/api/coding/paas/v4/chat/completions",
+  "model": "glm-5.1",
+  "api_key": "",
+  "max_tokens": 8192,
+  "temperature": 0.3,
+  "fallback": {
+    "base_url": "http://localhost:11434/api/chat",
+    "model": "qwen3.5-tools",
+    "api_key": "",
+    "max_tokens": 8192,
+    "temperature": 0.3
+  }
+}
