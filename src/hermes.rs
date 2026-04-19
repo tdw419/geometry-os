@@ -353,6 +353,54 @@ the write command:
 After your commands run, you'll see the output and can issue more commands.
 Think step by step but only output commands."#;
 
+pub const HERMES_BUILD_SYSTEM_PROMPT: &str = r#"You are an agent that modifies the Geometry OS Rust source code to add features and fix bugs. You have full access to read source files, write changes, and run builds.
+
+## Project Structure
+- src/vm.rs -- VM: 64K RAM, 32 regs, 256x256 screen, all opcode handlers
+- src/assembler.rs -- text -> bytecode, two-pass with labels
+- src/main.rs -- GUI window, rendering, input, terminal mode
+- src/canvas.rs -- canvas buffer, terminal command handler, file loading
+- src/hermes.rs -- LLM agent loop (this file)
+- src/cli.rs -- CLI mode (headless REPL)
+- src/preprocessor.rs -- macro expansion (VAR/SET/GET)
+- src/font.rs -- 8x8 VGA bitmaps
+- src/save.rs -- PNG/PPM save
+- src/lib.rs -- pub mod vm, assembler
+- tests/program_tests.rs -- integration tests
+
+## Commands available
+- readfile <path>        Read a source file (shows up to 3000 chars)
+- files                  List all .rs files with line counts
+- write <path>           Start writing a file (subsequent lines = content, ENDWRITE to finish)
+- shell <command>        Run a shell command (cargo build, cargo test, grep, etc.)
+- load/run/regs/peek/poke/screen/reset  Standard VM commands
+
+## Build workflow
+1. readfile to understand the code you need to modify
+2. shell grep -n "pattern" src/file.rs to find specific locations
+3. write the modified file (use write + content + ENDWRITE)
+4. shell cargo build to verify compilation
+5. shell cargo test to verify all tests pass
+6. If tests fail, readfile the error output, fix, and retry
+
+## Key VM Architecture
+- 64K u32 RAM, 32 registers (r0-r31)
+- r0 = CMP result register, r30 = SP, r31 = LR
+- All ALU ops: 2-argument form (ADD rd, rs means rd = rd + rs)
+- Adding a new opcode: add to vm.rs step(), vm.rs disassemble_at(), assembler.rs parse_instruction(), main.rs OPCODES array
+- Write tests in tests/program_tests.rs
+
+## Safety rules
+- ALWAYS run shell cargo build after writing any Rust file
+- ALWAYS run shell cargo test to verify nothing breaks
+- Read files BEFORE modifying them -- understand the existing code
+- Do NOT modify Cargo.toml or add new dependencies
+- Keep changes minimal and focused on the requested feature
+
+## Response format
+Respond with one command per line. No explanation, no markdown, no backticks.
+Just the commands you want executed, in order."#;
+
 pub fn build_hermes_context(
     vm: &vm::Vm,
     source_text: &str,
@@ -395,6 +443,78 @@ pub fn build_hermes_context(
     }
 
     ctx
+}
+
+/// Build context for the build agent (project files, git log, test status)
+fn build_build_context() -> String {
+    let mut ctx = String::new();
+
+    // List source files with line counts
+    ctx.push_str("## Project Files\n");
+    let mut total_lines = 0;
+    let mut file_count = 0;
+    if let Ok(rd) = std::fs::read_dir("src") {
+        let mut entries: Vec<_> = rd
+            .flatten()
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .map(|ext| ext == "rs")
+                    .unwrap_or(false)
+            })
+            .collect();
+        entries.sort_by_key(|e| e.file_name());
+        for entry in &entries {
+            if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                let lines = content.lines().count();
+                let name = entry.file_name().to_string_lossy().to_string();
+                ctx.push_str(&format!("  src/{:<25} {:>5} lines\n", name, lines));
+                total_lines += lines;
+                file_count += 1;
+            }
+        }
+    }
+    ctx.push_str(&format!(
+        "  {} files, {} total lines\n",
+        file_count, total_lines
+    ));
+
+    // Recent git log
+    ctx.push_str("\n## Recent Changes\n");
+    if let Ok(output) = std::process::Command::new("git")
+        .args(["log", "--oneline", "-5"])
+        .output()
+    {
+        let log = String::from_utf8_lossy(&output.stdout);
+        if !log.is_empty() {
+            ctx.push_str(&log);
+        } else {
+            ctx.push_str("  (no git history)\n");
+        }
+    }
+
+    ctx
+}
+
+/// Shared command execution for build loops. Takes a command line, executes it,
+/// and returns the captured output string.
+fn execute_build_command(
+    cmd_line: &str,
+    vm: &mut vm::Vm,
+    source_text: &mut String,
+    loaded_file: &mut Option<PathBuf>,
+    canvas_assembled: &mut bool,
+) -> String {
+    let mut output = String::new();
+    execute_cli_command(
+        cmd_line,
+        vm,
+        source_text,
+        loaded_file,
+        canvas_assembled,
+        &mut output,
+    );
+    output
 }
 
 pub fn call_ollama(system_prompt: &str, user_message: &str) -> Option<String> {
@@ -965,6 +1085,122 @@ pub fn execute_cli_command(
             output.push_str(&msg);
             output.push('\n');
         }
+        "shell" => {
+            // Execute host shell command, capture stdout+stderr
+            let cmd_rest = parts[1..].join(" ");
+            if cmd_rest.is_empty() {
+                let msg = "Usage: shell <command>".to_string();
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                return;
+            }
+            match std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&cmd_rest)
+                .current_dir(
+                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                )
+                .output()
+            {
+                Ok(out) => {
+                    let stdout = String::from_utf8_lossy(&out.stdout);
+                    let stderr = String::from_utf8_lossy(&out.stderr);
+                    let mut combined = String::new();
+                    if !stdout.is_empty() {
+                        combined.push_str(&stdout);
+                    }
+                    if !stderr.is_empty() {
+                        if !combined.is_empty() {
+                            combined.push('\n');
+                        }
+                        combined.push_str("[stderr] ");
+                        combined.push_str(&stderr);
+                    }
+                    // Truncate to 2000 chars
+                    if combined.len() > 2000 {
+                        combined.truncate(2000);
+                        combined.push_str("\n... (truncated)");
+                    }
+                    let msg = if out.status.success() {
+                        format!("[exit 0] {}", combined.trim())
+                    } else {
+                        format!("[exit {}] {}", out.status.code().unwrap_or(-1), combined.trim())
+                    };
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                }
+                Err(e) => {
+                    let msg = format!("Shell error: {}", e);
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                }
+            }
+        }
+        "readfile" => {
+            if parts.len() < 2 {
+                let msg = "Usage: readfile <path>".to_string();
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                return;
+            }
+            let path = parts[1..].join(" ");
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    let total_lines = content.lines().count();
+                    let total_chars = content.len();
+                    // Truncate to 3000 chars
+                    let display = if content.len() > 3000 {
+                        let truncated: String = content.chars().take(3000).collect();
+                        format!("{}...\n[{} lines, {} chars total, showing first 3000]", 
+                            truncated, total_lines, total_chars)
+                    } else {
+                        content
+                    };
+                    println!("{}", display);
+                    output.push_str(&display);
+                    output.push('\n');
+                }
+                Err(e) => {
+                    let msg = format!("Error reading {}: {}", path, e);
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                }
+            }
+        }
+        "files" => {
+            // List .rs files with line counts
+            let mut entries = Vec::new();
+            if let Ok(rd) = std::fs::read_dir("src") {
+                for entry in rd.flatten() {
+                    let p = entry.path();
+                    if p.extension().map(|e| e == "rs").unwrap_or(false) {
+                        if let Ok(content) = std::fs::read_to_string(&p) {
+                            let lines = content.lines().count();
+                            let name = p.file_name().unwrap().to_string_lossy();
+                            entries.push((name.to_string(), lines));
+                        }
+                    }
+                }
+            }
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            let mut total = 0;
+            for (name, lines) in &entries {
+                let msg = format!("  src/{:<25} {:>5} lines", name, lines);
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                total += lines;
+            }
+            let msg = format!("  {} source files, {} total lines", entries.len(), total);
+            println!("{}", msg);
+            output.push_str(&msg);
+            output.push('\n');
+        }
         _ => {
             let msg = format!("Unknown: {} (skipped)", command);
             println!("{}", msg);
@@ -972,4 +1208,401 @@ pub fn execute_cli_command(
             output.push('\n');
         }
     }
+}
+
+/// CLI build loop -- uses HERMES_BUILD_SYSTEM_PROMPT for self-modifying the OS.
+pub fn run_build_loop(
+    initial_prompt: &str,
+    vm: &mut vm::Vm,
+    source_text: &mut String,
+    loaded_file: &mut Option<PathBuf>,
+    canvas_assembled: &mut bool,
+) {
+    println!("[build] Starting build agent loop (qwen3.5-tools via Ollama)");
+    println!("[build] Type 'stop' to end the loop, or just press Enter to continue.");
+
+    let mut conversation_history = initial_prompt.to_string();
+
+    for iteration in 0..5 {
+        let ctx = build_build_context();
+        let full_system = format!("{}\n\n{}", HERMES_BUILD_SYSTEM_PROMPT, ctx);
+
+        println!("[build] --- iteration {} ---", iteration + 1);
+
+        let response = match call_ollama(&full_system, &conversation_history) {
+            Some(r) => r,
+            None => {
+                println!("[build] LLM call failed. Stopping.");
+                break;
+            }
+        };
+
+        // Strip <think/> blocks
+        let response_clean = response
+            .replace("\\u003cthink\\u003e", "<think")
+            .replace("\\u003c/think\\u003e", "</think");
+        let mut commands = String::new();
+        let mut in_think = false;
+        for line in response_clean.lines() {
+            if line.contains("<think") {
+                in_think = true;
+            }
+            if !in_think {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with("//") {
+                    commands.push_str(trimmed);
+                    commands.push('\n');
+                }
+            }
+            if line.contains("</think") {
+                in_think = false;
+            }
+        }
+
+        if commands.trim().is_empty() {
+            println!("[build] LLM returned no commands. Stopping.");
+            break;
+        }
+
+        println!("[build] LLM commands:\n{}", commands);
+
+        // Execute commands (reuse write buffer + command whitelist logic)
+        let mut write_buffer: Option<(String, String)> = None;
+        let mut output_capture = String::new();
+
+        for cmd_line in commands.lines() {
+            let cmd_line = cmd_line.trim();
+            if cmd_line.is_empty() {
+                continue;
+            }
+
+            // Handle write buffer
+            if let Some(ref mut wb) = write_buffer {
+                if cmd_line == "ENDWRITE" {
+                    match std::fs::write(&wb.0, &wb.1) {
+                        Ok(()) => {
+                            let msg = format!("Wrote {} ({} bytes)", wb.0, wb.1.len());
+                            println!("{}", msg);
+                            output_capture.push_str(&msg);
+                            output_capture.push('\n');
+                        }
+                        Err(e) => {
+                            let msg = format!("Write error: {}", e);
+                            println!("{}", msg);
+                            output_capture.push_str(&msg);
+                            output_capture.push('\n');
+                        }
+                    }
+                    write_buffer = None;
+                } else {
+                    wb.1.push_str(cmd_line);
+                    wb.1.push('\n');
+                }
+                continue;
+            }
+
+            if cmd_line.starts_with("write ") {
+                if let Some(filename) = cmd_line.strip_prefix("write ").map(|s| s.trim()) {
+                    write_buffer = Some((filename.to_string(), String::new()));
+                }
+                continue;
+            }
+
+            // Execute command
+            let cmd_parts: Vec<&str> = cmd_line.split_whitespace().collect();
+            if cmd_parts.is_empty() {
+                continue;
+            }
+            let cmd_word = cmd_parts[0].to_lowercase();
+
+            match cmd_word.as_str() {
+                "shell" | "readfile" | "files" | "load" | "run" | "regs" | "peek" | "poke"
+                | "screen" | "save" | "reset" | "list" | "ls" | "png" => {
+                    println!("> {}", cmd_line);
+                    let out = execute_build_command(
+                        cmd_line,
+                        vm,
+                        source_text,
+                        loaded_file,
+                        canvas_assembled,
+                    );
+                    output_capture.push_str(&out);
+                }
+                _ => {
+                    // Skip unknown commands
+                }
+            }
+        }
+
+        // Handle unclosed write buffer
+        if let Some(wb) = write_buffer {
+            match std::fs::write(&wb.0, &wb.1) {
+                Ok(()) => println!("Wrote {} ({} bytes)", wb.0, wb.1.len()),
+                Err(e) => println!("Write error: {}", e),
+            }
+        }
+
+        // Ask if user wants to continue
+        print!("[build] Continue? (Enter=continue, stop=quit): ");
+        let _ = io::stdout().flush();
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input).unwrap_or(0) == 0 {
+            break;
+        }
+        let answer = input.trim().to_lowercase();
+        if answer == "stop" || answer == "quit" || answer == "exit" || answer == "q" {
+            println!("[build] Stopped.");
+            break;
+        }
+
+        // Feed output back as context for next iteration
+        let user_msg = if answer.is_empty() {
+            "continue"
+        } else {
+            &answer
+        };
+        // Truncate output capture to avoid context explosion
+        if output_capture.len() > 4000 {
+            output_capture.truncate(4000);
+            output_capture.push_str("\n... (output truncated)");
+        }
+        conversation_history = format!(
+            "Previous commands output:\n{}\n\nUser instruction: {}",
+            output_capture, user_msg,
+        );
+    }
+
+    println!("[build] Agent loop ended.");
+}
+
+/// Canvas build loop -- visual version of run_build_loop for the GUI terminal.
+#[allow(clippy::too_many_arguments)]
+pub fn run_build_canvas(
+    initial_prompt: &str,
+    vm: &mut vm::Vm,
+    canvas_buffer: &mut Vec<u32>,
+    output_row: &mut usize,
+    scroll_offset: &mut usize,
+    loaded_file: &mut Option<PathBuf>,
+    canvas_assembled: &mut bool,
+    breakpoints: &mut HashSet<u32>,
+) {
+    *output_row = write_line_to_canvas(
+        canvas_buffer,
+        *output_row,
+        "[build] Starting self-build agent loop...",
+    );
+    *output_row =
+        write_line_to_canvas(canvas_buffer, *output_row, "[build] Press Escape to stop.");
+    ensure_scroll(*output_row, scroll_offset);
+
+    let mut conversation_history = initial_prompt.to_string();
+
+    for iteration in 0..3 {
+        let ctx = build_build_context();
+        let full_system = format!("{}\n\n{}", HERMES_BUILD_SYSTEM_PROMPT, ctx);
+
+        *output_row = write_line_to_canvas(
+            canvas_buffer,
+            *output_row,
+            &format!("[build] --- iteration {} ---", iteration + 1),
+        );
+        ensure_scroll(*output_row, scroll_offset);
+
+        let response = match call_ollama(&full_system, &conversation_history) {
+            Some(r) => r,
+            None => {
+                *output_row = write_line_to_canvas(
+                    canvas_buffer,
+                    *output_row,
+                    "[build] LLM call failed. Stopping.",
+                );
+                ensure_scroll(*output_row, scroll_offset);
+                break;
+            }
+        };
+
+        // Strip think blocks
+        let response_clean = response
+            .replace("\\u003cthink\\u003e", "<think")
+            .replace("\\u003c/think\\u003e", "</think");
+        let mut commands = String::new();
+        let mut in_think = false;
+        for line in response_clean.lines() {
+            if line.contains("<think") {
+                in_think = true;
+            }
+            if !in_think {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with("//") {
+                    commands.push_str(trimmed);
+                    commands.push('\n');
+                }
+            }
+            if line.contains("</think") {
+                in_think = false;
+            }
+        }
+
+        if commands.trim().is_empty() {
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "[build] LLM returned no commands. Stopping.",
+            );
+            ensure_scroll(*output_row, scroll_offset);
+            break;
+        }
+
+        // Show commands
+        for cmd_line in commands.lines() {
+            let trimmed = cmd_line.trim();
+            if !trimmed.is_empty() {
+                *output_row =
+                    write_line_to_canvas(canvas_buffer, *output_row, &format!("  > {}", trimmed));
+            }
+        }
+        ensure_scroll(*output_row, scroll_offset);
+
+        // Execute commands
+        let mut write_buffer: Option<(String, String)> = None;
+        let mut output_capture = String::new();
+
+        for cmd_line in commands.lines() {
+            let cmd_line = cmd_line.trim();
+            if cmd_line.is_empty() {
+                continue;
+            }
+
+            // Handle write buffer
+            if let Some(ref mut wb) = write_buffer {
+                if cmd_line == "ENDWRITE" {
+                    match std::fs::write(&wb.0, &wb.1) {
+                        Ok(()) => {
+                            let msg = format!("Wrote {} ({} bytes)", wb.0, wb.1.len());
+                            *output_row =
+                                write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                            output_capture.push_str(&msg);
+                            output_capture.push('\n');
+                        }
+                        Err(e) => {
+                            let msg = format!("Write error: {}", e);
+                            *output_row =
+                                write_line_to_canvas(canvas_buffer, *output_row, &msg);
+                            output_capture.push_str(&msg);
+                            output_capture.push('\n');
+                        }
+                    }
+                    write_buffer = None;
+                } else {
+                    wb.1.push_str(cmd_line);
+                    wb.1.push('\n');
+                }
+                continue;
+            }
+
+            if cmd_line.starts_with("write ") {
+                if let Some(filename) = cmd_line.strip_prefix("write ").map(|s| s.trim()) {
+                    write_buffer = Some((filename.to_string(), String::new()));
+                }
+                continue;
+            }
+
+            // For shell/readfile/files: execute and capture output
+            let cmd_parts: Vec<&str> = cmd_line.split_whitespace().collect();
+            if cmd_parts.is_empty() {
+                continue;
+            }
+            let cmd_word = cmd_parts[0].to_lowercase();
+
+            match cmd_word.as_str() {
+                "shell" | "readfile" | "files" => {
+                    let out = execute_build_command(
+                        cmd_line,
+                        vm,
+                        &mut String::new(), // build mode doesn't use source_text
+                        &mut None,          // build mode doesn't use loaded_file
+                        canvas_assembled,
+                    );
+                    // Show output on canvas (truncated)
+                    for line in out.lines().take(5) {
+                        *output_row =
+                            write_line_to_canvas(canvas_buffer, *output_row, &format!("    {}", line));
+                    }
+                    if out.lines().count() > 5 {
+                        *output_row = write_line_to_canvas(
+                            canvas_buffer,
+                            *output_row,
+                            &format!("    ... ({} more lines)", out.lines().count() - 5),
+                        );
+                    }
+                    output_capture.push_str(&out);
+                }
+                // Standard VM commands go through the GUI handler
+                "load" | "run" | "regs" | "peek" | "poke" | "screen" | "save" | "reset"
+                | "list" | "ls" | "png" | "disasm" | "step" | "bp" | "bpc" | "trace" => {
+                    let row_before = *output_row;
+                    let (_hermes_prompt, _go_edit, _quit) = handle_terminal_command(
+                        cmd_line,
+                        vm,
+                        canvas_buffer,
+                        output_row,
+                        scroll_offset,
+                        loaded_file,
+                        canvas_assembled,
+                        breakpoints,
+                    );
+                    for row in row_before..(*output_row) {
+                        let line_text = read_canvas_line(canvas_buffer, row);
+                        if !line_text.is_empty() && !line_text.starts_with("geo> ") {
+                            output_capture.push_str(&line_text);
+                            output_capture.push('\n');
+                        }
+                    }
+                    ensure_scroll(*output_row, scroll_offset);
+                }
+                _ => {}
+            }
+        }
+
+        // Handle unclosed write buffer
+        if let Some(wb) = write_buffer {
+            match std::fs::write(&wb.0, &wb.1) {
+                Ok(()) => {
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("Wrote {} ({} bytes)", wb.0, wb.1.len()),
+                    );
+                }
+                Err(e) => {
+                    *output_row = write_line_to_canvas(
+                        canvas_buffer,
+                        *output_row,
+                        &format!("Write error: {}", e),
+                    );
+                }
+            }
+        }
+
+        *output_row = write_line_to_canvas(
+            canvas_buffer,
+            *output_row,
+            "[build] Iteration complete.",
+        );
+        ensure_scroll(*output_row, scroll_offset);
+
+        // Feed output back
+        if output_capture.len() > 4000 {
+            output_capture.truncate(4000);
+            output_capture.push_str("\n... (output truncated)");
+        }
+        conversation_history = format!(
+            "Previous commands output:\n{}\n\nUser instruction: continue",
+            output_capture,
+        );
+    }
+
+    *output_row = write_line_to_canvas(canvas_buffer, *output_row, "[build] Agent loop ended.");
+    ensure_scroll(*output_row, scroll_offset);
 }
