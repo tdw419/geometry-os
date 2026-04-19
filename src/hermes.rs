@@ -68,7 +68,7 @@ fn safe_write_file(filename: &str, content: &str) -> Result<usize, String> {
 fn get_git_diff() -> String {
     match std::process::Command::new("git")
         .args(["diff", "--stat"])
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
     {
         Ok(output) => {

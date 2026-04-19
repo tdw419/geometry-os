@@ -141,7 +141,7 @@ impl QemuBridge {
                             } else if i < bytes.len() {
                                 i += 1; // skip the char after ESC
                             }
-                        } else if b >= 0x20 && b < 0x7F {
+                        } else if (0x20..0x7F).contains(&b) {
                             result.push(b as char);
                             i += 1;
                         } else if b == b'\n' {

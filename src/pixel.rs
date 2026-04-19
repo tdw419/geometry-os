@@ -70,8 +70,8 @@ pub fn decode_rts_png(path: &str) -> Result<DecodedPixels, String> {
         out
     } else {
         // Hilbert curve layout: inverse Hilbert to get linear byte order
-        let grid_w = info.width as u32;
-        let grid_h = info.height as u32;
+        let grid_w = info.width;
+        let grid_h = info.height;
         let grid_side = grid_w.max(grid_h);
         let grid_order = 31 - grid_side.leading_zeros();
 

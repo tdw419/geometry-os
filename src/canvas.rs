@@ -63,7 +63,6 @@ pub fn read_canvas_line(canvas_buffer: &[u32], row: usize) -> String {
 }
 
 /// Handle a terminal command. Returns (switch_to_editor, should_quit).
-
 pub fn ensure_scroll(output_row: usize, scroll_offset: &mut usize) {
     if output_row >= *scroll_offset + CANVAS_ROWS {
         *scroll_offset = output_row - CANVAS_ROWS + 1;
@@ -88,7 +87,6 @@ pub fn source_from_canvas(canvas_buffer: &[u32]) -> String {
 
 /// Run the Hermes LLM agent loop, but write all output to the canvas buffer
 /// instead of stdout. This is the visual/canvas version of run_hermes_loop().
-
 pub fn ensure_cursor_visible(cursor_row: &usize, scroll_offset: &mut usize) {
     if *cursor_row < *scroll_offset {
         *scroll_offset = *cursor_row;
@@ -255,6 +253,7 @@ pub fn list_asm_files(dir: &str) -> Vec<String> {
     files
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_terminal_command(
     cmd: &str,
     vm: &mut vm::Vm,

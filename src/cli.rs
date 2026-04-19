@@ -666,7 +666,7 @@ pub fn cli_main(extra_args: &[String]) {
                         None => println!("[qemu] Not running"),
                     },
                     "traps" => {
-                        let sub = parts.get(2).map(|s| *s).unwrap_or("");
+                        let sub = parts.get(2).copied().unwrap_or("");
                         if sub == "analyze" || sub == "ai" {
                             // ── AI-driven behavioral analysis ──
                             let log_path = std::env::temp_dir().join("geo_qemu_trace.log");
@@ -898,7 +898,7 @@ fn analyze_traps(entries: &[TrapEntry]) {
     sorted_descs.sort_by(|a, b| b.1.cmp(a.1));
 
     println!("\n  TRAP DISTRIBUTION");
-    println!("  {:>10}  {:>6}  {}", "Count", "Pct", "Type");
+    println!("  {:>10}  {:>6}  Type", "Count", "Pct");
     println!("  {}", "-".repeat(40));
     for (desc, count) in &sorted_descs {
         let pct = **count as f64 / n as f64 * 100.0;
@@ -947,7 +947,7 @@ fn analyze_traps(entries: &[TrapEntry]) {
     if let Some(idx) = first_user {
         println!(
             "  First user_ecall at #{} ({:.1}%) -- userspace starts",
-            format!("{}", idx),
+            idx,
             idx as f64 / n as f64 * 100.0
         );
         // Pre-userspace summary
@@ -967,7 +967,7 @@ fn analyze_traps(entries: &[TrapEntry]) {
     if let Some(idx) = first_timer {
         println!(
             "  First s_timer at #{} ({:.1}%) -- scheduler active",
-            format!("{}", idx),
+            idx,
             idx as f64 / n as f64 * 100.0
         );
     }
@@ -983,7 +983,7 @@ fn analyze_traps(entries: &[TrapEntry]) {
     top_pages.sort_by(|a, b| b.1.cmp(a.1));
 
     println!("\n  SYSCALL HOTSPOTS (top 10 code pages)");
-    println!("  {:>18}  {:>8}  {}", "Page", "Calls", "Role");
+    println!("  {:>18}  {:>8}  Role", "Page", "Calls");
     println!("  {}", "-".repeat(50));
     for (page, count) in top_pages.iter().take(10) {
         let role = classify_address(**page);
@@ -1105,9 +1105,9 @@ fn classify_address(addr: u64) -> &'static str {
         "kernel (high mapping)"
     } else if addr >= 0xFFFFFF0000000000 {
         "kernel text"
-    } else if addr >= 0x7FF000000000 && addr <= 0x7FFFFFFFFFFF {
+    } else if (0x7FF000000000..=0x7FFFFFFFFFFF).contains(&addr) {
         "user library (libc/ld)"
-    } else if addr >= 0x555500000000 && addr <= 0x5556FFFFFFFF {
+    } else if (0x555500000000..=0x5556FFFFFFFF).contains(&addr) {
         "user binary (.text)"
     } else if addr < 0x100000000 {
         "lowmem"

@@ -156,7 +156,7 @@ impl Bus {
         // Memblock regions write detector (PA 0x0080348C - 0x00803A8C)
         // Log any write to the memblock memory regions array for debugging.
         // Also captures current_pc set by the boot loop before each step.
-        if addr >= 0x0080348C && addr < 0x00803A8C && self.memblock_write_log.len() < 100 {
+        if (0x0080348C..0x00803A8C).contains(&addr) && self.memblock_write_log.len() < 100 {
             // Store PC in upper 32 bits: (PC << 32) | addr, val
             // Since we only have Vec<(u64, u32)>, encode PC in the top of addr
             let encoded_addr = ((self.current_pc as u64) << 32) | addr;

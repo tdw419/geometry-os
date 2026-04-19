@@ -256,8 +256,8 @@ impl RiscvVm {
         // Reserve kernel, initramfs, and DTB regions in mem_rsvmap.
         let mut reserved_regions = vec![(0u64, kernel_phys_end)];
         if let (Some(initrd_addr), Some(initrd_end_addr)) = (initrd_start, initrd_end) {
-            let initrd_start_aligned = (initrd_addr as u64) & !0xFFF;
-            let initrd_end_aligned = ((initrd_end_addr as u64) + 0xFFF) & !0xFFF;
+            let initrd_start_aligned = initrd_addr & !0xFFF;
+            let initrd_end_aligned = (initrd_end_addr + 0xFFF) & !0xFFF;
             reserved_regions.push((
                 initrd_start_aligned,
                 initrd_end_aligned - initrd_start_aligned,
@@ -777,13 +777,9 @@ impl RiscvVm {
 
             // Memblock corruption tracker: check every 1K instructions in the danger zone.
             // Snapshot first 8 memory regions and log when they change.
-            let check_interval = if count > 170_000 && count < 250_000 {
-                1_000
-            } else {
-                50_000
-            };
-            if count % check_interval == 0 && count > 0 && count < 500_000 {
-                let mem_cnt_addr: u64 = 0x00803450; // memblock.memory.cnt at offset 8 from memblock base 0x00803448
+            if (170_000..250_000).contains(&count) && count.is_multiple_of(1_000) && count < 500_000
+            {
+                let mem_cnt_addr: u64 = 0x00803450;
                 let mem_cnt = vm.bus.read_word(mem_cnt_addr).unwrap_or(0);
                 let mut snapshot: Vec<(u32, u32)> = Vec::new();
                 for ri in 0..mem_cnt.min(8) {
@@ -1318,7 +1314,7 @@ impl RiscvVm {
                         if b == 0 {
                             break;
                         }
-                        if b >= 0x20 && b < 0x7f {
+                        if (0x20..0x7f).contains(&b) {
                             chars.push(b as char);
                         } else {
                             break;
@@ -1452,10 +1448,10 @@ impl RiscvVm {
                                 "a1", "a2", "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5",
                                 "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
                             ];
-                            for i in 0..32 {
+                            for (i, name) in reg_names.iter().enumerate() {
                                 eprintln!(
                                     "[boot]   x{} ({}) = 0x{:08X}",
-                                    i, reg_names[i], vm.cpu.x[i]
+                                    i, name, vm.cpu.x[i]
                                 );
                             }
                             // Dump kernel_map
@@ -1478,7 +1474,7 @@ impl RiscvVm {
                             // Dump L1 entries for kernel linear mapping (768..896)
                             let satp_ppn = vm.cpu.csr.satp & 0x003FFFFF;
                             let l1_pa = (satp_ppn as u64) << 12;
-                            let vpn1 = (vm.cpu.csr.stval as u32) >> 22;
+                            let vpn1 = vm.cpu.csr.stval >> 22;
                             eprintln!("[boot] L1 page table at PA 0x{:08X} (non-zero kernel entries 768..896):", l1_pa);
                             for idx in 768..896u32 {
                                 let addr = l1_pa + (idx as u64) * 4;
@@ -1512,7 +1508,7 @@ impl RiscvVm {
                                     idx,
                                     pte,
                                     tag,
-                                    (idx as u32) << 22
+                                    idx << 22
                                 );
                             }
                         }
@@ -1580,7 +1576,7 @@ impl RiscvVm {
             );
             for (i, (encoded, val)) in vm.bus.memblock_write_log.iter().enumerate() {
                 let pc = (encoded >> 32) as u32;
-                let addr = (encoded & 0xFFFFFFFF) as u64;
+                let addr = encoded & 0xFFFFFFFF;
                 let offset = addr - 0x0080348Cu64;
                 let region_idx = offset / 12;
                 let field = if offset % 8 < 4 { "base" } else { "size" };

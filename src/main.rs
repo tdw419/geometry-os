@@ -359,7 +359,7 @@ fn main() {
                         }
                         _ => {
                             if let Some(ch) = key_to_ascii_shifted(key, shift) {
-                                let _ = bridge.write_bytes(&[ch as u8]);
+                                let _ = bridge.write_bytes(&[ch]);
                             }
                         }
                     }
@@ -1001,7 +1001,7 @@ fn main() {
                                 }
                             }
                             "screenshot" => {
-                                let path = parts.get(1).map(|s| *s).unwrap_or("screenshot.png");
+                                let path = parts.get(1).copied().unwrap_or("screenshot.png");
                                 match save_full_buffer_png(path, &buffer, WIDTH, HEIGHT) {
                                     Ok(()) => status_msg = format!("[screenshot: {}]", path),
                                     Err(e) => status_msg = format!("[screenshot error: {}]", e),
@@ -1246,9 +1246,9 @@ fn main() {
                                     "PAUSED"
                                 };
 
-                                response.push_str(&format!("╔════════════════════════════════════════════════════════════════╗\n"));
+                                response.push_str("╔════════════════════════════════════════════════════════════════╗\n");
                                 response.push_str(&format!("║ Geometry OS Dashboard  {}  PC=0x{:04X}                              ║\n", state_label, vm.pc));
-                                response.push_str(&format!("╠════════════════════════════════════════════════════════════════╣\n"));
+                                response.push_str("╠════════════════════════════════════════════════════════════════╣\n");
 
                                 // Registers (4 per row)
                                 response.push_str("║ REGS: ");
@@ -1263,7 +1263,7 @@ fn main() {
                                     }
                                 }
 
-                                response.push_str(&format!("╠════════════════════════════════════════════════════════════════╣\n"));
+                                response.push_str("╠════════════════════════════════════════════════════════════════╣\n");
 
                                 // Disassembly
                                 let pc = vm.pc;
@@ -1323,7 +1323,7 @@ fn main() {
                                     ));
                                 }
 
-                                response.push_str(&format!("╠════════════════════════════════════════════════════════════════╣\n"));
+                                response.push_str("╠════════════════════════════════════════════════════════════════╣\n");
 
                                 // VM Screen (ASCII art, compact 32x16)
                                 response.push_str("║ VM DISPLAY:\n");
@@ -1362,9 +1362,9 @@ fn main() {
                                     response.push_str(&format!("║ {}\n", row.trim_end()));
                                 }
 
-                                response.push_str(&format!("╠════════════════════════════════════════════════════════════════╣\n"));
+                                response.push_str("╠════════════════════════════════════════════════════════════════╣\n");
                                 response.push_str(&format!("║ {}\n", status_msg));
-                                response.push_str(&format!("╚════════════════════════════════════════════════════════════════╝\n"));
+                                response.push_str("╚════════════════════════════════════════════════════════════════╝\n");
                             }
                             "load" => {
                                 // Load an .asm file onto the canvas

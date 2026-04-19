@@ -11,18 +11,15 @@ fn get_beep_sender() -> &'static Sender<Vec<u8>> {
         let (tx, rx) = channel::<Vec<u8>>();
         std::thread::spawn(move || {
             while let Ok(wav_data) = rx.recv() {
-                match std::process::Command::new("aplay")
+                if let Ok(mut child) = std::process::Command::new("aplay")
                     .args(["-q", "-t", "wav", "-"])
                     .stdin(std::process::Stdio::piped())
                     .spawn()
                 {
-                    Ok(mut child) => {
-                        if let Some(mut stdin) = child.stdin.take() {
-                            let _ = stdin.write_all(&wav_data);
-                        }
-                        let _ = child.wait();
+                    if let Some(mut stdin) = child.stdin.take() {
+                        let _ = stdin.write_all(&wav_data);
                     }
-                    Err(_) => {}
+                    let _ = child.wait();
                 }
             }
         });
