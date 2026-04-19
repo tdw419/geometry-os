@@ -52,6 +52,9 @@ pub struct Sbi {
     pub console_output: Vec<u8>,
     /// Whether the guest has requested shutdown.
     pub shutdown_requested: bool,
+    /// Log of SBI ECALL arguments (a7, a6, a0) for debugging.
+    #[allow(dead_code)]
+    pub ecall_log: Vec<(u32, u32, u32)>,
 }
 
 impl Sbi {
@@ -60,6 +63,7 @@ impl Sbi {
         Self {
             console_output: Vec::new(),
             shutdown_requested: false,
+            ecall_log: Vec::new(),
         }
     }
 
@@ -91,6 +95,8 @@ impl Sbi {
         uart: &mut Uart,
         clint: &mut super::clint::Clint,
     ) -> Option<(u32, u32)> {
+        // Log ECALL arguments for debugging (before they're modified)
+        self.ecall_log.push((a7, a6, a0));
         match a7 {
             // SBI v0.1 legacy calls (extension ID is the function ID, a6=0)
             SBI_CONSOLE_PUTCHAR => {

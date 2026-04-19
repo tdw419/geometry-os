@@ -206,7 +206,7 @@ impl RiscvVm {
         // which caused all physical addresses below 0xC0000000 to be silently discarded.
         let mut vm = Self::new_with_base(0, actual_ram_size);
         vm.bus.low_addr_identity_map = true; // Identity-map low addresses when page table walk fails (DTB, device regs)
-        vm.bus.auto_pte_fixup = true; // Needed: MMU-level fixup_ppn translates virtual PPNs during page table walks
+        vm.bus.auto_pte_fixup = false; // kernel_map is patched correctly below, so __pa() works and PTEs have correct physical PPNs
 
         // 3. Load kernel ELF at physical addresses (p_paddr).
         // The kernel's ELF has p_paddr = vaddr - PAGE_OFFSET, which are the correct
@@ -492,12 +492,11 @@ impl RiscvVm {
             eprintln!("[boot] WARNING: kernel patch mismatch! sw_a5_12=0x{:04X} sw_a6_24=0x{:08X} sw_a1_20=0x{:04X} (expected 0xC4DC/0x0104AC23/0xC8CC)", sw_a5_12, sw_a6_24, sw_a1_20);
         }
 
-        // With __pa() fixed for kernel_map, most PTEs are correct.
-        // auto_pte_fixup remains enabled for:
-        // 1. MMU-level fixup_ppn: translates any remaining virtual PPNs during walks
-        // 2. Write interception: fixes demand-paged PTEs created by fault handler
-        // 3. SATP scan: fixes PTEs on page table switch
-        vm.bus.auto_pte_fixup = true;
+        // With __pa() fixed for kernel_map, all PTEs have correct physical PPNs.
+        // auto_pte_fixup is DISABLED because the MMU-level fixup_ppn and
+        // write interception would incorrectly subtract PAGE_OFFSET from
+        // already-correct PPNs, corrupting page tables.
+        vm.bus.auto_pte_fixup = false;
 
         // Pre-populate memblock with kernel image reservation.
         //
@@ -592,7 +591,8 @@ impl RiscvVm {
         // riscv_timebase stays 0 and calibrate_delay() produces lpj_fine=0,
         // causing udelay() to loop forever. Pre-setting it ensures udelay
         // works even if DTB parsing is delayed.
-        let riscv_timebase_pa: u64 = 0x00C79E54;
+        // IMPORTANT: riscv_timebase is at VA 0xC0C7A058, PA = 0x00C7A058.
+        let riscv_timebase_pa: u64 = 0x00C7A058;
         vm.bus.write_word(riscv_timebase_pa, 10_000_000).ok();
 
         // Pre-set lpj_fine to a reasonable default.
@@ -604,8 +604,91 @@ impl RiscvVm {
         let lpj_fine_pa: u64 = 0x01482060;
         vm.bus.write_word(lpj_fine_pa, 400_000).ok();
 
-        // Enter S-mode via MRET.
-        // mepc = VIRTUAL entry point (e.g., 0xC0000000).
+        // Pre-set initial_boot_params to point to the DTB.
+        // The kernel's setup_arch() reads _dtb_early_pa and stores it to
+        // initial_boot_params. If this happens before the DTB watchdog
+        // restores the pointers (or if the write fails due to a page fault),
+        // initial_boot_params stays 0 and the kernel can't parse the DTB.
+        // Without DTB parsing: no earlycon, no cmdline parsing, no device
+        // discovery. Pre-setting it ensures the kernel can find the DTB
+        // even if the normal init path has issues.
+        //
+        // initial_boot_params (VA 0xC0C7A380, PA 0x00C7A380): pointer to DTB
+        // initial_boot_params_pa (VA 0xC0C7A3B0, PA 0x00C7A3B0): PA of DTB
+        let ibp_pa: u64 = 0x00C7A380;
+        let ibp_pa_pa: u64 = 0x00C7A3B0;
+        let dtb_phys_addr: u32 = dtb_addr as u32;
+        let dtb_virt_addr: u32 = dtb_addr.wrapping_add(0xC0000000) as u32;
+        vm.bus.write_word(ibp_pa, dtb_phys_addr).ok(); // initial_boot_params = DTB PA
+        vm.bus.write_word(ibp_pa_pa, dtb_phys_addr).ok(); // initial_boot_params_pa = DTB PA
+        eprintln!("[boot] Pre-set initial_boot_params=0x{:08X} (DTB at PA 0x{:08X})", dtb_phys_addr, dtb_phys_addr);
+        // Protect IBP immediately from kernel BSS clearing.
+        vm.bus.protected_addrs.push((ibp_pa, dtb_phys_addr));
+        vm.bus.protected_addrs.push((ibp_pa_pa, dtb_phys_addr));
+
+        // Pre-set loops_per_jiffy to skip calibrate_delay().
+        // calibrate_delay() calls udelay() in a loop to measure CPU speed.
+        // In our emulator, this takes billions of instructions. Pre-setting
+        // loops_per_jiffy (VA 0xC1480A18, PA 0x01480A18) to a reasonable
+        // value makes calibrate_delay() skip calibration when it finds a
+        // non-zero value.
+        // Value: 400000 (same as lpj_fine, approximately correct for 1.68 MIPS)
+        let lpj_pa: u64 = 0x01480A18;
+        vm.bus.write_word(lpj_pa, 400_000).ok();
+        eprintln!("[boot] Pre-set loops_per_jiffy=400000 to skip calibrate_delay()");
+
+        // Patch calibrate_delay to return immediately.
+        // calibrate_delay() at VA 0xC00080DA (PA 0x00080DA) runs an
+        // exponentially-growing loop calling udelay() to measure CPU speed.
+        // In our emulator, this takes billions of instructions. We pre-set
+        // loops_per_jiffy above, so calibration is unnecessary.
+        // Replace first instruction (addi sp,-80 -> 0x715D) with ret (0x8082).
+        // This also preserves the pre-set lpj_fine value.
+        let calibrate_delay_pa: u64 = 0x00080DA;
+        let first_insn = vm.bus.read_half(calibrate_delay_pa).unwrap_or(0);
+        if first_insn == 0x715D {
+            vm.bus.write_half(calibrate_delay_pa, 0x8082).ok(); // C.JR ra (ret)
+            eprintln!("[boot] Patched calibrate_delay to return immediately");
+        } else {
+            eprintln!(
+                "[boot] WARNING: calibrate_delay first insn = 0x{:04X} (expected 0x715D)",
+                first_insn
+            );
+        }
+
+        // Patch udelay to return immediately.
+        // udelay() at VA 0xC021B34E (PA 0x0021B34E) is called many times
+        // during early boot (exception handling, timer init, etc.) with
+        // large delay values. Even with 100x timer speedup, these calls
+        // take millions of instructions. We patch it to NOP so the kernel
+        // can progress past early boot and reach earlycon/UART output.
+        // Replace first instruction (addi sp,-16 -> 0x1141) with ret (0x8082).
+        // IMPORTANT: udelay must NOT corrupt registers. C.JR ra only reads ra.
+        let udelay_pa: u64 = 0x0021B34E;
+        let udelay_first = vm.bus.read_half(udelay_pa).unwrap_or(0);
+        if udelay_first == 0x1141 {
+            vm.bus.write_half(udelay_pa, 0x8082).ok(); // C.JR ra (ret)
+            eprintln!("[boot] Patched udelay to return immediately");
+        } else {
+            eprintln!(
+                "[boot] WARNING: udelay first insn = 0x{:04X} (expected 0x1141)",
+                udelay_first
+            );
+        }
+
+        // Patch ndelay to return immediately (same approach).
+        // ndelay() at VA 0xC021B308 (PA 0x0021B308).
+        let ndelay_pa: u64 = 0x0021B308;
+        let ndelay_first = vm.bus.read_half(ndelay_pa).unwrap_or(0);
+        if ndelay_first == 0x1141 {
+            vm.bus.write_half(ndelay_pa, 0x8082).ok(); // C.JR ra (ret)
+            eprintln!("[boot] Patched ndelay to return immediately");
+        } else {
+            eprintln!(
+                "[boot] WARNING: ndelay first insn = 0x{:04X} (expected 0x1141)",
+                ndelay_first
+            );
+        }
         // The boot page table maps VA 0xC0000000 -> PA 0x0, so the kernel
         // executes from the correct virtual address. This is critical because
         // the kernel uses PC-relative addressing (auipc, jal, etc.) that
@@ -741,16 +824,17 @@ impl RiscvVm {
                         // CLINT: 0x02000000 (L1[8])
                         // PLIC:  0x0C000000 (L1[48])
                         // UART:  0x10000000 (L1[64])
-                        // Also map low RAM for DTB/initramfs access: L1[0..5]
-                        let device_l1_entries: &[u32] = &[
-                            0, 1, 2, 3, 4, 5,  // Low RAM (0x0-0x17FFFFF) for DTB/initramfs
-                            8,  // CLINT at 0x02000000
-                            48, // PLIC at 0x0C000000
-                            64, // UART at 0x10000000
-                        ];
+                        //
+                        // Identity-map ALL addresses below PAGE_OFFSET (L1[0..768]).
+                        // This covers the entire 3GB low address space (0x0-0xBFFFFFFF).
+                        // The kernel accesses physical addresses in this range during
+                        // early boot (BSS clearing, per-CPU data, fixmap, etc.).
+                        // Without these mappings, any access to an unmapped low VA
+                        // causes a page fault cascade that leads to panic.
+                        // Entries 768+ are the kernel linear mapping (handled separately).
                         let identity_pte: u32 = 0x0000_00CF; // V+R+W+X+A+D, U=0
 
-                        for &l1_idx in device_l1_entries {
+                        for l1_idx in 0..768u32 {
                             let addr = pg_dir_phys + (l1_idx as u64) * 4;
                             let existing = vm.bus.read_word(addr).unwrap_or(0);
                             if (existing & 1) == 0 {
@@ -879,12 +963,30 @@ impl RiscvVm {
 
                         // Protect kernel_map and phys_ram_base from future corruption.
                         // Only add to protected list once (first SATP change).
+                        // IMPORTANT: protected values must match the correct kernel_map
+                        // values, NOT just 0. Previously all were set to 0, which
+                        // caused va_pa_offset to return 0 instead of 0xC0000000,
+                        // making __pa() a no-op and breaking ALL PTE writes.
                         if !kernel_map_protected {
-                            for offset in [12u64, 20, 24] {
-                                vm.bus.protected_addrs.push((km_phys + offset, 0));
-                            }
-                            // Also protect phys_ram_base
-                            vm.bus.protected_addrs.push((0x00C7A0B4, 0));
+                            // offset 12: phys_addr = 0
+                            vm.bus.protected_addrs.push((km_phys + 12, 0x00000000));
+                            // offset 20: va_pa_offset = PAGE_OFFSET = 0xC0000000
+                            vm.bus.protected_addrs.push((km_phys + 20, 0xC0000000));
+                            // offset 24: va_kernel_pa_offset = 0
+                            vm.bus.protected_addrs.push((km_phys + 24, 0x00000000));
+                            // Also protect phys_ram_base (reads should return 0)
+                            // REMOVED: phys_ram_base must be writable by kernel DTB parser.
+                            // vm.bus.protected_addrs.push((0x00C7A0B4, 0x00000000));
+                            // Protect initial_boot_params and initial_boot_params_pa
+                            vm.bus.protected_addrs.push((0x00C7A380, dtb_addr as u32));
+                            vm.bus.protected_addrs.push((0x00C7A3B0, dtb_addr as u32));
+                            // Note: DO NOT protect phys_ram_base (0x00C7A0B4) here.
+                            // The kernel's DTB parsing writes the real value, and
+                            // protecting it to 0 prevents the kernel from seeing RAM.
+                            // Protect loops_per_jiffy
+                            vm.bus.protected_addrs.push((0x01480A18, 400_000));
+                            // Protect lpj_fine
+                            vm.bus.protected_addrs.push((0x01482060, 400_000));
                             kernel_map_protected = true;
                             eprintln!("[boot] Protected kernel_map and phys_ram_base from future writes");
                         }
@@ -981,14 +1083,15 @@ impl RiscvVm {
                         // Check for demand-paged identity mapping at low addresses.
                         //
                         // The kernel's page table doesn't include identity mappings for
-                        // low physical addresses (DTB at ~21MB, initramfs, device regions).
-                        // Our SATP-change fixup injects these, but the kernel's own
-                        // setup_vm() may clear them. When the kernel faults on a low
+                        // low physical addresses (DTB at ~21MB, initramfs, device regions,
+                        // per-CPU data, fixmap, etc.). Our SATP-change fixup injects L1[0..767],
+                        // but the kernel's own setup_vm() may clear them or create new
+                        // page tables without our mappings. When the kernel faults on a low
                         // address, inject the identity megapage on demand.
                         let fault_addr = vm.cpu.csr.mtval;
                         let is_page_fault =
                             cause_code == 12 || cause_code == 13 || cause_code == 15;
-                        if is_page_fault && fault_addr < 0x0200_0000 {
+                        if is_page_fault && fault_addr < 0xC000_0000 {
                             let satp = vm.cpu.csr.satp;
                             let pg_dir_ppn = (satp & 0x3FFFFF) as u64;
                             if pg_dir_ppn > 0 {
@@ -1118,7 +1221,13 @@ impl RiscvVm {
             // Advance CLINT timer and sync hardware interrupt state into MIP.
             // Without this, mtime never advances and timer interrupts never fire,
             // causing the kernel to hang waiting for the first timer tick.
-            vm.bus.tick_clint();
+            //
+            // Use tick_clint_n(100) to simulate realistic CPU/timebase ratio.
+            // On real hardware, a 1 GHz CPU with 10 MHz timebase runs 100
+            // instructions per timer tick. Advancing by 100 per instruction
+            // makes udelay() and calibrate_delay() complete in reasonable time
+            // instead of needing billions of instructions.
+            vm.bus.tick_clint_n(100);
             vm.bus.sync_mip(&mut vm.cpu.csr.mip);
 
             let step_result = vm.step();
@@ -1229,8 +1338,8 @@ impl RiscvVm {
                     "[boot]   _dtb_early_pa=0x{:08X} (expect 0x{:08X})",
                     depa, dtb_addr as u32
                 );
-                // Check initial_boot_params (VA 0xC0C7A178, PA 0x00C7A178)
-                let ibp_pa = 0x00C7A178u64;
+                // Check initial_boot_params (VA 0xC0C7A380, PA 0x00C7A380)
+                let ibp_pa = 0x00C7A380u64;
                 let ibp = vm.bus.read_word(ibp_pa).unwrap_or(0);
                 eprintln!(
                     "[boot]   initial_boot_params=0x{:08X} (expect DTB PA 0x{:08X})",

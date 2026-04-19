@@ -45,6 +45,18 @@ impl Clint {
         self.mtime >= self.mtimecmp
     }
 
+    /// Advance mtime by N ticks. Returns true if a timer interrupt is pending.
+    ///
+    /// Used during Linux boot to simulate realistic CPU/timebase ratio.
+    /// On real hardware, the CPU runs ~100x faster than the CLINT timer
+    /// (e.g., 1 GHz CPU with 10 MHz timebase). Advancing by 100 per
+    /// instruction makes `udelay()` and `calibrate_delay()` complete
+    /// in reasonable time instead of billions of instructions.
+    pub fn tick_n(&mut self, n: u64) -> bool {
+        self.mtime = self.mtime.wrapping_add(n);
+        self.mtime >= self.mtimecmp
+    }
+
     /// Returns true if the machine timer interrupt should fire.
     pub fn timer_pending(&self) -> bool {
         self.mtime >= self.mtimecmp

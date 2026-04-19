@@ -17,16 +17,13 @@ fn main() {
     let mut count: u64 = 0;
     let mut sbi_count: u64 = 0;
     let mut ecall_m_count: u64 = 0;
-    let mut forward_count: u64 = 0;
     let mut last_satp: u32 = vm.cpu.csr.satp;
     let mut satp_changes: u32 = 0;
     let mut dtb_early_va_expected: u32 = (dtb_addr.wrapping_add(0xC0000000)) as u32;
-    let mut last_report_pc: u32 = 0;
-    let mut unique_pcs: u32 = 0;
-
-    // PC tracking - log unique PCs to trace execution path
-    let mut pc_log: Vec<(u64, u32, &'static str)> = Vec::new();
-    let mut seen_pcs: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    let mut medeleg_log: Vec<(u64, u32)> = Vec::new();
+    let mut stvec_log: Vec<(u64, u32)> = Vec::new();
+    let mut _last_medeleg: u32 = vm.cpu.csr.medeleg;
+    let mut _last_stvec: u32 = vm.cpu.csr.stvec;
 
     while count < max_count {
         if vm.bus.sbi.shutdown_requested { break; }
@@ -43,7 +40,7 @@ fn main() {
             }
         }
 
-        // SATP change handling (same as boot_panic_diag)
+        // SATP change handling
         {
             let cur_satp = vm.cpu.csr.satp;
             if cur_satp != last_satp {
@@ -79,7 +76,6 @@ fn main() {
                         vm.bus.write_word(scan_addr, fixup_pte).ok();
                     }
                     vm.cpu.tlb.flush_all();
-                    // Re-protect kernel_map
                     vm.bus.write_word(0x00C7A098 + 12, 0x00000000).ok();
                     vm.bus.write_word(0x00C7A098 + 20, 0xC0000000).ok();
                     vm.bus.write_word(0x00C7A098 + 24, 0x00000000).ok();
@@ -98,13 +94,11 @@ fn main() {
             let is_interrupt = (mcause >> 31) & 1 == 1;
 
             if is_interrupt {
-                // Timer interrupt
                 vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
                 vm.cpu.csr.mepc = vm.cpu.csr.mepc.wrapping_add(4);
             } else {
                 match cause_code {
                     9 => {
-                        // ECALL_S = SBI call
                         sbi_count += 1;
                         let result = vm.bus.sbi.handle_ecall(
                             vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
@@ -114,7 +108,6 @@ fn main() {
                         if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
                     }
                     11 => {
-                        // ECALL_M
                         ecall_m_count += 1;
                         let result = vm.bus.sbi.handle_ecall(
                             vm.cpu.x[17], vm.cpu.x[16], vm.cpu.x[10], vm.cpu.x[11],
@@ -124,7 +117,6 @@ fn main() {
                         if let Some((a0, a1)) = result { vm.cpu.x[10] = a0; vm.cpu.x[11] = a1; }
                     }
                     _ => {
-                        // Forward traps from S/U to S-mode
                         if mpp != 3 {
                             let stvec = vm.cpu.csr.stvec & !0x3u32;
                             if stvec != 0 {
@@ -142,7 +134,6 @@ fn main() {
                                 vm.cpu.pc = stvec;
                                 vm.cpu.privilege = Privilege::Supervisor;
                                 vm.cpu.tlb.flush_all();
-                                forward_count += 1;
                                 count += 1;
                                 continue;
                             }
@@ -157,52 +148,58 @@ fn main() {
         vm.bus.sync_mip(&mut vm.cpu.csr.mip);
         let _step_result = vm.step();
 
-        // Track unique PCs to understand execution flow
-        let pc = vm.cpu.pc;
-        if seen_pcs.insert(pc) {
-            unique_pcs += 1;
-            let priv_str = match vm.cpu.privilege {
-                Privilege::Machine => "M",
-                Privilege::Supervisor => "S",
-                Privilege::User => "U",
-            };
-            // Only log after setup_vm (count > 180K) to reduce noise
-            if count > 177_000 && unique_pcs <= 500 {
-                pc_log.push((count, pc, priv_str));
-            }
+        // Track medeleg and stvec changes
+        let cur_medeleg = vm.cpu.csr.medeleg;
+        if cur_medeleg != _last_medeleg && count > 170_000 {
+            medeleg_log.push((count, cur_medeleg));
+            _last_medeleg = cur_medeleg;
+        }
+        let cur_stvec = vm.cpu.csr.stvec;
+        if cur_stvec != _last_stvec && count > 170_000 {
+            stvec_log.push((count, cur_stvec));
+            _last_stvec = cur_stvec;
         }
 
-        // Report every 50K instructions
-        if count > 0 && count % 50_000 == 0 {
-            let priv_str = match vm.cpu.privilege {
-                Privilege::Machine => "M",
-                Privilege::Supervisor => "S",
-                Privilege::User => "U",
-            };
-            eprintln!("[{}K] PC=0x{:08X} SBI={} ecall_m={} fwd={} priv={}",
-                count / 1000, pc, sbi_count, ecall_m_count, forward_count, priv_str);
+        // Detect panic entry
+        if vm.cpu.pc == 0xC000252E && count > 200_000 {
+            eprintln!("\n!!! PANIC at count={} !!!", count);
+            eprintln!("    RA=0x{:08X} SP=0x{:08X}", vm.cpu.x[1], vm.cpu.x[2]);
+            eprintln!("    A0=0x{:08X} (format string)", vm.cpu.x[10]);
+            // Read format string
+            let fmt = vm.cpu.x[10];
+            if fmt > 0xC0000000 && fmt < 0xC2000000 {
+                let pa = (fmt - 0xC0000000) as u64;
+                let mut msg = Vec::new();
+                for i in 0..200u64 {
+                    if let Ok(b) = vm.bus.read_byte(pa + i) {
+                        if b == 0 { break; }
+                        msg.push(b);
+                    } else { break; }
+                }
+                if let Ok(s) = String::from_utf8(msg) {
+                    eprintln!("    PANIC MSG: '{}'", s);
+                }
+            }
+            break;
         }
 
         count += 1;
+        if count % 100_000 == 0 && count > 0 {
+            eprintln!("[{}K] PC=0x{:08X} SBI={} medeleg=0x{:04X} stvec=0x{:08X} priv={:?}",
+                count / 1000, vm.cpu.pc, sbi_count, vm.cpu.csr.medeleg,
+                vm.cpu.csr.stvec, vm.cpu.privilege);
+        }
     }
 
-    // Print execution trace after setup_vm
-    eprintln!("\n=== Execution trace after setup_vm (first 200 unique PCs) ===");
-    for (c, p, pr) in pc_log.iter().take(200) {
-        eprintln!("  count={}: PC=0x{:08X} priv={}", c, p, pr);
+    eprintln!("\n=== medeleg changes ===");
+    for (c, v) in &medeleg_log {
+        eprintln!("  count={}: medeleg=0x{:04X}", c, v);
     }
-
-    eprintln!("\nTotal: {} instructions, {} unique PCs, {} SBI calls, {} ECALL_M, {} forwards",
-        count, unique_pcs, sbi_count, ecall_m_count, forward_count);
-
-    // Check what the final PC is
-    eprintln!("Final: PC=0x{:08X} priv={:?}", vm.cpu.pc, vm.cpu.privilege);
-
-    // UART output
+    eprintln!("\n=== stvec changes ===");
+    for (c, v) in &stvec_log {
+        eprintln!("  count={}: stvec=0x{:08X}", c, v);
+    }
+    eprintln!("\nTotal: {} instructions, {} SBI calls, {} ECALL_M", count, sbi_count, ecall_m_count);
     let tx = vm.bus.uart.drain_tx();
     eprintln!("UART: {} bytes", tx.len());
-    if !tx.is_empty() {
-        let s = String::from_utf8_lossy(&tx);
-        eprintln!("{}", &s[..s.len().min(5000)]);
-    }
 }

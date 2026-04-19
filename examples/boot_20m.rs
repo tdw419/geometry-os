@@ -41,13 +41,25 @@ fn main() {
         println!("{}\n", s);
     }
 
-    // UART output
+    // SBI ecall log
+    println!(
+        "SBI ecall_log: {} entries",
+        vm.bus.sbi.ecall_log.len()
+    );
+    for (i, (a7, a6, a0)) in vm.bus.sbi.ecall_log.iter().take(30).enumerate() {
+        println!("  [{}] a7=0x{:02X} a6={} a0=0x{:08X}", i, a7, a6, a0);
+    }
+
+    // UART TX buffer
     let tx = vm.bus.uart.drain_tx();
     println!("UART TX: {} bytes", tx.len());
     if !tx.is_empty() {
         let s = String::from_utf8_lossy(&tx);
         println!("{}\n", s);
     }
+
+    // ECALL count from CPU
+    println!("CPU ecall_count: {}", vm.cpu.ecall_count);
 
     // Syscall log
     println!("Syscalls: {}", vm.bus.syscall_log.len());

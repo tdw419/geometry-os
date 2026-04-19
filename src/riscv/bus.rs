@@ -292,6 +292,12 @@ impl Bus {
         self.clint.tick();
     }
 
+    /// Advance the CLINT timer by N ticks.
+    /// Used during Linux boot to simulate realistic CPU/timebase ratio.
+    pub fn tick_clint_n(&mut self, n: u64) {
+        self.clint.tick_n(n);
+    }
+
     /// Sync CLINT + PLIC hardware state into the MIP register.
     ///
     /// Sets/clears MTIP (bit 7) based on mtime >= mtimecmp.
