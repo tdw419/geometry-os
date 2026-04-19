@@ -2333,4 +2333,47 @@ mod tests {
             assert_eq!(line.len(), 48, "expected 48 cols");
         }
     }
+
+    /// Canary test: opcode_name must agree with the disassembler.
+    /// If opcodes are added to disasm.rs but not opcode_name (or vice versa),
+    /// this test catches the drift. Samples representative opcodes across the
+    /// full ISA range rather than testing all 103 (disasm requires a Vm + RAM).
+    #[test]
+    fn test_opcode_name_matches_disasm() {
+        use crate::vm::Vm;
+        // Canaries: one from each ISA range, plus some that were wrong before
+        let canaries: &[(u8, &str)] = &[
+            (0x00, "HALT"),
+            (0x02, "FRAME"),
+            (0x14, "STRO"), // was wrong: was TEXT
+            (0x1B, "ADDI"),
+            (0x20, "ADD"),
+            (0x29, "MOD"),
+            (0x30, "JMP"),      // was wrong: was ADDI
+            (0x33, "CALL"),     // was wrong: was DIVI
+            (0x40, "PSET"),     // was wrong: was PLOT
+            (0x42, "FILL"),     // was wrong: was LINE
+            (0x45, "LINE"),     // was wrong: was GETPIX
+            (0x52, "SYSCALL"),  // was wrong: was IKEY
+            (0x60, "PUSH"),     // was wrong: was FOPEN
+            (0x6E, "SHUTDOWN"), // was wrong: was SETENV
+            (0x75, "FORMULA"),
+            (0x7E, "NOTE"),
+        ];
+        for &(op, _expected) in canaries {
+            let name = opcode_name(op);
+            // Disassemble by putting the opcode in RAM and calling disassemble_at
+            let mut vm2 = Vm::new();
+            let addr = 100u32;
+            vm2.ram[addr as usize] = op as u32;
+            let (disasm_str, _) = vm2.disassemble_at(addr);
+            // disasm_str starts with the mnemonic (before any spaces/args)
+            let disasm_mnemonic = disasm_str.split_whitespace().next().unwrap_or("???");
+            assert_eq!(
+                name, disasm_mnemonic,
+                "opcode_name(0x{:02X}) = {:?} but disasm says {:?}",
+                op, name, disasm_mnemonic
+            );
+        }
+    }
 }
