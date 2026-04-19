@@ -620,6 +620,16 @@ impl RiscvVm {
         vm.bus.write_word(lpj_pa, 400_000).ok();
         eprintln!("[boot] Pre-set loops_per_jiffy=400000 to skip calibrate_delay()");
 
+        // Pre-set sbi_debug_console_available = true so that earlycon=sbi
+        // uses the DBCN console write path. The kernel's early_sbi_setup()
+        // checks this flag during early param parsing, BEFORE sbi_init() runs.
+        // Without this pre-set, earlycon=sbi returns -ENODEV because the flag
+        // is still false at earlycon setup time.
+        // BSS symbol: sbi_debug_console_available at VA 0xC14820A0, PA 0x014820A0.
+        let sbi_dbcn_pa: u64 = 0x014820A0;
+        vm.bus.write_word(sbi_dbcn_pa, 1).ok(); // bool true
+        eprintln!("[boot] Pre-set sbi_debug_console_available=true for earlycon DBCN");
+
         // Patch calibrate_delay to return immediately.
         // calibrate_delay() at VA 0xC00080DA (PA 0x00080DA) runs an
         // exponentially-growing loop calling udelay() to measure CPU speed.
