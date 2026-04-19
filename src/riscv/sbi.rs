@@ -211,12 +211,25 @@ impl Sbi {
             }
             SBI_EXT_HART_STATE => {
                 match a6 {
-                    // hart_start (0)
-                    0 => Some((SBI_SUCCESS as u32, 0)),
+                    // hart_start (0) -- only allow hart 0 (ourselves)
+                    0 => {
+                        if a0 == 0 {
+                            Some((SBI_SUCCESS as u32, 0))
+                        } else {
+                            // Reject secondary CPU start -- we only emulate 1 hart
+                            Some((SBI_ERR_FAILURE as u32, 0))
+                        }
+                    }
                     // hart_stop (1)
                     1 => Some((SBI_SUCCESS as u32, 0)),
                     // hart_get_status (2)
-                    2 => Some((0, 0)), // started
+                    2 => {
+                        if a0 == 0 {
+                            Some((0, 0)) // started
+                        } else {
+                            Some((SBI_ERR_FAILURE as u32, 0)) // not available
+                        }
+                    }
                     _ => Some((SBI_ERR_NOT_SUPPORTED as u32, 0)),
                 }
             }
@@ -489,5 +502,31 @@ mod tests {
         );
         assert_eq!(result, Some((SBI_SUCCESS as u32, 0)));
         assert_eq!(clint.mtimecmp, 0xF00D0000CAFE);
+    }
+
+    #[test]
+    fn test_sbi_hart_state_start_primary() {
+        let mut sbi = Sbi::new();
+        let mut uart = Uart::new();
+        let mut clint = Clint::new();
+        // hart 0 (our CPU) should succeed
+        let r = sbi.handle_ecall(SBI_EXT_HART_STATE, 0, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        assert_eq!(r, Some((SBI_SUCCESS as u32, 0)));
+        // hart 1 (secondary) should fail -- we only emulate 1 hart
+        let r = sbi.handle_ecall(SBI_EXT_HART_STATE, 0, 1, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        assert_eq!(r, Some((SBI_ERR_FAILURE as u32, 0)));
+    }
+
+    #[test]
+    fn test_sbi_hart_state_get_status() {
+        let mut sbi = Sbi::new();
+        let mut uart = Uart::new();
+        let mut clint = Clint::new();
+        // hart 0 should report started
+        let r = sbi.handle_ecall(SBI_EXT_HART_STATE, 2, 0, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        assert_eq!(r, Some((0, 0)));
+        // hart 1 should report not available
+        let r = sbi.handle_ecall(SBI_EXT_HART_STATE, 2, 1, 0, 0, 0, 0, 0, &mut uart, &mut clint);
+        assert_eq!(r, Some((SBI_ERR_FAILURE as u32, 0)));
     }
 }

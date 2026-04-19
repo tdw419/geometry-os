@@ -11,13 +11,24 @@ fn main() {
         initramfs.as_deref(),
         256,
         50_000_000,
-        "console=ttyS0 loglevel=8",
+        "console=ttyS0 earlycon=uart8250,mmio32,0x10000000 panic=5 nosmp maxcpus=0 loglevel=8",
     )
     .unwrap();
 
     eprintln!(
         "[result] Boot completed: {} instructions, PC=0x{:08X}",
         info.instructions, vm.cpu.pc
+    );
+
+    // Check UART write statistics
+    eprintln!(
+        "[result] UART write_count={} tx_buf_len={}",
+        vm.bus.uart.write_count,
+        vm.bus.uart.tx_buf.len(),
+    );
+    eprintln!(
+        "[result] SBI console_output={} bytes",
+        vm.bus.sbi.console_output.len(),
     );
 
     // Check for UART output
@@ -30,5 +41,14 @@ fn main() {
         }
     } else {
         eprintln!("[result] No UART output");
+    }
+
+    // Check SBI console output
+    if !vm.bus.sbi.console_output.is_empty() {
+        let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
+        eprintln!("[result] SBI console output ({} bytes):", s.len());
+        for line in s.lines().take(50) {
+            eprintln!("  {}", line);
+        }
     }
 }
