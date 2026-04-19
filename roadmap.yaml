@@ -10,7 +10,7 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 111
+  opcodes: 107
   tests: 1294
   programs: 62
   loc: 36489
@@ -2972,6 +2972,66 @@ phases:
     '
   scope_lines_total: 800
   test_target: 10
+- id: phase-51
+  title: TCP Networking
+  status: complete
+  goal: Add TCP client networking opcodes for connecting, sending, receiving, and disconnecting
+  description: 'Four new opcodes (0x7F-0x82) provide TCP client capability. Programs can connect
+    to remote hosts, send and receive data, and close connections. This enables network-aware
+    programs that can communicate with external services.'
+  deliverables:
+  - name: CONNECT opcode (0x7F)
+    description: 'Connect to a remote TCP host. Takes addr_reg, port_reg, fd_reg. Stores file descriptor in fd_reg.'
+    status: done
+    tasks: []
+  - name: SOCKSEND opcode (0x80)
+    description: 'Send data on a TCP connection. Takes fd_reg, buf_reg, len_reg, sent_reg. Returns bytes sent.'
+    status: done
+    tasks: []
+  - name: SOCKRECV opcode (0x81)
+    description: 'Receive data from a TCP connection. Takes fd_reg, buf_reg, max_len_reg, recv_reg. Returns bytes received.'
+    status: done
+    tasks: []
+  - name: DISCONNECT opcode (0x82)
+    description: 'Close a TCP connection. Takes fd_reg. Frees the socket.'
+    status: done
+    tasks: []
+  - name: Networking tests
+    description: '12 unit tests covering connect, send, recv, disconnect, and edge cases.'
+    status: done
+    tasks: []
+  - name: Assembler support
+    description: 'All four opcodes recognized by the assembler with proper argument validation.'
+    status: done
+    tasks: []
+  technical_notes: 'Implementation in src/vm/net.rs (563 LOC). Opcodes 0x7F-0x82. Uses Rust std::net::TcpStream.
+    Non-blocking by default. 12 tests in net.rs.'
+  scope_lines_total: 563
+  test_target: 12
+- id: phase-52
+  title: Episodic Memory
+  status: complete
+  goal: Persist diagnostic context across Hermes sessions so the LLM agent can recall past runs
+  description: 'Episodic memory layer for Geometry OS. Stores program run outcomes in JSONL format
+    so the Hermes agent can recall past runs, black-screen incidents, and what fixed them. Part of
+    the AI-Native OS memory taxonomy: Working (context window), Episodic (this), Semantic (RAG),
+    Procedural (skills).'
+  deliverables:
+  - name: Episode data structure and JSONL persistence
+    description: 'Episode struct with timestamp, program, total_ops, top_opcodes, screen state, and outcome. Stored as JSONL in episodic_memory/ directory.'
+    status: done
+    tasks: []
+  - name: Episode logging and read-back
+    description: 'Log episodes after program runs. Parse top_ops array on read-back. Query by program name or recent episodes.'
+    status: done
+    tasks: []
+  - name: Episodic memory tests
+    description: '12 unit tests covering episode creation, serialization, read-back, and querying.'
+    status: done
+    tasks: []
+  technical_notes: 'Implementation in src/episode_log.rs (689 LOC). Zero external dependencies -- hand-rolled JSON. Includes opcode histogram and screen delta detection.'
+  scope_lines_total: 689
+  test_target: 12
 global_risks:
 - 'Opcode space: 107 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard

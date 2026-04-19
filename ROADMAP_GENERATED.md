@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 107 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 50/50 phases complete, 0 in progress
+**Progress:** 52/52 phases complete, 0 in progress
 
-**Deliverables:** 213/213 complete
+**Deliverables:** 222/222 complete
 
 **Tasks:** 84/84 complete
 
@@ -62,6 +62,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 107 o
 | phase-48 Self-Execution Opcode (RUNNEXT) | COMPLETE | 2/2 | 140 | 5 |
 | phase-49 Self-Modifying Programs: Demos and Patterns | COMPLETE | 2/2 | 400 | - |
 | phase-50 Reactive Canvas: Live Cell Formulas | COMPLETE | 3/3 | 800 | 10 |
+| phase-51 TCP Networking | COMPLETE | 6/6 | 563 | 12 |
+| phase-52 Episodic Memory | COMPLETE | 3/3 | 689 | 12 |
 
 ## Dependencies
 
@@ -1508,6 +1510,41 @@ This phase explores the spreadsheet model. Each cell can be: - A literal value (
 The dependency graph needs cycle detection to prevent infinite recalculation. Simple approach: single-pass topological sort of formula dependencies, recalculate in order after any STORE to the canvas.
 This is marked "future" because it's a significant new feature. The core pixel-driving-pixels capability (phases 45-48) does not require this.
 
+
+## [x] phase-51: TCP Networking (COMPLETE)
+
+**Goal:** Add TCP client networking opcodes for connecting, sending, receiving, and disconnecting
+
+Four new opcodes (0x7F-0x82) provide TCP client capability. Programs can connect to remote hosts, send and receive data, and close connections. This enables network-aware programs that can communicate with external services.
+
+### Deliverables
+
+- [x] **CONNECT opcode (0x7F)** -- Connect to a remote TCP host. Takes addr_reg, port_reg, fd_reg. Stores file descriptor in fd_reg.
+- [x] **SOCKSEND opcode (0x80)** -- Send data on a TCP connection. Takes fd_reg, buf_reg, len_reg, sent_reg. Returns bytes sent.
+- [x] **SOCKRECV opcode (0x81)** -- Receive data from a TCP connection. Takes fd_reg, buf_reg, max_len_reg, recv_reg. Returns bytes received.
+- [x] **DISCONNECT opcode (0x82)** -- Close a TCP connection. Takes fd_reg. Frees the socket.
+- [x] **Networking tests** -- 12 unit tests covering connect, send, recv, disconnect, and edge cases.
+- [x] **Assembler support** -- All four opcodes recognized by the assembler with proper argument validation.
+
+### Technical Notes
+
+Implementation in src/vm/net.rs (563 LOC). Opcodes 0x7F-0x82. Uses Rust std::net::TcpStream. Non-blocking by default. 12 tests in net.rs.
+
+## [x] phase-52: Episodic Memory (COMPLETE)
+
+**Goal:** Persist diagnostic context across Hermes sessions so the LLM agent can recall past runs
+
+Episodic memory layer for Geometry OS. Stores program run outcomes in JSONL format so the Hermes agent can recall past runs, black-screen incidents, and what fixed them. Part of the AI-Native OS memory taxonomy: Working (context window), Episodic (this), Semantic (RAG), Procedural (skills).
+
+### Deliverables
+
+- [x] **Episode data structure and JSONL persistence** -- Episode struct with timestamp, program, total_ops, top_opcodes, screen state, and outcome. Stored as JSONL in episodic_memory/ directory.
+- [x] **Episode logging and read-back** -- Log episodes after program runs. Parse top_ops array on read-back. Query by program name or recent episodes.
+- [x] **Episodic memory tests** -- 12 unit tests covering episode creation, serialization, read-back, and querying.
+
+### Technical Notes
+
+Implementation in src/episode_log.rs (689 LOC). Zero external dependencies -- hand-rolled JSON. Includes opcode histogram and screen delta detection.
 
 ## Global Risks
 
