@@ -8,6 +8,7 @@ use crate::canvas::{
 use crate::preprocessor;
 use crate::save::save_screen_png;
 use crate::vm;
+use geometry_os::episode_log;
 use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -880,6 +881,32 @@ fn opcode_name(op: u8) -> &'static str {
     }
 }
 
+/// Build top-N opcode list from VM histogram (with mnemonic names).
+fn build_top_opcodes(vm: &vm::Vm, n: usize) -> Vec<(u8, String, u64, f64)> {
+    let total_ops: u64 = vm.opcode_histogram.iter().sum();
+    let mut ranked: Vec<(u8, u64)> = vm
+        .opcode_histogram
+        .iter()
+        .enumerate()
+        .filter(|(_, &c)| c > 0)
+        .map(|(op, &c)| (op as u8, c))
+        .collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    ranked
+        .iter()
+        .take(n)
+        .map(|(op, count)| {
+            let name = opcode_name(*op).to_string();
+            let pct = if total_ops > 0 {
+                *count as f64 / total_ops as f64 * 100.0
+            } else {
+                0.0
+            };
+            (*op, name, *count, pct)
+        })
+        .collect()
+}
+
 pub fn build_hermes_context(
     vm: &vm::Vm,
     source_text: &str,
@@ -956,6 +983,15 @@ pub fn build_hermes_context(
     // Loaded file
     if let Some(ref f) = loaded_file {
         ctx.push_str(&format!("\n## Loaded file: {}\n", f.display()));
+
+        // Inject episodic memory: past run history for this program
+        if let Some(name) = f.file_name() {
+            let prog_name = name.to_string_lossy();
+            let episode_ctx = episode_log::format_episode_context(&prog_name, 10);
+            if !episode_ctx.is_empty() {
+                ctx.push_str(&episode_ctx);
+            }
+        }
     }
 
     // Source text (first 100 lines)
@@ -1547,6 +1583,27 @@ pub fn execute_cli_command(
                     output.push_str(&msg);
                     output.push('\n');
                     *canvas_assembled = true;
+
+                    // Log diagnostic episode for cross-session memory
+                    let prog_name = loaded_file
+                        .as_ref()
+                        .and_then(|p| p.file_name())
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "unknown".to_string());
+                    let total_ops: u64 = vm.opcode_histogram.iter().sum();
+                    let screen_non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+                    let top_ops = build_top_opcodes(vm, 10);
+                    let episode = episode_log::build_episode_raw(
+                        &prog_name,
+                        total_ops,
+                        top_ops,
+                        screen_non_black,
+                        vm.screen.len(),
+                        vm.pc,
+                        vm.halted,
+                        None, // fix is set later by the agent
+                    );
+                    episode_log::log_episode(&episode);
                 }
                 Err(e) => {
                     let msg = format!("{}", e);

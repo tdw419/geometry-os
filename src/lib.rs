@@ -2,6 +2,7 @@
 // Exposes VM and assembler for integration tests
 
 pub mod assembler;
+pub mod episode_log;
 pub mod font;
 pub mod glyph_backend;
 pub mod inode_fs;
