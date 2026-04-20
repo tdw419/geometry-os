@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 75/88 phases complete, 0 in progress
+**Progress:** 75/91 phases complete, 0 in progress
 
-**Deliverables:** 323/377 complete
+**Deliverables:** 319/391 complete
 
 **Tasks:** 98/98 complete
 
@@ -75,23 +75,23 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-61 GUI Calculator App + Token-Pixel-GUI Doc | COMPLETE | 2/2 | 1,200 | 1 |
 | phase-62 Notepad Bug Fixes + Clock App | COMPLETE | 2/2 | 1,485 | 6 |
 | phase-63 ABS + RECT Opcodes + Color Picker App | COMPLETE | 7/7 | 800 | 10 |
-| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | PLANNED | 6/6 | 900 | 12 |
-| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | PLANNED | 4/4 | 1,000 | 10 |
-| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | PLANNED | 6/6 | 700 | 15 |
-| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | PLANNED | 5/5 | 500 | 8 |
-| phase-68 WINSYS Opcode | PLANNED | 5/5 | 500 | 10 |
-| phase-68b Window Mouse Interaction + Desktop Demo | PLANNED | 3/3 | 700 | 12 |
-| phase-69 Sprite Engine | PLANNED | 6/7 | 800 | 12 |
+| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | COMPLETE | 6/6 | 900 | 12 |
+| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | COMPLETE | 4/4 | 1,000 | 10 |
+| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | COMPLETE | 6/6 | 700 | 15 |
+| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | COMPLETE | 5/5 | 500 | 8 |
+| phase-68 WINSYS Opcode | COMPLETE | 5/5 | 500 | 10 |
+| phase-68b Window Mouse Interaction + Desktop Demo | COMPLETE | 3/3 | 700 | 12 |
+| phase-69 Sprite Engine | COMPLETE | 6/7 | 800 | 12 |
 | phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
 | phase-71 Pixel Network Protocol | PLANNED | 0/6 | 900 | 10 |
 | phase-72 Desktop Taskbar + App Launcher | PLANNED | 0/3 | 800 | 8 |
-| phase-73 Core Utilities | PLANNED | 5/5 | 1,000 | 10 |
-| phase-74 Image Viewer + Screenshot | PLANNED | 4/4 | 600 | 8 |
+| phase-73 Core Utilities | COMPLETE | 5/5 | 1,000 | 10 |
+| phase-74 Image Viewer + Screenshot | COMPLETE | 4/4 | 600 | 8 |
 | phase-75 Stopwatch + Timer + Calculator (scientific) | COMPLETE | 4/4 | 1,200 | 10 |
 | phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |
 | phase-77 Settings + Wallpaper + Screensaver | COMPLETE | 4/4 | 1,000 | 11 |
 | phase-78 Calendar + About + Help System | PLANNED | 0/4 | 800 | 8 |
-| phase-79 Neural Network Forward Pass (Pixel Neural Net) | PLANNED | 5/5 | 1,500 | 10 |
+| phase-79 Neural Network Forward Pass (Pixel Neural Net) | COMPLETE | 5/5 | 1,500 | 10 |
 | phase-80 LLM Bridge Opcode (External AI) | PLANNED | 0/5 | 1,200 | 8 |
 | phase-81 HTTP Client + Text Browser | PLANNED | 0/4 | 1,500 | 10 |
 | phase-82 HTML Renderer + Interactive Browser | PLANNED | 0/5 | 2,000 | 12 |
@@ -1996,7 +1996,7 @@ ABS (0x87) for absolute value of register, RECT (0x88) for outline rectangle dra
 - [x] **RECT tests** -- Test outline corners, interior empty, 1x1, zero dimensions, assembly, disassembly (6 tests)
 - [x] **color_picker.asm** -- Mouse-driven RGB color picker with 8-color palette, slider indicators, RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.
 
-## [ ] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (PLANNED)
+## [x] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (COMPLETE)
 
 **Goal:** Add value clamping opcodes and a screensaver demo program
 
@@ -2011,7 +2011,7 @@ MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app demonstrates idle-
 - [x] **MIN/MAX/CLAMP tests** -- Test edge cases: equal values, negative, overflow
 - [x] **screensaver.asm** -- Multi-effect screensaver with bouncing logos, starfield, plasma cycling. Auto-starts after N seconds of no input.
 
-## [ ] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (PLANNED)
+## [x] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (COMPLETE)
 
 **Goal:** Add colored text rendering opcode, upgrade terminal with color output
 
@@ -2024,7 +2024,7 @@ DRAWTEXT (0x8C) renders text with foreground and background colors. Terminal v5 
 - [x] **DRAWTEXT tests** -- Foreground color, background color, transparent (0) bg, newline handling
 - [x] **terminal.asm v5 color upgrade** -- Green-on-dark title bar, light gray terminal text via DRAWTEXT.
 
-## [ ] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (PLANNED)
+## [x] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (COMPLETE)
 
 **Goal:** Add bitwise manipulation opcodes for flags and state management
 
@@ -2039,7 +2039,7 @@ BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient bit manipulation. Enh
 - [x] **BIT tests** -- Set/clear/test individual bits, edge cases (bit 0, bit 31)
 - [x] **game_of_life enhanced with bit operations** -- Deferred: tests prove opcodes. Existing GoL uses PEEK-based neighbor counting.
 
-## [ ] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (PLANNED)
+## [x] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (COMPLETE)
 
 **Goal:** Add logical NOT and screen invert operations
 
@@ -2053,7 +2053,7 @@ NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels (XOR 0xFFFFF
 - [x] **NOT/INV tests** -- 
 - [x] **invert_demo.asm** -- Colored stripes cycle between normal and inverted every ~30 frames
 
-## [ ] phase-68: WINSYS Opcode (PLANNED)
+## [x] phase-68: WINSYS Opcode (COMPLETE)
 
 **Goal:** Window management opcode that creates, destroys, and manages window regions
 
@@ -2067,7 +2067,7 @@ WINSYS opcode (0x94) manages rectangular window regions. Each window has an id, 
 - [x] **WINSYS assembler + disassembler entries** -- 
 - [x] **WINSYS tests** -- Create/destroy windows, Z-order, clipping, max 8 windows, WPIXEL/WREAD. 17 tests.
 
-## [ ] phase-68b: Window Mouse Interaction + Desktop Demo (PLANNED)
+## [x] phase-68b: Window Mouse Interaction + Desktop Demo (COMPLETE)
 
 **Goal:** Mouse-driven window management with drag, focus, and a multi-window desktop
 
@@ -2079,7 +2079,7 @@ MOUSEQ clicks check window Z-order for hit-testing. Title bar drag to move, body
 - [x] **window_desktop.asm** -- Desktop with 3 windows (Hello, Counter, Colors). Each window has its own offscreen buffer content. Drag to move via title bar, click to focus/bring-to-front. Animated counter and color stripes.
 - [x] **Window desktop tests** -- Mouse forwarding, drag updates position, focus changes Z-order, MOVETO, WINFO, hit-test after move, bring-to-front affects hittest. 12 tests.
 
-## [ ] phase-69: Sprite Engine (PLANNED)
+## [x] phase-69: Sprite Engine (COMPLETE)
 
 **Goal:** Sprite sheets, transparent blitting, and tile maps for games and visual programs
 
@@ -2135,7 +2135,7 @@ Taskbar shows running processes as clickable icons. App launcher opens a grid of
 - [ ] **launcher.asm** -- Full-screen grid of available .asm programs from VFS. Scroll with mouse wheel, click to launch via RUNNEXT. ESC to close.
 - [ ] **Taskbar + launcher tests** -- Taskbar renders, launcher lists programs, click launches process. 8+ tests.
 
-## [ ] phase-73: Core Utilities (PLANNED)
+## [x] phase-73: Core Utilities (COMPLETE)
 
 **Goal:** Unix-style text utilities that work inside the terminal
 
@@ -2149,7 +2149,7 @@ Small focused programs that prove VFS + shell integration. Each is 50-200 lines 
 - [x] **hexdump.asm** -- Hex viewer for RAM data. Converts bytes to hex ASCII, displays 8 bytes per row via DRAWTEXT. Byte count at RAM[0x7800].
 - [x] **Core utils tests** -- 14 tests: assembly, execution, output verification for all 4 utilities. wc verifies char/line/word counts. grep verifies match count. hexdump verifies byte count and hex display. ls verifies LS syscall and halting.
 
-## [ ] phase-74: Image Viewer + Screenshot (PLANNED)
+## [x] phase-74: Image Viewer + Screenshot (COMPLETE)
 
 **Goal:** View images stored in VFS and capture screenshots of the canvas
 
@@ -2214,7 +2214,7 @@ Calendar shows month grid. About box shows system info. Help system shows keyboa
 - [ ] **help.asm** -- Help viewer: keyboard shortcuts, opcode reference, shell commands. Reads help text from VFS file /etc/help.txt. Scrollable, searchable.
 - [ ] **Info app tests** -- Calendar renders correct dates, about shows stats, help loads text. 8+ tests.
 
-## [ ] phase-79: Neural Network Forward Pass (Pixel Neural Net) (PLANNED)
+## [x] phase-79: Neural Network Forward Pass (Pixel Neural Net) (COMPLETE)
 
 **Goal:** Run a tiny neural network entirely inside the VM using pixel-stored weights
 
