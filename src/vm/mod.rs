@@ -966,6 +966,59 @@ impl Vm {
                 }
             }
 
+            // DRAWTEXT x_reg, y_reg, addr_reg, fg_reg, bg_reg  (0x8C)
+            // Render text from RAM with fg/bg colors. bg=0 means transparent.
+            0x8C => {
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                let ar = self.fetch() as usize;
+                let fgr = self.fetch() as usize;
+                let bgr = self.fetch() as usize;
+                if xr < NUM_REGS && yr < NUM_REGS && ar < NUM_REGS
+                    && fgr < NUM_REGS && bgr < NUM_REGS
+                {
+                    let mut sx = self.regs[xr] as usize;
+                    let mut sy = self.regs[yr] as usize;
+                    let mut addr = self.regs[ar] as usize;
+                    let fg = self.regs[fgr];
+                    let bg_val = self.regs[bgr];
+                    let bg = if bg_val == 0 { None } else { Some(bg_val) };
+                    loop {
+                        if addr >= self.ram.len() {
+                            break;
+                        }
+                        let ch = (self.ram[addr] & 0xFF) as u8;
+                        if ch == 0 {
+                            break;
+                        }
+                        if ch == b'\n' {
+                            // fill bg for rest of line if bg set
+                            if let Some(bg_color) = bg {
+                                for col in 0..6 {
+                                    let px = sx + col;
+                                    if px < 256 && sy < 256 && (sy + 7) < 256 {
+                                        for row in 0..8 {
+                                            self.screen[(sy + row) * 256 + px] = bg_color;
+                                        }
+                                    }
+                                }
+                            }
+                            sx = self.regs[xr] as usize;
+                            sy += 10;
+                            addr += 1;
+                            continue;
+                        }
+                        self.draw_char_with_bg(ch, sx, sy, fg, bg);
+                        sx += 6;
+                        if sx > 250 {
+                            sx = self.regs[xr] as usize;
+                            sy += 8;
+                        }
+                        addr += 1;
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;

@@ -6117,3 +6117,140 @@ fn test_screensaver_runs_first_frame() {
     }
     // Should not crash -- just verify it ran
 }
+
+// ── DRAWTEXT: colored text opcode (0x8C) ─────────────────────
+
+#[test]
+fn test_drawtext_assembles() {
+    let src = "LDI r0, 10\nLDI r1, 20\nLDI r2, msg\nLDI r3, 0xFF0000\nLDI r4, 0x0000FF\nDRAWTEXT r0, r1, r2, r3, r4\nHALT\nmsg:\n";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(result.is_ok(), "DRAWTEXT should assemble: {:?}", result.err());
+    let asm = result.unwrap();
+    // 5 LDIs (3 bytes each) = offset 15, then DRAWTEXT
+    assert_eq!(asm.pixels[15], 0x8C, "opcode should be 0x8C");
+}
+
+#[test]
+fn test_drawtext_disassembles() {
+    let (text, len) = disasm(&[0x8C, 0, 1, 2, 3, 4]);
+    assert_eq!(text, "DRAWTEXT r0, r1, r2, r3, r4");
+    assert_eq!(len, 6);
+}
+
+#[test]
+fn test_drawtext_foreground_color() {
+    let mut vm = Vm::new();
+    // Store "AB" at RAM[100]
+    vm.ram[100] = 'A' as u32;
+    vm.ram[101] = 'B' as u32;
+    vm.ram[102] = 0; // null terminator
+    // DRAWTEXT r10, r11, r12, r13, r14
+    vm.regs[10] = 50;  // x
+    vm.regs[11] = 50;  // y
+    vm.regs[12] = 100; // addr
+    vm.regs[13] = 0x00FF00; // fg = green
+    vm.regs[14] = 0; // bg = transparent
+    vm.ram[0] = 0x8C; // DRAWTEXT
+    vm.ram[1] = 10; vm.ram[2] = 11; vm.ram[3] = 12; vm.ram[4] = 13; vm.ram[5] = 14;
+    vm.ram[6] = 0x00; // HALT
+    vm.step();
+    // Check that some pixels are green (foreground)
+    let mut green_count = 0;
+    for y in 50..57 {
+        for x in 50..62 {
+            if vm.screen[y * 256 + x] == 0x00FF00 {
+                green_count += 1;
+            }
+        }
+    }
+    assert!(green_count > 0, "DRAWTEXT should render green fg pixels, found {}", green_count);
+}
+
+#[test]
+fn test_drawtext_background_color() {
+    let mut vm = Vm::new();
+    vm.ram[100] = 'A' as u32;
+    vm.ram[101] = 0;
+    vm.regs[10] = 20;
+    vm.regs[11] = 20;
+    vm.regs[12] = 100;
+    vm.regs[13] = 0xFFFFFF; // fg = white
+    vm.regs[14] = 0x0000FF; // bg = blue
+    vm.ram[0] = 0x8C;
+    vm.ram[1] = 10; vm.ram[2] = 11; vm.ram[3] = 12; vm.ram[4] = 13; vm.ram[5] = 14;
+    vm.ram[6] = 0x00;
+    vm.step();
+    // Should have both white (fg) and blue (bg) pixels in the glyph area
+    let mut blue_count = 0;
+    for y in 20..27 {
+        for x in 20..25 {
+            if vm.screen[y * 256 + x] == 0x0000FF {
+                blue_count += 1;
+            }
+        }
+    }
+    assert!(blue_count > 0, "DRAWTEXT with bg should fill bg pixels, found {} blue", blue_count);
+}
+
+#[test]
+fn test_drawtext_transparent_bg() {
+    let mut vm = Vm::new();
+    // Fill screen area with a known color first
+    for y in 30..37 {
+        for x in 30..36 {
+            vm.screen[y * 256 + x] = 0x888888;
+        }
+    }
+    vm.ram[100] = 'X' as u32;
+    vm.ram[101] = 0;
+    vm.regs[10] = 30;
+    vm.regs[11] = 30;
+    vm.regs[12] = 100;
+    vm.regs[13] = 0xFF0000; // red fg
+    vm.regs[14] = 0; // transparent bg
+    vm.ram[0] = 0x8C;
+    vm.ram[1] = 10; vm.ram[2] = 11; vm.ram[3] = 12; vm.ram[4] = 13; vm.ram[5] = 14;
+    vm.ram[6] = 0x00;
+    vm.step();
+    // Background pixels should remain unchanged (0x888888)
+    let mut unchanged = 0;
+    for y in 30..37 {
+        for x in 30..36 {
+            if vm.screen[y * 256 + x] == 0x888888 {
+                unchanged += 1;
+            }
+        }
+    }
+    assert!(unchanged > 0, "transparent bg should leave existing pixels, found {} unchanged", unchanged);
+}
+
+#[test]
+fn test_drawtext_newline() {
+    let mut vm = Vm::new();
+    vm.ram[100] = 'A' as u32;
+    vm.ram[101] = '\n' as u32;
+    vm.ram[102] = 'B' as u32;
+    vm.ram[103] = 0;
+    vm.regs[10] = 10; // x start
+    vm.regs[11] = 10; // y start
+    vm.regs[12] = 100;
+    vm.regs[13] = 0xFFFFFF;
+    vm.regs[14] = 0;
+    vm.ram[0] = 0x8C;
+    vm.ram[1] = 10; vm.ram[2] = 11; vm.ram[3] = 12; vm.ram[4] = 13; vm.ram[5] = 14;
+    vm.ram[6] = 0x00;
+    vm.step();
+    // 'A' should be at y=10, 'B' at y=20 (10 + 10 for newline)
+    let mut a_pixels = 0;
+    let mut b_pixels = 0;
+    for x in 10..16 {
+        for y in 10..17 {
+            if vm.screen[y * 256 + x] == 0xFFFFFF { a_pixels += 1; }
+        }
+        for y in 20..27 {
+            if vm.screen[y * 256 + x] == 0xFFFFFF { b_pixels += 1; }
+        }
+    }
+    assert!(a_pixels > 0, "'A' should render at y=10");
+    assert!(b_pixels > 0, "'B' should render at y=20 after newline");
+}

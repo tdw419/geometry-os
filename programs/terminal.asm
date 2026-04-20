@@ -58,13 +58,15 @@ LDI r4, 16
 LDI r5, 0x333355
 RECTF r1, r2, r3, r4, r5
 
-; Title text "GeoTerm" -- use STRO + TEXT
+; Title text "GeoTerm" -- use STRO + DRAWTEXT (green on dark title bar)
 LDI r20, SCRATCH
 STRO r20, "GeoTerm"
 LDI r1, 4
 LDI r2, 4
 LDI r3, SCRATCH
-TEXT r1, r2, r3
+LDI r4, 0x00FF00  ; fg = green
+LDI r5, 0x333355  ; bg = match title bar
+DRAWTEXT r1, r2, r3, r4, r5
 
 ; Close button hit region
 LDI r1, 220
@@ -154,10 +156,12 @@ copy_col:
     LDI r0, 0
     STORE r16, r0
 
-    ; TEXT x=0, y=r12, addr=SCRATCH
+    ; DRAWTEXT x=0, y=r12, addr=SCRATCH, fg=white, bg=0 (transparent)
     LDI r1, 0
     LDI r13, SCRATCH
-    TEXT r1, r12, r13
+    LDI r14, 0xCCCCCC  ; fg = light gray
+    LDI r15, 0         ; bg = transparent
+    DRAWTEXT r1, r12, r13, r14, r15
 
     LDI r1, 1
 

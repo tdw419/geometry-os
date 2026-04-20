@@ -58,7 +58,11 @@ impl Vm {
 
     /// Draw a character to the screen buffer (tiny 5x7 inline font for TEXT opcode)
     pub(super) fn draw_char(&mut self, ch: u8, x: usize, y: usize, color: u32) {
-        // Simple 5x7 font for printable ASCII
+        self.draw_char_with_bg(ch, x, y, color, None);
+    }
+
+    /// Draw a character with optional background color
+    pub(super) fn draw_char_with_bg(&mut self, ch: u8, x: usize, y: usize, fg: u32, bg: Option<u32>) {
         const MINI_FONT: [[u8; 7]; 96] = include!("../mini_font.in");
         let idx = ch as usize;
         if !(32..=127).contains(&idx) {
@@ -67,11 +71,14 @@ impl Vm {
         let glyph = &MINI_FONT[idx - 32];
         for (row, &glyph_row) in glyph.iter().enumerate().take(7usize) {
             for col in 0..5usize {
-                if glyph_row & (1 << (4 - col)) != 0 {
-                    let px = x + col;
-                    let py = y + row;
-                    if px < 256 && py < 256 {
-                        self.screen[py * 256 + px] = color;
+                let px = x + col;
+                let py = y + row;
+                if px < 256 && py < 256 {
+                    let on = glyph_row & (1 << (4 - col)) != 0;
+                    if on {
+                        self.screen[py * 256 + px] = fg;
+                    } else if let Some(bg_color) = bg {
+                        self.screen[py * 256 + px] = bg_color;
                     }
                 }
             }

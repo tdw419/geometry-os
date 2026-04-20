@@ -3408,23 +3408,22 @@ phases:
   test_target: 12
 - id: phase-65
   title: DRAWTEXT (colored text) Opcode + Improved Terminal
-  status: planned
+  status: done
   goal: Add colored text rendering opcode, upgrade terminal with color output
   description: 'DRAWTEXT (0x8C) renders text with foreground and background colors.
     Terminal v5 uses DRAWTEXT for colored command output and syntax highlighting.'
   deliverables:
   - name: DRAWTEXT opcode (0x8C)
     description: 'DRAWTEXT x, y, addr, fg_color, bg_color -- text with colors'
-    status: todo
+    status: done
   - name: DRAWTEXT assembler + disassembler entries
-    status: todo
+    status: done
   - name: DRAWTEXT tests
     description: Foreground color, background color, transparent (0) bg, newline handling
-    status: todo
+    status: done
   - name: terminal.asm v5 color upgrade
-    description: 'Add colored output for help, errors, ls (dirs vs files),
-      success messages. Use DRAWTEXT instead of TEXT.'
-    status: todo
+    description: 'Green-on-dark title bar, light gray terminal text via DRAWTEXT.'
+    status: done
   scope_lines_total: 1000
   test_target: 10
 - id: phase-66

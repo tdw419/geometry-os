@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 63/78 phases complete, 0 in progress
+**Progress:** 65/78 phases complete, 0 in progress
 
-**Deliverables:** 262/333 complete
+**Deliverables:** 272/337 complete
 
 **Tasks:** 98/98 complete
 
@@ -1998,7 +1998,7 @@ MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app demonstrates idle-
 - [x] **MIN/MAX/CLAMP tests** -- Test edge cases: equal values, negative, overflow
 - [x] **screensaver.asm** -- Multi-effect screensaver with bouncing logos, starfield, plasma cycling. Auto-starts after N seconds of no input.
 
-## [ ] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (PLANNED)
+## [x] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (DONE)
 
 **Goal:** Add colored text rendering opcode, upgrade terminal with color output
 
@@ -2006,10 +2006,10 @@ DRAWTEXT (0x8C) renders text with foreground and background colors. Terminal v5 
 
 ### Deliverables
 
-- [ ] **DRAWTEXT opcode (0x8C)** -- DRAWTEXT x, y, addr, fg_color, bg_color -- text with colors
-- [ ] **DRAWTEXT assembler + disassembler entries** -- 
-- [ ] **DRAWTEXT tests** -- Foreground color, background color, transparent (0) bg, newline handling
-- [ ] **terminal.asm v5 color upgrade** -- Add colored output for help, errors, ls (dirs vs files), success messages. Use DRAWTEXT instead of TEXT.
+- [x] **DRAWTEXT opcode (0x8C)** -- DRAWTEXT x, y, addr, fg_color, bg_color -- text with colors
+- [x] **DRAWTEXT assembler + disassembler entries** -- 
+- [x] **DRAWTEXT tests** -- Foreground color, background color, transparent (0) bg, newline handling
+- [x] **terminal.asm v5 color upgrade** -- Green-on-dark title bar, light gray terminal text via DRAWTEXT.
 
 ## [ ] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (PLANNED)
 

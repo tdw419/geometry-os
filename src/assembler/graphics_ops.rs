@@ -72,6 +72,19 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "DRAWTEXT" => {
+            if tokens.len() < 6 {
+                return Err("DRAWTEXT requires 5 arguments: DRAWTEXT x_reg, y_reg, addr_reg, fg_reg, bg_reg".to_string());
+            }
+            bytecode.push(0x8C);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            bytecode.push(parse_reg(tokens[5])? as u32);
+            Ok(Some(()))
+        }
+
         "LINE" => {
             if tokens.len() < 6 {
                 return Err("LINE requires 5 arguments: LINE x0r, y0r, x1r, y1r, cr".to_string());

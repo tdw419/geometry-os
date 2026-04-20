@@ -672,6 +672,9 @@ impl Vm {
             0x8B => {
                 (format!("CLAMP {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3))), 4)
             }
+            0x8C => {
+                (format!("DRAWTEXT {}, {}, {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3)), reg(ram(a + 4)), reg(ram(a + 5))), 6)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
