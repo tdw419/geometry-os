@@ -185,6 +185,8 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         hit_regions: Vec::with_capacity(vm::MAX_HIT_REGIONS),
         mouse_x: 0,
         mouse_y: 0,
+        windows: Vec::with_capacity(vm::MAX_WINDOWS),
+        next_window_id: 1,
     };
 
     // Parse canvas trailer

@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 67/78 phases complete, 0 in progress
+**Progress:** 68/82 phases complete, 0 in progress
 
-**Deliverables:** 283/347 complete
+**Deliverables:** 288/371 complete
 
 **Tasks:** 98/98 complete
 
@@ -75,11 +75,12 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-61 GUI Calculator App + Token-Pixel-GUI Doc | COMPLETE | 2/2 | 1,200 | 1 |
 | phase-62 Notepad Bug Fixes + Clock App | COMPLETE | 2/2 | 1,485 | 6 |
 | phase-63 ABS + RECT Opcodes + Color Picker App | COMPLETE | 7/7 | 800 | 10 |
-| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | PLANNED | 0/6 | 900 | 12 |
-| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | PLANNED | 0/4 | 1,000 | 10 |
-| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | PLANNED | 0/6 | 700 | 15 |
-| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | PLANNED | 0/5 | 500 | 8 |
-| phase-68 Pixel Window System | PLANNED | 0/5 | 1,200 | 15 |
+| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | PLANNED | 6/6 | 900 | 12 |
+| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | PLANNED | 4/4 | 1,000 | 10 |
+| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | PLANNED | 6/6 | 700 | 15 |
+| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | PLANNED | 5/5 | 500 | 8 |
+| phase-68 WINSYS Opcode | PLANNED | 0/5 | 500 | 10 |
+| phase-68b Window Mouse Interaction + Desktop Demo | PLANNED | 0/3 | 700 | 8 |
 | phase-69 Sprite Engine | PLANNED | 0/7 | 800 | 12 |
 | phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
 | phase-71 Pixel Network Protocol | PLANNED | 0/6 | 900 | 10 |
@@ -1983,7 +1984,7 @@ ABS (0x87) for absolute value of register, RECT (0x88) for outline rectangle dra
 - [x] **RECT tests** -- Test outline corners, interior empty, 1x1, zero dimensions, assembly, disassembly (6 tests)
 - [x] **color_picker.asm** -- Mouse-driven RGB color picker with 8-color palette, slider indicators, RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.
 
-## [x] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (DONE)
+## [ ] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (PLANNED)
 
 **Goal:** Add value clamping opcodes and a screensaver demo program
 
@@ -1998,7 +1999,7 @@ MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app demonstrates idle-
 - [x] **MIN/MAX/CLAMP tests** -- Test edge cases: equal values, negative, overflow
 - [x] **screensaver.asm** -- Multi-effect screensaver with bouncing logos, starfield, plasma cycling. Auto-starts after N seconds of no input.
 
-## [x] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (DONE)
+## [ ] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (PLANNED)
 
 **Goal:** Add colored text rendering opcode, upgrade terminal with color output
 
@@ -2011,7 +2012,7 @@ DRAWTEXT (0x8C) renders text with foreground and background colors. Terminal v5 
 - [x] **DRAWTEXT tests** -- Foreground color, background color, transparent (0) bg, newline handling
 - [x] **terminal.asm v5 color upgrade** -- Green-on-dark title bar, light gray terminal text via DRAWTEXT.
 
-## [x] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (DONE)
+## [ ] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (PLANNED)
 
 **Goal:** Add bitwise manipulation opcodes for flags and state management
 
@@ -2020,13 +2021,13 @@ BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient bit manipulation. Enh
 ### Deliverables
 
 - [x] **BITSET opcode (0x8D)** -- BITSET rd, bit_reg -- set bit N in rd (rd |= 1 << N)
-- [x] **BITCLR opcode (0x8E)** -- BITCLR rd, bit_reg -- clear bit N in rd (rd &= ~(1 << N))
+- [x] **BITCLR opcode (0x8E)** -- BITCLR rd, bit_reg -- clear bit N in rd (rd &= ~(1 << N)
 - [x] **BITTEST opcode (0x8F)** -- BITTEST rd, bit_reg -- r0 = (rd >> N) & 1 (test bit N)
 - [x] **BITSET/BITCLR/BITTEST assembler + disassembler entries** -- 
 - [x] **BIT tests** -- Set/clear/test individual bits, edge cases (bit 0, bit 31)
-- [x] **game_of_life enhanced with bit operations** -- Deferred: tests prove opcodes. Existing GoL uses PEEK-based neighbor counting; BITTEST optimization is cosmetic.
+- [x] **game_of_life enhanced with bit operations** -- Deferred: tests prove opcodes. Existing GoL uses PEEK-based neighbor counting.
 
-## [x] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (DONE)
+## [ ] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (PLANNED)
 
 **Goal:** Add logical NOT and screen invert operations
 
@@ -2040,19 +2041,31 @@ NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels (XOR 0xFFFFF
 - [x] **NOT/INV tests** -- 
 - [x] **invert_demo.asm** -- Colored stripes cycle between normal and inverted every ~30 frames
 
-## [ ] phase-68: Pixel Window System (PLANNED)
+## [ ] phase-68: WINSYS Opcode (PLANNED)
 
-**Goal:** Overlapping draggable windows rendered as pixel regions, each backed by a separate process
+**Goal:** Window management opcode that creates, destroys, and manages window regions
 
-Window manager renders titled rectangular regions on the canvas. Each window is a process with its own canvas region. MOUSEQ detects drag/resize/click-to-focus. Proves multiprocess + IPC + mouse work together as a cohesive desktop.
+WINSYS opcode (0x92) manages rectangular window regions. Each window has an id, position, size, and title. Offscreen buffer per window. The opcode handles create/destroy/bring-to-front/list operations. Rendering blits visible regions to the main canvas in Z-order, clipped at screen edges.
 
 ### Deliverables
 
-- [ ] **WINSYS opcode (0x92)** -- WINSYS op, r0 -- op=0:create window (r1=x,r2=y,r3=w,r4=h), op=1:destroy, op=2:bring to front, op=3:list windows. Returns window id in r0.
-- [ ] **Window region blitting** -- Each process draws to its own offscreen region. WINSYS blits visible regions to the main canvas with Z-order (front window on top). Clipped at edges.
-- [ ] **Mouse hit-testing for windows** -- MOUSEQ clicks check window Z-order. Title bar click = drag, corner = resize, body = forward to process. Title bar drawn with RECTF + TEXT for window title.
-- [ ] **window_desktop.asm** -- Desktop with 2-3 windows (terminal, paint, clock). Drag to move, click to focus. Each window is a child process communicating via IPC pipes.
-- [ ] **Window system tests** -- Create/destroy windows, Z-order, clipping, mouse forwarding, IPC between windowed processes. 15+ tests.
+- [ ] **WINSYS opcode (0x92)** -- WINSYS op_reg -- op=0:create window (r1=x,r2=y,r3=w,r4=h, r5=title_addr), returns window id in r0. op=1:destroy window (r0=win_id). op=2:bring to front (r0=win_id). op=3:list windows (r0=addr to write list).
+- [ ] **Window data structure** -- Per-window: id, x, y, w, h, z_order, title, process_id, offscreen_buffer (w*h u32 pixels). Max 8 windows. Stored on VM state.
+- [ ] **Window blitting to canvas** -- After FRAME, blit all windows to canvas in Z-order. Front window on top. Clip at screen edges (256x256). Transparent regions (0x00000000) show windows behind.
+- [ ] **WINSYS assembler + disassembler entries** -- 
+- [ ] **WINSYS tests** -- Create/destroy windows, Z-order, clipping, max 8 windows. 10+ tests.
+
+## [ ] phase-68b: Window Mouse Interaction + Desktop Demo (PLANNED)
+
+**Goal:** Mouse-driven window management with drag, focus, and a multi-window desktop
+
+MOUSEQ clicks check window Z-order for hit-testing. Title bar drag to move, body clicks forward to the window process. window_desktop.asm demonstrates 2-3 windows running as child processes communicating via IPC pipes.
+
+### Deliverables
+
+- [ ] **Window mouse hit-testing** -- MOUSEQ clicks iterate windows front-to-back. Title bar (top 10px) = drag. Body = forward click coordinates to window process via IPC. Corner hit = resize (future).
+- [ ] **window_desktop.asm** -- Desktop with 2-3 windows (clock, counter, hello). Each window runs as a child process. Drag to move, click to focus. Demonstrates WINSYS + MOUSEQ + IPC together.
+- [ ] **Window desktop tests** -- Mouse forwarding, drag updates position, focus changes Z-order. 8+ tests.
 
 ## [ ] phase-69: Sprite Engine (PLANNED)
 
@@ -2188,6 +2201,61 @@ Calendar shows month grid. About box shows system info. Help system shows keyboa
 - [ ] **about.asm** -- System info panel: Geometry OS version, opcode count, RAM size, process count, uptime in frames, CPU usage estimate. Proves VM introspection.
 - [ ] **help.asm** -- Help viewer: keyboard shortcuts, opcode reference, shell commands. Reads help text from VFS file /etc/help.txt. Scrollable, searchable.
 - [ ] **Info app tests** -- Calendar renders correct dates, about shows stats, help loads text. 8+ tests.
+
+## [x] phase-79: Neural Network Forward Pass (Pixel Neural Net) (DONE)
+
+**Goal:** Run a tiny neural network entirely inside the VM using pixel-stored weights
+
+A hand-coded 3-layer MLP (64-32-16 neurons) whose weights are stored in RAM as packed u32 fixed-point values. Forward pass uses existing MUL/ADD/SHLI/SHRI opcodes. Two new opcodes accelerate the inner loop: MATVEC (matrix-vector multiply) and RELU (activation function). The network is trained externally (Python) and weights are loaded at boot. Proves the VM can do real inference -- not just move pixels around but actually *think* in pixels.
+
+### Deliverables
+
+- [x] **MATVEC opcode (0x92)** -- MATVEC weight_addr, input_addr, output_addr, rows, cols -- matrix-vector multiply using fixed-point (16.16) math. The hot inner loop: output[i] = sum(weight[i][j] * input[j]) >> 16. Rows/cols from registers.
+- [x] **RELU opcode (0x93)** -- RELU rd -- if rd (signed) < 0, rd = 0. Simple activation.
+- [x] **Weight packing format** -- Weights stored as u32 in RAM. Each weight = fixed-point 16.16 (multiply by 65536). Python script trains a small network (XOR) and dumps weights as assembly LDI/STORE sequence. tools/train_xor_nn.py.
+- [x] **nn_demo.asm** -- Load pre-trained XOR weights, run forward pass for all 4 inputs, display results on screen. Green pixel = correct, red = wrong. Proves inference works end-to-end.
+- [x] **Neural net tests** -- MATVEC correctness (known matrix, identity, single element), RELU on negative/zero/positive/large, full forward pass pipeline. 14 tests.
+
+## [ ] phase-80: LLM Bridge Opcode (External AI) (PLANNED)
+
+**Goal:** Call external LLMs from inside the VM for text generation and code assistance
+
+LLM opcode sends a null-terminated prompt string from RAM to a configured external API (localhost proxy or cloud). Response is written back to a RAM buffer. Configuration (API endpoint, model) stored in VFS /etc/llm.cfg. Enables smart terminal, code completion, and natural language interaction from inside Geometry OS programs.
+
+### Deliverables
+
+- [ ] **LLM opcode (0x94)** -- LLM prompt_addr, response_addr, max_len_reg -- sends prompt string to external LLM, writes response to RAM buffer at response_addr (up to max_len bytes). r0 = response length (0 on error). Config read from /etc/llm.cfg (endpoint URL, model name, API key reference).
+- [ ] **LLM configuration** -- /etc/llm.cfg in VFS: endpoint, model, max_tokens. Python-side proxy server (localhost:8321) that bridges VM LLM calls to real APIs (OpenAI, Anthropic, local Ollama). Keeps API keys out of the VM.
+- [ ] **LLM assembler + disassembler entries** -- 
+- [ ] **smart_term.asm** -- Terminal with AI assist: type a natural language command, press Tab, LLM translates to a shell command. Proves LLM bridge works in a real app.
+- [ ] **LLM tests** -- Mock LLM server returns fixed responses. Test prompt send, response receive, truncation, error handling. 8+ tests.
+
+## [ ] phase-81: HTTP Client + Text Browser (PLANNED)
+
+**Goal:** Fetch web pages and render them as text inside the VM
+
+HTTP GET via existing TCP opcodes (CONNECT 0x7F, SOCKSEND 0x80, SOCKRECV 0x81). Parse response headers and body. Render plain text and simple HTML (paragraphs, line breaks). URL bar at top, scrollable content area. Proves the network stack handles real protocols and the VM can be a web citizen.
+
+### Deliverables
+
+- [ ] **http_get.asm** -- HTTP client library: takes URL (host + path) in RAM, opens TCP connection to port 80, sends GET request, reads response into RAM buffer. Strips headers, returns body. Handles chunked transfer and content-length.
+- [ ] **browser.asm v1** -- Text browser: URL bar at top (type host, press Enter), content area below. Renders plain text fetched via http_get. Scroll with arrow keys. Back button (ESC). Shows loading indicator during fetch.
+- [ ] **URL parsing** -- Split "host:port/path" from RAM string. Default port 80. Extract path component. Store parsed parts in registers for TCP connection.
+- [ ] **HTTP tests** -- Mock HTTP server on localhost. Test GET request formatting, response parsing, header stripping, chunked encoding. Browser renders fetched text. 10+ tests.
+
+## [ ] phase-82: HTML Renderer + Interactive Browser (PLANNED)
+
+**Goal:** Parse and render simple HTML with styled text, links, and images
+
+Extends browser.asm with an HTML parser that handles common tags. Links become clickable HITSET regions. Images render as pixel data fetched from URLs. Bookmarks stored in VFS. A real pixel-native web experience -- every pixel you see came from the network through the VM.
+
+### Deliverables
+
+- [ ] **HTML parser** -- Tokenize HTML into: text, open-tag, close-tag. Handle tags: p, br, h1-h3, b, i, a href, img src, hr, ul/li. Ignore unknown tags gracefully. Written as a library callable from assembly (uses STRO/LOAD/STORE RAM operations).
+- [ ] **Styled text renderer** -- DRAWTEXT with per-line colors: h1 = large green, h2 = yellow, body = white, links = cyan. Paragraph spacing. Horizontal rules via RECT. Proves DRAWTEXT color system works for rich content.
+- [ ] **Clickable links** -- HTML a-tags register HITSET regions at render time. Click fires a new HTTP fetch to the linked URL. Navigation history (back/forward) stored in RAM ring buffer.
+- [ ] **Bookmarks** -- /etc/bookmarks.cfg in VFS. Browser start page shows bookmark list as clickable links. Add/remove bookmarks via UI.
+- [ ] **Browser tests** -- HTML parser correctness, styled rendering, link click triggers fetch, back navigation, bookmarks round-trip. 12+ tests.
 
 ## Global Risks
 

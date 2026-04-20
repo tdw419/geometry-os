@@ -129,6 +129,11 @@ pub struct Vm {
     /// Active TCP connections (Phase 41: Networking).
     /// Up to 8 simultaneous connections, indexed by fd.
     pub tcp_connections: Vec<Option<std::net::TcpStream>>,
+    /// Managed windows (Phase 68: WINSYS opcode).
+    /// Max MAX_WINDOWS active at once. Window IDs are 1-based.
+    pub windows: Vec<Window>,
+    /// Next window ID to assign (monotonically increasing).
+    pub next_window_id: u32,
 }
 
 impl Default for Vm {
@@ -205,6 +210,8 @@ impl Vm {
             mouse_x: 0,
             mouse_y: 0,
             tcp_connections: (0..MAX_TCP_CONNECTIONS).map(|_| None).collect(),
+            windows: Vec::with_capacity(MAX_WINDOWS),
+            next_window_id: 1,
         }
     }
 
@@ -290,6 +297,8 @@ impl Vm {
         self.frame_checkpoints.clear();
         self.snapshots.clear();
         self.pixel_write_log.clear();
+        self.windows.clear();
+        self.next_window_id = 1;
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -395,6 +404,8 @@ impl Vm {
                     self.frame_checkpoints
                         .push(step, self.frame_count, &self.screen);
                 }
+                // Phase 68: blit active windows to screen in Z-order (lowest z first)
+                self.blit_windows();
                 return true; // keep running (host checks frame_ready to pace rendering)
             }
 
@@ -1064,12 +1075,232 @@ impl Vm {
                 }
             }
 
+            // MATVEC r_weight, r_input, r_output, r_rows, r_cols (0x92)
+            // Matrix-vector multiply using fixed-point 16.16 arithmetic.
+            // output[i] = sum(weight[i*cols + j] * input[j]) >> 16
+            // Addresses taken from registers, rows/cols from registers.
+            0x92 => {
+                let r_weight = self.fetch() as usize;
+                let r_input = self.fetch() as usize;
+                let r_output = self.fetch() as usize;
+                let r_rows = self.fetch() as usize;
+                let r_cols = self.fetch() as usize;
+                if r_weight < NUM_REGS && r_input < NUM_REGS && r_output < NUM_REGS
+                    && r_rows < NUM_REGS && r_cols < NUM_REGS
+                {
+                    let weight_base = self.regs[r_weight] as usize;
+                    let input_base = self.regs[r_input] as usize;
+                    let output_base = self.regs[r_output] as usize;
+                    let rows = self.regs[r_rows] as usize;
+                    let cols = self.regs[r_cols] as usize;
+                    for i in 0..rows {
+                        let mut sum: i64 = 0;
+                        for j in 0..cols {
+                            let w_addr = weight_base + i * cols + j;
+                            let i_addr = input_base + j;
+                            if w_addr < self.ram.len() && i_addr < self.ram.len() {
+                                // Fixed-point 16.16 multiply
+                                let w = self.ram[w_addr] as i32;
+                                let x = self.ram[i_addr] as i32;
+                                sum += (w as i64 * x as i64) >> 16;
+                            }
+                        }
+                        let o_addr = output_base + i;
+                        if o_addr < self.ram.len() {
+                            self.ram[o_addr] = sum as u32;
+                        }
+                    }
+                }
+            }
+
+            // RELU rd (0x93) -- ReLU activation: if rd < 0 (signed), rd = 0
+            0x93 => {
+                let rd = self.fetch() as usize;
+                if rd < NUM_REGS {
+                    if (self.regs[rd] as i32) < 0 {
+                        self.regs[rd] = 0;
+                    }
+                }
+            }
+
+            // WINSYS op_reg (0x94) -- Window management operations.
+            // op=0: create window (r1=x, r2=y, r3=w, r4=h, r5=title_addr) -> r0=window_id
+            // op=1: destroy window (r0=win_id)
+            // op=2: bring to front (r0=win_id)
+            // op=3: list windows (r0=addr to write list of u32: count, id1, id2, ...)
+            0x94 => {
+                let op_reg = self.fetch() as usize;
+                if op_reg < NUM_REGS {
+                    let op = self.regs[op_reg];
+                    match op {
+                        0 => {
+                            // CREATE: r1=x, r2=y, r3=w, r4=h, r5=title_addr
+                            let active_count = self.windows.iter().filter(|w| w.active).count();
+                            if active_count >= MAX_WINDOWS {
+                                self.regs[0] = 0; // no slots
+                            } else {
+                                let id = self.next_window_id;
+                                self.next_window_id += 1;
+                                let x = if 1 < NUM_REGS { self.regs[1] } else { 0 };
+                                let y = if 2 < NUM_REGS { self.regs[2] } else { 0 };
+                                let w = if 3 < NUM_REGS { self.regs[3] } else { 64 };
+                                let h = if 4 < NUM_REGS { self.regs[4] } else { 48 };
+                                let title_addr = if 5 < NUM_REGS { self.regs[5] } else { 0 };
+                                let max_z = self.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                                let mut win = Window::new(id, x, y, w, h, title_addr, self.current_pid);
+                                win.z_order = max_z + 1;
+                                self.windows.push(win);
+                                self.regs[0] = id;
+                            }
+                        }
+                        1 => {
+                            // DESTROY: r0=win_id
+                            let win_id = self.regs[0];
+                            if let Some(w) = self.windows.iter_mut().find(|w| w.id == win_id && w.active) {
+                                w.active = false;
+                            }
+                        }
+                        2 => {
+                            // BRING TO FRONT: r0=win_id
+                            let win_id = self.regs[0];
+                            let max_z = self.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                            if let Some(w) = self.windows.iter_mut().find(|w| w.id == win_id && w.active) {
+                                w.z_order = max_z + 1;
+                            }
+                        }
+                        3 => {
+                            // LIST: r0=addr to write list
+                            let addr = self.regs[0] as usize;
+                            let active: Vec<u32> = self.windows.iter()
+                                .filter(|w| w.active)
+                                .map(|w| w.id)
+                                .collect();
+                            if addr < self.ram.len() {
+                                self.ram[addr] = active.len() as u32;
+                            }
+                            for (i, &id) in active.iter().enumerate() {
+                                let slot = addr + 1 + i;
+                                if slot < self.ram.len() {
+                                    self.ram[slot] = id;
+                                }
+                            }
+                        }
+                        _ => {
+                            // Unknown op -- r0 = 0 (error)
+                            self.regs[0] = 0;
+                        }
+                    }
+                }
+            }
+
+            // WPIXEL win_id_reg, x_reg, y_reg, color_reg (0x95)
+            // Write a pixel to a window's offscreen buffer.
+            // If x or y is out of bounds for the window, the pixel is silently dropped.
+            0x95 => {
+                let wid_r = self.fetch() as usize;
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                let cr = self.fetch() as usize;
+                if wid_r < NUM_REGS && xr < NUM_REGS && yr < NUM_REGS && cr < NUM_REGS {
+                    let win_id = self.regs[wid_r];
+                    let px = self.regs[xr];
+                    let py = self.regs[yr];
+                    let color = self.regs[cr];
+                    if let Some(win) = self.windows.iter_mut().find(|w| w.id == win_id && w.active) {
+                        let px_u = px as usize;
+                        let py_u = py as usize;
+                        let w_u = win.w as usize;
+                        let h_u = win.h as usize;
+                        if px_u < w_u && py_u < h_u {
+                            let idx = py_u * w_u + px_u;
+                            if idx < win.offscreen_buffer.len() {
+                                win.offscreen_buffer[idx] = color;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // WREAD win_id_reg, x_reg, y_reg, dest_reg (0x96)
+            // Read a pixel from a window's offscreen buffer into dest_reg.
+            // Out-of-bounds reads set dest to 0.
+            0x96 => {
+                let wid_r = self.fetch() as usize;
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                let dr = self.fetch() as usize;
+                if wid_r < NUM_REGS && xr < NUM_REGS && yr < NUM_REGS && dr < NUM_REGS {
+                    let win_id = self.regs[wid_r];
+                    let px = self.regs[xr];
+                    let py = self.regs[yr];
+                    if let Some(win) = self.windows.iter().find(|w| w.id == win_id && w.active) {
+                        let px_u = px as usize;
+                        let py_u = py as usize;
+                        let w_u = win.w as usize;
+                        let h_u = win.h as usize;
+                        if px_u < w_u && py_u < h_u {
+                            let idx = py_u * w_u + px_u;
+                            if idx < win.offscreen_buffer.len() {
+                                self.regs[dr] = win.offscreen_buffer[idx];
+                            } else {
+                                self.regs[dr] = 0;
+                            }
+                        } else {
+                            self.regs[dr] = 0;
+                        }
+                    } else {
+                        self.regs[dr] = 0;
+                    }
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;
             }
         }
         true
+    }
+
+    /// Blit all active windows to the screen in Z-order (lowest z first).
+    /// Non-zero pixels in the offscreen buffer overwrite the screen.
+    /// Zero pixels (0x00000000) are transparent -- they don't overwrite.
+    /// Clip at screen edges (256x256).
+    pub fn blit_windows(&mut self) {
+        // Collect (id, x, y, w, h, z_order) for active windows, sorted by z_order ascending
+        let mut wins: Vec<(u32, u32, u32, u32, u32, u32)> = self
+            .windows
+            .iter()
+            .filter(|w| w.active)
+            .map(|w| (w.id, w.x, w.y, w.w, w.h, w.z_order))
+            .collect();
+        wins.sort_by_key(|w| w.5); // sort by z_order ascending (lowest first)
+
+        for (win_id, wx, wy, ww, wh, _z) in wins {
+            // Find the window and blit its offscreen buffer
+            // We need to clone the relevant parts to avoid borrow issues
+            let win_data: Option<(u32, u32, u32, Vec<u32>)> = self
+                .windows
+                .iter()
+                .find(|w| w.id == win_id)
+                .map(|w| (w.x, w.y, w.w, w.offscreen_buffer.clone()));
+            if let Some((wx, wy, ww, buf)) = win_data {
+                let w_usize = ww as usize;
+                for py in 0..wh as usize {
+                    for px in 0..ww as usize {
+                        let color = buf[py * w_usize + px];
+                        if color != 0 {
+                            // Transparent pixels (0x00000000) don't overwrite
+                            let sx = wx as i32 + px as i32;
+                            let sy = wy as i32 + py as i32;
+                            if sx >= 0 && sx < 256 && sy >= 0 && sy < 256 {
+                                self.screen[(sy as usize) * 256 + (sx as usize)] = color;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

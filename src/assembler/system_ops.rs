@@ -484,6 +484,67 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "MATVEC" => {
+            if tokens.len() < 6 {
+                return Err("MATVEC requires 5 arguments: MATVEC r_weight, r_input, r_output, r_rows, r_cols".to_string());
+            }
+            bytecode.push(0x92);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            bytecode.push(parse_reg(tokens[5])? as u32);
+            Ok(Some(()))
+        }
+
+        "RELU" => {
+            if tokens.len() < 2 {
+                return Err("RELU requires 1 argument: RELU rd".to_string());
+            }
+            bytecode.push(0x93);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
+        "WINSYS" => {
+            if tokens.len() < 2 {
+                return Err("WINSYS requires 1 argument: WINSYS op_reg".to_string());
+            }
+            bytecode.push(0x94);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
+        "WPIXEL" => {
+            if tokens.len() < 5 {
+                return Err(
+                    "WPIXEL requires 4 arguments: WPIXEL win_id_reg, x_reg, y_reg, color_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0x95);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            Ok(Some(()))
+        }
+
+        "WREAD" => {
+            if tokens.len() < 5 {
+                return Err(
+                    "WREAD requires 4 arguments: WREAD win_id_reg, x_reg, y_reg, dest_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0x96);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

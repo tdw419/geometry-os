@@ -512,6 +512,61 @@ impl Process {
     }
 }
 
+/// Maximum number of windows that can be active simultaneously.
+pub const MAX_WINDOWS: usize = 8;
+
+/// Window title bar height in pixels.
+pub const WINDOW_TITLE_BAR_H: u32 = 12;
+/// Window border width in pixels.
+pub const WINDOW_BORDER_W: u32 = 1;
+
+/// A managed window with position, size, Z-order, and offscreen buffer.
+/// Created by WINSYS op=0, destroyed by WINSYS op=1.
+#[derive(Debug, Clone)]
+pub struct Window {
+    /// Window ID (1-based, 0 = invalid/no window).
+    pub id: u32,
+    /// Left edge X coordinate.
+    pub x: u32,
+    /// Top edge Y coordinate.
+    pub y: u32,
+    /// Window width in pixels.
+    pub w: u32,
+    /// Window height in pixels.
+    pub h: u32,
+    /// Z-order: higher = on top. Auto-assigned on create/bring-to-front.
+    pub z_order: u32,
+    /// RAM address of null-terminated title string.
+    pub title_addr: u32,
+    /// PID of the process that created this window.
+    pub pid: u32,
+    /// Whether this window is active (alive).
+    pub active: bool,
+    /// Offscreen pixel buffer (w * h pixels). Initialized to all black (0).
+    /// Programs write pixels here; FRAME blits to main screen in Z-order.
+    pub offscreen_buffer: Vec<u32>,
+}
+
+impl Window {
+    /// Create a new window with the given parameters.
+    /// Offscreen buffer is initialized to transparent black (0x00000000).
+    pub fn new(id: u32, x: u32, y: u32, w: u32, h: u32, title_addr: u32, pid: u32) -> Self {
+        let buf_size = (w as usize) * (h as usize);
+        Window {
+            id,
+            x,
+            y,
+            w,
+            h,
+            z_order: 0,
+            title_addr,
+            pid,
+            active: true,
+            offscreen_buffer: vec![0u32; buf_size],
+        }
+    }
+}
+
 /// Magic bytes for save files
 pub const SAVE_MAGIC: &[u8; 4] = b"GEOS";
 /// Save file format version

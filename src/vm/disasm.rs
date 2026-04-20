@@ -690,6 +690,39 @@ impl Vm {
             0x91 => {
                 ("INV".to_string(), 1)
             }
+            0x92 => {
+                (format!("MATVEC {}, {}, {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3)), reg(ram(a + 4)), reg(ram(a + 5))), 6)
+            }
+            0x93 => {
+                (format!("RELU {}", reg(ram(a + 1))), 2)
+            }
+            0x94 => {
+                (format!("WINSYS {}", reg(ram(a + 1))), 2)
+            }
+            0x95 => {
+                (
+                    format!(
+                        "WPIXEL {}, {}, {}, {}",
+                        reg(ram(a + 1)),
+                        reg(ram(a + 2)),
+                        reg(ram(a + 3)),
+                        reg(ram(a + 4))
+                    ),
+                    5,
+                )
+            }
+            0x96 => {
+                (
+                    format!(
+                        "WREAD {}, {}, {}, {}",
+                        reg(ram(a + 1)),
+                        reg(ram(a + 2)),
+                        reg(ram(a + 3)),
+                        reg(ram(a + 4))
+                    ),
+                    5,
+                )
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

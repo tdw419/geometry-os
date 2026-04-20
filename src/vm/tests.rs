@@ -6458,3 +6458,293 @@ fn test_invert_demo_runs() {
     // Should have drawn red stripe at y=0
     assert_eq!(vm.screen[5 * 256 + 10], 0x00FF0000, "red stripe should be at top");
 }
+
+// ── MATVEC opcode (Phase 79) ───────────────────────────────
+
+#[test]
+fn test_matvec_basic_2x2() {
+    // 2x2 matrix * 2-element vector
+    // weights = [[2, 3], [4, 5]] in fixed-point 16.16
+    // input   = [1, 2] in fixed-point
+    // expected output = [2*1 + 3*2, 4*1 + 5*2] = [8, 14]
+    let mut vm = Vm::new();
+
+    // Set up weights at RAM[200]: [2<<16, 3<<16, 4<<16, 5<<16]
+    let w_base: usize = 200;
+    vm.ram[w_base + 0] = 2 << 16; // w[0][0] = 2.0
+    vm.ram[w_base + 1] = 3 << 16; // w[0][1] = 3.0
+    vm.ram[w_base + 2] = 4 << 16; // w[1][0] = 4.0
+    vm.ram[w_base + 3] = 5 << 16; // w[1][1] = 5.0
+
+    // Set up input at RAM[300]: [1<<16, 2<<16]
+    let i_base: usize = 300;
+    vm.ram[i_base + 0] = 1 << 16; // x[0] = 1.0
+    vm.ram[i_base + 1] = 2 << 16; // x[1] = 2.0
+
+    // Output at RAM[400]
+    let o_base: usize = 400;
+
+    // Set registers
+    vm.regs[1] = w_base as u32; // r_weight
+    vm.regs[2] = i_base as u32; // r_input
+    vm.regs[3] = o_base as u32; // r_output
+    vm.regs[4] = 2;             // r_rows
+    vm.regs[5] = 2;             // r_cols
+
+    // MATVEC r1, r2, r3, r4, r5
+    vm.ram[0] = 0x92;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
+    vm.ram[6] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step(); // MATVEC
+    vm.step(); // HALT
+
+    // output[0] = 2*1 + 3*2 = 8.0 in fixed-point
+    assert_eq!(vm.ram[o_base + 0], 8 << 16, "MATVEC output[0] should be 8.0");
+    // output[1] = 4*1 + 5*2 = 14.0 in fixed-point
+    assert_eq!(vm.ram[o_base + 1], 14 << 16, "MATVEC output[1] should be 14.0");
+}
+
+#[test]
+fn test_matvec_identity() {
+    // 3x3 identity * [10, 20, 30] = [10, 20, 30]
+    let mut vm = Vm::new();
+    let w_base: usize = 500;
+    // Identity matrix
+    for i in 0..3 {
+        for j in 0..3 {
+            vm.ram[w_base + i * 3 + j] = if i == j { 1 << 16 } else { 0 };
+        }
+    }
+
+    let i_base: usize = 600;
+    vm.ram[i_base] = 10 << 16;
+    vm.ram[i_base + 1] = 20 << 16;
+    vm.ram[i_base + 2] = 30 << 16;
+
+    let o_base: usize = 700;
+
+    vm.regs[1] = w_base as u32;
+    vm.regs[2] = i_base as u32;
+    vm.regs[3] = o_base as u32;
+    vm.regs[4] = 3; // rows
+    vm.regs[5] = 3; // cols
+
+    vm.ram[0] = 0x92; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; vm.ram[4] = 4; vm.ram[5] = 5;
+    vm.ram[6] = 0x00;
+    vm.pc = 0; vm.halted = false;
+    vm.step(); vm.step();
+
+    assert_eq!(vm.ram[o_base], 10 << 16, "identity: output[0]");
+    assert_eq!(vm.ram[o_base + 1], 20 << 16, "identity: output[1]");
+    assert_eq!(vm.ram[o_base + 2], 30 << 16, "identity: output[2]");
+}
+
+#[test]
+fn test_matvec_single_element() {
+    // 1x1 matrix: [[7]] * [3] = [21]
+    let mut vm = Vm::new();
+    vm.ram[800] = 7 << 16;
+    vm.ram[900] = 3 << 16;
+
+    vm.regs[1] = 800;
+    vm.regs[2] = 900;
+    vm.regs[3] = 950;
+    vm.regs[4] = 1;
+    vm.regs[5] = 1;
+
+    vm.ram[0] = 0x92; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; vm.ram[4] = 4; vm.ram[5] = 5;
+    vm.ram[6] = 0x00;
+    vm.pc = 0; vm.halted = false;
+    vm.step(); vm.step();
+
+    assert_eq!(vm.ram[950], 21 << 16, "1x1 MATVEC should produce 21");
+}
+
+#[test]
+fn test_matvec_assemble() {
+    let src = "MATVEC r1, r2, r3, r4, r5\nHALT\n";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(result.is_ok(), "MATVEC should assemble: {:?}", result.err());
+    let asm = result.unwrap();
+    assert_eq!(asm.pixels[0], 0x92, "MATVEC opcode");
+    assert_eq!(asm.pixels[1], 1);
+    assert_eq!(asm.pixels[2], 2);
+    assert_eq!(asm.pixels[3], 3);
+    assert_eq!(asm.pixels[4], 4);
+    assert_eq!(asm.pixels[5], 5);
+}
+
+#[test]
+fn test_matvec_disasm() {
+    let (text, len) = disasm(&[0x92, 1, 2, 3, 4, 5]);
+    assert_eq!(text, "MATVEC r1, r2, r3, r4, r5");
+    assert_eq!(len, 6);
+}
+
+// ── RELU opcode (Phase 79) ───────────────────────────────
+
+#[test]
+fn test_relu_positive_unchanged() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 42 << 16; // positive value
+    vm.ram[0] = 0x93; vm.ram[1] = 5; vm.ram[2] = 0x00;
+    vm.pc = 0; vm.halted = false;
+    vm.step(); vm.step();
+    assert_eq!(vm.regs[5], 42 << 16, "RELU should leave positive unchanged");
+}
+
+#[test]
+fn test_relu_zero_unchanged() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 0;
+    vm.ram[0] = 0x93; vm.ram[1] = 5; vm.ram[2] = 0x00;
+    vm.pc = 0; vm.halted = false;
+    vm.step(); vm.step();
+    assert_eq!(vm.regs[5], 0, "RELU should leave zero unchanged");
+}
+
+#[test]
+fn test_relu_negative_clamped() {
+    let mut vm = Vm::new();
+    vm.regs[5] = (-5i32 as u32); // negative in two's complement
+    vm.ram[0] = 0x93; vm.ram[1] = 5; vm.ram[2] = 0x00;
+    vm.pc = 0; vm.halted = false;
+    vm.step(); vm.step();
+    assert_eq!(vm.regs[5], 0, "RELU should clamp negative to 0");
+}
+
+#[test]
+fn test_relu_large_negative() {
+    let mut vm = Vm::new();
+    vm.regs[3] = 0x80000000; // most negative i32
+    vm.ram[0] = 0x93; vm.ram[1] = 3; vm.ram[2] = 0x00;
+    vm.pc = 0; vm.halted = false;
+    vm.step(); vm.step();
+    assert_eq!(vm.regs[3], 0, "RELU should clamp large negative to 0");
+}
+
+#[test]
+fn test_relu_assemble() {
+    let src = "RELU r7\nHALT\n";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(result.is_ok(), "RELU should assemble: {:?}", result.err());
+    let asm = result.unwrap();
+    assert_eq!(asm.pixels[0], 0x93, "RELU opcode");
+    assert_eq!(asm.pixels[1], 7);
+}
+
+#[test]
+fn test_relu_disasm() {
+    let (text, len) = disasm(&[0x93, 7]);
+    assert_eq!(text, "RELU r7");
+    assert_eq!(len, 2);
+}
+
+// ── MATVEC + RELU forward pass (Phase 79) ────────────────────
+
+#[test]
+fn test_matvec_relu_pipeline() {
+    // Simulate one layer: MATVEC then RELU
+    // weights = [[1, -2], [3, 4]], input = [1, 1]
+    // raw output = [1*1 + (-2)*1, 3*1 + 4*1] = [-1, 7]
+    // after RELU: [0, 7]
+    let mut vm = Vm::new();
+
+    let w_base: usize = 1000;
+    // Fixed-point: -2.0 = 0xFFFE0000 (two's complement)
+    vm.ram[w_base + 0] = 1 << 16;                    // 1.0
+    vm.ram[w_base + 1] = ((-2i32 << 16) as u32);     // -2.0
+    vm.ram[w_base + 2] = 3 << 16;                    // 3.0
+    vm.ram[w_base + 3] = 4 << 16;                    // 4.0
+
+    let i_base: usize = 1100;
+    vm.ram[i_base + 0] = 1 << 16; // 1.0
+    vm.ram[i_base + 1] = 1 << 16; // 1.0
+
+    let o_base: usize = 1200;
+
+    vm.regs[1] = w_base as u32;
+    vm.regs[2] = i_base as u32;
+    vm.regs[3] = o_base as u32;
+    vm.regs[4] = 2; // rows
+    vm.regs[5] = 2; // cols
+
+    // Step 1: MATVEC r1, r2, r3, r4, r5
+    vm.ram[0] = 0x92; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; vm.ram[4] = 4; vm.ram[5] = 5;
+
+    // Step 2: Load output[0] into r6 via LDI addr + LOAD
+    // Use LDI r7, o_base then LOAD r6, r7
+    vm.ram[6] = 0x10; vm.ram[7] = 7; vm.ram[8] = o_base as u32;   // LDI r7, o_base
+    vm.ram[9] = 0x11; vm.ram[10] = 6; vm.ram[11] = 7;             // LOAD r6, r7
+    vm.ram[12] = 0x93; vm.ram[13] = 6;                              // RELU r6
+    vm.ram[14] = 0x12; vm.ram[15] = 7; vm.ram[16] = 6;            // STORE r7, r6
+
+    // Step 3: Same for output[1]
+    vm.ram[17] = 0x10; vm.ram[18] = 7; vm.ram[19] = (o_base + 1) as u32; // LDI r7, o_base+1
+    vm.ram[20] = 0x11; vm.ram[21] = 6; vm.ram[22] = 7;            // LOAD r6, r7
+    vm.ram[23] = 0x93; vm.ram[24] = 6;                              // RELU r6
+    vm.ram[25] = 0x12; vm.ram[26] = 7; vm.ram[27] = 6;            // STORE r7, r6
+
+    vm.ram[28] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 { if !vm.step() { break; } }
+
+    assert_eq!(vm.ram[o_base], 0, "RELU should clamp -1 to 0");
+    assert_eq!(vm.ram[o_base + 1], 7 << 16, "RELU should leave 7 unchanged");
+}
+
+// ── nn_demo.asm (Phase 79) ───────────────────────────────
+
+#[test]
+fn test_nn_demo_assembles() {
+    let source = include_str!("../../programs/nn_demo.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "nn_demo should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_nn_demo_runs_correctly() {
+    let source = include_str!("../../programs/nn_demo.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run until halt (should process all 4 cases)
+    for _ in 0..50000 {
+        if !vm.step() { break; }
+    }
+    // Should have drawn 4 green boxes (all XOR cases correct)
+    // Check that screen has green pixels in the result area (y=108..148)
+    let mut green_count = 0;
+    for y in 108..148 {
+        for x in 20..260 {
+            let pixel = vm.screen[y * 256 + x];
+            if pixel == 0x0000FF00 {
+                green_count += 1;
+            }
+        }
+    }
+    assert!(green_count > 0, "nn_demo should draw green (correct) pixels, found {} green pixels", green_count);
+
+    // Verify no red pixels (no wrong predictions)
+    let mut red_count = 0;
+    for y in 108..148 {
+        for x in 20..260 {
+            let pixel = vm.screen[y * 256 + x];
+            if pixel == 0x00FF0000 {
+                red_count += 1;
+            }
+        }
+    }
+    assert_eq!(red_count, 0, "nn_demo should have NO red (wrong) pixels, found {}", red_count);
+}
