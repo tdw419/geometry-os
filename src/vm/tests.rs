@@ -3763,5 +3763,168 @@ fn test_counter_renders_number_text() {
     assert_eq!(vm.ram[scratch + 9], 0, "should be null terminated");
 }
 
+// ── Terminal Application Integration Tests ────────────────────
+
+/// Helper: load terminal.asm into a fresh VM and run until N frames have rendered.
+fn boot_terminal(target_frames: u32) -> Vm {
+    let source = include_str!("../../programs/terminal.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("terminal.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + target_frames {
+            break;
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_terminal_boots_and_renders() {
+    let vm = boot_terminal(1);
+    assert!(!vm.halted, "terminal app should not halt after boot");
+    // Title bar should be blue-purple (0x333355) at row 0
+    assert_eq!(vm.screen[5 * 256 + 5], 0x333355, "title bar should be blue-purple");
+    // Content area below title bar (y=20) should be dark gray background
+    assert_eq!(vm.screen[20 * 256 + 10], 0x0C0C0C, "content area should be dark gray");
+    // Cursor col should start at 2 (after "$ " prompt)
+    assert_eq!(vm.ram[0x4800], 2, "cursor col should start at 2");
+    // Cursor row should start at 0
+    assert_eq!(vm.ram[0x4801], 0, "cursor row should start at 0");
+    // Text buffer at row 0 should have '$' at col 0 and ' ' at col 1
+    assert_eq!(vm.ram[0x4000], b'$' as u32, "row 0 col 0 should be '$'");
+    assert_eq!(vm.ram[0x4001], b' ' as u32, "row 0 col 1 should be ' '");
+    // Close button hit region registered (id=99)
+    assert_eq!(vm.hit_regions.len(), 1, "should have 1 hit region (close button)");
+}
+
+#[test]
+fn test_terminal_types_character() {
+    let mut vm = boot_terminal(1);
+    assert!(!vm.halted, "should be running");
+
+    // Push 'H' (0x48 = 72) key
+    vm.push_key(b'H' as u32);
+
+    // Run a few frames to process the key
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start_frame + 3 { break; }
+    }
+
+    assert!(!vm.halted, "should still be running after key");
+    // 'H' should be at buffer[row=0 * COLS=42 + col=2] = 0x4002
+    assert_eq!(vm.ram[0x4000 + 42 * 0 + 2], b'H' as u32,
+        "typed 'H' should appear at row 0, col 2");
+    // Cursor should have advanced to col 3
+    assert_eq!(vm.ram[0x4800], 3, "cursor should have advanced to col 3");
+}
+
+#[test]
+fn test_terminal_types_multiple_chars() {
+    let mut vm = boot_terminal(1);
+    assert!(!vm.halted);
+
+    // Type "Hi" (two characters)
+    vm.push_key(b'H' as u32);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    vm.push_key(b'i' as u32);
+    let start2 = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start2 + 2 { break; }
+    }
+
+    assert!(!vm.halted, "should still be running");
+    assert_eq!(vm.ram[0x4000 + 42 * 0 + 2], b'H' as u32, "should have 'H' at col 2");
+    assert_eq!(vm.ram[0x4000 + 42 * 0 + 3], b'i' as u32, "should have 'i' at col 3");
+    assert_eq!(vm.ram[0x4800], 4, "cursor should be at col 4");
+}
+
+#[test]
+fn test_terminal_enter_newline() {
+    let mut vm = boot_terminal(1);
+    assert!(!vm.halted);
+
+    // Type 'A' then Enter (13)
+    vm.push_key(b'A' as u32);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    vm.push_key(13); // Enter
+    let start2 = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start2 + 2 { break; }
+    }
+
+    assert!(!vm.halted, "should still be running");
+    // Cursor should be on row 1, col 2 (new prompt)
+    assert_eq!(vm.ram[0x4801], 1, "cursor should be on row 1 after enter");
+    assert_eq!(vm.ram[0x4800], 2, "cursor col should be 2 (after new prompt)");
+    // Row 1 should have prompt
+    assert_eq!(vm.ram[0x4000 + 42 * 1], b'$' as u32, "row 1 should start with '$'");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], b' ' as u32, "row 1 col 1 should be ' '");
+}
+
+#[test]
+fn test_terminal_backspace() {
+    let mut vm = boot_terminal(1);
+    assert!(!vm.halted);
+
+    // Type "AB" then backspace (8)
+    vm.push_key(b'A' as u32);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    vm.push_key(b'B' as u32);
+    let start2 = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start2 + 2 { break; }
+    }
+    assert_eq!(vm.ram[0x4800], 4, "cursor should be at col 4 after 'AB'");
+
+    // Backspace
+    vm.push_key(8);
+    let start3 = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start3 + 2 { break; }
+    }
+
+    assert!(!vm.halted, "should still be running");
+    assert_eq!(vm.ram[0x4800], 3, "cursor should be back at col 3 after backspace");
+    // Col 3 should be cleared to space
+    assert_eq!(vm.ram[0x4000 + 42 * 0 + 3], b' ' as u32,
+        "backspaced position should be space");
+}
+
+#[test]
+fn test_terminal_blink_counter_advances() {
+    let vm = boot_terminal(5);
+    assert!(!vm.halted);
+    // Blink counter at RAM[0x4802] should be > 0 after 5 frames
+    assert!(vm.ram[0x4802] > 0, "blink counter should have advanced: got {}", vm.ram[0x4802]);
+}
 
 

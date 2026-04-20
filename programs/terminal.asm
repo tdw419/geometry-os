@@ -198,17 +198,17 @@ handle_key:
     LDI r1, 1
 
     CMPI r5, 13
-    JNZ r5, check_bs
+    JNZ r0, check_bs
     JMP do_enter
 
 check_bs:
     CMPI r5, 8
-    JNZ r5, check_del
+    JNZ r0, check_del
     JMP do_backspace
 
 check_del:
     CMPI r5, 127
-    JNZ r5, do_char
+    JNZ r0, do_char
     JMP do_backspace
 
 do_char:
