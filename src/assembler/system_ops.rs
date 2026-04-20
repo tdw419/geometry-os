@@ -380,6 +380,18 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "STRCMP" => {
+            if tokens.len() < 3 {
+                return Err(
+                    "STRCMP requires 2 arguments: STRCMP addr1_reg, addr2_reg".to_string(),
+                );
+            }
+            bytecode.push(0x86);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

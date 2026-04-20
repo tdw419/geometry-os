@@ -4758,3 +4758,146 @@ fn test_file_browser_debug_click() {
     vm.step();
     eprintln!("After HITQ: regs[12]={}", vm.regs[12]);
 }
+
+// ── STRCMP: string comparison opcode (0x86) ─────────────────────
+
+fn setup_strcmp_test(s1: &str, s2: &str) -> Vm {
+    let mut vm = Vm::new();
+    // Write s1 starting at address 0x300
+    let base1 = 0x300;
+    for (i, &b) in s1.as_bytes().iter().enumerate() {
+        vm.ram[base1 + i] = b as u32;
+    }
+    vm.ram[base1 + s1.len()] = 0; // null terminator
+    // Write s2 starting at address 0x400
+    let base2 = 0x400;
+    for (i, &b) in s2.as_bytes().iter().enumerate() {
+        vm.ram[base2 + i] = b as u32;
+    }
+    vm.ram[base2 + s2.len()] = 0;
+    // r1 = addr of s1, r2 = addr of s2
+    vm.regs[1] = base1 as u32;
+    vm.regs[2] = base2 as u32;
+    // STRCMP r1, r2 (opcode 0x86)
+    vm.ram[0] = 0x86;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00; // HALT
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() { break; }
+    }
+    vm
+}
+
+#[test]
+fn test_strcmp_equal_strings() {
+    let vm = setup_strcmp_test("hello", "hello");
+    assert_eq!(vm.regs[0], 0, "STRCMP should set r0=0 for equal strings");
+}
+
+#[test]
+fn test_strcmp_equal_empty_strings() {
+    let vm = setup_strcmp_test("", "");
+    assert_eq!(vm.regs[0], 0, "STRCMP should set r0=0 for empty strings");
+}
+
+#[test]
+fn test_strcmp_s1_less_than_s2() {
+    let vm = setup_strcmp_test("abc", "abd");
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "STRCMP should set r0=-1 when s1 < s2");
+}
+
+#[test]
+fn test_strcmp_s1_greater_than_s2() {
+    let vm = setup_strcmp_test("xyz", "abc");
+    assert_eq!(vm.regs[0], 1, "STRCMP should set r0=1 when s1 > s2");
+}
+
+#[test]
+fn test_strcmp_s1_shorter_is_less() {
+    let vm = setup_strcmp_test("ab", "abc");
+    // 'ab' < 'abc' because s1 hits null first (0 < 'c')
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "STRCMP: shorter string should be less");
+}
+
+#[test]
+fn test_strcmp_s1_longer_is_greater() {
+    let vm = setup_strcmp_test("abcd", "abc");
+    // 'abcd' > 'abc' because s2 hits null first ('d' > 0)
+    assert_eq!(vm.regs[0], 1, "STRCMP: longer string should be greater");
+}
+
+#[test]
+fn test_strcmp_single_char_equal() {
+    let vm = setup_strcmp_test("a", "a");
+    assert_eq!(vm.regs[0], 0);
+}
+
+#[test]
+fn test_strcmp_single_char_less() {
+    let vm = setup_strcmp_test("A", "a");
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "STRCMP: 'A' (65) < 'a' (97)");
+}
+
+#[test]
+fn test_strcmp_assembles_and_runs() {
+    let source = r#"
+LDI r1, 0x300
+STRO r1, "hello"
+LDI r2, 0x400
+STRO r2, "hello"
+STRCMP r1, r2
+HALT
+"#;
+    let asm = crate::assembler::assemble(source, 0).expect("should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[0], 0, "assembled STRCMP: 'hello' == 'hello'");
+}
+
+#[test]
+fn test_strcmp_assemble_not_equal() {
+    let source = r#"
+LDI r1, 0x300
+STRO r1, "abc"
+LDI r2, 0x400
+STRO r2, "xyz"
+STRCMP r1, r2
+HALT
+"#;
+    let asm = crate::assembler::assemble(source, 0).expect("should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "assembled STRCMP: 'abc' < 'xyz'");
+}
+
+#[test]
+fn test_strcmp_preserves_other_registers() {
+    let vm = setup_strcmp_test("foo", "bar");
+    // r1 and r2 should still hold their original addresses
+    assert_eq!(vm.regs[1], 0x300);
+    assert_eq!(vm.regs[2], 0x400);
+}
+
+#[test]
+fn test_strcmp_numeric_characters() {
+    let vm = setup_strcmp_test("123", "124");
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "STRCMP: '123' < '124'");
+}
+
+#[test]
+fn test_strcmp_case_sensitive() {
+    let vm = setup_strcmp_test("Hello", "hello");
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "STRCMP: 'Hello' < 'hello' (case sensitive)");
+}

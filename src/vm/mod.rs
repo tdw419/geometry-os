@@ -833,6 +833,45 @@ impl Vm {
                     self.regs[xr + 1] = self.mouse_y;
                 }
             }
+
+            // STRCMP addr1_reg, addr2_reg -- compare two null-terminated strings
+            // Sets r0: 0 if equal, 1 if s1 > s2, 0xFFFFFFFF (-1) if s1 < s2
+            0x86 => {
+                let a1 = self.fetch() as usize;
+                let a2 = self.fetch() as usize;
+                if a1 < NUM_REGS && a2 < NUM_REGS {
+                    let mut addr1 = self.regs[a1] as usize;
+                    let mut addr2 = self.regs[a2] as usize;
+                    let mut result: i32 = 0;
+                    loop {
+                        let c1 = if addr1 < self.ram.len() {
+                            (self.ram[addr1] & 0xFF) as u8
+                        } else {
+                            0
+                        };
+                        let c2 = if addr2 < self.ram.len() {
+                            (self.ram[addr2] & 0xFF) as u8
+                        } else {
+                            0
+                        };
+                        if c1 == 0 && c2 == 0 {
+                            result = 0; // equal (both null)
+                            break;
+                        }
+                        if c1 < c2 {
+                            result = -1;
+                            break;
+                        }
+                        if c1 > c2 {
+                            result = 1;
+                            break;
+                        }
+                        addr1 += 1;
+                        addr2 += 1;
+                    }
+                    self.regs[0] = result as u32;
+                }
+            }
             // Unknown opcode: halt
             _ => {
                 self.halted = true;
