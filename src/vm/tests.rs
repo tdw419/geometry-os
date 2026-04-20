@@ -9958,3 +9958,202 @@ fn test_settings_runs_persistently() {
     assert_eq!(vm.ram[0x6900], 0, "theme unchanged");
     assert_eq!(vm.ram[0x6904], 50, "volume unchanged");
 }
+
+// ── About App Tests ──────────────────────────────────
+
+#[test]
+fn test_about_assembles() {
+    let source = std::fs::read_to_string("programs/about.asm").unwrap();
+    crate::assembler::assemble(&source, 0).expect("about.asm should assemble");
+}
+
+#[test]
+fn test_about_renders_info_panel() {
+    let source = std::fs::read_to_string("programs/about.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run to completion (about.asm halts)
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "about.asm should halt after rendering");
+
+    // Title bar at row 0 should be dark blue (0x1B3A5C)
+    assert_eq!(vm.screen[0], 0x1B3A5C, "title bar pixel at (0,0)");
+
+    // Info panel background at row 30 (0x141428)
+    assert_eq!(vm.screen[30 * 256 + 20], 0x141428, "info panel background");
+
+    // Footer area should have content (palette bar background 0x0A0A1A)
+    let palette_pixels = vm.screen.iter().filter(|&&p| p == 0x0A0A1A).count();
+    assert!(palette_pixels > 50, "should see palette bar at bottom");
+
+    // Should have color palette squares (non-black, non-background colors)
+    let unique_colors: std::collections::HashSet<u32> =
+        vm.screen.iter().filter(|&&p| p != 0).copied().collect();
+    assert!(
+        unique_colors.len() > 10,
+        "about page should have many colors (title, panel, text, palette), got {}",
+        unique_colors.len()
+    );
+}
+
+// ── Calendar App Tests ──────────────────────────────────
+
+#[test]
+fn test_calendar_assembles() {
+    let source = std::fs::read_to_string("programs/calendar.asm").unwrap();
+    crate::assembler::assemble(&source, 0).expect("calendar.asm should assemble");
+}
+
+#[test]
+fn test_calendar_computes_month_data() {
+    let source = std::fs::read_to_string("programs/calendar.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run 1 frame
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + 1 {
+            break;
+        }
+    }
+
+    // Should not halt (animation loop)
+    assert!(!vm.halted, "calendar should not halt");
+
+    // Check month/year defaults
+    assert_eq!(vm.ram[0x6100], 4, "month should be April (4)");
+    assert_eq!(vm.ram[0x6101], 2026, "year should be 2026");
+
+    // April 2026 has 30 days
+    assert_eq!(vm.ram[0x6102], 30, "April has 30 days");
+
+    // April 1 2026 is a Wednesday (day index 3 if 0=Sunday)
+    // Zeller: (h+1)%7 where h is the Zeller result
+    // For April 1, 2026: Should be Wednesday = 3 (if 0=Sunday)
+    let first_day = vm.ram[0x6103];
+    assert!(first_day <= 6, "first day should be 0-6, got {}", first_day);
+
+    // Title bar should have color (0x1B3A5C)
+    assert_eq!(vm.screen[0], 0x1B3A5C, "title bar should be drawn");
+}
+
+#[test]
+fn test_calendar_zeller_april_2026() {
+    // Verify Zeller congruence: April 1, 2026 is Wednesday
+    // Our convention: 0=Sunday, so Wednesday = 3
+    let source = std::fs::read_to_string("programs/calendar.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run past compute_month
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    // April 2026: 1st is Wednesday = index 3
+    assert_eq!(vm.ram[0x6103], 3, "April 1 2026 should be Wednesday (3)");
+}
+
+// ── Help Viewer Tests ──────────────────────────────────
+
+#[test]
+fn test_help_assembles() {
+    let source = std::fs::read_to_string("programs/help.asm").unwrap();
+    crate::assembler::assemble(&source, 0).expect("help.asm should assemble");
+}
+
+#[test]
+fn test_help_renders_content() {
+    let vm = boot_app("programs/help.asm", 1);
+
+    // Should not halt (animation loop)
+    assert!(!vm.halted, "help viewer should not halt");
+
+    // Title bar at row 0 should be 0x1B3A5C
+    assert_eq!(vm.screen[0], 0x1B3A5C, "title bar");
+
+    // Content area should have background (0x101828)
+    assert_eq!(vm.screen[34 * 256 + 8], 0x101828, "content background");
+
+    // Should have text pixels (0xAAAACC or 0x8888FF)
+    let text_pixels = vm
+        .screen
+        .iter()
+        .filter(|&&p| p == 0xAAAACC || p == 0x8888FF)
+        .count();
+    assert!(
+        text_pixels > 5,
+        "should have help text pixels, got {}",
+        text_pixels
+    );
+}
+
+#[test]
+fn test_help_scrolls() {
+    let source = std::fs::read_to_string("programs/help.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run 1 frame to initialize
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + 1 {
+            break;
+        }
+    }
+
+    // Initial scroll should be 0
+    assert_eq!(vm.ram[0x6100], 0, "initial scroll = 0");
+
+    // Simulate down arrow press
+    vm.ram[0xFFF] = 66; // 'B' = down arrow
+                        // Run another frame
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + 2 {
+            break;
+        }
+    }
+
+    // Scroll should have advanced
+    assert_eq!(vm.ram[0x6100], 1, "scroll should be 1 after down arrow");
+}

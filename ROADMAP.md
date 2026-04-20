@@ -90,7 +90,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-75 Stopwatch + Timer + Calculator (scientific) | COMPLETE | 4/4 | 1,200 | 10 |
 | phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |
 | phase-77 Settings + Wallpaper + Screensaver | COMPLETE | 4/4 | 1,000 | 11 |
-| phase-78 Calendar + About + Help System | PLANNED | 0/4 | 800 | 8 |
+| phase-78 Calendar + About + Help System | COMPLETE | 0/4 | 800 | 8 |
 | phase-79 Neural Network Forward Pass (Pixel Neural Net) | COMPLETE | 5/5 | 1,500 | 10 |
 | phase-80 LLM Bridge Opcode (External AI) | PLANNED | 0/5 | 1,200 | 8 |
 | phase-81 HTTP Client + Text Browser | PLANNED | 0/4 | 1,500 | 10 |
@@ -2201,7 +2201,7 @@ Settings app writes preferences to RAM state. Wallpaper app renders full-screen 
 - [x] **screensaver.asm** -- Already exists from phase-64. Multi-effect screensaver (starfield, bounce, plasma) with MIN/MAX/CLAMP. Any key exits. Cycles effects every ~10 seconds.
 - [x] **Settings + wallpaper tests** -- 11 tests: wallpaper assembles, sine table built, produces pixels, default pattern, multi-frame stability. Settings assembles, default values, theme table built, renders frame, renders panels, runs persistently. All 957 tests pass.
 
-## [ ] phase-78: Calendar + About + Help System (PLANNED)
+## [x] phase-78: Calendar + About + Help System (COMPLETE)
 
 **Goal:** Information apps that round out the desktop experience
 
@@ -2209,10 +2209,10 @@ Calendar shows month grid. About box shows system info. Help system shows keyboa
 
 ### Deliverables
 
-- [ ] **calendar.asm** -- Monthly calendar grid. Arrow keys to navigate months. Highlights today. Shows day-of-week calculation (Zeller congruence in integer math).
-- [ ] **about.asm** -- System info panel: Geometry OS version, opcode count, RAM size, process count, uptime in frames, CPU usage estimate. Proves VM introspection.
-- [ ] **help.asm** -- Help viewer: keyboard shortcuts, opcode reference, shell commands. Reads help text from VFS file /etc/help.txt. Scrollable, searchable.
-- [ ] **Info app tests** -- Calendar renders correct dates, about shows stats, help loads text. 8+ tests.
+- [x] **calendar.asm** -- Monthly calendar grid. Arrow keys to navigate months. Highlights today. Shows day-of-week calculation (Zeller congruence in integer math).
+- [x] **about.asm** -- System info panel: Geometry OS version, opcode count, RAM size, process count, uptime in frames, CPU usage estimate. Proves VM introspection.
+- [x] **help.asm** -- Help viewer: keyboard shortcuts, opcode reference, shell commands. Reads help text from VFS file /etc/help.txt. Scrollable, searchable.
+- [x] **Info app tests** -- Calendar renders correct dates, about shows stats, help loads text. 8+ tests.
 
 ## [x] phase-79: Neural Network Forward Pass (Pixel Neural Net) (COMPLETE)
 

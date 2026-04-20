@@ -271,8 +271,10 @@ zeller_ok:
     LDI r18, 7
     MOD r17, r18
 
-    ; Convert to 0=Sunday: (h+1)%7
-    LDI r18, 1
+    ; Convert to 0=Sunday: (h + 6) % 7
+    ; Zeller: 0=Sat,1=Sun,2=Mon,3=Tue,4=Wed,5=Thu,6=Fri
+    ; Target: 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+    LDI r18, 6
     ADD r17, r18
     LDI r18, 7
     MOD r17, r18
@@ -486,94 +488,106 @@ get_month_name:
 
     LDI r11, 1
     CMP r10, r11
-    JNZ r10, gm_2
+    JZ r0, gm_jan
+
+    LDI r11, 2
+    CMP r10, r11
+    JZ r0, gm_feb
+
+    LDI r11, 3
+    CMP r10, r11
+    JZ r0, gm_mar
+
+    LDI r11, 4
+    CMP r10, r11
+    JZ r0, gm_apr
+
+    LDI r11, 5
+    CMP r10, r11
+    JZ r0, gm_may
+
+    LDI r11, 6
+    CMP r10, r11
+    JZ r0, gm_jun
+
+    LDI r11, 7
+    CMP r10, r11
+    JZ r0, gm_jul
+
+    LDI r11, 8
+    CMP r10, r11
+    JZ r0, gm_aug
+
+    LDI r11, 9
+    CMP r10, r11
+    JZ r0, gm_sep
+
+    LDI r11, 10
+    CMP r10, r11
+    JZ r0, gm_oct
+
+    LDI r11, 11
+    CMP r10, r11
+    JZ r0, gm_nov
+
+    ; Default: December
+    STRO r20, "December"
+    POP r31
+    RET
+
+gm_jan:
     STRO r20, "January"
     POP r31
     RET
 
-gm_2:
-    LDI r11, 2
-    CMP r10, r11
-    JNZ r10, gm_3
+gm_feb:
     STRO r20, "February"
-    Pop r31
+    POP r31
     RET
 
-gm_3:
-    LDI r11, 3
-    CMP r10, r11
-    JNZ r10, gm_4
+gm_mar:
     STRO r20, "March"
-    Pop r31
+    POP r31
     RET
 
-gm_4:
-    LDI r11, 4
-    CMP r10, r11
-    JNZ r10, gm_5
+gm_apr:
     STRO r20, "April"
-    Pop r31
+    POP r31
     RET
 
-gm_5:
-    LDI r11, 5
-    CMP r10, r11
-    JNZ r10, gm_6
+gm_may:
     STRO r20, "May"
-    Pop r31
+    POP r31
     RET
 
-gm_6:
-    LDI r11, 6
-    CMP r10, r11
-    JNZ r10, gm_7
+gm_jun:
     STRO r20, "June"
-    Pop r31
+    POP r31
     RET
 
-gm_7:
-    LDI r11, 7
-    CMP r10, r11
-    JNZ r10, gm_8
+gm_jul:
     STRO r20, "July"
-    Pop r31
+    POP r31
     RET
 
-gm_8:
-    LDI r11, 8
-    CMP r10, r11
-    JNZ r10, gm_9
+gm_aug:
     STRO r20, "August"
-    Pop r31
+    POP r31
     RET
 
-gm_9:
-    LDI r11, 9
-    CMP r10, r11
-    JNZ r10, gm_10
+gm_sep:
     STRO r20, "September"
-    Pop r31
+    POP r31
     RET
 
-gm_10:
-    LDI r11, 10
-    CMP r10, r11
-    JNZ r10, gm_11
+gm_oct:
     STRO r20, "October"
-    Pop r31
+    POP r31
     RET
 
-gm_11:
-    LDI r11, 11
-    CMP r10, r11
-    JNZ r10, gm_12
+gm_nov:
     STRO r20, "November"
-    Pop r31
-    RET
-
-gm_12:
-    STRO r20, "December"
-    Pop r31
+    POP r31
     RET
 
 ; =========================================
@@ -611,7 +625,7 @@ its_write:
 
     LDI r18, 0
     STORE r20, r18
-    Pop r31
+    POP r31
     RET
 
 its_zero:
@@ -621,5 +635,5 @@ its_zero:
     ADD r20, r19
     LDI r18, 0
     STORE r20, r18
-    Pop r31
+    POP r31
     RET

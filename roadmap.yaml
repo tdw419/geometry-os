@@ -3784,7 +3784,7 @@ phases:
   test_target: 11
 - id: phase-78
   title: Calendar + About + Help System
-  status: planned
+  status: done
   goal: Information apps that round out the desktop experience
   description: 'Calendar shows month grid. About box shows system info. Help system shows
     keyboard shortcuts and command reference. Proves text rendering and data display.'
@@ -3792,15 +3792,15 @@ phases:
   - name: calendar.asm
     description: 'Monthly calendar grid. Arrow keys to navigate months. Highlights today.
       Shows day-of-week calculation (Zeller congruence in integer math).'
-    status: todo
+    status: done
   - name: about.asm
     description: 'System info panel: Geometry OS version, opcode count, RAM size, process
       count, uptime in frames, CPU usage estimate. Proves VM introspection.'
-    status: todo
+    status: done
   - name: help.asm
     description: 'Help viewer: keyboard shortcuts, opcode reference, shell commands.
       Reads help text from VFS file /etc/help.txt. Scrollable, searchable.'
-    status: todo
+    status: done
   - name: Info app tests
     description: 'Calendar renders correct dates, about shows stats, help loads text. 8+ tests.'
     status: todo
