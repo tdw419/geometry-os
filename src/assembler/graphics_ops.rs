@@ -230,6 +230,21 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "SPRBLT" => {
+            if tokens.len() < 5 {
+                return Err(
+                    "SPRBLT requires 4 arguments: SPRBLT sheet_addr_reg, sprite_id_reg, x_reg, y_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0x97);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

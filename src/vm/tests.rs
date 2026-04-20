@@ -8690,3 +8690,313 @@ fn test_winsys_bring_to_front_affects_hittest() {
     vm.step();
     assert_eq!(vm.regs[0], win1, "win1 brought to front");
 }
+
+// ── Sprite Engine (Phase 69) -- SPRBLT (0x97) ────────────────────────
+
+#[test]
+fn test_sprblt_basic_blit() {
+    // Create a sprite sheet at RAM 0x2000 with 2 sprites
+    // Sprite 0: all red (0xFF0000)
+    // Sprite 1: all green (0x00FF00)
+    let mut vm = Vm::new();
+    let sheet_addr = 0x2000;
+    // Sprite 0: 16x16 red pixels starting at sheet_addr
+    for i in 0..256 {
+        vm.ram[sheet_addr + i] = 0xFF0000;
+    }
+    // Sprite 1: 16x16 green pixels starting at sheet_addr + 256
+    for i in 0..256 {
+        vm.ram[sheet_addr + 256 + i] = 0x00FF00;
+    }
+
+    // SPRBLT sheet_addr_r, sprite_id_r, x_r, y_r
+    vm.regs[1] = sheet_addr as u32; // sheet addr
+    vm.regs[2] = 0; // sprite_id = 0 (red)
+    vm.regs[3] = 10; // x = 10
+    vm.regs[4] = 20; // y = 20
+
+    vm.ram[0] = 0x97; // SPRBLT
+    vm.ram[1] = 1; // sheet_addr_r
+    vm.ram[2] = 2; // sprite_id_r
+    vm.ram[3] = 3; // x_r
+    vm.ram[4] = 4; // y_r
+    vm.step();
+
+    // Check top-left pixel of the sprite
+    assert_eq!(vm.screen[20 * 256 + 10], 0xFF0000, "top-left should be red");
+    // Check center pixel
+    assert_eq!(vm.screen[27 * 256 + 17], 0xFF0000, "center should be red");
+    // Check bottom-right
+    assert_eq!(
+        vm.screen[35 * 256 + 25],
+        0xFF0000,
+        "bottom-right should be red"
+    );
+    // Check just outside sprite area -- should be 0 (default)
+    assert_eq!(vm.screen[20 * 256 + 9], 0, "left of sprite should be black");
+    assert_eq!(vm.screen[19 * 256 + 10], 0, "above sprite should be black");
+}
+
+#[test]
+fn test_sprblt_second_sprite() {
+    let mut vm = Vm::new();
+    let sheet_addr = 0x2000;
+    // Sprite 0: red
+    for i in 0..256 {
+        vm.ram[sheet_addr + i] = 0xFF0000;
+    }
+    // Sprite 1: green
+    for i in 0..256 {
+        vm.ram[sheet_addr + 256 + i] = 0x00FF00;
+    }
+
+    // Blit sprite 1 (green) at (5, 5)
+    vm.regs[1] = sheet_addr as u32;
+    vm.regs[2] = 1;
+    vm.regs[3] = 5;
+    vm.regs[4] = 5;
+
+    vm.ram[0] = 0x97;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.step();
+
+    assert_eq!(vm.screen[5 * 256 + 5], 0x00FF00, "sprite 1 should be green");
+    assert_eq!(vm.screen[20 * 256 + 20], 0x00FF00, "sprite 1 bottom-right");
+}
+
+#[test]
+fn test_sprblt_transparency() {
+    let mut vm = Vm::new();
+    let sheet_addr = 0x2000;
+    // Sprite 0: checkerboard -- every other pixel is transparent
+    for y in 0..16 {
+        for x in 0..16 {
+            let idx = sheet_addr + y * 16 + x;
+            if (x + y) % 2 == 0 {
+                vm.ram[idx] = 0xFFFFFF; // white
+            } else {
+                vm.ram[idx] = 0; // transparent
+            }
+        }
+    }
+
+    // Pre-fill screen with blue so we can check transparency
+    for i in 0..256 * 256 {
+        vm.screen[i] = 0x0000FF;
+    }
+
+    vm.regs[1] = sheet_addr as u32;
+    vm.regs[2] = 0;
+    vm.regs[3] = 8;
+    vm.regs[4] = 8;
+
+    vm.ram[0] = 0x97;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.step();
+
+    // (8,8) should be white (even sum)
+    assert_eq!(
+        vm.screen[8 * 256 + 8],
+        0xFFFFFF,
+        "even position should be white"
+    );
+    // (9,8) should be blue (transparent -- background preserved)
+    assert_eq!(
+        vm.screen[8 * 256 + 9],
+        0x0000FF,
+        "odd position should remain blue"
+    );
+}
+
+#[test]
+fn test_sprblt_screen_clipping() {
+    let mut vm = Vm::new();
+    let sheet_addr = 0x2000;
+    // Sprite 0: all yellow
+    for i in 0..256 {
+        vm.ram[sheet_addr + i] = 0xFFFF00;
+    }
+
+    // Blit at x=250, y=250 -- only 6x6 pixels should appear on screen
+    vm.regs[1] = sheet_addr as u32;
+    vm.regs[2] = 0;
+    vm.regs[3] = 250;
+    vm.regs[4] = 250;
+
+    vm.ram[0] = 0x97;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.step();
+
+    // (250, 250) should be yellow (in bounds)
+    assert_eq!(vm.screen[250 * 256 + 250], 0xFFFF00, "in-bounds pixel");
+    // (255, 255) should be yellow (last valid pixel)
+    assert_eq!(vm.screen[255 * 256 + 255], 0xFFFF00, "edge pixel");
+    // Pixels at x>=256 or y>=256 are clipped (screen is only 256x256)
+    // Just verify no crash happened
+}
+
+#[test]
+fn test_sprblt_negative_position() {
+    let mut vm = Vm::new();
+    let sheet_addr = 0x2000;
+    for i in 0..256 {
+        vm.ram[sheet_addr + i] = 0xFF00FF;
+    }
+
+    // Blit at x=-5 (0xFFFFFFFB as u32 -> interpreted as i32 = -5)
+    vm.regs[1] = sheet_addr as u32;
+    vm.regs[2] = 0;
+    vm.regs[3] = 0xFFFFFFFB; // -5 as i32
+    vm.regs[4] = 0;
+
+    vm.ram[0] = 0x97;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.step();
+
+    // Pixels at x=-5..-1 should be clipped. Pixel at x=0, y=0 should be drawn.
+    // -5 + 5 = 0 -> dx=5 should land at screen x=0
+    assert_eq!(vm.screen[0], 0xFF00FF, "dx=5 should appear at x=0");
+    // -5 + 4 = -1 -> clipped
+    // Just verify no crash
+}
+
+#[test]
+fn test_sprblt_assembler() {
+    use crate::assembler::assemble;
+    let src = "SPRBLT r1, r2, r3, r4";
+    let result = assemble(src, 0);
+    assert!(result.is_ok(), "assembly should succeed");
+    let asm = result.unwrap();
+    assert_eq!(asm.pixels[0], 0x97, "opcode");
+    assert_eq!(asm.pixels[1], 1, "sheet_addr reg");
+    assert_eq!(asm.pixels[2], 2, "sprite_id reg");
+    assert_eq!(asm.pixels[3], 3, "x reg");
+    assert_eq!(asm.pixels[4], 4, "y reg");
+}
+
+#[test]
+fn test_sprblt_assembler_error_too_few_args() {
+    use crate::assembler::assemble;
+    let src = "SPRBLT r1, r2, r3";
+    let result = assemble(src, 0);
+    assert!(result.is_err(), "should fail with too few args");
+}
+
+#[test]
+fn test_sprblt_disasm() {
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x97;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    let (s, len) = vm.disassemble_at(0);
+    assert_eq!(s, "SPRBLT r1, r2, r3, r4");
+    assert_eq!(len, 5);
+}
+
+#[test]
+fn test_sprblt_via_run_program() {
+    // Full end-to-end: assemble + run
+    use crate::assembler::assemble;
+    let src = r#"
+        LDI r1, 0x2000
+        LDI r2, 0
+        LDI r3, 50
+        LDI r4, 50
+        SPRBLT r1, r2, r3, r4
+        HALT
+    "#;
+    let asm = assemble(src, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    // Write sprite 0 data at 0x2000
+    let sheet_addr = 0x2000;
+    for i in 0..256 {
+        vm.ram[sheet_addr + i] = 0x00FFFF;
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "should halt");
+    assert_eq!(vm.screen[50 * 256 + 50], 0x00FFFF, "sprite should be drawn");
+}
+
+#[test]
+fn test_sprblt_high_sprite_id() {
+    // Test sprite at index 5 in the sheet
+    let mut vm = Vm::new();
+    let sheet_addr = 0x2000;
+    // Sprite 5 starts at sheet_addr + 5 * 256 = 0x2800
+    let sprite5_offset = 5 * 256;
+    for i in 0..256 {
+        vm.ram[sheet_addr + sprite5_offset + i] = 0xFF00FF;
+    }
+
+    vm.regs[1] = sheet_addr as u32;
+    vm.regs[2] = 5;
+    vm.regs[3] = 0;
+    vm.regs[4] = 0;
+
+    vm.ram[0] = 0x97;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.step();
+
+    assert_eq!(vm.screen[0], 0xFF00FF, "sprite 5 should be drawn");
+}
+
+#[test]
+fn test_sprblt_all_transparent() {
+    let mut vm = Vm::new();
+    let sheet_addr = 0x2000;
+    // Sprite 0: all transparent
+    for i in 0..256 {
+        vm.ram[sheet_addr + i] = 0;
+    }
+    // Fill screen with known color
+    for i in 0..256 * 256 {
+        vm.screen[i] = 0x123456;
+    }
+
+    vm.regs[1] = sheet_addr as u32;
+    vm.regs[2] = 0;
+    vm.regs[3] = 10;
+    vm.regs[4] = 10;
+
+    vm.ram[0] = 0x97;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.step();
+
+    // Entire sprite area should remain unchanged
+    assert_eq!(
+        vm.screen[10 * 256 + 10],
+        0x123456,
+        "transparent sprite should not draw"
+    );
+}

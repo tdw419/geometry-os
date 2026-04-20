@@ -1360,6 +1360,47 @@ impl Vm {
                 }
             }
 
+            // SPRBLT sheet_addr_reg, sprite_id_reg, x_reg, y_reg (0x97)
+            // Blit a 16x16 sprite from a sprite sheet in RAM to the screen.
+            // Sprite sheet: contiguous array of 16x16 pixel sprites.
+            // Sprite data starts at: sheet_addr + sprite_id * 256
+            // Each sprite is 16x16 = 256 u32 pixels (row-major).
+            // Pixels with value 0 are transparent (skipped).
+            // Clipped to screen boundaries (0..256).
+            0x97 => {
+                let sheet_r = self.fetch() as usize;
+                let sid_r = self.fetch() as usize;
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                if sheet_r < NUM_REGS && sid_r < NUM_REGS && xr < NUM_REGS && yr < NUM_REGS {
+                    let sheet_addr = self.regs[sheet_r] as usize;
+                    let sprite_id = self.regs[sid_r] as usize;
+                    let sx = self.regs[xr] as i32;
+                    let sy = self.regs[yr] as i32;
+
+                    let sprite_offset = sprite_id * 256; // 16x16 pixels per sprite
+                    let data_start = sheet_addr + sprite_offset;
+
+                    for dy in 0..16usize {
+                        for dx in 0..16usize {
+                            let ram_addr = data_start + dy * 16 + dx;
+                            if ram_addr >= self.ram.len() {
+                                break;
+                            }
+                            let color = self.ram[ram_addr];
+                            if color == 0 {
+                                continue; // transparent
+                            }
+                            let px = sx + dx as i32;
+                            let py = sy + dy as i32;
+                            if (0..256).contains(&px) && (0..256).contains(&py) {
+                                self.screen[(py as usize) * 256 + (px as usize)] = color;
+                            }
+                        }
+                    }
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

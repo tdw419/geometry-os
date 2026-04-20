@@ -739,6 +739,16 @@ impl Vm {
                 ),
                 5,
             ),
+            0x97 => (
+                format!(
+                    "SPRBLT {}, {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3)),
+                    reg(ram(a + 4))
+                ),
+                5,
+            ),
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
