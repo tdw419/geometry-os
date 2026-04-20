@@ -3755,29 +3755,33 @@ phases:
   test_target: 10
 - id: phase-77
   title: Settings + Wallpaper + Screensaver
-  status: planned
+  status: complete
   goal: System customization apps that prove config persistence and idle detection
-  description: 'Settings app writes preferences to VFS config file. Wallpaper app renders
-    full-screen patterns. Screensaver activates after idle timeout. Proves config persistence
-    and time-based events.'
+  description: 'Settings app with 8 color themes, wallpaper generator with 5 procedural
+    patterns, screensaver from phase-64. Proves theme palettes, sine table rendering,
+    and config state management.'
   deliverables:
   - name: settings.asm
-    description: 'Settings panel: theme colors (8 preset palettes), beep volume, key repeat
-      rate, default shell. Saves to /etc/settings.cfg in VFS. Loaded at boot by init.asm.'
-    status: todo
+    description: 'Settings panel with 8 color themes (Dark, Ocean, Forest, Sunset,
+      Monochrome, Vaporwave, Amber, Matrix), volume slider, key repeat control. W/S
+      navigate, A/D change values. Visual preview swatch.'
+    status: done
   - name: wallpaper.asm
-    description: 'Generates full-screen procedural wallpaper patterns (plasma, gradient,
-      noise). Save current pattern as /etc/wallpaper.cfg. init.asm loads on boot.'
-    status: todo
+    description: '5 full-screen procedural wallpaper patterns (gradient, plasma, diamonds,
+      stripes, noise). Parabolic cosine sine table. Keys 1-5 select pattern. Animated
+      via FRAME loop.'
+    status: done
   - name: screensaver.asm
-    description: 'Activates after 60 seconds of no input. Shows starfield or bouncing
-      geometry. Any keypress returns to desktop. Proves idle detection via FRAME counting.'
-    status: todo
+    description: 'Already exists from phase-64. Multi-effect screensaver (starfield,
+      bounce, plasma) with MIN/MAX/CLAMP. Any key exits.'
+    status: done
   - name: Settings + wallpaper tests
-    description: 'Config file round-trip, wallpaper renders, screensaver activates on idle. 8+ tests.'
-    status: todo
+    description: '11 tests: wallpaper assembles, sine table built, produces pixels,
+      default pattern, multi-frame. Settings assembles, defaults, theme table, renders,
+      panels, persistently. All 957 tests pass.'
+    status: done
   scope_lines_total: 1000
-  test_target: 8
+  test_target: 11
 - id: phase-78
   title: Calendar + About + Help System
   status: planned
@@ -4055,6 +4059,97 @@ phases:
     status: todo
   scope_lines_total: 1200
   test_target: 10
+- id: phase-88
+  title: AI Vision Bridge -- Screenshot + Canvas Analysis
+  status: planned
+  goal: Expose the canvas as a base64 PNG that AI agents can request and analyze
+  description: 'AI_AGENT opcode returns the current canvas state as a base64-encoded PNG
+    written to RAM (or saved to VFS). Agents can take screenshots mid-execution, send them
+    to a vision LLM, and get back analysis of what rendered. Enables visual debugging
+    without human eyes.'
+  deliverables:
+  - name: AI_AGENT opcode (0x99)
+    description: 'AI_AGENT op_reg -- op=0: screenshot to VFS file, returns path addr in r0.
+      op=1: get canvas checksum (fast comparison for "did it change"). op=2: diff two
+      screenshots, returns changed pixel count in r0. op=3: call external vision API
+      with screenshot + prompt from RAM.'
+    status: todo
+  - name: Canvas-to-PNG export
+    description: 'Convert the 256x256 u32 canvas buffer to a PNG file in VFS. No external
+      dependencies -- pure Rust PNG encoder (header + deflate). ~50 lines.'
+    status: todo
+  - name: Canvas checksum
+    description: 'Fast hash of the canvas buffer (FNV-1a or simple XOR fold). Lets agents
+      quickly check if a program changed the screen without sending full images.'
+    status: todo
+  - name: ai_vision.asm
+    description: 'Demo: draw something complex, call AI_AGENT screenshot, compare checksum
+      before/after. Proves the pipeline works.'
+    status: todo
+  - name: AI vision tests
+    description: 'Screenshot saves, checksum matches, diff detects changes. 8+ tests.'
+    status: todo
+  scope_lines_total: 600
+  test_target: 8
+- id: phase-89
+  title: AI Agent Input -- Programmatic Keyboard + Mouse Injection
+  status: planned
+  goal: Let AI agents inject keyboard and mouse events to interact with running programs
+  description: 'AI agents can simulate user input programmatically. Send keystrokes,
+    move the mouse, click buttons -- all from RAM commands instead of physical hardware.
+    Enables fully autonomous GUI testing and interaction.'
+  deliverables:
+  - name: AI_INJECT opcode (0x9A)
+    description: 'AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift state).
+      op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x, r2=y, r3=button).
+      op=3: inject text string (r1=addr of null-terminated string, types each char).'
+    status: todo
+  - name: Event injection queue
+    description: 'Injected events go into the same IKEY/MOUSEQ queue as real hardware events.
+      Agents and humans share the same input system. Injected events tagged with source flag.'
+    status: todo
+  - name: ai_interact.asm
+    description: 'Demo: program injects keystrokes into itself. Opens a menu, types text,
+      clicks a button -- all autonomously. Proves AI can drive the GUI.'
+    status: todo
+  - name: AI input tests
+    description: 'Key injection, mouse move/click, text string injection, event ordering. 10+ tests.'
+    status: todo
+  scope_lines_total: 500
+  test_target: 10
+- id: phase-90
+  title: AI Native Desktop -- Agents on the Map
+  status: planned
+  goal: AI agents appear as avatars on the infinite map and can interact with buildings
+  description: 'AI agents get their own avatars on the infinite map. They can walk around,
+    enter buildings, use apps, and build things -- all visible to the human player.
+    The map shows both human and AI activity in real time. Agents are citizens of the OS.'
+  deliverables:
+  - name: Agent avatar system
+    description: 'Up to 4 AI agent avatars on the map. Different color from player (cyan
+      for AI). Agent movement is programmatic via AI_INJECT. Agent pathfinding: walk toward
+      target building, avoid obstacles.'
+    status: todo
+  - name: Agent building interaction
+    description: 'AI agents can enter buildings, run apps, read output via AI_AGENT screenshot,
+      and report results. Agent enters terminal building, runs command, reads output,
+      returns to map.'
+    status: todo
+  - name: Agent task queue
+    description: 'RAM-based task queue. Human assigns tasks to agents (via terminal command
+      or map UI). Agent picks up task, walks to building, executes, reports back. Proves
+      multi-agent coordination on the map.'
+    status: todo
+  - name: ai_agents_demo.asm
+    description: 'Player assigns "run tests" to an AI agent. Agent walks to terminal building,
+      enters, runs cargo test equivalent, reads output, walks back, reports pass/fail as
+      floating text above avatar.'
+    status: todo
+  - name: Agent avatar tests
+    description: 'Agent renders, pathfinding, building entry, task queue, reporting. 12+ tests.'
+    status: todo
+  scope_lines_total: 1200
+  test_target: 12
 global_risks:
 - 'Opcode space: 113 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard

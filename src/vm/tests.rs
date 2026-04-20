@@ -9808,3 +9808,153 @@ fn test_sci_calc_title_rendered() {
     let vm = boot_app("programs/sci_calc.asm", 1);
     assert_eq!(vm.screen[10 * 256 + 10], 0x1B3A4B, "title bar rendered");
 }
+
+// ── Wallpaper Tests (Phase 77) ──────────────────────────────
+
+#[test]
+fn test_wallpaper_assembles() {
+    let source = std::fs::read_to_string("programs/wallpaper.asm").unwrap();
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "wallpaper.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 100,
+        "wallpaper should produce substantial bytecode, got {} words",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_wallpaper_sine_table_built() {
+    let vm = boot_app("programs/wallpaper.asm", 1);
+    // Sine table at 0x2000, parabolic cosine formula
+    // Entry 0: delta=128, val = 255-127 = 128
+    assert!(
+        vm.ram[0x2000] >= 128,
+        "sine[0] should be >=128, got {}",
+        vm.ram[0x2000]
+    );
+    // Entry 128 (0x2080): delta=0, val = 255 (peak)
+    assert!(
+        vm.ram[0x2080] > 200,
+        "sine[128] should be ~255, got {}",
+        vm.ram[0x2080]
+    );
+}
+
+#[test]
+fn test_wallpaper_produces_pixels() {
+    let vm = boot_app("programs/wallpaper.asm", 1);
+    // Should have rendered something to the screen (non-black pixels)
+    let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(
+        non_black > 100,
+        "wallpaper should render pixels, got {} non-black",
+        non_black
+    );
+}
+
+#[test]
+fn test_wallpaper_pattern_default() {
+    let vm = boot_app("programs/wallpaper.asm", 1);
+    // Default pattern is 0 (gradient)
+    assert_eq!(vm.ram[0x6800], 0, "default pattern should be 0");
+}
+
+#[test]
+fn test_wallpaper_runs_multiple_frames() {
+    let vm = boot_app("programs/wallpaper.asm", 3);
+    // Should survive 3 frames without crashing
+    assert!(!vm.halted, "wallpaper should still be running");
+    // Pattern should still be valid (0)
+    assert!(
+        vm.ram[0x6800] <= 4,
+        "pattern should be 0-4, got {}",
+        vm.ram[0x6800]
+    );
+}
+
+// ── Settings Tests (Phase 77) ───────────────────────────────
+
+#[test]
+fn test_settings_assembles() {
+    let source = std::fs::read_to_string("programs/settings.asm").unwrap();
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "settings.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 100,
+        "settings should produce substantial bytecode, got {} words",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_settings_default_values() {
+    let vm = boot_app("programs/settings.asm", 1);
+    // Theme defaults to 0
+    assert_eq!(vm.ram[0x6900], 0, "default theme should be 0");
+    // Volume defaults to 50
+    assert_eq!(vm.ram[0x6904], 50, "default volume should be 50");
+    // Cursor defaults to 0
+    assert_eq!(vm.ram[0x6908], 0, "default cursor should be 0");
+    // Key repeat defaults to 3
+    assert_eq!(vm.ram[0x690C], 3, "default key repeat should be 3");
+}
+
+#[test]
+fn test_settings_theme_table_built() {
+    let vm = boot_app("programs/settings.asm", 1);
+    // Theme 0 at 0x7000: bg=0x0D1B2A, fg=0xE0E0E0, accent=0x00B4D8, panel=0x1B2838
+    assert_eq!(vm.ram[0x7000], 0x0D1B2A, "theme 0 bg");
+    assert_eq!(vm.ram[0x7001], 0xE0E0E0, "theme 0 fg");
+    assert_eq!(vm.ram[0x7002], 0x00B4D8, "theme 0 accent");
+    assert_eq!(vm.ram[0x7003], 0x1B2838, "theme 0 panel");
+    // Theme 7 (Matrix) at 0x701C
+    assert_eq!(vm.ram[0x701C], 0x000A00, "theme 7 (Matrix) bg");
+    assert_eq!(vm.ram[0x701D], 0x00FF00, "theme 7 (Matrix) fg");
+}
+
+#[test]
+fn test_settings_renders_frame() {
+    let vm = boot_app("programs/settings.asm", 1);
+    // Should not be halted (loops with FRAME)
+    assert!(!vm.halted, "settings should still be running");
+    // Title bar should have accent color (cyan for theme 0)
+    // Title bar is at row 0-23, uses accent color 0x00B4D8
+    assert!(
+        vm.screen.iter().filter(|&&p| p == 0x00B4D8).count() > 10,
+        "should see accent color on screen (title bar)"
+    );
+}
+
+#[test]
+fn test_settings_renders_panels() {
+    let vm = boot_app("programs/settings.asm", 1);
+    // Should have panel background color somewhere (0x1B2838)
+    assert!(
+        vm.screen.iter().filter(|&&p| p == 0x1B2838).count() > 10,
+        "should see panel color on screen"
+    );
+}
+
+#[test]
+fn test_settings_runs_persistently() {
+    let vm = boot_app("programs/settings.asm", 5);
+    // Should survive 5 frames without crashing
+    assert!(
+        !vm.halted,
+        "settings should still be running after 5 frames"
+    );
+    // Config values should be unchanged (no input)
+    assert_eq!(vm.ram[0x6900], 0, "theme unchanged");
+    assert_eq!(vm.ram[0x6904], 50, "volume unchanged");
+}

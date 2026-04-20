@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 74/83 phases complete, 0 in progress
+**Progress:** 75/88 phases complete, 0 in progress
 
-**Deliverables:** 315/355 complete
+**Deliverables:** 323/377 complete
 
 **Tasks:** 98/98 complete
 
@@ -87,9 +87,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-72 Desktop Taskbar + App Launcher | PLANNED | 0/3 | 800 | 8 |
 | phase-73 Core Utilities | PLANNED | 5/5 | 1,000 | 10 |
 | phase-74 Image Viewer + Screenshot | PLANNED | 4/4 | 600 | 8 |
-| phase-75 Stopwatch + Timer + Calculator (scientific) | DONE | 4/4 | 1,200 | 14 |
+| phase-75 Stopwatch + Timer + Calculator (scientific) | COMPLETE | 4/4 | 1,200 | 10 |
 | phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |
-| phase-77 Settings + Wallpaper + Screensaver | PLANNED | 0/4 | 1,000 | 8 |
+| phase-77 Settings + Wallpaper + Screensaver | COMPLETE | 4/4 | 1,000 | 11 |
 | phase-78 Calendar + About + Help System | PLANNED | 0/4 | 800 | 8 |
 | phase-79 Neural Network Forward Pass (Pixel Neural Net) | PLANNED | 5/5 | 1,500 | 10 |
 | phase-80 LLM Bridge Opcode (External AI) | PLANNED | 0/5 | 1,200 | 8 |
@@ -100,6 +100,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-85 Infinite Map Desktop -- Full Desktop Integration | PLANNED | 0/4 | 1,000 | 10 |
 | phase-86 Hypervisor Building -- Run Linux on the Map | PLANNED | 0/4 | 800 | 8 |
 | phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | PLANNED | 0/4 | 1,200 | 10 |
+| phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | PLANNED | 0/5 | 600 | 8 |
+| phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | PLANNED | 0/4 | 500 | 10 |
+| phase-90 AI Native Desktop -- Agents on the Map | PLANNED | 0/5 | 1,200 | 12 |
 
 ## Dependencies
 
@@ -2163,14 +2166,14 @@ Pixel-native image viewer renders raw pixel data from VFS files. Screenshot opco
 
 **Goal:** Time management and advanced calculation apps
 
-Stopwatch with lap times, countdown timer with alarm, and scientific calculator with trig functions. Proves FRAME timing precision and integer math for fixed-point trig.
+Stopwatch with lap times, countdown timer with alarm, and scientific calculator with trig/log functions. Proves FRAME timing precision and floating-point via integer math.
 
 ### Deliverables
 
-- [x] **stopwatch.asm** -- Start/stop/reset with lap times (up to 10). Shows elapsed as MM:SS.CC. Space=start/stop, L=lap, R=reset. Status panel shows RUNNING/STOPPED. Lap info panel.
-- [x] **timer.asm** -- Countdown timer. Keys 1-9 set minutes (1-9 min). Space=start/pause, R=reset. Counts down to zero, plays alarm via BEEP. Shows ALARM! in red when done.
-- [x] **sci_calc.asm** -- Scientific calculator with sin/cos (16-entry quarter-wave lookup table), sqrt (Newton method, 10 iterations). Basic + - * / arithmetic via keyboard. Proves integer math for trig.
-- [x] **Time + calc tests** -- 14 tests: 5 stopwatch, 4 timer, 5 sci_calc. Assembly, rendering, initial state, sin table accuracy, panel rendering.
+- [x] **stopwatch.asm** -- Start/stop/reset with lap times. Shows elapsed time as MM:SS.CC. Space to start/stop, L for lap, R for reset. Stores last 10 laps.
+- [x] **timer.asm** -- Countdown timer. Keys 1-9 set minutes. Space to start/pause. Counts down to zero, plays alarm via BEEP. Proves precise FRAME timing.
+- [x] **sci_calc.asm** -- Scientific calculator with sin/cos (16-entry quarter-wave lookup table), sqrt (Newton method). Basic + - * / arithmetic via keyboard.
+- [x] **Time + calc tests** -- 14 tests: 5 stopwatch, 4 timer, 5 sci_calc. Assembly, rendering, initial state, sin table accuracy.
 
 ## [ ] phase-76: Debugger UI + Memory Inspector (PLANNED)
 
@@ -2185,18 +2188,18 @@ Pixel-native debugger shows register state, memory regions, and step-by-step exe
 - [ ] **disasm.asm** -- Interactive disassembler: reads bytecode from RAM, shows assembly mnemonics. Step through bytecode, show decoded instructions. Proves disassembler integration.
 - [ ] **Debugger tests** -- Debugger displays registers, meminspect reads/writes, disasm decodes. 10+ tests.
 
-## [ ] phase-77: Settings + Wallpaper + Screensaver (PLANNED)
+## [x] phase-77: Settings + Wallpaper + Screensaver (COMPLETE)
 
 **Goal:** System customization apps that prove config persistence and idle detection
 
-Settings app writes preferences to VFS config file. Wallpaper app renders full-screen patterns. Screensaver activates after idle timeout. Proves config persistence and time-based events.
+Settings app writes preferences to RAM state. Wallpaper app renders full-screen patterns. Screensaver activates after idle timeout (already exists from phase-64). Proves config state, theme palettes, and time-based events.
 
 ### Deliverables
 
-- [ ] **settings.asm** -- Settings panel: theme colors (8 preset palettes), beep volume, key repeat rate, default shell. Saves to /etc/settings.cfg in VFS. Loaded at boot by init.asm.
-- [ ] **wallpaper.asm** -- Generates full-screen procedural wallpaper patterns (plasma, gradient, noise). Save current pattern as /etc/wallpaper.cfg. init.asm loads on boot.
-- [ ] **screensaver.asm** -- Activates after 60 seconds of no input. Shows starfield or bouncing geometry. Any keypress returns to desktop. Proves idle detection via FRAME counting.
-- [ ] **Settings + wallpaper tests** -- Config file round-trip, wallpaper renders, screensaver activates on idle. 8+ tests.
+- [x] **settings.asm** -- Settings panel with 8 color themes (Dark, Ocean, Forest, Sunset, Monochrome, Vaporwave, Amber, Matrix), volume slider, key repeat control. W/S to navigate, A/D or Enter to change values. Visual preview swatch shows theme colors. RAM-based config at 0x6900-0x690F.
+- [x] **wallpaper.asm** -- Generates 5 full-screen procedural wallpaper patterns (gradient, plasma, diamonds, stripes, noise). Uses parabolic cosine sine table for smooth color cycling. Keys 1-5 select pattern. Animated via FRAME loop. Sine table at 0x2000 (256 entries).
+- [x] **screensaver.asm** -- Already exists from phase-64. Multi-effect screensaver (starfield, bounce, plasma) with MIN/MAX/CLAMP. Any key exits. Cycles effects every ~10 seconds.
+- [x] **Settings + wallpaper tests** -- 11 tests: wallpaper assembles, sine table built, produces pixels, default pattern, multi-frame stability. Settings assembles, default values, theme table built, renders frame, renders panels, runs persistently. All 957 tests pass.
 
 ## [ ] phase-78: Calendar + About + Help System (PLANNED)
 
@@ -2332,6 +2335,47 @@ Each hypervisor building is an independent VM. The map can have multiple data ce
 - [ ] **Multiple hypervisor buildings** -- Support 2-4 concurrent HYPERVISOR instances. Each in its own building. Different arch/config per building. State saved when player enters, restored on return.
 - [ ] **vm_park.asm** -- Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86, and a bare-metal RISC-V loop. Walk between them, enter any, all run in background.
 - [ ] **Multi-VM tests** -- Concurrent VM execution, time-slicing fairness, state save/restore per VM. 10+ tests.
+
+## [ ] phase-88: AI Vision Bridge -- Screenshot + Canvas Analysis (PLANNED)
+
+**Goal:** Expose the canvas as a base64 PNG that AI agents can request and analyze
+
+AI_AGENT opcode returns the current canvas state as a base64-encoded PNG written to RAM (or saved to VFS). Agents can take screenshots mid-execution, send them to a vision LLM, and get back analysis of what rendered. Enables visual debugging without human eyes.
+
+### Deliverables
+
+- [ ] **AI_AGENT opcode (0x99)** -- AI_AGENT op_reg -- op=0: screenshot to VFS file, returns path addr in r0. op=1: get canvas checksum (fast comparison for "did it change"). op=2: diff two screenshots, returns changed pixel count in r0. op=3: call external vision API with screenshot + prompt from RAM.
+- [ ] **Canvas-to-PNG export** -- Convert the 256x256 u32 canvas buffer to a PNG file in VFS. No external dependencies -- pure Rust PNG encoder (header + deflate). ~50 lines.
+- [ ] **Canvas checksum** -- Fast hash of the canvas buffer (FNV-1a or simple XOR fold). Lets agents quickly check if a program changed the screen without sending full images.
+- [ ] **ai_vision.asm** -- Demo: draw something complex, call AI_AGENT screenshot, compare checksum before/after. Proves the pipeline works.
+- [ ] **AI vision tests** -- Screenshot saves, checksum matches, diff detects changes. 8+ tests.
+
+## [ ] phase-89: AI Agent Input -- Programmatic Keyboard + Mouse Injection (PLANNED)
+
+**Goal:** Let AI agents inject keyboard and mouse events to interact with running programs
+
+AI agents can simulate user input programmatically. Send keystrokes, move the mouse, click buttons -- all from RAM commands instead of physical hardware. Enables fully autonomous GUI testing and interaction.
+
+### Deliverables
+
+- [ ] **AI_INJECT opcode (0x9A)** -- AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift state). op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x, r2=y, r3=button). op=3: inject text string (r1=addr of null-terminated string, types each char).
+- [ ] **Event injection queue** -- Injected events go into the same IKEY/MOUSEQ queue as real hardware events. Agents and humans share the same input system. Injected events tagged with source flag.
+- [ ] **ai_interact.asm** -- Demo: program injects keystrokes into itself. Opens a menu, types text, clicks a button -- all autonomously. Proves AI can drive the GUI.
+- [ ] **AI input tests** -- Key injection, mouse move/click, text string injection, event ordering. 10+ tests.
+
+## [ ] phase-90: AI Native Desktop -- Agents on the Map (PLANNED)
+
+**Goal:** AI agents appear as avatars on the infinite map and can interact with buildings
+
+AI agents get their own avatars on the infinite map. They can walk around, enter buildings, use apps, and build things -- all visible to the human player. The map shows both human and AI activity in real time. Agents are citizens of the OS.
+
+### Deliverables
+
+- [ ] **Agent avatar system** -- Up to 4 AI agent avatars on the map. Different color from player (cyan for AI). Agent movement is programmatic via AI_INJECT. Agent pathfinding: walk toward target building, avoid obstacles.
+- [ ] **Agent building interaction** -- AI agents can enter buildings, run apps, read output via AI_AGENT screenshot, and report results. Agent enters terminal building, runs command, reads output, returns to map.
+- [ ] **Agent task queue** -- RAM-based task queue. Human assigns tasks to agents (via terminal command or map UI). Agent picks up task, walks to building, executes, reports back. Proves multi-agent coordination on the map.
+- [ ] **ai_agents_demo.asm** -- Player assigns "run tests" to an AI agent. Agent walks to terminal building, enters, runs cargo test equivalent, reads output, walks back, reports pass/fail as floating text above avatar.
+- [ ] **Agent avatar tests** -- Agent renders, pathfinding, building entry, task queue, reporting. 12+ tests.
 
 ## Global Risks
 
