@@ -222,6 +222,28 @@ impl Vm {
                 let addr2 = ram(a + 2);
                 (format!("BGE {}, 0x{:04X}", reg(r), addr2), 3)
             }
+            0x37 => {
+                let xr = ram(a + 1);
+                let yr = ram(a + 2);
+                let wr = ram(a + 3);
+                let hr = ram(a + 4);
+                let id = ram(a + 5);
+                (
+                    format!(
+                        "HITSET {}, {}, {}, {}, {}",
+                        reg(xr),
+                        reg(yr),
+                        reg(wr),
+                        reg(hr),
+                        id
+                    ),
+                    6,
+                )
+            }
+            0x38 => {
+                let rd = ram(a + 1);
+                (format!("HITQ {}", reg(rd)), 2)
+            }
             0x40 => {
                 let xr = ram(a + 1);
                 let yr = ram(a + 2);
@@ -640,7 +662,7 @@ mod tests {
 
     /// Helper: create a VM and load a single instruction at addr.
     /// `words` are the opcode and its operands in order.
-    fn load_instruction(words: &[u32], addr: usize) -> Vm {
+    pub(crate) fn load_instruction(words: &[u32], addr: usize) -> Vm {
         let mut vm = Vm::new();
         for (i, &w) in words.iter().enumerate() {
             vm.ram[addr + i] = w;

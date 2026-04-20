@@ -270,6 +270,9 @@ impl Vm {
             snapshots: Vec::new(),
             pixel_write_log: PixelWriteLog::new(DEFAULT_PIXEL_WRITE_CAPACITY),
             tcp_connections: (0..super::MAX_TCP_CONNECTIONS).map(|_| None).collect(),
+            hit_regions: Vec::with_capacity(super::MAX_HIT_REGIONS),
+            mouse_x: 0,
+            mouse_y: 0,
         })
     }
 }
