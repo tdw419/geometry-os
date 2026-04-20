@@ -179,3 +179,98 @@ pub const GLYPHS: [[u8; GLYPH_H]; 128] = [
     // 0x7F: DEL (blank)
     [0x00; 8],
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_glyph_array_has_128_entries() {
+        assert_eq!(GLYPHS.len(), 128);
+    }
+
+    #[test]
+    fn test_all_glyphs_have_correct_dimensions() {
+        for (i, glyph) in GLYPHS.iter().enumerate() {
+            assert_eq!(glyph.len(), GLYPH_H, "glyph {} has wrong height", i);
+        }
+    }
+
+    #[test]
+    fn test_control_characters_are_blank() {
+        // ASCII 0x00-0x1F are control characters, should be all zeros
+        for (i, glyph) in GLYPHS.iter().enumerate().take(32) {
+            assert!(glyph.iter().all(|&b| b == 0), "control char 0x{:02X} is not blank", i);
+        }
+    }
+
+    #[test]
+    fn test_space_is_blank() {
+        assert!(GLYPHS[0x20].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_del_is_blank() {
+        assert!(GLYPHS[0x7F].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_exclamation_mark_has_pixels() {
+        let glyph = &GLYPHS[0x21];
+        assert!(glyph.iter().any(|&b| b != 0), "exclamation mark should have some pixels set");
+        // Check it has the characteristic pattern: top 5 rows have middle column
+        assert_ne!(glyph[0] & 0x18, 0); // middle bits set in row 0
+    }
+
+    #[test]
+    fn test_letter_A_shape() {
+        let glyph = &GLYPHS[0x41];
+        // A has a peak at row 0 (bits 3,4,5 set = 0x38 = 0b00111000)
+        assert_eq!(glyph[0], 0x38, "A row 0 should be 0x38");
+        // A has a flat bottom at row 6 (bits 2,3,4,5,6 set = 0x6C)
+        assert_eq!(glyph[6], 0xC6, "A row 6 should be 0xC6");
+    }
+
+    #[test]
+    fn test_digits_are_distinct() {
+        // Each digit 0-9 should have a unique glyph
+        let mut seen = std::collections::HashSet::new();
+        for d in 0x30..=0x39 {
+            let glyph = GLYPHS[d];
+            assert!(seen.insert(glyph), "digit {} (0x{:02X}) has duplicate glyph", d - 0x30, d);
+        }
+    }
+
+    #[test]
+    fn test_uppercase_letters_are_distinct() {
+        let mut seen = std::collections::HashSet::new();
+        for c in 0x41..=0x5A {
+            let glyph = GLYPHS[c];
+            assert!(seen.insert(glyph), "uppercase letter {} (0x{:02X}) has duplicate glyph", c as u8 as char, c);
+        }
+    }
+
+    #[test]
+    fn test_lowercase_letters_are_distinct() {
+        let mut seen = std::collections::HashSet::new();
+        for c in 0x61..=0x7A {
+            let glyph = GLYPHS[c];
+            assert!(seen.insert(glyph), "lowercase letter {} (0x{:02X}) has duplicate glyph", c as u8 as char, c);
+        }
+    }
+
+    #[test]
+    fn test_printable_glyphs_have_content() {
+        // All visible printable ASCII (0x21-0x7E) should have at least one pixel set.
+        // Note: 0x20 (space) is printable but intentionally blank.
+        for (i, glyph) in GLYPHS.iter().enumerate().take(0x7F).skip(0x21) {
+            assert!(glyph.iter().any(|&b| b != 0), "printable char 0x{:02X} ({}) is blank", i, i as u8 as char);
+        }
+    }
+
+    #[test]
+    fn test_glyph_dimensions_constants() {
+        assert_eq!(GLYPH_W, 8);
+        assert_eq!(GLYPH_H, 8);
+    }
+}

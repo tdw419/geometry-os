@@ -129,7 +129,7 @@ pub fn is_rts_png(path: &str) -> bool {
 }
 
 /// Hilbert curve: distance -> (x, y)
-fn d2xy(grid_order: u32, d: u32) -> (u32, u32) {
+pub(crate) fn d2xy(grid_order: u32, d: u32) -> (u32, u32) {
     let mut x: u32 = 0;
     let mut y: u32 = 0;
 
@@ -153,4 +153,103 @@ fn d2xy(grid_order: u32, d: u32) -> (u32, u32) {
     }
 
     (x, y)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_d2xy_origin() {
+        assert_eq!(d2xy(1, 0), (0, 0));
+        assert_eq!(d2xy(2, 0), (0, 0));
+        assert_eq!(d2xy(3, 0), (0, 0));
+    }
+
+    #[test]
+    fn test_d2xy_order1_all_points() {
+        // Order 1: 4 points, all within 2x2 grid
+        for d in 0..4 {
+            let (x, y) = d2xy(1, d);
+            assert!(x < 2 && y < 2, "d2xy(1, {}) = ({}, {}) out of bounds", d, x, y);
+        }
+        // All 4 points should be unique
+        let mut seen = std::collections::HashSet::new();
+        for d in 0..4 {
+            let (x, y) = d2xy(1, d);
+            assert!(seen.insert((x, y)), "duplicate point ({}, {}) at d={}", x, y, d);
+        }
+        assert_eq!(seen.len(), 4);
+    }
+
+    #[test]
+    fn test_d2xy_order2_continuity() {
+        // Order 2: 16 points, all must be within 4x4 grid and unique
+        for d in 0..16 {
+            let (x, y) = d2xy(2, d);
+            assert!(x < 4 && y < 4, "d2xy(2, {}) = ({}, {}) out of bounds", d, x, y);
+        }
+        // All points must be unique
+        let mut seen = std::collections::HashSet::new();
+        for d in 0..16 {
+            let p = d2xy(2, d);
+            assert!(seen.insert(p), "duplicate point {:?} at d={}", p, d);
+        }
+        assert_eq!(seen.len(), 16);
+    }
+
+    #[test]
+    fn test_d2xy_order3_coverage() {
+        // Order 3: 64 points, all must be within 8x8 grid
+        let mut seen = std::collections::HashSet::new();
+        for d in 0..64 {
+            let (x, y) = d2xy(3, d);
+            assert!(x < 8 && y < 8, "d2xy(3, {}) = ({}, {}) out of bounds", d, x, y);
+            assert!(seen.insert((x, y)), "duplicate point ({}, {}) at d={}", x, y, d);
+        }
+        assert_eq!(seen.len(), 64);
+    }
+
+    #[test]
+    fn test_d2xy_order4_coverage() {
+        // Order 4: 256 points, all must be within 16x16 grid
+        let mut seen = std::collections::HashSet::new();
+        for d in 0..256 {
+            let (x, y) = d2xy(4, d);
+            assert!(x < 16 && y < 16, "d2xy(4, {}) = ({}, {}) out of bounds", d, x, y);
+            assert!(seen.insert((x, y)), "duplicate point ({}, {}) at d={}", x, y, d);
+        }
+        assert_eq!(seen.len(), 256);
+    }
+
+    #[test]
+    fn test_d2xy_known_values_order1() {
+        // Known Hilbert curve order 1 pattern: (0,0) (1,0) (0,1) (1,1)
+        assert_eq!(d2xy(1, 0), (0, 0));
+        assert_eq!(d2xy(1, 1), (1, 0));
+        assert_eq!(d2xy(1, 2), (0, 1));
+        assert_eq!(d2xy(1, 3), (1, 1));
+    }
+
+    #[test]
+    fn test_is_rts_png() {
+        assert!(is_rts_png("kernel.rts.png"));
+        assert!(is_rts_png("test.RTS.PNG"));
+        assert!(is_rts_png("/path/to/file.rts.png"));
+        assert!(!is_rts_png("kernel.png"));
+        assert!(!is_rts_png("kernel.rts"));
+        assert!(!is_rts_png("rts.png.txt"));
+        assert!(!is_rts_png(""));
+    }
+
+    #[test]
+    fn test_d2xy_large_order() {
+        // Order 5: 1024 points, spot-check bounds
+        let (x, y) = d2xy(5, 0);
+        assert_eq!(x, 0);
+        assert_eq!(y, 0);
+        let (x, y) = d2xy(5, 1023);
+        assert!(x < 32);
+        assert!(y < 32);
+    }
 }
