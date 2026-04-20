@@ -11,9 +11,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 109
-  tests: 1473
-  programs: 63
-  loc: 38780
+  tests: 1651
+  programs: 65
+  loc: 38931
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
