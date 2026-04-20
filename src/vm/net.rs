@@ -544,7 +544,7 @@ mod tests {
         assert_eq!(vm.tcp_connection_count(), MAX_TCP_CONNECTIONS);
 
         // 9th connection should fail
-        let (extra_vm, extra_port) = setup_echo_server();
+        let (_extra_vm, extra_port) = setup_echo_server();
         // We need to update the IP in RAM since extra_vm wrote to its own RAM
         // Use the first vm's RAM which already has 127.0.0.1 at 0x7000
         vm.regs[2] = extra_port as u32;

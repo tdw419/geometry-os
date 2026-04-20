@@ -1985,18 +1985,41 @@ pub fn execute_cli_command(
                 }
             };
             let total_writes = vm.pixel_write_log.count_at(x, y);
+            let current_color = vm.screen[y as usize * 256 + x as usize];
+            let buffer_full = vm.pixel_write_log.is_full();
             if total_writes == 0 {
-                let msg = format!("Pixel ({},{}) was never written (or trace was off)", x, y);
-                println!("{}", msg);
-                output.push_str(&msg);
-                output.push('\n');
-                let color = vm.screen[y as usize * 256 + x as usize];
-                let msg2 = format!("  Current color: 0x{:08X} (likely initial/black)", color);
-                println!("{}", msg2);
-                output.push_str(&msg2);
+                if current_color != 0 {
+                    let msg = format!(
+                        "Pixel ({},{}) has 0 recorded writes BUT is colored 0x{:08X}!",
+                        x, y, current_color
+                    );
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                    let msg2 = "WARNING: pixel is colored but provenance data was evicted (buffer wrapped before query).";
+                    println!("{}", msg2);
+                    output.push_str(msg2);
+                    output.push('\n');
+                } else {
+                    let msg = format!("Pixel ({},{}) was never written (black/initial)", x, y);
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                }
+                let msg3 = format!("  Current color: 0x{:08X}", current_color);
+                println!("{}", msg3);
+                output.push_str(&msg3);
                 output.push('\n');
             } else {
-                let msg = format!("Pixel ({},{}) was written {} time(s):", x, y, total_writes);
+                let caveat = if buffer_full {
+                    " (buffer full -- earlier writes may exist)"
+                } else {
+                    ""
+                };
+                let msg = format!(
+                    "Pixel ({},{}) was written {} time(s){}:",
+                    x, y, total_writes, caveat
+                );
                 println!("{}", msg);
                 output.push_str(&msg);
                 output.push('\n');
@@ -2053,18 +2076,40 @@ pub fn execute_cli_command(
                     }
                 };
                 let total_writes = vm.pixel_write_log.count_at(x, y);
+                let current_color = vm.screen[y as usize * 256 + x as usize];
+                let buffer_full = vm.pixel_write_log.is_full();
                 if total_writes == 0 {
-                    let msg = format!("Pixel ({},{}) was never written (or trace was off)", x, y);
-                    println!("{}", msg);
-                    output.push_str(&msg);
-                    output.push('\n');
+                    if current_color != 0 {
+                        let msg = format!(
+                            "Pixel ({},{}) has 0 recorded writes BUT is colored 0x{:08X}!",
+                            x, y, current_color
+                        );
+                        println!("{}", msg);
+                        output.push_str(&msg);
+                        output.push('\n');
+                        let msg2 = "WARNING: pixel is colored but provenance data was evicted (buffer wrapped before query).";
+                        println!("{}", msg2);
+                        output.push_str(msg2);
+                        output.push('\n');
+                    } else {
+                        let msg = format!("Pixel ({},{}) was never written (black/initial)", x, y);
+                        println!("{}", msg);
+                        output.push_str(&msg);
+                        output.push('\n');
+                    }
                 } else {
+                    let caveat = if buffer_full {
+                        " (buffer full -- earlier writes may exist)"
+                    } else {
+                        ""
+                    };
                     let entries = vm.pixel_write_log.recent_at(x, y, 10);
                     let msg = format!(
-                        "Pixel ({},{}) -- {} writes, showing last {}:",
+                        "Pixel ({},{}) -- {} writes{}, showing last {}:",
                         x,
                         y,
                         total_writes,
+                        caveat,
                         entries.len()
                     );
                     println!("{}", msg);

@@ -392,8 +392,9 @@ pub const MAX_SNAPSHOTS: usize = 16;
 
 /// Default pixel write log capacity (entries).
 /// Each entry is 20 bytes (x: u16, y: u16, step_lo: u32, step_hi: u32, opcode: u8, color: u32).
-/// 50K entries = ~1MB. Records individual pixel writes from PSET/PSETI.
-pub const DEFAULT_PIXEL_WRITE_CAPACITY: usize = 50_000;
+/// 262144 entries (4x screen size) = ~5MB. Survives 4 full-screen passes.
+/// Memory is cheap; silent data loss is expensive.
+pub const DEFAULT_PIXEL_WRITE_CAPACITY: usize = 262_144;
 
 /// A single recorded pixel write event.
 #[derive(Debug, Clone, PartialEq, Eq)]
