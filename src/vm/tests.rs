@@ -4142,7 +4142,163 @@ fn test_terminal_cmd_clear() {
     assert_eq!(vm.ram[0x4000 + 42 * 0], b'$' as u32, "row 0 should have prompt after clear");
 }
 
+#[test]
+fn test_terminal_cmd_echo_with_args() {
+    let mut vm = boot_terminal(0);
+    for ch in b"echo hello world" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    assert!(!vm.halted);
+    // Row 1 should have "hello world"
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'h' as u32, "row 1 should start with 'h'");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 5], b' ' as u32, "row 1 col 5 should be space");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 6], b'w' as u32, "row 1 col 6 should be 'w'");
+    // Row 2 should have prompt
+    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt");
+}
 
+#[test]
+fn test_terminal_cmd_echo_no_args() {
+    let mut vm = boot_terminal(0);
+    for ch in b"echo " {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    assert!(!vm.halted);
+    // echo with no args prints empty line -- cursor advances to row 2
+    assert_eq!(vm.ram[0x4801], 2, "cursor should be on row 2 after empty echo");
+    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt");
+}
+
+#[test]
+fn test_terminal_cmd_date() {
+    let mut vm = boot_terminal(0);
+    for ch in b"date" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    assert!(!vm.halted);
+    // Row 1 should have "2026-04-20"
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'2' as u32, "row 1 should start with '2'");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 4], b'-' as u32, "row 1 col 4 should be '-'");
+    // Row 2 should have prompt
+    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt");
+}
+
+#[test]
+fn test_terminal_cmd_cls() {
+    let mut vm = boot_terminal(0);
+    // Type something first
+    for ch in b"hi" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    // Now type cls
+    for ch in b"cls" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    assert!(!vm.halted);
+    assert_eq!(vm.ram[0x4801], 0, "cursor row should be 0 after cls");
+    assert_eq!(vm.ram[0x4800], 2, "cursor col should be 2 after cls");
+    assert_eq!(vm.ram[0x4000 + 42 * 0], b'$' as u32, "row 0 should have prompt after cls");
+}
+
+#[test]
+fn test_terminal_cmd_ls() {
+    let mut vm = boot_terminal(0);
+    for ch in b"ls" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    assert!(!vm.halted);
+    // ls lists VFS directory entries (boot.cfg and/or linux), each on its own row
+    // Row 1 should have a non-space, non-null character (file listing or "(empty)")
+    let row1_start = vm.ram[0x4000 + 42 * 1];
+    assert!(row1_start != 32 && row1_start != 0,
+        "row 1 should have ls output, got char code {}", row1_start);
+    // Prompt should appear after the last listed file
+    // Find the prompt row by checking for '$'
+    let mut found_prompt = false;
+    for row in 1..5 {
+        if vm.ram[0x4000 + 42 * row] == b'$' as u32 {
+            found_prompt = true;
+            break;
+        }
+    }
+    assert!(found_prompt, "should find prompt row after ls output");
+}
+
+#[test]
+fn test_terminal_scroll() {
+    let mut vm = boot_terminal(0);
+    // Fill 32 rows with "hi" + Enter (each consumes 2 rows: input + response)
+    for row_fill in 0..32 {
+        for ch in b"hi" {
+            vm.push_key(*ch as u32);
+            let start = vm.frame_count;
+            for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+        }
+        vm.push_key(13);
+        let start = vm.frame_count;
+        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+        if vm.halted { panic!("terminal halted at row_fill {}", row_fill); }
+    }
+    assert!(!vm.halted);
+    assert_eq!(vm.ram[0x4801], 29, "cursor row should be clamped to 29 after scroll");
+    assert_eq!(vm.ram[0x4000 + 42 * 29], b'$' as u32, "last row should have prompt");
+}
+
+#[test]
+fn test_terminal_unknown_cmd_still_works() {
+    let mut vm = boot_terminal(0);
+    for ch in b"xyz" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    assert!(!vm.halted);
+    assert_eq!(vm.ram[0x4000 + 42 * 1], 63, "row 1 should start with '?'");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 2], b'x' as u32, "row 1 col 2 should be 'x'");
+}
+
+#[test]
+fn test_terminal_buffer_init() {
+    let vm = boot_terminal(1);
+    // Buffer should be properly initialized to spaces (CMPI r0 clobber bug fix)
+    for i in 2..1260 {
+        assert_eq!(vm.ram[0x4000 + i], 32,
+            "buffer position {} should be space after init, got {}", i, vm.ram[0x4000 + i]);
+    }
+}
 
 // ── Pulse app (self-animating, no input) ───────────────────
 

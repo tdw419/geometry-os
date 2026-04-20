@@ -1,7 +1,8 @@
-; terminal.asm -- Interactive Terminal for Geometry OS (v3 with command dispatch)
+; terminal.asm -- Interactive Terminal for Geometry OS (v4 with scroll + 8 commands)
 ;
 ; Self-contained GUI app: draw, input, render loop.
-; Supports 4 builtin commands: clear, help, ver, hi
+; Commands: clear, cls, help, ver, hi, echo, ls, date
+; Auto-scrolls when content exceeds 30 rows
 ;
 ; RAM Layout:
 ;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
@@ -31,12 +32,12 @@ FILL r0
 
 ; Clear text buffer to spaces
 LDI r20, BUF
-LDI r0, 32
+LDI r6, 32
 clear_buf:
-    STORE r20, r0
+    STORE r20, r6
     ADD r20, r1
     CMPI r20, BUF_END
-    BLT r20, clear_buf
+    BLT r0, clear_buf
 
 ; Init cursor and blink to 0
 LDI r20, CUR_COL
@@ -416,17 +417,101 @@ try_hi:
     LDI r20, SCRATCH
     LOAD r22, r20
     CMPI r22, 104        ; 'h'
-    JNZ r0, try_unknown
+    JNZ r0, try_echo
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 105        ; 'i'
+    JNZ r0, try_echo
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_echo
+    ; MATCH: hi
+    JMP cmd_hi
+
+try_echo:
+    ; --- Try "echo " (5 chars: e,c,h,o,space) ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 101        ; 'e'
+    JNZ r0, try_ls
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 99         ; 'c'
+    JNZ r0, try_ls
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 104        ; 'h'
+    JNZ r0, try_ls
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 111        ; 'o'
+    JNZ r0, try_ls
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 32         ; ' ' (space after echo)
+    JNZ r0, try_ls
+    JMP cmd_echo
+
+try_ls:
+    ; --- Try "ls" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 108        ; 'l'
+    JNZ r0, try_date
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
+    JNZ r0, try_date
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_date
+    JMP cmd_ls
+
+try_date:
+    ; --- Try "date" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 100        ; 'd'
+    JNZ r0, try_cls
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 97         ; 'a'
+    JNZ r0, try_cls
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 116        ; 't'
+    JNZ r0, try_cls
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 101        ; 'e'
+    JNZ r0, try_cls
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_cls
+    JMP cmd_date
+
+try_cls:
+    ; --- Try "cls" (alias for clear) ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 99         ; 'c'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 108        ; 'l'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
     JNZ r0, try_unknown
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 0          ; null
     JNZ r0, try_unknown
-    ; MATCH: hi
-    JMP cmd_hi
+    JMP cmd_clear
 
 try_unknown:
     ; Check if input is empty (first char is null)
@@ -446,12 +531,12 @@ cmd_clear:
     ; Clear the text buffer to spaces, reset cursor to row 0, col 2
     LDI r1, 1
     LDI r20, BUF
-    LDI r0, 32
+    LDI r6, 32
 cc_clear:
-    STORE r20, r0
+    STORE r20, r6
     ADD r20, r1
     CMPI r20, BUF_END
-    BLT r20, cc_clear
+    BLT r0, cc_clear
 
     ; Reset cursor to row 0, col 2
     LDI r20, CUR_ROW
@@ -480,7 +565,7 @@ cmd_help:
     MUL r6, r7
     LDI r20, BUF
     ADD r20, r6
-    STRO r20, "cmds: clear help ver hi"
+    STRO r20, "cmds: clear cls help ver hi echo ls date"
     CALL do_newline
     JMP dc_ret
 
@@ -507,6 +592,105 @@ cmd_hi:
     LDI r20, BUF
     ADD r20, r6
     STRO r20, "hello!"
+    CALL do_newline
+    JMP dc_ret
+
+cmd_echo:
+    ; Write args (SCRATCH+5 onward, after "echo ") to current row
+    PUSH r31
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6           ; r20 = BUF + row*COLS
+
+    ; Source is SCRATCH+5 (skip "echo ")
+    LDI r21, SCRATCH
+    ADD r21, r1           ; +1
+    ADD r21, r1           ; +2
+    ADD r21, r1           ; +3
+    ADD r21, r1           ; +4
+    ADD r21, r1           ; +5
+
+echo_loop:
+    LOAD r0, r21
+    JZ r0, echo_done
+    STORE r20, r0
+    ADD r20, r1
+    ADD r21, r1
+    JMP echo_loop
+
+echo_done:
+    CALL do_newline
+    POP r31
+    RET
+
+cmd_ls:
+    ; List VFS directory using LS opcode
+    PUSH r31
+    LDI r1, 1
+    LDI r20, 0x5100       ; LS output buffer
+    LS r20                ; list files, count in r0
+    CMPI r0, 0
+    JZ r0, ls_empty
+
+    ; Read entries from buffer, write one per row
+    LDI r21, 0x5100
+ls_next:
+    LOAD r0, r21
+    JZ r0, ls_done        ; end of entries
+
+    ; Write entry to current row
+    LDI r22, CUR_ROW
+    LOAD r6, r22
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r23, BUF
+    ADD r23, r6
+
+    ; Copy string from r21 to r23
+ls_copy:
+    LOAD r0, r21
+    JZ r0, ls_copied
+    STORE r23, r0
+    ADD r21, r1
+    ADD r23, r1
+    JMP ls_copy
+
+ls_copied:
+    ADD r21, r1           ; skip null terminator
+    CALL do_newline
+    JMP ls_next
+
+ls_empty:
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "(empty)"
+    CALL do_newline
+    POP r31
+    RET
+
+ls_done:
+    POP r31
+    RET
+
+cmd_date:
+    ; Display date string
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "2026-04-20"
     CALL do_newline
     JMP dc_ret
 
@@ -577,9 +761,79 @@ do_newline:
     LDI r0, 0
     STORE r20, r0
     LDI r20, CUR_ROW
-    LOAD r0, r20
+    LOAD r6, r20          ; r6 = current row
+    ADD r6, r1            ; r6 = new row
+    CMPI r6, ROWS
+    BLT r0, dn_store      ; branch if new row < ROWS (r0 = CMPI result)
+    PUSH r31              ; save return address across scroll call
+    CALL scroll_up
+    POP r31               ; restore return address
+    LDI r20, CUR_ROW      ; reload after scroll clobbers r20
+    LDI r6, 29            ; clamp to last row
+dn_store:
+    STORE r20, r6
+    RET
+
+; =========================================
+; SCROLL_UP
+; Shift all text rows up by 1, clear last row
+; =========================================
+scroll_up:
+    PUSH r31
+    LDI r1, 1
+    LDI r10, 0            ; row counter
+scroll_loop:
+    CMPI r10, 29
+    BGE r0, scroll_clear
+
+    ; Source ptr: BUF + (row+1)*COLS
+    LDI r20, BUF
+    LDI r0, 0
+    ADD r0, r10
     ADD r0, r1
-    STORE r20, r0
+    LDI r11, COLS
+    MUL r0, r11
+    ADD r20, r0
+
+    ; Dest ptr: BUF + row*COLS
+    LDI r21, BUF
+    LDI r0, 0
+    ADD r0, r10
+    LDI r11, COLS
+    MUL r0, r11
+    ADD r21, r0
+
+    ; Copy COLS words
+    LDI r22, 0
+scroll_copy:
+    LOAD r0, r20
+    STORE r21, r0
+    ADD r20, r1
+    ADD r21, r1
+    ADD r22, r1
+    CMPI r22, COLS
+    BLT r22, scroll_copy
+
+    ADD r10, r1
+    JMP scroll_loop
+
+scroll_clear:
+    ; Clear last row (row 29) to spaces
+    LDI r20, BUF
+    LDI r6, 29
+    LDI r11, COLS
+    MUL r6, r11
+    ADD r20, r6           ; r20 = BUF + 29*42
+    LDI r6, 32
+    LDI r22, 0
+scroll_clr_loop:
+    STORE r20, r6
+    ADD r20, r1
+    ADD r22, r1
+    CMPI r22, COLS
+    BLT r0, scroll_clr_loop
+
+    POP r31
     RET
 
 hk_ret:
