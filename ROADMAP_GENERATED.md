@@ -1638,7 +1638,7 @@ Implementation in src/vm/mod.rs (0x85 handler). Reads mouse_x/mouse_y fields on 
 
 ## Global Risks
 
-- Opcode space: 112 of ~256 slots used, plenty of room
+- Opcode space: 113 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
