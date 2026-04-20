@@ -1401,6 +1401,63 @@ impl Vm {
                 }
             }
 
+            // SCRSHOT path_addr_reg (0x98) -- Screenshot: save screen to VFS file
+            // Reads null-terminated path from RAM at address in register.
+            // Writes 256x256 raw RGBA u32 pixels to the VFS file.
+            // Returns fd in r0 (or 0xFFFFFFFF on error).
+            0x98 => {
+                let pr = self.fetch() as usize;
+                if pr < NUM_REGS {
+                    let path_addr = self.regs[pr] as usize;
+                    // Read the current process's PID for VFS
+                    let pid = self.current_pid;
+                    let fd = self.vfs.fopen(&self.ram, path_addr as u32, 1, pid); // FOPEN_WRITE
+                    if fd != 0xFFFFFFFF {
+                        // Write screen pixels to file
+                        // Pack screen as bytes: each u32 pixel = 4 bytes (RGBA)
+                        let mut pixel_bytes: Vec<u8> = Vec::with_capacity(256 * 256 * 4);
+                        for &pixel in self.screen.iter() {
+                            pixel_bytes.push((pixel >> 24) as u8); // A
+                            pixel_bytes.push((pixel >> 16) as u8); // R
+                            pixel_bytes.push((pixel >> 8) as u8); // G
+                            pixel_bytes.push(pixel as u8); // B
+                        }
+                        // Write bytes to VFS via fwrite - need to stage in RAM first
+                        // Use a temporary RAM region to stage bytes
+                        let stage_base = 0x9000u32;
+                        let chunk_size = 512u32; // write 512 bytes at a time
+                        let mut written: u32 = 0;
+                        let total_bytes = pixel_bytes.len() as u32;
+                        let mut offset = 0u32;
+                        while offset < total_bytes {
+                            let end = std::cmp::min(offset + chunk_size, total_bytes);
+                            let len = end - offset;
+                            // Copy bytes to staging area
+                            for i in 0..len {
+                                let addr = (stage_base as usize) + (i as usize);
+                                if addr < self.ram.len() {
+                                    self.ram[addr] =
+                                        pixel_bytes[(offset as usize) + (i as usize)] as u32;
+                                }
+                            }
+                            let n = self.vfs.fwrite(&self.ram, fd, stage_base, len, pid);
+                            if n == 0xFFFFFFFF {
+                                let _ = self.vfs.fclose(fd, pid);
+                                self.regs[0] = 0xFFFFFFFF;
+                                written = 0;
+                                break;
+                            }
+                            written += n;
+                            offset = end;
+                        }
+                        self.vfs.fclose(fd, pid);
+                        self.regs[0] = written; // total bytes written
+                    } else {
+                        self.regs[0] = 0xFFFFFFFF;
+                    }
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

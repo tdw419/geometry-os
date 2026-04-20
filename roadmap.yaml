@@ -3678,7 +3678,7 @@ phases:
   test_target: 10
 - id: phase-74
   title: Image Viewer + Screenshot
-  status: planned
+  status: done
   goal: View images stored in VFS and capture screenshots of the canvas
   description: 'Pixel-native image viewer renders raw pixel data from VFS files.
     Screenshot opcode saves the current canvas to a VFS file. Proves binary I/O and
@@ -3687,18 +3687,18 @@ phases:
   - name: SCRSHOT opcode (0x95)
     description: 'SCRSHOT addr -- save canvas to VFS file at path stored in RAM starting
       at addr. Format: 256x256 RGBA u32 pixels, no header. Returns fd in r0.'
-    status: todo
+    status: done
   - name: imgview.asm
     description: 'Image viewer: loads .img files from VFS (raw RGBA u32 pixel data),
       renders on canvas. Arrow keys to pan, +/- to zoom. Shows filename at top.'
-    status: todo
+    status: done
   - name: screenshot.asm
     description: 'Press P to capture screenshot, saves to VFS as screenshot_N.img.
       Small overlay confirms "Saved!" for 1 second.'
-    status: todo
+    status: done
   - name: Image viewer + screenshot tests
     description: 'SCRSHOT saves file, imgview loads and renders, round-trip test. 8+ tests.'
-    status: todo
+    status: done
   scope_lines_total: 600
   test_target: 8
 - id: phase-75

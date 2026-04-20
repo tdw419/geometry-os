@@ -750,6 +750,9 @@ impl Vm {
                 5,
             ),
 
+            // SCRSHOT path_addr_reg (0x98) -- save screen to VFS file
+            0x98 => (format!("SCRSHOT {}", reg(ram(a + 1))), 2),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

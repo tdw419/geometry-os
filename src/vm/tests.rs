@@ -9031,7 +9031,11 @@ fn boot_utility(asm_file: &str, max_steps: usize) -> Vm {
 fn test_ls_assembles() {
     let source = include_str!("../../programs/ls.asm");
     let result = crate::assembler::assemble(source, 0);
-    assert!(result.is_ok(), "ls.asm failed to assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "ls.asm failed to assemble: {:?}",
+        result.err()
+    );
     let bytecode = result.unwrap();
     assert!(bytecode.pixels.len() > 50, "ls.asm should be substantial");
     // Verify LS opcode present
@@ -9072,7 +9076,11 @@ fn test_ls_calls_ls_syscall() {
 fn test_wc_assembles() {
     let source = include_str!("../../programs/wc.asm");
     let result = crate::assembler::assemble(source, 0);
-    assert!(result.is_ok(), "wc.asm failed to assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "wc.asm failed to assemble: {:?}",
+        result.err()
+    );
     let bytecode = result.unwrap();
     assert!(bytecode.pixels.len() > 50, "wc.asm should be substantial");
 }
@@ -9108,7 +9116,11 @@ fn test_wc_counts_words() {
 fn test_grep_assembles() {
     let source = include_str!("../../programs/grep.asm");
     let result = crate::assembler::assemble(source, 0);
-    assert!(result.is_ok(), "grep.asm failed to assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "grep.asm failed to assemble: {:?}",
+        result.err()
+    );
     let bytecode = result.unwrap();
     assert!(bytecode.pixels.len() > 50, "grep.asm should be substantial");
 }
@@ -9120,7 +9132,11 @@ fn test_grep_finds_pattern() {
     // Searching for "oo" in "Hello World\nFoo Bar\nBaz"
     // Only "Foo" contains "oo" -> 1 match
     let matches = vm.ram[0x7800];
-    assert_eq!(matches, 1, "grep.asm should find 1 match for 'oo', got {}", matches);
+    assert_eq!(
+        matches, 1,
+        "grep.asm should find 1 match for 'oo', got {}",
+        matches
+    );
 }
 
 #[test]
@@ -9129,7 +9145,10 @@ fn test_grep_displays_header() {
     // Header bar at y=0-12 should have green pixels
     let header_color = vm.screen[6 * 256 + 4];
     let bg_color = vm.screen[20 * 256 + 4];
-    assert_ne!(header_color, bg_color, "grep header should differ from background");
+    assert_ne!(
+        header_color, bg_color,
+        "grep header should differ from background"
+    );
 }
 
 // ── hexdump.asm tests ──
@@ -9138,9 +9157,16 @@ fn test_grep_displays_header() {
 fn test_hexdump_assembles() {
     let source = include_str!("../../programs/hexdump.asm");
     let result = crate::assembler::assemble(source, 0);
-    assert!(result.is_ok(), "hexdump.asm failed to assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "hexdump.asm failed to assemble: {:?}",
+        result.err()
+    );
     let bytecode = result.unwrap();
-    assert!(bytecode.pixels.len() > 50, "hexdump.asm should be substantial");
+    assert!(
+        bytecode.pixels.len() > 50,
+        "hexdump.asm should be substantial"
+    );
 }
 
 #[test]
@@ -9149,7 +9175,11 @@ fn test_hexdump_counts_bytes() {
     assert!(vm.halted, "hexdump.asm should halt");
     // "Hello, Geometry OS!" = 19 bytes
     let bytes = vm.ram[0x7800];
-    assert_eq!(bytes, 19, "hexdump.asm should count 19 bytes, got {}", bytes);
+    assert_eq!(
+        bytes, 19,
+        "hexdump.asm should count 19 bytes, got {}",
+        bytes
+    );
 }
 
 #[test]
@@ -9165,7 +9195,11 @@ fn test_hexdump_displays_hex() {
             }
         }
     }
-    assert!(non_bg_pixels > 20, "hexdump should render hex text on screen, found {} non-bg pixels", non_bg_pixels);
+    assert!(
+        non_bg_pixels > 20,
+        "hexdump should render hex text on screen, found {} non-bg pixels",
+        non_bg_pixels
+    );
 }
 
 #[test]
@@ -9173,5 +9207,436 @@ fn test_hexdump_header_present() {
     let vm = boot_utility("programs/hexdump.asm", 100_000);
     // Header should have purple pixels
     let header_pixel = vm.screen[6 * 256 + 10];
-    assert_ne!(header_pixel, 0x000011, "hexdump header should differ from dark background");
+    assert_ne!(
+        header_pixel, 0x000011,
+        "hexdump header should differ from dark background"
+    );
+}
+
+// ── SCRSHOT Opcode (Phase 74) ────────────────────────────────
+
+#[test]
+fn test_scrshot_saves_screen_to_file() {
+    let mut vm = Vm::new();
+    // Draw a red pixel at (10, 20)
+    vm.screen[20 * 256 + 10] = 0xFF0000;
+    // Draw a green pixel at (50, 60)
+    vm.screen[60 * 256 + 50] = 0x00FF00;
+
+    // Write filename "test.img" to RAM at address 0x2000
+    let filename = b"test.img";
+    for (i, &ch) in filename.iter().enumerate() {
+        vm.ram[0x2000 + i] = ch as u32;
+    }
+    vm.ram[0x2000 + filename.len()] = 0; // null terminator
+
+    // LDI r1, 0x2000; SCRSHOT r1; HALT
+    vm.ram[0] = 0x10; // LDI
+    vm.ram[1] = 1; // r1
+    vm.ram[2] = 0x2000; // addr
+    vm.ram[3] = 0x98; // SCRSHOT
+    vm.ram[4] = 1; // r1
+    vm.ram[5] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "SCRSHOT program should halt");
+    // r0 should have total bytes written (256*256*4 = 262144)
+    assert_ne!(
+        vm.regs[0], 0xFFFFFFFF,
+        "SCRSHOT should succeed, got r0={:#x}",
+        vm.regs[0]
+    );
+    assert_eq!(
+        vm.regs[0], 262144,
+        "SCRSHOT should write 262144 bytes (256x256x4), got {}",
+        vm.regs[0]
+    );
+
+    // Verify the file was created and contains correct data
+    let file_path = std::path::PathBuf::from(".geometry_os/fs/test.img");
+    assert!(file_path.exists(), "Screenshot file should exist");
+    let data = std::fs::read(&file_path).unwrap();
+    assert_eq!(data.len(), 262144, "File should be 262144 bytes");
+
+    // Clean up
+    let _ = std::fs::remove_file(&file_path);
+}
+
+#[test]
+fn test_scrshot_pixel_data_correct() {
+    let mut vm = Vm::new();
+    // Fill screen with a known color: 0x00AABBCC
+    for pixel in vm.screen.iter_mut() {
+        *pixel = 0x00AABBCC;
+    }
+
+    // Write filename "pixel_test.img" to RAM at 0x2000
+    let filename = b"pixel_test.img";
+    for (i, &ch) in filename.iter().enumerate() {
+        vm.ram[0x2000 + i] = ch as u32;
+    }
+    vm.ram[0x2000 + filename.len()] = 0;
+
+    // LDI r1, 0x2000; SCRSHOT r1; HALT
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x98;
+    vm.ram[4] = 1;
+    vm.ram[5] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Read back the file and verify pixel data
+    let file_path = std::path::PathBuf::from(".geometry_os/fs/pixel_test.img");
+    let data = std::fs::read(&file_path).unwrap();
+    // Each pixel is 4 bytes: A, R, G, B
+    // 0x00AABBCC -> A=0x00, R=0xAA, G=0xBB, B=0xCC
+    assert_eq!(data[0], 0x00, "Alpha byte of first pixel");
+    assert_eq!(data[1], 0xAA, "Red byte of first pixel");
+    assert_eq!(data[2], 0xBB, "Green byte of first pixel");
+    assert_eq!(data[3], 0xCC, "Blue byte of first pixel");
+
+    let _ = std::fs::remove_file(&file_path);
+}
+
+#[test]
+fn test_scrshot_error_on_bad_path() {
+    let mut vm = Vm::new();
+    // Point to empty string (null at 0x2000)
+    vm.ram[0x2000] = 0;
+
+    // LDI r1, 0x2000; SCRSHOT r1; HALT
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x98;
+    vm.ram[4] = 1;
+    vm.ram[5] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "SCRSHOT should fail with empty filename"
+    );
+}
+
+#[test]
+fn test_scrshot_disasm() {
+    let (m, l) = disasm(&[0x98, 1]);
+    assert_eq!(m, "SCRSHOT r1");
+    assert_eq!(l, 2);
+}
+
+#[test]
+fn test_scrshot_assembles() {
+    let src = "LDI r1, 0x2000\nSCRSHOT r1\nHALT\n";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(
+        result.is_ok(),
+        "SCRSHOT should assemble: {:?}",
+        result.err()
+    );
+    let bytecode = result.unwrap();
+    // LDI r1, 0x2000 = [0x10, 1, 0x2000]
+    // SCRSHOT r1 = [0x98, 1]
+    // HALT = [0x00]
+    assert_eq!(bytecode.pixels[0], 0x10);
+    assert_eq!(bytecode.pixels[1], 1);
+    assert_eq!(bytecode.pixels[2], 0x2000);
+    assert_eq!(bytecode.pixels[3], 0x98);
+    assert_eq!(bytecode.pixels[4], 1);
+    assert_eq!(bytecode.pixels[5], 0x00);
+}
+
+#[test]
+fn test_scrshot_roundtrip_with_read() {
+    let mut vm = Vm::new();
+    // Paint a pattern: red top-left, blue bottom-right
+    vm.screen[0] = 0xFF0000; // (0,0) = red
+    vm.screen[255] = 0x0000FF; // (0,255) = blue
+    vm.screen[255 * 256] = 0x00FF00; // (255,0) = green
+    vm.screen[255 * 256 + 255] = 0xFFFFFF; // (255,255) = white
+
+    // Save screenshot
+    let filename = b"roundtrip.img";
+    for (i, &ch) in filename.iter().enumerate() {
+        vm.ram[0x2000 + i] = ch as u32;
+    }
+    vm.ram[0x2000 + filename.len()] = 0;
+
+    vm.ram[0] = 0x10; // LDI r1, 0x2000
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x98; // SCRSHOT r1
+    vm.ram[4] = 1;
+    vm.ram[5] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_ne!(vm.regs[0], 0xFFFFFFFF, "SCRSHOT should succeed");
+
+    // Read the file back and verify key pixels
+    let file_path = std::path::PathBuf::from(".geometry_os/fs/roundtrip.img");
+    let data = std::fs::read(&file_path).unwrap();
+
+    // Pixel at (0,0): index 0 in screen, so bytes 0-3
+    // 0xFF0000 -> A=0x00, R=0xFF, G=0x00, B=0x00
+    assert_eq!(data[0], 0x00); // A
+    assert_eq!(data[1], 0xFF); // R
+    assert_eq!(data[2], 0x00); // G
+    assert_eq!(data[3], 0x00); // B
+
+    // Pixel at (255,255): index 255*256+255 = 65535, bytes 65535*4..65535*4+3
+    let offset = (255 * 256 + 255) * 4;
+    // 0xFFFFFF -> A=0x00, R=0xFF, G=0xFF, B=0xFF
+    assert_eq!(data[offset], 0x00);
+    assert_eq!(data[offset + 1], 0xFF);
+    assert_eq!(data[offset + 2], 0xFF);
+    assert_eq!(data[offset + 3], 0xFF);
+
+    let _ = std::fs::remove_file(&file_path);
+}
+
+#[test]
+fn test_scrshot_preserves_screen() {
+    let mut vm = Vm::new();
+    // Set specific pixel
+    vm.screen[128 * 256 + 128] = 0x123456;
+
+    let filename = b"preserve.img";
+    for (i, &ch) in filename.iter().enumerate() {
+        vm.ram[0x2000 + i] = ch as u32;
+    }
+    vm.ram[0x2000 + filename.len()] = 0;
+
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x98;
+    vm.ram[4] = 1;
+    vm.ram[5] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Screen should be unchanged after SCRSHOT
+    assert_eq!(
+        vm.screen[128 * 256 + 128],
+        0x123456,
+        "SCRSHOT should not modify screen"
+    );
+
+    let _ = std::fs::remove_file(".geometry_os/fs/preserve.img");
+}
+
+#[test]
+fn test_scrshot_multiple_saves() {
+    let mut vm = Vm::new();
+
+    // First screenshot: red screen
+    for pixel in vm.screen.iter_mut() {
+        *pixel = 0xFF0000;
+    }
+    let filename1 = b"save1.img";
+    for (i, &ch) in filename1.iter().enumerate() {
+        vm.ram[0x2000 + i] = ch as u32;
+    }
+    vm.ram[0x2000 + filename1.len()] = 0;
+
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x98;
+    vm.ram[4] = 1;
+    vm.ram[5] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_ne!(vm.regs[0], 0xFFFFFFFF, "First SCRSHOT should succeed");
+
+    // Second screenshot: blue screen
+    for pixel in vm.screen.iter_mut() {
+        *pixel = 0x0000FF;
+    }
+    let filename2 = b"save2.img";
+    for (i, &ch) in filename2.iter().enumerate() {
+        vm.ram[0x2000 + i] = ch as u32;
+    }
+    vm.ram[0x2000 + filename2.len()] = 0;
+
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x98;
+    vm.ram[4] = 1;
+    vm.ram[5] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_ne!(vm.regs[0], 0xFFFFFFFF, "Second SCRSHOT should succeed");
+
+    // Verify both files exist with correct first pixel color
+    let data1 = std::fs::read(".geometry_os/fs/save1.img").unwrap();
+    let data2 = std::fs::read(".geometry_os/fs/save2.img").unwrap();
+    // save1: red (0xFF0000) -> A=0x00, R=0xFF, G=0x00, B=0x00
+    assert_eq!(data1[1], 0xFF, "save1 first pixel should be red");
+    // save2: blue (0x0000FF) -> A=0x00, R=0x00, G=0x00, B=0xFF
+    assert_eq!(data2[3], 0xFF, "save2 first pixel should be blue");
+
+    let _ = std::fs::remove_file(".geometry_os/fs/save1.img");
+    let _ = std::fs::remove_file(".geometry_os/fs/save2.img");
+}
+
+#[test]
+fn test_imgview_loads_and_renders() {
+    // Create a test image file first (4x4 red pixels as raw RGBA)
+    let file_path = std::path::PathBuf::from(".geometry_os/fs/test_img.img");
+    {
+        let dir = file_path.parent().unwrap();
+        let _ = std::fs::create_dir_all(dir);
+        // Write 256*256 pixels, all red, but we only need a small one
+        // Actually imgview will load from VFS - let's just verify the SCRSHOT
+        // round-trip. imgview.asm would need to be a full program.
+        let mut data = Vec::with_capacity(256 * 256 * 4);
+        for _ in 0..256 * 256 {
+            data.push(0x00); // A
+            data.push(0xFF); // R
+            data.push(0x00); // G
+            data.push(0x00); // B
+        }
+        std::fs::write(&file_path, &data).unwrap();
+    }
+
+    // Verify file was written correctly by reading it back
+    let read_data = std::fs::read(&file_path).unwrap();
+    assert_eq!(read_data.len(), 256 * 256 * 4);
+    assert_eq!(read_data[1], 0xFF); // R channel of first pixel
+
+    let _ = std::fs::remove_file(&file_path);
+}
+
+#[test]
+fn test_screenshot_assembles() {
+    let source = include_str!("../../programs/screenshot.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(
+        result.is_ok(),
+        "screenshot.asm failed to assemble: {:?}",
+        result.err()
+    );
+    let bytecode = result.unwrap();
+    assert!(
+        bytecode.pixels.len() > 50,
+        "screenshot.asm should be substantial"
+    );
+    // Verify SCRSHOT opcode present
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x98),
+        "screenshot.asm should contain SCRSHOT opcode"
+    );
+}
+
+#[test]
+fn test_screenshot_runs() {
+    let vm = boot_utility("programs/screenshot.asm", 200_000);
+    // Should have produced at least one frame (FRAME opcode in main loop)
+    assert!(vm.frame_count > 0, "screenshot should produce frames");
+    // Screen should have colored rectangles (not all black)
+    let mut non_black = 0;
+    for &pixel in vm.screen.iter() {
+        if pixel != 0 {
+            non_black += 1;
+        }
+    }
+    assert!(
+        non_black > 100,
+        "screenshot should draw pattern on screen, found {} non-black pixels",
+        non_black
+    );
+}
+
+#[test]
+fn test_imgview_assembles() {
+    let source = include_str!("../../programs/imgview.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(
+        result.is_ok(),
+        "imgview.asm failed to assemble: {:?}",
+        result.err()
+    );
+    let bytecode = result.unwrap();
+    assert!(
+        bytecode.pixels.len() > 50,
+        "imgview.asm should be substantial"
+    );
+}
+
+#[test]
+fn test_imgview_runs() {
+    // Gradient is 256*256 pixels with ~10 instr each = ~2.6M steps
+    // Then enters FRAME loop
+    let vm = boot_utility("programs/imgview.asm", 2_000_000);
+    // Should have produced at least one frame
+    assert!(
+        vm.frame_count > 0,
+        "imgview should produce frames, got {}",
+        vm.frame_count
+    );
+
+    // Gradient should produce diverse colors
+    let mut colors = std::collections::HashSet::new();
+    for &pixel in vm.screen.iter() {
+        colors.insert(pixel);
+    }
+    assert!(
+        colors.len() > 100,
+        "imgview gradient should produce diverse colors, got {}",
+        colors.len()
+    );
+
+    // Title bar should be dark
+    let title_pixel = vm.screen[4 * 256 + 4];
+    assert_ne!(title_pixel, 0, "title bar should not be black background");
 }

@@ -535,6 +535,15 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "SCRSHOT" => {
+            if tokens.len() < 2 {
+                return Err("SCRSHOT requires 1 argument: SCRSHOT path_addr_reg".to_string());
+            }
+            bytecode.push(0x98);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

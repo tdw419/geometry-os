@@ -141,6 +141,7 @@ pub const OPCODES: &[&str] = &[
     "CLAMP",
     "STRCMP",
     "SCREENP",
+    "SCRSHOT",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

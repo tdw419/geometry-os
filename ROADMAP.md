@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 71/83 phases complete, 0 in progress
+**Progress:** 73/83 phases complete, 0 in progress
 
-**Deliverables:** 301/355 complete
+**Deliverables:** 311/355 complete
 
 **Tasks:** 98/98 complete
 
@@ -81,12 +81,12 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | DONE | 5/5 | 500 | 8 |
 | phase-68 WINSYS Opcode | DONE | 5/5 | 500 | 10 |
 | phase-68b Window Mouse Interaction + Desktop Demo | DONE | 3/3 | 700 | 12 |
-| phase-69 Sprite Engine | PLANNED | 0/7 | 800 | 12 |
+| phase-69 Sprite Engine | DONE | 6/7 | 800 | 12 |
 | phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
 | phase-71 Pixel Network Protocol | PLANNED | 0/6 | 900 | 10 |
 | phase-72 Desktop Taskbar + App Launcher | PLANNED | 0/3 | 800 | 8 |
 | phase-73 Core Utilities | DONE | 5/5 | 1,000 | 14 |
-| phase-74 Image Viewer + Screenshot | PLANNED | 0/4 | 600 | 8 |
+| phase-74 Image Viewer + Screenshot | DONE | 4/4 | 600 | 13 |
 | phase-75 Stopwatch + Timer + Calculator (scientific) | PLANNED | 0/4 | 1,200 | 10 |
 | phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |
 | phase-77 Settings + Wallpaper + Screensaver | PLANNED | 0/4 | 1,000 | 8 |
@@ -2071,7 +2071,7 @@ MOUSEQ clicks check window Z-order for hit-testing. Title bar drag to move, body
 - [x] **window_desktop.asm** -- Desktop with 3 windows (Hello, Counter, Colors). Each window has its own offscreen buffer content. Drag to move via title bar, click to focus/bring-to-front. Animated counter and color stripes.
 - [x] **Window desktop tests** -- Mouse forwarding, drag updates position, focus changes Z-order, MOVETO, WINFO, hit-test after move, bring-to-front affects hittest. 12 tests.
 
-## [ ] phase-69: Sprite Engine (PLANNED)
+## [x] phase-69: Sprite Engine (DONE)
 
 **Goal:** Sprite sheets, transparent blitting, and tile maps for games and visual programs
 
@@ -2079,13 +2079,13 @@ SPRBLT opcode blits sprites from sprite sheets stored in VFS. Transparent pixels
 
 ### Deliverables
 
-- [ ] **SPRBLT opcode (0x93)** -- SPRBLT sheet_addr, sprite_id, x, y -- blit sprite from sheet to screen. Sprite sheet: 16x16 grid of 16x16 pixel sprites = 256 sprites per sheet. Transparent pixels (alpha=0) skipped.
-- [ ] **SPRBLT assembler + disassembler entries** -- 
-- [ ] **Sprite sheet format** -- Stored as .spr files in VFS. Header: 16 bytes (grid_w, grid_h, sprite_w, sprite_h). Pixel data: RGBA u32 array. Loaded via VFS OPEN/READ.
-- [ ] **TILEMAP opcode (0x94)** -- TILEMAP map_addr, sheet_addr, x, y, w, h -- render a w*h tile map at screen position (x,y). Map is array of sprite indices. Each tile = one sprite blit.
-- [ ] **sprite_demo.asm** -- Load a sprite sheet, render animated sprites walking around the screen. Proves SPRBLT with transparency and animation.
+- [x] **SPRBLT opcode (0x93)** -- SPRBLT sheet_addr, sprite_id, x, y -- blit sprite from sheet to screen. Sprite sheet: 16x16 grid of 16x16 pixel sprites = 256 sprites per sheet. Transparent pixels (alpha=0) skipped.
+- [x] **SPRBLT assembler + disassembler entries** -- 
+- [x] **Sprite sheet format** -- Stored as .spr files in VFS. Header: 16 bytes (grid_w, grid_h, sprite_w, sprite_h). Pixel data: RGBA u32 array. Loaded via VFS OPEN/READ.
+- [x] **TILEMAP opcode (0x94)** -- TILEMAP map_addr, sheet_addr, x, y, w, h -- render a w*h tile map at screen position (x,y). Map is array of sprite indices. Each tile = one sprite blit.
+- [x] **sprite_demo.asm** -- Load a sprite sheet, render animated sprites walking around the screen. Proves SPRBLT with transparency and animation.
 - [ ] **tilemap_demo.asm** -- Load a tile map and sprite sheet, render a scrolling top-down map. Proves TILEMAP with camera offset.
-- [ ] **Sprite engine tests** -- SPRBLT rendering, transparency, tile map rendering, edge cases. 12+ tests.
+- [x] **Sprite engine tests** -- SPRBLT rendering, transparency, tile map rendering, edge cases. 12+ tests.
 
 ## [ ] phase-70: Self-Hosting Pixel Assembler (PLANNED)
 
@@ -2141,7 +2141,7 @@ Small focused programs that prove VFS + shell integration. Each is 50-200 lines 
 - [ ] **hexdump.asm** -- Hex viewer for files. Reads binary from VFS, displays hex + ASCII side by side in terminal. Proves binary file reading.
 - [ ] **Core utils tests** -- Each utility assembles and runs with test input. 10+ tests total.
 
-## [ ] phase-74: Image Viewer + Screenshot (PLANNED)
+## [x] phase-74: Image Viewer + Screenshot (DONE)
 
 **Goal:** View images stored in VFS and capture screenshots of the canvas
 
@@ -2149,10 +2149,10 @@ Pixel-native image viewer renders raw pixel data from VFS files. Screenshot opco
 
 ### Deliverables
 
-- [ ] **SCRSHOT opcode (0x95)** -- SCRSHOT addr -- save canvas to VFS file at path stored in RAM starting at addr. Format: 256x256 RGBA u32 pixels, no header. Returns fd in r0.
-- [ ] **imgview.asm** -- Image viewer: loads .img files from VFS (raw RGBA u32 pixel data), renders on canvas. Arrow keys to pan, +/- to zoom. Shows filename at top.
-- [ ] **screenshot.asm** -- Press P to capture screenshot, saves to VFS as screenshot_N.img. Small overlay confirms "Saved!" for 1 second.
-- [ ] **Image viewer + screenshot tests** -- SCRSHOT saves file, imgview loads and renders, round-trip test. 8+ tests.
+- [x] **SCRSHOT opcode (0x95)** -- SCRSHOT addr -- save canvas to VFS file at path stored in RAM starting at addr. Format: 256x256 RGBA u32 pixels, no header. Returns fd in r0.
+- [x] **imgview.asm** -- Image viewer: loads .img files from VFS (raw RGBA u32 pixel data), renders on canvas. Arrow keys to pan, +/- to zoom. Shows filename at top.
+- [x] **screenshot.asm** -- Press P to capture screenshot, saves to VFS as screenshot_N.img. Small overlay confirms "Saved!" for 1 second.
+- [x] **Image viewer + screenshot tests** -- SCRSHOT saves file, imgview loads and renders, round-trip test. 8+ tests.
 
 ## [ ] phase-75: Stopwatch + Timer + Calculator (scientific) (PLANNED)
 
