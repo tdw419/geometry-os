@@ -819,6 +819,8 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0x34 => "RET",
         0x35 => "BLT",
         0x36 => "BGE",
+        0x37 => "HITSET",
+        0x38 => "HITQ",
         0x40 => "PSET",
         0x41 => "PSETI",
         0x42 => "FILL",
@@ -888,6 +890,7 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0x82 => "DISCONNECT",
         0x83 => "TRACE_READ",
         0x84 => "PIXEL_HISTORY",
+        0x85 => "MOUSEQ",
         _ => "???",
     }
 }
