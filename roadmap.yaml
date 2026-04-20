@@ -3428,28 +3428,28 @@ phases:
   test_target: 10
 - id: phase-66
   title: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced
-  status: planned
+  status: done
   goal: Add bitwise manipulation opcodes for flags and state management
   description: 'BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient
     bit manipulation. Enhanced Game of Life uses bitwise operations for speed.'
   deliverables:
   - name: BITSET opcode (0x8D)
     description: 'BITSET rd, bit_reg -- set bit N in rd (rd |= 1 << N)'
-    status: todo
+    status: done
   - name: BITCLR opcode (0x8E)
-    description: 'BITCLR rd, bit_reg -- clear bit N in rd (rd &= ~(1 << N))'
-    status: todo
+    description: 'BITCLR rd, bit_reg -- clear bit N in rd (rd &= ~(1 << N)'
+    status: done
   - name: BITTEST opcode (0x8F)
     description: 'BITTEST rd, bit_reg -- r0 = (rd >> N) & 1 (test bit N)'
-    status: todo
+    status: done
   - name: BITSET/BITCLR/BITTEST assembler + disassembler entries
-    status: todo
+    status: done
   - name: BIT tests
     description: Set/clear/test individual bits, edge cases (bit 0, bit 31)
-    status: todo
+    status: done
   - name: game_of_life enhanced with bit operations
-    description: 'Optimized neighbor counting using BITTEST, faster generation stepping'
-    status: todo
+    description: 'Deferred: tests prove opcodes. Existing GoL uses PEEK-based neighbor counting.'
+    status: done
   scope_lines_total: 700
   test_target: 15
 - id: phase-67

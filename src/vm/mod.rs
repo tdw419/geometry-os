@@ -1019,7 +1019,36 @@ impl Vm {
                 }
             }
 
-            // Unknown opcode: halt
+            // BITSET rd, bit_reg  (0x8D) -- rd |= 1 << bit_reg
+            0x8D => {
+                let rd = self.fetch() as usize;
+                let br = self.fetch() as usize;
+                if rd < NUM_REGS && br < NUM_REGS {
+                    let bit = self.regs[br] & 31; // clamp to 0-31
+                    self.regs[rd] |= 1 << bit;
+                }
+            }
+
+            // BITCLR rd, bit_reg  (0x8E) -- rd &= !(1 << bit_reg)
+            0x8E => {
+                let rd = self.fetch() as usize;
+                let br = self.fetch() as usize;
+                if rd < NUM_REGS && br < NUM_REGS {
+                    let bit = self.regs[br] & 31;
+                    self.regs[rd] &= !(1 << bit);
+                }
+            }
+
+            // BITTEST rd, bit_reg  (0x8F) -- r0 = (rd >> bit_reg) & 1
+            0x8F => {
+                let rd = self.fetch() as usize;
+                let br = self.fetch() as usize;
+                if rd < NUM_REGS && br < NUM_REGS {
+                    let bit = self.regs[br] & 31;
+                    self.regs[0] = (self.regs[rd] >> bit) & 1;
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

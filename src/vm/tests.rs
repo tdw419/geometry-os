@@ -6254,3 +6254,111 @@ fn test_drawtext_newline() {
     assert!(a_pixels > 0, "'A' should render at y=10");
     assert!(b_pixels > 0, "'B' should render at y=20 after newline");
 }
+
+// ── BITSET/BITCLR/BITTEST opcodes (0x8D-0x8F) ───────────────
+
+#[test]
+fn test_bitset_sets_bit() {
+    let vm = run_program(&[0x8D, 1, 2, 0x00], 100);
+    assert_eq!(vm.regs[1], 1 << (vm.regs[2] & 31));
+}
+
+#[test]
+fn test_bitset_bit5() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0;
+    vm.regs[2] = 5;
+    vm.ram[0] = 0x8D; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[1], 0x20, "bit 5 should be set (= 0x20)");
+}
+
+#[test]
+fn test_bitset_or_combined() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0x10; // bit 4 already set
+    vm.regs[2] = 3;    // set bit 3
+    vm.ram[0] = 0x8D; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[1], 0x18, "bits 3+4 should be set (= 0x18)");
+}
+
+#[test]
+fn test_bitclr_clears_bit() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0xFF;
+    vm.regs[2] = 3;
+    vm.ram[0] = 0x8E; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[1], 0xF7, "bit 3 cleared: 0xFF & ~0x08 = 0xF7");
+}
+
+#[test]
+fn test_bitclr_already_clear() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0x00;
+    vm.regs[2] = 7;
+    vm.ram[0] = 0x8E; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[1], 0x00, "clearing already-clear bit should be no-op");
+}
+
+#[test]
+fn test_bittest_set_bit() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0x80; // bit 7 set
+    vm.regs[2] = 7;
+    vm.ram[0] = 0x8F; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "bit 7 is set, r0 should be 1");
+}
+
+#[test]
+fn test_bittest_clear_bit() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0x7F; // bit 7 clear
+    vm.regs[2] = 7;
+    vm.ram[0] = 0x8F; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "bit 7 is clear, r0 should be 0");
+}
+
+#[test]
+fn test_bittest_bit31() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0x80000000; // bit 31 set
+    vm.regs[2] = 31;
+    vm.ram[0] = 0x8F; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "bit 31 should be 1");
+}
+
+#[test]
+fn test_bitset_bit0() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.ram[0] = 0x8D; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[1], 1, "bit 0 should be set (= 1)");
+}
+
+#[test]
+fn test_bit_assembles() {
+    let src = "LDI r1, 0\nLDI r2, 5\nBITSET r1, r2\nBITCLR r1, r2\nBITTEST r1, r2\nHALT\n";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(result.is_ok(), "BIT ops should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_bit_disassembles() {
+    let (text, len) = disasm(&[0x8D, 1, 2]);
+    assert_eq!(text, "BITSET r1, r2");
+    assert_eq!(len, 3);
+    let (text, len) = disasm(&[0x8E, 3, 4]);
+    assert_eq!(text, "BITCLR r3, r4");
+    assert_eq!(len, 3);
+    let (text, len) = disasm(&[0x8F, 5, 6]);
+    assert_eq!(text, "BITTEST r5, r6");
+    assert_eq!(len, 3);
+}

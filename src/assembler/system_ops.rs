@@ -440,6 +440,36 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "BITSET" => {
+            if tokens.len() < 3 {
+                return Err("BITSET requires 2 arguments: BITSET rd, bit_reg".to_string());
+            }
+            bytecode.push(0x8D);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
+        "BITCLR" => {
+            if tokens.len() < 3 {
+                return Err("BITCLR requires 2 arguments: BITCLR rd, bit_reg".to_string());
+            }
+            bytecode.push(0x8E);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
+        "BITTEST" => {
+            if tokens.len() < 3 {
+                return Err("BITTEST requires 2 arguments: BITTEST rd, bit_reg".to_string());
+            }
+            bytecode.push(0x8F);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

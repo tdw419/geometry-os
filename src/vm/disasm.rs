@@ -675,6 +675,15 @@ impl Vm {
             0x8C => {
                 (format!("DRAWTEXT {}, {}, {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3)), reg(ram(a + 4)), reg(ram(a + 5))), 6)
             }
+            0x8D => {
+                (format!("BITSET {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
+            }
+            0x8E => {
+                (format!("BITCLR {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
+            }
+            0x8F => {
+                (format!("BITTEST {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
