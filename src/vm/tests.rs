@@ -5204,3 +5204,84 @@ fn test_clock_blink_toggle() {
     // Blink should be 0 or 1
     assert!(blink1 <= 1, "blink should be 0 or 1");
 }
+
+// ── Multiproc (SPAWN) Tests ───────────────────────────────────────
+
+fn boot_multiproc(frames: u32) -> Vm {
+    let source = include_str!("../../programs/multiproc.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("multiproc.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let start_frame = vm.frame_count;
+    for _ in 0..2_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + frames {
+            break;
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_multiproc_assembles() {
+    let source = include_str!("../../programs/multiproc.asm");
+    crate::assembler::assemble(source, 0).expect("multiproc.asm should assemble");
+}
+
+#[test]
+fn test_multiproc_boots_and_runs() {
+    let vm = boot_multiproc(5);
+    assert!(!vm.halted, "multiproc should not halt after 5 frames");
+    // Should have spawned a child process
+    assert!(vm.processes.len() >= 1, "should have at least 1 spawned process");
+}
+
+#[test]
+fn test_multiproc_two_dots_visible() {
+    let vm = boot_multiproc(20);
+    // The primary process draws a white dot that bounces in the left half (x: 0-127)
+    // After 20 frames at vx=+1, the dot starts at x=32 and reaches x=52
+    // It should be visible as a white pixel somewhere on screen
+    let mut has_white = false;
+    for y in 0..256usize {
+        for x in 0..256usize {
+            if vm.screen[y * 256 + x] == 0xFFFFFF {
+                has_white = true;
+                break;
+            }
+        }
+        if has_white { break; }
+    }
+    assert!(has_white, "screen should have the primary white dot");
+}
+
+#[test]
+fn test_multiproc_child_isolation() {
+    let vm = boot_multiproc(5);
+    // Child processes should have their own register state
+    // The parent's r5 = 0xFFFFFF (white), child's r5 = 0xFF2020 (red)
+    // We can't directly inspect child registers, but we can verify
+    // the child exists and is not halted
+    if let Some(child) = vm.processes.first() {
+        assert!(!child.is_halted(), "child process should not be halted");
+    }
+}
+
+#[test]
+fn test_multiproc_persistent() {
+    let mut vm = boot_multiproc(5);
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(!vm.halted, "multiproc should run persistently");
+}

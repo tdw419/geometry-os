@@ -44,7 +44,7 @@ chk_rw:
   LDI r6, 127
   CMP r1, r6
   JNZ r6, chk_tw
-  LDI r3, -1
+  LDI r3, 0xFFFFFFFF
 chk_tw:
   ; bounce top wall (y = 0)
   LDI r6, 0
@@ -56,7 +56,7 @@ chk_bw:
   LDI r6, 255
   CMP r2, r6
   JNZ r6, draw
-  LDI r4, -1
+  LDI r4, 0xFFFFFFFF
 
 draw:
   PSET r1, r2, r5
@@ -68,7 +68,7 @@ draw:
 red_proc:
   LDI r1, 196         ; start x = 196 (right half)
   LDI r2, 64          ; start y = 64
-  LDI r3, -1          ; vx = -1
+  LDI r3, 0xFFFFFFFF          ; vx = -1
   LDI r4, 1           ; vy = +1
   LDI r5, 0xFF2020    ; red
 
@@ -91,7 +91,7 @@ red_chk_rw:
   LDI r6, 255
   CMP r1, r6
   JNZ r6, red_chk_tw
-  LDI r3, -1
+  LDI r3, 0xFFFFFFFF
 red_chk_tw:
   ; bounce top (y = 0)
   LDI r6, 0
@@ -103,7 +103,7 @@ red_chk_bw:
   LDI r6, 255
   CMP r2, r6
   JNZ r6, red_draw
-  LDI r4, -1
+  LDI r4, 0xFFFFFFFF
 red_draw:
   PSET r1, r2, r5
   ; No FRAME here — the primary process drives frame sync
