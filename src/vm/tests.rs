@@ -3876,12 +3876,16 @@ fn test_terminal_enter_newline() {
     }
 
     assert!(!vm.halted, "should still be running");
-    // Cursor should be on row 1, col 2 (new prompt)
-    assert_eq!(vm.ram[0x4801], 1, "cursor should be on row 1 after enter");
+    // With command dispatch: "A" is unknown -> "? A" on row 1, prompt on row 2
+    assert_eq!(vm.ram[0x4801], 2, "cursor should be on row 2 after enter (row 1 has '? A' output)");
     assert_eq!(vm.ram[0x4800], 2, "cursor col should be 2 (after new prompt)");
-    // Row 1 should have prompt
-    assert_eq!(vm.ram[0x4000 + 42 * 1], b'$' as u32, "row 1 should start with '$'");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], b' ' as u32, "row 1 col 1 should be ' '");
+    // Row 1 should have "? A" output
+    assert_eq!(vm.ram[0x4000 + 42 * 1], 63, "row 1 should start with '?' (unknown cmd)");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], 32, "row 1 col 1 should be ' '");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 2], b'A' as u32, "row 1 col 2 should be 'A'");
+    // Row 2 should have prompt
+    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should start with '$'");
+    assert_eq!(vm.ram[0x4000 + 42 * 2 + 1], b' ' as u32, "row 2 col 1 should be ' '");
 }
 
 #[test]
@@ -3925,6 +3929,108 @@ fn test_terminal_blink_counter_advances() {
     assert!(!vm.halted);
     // Blink counter at RAM[0x4802] should be > 0 after 5 frames
     assert!(vm.ram[0x4802] > 0, "blink counter should have advanced: got {}", vm.ram[0x4802]);
+}
+
+#[test]
+fn test_terminal_cmd_help() {
+    let mut vm = boot_terminal(0);
+    // Type "help" then Enter
+    for ch in b"help" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 {
+            if !vm.step() { break; }
+            if vm.frame_count >= start + 2 { break; }
+        }
+    }
+    vm.push_key(13); // Enter
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 3 { break; }
+    }
+    assert!(!vm.halted, "should not halt after help command");
+    // Row 1 should have "cmds: clear help ver hi" output
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'c' as u32, "row 1 should start with 'c' from 'cmds...'");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], b'm' as u32, "row 1 col 1 should be 'm'");
+    // Row 2 should have prompt
+    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt after help output");
+    assert_eq!(vm.ram[0x4801], 2, "cursor should be on row 2 after help");
+}
+
+#[test]
+fn test_terminal_cmd_ver() {
+    let mut vm = boot_terminal(0);
+    for ch in b"ver" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 {
+            if !vm.step() { break; }
+            if vm.frame_count >= start + 2 { break; }
+        }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 3 { break; }
+    }
+    assert!(!vm.halted);
+    // Row 1 should have "GeoTerm v1.0"
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'G' as u32, "row 1 should start with 'G'");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], b'e' as u32, "row 1 col 1 should be 'e'");
+    // Row 2 should have prompt
+    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt");
+}
+
+#[test]
+fn test_terminal_cmd_hi() {
+    let mut vm = boot_terminal(0);
+    for ch in b"hi" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 {
+            if !vm.step() { break; }
+            if vm.frame_count >= start + 2 { break; }
+        }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 3 { break; }
+    }
+    assert!(!vm.halted);
+    // Row 1 should have "hello!"
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'h' as u32, "row 1 should start with 'h'");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], b'e' as u32, "row 1 col 1 should be 'e'");
+    assert_eq!(vm.ram[0x4000 + 42 * 1 + 5], b'!' as u32, "row 1 col 5 should be '!'");
+}
+
+#[test]
+fn test_terminal_cmd_clear() {
+    let mut vm = boot_terminal(0);
+    // Type "clear" then Enter -- just "clear" with nothing else on the line
+    for ch in b"clear" {
+        vm.push_key(*ch as u32);
+        let start = vm.frame_count;
+        for _ in 0..500_000 {
+            if !vm.step() { break; }
+            if vm.frame_count >= start + 2 { break; }
+        }
+    }
+    vm.push_key(13);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 3 { break; }
+    }
+    assert!(!vm.halted);
+    // After clear, cursor should be at row 0, col 2
+    assert_eq!(vm.ram[0x4801], 0, "cursor row should be 0 after clear");
+    assert_eq!(vm.ram[0x4800], 2, "cursor col should be 2 after clear");
+    // Row 0 should have prompt
+    assert_eq!(vm.ram[0x4000 + 42 * 0], b'$' as u32, "row 0 should have prompt after clear");
 }
 
 

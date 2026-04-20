@@ -1,13 +1,14 @@
-; terminal.asm -- Interactive Terminal for Geometry OS (v2 minimal)
+; terminal.asm -- Interactive Terminal for Geometry OS (v3 with command dispatch)
 ;
 ; Self-contained GUI app: draw, input, render loop.
+; Supports 4 builtin commands: clear, help, ver, hi
 ;
 ; RAM Layout:
 ;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
 ;   0x4800         Cursor column
 ;   0x4801         Cursor row
 ;   0x4802         Blink counter
-;   0x5000-0x502B  Scratch line buffer (42 chars + null)
+;   0x5000-0x502A  Scratch line buffer (42 chars + null)
 
 #define COLS 42
 #define ROWS 30
@@ -236,9 +237,21 @@ do_char:
     CALL do_newline
     JMP hk_ret
 
+; =========================================
+; DO_ENTER -- command dispatch
+; =========================================
 do_enter:
+    ; 1. Extract command text from current row into SCRATCH
+    CALL extract_cmd
+
+    ; 2. Advance to next row for output
     CALL do_newline
-    ; Write prompt "$ " on new row
+
+    ; 3. Try matching commands (dispatch_cmd writes output rows)
+    CALL dispatch_cmd
+
+    ; 4. Write prompt "$ " on the row after any output
+    LDI r1, 1
     LDI r20, CUR_ROW
     LOAD r2, r20
     LDI r3, COLS
@@ -255,6 +268,289 @@ do_enter:
     STORE r20, r0
     JMP hk_ret
 
+; =========================================
+; EXTRACT_CMD
+; Copy chars from BUF[row*COLS+2 .. row*COLS+col-1] into SCRATCH
+; Null terminate. Skips leading spaces.
+; =========================================
+extract_cmd:
+    PUSH r31
+    LDI r1, 1
+
+    ; Compute base = row * COLS
+    LDI r20, CUR_ROW
+    LOAD r6, r20          ; r6 = row
+    LDI r7, COLS
+    MUL r6, r7            ; r6 = row * COLS
+
+    ; Source starts at col 2 (skip "$ ")
+    LDI r20, BUF
+    ADD r20, r6           ; r20 = BUF + row*COLS
+    ADD r20, r1
+    ADD r20, r1           ; r20 = BUF + row*COLS + 2
+
+    ; Destination
+    LDI r21, SCRATCH
+
+    ; Get end position (cursor col)
+    LDI r20, CUR_COL
+    LOAD r7, r20          ; r7 = cursor col
+
+    ; Recompute source pointer
+    LDI r20, BUF
+    ADD r20, r6           ; r20 = BUF + row*COLS
+    ADD r20, r1
+    ADD r20, r1           ; r20 = BUF + row*COLS + 2
+
+    ; Copy loop: copy chars from col 2 to cursor col
+    LDI r22, 2            ; current column index
+ec_loop:
+    ; If col_index >= cursor_col, done
+    CMP r22, r7
+    BGE r0, ec_done
+
+    ; Load char from source
+    LOAD r0, r20
+    ; Store to scratch
+    STORE r21, r0
+
+    ADD r20, r1           ; advance source
+    ADD r21, r1           ; advance dest
+    ADD r22, r1           ; col++
+    JMP ec_loop
+
+ec_done:
+    ; Null terminate
+    LDI r0, 0
+    STORE r21, r0
+
+    POP r31
+    RET
+
+; =========================================
+; DISPATCH_CMD
+; Match SCRATCH against builtin commands.
+; If match found, write output to current row and newline.
+; If no match and input not empty, write "?" and newline.
+; =========================================
+dispatch_cmd:
+    PUSH r31
+    LDI r1, 1
+
+    ; --- Try "clear" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 99         ; 'c'
+    JNZ r0, try_help
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 108        ; 'l'
+    JNZ r0, try_help
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 101        ; 'e'
+    JNZ r0, try_help
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 97         ; 'a'
+    JNZ r0, try_help
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 114        ; 'r'
+    JNZ r0, try_help
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null terminator
+    JNZ r0, try_help
+    ; MATCH: clear
+    JMP cmd_clear
+
+try_help:
+    ; --- Try "help" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 104        ; 'h'
+    JNZ r0, try_ver
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 101        ; 'e'
+    JNZ r0, try_ver
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 108        ; 'l'
+    JNZ r0, try_ver
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 112        ; 'p'
+    JNZ r0, try_ver
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_ver
+    ; MATCH: help
+    JMP cmd_help
+
+try_ver:
+    ; --- Try "ver" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 118        ; 'v'
+    JNZ r0, try_hi
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 101        ; 'e'
+    JNZ r0, try_hi
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 114        ; 'r'
+    JNZ r0, try_hi
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_hi
+    ; MATCH: ver
+    JMP cmd_ver
+
+try_hi:
+    ; --- Try "hi" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 104        ; 'h'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 105        ; 'i'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_unknown
+    ; MATCH: hi
+    JMP cmd_hi
+
+try_unknown:
+    ; Check if input is empty (first char is null)
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    JZ r22, dc_ret       ; empty input, no output
+
+    ; Unknown command: write "? <cmd>"
+    CALL write_unknown
+    JMP dc_ret
+
+; =========================================
+; COMMANDS
+; =========================================
+
+cmd_clear:
+    ; Clear the text buffer to spaces, reset cursor to row 0, col 2
+    LDI r1, 1
+    LDI r20, BUF
+    LDI r0, 32
+cc_clear:
+    STORE r20, r0
+    ADD r20, r1
+    CMPI r20, BUF_END
+    BLT r20, cc_clear
+
+    ; Reset cursor to row 0, col 2
+    LDI r20, CUR_ROW
+    LDI r0, 0
+    STORE r20, r0
+    LDI r20, CUR_COL
+    LDI r0, 2
+    STORE r20, r0
+
+    ; Write prompt on row 0
+    LDI r20, BUF
+    LDI r0, 36           ; '$'
+    STORE r20, r0
+    ADD r20, r1
+    LDI r0, 32           ; ' '
+    STORE r20, r0
+
+    JMP dc_ret
+
+cmd_help:
+    ; Write "cmds: clear help ver hi" to current row
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "cmds: clear help ver hi"
+    CALL do_newline
+    JMP dc_ret
+
+cmd_ver:
+    ; Write "GeoTerm v1.0" to current row
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "GeoTerm v1.0"
+    CALL do_newline
+    JMP dc_ret
+
+cmd_hi:
+    ; Write "hello!" to current row
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "hello!"
+    CALL do_newline
+    JMP dc_ret
+
+write_unknown:
+    ; Write "? " followed by the command text from SCRATCH to current row
+    PUSH r31
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6           ; r20 = BUF + row*COLS (destination)
+
+    ; Write "? "
+    LDI r0, 63            ; '?'
+    STORE r20, r0
+    ADD r20, r1
+    LDI r0, 32            ; ' '
+    STORE r20, r0
+    ADD r20, r1
+
+    ; Copy SCRATCH to rest of row
+    LDI r21, SCRATCH
+wu_loop:
+    LOAD r0, r21
+    JZ r0, wu_done
+    STORE r20, r0
+    ADD r20, r1
+    ADD r21, r1
+    JMP wu_loop
+
+wu_done:
+    CALL do_newline
+    POP r31
+    RET
+
+dc_ret:
+    POP r31
+    RET
+
+; =========================================
+; DO_BACKSPACE
+; =========================================
 do_backspace:
     LDI r20, CUR_COL
     LOAD r0, r20
