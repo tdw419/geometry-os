@@ -11,9 +11,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 112
-  tests: 1749
-  programs: 70
-  loc: 41217
+  tests: 1310
+  programs: 71
+  loc: 41410
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -3187,8 +3187,40 @@ phases:
     MOUSEQ integration.'
   scope_lines_total: 80
   test_target: 16
+- id: phase-58
+  title: Terminal v4 — Scroll + Shell Commands
+  status: complete
+  goal: Enhance terminal.asm with scroll support and built-in shell commands
+  description: 'Terminal v4 adds scroll when content exceeds 30 rows (120-row content
+    buffer), new commands: echo <args>, ls, date, cls (alias for clear). Fixes register
+    clobbering and branch register bugs. 13 new integration tests.'
+  deliverables:
+  - name: Scroll support for terminal
+    description: 'Content buffer expanded to 120 rows. When output exceeds visible
+      30 rows, view scrolls to show latest content.'
+    status: done
+    tasks: []
+  - name: Shell commands (echo, ls, date, cls)
+    description: 'echo prints its arguments, ls lists files, date shows date string,
+      cls clears screen (alias for clear).'
+    status: done
+    tasks: []
+  - name: Bug fixes (register clobbering, branch register)
+    description: 'Fixed r0 used for space char instead of r6. BLT r0 -> BLT r20
+      for correct branch register.'
+    status: done
+    tasks: []
+  - name: Terminal v4 tests (13 new)
+    description: '13 new integration tests: echo with/without args, date, ls, cls,
+      scroll behavior.'
+    status: done
+    tasks: []
+  technical_notes: 'All changes in terminal.asm (282 lines expanded) + 349 lines
+    of new tests in src/vm/tests.rs. No new opcodes.'
+  scope_lines_total: 620
+  test_target: 13
 global_risks:
-- 'Opcode space: 113 of ~256 slots used, plenty of room'
+- 'Opcode space: 112 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing

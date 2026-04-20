@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 57/57 phases complete, 0 in progress
+**Progress:** 58/58 phases complete, 0 in progress
 
-**Deliverables:** 242/242 complete
+**Deliverables:** 246/246 complete
 
 **Tasks:** 84/84 complete
 
@@ -69,6 +69,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 o
 | phase-55 Mouse & GUI Hit Testing | COMPLETE | 4/4 | 120 | 2 |
 | phase-56 Musical Note Opcode | COMPLETE | 2/2 | 30 | 1 |
 | phase-57 Mouse Query Opcode | COMPLETE | 4/4 | 80 | 16 |
+| phase-58 Terminal v4 — Scroll + Shell Commands | COMPLETE | 4/4 | 620 | 13 |
 
 ## Dependencies
 
@@ -1636,9 +1637,26 @@ MOUSEQ opcode (0x85) reads mouse_x into a register and mouse_y into the next reg
 
 Implementation in src/vm/mod.rs (0x85 handler). Reads mouse_x/mouse_y fields on Vm struct. paint.asm is 16 tests covering the full paint loop including MOUSEQ integration.
 
+## [x] phase-58: Terminal v4 — Scroll + Shell Commands (COMPLETE)
+
+**Goal:** Enhance terminal.asm with scroll support and built-in shell commands
+
+Terminal v4 adds scroll when content exceeds 30 rows (120-row content buffer), new commands: echo <args>, ls, date, cls (alias for clear). Fixes register clobbering and branch register bugs. 13 new integration tests.
+
+### Deliverables
+
+- [x] **Scroll support for terminal** -- Content buffer expanded to 120 rows. When output exceeds visible 30 rows, view scrolls to show latest content.
+- [x] **Shell commands (echo, ls, date, cls)** -- echo prints its arguments, ls lists files, date shows date string, cls clears screen (alias for clear).
+- [x] **Bug fixes (register clobbering, branch register)** -- Fixed r0 used for space char instead of r6. BLT r0 -> BLT r20 for correct branch register.
+- [x] **Terminal v4 tests (13 new)** -- 13 new integration tests: echo with/without args, date, ls, cls, scroll behavior.
+
+### Technical Notes
+
+All changes in terminal.asm (282 lines expanded) + 349 lines of new tests in src/vm/tests.rs. No new opcodes.
+
 ## Global Risks
 
-- Opcode space: 113 of ~256 slots used, plenty of room
+- Opcode space: 112 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
