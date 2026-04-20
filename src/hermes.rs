@@ -2163,7 +2163,7 @@ pub fn execute_cli_command(
                 if vm.pixel_write_log.is_empty() {
                     let msg = "Note: No pixel writes recorded. Run a program first (trace is auto-enabled during 'run').";
                     println!("{}", msg);
-                    output.push_str(&msg);
+                    output.push_str(msg);
                     output.push('\n');
                 }
             }
