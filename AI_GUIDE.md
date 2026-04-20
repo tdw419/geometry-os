@@ -67,6 +67,6 @@ cargo build 2>&1 | grep -E "^error|^warning\["  # check for errors/warnings
 7. Update `roadmap.yaml` deliverable status
 8. Write a program that uses it
 
-## Current Phase: 30 (Boot Sequence & Init)
+## Current Phase: 63 (ABS + RECT Opcodes + Color Picker App)
 
 Building the boot sequence and init process. Read docs/NORTH_STAR.md before starting.

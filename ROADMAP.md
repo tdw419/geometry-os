@@ -1,406 +1,2058 @@
-File unchanged since last read. The content from the earlier read_file result in this conversation is still current — refer to that instead of re-reading.
----
-
-## Part II: Hypervisor (Running Other Operating Systems)
-
-Geometry OS is an OS. Now it becomes a hypervisor.
-
-Two paths, ordered by value:
-
-1. **QEMU Bridge** (Phase 33) -- fast path. Wrap QEMU subprocess, render guest
-   console on the canvas. Boot Linux THIS WEEK. Proves the concept and
-   teaches us what the RISC-V interpreter actually needs.
-
-2. **RISC-V Interpreter** (Phases 34-37) -- deep path. Pure Rust, no external
-   dependencies, runs in WASM, testable down to individual instructions.
-   Built with knowledge gained from the QEMU bridge.
-
----
-
-### Phase 33: QEMU Bridge
-
-**Goal:** Spawn QEMU as a subprocess, pipe its serial console I/O through the Geometry OS canvas text surface. Boot Linux (or any OS) on day one.
-
-| Deliverable | Description | Scope |
-|---|---|---|
-| qemu.rs module | New `src/qemu.rs` -- QEMU subprocess management, stdin/stdout pipes | ~60 lines qemu.rs |
-| QEMU spawn | Launch `qemu-system-*` with `-nographic -serial mon:stdio`, capture stdin/stdout | ~80 lines qemu.rs |
-| Output to canvas | Read QEMU stdout bytes, write to canvas_buffer as u32 chars, auto-scroll | ~60 lines qemu.rs |
-| Input from keyboard | Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin | ~40 lines qemu.rs |
-| ANSI escape handling | Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering | ~100 lines qemu.rs |
-| HYPERVISOR opcode (0x54) | `HYPERVISOR config_addr_reg` -- reads config string from host RAM, spawns QEMU | ~60 lines vm.rs |
-| Config format | String at config_addr: `"arch=riscv64 kernel=linux.img [ram=256M] [disk=rootfs.ext4]"` | docs/ |
-| Shell command | `hypervisor arch=riscv64 kernel=linux.img` from shell.asm | programs/hypervisor.asm |
-| Process lifecycle | QEMU runs as host OS child process. F5 kills it, HYPERVISOR spawns new one | ~40 lines qemu.rs |
-| Download helper | Script to fetch pre-built RISC-V Linux kernel + rootfs for testing | scripts/ |
-| Integration test | Spawn QEMU with known kernel, verify "Linux version" appears in canvas output | ~60 lines tests |
-
-**Why first:** QEMU gives us a working hypervisor in days. Every architecture QEMU supports (x86, ARM, RISC-V, MIPS) works immediately. We learn exactly what the canvas text surface needs to handle (ANSI sequences, scroll speed, buffer size). This is the prototype that teaches us what the RISC-V interpreter needs to reimplement.
-
-**QEMU serial output -> canvas pipeline:**
-```
-QEMU stdout (raw bytes)
-  -> read into Vec<u8> buffer (non-blocking)
-  -> parse ANSI escape sequences
-  -> for each printable char: canvas_buffer[row * 32 + col] = char as u32
-  -> existing pixel font rendering renders the character
-  -> scroll when cursor passes row 128
-```
-
-**Keyboard -> QEMU stdin pipeline:**
-```
-minifb key event
-  -> key_to_ascii_shifted(key, shift)
-  -> write byte to QEMU stdin pipe
-  -> guest OS receives character via serial driver
-```
-
-**Supported QEMU architectures out of the box:**
-- `qemu-system-riscv64 -kernel Image` -- Linux RISC-V 64-bit
-- `qemu-system-x86_64 -kernel bzImage` -- Linux x86
-- `qemu-system-aarch64 -kernel Image` -- Linux ARM64
-- `qemu-system-mipsel -kernel vmlinux` -- Linux MIPS
-- Any QEMU-supported OS with serial console
-
----
-
-### Phase 34: RISC-V RV32I Core
-
-**Goal:** Implement a pure software RISC-V RV32I interpreter. This is the owned stack -- no QEMU dependency, runs in WASM, testable with `cargo test`.
-
-| Deliverable | Description | Scope |
-|---|---|---|
-| riscv/ module | New `src/riscv/` directory with mod.rs, cpu.rs, memory.rs, decode.rs | ~50 lines mod.rs |
-| Register file | x[0..32] (x0=zero), PC, 32-bit registers | ~30 lines cpu.rs |
-| Instruction decode | Decode all RV32I opcodes from 32-bit instruction words | ~200 lines decode.rs |
-| R-type ALU | ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND | ~80 lines cpu.rs |
-| I-type immediate | ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI | ~60 lines cpu.rs |
-| Upper immediate | LUI, AUIPC | ~20 lines cpu.rs |
-| Jumps | JAL, JALR (link register x1 or rd) | ~30 lines cpu.rs |
-| Branches | BEQ, BNE, BLT, BGE, BLTU, BGEU | ~40 lines cpu.rs |
-| Memory load | LB, LH, LW, LBU, LHU (sign/zero extend) | ~50 lines cpu.rs |
-| Memory store | SB, SH, SW | ~30 lines cpu.rs |
-| FENCE, ECALL, EBREAK | NOP-like for now (ECALL traps in Phase 35) | ~20 lines cpu.rs |
-| Guest RAM | Vec<u8> separate from host RAM, configurable size (default 128MB) | ~60 lines memory.rs |
-| Test suite | One test per instruction, verification against known encodings | ~300 lines tests |
-| riscv_simple.asm | Demo: compute fibonacci in RISC-V assembly, run in interpreter | programs/ |
-
-**Why here (not Phase 33):** QEMU already proved what works. We know which devices matter, what the boot sequence needs, how UART output looks. Now we rebuild it owned -- pure Rust, no subprocess, portable to WASM and embedded. RV32I is the non-negotiable foundation: 40 instructions, every RISC-V program uses them.
-
----
-
-### Phase 35: RISC-V Privilege Modes
-
-**Goal:** Implement Machine/Supervisor/User privilege levels, CSR registers, and trap handling. This is what allows a guest OS kernel to manage its own processes.
-
-| Deliverable | Description | Scope |
-|---|---|---|
-| Privilege enum | M-mode (3), S-mode (1), U-mode (0) in CPU state | ~20 lines cpu.rs |
-| CSR register bank | mstatus, mtvec, mepc, mcause, mtval, sstatus, stvec, sepc, scause, stval, satp, mie, mip, sie, sip, mcounteren, scounteren | ~80 lines csrs.rs |
-| CSR read/write | CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI opcodes (SYSTEM type) | ~100 lines cpu.rs |
-| ECALL trap | ECALL from U->S or S->M: saves PC to mepc/sepc, jumps to stvec/mtvec, sets cause | ~60 lines cpu.rs |
-| MRET instruction | Return from M-mode trap: restore PC from mepc, adjust mstatus | ~30 lines cpu.rs |
-| SRET instruction | Return from S-mode trap: restore PC from sepc, adjust sstatus | ~30 lines cpu.rs |
-| Timer interrupt | mtime/mtimecmp MMIO, fires interrupt when mtime >= mtimecmp | ~50 lines clint.rs |
-| Software interrupt | msip/ssip registers, software-triggered interrupts | ~30 lines clint.rs |
-| Trap delegation | medeleg/mideleg CSRs: delegate traps from M to S mode | ~40 lines csrs.rs |
-| Privilege transition tests | U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U | ~150 lines tests |
-
-**Why here:** Linux can't boot without privilege modes. The kernel runs in S-mode, user programs run in U-mode, and the hypervisor (us) runs in M-mode. Trap handling is how the kernel gets control back from user programs.
-
----
-
-### Phase 36: RISC-V Virtual Memory & Devices
-
-**Goal:** Implement SV32 page tables and the minimum device emulation (UART, CLINT, PLIC, virtio-blk) needed for a guest OS to boot.
-
-| Deliverable | Description | Scope |
-|---|---|---|
-| satp CSR | Mode (off/SV32), ASID, root page table physical address | ~20 lines csrs.rs |
-| SV32 page table walk | 2-level lookup: VPN[1]->PT1->VPN[0]->PT2->PPN+offset | ~120 lines mmu.rs |
-| Page table entry flags | V, R, W, X, U, G, A, D bits in PTE | ~30 lines mmu.rs |
-| Address translation | Virtual address -> physical address through page tables | ~80 lines mmu.rs |
-| TLB cache | 64-entry TLB with ASID-aware invalidation | ~80 lines mmu.rs |
-| Page fault traps | Store/AMO page fault, Load page fault, Instruction page fault with mtval/stval | ~40 lines mmu.rs |
-| SFENCE.VMA | TLB flush instruction (privileged) | ~20 lines cpu.rs |
-| UART 16550 | Serial port emulation at MMIO 0x10000000, THR/RBR/LSR/IER registers | ~150 lines uart.rs |
-| UART to canvas | Guest UART output rendered on canvas (reuses Phase 33 bridge pattern) | ~60 lines bridge.rs |
-| CLINT | mtime at 0x200BFF8, mtimecmp at 0x2004000, timer interrupts | ~80 lines clint.rs |
-| PLIC | Interrupt priority, enable, threshold, claim/complete | ~120 lines plic.rs |
-| Virtio block device | Virtio MMIO transport at 0x10001000, disk image from VFS | ~200 lines virtio_blk.rs |
-| Device Tree Blob | Generate DTB describing memory, UART, virtio devices | ~150 lines dtb.rs |
-| MMU + device test | Guest sets up page tables, writes to UART, verify output | ~150 lines tests |
-
-**Why here:** Virtual memory + devices in one phase because the RISC-V interpreter needs both before it can boot anything. QEMU already proved these are the minimum devices (we watched Linux use them through the Phase 33 bridge).
-
----
-
-### Phase 37: Guest OS Boot (Native RISC-V)
-
-**Goal:** Boot a real Linux RISC-V kernel using our own interpreter instead of QEMU. Geometry OS now has two hypervisor modes: QEMU (fast, any arch) and native RISC-V (owned stack, portable).
-
-| Deliverable | Description | Scope |
-|---|---|---|
-| ELF loader | Parse ELF64 RISC-V kernel images, load segments into guest RAM | ~120 lines loader.rs |
-| Raw binary loader | Load flat binary images at specified entry point (0x80000000) | ~40 lines loader.rs |
-| DTB passthrough | Pass device tree blob to kernel in a1 register at boot | ~30 lines cpu.rs |
-| Boot console | Guest UART output streams to canvas (same bridge as Phase 33) | ~80 lines bridge.rs |
-| Keyboard forwarding | Key presses -> guest UART RBR (same bridge as Phase 33) | ~40 lines bridge.rs |
-| HYPERVISOR mode flag | `HYPERVISOR` opcode detects "native" vs "qemu" from config string | ~30 lines vm.rs |
-| Boot script | `hypervisor native kernel=linux.img dtb=rv32.dtb ram=128M` | programs/ |
-| Verified boot | Boot OpenSBI + Linux tinyconfig, verify "Linux version" on canvas | ~100 lines tests |
-| Performance benchmark | Measure MIPS, compare interpreter vs QEMU, document results | docs/ |
-
-**Why here:** This is the payoff. Phases 33-36 built both paths. Now Geometry OS has:
-- **QEMU mode** (Phase 33): any architecture, battle-tested, fast
-- **Native RISC-V mode** (Phases 34-37): owned stack, no subprocess, WASM-portable
-
-Two ways to run guest OSes, same canvas interface. The QEMU bridge taught us what the interpreter needed. The interpreter proves we understand every layer of the stack.
-
----
-
-## Priority Order
-
-1. Phase 23 (Kernel Boundary) -- foundation for everything
-2. Phase 24 (Memory Protection) -- can't have an OS without it
-3. Phase 25 (Filesystem) -- programs need persistent storage
-4. Phase 26 (Preemptive Scheduler) -- stability under load
-5. Phase 27 (IPC) -- processes need to talk after memory protection removes shared RAM
-6. Phase 28 (Device Drivers) -- uniform hardware access
-7. Phase 29 (Shell) -- user interface to the OS
-8. Phase 30 (Boot/Init) -- proper startup sequence
-9. Phase 31 (Standard Library) -- raise the programming floor
-10. Phase 32 (Signals/Lifecycle) -- production-grade process management
-11. Phase 33 (QEMU Bridge) -- fast path: boot any OS via QEMU subprocess on canvas
-12. Phase 34 (RISC-V Core) -- RV32I interpreter, the owned stack foundation
-13. Phase 35 (RISC-V Privilege) -- M/S/U modes, CSRs, traps, ECALL/MRET/SRET
-14. Phase 36 (RISC-V Memory & Devices) -- SV32 page tables, UART, CLINT, PLIC, virtio-blk
-15. Phase 37 (Guest OS Boot Native) -- boot Linux with our own interpreter, two hypervisor modes
-
----
-
-## Priority Order for Automated Development
-
-- [x] Phase 23: Kernel Boundary -- CPU mode flag, SYSCALL opcode (0x52), RETK opcode (0x53), syscall dispatch table, restricted opcodes in user mode
-- [x] Phase 24: Memory Protection -- page tables, address space per process, SEGFAULT on illegal access
-- [x] Phase 25: Filesystem -- VFS layer, OPEN/READ/WRITE/CLOSE/SEEK syscalls, LS syscall, per-process fd table, cat.asm
-- [x] Phase 26: Preemptive Scheduler -- timer interrupt, priority levels, yield/sleep syscalls
-- [x] Phase 27: IPC -- PIPE syscall, MSGSND/MSGRCV syscalls, blocking I/O
-- [x] Phase 28: Device Drivers -- device file convention, IOCTL syscall, screen/keyboard/audio/net drivers
-- [x] Phase 29: Shell -- shell.asm, pipe operator, redirection, built-in commands (ls, cd, cat, echo, ps, kill, help)
-- [x] Phase 30: Boot Sequence -- boot ROM, init process (PID 1), graceful shutdown
-- [x] Phase 31: Standard Library -- lib/stdlib.asm, lib/math.asm, heap allocator, linking convention
-- [x] Phase 32: Signals & Lifecycle -- SIGNAL syscall, signal handlers, EXIT/WAIT syscalls, zombie cleanup
-- [x] Phase 33: QEMU Bridge -- QEMU subprocess, serial I/O to canvas, ANSI parsing, HYPERVISOR opcode (0x72), keyboard forwarding, multi-arch support
-- [x] Phase 34: RISC-V RV32I Core -- instruction decode, register file, ALU ops, branches, LUI/AUIPC/JAL/JALR, memory load/store, test suite for all 40 base instructions
-- [x] Phase 35: RISC-V Privilege Modes -- M/S/U modes, CSR registers, ECALL/MRET/SRET, trap entry/return, privilege transitions, TIMER/SOFTWARE interrupts
-- [x] Phase 36: RISC-V Virtual Memory & Devices -- SV32 page table walk, satp, TLB cache, page fault traps, UART 16550, CLINT, PLIC, virtio-blk, DTB generation
-- [x] Phase 37: Guest OS Boot (Native RISC-V) -- ELF/binary loader, DTB passthrough, boot console on canvas, HYPERVISOR native mode, verified boot of Linux RISC-V, performance benchmark
+# Geometry OS Roadmap
+
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
+
+**Progress:** 63/67 phases complete, 0 in progress
+
+**Deliverables:** 262/283 complete
+
+**Tasks:** 98/98 complete
+
+## Scope Summary
+
+| Phase | Status | Deliverables | LOC Target | Tests |
+|-------|--------|-------------|-----------|-------|
+| phase-1 Core VM + Visual Programs | COMPLETE | 23/23 | 2,000 | 10 |
+| phase-2 Extended Opcodes | COMPLETE | 10/10 | 2,800 | 16 |
+| phase-3 Interactive Programs | COMPLETE | 4/4 | 3,200 | 20 |
+| phase-4 Canvas & Editor | COMPLETE | 4/4 | 3,500 | 22 |
+| phase-5 Terminal Mode | COMPLETE | 2/2 | 3,800 | 24 |
+| phase-6 Animation | COMPLETE | 3/3 | 4,000 | 24 |
+| phase-7 Random & Games | COMPLETE | 3/3 | 4,300 | 24 |
+| phase-8 TICKS & Sound | COMPLETE | 5/5 | 4,322 | 46 |
+| phase-9 Debug Tools | COMPLETE | 5/5 | 4,500 | 48 |
+| phase-10 Extended Graphics | COMPLETE | 2/2 | 4,700 | 50 |
+| phase-11 Advanced Games | COMPLETE | 4/4 | 5,100 | 56 |
+| phase-12 Self-Hosting | COMPLETE | 2/2 | 5,500 | 54 |
+| phase-13 Close the Gaps | COMPLETE | 3/3 | - | - |
+| phase-14 Developer Experience | COMPLETE | 4/4 | - | - |
+| phase-15 VM Capability Gaps | COMPLETE | 4/4 | - | - |
+| phase-16 Showcase Shipping | COMPLETE | 4/4 | - | - |
+| phase-17 Platform Growth | COMPLETE | 3/3 | - | - |
+| phase-18 VM Instrumentation | COMPLETE | 2/2 | - | - |
+| phase-19 Visual Debugger | COMPLETE | 3/3 | - | - |
+| phase-20 High RAM Visualization | COMPLETE | 2/2 | - | - |
+| phase-21 Spatial Program Coordinator (Native Windowing) | COMPLETE | 3/3 | - | - |
+| phase-22 Screen Readback & Collision Detection | COMPLETE | 3/3 | - | - |
+| phase-23 Kernel Boundary (Syscall Mode) | COMPLETE | 5/5 | - | - |
+| phase-24 Memory Protection | COMPLETE | 6/6 | - | - |
+| phase-25 Filesystem | COMPLETE | 5/5 | - | - |
+| phase-26 Preemptive Scheduler | COMPLETE | 3/3 | - | - |
+| phase-27 Inter-Process Communication | COMPLETE | 4/4 | - | - |
+| phase-28 Device Driver Abstraction | COMPLETE | 3/3 | - | - |
+| phase-29 Shell | COMPLETE | 6/6 | - | - |
+| phase-30 Boot Sequence & Init | COMPLETE | 3/3 | - | - |
+| phase-31 Standard Library | COMPLETE | 4/4 | - | - |
+| phase-32 Signals & Process Lifecycle | COMPLETE | 4/4 | - | - |
+| phase-33 QEMU Bridge | COMPLETE | 9/9 | - | - |
+| phase-34 RISC-V RV32I Core | COMPLETE | 6/6 | - | - |
+| phase-35 RISC-V Privilege Modes | COMPLETE | 5/5 | - | - |
+| phase-36 RISC-V Virtual Memory & Devices | COMPLETE | 8/8 | - | - |
+| phase-37 Guest OS Boot (Native RISC-V) | COMPLETE | 6/6 | - | - |
+| phase-38 RISC-V M/A/C Extensions | COMPLETE | 3/3 | - | - |
+| phase-39 Build Linux for RV32IMAC | COMPLETE | 3/3 | - | - |
+| phase-40 Boot Linux in Geometry OS | COMPLETE | 2/2 | - | - |
+| phase-41 Tracing and Instrumentation | COMPLETE | 4/4 | - | - |
+| phase-42 Geometry OS Process Manager | COMPLETE | 3/3 | - | - |
+| phase-43 Geometry OS VFS and Disk | COMPLETE | 2/2 | - | - |
+| phase-44 Geometry OS Memory Management | COMPLETE | 3/3 | - | - |
+| phase-45 RAM-Mapped Canvas Buffer | COMPLETE | 5/5 | 370 | 10 |
+| phase-46 RAM-Mapped Screen Buffer | COMPLETE | 3/3 | 220 | 8 |
+| phase-47 Self-Assembly Opcode (ASMSELF) | COMPLETE | 3/3 | 340 | 8 |
+| phase-48 Self-Execution Opcode (RUNNEXT) | COMPLETE | 2/2 | 140 | 5 |
+| phase-49 Self-Modifying Programs: Demos and Patterns | COMPLETE | 2/2 | 400 | - |
+| phase-50 Reactive Canvas: Live Cell Formulas | COMPLETE | 3/3 | 800 | 10 |
+| phase-51 TCP Networking | COMPLETE | 6/6 | 563 | 12 |
+| phase-52 Episodic Memory | COMPLETE | 3/3 | 689 | 12 |
+| phase-53 Trace Query Opcodes | COMPLETE | 4/4 | 50 | 10 |
+| phase-54 Pixel Write History | COMPLETE | 6/6 | 200 | 13 |
+| phase-55 Mouse & GUI Hit Testing | COMPLETE | 4/4 | 120 | 2 |
+| phase-56 Musical Note Opcode | COMPLETE | 2/2 | 30 | 1 |
+| phase-57 Mouse Query Opcode | COMPLETE | 4/4 | 80 | 16 |
+| phase-58 Terminal v4 — Scroll + Shell Commands | COMPLETE | 4/4 | 620 | 13 |
+| phase-59 File Browser App + Bug Fixes | COMPLETE | 4/4 | 619 | - |
+| phase-60 STRCMP Opcode | COMPLETE | 1/1 | 50 | 13 |
+| phase-61 GUI Calculator App + Token-Pixel-GUI Doc | COMPLETE | 2/2 | 1,200 | 1 |
+| phase-62 Notepad Bug Fixes + Clock App | COMPLETE | 2/2 | 1,485 | 6 |
+| phase-63 ABS + RECT Opcodes + Color Picker App | COMPLETE | 7/7 | 800 | 10 |
+| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | PLANNED | 0/6 | 900 | 12 |
+| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | PLANNED | 0/4 | 1,000 | 10 |
+| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | PLANNED | 0/6 | 700 | 15 |
+| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | PLANNED | 0/5 | 500 | 8 |
+
+## Dependencies
+
+| From | To | Type | Reason |
+|------|----|------|--------|
+| phase-32 | phase-33 | soft | Signals not required for QEMU bridge, but nice to have |
+| phase-33 | phase-34 | informs | QEMU bridge teaches us what the interpreter needs to reimplement |
+| phase-34 | phase-35 | hard | Privilege modes layer on top of the base RV32I interpreter |
+| phase-35 | phase-36 | hard | SV32 and devices need privilege modes for trap handling |
+| phase-33 | phase-36 | informs | QEMU bridge proved which devices are the minimum needed |
+| phase-36 | phase-37 | hard | Need MMU + devices before booting a kernel |
+| phase-33 | phase-37 | informs | QEMU boot experience guides native boot requirements |
+| phase-45 | phase-46 | hard | Screen mapping follows the same interception pattern as canvas mapping |
+| phase-45 | phase-47 | hard | ASMSELF needs the canvas buffer to be addressable so programs can write to it first |
+| phase-46 | phase-47 | soft | Screen mapping not required for ASMSELF, but useful for demos |
+| phase-47 | phase-48 | hard | RUNNEXT is meaningless without ASMSELF to produce the bytecode |
+| phase-45 | phase-49 | hard | Canvas RAM mapping needed for all demos |
+| phase-46 | phase-49 | soft | Screen mapping needed for Game of Life demo |
+| phase-47 | phase-49 | hard | ASMSELF needed for self-writing and code evolution demos |
+| phase-48 | phase-49 | hard | RUNNEXT needed for self-writing and code evolution demos |
+| phase-49 | phase-50 | soft | Reactive canvas builds on proven self-modifying patterns |
 
----
+## [x] phase-1: Core VM + Visual Programs (COMPLETE)
 
-## Priority Order for Visual Programs
-
-These are the next batch of work for the chain. Each should produce a working .asm program that passes `cargo test`.
+**Goal:** Working VM with pixel opcodes, static visual output
 
-- [x] Biome transition blending for infinite_map_pxpk.asm -- smooth color gradients at biome boundaries using hash interpolation between neighboring biomes, eliminating hard checkerboard edges. Target: ~30-40K step budget impact within the 500K limit.
-- [x] Living weather system in living_map.asm -- add rain particles (blue dots falling from sky), lightning flashes (white screen flash at random intervals), and snow (white dots drifting down) driven by a weather_state variable cycling through clear/rain/storm/snow.
-- [x] Mini-map overlay for infinite_map_pxpk.asm -- render a 32x32 pixel thumbnail of the surrounding terrain in the top-right corner, updated every 4 frames, using the same hash functions at reduced resolution.
-- [x] Procedural tree sprites on terrain -- detect grass/forest biomes in infinite_map_pxpk.asm and overlay small tree shapes (brown trunk + green canopy) at deterministic hash-derived positions.
-- [x] Water reflection animation -- water tiles mirror the color of the tile above them with a slight blue tint, creating a reflection effect that varies with frame_counter for ripple motion.
-- [x] Day/night cycle with sky gradient -- extend the existing day/night tint system to also change the top 16 rows of the screen to a sky color that shifts from blue to orange to dark blue over the cycle.
-- [x] Terrain elevation contour lines -- add subtle dark lines at elevation boundaries (where fine_hash top bits change by more than 2 between adjacent tiles), creating a topographic map effect.
-- [x] Particle system demo program -- new programs/particles.asm: spawn 100 colored pixels that drift, bounce off screen edges, and fade over time. Proves the FRAME + pixel write performance for real-time effects.
+Foundational VM + programs that produce static images
 
----
+### Deliverables
 
-## Phase 38: Time-Travel Debugger
+- [x] **HALT/NOP/FRAME opcodes** -- Control flow: stop, no-op, yield to renderer
+- [x] **LDI/LOAD/STORE opcodes** -- Data movement: load immediate, load/store from RAM
+- [x] **ADD/SUB/MUL/DIV opcodes** -- Arithmetic on registers
+- [x] **AND/OR/XOR opcodes** -- Bitwise logic on registers
+- [x] **JMP/JZ/JNZ opcodes** -- Unconditional and conditional branching
+- [x] **CALL/RET opcodes** -- Subroutine call/return via r31
+- [x] **PSET/PSETI opcodes** -- Pixel set from registers or immediates
+- [x] **FILL opcode** -- Fill entire screen with a color
+- [x] **RECTF opcode** -- Filled rectangle
+- [x] **Two-pass assembler** -- Labels, comments, hex/dec/bin literals, .db directive
+- [x] **hello.asm** -- Hello world text display
+- [x] **fill_screen.asm** -- Fill screen with solid color
+- [x] **diagonal.asm** -- Diagonal line from (0,0) to (255,255)
+- [x] **border.asm** -- Colored border around screen edges
+- [x] **gradient.asm** -- Horizontal color gradient via nested loops
+- [x] **stripes.asm** -- Alternating horizontal stripes
+- [x] **nested_rects.asm** -- Concentric colored rectangles
+- [x] **checkerboard.asm** -- Checkerboard pattern
+- [x] **colors.asm** -- Color palette display
+- [x] **rainbow.asm** -- Rainbow stripes
+- [x] **rings.asm** -- Concentric rings
+- [x] **lines.asm** -- Star burst using LINE opcode
+- [x] **circles.asm** -- Concentric circles using CIRCLE opcode
 
-**Goal:** Deterministic execution recording with backward replay and timeline forking. Every instruction the VM executes gets logged to a ring buffer. Programs can rewind to any point, step backward, and fork into alternate timelines. This makes debugging visual programs 10x easier -- rewind from a crash, diff frames, explore "what if" branches.
+## [x] phase-2: Extended Opcodes (COMPLETE)
 
-The convergence analysis from two independent possibility explorations both identified this as the #1 highest-impact feature. It amplifies everything: debugging any future program, understanding existing demos, and enabling new interactive experiences (fork a snake game at a decision point, replay maze generation to watch it build).
+**Goal:** Shift, modulo, compare, stack, and signed negation opcodes
 
-### Phase 38a: Execution Trace Ring Buffer
+Instruction set extensions
 
-**Goal:** Record every instruction execution to a fixed-size ring buffer. The VM logs (PC, registers, opcode) each step into a circular buffer that overwrites old entries. Zero impact on forward execution when recording is off.
+### Deliverables
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| TraceEntry struct | (step_number: u64, pc: u32, regs: [u32; 16], opcode: u32) | ~5 lines vm/trace.rs |
-| TraceBuffer struct | Ring buffer of TraceEntry with configurable capacity (default 10000 entries) | ~40 lines vm/trace.rs |
-| Recording flag | `trace_recording: bool` on Vm, off by default | vm/mod.rs |
-| Hook in step() | After instruction decode, if recording: push TraceEntry to buffer | vm/mod.rs step() |
-| SNAP_TRACE opcode (0x73) | Toggle trace recording on/off. Takes register arg: r0=0 off, r0=1 on, r0=2 snapshot-and-clear | vm/ops_syscall.rs |
-| Tests | Record 100 steps, verify entries match, test wraparound, test toggle | ~30 lines |
+- [x] **SHL/SHR opcodes** -- Bit-shift left and right
+  - [x] shift_test.asm passes
+- [x] **MOD opcode** -- Modulo operation
+- [x] **NEG opcode** -- Two's complement negation
+- [x] **CMP opcode** -- Compare: r0 = -1/0/1 (lt/eq/gt)
+- [x] **BLT/BGE opcodes** -- Branch on CMP result (less-than, greater-or-equal)
+- [x] **PUSH/POP opcodes** -- Stack operations via r30 (SP)
+  - [x] push_pop_test.asm passes
+- [x] **TEXT opcode** -- Render null-terminated string from RAM at (x,y)
+- [x] **LINE opcode** -- Bresenham line between two points
+- [x] **CIRCLE opcode** -- Midpoint circle algorithm
+- [x] **SCROLL opcode** -- Scroll screen up by N pixels
 
-**Constraints:** Recording off = zero overhead (one bool check per step). Ring buffer allocated once, never grows. No heap allocation in the hot path.
+## [x] phase-3: Interactive Programs (COMPLETE)
 
-### Phase 38b: Frame Checkpointing
+**Goal:** Keyboard input via IKEY and interactive programs
 
-**Goal:** Snapshot the full screen buffer at every FRAME opcode. These checkpoints let the debugger show visual history without re-executing. Combined with the trace ring buffer, you can reconstruct the screen at any point.
+### Deliverables
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| FrameCheckpoint struct | (step_number: u64, frame_count: u32, screen: Vec<u32>) | vm/trace.rs |
-| Checkpoint ring buffer | Fixed capacity (default 256 frames), each entry = full 64x64 screen = 4096 u32s | vm/trace.rs |
-| Hook in FRAME handler | After incrementing frame_count, if recording: push screen snapshot | vm/mod.rs FRAME opcode |
-| Tests | Run a program with 300 frames, verify oldest frames evicted, verify frame_count matches | ~20 lines |
+- [x] **IKEY opcode** -- Read keyboard port RAM[0xFFF], clear it
+- [x] **blink.asm** -- Toggle a pixel on/off with keyboard
+- [x] **calculator.asm** -- 4-function calculator with text display
+- [x] **painter.asm** -- Freehand drawing with cursor keys
 
-**Constraints:** 256 frames * 4096 u32s = 4MB memory. Acceptable. Screen snapshots are cheap compared to full VM state.
+## [x] phase-4: Canvas & Editor (COMPLETE)
 
-### Phase 38c: Backward Replay
+**Goal:** Text editor improvements: paste, load, scroll, syntax highlighting
 
-**Goal:** Replay the trace buffer backward from any checkpoint. The debugger can show the last N frames in reverse, step backward through instructions, and display register/PC state at each point.
+### Deliverables
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| Replay API | `replay_from(step: u64) -> Vec<TraceEntry>` reads backward from ring buffer | vm/trace.rs |
-| Frame replay | `replay_frame(n: u32) -> Vec<u32>` returns the screen at frame n | vm/trace.rs |
-| REPLAY opcode (0x74) | Load a checkpoint into the screen buffer. Takes register arg: frame index (0=most recent). Sets frame_ready=true. | vm/ops_syscall.rs |
-| replay_demo.asm | Program that draws 64 frames of animation, then replays them backward on screen | programs/ |
-| Tests | Test replay_from, test replay_frame boundary conditions, test REPLAY opcode | ~25 lines |
+- [x] **Clipboard paste** -- Ctrl+V to paste text onto the grid
+- [x] **File load** -- Ctrl+F8 to load .asm files with Tab completion
+- [x] **Scroll/pan** -- Support programs larger than 32x32 characters
+- [x] **Syntax highlighting** -- Color opcodes, registers, numbers differently on canvas
 
-### Phase 38d: Timeline Forking
+## [x] phase-5: Terminal Mode (COMPLETE)
 
-**Goal:** Save the full VM state (ram + regs + pc + all fields) at any point. Fork into an alternate timeline by restoring that state and continuing execution differently. Enables "what if" exploration -- rewind a game to a decision point and try a different move.
+**Goal:** CLI mode with geo> prompt
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| VmSnapshot struct | Serializable VM state: ram (or delta), regs, pc, all configuration fields | vm/trace.rs |
-| Snapshot API | `snapshot(&self) -> VmSnapshot` and `restore(&mut self, snap: &VmSnapshot)` | vm/trace.rs |
-| FORK opcode (0x75) | Take register arg. r0=0: save snapshot to slot. r0=1: restore from slot. r0=2: list saved snapshots via IOCTL. | vm/ops_syscall.rs |
-| Snapshot storage | Vec<VmSnapshot> on Vm, max 16 snapshots | vm/mod.rs |
-| fork_demo.asm | Run snake for 200 frames, fork, replay from fork point with different random seed | programs/ |
-| Tests | Snapshot/restore roundtrip, multiple snapshots, restore from middle, test FORK opcode | ~30 lines |
+### Deliverables
 
-**Constraints:** Full RAM snapshot = 64K * 4 bytes = 256KB per snapshot. 16 snapshots = 4MB. Delta compression can reduce this later. Keep it simple first.
+- [x] **Terminal mode** -- geo> prompt with help, list, load, run, edit, regs, peek, poke, reset, clear, quit
+- [x] **Mode switching** -- Escape toggles Editor/Terminal
 
----
+## [x] phase-6: Animation (COMPLETE)
 
-## Priority Order for Phase 38
+**Goal:** FRAME opcode for 60fps animation loop
 
-- [x] Phase 38a: Execution Trace Ring Buffer
-- [x] Phase 38b: Frame Checkpointing
-- [x] Phase 38c: Backward Replay
-- [x] Phase 38d: Timeline Forking
+### Deliverables
 
----
+- [x] **FRAME opcode** -- Yield to renderer, enable animation loops
+- [x] **fire.asm** -- Scrolling fire animation using FRAME + SCROLL
+- [x] **scroll_demo.asm** -- Horizontal bar scrolling upward
 
-## Phase 39: Sound Synthesis
+## [x] phase-7: Random & Games (COMPLETE)
 
-**Goal:** Replace the single sine-wave BEEP with a proper NOTE opcode supporting multiple waveforms and envelope control. Programs can make actual music -- square waves for retro sounds, noise for percussion, triangle for bass. The demoscene programs get soundtracks, games get SFX.
+**Goal:** RAND opcode, Snake and Ball games
 
-### Phase 39a: NOTE Opcode with Waveform Selection
+### Deliverables
 
-**Goal:** New NOTE opcode that plays a note with selectable waveform, frequency, and duration. Extends audio.rs to synthesize square, triangle, sawtooth, and noise waveforms. The old BEEP opcode stays as a convenience wrapper.
+- [x] **RAND opcode** -- LCG pseudo-random u32 (seed 0xDEADBEEF)
+- [x] **snake.asm** -- Snake: WASD, random apples, growing tail, self-collision
+- [x] **ball.asm** -- Bouncing ball with WASD control
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| NOTE opcode (0x04) | NOTE wave_reg, freq_reg, dur_reg. wave_reg: 0=sine, 1=square, 2=triangle, 3=sawtooth, 4=noise. freq in Hz, dur in ms. | vm/mod.rs + audio.rs |
-| Waveform synthesis | Add square/triangle/sawtooth/noise generators to audio.rs alongside existing sine | audio.rs (~30 lines) |
-| Assembler support | `NOTE r1, r2, r3` in assembler | assembler |
-| Tests | Test each waveform, test clamping, test opcode encoding, test BEEP still works | ~20 lines |
+## [x] phase-8: TICKS & Sound (COMPLETE)
 
-**Note:** MEMCPY was opcode 0x04. Check if MEMCPY can be moved or if NOTE gets 0x7E (next free). Do NOT collide with existing opcodes.
+**Goal:** Frame counter for throttling, BEEP opcode for audio
 
-### Phase 39b: Sound Demo Programs
+### Deliverables
 
-**Goal:** Two demo programs that prove the sound system works musically.
+- [x] **TICKS register** -- RAM[0xFFE] frame counter, incremented each FRAME, wraps at u32 max
+- [x] **Snake throttle** -- Snake throttled via TICKS & 7 (~7.5 moves/sec)
+- [x] **BEEP opcode** -- BEEP freq_reg, dur_reg -- sine-wave via aplay (20-20000 Hz, 1-5000 ms)
+- [x] **Snake sounds** -- 880Hz ping on apple eat, 110Hz thud on death
+- [x] **Ball sounds** -- 330Hz click on wall bounce
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| sfx_demo.asm | Play a sequence of notes in different waveforms -- retro sound effects catalog | programs/ |
-| music_demo.asm | Play a simple melody (e.g. Mary Had a Little Lamb or Tetris theme) using square wave, with FRAME sync for visual accompany | programs/ |
+## [x] phase-9: Debug Tools (COMPLETE)
 
----
+**Goal:** Breakpoints, instruction trace, and save/load improvements
 
-## Phase 40: Roguelike
+### Deliverables
 
-**Goal:** A proper dungeon-crawling game that exercises every major subsystem: procedural generation for dungeon floors, keyboard input for movement, combat with enemies, item pickup, fog of war, and time-travel undo. This is the signature demo that proves Geometry OS is a real platform.
+- [x] **Save/load state** -- F7 saves full RAM to geometry_os.sav, restore on startup
+  - [x] test_vm_save_load_roundtrip passes
+- [x] **Disassembly panel** -- Show bytecode alongside source text in GUI
+- [x] **Single-step mode** -- F6 steps one instruction when paused
+- [x] **Breakpoints** -- Mark PC addresses to pause at during execution
+  - [x] User can set breakpoint at an address
+  - [x] VM halts when PC hits breakpoint address
+  _~80 LOC_
+- [x] **Instruction trace** -- Log PC + decoded instruction for first N steps
+  - [x] CLI mode logs each instruction with register state
+  _~60 LOC_
 
-### Phase 40a: Dungeon Floor Generation
+## [x] phase-10: Extended Graphics (COMPLETE)
 
-**Goal:** Procedural dungeon generation using the existing maze algorithm as a foundation. Rooms connected by corridors, rendered as a tilemap on the 64x64 screen.
+**Goal:** Sprite blitting and screenshot export
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| roguelike.asm | New program: player (@ in white), dungeon tiles, movement via IKEY | programs/ |
-| Dungeon gen | BSP or random rooms + corridors algorithm in assembly, using RAND for seeds | within roguelike.asm |
-| Tile rendering | Wall tiles (dark gray), floor tiles (brown), player (white @), stairs (yellow >) | within roguelike.asm |
-| Camera/viewport | 64x64 screen shows a portion of a larger dungeon (scroll with player movement) | within roguelike.asm |
-| Movement | WASD or arrow keys via IKEY, collision detection with walls | within roguelike.asm |
+### Deliverables
 
-### Phase 40b: Combat, Enemies, Items
+- [x] **SPRITE opcode** -- Copy a block of RAM to screen at (x,y) -- sprite blit
+  - [x] Copy NxM pixels from RAM to screen buffer
+  - [x] Color 0 pixels are transparent (skip)
+  - [x] test_sprite_transparent_skips_zero passes
+  _~120 LOC_
+- [x] **Screenshot export** -- Dump 256x256 canvas to PNG file
+  - [x] F9 or CLI command saves PNG
+  _~40 LOC_
 
-**Goal:** Add game mechanics -- enemies that move, health/stats, items to pick up, combat resolution. The game is now playable.
+## [x] phase-11: Advanced Games (COMPLETE)
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| Enemy spawning | Place enemies (red letters) at gen time in rooms, they patrol | within roguelike.asm |
-| Combat | Bump-to-attack: player moves into enemy = deals damage. Enemy moves into player = takes damage. Damage based on simple stats. | within roguelike.asm |
-| Health/HP display | Status bar at screen edge showing HP, floor number, score | within roguelike.asm |
-| Items | Health potions (green +), attack boosts, scattered in rooms | within roguelike.asm |
-| Stairs | Reach stairs (yellow >) to descend to next floor (regenerate dungeon, harder enemies) | within roguelike.asm |
-| SFX | NOTE opcode for hit sounds, pickup sounds, stair descend sound | within roguelike.asm |
+**Goal:** Richer games using sprites and extended features
 
-### Phase 40c: Time-Travel Undo
+### Deliverables
 
-**Goal:** Use the FORK opcode to implement undo. Before each player move, save a snapshot. Press U to undo -- restore the previous snapshot and re-render. The player can retry bad moves. This is the signature feature that no other retro game has.
+- [x] **breakout.asm** -- Breakout with paddle, ball, 4 rows of colored bricks, score, lives
+- [x] **tetris.asm** -- Tetris with piece rotation and line clearing
+- [x] **maze.asm** -- Randomly generated maze with player navigation
+  - [x] test_maze_assembles passes
+  - [x] test_maze_initializes passes
+- [x] **roguelike.asm** -- Procedural dungeon crawler with 64x64 map, rooms, corridors, enemies, items, camera/viewport scrolling, combat
+  - [x] test_roguelike_assembles passes
+  - [x] test_roguelike_initializes passes
+  - [x] test_roguelike_wall_collision_blocks passes
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| Undo system | Before each player turn: FORK save. Press U: FORK restore + re-render | within roguelike.asm |
-| Undo stack | Track multiple undo levels (up to 16 snapshots via FORK) | within roguelike.asm |
-| Visual feedback | Flash screen briefly on undo to show the rewind | within roguelike.asm |
+## [x] phase-12: Self-Hosting (COMPLETE)
 
----
+**Goal:** VM can assemble and run its own programs from within
 
-## Priority Order for Phase 39-40
+The text editor types assembly, the assembler compiles it, and
+the VM runs it. Missing piece: assembler callable as VM subroutine.
 
-- [x] Phase 39a: NOTE Opcode with Waveform Selection
-- [x] Phase 39b: Sound Demo Programs
-- [x] Phase 40a: Dungeon Floor Generation
-- [x] Phase 40b: Combat, Enemies, Items
-- [x] Phase 40c: Time-Travel Undo
 
----
+### Deliverables
 
-## Phase 41: TCP Networking
+- [x] **Assembler syscall** -- VM opcode that triggers the assembler on canvas text
+  - [x] ASM opcode (0x4B) reads null-terminated source from RAM
+  - [x] ASM writes bytecode to RAM at destination address
+  - [x] RAM[0xFFD] holds result (word count or 0xFFFFFFFF on error)
+  - [x] test_asm_opcode_basic passes
+  - [x] test_asm_opcode_error passes
+  _~150 LOC_
+- [x] **Self-hosting demo** -- Program that writes assembly, assembles it, runs the output
+  - [x] self_host.asm compiles and runs
+  - [x] Generated code executes (screen filled with green)
+  _~80 LOC_
 
-**Goal:** Give Geometry OS programs the ability to make TCP connections. This is the single most important feature that separates a toy VM from a real OS. Every real OS has networking -- now Geometry OS does too.
+## [x] phase-13: Close the Gaps (COMPLETE)
 
-### Phase 41a: TCP Socket Opcodes
+**Goal:** Every program tested, every error traceable, no regressions
 
-**Goal:** Four new opcodes for TCP connect, send, receive, and disconnect. Programs can open TCP connections to any host:port, send and receive raw bytes, and close connections. All operations are non-blocking (except the initial connect).
+### Deliverables
 
-| Deliverable | Description | Scope |
-|---|---|---|
-| CONNECT addr_reg, port_reg, fd_reg (0x7F) | Open TCP connection. Reads null-terminated IP string from RAM. Returns fd in fd_reg, status in r0. | src/vm/net.rs |
-| SOCKSEND fd_reg, buf_reg, len_reg, sent_reg (0x80) | Send bytes over TCP. One byte per u32 word (lower 8 bits). Non-blocking. | src/vm/net.rs |
-| SOCKRECV fd_reg, buf_reg, max_len_reg, recv_reg (0x81) | Receive bytes from TCP. Non-blocking. Returns NET_ERR_WOULD_BLOCK if no data. | src/vm/net.rs |
-| DISCONNECT fd_reg (0x82) | Close TCP connection and free slot. | src/vm/net.rs |
-| Connection pool | Up to 8 simultaneous TCP connections stored in Vm struct. Slots managed as fd indices. | src/vm/net.rs |
-| Error codes | NET_OK, NET_ERR_INVALID_FD, NET_ERR_CONNECT_FAILED, NET_ERR_SEND_FAILED, NET_ERR_RECV_FAILED, NET_ERR_NO_SLOTS, NET_ERR_WOULD_BLOCK, NET_ERR_CONNECTION_CLOSED | src/vm/net.rs |
-| Assembler support | CONNECT, SOCKSEND, SOCKRECV, DISCONNECT parsed and encoded | src/assembler/core_ops.rs |
-| Disassembler support | All 4 opcodes decoded with register arguments | src/vm/disasm.rs |
-| opcode_name entries | CONNECT, SOCKSEND, SOCKRECV, DISCONNECT in hermes.rs | src/hermes.rs |
-| Integration tests | 12 tests: connect success/fail/refused, send/recv roundtrip, disconnect, max connections, invalid fd, string parsing | src/vm/net.rs |
-| net_demo.asm | Connect to echo server, send message, receive echo, display on screen | programs/ |
+- [x] **Tests for untested programs** -- ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity
+  - [ ] cargo test all green
+  - [ ] Each untested program has at least one test
+  _~220 LOC_
+- [x] **Assembler error line numbers** -- Error messages include source line number
+  - [ ] Error message format: 'line N: unknown opcode: XYZ'
+  _~30 LOC_
+- [x] **Version string audit** -- Single source of truth for version across banner, CLI, Cargo.toml
+  _~10 LOC_
 
-**Why this matters:** Networking is table stakes for any OS. With CONNECT/SOCKSEND/SOCKRECV/DISCONNECT, Geometry OS programs can talk to HTTP servers, chat services, game servers, and any TCP service. Combined with the existing pixel-native rendering, this opens the door to networked visual applications that no other pixel VM can do.
+## [x] phase-14: Developer Experience (COMPLETE)
 
----
+**Goal:** Make the VM pleasant to program
 
-## Priority Order for Phase 41
+### Deliverables
 
-- [x] Phase 41a: TCP Socket Opcodes
+- [x] **Assembler #define constants** -- #define NAME value -- eliminates magic numbers
+  - [x] #define TILE 8 resolves in LDI and other immediate contexts
+  _~80 LOC_
+- [x] **programs/README.md** -- One-line description + controls + opcodes per program
+  _~60 LOC_
+- [x] **Disassembler panel in GUI** -- Shows PC +/- 10 instructions, updates each step
+  _~50 LOC_
+- [x] **GIF/video capture** -- F10 toggle writes numbered PNGs, ffmpeg command documented
+  _~20 LOC_
 
----
+## [x] phase-15: VM Capability Gaps (COMPLETE)
 
-## Design Principles
+**Goal:** Fix rough edges in game programming
 
-- **Pixels are the truth.** Everything visual should be expressible as pixel operations. The screen isn't an afterthought -- it's the primary interface.
-- **The screen IS the state.** Programs should be able to read the screen (PEEK) and react. Visual output isn't separate from computation.
-- **Everything is a file.** Device access, IPC, configuration -- all through the filesystem interface.
-- **Programs prove the need.** No speculative opcodes. Every new feature ships with a program that needs it.
-- **Small steps, always green.** Every phase is a series of commits where `cargo test` passes.
+### Deliverables
+
+- [x] **SAR opcode (arithmetic shift right, 0x2B)** -- Two's-complement division for negative numbers
+  - [x] Two's-complement division works for negative numbers
+  _~10 LOC_
+- [x] **Multi-key input (bitmask at 0xFFB)** -- Two simultaneous keys in same frame
+  - [x] Two simultaneous keys register in same frame
+  _~20 LOC_
+- [x] **BEEP in more programs** -- Sound effects for tetris, breakout, maze, sprite_demo
+  - [x] Sound effects on game events
+  _~20 LOC_
+- [x] **Signed arithmetic audit** -- Document SUB/ADD/MUL sign contract, CMP semantics
+  _~30 LOC_
+
+## [x] phase-16: Showcase Shipping (COMPLETE)
+
+**Goal:** Complete game, presentable repo, public release
+
+### Deliverables
+
+- [x] **Complete tetris** -- Scoring, levels, sound, game-over screen
+  - [x] Playable start-to-finish with visible score
+  _~100 LOC_
+- [x] **TILEMAP opcode** -- Grid blit from tile index array -- makes grid games 3x shorter
+  - [x] snake, tetris, maze each 3x shorter
+  _~60 LOC_
+- [x] **Persistent save slots** -- 4 named save slots accessible from terminal
+  - [x] save/load slot1 works
+  _~30 LOC_
+- [x] **GitHub release v1.0.1** -- Tag, release notes, prebuilt binary
+  - [x] Release notes prepared
+
+## [x] phase-17: Platform Growth (COMPLETE)
+
+**Goal:** Geometry OS as a target platform
+
+### Deliverables
+
+- [x] **GlyphLang compiler backend** -- Emit .geo bytecode from GlyphLang source
+  _~200 LOC_
+- [x] **Browser port via WASM** -- VM runs in browser with canvas rendering
+  - [x] wasm-pack build succeeds
+  - [x] Demo page with built-in programs runs in browser
+  - [x] Full opcode set works in WASM
+  _~200 LOC_
+- [x] **Network port (0xFFC UDP)** -- Two VM instances exchange messages
+  _~40 LOC_
+
+## [x] phase-18: VM Instrumentation (COMPLETE)
+
+**Goal:** Telemetry for memory access and execution flow
+
+### Deliverables
+
+- [x] **Access log buffer** -- Track LOAD/STORE/SPRITE/TILEMAP RAM hits per frame
+  _~50 LOC_
+- [x] **Instruction fetch logging** -- Track PC addresses for execution trail
+  _~10 LOC_
+
+## [x] phase-19: Visual Debugger (COMPLETE)
+
+**Goal:** Live heat-map and PC trail overlays on canvas
+
+### Deliverables
+
+- [x] **Intensity decay buffer** -- Fade memory highlights over ~10 frames
+  _~30 LOC_
+- [x] **Canvas cell tinting** -- Cyan (Read) and Magenta (Write) flashes on active RAM addresses
+  _~40 LOC_
+- [x] **PC trail visualization** -- Fading white glow follows the execution pointer
+  _~20 LOC_
+
+## [x] phase-20: High RAM Visualization (COMPLETE)
+
+**Goal:** Deep observability into game state and sprite memory
+
+### Deliverables
+
+- [x] **RAM inspector panel** -- Second 32x32 grid visualizing 0x2000-0x23FF or scrollable range
+  - [x] 32x32 grid renders at bottom of window
+  - [x] PageUp/PageDown scrolls through RAM in Terminal mode
+  - [x] Access intensities shown as color tints
+  _~60 LOC_
+- [x] **Global heatmap** -- Compact 256x256 view of entire 64K RAM access patterns
+  - [x] 256x256 pixel grid shows all 64K words
+  - [x] Read/Write access shown as cyan/magenta pulses
+  - [x] PC position highlighted in white
+  _~80 LOC_
+
+## [x] phase-21: Spatial Program Coordinator (Native Windowing) (COMPLETE)
+
+**Goal:** Eliminate CPU-side compositor dependency by running multiple autonomous Glyph programs concurrently within the GPU/WGPU substrate.
+
+### Deliverables
+
+- [x] **Multi-Process VM Scheduler** -- Modify the core VM to support multiple concurrent execution contexts (window instances) within the same 64K RAM.
+  - [x] SpawnedProcess struct with isolated registers and PC
+  - [x] step_all_processes() with swap-in/step/swap-out pattern
+  - [x] MAX_PROCESSES = 8 cap
+- [x] **SPAWN/KILL Opcodes (0x4D/0x4E)** -- SPAWN addr_reg creates child process; KILL pid_reg halts it. PID stored in RAM[0xFFA].
+  - [x] test_spawn_creates_child_process passes
+  - [x] test_spawn_max_processes passes
+  - [x] test_kill_halts_child_process passes
+- [x] **Window Manager Demo** -- window_manager.asm -- primary draws animated window border, child bounces ball inside via shared RAM bounds protocol.
+  - [x] window_manager.asm assembles and runs
+  - [x] test_window_manager_spawns_child passes
+  - [x] Ball stays within window bounds
+
+## [x] phase-22: Screen Readback & Collision Detection (COMPLETE)
+
+**Goal:** Let programs read pixel values from the framebuffer for collision detection, pick-color, and window compositing.
+
+### Deliverables
+
+- [x] **PEEK opcode (0x4F)** -- PEEK rx, ry, rd -- read screen pixel at (rx,ry) into rd. Enables collision detection.
+  - [x] PEEK reads screen buffer value into destination register
+  - [x] Out-of-bounds returns 0
+  - [x] test_peek_reads_screen_pixel passes
+  _~20 LOC_
+- [x] **Collision detection demo** -- peek_bounce.asm -- white ball bounces off drawn obstacles using PEEK. No RAM collision map.
+  _~100 LOC_
+- [x] **MOV instruction everywhere** -- MOV rd, rs documented and used across programs
+
+## [x] phase-23: Kernel Boundary (Syscall Mode) (COMPLETE)
+
+**Goal:** Establish user mode vs kernel mode. Programs can't directly access hardware.
+
+### Deliverables
+
+- [x] **CPU mode flag** -- vm.mode: User/Kernel bit in VM state
+- [x] **SYSCALL opcode (0x52)** -- Trap into kernel mode, dispatch by syscall number
+- [x] **RETK opcode (0x53)** -- Return from kernel mode to user mode
+- [x] **Syscall dispatch table** -- RAM region 0xFE00..0xFEFF mapping syscall numbers to kernel handlers
+- [x] **Restricted opcodes in user mode** -- IKEY, hardware STORE blocked in user mode
+
+## [x] phase-24: Memory Protection (COMPLETE)
+
+**Goal:** Each process gets its own address space. Processes can't trash each other.
+
+### Deliverables
+
+- [x] **Page tables** -- Simple 1-level paging: page_dir per process, maps virtual to physical
+  - [x] translate_va maps virtual to physical via page directory
+  - [x] Kernel mode uses identity mapping (no page directory)
+- [x] **Address space per process** -- SPAWN creates new page table, not just new registers
+  - [x] Each child gets 4 private physical pages
+  - [x] Shared regions (page 3, page 63) identity-mapped
+- [x] **SEGFAULT on illegal access** -- LOAD/STORE/fetch to unmapped page halts the process
+  - [x] test_child_segfaults_on_unmapped_store passes
+  - [x] test_child_segfaults_on_unmapped_load passes
+  - [x] test_child_segfaults_on_unmapped_fetch passes
+  - [x] RAM[0xFF9] tracks segfaulted PID
+- [x] **Process memory isolation** -- Two processes can't corrupt each other's memory
+  - [x] test_process_memory_isolation passes
+  - [x] test_child_user_mode_blocks_hardware_port_write passes
+  - [x] test_child_can_access_shared_window_bounds passes
+- [x] **Memory protection tests** -- 9 tests covering segfault, isolation, page tables, kernel mode
+  - [x] test_child_page_directory_has_shared_regions_mapped passes
+  - [x] test_kernel_mode_identity_mapping passes
+  - [x] test_kill_frees_physical_pages passes
+  - [x] test_segfault_pid_tracking passes
+- [x] **Process memory regions documentation** -- docs/MEMORY_PROTECTION.md -- code/heap/stack/shared segments
+
+## [x] phase-25: Filesystem (COMPLETE)
+
+**Goal:** Programs can create, read, write, and delete named files. Persistent storage.
+
+### Deliverables
+
+- [x] **Virtual filesystem layer** -- Abstract FS interface backed by host filesystem in .geometry_os/fs/
+- [x] **OPEN/READ/WRITE/CLOSE/SEEK syscalls** -- Full file I/O through syscall interface
+- [x] **LS syscall** -- Directory listing into RAM buffer
+- [x] **Per-process fd table** -- Max 16 open files per process
+- [x] **cat.asm** -- Test program that reads a file and displays it
+
+## [x] phase-26: Preemptive Scheduler (COMPLETE)
+
+**Goal:** Replace round-robin single-step with time-sliced priority scheduler.
+
+### Deliverables
+
+- [x] **Timer interrupt** -- VM fires tick every N instructions, triggers context switch
+- [x] **Priority levels** -- Each process has priority 0-3, higher gets more slices
+- [x] **Yield/Sleep syscalls** -- Voluntary yield and timed sleep
+
+## [x] phase-27: Inter-Process Communication (COMPLETE)
+
+**Goal:** Processes communicate through pipes and messages, not raw shared RAM.
+
+### Deliverables
+
+- [x] **PIPE syscall** -- Create unidirectional pipe with circular buffer (0x5D)
+  - [x] PIPE r5, r6 creates read FD (0x8000|idx) and write FD (0xC000|idx)
+  - [x] Pipe buffer holds 256 words
+- [x] **MSGSND/MSGRCV syscalls** -- Send and receive fixed-size messages by PID (0x5E, 0x5F)
+  - [x] MSGSND sends 4-word message to target PID
+  - [x] MSGRCV receives message, returns sender PID in r0
+  - [x] Per-process message queue holds 16 messages
+- [x] **Blocking I/O** -- READ on empty pipe blocks until data arrives
+  - [x] READ on empty pipe sets proc.blocked = true
+  - [x] Scheduler skips blocked processes
+  - [x] MSGRCV blocks if no message queued
+- [x] **pipe_test.asm** -- Program demonstrating parent-child pipe communication
+
+## [x] phase-28: Device Driver Abstraction (COMPLETE)
+
+**Goal:** All hardware access through a uniform driver interface. Everything is a file.
+
+### Deliverables
+
+- [x] **Device file convention** -- /dev/screen, /dev/keyboard, /dev/audio, /dev/net
+  - [x] OPEN /dev/screen returns fd 0xE000
+  - [x] OPEN /dev/keyboard returns fd 0xE001
+  - [x] OPEN /dev/audio returns fd 0xE002
+  - [x] OPEN /dev/net returns fd 0xE003
+- [x] **IOCTL syscall** -- Device-specific control operations
+  - [x] IOCTL assembles to opcode 0x62
+  - [x] Screen: get width/height via cmd 0/1
+  - [x] Keyboard: get/set echo mode via cmd 0/1
+  - [x] Audio: get/set volume via cmd 0/1
+  - [x] Net: get status via cmd 0
+- [x] **Screen/keyboard/audio/net drivers** -- Wrap existing hardware ports as device files
+  - [x] WRITE to /dev/screen draws pixels from (x,y,color) triplets
+  - [x] READ from /dev/keyboard reads RAM[0xFFF] and clears it
+  - [x] WRITE to /dev/audio sets beep from (freq,dur) pair
+  - [x] READ/WRITE to /dev/net uses RAM[0xFFC]
+  - [x] device_test.asm demo program
+
+## [x] phase-29: Shell (COMPLETE)
+
+**Goal:** Proper command shell with pipes, redirection, environment variables.
+
+### Deliverables
+
+- [x] **shell.asm** -- Interactive command interpreter as user process
+  - [x] shell.asm assembles without errors
+  - [x] Built-in commands: ls, cd, cat, echo, ps, kill, help, pwd, clear, exit
+- [x] **Pipe operator** -- prog1 | prog2 connects stdout to stdin
+  - [x] EXECP opcode (0x6A) spawns with fd redirection
+  - [x] shell.asm parses | operator and creates pipes
+- [x] **Redirection** -- prog > file, prog < file, prog >> file
+  - [x] shell.asm parses > operator and opens file for output
+- [x] **Built-in commands** -- ls, cd, cat, echo, ps, kill, help
+  - [x] ls lists VFS directory entries
+  - [x] cd changes CWD via CHDIR opcode
+  - [x] cat reads file and displays content
+  - [x] echo prints arguments to screen
+  - [x] ps lists process IDs
+  - [x] kill terminates a process by PID
+  - [x] help displays command list
+- [x] **New opcodes** -- READLN, WAITPID, EXECP, CHDIR, GETCWD
+  - [x] READLN (0x68) reads keyboard chars into line buffer
+  - [x] WAITPID (0x69) waits for child process to halt
+  - [x] EXECP (0x6A) spawns program with stdin/stdout fd redirection
+  - [x] CHDIR (0x6B) changes current working directory
+  - [x] GETCWD (0x6C) reads current working directory
+- [x] **VFS dup_fd** -- Duplicate file descriptors across PID tables for pipe/redir
+
+## [x] phase-30: Boot Sequence & Init (COMPLETE)
+
+**Goal:** OS boots into known state, starts init, manages services.
+
+### Deliverables
+
+- [x] **Boot ROM** -- Fixed bytecode at 0x0000, initializes hardware, jumps to init
+  - [x] boot() method assembles init.asm and spawns PID 1
+  - [x] boot.cfg created with default configuration
+- [x] **Init process** -- PID 1, reads boot.cfg, starts shell
+  - [x] init.asm assembles without errors
+  - [x] init process spawned with priority 2
+  - [x] supervisor loop monitors shell and respawns if it dies
+  - [x] environment variables set (SHELL, HOME, CWD, USER)
+- [x] **Graceful shutdown** -- SHUTDOWN syscall stops all processes, flushes FS
+  - [x] SHUTDOWN opcode 0x6E in kernel mode halts VM
+  - [x] SHUTDOWN in user mode returns error (r0=0xFFFFFFFF)
+  - [x] SHUTDOWN kills all child processes and frees pages
+  - [x] SHUTDOWN clears pipes and closes file descriptors
+  - [x] shutdown_requested flag set for host to check
+
+## [x] phase-31: Standard Library (COMPLETE)
+
+**Goal:** Reusable library of common operations for all programs.
+
+### Deliverables
+
+- [x] **lib/stdlib.asm** -- String ops, memory ops, formatted I/O
+- [x] **lib/math.asm** -- sin, cos, sqrt via lookup tables
+- [x] **Heap allocator** -- malloc/free for dynamic memory
+  - [x] lib/heap.asm implements _lib_heap_alloc and _lib_heap_free
+- [x] **Linking convention** -- .include or .lib directive in assembler
+  - [x] .include directive resolves and inlines lib/*.asm files
+
+## [x] phase-32: Signals & Process Lifecycle (COMPLETE)
+
+**Goal:** Signals, exit codes, wait, and proper process lifecycle management.
+
+### Deliverables
+
+- [x] **SIGNAL opcode** -- Send signal to process by PID (SIGTERM=0, SIGKILL=1, SIGUSR=2, SIGALRM=3)
+  - [x] SIGNAL opcode sends signal to target process
+- [x] **Signal handlers (SIGSET)** -- Process sets handler address for each signal type via SIGSET opcode
+  - [x] SIGSET registers handler address, signal delivery jumps to it
+- [x] **EXIT/WAITPID opcodes** -- Exit with status code, parent waits for child via WAITPID
+  - [x] EXIT opcode halts process with status code, sets zombie flag
+  - [x] WAITPID reaps zombie and returns exit code
+- [x] **Zombie cleanup** -- Exited processes cleaned up after parent WAITPID
+  - [x] Zombie process freed after WAITPID, pages reclaimed
+
+## [x] phase-33: QEMU Bridge (COMPLETE)
+
+**Goal:** Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one.
+
+QEMU gives us a working hypervisor in days. Every architecture QEMU supports
+(x86, ARM, RISC-V, MIPS) works immediately. We learn what the canvas text
+surface needs to handle (ANSI sequences, scroll speed, buffer size).
+
+
+### Deliverables
+
+- [x] **qemu.rs module** -- QEMU subprocess management with stdin/stdout pipes
+  - [x] `p33.d1.t1` Create src/qemu.rs with QemuBridge struct
+    > Create QemuBridge struct with fields for Child process, stdin/stdout pipes,
+    > and an output buffer. Implement Drop to kill child on cleanup.
+    - QemuBridge struct compiles
+    - Drop trait kills child process
+    _Files: src/qemu.rs_
+  _~60 LOC_
+- [x] **QEMU spawn** -- Launch qemu-system-* with -nographic -serial mon:stdio, capture stdin/stdout
+  - [x] `p33.d2.t1` Implement QemuBridge::spawn(config_str) -> Result (depends: p33.d1.t1)
+    > Parse config string "arch=riscv64 kernel=linux.img ram=256M disk=rootfs.ext4"
+    > into QEMU command. Construct qemu-system-{arch} with appropriate flags.
+    > Use std::process::Command with stdin/stdout piped.
+    - Config string parsed into arch, kernel, ram, disk fields
+    - Correct qemu-system-{arch} binary selected
+    - -nographic -serial mon:stdio flags always present
+    - -machine virt for riscv/aarch64
+    - -kernel, -m, -drive flags constructed from config
+    _Files: src/qemu.rs_
+  - [x] `p33.d2.t2` Implement architecture mapping (riscv64, riscv32, x86_64, aarch64, mipsel) (depends: p33.d2.t1)
+    > Map arch config values to qemu-system binary names and machine types.
+    - riscv64 -> qemu-system-riscv64 -machine virt
+    - x86_64 -> qemu-system-x86_64
+    - aarch64 -> qemu-system-aarch64 -machine virt
+    - mipsel -> qemu-system-mipsel -machine malta
+    - Unknown arch returns error
+    _Files: src/qemu.rs_
+  - [x] `p33.d2.t3` Test: spawn QEMU with --version, verify process starts and exits clean (depends: p33.d2.t1)
+    > Unit test that spawns qemu-system-riscv64 --version and captures version string from stdout.
+    - QEMU process starts and exits with code 0
+    - Version string captured from stdout
+    _Files: src/qemu.rs_
+  _~80 LOC_
+- [x] **Output to canvas** -- Read QEMU stdout bytes, write to canvas_buffer as u32 chars, auto-scroll
+  - [x] `p33.d3.t1` Implement non-blocking stdout reader (depends: p33.d1.t1)
+    > Set QEMU stdout to non-blocking mode. Each frame tick, read available
+    > bytes into a Vec<u8> buffer. Return the bytes for processing.
+    - Non-blocking read returns immediately even if no data
+    - Bytes read are valid QEMU output
+    _Files: src/qemu.rs_
+  - [x] `p33.d3.t2` Implement stdout bytes -> canvas_buffer writer (depends: p33.d3.t1)
+    > For each printable byte: write as u32 to canvas_buffer at cursor position.
+    > Track virtual cursor (row, col). Auto-scroll when row >= 128.
+    - Printable ASCII chars appear in canvas_buffer
+    - Cursor advances correctly
+    - Scrolling works when row exceeds 128
+    _Files: src/qemu.rs, src/main.rs_
+  - [x] `p33.d3.t3` Test: feed known bytes, verify canvas_buffer contents (depends: p33.d3.t2)
+    > Unit test: write 'Hello\nWorld' bytes, verify canvas_buffer has correct chars at correct positions.
+    - 'H' at position [0][0], 'e' at [0][1], etc.
+    - 'W' starts at row 1 after newline
+    _Files: src/qemu.rs_
+  _~60 LOC_
+- [x] **Input from keyboard** -- Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin
+  - [x] `p33.d4.t1` Implement keyboard event -> QEMU stdin writer (depends: p33.d1.t1)
+    > When hypervisor is active and a key is pressed, call key_to_ascii_shifted()
+    > and write the resulting byte to QEMU's stdin pipe. Map Enter to \\r,
+    > Backspace to 0x7F, Ctrl+C to 0x03.
+    - Regular keys forwarded as ASCII bytes
+    - Enter sends \r (carriage return)
+    - Backspace sends 0x7F
+    - Ctrl+C sends 0x03
+    _Files: src/qemu.rs, src/main.rs_
+  _~40 LOC_
+- [x] **ANSI escape handling** -- Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering
+  - [x] `p33.d5.t1` Implement ANSI escape state machine (depends: p33.d3.t2)
+    > State machine: Normal -> Escape (0x1B) -> Csi ('[') -> params.
+    > Handle: CSI A/B/C/D (cursor), CSI H (home), CSI 2J (clear),
+    > CSI K (clear line), CSI m (color, can ignore), CSI ? 25 h/l (cursor show/hide).
+    - ESC [ A moves cursor up
+    - ESC [ B moves cursor down
+    - ESC [ C moves cursor right
+    - ESC [ D moves cursor left
+    - ESC [ H moves cursor to 0,0
+    - ESC [ 2 J clears canvas_buffer
+    - ESC [ K clears from cursor to end of row
+    - Unknown sequences ignored gracefully
+    _Files: src/qemu.rs_
+  - [x] `p33.d5.t2` Test: feed ANSI sequences, verify cursor state (depends: p33.d5.t1)
+    > Unit tests for each supported ANSI sequence. Verify cursor position and buffer state.
+    - Test for each cursor movement sequence
+    - Test for clear screen
+    - Test for clear line
+    - Test for mixed text + escape sequences
+    _Files: src/qemu.rs_
+  _~100 LOC_
+- [x] **HYPERVISOR opcode (0x72)** -- New opcode that reads config string from RAM and spawns QEMU
+  - [x] `p33.d6.t1` Add HYPERVISOR opcode 0x72 to vm.rs execute (depends: p33.d2.t1, p33.d3.t2, p33.d4.t1)
+    > Read config string from RAM at address in r0. Parse config.
+    > Spawn QemuBridge. Store in VM state. F5 while active kills QEMU.
+    - HYPERVISOR opcode triggers QEMU spawn
+    - Config string read from VM RAM
+    - VM state tracks active hypervisor
+    _Files: src/vm.rs_
+  - [x] `p33.d6.t2` Add HYPERVISOR to assembler mnemonic list (depends: p33.d6.t1)
+    > Register HYPERVISOR in assembler.rs so it can be used in .asm programs.
+    - 'HYPERVISOR r0' assembles to opcode 0x54
+    - Disassembler outputs HYPERVISOR for 0x54
+    _Files: src/assembler.rs_
+  _~60 LOC_
+- [x] **Shell command** -- hypervisor arch=riscv64 kernel=linux.img command in shell.asm
+  - [x] `p33.d7.t1` Add hypervisor command to shell.asm (depends: p33.d6.t1)
+    > Parse 'hypervisor <config>' from shell input, construct config string in RAM, execute HYPERVISOR opcode.
+    - 'hypervisor arch=riscv64 kernel=linux.img' spawns QEMU
+    - Error message on missing kernel file
+    _Files: programs/shell.asm_
+- [x] **Download helper** -- Script to fetch pre-built RISC-V Linux kernel + rootfs for testing
+  - [x] `p33.d8.t1` Create scripts/download_riscv_linux.sh
+    > Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal rootfs
+    > from a known URL. Place in .geometry_os/fs/linux/ directory.
+    - Script downloads kernel Image and rootfs
+    - Files placed in correct directory
+    - QEMU can boot the downloaded kernel
+    _Files: scripts/download_riscv_linux.sh_
+- [x] **Integration test** -- Spawn QEMU with known kernel, verify Linux version appears in output
+  - [x] `p33.d9.t1` Test: boot RISC-V Linux, verify console output (depends: p33.d2.t1, p33.d3.t1, p33.d5.t1)
+    > Integration test (marked #[ignore] for CI without QEMU).
+    > Spawn QEMU with RISC-V kernel, read stdout for 30 seconds,
+    > verify "Linux version" string appears.
+    - QEMU spawns and produces output
+    - 'Linux version' detected in output within 30 seconds
+    - QEMU process cleaned up after test
+    _Files: src/qemu.rs, tests/qemu_boot_test.rs_
+  _~60 LOC_
+
+### Technical Notes
+
+QEMU subprocess uses std::process::Command with piped stdin/stdout.
+Non-blocking reads via set_nonblocking() on the ChildStdout.
+Canvas rendering reuses existing pixel font pipeline from CANVAS_TEXT_SURFACE.md.
+
+
+### Risks
+
+- QEMU not installed on host -- need clear error message
+- ANSI parsing incomplete -- Linux boot output may use obscure sequences
+- Non-blocking pipe reads may miss data on fast output -- buffer management
+
+## [x] phase-34: RISC-V RV32I Core (COMPLETE)
+
+**Goal:** Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
+
+QEMU proved what works. Now rebuild it owned -- pure Rust, no subprocess,
+portable to WASM and embedded. RV32I is the foundation.
+
+
+### Deliverables
+
+- [x] **riscv/ module** -- src/riscv/ with mod.rs, cpu.rs, memory.rs, decode.rs
+  - [x] `p34.d1.t1` Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs
+    - Files compile
+    - mod.rs exports public structs
+    _Files: src/riscv/mod.rs, src/riscv/cpu.rs, src/riscv/memory.rs, src/riscv/decode.rs_
+  _~50 LOC_
+- [x] **Register file** -- x[0..32] (x0=zero), PC, 32-bit registers
+  - [x] `p34.d2.t1` Define RiscvCpu struct with x[32], pc, privilege fields
+    - RiscvCpu struct with x: [u32; 32], pc: u32, privilege: u8
+    - x[0] always reads as 0 (enforced on write)
+    - new() initializes pc=0x80000000, privilege=3 (M-mode)
+    _Files: src/riscv/cpu.rs_
+  _~30 LOC_
+- [x] **Guest RAM** -- Vec<u8> separate from host RAM, configurable size (default 128MB)
+  - [x] `p34.d3.t1` Implement GuestMemory with read_byte/half/word and write_byte/half/word
+    - GuestMemory with ram: Vec<u8>, ram_base: u64
+    - read_word at 0x80000000 reads first 4 bytes little-endian
+    - write_word followed by read_word returns same value
+    - Out-of-range access returns error
+    _Files: src/riscv/memory.rs_
+  _~60 LOC_
+- [x] **Instruction decode** -- Decode all RV32I opcodes from 32-bit instruction words
+  - [x] `p34.d4.t1` Implement decode() returning Operation enum for all RV32I opcodes (depends: p34.d1.t1)
+    - R-type: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+    - I-type: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
+    - Load: LB, LH, LW, LBU, LHU
+    - Store: SB, SH, SW
+    - Branch: BEQ, BNE, BLT, BGE, BLTU, BGEU
+    - Upper: LUI, AUIPC
+    - Jump: JAL, JALR
+    - System: ECALL, EBREAK, FENCE
+    _Files: src/riscv/decode.rs_
+  _~200 LOC_
+- [x] **Execute loop** -- CPU step() fetches, decodes, executes one instruction
+  - [x] `p34.d5.t1` Implement RiscvCpu::step() and execute() for all RV32I instructions (depends: p34.d2.t1, p34.d3.t1, p34.d4.t1)
+    - step() fetches word at PC, decodes, executes, advances PC by 4
+    - JAL/JALR update PC to target and store return address
+    - Branches conditionally update PC
+    - x[0] always reads as 0 after any write
+    _Files: src/riscv/cpu.rs_
+  _~200 LOC_
+- [x] **Test suite** -- One test per instruction, verification against known encodings
+  - [x] `p34.d6.t1` Write tests for all R-type ALU operations (depends: p34.d5.t1)
+    - ADD: 10 + 20 = 30
+    - SUB: 30 - 10 = 20
+    - SLL: 1 << 5 = 32
+    - SLT: 5 < 10 = 1
+    - SLTU: unsigned comparison
+    - XOR, OR, AND: bitwise ops
+    - SRL: logical right shift
+    - SRA: arithmetic right shift (sign-preserving)
+    _Files: src/riscv/cpu.rs_
+  - [x] `p34.d6.t2` Write tests for I-type, load, store, branch, jump instructions (depends: p34.d5.t1)
+    - ADDI: x1 = x2 + 100
+    - LW/SW: store word, load same address, verify equal
+    - LB/LBU: signed vs unsigned byte load
+    - BEQ: branch taken when equal, not taken when not
+    - JAL: jump and link, verify return address saved
+    - JALR: indirect jump with register base
+    _Files: src/riscv/cpu.rs_
+  - [x] `p34.d6.t3` Write fibonacci test program that runs 20 iterations in RISC-V (depends: p34.d5.t1)
+    - Fibonacci(10) = 55 computed by RISC-V code
+    - Result stored in a register, verified by test
+    _Files: src/riscv/cpu.rs_
+  _~300 LOC_
+
+## [x] phase-35: RISC-V Privilege Modes (COMPLETE)
+
+**Goal:** M/S/U privilege levels, CSR registers, trap handling. Linux needs this to manage its own processes.
+
+### Deliverables
+
+- [x] **Privilege enum + CSR bank** -- M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp
+  _~80 LOC_
+- [x] **CSR read/write** -- CSRRW, CSRRS, CSRRC and immediate variants
+  _~100 LOC_
+- [x] **ECALL/MRET/SRET** -- Trap entry saves PC, jumps to vector. MRET/SRET restore PC.
+  _~120 LOC_
+- [x] **Timer + software interrupts** -- mtime/mtimecmp, msip/ssip, interrupt pending/enable
+  _~80 LOC_
+- [x] **Privilege transition tests** -- U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
+  _~150 LOC_
+
+## [x] phase-36: RISC-V Virtual Memory & Devices (COMPLETE)
+
+**Goal:** SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot.
+
+### Deliverables
+
+- [x] **SV32 page table walk** -- 2-level lookup, PTE flags, address translation
+  _~120 LOC_
+- [x] **TLB cache** -- 64-entry TLB with ASID-aware invalidation
+  _~80 LOC_
+- [x] **Page fault traps** -- Instruction/Load/Store page faults with stval/mtval
+  _~40 LOC_
+- [x] **UART 16550** -- Serial port emulation, reuses Phase 33 bridge pattern to canvas
+  _~150 LOC_
+- [x] **CLINT + PLIC** -- Timer interrupt controller + platform interrupt controller
+  _~200 LOC_
+- [x] **Virtio block device** -- Virtio MMIO transport, disk image from VFS
+  _~200 LOC_
+- [x] **Device Tree Blob** -- Generate DTB describing memory, UART, virtio devices
+  _~150 LOC_
+- [x] **MMU + device integration test** -- Guest sets up page tables, writes to UART, verify output on canvas
+  _~150 LOC_
+
+## [x] phase-37: Guest OS Boot (Native RISC-V) (COMPLETE)
+
+**Goal:** Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes: QEMU and native.
+
+### Deliverables
+
+- [x] **ELF + binary loader** -- Parse ELF32 RISC-V kernel images, load segments into guest RAM
+  _~160 LOC_
+- [x] **DTB passthrough** -- Pass device tree blob to kernel in a1 register at boot
+  _~30 LOC_
+- [x] **Boot console** -- Guest UART output to canvas (same bridge as Phase 33)
+  _~80 LOC_
+- [x] **HYPERVISOR mode flag** -- Opcode detects 'native' vs 'qemu' from config string
+  _~30 LOC_
+- [x] **Verified boot** -- Boot synthetic RISC-V kernel, verify 'Linux version' on canvas via UART bridge
+  _~100 LOC_
+- [x] **Performance benchmark** -- Measure MIPS, compare interpreter vs QEMU, document results
+  _~40 LOC_
+
+## [x] phase-38: RISC-V M/A/C Extensions (COMPLETE)
+
+**Goal:** Extend the interpreter from RV32I to RV32IMAC so it can run real Linux kernels.
+
+Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compressed 16-bit instructions). Our interpreter currently only handles RV32I. These extensions are well-defined and mechanical to implement. M: 8 instructions. A: 11 instructions. C: ~40 compressed forms.
+
+### Deliverables
+
+- [x] **M extension (multiply/divide)** -- MUL, MULH, MULHU, MULHSU, DIV, DIVU, REM, REMU. All R-type, funct7=0b0000001.
+  - [x] `p38.d1.t1` Add M-extension opcodes to decode.rs and execute in cpu.rs
+    - MUL: rd = (rs1 * rs2)[31:0]
+    - MULH: rd = (rs1 * rs2)[63:32] signed*signed
+    - MULHU: rd = (rs1 * rs2)[63:32] unsigned*unsigned
+    - MULHSU: rd = (rs1 * rs2)[63:32] signed*unsigned
+    - DIV: rd = rs1 / rs2 signed
+    - DIVU: rd = rs1 / rs2 unsigned
+    - REM: rd = rs1 % rs2 signed
+    - REMU: rd = rs1 % rs2 unsigned
+    _Files: src/riscv/decode.rs, src/riscv/cpu.rs_
+  - [x] All 8 M-extension opcodes decode and execute correctly
+  - [x] Edge cases handled -- div by zero, overflow, signed/unsigned semantics
+  _~80 LOC_
+- [x] **A extension (atomics)** -- LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU
+  - [x] `p38.d2.t1` Add A-extension atomic instructions with reservation set tracking
+    - LR.W: load reserved, track address in reservation set
+    - SC.W: store conditional, succeed only if reservation holds
+    - AMOSWAP: atomically swap rs2 into memory, return old value
+    - AMOADD/AMOAND/AMOOR/AMOXOR: atomic RMW operations
+    - AMOMIN/AMOMAX/AMOMINU/AMOMAXU: atomic min/max
+    _Files: src/riscv/decode.rs, src/riscv/cpu.rs_
+  _~100 LOC_
+- [x] **C extension (compressed instructions)** -- Decode 16-bit compressed instruction forms into equivalent 32-bit operations
+  - [x] `p38.d3.t1` Implement C-extension decoder for all RV32C compressed instructions
+    - C.LWSP, C.SWSP, C.LW, C.SW
+    - C.ADDI, C.ADDI16SP, C.ADDI4SPN, C.LI, C.LUI
+    - C.SRLI, C.SRAI, C.ANDI, C.SUB, C.XOR, C.OR, C.AND
+    - C.BEQZ, C.BNEZ, C.J, C.JAL, C.JR, C.JALR, C.EBREAK
+    - C.NOP, C.ADD, C.MV
+    _Files: src/riscv/decode.rs, src/riscv/cpu.rs_
+  _~200 LOC_
+
+## [x] phase-39: Build Linux for RV32IMAC (COMPLETE)
+
+**Goal:** Cross-compile a minimal Linux kernel and initramfs for riscv32 that boots in our interpreter.
+
+Use Buildroot or direct kernel build to produce a vmlinux for riscv32. Tinyconfig + UART + CLINT + PLIC + virtio-blk + initramfs with busybox. Target: boot to shell in under 256MB RAM.
+
+### Deliverables
+
+- [x] **RV32 toolchain** -- riscv32 cross-compiler toolchain
+  - [x] `p39.d1.t1` Install or build riscv32 cross-compiler toolchain
+  - [x] riscv32 gcc compiles a hello world
+  - [x] Can produce statically-linked ELF binaries for rv32imac
+- [x] **Minimal kernel** -- Linux vmlinux for riscv32, defconfig + UART/CLINT/PLIC/virtio
+  - [x] `p39.d2.t1` Build minimal Linux kernel for riscv32 with UART/CLINT/PLIC/virtio
+  - [x] vmlinux ELF is valid ELF32 RISC-V binary
+  - [x] Console output via UART
+  - [x] Kernel loads in Geometry OS interpreter
+  - [x] Kernel size under 20MB
+- [x] **Initramfs** -- Busybox-based root filesystem in initramfs
+  - [x] `p39.d3.t1` Create minimal initramfs with busybox for riscv32
+  - [x] busybox statically linked for rv32imac
+  - [x] /init script mounts proc/sys, spawns shell
+  - [x] initramfs size under 4MB
+
+## [x] phase-40: Boot Linux in Geometry OS (COMPLETE)
+
+**Goal:** Boot the riscv32 Linux kernel inside our RISC-V interpreter and reach a shell prompt.
+
+Load vmlinux + initramfs into the interpreter, boot to shell. This is the "QEMU bridge" moment -- running real Linux in our own emulator. Fix any interpreter bugs discovered during boot.
+
+### Deliverables
+
+- [x] **Linux boot** -- Linux boots to shell prompt in the interpreter
+  - [x] `p40.d1.t1` Fix interpreter issues blocking Linux boot
+    - vmlinux loads and begins executing
+    - Kernel reaches console output (prints "Linux version...")
+    - No unimplemented instruction panics
+  - [x] `p40.d1.t2` QEMU bridge for canvas and CLI modes
+    - qemu boot command spawns QEMU subprocess
+    - Output renders on canvas via ANSI handler
+    - CLI mode has qemu boot/kill/status commands
+  - [x] met
+  _~200 LOC_
+- [x] **Shell access** -- Interactive shell via UART bridge to canvas
+  - [x] `p40.d2.t1` Canvas QEMU keyboard forwarding and output polling
+    - {'description': 'Shell prompt appears on canvas', 'met': True}
+    - {'description': 'Can type commands and see output', 'met': True}
+    - {'description': 'Escape exits QEMU mode', 'met': True}
+  - [x] Shell prompt appears on canvas
+  - [x] Can type commands and see output
+  - [x] Escape exits QEMU mode
+  _~100 LOC_
+
+## [x] phase-41: Tracing and Instrumentation (COMPLETE)
+
+**Goal:** Add instruction-level tracing to the interpreter so we can watch exactly what Linux does.
+
+Once Linux boots, instrument the interpreter to capture: every syscall, every page table walk, every context switch, every interrupt.
+
+### Deliverables
+
+- [x] **Instruction trace** -- Log every instruction executed with register state
+  - [x] `p41.d1.t1` Add toggleable instruction-level tracing to step()
+    - Can enable/disable trace at runtime
+    - {'Each line': 'PC, opcode, register values, result'}
+    - Trace output to file or ring buffer
+    - Overhead under 2x when tracing enabled
+  _~272 LOC_
+- [x] **Syscall trace** -- Intercept ECALL and decode/record syscall name + args + return value
+  - [x] `p41.d2.t1` Add syscall decoder mapping Linux riscv syscall numbers to names
+    - Maps all ~400 Linux riscv syscalls by number
+    - Logs syscall_name(arg0, arg1, ...) = return_value
+  _~100 LOC_
+- [x] **Page table trace** -- Trace SV32 page table walks, TLB fills, and page faults
+  - [x] `p41.d3.t1` Add page table walk tracing to MMU
+    - Logs every SATP write (new page table root)
+    - Logs page table walks with VPN to PFN mappings
+    - Logs page faults with faulting VA and reason
+  _~80 LOC_
+- [x] **Scheduler trace** -- Detect and log context switches and schedule decisions
+  - [x] `p41.d4.t1` Infer context switches from register state changes
+    - Detects task switches via SP/mhartid changes
+    - Logs switch_from to switch_to with PC and SP
+  _~60 LOC_
+
+## [x] phase-42: Geometry OS Process Manager (COMPLETE)
+
+**Goal:** Rebuild Geometry OS process management based on observed Linux scheduler behavior.
+
+Using traces from Phase 41, understand how Linux creates processes, schedules them, and manages task state. Then build Geometry OS equivalents that follow the same patterns but simpler.
+
+### Deliverables
+
+- [x] **Process abstraction** -- Process struct with PID, state, page table, registers, kernel stack
+  - [x] `p42.d1.t1` Design Process struct based on Linux task_struct observations
+    - Process has PID, state, page table root, saved registers
+    - Kernel stack per process
+    - Parent/child relationship
+  _~200 LOC_
+- [x] **Context switching** -- Save/restore registers on timer interrupt, switch address space
+  - [x] `p42.d2.t1` Implement context switch based on traced Linux switch_to pattern
+    - Timer interrupt triggers schedule
+    - callee-saved registers preserved
+    - SATP updated on address space change
+  _~150 LOC_
+- [x] **Fork/exec/exit/wait** -- Process lifecycle syscalls matching Linux semantics
+  - [x] `p42.d3.t1` Implement fork, exec, exit, wait syscalls
+    - fork returns 0 in child, child PID in parent
+    - exec replaces process image
+    - exit marks zombie, wakes parent
+    - wait blocks parent until child exits
+  _~200 LOC_
+
+## [x] phase-43: Geometry OS VFS and Disk (COMPLETE)
+
+**Goal:** Build a virtual filesystem layer based on observed Linux VFS patterns.
+
+Trace Linux VFS operations during boot and build Geometry OS equivalents.
+
+### Deliverables
+
+- [x] **Inode filesystem** -- In-memory inode-based filesystem with directory tree
+  - [x] `p43.d1.t1` Implement inode structures and directory operations
+    - {'Inode types': 'regular file, directory, device, pipe'}
+    - Path resolution and read/write with offset tracking
+    - FMKDIR, FSTAT, FUNLINK opcodes with assembler and disassembler support
+    - 30+ unit tests for inode operations
+  _~300 LOC_
+- [x] **File descriptor table** -- Per-process fd table with pipe support
+  - [x] `p43.d2.t1` Implement fd table with open/close/dup2/pipe
+    - stdin/stdout/stderr per process
+    - pipe creates connected read/write fds
+    - dup2 for shell redirects
+  _~100 LOC_
+
+## [x] phase-44: Geometry OS Memory Management (COMPLETE)
+
+**Goal:** Rebuild Geometry OS memory management based on observed Linux SV32 paging.
+
+Trace Linux page table setup during boot and build Geometry OS equivalents.
+
+### Deliverables
+
+- [x] **Page allocator** -- Physical page allocator for 4KB pages
+  - [x] `p44.d1.t1` Implement physical page allocator
+    - Allocates/frees 4KB pages
+    - Tracks used/free pages
+  _~150 LOC_
+- [x] **Virtual memory areas** -- Per-process VMA list for code, heap, stack, mmap
+  - [x] `p44.d2.t1` Implement VMA tracking and page fault handler
+    - VMA list per process
+    - Page fault allocates on demand
+    - Stack grows downward, heap via brk
+  _~150 LOC_
+- [x] **Copy-on-write fork** -- Fork shares physical pages, copies only on write
+  - [x] `p44.d3.t1` Implement COW fork based on observed Linux fork behavior
+    - fork marks pages read-only in child
+    - Write fault copies page
+    - Reference counting on physical pages
+  _~100 LOC_
+
+## [x] phase-45: RAM-Mapped Canvas Buffer (COMPLETE)
+
+**Goal:** Make the canvas grid addressable from VM RAM via STORE/LOAD
+
+The canvas buffer (128 rows x 32 cols = 4096 cells) currently lives in a separate Vec<u32> outside VM RAM. Map it into the VM address space at 0x8000-0x8FFF so that existing STORE and LOAD opcodes can read and write grid cells directly. No new opcodes needed -- just intercept the address range in the VM's memory access path.
+
+
+### Deliverables
+
+- [x] **Canvas memory region constant and address mapping** -- Define CANVAS_RAM_BASE = 0x8000, CANVAS_RAM_SIZE = 4096 (128*32). Document the mapping: address 0x8000 + row*32 + col corresponds to canvas_buffer[row * 32 + col]. Add to memory map docs.
+
+  - [x] `p45.d1.t1` Define CANVAS_RAM_BASE and CANVAS_RAM_SIZE constants
+    > Add `pub const CANVAS_RAM_BASE: usize = 0x8000;` and `pub const CANVAS_RAM_SIZE: usize = 4096;` to vm.rs (or main.rs if canvas_buffer ownership stays there). These are the address range [0x8000, 0x8FFF] that maps to the canvas grid.
+    - Constants defined and visible to both vm.rs and main.rs
+    _Files: src/vm.rs_
+  - [x] `p45.d1.t2` Update CANVAS_TEXT_SURFACE.md memory map with 0x8000 range (depends: p45.d1.t1)
+    > Add a row to the memory map table in CANVAS_TEXT_SURFACE.md: 0x8000-0x8FFF | 4096 | Canvas grid (RAM-mapped mirror of canvas_buffer)
+    - Memory map shows 0x8000-0x8FFF as canvas region
+    _Files: docs/CANVAS_TEXT_SURFACE.md_
+  - [x] CANVAS_RAM_BASE constant defined in vm.rs or main.rs
+    _Validation: grep CANVAS_RAM_BASE src/vm.rs src/main.rs_
+  - [x] Memory map documentation updated in CANVAS_TEXT_SURFACE.md
+    _Validation: grep 0x8000 docs/CANVAS_TEXT_SURFACE.md_
+  _~20 LOC_
+- [x] **Intercept LOAD for canvas address range** -- In the LOAD opcode handler (0x11 in vm.rs), when the translated physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], read from canvas_buffer instead of self.ram. The VM needs a reference or copy of the canvas buffer. Easiest approach: the canvas_buffer is passed to the VM (or VM holds a reference) so LOAD can index into it.
+
+  - [x] `p45.d2.t1` Add canvas_buffer reference to VM struct (depends: p45.d1.t1)
+    > The VM struct needs access to the canvas buffer for both LOAD and STORE interception. Add a field like `pub canvas_buffer: Vec<u32>` to the VM struct (a copy that gets synced back to main.rs canvas_buffer each frame) OR pass it as a mutable reference through the execute method. The copy approach is simpler and avoids lifetime issues.
+    - VM struct has access to canvas buffer data
+    - cargo build succeeds
+    _Files: src/vm.rs, src/main.rs_
+  - [x] `p45.d2.t2` Intercept LOAD opcode for canvas range (depends: p45.d2.t1)
+    > In the LOAD handler (opcode 0x11), after page translation produces a physical address, check if it falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + CANVAS_RAM_SIZE). If so, read from the canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr]. The canvas buffer index maps directly: canvas_buffer[addr - 0x8000].
+    - LOAD from canvas addr returns the glyph value stored there
+    - LOAD from normal RAM addr is unchanged
+    _Files: src/vm.rs_
+  - [x] `p45.d2.t3` Sync canvas_buffer to VM before execution (depends: p45.d2.t1)
+    > Before each frame's VM execution, copy the current canvas_buffer contents into the VM's canvas mirror (or set up the reference). This ensures the VM sees the latest grid state including human-typed text.
+    - VM canvas mirror matches main.rs canvas_buffer at start of each frame
+    _Files: src/main.rs_
+  - [x] LOAD from 0x8000+row*32+col returns canvas_buffer value
+    _Validation: Write test program: STORE to canvas addr, LOAD back, verify_
+  - [x] LOAD from addresses outside 0x8000-0x8FFF still works normally
+    _Validation: Existing tests pass without modification_
+  _~80 LOC_
+- [x] **Intercept STORE for canvas address range** -- In the STORE opcode handler (0x12 in vm.rs), when the translated physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], write to canvas_buffer instead of self.ram. After the store, mark the canvas as dirty so the renderer picks up the change on the next frame.
+
+  - [x] `p45.d3.t1` Intercept STORE opcode for canvas range (depends: p45.d2.t1)
+    > In the STORE handler (opcode 0x12), after page translation, check if the address is in the canvas range. If so, write to the canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr]. Bypass the user-mode protection for this range (canvas is not I/O).
+    - STORE to canvas addr writes to canvas buffer
+    - User-mode programs can write to canvas (no segfault)
+    _Files: src/vm.rs_
+  - [x] `p45.d3.t2` Sync VM canvas mutations back to main canvas_buffer (depends: p45.d3.t1)
+    > After each frame's VM execution, copy any changed canvas cells from the VM's mirror back to main.rs's canvas_buffer. This ensures the renderer displays the VM's writes. A simple full-copy each frame is fine (4096 u32 values = 16KB).
+    - Changes made by VM via STORE appear on the visible canvas grid
+    _Files: src/main.rs_
+  - [x] `p45.d3.t3` Handle User-mode access to canvas region (depends: p45.d3.t1)
+    > The STORE handler currently blocks User-mode writes to addr >= 0xFF00. The canvas range (0x8000) is below this threshold, so User-mode should work by default. But verify and add a comment clarifying that canvas writes are permitted in User mode. If any page translation or protection logic would block it, add an explicit exception.
+    - User-mode programs can STORE to canvas range without segfault
+    _Files: src/vm.rs_
+  - [x] STORE to 0x8000+row*32+col writes value to canvas_buffer
+    _Validation: Write test: STORE 0x8000 with 'H', see 'H' appear on grid_
+  - [x] Stored values appear as glyphs on the canvas grid
+    _Validation: Visual test: program writes ASCII chars, grid shows them_
+  - [x] STORE to addresses outside canvas range still works
+    _Validation: Existing tests pass_
+  _~60 LOC_
+- [x] **Test suite for RAM-mapped canvas** -- Write tests that verify STORE/LOAD to canvas addresses work correctly. Test read-after-write, boundary conditions, interaction with normal RAM, and multi-process canvas access.
+
+  - [x] `p45.d4.t1` Test: LOAD reads canvas buffer values (depends: p45.d2.t2, p45.d3.t1)
+    > Write a test that pre-fills canvas_buffer cells with known values, runs a program that LOADs from 0x8000+offset, and checks the register contains the expected value.
+    - Test asserts register value matches canvas cell content
+    _Files: src/vm.rs_
+  - [x] `p45.d4.t2` Test: STORE writes appear in canvas buffer (depends: p45.d3.t1)
+    > Write a test that runs a program storing values to canvas addresses, then checks the canvas buffer contains those values.
+    - Test asserts canvas_buffer has stored values after execution
+    _Files: src/vm.rs_
+  - [x] `p45.d4.t3` Test: boundary conditions (first/last cell, row boundaries) (depends: p45.d3.t1)
+    > Test STORE/LOAD at 0x8000 (first cell), 0x8FFF (last cell), and at row boundaries (e.g. end of row 0, start of row 1). Verify no off-by-one errors.
+    - All boundary addresses read/write correctly
+    _Files: src/vm.rs_
+  - [x] `p45.d4.t4` Test: canvas access does not corrupt normal RAM (depends: p45.d3.t1)
+    > Write a test that stores to both normal RAM and canvas addresses, then verifies the normal RAM values are unchanged and the canvas values are correct. Ensures the two memory spaces don't overlap.
+    - RAM values unchanged after canvas writes
+    - Canvas values unchanged after RAM writes
+    _Files: src/vm.rs_
+  - [x] `p45.d4.t5` Test: page translation works with canvas addresses (depends: p45.d2.t2, p45.d3.t1)
+    > Verify that LOAD/STORE to canvas addresses still go through the page translation mechanism. A process with a page table that maps 0x8000 to a different physical address should see the translated result. Or if canvas is identity-mapped, verify that works.
+    - Canvas LOAD/STORE respects page translation
+    _Files: src/vm.rs_
+  - [x] At least 5 tests covering canvas LOAD/STORE behavior
+    _Validation: cargo test passes with new tests_
+  - [x] All existing tests still pass
+    _Validation: cargo test --no-fail-fast 2>&1 | tail -5_
+  _~150 LOC_
+- [x] **Demo program: canvas grid writer** -- Write an assembly program that writes ASCII characters to the canvas grid using STORE. The program fills the grid with a visible pattern -- for example, writing "HELLO WORLD" across the top row, or filling the grid with sequential ASCII values. The human sees the text appear on the grid while the program runs.
+
+  - [x] `p45.d5.t1` Write canvas_grid_writer.asm demo (depends: p45.d3.t1)
+    > Create programs/canvas_grid_writer.asm. The program uses LDI to load ASCII values and STORE to write them to 0x8000+ addresses. Writes "PIXELS DRIVE PIXELS" across the first visible row. Uses a loop with an index register incrementing through the string.
+    - Program assembles without errors
+    - Running the program shows text on the canvas grid
+    _Files: programs/canvas_grid_writer.asm_
+  - [x] `p45.d5.t2` Write canvas_counter.asm demo (depends: p45.d3.t1)
+    > Create programs/canvas_counter.asm. A loop that increments a counter and writes the digit (as ASCII) to a specific canvas cell each iteration. The human sees a digit ticking up on the grid in real time.
+    - Counter digit visibly changes on the grid each frame
+    _Files: programs/canvas_counter.asm_
+  - [x] Program writes visible text to canvas grid via STORE
+    _Validation: Load program, F8 assemble, F5 run, see text on grid_
+  - [x] Demo program added to programs/ directory
+    _Validation: ls programs/canvas_*.asm_
+  _~60 LOC_
+
+### Technical Notes
+
+The VM's RAM is 0x10000 (65536 cells). The canvas buffer is 4096 cells. Mapping at 0x8000 leaves plenty of headroom (0x9000-0xFFFF still available). The screen buffer (256x256 = 65536 pixels) is too large for a contiguous RAM mapping -- that's addressed in phase 46.
+Canvas buffer sync strategy: copy main's canvas_buffer into VM before execution, copy VM's canvas writes back after execution. 4096 * 4 bytes = 16KB per frame, negligible cost.
+The page translation layer (translate_va_or_fault) must be considered. For kernel-mode processes (the default for canvas-assembled programs), virtual address == physical address. For user-mode child processes, the page table may remap things. The canvas range should work through the normal translation path.
+
+
+### Risks
+
+- Page translation might block canvas access for user-mode processes
+- Canvas buffer ownership between main.rs and vm.rs needs careful handling
+- STORE handler's user-mode protection (addr >= 0xFF00 check) must not block canvas writes
+
+## [x] phase-46: RAM-Mapped Screen Buffer (COMPLETE)
+
+**Goal:** Make the 256x256 screen buffer addressable from VM RAM
+
+The screen buffer (256x256 = 65536 pixels) is currently only accessible via PIXEL (write) and PEEK (read) opcodes. Map it into the VM address space at 0x9000-0x13FFF (a 64K region) so that normal LOAD/STORE can read and write screen pixels. This unifies all three memory spaces (RAM, canvas, screen) under one addressing scheme.
+
+
+### Deliverables
+
+- [x] **Screen memory region mapping** -- Define SCREEN_RAM_BASE = 0x9000. The screen is 256x256 = 65536 cells, so it spans 0x9000-0x18FFF. However, VM RAM is only 0x10000 total. Options: (a) expand RAM_SIZE to 0x20000, (b) use a sparse/aliased mapping where only low-res access works, (c) map screen at a higher address with extended RAM. Simplest: expand RAM to 0x20000 (128K) and map screen at 0x10000.
+
+  - [x] `p46.d1.t1` Determine screen mapping strategy and expand RAM if needed (depends: p45.d3.t1)
+    > Evaluate options for mapping the 64K screen buffer. The simplest approach: expand RAM_SIZE from 0x10000 to 0x20000 (128K) and map the screen buffer at 0x10000. This keeps everything in one flat address space. Alternative: use a windowed mapping at 0x9000 where only a 4K window is visible at a time (controlled by a register). Recommend the flat mapping for simplicity.
+    - Decision documented with address range and RAM size
+    _Files: src/vm.rs_
+  - [x] `p46.d1.t2` Implement screen buffer LOAD interception (depends: p46.d1.t1)
+    > In the LOAD handler, check if the translated address falls in the screen buffer range. If so, read from self.screen[addr - SCREEN_RAM_BASE] instead of self.ram[addr]. The screen buffer already exists on the VM struct as `pub screen: Vec<u32>`.
+    - LOAD from screen addr returns pixel color value
+    _Files: src/vm.rs_
+  - [x] `p46.d1.t3` Implement screen buffer STORE interception (depends: p46.d1.t1)
+    > In the STORE handler, check if the translated address falls in the screen buffer range. If so, write to self.screen[addr - SCREEN_RAM_BASE]. The renderer will pick up the change on the next frame automatically since it reads from self.screen.
+    - STORE to screen addr changes the visible pixel
+    _Files: src/vm.rs_
+  - [x] Screen buffer is LOAD/STORE accessible at a defined address range
+    _Validation: LOAD from screen addr returns same value as PEEK_
+  - [x] Existing PIXEL and PEEK opcodes still work
+    _Validation: cargo test passes_
+  _~100 LOC_
+- [x] **Tests for screen buffer mapping** -- Verify that LOAD/STORE to screen addresses correctly read and write pixels. Cross-validate against PEEK and PIXEL opcodes.
+
+  - [x] `p46.d2.t1` Test: LOAD from screen matches PEEK (depends: p46.d1.t2)
+    > Write a test that draws a pixel with PIXEL opcode, then reads it with both PEEK and LOAD (via screen-mapped address). Verify both return the same color value.
+    - PEEK and LOAD return identical values
+    _Files: src/vm.rs_
+  - [x] `p46.d2.t2` Test: STORE to screen matches PIXEL (depends: p46.d1.t3)
+    > Write a test that writes a pixel via both PIXEL opcode and STORE to screen-mapped address. Read back with PEEK and verify both wrote the same value.
+    - Both methods produce identical pixel values on screen
+    _Files: src/vm.rs_
+  - [x] LOAD from screen address matches PEEK result
+    _Validation: Test program: PEEK and LOAD same pixel, compare registers_
+  - [x] STORE to screen address matches PIXEL result
+    _Validation: Test program: STORE and PIXEL write same location, compare_
+  _~80 LOC_
+- [x] **Unified memory map documentation** -- Update all memory map documentation to show the complete unified address space: RAM (0x0000-0x7FFF), canvas (0x8000-0x8FFF), screen (0x10000+). Add a new doc section showing the full map.
+
+  - [x] `p46.d3.t1` Write UNIFIED_MEMORY_MAP section in docs (depends: p46.d1.t3)
+    > Add a section to CANVAS_TEXT_SURFACE.md (or create UNIFIED_MEMORY_MAP.md) showing the complete address space: 0x0000-0x0FFF: bytecode/data, 0x1000-0x1FFF: canvas bytecode, 0x8000-0x8FFF: canvas grid (mirror), 0x10000-0x1FFFF: screen buffer. Explain the design: one address space, three backing stores, LOAD/STORE as the universal access method.
+    - Document shows all regions with address ranges and purposes
+    _Files: docs/CANVAS_TEXT_SURFACE.md_
+  - [x] All three regions documented in one place
+    _Validation: grep 'canvas\|screen\|RAM' docs/CANVAS_TEXT_SURFACE.md shows unified map_
+  _~40 LOC_
+
+### Technical Notes
+
+The screen buffer (self.screen) is already a field on the VM struct, unlike canvas_buffer which lives in main.rs. This makes interception simpler -- no sync step needed.
+RAM_SIZE expansion from 0x10000 to 0x20000 adds 256KB of memory (64K u32 cells). At current RAM usage this is fine. The screen mapping at 0x10000 means screen pixels are at screen[y * 256 + x], accessed as RAM[0x10000 + y * 256 + x].
+Alternative: don't expand RAM, instead use a separate mapping that redirects LOAD/STORE at 0x9000-0xFFFF to the screen buffer. But this creates an address collision with I/O ports (0xFFB-0xFFF). Expanding RAM is cleaner.
+
+
+### Risks
+
+- RAM_SIZE expansion may affect fuzzer or existing test assumptions about address space
+- Screen buffer is 256x256=64K which exactly fills the expansion -- no room for growth
+- Page translation for screen addresses may need special handling
+
+## [x] phase-47: Self-Assembly Opcode (ASMSELF) (COMPLETE)
+
+**Goal:** Add an opcode that lets a running program assemble canvas text into bytecode
+
+Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas text, runs it through the preprocessor and assembler, and stores the resulting bytecode at 0x1000. This lets a program write new assembly onto the canvas grid (using STORE to the canvas range from phase 45) and then compile it without human intervention. Combined, a program can generate its own replacement.
+
+
+### Deliverables
+
+- [x] **ASMSELF opcode implementation** -- New opcode (suggest 0x52 or next available). When executed: 1. Read the canvas buffer as a text string (same logic as F8 handler) 2. Run through preprocessor::preprocess() 3. Run through assembler::assemble() 4. If success: write bytecode to 0x1000, set a flag 5. If failure: set an error register/port with the error info The VM needs access to the preprocessor and assembler modules.
+
+  - [x] `p47.d1.t1` Add ASMSELF opcode constant and handler skeleton (depends: p45.d3.t1)
+    > Reserve the next available opcode number for ASMSELF. Add a stub handler in the VM's execute loop that reads the canvas buffer, converts to text string, and logs "ASMSELF called" for now.
+    - Opcode constant defined in vm.rs
+    - Handler appears in execute match arm
+    _Files: src/vm.rs_
+  - [x] `p47.d1.t2` Implement canvas-to-text conversion in VM context (depends: p47.d1.t1)
+    > Extract the canvas-to-text conversion logic from the F8 handler in main.rs into a reusable function. This function takes a &[u32] (canvas buffer slice) and returns a String. The F8 handler and the ASMSELF opcode both call this function. Place it in a shared module (e.g., preprocessor.rs or a new canvas.rs).
+    - Function exists and is callable from both vm.rs and main.rs
+    - F8 handler refactored to use the shared function
+    _Files: src/vm.rs, src/main.rs_
+  - [x] `p47.d1.t3` Wire preprocessor and assembler into ASMSELF handler (depends: p47.d1.t2)
+    > In the ASMSELF handler, after getting the text string from the canvas: call preprocessor::preprocess(), then assembler::assemble(). On success, write bytecode bytes to self.ram starting at CANVAS_BYTECODE_ADDR (0x1000). On failure, write the error string to a memory-mapped error port or a designated RAM region. The VM will need to import/use the preprocessor and assembler modules.
+    - ASMSELF produces valid bytecode at 0x1000
+    - Invalid assembly writes error info without crashing
+    _Files: src/vm.rs_
+  - [x] `p47.d1.t4` Add ASMSELF to disassembler (depends: p47.d1.t1)
+    > Add the ASMSELF opcode to the disassemble() method in vm.rs so it appears correctly in trace output and disassembly views.
+    - Disassembler shows ASMSELF with correct operand count
+    _Files: src/vm.rs_
+  - [x] `p47.d1.t5` Add ASMSELF to assembler mnemonic list (depends: p47.d1.t1)
+    > Add "ASMSELF" to the OPCODES list in preprocessor.rs and the assembler in assembler.rs. It takes no operands (just the opcode byte). Update the opcode count in docs and meta.
+    - Can type ASMSELF in assembly source and it assembles
+    - Opcode count incremented in documentation
+    _Files: src/assembler.rs, src/preprocessor.rs_
+  - [x] ASMSELF assembles canvas text into bytecode at 0x1000
+    _Validation: Program writes text to canvas, calls ASMSELF, then LOADs from 0x1000 to verify bytecode_
+  - [x] Assembly errors are reported without crashing the VM
+    _Validation: Write invalid text to canvas, call ASMSELF, VM continues running_
+  _~200 LOC_
+- [x] **Assembly status port** -- Define a memory-mapped port (e.g., 0xFFE or 0xFFA) where the ASMSELF opcode writes its result: success (bytecode length) or failure (0xFFFFFFFF). Programs poll this port after calling ASMSELF to check if assembly succeeded.
+
+  - [x] `p47.d2.t1` Define ASM_STATUS port and write logic (depends: p47.d1.t3)
+    > Use existing RAM[0xFFD] (ASM result port) which already exists for this purpose (bytecode word count, or 0xFFFFFFFF on error). Ensure ASMSELF writes to this port identically to how F8 assembly does.
+    - RAM[0xFFD] contains result after ASMSELF
+    _Files: src/vm.rs_
+  - [x] Port shows bytecode length on success
+    _Validation: LOAD from status port after ASMSELF returns positive number_
+  - [x] Port shows 0xFFFFFFFF on failure
+    _Validation: LOAD from status port after bad ASMSELF returns 0xFFFFFFFF_
+  _~20 LOC_
+- [x] **Test suite for ASMSELF** -- Test that ASMSELF correctly assembles canvas text, handles errors, and the resulting bytecode is executable.
+
+  - [x] `p47.d3.t1` Test: ASMSELF assembles valid canvas text (depends: p47.d1.t3)
+    > Pre-fill canvas buffer with "LDI r0, 42\nHALT\n". Execute ASMSELF. Verify RAM[0xFFD] contains a positive byte count. Verify RAM at 0x1000 contains expected bytecode for LDI r0, 42.
+    - Bytecode at 0x1000 matches hand-assembled LDI r0, 42; HALT
+    _Files: src/vm.rs_
+  - [x] `p47.d3.t2` Test: ASMSELF handles invalid assembly gracefully (depends: p47.d1.t3)
+    > Pre-fill canvas with garbage text. Execute ASMSELF. Verify RAM[0xFFD] contains 0xFFFFFFFF. Verify VM did not crash and continues executing.
+    - Error port set, VM still running
+    _Files: src/vm.rs_
+  - [x] `p47.d3.t3` Test: program writes code to canvas then assembles it (depends: p47.d1.t3)
+    > Full integration test: a program uses STORE to write "LDI r0, 99\nHALT\n" to the canvas address range, calls ASMSELF, then jumps to 0x1000 (or uses RUNNEXT from phase 48). Verify r0 ends up as 99.
+    - Self-written program executes correctly after ASMSELF
+    _Files: src/vm.rs_
+  - [x] ASMSELF assembles and the result runs correctly
+    _Validation: Test program: write simple ASM to canvas, ASMSELF, jump to 0x1000, verify behavior_
+  _~120 LOC_
+
+### Technical Notes
+
+The assembler and preprocessor are currently called from main.rs. The VM (vm.rs) will need to import them. Since vm.rs is a separate module, this means adding `use crate::assembler;` and `use crate::preprocessor;` to vm.rs.
+The canvas-to-text conversion currently lives in the F8 handler in main.rs. It reads 4096 cells, converts each u32 to a char, collapses newlines. This logic needs to be extracted into a shared function. The function should be in a neutral module (preprocessor.rs is a good candidate since it already handles text processing).
+ASMSELF takes no operands (1-byte instruction). The assembled bytecode always goes to 0x1000 (CANVAS_BYTECODE_ADDR), same as F8. This means calling ASMSELF overwrites whatever bytecode is currently running. The program should use RUNNEXT (phase 48) to jump to the new bytecode.
+
+
+### Risks
+
+- ASMSELF during execution replaces the running bytecode -- program must jump to new code carefully
+- Preprocessor/assembler errors in a running VM context need careful error handling
+- Self-assembly is inherently dangerous (infinite loops, corrupting own code)
+
+## [x] phase-48: Self-Execution Opcode (RUNNEXT) (COMPLETE)
+
+**Goal:** Add an opcode that starts executing the newly assembled bytecode
+
+Add the RUNNEXT opcode that sets PC to 0x1000 (the canvas bytecode region) and continues execution. Combined with ASMSELF, a program can write new code onto the canvas, compile it, and run it -- all from within the VM. This closes the loop: pixels write pixels, pixels assemble pixels, pixels execute pixels.
+
+
+### Deliverables
+
+- [x] **RUNNEXT opcode implementation** -- New opcode (next available after ASMSELF). When executed: 1. Set PC = CANVAS_BYTECODE_ADDR (0x1000) 2. Reset halted flag 3. Clear any error state 4. Execution continues from the new bytecode on the next fetch cycle
+This is essentially JMP 0x1000 but with awareness that the bytecode at 0x1000 was just assembled from canvas text. Could be implemented as a simple PC set, or as JMP with an implicit operand.
+
+  - [x] `p48.d1.t1` Implement RUNNEXT opcode handler (depends: p47.d1.t1)
+    > Add RUNNEXT opcode in vm.rs execute match. Handler sets self.pc = CANVAS_BYTECODE_ADDR (0x1000). No operands needed (1-byte instruction). Register file is preserved. The VM continues fetching from the new PC on the next cycle.
+    - PC set to 0x1000 after RUNNEXT
+    - Execution continues from new bytecode
+    _Files: src/vm.rs_
+  - [x] `p48.d1.t2` Add RUNNEXT to disassembler and assembler (depends: p48.d1.t1)
+    > Add RUNNEXT to the mnemonic list in assembler.rs, the OPCODES list in preprocessor.rs, and the disassemble() method in vm.rs. No operands.
+    - RUNNEXT appears in trace output correctly
+    - Can type RUNNEXT in assembly source
+    _Files: src/vm.rs, src/assembler.rs, src/preprocessor.rs_
+  - [x] RUNNEXT starts executing bytecode at 0x1000
+    _Validation: Program writes code, ASMSELF, RUNNEXT, verify new code runs_
+  - [x] Register state preserved across RUNNEXT
+    _Validation: r0-r26 retain their values after RUNNEXT_
+  _~40 LOC_
+- [x] **Test suite for RUNNEXT** -- Test the full write-compile-execute cycle. A program writes new code, assembles it, runs it, and the new code's effects are visible.
+
+  - [x] `p48.d2.t1` Test: RUNNEXT executes newly assembled code (depends: p47.d1.t3, p48.d1.t1)
+    > Write a test program that: (1) stores "LDI r0, 77\nHALT" to canvas addresses, (2) calls ASMSELF, (3) checks RAM[0xFFD] for success, (4) calls RUNNEXT, (5) verify r0 == 77 after execution.
+    - r0 == 77 after RUNNEXT
+    _Files: src/vm.rs_
+  - [x] `p48.d2.t2` Test: registers preserved across RUNNEXT (depends: p48.d1.t1)
+    > Set r5 = 12345. Write code to canvas that reads r5 and adds 1. ASMSELF, RUNNEXT. Verify r5 is still 12345 in the new program's context, and that the new program can read it.
+    - Register values survive the transition
+    _Files: src/vm.rs_
+  - [x] `p48.d2.t3` Test: chained self-modification (depends: p48.d1.t1)
+    > Program A writes Program B to canvas. ASMSELF. RUNNEXT. Program B writes Program C to canvas. ASMSELF. RUNNEXT. Program C HALTs. Verify all three ran in sequence. This is the generational self-modification test.
+    - Three generations of code execute in sequence
+    _Files: src/vm.rs_
+  - [x] Full write-compile-execute cycle works end-to-end
+    _Validation: Test program writes LDI r0, 77 to canvas, ASMSELF, RUNNEXT, verify r0=77_
+  _~100 LOC_
+
+### Technical Notes
+
+RUNNEXT is intentionally simple: it just sets PC = 0x1000. The complexity is in ASMSELF (phase 47). RUNNEXT could alternatively be implemented as a JMP to a label at 0x1000, but having a dedicated opcode makes the intent clear and enables future extensions (e.g., RUNNEXT with a timeout, RUNNEXT in a sandboxed context).
+Register preservation: RUNNEXT does NOT reset registers. The new program inherits all register state. This is by design -- it allows data passing between program generations. If a clean slate is needed, the new program can zero registers itself.
+Stack preservation: the return stack is NOT reset. This means the new program can RET back to the caller if the caller used CALL before RUNNEXT. This is a feature, not a bug -- it enables coroutines.
+
+
+### Risks
+
+- Infinite self-modification loops (program rewrites itself forever)
+- Assembler errors in a running context could leave the VM in a bad state
+
+## [x] phase-49: Self-Modifying Programs: Demos and Patterns (COMPLETE)
+
+**Goal:** Build demonstration programs that showcase the pixel-driving-pixels capability
+
+With phases 45-48 complete, write programs that demonstrate the full self-modifying capability: programs that write their own code, programs whose state IS the display, programs that evolve over time. These demos prove that the pixel-driving-pixels problem is solved.
+
+
+### Deliverables
+
+- [x] **Demo: Self-writing program** -- A program that writes another program onto the canvas grid using STORE to canvas addresses, calls ASMSELF to compile it, and RUNNEXT to execute it. The generated program is different from the original -- it's a true successor. The human watches text appear on the grid, then sees the new program run.
+
+  - [x] `p49.d1.t1` Write programs/self_writer.asm (depends: p48.d1.t1)
+    > A program that uses STORE to canvas addresses (0x8000+) to write "LDI r0, 42\nLDI r1, 1\nADD r0, r1\nHALT\n" onto the grid. The text becomes visible as typed glyphs. Then calls ASMSELF and RUNNEXT. The successor runs and r0 = 43.
+    - Text appears on grid before assembly
+    - Successor program executes correctly
+    _Files: programs/self_writer.asm_
+  - [x] `p49.d1.t2` Write programs/evolving_counter.asm (depends: p45.d3.t1)
+    > A program that counts frames (via TICKS port 0xFFE) and writes the count as ASCII digits directly onto the canvas grid. The grid becomes a live dashboard. The count digits are the program's visible state -- no separate output. The digit changes each frame. This demonstrates that the grid IS the display.
+    - Digits visibly increment on the canvas grid
+    _Files: programs/evolving_counter.asm_
+  - [x] `p49.d1.t3` Write programs/game_of_life.asm (depends: p46.d1.t3)
+    > Conway's Game of Life implemented entirely in Geometry OS assembly. Uses PEEK to read the screen, POKE (or STORE to screen-mapped RAM) to write the next generation. The screen IS the cellular automaton. No Rust code involved in the logic -- pure pixel-driven-pixels. Initialize with a glider or blinker pattern.
+    - Cells evolve according to Conway's rules
+    - Gliders move, blinkers blink
+    _Files: programs/game_of_life.asm_
+  - [x] `p49.d1.t4` Write programs/code_evolution.asm (depends: p48.d1.t1)
+    > The crown jewel demo. A program that writes increasingly complex versions of itself to the canvas grid. Generation 0 just halts. Generation 1 writes generation 2 which adds a counter. Generation 2 writes generation 3 which adds a screen effect. Each generation writes its successor, compiles, and runs it. The human watches the code evolve on the grid in real time.
+    - At least 3 generations of code evolution
+    - Each generation visibly different from the last
+    _Files: programs/code_evolution.asm_
+  - [x] Program generates a visually different successor and runs it
+    _Validation: Load demo, F5, watch grid change, see new program execute_
+  _~300 LOC_
+- [x] **Documentation: pixel-driving-pixels patterns** -- Write a guide for building self-modifying programs. Document the patterns: canvas STORE for writing code, ASMSELF for compiling, RUNNEXT for executing, register passing between generations, and common pitfalls (infinite loops, corrupting your own code).
+
+  - [x] `p49.d2.t1` Write docs/SELF_MODIFYING_GUIDE.md (depends: p48.d1.t1)
+    > Create a guide covering: (1) Canvas STORE pattern -- how to write text to canvas cells, (2) ASMSELF + RUNNEXT pattern -- compile and execute, (3) Register passing -- sharing state between generations, (4) Self-reading -- using LOAD from canvas to inspect your own source, (5) Pitfalls -- infinite loops, corruption, error handling. Include code snippets for each pattern.
+    - Guide covers all 5 topics with working code examples
+    _Files: docs/SELF_MODIFYING_GUIDE.md_
+  - [x] Guide document exists with at least 3 documented patterns
+    _Validation: ls docs/SELF_MODIFYING_GUIDE.md_
+  _~100 LOC_
+
+### Technical Notes
+
+Demo programs should be small enough to fit on the canvas grid (32 columns, 128 rows). Complex programs may need to use the .org directive for layout. The code_evolution demo is the most ambitious -- it may need careful tuning to keep each generation's code within grid size limits.
+The game_of_life.asm demo is the purest expression of pixels-driving-pixels. It needs the screen buffer mapping from phase 46 to work optimally, but could also work with just PEEK and PIXEL opcodes.
+
+
+### Risks
+
+- Demo programs may be too complex to write in raw assembly within grid size limits
+- Code evolution demo may be too ambitious for initial implementation
+
+## [x] phase-50: Reactive Canvas: Live Cell Formulas (COMPLETE)
+
+**Goal:** Make canvas cells react to changes in other cells automatically
+
+Extend the canvas with an optional formula layer. A cell can have a formula instead of a static value. When a referenced cell changes, the formula cell recalculates. This is the spreadsheet model applied to the pixel grid. It makes the canvas reactive without explicit STORE/LOAD loops.
+This is a future phase -- it depends on phases 45-48 being stable and is a natural evolution of the pixel-driving-pixels concept. Not required for the initial self-modifying capability.
+
+
+### Deliverables
+
+- [x] **Formula cell type and evaluation engine** -- Add a parallel buffer (formula_buffer, same size as canvas_buffer) where each cell can optionally hold a formula instead of a value. Formulas reference other cells by address. When a STORE writes to a cell, the engine checks if any formula depends on that cell and recalculates.
+
+- [x] **Formula syntax in preprocessor** -- Extend the preprocessor to recognize formula syntax in canvas text. A line like `= r0 + r1` means "this cell displays the value of r0 + r1". The preprocessor generates the reactive update hooks.
+
+- [x] **Demo: live register dashboard** -- A program where the canvas grid shows live register values. As the program runs, the grid cells update to show r0, r1, r2 etc. as changing digits. The display IS the debug view. No separate inspector.
+
+
+### Technical Notes
+
+This phase explores the spreadsheet model. Each cell can be: - A literal value (current behavior) - A formula that references other cells or registers - A formula that references screen pixels (PEEK-equivalent)
+The dependency graph needs cycle detection to prevent infinite recalculation. Simple approach: single-pass topological sort of formula dependencies, recalculate in order after any STORE to the canvas.
+This is marked "future" because it's a significant new feature. The core pixel-driving-pixels capability (phases 45-48) does not require this.
+
+
+## [x] phase-51: TCP Networking (COMPLETE)
+
+**Goal:** Add TCP client networking opcodes for connecting, sending, receiving, and disconnecting
+
+Four new opcodes (0x7F-0x82) provide TCP client capability. Programs can connect to remote hosts, send and receive data, and close connections. This enables network-aware programs that can communicate with external services.
+
+### Deliverables
+
+- [x] **CONNECT opcode (0x7F)** -- Connect to a remote TCP host. Takes addr_reg, port_reg, fd_reg. Stores file descriptor in fd_reg.
+- [x] **SOCKSEND opcode (0x80)** -- Send data on a TCP connection. Takes fd_reg, buf_reg, len_reg, sent_reg. Returns bytes sent.
+- [x] **SOCKRECV opcode (0x81)** -- Receive data from a TCP connection. Takes fd_reg, buf_reg, max_len_reg, recv_reg. Returns bytes received.
+- [x] **DISCONNECT opcode (0x82)** -- Close a TCP connection. Takes fd_reg. Frees the socket.
+- [x] **Networking tests** -- 12 unit tests covering connect, send, recv, disconnect, and edge cases.
+- [x] **Assembler support** -- All four opcodes recognized by the assembler with proper argument validation.
+
+### Technical Notes
+
+Implementation in src/vm/net.rs (563 LOC). Opcodes 0x7F-0x82. Uses Rust std::net::TcpStream. Non-blocking by default. 12 tests in net.rs.
+
+## [x] phase-52: Episodic Memory (COMPLETE)
+
+**Goal:** Persist diagnostic context across Hermes sessions so the LLM agent can recall past runs
+
+Episodic memory layer for Geometry OS. Stores program run outcomes in JSONL format so the Hermes agent can recall past runs, black-screen incidents, and what fixed them. Part of the AI-Native OS memory taxonomy: Working (context window), Episodic (this), Semantic (RAG), Procedural (skills).
+
+### Deliverables
+
+- [x] **Episode data structure and JSONL persistence** -- Episode struct with timestamp, program, total_ops, top_opcodes, screen state, and outcome. Stored as JSONL in episodic_memory/ directory.
+- [x] **Episode logging and read-back** -- Log episodes after program runs. Parse top_ops array on read-back. Query by program name or recent episodes.
+- [x] **Episodic memory tests** -- 12 unit tests covering episode creation, serialization, read-back, and querying.
+
+### Technical Notes
+
+Implementation in src/episode_log.rs (689 LOC). Zero external dependencies -- hand-rolled JSON. Includes opcode histogram and screen delta detection.
+
+## [x] phase-53: Trace Query Opcodes (COMPLETE)
+
+**Goal:** Enable assembly programs to query the execution trace buffer from within the VM
+
+TRACE_READ opcode (0x83) provides 4 modes for introspecting execution history: query count, read entry by index, count opcodes of a specific type, and find all indices matching a specific opcode. This is the foundation for pixel-level time-travel debugging -- programs can analyze their own execution traces to build debuggers, profilers, and visual histories from within the VM.
+
+### Deliverables
+
+- [x] **TRACE_READ opcode (0x83)** -- Query execution trace buffer from assembly. Mode 0: entry count. Mode 1: read entry to RAM (20 words). Mode 2: count opcode matches. Mode 3: find matching indices.
+- [x] **TraceBuffer query methods** -- Added get_at(), count_opcode(), and find_opcode_indices() to TraceBuffer in src/vm/trace.rs.
+- [x] **TRACE_READ tests** -- 10 unit tests covering all 4 modes, error cases, assembler, and disassembler.
+- [x] **Assembler and disassembler support** -- TRACE_READ recognized by assembler and disassembler. Added to preprocessor OPCODES list. Also fixed missing CONNECT/SOCKSEND/SOCKRECV/DISCONNECT from preprocessor.
+
+### Technical Notes
+
+Implementation in src/vm/mod.rs (opcode 0x83) + src/vm/trace.rs (3 new query methods). TraceBuffer already existed with 10K-entry ring buffer from Phase 38a. Entry format: [step_lo, step_hi, pc, r0..r15, opcode] = 20 u32 words.
+
+## [x] phase-54: Pixel Write History (COMPLETE)
+
+**Goal:** Enable programs to query which instructions wrote to specific pixels
+
+PIXEL_HISTORY opcode (0x84) provides 4 modes for introspecting pixel write history: query total entries, count writes to a specific pixel, retrieve recent writes to a pixel into RAM, and get entry by absolute index. This is the foundation for pixel-level time-travel debugging -- programs can analyze their own rendering history to build debuggers and visual tracebacks from within the VM.
+
+### Deliverables
+
+- [x] **PixelWriteLog ring buffer** -- 50K-entry ring buffer in src/vm/trace.rs recording every PSET/PSETI when trace_recording is on. Each entry: x, y, step_lo, step_hi, opcode, color (20 bytes).
+- [x] **PSET/PSETI write logging** -- PSET (0x40) and PSETI (0x41) now record pixel writes to pixel_write_log when trace_recording is enabled. Zero overhead when off.
+- [x] **PIXEL_HISTORY opcode (0x84)** -- Query pixel write history from assembly. Mode 0: total entry count. Mode 1: count writes to pixel (r1=x, r2=y). Mode 2: get N most recent writes to pixel into RAM (6 words per entry). Mode 3: get entry at absolute index.
+- [x] **Assembler and disassembler support** -- PIXEL_HISTORY recognized by assembler (core_ops.rs), disassembler (disasm.rs), and preprocessor OPCODES list.
+- [x] **PIXEL_HISTORY tests** -- 13 unit tests covering PSET recording, PSETI recording, no-recording-when-off, ring buffer overflow, reset clearing, all 4 query modes, invalid mode, buffer overflow check, assembler, and disassembler.
+- [x] **Demo program** -- programs/pixel_history_demo.asm demonstrates writing 3 colors to same pixel and querying the history.
+
+### Technical Notes
+
+Implementation in src/vm/ops_extended.rs (opcode 0x84) + src/vm/trace.rs (PixelWriteLog, PixelWriteEntry). pixel_write_log field on Vm struct. Dispatch in mod.rs step() via dedicated 0x84 arm delegating to step_extended().
+
+## [x] phase-55: Mouse & GUI Hit Testing (COMPLETE)
+
+**Goal:** Add mouse input support with clickable hit regions for GUI interaction
+
+Two new opcodes (0x37, 0x38) provide mouse-driven GUI interaction. HITSET defines clickable rectangular regions on screen. HITQ queries whether a hit occurred in a region. The host feeds mouse coordinates via push_mouse(). This enables buttons, menus, and other GUI elements in assembly programs.
+
+### Deliverables
+
+- [x] **HITSET opcode (0x37)** -- Define a clickable hit region. HITSET x_reg, y_reg, w_reg, h_reg, id_reg registers a rectangular area with a numeric ID. Up to MAX_HIT_REGIONS regions supported.
+- [x] **HITQ opcode (0x38)** -- HITQ result_reg checks if the mouse clicked inside any registered hit region. Returns the region ID in result_reg, or 0 if no hit.
+- [x] **Mouse state fields** -- Vm struct fields: mouse_x, mouse_y (current position), hit_regions (Vec<HitRegion>). Host calls push_mouse(x, y) to update position. Click detection on FRAME boundary.
+- [x] **Disassembler support** -- HITSET and HITQ appear correctly in trace output and disassembly views.
+
+### Technical Notes
+
+Implementation in src/vm/mod.rs (Vm struct fields, push_mouse, HITSET/HITQ handlers). HitRegion struct stores x, y, w, h, id. MAX_HIT_REGIONS cap prevents unbounded growth. Mouse coordinates updated by host each frame before VM step.
+
+## [x] phase-56: Musical Note Opcode (COMPLETE)
+
+**Goal:** Extended audio with waveform selection via NOTE opcode
+
+NOTE opcode (0x7E) extends the audio system beyond BEEP (0x03). While BEEP plays a fixed sine wave, NOTE accepts a waveform type register, enabling square waves, sawtooth, triangle, and other timbres for richer game audio and music programs.
+
+### Deliverables
+
+- [x] **NOTE opcode (0x7E)** -- NOTE waveform_reg, freq_reg, dur_reg -- play a musical note with selectable waveform type. Waveform types: 0=sine, 1=square, 2=sawtooth, 3=triangle.
+- [x] **Disassembler and assembler support** -- NOTE recognized by assembler, preprocessor OPCODES list, and disassembler.
+
+### Technical Notes
+
+Implementation in src/vm/mod.rs (0x7E handler). Uses the same audio pipeline as BEEP but with waveform selection. The note field on Vm struct stores (waveform, freq_hz, duration_ms) for host consumption.
+
+## [x] phase-57: Mouse Query Opcode (COMPLETE)
+
+**Goal:** Add MOUSEQ opcode for reading mouse position and a paint app demo
+
+MOUSEQ opcode (0x85) reads mouse_x into a register and mouse_y into the next register. Combined with the existing HITSET/HITQ from phase-55, this enables full mouse-driven programs. Includes paint.asm as a demonstration program with 8-color palette, clear button, and line-fill painting.
+
+### Deliverables
+
+- [x] **MOUSEQ opcode (0x85)** -- MOUSEQ x_reg reads mouse_x into x_reg and mouse_y into x_reg+1. Position updated by host via push_mouse() each frame.
+- [x] **Assembler and disassembler support** -- MOUSEQ recognized by assembler, preprocessor OPCODES list, and disassembler.
+- [x] **paint.asm demo program** -- Mouse-driven paint app with 8-color palette, clear button, color highlight, and paint-at-mouse with line fill.
+- [x] **MOUSEQ tests** -- 16 unit tests covering MOUSEQ functionality, assembler, disassembler, and paint.asm integration.
+
+### Technical Notes
+
+Implementation in src/vm/mod.rs (0x85 handler). Reads mouse_x/mouse_y fields on Vm struct. paint.asm is 16 tests covering the full paint loop including MOUSEQ integration.
+
+## [x] phase-58: Terminal v4 — Scroll + Shell Commands (COMPLETE)
+
+**Goal:** Enhance terminal.asm with scroll support and built-in shell commands
+
+Terminal v4 adds scroll when content exceeds 30 rows (120-row content buffer), new commands: echo <args>, ls, date, cls (alias for clear). Fixes register clobbering and branch register bugs. 13 new integration tests.
+
+### Deliverables
+
+- [x] **Scroll support for terminal** -- Content buffer expanded to 120 rows. When output exceeds visible 30 rows, view scrolls to show latest content.
+- [x] **Shell commands (echo, ls, date, cls)** -- echo prints its arguments, ls lists files, date shows date string, cls clears screen (alias for clear).
+- [x] **Bug fixes (register clobbering, branch register)** -- Fixed r0 used for space char instead of r6. BLT r0 -> BLT r20 for correct branch register.
+- [x] **Terminal v4 tests (13 new)** -- 13 new integration tests: echo with/without args, date, ls, cls, scroll behavior.
+
+### Technical Notes
+
+All changes in terminal.asm (282 lines expanded) + 349 lines of new tests in src/vm/tests.rs. No new opcodes.
+
+## [x] phase-59: File Browser App + Bug Fixes (COMPLETE)
+
+**Goal:** Interactive file browser with click-to-open and read support
+
+File browser application using HITSET for clickable rows. Fixed two critical bugs: HITSET id=0 collision with HITQ no-match return, and CMPI fd clobber after OPEN. 423-line file_browser.asm with 196 lines of new integration tests.
+
+### Deliverables
+
+- [x] **file_browser.asm application** -- 423-line interactive file browser. HITSET rows with ids 1-12 for clickable file listing. Click to open and read file contents. Displays file content in a scrollable view.
+- [x] **HITSET id collision fix** -- HITSET row 0 used id=0 which collided with HITQ no-match return (0). Renumbered ids 1-12, adjusted click handler bounds.
+- [x] **CMPI fd clobber fix** -- CMPI r0, 0xFFFFFFFF after OPEN clobbered r0 (the fd). Fix: MOV r19, r0 after OPEN, use r19 for subsequent fd operations.
+- [x] **File browser integration tests** -- 196 lines of new tests covering file browser listing, click-to-open, file read display, and edge cases.
+
+### Technical Notes
+
+No new opcodes. Pure application-level code in programs/file_browser.asm. Tests in src/vm/tests.rs. Bug fixes improve HITSET/HITQ reliability for all future apps.
+
+## [x] phase-60: STRCMP Opcode (COMPLETE)
+
+**Goal:** String comparison opcode for null-terminated strings
+
+STRCMP (0x86): compares two null-terminated strings in memory, sets r0 to -1/0/1. 13 new tests covering equal/less/greater/empty/edge cases.
+
+### Deliverables
+
+- [x] **STRCMP opcode (0x86)** -- Compare null-terminated strings at addresses in r1/r2, set r0: -1 (s1<s2), 0 (equal), 1 (s1>s2)
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] S
+  - [x] T
+  - [x] R
+  - [x] C
+  - [x] M
+  - [x] P
+  - [x]  
+  - [x] c
+  - [x] o
+  - [x] m
+  - [x] p
+  - [x] a
+  - [x] r
+  - [x] e
+  - [x] s
+  - [x]  
+  - [x] s
+  - [x] t
+  - [x] r
+  - [x] i
+  - [x] n
+  - [x] g
+  - [x] s
+  - [x]  
+  - [x] c
+  - [x] o
+  - [x] r
+  - [x] r
+  - [x] e
+  - [x] c
+  - [x] t
+  - [x] l
+  - [x] y
+  - [x] ,
+  - [x]  
+  - [x] a
+  - [x] s
+  - [x] s
+  - [x] e
+  - [x] m
+  - [x] b
+  - [x] l
+  - [x] e
+  - [x] s
+  - [x]  
+  - [x] a
+  - [x] n
+  - [x] d
+  - [x]  
+  - [x] r
+  - [x] u
+  - [x] n
+  - [x] s
+  - [x] ,
+  - [x]  
+  - [x] a
+  - [x] l
+  - [x] l
+  - [x]  
+  - [x] 1
+  - [x] 3
+  - [x]  
+  - [x] t
+  - [x] e
+  - [x] s
+  - [x] t
+  - [x] s
+  - [x]  
+  - [x] p
+  - [x] a
+  - [x] s
+  - [x] s
+
+### Technical Notes
+
+String comparison opcode useful for shell and file_browser. Implemented in src/vm/mod.rs dispatch, src/assembler/system_ops.rs, src/vm/disasm.rs, src/hermes.rs opcode_name. 13 tests in src/vm/tests.rs.
+
+## [x] phase-61: GUI Calculator App + Token-Pixel-GUI Doc (COMPLETE)
+
+**Goal:** Full GUI calculator with mouse-driven button grid and architecture documentation
+
+gui_calc.asm: full GUI calculator with mouse-driven button grid, display area, ADD/SUB/MUL/DIV operations, clear/backspace. TOKEN_PIXEL_GUI.md: explains the 3-layer Token->Pixel->GUI stack.
+
+### Deliverables
+
+- [x] **gui_calc.asm** -- Full GUI calculator: 920 lines, mouse-driven button grid, display area, ADD/SUB/MUL/DIV, clear/backspace
+  - [x] `` 
+  - [x] `` 
+  - [x] g
+  - [x] u
+  - [x] i
+  - [x] _
+  - [x] c
+  - [x] a
+  - [x] l
+  - [x] c
+  - [x] .
+  - [x] a
+  - [x] s
+  - [x] m
+  - [x]  
+  - [x] a
+  - [x] s
+  - [x] s
+  - [x] e
+  - [x] m
+  - [x] b
+  - [x] l
+  - [x] e
+  - [x] s
+  - [x]  
+  - [x] a
+  - [x] n
+  - [x] d
+  - [x]  
+  - [x] r
+  - [x] u
+  - [x] n
+  - [x] s
+  - [x]  
+  - [x] c
+  - [x] o
+  - [x] r
+  - [x] r
+  - [x] e
+  - [x] c
+  - [x] t
+  - [x] l
+  - [x] y
+- [x] **TOKEN_PIXEL_GUI.md** -- Architecture document explaining 3-layer stack: Token->Pixel->GUI
+  - [x] D
+  - [x] o
+  - [x] c
+  - [x] u
+  - [x] m
+  - [x] e
+  - [x] n
+  - [x] t
+  - [x]  
+  - [x] e
+  - [x] x
+  - [x] i
+  - [x] s
+  - [x] t
+  - [x] s
+  - [x]  
+  - [x] a
+  - [x] n
+  - [x] d
+  - [x]  
+  - [x] e
+  - [x] x
+  - [x] p
+  - [x] l
+  - [x] a
+  - [x] i
+  - [x] n
+  - [x] s
+  - [x]  
+  - [x] t
+  - [x] h
+  - [x] e
+  - [x]  
+  - [x] a
+  - [x] r
+  - [x] c
+  - [x] h
+  - [x] i
+  - [x] t
+  - [x] e
+  - [x] c
+  - [x] t
+  - [x] u
+  - [x] r
+  - [x] e
+
+### Technical Notes
+
+gui_calc.asm uses mouse events, drawing primitives, and arithmetic opcodes. 920-line program demonstrating the full GUI capability. TOKEN_PIXEL_GUI.md documents the token-pixel-GUI rendering stack (284 lines).
+
+## [x] phase-62: Notepad Bug Fixes + Clock App (COMPLETE)
+
+**Goal:** Fix 5 notepad bugs and add digital clock application
+
+Fixed 5 critical bugs in notepad.asm (r31 save, r12 clobber, r1 restores, LDI r0 fix, null terminate). Added clock.asm: digital clock with FRAME timing, TEXT rendering, RECTF UI, DIV/MOD time math, STRO string building, blinking colon. 6 new tests.
+
+### Deliverables
+
+- [x] **notepad.asm bug fixes** -- Fix 5 bugs: draw_status r31 save, r12→r14 clobber, r1 restores after TEXT/RECTF, LDI r0→LDI r2 for null terminate
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+- [x] **clock.asm** -- Digital clock: 494 lines, FRAME timing, TEXT rendering, RECTF UI, DIV/MOD time math, STRO string building, blinking colon separator
+  - [x] `` 
+  - [x] `` 
+  - [x] n
+  - [x] o
+  - [x] t
+  - [x] e
+  - [x] p
+  - [x] a
+  - [x] d
+  - [x] .
+  - [x] a
+  - [x] s
+  - [x] m
+  - [x]  
+  - [x] r
+  - [x] u
+  - [x] n
+  - [x] s
+  - [x]  
+  - [x] c
+  - [x] o
+  - [x] r
+  - [x] r
+  - [x] e
+  - [x] c
+  - [x] t
+  - [x] l
+  - [x] y
+  - [x] ,
+  - [x]  
+  - [x] c
+  - [x] l
+  - [x] o
+  - [x] c
+  - [x] k
+  - [x] .
+  - [x] a
+  - [x] s
+  - [x] m
+  - [x]  
+  - [x] r
+  - [x] u
+  - [x] n
+  - [x] s
+  - [x]  
+  - [x] a
+  - [x] n
+  - [x] d
+  - [x]  
+  - [x] d
+  - [x] i
+  - [x] s
+  - [x] p
+  - [x] l
+  - [x] a
+  - [x] y
+  - [x] s
+  - [x]  
+  - [x] t
+  - [x] i
+  - [x] m
+  - [x] e
+
+### Technical Notes
+
+Commit 5ed4b7951. notepad.asm now 713 lines, clock.asm 494 lines. 6 new tests in src/vm/tests.rs. 1485 insertions total.
+
+## [x] phase-63: ABS + RECT Opcodes + Color Picker App (COMPLETE)
+
+**Goal:** Add absolute value and outline rectangle opcodes, ship a color picker GUI app
+
+ABS (0x87) for absolute value of register, RECT (0x88) for outline rectangle drawing. Color picker app demonstrates mouse-driven RGB selection with palette swatches, slider indicators, and live preview. 15 new tests, 115 opcodes.
+
+### Deliverables
+
+- [x] **ABS opcode (0x87)** -- ABS rd -- rd = |rd|, handles i32 wraparound for 0x80000000
+- [x] **RECT opcode (0x88)** -- RECT x, y, w, h, color -- outline rectangle (4 edges only)
+- [x] **ABS/RECT assembler entries** -- Add to assembler system_ops.rs, graphics_ops.rs, preprocessor OPCODES list
+- [x] **ABS/RECT disassembler entries** -- Add to vm/disasm.rs
+- [x] **ABS tests** -- Test positive, negative, zero, large negative, i32::MIN, assembly, disassembly (7 tests)
+- [x] **RECT tests** -- Test outline corners, interior empty, 1x1, zero dimensions, assembly, disassembly (6 tests)
+- [x] **color_picker.asm** -- Mouse-driven RGB color picker with 8-color palette, slider indicators, RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.
+
+## [ ] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (PLANNED)
+
+**Goal:** Add value clamping opcodes and a screensaver demo program
+
+MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app demonstrates idle-time animation with multiple effects.
+
+### Deliverables
+
+- [ ] **MIN opcode (0x89)** -- MIN rd, rs -- rd = min(rd, rs)
+- [ ] **MAX opcode (0x8A)** -- MAX rd, rs -- rd = max(rd, rs)
+- [ ] **CLAMP opcode (0x8B)** -- CLAMP rd, min_reg, max_reg -- rd = clamp(rd, min, max)
+- [ ] **MIN/MAX/CLAMP assembler + disassembler entries** -- 
+- [ ] **MIN/MAX/CLAMP tests** -- Test edge cases: equal values, negative, overflow
+- [ ] **screensaver.asm** -- Multi-effect screensaver with bouncing logos, starfield, plasma cycling. Auto-starts after N seconds of no input.
+
+## [ ] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (PLANNED)
+
+**Goal:** Add colored text rendering opcode, upgrade terminal with color output
+
+DRAWTEXT (0x8C) renders text with foreground and background colors. Terminal v5 uses DRAWTEXT for colored command output and syntax highlighting.
+
+### Deliverables
+
+- [ ] **DRAWTEXT opcode (0x8C)** -- DRAWTEXT x, y, addr, fg_color, bg_color -- text with colors
+- [ ] **DRAWTEXT assembler + disassembler entries** -- 
+- [ ] **DRAWTEXT tests** -- Foreground color, background color, transparent (0) bg, newline handling
+- [ ] **terminal.asm v5 color upgrade** -- Add colored output for help, errors, ls (dirs vs files), success messages. Use DRAWTEXT instead of TEXT.
+
+## [ ] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (PLANNED)
+
+**Goal:** Add bitwise manipulation opcodes for flags and state management
+
+BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient bit manipulation. Enhanced Game of Life uses bitwise operations for speed.
+
+### Deliverables
+
+- [ ] **BITSET opcode (0x8D)** -- BITSET rd, bit_reg -- set bit N in rd (rd |= 1 << N)
+- [ ] **BITCLR opcode (0x8E)** -- BITCLR rd, bit_reg -- clear bit N in rd (rd &= ~(1 << N))
+- [ ] **BITTEST opcode (0x8F)** -- BITTEST rd, bit_reg -- r0 = (rd >> N) & 1 (test bit N)
+- [ ] **BITSET/BITCLR/BITTEST assembler + disassembler entries** -- 
+- [ ] **BIT tests** -- Set/clear/test individual bits, edge cases (bit 0, bit 31)
+- [ ] **game_of_life enhanced with bit operations** -- Optimized neighbor counting using BITTEST, faster generation stepping
+
+## [ ] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (PLANNED)
+
+**Goal:** Add logical NOT and screen invert operations
+
+NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels (XOR 0xFFFFFF). Invert demo shows visual effects.
+
+### Deliverables
+
+- [ ] **NOT opcode (0x90)** -- NOT rd -- rd = ~rd (bitwise complement)
+- [ ] **INV opcode (0x91)** -- INV -- invert all screen pixels (XOR 0xFFFFFF)
+- [ ] **NOT/INV assembler + disassembler entries** -- 
+- [ ] **NOT/INV tests** -- 
+- [ ] **invert_demo.asm** -- Visual demo cycling between normal and inverted screen
+
+## Global Risks
+
+- Opcode space: 113 of ~256 slots used, plenty of room
+- Scope creep -- adding features is easy, keeping the OS coherent is hard
+- Kernel boundary breaks existing programs -- need a compatibility mode
+- Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
+- Filesystem persistence needs host directory -- WASM port needs different backing
+- Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces shared-RAM for multiprocess
+- Phase 28 device drivers: IOCTL opcode 0x62, 4 device files at fds 0xE000-0xE003
+- Self-modifying code is inherently hard to debug -- need good error reporting
+- Assembly inside a running VM may be slow for large programs -- may need optimization
+- The concept of a program rewriting itself challenges test design -- how do you unit test a program that changes?
+- RAM size expansion (phase 46) affects the fuzzer which generates random addresses
+
+## Conventions
+
+- Every new opcode gets a test in tests/program_tests.rs
+- Every new program gets assembled by test_all_programs_assemble
+- README.md updated when opcodes or features change
+- roadmap.yaml is the single source of truth for project state
+- Semantic versioning: minor bump for new opcodes, patch for fixes
+- New opcodes need a program that needs them (no speculative opcodes)
+- All new opcodes added to assembler.rs, preprocessor.rs OPCODES list, and vm.rs disassembler
+- Opcode numbers assigned sequentially from next available
+- Canvas and screen mappings use LOAD/STORE interception, not new opcodes
+- ASMSELF and RUNNEXT take no operands (1-byte instructions)
+- Error reporting via RAM[0xFFD] (existing ASM result port)

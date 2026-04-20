@@ -872,6 +872,65 @@ impl Vm {
                     self.regs[0] = result as u32;
                 }
             }
+
+            // ABS rd  (0x87) -- absolute value: rd = |rd|
+            // Handles i32::MIN edge case (0x80000000) by returning itself
+            0x87 => {
+                let rd = self.fetch() as usize;
+                if rd < NUM_REGS {
+                    let val = self.regs[rd] as i32;
+                    self.regs[rd] = val.wrapping_abs() as u32;
+                }
+            }
+
+            // RECT x, y, w, h, color  (0x88) -- outline rectangle (4 edges only)
+            0x88 => {
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                let wr = self.fetch() as usize;
+                let hr = self.fetch() as usize;
+                let cr = self.fetch() as usize;
+                if xr < NUM_REGS && yr < NUM_REGS && wr < NUM_REGS && hr < NUM_REGS && cr < NUM_REGS {
+                    let x0 = self.regs[xr] as usize;
+                    let y0 = self.regs[yr] as usize;
+                    let w = self.regs[wr] as usize;
+                    let h = self.regs[hr] as usize;
+                    let color = self.regs[cr];
+                    if w > 0 && h > 0 {
+                        // Top edge
+                        for dx in 0..w {
+                            let px = x0 + dx;
+                            if px < 256 && y0 < 256 {
+                                self.screen[y0 * 256 + px] = color;
+                            }
+                        }
+                        // Bottom edge
+                        let by = y0 + h - 1;
+                        for dx in 0..w {
+                            let px = x0 + dx;
+                            if px < 256 && by < 256 {
+                                self.screen[by * 256 + px] = color;
+                            }
+                        }
+                        // Left edge (excluding corners already drawn)
+                        for dy in 1..h.saturating_sub(1) {
+                            let py = y0 + dy;
+                            if x0 < 256 && py < 256 {
+                                self.screen[py * 256 + x0] = color;
+                            }
+                        }
+                        // Right edge (excluding corners already drawn)
+                        let rx = x0 + w - 1;
+                        for dy in 1..h.saturating_sub(1) {
+                            let py = y0 + dy;
+                            if rx < 256 && py < 256 {
+                                self.screen[py * 256 + rx] = color;
+                            }
+                        }
+                    }
+                }
+            }
+
             // Unknown opcode: halt
             _ => {
                 self.halted = true;

@@ -77,6 +77,9 @@ This directory contains assembly programs for the Geometry OS virtual machine. Y
 - **preprocessor_advanced_test.asm**: Tests register safety and `INC`/`DEC` preprocessor macros.
 - **stdlib_test.asm**: Tests standard library functions: strlen, strcpy, strcmp, memset, itoa, print_str, print_int. Also tests `.str` directive and `.lib`/`.include` linking.
 
+## GUI Apps
+- **color_picker.asm**: Mouse-driven RGB color picker with 8-color palette, RGB slider indicators, and live color preview. Demonstrates `RECT` outline opcode, `RECTF` fills, `HITSET`/`HITQ` mouse interaction.
+
 ## Procedural Generation
 - **maze_gen.asm**: Static procedural maze generator. Generates a solvable maze on the 256x256 screen using depth-first search with backtracking. 16x16 cell grid with white walls and green entrance/exit markers.
 

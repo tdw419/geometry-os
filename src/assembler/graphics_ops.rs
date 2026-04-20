@@ -200,6 +200,21 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "RECT" => {
+            if tokens.len() < 6 {
+                return Err(
+                    "RECT requires 5 arguments: RECT x_reg, y_reg, w_reg, h_reg, color_reg".to_string(),
+                );
+            }
+            bytecode.push(0x88);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            bytecode.push(parse_reg(tokens[5])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

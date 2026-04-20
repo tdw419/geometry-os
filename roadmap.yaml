@@ -10,9 +10,9 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 113
-  tests: 1835
-  programs: 74
+  opcodes: 115
+  tests: 1863
+  programs: 75
   loc: 42043
 phases:
 - id: phase-1
@@ -3347,6 +3347,134 @@ phases:
     6 new tests in src/vm/tests.rs. 1485 insertions total.'
   scope_lines_total: 1485
   test_target: 6
+- id: phase-63
+  title: ABS + RECT Opcodes + Color Picker App
+  status: complete
+  goal: Add absolute value and outline rectangle opcodes, ship a color picker GUI app
+  description: 'ABS (0x87) for absolute value of register, RECT (0x88) for outline
+    rectangle drawing. Color picker app demonstrates mouse-driven RGB selection with
+    palette swatches, slider indicators, and live preview. 15 new tests, 115 opcodes.'
+  deliverables:
+  - name: ABS opcode (0x87)
+    description: 'ABS rd -- rd = |rd|, handles i32 wraparound for 0x80000000'
+    status: done
+  - name: RECT opcode (0x88)
+    description: 'RECT x, y, w, h, color -- outline rectangle (4 edges only)'
+    status: done
+  - name: ABS/RECT assembler entries
+    description: Add to assembler system_ops.rs, graphics_ops.rs, preprocessor OPCODES list
+    status: done
+  - name: ABS/RECT disassembler entries
+    description: Add to vm/disasm.rs
+    status: done
+  - name: ABS tests
+    description: 'Test positive, negative, zero, large negative, i32::MIN, assembly, disassembly (7 tests)'
+    status: done
+  - name: RECT tests
+    description: 'Test outline corners, interior empty, 1x1, zero dimensions, assembly, disassembly (6 tests)'
+    status: done
+  - name: color_picker.asm
+    description: 'Mouse-driven RGB color picker with 8-color palette, slider indicators,
+      RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.'
+    status: done
+  scope_lines_total: 800
+  test_target: 10
+- id: phase-64
+  title: MIN/MAX + CLAMP Opcodes + Screensaver Demo
+  status: planned
+  goal: Add value clamping opcodes and a screensaver demo program
+  description: 'MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app
+    demonstrates idle-time animation with multiple effects.'
+  deliverables:
+  - name: MIN opcode (0x89)
+    description: 'MIN rd, rs -- rd = min(rd, rs)'
+    status: todo
+  - name: MAX opcode (0x8A)
+    description: 'MAX rd, rs -- rd = max(rd, rs)'
+    status: todo
+  - name: CLAMP opcode (0x8B)
+    description: 'CLAMP rd, min_reg, max_reg -- rd = clamp(rd, min, max)'
+    status: todo
+  - name: MIN/MAX/CLAMP assembler + disassembler entries
+    status: todo
+  - name: MIN/MAX/CLAMP tests
+    description: 'Test edge cases: equal values, negative, overflow'
+    status: todo
+  - name: screensaver.asm
+    description: 'Multi-effect screensaver with bouncing logos, starfield, plasma
+      cycling. Auto-starts after N seconds of no input.'
+    status: todo
+  scope_lines_total: 900
+  test_target: 12
+- id: phase-65
+  title: DRAWTEXT (colored text) Opcode + Improved Terminal
+  status: planned
+  goal: Add colored text rendering opcode, upgrade terminal with color output
+  description: 'DRAWTEXT (0x8C) renders text with foreground and background colors.
+    Terminal v5 uses DRAWTEXT for colored command output and syntax highlighting.'
+  deliverables:
+  - name: DRAWTEXT opcode (0x8C)
+    description: 'DRAWTEXT x, y, addr, fg_color, bg_color -- text with colors'
+    status: todo
+  - name: DRAWTEXT assembler + disassembler entries
+    status: todo
+  - name: DRAWTEXT tests
+    description: Foreground color, background color, transparent (0) bg, newline handling
+    status: todo
+  - name: terminal.asm v5 color upgrade
+    description: 'Add colored output for help, errors, ls (dirs vs files),
+      success messages. Use DRAWTEXT instead of TEXT.'
+    status: todo
+  scope_lines_total: 1000
+  test_target: 10
+- id: phase-66
+  title: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced
+  status: planned
+  goal: Add bitwise manipulation opcodes for flags and state management
+  description: 'BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient
+    bit manipulation. Enhanced Game of Life uses bitwise operations for speed.'
+  deliverables:
+  - name: BITSET opcode (0x8D)
+    description: 'BITSET rd, bit_reg -- set bit N in rd (rd |= 1 << N)'
+    status: todo
+  - name: BITCLR opcode (0x8E)
+    description: 'BITCLR rd, bit_reg -- clear bit N in rd (rd &= ~(1 << N))'
+    status: todo
+  - name: BITTEST opcode (0x8F)
+    description: 'BITTEST rd, bit_reg -- r0 = (rd >> N) & 1 (test bit N)'
+    status: todo
+  - name: BITSET/BITCLR/BITTEST assembler + disassembler entries
+    status: todo
+  - name: BIT tests
+    description: Set/clear/test individual bits, edge cases (bit 0, bit 31)
+    status: todo
+  - name: game_of_life enhanced with bit operations
+    description: 'Optimized neighbor counting using BITTEST, faster generation stepping'
+    status: todo
+  scope_lines_total: 700
+  test_target: 15
+- id: phase-67
+  title: NOT opcode + INV (invert) Screen Opcode + Invert Demo
+  status: planned
+  goal: Add logical NOT and screen invert operations
+  description: 'NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels
+    (XOR 0xFFFFFF). Invert demo shows visual effects.'
+  deliverables:
+  - name: NOT opcode (0x90)
+    description: 'NOT rd -- rd = ~rd (bitwise complement)'
+    status: todo
+  - name: INV opcode (0x91)
+    description: 'INV -- invert all screen pixels (XOR 0xFFFFFF)'
+    status: todo
+  - name: NOT/INV assembler + disassembler entries
+    status: todo
+  - name: NOT/INV tests
+    status: todo
+  - name: invert_demo.asm
+    description: 'Visual demo cycling between normal and inverted screen'
+    status: todo
+  scope_lines_total: 500
+  test_target: 8
 global_risks:
 - 'Opcode space: 113 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard

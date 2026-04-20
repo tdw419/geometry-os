@@ -120,6 +120,8 @@ pub const OPCODES: &[&str] = &[
     "DISCONNECT",
     "TRACE_READ",
     "PIXEL_HISTORY",
+    "ABS",
+    "RECT",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",
