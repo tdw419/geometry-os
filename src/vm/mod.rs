@@ -118,6 +118,13 @@ pub struct Vm {
     pub snapshots: Vec<VmSnapshot>,
     /// Pixel write history log (Phase 54: Pixel Write History).
     /// Records every PSET/PSETI when trace_recording is on.
+    /// Hit-test regions for GUI interaction (HITSET/HITQ opcodes).
+    pub hit_regions: Vec<HitRegion>,
+    /// Current mouse/touch cursor X position, set by host via push_mouse().
+    /// Queried by HITQ to find which region was clicked.
+    pub mouse_x: u32,
+    /// Current mouse/touch cursor Y position.
+    pub mouse_y: u32,
     pub pixel_write_log: PixelWriteLog,
     /// Active TCP connections (Phase 41: Networking).
     /// Up to 8 simultaneous connections, indexed by fd.
@@ -194,6 +201,9 @@ impl Vm {
             frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
             snapshots: Vec::new(),
             pixel_write_log: PixelWriteLog::new(DEFAULT_PIXEL_WRITE_CAPACITY),
+            hit_regions: Vec::with_capacity(MAX_HIT_REGIONS),
+            mouse_x: 0,
+            mouse_y: 0,
             tcp_connections: (0..MAX_TCP_CONNECTIONS).map(|_| None).collect(),
         }
     }
@@ -210,6 +220,20 @@ impl Vm {
         // Also write to legacy RAM[0xFFF] port for backward compatibility
         self.ram[0xFFF] = key;
         true
+    }
+
+    /// Update mouse/touch cursor position. Called by host on mouse events.
+    /// The cursor is read by HITQ to determine which region was clicked.
+    pub fn push_mouse(&mut self, x: u32, y: u32) {
+        self.mouse_x = x;
+        self.mouse_y = y;
+        // Also mirror to RAM ports for direct access
+        if (0xFF9) < self.ram.len() {
+            self.ram[0xFF9] = x;
+        }
+        if (0xFFA) < self.ram.len() {
+            self.ram[0xFFA] = y;
+        }
     }
 
     /// Reset the VM to initial state (zeroed RAM, registers, screen, halted=false).
@@ -582,6 +606,52 @@ impl Vm {
                 if self.regs[0] != 0xFFFFFFFF {
                     self.pc = addr;
                     return true;
+                }
+            }
+
+            // HITSET xr, yr, wr, hr, id  -- register a hit-test region
+            // Adds a rectangular region to the hit table. Used for buttons,
+            // clickable areas, and GUI elements. Max MAX_HIT_REGIONS regions.
+            0x37 => {
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                let wr = self.fetch() as usize;
+                let hr = self.fetch() as usize;
+                let id = self.fetch();
+                if xr < NUM_REGS && yr < NUM_REGS && wr < NUM_REGS && hr < NUM_REGS {
+                    if self.hit_regions.len() < MAX_HIT_REGIONS {
+                        self.hit_regions.push(HitRegion {
+                            x: self.regs[xr],
+                            y: self.regs[yr],
+                            w: self.regs[wr],
+                            h: self.regs[hr],
+                            id,
+                        });
+                    }
+                }
+            }
+
+            // HITQ rd  -- query cursor against hit regions, write matching id to rd
+            // Checks if current mouse position (self.mouse_x/y, set by host via
+            // push_mouse) falls inside any registered HitRegion.
+            // rd = region id if hit, 0 if no match. First match wins.
+            0x38 => {
+                let rd = self.fetch() as usize;
+                if rd < NUM_REGS {
+                    let mx = self.mouse_x;
+                    let my = self.mouse_y;
+                    let mut found_id = 0u32;
+                    for region in &self.hit_regions {
+                        if mx >= region.x
+                            && mx < region.x + region.w
+                            && my >= region.y
+                            && my < region.y + region.h
+                        {
+                            found_id = region.id;
+                            break;
+                        }
+                    }
+                    self.regs[rd] = found_id;
                 }
             }
 

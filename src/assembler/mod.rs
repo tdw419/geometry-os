@@ -50,6 +50,19 @@ pub fn assemble_with_lib(
     assemble_inner(&expanded, base_addr)
 }
 
+/// Find the position of the first ':' that is not inside a quoted string.
+fn find_colon_outside_quotes(line: &str) -> Option<usize> {
+    let mut in_quote: Option<char> = None;
+    for (i, ch) in line.char_indices() {
+        match in_quote {
+            Some(q) if ch == q => in_quote = None,
+            None if ch == '"' || ch == '\'' => in_quote = Some(ch),
+            None if ch == ':' => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
 /// Backward-compatible assemble() with no library path.
 pub fn assemble(source: &str, base_addr: usize) -> Result<AsmResult, AsmError> {
     assemble_with_lib(source, base_addr, None)
@@ -189,8 +202,9 @@ fn assemble_inner(source: &str, base_addr: usize) -> Result<AsmResult, AsmError>
             continue;
         }
 
-        // Check for label
-        if let Some(label_end) = line.find(':') {
+        // Check for label (colon outside quotes only)
+        let colon_pos = find_colon_outside_quotes(line);
+        if let Some(label_end) = colon_pos {
             let label_name = line[..label_end].trim().to_lowercase();
             labels.insert(label_name, bytecode.len());
             let rest = line[label_end + 1..].trim();

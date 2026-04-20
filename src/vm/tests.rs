@@ -864,6 +864,195 @@ fn test_ikey_no_key() {
     assert_eq!(vm.regs[5], 0);
 }
 
+// ── HITSET / HITQ (GUI Hit-Testing) ────────────────────────────
+
+#[test]
+fn test_hitset_registers_region() {
+    // HITSET r1, r2, r3, r4, 42  -- register a 10x20 region at (5,5) with id=42
+    let vm = run_program(&[0x10, 1, 5,  // LDI r1, 5 (x)
+                           0x10, 2, 5,  // LDI r2, 5 (y)
+                           0x10, 3, 10, // LDI r3, 10 (w)
+                           0x10, 4, 20, // LDI r4, 20 (h)
+                           0x37, 1, 2, 3, 4, 42, // HITSET r1,r2,r3,r4,42
+                           0x00], 100); // HALT
+    assert_eq!(vm.hit_regions.len(), 1);
+    assert_eq!(vm.hit_regions[0].x, 5);
+    assert_eq!(vm.hit_regions[0].y, 5);
+    assert_eq!(vm.hit_regions[0].w, 10);
+    assert_eq!(vm.hit_regions[0].h, 20);
+    assert_eq!(vm.hit_regions[0].id, 42);
+}
+
+#[test]
+fn test_hitq_finds_region() {
+    // Register a region at (10,10) size 50x30 with id=7
+    // Set mouse to (25, 20) which is inside the region
+    // Query should return 7
+    let mut vm = Vm::new();
+    vm.regs[1] = 10; // x
+    vm.regs[2] = 10; // y
+    vm.regs[3] = 50; // w
+    vm.regs[4] = 30; // h
+    vm.ram[0] = 0x37; // HITSET
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 7; // id
+    vm.ram[6] = 0x38; // HITQ
+    vm.ram[7] = 5; // -> r5
+    vm.ram[8] = 0x00; // HALT
+    vm.pc = 0;
+    vm.push_mouse(25, 20); // inside the region
+    for _ in 0..100 {
+        if !vm.step() { break; }
+    }
+    assert_eq!(vm.regs[5], 7); // found the region
+}
+
+#[test]
+fn test_hitq_no_match() {
+    // Register a region at (10,10) size 50x30 with id=7
+    // Set mouse to (0, 0) which is outside
+    let mut vm = Vm::new();
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 50;
+    vm.regs[4] = 30;
+    vm.ram[0] = 0x37;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 7;
+    vm.ram[6] = 0x38; // HITQ
+    vm.ram[7] = 5;
+    vm.ram[8] = 0x00;
+    vm.pc = 0;
+    vm.push_mouse(0, 0); // outside
+    for _ in 0..100 {
+        if !vm.step() { break; }
+    }
+    assert_eq!(vm.regs[5], 0); // no match
+}
+
+#[test]
+fn test_hitq_boundary_edges() {
+    // Test exact boundary: top-left corner (inclusive), bottom-right (exclusive)
+    let mut vm = Vm::new();
+    vm.regs[1] = 10; // x
+    vm.regs[2] = 10; // y
+    vm.regs[3] = 20; // w
+    vm.regs[4] = 20; // h
+    vm.ram[0] = 0x37;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 1; // id
+    vm.ram[6] = 0x38; // HITQ
+    vm.ram[7] = 5;
+    vm.ram[8] = 0x00;
+    vm.pc = 0;
+
+    // Exact top-left: (10,10) should match
+    vm.push_mouse(10, 10);
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[5], 1);
+
+    // Reset and test bottom-right: (29,29) is inside (10+20-1), (30,30) is outside
+    let mut vm2 = Vm::new();
+    vm2.regs[1] = 10;
+    vm2.regs[2] = 10;
+    vm2.regs[3] = 20;
+    vm2.regs[4] = 20;
+    vm2.ram[0] = 0x37;
+    vm2.ram[1] = 1;
+    vm2.ram[2] = 2;
+    vm2.ram[3] = 3;
+    vm2.ram[4] = 4;
+    vm2.ram[5] = 1;
+    vm2.ram[6] = 0x38;
+    vm2.ram[7] = 5;
+    vm2.ram[8] = 0x00;
+    vm2.pc = 0;
+    vm2.push_mouse(29, 29); // last pixel inside
+    for _ in 0..100 { if !vm2.step() { break; } }
+    assert_eq!(vm2.regs[5], 1);
+
+    // Exactly on the exclusive edge
+    let mut vm3 = Vm::new();
+    vm3.regs[1] = 10;
+    vm3.regs[2] = 10;
+    vm3.regs[3] = 20;
+    vm3.regs[4] = 20;
+    vm3.ram[0] = 0x37;
+    vm3.ram[1] = 1;
+    vm3.ram[2] = 2;
+    vm3.ram[3] = 3;
+    vm3.ram[4] = 4;
+    vm3.ram[5] = 1;
+    vm3.ram[6] = 0x38;
+    vm3.ram[7] = 5;
+    vm3.ram[8] = 0x00;
+    vm3.pc = 0;
+    vm3.push_mouse(30, 30); // exclusive edge -- outside
+    for _ in 0..100 { if !vm3.step() { break; } }
+    assert_eq!(vm3.regs[5], 0);
+}
+
+#[test]
+fn test_hitq_first_match_wins() {
+    // Two overlapping regions; first registered wins
+    let mut vm = Vm::new();
+    vm.regs[1] = 10; vm.regs[2] = 10; vm.regs[3] = 50; vm.regs[4] = 50;
+    // Region 1: (10,10) 50x50, id=100
+    vm.ram[0] = 0x37; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; vm.ram[4] = 4; vm.ram[5] = 100;
+    // Region 2: (20,20) 50x50, id=200
+    vm.ram[6] = 0x10; vm.ram[7] = 1; vm.ram[8] = 20; // LDI r1, 20
+    vm.ram[9] = 0x10; vm.ram[10] = 2; vm.ram[11] = 20; // LDI r2, 20
+    vm.ram[12] = 0x37; vm.ram[13] = 1; vm.ram[14] = 2; vm.ram[15] = 3; vm.ram[16] = 4; vm.ram[17] = 200;
+    vm.ram[18] = 0x38; vm.ram[19] = 5; // HITQ r5
+    vm.ram[20] = 0x00; // HALT
+    vm.pc = 0;
+    vm.push_mouse(30, 30); // inside both
+    for _ in 0..100 { if !vm.step() { break; } }
+    assert_eq!(vm.regs[5], 100); // first registered wins
+}
+
+#[test]
+fn test_push_mouse_mirrors_to_ram() {
+    let mut vm = Vm::new();
+    vm.push_mouse(123, 456);
+    assert_eq!(vm.mouse_x, 123);
+    assert_eq!(vm.mouse_y, 456);
+    assert_eq!(vm.ram[0xFF9], 123);
+    assert_eq!(vm.ram[0xFFA], 456);
+}
+
+#[test]
+fn test_disasm_hitset_hitq() {
+    // HITSET r1, r2, r3, r4, 42
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x37;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 42;
+    let (mnemonic, len) = vm.disassemble_at(0);
+    assert_eq!(len, 6);
+    assert!(mnemonic.contains("HITSET"));
+
+    // HITQ r5
+    let mut vm2 = Vm::new();
+    vm2.ram[0] = 0x38;
+    vm2.ram[1] = 5;
+    let (mnemonic2, len2) = vm2.disassemble_at(0);
+    assert_eq!(len2, 2);
+    assert!(mnemonic2.contains("HITQ"));
+}
+
 // ── RAND ────────────────────────────────────────────────────────
 
 #[test]
@@ -3382,3 +3571,197 @@ fn test_disasm_execp_chdir_getcwd() {
     assert_eq!(m, "GETCWD r3");
     assert_eq!(l, 2);
 }
+
+// ── hello_window.asm end-to-end demo ──────────────────────────
+
+#[test]
+fn test_hello_window_assembles_and_runs() {
+    let source = include_str!("../../programs/hello_window.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("hello_window.asm should assemble");
+
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = word;
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Title bar pixel (inside 256x30 fill of 0x555555) must be set.
+    assert_eq!(vm.screen[5 * 256 + 5], 0x555555, "title bar should render");
+
+    // OK button pixel (inside 80x28 at (88,110) of 0x2266FF) must be set.
+    assert_eq!(
+        vm.screen[120 * 256 + 100],
+        0x2266FF,
+        "OK button should render"
+    );
+
+    // Exactly one hit region registered, matching the button rect with id=1.
+    assert_eq!(vm.hit_regions.len(), 1);
+    let btn = vm.hit_regions[0];
+    assert_eq!((btn.x, btn.y, btn.w, btn.h, btn.id), (88, 110, 80, 28, 1));
+}
+
+#[test]
+fn test_hello_window_click_routes_to_id() {
+    // Same demo, but after HALT we simulate a click inside the OK button
+    // and re-run just a HITQ + HALT stub to read the id back.
+    let source = include_str!("../../programs/hello_window.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("hello_window.asm should assemble");
+
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = word;
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Simulate cursor inside the button.
+    vm.push_mouse(120, 120);
+
+    // Inject a 2-instruction stub at 0xE00: HITQ r11; HALT.
+    vm.ram[0xE00] = 0x38;
+    vm.ram[0xE01] = 11;
+    vm.ram[0xE02] = 0x00;
+    vm.pc = 0xE00;
+    vm.halted = false;
+    for _ in 0..10 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[11], 1, "cursor inside OK button should resolve to id=1");
+
+    // Cursor outside → miss.
+    vm.push_mouse(0, 0);
+    vm.regs[11] = 0xDEAD;
+    vm.pc = 0xE00;
+    vm.halted = false;
+    for _ in 0..10 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[11], 0, "cursor outside any region should resolve to 0");
+}
+
+// ── Counter Application Integration Tests ────────────────────
+
+/// Helper: load counter.asm into a fresh VM and run until N frames have rendered.
+fn boot_counter(target_frames: u32) -> Vm {
+    let source = include_str!("../../programs/counter.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("counter.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + target_frames {
+            break;
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_counter_boots_and_renders() {
+    let vm = boot_counter(1);
+    assert!(!vm.halted, "counter app should not halt after boot");
+    // Background should be dark purple (0x1A1A2E)
+    assert_eq!(vm.screen[0], 0x1A1A2E, "background should be dark purple");
+    // [+] button (green 0x2ECC71) at (80, 170) should be green
+    assert_eq!(vm.screen[170 * 256 + 80], 0x2ECC71, "+ button should be green");
+    // [-] button (red 0xE74C3C) at (176, 170) should be red
+    assert_eq!(vm.screen[170 * 256 + 176], 0xE74C3C, "- button should be red");
+    // Counter should be 0
+    assert_eq!(vm.ram[0x100], 0, "counter should start at 0");
+    // Two hit regions registered
+    assert_eq!(vm.hit_regions.len(), 2, "should have 2 hit regions");
+}
+
+#[test]
+fn test_counter_click_increments() {
+    let mut vm = boot_counter(1);
+    assert!(!vm.halted, "should be running");
+    assert_eq!(vm.ram[0x100], 0, "counter should start at 0");
+
+    // Position mouse over [+] button center (80, 170)
+    vm.push_mouse(80, 170);
+
+    // Run a few frames
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + 3 {
+            break;
+        }
+    }
+
+    assert!(!vm.halted, "should still be running after click");
+    // Counter should have incremented (at least once, since mouse is held)
+    assert!(vm.ram[0x100] > 0, "counter should have incremented: got {}", vm.ram[0x100]);
+}
+
+#[test]
+fn test_counter_click_decrements() {
+    let mut vm = boot_counter(1);
+
+    // First increment to 3
+    vm.push_mouse(80, 170);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 4 { break; }
+    }
+    let val = vm.ram[0x100];
+    assert!(val > 0, "should have incremented");
+
+    // Now move mouse to [-] button center (176, 170)
+    vm.push_mouse(176, 170);
+    let start2 = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start2 + 3 { break; }
+    }
+
+    assert!(!vm.halted, "should still be running");
+    // Counter should have decreased
+    assert!(vm.ram[0x100] < val, "counter should have decremented: was {}, now {}", val, vm.ram[0x100]);
+}
+
+#[test]
+fn test_counter_renders_number_text() {
+    let vm = boot_counter(1);
+    // Scratch buffer: "Count " (6 chars) then 3 digits + null = 10 total
+    let scratch: usize = 0x200;
+    assert_eq!(vm.ram[scratch + 0], b'C' as u32, "should have 'C' at scratch[0]");
+    assert_eq!(vm.ram[scratch + 1], b'o' as u32, "should have 'o' at scratch[1]");
+    assert_eq!(vm.ram[scratch + 5], b' ' as u32, "should have ' ' at scratch[5]");
+    assert_eq!(vm.ram[scratch + 6], b'0' as u32, "hundreds digit should be '0'");
+    assert_eq!(vm.ram[scratch + 7], b'0' as u32, "tens digit should be '0'");
+    assert_eq!(vm.ram[scratch + 8], b'0' as u32, "ones digit should be '0'");
+    assert_eq!(vm.ram[scratch + 9], 0, "should be null terminated");
+}
+
+
+

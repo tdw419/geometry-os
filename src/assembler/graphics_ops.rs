@@ -165,6 +165,30 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "HITSET" => {
+            if tokens.len() < 6 {
+                return Err(
+                    "HITSET requires 5 arguments: HITSET x_reg, y_reg, w_reg, h_reg, id".to_string(),
+                );
+            }
+            bytecode.push(0x37);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            bytecode.push(parse_reg(tokens[4])? as u32);
+            bytecode.push(parse_imm(tokens[5], constants)?);
+            Ok(Some(()))
+        }
+
+        "HITQ" => {
+            if tokens.len() < 2 {
+                return Err("HITQ requires 1 argument: HITQ dest_reg".to_string());
+            }
+            bytecode.push(0x38);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

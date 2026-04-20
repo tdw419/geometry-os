@@ -72,6 +72,20 @@ pub const MAX_PROCESSES: usize = 8;
 /// RAM[SYSCALL_TABLE + N] = handler address for syscall number N.
 pub const SYSCALL_TABLE: usize = 0xFE00;
 
+/// Maximum number of hit-test regions (GUI buttons, clickable areas).
+pub const MAX_HIT_REGIONS: usize = 64;
+
+/// A rectangular hit-test region for GUI interaction.
+/// Registered by HITSET, queried by HITQ.
+#[derive(Debug, Clone, Copy)]
+pub struct HitRegion {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+    pub id: u32,
+}
+
 /// Memory protection constants (Phase 24: Memory Protection).
 /// RAM is divided into pages. Each process gets a page directory mapping
 /// virtual page numbers to physical page numbers.
