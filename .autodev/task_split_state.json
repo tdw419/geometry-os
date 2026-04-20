@@ -1,0 +1,43 @@
+{
+  "source": ".autodev/phase64_spec.md",
+  "count": 3,
+  "tasks": [
+    {
+      "id": "1",
+      "title": "Implement MIN, MAX, and CLAMP Opcodes in VM Execution",
+      "description": "Add handlers for the MIN, MAX, and CLAMP opcodes (0x89, 0x8A, 0x8B) in the VM execution engine. Ensure these opcodes correctly compute the minimum, maximum, and clamped value of two registers respectively.",
+      "files_likely_touched": [
+        "src/vm/mod.rs"
+      ],
+      "estimated_complexity": "medium",
+      "dependencies": [],
+      "_file": ".autodev/tasks/task_000.md"
+    },
+    {
+      "id": "2",
+      "title": "Add MIN/MAX/CLAMP Assembler and Disassembler Entries",
+      "description": "Update the assembler (src/asm/system_ops.rs) and disassembler (src/vm/disasm.rs) to recognize and handle the new MIN, MAX, and CLAMP opcodes. Ensure that these entries correctly translate between assembly instructions and their corresponding opcode values.",
+      "files_likely_touched": [
+        "src/asm/system_ops.rs",
+        "src/vm/disasm.rs"
+      ],
+      "estimated_complexity": "small",
+      "dependencies": [],
+      "_file": ".autodev/tasks/task_001.md"
+    },
+    {
+      "id": "3",
+      "title": "Develop MIN/MAX/CLAMP Tests and Screensaver Demo Program",
+      "description": "Write comprehensive tests for the MIN, MAX, and CLAMP opcodes to cover various edge cases including equal values, negative numbers, and potential overflow. Additionally, create a screensaver demo program (screensaver.asm) that includes bouncing logos, starfield, plasma cycling effects. The screensaver should auto-start after N seconds of no input.",
+      "files_likely_touched": [
+        "src/vm/tests.rs",
+        "asm/screensaver.asm"
+      ],
+      "estimated_complexity": "large",
+      "dependencies": [],
+      "_file": ".autodev/tasks/task_002.md"
+    }
+  ],
+  "updated_at": "2026-04-20T16:06:35.915423+00:00",
+  "tool": "task_split"
+}

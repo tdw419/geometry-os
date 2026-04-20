@@ -1,0 +1,11 @@
+{
+  "task": "task_002",
+  "files_selected": 2,
+  "files": [
+    "src/vm/tests.rs",
+    "programs/fill_screen.asm"
+  ],
+  "output": "/home/jericho/zion/projects/geometry_os/geometry_os/.autodev/pack",
+  "updated_at": "2026-04-20T16:07:11.614788+00:00",
+  "tool": "context_pack"
+}

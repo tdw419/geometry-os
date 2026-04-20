@@ -1,0 +1,16 @@
+{
+  "choice": "phase-64 MIN/MAX/CLAMP",
+  "reasoning": "Phase-64 is planned next with minimal deliverables and LOC compared to other phases, making it simpler to implement. It also unblocks several downstream phases that require these operations.",
+  "confidence": 0.9,
+  "parse_error": false,
+  "matched_option": true,
+  "question": "Which phase to implement first? Consider dependencies and unblocking value.",
+  "options": [
+    "phase-64 MIN/MAX/CLAMP",
+    "phase-65 DRAWTEXT",
+    "phase-66 BITSET/BITCLR",
+    "phase-67 NOT/INV"
+  ],
+  "updated_at": "2026-04-20T16:05:49.246052+00:00",
+  "tool": "decide"
+}

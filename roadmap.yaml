@@ -3381,29 +3381,29 @@ phases:
   test_target: 10
 - id: phase-64
   title: MIN/MAX + CLAMP Opcodes + Screensaver Demo
-  status: planned
+  status: done
   goal: Add value clamping opcodes and a screensaver demo program
   description: 'MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app
     demonstrates idle-time animation with multiple effects.'
   deliverables:
   - name: MIN opcode (0x89)
     description: 'MIN rd, rs -- rd = min(rd, rs)'
-    status: todo
+    status: done
   - name: MAX opcode (0x8A)
     description: 'MAX rd, rs -- rd = max(rd, rs)'
-    status: todo
+    status: done
   - name: CLAMP opcode (0x8B)
     description: 'CLAMP rd, min_reg, max_reg -- rd = clamp(rd, min, max)'
-    status: todo
+    status: done
   - name: MIN/MAX/CLAMP assembler + disassembler entries
-    status: todo
+    status: done
   - name: MIN/MAX/CLAMP tests
     description: 'Test edge cases: equal values, negative, overflow'
-    status: todo
+    status: done
   - name: screensaver.asm
     description: 'Multi-effect screensaver with bouncing logos, starfield, plasma
       cycling. Auto-starts after N seconds of no input.'
-    status: todo
+    status: done
   scope_lines_total: 900
   test_target: 12
 - id: phase-65
@@ -3474,6 +3474,305 @@ phases:
     description: 'Visual demo cycling between normal and inverted screen'
     status: todo
   scope_lines_total: 500
+  test_target: 8
+- id: phase-68
+  title: Pixel Window System
+  status: planned
+  goal: Overlapping draggable windows rendered as pixel regions, each backed by a separate process
+  description: 'Window manager renders titled rectangular regions on the canvas. Each window
+    is a process with its own canvas region. MOUSEQ detects drag/resize/click-to-focus.
+    Proves multiprocess + IPC + mouse work together as a cohesive desktop.'
+  deliverables:
+  - name: WINSYS opcode (0x92)
+    description: 'WINSYS op, r0 -- op=0:create window (r1=x,r2=y,r3=w,r4=h), op=1:destroy,
+      op=2:bring to front, op=3:list windows. Returns window id in r0.'
+    status: todo
+  - name: Window region blitting
+    description: 'Each process draws to its own offscreen region. WINSYS blits visible
+      regions to the main canvas with Z-order (front window on top). Clipped at edges.'
+    status: todo
+  - name: Mouse hit-testing for windows
+    description: 'MOUSEQ clicks check window Z-order. Title bar click = drag, corner = resize,
+      body = forward to process. Title bar drawn with RECTF + TEXT for window title.'
+    status: todo
+  - name: window_desktop.asm
+    description: 'Desktop with 2-3 windows (terminal, paint, clock). Drag to move,
+      click to focus. Each window is a child process communicating via IPC pipes.'
+    status: todo
+  - name: Window system tests
+    description: 'Create/destroy windows, Z-order, clipping, mouse forwarding, IPC
+      between windowed processes. 15+ tests.'
+    status: todo
+  scope_lines_total: 1200
+  test_target: 15
+- id: phase-69
+  title: Sprite Engine
+  status: planned
+  goal: Sprite sheets, transparent blitting, and tile maps for games and visual programs
+  description: 'SPRBLT opcode blits sprites from sprite sheets stored in VFS. Transparent
+    pixels (0x00000000) are skipped. Tile maps render large maps from small sprite
+    tiles. Unlocks real games beyond PSET/RECTF primitives.'
+  deliverables:
+  - name: SPRBLT opcode (0x93)
+    description: 'SPRBLT sheet_addr, sprite_id, x, y -- blit sprite from sheet to screen.
+      Sprite sheet: 16x16 grid of 16x16 pixel sprites = 256 sprites per sheet.
+      Transparent pixels (alpha=0) skipped.'
+    status: todo
+  - name: SPRBLT assembler + disassembler entries
+    status: todo
+  - name: Sprite sheet format
+    description: 'Stored as .spr files in VFS. Header: 16 bytes (grid_w, grid_h, sprite_w,
+      sprite_h). Pixel data: RGBA u32 array. Loaded via VFS OPEN/READ.'
+    status: todo
+  - name: TILEMAP opcode (0x94)
+    description: 'TILEMAP map_addr, sheet_addr, x, y, w, h -- render a w*h tile map
+      at screen position (x,y). Map is array of sprite indices. Each tile = one sprite blit.'
+    status: todo
+  - name: sprite_demo.asm
+    description: 'Load a sprite sheet, render animated sprites walking around the screen.
+      Proves SPRBLT with transparency and animation.'
+    status: todo
+  - name: tilemap_demo.asm
+    description: 'Load a tile map and sprite sheet, render a scrolling top-down map.
+      Proves TILEMAP with camera offset.'
+    status: todo
+  - name: Sprite engine tests
+    description: 'SPRBLT rendering, transparency, tile map rendering, edge cases. 12+ tests.'
+    status: todo
+  scope_lines_total: 800
+  test_target: 12
+- id: phase-70
+  title: Self-Hosting Pixel Assembler
+  status: planned
+  goal: Write and assemble GO programs entirely inside GO, rendered as pixels
+  description: 'The existing self_host.asm proves the VM can assemble text. Push it to a
+    full pixel-native IDE: text editor (notepad.asm), assembler (self_host.asm), and
+    runner (F5 to execute) all running inside windowed processes. The OS builds itself.'
+  deliverables:
+  - name: Enhanced self_host.asm
+    description: 'Extend self_host.asm to support all 113 opcodes, labels, .db/.asciz
+    directives, and #define macros. Must be able to assemble every program in programs/.'
+    status: todo
+  - name: ASMSELF opcode enhancement
+    description: 'ASMSELF now returns assembled bytecode in a RAM region that can be
+      executed via RUNNEXT. Full round-trip: type code, assemble, run, see output.'
+    status: todo
+  - name: pixel_ide.asm
+    description: 'Windowed IDE with notepad (editor pane), assembler (build pane), and
+      output (screen pane). Three processes in windows. Type code, press F5, see result.'
+    status: todo
+  - name: Self-hosting test
+    description: 'Write a simple .asm program using the pixel IDE, assemble it, run it,
+      verify output matches expected result. The OS built and ran its own program.'
+    status: todo
+  scope_lines_total: 1500
+  test_target: 8
+- id: phase-71
+  title: Pixel Network Protocol
+  status: planned
+  goal: Share screens and communicate between Geometry OS instances over network
+  description: 'NET_SEND/NET_RECV opcodes for pixel-level communication. Send a screen
+    region to another GO instance. Enables remote desktop, multiplayer games, and
+    pixel-level collaboration. Uses existing net_demo.asm as foundation.'
+  deliverables:
+  - name: NET_SEND opcode enhancement (0x6E)
+    description: 'NET_SEND addr, len, dest_addr -- send pixel data to another GO instance.
+      dest_addr is IP:port stored as null-terminated string in RAM.'
+    status: todo
+  - name: NET_RECV opcode enhancement (0x6F)
+    description: 'NET_RECV addr, max_len -- receive pending pixel data into RAM buffer.
+      r0 = bytes received (0 if none). Non-blocking.'
+    status: todo
+  - name: Pixel protocol format
+    description: 'Frame: [4-byte header: type(1B) + width(1B) + height(1B) + flags(1B)]
+      + [pixel data as RGBA u32 array]. Types: screen_share, chat, file.'
+    status: todo
+  - name: net_share.asm
+    description: 'Two-instance demo: one GO instance shares its screen, the other displays
+      it in a window. Real-time pixel streaming at ~1 FPS.'
+    status: todo
+  - name: net_chat.asm
+    description: 'Simple pixel chat: type messages in terminal, send to peer, messages
+      appear on their screen. Proves bidirectional NET_SEND/NET_RECV.'
+    status: todo
+  - name: Network tests
+    description: 'Send/receive pixel frames, protocol parsing, connection handling. 10+ tests.'
+    status: todo
+  scope_lines_total: 900
+  test_target: 10
+- id: phase-72
+  title: Desktop Taskbar + App Launcher
+  status: planned
+  goal: Persistent taskbar at bottom of screen with running app icons, clock, and app launcher menu
+  description: 'Taskbar shows running processes as clickable icons. App launcher opens
+    a grid of available programs. Click to launch. Proves process listing, keyboard/mouse
+    input routing, and persistent UI elements across app switches.'
+  deliverables:
+  - name: taskbar.asm
+    description: 'Bottom bar (16px tall) showing running process icons, current time,
+      and a "Start" button. Click icon to switch focus. Click Start for launcher.'
+    status: todo
+  - name: launcher.asm
+    description: 'Full-screen grid of available .asm programs from VFS. Scroll with
+      mouse wheel, click to launch via RUNNEXT. ESC to close.'
+    status: todo
+  - name: Taskbar + launcher tests
+    description: 'Taskbar renders, launcher lists programs, click launches process. 8+ tests.'
+    status: todo
+  scope_lines_total: 800
+  test_target: 8
+- id: phase-73
+  title: Core Utilities
+  status: planned
+  goal: Unix-style text utilities that work inside the terminal
+  description: 'Small focused programs that prove VFS + shell integration. Each is
+    50-200 lines of assembly. Users can pipe output between them: ls | grep .asm | wc.'
+  deliverables:
+  - name: ls.asm (standalone)
+    description: 'List VFS directory contents. Flags: -l (long format with sizes),
+      -a (show hidden). Output via STRO for piping.'
+    status: todo
+  - name: grep.asm
+    description: 'Search stdin for pattern matches. Reads from pipe or file argument.
+      Outputs matching lines via STRO.'
+    status: todo
+  - name: wc.asm
+    description: 'Word count: lines, words, characters from stdin or file. Proves text parsing.'
+    status: todo
+  - name: hexdump.asm
+    description: 'Hex viewer for files. Reads binary from VFS, displays hex + ASCII
+      side by side in terminal. Proves binary file reading.'
+    status: todo
+  - name: Core utils tests
+    description: 'Each utility assembles and runs with test input. 10+ tests total.'
+    status: todo
+  scope_lines_total: 1000
+  test_target: 10
+- id: phase-74
+  title: Image Viewer + Screenshot
+  status: planned
+  goal: View images stored in VFS and capture screenshots of the canvas
+  description: 'Pixel-native image viewer renders raw pixel data from VFS files.
+    Screenshot opcode saves the current canvas to a VFS file. Proves binary I/O and
+    pixel file formats.'
+  deliverables:
+  - name: SCRSHOT opcode (0x95)
+    description: 'SCRSHOT addr -- save canvas to VFS file at path stored in RAM starting
+      at addr. Format: 256x256 RGBA u32 pixels, no header. Returns fd in r0.'
+    status: todo
+  - name: imgview.asm
+    description: 'Image viewer: loads .img files from VFS (raw RGBA u32 pixel data),
+      renders on canvas. Arrow keys to pan, +/- to zoom. Shows filename at top.'
+    status: todo
+  - name: screenshot.asm
+    description: 'Press P to capture screenshot, saves to VFS as screenshot_N.img.
+      Small overlay confirms "Saved!" for 1 second.'
+    status: todo
+  - name: Image viewer + screenshot tests
+    description: 'SCRSHOT saves file, imgview loads and renders, round-trip test. 8+ tests.'
+    status: todo
+  scope_lines_total: 600
+  test_target: 8
+- id: phase-75
+  title: Stopwatch + Timer + Calculator (scientific)
+  status: planned
+  goal: Time management and advanced calculation apps
+  description: 'Stopwatch with lap times, countdown timer with alarm, and scientific
+    calculator with trig/log functions. Proves FRAME timing precision and floating-point
+    via integer math.'
+  deliverables:
+  - name: stopwatch.asm
+    description: 'Start/stop/reset with lap times. Shows elapsed time as MM:SS.ms.
+      Space to start/stop, L for lap, R for reset. Stores last 10 laps.'
+    status: todo
+  - name: timer.asm
+    description: 'Countdown timer. Enter minutes:seconds, press start. Counts down
+      to zero, plays alarm via BEEP. Proves precise FRAME timing.'
+    status: todo
+  - name: sci_calc.asm
+    description: 'Scientific calculator extending gui_calc: sin/cos/tan (lookup table),
+      sqrt (Newton method), power, modulo. Proves integer math for fixed-point trig.'
+    status: todo
+  - name: Time + calc tests
+    description: 'Stopwatch counts correctly, timer fires alarm, sci_calc accuracy within
+      tolerance. 10+ tests.'
+    status: todo
+  scope_lines_total: 1200
+  test_target: 10
+- id: phase-76
+  title: Debugger UI + Memory Inspector
+  status: planned
+  goal: Visual debugging tools for GO programs running inside GO
+  description: 'Pixel-native debugger shows register state, memory regions, and step-by-step
+    execution. Memory inspector shows hex dump of any RAM region. Built on trace buffer
+    (phase 38) and VFS.'
+  deliverables:
+  - name: debugger.asm
+    description: 'Shows: register values (32 registers), PC, current instruction, stack
+      contents. Step/continue/reset buttons. Watchpoints on memory addresses. Proves
+      trace buffer (SNAP_TRACE) integration.'
+    status: todo
+  - name: meminspect.asm
+    description: 'Memory inspector: hex dump of RAM regions. Arrow keys to scroll,
+      type address to jump. Edit bytes in-place. Shows ASCII interpretation alongside hex.'
+    status: todo
+  - name: disasm.asm
+    description: 'Interactive disassembler: reads bytecode from RAM, shows assembly mnemonics.
+      Step through bytecode, show decoded instructions. Proves disassembler integration.'
+    status: todo
+  - name: Debugger tests
+    description: 'Debugger displays registers, meminspect reads/writes, disasm decodes. 10+ tests.'
+    status: todo
+  scope_lines_total: 1500
+  test_target: 10
+- id: phase-77
+  title: Settings + Wallpaper + Screensaver
+  status: planned
+  goal: System customization apps that prove config persistence and idle detection
+  description: 'Settings app writes preferences to VFS config file. Wallpaper app renders
+    full-screen patterns. Screensaver activates after idle timeout. Proves config persistence
+    and time-based events.'
+  deliverables:
+  - name: settings.asm
+    description: 'Settings panel: theme colors (8 preset palettes), beep volume, key repeat
+      rate, default shell. Saves to /etc/settings.cfg in VFS. Loaded at boot by init.asm.'
+    status: todo
+  - name: wallpaper.asm
+    description: 'Generates full-screen procedural wallpaper patterns (plasma, gradient,
+      noise). Save current pattern as /etc/wallpaper.cfg. init.asm loads on boot.'
+    status: todo
+  - name: screensaver.asm
+    description: 'Activates after 60 seconds of no input. Shows starfield or bouncing
+      geometry. Any keypress returns to desktop. Proves idle detection via FRAME counting.'
+    status: todo
+  - name: Settings + wallpaper tests
+    description: 'Config file round-trip, wallpaper renders, screensaver activates on idle. 8+ tests.'
+    status: todo
+  scope_lines_total: 1000
+  test_target: 8
+- id: phase-78
+  title: Calendar + About + Help System
+  status: planned
+  goal: Information apps that round out the desktop experience
+  description: 'Calendar shows month grid. About box shows system info. Help system shows
+    keyboard shortcuts and command reference. Proves text rendering and data display.'
+  deliverables:
+  - name: calendar.asm
+    description: 'Monthly calendar grid. Arrow keys to navigate months. Highlights today.
+      Shows day-of-week calculation (Zeller congruence in integer math).'
+    status: todo
+  - name: about.asm
+    description: 'System info panel: Geometry OS version, opcode count, RAM size, process
+      count, uptime in frames, CPU usage estimate. Proves VM introspection.'
+    status: todo
+  - name: help.asm
+    description: 'Help viewer: keyboard shortcuts, opcode reference, shell commands.
+      Reads help text from VFS file /etc/help.txt. Scrollable, searchable.'
+    status: todo
+  - name: Info app tests
+    description: 'Calendar renders correct dates, about shows stats, help loads text. 8+ tests.'
+    status: todo
+  scope_lines_total: 800
   test_target: 8
 global_risks:
 - 'Opcode space: 113 of ~256 slots used, plenty of room'

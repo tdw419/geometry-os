@@ -1,0 +1,26 @@
+{
+  "tag": "retest",
+  "timestamp": "20260420_154923",
+  "project": "/home/jericho/zion/projects/geometry_os/geometry_os",
+  "files": [
+    "snapshot_state.json",
+    ".gitignore",
+    "snapshots/snap_test-snap_manifest.json",
+    "snapshots/snap_test-snap.tar.gz"
+  ],
+  "tool_states": {
+    "snapshot": {
+      "tag": "test-snap",
+      "timestamp": "20260420_153847",
+      "project": "/home/jericho/zion/projects/geometry_os/geometry_os",
+      "files": [
+        ".gitignore"
+      ],
+      "tool_states": {},
+      "snapshot_file": ".autodev/snapshots/snap_test-snap.tar.gz",
+      "updated_at": "2026-04-20T15:38:47.869829+00:00",
+      "tool": "snapshot"
+    }
+  },
+  "snapshot_file": ".autodev/snapshots/snap_retest.tar.gz"
+}

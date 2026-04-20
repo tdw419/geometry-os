@@ -931,41 +931,6 @@ impl Vm {
                 }
             }
 
-            // MIN rd, rs  (0x89) -- rd = min(rd, rs) as signed i32
-            0x89 => {
-                let rd = self.fetch() as usize;
-                let rs = self.fetch() as usize;
-                if rd < NUM_REGS && rs < NUM_REGS {
-                    let a = self.regs[rd] as i32;
-                    let b = self.regs[rs] as i32;
-                    self.regs[rd] = a.min(b) as u32;
-                }
-            }
-
-            // MAX rd, rs  (0x8A) -- rd = max(rd, rs) as signed i32
-            0x8A => {
-                let rd = self.fetch() as usize;
-                let rs = self.fetch() as usize;
-                if rd < NUM_REGS && rs < NUM_REGS {
-                    let a = self.regs[rd] as i32;
-                    let b = self.regs[rs] as i32;
-                    self.regs[rd] = a.max(b) as u32;
-                }
-            }
-
-            // CLAMP rd, min_reg, max_reg  (0x8B) -- rd = clamp(rd, min, max) as signed i32
-            0x8B => {
-                let rd = self.fetch() as usize;
-                let min_r = self.fetch() as usize;
-                let max_r = self.fetch() as usize;
-                if rd < NUM_REGS && min_r < NUM_REGS && max_r < NUM_REGS {
-                    let val = self.regs[rd] as i32;
-                    let lo = self.regs[min_r] as i32;
-                    let hi = self.regs[max_r] as i32;
-                    self.regs[rd] = val.clamp(lo, hi) as u32;
-                }
-            }
-
             // Unknown opcode: halt
             _ => {
                 self.halted = true;

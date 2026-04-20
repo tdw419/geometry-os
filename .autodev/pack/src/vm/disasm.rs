@@ -663,15 +663,6 @@ impl Vm {
             0x88 => {
                 (format!("RECT {}, {}, {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3)), reg(ram(a + 4)), reg(ram(a + 5))), 6)
             }
-            0x89 => {
-                (format!("MIN {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
-            }
-            0x8A => {
-                (format!("MAX {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
-            }
-            0x8B => {
-                (format!("CLAMP {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3))), 4)
-            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

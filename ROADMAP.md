@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 63/67 phases complete, 0 in progress
+**Progress:** 63/78 phases complete, 0 in progress
 
-**Deliverables:** 262/283 complete
+**Deliverables:** 262/333 complete
 
 **Tasks:** 98/98 complete
 
@@ -79,6 +79,17 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | PLANNED | 0/4 | 1,000 | 10 |
 | phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | PLANNED | 0/6 | 700 | 15 |
 | phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | PLANNED | 0/5 | 500 | 8 |
+| phase-68 Pixel Window System | PLANNED | 0/5 | 1,200 | 15 |
+| phase-69 Sprite Engine | PLANNED | 0/7 | 800 | 12 |
+| phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
+| phase-71 Pixel Network Protocol | PLANNED | 0/6 | 900 | 10 |
+| phase-72 Desktop Taskbar + App Launcher | PLANNED | 0/3 | 800 | 8 |
+| phase-73 Core Utilities | PLANNED | 0/5 | 1,000 | 10 |
+| phase-74 Image Viewer + Screenshot | PLANNED | 0/4 | 600 | 8 |
+| phase-75 Stopwatch + Timer + Calculator (scientific) | PLANNED | 0/4 | 1,200 | 10 |
+| phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |
+| phase-77 Settings + Wallpaper + Screensaver | PLANNED | 0/4 | 1,000 | 8 |
+| phase-78 Calendar + About + Help System | PLANNED | 0/4 | 800 | 8 |
 
 ## Dependencies
 
@@ -1972,7 +1983,7 @@ ABS (0x87) for absolute value of register, RECT (0x88) for outline rectangle dra
 - [x] **RECT tests** -- Test outline corners, interior empty, 1x1, zero dimensions, assembly, disassembly (6 tests)
 - [x] **color_picker.asm** -- Mouse-driven RGB color picker with 8-color palette, slider indicators, RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.
 
-## [ ] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (PLANNED)
+## [x] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (DONE)
 
 **Goal:** Add value clamping opcodes and a screensaver demo program
 
@@ -1980,12 +1991,12 @@ MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app demonstrates idle-
 
 ### Deliverables
 
-- [ ] **MIN opcode (0x89)** -- MIN rd, rs -- rd = min(rd, rs)
-- [ ] **MAX opcode (0x8A)** -- MAX rd, rs -- rd = max(rd, rs)
-- [ ] **CLAMP opcode (0x8B)** -- CLAMP rd, min_reg, max_reg -- rd = clamp(rd, min, max)
-- [ ] **MIN/MAX/CLAMP assembler + disassembler entries** -- 
-- [ ] **MIN/MAX/CLAMP tests** -- Test edge cases: equal values, negative, overflow
-- [ ] **screensaver.asm** -- Multi-effect screensaver with bouncing logos, starfield, plasma cycling. Auto-starts after N seconds of no input.
+- [x] **MIN opcode (0x89)** -- MIN rd, rs -- rd = min(rd, rs)
+- [x] **MAX opcode (0x8A)** -- MAX rd, rs -- rd = max(rd, rs)
+- [x] **CLAMP opcode (0x8B)** -- CLAMP rd, min_reg, max_reg -- rd = clamp(rd, min, max)
+- [x] **MIN/MAX/CLAMP assembler + disassembler entries** -- 
+- [x] **MIN/MAX/CLAMP tests** -- Test edge cases: equal values, negative, overflow
+- [x] **screensaver.asm** -- Multi-effect screensaver with bouncing logos, starfield, plasma cycling. Auto-starts after N seconds of no input.
 
 ## [ ] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (PLANNED)
 
@@ -2028,6 +2039,155 @@ NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels (XOR 0xFFFFF
 - [ ] **NOT/INV assembler + disassembler entries** -- 
 - [ ] **NOT/INV tests** -- 
 - [ ] **invert_demo.asm** -- Visual demo cycling between normal and inverted screen
+
+## [ ] phase-68: Pixel Window System (PLANNED)
+
+**Goal:** Overlapping draggable windows rendered as pixel regions, each backed by a separate process
+
+Window manager renders titled rectangular regions on the canvas. Each window is a process with its own canvas region. MOUSEQ detects drag/resize/click-to-focus. Proves multiprocess + IPC + mouse work together as a cohesive desktop.
+
+### Deliverables
+
+- [ ] **WINSYS opcode (0x92)** -- WINSYS op, r0 -- op=0:create window (r1=x,r2=y,r3=w,r4=h), op=1:destroy, op=2:bring to front, op=3:list windows. Returns window id in r0.
+- [ ] **Window region blitting** -- Each process draws to its own offscreen region. WINSYS blits visible regions to the main canvas with Z-order (front window on top). Clipped at edges.
+- [ ] **Mouse hit-testing for windows** -- MOUSEQ clicks check window Z-order. Title bar click = drag, corner = resize, body = forward to process. Title bar drawn with RECTF + TEXT for window title.
+- [ ] **window_desktop.asm** -- Desktop with 2-3 windows (terminal, paint, clock). Drag to move, click to focus. Each window is a child process communicating via IPC pipes.
+- [ ] **Window system tests** -- Create/destroy windows, Z-order, clipping, mouse forwarding, IPC between windowed processes. 15+ tests.
+
+## [ ] phase-69: Sprite Engine (PLANNED)
+
+**Goal:** Sprite sheets, transparent blitting, and tile maps for games and visual programs
+
+SPRBLT opcode blits sprites from sprite sheets stored in VFS. Transparent pixels (0x00000000) are skipped. Tile maps render large maps from small sprite tiles. Unlocks real games beyond PSET/RECTF primitives.
+
+### Deliverables
+
+- [ ] **SPRBLT opcode (0x93)** -- SPRBLT sheet_addr, sprite_id, x, y -- blit sprite from sheet to screen. Sprite sheet: 16x16 grid of 16x16 pixel sprites = 256 sprites per sheet. Transparent pixels (alpha=0) skipped.
+- [ ] **SPRBLT assembler + disassembler entries** -- 
+- [ ] **Sprite sheet format** -- Stored as .spr files in VFS. Header: 16 bytes (grid_w, grid_h, sprite_w, sprite_h). Pixel data: RGBA u32 array. Loaded via VFS OPEN/READ.
+- [ ] **TILEMAP opcode (0x94)** -- TILEMAP map_addr, sheet_addr, x, y, w, h -- render a w*h tile map at screen position (x,y). Map is array of sprite indices. Each tile = one sprite blit.
+- [ ] **sprite_demo.asm** -- Load a sprite sheet, render animated sprites walking around the screen. Proves SPRBLT with transparency and animation.
+- [ ] **tilemap_demo.asm** -- Load a tile map and sprite sheet, render a scrolling top-down map. Proves TILEMAP with camera offset.
+- [ ] **Sprite engine tests** -- SPRBLT rendering, transparency, tile map rendering, edge cases. 12+ tests.
+
+## [ ] phase-70: Self-Hosting Pixel Assembler (PLANNED)
+
+**Goal:** Write and assemble GO programs entirely inside GO, rendered as pixels
+
+The existing self_host.asm proves the VM can assemble text. Push it to a full pixel-native IDE: text editor (notepad.asm), assembler (self_host.asm), and runner (F5 to execute) all running inside windowed processes. The OS builds itself.
+
+### Deliverables
+
+- [ ] **Enhanced self_host.asm** -- Extend self_host.asm to support all 113 opcodes, labels, .db/.asciz directives, and #define macros. Must be able to assemble every program in programs/.
+- [ ] **ASMSELF opcode enhancement** -- ASMSELF now returns assembled bytecode in a RAM region that can be executed via RUNNEXT. Full round-trip: type code, assemble, run, see output.
+- [ ] **pixel_ide.asm** -- Windowed IDE with notepad (editor pane), assembler (build pane), and output (screen pane). Three processes in windows. Type code, press F5, see result.
+- [ ] **Self-hosting test** -- Write a simple .asm program using the pixel IDE, assemble it, run it, verify output matches expected result. The OS built and ran its own program.
+
+## [ ] phase-71: Pixel Network Protocol (PLANNED)
+
+**Goal:** Share screens and communicate between Geometry OS instances over network
+
+NET_SEND/NET_RECV opcodes for pixel-level communication. Send a screen region to another GO instance. Enables remote desktop, multiplayer games, and pixel-level collaboration. Uses existing net_demo.asm as foundation.
+
+### Deliverables
+
+- [ ] **NET_SEND opcode enhancement (0x6E)** -- NET_SEND addr, len, dest_addr -- send pixel data to another GO instance. dest_addr is IP:port stored as null-terminated string in RAM.
+- [ ] **NET_RECV opcode enhancement (0x6F)** -- NET_RECV addr, max_len -- receive pending pixel data into RAM buffer. r0 = bytes received (0 if none). Non-blocking.
+- [ ] **Pixel protocol format** -- Frame: [4-byte header: type(1B) + width(1B) + height(1B) + flags(1B)] + [pixel data as RGBA u32 array]. Types: screen_share, chat, file.
+- [ ] **net_share.asm** -- Two-instance demo: one GO instance shares its screen, the other displays it in a window. Real-time pixel streaming at ~1 FPS.
+- [ ] **net_chat.asm** -- Simple pixel chat: type messages in terminal, send to peer, messages appear on their screen. Proves bidirectional NET_SEND/NET_RECV.
+- [ ] **Network tests** -- Send/receive pixel frames, protocol parsing, connection handling. 10+ tests.
+
+## [ ] phase-72: Desktop Taskbar + App Launcher (PLANNED)
+
+**Goal:** Persistent taskbar at bottom of screen with running app icons, clock, and app launcher menu
+
+Taskbar shows running processes as clickable icons. App launcher opens a grid of available programs. Click to launch. Proves process listing, keyboard/mouse input routing, and persistent UI elements across app switches.
+
+### Deliverables
+
+- [ ] **taskbar.asm** -- Bottom bar (16px tall) showing running process icons, current time, and a "Start" button. Click icon to switch focus. Click Start for launcher.
+- [ ] **launcher.asm** -- Full-screen grid of available .asm programs from VFS. Scroll with mouse wheel, click to launch via RUNNEXT. ESC to close.
+- [ ] **Taskbar + launcher tests** -- Taskbar renders, launcher lists programs, click launches process. 8+ tests.
+
+## [ ] phase-73: Core Utilities (PLANNED)
+
+**Goal:** Unix-style text utilities that work inside the terminal
+
+Small focused programs that prove VFS + shell integration. Each is 50-200 lines of assembly. Users can pipe output between them: ls | grep .asm | wc.
+
+### Deliverables
+
+- [ ] **ls.asm (standalone)** -- List VFS directory contents. Flags: -l (long format with sizes), -a (show hidden). Output via STRO for piping.
+- [ ] **grep.asm** -- Search stdin for pattern matches. Reads from pipe or file argument. Outputs matching lines via STRO.
+- [ ] **wc.asm** -- Word count: lines, words, characters from stdin or file. Proves text parsing.
+- [ ] **hexdump.asm** -- Hex viewer for files. Reads binary from VFS, displays hex + ASCII side by side in terminal. Proves binary file reading.
+- [ ] **Core utils tests** -- Each utility assembles and runs with test input. 10+ tests total.
+
+## [ ] phase-74: Image Viewer + Screenshot (PLANNED)
+
+**Goal:** View images stored in VFS and capture screenshots of the canvas
+
+Pixel-native image viewer renders raw pixel data from VFS files. Screenshot opcode saves the current canvas to a VFS file. Proves binary I/O and pixel file formats.
+
+### Deliverables
+
+- [ ] **SCRSHOT opcode (0x95)** -- SCRSHOT addr -- save canvas to VFS file at path stored in RAM starting at addr. Format: 256x256 RGBA u32 pixels, no header. Returns fd in r0.
+- [ ] **imgview.asm** -- Image viewer: loads .img files from VFS (raw RGBA u32 pixel data), renders on canvas. Arrow keys to pan, +/- to zoom. Shows filename at top.
+- [ ] **screenshot.asm** -- Press P to capture screenshot, saves to VFS as screenshot_N.img. Small overlay confirms "Saved!" for 1 second.
+- [ ] **Image viewer + screenshot tests** -- SCRSHOT saves file, imgview loads and renders, round-trip test. 8+ tests.
+
+## [ ] phase-75: Stopwatch + Timer + Calculator (scientific) (PLANNED)
+
+**Goal:** Time management and advanced calculation apps
+
+Stopwatch with lap times, countdown timer with alarm, and scientific calculator with trig/log functions. Proves FRAME timing precision and floating-point via integer math.
+
+### Deliverables
+
+- [ ] **stopwatch.asm** -- Start/stop/reset with lap times. Shows elapsed time as MM:SS.ms. Space to start/stop, L for lap, R for reset. Stores last 10 laps.
+- [ ] **timer.asm** -- Countdown timer. Enter minutes:seconds, press start. Counts down to zero, plays alarm via BEEP. Proves precise FRAME timing.
+- [ ] **sci_calc.asm** -- Scientific calculator extending gui_calc: sin/cos/tan (lookup table), sqrt (Newton method), power, modulo. Proves integer math for fixed-point trig.
+- [ ] **Time + calc tests** -- Stopwatch counts correctly, timer fires alarm, sci_calc accuracy within tolerance. 10+ tests.
+
+## [ ] phase-76: Debugger UI + Memory Inspector (PLANNED)
+
+**Goal:** Visual debugging tools for GO programs running inside GO
+
+Pixel-native debugger shows register state, memory regions, and step-by-step execution. Memory inspector shows hex dump of any RAM region. Built on trace buffer (phase 38) and VFS.
+
+### Deliverables
+
+- [ ] **debugger.asm** -- Shows: register values (32 registers), PC, current instruction, stack contents. Step/continue/reset buttons. Watchpoints on memory addresses. Proves trace buffer (SNAP_TRACE) integration.
+- [ ] **meminspect.asm** -- Memory inspector: hex dump of RAM regions. Arrow keys to scroll, type address to jump. Edit bytes in-place. Shows ASCII interpretation alongside hex.
+- [ ] **disasm.asm** -- Interactive disassembler: reads bytecode from RAM, shows assembly mnemonics. Step through bytecode, show decoded instructions. Proves disassembler integration.
+- [ ] **Debugger tests** -- Debugger displays registers, meminspect reads/writes, disasm decodes. 10+ tests.
+
+## [ ] phase-77: Settings + Wallpaper + Screensaver (PLANNED)
+
+**Goal:** System customization apps that prove config persistence and idle detection
+
+Settings app writes preferences to VFS config file. Wallpaper app renders full-screen patterns. Screensaver activates after idle timeout. Proves config persistence and time-based events.
+
+### Deliverables
+
+- [ ] **settings.asm** -- Settings panel: theme colors (8 preset palettes), beep volume, key repeat rate, default shell. Saves to /etc/settings.cfg in VFS. Loaded at boot by init.asm.
+- [ ] **wallpaper.asm** -- Generates full-screen procedural wallpaper patterns (plasma, gradient, noise). Save current pattern as /etc/wallpaper.cfg. init.asm loads on boot.
+- [ ] **screensaver.asm** -- Activates after 60 seconds of no input. Shows starfield or bouncing geometry. Any keypress returns to desktop. Proves idle detection via FRAME counting.
+- [ ] **Settings + wallpaper tests** -- Config file round-trip, wallpaper renders, screensaver activates on idle. 8+ tests.
+
+## [ ] phase-78: Calendar + About + Help System (PLANNED)
+
+**Goal:** Information apps that round out the desktop experience
+
+Calendar shows month grid. About box shows system info. Help system shows keyboard shortcuts and command reference. Proves text rendering and data display.
+
+### Deliverables
+
+- [ ] **calendar.asm** -- Monthly calendar grid. Arrow keys to navigate months. Highlights today. Shows day-of-week calculation (Zeller congruence in integer math).
+- [ ] **about.asm** -- System info panel: Geometry OS version, opcode count, RAM size, process count, uptime in frames, CPU usage estimate. Proves VM introspection.
+- [ ] **help.asm** -- Help viewer: keyboard shortcuts, opcode reference, shell commands. Reads help text from VFS file /etc/help.txt. Scrollable, searchable.
+- [ ] **Info app tests** -- Calendar renders correct dates, about shows stats, help loads text. 8+ tests.
 
 ## Global Risks
 

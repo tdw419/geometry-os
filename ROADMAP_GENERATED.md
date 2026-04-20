@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 62/62 phases complete, 0 in progress
+**Progress:** 63/71 phases complete, 0 in progress
 
-**Deliverables:** 255/255 complete
+**Deliverables:** 262/305 complete
 
 **Tasks:** 98/98 complete
 
@@ -74,6 +74,15 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-60 STRCMP Opcode | COMPLETE | 1/1 | 50 | 13 |
 | phase-61 GUI Calculator App + Token-Pixel-GUI Doc | COMPLETE | 2/2 | 1,200 | 1 |
 | phase-62 Notepad Bug Fixes + Clock App | COMPLETE | 2/2 | 1,485 | 6 |
+| phase-63 ABS + RECT Opcodes + Color Picker App | COMPLETE | 7/7 | 800 | 10 |
+| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | PLANNED | 0/6 | 900 | 12 |
+| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | PLANNED | 0/4 | 1,000 | 10 |
+| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | PLANNED | 0/6 | 700 | 15 |
+| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | PLANNED | 0/5 | 500 | 8 |
+| phase-68 Pixel Window System | PLANNED | 0/5 | 1,200 | 15 |
+| phase-69 Sprite Engine | PLANNED | 0/7 | 800 | 12 |
+| phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
+| phase-71 Pixel Network Protocol | PLANNED | 0/6 | 900 | 10 |
 
 ## Dependencies
 
@@ -1950,6 +1959,137 @@ Fixed 5 critical bugs in notepad.asm (r31 save, r12 clobber, r1 restores, LDI r0
 ### Technical Notes
 
 Commit 5ed4b7951. notepad.asm now 713 lines, clock.asm 494 lines. 6 new tests in src/vm/tests.rs. 1485 insertions total.
+
+## [x] phase-63: ABS + RECT Opcodes + Color Picker App (COMPLETE)
+
+**Goal:** Add absolute value and outline rectangle opcodes, ship a color picker GUI app
+
+ABS (0x87) for absolute value of register, RECT (0x88) for outline rectangle drawing. Color picker app demonstrates mouse-driven RGB selection with palette swatches, slider indicators, and live preview. 15 new tests, 115 opcodes.
+
+### Deliverables
+
+- [x] **ABS opcode (0x87)** -- ABS rd -- rd = |rd|, handles i32 wraparound for 0x80000000
+- [x] **RECT opcode (0x88)** -- RECT x, y, w, h, color -- outline rectangle (4 edges only)
+- [x] **ABS/RECT assembler entries** -- Add to assembler system_ops.rs, graphics_ops.rs, preprocessor OPCODES list
+- [x] **ABS/RECT disassembler entries** -- Add to vm/disasm.rs
+- [x] **ABS tests** -- Test positive, negative, zero, large negative, i32::MIN, assembly, disassembly (7 tests)
+- [x] **RECT tests** -- Test outline corners, interior empty, 1x1, zero dimensions, assembly, disassembly (6 tests)
+- [x] **color_picker.asm** -- Mouse-driven RGB color picker with 8-color palette, slider indicators, RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.
+
+## [ ] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (PLANNED)
+
+**Goal:** Add value clamping opcodes and a screensaver demo program
+
+MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app demonstrates idle-time animation with multiple effects.
+
+### Deliverables
+
+- [ ] **MIN opcode (0x89)** -- MIN rd, rs -- rd = min(rd, rs)
+- [ ] **MAX opcode (0x8A)** -- MAX rd, rs -- rd = max(rd, rs)
+- [ ] **CLAMP opcode (0x8B)** -- CLAMP rd, min_reg, max_reg -- rd = clamp(rd, min, max)
+- [ ] **MIN/MAX/CLAMP assembler + disassembler entries** -- 
+- [ ] **MIN/MAX/CLAMP tests** -- Test edge cases: equal values, negative, overflow
+- [ ] **screensaver.asm** -- Multi-effect screensaver with bouncing logos, starfield, plasma cycling. Auto-starts after N seconds of no input.
+
+## [ ] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (PLANNED)
+
+**Goal:** Add colored text rendering opcode, upgrade terminal with color output
+
+DRAWTEXT (0x8C) renders text with foreground and background colors. Terminal v5 uses DRAWTEXT for colored command output and syntax highlighting.
+
+### Deliverables
+
+- [ ] **DRAWTEXT opcode (0x8C)** -- DRAWTEXT x, y, addr, fg_color, bg_color -- text with colors
+- [ ] **DRAWTEXT assembler + disassembler entries** -- 
+- [ ] **DRAWTEXT tests** -- Foreground color, background color, transparent (0) bg, newline handling
+- [ ] **terminal.asm v5 color upgrade** -- Add colored output for help, errors, ls (dirs vs files), success messages. Use DRAWTEXT instead of TEXT.
+
+## [ ] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (PLANNED)
+
+**Goal:** Add bitwise manipulation opcodes for flags and state management
+
+BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient bit manipulation. Enhanced Game of Life uses bitwise operations for speed.
+
+### Deliverables
+
+- [ ] **BITSET opcode (0x8D)** -- BITSET rd, bit_reg -- set bit N in rd (rd |= 1 << N)
+- [ ] **BITCLR opcode (0x8E)** -- BITCLR rd, bit_reg -- clear bit N in rd (rd &= ~(1 << N))
+- [ ] **BITTEST opcode (0x8F)** -- BITTEST rd, bit_reg -- r0 = (rd >> N) & 1 (test bit N)
+- [ ] **BITSET/BITCLR/BITTEST assembler + disassembler entries** -- 
+- [ ] **BIT tests** -- Set/clear/test individual bits, edge cases (bit 0, bit 31)
+- [ ] **game_of_life enhanced with bit operations** -- Optimized neighbor counting using BITTEST, faster generation stepping
+
+## [ ] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (PLANNED)
+
+**Goal:** Add logical NOT and screen invert operations
+
+NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels (XOR 0xFFFFFF). Invert demo shows visual effects.
+
+### Deliverables
+
+- [ ] **NOT opcode (0x90)** -- NOT rd -- rd = ~rd (bitwise complement)
+- [ ] **INV opcode (0x91)** -- INV -- invert all screen pixels (XOR 0xFFFFFF)
+- [ ] **NOT/INV assembler + disassembler entries** -- 
+- [ ] **NOT/INV tests** -- 
+- [ ] **invert_demo.asm** -- Visual demo cycling between normal and inverted screen
+
+## [ ] phase-68: Pixel Window System (PLANNED)
+
+**Goal:** Overlapping draggable windows rendered as pixel regions, each backed by a separate process
+
+Window manager renders titled rectangular regions on the canvas. Each window is a process with its own canvas region. MOUSEQ detects drag/resize/click-to-focus. Proves multiprocess + IPC + mouse work together as a cohesive desktop.
+
+### Deliverables
+
+- [ ] **WINSYS opcode (0x92)** -- WINSYS op, r0 -- op=0:create window (r1=x,r2=y,r3=w,r4=h), op=1:destroy, op=2:bring to front, op=3:list windows. Returns window id in r0.
+- [ ] **Window region blitting** -- Each process draws to its own offscreen region. WINSYS blits visible regions to the main canvas with Z-order (front window on top). Clipped at edges.
+- [ ] **Mouse hit-testing for windows** -- MOUSEQ clicks check window Z-order. Title bar click = drag, corner = resize, body = forward to process. Title bar drawn with RECTF + TEXT for window title.
+- [ ] **window_desktop.asm** -- Desktop with 2-3 windows (terminal, paint, clock). Drag to move, click to focus. Each window is a child process communicating via IPC pipes.
+- [ ] **Window system tests** -- Create/destroy windows, Z-order, clipping, mouse forwarding, IPC between windowed processes. 15+ tests.
+
+## [ ] phase-69: Sprite Engine (PLANNED)
+
+**Goal:** Sprite sheets, transparent blitting, and tile maps for games and visual programs
+
+SPRBLT opcode blits sprites from sprite sheets stored in VFS. Transparent pixels (0x00000000) are skipped. Tile maps render large maps from small sprite tiles. Unlocks real games beyond PSET/RECTF primitives.
+
+### Deliverables
+
+- [ ] **SPRBLT opcode (0x93)** -- SPRBLT sheet_addr, sprite_id, x, y -- blit sprite from sheet to screen. Sprite sheet: 16x16 grid of 16x16 pixel sprites = 256 sprites per sheet. Transparent pixels (alpha=0) skipped.
+- [ ] **SPRBLT assembler + disassembler entries** -- 
+- [ ] **Sprite sheet format** -- Stored as .spr files in VFS. Header: 16 bytes (grid_w, grid_h, sprite_w, sprite_h). Pixel data: RGBA u32 array. Loaded via VFS OPEN/READ.
+- [ ] **TILEMAP opcode (0x94)** -- TILEMAP map_addr, sheet_addr, x, y, w, h -- render a w*h tile map at screen position (x,y). Map is array of sprite indices. Each tile = one sprite blit.
+- [ ] **sprite_demo.asm** -- Load a sprite sheet, render animated sprites walking around the screen. Proves SPRBLT with transparency and animation.
+- [ ] **tilemap_demo.asm** -- Load a tile map and sprite sheet, render a scrolling top-down map. Proves TILEMAP with camera offset.
+- [ ] **Sprite engine tests** -- SPRBLT rendering, transparency, tile map rendering, edge cases. 12+ tests.
+
+## [ ] phase-70: Self-Hosting Pixel Assembler (PLANNED)
+
+**Goal:** Write and assemble GO programs entirely inside GO, rendered as pixels
+
+The existing self_host.asm proves the VM can assemble text. Push it to a full pixel-native IDE: text editor (notepad.asm), assembler (self_host.asm), and runner (F5 to execute) all running inside windowed processes. The OS builds itself.
+
+### Deliverables
+
+- [ ] **Enhanced self_host.asm** -- Extend self_host.asm to support all 113 opcodes, labels, .db/.asciz directives, and #define macros. Must be able to assemble every program in programs/.
+- [ ] **ASMSELF opcode enhancement** -- ASMSELF now returns assembled bytecode in a RAM region that can be executed via RUNNEXT. Full round-trip: type code, assemble, run, see output.
+- [ ] **pixel_ide.asm** -- Windowed IDE with notepad (editor pane), assembler (build pane), and output (screen pane). Three processes in windows. Type code, press F5, see result.
+- [ ] **Self-hosting test** -- Write a simple .asm program using the pixel IDE, assemble it, run it, verify output matches expected result. The OS built and ran its own program.
+
+## [ ] phase-71: Pixel Network Protocol (PLANNED)
+
+**Goal:** Share screens and communicate between Geometry OS instances over network
+
+NET_SEND/NET_RECV opcodes for pixel-level communication. Send a screen region to another GO instance. Enables remote desktop, multiplayer games, and pixel-level collaboration. Uses existing net_demo.asm as foundation.
+
+### Deliverables
+
+- [ ] **NET_SEND opcode enhancement (0x6E)** -- NET_SEND addr, len, dest_addr -- send pixel data to another GO instance. dest_addr is IP:port stored as null-terminated string in RAM.
+- [ ] **NET_RECV opcode enhancement (0x6F)** -- NET_RECV addr, max_len -- receive pending pixel data into RAM buffer. r0 = bytes received (0 if none). Non-blocking.
+- [ ] **Pixel protocol format** -- Frame: [4-byte header: type(1B) + width(1B) + height(1B) + flags(1B)] + [pixel data as RGBA u32 array]. Types: screen_share, chat, file.
+- [ ] **net_share.asm** -- Two-instance demo: one GO instance shares its screen, the other displays it in a window. Real-time pixel streaming at ~1 FPS.
+- [ ] **net_chat.asm** -- Simple pixel chat: type messages in terminal, send to peer, messages appear on their screen. Proves bidirectional NET_SEND/NET_RECV.
+- [ ] **Network tests** -- Send/receive pixel frames, protocol parsing, connection handling. 10+ tests.
 
 ## Global Risks
 

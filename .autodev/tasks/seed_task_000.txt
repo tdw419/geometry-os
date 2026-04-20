@@ -1,0 +1,29 @@
+You are an AI coding agent executing a specific task.
+Read the project's AI_GUIDE.md first to understand the codebase, then complete the task below.
+
+# Task
+
+# Task 1: Implement MIN, MAX, and CLAMP Opcodes in VM Execution
+
+## Description
+Add handlers for the MIN, MAX, and CLAMP opcodes (0x89, 0x8A, 0x8B) in the VM execution engine. Ensure these opcodes correctly compute the minimum, maximum, and clamped value of two registers respectively.
+
+## Files Likely Touched
+- src/vm/mod.rs
+
+## Estimated Complexity
+medium
+
+## Dependencies
+None (parallelizable)
+
+
+# Instructions
+
+1. Read AI_GUIDE.md in the project root
+2. Understand the task requirements above
+3. Implement the changes
+4. Run tests to verify
+5. Report what you did and what tests pass
+
+When done, write a brief summary to .autodev/outcome_task_000.md

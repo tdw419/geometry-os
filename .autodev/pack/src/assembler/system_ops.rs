@@ -403,43 +403,6 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
-        "MIN" => {
-            if tokens.len() < 3 {
-                return Err(
-                    "MIN requires 2 arguments: MIN rd, rs".to_string(),
-                );
-            }
-            bytecode.push(0x89);
-            bytecode.push(parse_reg(tokens[1])? as u32);
-            bytecode.push(parse_reg(tokens[2])? as u32);
-            Ok(Some(()))
-        }
-
-        "MAX" => {
-            if tokens.len() < 3 {
-                return Err(
-                    "MAX requires 2 arguments: MAX rd, rs".to_string(),
-                );
-            }
-            bytecode.push(0x8A);
-            bytecode.push(parse_reg(tokens[1])? as u32);
-            bytecode.push(parse_reg(tokens[2])? as u32);
-            Ok(Some(()))
-        }
-
-        "CLAMP" => {
-            if tokens.len() < 4 {
-                return Err(
-                    "CLAMP requires 3 arguments: CLAMP rd, min_reg, max_reg".to_string(),
-                );
-            }
-            bytecode.push(0x8B);
-            bytecode.push(parse_reg(tokens[1])? as u32);
-            bytecode.push(parse_reg(tokens[2])? as u32);
-            bytecode.push(parse_reg(tokens[3])? as u32);
-            Ok(Some(()))
-        }
-
         _ => Ok(None),
     }
 }
