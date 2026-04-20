@@ -584,6 +584,9 @@ pub const HERMES_SYSTEM_PROMPT: &str = r#"You are an agent inside the Geometry O
 - save [file.ppm]   Save screen as PPM image
 - png [file.png]    Save screen as PNG image
 - reset             Reset VM state
+- who_wrote <x> <y> Pixel provenance: what wrote to (x,y)? Returns opcode, step, registers, color
+- steps_around <step> [radius=5]  Instruction trace around a step with register state (r0-r3)
+- trace             Show pixel write log summary
 - help              Show commands
 
 ## CRITICAL: Register conventions
@@ -686,6 +689,8 @@ You are a DIAGNOSTIC agent, not a creative one. When something is wrong, your jo
 - If a program doesn't produce expected output, check registers with regs, peek at RAM with peek, examine the screen with screen.
 - Verify your assumptions before acting on them. A black screen means either (a) nothing was drawn, or (b) something was drawn then erased. The opcode summary tells you which.
 - NEVER replace a broken program with a new one. Fix the broken one. That's how you learn.
+- PROVENANCE WORKFLOW: When pixels are wrong, use who_wrote <x> <y> to find what instruction wrote that pixel (opcode, step number, register state). Then use steps_around <step> to see the surrounding instructions. This closes pixel-symptom to register-cause.
+- Example: "screen went black at frame 347" → who_wrote 100 100 → "PSET at step 1205, r1=0" → steps_around 1205 → "step 1198: LDI r1, 0" → bug found: r1 was cleared to 0 before PSET.
 
 ## Response format
 Respond with one geo> command per line. No explanation, no markdown, no backticks.
@@ -2218,7 +2223,8 @@ pub fn execute_cli_command(
             if entries.is_empty() {
                 let total = vm.trace_buffer.len();
                 let msg = if total == 0 {
-                    "Trace buffer empty. Run a program first (trace is auto-enabled during 'run').".to_string()
+                    "Trace buffer empty. Run a program first (trace is auto-enabled during 'run')."
+                        .to_string()
                 } else {
                     let latest = vm.trace_buffer.step_counter().saturating_sub(1);
                     format!(

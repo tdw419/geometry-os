@@ -273,7 +273,10 @@ mod tests {
         let mut buf = vec![0u8; 256 * 256 * 3];
         reader.next_frame(&mut buf).unwrap();
 
-        assert!(buf.iter().all(|&b| b == 0), "all-black screen should produce all-zero bytes");
+        assert!(
+            buf.iter().all(|&b| b == 0),
+            "all-black screen should produce all-zero bytes"
+        );
 
         let _ = std::fs::remove_file(&path);
     }
@@ -293,7 +296,10 @@ mod tests {
         let mut buf = vec![0u8; 256 * 256 * 3];
         reader.next_frame(&mut buf).unwrap();
 
-        assert!(buf.iter().all(|&b| b == 0xFF), "all-white screen should produce all-0xFF bytes");
+        assert!(
+            buf.iter().all(|&b| b == 0xFF),
+            "all-white screen should produce all-0xFF bytes"
+        );
 
         let _ = std::fs::remove_file(&path);
     }
@@ -392,7 +398,17 @@ mod tests {
         // Write valid magic but way too small
         std::fs::write(
             &path,
-            [vm::SAVE_MAGIC[0], vm::SAVE_MAGIC[1], vm::SAVE_MAGIC[2], vm::SAVE_MAGIC[3], 0, 0, 0, 0, 0],
+            [
+                vm::SAVE_MAGIC[0],
+                vm::SAVE_MAGIC[1],
+                vm::SAVE_MAGIC[2],
+                vm::SAVE_MAGIC[3],
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
         )
         .unwrap();
 

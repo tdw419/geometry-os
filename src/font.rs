@@ -200,7 +200,11 @@ mod tests {
     fn test_control_characters_are_blank() {
         // ASCII 0x00-0x1F are control characters, should be all zeros
         for (i, glyph) in GLYPHS.iter().enumerate().take(32) {
-            assert!(glyph.iter().all(|&b| b == 0), "control char 0x{:02X} is not blank", i);
+            assert!(
+                glyph.iter().all(|&b| b == 0),
+                "control char 0x{:02X} is not blank",
+                i
+            );
         }
     }
 
@@ -217,7 +221,10 @@ mod tests {
     #[test]
     fn test_exclamation_mark_has_pixels() {
         let glyph = &GLYPHS[0x21];
-        assert!(glyph.iter().any(|&b| b != 0), "exclamation mark should have some pixels set");
+        assert!(
+            glyph.iter().any(|&b| b != 0),
+            "exclamation mark should have some pixels set"
+        );
         // Check it has the characteristic pattern: top 5 rows have middle column
         assert_ne!(glyph[0] & 0x18, 0); // middle bits set in row 0
     }
@@ -237,7 +244,12 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for d in 0x30..=0x39 {
             let glyph = GLYPHS[d];
-            assert!(seen.insert(glyph), "digit {} (0x{:02X}) has duplicate glyph", d - 0x30, d);
+            assert!(
+                seen.insert(glyph),
+                "digit {} (0x{:02X}) has duplicate glyph",
+                d - 0x30,
+                d
+            );
         }
     }
 
@@ -246,7 +258,12 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for c in 0x41..=0x5A {
             let glyph = GLYPHS[c];
-            assert!(seen.insert(glyph), "uppercase letter {} (0x{:02X}) has duplicate glyph", c as u8 as char, c);
+            assert!(
+                seen.insert(glyph),
+                "uppercase letter {} (0x{:02X}) has duplicate glyph",
+                c as u8 as char,
+                c
+            );
         }
     }
 
@@ -255,7 +272,12 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for c in 0x61..=0x7A {
             let glyph = GLYPHS[c];
-            assert!(seen.insert(glyph), "lowercase letter {} (0x{:02X}) has duplicate glyph", c as u8 as char, c);
+            assert!(
+                seen.insert(glyph),
+                "lowercase letter {} (0x{:02X}) has duplicate glyph",
+                c as u8 as char,
+                c
+            );
         }
     }
 
@@ -264,7 +286,12 @@ mod tests {
         // All visible printable ASCII (0x21-0x7E) should have at least one pixel set.
         // Note: 0x20 (space) is printable but intentionally blank.
         for (i, glyph) in GLYPHS.iter().enumerate().take(0x7F).skip(0x21) {
-            assert!(glyph.iter().any(|&b| b != 0), "printable char 0x{:02X} ({}) is blank", i, i as u8 as char);
+            assert!(
+                glyph.iter().any(|&b| b != 0),
+                "printable char 0x{:02X} ({}) is blank",
+                i,
+                i as u8 as char
+            );
         }
     }
 

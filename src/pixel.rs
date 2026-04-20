@@ -171,13 +171,25 @@ mod tests {
         // Order 1: 4 points, all within 2x2 grid
         for d in 0..4 {
             let (x, y) = d2xy(1, d);
-            assert!(x < 2 && y < 2, "d2xy(1, {}) = ({}, {}) out of bounds", d, x, y);
+            assert!(
+                x < 2 && y < 2,
+                "d2xy(1, {}) = ({}, {}) out of bounds",
+                d,
+                x,
+                y
+            );
         }
         // All 4 points should be unique
         let mut seen = std::collections::HashSet::new();
         for d in 0..4 {
             let (x, y) = d2xy(1, d);
-            assert!(seen.insert((x, y)), "duplicate point ({}, {}) at d={}", x, y, d);
+            assert!(
+                seen.insert((x, y)),
+                "duplicate point ({}, {}) at d={}",
+                x,
+                y,
+                d
+            );
         }
         assert_eq!(seen.len(), 4);
     }
@@ -187,7 +199,13 @@ mod tests {
         // Order 2: 16 points, all must be within 4x4 grid and unique
         for d in 0..16 {
             let (x, y) = d2xy(2, d);
-            assert!(x < 4 && y < 4, "d2xy(2, {}) = ({}, {}) out of bounds", d, x, y);
+            assert!(
+                x < 4 && y < 4,
+                "d2xy(2, {}) = ({}, {}) out of bounds",
+                d,
+                x,
+                y
+            );
         }
         // All points must be unique
         let mut seen = std::collections::HashSet::new();
@@ -204,8 +222,20 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for d in 0..64 {
             let (x, y) = d2xy(3, d);
-            assert!(x < 8 && y < 8, "d2xy(3, {}) = ({}, {}) out of bounds", d, x, y);
-            assert!(seen.insert((x, y)), "duplicate point ({}, {}) at d={}", x, y, d);
+            assert!(
+                x < 8 && y < 8,
+                "d2xy(3, {}) = ({}, {}) out of bounds",
+                d,
+                x,
+                y
+            );
+            assert!(
+                seen.insert((x, y)),
+                "duplicate point ({}, {}) at d={}",
+                x,
+                y,
+                d
+            );
         }
         assert_eq!(seen.len(), 64);
     }
@@ -216,8 +246,20 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for d in 0..256 {
             let (x, y) = d2xy(4, d);
-            assert!(x < 16 && y < 16, "d2xy(4, {}) = ({}, {}) out of bounds", d, x, y);
-            assert!(seen.insert((x, y)), "duplicate point ({}, {}) at d={}", x, y, d);
+            assert!(
+                x < 16 && y < 16,
+                "d2xy(4, {}) = ({}, {}) out of bounds",
+                d,
+                x,
+                y
+            );
+            assert!(
+                seen.insert((x, y)),
+                "duplicate point ({}, {}) at d={}",
+                x,
+                y,
+                d
+            );
         }
         assert_eq!(seen.len(), 256);
     }
