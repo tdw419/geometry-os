@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 56/56 phases complete, 0 in progress
+**Progress:** 57/57 phases complete, 0 in progress
 
-**Deliverables:** 238/238 complete
+**Deliverables:** 242/242 complete
 
 **Tasks:** 84/84 complete
 
@@ -68,6 +68,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 o
 | phase-54 Pixel Write History | COMPLETE | 6/6 | 200 | 13 |
 | phase-55 Mouse & GUI Hit Testing | COMPLETE | 4/4 | 120 | 2 |
 | phase-56 Musical Note Opcode | COMPLETE | 2/2 | 30 | 1 |
+| phase-57 Mouse Query Opcode | COMPLETE | 4/4 | 80 | 16 |
 
 ## Dependencies
 
@@ -1618,9 +1619,26 @@ NOTE opcode (0x7E) extends the audio system beyond BEEP (0x03). While BEEP plays
 
 Implementation in src/vm/mod.rs (0x7E handler). Uses the same audio pipeline as BEEP but with waveform selection. The note field on Vm struct stores (waveform, freq_hz, duration_ms) for host consumption.
 
+## [x] phase-57: Mouse Query Opcode (COMPLETE)
+
+**Goal:** Add MOUSEQ opcode for reading mouse position and a paint app demo
+
+MOUSEQ opcode (0x85) reads mouse_x into a register and mouse_y into the next register. Combined with the existing HITSET/HITQ from phase-55, this enables full mouse-driven programs. Includes paint.asm as a demonstration program with 8-color palette, clear button, and line-fill painting.
+
+### Deliverables
+
+- [x] **MOUSEQ opcode (0x85)** -- MOUSEQ x_reg reads mouse_x into x_reg and mouse_y into x_reg+1. Position updated by host via push_mouse() each frame.
+- [x] **Assembler and disassembler support** -- MOUSEQ recognized by assembler, preprocessor OPCODES list, and disassembler.
+- [x] **paint.asm demo program** -- Mouse-driven paint app with 8-color palette, clear button, color highlight, and paint-at-mouse with line fill.
+- [x] **MOUSEQ tests** -- 16 unit tests covering MOUSEQ functionality, assembler, disassembler, and paint.asm integration.
+
+### Technical Notes
+
+Implementation in src/vm/mod.rs (0x85 handler). Reads mouse_x/mouse_y fields on Vm struct. paint.asm is 16 tests covering the full paint loop including MOUSEQ integration.
+
 ## Global Risks
 
-- Opcode space: 111 of ~256 slots used, plenty of room
+- Opcode space: 112 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
