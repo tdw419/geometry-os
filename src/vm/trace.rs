@@ -212,6 +212,19 @@ impl TraceBuffer {
             pos: 0,
         }
     }
+
+    /// Return chronologically-ordered entries whose step_number falls within
+    /// `[step - radius, step + radius]`. Entries evicted from the ring buffer
+    /// are silently omitted -- the caller can detect truncation by comparing
+    /// the oldest returned step_number against `step - radius`.
+    pub fn range_around(&self, step: u64, radius: u64) -> Vec<TraceEntry> {
+        let lo = step.saturating_sub(radius);
+        let hi = step.saturating_add(radius);
+        self.iter()
+            .filter(|e| e.step_number >= lo && e.step_number <= hi)
+            .cloned()
+            .collect()
+    }
 }
 
 /// Iterator over trace entries from oldest to newest.

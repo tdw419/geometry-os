@@ -1091,6 +1091,11 @@ fn build_build_context(vm: &vm::Vm) -> String {
             vm.snapshots.len(),
             vm.trace_buffer.len()
         ));
+        if !vm.trace_buffer.is_empty() {
+            ctx.push_str(
+                "  Use 'steps_around <step> [radius=5]' to see instructions and r0-r3 around a step.\n",
+            );
+        }
     }
 
     // List source files with line counts
@@ -2160,12 +2165,106 @@ pub fn execute_cli_command(
                 println!("{}", msg);
                 output.push_str(&msg);
                 output.push('\n');
+                if !vm.trace_buffer.is_empty() {
+                    let msg = "Query instruction trace: 'steps_around <step> [radius=5]'";
+                    println!("{}", msg);
+                    output.push_str(msg);
+                    output.push('\n');
+                }
                 if vm.pixel_write_log.is_empty() {
                     let msg = "Note: No pixel writes recorded. Run a program first (trace is auto-enabled during 'run').";
                     println!("{}", msg);
                     output.push_str(msg);
                     output.push('\n');
                 }
+            }
+        }
+        "steps_around" => {
+            // steps_around <step> [radius=5] -- show instruction trace around a step
+            if parts.len() < 2 {
+                let msg = "Usage: steps_around <step> [radius=5]".to_string();
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                return;
+            }
+            let step: u64 = match parts[1].parse() {
+                Ok(v) => v,
+                _ => {
+                    let msg = "step must be a non-negative integer".to_string();
+                    println!("{}", msg);
+                    output.push_str(&msg);
+                    output.push('\n');
+                    return;
+                }
+            };
+            let radius: u64 = if parts.len() >= 3 {
+                match parts[2].parse() {
+                    Ok(v) => v,
+                    _ => {
+                        let msg = "radius must be a non-negative integer".to_string();
+                        println!("{}", msg);
+                        output.push_str(&msg);
+                        output.push('\n');
+                        return;
+                    }
+                }
+            } else {
+                5
+            };
+            let entries = vm.trace_buffer.range_around(step, radius);
+            let lo = step.saturating_sub(radius);
+            let hi = step.saturating_add(radius);
+            if entries.is_empty() {
+                let total = vm.trace_buffer.len();
+                let msg = if total == 0 {
+                    "Trace buffer empty. Run a program first (trace is auto-enabled during 'run').".to_string()
+                } else {
+                    let latest = vm.trace_buffer.step_counter().saturating_sub(1);
+                    format!(
+                        "No trace entries in range [{}, {}]. Buffer has {} entries, newest step={}.",
+                        lo, hi, total, latest
+                    )
+                };
+                println!("{}", msg);
+                output.push_str(&msg);
+                output.push('\n');
+                return;
+            }
+            let oldest = entries.first().map(|e| e.step_number).unwrap_or(lo);
+            let evicted = oldest > lo;
+            let caveat = if evicted {
+                format!(" (earlier entries evicted; showing from step {})", oldest)
+            } else {
+                String::new()
+            };
+            let msg = format!(
+                "Trace around step {} [{}..={}] -- {} entries{}:",
+                step,
+                lo,
+                hi,
+                entries.len(),
+                caveat
+            );
+            println!("{}", msg);
+            output.push_str(&msg);
+            output.push('\n');
+            for e in &entries {
+                let marker = if e.step_number == step { " <--" } else { "" };
+                let line = format!(
+                    "  step={:>7} pc=0x{:04X} {:<10} r0={:08X} r1={:08X} r2={:08X} r3={:08X}{}",
+                    e.step_number,
+                    e.pc,
+                    opcode_name(e.opcode as u8),
+                    e.regs[0],
+                    e.regs[1],
+                    e.regs[2],
+                    e.regs[3],
+                    marker
+                );
+                println!("{}", line);
+                output.push_str(&line);
+                output.push('\n');
             }
         }
         "rollback" => {

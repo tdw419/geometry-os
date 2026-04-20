@@ -1588,3 +1588,95 @@ fn test_trace_read_disassembler() {
     assert_eq!(len, 2, "TRACE_READ should be 2 words");
     assert_eq!(mnemonic, "TRACE_READ r1");
 }
+
+// ---- range_around (Phase 55: steps_around command) ----
+
+#[test]
+fn test_range_around_basic() {
+    let mut buf = TraceBuffer::new(100);
+    let regs = [0u32; 32];
+    for i in 0..20 {
+        buf.push(0x100 + i, &regs, i as u32);
+    }
+
+    let window = buf.range_around(10, 2);
+    assert_eq!(window.len(), 5, "radius 2 around step 10 => steps 8..=12");
+    assert_eq!(window.first().unwrap().step_number, 8);
+    assert_eq!(window.last().unwrap().step_number, 12);
+}
+
+#[test]
+fn test_range_around_saturating_low_end() {
+    let mut buf = TraceBuffer::new(100);
+    let regs = [0u32; 32];
+    for i in 0..5 {
+        buf.push(0x100 + i, &regs, i as u32);
+    }
+
+    // step 1, radius 10 -> clamp at 0
+    let window = buf.range_around(1, 10);
+    assert_eq!(window.len(), 5);
+    assert_eq!(window.first().unwrap().step_number, 0);
+    assert_eq!(window.last().unwrap().step_number, 4);
+}
+
+#[test]
+fn test_range_around_empty_when_out_of_range() {
+    let mut buf = TraceBuffer::new(100);
+    let regs = [0u32; 32];
+    for i in 0..5 {
+        buf.push(0x100 + i, &regs, i as u32);
+    }
+
+    let window = buf.range_around(1000, 5);
+    assert!(window.is_empty());
+}
+
+#[test]
+fn test_range_around_zero_radius_returns_single_entry() {
+    let mut buf = TraceBuffer::new(100);
+    let regs = [0u32; 32];
+    for i in 0..10 {
+        buf.push(0x100 + i, &regs, i as u32);
+    }
+
+    let window = buf.range_around(4, 0);
+    assert_eq!(window.len(), 1);
+    assert_eq!(window[0].step_number, 4);
+}
+
+#[test]
+fn test_range_around_after_eviction() {
+    // Buffer holds only 10, but we push 100. Steps 0..89 are evicted.
+    let mut buf = TraceBuffer::new(10);
+    let regs = [0u32; 32];
+    for i in 0..100 {
+        buf.push(0x100 + i, &regs, i as u32);
+    }
+
+    // Query around step 5 (long evicted) -- returns empty
+    let window = buf.range_around(5, 2);
+    assert!(window.is_empty(), "evicted range should return empty");
+
+    // Query around step 95 (live): radius 3 => steps 92..=98, all live
+    let window = buf.range_around(95, 3);
+    assert_eq!(window.len(), 7);
+    assert_eq!(window.first().unwrap().step_number, 92);
+    assert_eq!(window.last().unwrap().step_number, 98);
+}
+
+#[test]
+fn test_range_around_partial_eviction_boundary() {
+    // Only steps 90..=99 remain (buffer cap 10).
+    let mut buf = TraceBuffer::new(10);
+    let regs = [0u32; 32];
+    for i in 0..100 {
+        buf.push(0x100 + i, &regs, i as u32);
+    }
+
+    // Query around step 92, radius 5 -> would want 87..=97, only 90..=97 live.
+    let window = buf.range_around(92, 5);
+    assert_eq!(window.len(), 8);
+    assert_eq!(window.first().unwrap().step_number, 90);
+    assert_eq!(window.last().unwrap().step_number, 97);
+}
