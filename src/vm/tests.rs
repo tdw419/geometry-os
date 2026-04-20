@@ -5727,3 +5727,105 @@ fn test_simon_wrong_click_ends_game() {
     assert!(phase == 1 || phase == 2 || phase == 3,
         "phase should be valid after wrong click");
 }
+
+#[test]
+fn test_reaction_assembles() {
+    let source = include_str!("../../programs/reaction.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("reaction.asm should assemble");
+    let has_ikey = asm.pixels.iter().any(|&w| w == 0x48);
+    let has_rand = asm.pixels.iter().any(|&w| w == 0x49);
+    assert!(has_ikey, "reaction.asm should use IKEY opcode");
+    assert!(has_rand, "reaction.asm should use RAND opcode");
+}
+
+#[test]
+fn test_reaction_boots_and_shows_wait() {
+    let source = include_str!("../../programs/reaction.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("reaction.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= 1 { break; }
+    }
+
+    // Should be in waiting phase (phase 0)
+    assert_eq!(vm.ram[0x4200], 0, "should start in waiting phase");
+    // Background should be dark navy
+    assert_eq!(vm.screen[0], 0x1A1A2E, "background should be navy");
+}
+
+#[test]
+fn test_reaction_transitions_to_ready() {
+    let source = include_str!("../../programs/reaction.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("reaction.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until first frame (program init completes)
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= 1 { break; }
+    }
+    assert_eq!(vm.ram[0x4200], 0, "should start in waiting phase");
+
+    // Now set wait time to 3 frames for fast test
+    vm.ram[0x4204] = 3;
+    // Run enough frames to pass the wait
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= 6 { break; }
+    }
+
+    // Should have transitioned to ready phase (phase 1)
+    assert_eq!(vm.ram[0x4200], 1, "should be in ready phase after wait");
+}
+
+#[test]
+fn test_reaction_records_keypress() {
+    let source = include_str!("../../programs/reaction.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("reaction.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until first frame, then force to ready phase
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= 1 { break; }
+    }
+    // Force ready phase
+    vm.ram[0x4200] = 1;
+    vm.ram[0x4208] = 0; // TIMER = 0
+
+    // Run 5 frames in ready phase, then press a key
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= 6 { break; }
+    }
+
+    vm.push_key(65); // 'A' key
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= 8 { break; }
+    }
+
+    // Should be in result phase (phase 2) with a reaction time
+    assert_eq!(vm.ram[0x4200], 2, "should be in result phase after keypress, actual={}", vm.ram[0x4200]);
+    let reaction = vm.ram[0x420C];
+    // Reaction time should be reasonable (1-100 frames)
+    // The exact value depends on timing but should be small
+    assert!(reaction < 100, "reaction time should be under 100 frames, got {}", reaction);
+}
