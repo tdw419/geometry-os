@@ -4562,3 +4562,199 @@ fn test_paint_app_runs_100_frames() {
     }
     assert!(!vm.halted, "paint should run 100 frames without halting");
 }
+
+// ── File Browser Tests ──
+
+fn boot_file_browser(target_frames: u32) -> Vm {
+    let source = include_str!("../../programs/file_browser.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("file_browser.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + target_frames {
+            break;
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_file_browser_assembles() {
+    let source = include_str!("../../programs/file_browser.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "file_browser.asm failed to assemble: {:?}", result.err());
+    let bytecode = result.unwrap();
+    assert!(bytecode.pixels.len() > 100, "file browser should be substantial");
+    assert!(bytecode.pixels.len() < 0x400, "bytecode must fit below 0x400 for data safety");
+    // Verify key opcodes present
+    assert!(bytecode.pixels.iter().any(|&w| w == 0x59), "should contain LS opcode");
+    assert!(bytecode.pixels.iter().any(|&w| w == 0x54), "should contain OPEN opcode");
+    assert!(bytecode.pixels.iter().any(|&w| w == 0x55), "should contain READ opcode");
+    assert!(bytecode.pixels.iter().any(|&w| w == 0x57), "should contain CLOSE opcode");
+}
+
+#[test]
+fn test_file_browser_boots_and_runs() {
+    let vm = boot_file_browser(1);
+    assert!(!vm.halted, "file browser should not halt after boot");
+}
+
+#[test]
+fn test_file_browser_draws_title() {
+    let vm = boot_file_browser(1);
+    let title_color = vm.screen[6 * 256 + 10];
+    let bg_color = vm.screen[30 * 256 + 10];
+    assert_ne!(title_color, bg_color, "title bar should differ from background");
+}
+
+#[test]
+fn test_file_browser_lists_files() {
+    let vm = boot_file_browser(1);
+    let file_count = vm.ram[0x504];
+    assert!(file_count >= 2, "should list at least 2 files, got {}", file_count);
+    let first_entry = vm.ram[0x400];
+    assert!(first_entry >= 0x600, "first filename addr should be in FILE_BUF, got {:#x}", first_entry);
+}
+
+#[test]
+fn test_file_browser_registers_hit_regions() {
+    let vm = boot_file_browser(1);
+    assert_eq!(vm.hit_regions.len(), 13, "should have 13 hit regions (12 rows + back)");
+}
+
+#[test]
+fn test_file_browser_click_opens_file() {
+    let mut vm = boot_file_browser(1);
+    // Click on first file row (y=38, middle of row at y=30 h=16)
+    vm.push_mouse(80, 38);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
+    }
+    assert_eq!(vm.ram[0x500], 1, "mode should be 1 (content view) after clicking file");
+}
+
+#[test]
+fn test_file_browser_back_button_returns() {
+    let mut vm = boot_file_browser(1);
+    // First click a file to open content view
+    vm.push_mouse(80, 38);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
+    }
+    assert_eq!(vm.ram[0x500], 1, "should be in content view");
+    // Now click BACK button (at y=240, x=10, w=60)
+    vm.push_mouse(40, 248);
+    let start2 = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start2 + 3 {
+            break;
+        }
+    }
+    assert_eq!(vm.ram[0x500], 0, "mode should be 0 (list view) after clicking back");
+}
+
+#[test]
+fn test_file_browser_shows_content() {
+    let mut vm = boot_file_browser(1);
+    // Click on first file to open it
+    vm.push_mouse(80, 38);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 5 {
+            break;
+        }
+    }
+    eprintln!("MODE={}, TEMP_FD={}", vm.ram[0x500], vm.ram[0x50C]);
+    eprintln!("CONTENT_BUF[0..8]: {:?}",
+        (0..8).map(|i| vm.ram[0xA00 + i]).collect::<Vec<_>>());
+    // Content buffer should have data from the file
+    let content_start = vm.ram[0xA00];
+    assert!(content_start != 0, "content buffer should have file data");
+}
+
+#[test]
+fn test_file_browser_alternating_row_colors() {
+    let vm = boot_file_browser(1);
+    let row0_color = vm.screen[32 * 256 + 15];
+    let row1_color = vm.screen[48 * 256 + 15];
+    assert_ne!(row0_color, 0x1a1a2e, "row 0 should have row background");
+    assert_ne!(row1_color, 0x1a1a2e, "row 1 should have row background");
+}
+
+#[test]
+fn test_file_browser_debug_click() {
+    let mut vm = boot_file_browser(1);
+    eprintln!("After boot: halted={}, frame={}", vm.halted, vm.frame_count);
+    eprintln!("  MODE={}", vm.ram[0x500]);
+    eprintln!("  FILE_COUNT={}", vm.ram[0x504]);
+    eprintln!("  FNAME_TABLE[0]={:#x}", vm.ram[0x400]);
+    eprintln!("  hit_regions={}", vm.hit_regions.len());
+    for (i, hr) in vm.hit_regions.iter().enumerate() {
+        eprintln!("    [{}] x={} y={} w={} h={} id={}", i, hr.x, hr.y, hr.w, hr.h, hr.id);
+    }
+    
+    vm.push_mouse(80, 38);
+    eprintln!("\nMouse pushed at (80, 38)");
+    
+    // Run a few frames
+    for frame in 0..5 {
+        let start = vm.frame_count;
+        for _ in 0..500_000 {
+            if !vm.step() { break; }
+            if vm.frame_count >= start + 1 { break; }
+        }
+        eprintln!("After frame {}: halted={}, MODE={}, pc={}, regs12={}", frame, vm.halted, vm.ram[0x500], vm.pc, vm.regs[12]);
+    }
+    
+    // Check what filename would be opened
+    let fname_addr = vm.ram[0x400] as usize;
+    let mut s = String::new();
+    for i in 0..32 {
+        let v = vm.ram[fname_addr + i];
+        if v == 0 { break; }
+        s.push(v as u8 as char);
+    }
+    eprintln!("Filename at FNAME_TABLE[0]: {:?}", s);
+    
+    // Direct test: push mouse, step until HITQ executes, check regs[12]
+    eprintln!("mouse_x={}, mouse_y={}", vm.mouse_x, vm.mouse_y);
+    // Step a few instructions to reach HITQ
+    for _ in 0..200 {
+        if vm.ram[vm.pc as usize] == 0x38 { // HITQ opcode
+            break;
+        }
+        if !vm.step() { break; }
+    }
+    eprintln!("After stepping to HITQ: pc={}, ram[pc]={}", vm.pc, vm.ram[vm.pc as usize]);
+    // Execute HITQ
+    vm.step();
+    eprintln!("After HITQ: regs[12]={}", vm.regs[12]);
+}
