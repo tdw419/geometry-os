@@ -1989,6 +1989,19 @@ fn test_runnext_full_write_compile_execute_cycle() {
 }
 
 // ============================================================
+// gui_calc.asm: GUI Calculator App
+// ============================================================
+
+#[test]
+fn test_gui_calc_assembles() {
+    let source = include_str!("../../programs/gui_calc.asm");
+    let result = crate::assembler::assemble(source, 0x1000);
+    assert!(result.is_ok(), "gui_calc.asm should assemble: {:?}", result.err());
+    let asm = result.expect("should succeed");
+    assert!(asm.pixels.len() > 100, "gui_calc should produce substantial bytecode, got {}", asm.pixels.len());
+}
+
+// ============================================================
 // Phase 49: Self-Modifying Programs - Demo Tests
 // ============================================================
 
