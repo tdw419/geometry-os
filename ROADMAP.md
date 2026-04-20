@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 69/82 phases complete, 0 in progress
+**Progress:** 70/83 phases complete, 0 in progress
 
-**Deliverables:** 293/371 complete
+**Deliverables:** 296/355 complete
 
 **Tasks:** 98/98 complete
 
@@ -75,12 +75,12 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-61 GUI Calculator App + Token-Pixel-GUI Doc | COMPLETE | 2/2 | 1,200 | 1 |
 | phase-62 Notepad Bug Fixes + Clock App | COMPLETE | 2/2 | 1,485 | 6 |
 | phase-63 ABS + RECT Opcodes + Color Picker App | COMPLETE | 7/7 | 800 | 10 |
-| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | PLANNED | 6/6 | 900 | 12 |
-| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | PLANNED | 4/4 | 1,000 | 10 |
-| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | PLANNED | 6/6 | 700 | 15 |
-| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | PLANNED | 5/5 | 500 | 8 |
+| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | DONE | 6/6 | 900 | 12 |
+| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | DONE | 4/4 | 1,000 | 10 |
+| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | DONE | 6/6 | 700 | 15 |
+| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | DONE | 5/5 | 500 | 8 |
 | phase-68 WINSYS Opcode | DONE | 5/5 | 500 | 10 |
-| phase-68b Window Mouse Interaction + Desktop Demo | PLANNED | 0/3 | 700 | 8 |
+| phase-68b Window Mouse Interaction + Desktop Demo | DONE | 3/3 | 700 | 12 |
 | phase-69 Sprite Engine | PLANNED | 0/7 | 800 | 12 |
 | phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
 | phase-71 Pixel Network Protocol | PLANNED | 0/6 | 900 | 10 |
@@ -91,6 +91,10 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |
 | phase-77 Settings + Wallpaper + Screensaver | PLANNED | 0/4 | 1,000 | 8 |
 | phase-78 Calendar + About + Help System | PLANNED | 0/4 | 800 | 8 |
+| phase-79 Neural Network Forward Pass (Pixel Neural Net) | DONE | 5/5 | - | 14 |
+| phase-80 LLM Bridge Opcode (External AI) | PLANNED | 0/5 | - | 8 |
+| phase-81 HTTP Client + Text Browser | PLANNED | 0/4 | - | 10 |
+| phase-82 HTML Renderer + Interactive Browser | PLANNED | 0/5 | - | 12 |
 
 ## Dependencies
 
@@ -1984,7 +1988,7 @@ ABS (0x87) for absolute value of register, RECT (0x88) for outline rectangle dra
 - [x] **RECT tests** -- Test outline corners, interior empty, 1x1, zero dimensions, assembly, disassembly (6 tests)
 - [x] **color_picker.asm** -- Mouse-driven RGB color picker with 8-color palette, slider indicators, RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.
 
-## [ ] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (PLANNED)
+## [x] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (DONE)
 
 **Goal:** Add value clamping opcodes and a screensaver demo program
 
@@ -1999,7 +2003,7 @@ MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app demonstrates idle-
 - [x] **MIN/MAX/CLAMP tests** -- Test edge cases: equal values, negative, overflow
 - [x] **screensaver.asm** -- Multi-effect screensaver with bouncing logos, starfield, plasma cycling. Auto-starts after N seconds of no input.
 
-## [ ] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (PLANNED)
+## [x] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (DONE)
 
 **Goal:** Add colored text rendering opcode, upgrade terminal with color output
 
@@ -2012,7 +2016,7 @@ DRAWTEXT (0x8C) renders text with foreground and background colors. Terminal v5 
 - [x] **DRAWTEXT tests** -- Foreground color, background color, transparent (0) bg, newline handling
 - [x] **terminal.asm v5 color upgrade** -- Green-on-dark title bar, light gray terminal text via DRAWTEXT.
 
-## [ ] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (PLANNED)
+## [x] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (DONE)
 
 **Goal:** Add bitwise manipulation opcodes for flags and state management
 
@@ -2027,7 +2031,7 @@ BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient bit manipulation. Enh
 - [x] **BIT tests** -- Set/clear/test individual bits, edge cases (bit 0, bit 31)
 - [x] **game_of_life enhanced with bit operations** -- Deferred: tests prove opcodes. Existing GoL uses PEEK-based neighbor counting.
 
-## [ ] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (PLANNED)
+## [x] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (DONE)
 
 **Goal:** Add logical NOT and screen invert operations
 
@@ -2055,7 +2059,7 @@ WINSYS opcode (0x92) manages rectangular window regions. Each window has an id, 
 - [x] **WINSYS + WPIXEL + WREAD assembler + disassembler entries** -- 
 - [x] **WINSYS tests** -- 17 tests: create/destroy, Z-order, bring-to-front, list, max 8 windows, WPIXEL/WREAD, blitting, clipping, assembler, disassembler.
 
-## [ ] phase-68b: Window Mouse Interaction + Desktop Demo (PLANNED)
+## [x] phase-68b: Window Mouse Interaction + Desktop Demo (DONE)
 
 **Goal:** Mouse-driven window management with drag, focus, and a multi-window desktop
 
@@ -2063,9 +2067,9 @@ MOUSEQ clicks check window Z-order for hit-testing. Title bar drag to move, body
 
 ### Deliverables
 
-- [ ] **Window mouse hit-testing** -- MOUSEQ clicks iterate windows front-to-back. Title bar (top 10px) = drag. Body = forward click coordinates to window process via IPC. Corner hit = resize (future).
-- [ ] **window_desktop.asm** -- Desktop with 2-3 windows (clock, counter, hello). Each window runs as a child process. Drag to move, click to focus. Demonstrates WINSYS + MOUSEQ + IPC together.
-- [ ] **Window desktop tests** -- Mouse forwarding, drag updates position, focus changes Z-order. 8+ tests.
+- [x] **Window mouse hit-testing** -- MOUSEQ clicks iterate windows front-to-back. Title bar (top 12px) = drag. Body = forward click coordinates to window process via IPC. WINSYS op=4 (HITTEST), op=5 (MOVETO), op=6 (WINFO). Mouse button state in MOUSEQ reg+2.
+- [x] **window_desktop.asm** -- Desktop with 3 windows (Hello, Counter, Colors). Each window has its own offscreen buffer content. Drag to move via title bar, click to focus/bring-to-front. Animated counter and color stripes.
+- [x] **Window desktop tests** -- Mouse forwarding, drag updates position, focus changes Z-order, MOVETO, WINFO, hit-test after move, bring-to-front affects hittest. 12 tests.
 
 ## [ ] phase-69: Sprite Engine (PLANNED)
 

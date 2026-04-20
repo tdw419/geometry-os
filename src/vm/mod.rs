@@ -125,6 +125,9 @@ pub struct Vm {
     pub mouse_x: u32,
     /// Current mouse/touch cursor Y position.
     pub mouse_y: u32,
+    /// Mouse button state: 0=none, 1=left down, 2=left click (consumed on read).
+    /// Set by host via push_mouse_button(). Queried by MOUSEQ into reg+2.
+    pub mouse_button: u32,
     pub pixel_write_log: PixelWriteLog,
     /// Active TCP connections (Phase 41: Networking).
     /// Up to 8 simultaneous connections, indexed by fd.
@@ -209,6 +212,7 @@ impl Vm {
             hit_regions: Vec::with_capacity(MAX_HIT_REGIONS),
             mouse_x: 0,
             mouse_y: 0,
+            mouse_button: 0,
             tcp_connections: (0..MAX_TCP_CONNECTIONS).map(|_| None).collect(),
             windows: Vec::with_capacity(MAX_WINDOWS),
             next_window_id: 1,
@@ -241,6 +245,12 @@ impl Vm {
         if (0xFFA) < self.ram.len() {
             self.ram[0xFFA] = y;
         }
+    }
+
+    /// Update mouse button state. Called by host on mouse button events.
+    /// button: 0=none/release, 1=left down, 2=left click.
+    pub fn push_mouse_button(&mut self, button: u32) {
+        self.mouse_button = button;
     }
 
     /// Reset the VM to initial state (zeroed RAM, registers, screen, halted=false).
@@ -299,6 +309,7 @@ impl Vm {
         self.pixel_write_log.clear();
         self.windows.clear();
         self.next_window_id = 1;
+        self.mouse_button = 0;
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -834,14 +845,20 @@ impl Vm {
                     return false;
                 }
             }
-            // MOUSEQ x_reg  (0x85) -- Query mouse position.
-            // Reads current mouse X into x_reg and mouse Y into x_reg+1.
-            // Set by host via push_mouse(x, y). Returns 0,0 if no mouse events.
+            // MOUSEQ x_reg  (0x85) -- Query mouse position and button.
+            // Reads current mouse X into x_reg, mouse Y into x_reg+1, button into x_reg+2.
+            // Button: 0=none, 1=left down, 2=left click (auto-cleared after read).
+            // Set by host via push_mouse(x, y) and push_mouse_button(btn).
             0x85 => {
                 let xr = self.fetch() as usize;
-                if xr < NUM_REGS && xr + 1 < NUM_REGS {
+                if xr < NUM_REGS && xr + 2 < NUM_REGS {
                     self.regs[xr] = self.mouse_x;
                     self.regs[xr + 1] = self.mouse_y;
+                    self.regs[xr + 2] = self.mouse_button;
+                    // Auto-clear click state after read (but not down state)
+                    if self.mouse_button == 2 {
+                        self.mouse_button = 1; // was click, now just down
+                    }
                 }
             }
 
@@ -1198,6 +1215,79 @@ impl Vm {
                                 if slot < self.ram.len() {
                                     self.ram[slot] = id;
                                 }
+                            }
+                        }
+                        4 => {
+                            // HITTEST: Check which window the mouse is over.
+                            // Uses mouse_x, mouse_y. Iterates windows front-to-back
+                            // (highest z_order first). Returns in r0: window_id (0=none).
+                            // In r1: hit_type (0=none, 1=title bar, 2=body).
+                            // Title bar = top 12 pixels of window (including border).
+                            let mx = self.mouse_x;
+                            let my = self.mouse_y;
+                            let mut best_id: u32 = 0;
+                            let mut best_hit: u32 = 0;
+                            let mut best_z: u32 = 0;
+                            for w in &self.windows {
+                                if !w.active {
+                                    continue;
+                                }
+                                // Check if mouse is within window bounds
+                                let in_x = mx >= w.x && mx < w.x + w.w;
+                                let in_y = my >= w.y && my < w.y + w.h;
+                                if in_x && in_y && w.z_order > best_z {
+                                    best_z = w.z_order;
+                                    best_id = w.id;
+                                    // Title bar = top 12 pixels
+                                    if my < w.y + 12 {
+                                        best_hit = 1; // title bar
+                                    } else {
+                                        best_hit = 2; // body
+                                    }
+                                }
+                            }
+                            self.regs[0] = best_id;
+                            self.regs[1] = best_hit;
+                        }
+                        5 => {
+                            // MOVETO: Move window to new position.
+                            // r0=win_id, r1=new_x, r2=new_y.
+                            let win_id = self.regs[0];
+                            let new_x = if 1 < NUM_REGS { self.regs[1] } else { 0 };
+                            let new_y = if 2 < NUM_REGS { self.regs[2] } else { 0 };
+                            if let Some(w) =
+                                self.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                            {
+                                w.x = new_x;
+                                w.y = new_y;
+                                self.regs[0] = 1; // success
+                            } else {
+                                self.regs[0] = 0; // not found
+                            }
+                        }
+                        6 => {
+                            // WINFO: Get window info.
+                            // r0=win_id. Writes [x, y, w, h, z_order, pid] to RAM
+                            // starting at address in r1.
+                            let win_id = self.regs[0];
+                            let addr = if 1 < NUM_REGS {
+                                self.regs[1] as usize
+                            } else {
+                                0
+                            };
+                            if let Some(w) =
+                                self.windows.iter().find(|w| w.id == win_id && w.active)
+                            {
+                                let info = [w.x, w.y, w.w, w.h, w.z_order, w.pid];
+                                for (i, &val) in info.iter().enumerate() {
+                                    let slot = addr + i;
+                                    if slot < self.ram.len() {
+                                        self.ram[slot] = val;
+                                    }
+                                }
+                                self.regs[0] = 1; // success
+                            } else {
+                                self.regs[0] = 0; // not found
                             }
                         }
                         _ => {

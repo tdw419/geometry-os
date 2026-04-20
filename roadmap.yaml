@@ -3506,25 +3506,28 @@ phases:
   test_target: 10
 - id: phase-68b
   title: Window Mouse Interaction + Desktop Demo
-  status: planned
+  status: done
   goal: Mouse-driven window management with drag, focus, and a multi-window desktop
   description: 'MOUSEQ clicks check window Z-order for hit-testing. Title bar drag to move,
     body clicks forward to the window process. window_desktop.asm demonstrates 2-3 windows
     running as child processes communicating via IPC pipes.'
   deliverables:
   - name: Window mouse hit-testing
-    description: 'MOUSEQ clicks iterate windows front-to-back. Title bar (top 10px) = drag.
-      Body = forward click coordinates to window process via IPC. Corner hit = resize (future).'
-    status: todo
+    description: 'MOUSEQ clicks iterate windows front-to-back. Title bar (top 12px) = drag.
+      Body = forward click coordinates to window process via IPC. WINSYS op=4 (HITTEST),
+      op=5 (MOVETO), op=6 (WINFO). Mouse button state in MOUSEQ reg+2.'
+    status: done
   - name: window_desktop.asm
-    description: 'Desktop with 2-3 windows (clock, counter, hello). Each window runs as a
-      child process. Drag to move, click to focus. Demonstrates WINSYS + MOUSEQ + IPC together.'
-    status: todo
+    description: 'Desktop with 3 windows (Hello, Counter, Colors). Each window has its own
+      offscreen buffer content. Drag to move via title bar, click to focus/bring-to-front.
+      Animated counter and color stripes.'
+    status: done
   - name: Window desktop tests
-    description: 'Mouse forwarding, drag updates position, focus changes Z-order. 8+ tests.'
-    status: todo
+    description: 'Mouse forwarding, drag updates position, focus changes Z-order, MOVETO,
+      WINFO, hit-test after move, bring-to-front affects hittest. 12 tests.'
+    status: done
   scope_lines_total: 700
-  test_target: 8
+  test_target: 12
 - id: phase-69
   title: Sprite Engine
   status: planned

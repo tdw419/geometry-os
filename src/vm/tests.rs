@@ -8366,3 +8366,327 @@ fn test_wread_disasm() {
         mnem
     );
 }
+
+// ── Window Mouse Interaction (Phase 68b) ──────────────────────────
+
+#[test]
+fn test_mouseq_button_state() {
+    // MOUSEQ now reads button state into reg+2
+    let mut vm = Vm::new();
+    vm.push_mouse(100, 200);
+    vm.push_mouse_button(2); // left click
+    vm.ram[0] = 0x85; // MOUSEQ
+    vm.ram[1] = 10; // dest reg r10
+    vm.step();
+    assert_eq!(vm.regs[10], 100, "mouse x");
+    assert_eq!(vm.regs[11], 200, "mouse y");
+    assert_eq!(vm.regs[12], 2, "mouse button = click");
+    // Click auto-clears to down after read
+    assert_eq!(vm.mouse_button, 1, "button auto-clears to down");
+}
+
+#[test]
+fn test_mouseq_no_button() {
+    let mut vm = Vm::new();
+    vm.push_mouse(50, 75);
+    // No button pressed (default 0)
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 5;
+    vm.step();
+    assert_eq!(vm.regs[5], 50, "mouse x");
+    assert_eq!(vm.regs[6], 75, "mouse y");
+    assert_eq!(vm.regs[7], 0, "no button");
+}
+
+#[test]
+fn test_winsys_hittest_body() {
+    // WINSYS op=4: HITTEST finds window under mouse, returns body hit
+    let mut vm = Vm::new();
+    // Create a window at (20, 20) with size 100x80
+    vm.regs[1] = 20; // x
+    vm.regs[2] = 20; // y
+    vm.regs[3] = 100; // w
+    vm.regs[4] = 80; // h
+    vm.regs[5] = 0; // title_addr
+    vm.regs[6] = 0; // op=0 (create)
+    vm.ram[0] = 0x94; // WINSYS
+    vm.ram[1] = 6; // op_reg=r6
+    vm.step();
+    let win_id = vm.regs[0];
+    assert_ne!(win_id, 0, "window created");
+
+    // Move mouse to body area (past title bar, top 12px)
+    vm.push_mouse(50, 60);
+    vm.regs[6] = 4; // op=4 (hittest)
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], win_id, "hit window id");
+    assert_eq!(vm.regs[1], 2, "hit type = body");
+}
+
+#[test]
+fn test_winsys_hittest_title_bar() {
+    // WINSYS op=4: Title bar hit (top 12px)
+    let mut vm = Vm::new();
+    vm.regs[1] = 10; // x
+    vm.regs[2] = 30; // y
+    vm.regs[3] = 80; // w
+    vm.regs[4] = 60; // h
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // op=0 create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // Mouse at y=35, within top 12px (30+12=42)
+    vm.push_mouse(40, 35);
+    vm.regs[6] = 4; // hittest
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], win_id, "hit window id");
+    assert_eq!(vm.regs[1], 1, "hit type = title bar");
+}
+
+#[test]
+fn test_winsys_hittest_no_hit() {
+    // WINSYS op=4: Mouse not over any window
+    let mut vm = Vm::new();
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 50;
+    vm.regs[4] = 50;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.step();
+
+    // Mouse far away from window
+    vm.push_mouse(200, 200);
+    vm.regs[6] = 4;
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "no window hit");
+    assert_eq!(vm.regs[1], 0, "no hit type");
+}
+
+#[test]
+fn test_winsys_hittest_z_order() {
+    // WINSYS op=4: Front window takes priority over back window
+    let mut vm = Vm::new();
+    // Create first window at (10, 10, 100x100)
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 100;
+    vm.regs[4] = 100;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.step();
+    let win1 = vm.regs[0];
+
+    // Create second window overlapping (gets higher z_order)
+    vm.regs[6] = 0;
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    let win2 = vm.regs[0];
+    assert_ne!(win2, win1, "different window");
+
+    // Mouse over overlapping area -- should hit front window (win2)
+    vm.push_mouse(50, 50);
+    vm.regs[6] = 4;
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], win2, "front window hit");
+}
+
+#[test]
+fn test_winsys_moveto() {
+    // WINSYS op=5: MOVETO moves window to new position
+    let mut vm = Vm::new();
+    // Create window
+    vm.regs[1] = 10;
+    vm.regs[2] = 20;
+    vm.regs[3] = 60;
+    vm.regs[4] = 40;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // Move window to (100, 150)
+    vm.regs[0] = win_id;
+    vm.regs[1] = 100;
+    vm.regs[2] = 150;
+    vm.regs[6] = 5; // op=5 MOVETO
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "moveto success");
+
+    // Verify via WINFO
+    vm.regs[0] = win_id;
+    vm.regs[1] = 0x8000; // addr for info
+    vm.regs[6] = 6; // op=6 WINFO
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.ram[0x8000], 100, "new x");
+    assert_eq!(vm.ram[0x8001], 150, "new y");
+    assert_eq!(vm.ram[0x8002], 60, "w unchanged");
+    assert_eq!(vm.ram[0x8003], 40, "h unchanged");
+}
+
+#[test]
+fn test_winsys_moveto_not_found() {
+    // WINSYS op=5: MOVETO with invalid window ID
+    let mut vm = Vm::new();
+    vm.regs[0] = 999; // nonexistent
+    vm.regs[1] = 50;
+    vm.regs[2] = 50;
+    vm.regs[6] = 5;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "moveto failed for invalid window");
+}
+
+#[test]
+fn test_winsys_winfo() {
+    // WINSYS op=6: WINFO returns window details
+    let mut vm = Vm::new();
+    vm.regs[1] = 15; // x
+    vm.regs[2] = 25; // y
+    vm.regs[3] = 70; // w
+    vm.regs[4] = 50; // h
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // Get info
+    vm.regs[0] = win_id;
+    vm.regs[1] = 0x7000; // dest addr
+    vm.regs[6] = 6; // WINFO
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "winfo success");
+    assert_eq!(vm.ram[0x7000], 15, "x");
+    assert_eq!(vm.ram[0x7001], 25, "y");
+    assert_eq!(vm.ram[0x7002], 70, "w");
+    assert_eq!(vm.ram[0x7003], 50, "h");
+    assert_eq!(vm.ram[0x7004], 1, "z_order (first window)");
+    assert_eq!(vm.ram[0x7005], 0, "pid (main process)");
+}
+
+#[test]
+fn test_winsys_winfo_not_found() {
+    let mut vm = Vm::new();
+    vm.regs[0] = 42; // nonexistent
+    vm.regs[1] = 0x7000;
+    vm.regs[6] = 6;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "winfo failed for invalid window");
+}
+
+#[test]
+fn test_winsys_hittest_after_moveto() {
+    // Hit-test after moving window should use new position
+    let mut vm = Vm::new();
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 50;
+    vm.regs[4] = 50;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // Move to (100, 100)
+    vm.regs[0] = win_id;
+    vm.regs[1] = 100;
+    vm.regs[2] = 100;
+    vm.regs[6] = 5;
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+
+    // Old position should not hit
+    vm.push_mouse(30, 30);
+    vm.regs[6] = 4;
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "old position no hit");
+
+    // New position should hit
+    vm.push_mouse(120, 120);
+    vm.regs[6] = 4;
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], win_id, "new position hits");
+}
+
+#[test]
+fn test_winsys_bring_to_front_affects_hittest() {
+    // After bringing back window to front, it should be hit first
+    let mut vm = Vm::new();
+    // Window 1 at (10, 10, 80, 80)
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 80;
+    vm.regs[4] = 80;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.step();
+    let win1 = vm.regs[0];
+
+    // Window 2 overlapping (higher z)
+    vm.regs[1] = 20;
+    vm.regs[2] = 20;
+    vm.regs[6] = 0;
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    let win2 = vm.regs[0];
+
+    // Initially win2 should be hit (higher z)
+    vm.push_mouse(50, 50);
+    vm.regs[6] = 4;
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], win2, "win2 on top");
+
+    // Bring win1 to front
+    vm.regs[0] = win1;
+    vm.regs[6] = 2; // op=2 bring to front
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+
+    // Now win1 should be hit
+    vm.regs[6] = 4;
+    vm.ram[vm.pc as usize] = 0x94;
+    vm.ram[vm.pc as usize + 1] = 6;
+    vm.step();
+    assert_eq!(vm.regs[0], win1, "win1 brought to front");
+}

@@ -287,6 +287,7 @@ impl Vm {
             hit_regions: Vec::with_capacity(super::MAX_HIT_REGIONS),
             mouse_x: 0,
             mouse_y: 0,
+            mouse_button: 0,
             windows: Vec::with_capacity(super::MAX_WINDOWS),
             next_window_id: 1,
         })
