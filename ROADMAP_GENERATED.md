@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 109 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 54/54 phases complete, 0 in progress
+**Progress:** 56/56 phases complete, 0 in progress
 
-**Deliverables:** 232/232 complete
+**Deliverables:** 238/238 complete
 
 **Tasks:** 84/84 complete
 
@@ -66,6 +66,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 109 o
 | phase-52 Episodic Memory | COMPLETE | 3/3 | 689 | 12 |
 | phase-53 Trace Query Opcodes | COMPLETE | 4/4 | 50 | 10 |
 | phase-54 Pixel Write History | COMPLETE | 6/6 | 200 | 13 |
+| phase-55 Mouse & GUI Hit Testing | COMPLETE | 4/4 | 120 | 2 |
+| phase-56 Musical Note Opcode | COMPLETE | 2/2 | 30 | 1 |
 
 ## Dependencies
 
@@ -1584,9 +1586,41 @@ PIXEL_HISTORY opcode (0x84) provides 4 modes for introspecting pixel write histo
 
 Implementation in src/vm/ops_extended.rs (opcode 0x84) + src/vm/trace.rs (PixelWriteLog, PixelWriteEntry). pixel_write_log field on Vm struct. Dispatch in mod.rs step() via dedicated 0x84 arm delegating to step_extended().
 
+## [x] phase-55: Mouse & GUI Hit Testing (COMPLETE)
+
+**Goal:** Add mouse input support with clickable hit regions for GUI interaction
+
+Two new opcodes (0x37, 0x38) provide mouse-driven GUI interaction. HITSET defines clickable rectangular regions on screen. HITQ queries whether a hit occurred in a region. The host feeds mouse coordinates via push_mouse(). This enables buttons, menus, and other GUI elements in assembly programs.
+
+### Deliverables
+
+- [x] **HITSET opcode (0x37)** -- Define a clickable hit region. HITSET x_reg, y_reg, w_reg, h_reg, id_reg registers a rectangular area with a numeric ID. Up to MAX_HIT_REGIONS regions supported.
+- [x] **HITQ opcode (0x38)** -- HITQ result_reg checks if the mouse clicked inside any registered hit region. Returns the region ID in result_reg, or 0 if no hit.
+- [x] **Mouse state fields** -- Vm struct fields: mouse_x, mouse_y (current position), hit_regions (Vec<HitRegion>). Host calls push_mouse(x, y) to update position. Click detection on FRAME boundary.
+- [x] **Disassembler support** -- HITSET and HITQ appear correctly in trace output and disassembly views.
+
+### Technical Notes
+
+Implementation in src/vm/mod.rs (Vm struct fields, push_mouse, HITSET/HITQ handlers). HitRegion struct stores x, y, w, h, id. MAX_HIT_REGIONS cap prevents unbounded growth. Mouse coordinates updated by host each frame before VM step.
+
+## [x] phase-56: Musical Note Opcode (COMPLETE)
+
+**Goal:** Extended audio with waveform selection via NOTE opcode
+
+NOTE opcode (0x7E) extends the audio system beyond BEEP (0x03). While BEEP plays a fixed sine wave, NOTE accepts a waveform type register, enabling square waves, sawtooth, triangle, and other timbres for richer game audio and music programs.
+
+### Deliverables
+
+- [x] **NOTE opcode (0x7E)** -- NOTE waveform_reg, freq_reg, dur_reg -- play a musical note with selectable waveform type. Waveform types: 0=sine, 1=square, 2=sawtooth, 3=triangle.
+- [x] **Disassembler and assembler support** -- NOTE recognized by assembler, preprocessor OPCODES list, and disassembler.
+
+### Technical Notes
+
+Implementation in src/vm/mod.rs (0x7E handler). Uses the same audio pipeline as BEEP but with waveform selection. The note field on Vm struct stores (waveform, freq_hz, duration_ms) for host consumption.
+
 ## Global Risks
 
-- Opcode space: 109 of ~256 slots used, plenty of room
+- Opcode space: 111 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
