@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 61/61 phases complete, 0 in progress
+**Progress:** 62/62 phases complete, 0 in progress
 
-**Deliverables:** 253/253 complete
+**Deliverables:** 255/255 complete
 
-**Tasks:** 91/91 complete
+**Tasks:** 98/98 complete
 
 ## Scope Summary
 
@@ -73,6 +73,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-59 File Browser App + Bug Fixes | COMPLETE | 4/4 | 619 | - |
 | phase-60 STRCMP Opcode | COMPLETE | 1/1 | 50 | 13 |
 | phase-61 GUI Calculator App + Token-Pixel-GUI Doc | COMPLETE | 2/2 | 1,200 | 1 |
+| phase-62 Notepad Bug Fixes + Clock App | COMPLETE | 2/2 | 1,485 | 6 |
 
 ## Dependencies
 
@@ -1867,6 +1868,88 @@ gui_calc.asm: full GUI calculator with mouse-driven button grid, display area, A
 ### Technical Notes
 
 gui_calc.asm uses mouse events, drawing primitives, and arithmetic opcodes. 920-line program demonstrating the full GUI capability. TOKEN_PIXEL_GUI.md documents the token-pixel-GUI rendering stack (284 lines).
+
+## [x] phase-62: Notepad Bug Fixes + Clock App (COMPLETE)
+
+**Goal:** Fix 5 notepad bugs and add digital clock application
+
+Fixed 5 critical bugs in notepad.asm (r31 save, r12 clobber, r1 restores, LDI r0 fix, null terminate). Added clock.asm: digital clock with FRAME timing, TEXT rendering, RECTF UI, DIV/MOD time math, STRO string building, blinking colon. 6 new tests.
+
+### Deliverables
+
+- [x] **notepad.asm bug fixes** -- Fix 5 bugs: draw_status r31 save, r12→r14 clobber, r1 restores after TEXT/RECTF, LDI r0→LDI r2 for null terminate
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+- [x] **clock.asm** -- Digital clock: 494 lines, FRAME timing, TEXT rendering, RECTF UI, DIV/MOD time math, STRO string building, blinking colon separator
+  - [x] `` 
+  - [x] `` 
+  - [x] n
+  - [x] o
+  - [x] t
+  - [x] e
+  - [x] p
+  - [x] a
+  - [x] d
+  - [x] .
+  - [x] a
+  - [x] s
+  - [x] m
+  - [x]  
+  - [x] r
+  - [x] u
+  - [x] n
+  - [x] s
+  - [x]  
+  - [x] c
+  - [x] o
+  - [x] r
+  - [x] r
+  - [x] e
+  - [x] c
+  - [x] t
+  - [x] l
+  - [x] y
+  - [x] ,
+  - [x]  
+  - [x] c
+  - [x] l
+  - [x] o
+  - [x] c
+  - [x] k
+  - [x] .
+  - [x] a
+  - [x] s
+  - [x] m
+  - [x]  
+  - [x] r
+  - [x] u
+  - [x] n
+  - [x] s
+  - [x]  
+  - [x] a
+  - [x] n
+  - [x] d
+  - [x]  
+  - [x] d
+  - [x] i
+  - [x] s
+  - [x] p
+  - [x] l
+  - [x] a
+  - [x] y
+  - [x] s
+  - [x]  
+  - [x] t
+  - [x] i
+  - [x] m
+  - [x] e
+
+### Technical Notes
+
+Commit 5ed4b7951. notepad.asm now 713 lines, clock.asm 494 lines. 6 new tests in src/vm/tests.rs. 1485 insertions total.
 
 ## Global Risks
 

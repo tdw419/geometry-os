@@ -11,9 +11,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 113
-  tests: 763
-  programs: 73
-  loc: 41883
+  tests: 1835
+  programs: 74
+  loc: 42043
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -3309,6 +3309,44 @@ phases:
     documents the token-pixel-GUI rendering stack (284 lines).'
   scope_lines_total: 1200
   test_target: 1
+- id: phase-62
+  title: Notepad Bug Fixes + Clock App
+  status: complete
+  goal: Fix 5 notepad bugs and add digital clock application
+  description: 'Fixed 5 critical bugs in notepad.asm (r31 save, r12 clobber, r1 restores,
+    LDI r0 fix, null terminate). Added clock.asm: digital clock with FRAME timing,
+    TEXT rendering, RECTF UI, DIV/MOD time math, STRO string building, blinking colon.
+    6 new tests.'
+  deliverables:
+  - name: notepad.asm bug fixes
+    description: 'Fix 5 bugs: draw_status r31 save, r12→r14 clobber, r1 restores
+      after TEXT/RECTF, LDI r0→LDI r2 for null terminate'
+    status: done
+    tasks:
+    - name: Fix draw_status PUSH/POP r31
+      status: done
+    - name: Fix render_row r12→r14
+      status: done
+    - name: Fix r1 restores after TEXT
+      status: done
+    - name: Fix LDI r0→r2 for null terminate
+      status: done
+    - name: Fix copy_line r1 initialization
+      status: done
+  - name: clock.asm
+    description: 'Digital clock: 494 lines, FRAME timing, TEXT rendering, RECTF UI,
+      DIV/MOD time math, STRO string building, blinking colon separator'
+    status: done
+    tasks:
+    - name: Write clock.asm with digital clock display
+      status: done
+    - name: Add 6 clock tests (assembles, boots, persistent, time updates, day counter, blink)
+      status: done
+    acceptance_criteria: notepad.asm runs correctly, clock.asm runs and displays time
+  technical_notes: 'Commit 5ed4b7951. notepad.asm now 713 lines, clock.asm 494 lines.
+    6 new tests in src/vm/tests.rs. 1485 insertions total.'
+  scope_lines_total: 1485
+  test_target: 6
 global_risks:
 - 'Opcode space: 113 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
