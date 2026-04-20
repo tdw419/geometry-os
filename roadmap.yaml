@@ -10,10 +10,10 @@ meta:
   screen: 256x256 pixels
   registers: 32
   ram: 65536 words
-  opcodes: 112
-  tests: 1769
-  programs: 71
-  loc: 41455
+  opcodes: 113
+  tests: 1795
+  programs: 72
+  loc: 41806
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -3253,8 +3253,37 @@ phases:
     apps.'
   scope_lines_total: 619
   test_target: 0
+- id: phase-60
+  title: STRCMP Opcode
+  status: complete
+  goal: String comparison opcode for null-terminated strings
+  description: 'STRCMP (0x86): compares two null-terminated strings in memory, sets
+    r0 to -1/0/1. 13 new tests covering equal/less/greater/empty/edge cases.'
+  deliverables:
+  - name: STRCMP opcode (0x86)
+    description: 'Compare null-terminated strings at addresses in r1/r2, set r0: -1
+      (s1<s2), 0 (equal), 1 (s1>s2)'
+    status: done
+    tasks:
+    - name: Implement STRCMP in VM dispatch
+      status: done
+    - name: Add STRCMP to assembler
+      status: done
+    - name: Add STRCMP to disassembler
+      status: done
+    - name: Add STRCMP to opcode_name
+      status: done
+    - name: Write 13 STRCMP tests
+      status: done
+    acceptance_criteria: STRCMP compares strings correctly, assembles and runs, all
+      13 tests pass
+  technical_notes: 'String comparison opcode useful for shell and file_browser. Implemented
+    in src/vm/mod.rs dispatch, src/assembler/system_ops.rs, src/vm/disasm.rs, src/hermes.rs
+    opcode_name. 13 tests in src/vm/tests.rs.'
+  scope_lines_total: 50
+  test_target: 13
 global_risks:
-- 'Opcode space: 112 of ~256 slots used, plenty of room'
+- 'Opcode space: 113 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing

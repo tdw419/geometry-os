@@ -891,6 +891,7 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0x83 => "TRACE_READ",
         0x84 => "PIXEL_HISTORY",
         0x85 => "MOUSEQ",
+        0x86 => "STRCMP",
         _ => "???",
     }
 }

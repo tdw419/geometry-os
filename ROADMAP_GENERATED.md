@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 59/59 phases complete, 0 in progress
+**Progress:** 60/60 phases complete, 0 in progress
 
-**Deliverables:** 250/250 complete
+**Deliverables:** 251/251 complete
 
-**Tasks:** 84/84 complete
+**Tasks:** 89/89 complete
 
 ## Scope Summary
 
@@ -71,6 +71,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 o
 | phase-57 Mouse Query Opcode | COMPLETE | 4/4 | 80 | 16 |
 | phase-58 Terminal v4 — Scroll + Shell Commands | COMPLETE | 4/4 | 620 | 13 |
 | phase-59 File Browser App + Bug Fixes | COMPLETE | 4/4 | 619 | - |
+| phase-60 STRCMP Opcode | COMPLETE | 1/1 | 50 | 13 |
 
 ## Dependencies
 
@@ -1672,9 +1673,100 @@ File browser application using HITSET for clickable rows. Fixed two critical bug
 
 No new opcodes. Pure application-level code in programs/file_browser.asm. Tests in src/vm/tests.rs. Bug fixes improve HITSET/HITQ reliability for all future apps.
 
+## [x] phase-60: STRCMP Opcode (COMPLETE)
+
+**Goal:** String comparison opcode for null-terminated strings
+
+STRCMP (0x86): compares two null-terminated strings in memory, sets r0 to -1/0/1. 13 new tests covering equal/less/greater/empty/edge cases.
+
+### Deliverables
+
+- [x] **STRCMP opcode (0x86)** -- Compare null-terminated strings at addresses in r1/r2, set r0: -1 (s1<s2), 0 (equal), 1 (s1>s2)
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] `` 
+  - [x] S
+  - [x] T
+  - [x] R
+  - [x] C
+  - [x] M
+  - [x] P
+  - [x]  
+  - [x] c
+  - [x] o
+  - [x] m
+  - [x] p
+  - [x] a
+  - [x] r
+  - [x] e
+  - [x] s
+  - [x]  
+  - [x] s
+  - [x] t
+  - [x] r
+  - [x] i
+  - [x] n
+  - [x] g
+  - [x] s
+  - [x]  
+  - [x] c
+  - [x] o
+  - [x] r
+  - [x] r
+  - [x] e
+  - [x] c
+  - [x] t
+  - [x] l
+  - [x] y
+  - [x] ,
+  - [x]  
+  - [x] a
+  - [x] s
+  - [x] s
+  - [x] e
+  - [x] m
+  - [x] b
+  - [x] l
+  - [x] e
+  - [x] s
+  - [x]  
+  - [x] a
+  - [x] n
+  - [x] d
+  - [x]  
+  - [x] r
+  - [x] u
+  - [x] n
+  - [x] s
+  - [x] ,
+  - [x]  
+  - [x] a
+  - [x] l
+  - [x] l
+  - [x]  
+  - [x] 1
+  - [x] 3
+  - [x]  
+  - [x] t
+  - [x] e
+  - [x] s
+  - [x] t
+  - [x] s
+  - [x]  
+  - [x] p
+  - [x] a
+  - [x] s
+  - [x] s
+
+### Technical Notes
+
+String comparison opcode useful for shell and file_browser. Implemented in src/vm/mod.rs dispatch, src/assembler/system_ops.rs, src/vm/disasm.rs, src/hermes.rs opcode_name. 13 tests in src/vm/tests.rs.
+
 ## Global Risks
 
-- Opcode space: 112 of ~256 slots used, plenty of room
+- Opcode space: 113 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing

@@ -654,6 +654,9 @@ impl Vm {
                 let xr = ram(a + 1);
                 (format!("MOUSEQ {}", reg(xr)), 2)
             }
+            0x86 => {
+                (format!("STRCMP {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
