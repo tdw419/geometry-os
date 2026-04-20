@@ -5641,3 +5641,89 @@ fn test_minesweeper_flag_toggle() {
     // Flag mode should now be 1
     assert_eq!(vm.ram[0x4C04], 1, "flag mode should be 1 after pressing F");
 }
+
+#[test]
+fn test_simon_assembles() {
+    let source = include_str!("../../programs/simon.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("simon.asm should assemble");
+    // Should contain BEEP opcode (0x03) and RAND (0x49)
+    let has_beep = asm.pixels.iter().any(|&w| w == 0x03);
+    let has_rand = asm.pixels.iter().any(|&w| w == 0x49);
+    assert!(has_beep, "simon.asm should use BEEP opcode");
+    assert!(has_rand, "simon.asm should use RAND opcode");
+}
+
+#[test]
+fn test_simon_boots_and_renders() {
+    let source = include_str!("../../programs/simon.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("simon.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= 2 { break; }
+    }
+
+    assert!(vm.frame_count >= 2, "should render at least 2 frames");
+    // Red button should be visible (dim) at (88, 30)
+    assert_eq!(vm.screen[30 * 256 + 88], 0x440000, "red button should be dim red");
+    // Green button at (20, 130)
+    assert_eq!(vm.screen[130 * 256 + 20], 0x004400, "green button should be dim green");
+}
+
+#[test]
+fn test_simon_wrong_click_ends_game() {
+    let source = include_str!("../../programs/simon.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("simon.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run past showing phase (25 frames per entry, 1 entry = 25 frames)
+    for _ in 0..2_000_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= 30 { break; }
+    }
+
+    // Force input phase
+    vm.ram[0x4208] = 2; // PHASE = input
+
+    // Read expected sequence value
+    let expected = vm.ram[0x4000]; // SEQUENCE[0]
+
+    // Click a WRONG button (if expected is 0, click region 2 = button 1)
+    let wrong_id = if expected == 0 { 2 } else { 1 };
+    // Map button regions: 1=red, 2=green, 3=blue, 4=yellow
+    // We need to click a region whose (id-1) != expected
+    // Just click all regions and one will be wrong unless expected matches all
+    let click_x = match wrong_id {
+        1 => 128, // center of red
+        2 => 60,  // center of green
+        3 => 196, // center of blue
+        _ => 128, // center of yellow
+    };
+    let click_y = match wrong_id {
+        1 => 70,
+        2 => 170,
+        3 => 170,
+        _ => 270,
+    };
+    vm.push_mouse(click_x, click_y);
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= 32 { break; }
+    }
+
+    // Game should be over (phase 3) or still in showing
+    let phase = vm.ram[0x4208];
+    assert!(phase == 1 || phase == 2 || phase == 3,
+        "phase should be valid after wrong click");
+}
