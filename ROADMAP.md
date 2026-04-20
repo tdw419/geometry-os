@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 68/82 phases complete, 0 in progress
+**Progress:** 69/82 phases complete, 0 in progress
 
-**Deliverables:** 288/371 complete
+**Deliverables:** 293/371 complete
 
 **Tasks:** 98/98 complete
 
@@ -79,7 +79,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | PLANNED | 4/4 | 1,000 | 10 |
 | phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | PLANNED | 6/6 | 700 | 15 |
 | phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | PLANNED | 5/5 | 500 | 8 |
-| phase-68 WINSYS Opcode | PLANNED | 0/5 | 500 | 10 |
+| phase-68 WINSYS Opcode | DONE | 5/5 | 500 | 10 |
 | phase-68b Window Mouse Interaction + Desktop Demo | PLANNED | 0/3 | 700 | 8 |
 | phase-69 Sprite Engine | PLANNED | 0/7 | 800 | 12 |
 | phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
@@ -2041,7 +2041,7 @@ NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels (XOR 0xFFFFF
 - [x] **NOT/INV tests** -- 
 - [x] **invert_demo.asm** -- Colored stripes cycle between normal and inverted every ~30 frames
 
-## [ ] phase-68: WINSYS Opcode (PLANNED)
+## [x] phase-68: WINSYS Opcode (DONE)
 
 **Goal:** Window management opcode that creates, destroys, and manages window regions
 
@@ -2049,11 +2049,11 @@ WINSYS opcode (0x92) manages rectangular window regions. Each window has an id, 
 
 ### Deliverables
 
-- [ ] **WINSYS opcode (0x92)** -- WINSYS op_reg -- op=0:create window (r1=x,r2=y,r3=w,r4=h, r5=title_addr), returns window id in r0. op=1:destroy window (r0=win_id). op=2:bring to front (r0=win_id). op=3:list windows (r0=addr to write list).
-- [ ] **Window data structure** -- Per-window: id, x, y, w, h, z_order, title, process_id, offscreen_buffer (w*h u32 pixels). Max 8 windows. Stored on VM state.
-- [ ] **Window blitting to canvas** -- After FRAME, blit all windows to canvas in Z-order. Front window on top. Clip at screen edges (256x256). Transparent regions (0x00000000) show windows behind.
-- [ ] **WINSYS assembler + disassembler entries** -- 
-- [ ] **WINSYS tests** -- Create/destroy windows, Z-order, clipping, max 8 windows. 10+ tests.
+- [x] **WINSYS opcode (0x94)** -- WINSYS op_reg -- op=0:create window (r1=x,r2=y,r3=w,r4=h, r5=title_addr), returns window id in r0. op=1:destroy window (r0=win_id). op=2:bring to front (r0=win_id). op=3:list windows (r0=addr to write list).
+- [x] **Window data structure** -- Per-window: id, x, y, w, h, z_order, title, process_id, offscreen_buffer (w*h u32 pixels). Max 8 windows. Stored on VM state. WPIXEL (0x95) + WREAD (0x96) for per-window pixel I/O.
+- [x] **Window blitting to canvas** -- After FRAME, blit_windows() blits all active windows to screen in Z-order. Front window on top. Clip at screen edges (256x256). Zero pixels (0x00000000) are transparent.
+- [x] **WINSYS + WPIXEL + WREAD assembler + disassembler entries** -- 
+- [x] **WINSYS tests** -- 17 tests: create/destroy, Z-order, bring-to-front, list, max 8 windows, WPIXEL/WREAD, blitting, clipping, assembler, disassembler.
 
 ## [ ] phase-68b: Window Mouse Interaction + Desktop Demo (PLANNED)
 

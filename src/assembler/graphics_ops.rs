@@ -181,7 +181,8 @@ pub(super) fn try_parse(
         "HITSET" => {
             if tokens.len() < 6 {
                 return Err(
-                    "HITSET requires 5 arguments: HITSET x_reg, y_reg, w_reg, h_reg, id".to_string(),
+                    "HITSET requires 5 arguments: HITSET x_reg, y_reg, w_reg, h_reg, id"
+                        .to_string(),
                 );
             }
             bytecode.push(0x37);
@@ -216,7 +217,8 @@ pub(super) fn try_parse(
         "RECT" => {
             if tokens.len() < 6 {
                 return Err(
-                    "RECT requires 5 arguments: RECT x_reg, y_reg, w_reg, h_reg, color_reg".to_string(),
+                    "RECT requires 5 arguments: RECT x_reg, y_reg, w_reg, h_reg, color_reg"
+                        .to_string(),
                 );
             }
             bytecode.push(0x88);

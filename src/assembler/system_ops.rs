@@ -382,9 +382,7 @@ pub(super) fn try_parse(
 
         "STRCMP" => {
             if tokens.len() < 3 {
-                return Err(
-                    "STRCMP requires 2 arguments: STRCMP addr1_reg, addr2_reg".to_string(),
-                );
+                return Err("STRCMP requires 2 arguments: STRCMP addr1_reg, addr2_reg".to_string());
             }
             bytecode.push(0x86);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -394,9 +392,7 @@ pub(super) fn try_parse(
 
         "ABS" => {
             if tokens.len() < 2 {
-                return Err(
-                    "ABS requires 1 argument: ABS rd".to_string(),
-                );
+                return Err("ABS requires 1 argument: ABS rd".to_string());
             }
             bytecode.push(0x87);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -405,9 +401,7 @@ pub(super) fn try_parse(
 
         "MIN" => {
             if tokens.len() < 3 {
-                return Err(
-                    "MIN requires 2 arguments: MIN rd, rs".to_string(),
-                );
+                return Err("MIN requires 2 arguments: MIN rd, rs".to_string());
             }
             bytecode.push(0x89);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -417,9 +411,7 @@ pub(super) fn try_parse(
 
         "MAX" => {
             if tokens.len() < 3 {
-                return Err(
-                    "MAX requires 2 arguments: MAX rd, rs".to_string(),
-                );
+                return Err("MAX requires 2 arguments: MAX rd, rs".to_string());
             }
             bytecode.push(0x8A);
             bytecode.push(parse_reg(tokens[1])? as u32);
@@ -429,9 +421,7 @@ pub(super) fn try_parse(
 
         "CLAMP" => {
             if tokens.len() < 4 {
-                return Err(
-                    "CLAMP requires 3 arguments: CLAMP rd, min_reg, max_reg".to_string(),
-                );
+                return Err("CLAMP requires 3 arguments: CLAMP rd, min_reg, max_reg".to_string());
             }
             bytecode.push(0x8B);
             bytecode.push(parse_reg(tokens[1])? as u32);

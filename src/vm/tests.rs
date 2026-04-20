@@ -869,12 +869,17 @@ fn test_ikey_no_key() {
 #[test]
 fn test_hitset_registers_region() {
     // HITSET r1, r2, r3, r4, 42  -- register a 10x20 region at (5,5) with id=42
-    let vm = run_program(&[0x10, 1, 5,  // LDI r1, 5 (x)
-                           0x10, 2, 5,  // LDI r2, 5 (y)
-                           0x10, 3, 10, // LDI r3, 10 (w)
-                           0x10, 4, 20, // LDI r4, 20 (h)
-                           0x37, 1, 2, 3, 4, 42, // HITSET r1,r2,r3,r4,42
-                           0x00], 100); // HALT
+    let vm = run_program(
+        &[
+            0x10, 1, 5, // LDI r1, 5 (x)
+            0x10, 2, 5, // LDI r2, 5 (y)
+            0x10, 3, 10, // LDI r3, 10 (w)
+            0x10, 4, 20, // LDI r4, 20 (h)
+            0x37, 1, 2, 3, 4, 42, // HITSET r1,r2,r3,r4,42
+            0x00,
+        ],
+        100,
+    ); // HALT
     assert_eq!(vm.hit_regions.len(), 1);
     assert_eq!(vm.hit_regions[0].x, 5);
     assert_eq!(vm.hit_regions[0].y, 5);
@@ -905,7 +910,9 @@ fn test_hitq_finds_region() {
     vm.pc = 0;
     vm.push_mouse(25, 20); // inside the region
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert_eq!(vm.regs[5], 7); // found the region
 }
@@ -931,7 +938,9 @@ fn test_hitq_no_match() {
     vm.pc = 0;
     vm.push_mouse(0, 0); // outside
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     assert_eq!(vm.regs[5], 0); // no match
 }
@@ -957,7 +966,11 @@ fn test_hitq_boundary_edges() {
 
     // Exact top-left: (10,10) should match
     vm.push_mouse(10, 10);
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[5], 1);
 
     // Reset and test bottom-right: (29,29) is inside (10+20-1), (30,30) is outside
@@ -977,7 +990,11 @@ fn test_hitq_boundary_edges() {
     vm2.ram[8] = 0x00;
     vm2.pc = 0;
     vm2.push_mouse(29, 29); // last pixel inside
-    for _ in 0..100 { if !vm2.step() { break; } }
+    for _ in 0..100 {
+        if !vm2.step() {
+            break;
+        }
+    }
     assert_eq!(vm2.regs[5], 1);
 
     // Exactly on the exclusive edge
@@ -997,7 +1014,11 @@ fn test_hitq_boundary_edges() {
     vm3.ram[8] = 0x00;
     vm3.pc = 0;
     vm3.push_mouse(30, 30); // exclusive edge -- outside
-    for _ in 0..100 { if !vm3.step() { break; } }
+    for _ in 0..100 {
+        if !vm3.step() {
+            break;
+        }
+    }
     assert_eq!(vm3.regs[5], 0);
 }
 
@@ -1005,18 +1026,40 @@ fn test_hitq_boundary_edges() {
 fn test_hitq_first_match_wins() {
     // Two overlapping regions; first registered wins
     let mut vm = Vm::new();
-    vm.regs[1] = 10; vm.regs[2] = 10; vm.regs[3] = 50; vm.regs[4] = 50;
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 50;
+    vm.regs[4] = 50;
     // Region 1: (10,10) 50x50, id=100
-    vm.ram[0] = 0x37; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; vm.ram[4] = 4; vm.ram[5] = 100;
+    vm.ram[0] = 0x37;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 100;
     // Region 2: (20,20) 50x50, id=200
-    vm.ram[6] = 0x10; vm.ram[7] = 1; vm.ram[8] = 20; // LDI r1, 20
-    vm.ram[9] = 0x10; vm.ram[10] = 2; vm.ram[11] = 20; // LDI r2, 20
-    vm.ram[12] = 0x37; vm.ram[13] = 1; vm.ram[14] = 2; vm.ram[15] = 3; vm.ram[16] = 4; vm.ram[17] = 200;
-    vm.ram[18] = 0x38; vm.ram[19] = 5; // HITQ r5
+    vm.ram[6] = 0x10;
+    vm.ram[7] = 1;
+    vm.ram[8] = 20; // LDI r1, 20
+    vm.ram[9] = 0x10;
+    vm.ram[10] = 2;
+    vm.ram[11] = 20; // LDI r2, 20
+    vm.ram[12] = 0x37;
+    vm.ram[13] = 1;
+    vm.ram[14] = 2;
+    vm.ram[15] = 3;
+    vm.ram[16] = 4;
+    vm.ram[17] = 200;
+    vm.ram[18] = 0x38;
+    vm.ram[19] = 5; // HITQ r5
     vm.ram[20] = 0x00; // HALT
     vm.pc = 0;
     vm.push_mouse(30, 30); // inside both
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[5], 100); // first registered wins
 }
 
@@ -1996,9 +2039,17 @@ fn test_runnext_full_write_compile_execute_cycle() {
 fn test_gui_calc_assembles() {
     let source = include_str!("../../programs/gui_calc.asm");
     let result = crate::assembler::assemble(source, 0x1000);
-    assert!(result.is_ok(), "gui_calc.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "gui_calc.asm should assemble: {:?}",
+        result.err()
+    );
     let asm = result.expect("should succeed");
-    assert!(asm.pixels.len() > 100, "gui_calc should produce substantial bytecode, got {}", asm.pixels.len());
+    assert!(
+        asm.pixels.len() > 100,
+        "gui_calc should produce substantial bytecode, got {}",
+        asm.pixels.len()
+    );
 }
 
 // ============================================================
@@ -2993,7 +3044,11 @@ fn test_mouseq_in_paint_loop() {
     }
 
     // Check that pixel was painted at (64, 128)
-    assert_eq!(vm.screen[128 * 256 + 64], 0xFF0000, "pixel should be painted at mouse pos");
+    assert_eq!(
+        vm.screen[128 * 256 + 64],
+        0xFF0000,
+        "pixel should be painted at mouse pos"
+    );
 }
 
 // ── Disassembler Tests ───────────────────────────────────────────
@@ -3762,7 +3817,10 @@ fn test_hello_window_click_routes_to_id() {
             break;
         }
     }
-    assert_eq!(vm.regs[11], 1, "cursor inside OK button should resolve to id=1");
+    assert_eq!(
+        vm.regs[11], 1,
+        "cursor inside OK button should resolve to id=1"
+    );
 
     // Cursor outside → miss.
     vm.push_mouse(0, 0);
@@ -3774,7 +3832,10 @@ fn test_hello_window_click_routes_to_id() {
             break;
         }
     }
-    assert_eq!(vm.regs[11], 0, "cursor outside any region should resolve to 0");
+    assert_eq!(
+        vm.regs[11], 0,
+        "cursor outside any region should resolve to 0"
+    );
 }
 
 // ── Counter Application Integration Tests ────────────────────
@@ -3810,9 +3871,17 @@ fn test_counter_boots_and_renders() {
     // Background should be dark purple (0x1A1A2E)
     assert_eq!(vm.screen[0], 0x1A1A2E, "background should be dark purple");
     // [+] button (green 0x2ECC71) at (80, 170) should be green
-    assert_eq!(vm.screen[170 * 256 + 80], 0x2ECC71, "+ button should be green");
+    assert_eq!(
+        vm.screen[170 * 256 + 80],
+        0x2ECC71,
+        "+ button should be green"
+    );
     // [-] button (red 0xE74C3C) at (176, 170) should be red
-    assert_eq!(vm.screen[170 * 256 + 176], 0xE74C3C, "- button should be red");
+    assert_eq!(
+        vm.screen[170 * 256 + 176],
+        0xE74C3C,
+        "- button should be red"
+    );
     // Counter should be 0
     assert_eq!(vm.ram[0x100], 0, "counter should start at 0");
     // Two hit regions registered
@@ -3841,7 +3910,11 @@ fn test_counter_click_increments() {
 
     assert!(!vm.halted, "should still be running after click");
     // Counter should have incremented (at least once, since mouse is held)
-    assert!(vm.ram[0x100] > 0, "counter should have incremented: got {}", vm.ram[0x100]);
+    assert!(
+        vm.ram[0x100] > 0,
+        "counter should have incremented: got {}",
+        vm.ram[0x100]
+    );
 }
 
 #[test]
@@ -3852,8 +3925,12 @@ fn test_counter_click_decrements() {
     vm.push_mouse(80, 170);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 4 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 4 {
+            break;
+        }
     }
     let val = vm.ram[0x100];
     assert!(val > 0, "should have incremented");
@@ -3862,13 +3939,22 @@ fn test_counter_click_decrements() {
     vm.push_mouse(176, 170);
     let start2 = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start2 + 3 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start2 + 3 {
+            break;
+        }
     }
 
     assert!(!vm.halted, "should still be running");
     // Counter should have decreased
-    assert!(vm.ram[0x100] < val, "counter should have decremented: was {}, now {}", val, vm.ram[0x100]);
+    assert!(
+        vm.ram[0x100] < val,
+        "counter should have decremented: was {}, now {}",
+        val,
+        vm.ram[0x100]
+    );
 }
 
 #[test]
@@ -3876,10 +3962,26 @@ fn test_counter_renders_number_text() {
     let vm = boot_counter(1);
     // Scratch buffer: "Count " (6 chars) then 3 digits + null = 10 total
     let scratch: usize = 0x200;
-    assert_eq!(vm.ram[scratch + 0], b'C' as u32, "should have 'C' at scratch[0]");
-    assert_eq!(vm.ram[scratch + 1], b'o' as u32, "should have 'o' at scratch[1]");
-    assert_eq!(vm.ram[scratch + 5], b' ' as u32, "should have ' ' at scratch[5]");
-    assert_eq!(vm.ram[scratch + 6], b'0' as u32, "hundreds digit should be '0'");
+    assert_eq!(
+        vm.ram[scratch + 0],
+        b'C' as u32,
+        "should have 'C' at scratch[0]"
+    );
+    assert_eq!(
+        vm.ram[scratch + 1],
+        b'o' as u32,
+        "should have 'o' at scratch[1]"
+    );
+    assert_eq!(
+        vm.ram[scratch + 5],
+        b' ' as u32,
+        "should have ' ' at scratch[5]"
+    );
+    assert_eq!(
+        vm.ram[scratch + 6],
+        b'0' as u32,
+        "hundreds digit should be '0'"
+    );
     assert_eq!(vm.ram[scratch + 7], b'0' as u32, "tens digit should be '0'");
     assert_eq!(vm.ram[scratch + 8], b'0' as u32, "ones digit should be '0'");
     assert_eq!(vm.ram[scratch + 9], 0, "should be null terminated");
@@ -3916,9 +4018,17 @@ fn test_terminal_boots_and_renders() {
     let vm = boot_terminal(1);
     assert!(!vm.halted, "terminal app should not halt after boot");
     // Title bar should be blue-purple (0x333355) at row 0
-    assert_eq!(vm.screen[5 * 256 + 5], 0x333355, "title bar should be blue-purple");
+    assert_eq!(
+        vm.screen[5 * 256 + 5],
+        0x333355,
+        "title bar should be blue-purple"
+    );
     // Content area below title bar (y=20) should be dark gray background
-    assert_eq!(vm.screen[20 * 256 + 10], 0x0C0C0C, "content area should be dark gray");
+    assert_eq!(
+        vm.screen[20 * 256 + 10],
+        0x0C0C0C,
+        "content area should be dark gray"
+    );
     // Cursor col should start at 2 (after "$ " prompt)
     assert_eq!(vm.ram[0x4800], 2, "cursor col should start at 2");
     // Cursor row should start at 0
@@ -3927,7 +4037,11 @@ fn test_terminal_boots_and_renders() {
     assert_eq!(vm.ram[0x4000], b'$' as u32, "row 0 col 0 should be '$'");
     assert_eq!(vm.ram[0x4001], b' ' as u32, "row 0 col 1 should be ' '");
     // Close button hit region registered (id=99)
-    assert_eq!(vm.hit_regions.len(), 1, "should have 1 hit region (close button)");
+    assert_eq!(
+        vm.hit_regions.len(),
+        1,
+        "should have 1 hit region (close button)"
+    );
 }
 
 #[test]
@@ -3941,14 +4055,21 @@ fn test_terminal_types_character() {
     // Run a few frames to process the key
     let start_frame = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start_frame + 3 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + 3 {
+            break;
+        }
     }
 
     assert!(!vm.halted, "should still be running after key");
     // 'H' should be at buffer[row=0 * COLS=42 + col=2] = 0x4002
-    assert_eq!(vm.ram[0x4000 + 42 * 0 + 2], b'H' as u32,
-        "typed 'H' should appear at row 0, col 2");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 0 + 2],
+        b'H' as u32,
+        "typed 'H' should appear at row 0, col 2"
+    );
     // Cursor should have advanced to col 3
     assert_eq!(vm.ram[0x4800], 3, "cursor should have advanced to col 3");
 }
@@ -3962,19 +4083,35 @@ fn test_terminal_types_multiple_chars() {
     vm.push_key(b'H' as u32);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     vm.push_key(b'i' as u32);
     let start2 = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start2 + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start2 + 2 {
+            break;
+        }
     }
 
     assert!(!vm.halted, "should still be running");
-    assert_eq!(vm.ram[0x4000 + 42 * 0 + 2], b'H' as u32, "should have 'H' at col 2");
-    assert_eq!(vm.ram[0x4000 + 42 * 0 + 3], b'i' as u32, "should have 'i' at col 3");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 0 + 2],
+        b'H' as u32,
+        "should have 'H' at col 2"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 0 + 3],
+        b'i' as u32,
+        "should have 'i' at col 3"
+    );
     assert_eq!(vm.ram[0x4800], 4, "cursor should be at col 4");
 }
 
@@ -3987,27 +4124,57 @@ fn test_terminal_enter_newline() {
     vm.push_key(b'A' as u32);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     vm.push_key(13); // Enter
     let start2 = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start2 + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start2 + 2 {
+            break;
+        }
     }
 
     assert!(!vm.halted, "should still be running");
     // With command dispatch: "A" is unknown -> "? A" on row 1, prompt on row 2
-    assert_eq!(vm.ram[0x4801], 2, "cursor should be on row 2 after enter (row 1 has '? A' output)");
-    assert_eq!(vm.ram[0x4800], 2, "cursor col should be 2 (after new prompt)");
+    assert_eq!(
+        vm.ram[0x4801], 2,
+        "cursor should be on row 2 after enter (row 1 has '? A' output)"
+    );
+    assert_eq!(
+        vm.ram[0x4800], 2,
+        "cursor col should be 2 (after new prompt)"
+    );
     // Row 1 should have "? A" output
-    assert_eq!(vm.ram[0x4000 + 42 * 1], 63, "row 1 should start with '?' (unknown cmd)");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1],
+        63,
+        "row 1 should start with '?' (unknown cmd)"
+    );
     assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], 32, "row 1 col 1 should be ' '");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 2], b'A' as u32, "row 1 col 2 should be 'A'");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 2],
+        b'A' as u32,
+        "row 1 col 2 should be 'A'"
+    );
     // Row 2 should have prompt
-    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should start with '$'");
-    assert_eq!(vm.ram[0x4000 + 42 * 2 + 1], b' ' as u32, "row 2 col 1 should be ' '");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 2],
+        b'$' as u32,
+        "row 2 should start with '$'"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 2 + 1],
+        b' ' as u32,
+        "row 2 col 1 should be ' '"
+    );
 }
 
 #[test]
@@ -4019,14 +4186,22 @@ fn test_terminal_backspace() {
     vm.push_key(b'A' as u32);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     vm.push_key(b'B' as u32);
     let start2 = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start2 + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start2 + 2 {
+            break;
+        }
     }
     assert_eq!(vm.ram[0x4800], 4, "cursor should be at col 4 after 'AB'");
 
@@ -4034,15 +4209,25 @@ fn test_terminal_backspace() {
     vm.push_key(8);
     let start3 = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start3 + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start3 + 2 {
+            break;
+        }
     }
 
     assert!(!vm.halted, "should still be running");
-    assert_eq!(vm.ram[0x4800], 3, "cursor should be back at col 3 after backspace");
+    assert_eq!(
+        vm.ram[0x4800], 3,
+        "cursor should be back at col 3 after backspace"
+    );
     // Col 3 should be cleared to space
-    assert_eq!(vm.ram[0x4000 + 42 * 0 + 3], b' ' as u32,
-        "backspaced position should be space");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 0 + 3],
+        b' ' as u32,
+        "backspaced position should be space"
+    );
 }
 
 #[test]
@@ -4050,7 +4235,11 @@ fn test_terminal_blink_counter_advances() {
     let vm = boot_terminal(5);
     assert!(!vm.halted);
     // Blink counter at RAM[0x4802] should be > 0 after 5 frames
-    assert!(vm.ram[0x4802] > 0, "blink counter should have advanced: got {}", vm.ram[0x4802]);
+    assert!(
+        vm.ram[0x4802] > 0,
+        "blink counter should have advanced: got {}",
+        vm.ram[0x4802]
+    );
 }
 
 #[test]
@@ -4061,15 +4250,23 @@ fn test_terminal_cmd_help() {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
         for _ in 0..500_000 {
-            if !vm.step() { break; }
-            if vm.frame_count >= start + 2 { break; }
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
         }
     }
     vm.push_key(13); // Enter
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 6 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 6 {
+            break;
+        }
     }
     assert!(!vm.halted, "should not halt after help command");
     // Debug: dump buffer rows with raw values
@@ -4083,12 +4280,28 @@ fn test_terminal_cmd_help() {
     }
     eprintln!("cursor row={} col={}", vm.ram[0x4801], vm.ram[0x4800]);
     // Row 1 should have "cmds: clear help ver hi echo ls date cat" output
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'c' as u32, "row 1 should start with 'c' from 'cmds...'");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], b'm' as u32, "row 1 col 1 should be 'm'");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 0],
+        b'c' as u32,
+        "row 1 should start with 'c' from 'cmds...'"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 1],
+        b'm' as u32,
+        "row 1 col 1 should be 'm'"
+    );
     // Row 2 should have "      sys colors whoami uname uptime"
-    assert_eq!(vm.ram[0x4000 + 42 * 2 + 6], b's' as u32, "row 2 should have 'sys' from second help line");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 2 + 6],
+        b's' as u32,
+        "row 2 should have 'sys' from second help line"
+    );
     // Row 3 should have prompt (help now outputs 2 lines)
-    assert_eq!(vm.ram[0x4000 + 42 * 3], b'$' as u32, "row 3 should have prompt after help output");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 3],
+        b'$' as u32,
+        "row 3 should have prompt after help output"
+    );
     assert_eq!(vm.ram[0x4801], 3, "cursor should be on row 3 after help");
 }
 
@@ -4099,22 +4312,42 @@ fn test_terminal_cmd_ver() {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
         for _ in 0..500_000 {
-            if !vm.step() { break; }
-            if vm.frame_count >= start + 2 { break; }
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
         }
     }
     vm.push_key(13);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 3 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
     }
     assert!(!vm.halted);
     // Row 1 should have "GeoTerm v1.0"
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'G' as u32, "row 1 should start with 'G'");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], b'e' as u32, "row 1 col 1 should be 'e'");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 0],
+        b'G' as u32,
+        "row 1 should start with 'G'"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 1],
+        b'e' as u32,
+        "row 1 col 1 should be 'e'"
+    );
     // Row 2 should have prompt
-    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 2],
+        b'$' as u32,
+        "row 2 should have prompt"
+    );
 }
 
 #[test]
@@ -4124,21 +4357,41 @@ fn test_terminal_cmd_hi() {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
         for _ in 0..500_000 {
-            if !vm.step() { break; }
-            if vm.frame_count >= start + 2 { break; }
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
         }
     }
     vm.push_key(13);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 3 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
     }
     assert!(!vm.halted);
     // Row 1 should have "hello!"
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'h' as u32, "row 1 should start with 'h'");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], b'e' as u32, "row 1 col 1 should be 'e'");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 5], b'!' as u32, "row 1 col 5 should be '!'");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 0],
+        b'h' as u32,
+        "row 1 should start with 'h'"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 1],
+        b'e' as u32,
+        "row 1 col 1 should be 'e'"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 5],
+        b'!' as u32,
+        "row 1 col 5 should be '!'"
+    );
 }
 
 #[test]
@@ -4149,22 +4402,34 @@ fn test_terminal_cmd_clear() {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
         for _ in 0..500_000 {
-            if !vm.step() { break; }
-            if vm.frame_count >= start + 2 { break; }
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
         }
     }
     vm.push_key(13);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 3 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
     }
     assert!(!vm.halted);
     // After clear, cursor should be at row 0, col 2
     assert_eq!(vm.ram[0x4801], 0, "cursor row should be 0 after clear");
     assert_eq!(vm.ram[0x4800], 2, "cursor col should be 2 after clear");
     // Row 0 should have prompt
-    assert_eq!(vm.ram[0x4000 + 42 * 0], b'$' as u32, "row 0 should have prompt after clear");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 0],
+        b'$' as u32,
+        "row 0 should have prompt after clear"
+    );
 }
 
 #[test]
@@ -4173,18 +4438,48 @@ fn test_terminal_cmd_echo_with_args() {
     for ch in b"echo hello world" {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
-        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+        for _ in 0..500_000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
+        }
     }
     vm.push_key(13);
     let start = vm.frame_count;
-    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
+    }
     assert!(!vm.halted);
     // Row 1 should have "hello world"
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'h' as u32, "row 1 should start with 'h'");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 5], b' ' as u32, "row 1 col 5 should be space");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 6], b'w' as u32, "row 1 col 6 should be 'w'");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 0],
+        b'h' as u32,
+        "row 1 should start with 'h'"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 5],
+        b' ' as u32,
+        "row 1 col 5 should be space"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 6],
+        b'w' as u32,
+        "row 1 col 6 should be 'w'"
+    );
     // Row 2 should have prompt
-    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 2],
+        b'$' as u32,
+        "row 2 should have prompt"
+    );
 }
 
 #[test]
@@ -4193,15 +4488,36 @@ fn test_terminal_cmd_echo_no_args() {
     for ch in b"echo " {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
-        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+        for _ in 0..500_000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
+        }
     }
     vm.push_key(13);
     let start = vm.frame_count;
-    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
+    }
     assert!(!vm.halted);
     // echo with no args prints empty line -- cursor advances to row 2
-    assert_eq!(vm.ram[0x4801], 2, "cursor should be on row 2 after empty echo");
-    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt");
+    assert_eq!(
+        vm.ram[0x4801], 2,
+        "cursor should be on row 2 after empty echo"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 2],
+        b'$' as u32,
+        "row 2 should have prompt"
+    );
 }
 
 #[test]
@@ -4210,17 +4526,43 @@ fn test_terminal_cmd_date() {
     for ch in b"date" {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
-        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+        for _ in 0..500_000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
+        }
     }
     vm.push_key(13);
     let start = vm.frame_count;
-    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
+    }
     assert!(!vm.halted);
     // Row 1 should have "2026-04-20"
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'2' as u32, "row 1 should start with '2'");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 4], b'-' as u32, "row 1 col 4 should be '-'");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 0],
+        b'2' as u32,
+        "row 1 should start with '2'"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 4],
+        b'-' as u32,
+        "row 1 col 4 should be '-'"
+    );
     // Row 2 should have prompt
-    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 2],
+        b'$' as u32,
+        "row 2 should have prompt"
+    );
 }
 
 #[test]
@@ -4230,24 +4572,56 @@ fn test_terminal_cmd_cls() {
     for ch in b"hi" {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
-        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+        for _ in 0..500_000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
+        }
     }
     vm.push_key(13);
     let start = vm.frame_count;
-    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
+    }
     // Now type cls
     for ch in b"cls" {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
-        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+        for _ in 0..500_000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
+        }
     }
     vm.push_key(13);
     let start = vm.frame_count;
-    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
+    }
     assert!(!vm.halted);
     assert_eq!(vm.ram[0x4801], 0, "cursor row should be 0 after cls");
     assert_eq!(vm.ram[0x4800], 2, "cursor col should be 2 after cls");
-    assert_eq!(vm.ram[0x4000 + 42 * 0], b'$' as u32, "row 0 should have prompt after cls");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 0],
+        b'$' as u32,
+        "row 0 should have prompt after cls"
+    );
 }
 
 #[test]
@@ -4256,17 +4630,34 @@ fn test_terminal_cmd_ls() {
     for ch in b"ls" {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
-        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+        for _ in 0..500_000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
+        }
     }
     vm.push_key(13);
     let start = vm.frame_count;
-    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
+    }
     assert!(!vm.halted);
     // ls lists VFS directory entries (boot.cfg and/or linux), each on its own row
     // Row 1 should have a non-space, non-null character (file listing or "(empty)")
     let row1_start = vm.ram[0x4000 + 42 * 1];
-    assert!(row1_start != 32 && row1_start != 0,
-        "row 1 should have ls output, got char code {}", row1_start);
+    assert!(
+        row1_start != 32 && row1_start != 0,
+        "row 1 should have ls output, got char code {}",
+        row1_start
+    );
     // Prompt should appear after the last listed file
     // Find the prompt row by checking for '$'
     let mut found_prompt = false;
@@ -4287,16 +4678,39 @@ fn test_terminal_scroll() {
         for ch in b"hi" {
             vm.push_key(*ch as u32);
             let start = vm.frame_count;
-            for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+            for _ in 0..500_000 {
+                if !vm.step() {
+                    break;
+                }
+                if vm.frame_count >= start + 2 {
+                    break;
+                }
+            }
         }
         vm.push_key(13);
         let start = vm.frame_count;
-        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
-        if vm.halted { panic!("terminal halted at row_fill {}", row_fill); }
+        for _ in 0..500_000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 3 {
+                break;
+            }
+        }
+        if vm.halted {
+            panic!("terminal halted at row_fill {}", row_fill);
+        }
     }
     assert!(!vm.halted);
-    assert_eq!(vm.ram[0x4801], 29, "cursor row should be clamped to 29 after scroll");
-    assert_eq!(vm.ram[0x4000 + 42 * 29], b'$' as u32, "last row should have prompt");
+    assert_eq!(
+        vm.ram[0x4801], 29,
+        "cursor row should be clamped to 29 after scroll"
+    );
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 29],
+        b'$' as u32,
+        "last row should have prompt"
+    );
 }
 
 #[test]
@@ -4305,14 +4719,32 @@ fn test_terminal_unknown_cmd_still_works() {
     for ch in b"xyz" {
         vm.push_key(*ch as u32);
         let start = vm.frame_count;
-        for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 2 { break; } }
+        for _ in 0..500_000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 2 {
+                break;
+            }
+        }
     }
     vm.push_key(13);
     let start = vm.frame_count;
-    for _ in 0..500_000 { if !vm.step() { break; } if vm.frame_count >= start + 3 { break; } }
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
+    }
     assert!(!vm.halted);
     assert_eq!(vm.ram[0x4000 + 42 * 1], 63, "row 1 should start with '?'");
-    assert_eq!(vm.ram[0x4000 + 42 * 1 + 2], b'x' as u32, "row 1 col 2 should be 'x'");
+    assert_eq!(
+        vm.ram[0x4000 + 42 * 1 + 2],
+        b'x' as u32,
+        "row 1 col 2 should be 'x'"
+    );
 }
 
 #[test]
@@ -4320,8 +4752,13 @@ fn test_terminal_buffer_init() {
     let vm = boot_terminal(1);
     // Buffer should be properly initialized to spaces (CMPI r0 clobber bug fix)
     for i in 2..1260 {
-        assert_eq!(vm.ram[0x4000 + i], 32,
-            "buffer position {} should be space after init, got {}", i, vm.ram[0x4000 + i]);
+        assert_eq!(
+            vm.ram[0x4000 + i],
+            32,
+            "buffer position {} should be space after init, got {}",
+            i,
+            vm.ram[0x4000 + i]
+        );
     }
 }
 
@@ -4340,8 +4777,12 @@ fn boot_pulse(target_frames: u32) -> Vm {
     vm.halted = false;
     let start_frame = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start_frame + target_frames { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + target_frames {
+            break;
+        }
     }
     vm
 }
@@ -4351,13 +4792,29 @@ fn test_pulse_boots_and_renders() {
     let vm = boot_pulse(1);
     assert!(!vm.halted, "pulse app should not halt after boot");
     // Background at a point with no text should be dark blue-black
-    assert_eq!(vm.screen[1 * 256 + 1], 0x0D0D1A, "background should be dark blue-black");
+    assert_eq!(
+        vm.screen[1 * 256 + 1],
+        0x0D0D1A,
+        "background should be dark blue-black"
+    );
     // "PULSE" title text renders at (5,5) -- 'P' pixel should be non-background
-    assert_ne!(vm.screen[5 * 256 + 5], 0x0D0D1A, "title text 'P' should differ from background");
+    assert_ne!(
+        vm.screen[5 * 256 + 5],
+        0x0D0D1A,
+        "title text 'P' should differ from background"
+    );
     // Tick counter at 0x200 should be >= 1 after 1 frame
-    assert!(vm.ram[0x200] >= 1, "tick should be >= 1 after first frame, got {}", vm.ram[0x200]);
+    assert!(
+        vm.ram[0x200] >= 1,
+        "tick should be >= 1 after first frame, got {}",
+        vm.ram[0x200]
+    );
     // Bar width at 0x204 should be in valid range (triangle wave 0-99)
-    assert!(vm.ram[0x204] <= 100, "bar width should be <= 100, got {}", vm.ram[0x204]);
+    assert!(
+        vm.ram[0x204] <= 100,
+        "bar width should be <= 100, got {}",
+        vm.ram[0x204]
+    );
 }
 
 #[test]
@@ -4372,19 +4829,37 @@ fn test_pulse_bar_width_oscillates() {
     for frame in 0..250 {
         let start = vm.frame_count;
         for _ in 0..500_000 {
-            if !vm.step() { break; }
-            if vm.frame_count >= start + 1 { break; }
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 1 {
+                break;
+            }
         }
-        if vm.halted { panic!("pulse halted at frame {}", frame); }
+        if vm.halted {
+            panic!("pulse halted at frame {}", frame);
+        }
 
         let width = vm.ram[0x204];
-        if width == 0 { saw_zero = true; }
-        if width >= 90 { saw_peak = true; }
+        if width == 0 {
+            saw_zero = true;
+        }
+        if width >= 90 {
+            saw_peak = true;
+        }
         prev_width = width;
     }
 
-    assert!(saw_zero, "bar width should hit 0 during oscillation (saw {})", prev_width);
-    assert!(saw_peak, "bar width should reach >= 90 during oscillation (max saw {})", prev_width);
+    assert!(
+        saw_zero,
+        "bar width should hit 0 during oscillation (saw {})",
+        prev_width
+    );
+    assert!(
+        saw_peak,
+        "bar width should reach >= 90 during oscillation (max saw {})",
+        prev_width
+    );
 }
 
 #[test]
@@ -4396,14 +4871,27 @@ fn test_pulse_tick_increments_per_frame() {
     // Run 10 more frames
     let start = vm2.frame_count;
     for _ in 0..500_000 {
-        if !vm2.step() { break; }
-        if vm2.frame_count >= start + 10 { break; }
+        if !vm2.step() {
+            break;
+        }
+        if vm2.frame_count >= start + 10 {
+            break;
+        }
     }
     let tick10 = vm2.ram[0x200];
 
-    assert!(tick10 > tick1, "tick should increase across frames: tick1={}, tick10={}", tick1, tick10);
+    assert!(
+        tick10 > tick1,
+        "tick should increase across frames: tick1={}, tick10={}",
+        tick1,
+        tick10
+    );
     // Should be roughly proportional (allowing for init frame)
-    assert!(tick10 >= 9, "after 10 frames, tick should be >= 9, got {}", tick10);
+    assert!(
+        tick10 >= 9,
+        "after 10 frames, tick should be >= 9, got {}",
+        tick10
+    );
 }
 
 #[test]
@@ -4416,20 +4904,38 @@ fn test_pulse_triangle_wave_symmetry() {
     for frame in 0..200 {
         let start = vm.frame_count;
         for _ in 0..500_000 {
-            if !vm.step() { break; }
-            if vm.frame_count >= start + 1 { break; }
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 1 {
+                break;
+            }
         }
-        if vm.halted { break; }
+        if vm.halted {
+            break;
+        }
         widths.push(vm.ram[0x204]);
     }
 
-    assert!(widths.len() >= 200, "should have 200 width samples, got {}", widths.len());
+    assert!(
+        widths.len() >= 200,
+        "should have 200 width samples, got {}",
+        widths.len()
+    );
     // Peak should be around frame 99 or 100
     let max_width = *widths.iter().max().unwrap();
-    assert!(max_width >= 99, "max bar width should be >= 99, got {}", max_width);
+    assert!(
+        max_width >= 99,
+        "max bar width should be >= 99, got {}",
+        max_width
+    );
     // Symmetry: width at frame i should equal width at frame (198 - i)
     // (offset by 1 because tick increments before computing width)
-    assert_eq!(widths[10], widths[188], "triangle should be symmetric: w[10]={}, w[188]={}", widths[10], widths[188]);
+    assert_eq!(
+        widths[10], widths[188],
+        "triangle should be symmetric: w[10]={}, w[188]={}",
+        widths[10], widths[188]
+    );
 }
 
 #[test]
@@ -4438,7 +4944,11 @@ fn test_pulse_never_halts() {
     let vm = boot_pulse(500);
     assert!(!vm.halted, "pulse should never halt, even after 500 frames");
     // Frame count should be 500
-    assert!(vm.frame_count >= 500, "should have run 500 frames, got {}", vm.frame_count);
+    assert!(
+        vm.frame_count >= 500,
+        "should have run 500 frames, got {}",
+        vm.frame_count
+    );
 }
 
 #[test]
@@ -4452,7 +4962,10 @@ fn test_pulse_color_changes_over_time() {
 
     // At least one should have bar drawn (late frame at peak), and colors should differ
     // The late frame bar should be non-background
-    assert_ne!(late_pixel, 0x0D0D1A, "late frame should have bar drawn at (100,110)");
+    assert_ne!(
+        late_pixel, 0x0D0D1A,
+        "late frame should have bar drawn at (100,110)"
+    );
 }
 
 // ── Paint App Integration Tests ──────────────────────────
@@ -4484,7 +4997,11 @@ fn boot_paint(target_frames: u32) -> Vm {
 fn test_paint_app_assembles() {
     let source = include_str!("../../programs/paint.asm");
     let result = crate::assembler::assemble(source, 0);
-    assert!(result.is_ok(), "paint.asm failed to assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "paint.asm failed to assemble: {:?}",
+        result.err()
+    );
     let bytecode = result.unwrap();
     assert!(bytecode.pixels.len() > 100, "paint should be substantial");
     // Verify MOUSEQ opcode is present
@@ -4502,11 +5019,23 @@ fn test_paint_app_boots_and_runs() {
 fn test_paint_app_draws_palette() {
     let vm = boot_paint(1);
     // Red swatch at (2, 240) should be red
-    assert_eq!(vm.screen[240 * 256 + 2], 0xFF0000, "red swatch should be red");
+    assert_eq!(
+        vm.screen[240 * 256 + 2],
+        0xFF0000,
+        "red swatch should be red"
+    );
     // Green swatch at (34, 240) should be green
-    assert_eq!(vm.screen[240 * 256 + 34], 0x00FF00, "green swatch should be green");
+    assert_eq!(
+        vm.screen[240 * 256 + 34],
+        0x00FF00,
+        "green swatch should be green"
+    );
     // Blue swatch at (66, 240) should be blue
-    assert_eq!(vm.screen[240 * 256 + 66], 0x0000FF, "blue swatch should be blue");
+    assert_eq!(
+        vm.screen[240 * 256 + 66],
+        0x0000FF,
+        "blue swatch should be blue"
+    );
 }
 
 #[test]
@@ -4546,7 +5075,11 @@ fn test_paint_app_clear_button() {
             break;
         }
     }
-    assert_eq!(vm.screen[50 * 256 + 50], 0xFF0000, "should have painted red");
+    assert_eq!(
+        vm.screen[50 * 256 + 50],
+        0xFF0000,
+        "should have painted red"
+    );
 
     // Now click clear button (at x=2, y=220, w=40, h=16)
     vm.push_mouse(20, 228);
@@ -4617,15 +5150,37 @@ fn boot_file_browser(target_frames: u32) -> Vm {
 fn test_file_browser_assembles() {
     let source = include_str!("../../programs/file_browser.asm");
     let result = crate::assembler::assemble(source, 0);
-    assert!(result.is_ok(), "file_browser.asm failed to assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "file_browser.asm failed to assemble: {:?}",
+        result.err()
+    );
     let bytecode = result.unwrap();
-    assert!(bytecode.pixels.len() > 100, "file browser should be substantial");
-    assert!(bytecode.pixels.len() < 0x400, "bytecode must fit below 0x400 for data safety");
+    assert!(
+        bytecode.pixels.len() > 100,
+        "file browser should be substantial"
+    );
+    assert!(
+        bytecode.pixels.len() < 0x400,
+        "bytecode must fit below 0x400 for data safety"
+    );
     // Verify key opcodes present
-    assert!(bytecode.pixels.iter().any(|&w| w == 0x59), "should contain LS opcode");
-    assert!(bytecode.pixels.iter().any(|&w| w == 0x54), "should contain OPEN opcode");
-    assert!(bytecode.pixels.iter().any(|&w| w == 0x55), "should contain READ opcode");
-    assert!(bytecode.pixels.iter().any(|&w| w == 0x57), "should contain CLOSE opcode");
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x59),
+        "should contain LS opcode"
+    );
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x54),
+        "should contain OPEN opcode"
+    );
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x55),
+        "should contain READ opcode"
+    );
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x57),
+        "should contain CLOSE opcode"
+    );
 }
 
 #[test]
@@ -4639,22 +5194,37 @@ fn test_file_browser_draws_title() {
     let vm = boot_file_browser(1);
     let title_color = vm.screen[6 * 256 + 10];
     let bg_color = vm.screen[30 * 256 + 10];
-    assert_ne!(title_color, bg_color, "title bar should differ from background");
+    assert_ne!(
+        title_color, bg_color,
+        "title bar should differ from background"
+    );
 }
 
 #[test]
 fn test_file_browser_lists_files() {
     let vm = boot_file_browser(1);
     let file_count = vm.ram[0x504];
-    assert!(file_count >= 2, "should list at least 2 files, got {}", file_count);
+    assert!(
+        file_count >= 2,
+        "should list at least 2 files, got {}",
+        file_count
+    );
     let first_entry = vm.ram[0x400];
-    assert!(first_entry >= 0x600, "first filename addr should be in FILE_BUF, got {:#x}", first_entry);
+    assert!(
+        first_entry >= 0x600,
+        "first filename addr should be in FILE_BUF, got {:#x}",
+        first_entry
+    );
 }
 
 #[test]
 fn test_file_browser_registers_hit_regions() {
     let vm = boot_file_browser(1);
-    assert_eq!(vm.hit_regions.len(), 13, "should have 13 hit regions (12 rows + back)");
+    assert_eq!(
+        vm.hit_regions.len(),
+        13,
+        "should have 13 hit regions (12 rows + back)"
+    );
 }
 
 #[test]
@@ -4671,7 +5241,10 @@ fn test_file_browser_click_opens_file() {
             break;
         }
     }
-    assert_eq!(vm.ram[0x500], 1, "mode should be 1 (content view) after clicking file");
+    assert_eq!(
+        vm.ram[0x500], 1,
+        "mode should be 1 (content view) after clicking file"
+    );
 }
 
 #[test]
@@ -4700,7 +5273,10 @@ fn test_file_browser_back_button_returns() {
             break;
         }
     }
-    assert_eq!(vm.ram[0x500], 0, "mode should be 0 (list view) after clicking back");
+    assert_eq!(
+        vm.ram[0x500], 0,
+        "mode should be 0 (list view) after clicking back"
+    );
 }
 
 #[test]
@@ -4718,8 +5294,10 @@ fn test_file_browser_shows_content() {
         }
     }
     eprintln!("MODE={}, TEMP_FD={}", vm.ram[0x500], vm.ram[0x50C]);
-    eprintln!("CONTENT_BUF[0..8]: {:?}",
-        (0..8).map(|i| vm.ram[0xA00 + i]).collect::<Vec<_>>());
+    eprintln!(
+        "CONTENT_BUF[0..8]: {:?}",
+        (0..8).map(|i| vm.ram[0xA00 + i]).collect::<Vec<_>>()
+    );
     // Content buffer should have data from the file
     let content_start = vm.ram[0xA00];
     assert!(content_start != 0, "content buffer should have file data");
@@ -4743,42 +5321,60 @@ fn test_file_browser_debug_click() {
     eprintln!("  FNAME_TABLE[0]={:#x}", vm.ram[0x400]);
     eprintln!("  hit_regions={}", vm.hit_regions.len());
     for (i, hr) in vm.hit_regions.iter().enumerate() {
-        eprintln!("    [{}] x={} y={} w={} h={} id={}", i, hr.x, hr.y, hr.w, hr.h, hr.id);
+        eprintln!(
+            "    [{}] x={} y={} w={} h={} id={}",
+            i, hr.x, hr.y, hr.w, hr.h, hr.id
+        );
     }
-    
+
     vm.push_mouse(80, 38);
     eprintln!("\nMouse pushed at (80, 38)");
-    
+
     // Run a few frames
     for frame in 0..5 {
         let start = vm.frame_count;
         for _ in 0..500_000 {
-            if !vm.step() { break; }
-            if vm.frame_count >= start + 1 { break; }
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 1 {
+                break;
+            }
         }
-        eprintln!("After frame {}: halted={}, MODE={}, pc={}, regs12={}", frame, vm.halted, vm.ram[0x500], vm.pc, vm.regs[12]);
+        eprintln!(
+            "After frame {}: halted={}, MODE={}, pc={}, regs12={}",
+            frame, vm.halted, vm.ram[0x500], vm.pc, vm.regs[12]
+        );
     }
-    
+
     // Check what filename would be opened
     let fname_addr = vm.ram[0x400] as usize;
     let mut s = String::new();
     for i in 0..32 {
         let v = vm.ram[fname_addr + i];
-        if v == 0 { break; }
+        if v == 0 {
+            break;
+        }
         s.push(v as u8 as char);
     }
     eprintln!("Filename at FNAME_TABLE[0]: {:?}", s);
-    
+
     // Direct test: push mouse, step until HITQ executes, check regs[12]
     eprintln!("mouse_x={}, mouse_y={}", vm.mouse_x, vm.mouse_y);
     // Step a few instructions to reach HITQ
     for _ in 0..200 {
-        if vm.ram[vm.pc as usize] == 0x38 { // HITQ opcode
+        if vm.ram[vm.pc as usize] == 0x38 {
+            // HITQ opcode
             break;
         }
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
-    eprintln!("After stepping to HITQ: pc={}, ram[pc]={}", vm.pc, vm.ram[vm.pc as usize]);
+    eprintln!(
+        "After stepping to HITQ: pc={}, ram[pc]={}",
+        vm.pc, vm.ram[vm.pc as usize]
+    );
     // Execute HITQ
     vm.step();
     eprintln!("After HITQ: regs[12]={}", vm.regs[12]);
@@ -4794,7 +5390,7 @@ fn setup_strcmp_test(s1: &str, s2: &str) -> Vm {
         vm.ram[base1 + i] = b as u32;
     }
     vm.ram[base1 + s1.len()] = 0; // null terminator
-    // Write s2 starting at address 0x400
+                                  // Write s2 starting at address 0x400
     let base2 = 0x400;
     for (i, &b) in s2.as_bytes().iter().enumerate() {
         vm.ram[base2 + i] = b as u32;
@@ -4810,7 +5406,9 @@ fn setup_strcmp_test(s1: &str, s2: &str) -> Vm {
     vm.ram[3] = 0x00; // HALT
     vm.pc = 0;
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     vm
 }
@@ -4830,7 +5428,10 @@ fn test_strcmp_equal_empty_strings() {
 #[test]
 fn test_strcmp_s1_less_than_s2() {
     let vm = setup_strcmp_test("abc", "abd");
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "STRCMP should set r0=-1 when s1 < s2");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "STRCMP should set r0=-1 when s1 < s2"
+    );
 }
 
 #[test]
@@ -4843,7 +5444,10 @@ fn test_strcmp_s1_greater_than_s2() {
 fn test_strcmp_s1_shorter_is_less() {
     let vm = setup_strcmp_test("ab", "abc");
     // 'ab' < 'abc' because s1 hits null first (0 < 'c')
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "STRCMP: shorter string should be less");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "STRCMP: shorter string should be less"
+    );
 }
 
 #[test]
@@ -4878,11 +5482,17 @@ HALT
     let asm = crate::assembler::assemble(source, 0).expect("should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[0], 0, "assembled STRCMP: 'hello' == 'hello'");
 }
 
@@ -4899,11 +5509,17 @@ HALT
     let asm = crate::assembler::assemble(source, 0).expect("should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..1000 { if !vm.step() { break; } }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[0], 0xFFFFFFFF, "assembled STRCMP: 'abc' < 'xyz'");
 }
 
@@ -4924,7 +5540,10 @@ fn test_strcmp_numeric_characters() {
 #[test]
 fn test_strcmp_case_sensitive() {
     let vm = setup_strcmp_test("Hello", "hello");
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "STRCMP: 'Hello' < 'hello' (case sensitive)");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "STRCMP: 'Hello' < 'hello' (case sensitive)"
+    );
 }
 
 // ── ABS: absolute value opcode (0x87) ─────────────────────
@@ -4986,11 +5605,17 @@ fn test_abs_assembles() {
     let asm = crate::assembler::assemble(source, 0).expect("should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 1, "assembled ABS: |-1| = 1");
 }
 
@@ -5010,8 +5635,8 @@ fn test_rect_draws_outline() {
     let mut vm = Vm::new();
     vm.regs[1] = 10; // x
     vm.regs[2] = 10; // y
-    vm.regs[3] = 5;  // w
-    vm.regs[4] = 3;  // h
+    vm.regs[3] = 5; // w
+    vm.regs[4] = 3; // h
     vm.regs[5] = 0xFF0000; // color (red)
     vm.ram[0] = 0x88;
     vm.ram[1] = 1;
@@ -5038,8 +5663,8 @@ fn test_rect_1x1() {
     let mut vm = Vm::new();
     vm.regs[1] = 50; // x
     vm.regs[2] = 50; // y
-    vm.regs[3] = 1;  // w
-    vm.regs[4] = 1;  // h
+    vm.regs[3] = 1; // w
+    vm.regs[4] = 1; // h
     vm.regs[5] = 0x00FF00; // green
     vm.ram[0] = 0x88;
     vm.ram[1] = 1;
@@ -5050,7 +5675,11 @@ fn test_rect_1x1() {
     vm.step();
 
     // Single pixel should be drawn
-    assert_eq!(vm.screen[50 * 256 + 50], 0x00FF00, "1x1 rect draws single pixel");
+    assert_eq!(
+        vm.screen[50 * 256 + 50],
+        0x00FF00,
+        "1x1 rect draws single pixel"
+    );
 }
 
 #[test]
@@ -5058,7 +5687,7 @@ fn test_rect_zero_dimensions() {
     let mut vm = Vm::new();
     vm.regs[1] = 10;
     vm.regs[2] = 10;
-    vm.regs[3] = 0;  // w=0
+    vm.regs[3] = 0; // w=0
     vm.regs[4] = 5;
     vm.regs[5] = 0xFF0000;
     vm.ram[0] = 0x88;
@@ -5082,11 +5711,17 @@ fn test_rect_assembles() {
 
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     // Check corners of 10,20 5x3
     assert_eq!(vm.screen[20 * 256 + 10], 0xFF0000, "top-left");
     assert_eq!(vm.screen[20 * 256 + 14], 0xFF0000, "top-right");
@@ -5114,14 +5749,20 @@ fn boot_notepad(target_frames: u32) -> Vm {
     let asm = crate::assembler::assemble(source, 0).expect("notepad.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
     let start_frame = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start_frame + target_frames { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + target_frames {
+            break;
+        }
     }
     vm
 }
@@ -5138,7 +5779,9 @@ fn test_notepad_boots_and_renders() {
     let asm = crate::assembler::assemble(source, 0).expect("notepad.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     eprintln!("notepad bytecode: {} words", asm.pixels.len());
     vm.pc = 0;
@@ -5147,16 +5790,31 @@ fn test_notepad_boots_and_renders() {
     let start_frame = vm.frame_count;
     let mut steps = 0u64;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         steps += 1;
-        if vm.frame_count >= start_frame + target_frames { break; }
+        if vm.frame_count >= start_frame + target_frames {
+            break;
+        }
     }
-    eprintln!("steps: {}, halted: {}, pc: {}, frame_count: {}", steps, vm.halted, vm.pc, vm.frame_count);
+    eprintln!(
+        "steps: {}, halted: {}, pc: {}, frame_count: {}",
+        steps, vm.halted, vm.pc, vm.frame_count
+    );
     assert!(!vm.halted, "notepad should not halt after boot");
     // Title bar should be blue-purple (0x16213E) at top
-    assert_eq!(vm.screen[5 * 256 + 5], 0x16213E, "title bar should be blue-purple");
+    assert_eq!(
+        vm.screen[5 * 256 + 5],
+        0x16213E,
+        "title bar should be blue-purple"
+    );
     // Text area below title bar should be dark (0x1A1A2E)
-    assert_eq!(vm.screen[20 * 256 + 50], 0x1A1A2E, "text area should be dark");
+    assert_eq!(
+        vm.screen[20 * 256 + 50],
+        0x1A1A2E,
+        "text area should be dark"
+    );
     // Cursor should start at col 0, row 0
     assert_eq!(vm.ram[0x6000], 0, "cursor col should start at 0");
     assert_eq!(vm.ram[0x6001], 0, "cursor row should start at 0");
@@ -5171,8 +5829,12 @@ fn test_notepad_type_character() {
     vm.push_key(65);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     assert!(!vm.halted, "notepad should not halt after typing");
     // Character 'A' should be in buffer at row 0, col 0
@@ -5188,14 +5850,22 @@ fn test_notepad_backspace() {
     vm.push_key(65);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     vm.push_key(8); // backspace
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     // Character should be cleared (space = 32)
     assert_eq!(vm.ram[0x4000], 32, "backspace should clear character");
@@ -5210,20 +5880,32 @@ fn test_notepad_enter_newline() {
     vm.push_key(72); // 'H'
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     vm.push_key(105); // 'i'
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     vm.push_key(13); // Enter
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 3 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 3 {
+            break;
+        }
     }
     assert!(!vm.halted, "notepad should not halt after enter");
     // Row 0 should have 'H' 'i' followed by spaces
@@ -5241,14 +5923,22 @@ fn test_notepad_arrow_keys() {
     vm.push_key(65);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     vm.push_key(66);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     assert_eq!(vm.ram[0x6000], 2, "cursor should be at col 2 after 'AB'");
 
@@ -5256,8 +5946,12 @@ fn test_notepad_arrow_keys() {
     vm.push_key(37);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     assert_eq!(vm.ram[0x6000], 1, "cursor should move left to col 1");
 
@@ -5265,8 +5959,12 @@ fn test_notepad_arrow_keys() {
     vm.push_key(39);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     assert_eq!(vm.ram[0x6000], 2, "cursor should move right to col 2");
 
@@ -5274,8 +5972,12 @@ fn test_notepad_arrow_keys() {
     vm.push_key(40);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     assert_eq!(vm.ram[0x6001], 1, "cursor should move down to row 1");
 
@@ -5283,8 +5985,12 @@ fn test_notepad_arrow_keys() {
     vm.push_key(38);
     let start = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start + 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
     }
     assert_eq!(vm.ram[0x6001], 0, "cursor should move up to row 0");
 }
@@ -5294,16 +6000,25 @@ fn test_notepad_runs_persistently() {
     let mut vm = boot_notepad(1);
     // Run for 100 frames without halting
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
-    assert!(!vm.halted, "notepad should run persistently without halting");
+    assert!(
+        !vm.halted,
+        "notepad should run persistently without halting"
+    );
 }
 
 #[test]
 fn test_notepad_status_bar() {
     let vm = boot_notepad(1);
     // Status bar should be at bottom of screen (y=248)
-    assert_eq!(vm.screen[249 * 256 + 10], 0x0D0D1A, "status bar should be dark");
+    assert_eq!(
+        vm.screen[249 * 256 + 10],
+        0x0D0D1A,
+        "status bar should be dark"
+    );
 }
 
 // ── Clock App Tests ────────────────────────────────────────────────
@@ -5344,9 +6059,17 @@ fn test_clock_boots_and_renders() {
     // Title bar should be dark navy at top
     assert_eq!(vm.screen[5 * 256 + 5], 0x0D1B2A, "title bar should be navy");
     // Main panel should be dark at center
-    assert_eq!(vm.screen[80 * 256 + 128], 0x060612, "digit panel should be dark");
+    assert_eq!(
+        vm.screen[80 * 256 + 128],
+        0x060612,
+        "digit panel should be dark"
+    );
     // Status bar at bottom
-    assert_eq!(vm.screen[248 * 256 + 128], 0x0A0A1A, "status bar should be dark");
+    assert_eq!(
+        vm.screen[248 * 256 + 128],
+        0x0A0A1A,
+        "status bar should be dark"
+    );
 }
 
 #[test]
@@ -5421,7 +6144,10 @@ fn test_multiproc_boots_and_runs() {
     let vm = boot_multiproc(5);
     assert!(!vm.halted, "multiproc should not halt after 5 frames");
     // Should have spawned a child process
-    assert!(vm.processes.len() >= 1, "should have at least 1 spawned process");
+    assert!(
+        vm.processes.len() >= 1,
+        "should have at least 1 spawned process"
+    );
 }
 
 #[test]
@@ -5438,7 +6164,9 @@ fn test_multiproc_two_dots_visible() {
                 break;
             }
         }
-        if has_white { break; }
+        if has_white {
+            break;
+        }
     }
     assert!(has_white, "screen should have the primary white dot");
 }
@@ -5473,14 +6201,20 @@ fn boot_color_picker(target_frames: u32) -> Vm {
     let asm = crate::assembler::assemble(source, 0).expect("color_picker.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
     let start_frame = vm.frame_count;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= start_frame + target_frames { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + target_frames {
+            break;
+        }
     }
     vm
 }
@@ -5500,15 +6234,21 @@ fn test_color_picker_boots_and_renders() {
     let asm = crate::assembler::assemble(source, 0).expect("color_picker.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     // Run enough steps to reach FRAME
     for _ in 0..1_000_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 1 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 1 {
+            break;
+        }
     }
 
     // If halted before first frame, that is a bug - but let's just check that
@@ -5517,7 +6257,11 @@ fn test_color_picker_boots_and_renders() {
         // Background should be dark navy from FILL
         assert_eq!(vm.screen[0], 0x1A1A2E, "background should be navy");
         // Preview outline at (80,30) should have gray border
-        assert_eq!(vm.screen[30 * 256 + 80], 0xAAAAAA, "preview top-left outline");
+        assert_eq!(
+            vm.screen[30 * 256 + 80],
+            0xAAAAAA,
+            "preview top-left outline"
+        );
     }
     // At minimum, the program should contain RECT and assemble without error
     let has_rect = asm.pixels.iter().any(|&w| w == 0x88);
@@ -5541,7 +6285,9 @@ fn test_minesweeper_boots_and_renders() {
     let asm = crate::assembler::assemble(source, 0).expect("minesweeper.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
@@ -5550,12 +6296,19 @@ fn test_minesweeper_boots_and_renders() {
     let mut last_pc = 0u32;
     let mut stuck_count = 0usize;
     for step in 0..5_000_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 1 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 1 {
+            break;
+        }
         if vm.pc == last_pc {
             stuck_count += 1;
             if stuck_count > 200 {
-                panic!("minesweeper stuck in loop at PC={} after {} steps", vm.pc, step);
+                panic!(
+                    "minesweeper stuck in loop at PC={} after {} steps",
+                    vm.pc, step
+                );
             }
         } else {
             stuck_count = 0;
@@ -5563,11 +6316,19 @@ fn test_minesweeper_boots_and_renders() {
         }
     }
 
-    assert!(vm.frame_count >= 1, "should have rendered at least one frame (pc={})", vm.pc);
+    assert!(
+        vm.frame_count >= 1,
+        "should have rendered at least one frame (pc={})",
+        vm.pc
+    );
     // Title bar at (0,0) should be dark purple
     assert_eq!(vm.screen[0], 0x333355, "title bar should be dark purple");
     // Grid cell at (36,30) should be gray (hidden)
-    assert_eq!(vm.screen[30 * 256 + 36], 0x555577, "grid cell should be gray");
+    assert_eq!(
+        vm.screen[30 * 256 + 36],
+        0x555577,
+        "grid cell should be gray"
+    );
 }
 
 #[test]
@@ -5576,23 +6337,36 @@ fn test_minesweeper_reveals_safe_cell() {
     let asm = crate::assembler::assemble(source, 0).expect("minesweeper.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     // Run to first frame
     for _ in 0..2_000_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 1 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 1 {
+            break;
+        }
     }
-    assert!(vm.frame_count >= 1, "should have rendered at least one frame");
+    assert!(
+        vm.frame_count >= 1,
+        "should have rendered at least one frame"
+    );
 
     // Click on a cell in the grid (center of first cell)
     vm.push_mouse(47, 41); // GRID_X + 11, GRID_Y + 11
     for _ in 0..2_000_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 3 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 3 {
+            break;
+        }
     }
 
     // Find a cell that is revealed (not a mine) - check REVEAL grid
@@ -5606,8 +6380,10 @@ fn test_minesweeper_reveals_safe_cell() {
     let state = vm.ram[0x4C00]; // STATE
     assert!(state == 0 || state == 2, "game should be playing or lost");
     if state == 0 {
-        assert!(clicked_revealed || vm.ram[reveal_addr] == 0,
-            "if still playing, cell should be revealed or unchanged");
+        assert!(
+            clicked_revealed || vm.ram[reveal_addr] == 0,
+            "if still playing, cell should be revealed or unchanged"
+        );
     }
 }
 
@@ -5617,15 +6393,21 @@ fn test_minesweeper_flag_toggle() {
     let asm = crate::assembler::assemble(source, 0).expect("minesweeper.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     // Run to first frame
     for _ in 0..2_000_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 1 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 1 {
+            break;
+        }
     }
 
     // Flag mode should start at 0
@@ -5634,8 +6416,12 @@ fn test_minesweeper_flag_toggle() {
     // Press 'F' to toggle flag mode
     vm.push_key(70); // 'F' = 70
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 2 {
+            break;
+        }
     }
 
     // Flag mode should now be 1
@@ -5659,21 +6445,35 @@ fn test_simon_boots_and_renders() {
     let asm = crate::assembler::assemble(source, 0).expect("simon.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 2 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 2 {
+            break;
+        }
     }
 
     assert!(vm.frame_count >= 2, "should render at least 2 frames");
     // Red button should be visible (dim) at (88, 30)
-    assert_eq!(vm.screen[30 * 256 + 88], 0x440000, "red button should be dim red");
+    assert_eq!(
+        vm.screen[30 * 256 + 88],
+        0x440000,
+        "red button should be dim red"
+    );
     // Green button at (20, 130)
-    assert_eq!(vm.screen[130 * 256 + 20], 0x004400, "green button should be dim green");
+    assert_eq!(
+        vm.screen[130 * 256 + 20],
+        0x004400,
+        "green button should be dim green"
+    );
 }
 
 #[test]
@@ -5682,15 +6482,21 @@ fn test_simon_wrong_click_ends_game() {
     let asm = crate::assembler::assemble(source, 0).expect("simon.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     // Run past showing phase (25 frames per entry, 1 entry = 25 frames)
     for _ in 0..2_000_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 30 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 30 {
+            break;
+        }
     }
 
     // Force input phase
@@ -5718,14 +6524,20 @@ fn test_simon_wrong_click_ends_game() {
     };
     vm.push_mouse(click_x, click_y);
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 32 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 32 {
+            break;
+        }
     }
 
     // Game should be over (phase 3) or still in showing
     let phase = vm.ram[0x4208];
-    assert!(phase == 1 || phase == 2 || phase == 3,
-        "phase should be valid after wrong click");
+    assert!(
+        phase == 1 || phase == 2 || phase == 3,
+        "phase should be valid after wrong click"
+    );
 }
 
 #[test]
@@ -5744,14 +6556,20 @@ fn test_reaction_boots_and_shows_wait() {
     let asm = crate::assembler::assemble(source, 0).expect("reaction.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 1 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 1 {
+            break;
+        }
     }
 
     // Should be in waiting phase (phase 0)
@@ -5766,15 +6584,21 @@ fn test_reaction_transitions_to_ready() {
     let asm = crate::assembler::assemble(source, 0).expect("reaction.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     // Run until first frame (program init completes)
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 1 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 1 {
+            break;
+        }
     }
     assert_eq!(vm.ram[0x4200], 0, "should start in waiting phase");
 
@@ -5782,8 +6606,12 @@ fn test_reaction_transitions_to_ready() {
     vm.ram[0x4204] = 3;
     // Run enough frames to pass the wait
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 6 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 6 {
+            break;
+        }
     }
 
     // Should have transitioned to ready phase (phase 1)
@@ -5796,15 +6624,21 @@ fn test_reaction_records_keypress() {
     let asm = crate::assembler::assemble(source, 0).expect("reaction.asm should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     // Run until first frame, then force to ready phase
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 1 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 1 {
+            break;
+        }
     }
     // Force ready phase
     vm.ram[0x4200] = 1;
@@ -5812,22 +6646,38 @@ fn test_reaction_records_keypress() {
 
     // Run 5 frames in ready phase, then press a key
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 6 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 6 {
+            break;
+        }
     }
 
     vm.push_key(65); // 'A' key
     for _ in 0..500_000 {
-        if !vm.step() { break; }
-        if vm.frame_count >= 8 { break; }
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= 8 {
+            break;
+        }
     }
 
     // Should be in result phase (phase 2) with a reaction time
-    assert_eq!(vm.ram[0x4200], 2, "should be in result phase after keypress, actual={}", vm.ram[0x4200]);
+    assert_eq!(
+        vm.ram[0x4200], 2,
+        "should be in result phase after keypress, actual={}",
+        vm.ram[0x4200]
+    );
     let reaction = vm.ram[0x420C];
     // Reaction time should be reasonable (1-100 frames)
     // The exact value depends on timing but should be small
-    assert!(reaction < 100, "reaction time should be under 100 frames, got {}", reaction);
+    assert!(
+        reaction < 100,
+        "reaction time should be under 100 frames, got {}",
+        reaction
+    );
 }
 
 // ── MIN: minimum opcode (0x89) ──────────────────────────────
@@ -5886,11 +6736,17 @@ fn test_min_assembles() {
     let asm = crate::assembler::assemble(source, 0).expect("should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 10, "assembled MIN: min(10,20) = 10");
 }
 
@@ -5961,11 +6817,17 @@ fn test_max_assembles() {
     let asm = crate::assembler::assemble(source, 0).expect("should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 20, "assembled MAX: max(10,20) = 20");
 }
 
@@ -5986,7 +6848,7 @@ fn test_max_disassembles() {
 fn test_clamp_within_range() {
     let mut vm = Vm::new();
     vm.regs[1] = 50;
-    vm.regs[2] = 0;   // min
+    vm.regs[2] = 0; // min
     vm.regs[3] = 100; // max
     vm.ram[0] = 0x8B; // CLAMP r1, r2, r3
     vm.ram[1] = 1;
@@ -6000,7 +6862,7 @@ fn test_clamp_within_range() {
 fn test_clamp_below_min() {
     let mut vm = Vm::new();
     vm.regs[1] = 5;
-    vm.regs[2] = 10;  // min
+    vm.regs[2] = 10; // min
     vm.regs[3] = 100; // max
     vm.ram[0] = 0x8B;
     vm.ram[1] = 1;
@@ -6014,7 +6876,7 @@ fn test_clamp_below_min() {
 fn test_clamp_above_max() {
     let mut vm = Vm::new();
     vm.regs[1] = 200;
-    vm.regs[2] = 0;   // min
+    vm.regs[2] = 0; // min
     vm.regs[3] = 100; // max
     vm.ram[0] = 0x8B;
     vm.ram[1] = 1;
@@ -6028,8 +6890,8 @@ fn test_clamp_above_max() {
 fn test_clamp_negative() {
     let mut vm = Vm::new();
     vm.regs[1] = 0xFFFFFFFE; // -2
-    vm.regs[2] = 0;          // min = 0
-    vm.regs[3] = 100;        // max = 100
+    vm.regs[2] = 0; // min = 0
+    vm.regs[3] = 100; // max = 100
     vm.ram[0] = 0x8B;
     vm.ram[1] = 1;
     vm.ram[2] = 2;
@@ -6070,11 +6932,17 @@ fn test_clamp_assembles() {
     let asm = crate::assembler::assemble(source, 0).expect("should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert_eq!(vm.regs[1], 100, "assembled CLAMP: 200 clamped to 100");
 }
 
@@ -6096,9 +6964,17 @@ fn test_clamp_disassembles() {
 fn test_screensaver_assembles() {
     let source = include_str!("../../programs/screensaver.asm");
     let result = crate::assembler::assemble(source, 0);
-    assert!(result.is_ok(), "screensaver.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "screensaver.asm should assemble: {:?}",
+        result.err()
+    );
     let asm = result.unwrap();
-    assert!(asm.pixels.len() > 50, "screensaver should produce substantial bytecode, got {} words", asm.pixels.len());
+    assert!(
+        asm.pixels.len() > 50,
+        "screensaver should produce substantial bytecode, got {} words",
+        asm.pixels.len()
+    );
 }
 
 #[test]
@@ -6107,13 +6983,17 @@ fn test_screensaver_runs_first_frame() {
     let asm = crate::assembler::assemble(source, 0).expect("should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
     // Run up to 10000 steps (should hit FRAME)
     for _ in 0..10000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     // Should not crash -- just verify it ran
 }
@@ -6124,7 +7004,11 @@ fn test_screensaver_runs_first_frame() {
 fn test_drawtext_assembles() {
     let src = "LDI r0, 10\nLDI r1, 20\nLDI r2, msg\nLDI r3, 0xFF0000\nLDI r4, 0x0000FF\nDRAWTEXT r0, r1, r2, r3, r4\nHALT\nmsg:\n";
     let result = crate::assembler::assemble(src, 0);
-    assert!(result.is_ok(), "DRAWTEXT should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "DRAWTEXT should assemble: {:?}",
+        result.err()
+    );
     let asm = result.unwrap();
     // 5 LDIs (3 bytes each) = offset 15, then DRAWTEXT
     assert_eq!(asm.pixels[15], 0x8C, "opcode should be 0x8C");
@@ -6144,14 +7028,18 @@ fn test_drawtext_foreground_color() {
     vm.ram[100] = 'A' as u32;
     vm.ram[101] = 'B' as u32;
     vm.ram[102] = 0; // null terminator
-    // DRAWTEXT r10, r11, r12, r13, r14
-    vm.regs[10] = 50;  // x
-    vm.regs[11] = 50;  // y
+                     // DRAWTEXT r10, r11, r12, r13, r14
+    vm.regs[10] = 50; // x
+    vm.regs[11] = 50; // y
     vm.regs[12] = 100; // addr
     vm.regs[13] = 0x00FF00; // fg = green
     vm.regs[14] = 0; // bg = transparent
     vm.ram[0] = 0x8C; // DRAWTEXT
-    vm.ram[1] = 10; vm.ram[2] = 11; vm.ram[3] = 12; vm.ram[4] = 13; vm.ram[5] = 14;
+    vm.ram[1] = 10;
+    vm.ram[2] = 11;
+    vm.ram[3] = 12;
+    vm.ram[4] = 13;
+    vm.ram[5] = 14;
     vm.ram[6] = 0x00; // HALT
     vm.step();
     // Check that some pixels are green (foreground)
@@ -6163,7 +7051,11 @@ fn test_drawtext_foreground_color() {
             }
         }
     }
-    assert!(green_count > 0, "DRAWTEXT should render green fg pixels, found {}", green_count);
+    assert!(
+        green_count > 0,
+        "DRAWTEXT should render green fg pixels, found {}",
+        green_count
+    );
 }
 
 #[test]
@@ -6177,7 +7069,11 @@ fn test_drawtext_background_color() {
     vm.regs[13] = 0xFFFFFF; // fg = white
     vm.regs[14] = 0x0000FF; // bg = blue
     vm.ram[0] = 0x8C;
-    vm.ram[1] = 10; vm.ram[2] = 11; vm.ram[3] = 12; vm.ram[4] = 13; vm.ram[5] = 14;
+    vm.ram[1] = 10;
+    vm.ram[2] = 11;
+    vm.ram[3] = 12;
+    vm.ram[4] = 13;
+    vm.ram[5] = 14;
     vm.ram[6] = 0x00;
     vm.step();
     // Should have both white (fg) and blue (bg) pixels in the glyph area
@@ -6189,7 +7085,11 @@ fn test_drawtext_background_color() {
             }
         }
     }
-    assert!(blue_count > 0, "DRAWTEXT with bg should fill bg pixels, found {} blue", blue_count);
+    assert!(
+        blue_count > 0,
+        "DRAWTEXT with bg should fill bg pixels, found {} blue",
+        blue_count
+    );
 }
 
 #[test]
@@ -6209,7 +7109,11 @@ fn test_drawtext_transparent_bg() {
     vm.regs[13] = 0xFF0000; // red fg
     vm.regs[14] = 0; // transparent bg
     vm.ram[0] = 0x8C;
-    vm.ram[1] = 10; vm.ram[2] = 11; vm.ram[3] = 12; vm.ram[4] = 13; vm.ram[5] = 14;
+    vm.ram[1] = 10;
+    vm.ram[2] = 11;
+    vm.ram[3] = 12;
+    vm.ram[4] = 13;
+    vm.ram[5] = 14;
     vm.ram[6] = 0x00;
     vm.step();
     // Background pixels should remain unchanged (0x888888)
@@ -6221,7 +7125,11 @@ fn test_drawtext_transparent_bg() {
             }
         }
     }
-    assert!(unchanged > 0, "transparent bg should leave existing pixels, found {} unchanged", unchanged);
+    assert!(
+        unchanged > 0,
+        "transparent bg should leave existing pixels, found {} unchanged",
+        unchanged
+    );
 }
 
 #[test]
@@ -6237,7 +7145,11 @@ fn test_drawtext_newline() {
     vm.regs[13] = 0xFFFFFF;
     vm.regs[14] = 0;
     vm.ram[0] = 0x8C;
-    vm.ram[1] = 10; vm.ram[2] = 11; vm.ram[3] = 12; vm.ram[4] = 13; vm.ram[5] = 14;
+    vm.ram[1] = 10;
+    vm.ram[2] = 11;
+    vm.ram[3] = 12;
+    vm.ram[4] = 13;
+    vm.ram[5] = 14;
     vm.ram[6] = 0x00;
     vm.step();
     // 'A' should be at y=10, 'B' at y=20 (10 + 10 for newline)
@@ -6245,10 +7157,14 @@ fn test_drawtext_newline() {
     let mut b_pixels = 0;
     for x in 10..16 {
         for y in 10..17 {
-            if vm.screen[y * 256 + x] == 0xFFFFFF { a_pixels += 1; }
+            if vm.screen[y * 256 + x] == 0xFFFFFF {
+                a_pixels += 1;
+            }
         }
         for y in 20..27 {
-            if vm.screen[y * 256 + x] == 0xFFFFFF { b_pixels += 1; }
+            if vm.screen[y * 256 + x] == 0xFFFFFF {
+                b_pixels += 1;
+            }
         }
     }
     assert!(a_pixels > 0, "'A' should render at y=10");
@@ -6268,7 +7184,10 @@ fn test_bitset_bit5() {
     let mut vm = Vm::new();
     vm.regs[1] = 0;
     vm.regs[2] = 5;
-    vm.ram[0] = 0x8D; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.ram[0] = 0x8D;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
     vm.step();
     assert_eq!(vm.regs[1], 0x20, "bit 5 should be set (= 0x20)");
 }
@@ -6277,8 +7196,11 @@ fn test_bitset_bit5() {
 fn test_bitset_or_combined() {
     let mut vm = Vm::new();
     vm.regs[1] = 0x10; // bit 4 already set
-    vm.regs[2] = 3;    // set bit 3
-    vm.ram[0] = 0x8D; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.regs[2] = 3; // set bit 3
+    vm.ram[0] = 0x8D;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
     vm.step();
     assert_eq!(vm.regs[1], 0x18, "bits 3+4 should be set (= 0x18)");
 }
@@ -6288,7 +7210,10 @@ fn test_bitclr_clears_bit() {
     let mut vm = Vm::new();
     vm.regs[1] = 0xFF;
     vm.regs[2] = 3;
-    vm.ram[0] = 0x8E; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.ram[0] = 0x8E;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
     vm.step();
     assert_eq!(vm.regs[1], 0xF7, "bit 3 cleared: 0xFF & ~0x08 = 0xF7");
 }
@@ -6298,9 +7223,15 @@ fn test_bitclr_already_clear() {
     let mut vm = Vm::new();
     vm.regs[1] = 0x00;
     vm.regs[2] = 7;
-    vm.ram[0] = 0x8E; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.ram[0] = 0x8E;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
     vm.step();
-    assert_eq!(vm.regs[1], 0x00, "clearing already-clear bit should be no-op");
+    assert_eq!(
+        vm.regs[1], 0x00,
+        "clearing already-clear bit should be no-op"
+    );
 }
 
 #[test]
@@ -6308,7 +7239,10 @@ fn test_bittest_set_bit() {
     let mut vm = Vm::new();
     vm.regs[1] = 0x80; // bit 7 set
     vm.regs[2] = 7;
-    vm.ram[0] = 0x8F; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.ram[0] = 0x8F;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
     vm.step();
     assert_eq!(vm.regs[0], 1, "bit 7 is set, r0 should be 1");
 }
@@ -6318,7 +7252,10 @@ fn test_bittest_clear_bit() {
     let mut vm = Vm::new();
     vm.regs[1] = 0x7F; // bit 7 clear
     vm.regs[2] = 7;
-    vm.ram[0] = 0x8F; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.ram[0] = 0x8F;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
     vm.step();
     assert_eq!(vm.regs[0], 0, "bit 7 is clear, r0 should be 0");
 }
@@ -6328,7 +7265,10 @@ fn test_bittest_bit31() {
     let mut vm = Vm::new();
     vm.regs[1] = 0x80000000; // bit 31 set
     vm.regs[2] = 31;
-    vm.ram[0] = 0x8F; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.ram[0] = 0x8F;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
     vm.step();
     assert_eq!(vm.regs[0], 1, "bit 31 should be 1");
 }
@@ -6338,7 +7278,10 @@ fn test_bitset_bit0() {
     let mut vm = Vm::new();
     vm.regs[1] = 0;
     vm.regs[2] = 0;
-    vm.ram[0] = 0x8D; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 0x00;
+    vm.ram[0] = 0x8D;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
     vm.step();
     assert_eq!(vm.regs[1], 1, "bit 0 should be set (= 1)");
 }
@@ -6347,7 +7290,11 @@ fn test_bitset_bit0() {
 fn test_bit_assembles() {
     let src = "LDI r1, 0\nLDI r2, 5\nBITSET r1, r2\nBITCLR r1, r2\nBITTEST r1, r2\nHALT\n";
     let result = crate::assembler::assemble(src, 0);
-    assert!(result.is_ok(), "BIT ops should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "BIT ops should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -6369,7 +7316,9 @@ fn test_bit_disassembles() {
 fn test_not_inverts_bits() {
     let mut vm = Vm::new();
     vm.regs[1] = 0x00FF00FF;
-    vm.ram[0] = 0x90; vm.ram[1] = 1; vm.ram[2] = 0x00;
+    vm.ram[0] = 0x90;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00;
     vm.step();
     assert_eq!(vm.regs[1], !0x00FF00FFu32, "NOT should invert all bits");
 }
@@ -6378,7 +7327,9 @@ fn test_not_inverts_bits() {
 fn test_not_zero() {
     let mut vm = Vm::new();
     vm.regs[1] = 0;
-    vm.ram[0] = 0x90; vm.ram[1] = 1; vm.ram[2] = 0x00;
+    vm.ram[0] = 0x90;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00;
     vm.step();
     assert_eq!(vm.regs[1], 0xFFFFFFFF, "NOT 0 = all ones");
 }
@@ -6387,7 +7338,9 @@ fn test_not_zero() {
 fn test_not_all_ones() {
     let mut vm = Vm::new();
     vm.regs[1] = 0xFFFFFFFF;
-    vm.ram[0] = 0x90; vm.ram[1] = 1; vm.ram[2] = 0x00;
+    vm.ram[0] = 0x90;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00;
     vm.step();
     assert_eq!(vm.regs[1], 0, "NOT all-ones = 0");
 }
@@ -6398,7 +7351,8 @@ fn test_inv_inverts_screen() {
     vm.screen[0] = 0x123456;
     vm.screen[1] = 0x000000;
     vm.screen[2] = 0xFFFFFF;
-    vm.ram[0] = 0x91; vm.ram[1] = 0x00;
+    vm.ram[0] = 0x91;
+    vm.ram[1] = 0x00;
     vm.step();
     assert_eq!(vm.screen[0], 0x123456 ^ 0x00FFFFFF);
     assert_eq!(vm.screen[1], 0x00FFFFFF);
@@ -6409,17 +7363,26 @@ fn test_inv_inverts_screen() {
 fn test_inv_double_invert_restores() {
     let mut vm = Vm::new();
     vm.screen[100] = 0xABCDEF;
-    vm.ram[0] = 0x91; vm.ram[1] = 0x91; vm.ram[2] = 0x00;
+    vm.ram[0] = 0x91;
+    vm.ram[1] = 0x91;
+    vm.ram[2] = 0x00;
     vm.step();
     vm.step();
-    assert_eq!(vm.screen[100], 0xABCDEF, "INV twice should restore original");
+    assert_eq!(
+        vm.screen[100], 0xABCDEF,
+        "INV twice should restore original"
+    );
 }
 
 #[test]
 fn test_not_inv_assemble() {
     let src = "NOT r1\nINV\nHALT\n";
     let result = crate::assembler::assemble(src, 0);
-    assert!(result.is_ok(), "NOT/INV should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "NOT/INV should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -6438,7 +7401,11 @@ fn test_not_inv_disasm() {
 fn test_invert_demo_assembles() {
     let source = include_str!("../../programs/invert_demo.asm");
     let result = crate::assembler::assemble(source, 0);
-    assert!(result.is_ok(), "invert_demo should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "invert_demo should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -6447,16 +7414,24 @@ fn test_invert_demo_runs() {
     let asm = crate::assembler::assemble(source, 0).expect("should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
     // Run until it draws stripes + first FRAME (before the loop)
     for _ in 0..5000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     // Should have drawn red stripe at y=0
-    assert_eq!(vm.screen[5 * 256 + 10], 0x00FF0000, "red stripe should be at top");
+    assert_eq!(
+        vm.screen[5 * 256 + 10],
+        0x00FF0000,
+        "red stripe should be at top"
+    );
 }
 
 // ── MATVEC opcode (Phase 79) ───────────────────────────────
@@ -6488,8 +7463,8 @@ fn test_matvec_basic_2x2() {
     vm.regs[1] = w_base as u32; // r_weight
     vm.regs[2] = i_base as u32; // r_input
     vm.regs[3] = o_base as u32; // r_output
-    vm.regs[4] = 2;             // r_rows
-    vm.regs[5] = 2;             // r_cols
+    vm.regs[4] = 2; // r_rows
+    vm.regs[5] = 2; // r_cols
 
     // MATVEC r1, r2, r3, r4, r5
     vm.ram[0] = 0x92;
@@ -6505,9 +7480,17 @@ fn test_matvec_basic_2x2() {
     vm.step(); // HALT
 
     // output[0] = 2*1 + 3*2 = 8.0 in fixed-point
-    assert_eq!(vm.ram[o_base + 0], 8 << 16, "MATVEC output[0] should be 8.0");
+    assert_eq!(
+        vm.ram[o_base + 0],
+        8 << 16,
+        "MATVEC output[0] should be 8.0"
+    );
     // output[1] = 4*1 + 5*2 = 14.0 in fixed-point
-    assert_eq!(vm.ram[o_base + 1], 14 << 16, "MATVEC output[1] should be 14.0");
+    assert_eq!(
+        vm.ram[o_base + 1],
+        14 << 16,
+        "MATVEC output[1] should be 14.0"
+    );
 }
 
 #[test]
@@ -6535,10 +7518,17 @@ fn test_matvec_identity() {
     vm.regs[4] = 3; // rows
     vm.regs[5] = 3; // cols
 
-    vm.ram[0] = 0x92; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; vm.ram[4] = 4; vm.ram[5] = 5;
+    vm.ram[0] = 0x92;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
     vm.ram[6] = 0x00;
-    vm.pc = 0; vm.halted = false;
-    vm.step(); vm.step();
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
 
     assert_eq!(vm.ram[o_base], 10 << 16, "identity: output[0]");
     assert_eq!(vm.ram[o_base + 1], 20 << 16, "identity: output[1]");
@@ -6558,10 +7548,17 @@ fn test_matvec_single_element() {
     vm.regs[4] = 1;
     vm.regs[5] = 1;
 
-    vm.ram[0] = 0x92; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; vm.ram[4] = 4; vm.ram[5] = 5;
+    vm.ram[0] = 0x92;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
     vm.ram[6] = 0x00;
-    vm.pc = 0; vm.halted = false;
-    vm.step(); vm.step();
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
 
     assert_eq!(vm.ram[950], 21 << 16, "1x1 MATVEC should produce 21");
 }
@@ -6593,9 +7590,13 @@ fn test_matvec_disasm() {
 fn test_relu_positive_unchanged() {
     let mut vm = Vm::new();
     vm.regs[5] = 42 << 16; // positive value
-    vm.ram[0] = 0x93; vm.ram[1] = 5; vm.ram[2] = 0x00;
-    vm.pc = 0; vm.halted = false;
-    vm.step(); vm.step();
+    vm.ram[0] = 0x93;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
     assert_eq!(vm.regs[5], 42 << 16, "RELU should leave positive unchanged");
 }
 
@@ -6603,9 +7604,13 @@ fn test_relu_positive_unchanged() {
 fn test_relu_zero_unchanged() {
     let mut vm = Vm::new();
     vm.regs[5] = 0;
-    vm.ram[0] = 0x93; vm.ram[1] = 5; vm.ram[2] = 0x00;
-    vm.pc = 0; vm.halted = false;
-    vm.step(); vm.step();
+    vm.ram[0] = 0x93;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
     assert_eq!(vm.regs[5], 0, "RELU should leave zero unchanged");
 }
 
@@ -6613,9 +7618,13 @@ fn test_relu_zero_unchanged() {
 fn test_relu_negative_clamped() {
     let mut vm = Vm::new();
     vm.regs[5] = (-5i32 as u32); // negative in two's complement
-    vm.ram[0] = 0x93; vm.ram[1] = 5; vm.ram[2] = 0x00;
-    vm.pc = 0; vm.halted = false;
-    vm.step(); vm.step();
+    vm.ram[0] = 0x93;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
     assert_eq!(vm.regs[5], 0, "RELU should clamp negative to 0");
 }
 
@@ -6623,9 +7632,13 @@ fn test_relu_negative_clamped() {
 fn test_relu_large_negative() {
     let mut vm = Vm::new();
     vm.regs[3] = 0x80000000; // most negative i32
-    vm.ram[0] = 0x93; vm.ram[1] = 3; vm.ram[2] = 0x00;
-    vm.pc = 0; vm.halted = false;
-    vm.step(); vm.step();
+    vm.ram[0] = 0x93;
+    vm.ram[1] = 3;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
     assert_eq!(vm.regs[3], 0, "RELU should clamp large negative to 0");
 }
 
@@ -6658,10 +7671,10 @@ fn test_matvec_relu_pipeline() {
 
     let w_base: usize = 1000;
     // Fixed-point: -2.0 = 0xFFFE0000 (two's complement)
-    vm.ram[w_base + 0] = 1 << 16;                    // 1.0
-    vm.ram[w_base + 1] = ((-2i32 << 16) as u32);     // -2.0
-    vm.ram[w_base + 2] = 3 << 16;                    // 3.0
-    vm.ram[w_base + 3] = 4 << 16;                    // 4.0
+    vm.ram[w_base + 0] = 1 << 16; // 1.0
+    vm.ram[w_base + 1] = ((-2i32 << 16) as u32); // -2.0
+    vm.ram[w_base + 2] = 3 << 16; // 3.0
+    vm.ram[w_base + 3] = 4 << 16; // 4.0
 
     let i_base: usize = 1100;
     vm.ram[i_base + 0] = 1 << 16; // 1.0
@@ -6676,25 +7689,48 @@ fn test_matvec_relu_pipeline() {
     vm.regs[5] = 2; // cols
 
     // Step 1: MATVEC r1, r2, r3, r4, r5
-    vm.ram[0] = 0x92; vm.ram[1] = 1; vm.ram[2] = 2; vm.ram[3] = 3; vm.ram[4] = 4; vm.ram[5] = 5;
+    vm.ram[0] = 0x92;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
 
     // Step 2: Load output[0] into r6 via LDI addr + LOAD
     // Use LDI r7, o_base then LOAD r6, r7
-    vm.ram[6] = 0x10; vm.ram[7] = 7; vm.ram[8] = o_base as u32;   // LDI r7, o_base
-    vm.ram[9] = 0x11; vm.ram[10] = 6; vm.ram[11] = 7;             // LOAD r6, r7
-    vm.ram[12] = 0x93; vm.ram[13] = 6;                              // RELU r6
-    vm.ram[14] = 0x12; vm.ram[15] = 7; vm.ram[16] = 6;            // STORE r7, r6
+    vm.ram[6] = 0x10;
+    vm.ram[7] = 7;
+    vm.ram[8] = o_base as u32; // LDI r7, o_base
+    vm.ram[9] = 0x11;
+    vm.ram[10] = 6;
+    vm.ram[11] = 7; // LOAD r6, r7
+    vm.ram[12] = 0x93;
+    vm.ram[13] = 6; // RELU r6
+    vm.ram[14] = 0x12;
+    vm.ram[15] = 7;
+    vm.ram[16] = 6; // STORE r7, r6
 
     // Step 3: Same for output[1]
-    vm.ram[17] = 0x10; vm.ram[18] = 7; vm.ram[19] = (o_base + 1) as u32; // LDI r7, o_base+1
-    vm.ram[20] = 0x11; vm.ram[21] = 6; vm.ram[22] = 7;            // LOAD r6, r7
-    vm.ram[23] = 0x93; vm.ram[24] = 6;                              // RELU r6
-    vm.ram[25] = 0x12; vm.ram[26] = 7; vm.ram[27] = 6;            // STORE r7, r6
+    vm.ram[17] = 0x10;
+    vm.ram[18] = 7;
+    vm.ram[19] = (o_base + 1) as u32; // LDI r7, o_base+1
+    vm.ram[20] = 0x11;
+    vm.ram[21] = 6;
+    vm.ram[22] = 7; // LOAD r6, r7
+    vm.ram[23] = 0x93;
+    vm.ram[24] = 6; // RELU r6
+    vm.ram[25] = 0x12;
+    vm.ram[26] = 7;
+    vm.ram[27] = 6; // STORE r7, r6
 
     vm.ram[28] = 0x00; // HALT
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..100 { if !vm.step() { break; } }
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
 
     assert_eq!(vm.ram[o_base], 0, "RELU should clamp -1 to 0");
     assert_eq!(vm.ram[o_base + 1], 7 << 16, "RELU should leave 7 unchanged");
@@ -6706,7 +7742,11 @@ fn test_matvec_relu_pipeline() {
 fn test_nn_demo_assembles() {
     let source = include_str!("../../programs/nn_demo.asm");
     let result = crate::assembler::assemble(source, 0);
-    assert!(result.is_ok(), "nn_demo should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "nn_demo should assemble: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -6715,13 +7755,17 @@ fn test_nn_demo_runs_correctly() {
     let asm = crate::assembler::assemble(source, 0).expect("should assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
     // Run until halt (should process all 4 cases)
     for _ in 0..50000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
     // Should have drawn 4 green boxes (all XOR cases correct)
     // Check that screen has green pixels in the result area (y=108..148)
@@ -6734,7 +7778,11 @@ fn test_nn_demo_runs_correctly() {
             }
         }
     }
-    assert!(green_count > 0, "nn_demo should draw green (correct) pixels, found {} green pixels", green_count);
+    assert!(
+        green_count > 0,
+        "nn_demo should draw green (correct) pixels, found {} green pixels",
+        green_count
+    );
 
     // Verify no red pixels (no wrong predictions)
     let mut red_count = 0;
@@ -6746,5 +7794,575 @@ fn test_nn_demo_runs_correctly() {
             }
         }
     }
-    assert_eq!(red_count, 0, "nn_demo should have NO red (wrong) pixels, found {}", red_count);
+    assert_eq!(
+        red_count, 0,
+        "nn_demo should have NO red (wrong) pixels, found {}",
+        red_count
+    );
+}
+
+// ── WINSYS opcode (Phase 68) ──────────────────────────────────
+
+#[test]
+fn test_winsys_create_window() {
+    // WINSYS op=0 (create): r1=x, r2=y, r3=w, r4=h, r5=title_addr
+    let mut vm = Vm::new();
+    vm.regs[1] = 10; // x
+    vm.regs[2] = 20; // y
+    vm.regs[3] = 64; // w
+    vm.regs[4] = 48; // h
+    vm.regs[5] = 0; // title_addr
+    vm.regs[6] = 0; // op = create
+    vm.ram[0] = 0x94; // WINSYS
+    vm.ram[1] = 6; // op_reg
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "first window should have id 1");
+    assert_eq!(vm.windows.len(), 1);
+    let w = &vm.windows[0];
+    assert_eq!(w.x, 10);
+    assert_eq!(w.y, 20);
+    assert_eq!(w.w, 64);
+    assert_eq!(w.h, 48);
+    assert!(w.active);
+    assert_eq!(w.offscreen_buffer.len(), 64 * 48);
+}
+
+#[test]
+fn test_winsys_destroy_window() {
+    let mut vm = Vm::new();
+    // Create window (op=0)
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 32;
+    vm.regs[4] = 32;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+    assert_eq!(win_id, 1);
+
+    // Destroy window (op=1)
+    vm.regs[6] = 1; // destroy
+    vm.regs[0] = win_id;
+    vm.ram[3] = 0x94;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x00;
+    vm.pc = 3;
+    vm.halted = false;
+    vm.step();
+    assert!(
+        !vm.windows[0].active,
+        "window should be inactive after destroy"
+    );
+}
+
+#[test]
+fn test_winsys_bring_to_front() {
+    let mut vm = Vm::new();
+    // Create window 1
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 32;
+    vm.regs[4] = 32;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let id1 = vm.regs[0];
+
+    // Create window 2
+    vm.regs[6] = 0;
+    vm.ram[2] = 0x94;
+    vm.ram[3] = 6;
+    vm.pc = 2;
+    vm.halted = false;
+    vm.step();
+    let id2 = vm.regs[0];
+
+    // Window 2 should be on top (higher z_order)
+    let z1 = vm.windows.iter().find(|w| w.id == id1).unwrap().z_order;
+    let z2 = vm.windows.iter().find(|w| w.id == id2).unwrap().z_order;
+    assert!(z2 > z1, "window 2 should have higher z_order");
+
+    // Bring window 1 to front (op=2)
+    vm.regs[0] = id1;
+    vm.regs[6] = 2;
+    vm.ram[4] = 0x94;
+    vm.ram[5] = 6;
+    vm.ram[6] = 0x00;
+    vm.pc = 4;
+    vm.halted = false;
+    vm.step();
+    let z1_new = vm.windows.iter().find(|w| w.id == id1).unwrap().z_order;
+    assert!(z1_new > z2, "window 1 should now be on top");
+}
+
+#[test]
+fn test_winsys_list_windows() {
+    let mut vm = Vm::new();
+    // Create 3 windows
+    for i in 0..3 {
+        vm.regs[1] = i * 30;
+        vm.regs[2] = 0;
+        vm.regs[3] = 20;
+        vm.regs[4] = 20;
+        vm.regs[5] = 0;
+        vm.regs[6] = 0; // create
+        let addr = (i * 2) as usize;
+        vm.ram[addr] = 0x94;
+        vm.ram[addr + 1] = 6;
+        vm.pc = addr as u32;
+        vm.halted = false;
+        vm.step();
+    }
+
+    // List windows (op=3): write to RAM[0x2000]
+    let list_addr = 0x2000;
+    vm.regs[0] = list_addr;
+    vm.regs[6] = 3;
+    vm.ram[10] = 0x94;
+    vm.ram[11] = 6;
+    vm.ram[12] = 0x00;
+    vm.pc = 10;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.ram[list_addr as usize], 3, "should have 3 windows");
+    // Active window IDs should be listed
+    let ids: Vec<u32> = (0..3).map(|i| vm.ram[list_addr as usize + 1 + i]).collect();
+    assert!(ids.contains(&1), "id 1 should be in list");
+    assert!(ids.contains(&2), "id 2 should be in list");
+    assert!(ids.contains(&3), "id 3 should be in list");
+}
+
+#[test]
+fn test_winsys_max_windows() {
+    let mut vm = Vm::new();
+    // Create MAX_WINDOWS (8) windows
+    for i in 0..8 {
+        vm.regs[1] = (i * 10) as u32;
+        vm.regs[2] = 0;
+        vm.regs[3] = 8;
+        vm.regs[4] = 8;
+        vm.regs[5] = 0;
+        vm.regs[6] = 0;
+        let addr = (i * 2) as usize;
+        vm.ram[addr] = 0x94;
+        vm.ram[addr + 1] = 6;
+        vm.pc = addr as u32;
+        vm.halted = false;
+        vm.step();
+    }
+    assert_eq!(vm.windows.len(), 8);
+
+    // 9th window should fail
+    vm.regs[6] = 0;
+    vm.ram[20] = 0x94;
+    vm.ram[21] = 6;
+    vm.ram[22] = 0x00;
+    vm.pc = 20;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "9th window should fail, r0 = 0");
+    assert_eq!(vm.windows.len(), 8, "still only 8 windows");
+}
+
+#[test]
+fn test_winsys_unknown_op() {
+    let mut vm = Vm::new();
+    vm.regs[6] = 99; // unknown op
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "unknown op should set r0 = 0 (error)");
+}
+
+#[test]
+fn test_wpixel_write_and_read() {
+    let mut vm = Vm::new();
+    // Create a 16x16 window
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 16;
+    vm.regs[4] = 16;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // WPIXEL: write red pixel at (5, 5)
+    vm.regs[7] = win_id;
+    vm.regs[8] = 5; // x
+    vm.regs[9] = 5; // y
+    vm.regs[10] = 0xFF0000; // red
+    vm.ram[2] = 0x95;
+    vm.ram[3] = 7;
+    vm.ram[4] = 8;
+    vm.ram[5] = 9;
+    vm.ram[6] = 10;
+    vm.pc = 2;
+    vm.halted = false;
+    vm.step();
+
+    // Verify pixel is in offscreen buffer
+    let buf_idx = 5 * 16 + 5;
+    assert_eq!(
+        vm.windows[0].offscreen_buffer[buf_idx], 0xFF0000,
+        "pixel should be red in buffer"
+    );
+
+    // WREAD: read back the pixel
+    vm.regs[7] = win_id;
+    vm.regs[8] = 5;
+    vm.regs[9] = 5;
+    vm.ram[7] = 0x96;
+    vm.ram[8] = 7;
+    vm.ram[9] = 8;
+    vm.ram[10] = 9;
+    vm.ram[11] = 11;
+    vm.pc = 7;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[11], 0xFF0000, "WREAD should return red");
+}
+
+#[test]
+fn test_wpixel_out_of_bounds() {
+    let mut vm = Vm::new();
+    // Create a 8x8 window
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 8;
+    vm.regs[4] = 8;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // Try to write pixel at (20, 20) -- out of bounds for 8x8 window
+    vm.regs[7] = win_id;
+    vm.regs[8] = 20;
+    vm.regs[9] = 20;
+    vm.regs[10] = 0xFFFFFF;
+    vm.ram[2] = 0x95;
+    vm.ram[3] = 7;
+    vm.ram[4] = 8;
+    vm.ram[5] = 9;
+    vm.ram[6] = 10;
+    vm.pc = 2;
+    vm.halted = false;
+    vm.step();
+    // Should not panic, pixel silently dropped
+    assert_eq!(
+        vm.windows[0]
+            .offscreen_buffer
+            .iter()
+            .filter(|&&p| p == 0xFFFFFF)
+            .count(),
+        0,
+        "no white pixels should exist in 8x8 buffer"
+    );
+}
+
+#[test]
+fn test_wread_out_of_bounds() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 8;
+    vm.regs[4] = 8;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // Read pixel at out-of-bounds coordinates
+    vm.regs[7] = win_id;
+    vm.regs[8] = 100;
+    vm.regs[9] = 100;
+    vm.ram[2] = 0x96;
+    vm.ram[3] = 7;
+    vm.ram[4] = 8;
+    vm.ram[5] = 9;
+    vm.ram[6] = 11;
+    vm.pc = 2;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[11], 0, "out-of-bounds WREAD should return 0");
+}
+
+#[test]
+fn test_winsys_blit_windows_to_screen() {
+    let mut vm = Vm::new();
+    // Create a window at (10, 10) size 4x4
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 4;
+    vm.regs[4] = 4;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // Write a green pixel at (2, 2) in the window's offscreen buffer
+    vm.regs[7] = win_id;
+    vm.regs[8] = 2;
+    vm.regs[9] = 2;
+    vm.regs[10] = 0x00FF00;
+    vm.ram[2] = 0x95;
+    vm.ram[3] = 7;
+    vm.ram[4] = 8;
+    vm.ram[5] = 9;
+    vm.ram[6] = 10;
+    vm.pc = 2;
+    vm.halted = false;
+    vm.step();
+
+    // Call FRAME to trigger blitting
+    vm.ram[7] = 0x02; // FRAME
+    vm.pc = 7;
+    vm.halted = false;
+    vm.step();
+
+    // The pixel at (2, 2) in the window should appear at screen (10+2, 10+2) = (12, 12)
+    assert_eq!(
+        vm.screen[12 * 256 + 12],
+        0x00FF00,
+        "green pixel should be blitted to screen at (12, 12)"
+    );
+}
+
+#[test]
+fn test_winsys_blit_z_order() {
+    let mut vm = Vm::new();
+    // Create window 1 at (0, 0) size 4x4 with blue pixel at (1, 1)
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 4;
+    vm.regs[4] = 4;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let id1 = vm.regs[0];
+
+    // Write blue pixel at (1, 1) in window 1
+    vm.regs[7] = id1;
+    vm.regs[8] = 1;
+    vm.regs[9] = 1;
+    vm.regs[10] = 0x0000FF;
+    vm.ram[2] = 0x95;
+    vm.ram[3] = 7;
+    vm.ram[4] = 8;
+    vm.ram[5] = 9;
+    vm.ram[6] = 10;
+    vm.pc = 2;
+    vm.halted = false;
+    vm.step();
+
+    // Create window 2 at (0, 0) size 4x4 with red pixel at (1, 1)
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 4;
+    vm.regs[4] = 4;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[7] = 0x94;
+    vm.ram[8] = 6;
+    vm.pc = 7;
+    vm.halted = false;
+    vm.step();
+    let id2 = vm.regs[0];
+
+    // Write red pixel at (1, 1) in window 2
+    vm.regs[7] = id2;
+    vm.regs[8] = 1;
+    vm.regs[9] = 1;
+    vm.regs[10] = 0xFF0000;
+    vm.ram[9] = 0x95;
+    vm.ram[10] = 7;
+    vm.ram[11] = 8;
+    vm.ram[12] = 9;
+    vm.ram[13] = 10;
+    vm.pc = 9;
+    vm.halted = false;
+    vm.step();
+
+    // FRAME: window 2 (higher z_order) should overwrite window 1
+    vm.ram[14] = 0x02; // FRAME
+    vm.pc = 14;
+    vm.halted = false;
+    vm.step();
+
+    // Screen pixel at (1, 1) should be red (window 2 on top)
+    assert_eq!(
+        vm.screen[1 * 256 + 1],
+        0xFF0000,
+        "red (window 2) should be on top of blue (window 1)"
+    );
+}
+
+#[test]
+fn test_winsys_blit_clipping() {
+    let mut vm = Vm::new();
+    // Create a window at (-2, -2) size 8x8 -- partially off-screen
+    vm.regs[1] = 0xFFFFFFFE_u32; // -2 as u32 (wrapping)
+    vm.regs[2] = 0xFFFFFFFE_u32; // -2 as u32
+    vm.regs[3] = 8;
+    vm.regs[4] = 8;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // Write green pixel at (3, 3) in the window -> screen position (1, 1)
+    vm.regs[7] = win_id;
+    vm.regs[8] = 3;
+    vm.regs[9] = 3;
+    vm.regs[10] = 0x00FF00;
+    vm.ram[2] = 0x95;
+    vm.ram[3] = 7;
+    vm.ram[4] = 8;
+    vm.ram[5] = 9;
+    vm.ram[6] = 10;
+    vm.pc = 2;
+    vm.halted = false;
+    vm.step();
+
+    // Write pixel at (0, 0) -> screen position (-2, -2) -> should be clipped
+    vm.regs[7] = win_id;
+    vm.regs[8] = 0;
+    vm.regs[9] = 0;
+    vm.regs[10] = 0xFF00FF;
+    vm.ram[7] = 0x95;
+    vm.ram[8] = 7;
+    vm.ram[9] = 8;
+    vm.ram[10] = 9;
+    vm.ram[11] = 10;
+    vm.pc = 7;
+    vm.halted = false;
+    vm.step();
+
+    vm.ram[12] = 0x02; // FRAME
+    vm.pc = 12;
+    vm.halted = false;
+    vm.step();
+
+    // Pixel at (3,3) in window -> screen (1,1) should be visible
+    assert_eq!(
+        vm.screen[1 * 256 + 1],
+        0x00FF00,
+        "in-bounds pixel should be blitted"
+    );
+}
+
+#[test]
+fn test_winsys_assembler() {
+    let src = "LDI r6, 0\nWINSYS r6\nHALT\n";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(result.is_ok(), "WINSYS should assemble: {:?}", result.err());
+    let asm = result.unwrap();
+    assert_eq!(asm.pixels[3], 0x94, "WINSYS opcode should be 0x94");
+}
+
+#[test]
+fn test_wpixel_wread_assembler() {
+    let src = "LDI r7, 1\nLDI r8, 5\nLDI r9, 5\nLDI r10, 0xFF0000\nWPIXEL r7, r8, r9, r10\nWREAD r7, r8, r9, r11\nHALT\n";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(
+        result.is_ok(),
+        "WPIXEL/WREAD should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    // WPIXEL at offset 12 (after 4 LDIs * 3 words each)
+    assert_eq!(asm.pixels[12], 0x95, "WPIXEL opcode should be 0x95");
+    // WREAD at offset 17 (after 4 LDIs + WPIXEL(5 words))
+    assert_eq!(asm.pixels[17], 0x96, "WREAD opcode should be 0x96");
+}
+
+#[test]
+fn test_winsys_disasm() {
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    let (mnem, len) = vm.disassemble_at(0);
+    assert_eq!(len, 2);
+    assert!(
+        mnem.starts_with("WINSYS"),
+        "disasm should show WINSYS, got: {}",
+        mnem
+    );
+}
+
+#[test]
+fn test_wpixel_disasm() {
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x95;
+    vm.ram[1] = 7;
+    vm.ram[2] = 8;
+    vm.ram[3] = 9;
+    vm.ram[4] = 10;
+    let (mnem, len) = vm.disassemble_at(0);
+    assert_eq!(len, 5);
+    assert!(
+        mnem.starts_with("WPIXEL"),
+        "disasm should show WPIXEL, got: {}",
+        mnem
+    );
+}
+
+#[test]
+fn test_wread_disasm() {
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x96;
+    vm.ram[1] = 7;
+    vm.ram[2] = 8;
+    vm.ram[3] = 9;
+    vm.ram[4] = 11;
+    let (mnem, len) = vm.disassemble_at(0);
+    assert_eq!(len, 5);
+    assert!(
+        mnem.starts_with("WREAD"),
+        "disasm should show WREAD, got: {}",
+        mnem
+    );
 }

@@ -62,7 +62,14 @@ impl Vm {
     }
 
     /// Draw a character with optional background color
-    pub(super) fn draw_char_with_bg(&mut self, ch: u8, x: usize, y: usize, fg: u32, bg: Option<u32>) {
+    pub(super) fn draw_char_with_bg(
+        &mut self,
+        ch: u8,
+        x: usize,
+        y: usize,
+        fg: u32,
+        bg: Option<u32>,
+    ) {
         const MINI_FONT: [[u8; 7]; 96] = include!("../mini_font.in");
         let idx = ch as usize;
         if !(32..=127).contains(&idx) {

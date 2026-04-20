@@ -654,75 +654,91 @@ impl Vm {
                 let xr = ram(a + 1);
                 (format!("MOUSEQ {}", reg(xr)), 2)
             }
-            0x86 => {
-                (format!("STRCMP {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
-            }
-            0x87 => {
-                (format!("ABS {}", reg(ram(a + 1))), 2)
-            }
-            0x88 => {
-                (format!("RECT {}, {}, {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3)), reg(ram(a + 4)), reg(ram(a + 5))), 6)
-            }
-            0x89 => {
-                (format!("MIN {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
-            }
-            0x8A => {
-                (format!("MAX {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
-            }
-            0x8B => {
-                (format!("CLAMP {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3))), 4)
-            }
-            0x8C => {
-                (format!("DRAWTEXT {}, {}, {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3)), reg(ram(a + 4)), reg(ram(a + 5))), 6)
-            }
-            0x8D => {
-                (format!("BITSET {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
-            }
-            0x8E => {
-                (format!("BITCLR {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
-            }
-            0x8F => {
-                (format!("BITTEST {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
-            }
-            0x90 => {
-                (format!("NOT {}", reg(ram(a + 1))), 2)
-            }
-            0x91 => {
-                ("INV".to_string(), 1)
-            }
-            0x92 => {
-                (format!("MATVEC {}, {}, {}, {}, {}", reg(ram(a + 1)), reg(ram(a + 2)), reg(ram(a + 3)), reg(ram(a + 4)), reg(ram(a + 5))), 6)
-            }
-            0x93 => {
-                (format!("RELU {}", reg(ram(a + 1))), 2)
-            }
-            0x94 => {
-                (format!("WINSYS {}", reg(ram(a + 1))), 2)
-            }
-            0x95 => {
-                (
-                    format!(
-                        "WPIXEL {}, {}, {}, {}",
-                        reg(ram(a + 1)),
-                        reg(ram(a + 2)),
-                        reg(ram(a + 3)),
-                        reg(ram(a + 4))
-                    ),
-                    5,
-                )
-            }
-            0x96 => {
-                (
-                    format!(
-                        "WREAD {}, {}, {}, {}",
-                        reg(ram(a + 1)),
-                        reg(ram(a + 2)),
-                        reg(ram(a + 3)),
-                        reg(ram(a + 4))
-                    ),
-                    5,
-                )
-            }
+            0x86 => (
+                format!("STRCMP {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+            0x87 => (format!("ABS {}", reg(ram(a + 1))), 2),
+            0x88 => (
+                format!(
+                    "RECT {}, {}, {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3)),
+                    reg(ram(a + 4)),
+                    reg(ram(a + 5))
+                ),
+                6,
+            ),
+            0x89 => (format!("MIN {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3),
+            0x8A => (format!("MAX {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3),
+            0x8B => (
+                format!(
+                    "CLAMP {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3))
+                ),
+                4,
+            ),
+            0x8C => (
+                format!(
+                    "DRAWTEXT {}, {}, {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3)),
+                    reg(ram(a + 4)),
+                    reg(ram(a + 5))
+                ),
+                6,
+            ),
+            0x8D => (
+                format!("BITSET {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+            0x8E => (
+                format!("BITCLR {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+            0x8F => (
+                format!("BITTEST {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+            0x90 => (format!("NOT {}", reg(ram(a + 1))), 2),
+            0x91 => ("INV".to_string(), 1),
+            0x92 => (
+                format!(
+                    "MATVEC {}, {}, {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3)),
+                    reg(ram(a + 4)),
+                    reg(ram(a + 5))
+                ),
+                6,
+            ),
+            0x93 => (format!("RELU {}", reg(ram(a + 1))), 2),
+            0x94 => (format!("WINSYS {}", reg(ram(a + 1))), 2),
+            0x95 => (
+                format!(
+                    "WPIXEL {}, {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3)),
+                    reg(ram(a + 4))
+                ),
+                5,
+            ),
+            0x96 => (
+                format!(
+                    "WREAD {}, {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3)),
+                    reg(ram(a + 4))
+                ),
+                5,
+            ),
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

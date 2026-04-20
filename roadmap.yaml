@@ -3476,31 +3476,32 @@ phases:
   test_target: 8
 - id: phase-68
   title: WINSYS Opcode
-  status: planned
+  status: done
   goal: Window management opcode that creates, destroys, and manages window regions
-  description: 'WINSYS opcode (0x92) manages rectangular window regions. Each window
+  description: 'WINSYS opcode (0x94) manages rectangular window regions. Each window
     has an id, position, size, and title. Offscreen buffer per window. The opcode handles
     create/destroy/bring-to-front/list operations. Rendering blits visible regions to
-    the main canvas in Z-order, clipped at screen edges.'
+    the main canvas in Z-order, clipped at screen edges. WPIXEL (0x95) writes pixels
+    to window offscreen buffers, WREAD (0x96) reads them back.'
   deliverables:
-  - name: WINSYS opcode (0x92)
+  - name: WINSYS opcode (0x94)
     description: 'WINSYS op_reg -- op=0:create window (r1=x,r2=y,r3=w,r4=h, r5=title_addr),
       returns window id in r0. op=1:destroy window (r0=win_id). op=2:bring to front (r0=win_id).
       op=3:list windows (r0=addr to write list).'
-    status: todo
+    status: done
   - name: Window data structure
     description: 'Per-window: id, x, y, w, h, z_order, title, process_id, offscreen_buffer
       (w*h u32 pixels). Max 8 windows. Stored on VM state.'
-    status: todo
+    status: done
   - name: Window blitting to canvas
     description: 'After FRAME, blit all windows to canvas in Z-order. Front window on top.
       Clip at screen edges (256x256). Transparent regions (0x00000000) show windows behind.'
-    status: todo
+    status: done
   - name: WINSYS assembler + disassembler entries
-    status: todo
+    status: done
   - name: WINSYS tests
-    description: 'Create/destroy windows, Z-order, clipping, max 8 windows. 10+ tests.'
-    status: todo
+    description: 'Create/destroy windows, Z-order, clipping, max 8 windows, WPIXEL/WREAD. 17 tests.'
+    status: done
   scope_lines_total: 500
   test_target: 10
 - id: phase-68b

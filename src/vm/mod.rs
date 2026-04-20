@@ -901,7 +901,8 @@ impl Vm {
                 let wr = self.fetch() as usize;
                 let hr = self.fetch() as usize;
                 let cr = self.fetch() as usize;
-                if xr < NUM_REGS && yr < NUM_REGS && wr < NUM_REGS && hr < NUM_REGS && cr < NUM_REGS {
+                if xr < NUM_REGS && yr < NUM_REGS && wr < NUM_REGS && hr < NUM_REGS && cr < NUM_REGS
+                {
                     let x0 = self.regs[xr] as usize;
                     let y0 = self.regs[yr] as usize;
                     let w = self.regs[wr] as usize;
@@ -985,8 +986,11 @@ impl Vm {
                 let ar = self.fetch() as usize;
                 let fgr = self.fetch() as usize;
                 let bgr = self.fetch() as usize;
-                if xr < NUM_REGS && yr < NUM_REGS && ar < NUM_REGS
-                    && fgr < NUM_REGS && bgr < NUM_REGS
+                if xr < NUM_REGS
+                    && yr < NUM_REGS
+                    && ar < NUM_REGS
+                    && fgr < NUM_REGS
+                    && bgr < NUM_REGS
                 {
                     let mut sx = self.regs[xr] as usize;
                     let mut sy = self.regs[yr] as usize;
@@ -1085,8 +1089,11 @@ impl Vm {
                 let r_output = self.fetch() as usize;
                 let r_rows = self.fetch() as usize;
                 let r_cols = self.fetch() as usize;
-                if r_weight < NUM_REGS && r_input < NUM_REGS && r_output < NUM_REGS
-                    && r_rows < NUM_REGS && r_cols < NUM_REGS
+                if r_weight < NUM_REGS
+                    && r_input < NUM_REGS
+                    && r_output < NUM_REGS
+                    && r_rows < NUM_REGS
+                    && r_cols < NUM_REGS
                 {
                     let weight_base = self.regs[r_weight] as usize;
                     let input_base = self.regs[r_input] as usize;
@@ -1146,8 +1153,10 @@ impl Vm {
                                 let w = if 3 < NUM_REGS { self.regs[3] } else { 64 };
                                 let h = if 4 < NUM_REGS { self.regs[4] } else { 48 };
                                 let title_addr = if 5 < NUM_REGS { self.regs[5] } else { 0 };
-                                let max_z = self.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
-                                let mut win = Window::new(id, x, y, w, h, title_addr, self.current_pid);
+                                let max_z =
+                                    self.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                                let mut win =
+                                    Window::new(id, x, y, w, h, title_addr, self.current_pid);
                                 win.z_order = max_z + 1;
                                 self.windows.push(win);
                                 self.regs[0] = id;
@@ -1156,7 +1165,9 @@ impl Vm {
                         1 => {
                             // DESTROY: r0=win_id
                             let win_id = self.regs[0];
-                            if let Some(w) = self.windows.iter_mut().find(|w| w.id == win_id && w.active) {
+                            if let Some(w) =
+                                self.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                            {
                                 w.active = false;
                             }
                         }
@@ -1164,14 +1175,18 @@ impl Vm {
                             // BRING TO FRONT: r0=win_id
                             let win_id = self.regs[0];
                             let max_z = self.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
-                            if let Some(w) = self.windows.iter_mut().find(|w| w.id == win_id && w.active) {
+                            if let Some(w) =
+                                self.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                            {
                                 w.z_order = max_z + 1;
                             }
                         }
                         3 => {
                             // LIST: r0=addr to write list
                             let addr = self.regs[0] as usize;
-                            let active: Vec<u32> = self.windows.iter()
+                            let active: Vec<u32> = self
+                                .windows
+                                .iter()
                                 .filter(|w| w.active)
                                 .map(|w| w.id)
                                 .collect();
@@ -1206,7 +1221,8 @@ impl Vm {
                     let px = self.regs[xr];
                     let py = self.regs[yr];
                     let color = self.regs[cr];
-                    if let Some(win) = self.windows.iter_mut().find(|w| w.id == win_id && w.active) {
+                    if let Some(win) = self.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                    {
                         let px_u = px as usize;
                         let py_u = py as usize;
                         let w_u = win.w as usize;
