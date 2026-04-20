@@ -1,12 +1,12 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 60/60 phases complete, 0 in progress
+**Progress:** 61/61 phases complete, 0 in progress
 
-**Deliverables:** 251/251 complete
+**Deliverables:** 253/253 complete
 
-**Tasks:** 89/89 complete
+**Tasks:** 91/91 complete
 
 ## Scope Summary
 
@@ -72,6 +72,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 o
 | phase-58 Terminal v4 — Scroll + Shell Commands | COMPLETE | 4/4 | 620 | 13 |
 | phase-59 File Browser App + Bug Fixes | COMPLETE | 4/4 | 619 | - |
 | phase-60 STRCMP Opcode | COMPLETE | 1/1 | 50 | 13 |
+| phase-61 GUI Calculator App + Token-Pixel-GUI Doc | COMPLETE | 2/2 | 1,200 | 1 |
 
 ## Dependencies
 
@@ -1763,6 +1764,109 @@ STRCMP (0x86): compares two null-terminated strings in memory, sets r0 to -1/0/1
 ### Technical Notes
 
 String comparison opcode useful for shell and file_browser. Implemented in src/vm/mod.rs dispatch, src/assembler/system_ops.rs, src/vm/disasm.rs, src/hermes.rs opcode_name. 13 tests in src/vm/tests.rs.
+
+## [x] phase-61: GUI Calculator App + Token-Pixel-GUI Doc (COMPLETE)
+
+**Goal:** Full GUI calculator with mouse-driven button grid and architecture documentation
+
+gui_calc.asm: full GUI calculator with mouse-driven button grid, display area, ADD/SUB/MUL/DIV operations, clear/backspace. TOKEN_PIXEL_GUI.md: explains the 3-layer Token->Pixel->GUI stack.
+
+### Deliverables
+
+- [x] **gui_calc.asm** -- Full GUI calculator: 920 lines, mouse-driven button grid, display area, ADD/SUB/MUL/DIV, clear/backspace
+  - [x] `` 
+  - [x] `` 
+  - [x] g
+  - [x] u
+  - [x] i
+  - [x] _
+  - [x] c
+  - [x] a
+  - [x] l
+  - [x] c
+  - [x] .
+  - [x] a
+  - [x] s
+  - [x] m
+  - [x]  
+  - [x] a
+  - [x] s
+  - [x] s
+  - [x] e
+  - [x] m
+  - [x] b
+  - [x] l
+  - [x] e
+  - [x] s
+  - [x]  
+  - [x] a
+  - [x] n
+  - [x] d
+  - [x]  
+  - [x] r
+  - [x] u
+  - [x] n
+  - [x] s
+  - [x]  
+  - [x] c
+  - [x] o
+  - [x] r
+  - [x] r
+  - [x] e
+  - [x] c
+  - [x] t
+  - [x] l
+  - [x] y
+- [x] **TOKEN_PIXEL_GUI.md** -- Architecture document explaining 3-layer stack: Token->Pixel->GUI
+  - [x] D
+  - [x] o
+  - [x] c
+  - [x] u
+  - [x] m
+  - [x] e
+  - [x] n
+  - [x] t
+  - [x]  
+  - [x] e
+  - [x] x
+  - [x] i
+  - [x] s
+  - [x] t
+  - [x] s
+  - [x]  
+  - [x] a
+  - [x] n
+  - [x] d
+  - [x]  
+  - [x] e
+  - [x] x
+  - [x] p
+  - [x] l
+  - [x] a
+  - [x] i
+  - [x] n
+  - [x] s
+  - [x]  
+  - [x] t
+  - [x] h
+  - [x] e
+  - [x]  
+  - [x] a
+  - [x] r
+  - [x] c
+  - [x] h
+  - [x] i
+  - [x] t
+  - [x] e
+  - [x] c
+  - [x] t
+  - [x] u
+  - [x] r
+  - [x] e
+
+### Technical Notes
+
+gui_calc.asm uses mouse events, drawing primitives, and arithmetic opcodes. 920-line program demonstrating the full GUI capability. TOKEN_PIXEL_GUI.md documents the token-pixel-GUI rendering stack (284 lines).
 
 ## Global Risks
 

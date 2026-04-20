@@ -47,8 +47,10 @@ pub(super) fn try_parse(
                 return Err("STRO requires 2 args: STRO addr_reg, \"string\"".to_string());
             }
             let reg = parse_reg(tokens[1])?;
-            let rest = tokens[2..].join(",");
-            let s = rest.trim();
+            // With quote-aware tokenizer, the string is a single token (tokens[2]).
+            // join(",") still works as a fallback for edge cases.
+            let s = tokens[2..].join(",");
+            let s = s.trim();
             if !((s.starts_with('"') && s.ends_with('"'))
                 || (s.starts_with('\'') && s.ends_with('\'')))
             {

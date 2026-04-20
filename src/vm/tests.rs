@@ -4069,15 +4069,27 @@ fn test_terminal_cmd_help() {
     let start = vm.frame_count;
     for _ in 0..500_000 {
         if !vm.step() { break; }
-        if vm.frame_count >= start + 3 { break; }
+        if vm.frame_count >= start + 6 { break; }
     }
     assert!(!vm.halted, "should not halt after help command");
-    // Row 1 should have "cmds: clear help ver hi" output
+    // Debug: dump buffer rows with raw values
+    for row in 0..4 {
+        let base: usize = 0x4000 + 42 * row;
+        eprint!("row {} raw: ", row);
+        for col in 0..20 {
+            eprint!("{:3} ", vm.ram[base + col]);
+        }
+        eprintln!();
+    }
+    eprintln!("cursor row={} col={}", vm.ram[0x4801], vm.ram[0x4800]);
+    // Row 1 should have "cmds: clear help ver hi echo ls date cat" output
     assert_eq!(vm.ram[0x4000 + 42 * 1 + 0], b'c' as u32, "row 1 should start with 'c' from 'cmds...'");
     assert_eq!(vm.ram[0x4000 + 42 * 1 + 1], b'm' as u32, "row 1 col 1 should be 'm'");
-    // Row 2 should have prompt
-    assert_eq!(vm.ram[0x4000 + 42 * 2], b'$' as u32, "row 2 should have prompt after help output");
-    assert_eq!(vm.ram[0x4801], 2, "cursor should be on row 2 after help");
+    // Row 2 should have "      sys colors whoami uname uptime"
+    assert_eq!(vm.ram[0x4000 + 42 * 2 + 6], b's' as u32, "row 2 should have 'sys' from second help line");
+    // Row 3 should have prompt (help now outputs 2 lines)
+    assert_eq!(vm.ram[0x4000 + 42 * 3], b'$' as u32, "row 3 should have prompt after help output");
+    assert_eq!(vm.ram[0x4801], 3, "cursor should be on row 3 after help");
 }
 
 #[test]

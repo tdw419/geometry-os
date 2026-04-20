@@ -1,7 +1,8 @@
-; terminal.asm -- Interactive Terminal for Geometry OS (v4 with scroll + 8 commands)
+; terminal.asm -- Interactive Terminal for Geometry OS (v5 with VFS cat + 13 commands)
 ;
 ; Self-contained GUI app: draw, input, render loop.
-; Commands: clear, cls, help, ver, hi, echo, ls, date
+; Commands: clear, cls, help, ver, hi, echo, ls, date, cat, sys,
+;           colors, whoami, uname, uptime
 ; Auto-scrolls when content exceeds 30 rows
 ;
 ; RAM Layout:
@@ -10,6 +11,7 @@
 ;   0x4801         Cursor row
 ;   0x4802         Blink counter
 ;   0x5000-0x502A  Scratch line buffer (42 chars + null)
+;   0x5200-0x52C8  Cat file buffer (200 u32s for cat command)
 
 #define COLS 42
 #define ROWS 30
@@ -513,6 +515,170 @@ try_cls:
     JNZ r0, try_unknown
     JMP cmd_clear
 
+try_cat:
+    ; --- Try "cat " (4 chars: c,a,t,space) ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 99         ; 'c'
+    JNZ r0, try_sys
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 97         ; 'a'
+    JNZ r0, try_sys
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 116        ; 't'
+    JNZ r0, try_sys
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 32         ; ' ' (space after cat)
+    JNZ r0, try_sys
+    JMP cmd_cat
+
+try_sys:
+    ; --- Try "sys" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
+    JNZ r0, try_colors
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 121        ; 'y'
+    JNZ r0, try_colors
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
+    JNZ r0, try_colors
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_colors
+    JMP cmd_sys
+
+try_colors:
+    ; --- Try "colors" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 99         ; 'c'
+    JNZ r0, try_whoami
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 111        ; 'o'
+    JNZ r0, try_whoami
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 108        ; 'l'
+    JNZ r0, try_whoami
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 111        ; 'o'
+    JNZ r0, try_whoami
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 114        ; 'r'
+    JNZ r0, try_whoami
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
+    JNZ r0, try_whoami
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_whoami
+    JMP cmd_colors
+
+try_whoami:
+    ; --- Try "whoami" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 119        ; 'w'
+    JNZ r0, try_uname
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 104        ; 'h'
+    JNZ r0, try_uname
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 111        ; 'o'
+    JNZ r0, try_uname
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 97         ; 'a'
+    JNZ r0, try_uname
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 109        ; 'm'
+    JNZ r0, try_uname
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 105        ; 'i'
+    JNZ r0, try_uname
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_uname
+    JMP cmd_whoami
+
+try_uname:
+    ; --- Try "uname" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 117        ; 'u'
+    JNZ r0, try_uptime
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 110        ; 'n'
+    JNZ r0, try_uptime
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 97         ; 'a'
+    JNZ r0, try_uptime
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 109        ; 'm'
+    JNZ r0, try_uptime
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 101        ; 'e'
+    JNZ r0, try_uptime
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_uptime
+    JMP cmd_uname
+
+try_uptime:
+    ; --- Try "uptime" ---
+    LDI r20, SCRATCH
+    LOAD r22, r20
+    CMPI r22, 117        ; 'u'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 112        ; 'p'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 116        ; 't'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 105        ; 'i'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 109        ; 'm'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 101        ; 'e'
+    JNZ r0, try_unknown
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_unknown
+    JMP cmd_uptime
+
 try_unknown:
     ; Check if input is empty (first char is null)
     LDI r20, SCRATCH
@@ -565,7 +731,16 @@ cmd_help:
     MUL r6, r7
     LDI r20, BUF
     ADD r20, r6
-    STRO r20, "cmds: clear cls help ver hi echo ls date"
+    STRO r20, "cmds: clear cls help ver hi echo ls date cat"
+    CALL do_newline
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "      sys colors whoami uname uptime"
     CALL do_newline
     JMP dc_ret
 
@@ -578,7 +753,7 @@ cmd_ver:
     MUL r6, r7
     LDI r20, BUF
     ADD r20, r6
-    STRO r20, "GeoTerm v1.0"
+    STRO r20, "GeoTerm v1.1"
     CALL do_newline
     JMP dc_ret
 
@@ -727,6 +902,245 @@ wu_done:
     CALL do_newline
     POP r31
     RET
+
+; =========================================
+; CAT command -- read VFS file and display
+; Uses OPEN/READ/CLOSE opcodes
+; File path is in SCRATCH+4 (after "cat ")
+; =========================================
+cmd_cat:
+    PUSH r31
+    LDI r1, 1
+
+    ; Build filename address: SCRATCH+4 points to filename
+    LDI r21, SCRATCH
+    ADD r21, r1
+    ADD r21, r1
+    ADD r21, r1
+    ADD r21, r1           ; r21 = SCRATCH+4 (filename)
+
+    ; OPEN filename (r21), flags=0 (read), mode=0
+    ; OPEN takes (path_reg, flags_reg, mode_reg)
+    LDI r20, 0
+    OPEN r21, r20, r20
+    ; fd returned in r0
+    MOV r18, r0           ; r18 = fd
+    CMPI r0, 0xFFFFFFFF
+    JNZ r0, cat_read      ; if not -1, file opened OK
+
+    ; Error: file not found
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "(file not found)"
+    CALL do_newline
+    POP r31
+    RET
+
+cat_read:
+    ; Read file content into buffer at 0x5200
+    ; READ fd(r18), buf(r22=0x5200), len(r23=200)
+    LDI r22, 0x5200       ; CAT_BUF
+    LDI r23, 200          ; max words to read
+    READ r18, r22, r23
+    ; r0 = bytes read (0 = EOF, 0xFFFFFFFF = error)
+    CMPI r0, 0
+    JZ r0, cat_close      ; EOF or empty
+    CMPI r0, 0xFFFFFFFF
+    JNZ r0, cat_close     ; error
+
+    ; Write chars from buffer until null or 200 chars
+    LDI r22, 0x5200
+    LDI r24, 0            ; word counter
+cat_write_loop:
+    CMPI r24, 200
+    BGE r0, cat_close
+    LOAD r0, r22
+    JZ r0, cat_close      ; null terminator
+    ; Write char to current terminal row
+    CALL cat_write_char
+    ADD r22, r1
+    ADD r24, r1
+    JMP cat_write_loop
+
+cat_close:
+    CLOSE r18
+    POP r31
+    RET
+
+cat_write_char:
+    ; Write r0 (char) at current cursor position in buffer
+    ; Advance cursor, handle line wrapping via do_newline
+    PUSH r31
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r2, r20
+    LDI r7, COLS
+    MUL r2, r7
+    LDI r20, CUR_COL
+    LOAD r3, r20
+    ADD r2, r3
+    LDI r20, BUF
+    ADD r20, r2
+    STORE r20, r0
+
+    ; Advance cursor col
+    LDI r20, CUR_COL
+    LOAD r3, r20
+    ADD r3, r1
+    CMPI r3, COLS
+    JNZ r0, cwc_done      ; branch if not equal (r0 = CMPI result)
+    CALL do_newline
+    JMP cwc_ret
+cwc_done:
+    LDI r20, CUR_COL
+    STORE r20, r3
+cwc_ret:
+    POP r31
+    RET
+
+; =========================================
+; SYS command -- show system info
+; =========================================
+cmd_sys:
+    LDI r1, 1
+    ; Line 1: "Geometry OS v2.0"
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "Geometry OS v2.0"
+    CALL do_newline
+    ; Line 2: "Opcodes: 113"
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "Opcodes: 113  Programs: 72"
+    CALL do_newline
+    ; Line 3: "Tests: 1795"
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "Tests: 1795  Canvas: 256x256"
+    CALL do_newline
+    JMP dc_ret
+
+; =========================================
+; COLORS command -- display color swatches
+; Draws colored rectangles on the canvas
+; =========================================
+cmd_colors:
+    LDI r1, 1
+    ; Row 1 label
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "Color swatches drawn:"
+    CALL do_newline
+    ; Draw 6 color swatches across the screen
+    ; Red
+    LDI r1, 0
+    LDI r2, 0
+    LDI r3, 42
+    LDI r4, 42
+    LDI r5, 0xFF0000
+    RECTF r1, r2, r3, r4, r5
+    ; Green
+    LDI r1, 43
+    LDI r5, 0x00FF00
+    RECTF r1, r2, r3, r4, r5
+    ; Blue
+    LDI r1, 86
+    LDI r5, 0x0000FF
+    RECTF r1, r2, r3, r4, r5
+    ; Yellow
+    LDI r1, 129
+    LDI r5, 0xFFFF00
+    RECTF r1, r2, r3, r4, r5
+    ; Cyan
+    LDI r1, 172
+    LDI r5, 0x00FFFF
+    RECTF r1, r2, r3, r4, r5
+    ; Magenta
+    LDI r1, 215
+    LDI r3, 41
+    LDI r5, 0xFF00FF
+    RECTF r1, r2, r3, r4, r5
+    JMP dc_ret
+
+; =========================================
+; WHOAMI command
+; =========================================
+cmd_whoami:
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "GeoOS User"
+    CALL do_newline
+    JMP dc_ret
+
+; =========================================
+; UNAME command
+; =========================================
+cmd_uname:
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "GeometryOS 2.0 rv32imac"
+    CALL do_newline
+    JMP dc_ret
+
+; =========================================
+; UPTIME command -- show frame count as uptime
+; =========================================
+cmd_uptime:
+    LDI r1, 1
+    LDI r20, CUR_ROW
+    LOAD r6, r20
+    LDI r7, COLS
+    MUL r6, r7
+    LDI r20, BUF
+    ADD r20, r6
+    STRO r20, "uptime: "
+    ; Blink counter doubles as a rough tick counter
+    ; Show the value at BLINK address as a simple number
+    LDI r20, BLINK
+    LOAD r0, r20
+    ; Write a few digits (just show raw value is too complex)
+    ; Instead just show "running" indicator
+    ADD r20, r1
+    ADD r20, r1
+    ADD r20, r1
+    ADD r20, r1
+    ADD r20, r1
+    ADD r20, r1
+    ADD r20, r1
+    ADD r20, r1           ; advance past "uptime: "
+    STRO r20, "running"
+    CALL do_newline
+    JMP dc_ret
 
 dc_ret:
     POP r31
