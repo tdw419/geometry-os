@@ -1,3 +1,4 @@
+use std::io::Write;
 #[derive(Debug)]
 pub struct Vm {
     pub ram: Vec<u32>,
@@ -132,6 +133,9 @@ pub struct Vm {
     /// Active TCP connections (Phase 41: Networking).
     /// Up to 8 simultaneous connections, indexed by fd.
     pub tcp_connections: Vec<Option<std::net::TcpStream>>,
+    /// Network inbox: received pixel frames waiting to be consumed by NET_RECV.
+    /// Each entry is a Vec<u32> containing a pixel protocol frame.
+    pub net_inbox: Vec<Vec<u32>>,
     /// Managed windows (Phase 68: WINSYS opcode).
     /// Max MAX_WINDOWS active at once. Window IDs are 1-based.
     pub windows: Vec<Window>,
@@ -214,6 +218,7 @@ impl Vm {
             mouse_y: 0,
             mouse_button: 0,
             tcp_connections: (0..MAX_TCP_CONNECTIONS).map(|_| None).collect(),
+            net_inbox: Vec::new(),
             windows: Vec::with_capacity(MAX_WINDOWS),
             next_window_id: 1,
         }
@@ -310,6 +315,7 @@ impl Vm {
         self.windows.clear();
         self.next_window_id = 1;
         self.mouse_button = 0;
+        self.net_inbox.clear();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -1454,6 +1460,133 @@ impl Vm {
                         self.regs[0] = written; // total bytes written
                     } else {
                         self.regs[0] = 0xFFFFFFFF;
+                    }
+                }
+            }
+
+            // NET_SEND addr_reg, len_reg, dest_reg (0x99)
+            //
+            // Send pixel data to a connected peer via the pixel protocol.
+            // Reads `len` u32 words from RAM starting at `addr_reg`, wraps them
+            // in a pixel protocol frame, and sends via the TCP connection
+            // identified by `dest_reg` (connection fd).
+            //
+            // Pixel protocol frame format (all u32 words):
+            //   [0] = header: (frame_type << 24) | (width << 16) | (height << 8) | flags
+            //         frame_type: 0=screen_share, 1=chat, 2=file
+            //         flags: bit 0 = compressed (future)
+            //   [1..] = pixel data (width * height u32 RGBA values)
+            //
+            // For simple sends, width=1 and height=len provides a raw data transfer.
+            // r0 = NET_OK on success, error code on failure.
+            // After success, r0 = number of u32 words sent (including header).
+            0x99 => {
+                let ar = self.fetch() as usize;
+                let lr = self.fetch() as usize;
+                let dr = self.fetch() as usize;
+
+                if ar >= NUM_REGS || lr >= NUM_REGS || dr >= NUM_REGS {
+                    self.regs[0] = 0xFFFFFFFF;
+                } else {
+                    let buf_addr = self.regs[ar] as usize;
+                    let len = self.regs[lr] as usize;
+                    let fd = self.regs[dr] as usize;
+
+                    if fd >= crate::vm::net::MAX_TCP_CONNECTIONS
+                        || self.tcp_connections[fd].is_none()
+                    {
+                        self.regs[0] = crate::vm::net::NET_ERR_INVALID_FD;
+                    } else {
+                        // Build the pixel protocol frame
+                        // Header: type=0 (screen_share), width=len, height=1, flags=0
+                        let header =
+                            ((0u32) << 24) | ((len.min(255) as u32) << 16) | (1u32 << 8) | 0u32;
+                        let mut frame = vec![0u8; 4 + len.min(65536) * 4];
+                        // Write header as big-endian u32
+                        frame[0] = (header >> 24) as u8;
+                        frame[1] = (header >> 16) as u8;
+                        frame[2] = (header >> 8) as u8;
+                        frame[3] = header as u8;
+                        // Write pixel data as little-endian u32 array
+                        let data_len = len.min(65536);
+                        for i in 0..data_len {
+                            let idx = buf_addr + i;
+                            let word = if idx < self.ram.len() {
+                                self.ram[idx]
+                            } else {
+                                0
+                            };
+                            let off = 4 + i * 4;
+                            frame[off] = word as u8;
+                            frame[off + 1] = (word >> 8) as u8;
+                            frame[off + 2] = (word >> 16) as u8;
+                            frame[off + 3] = (word >> 24) as u8;
+                        }
+                        let frame_bytes = 4 + data_len * 4;
+
+                        if let Some(ref mut stream) = self.tcp_connections[fd] {
+                            match stream.write_all(&frame[..frame_bytes]) {
+                                Ok(()) => {
+                                    self.regs[0] = (data_len + 1) as u32; // words sent (header + data)
+                                }
+                                Err(_) => {
+                                    self.regs[0] = crate::vm::net::NET_ERR_SEND_FAILED;
+                                }
+                            }
+                        } else {
+                            self.regs[0] = crate::vm::net::NET_ERR_INVALID_FD;
+                        }
+                    }
+                }
+            }
+
+            // NET_RECV addr_reg, max_len_reg (0x9A)
+            //
+            // Receive pending pixel data from the network inbox into RAM.
+            // Non-blocking: reads the oldest frame from the inbox queue.
+            // Stores the pixel data (without header) starting at RAM[addr_reg].
+            //
+            // r0 = number of u32 words received (0 if inbox empty).
+            // The frame header is written to RAM[addr_reg - 4..addr_reg] if there's room:
+            //   RAM[addr-4] = frame_type, RAM[addr-3] = width, RAM[addr-2] = height, RAM[addr-1] = flags
+            // Or the caller can check r0 for the data length.
+            //
+            // For testing without a network: push frames directly into vm.net_inbox.
+            0x9A => {
+                let ar = self.fetch() as usize;
+                let mr = self.fetch() as usize;
+
+                if ar >= NUM_REGS || mr >= NUM_REGS {
+                    self.regs[0] = 0;
+                } else if self.net_inbox.is_empty() {
+                    self.regs[0] = 0; // nothing to receive
+                } else {
+                    let buf_addr = self.regs[ar] as usize;
+                    let max_len = self.regs[mr] as usize;
+
+                    let frame = self.net_inbox.remove(0);
+                    if frame.len() < 1 {
+                        self.regs[0] = 0;
+                    } else {
+                        // Frame format: first word is header, rest is pixel data
+                        // Header: (type << 24) | (width << 16) | (height << 8) | flags
+                        let header = frame[0];
+                        // Write header to RAM at buf_addr..buf_addr+4
+                        if buf_addr + 3 < self.ram.len() {
+                            self.ram[buf_addr] = (header >> 24) & 0xFF; // type
+                            self.ram[buf_addr + 1] = (header >> 16) & 0xFF; // width
+                            self.ram[buf_addr + 2] = (header >> 8) & 0xFF; // height
+                            self.ram[buf_addr + 3] = header & 0xFF; // flags
+                        }
+                        // Write pixel data starting at buf_addr + 4
+                        let data_len = (frame.len() - 1).min(max_len as usize);
+                        for i in 0..data_len {
+                            let idx = buf_addr + 4 + i;
+                            if idx < self.ram.len() {
+                                self.ram[idx] = frame[1 + i];
+                            }
+                        }
+                        self.regs[0] = (data_len + 4) as u32; // total words written
                     }
                 }
             }

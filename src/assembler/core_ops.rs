@@ -105,6 +105,32 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "NET_SEND" => {
+            if tokens.len() < 4 {
+                return Err(
+                    "NET_SEND requires 3 arguments: NET_SEND addr_reg, len_reg, dest_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0x99);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
+        "NET_RECV" => {
+            if tokens.len() < 3 {
+                return Err(
+                    "NET_RECV requires 2 arguments: NET_RECV addr_reg, max_len_reg".to_string(),
+                );
+            }
+            bytecode.push(0x9A);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
         "TRACE_READ" => {
             if tokens.len() < 2 {
                 return Err("TRACE_READ requires 1 argument: TRACE_READ mode_reg".to_string());

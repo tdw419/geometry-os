@@ -1,8 +1,8 @@
 title: Geometry OS Roadmap
 version: 1.0.0
-description: 'Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
-  the built-in text editor, press F5, watch it run.'
+description: Pixel-art virtual machine with built-in assembler, debugger, and live
+  GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  the built-in text editor, press F5, watch it run.
 project_url: https://github.com/tdw419/geometry-os
 meta:
   language: Rust
@@ -180,7 +180,8 @@ phases:
   goal: CLI mode with geo> prompt
   deliverables:
   - name: Terminal mode
-    description: geo> prompt with help, list, load, run, edit, regs, peek, poke, reset, clear, quit
+    description: geo> prompt with help, list, load, run, edit, regs, peek, poke, reset,
+      clear, quit
     status: done
   - name: Mode switching
     description: Escape toggles Editor/Terminal
@@ -231,7 +232,8 @@ phases:
     description: Snake throttled via TICKS & 7 (~7.5 moves/sec)
     status: done
   - name: BEEP opcode
-    description: BEEP freq_reg, dur_reg -- sine-wave via aplay (20-20000 Hz, 1-5000 ms)
+    description: BEEP freq_reg, dur_reg -- sine-wave via aplay (20-20000 Hz, 1-5000
+      ms)
     status: done
   - name: Snake sounds
     description: 880Hz ping on apple eat, 110Hz thud on death
@@ -332,7 +334,8 @@ phases:
     - description: test_maze_initializes passes
       met: true
   - name: roguelike.asm
-    description: Procedural dungeon crawler with 64x64 map, rooms, corridors, enemies, items, camera/viewport scrolling, combat
+    description: Procedural dungeon crawler with 64x64 map, rooms, corridors, enemies,
+      items, camera/viewport scrolling, combat
     status: done
     acceptance_criteria:
     - description: test_roguelike_assembles passes
@@ -391,7 +394,8 @@ phases:
   priority: 1
   deliverables:
   - name: Tests for untested programs
-    description: ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity
+    description: ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors,
+      checkerboard, painter -- assemble + first-frame sanity
     status: done
     scope_lines: 220
     scope_files:
@@ -638,11 +642,13 @@ phases:
 - id: phase-21
   title: Spatial Program Coordinator (Native Windowing)
   status: complete
-  goal: Eliminate CPU-side compositor dependency by running multiple autonomous Glyph programs concurrently within the GPU/WGPU substrate.
+  goal: Eliminate CPU-side compositor dependency by running multiple autonomous Glyph
+    programs concurrently within the GPU/WGPU substrate.
   priority: 9
   deliverables:
   - name: Multi-Process VM Scheduler
-    description: Modify the core VM to support multiple concurrent execution contexts (window instances) within the same 64K RAM.
+    description: Modify the core VM to support multiple concurrent execution contexts
+      (window instances) within the same 64K RAM.
     status: done
     acceptance_criteria:
     - description: SpawnedProcess struct with isolated registers and PC
@@ -652,7 +658,8 @@ phases:
     - description: MAX_PROCESSES = 8 cap
       met: true
   - name: SPAWN/KILL Opcodes (0x4D/0x4E)
-    description: SPAWN addr_reg creates child process; KILL pid_reg halts it. PID stored in RAM[0xFFA].
+    description: SPAWN addr_reg creates child process; KILL pid_reg halts it. PID
+      stored in RAM[0xFFA].
     status: done
     acceptance_criteria:
     - description: test_spawn_creates_child_process passes
@@ -662,7 +669,8 @@ phases:
     - description: test_kill_halts_child_process passes
       met: true
   - name: Window Manager Demo
-    description: window_manager.asm -- primary draws animated window border, child bounces ball inside via shared RAM bounds protocol.
+    description: window_manager.asm -- primary draws animated window border, child
+      bounces ball inside via shared RAM bounds protocol.
     status: done
     acceptance_criteria:
     - description: window_manager.asm assembles and runs
@@ -674,11 +682,13 @@ phases:
 - id: phase-22
   title: Screen Readback & Collision Detection
   status: complete
-  goal: Let programs read pixel values from the framebuffer for collision detection, pick-color, and window compositing.
+  goal: Let programs read pixel values from the framebuffer for collision detection,
+    pick-color, and window compositing.
   priority: 10
   deliverables:
   - name: PEEK opcode (0x4F)
-    description: PEEK rx, ry, rd -- read screen pixel at (rx,ry) into rd. Enables collision detection.
+    description: PEEK rx, ry, rd -- read screen pixel at (rx,ry) into rd. Enables
+      collision detection.
     status: done
     scope_lines: 20
     scope_files:
@@ -692,7 +702,8 @@ phases:
     - description: test_peek_reads_screen_pixel passes
       met: true
   - name: Collision detection demo
-    description: peek_bounce.asm -- white ball bounces off drawn obstacles using PEEK. No RAM collision map.
+    description: peek_bounce.asm -- white ball bounces off drawn obstacles using PEEK.
+      No RAM collision map.
     status: done
     scope_lines: 100
     scope_files:
@@ -916,7 +927,8 @@ phases:
     acceptance_criteria:
     - description: shell.asm assembles without errors
       met: true
-    - description: 'Built-in commands: ls, cd, cat, echo, ps, kill, help, pwd, clear, exit'
+    - description: 'Built-in commands: ls, cd, cat, echo, ps, kill, help, pwd, clear,
+        exit'
       met: true
   - name: Pipe operator
     description: prog1 | prog2 connects stdout to stdin
@@ -1066,9 +1078,11 @@ phases:
 - id: phase-33
   title: QEMU Bridge
   status: complete
-  goal: Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS canvas text surface. Boot Linux on day one.
+  goal: Spawn QEMU as a subprocess, pipe serial console I/O through the Geometry OS
+    canvas text surface. Boot Linux on day one.
   priority: 30
-  description: 'QEMU gives us a working hypervisor in days. Every architecture QEMU supports
+  description: 'QEMU gives us a working hypervisor in days. Every architecture QEMU
+    supports
 
     (x86, ARM, RISC-V, MIPS) works immediately. We learn what the canvas text
 
@@ -1086,7 +1100,8 @@ phases:
     - id: p33.d1.t1
       title: Create src/qemu.rs with QemuBridge struct
       status: done
-      description: 'Create QemuBridge struct with fields for Child process, stdin/stdout pipes,
+      description: 'Create QemuBridge struct with fields for Child process, stdin/stdout
+        pipes,
 
         and an output buffer. Implement Drop to kill child on cleanup.
 
@@ -1124,7 +1139,8 @@ phases:
     - id: p33.d2.t2
       title: Implement architecture mapping (riscv64, riscv32, x86_64, aarch64, mipsel)
       status: done
-      description: Map arch config values to qemu-system binary names and machine types.
+      description: Map arch config values to qemu-system binary names and machine
+        types.
       acceptance_criteria:
       - riscv64 -> qemu-system-riscv64 -machine virt
       - x86_64 -> qemu-system-x86_64
@@ -1138,7 +1154,8 @@ phases:
     - id: p33.d2.t3
       title: 'Test: spawn QEMU with --version, verify process starts and exits clean'
       status: done
-      description: Unit test that spawns qemu-system-riscv64 --version and captures version string from stdout.
+      description: Unit test that spawns qemu-system-riscv64 --version and captures
+        version string from stdout.
       acceptance_criteria:
       - QEMU process starts and exits with code 0
       - Version string captured from stdout
@@ -1169,7 +1186,8 @@ phases:
     - id: p33.d3.t2
       title: Implement stdout bytes -> canvas_buffer writer
       status: done
-      description: 'For each printable byte: write as u32 to canvas_buffer at cursor position.
+      description: 'For each printable byte: write as u32 to canvas_buffer at cursor
+        position.
 
         Track virtual cursor (row, col). Auto-scroll when row >= 128.
 
@@ -1186,7 +1204,8 @@ phases:
     - id: p33.d3.t3
       title: 'Test: feed known bytes, verify canvas_buffer contents'
       status: done
-      description: 'Unit test: write ''Hello\nWorld'' bytes, verify canvas_buffer has correct chars at correct positions.'
+      description: 'Unit test: write ''Hello\nWorld'' bytes, verify canvas_buffer
+        has correct chars at correct positions.'
       acceptance_criteria:
       - '''H'' at position [0][0], ''e'' at [0][1], etc.'
       - '''W'' starts at row 1 after newline'
@@ -1195,7 +1214,8 @@ phases:
       files:
       - src/qemu.rs
   - name: Input from keyboard
-    description: Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU stdin
+    description: Geometry OS keypresses -> key_to_ascii_shifted() -> write to QEMU
+      stdin
     status: done
     scope_lines: 40
     tasks:
@@ -1220,7 +1240,8 @@ phases:
       - src/qemu.rs
       - src/main.rs
   - name: ANSI escape handling
-    description: Parse basic ANSI sequences (cursor movement, clear screen) for proper terminal rendering
+    description: Parse basic ANSI sequences (cursor movement, clear screen) for proper
+      terminal rendering
     status: done
     scope_lines: 100
     tasks:
@@ -1250,7 +1271,8 @@ phases:
     - id: p33.d5.t2
       title: 'Test: feed ANSI sequences, verify cursor state'
       status: done
-      description: Unit tests for each supported ANSI sequence. Verify cursor position and buffer state.
+      description: Unit tests for each supported ANSI sequence. Verify cursor position
+        and buffer state.
       acceptance_criteria:
       - Test for each cursor movement sequence
       - Test for clear screen
@@ -1301,7 +1323,8 @@ phases:
     - id: p33.d7.t1
       title: Add hypervisor command to shell.asm
       status: done
-      description: Parse 'hypervisor <config>' from shell input, construct config string in RAM, execute HYPERVISOR opcode.
+      description: Parse 'hypervisor <config>' from shell input, construct config
+        string in RAM, execute HYPERVISOR opcode.
       acceptance_criteria:
       - '''hypervisor arch=riscv64 kernel=linux.img'' spawns QEMU'
       - Error message on missing kernel file
@@ -1316,7 +1339,8 @@ phases:
     - id: p33.d8.t1
       title: Create scripts/download_riscv_linux.sh
       status: done
-      description: 'Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal rootfs
+      description: 'Download pre-built RISC-V 64-bit Linux kernel (Image) and minimal
+        rootfs
 
         from a known URL. Place in .geometry_os/fs/linux/ directory.
 
@@ -1372,7 +1396,8 @@ phases:
 - id: phase-34
   title: RISC-V RV32I Core
   status: complete
-  goal: Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage, no QEMU dependency.
+  goal: Pure software RISC-V RV32I interpreter. 40 base instructions, full test coverage,
+    no QEMU dependency.
   priority: 40
   description: 'QEMU proved what works. Now rebuild it owned -- pure Rust, no subprocess,
 
@@ -1386,7 +1411,8 @@ phases:
     scope_lines: 50
     tasks:
     - id: p34.d1.t1
-      title: Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs stubs
+      title: Create src/riscv/ directory with mod.rs, cpu.rs, memory.rs, decode.rs
+        stubs
       status: done
       acceptance_criteria:
       - Files compile
@@ -1518,11 +1544,13 @@ phases:
 - id: phase-35
   title: RISC-V Privilege Modes
   status: complete
-  goal: M/S/U privilege levels, CSR registers, trap handling. Linux needs this to manage its own processes.
+  goal: M/S/U privilege levels, CSR registers, trap handling. Linux needs this to
+    manage its own processes.
   priority: 50
   deliverables:
   - name: Privilege enum + CSR bank
-    description: M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc, scause, satp
+    description: M/S/U modes, mstatus, mtvec, mepc, mcause, sstatus, stvec, sepc,
+      scause, satp
     status: done
     scope_lines: 80
   - name: CSR read/write
@@ -1538,7 +1566,8 @@ phases:
     status: done
     scope_lines: 80
   - name: Privilege transition tests
-    description: U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to U
+    description: U->S via ECALL, S->M via ECALL, MRET returns to S, SRET returns to
+      U
     status: done
     scope_lines: 150
   dependencies:
@@ -1549,7 +1578,8 @@ phases:
 - id: phase-36
   title: RISC-V Virtual Memory & Devices
   status: complete
-  goal: SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk) for guest OS boot.
+  goal: SV32 page tables and minimum device emulation (UART, CLINT, PLIC, virtio-blk)
+    for guest OS boot.
   priority: 60
   deliverables:
   - name: SV32 page table walk
@@ -1596,7 +1626,8 @@ phases:
 - id: phase-37
   title: Guest OS Boot (Native RISC-V)
   status: complete
-  goal: 'Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes: QEMU and native.'
+  goal: 'Boot real Linux RISC-V kernel using our own interpreter. Two hypervisor modes:
+    QEMU and native.'
   priority: 70
   deliverables:
   - name: ELF + binary loader
@@ -1616,7 +1647,8 @@ phases:
     status: done
     scope_lines: 30
   - name: Verified boot
-    description: Boot synthetic RISC-V kernel, verify 'Linux version' on canvas via UART bridge
+    description: Boot synthetic RISC-V kernel, verify 'Linux version' on canvas via
+      UART bridge
     status: done
     scope_lines: 100
   - name: Performance benchmark
@@ -1637,8 +1669,10 @@ phases:
   status: complete
   goal: Extend the interpreter from RV32I to RV32IMAC so it can run real Linux kernels.
   priority: 45
-  description: 'Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics), C (compressed 16-bit instructions). Our interpreter currently only handles RV32I. These extensions are well-defined
-    and mechanical to implement. M: 8 instructions. A: 11 instructions. C: ~40 compressed forms.'
+  description: 'Linux requires at minimum RV32IMAC: M (multiply/divide), A (atomics),
+    C (compressed 16-bit instructions). Our interpreter currently only handles RV32I.
+    These extensions are well-defined and mechanical to implement. M: 8 instructions.
+    A: 11 instructions. C: ~40 compressed forms.'
   depends_on:
   - phase-37
   deliverables:
@@ -1668,7 +1702,8 @@ phases:
       - src/riscv/decode.rs
       - src/riscv/cpu.rs
   - name: A extension (atomics)
-    description: LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU
+    description: LR.W, SC.W, AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX,
+      AMOMINU, AMOMAXU
     status: done
     acceptance_criteria_met: true
     scope_lines: 100
@@ -1686,7 +1721,8 @@ phases:
       - src/riscv/decode.rs
       - src/riscv/cpu.rs
   - name: C extension (compressed instructions)
-    description: Decode 16-bit compressed instruction forms into equivalent 32-bit operations
+    description: Decode 16-bit compressed instruction forms into equivalent 32-bit
+      operations
     status: done
     acceptance_criteria_met: true
     scope_lines: 200
@@ -1706,9 +1742,12 @@ phases:
 - id: phase-39
   title: Build Linux for RV32IMAC
   status: complete
-  goal: Cross-compile a minimal Linux kernel and initramfs for riscv32 that boots in our interpreter.
+  goal: Cross-compile a minimal Linux kernel and initramfs for riscv32 that boots
+    in our interpreter.
   priority: 50
-  description: 'Use Buildroot or direct kernel build to produce a vmlinux for riscv32. Tinyconfig + UART + CLINT + PLIC + virtio-blk + initramfs with busybox. Target: boot to shell in under 256MB RAM.'
+  description: 'Use Buildroot or direct kernel build to produce a vmlinux for riscv32.
+    Tinyconfig + UART + CLINT + PLIC + virtio-blk + initramfs with busybox. Target:
+    boot to shell in under 256MB RAM.'
   depends_on:
   - phase-38
   deliverables:
@@ -1760,9 +1799,12 @@ phases:
 - id: phase-40
   title: Boot Linux in Geometry OS
   status: complete
-  goal: Boot the riscv32 Linux kernel inside our RISC-V interpreter and reach a shell prompt.
+  goal: Boot the riscv32 Linux kernel inside our RISC-V interpreter and reach a shell
+    prompt.
   priority: 55
-  description: Load vmlinux + initramfs into the interpreter, boot to shell. This is the "QEMU bridge" moment -- running real Linux in our own emulator. Fix any interpreter bugs discovered during boot.
+  description: Load vmlinux + initramfs into the interpreter, boot to shell. This
+    is the "QEMU bridge" moment -- running real Linux in our own emulator. Fix any
+    interpreter bugs discovered during boot.
   depends_on:
   - phase-39
   deliverables:
@@ -1819,9 +1861,11 @@ phases:
 - id: phase-41
   title: Tracing and Instrumentation
   status: complete
-  goal: Add instruction-level tracing to the interpreter so we can watch exactly what Linux does.
+  goal: Add instruction-level tracing to the interpreter so we can watch exactly what
+    Linux does.
   priority: 60
-  description: 'Once Linux boots, instrument the interpreter to capture: every syscall, every page table walk, every context switch, every interrupt.'
+  description: 'Once Linux boots, instrument the interpreter to capture: every syscall,
+    every page table walk, every context switch, every interrupt.'
   depends_on:
   - phase-40
   deliverables:
@@ -1877,7 +1921,9 @@ phases:
   status: complete
   goal: Rebuild Geometry OS process management based on observed Linux scheduler behavior.
   priority: 65
-  description: Using traces from Phase 41, understand how Linux creates processes, schedules them, and manages task state. Then build Geometry OS equivalents that follow the same patterns but simpler.
+  description: Using traces from Phase 41, understand how Linux creates processes,
+    schedules them, and manages task state. Then build Geometry OS equivalents that
+    follow the same patterns but simpler.
   depends_on:
   - phase-41
   deliverables:
@@ -2000,13 +2046,18 @@ phases:
   title: RAM-Mapped Canvas Buffer
   status: complete
   goal: Make the canvas grid addressable from VM RAM via STORE/LOAD
-  description: 'The canvas buffer (128 rows x 32 cols = 4096 cells) currently lives in a separate Vec<u32> outside VM RAM. Map it into the VM address space at 0x8000-0x8FFF so that existing STORE and LOAD
-    opcodes can read and write grid cells directly. No new opcodes needed -- just intercept the address range in the VM''s memory access path.
+  description: 'The canvas buffer (128 rows x 32 cols = 4096 cells) currently lives
+    in a separate Vec<u32> outside VM RAM. Map it into the VM address space at 0x8000-0x8FFF
+    so that existing STORE and LOAD opcodes can read and write grid cells directly.
+    No new opcodes needed -- just intercept the address range in the VM''s memory
+    access path.
 
     '
   deliverables:
   - name: Canvas memory region constant and address mapping
-    description: 'Define CANVAS_RAM_BASE = 0x8000, CANVAS_RAM_SIZE = 4096 (128*32). Document the mapping: address 0x8000 + row*32 + col corresponds to canvas_buffer[row * 32 + col]. Add to memory map docs.
+    description: 'Define CANVAS_RAM_BASE = 0x8000, CANVAS_RAM_SIZE = 4096 (128*32).
+      Document the mapping: address 0x8000 + row*32 + col corresponds to canvas_buffer[row
+      * 32 + col]. Add to memory map docs.
 
       '
     status: done
@@ -2021,8 +2072,10 @@ phases:
     - id: p45.d1.t1
       title: Define CANVAS_RAM_BASE and CANVAS_RAM_SIZE constants
       status: done
-      description: 'Add `pub const CANVAS_RAM_BASE: usize = 0x8000;` and `pub const CANVAS_RAM_SIZE: usize = 4096;` to vm.rs (or main.rs if canvas_buffer ownership stays there). These are the address range
-        [0x8000, 0x8FFF] that maps to the canvas grid.
+      description: 'Add `pub const CANVAS_RAM_BASE: usize = 0x8000;` and `pub const
+        CANVAS_RAM_SIZE: usize = 4096;` to vm.rs (or main.rs if canvas_buffer ownership
+        stays there). These are the address range [0x8000, 0x8FFF] that maps to the
+        canvas grid.
 
         '
       dependencies: []
@@ -2033,7 +2086,8 @@ phases:
     - id: p45.d1.t2
       title: Update CANVAS_TEXT_SURFACE.md memory map with 0x8000 range
       status: done
-      description: 'Add a row to the memory map table in CANVAS_TEXT_SURFACE.md: 0x8000-0x8FFF | 4096 | Canvas grid (RAM-mapped mirror of canvas_buffer)
+      description: 'Add a row to the memory map table in CANVAS_TEXT_SURFACE.md: 0x8000-0x8FFF
+        | 4096 | Canvas grid (RAM-mapped mirror of canvas_buffer)
 
         '
       dependencies:
@@ -2047,8 +2101,11 @@ phases:
     - src/vm.rs
     - docs/CANVAS_TEXT_SURFACE.md
   - name: Intercept LOAD for canvas address range
-    description: 'In the LOAD opcode handler (0x11 in vm.rs), when the translated physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], read from canvas_buffer instead of self.ram. The VM
-      needs a reference or copy of the canvas buffer. Easiest approach: the canvas_buffer is passed to the VM (or VM holds a reference) so LOAD can index into it.
+    description: 'In the LOAD opcode handler (0x11 in vm.rs), when the translated
+      physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], read from
+      canvas_buffer instead of self.ram. The VM needs a reference or copy of the canvas
+      buffer. Easiest approach: the canvas_buffer is passed to the VM (or VM holds
+      a reference) so LOAD can index into it.
 
       '
     status: done
@@ -2063,8 +2120,11 @@ phases:
     - id: p45.d2.t1
       title: Add canvas_buffer reference to VM struct
       status: done
-      description: 'The VM struct needs access to the canvas buffer for both LOAD and STORE interception. Add a field like `pub canvas_buffer: Vec<u32>` to the VM struct (a copy that gets synced back to
-        main.rs canvas_buffer each frame) OR pass it as a mutable reference through the execute method. The copy approach is simpler and avoids lifetime issues.
+      description: 'The VM struct needs access to the canvas buffer for both LOAD
+        and STORE interception. Add a field like `pub canvas_buffer: Vec<u32>` to
+        the VM struct (a copy that gets synced back to main.rs canvas_buffer each
+        frame) OR pass it as a mutable reference through the execute method. The copy
+        approach is simpler and avoids lifetime issues.
 
         '
       dependencies:
@@ -2078,8 +2138,11 @@ phases:
     - id: p45.d2.t2
       title: Intercept LOAD opcode for canvas range
       status: done
-      description: 'In the LOAD handler (opcode 0x11), after page translation produces a physical address, check if it falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + CANVAS_RAM_SIZE). If so, read from the
-        canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr]. The canvas buffer index maps directly: canvas_buffer[addr - 0x8000].
+      description: 'In the LOAD handler (opcode 0x11), after page translation produces
+        a physical address, check if it falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE
+        + CANVAS_RAM_SIZE). If so, read from the canvas buffer at (addr - CANVAS_RAM_BASE)
+        instead of self.ram[addr]. The canvas buffer index maps directly: canvas_buffer[addr
+        - 0x8000].
 
         '
       dependencies:
@@ -2092,8 +2155,9 @@ phases:
     - id: p45.d2.t3
       title: Sync canvas_buffer to VM before execution
       status: done
-      description: 'Before each frame''s VM execution, copy the current canvas_buffer contents into the VM''s canvas mirror (or set up the reference). This ensures the VM sees the latest grid state including
-        human-typed text.
+      description: 'Before each frame''s VM execution, copy the current canvas_buffer
+        contents into the VM''s canvas mirror (or set up the reference). This ensures
+        the VM sees the latest grid state including human-typed text.
 
         '
       dependencies:
@@ -2107,8 +2171,10 @@ phases:
     - src/vm.rs
     - src/main.rs
   - name: Intercept STORE for canvas address range
-    description: 'In the STORE opcode handler (0x12 in vm.rs), when the translated physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], write to canvas_buffer instead of self.ram. After
-      the store, mark the canvas as dirty so the renderer picks up the change on the next frame.
+    description: 'In the STORE opcode handler (0x12 in vm.rs), when the translated
+      physical address falls in [CANVAS_RAM_BASE, CANVAS_RAM_BASE + 4095], write to
+      canvas_buffer instead of self.ram. After the store, mark the canvas as dirty
+      so the renderer picks up the change on the next frame.
 
       '
     status: done
@@ -2126,8 +2192,10 @@ phases:
     - id: p45.d3.t1
       title: Intercept STORE opcode for canvas range
       status: done
-      description: 'In the STORE handler (opcode 0x12), after page translation, check if the address is in the canvas range. If so, write to the canvas buffer at (addr - CANVAS_RAM_BASE) instead of self.ram[addr].
-        Bypass the user-mode protection for this range (canvas is not I/O).
+      description: 'In the STORE handler (opcode 0x12), after page translation, check
+        if the address is in the canvas range. If so, write to the canvas buffer at
+        (addr - CANVAS_RAM_BASE) instead of self.ram[addr]. Bypass the user-mode protection
+        for this range (canvas is not I/O).
 
         '
       dependencies:
@@ -2140,8 +2208,10 @@ phases:
     - id: p45.d3.t2
       title: Sync VM canvas mutations back to main canvas_buffer
       status: done
-      description: 'After each frame''s VM execution, copy any changed canvas cells from the VM''s mirror back to main.rs''s canvas_buffer. This ensures the renderer displays the VM''s writes. A simple
-        full-copy each frame is fine (4096 u32 values = 16KB).
+      description: 'After each frame''s VM execution, copy any changed canvas cells
+        from the VM''s mirror back to main.rs''s canvas_buffer. This ensures the renderer
+        displays the VM''s writes. A simple full-copy each frame is fine (4096 u32
+        values = 16KB).
 
         '
       dependencies:
@@ -2153,8 +2223,11 @@ phases:
     - id: p45.d3.t3
       title: Handle User-mode access to canvas region
       status: done
-      description: 'The STORE handler currently blocks User-mode writes to addr >= 0xFF00. The canvas range (0x8000) is below this threshold, so User-mode should work by default. But verify and add a comment
-        clarifying that canvas writes are permitted in User mode. If any page translation or protection logic would block it, add an explicit exception.
+      description: 'The STORE handler currently blocks User-mode writes to addr >=
+        0xFF00. The canvas range (0x8000) is below this threshold, so User-mode should
+        work by default. But verify and add a comment clarifying that canvas writes
+        are permitted in User mode. If any page translation or protection logic would
+        block it, add an explicit exception.
 
         '
       dependencies:
@@ -2168,7 +2241,9 @@ phases:
     - src/vm.rs
     - src/main.rs
   - name: Test suite for RAM-mapped canvas
-    description: 'Write tests that verify STORE/LOAD to canvas addresses work correctly. Test read-after-write, boundary conditions, interaction with normal RAM, and multi-process canvas access.
+    description: 'Write tests that verify STORE/LOAD to canvas addresses work correctly.
+      Test read-after-write, boundary conditions, interaction with normal RAM, and
+      multi-process canvas access.
 
       '
     status: done
@@ -2183,7 +2258,9 @@ phases:
     - id: p45.d4.t1
       title: 'Test: LOAD reads canvas buffer values'
       status: done
-      description: 'Write a test that pre-fills canvas_buffer cells with known values, runs a program that LOADs from 0x8000+offset, and checks the register contains the expected value.
+      description: 'Write a test that pre-fills canvas_buffer cells with known values,
+        runs a program that LOADs from 0x8000+offset, and checks the register contains
+        the expected value.
 
         '
       dependencies:
@@ -2196,7 +2273,8 @@ phases:
     - id: p45.d4.t2
       title: 'Test: STORE writes appear in canvas buffer'
       status: done
-      description: 'Write a test that runs a program storing values to canvas addresses, then checks the canvas buffer contains those values.
+      description: 'Write a test that runs a program storing values to canvas addresses,
+        then checks the canvas buffer contains those values.
 
         '
       dependencies:
@@ -2208,7 +2286,9 @@ phases:
     - id: p45.d4.t3
       title: 'Test: boundary conditions (first/last cell, row boundaries)'
       status: done
-      description: 'Test STORE/LOAD at 0x8000 (first cell), 0x8FFF (last cell), and at row boundaries (e.g. end of row 0, start of row 1). Verify no off-by-one errors.
+      description: 'Test STORE/LOAD at 0x8000 (first cell), 0x8FFF (last cell), and
+        at row boundaries (e.g. end of row 0, start of row 1). Verify no off-by-one
+        errors.
 
         '
       dependencies:
@@ -2220,8 +2300,9 @@ phases:
     - id: p45.d4.t4
       title: 'Test: canvas access does not corrupt normal RAM'
       status: done
-      description: 'Write a test that stores to both normal RAM and canvas addresses, then verifies the normal RAM values are unchanged and the canvas values are correct. Ensures the two memory spaces don''t
-        overlap.
+      description: 'Write a test that stores to both normal RAM and canvas addresses,
+        then verifies the normal RAM values are unchanged and the canvas values are
+        correct. Ensures the two memory spaces don''t overlap.
 
         '
       dependencies:
@@ -2234,8 +2315,10 @@ phases:
     - id: p45.d4.t5
       title: 'Test: page translation works with canvas addresses'
       status: done
-      description: 'Verify that LOAD/STORE to canvas addresses still go through the page translation mechanism. A process with a page table that maps 0x8000 to a different physical address should see the
-        translated result. Or if canvas is identity-mapped, verify that works.
+      description: 'Verify that LOAD/STORE to canvas addresses still go through the
+        page translation mechanism. A process with a page table that maps 0x8000 to
+        a different physical address should see the translated result. Or if canvas
+        is identity-mapped, verify that works.
 
         '
       dependencies:
@@ -2249,8 +2332,10 @@ phases:
     scope_files:
     - src/vm.rs
   - name: 'Demo program: canvas grid writer'
-    description: 'Write an assembly program that writes ASCII characters to the canvas grid using STORE. The program fills the grid with a visible pattern -- for example, writing "HELLO WORLD" across the
-      top row, or filling the grid with sequential ASCII values. The human sees the text appear on the grid while the program runs.
+    description: 'Write an assembly program that writes ASCII characters to the canvas
+      grid using STORE. The program fills the grid with a visible pattern -- for example,
+      writing "HELLO WORLD" across the top row, or filling the grid with sequential
+      ASCII values. The human sees the text appear on the grid while the program runs.
 
       '
     status: done
@@ -2265,8 +2350,10 @@ phases:
     - id: p45.d5.t1
       title: Write canvas_grid_writer.asm demo
       status: done
-      description: 'Create programs/canvas_grid_writer.asm. The program uses LDI to load ASCII values and STORE to write them to 0x8000+ addresses. Writes "PIXELS DRIVE PIXELS" across the first visible
-        row. Uses a loop with an index register incrementing through the string.
+      description: 'Create programs/canvas_grid_writer.asm. The program uses LDI to
+        load ASCII values and STORE to write them to 0x8000+ addresses. Writes "PIXELS
+        DRIVE PIXELS" across the first visible row. Uses a loop with an index register
+        incrementing through the string.
 
         '
       dependencies:
@@ -2279,8 +2366,9 @@ phases:
     - id: p45.d5.t2
       title: Write canvas_counter.asm demo
       status: done
-      description: 'Create programs/canvas_counter.asm. A loop that increments a counter and writes the digit (as ASCII) to a specific canvas cell each iteration. The human sees a digit ticking up on the
-        grid in real time.
+      description: 'Create programs/canvas_counter.asm. A loop that increments a counter
+        and writes the digit (as ASCII) to a specific canvas cell each iteration.
+        The human sees a digit ticking up on the grid in real time.
 
         '
       dependencies:
@@ -2294,33 +2382,46 @@ phases:
     - programs/canvas_grid_writer.asm
     - programs/canvas_counter.asm
   dependencies: []
-  technical_notes: 'The VM''s RAM is 0x10000 (65536 cells). The canvas buffer is 4096 cells. Mapping at 0x8000 leaves plenty of headroom (0x9000-0xFFFF still available). The screen buffer (256x256 = 65536
-    pixels) is too large for a contiguous RAM mapping -- that''s addressed in phase 46.
+  technical_notes: 'The VM''s RAM is 0x10000 (65536 cells). The canvas buffer is 4096
+    cells. Mapping at 0x8000 leaves plenty of headroom (0x9000-0xFFFF still available).
+    The screen buffer (256x256 = 65536 pixels) is too large for a contiguous RAM mapping
+    -- that''s addressed in phase 46.
 
-    Canvas buffer sync strategy: copy main''s canvas_buffer into VM before execution, copy VM''s canvas writes back after execution. 4096 * 4 bytes = 16KB per frame, negligible cost.
+    Canvas buffer sync strategy: copy main''s canvas_buffer into VM before execution,
+    copy VM''s canvas writes back after execution. 4096 * 4 bytes = 16KB per frame,
+    negligible cost.
 
-    The page translation layer (translate_va_or_fault) must be considered. For kernel-mode processes (the default for canvas-assembled programs), virtual address == physical address. For user-mode child
-    processes, the page table may remap things. The canvas range should work through the normal translation path.
+    The page translation layer (translate_va_or_fault) must be considered. For kernel-mode
+    processes (the default for canvas-assembled programs), virtual address == physical
+    address. For user-mode child processes, the page table may remap things. The canvas
+    range should work through the normal translation path.
 
     '
   risks:
   - Page translation might block canvas access for user-mode processes
   - Canvas buffer ownership between main.rs and vm.rs needs careful handling
-  - STORE handler's user-mode protection (addr >= 0xFF00 check) must not block canvas writes
+  - STORE handler's user-mode protection (addr >= 0xFF00 check) must not block canvas
+    writes
   scope_lines_total: 370
   test_target: 10
 - id: phase-46
   title: RAM-Mapped Screen Buffer
   status: complete
   goal: Make the 256x256 screen buffer addressable from VM RAM
-  description: 'The screen buffer (256x256 = 65536 pixels) is currently only accessible via PIXEL (write) and PEEK (read) opcodes. Map it into the VM address space at 0x9000-0x13FFF (a 64K region) so that
-    normal LOAD/STORE can read and write screen pixels. This unifies all three memory spaces (RAM, canvas, screen) under one addressing scheme.
+  description: 'The screen buffer (256x256 = 65536 pixels) is currently only accessible
+    via PIXEL (write) and PEEK (read) opcodes. Map it into the VM address space at
+    0x9000-0x13FFF (a 64K region) so that normal LOAD/STORE can read and write screen
+    pixels. This unifies all three memory spaces (RAM, canvas, screen) under one addressing
+    scheme.
 
     '
   deliverables:
   - name: Screen memory region mapping
-    description: 'Define SCREEN_RAM_BASE = 0x9000. The screen is 256x256 = 65536 cells, so it spans 0x9000-0x18FFF. However, VM RAM is only 0x10000 total. Options: (a) expand RAM_SIZE to 0x20000, (b) use
-      a sparse/aliased mapping where only low-res access works, (c) map screen at a higher address with extended RAM. Simplest: expand RAM to 0x20000 (128K) and map screen at 0x10000.
+    description: 'Define SCREEN_RAM_BASE = 0x9000. The screen is 256x256 = 65536 cells,
+      so it spans 0x9000-0x18FFF. However, VM RAM is only 0x10000 total. Options:
+      (a) expand RAM_SIZE to 0x20000, (b) use a sparse/aliased mapping where only
+      low-res access works, (c) map screen at a higher address with extended RAM.
+      Simplest: expand RAM to 0x20000 (128K) and map screen at 0x10000.
 
       '
     status: done
@@ -2335,8 +2436,11 @@ phases:
     - id: p46.d1.t1
       title: Determine screen mapping strategy and expand RAM if needed
       status: done
-      description: 'Evaluate options for mapping the 64K screen buffer. The simplest approach: expand RAM_SIZE from 0x10000 to 0x20000 (128K) and map the screen buffer at 0x10000. This keeps everything
-        in one flat address space. Alternative: use a windowed mapping at 0x9000 where only a 4K window is visible at a time (controlled by a register). Recommend the flat mapping for simplicity.
+      description: 'Evaluate options for mapping the 64K screen buffer. The simplest
+        approach: expand RAM_SIZE from 0x10000 to 0x20000 (128K) and map the screen
+        buffer at 0x10000. This keeps everything in one flat address space. Alternative:
+        use a windowed mapping at 0x9000 where only a 4K window is visible at a time
+        (controlled by a register). Recommend the flat mapping for simplicity.
 
         '
       dependencies:
@@ -2348,8 +2452,10 @@ phases:
     - id: p46.d1.t2
       title: Implement screen buffer LOAD interception
       status: done
-      description: 'In the LOAD handler, check if the translated address falls in the screen buffer range. If so, read from self.screen[addr - SCREEN_RAM_BASE] instead of self.ram[addr]. The screen buffer
-        already exists on the VM struct as `pub screen: Vec<u32>`.
+      description: 'In the LOAD handler, check if the translated address falls in
+        the screen buffer range. If so, read from self.screen[addr - SCREEN_RAM_BASE]
+        instead of self.ram[addr]. The screen buffer already exists on the VM struct
+        as `pub screen: Vec<u32>`.
 
         '
       dependencies:
@@ -2361,8 +2467,10 @@ phases:
     - id: p46.d1.t3
       title: Implement screen buffer STORE interception
       status: done
-      description: 'In the STORE handler, check if the translated address falls in the screen buffer range. If so, write to self.screen[addr - SCREEN_RAM_BASE]. The renderer will pick up the change on the
-        next frame automatically since it reads from self.screen.
+      description: 'In the STORE handler, check if the translated address falls in
+        the screen buffer range. If so, write to self.screen[addr - SCREEN_RAM_BASE].
+        The renderer will pick up the change on the next frame automatically since
+        it reads from self.screen.
 
         '
       dependencies:
@@ -2375,7 +2483,8 @@ phases:
     scope_files:
     - src/vm.rs
   - name: Tests for screen buffer mapping
-    description: 'Verify that LOAD/STORE to screen addresses correctly read and write pixels. Cross-validate against PEEK and PIXEL opcodes.
+    description: 'Verify that LOAD/STORE to screen addresses correctly read and write
+      pixels. Cross-validate against PEEK and PIXEL opcodes.
 
       '
     status: done
@@ -2390,7 +2499,9 @@ phases:
     - id: p46.d2.t1
       title: 'Test: LOAD from screen matches PEEK'
       status: done
-      description: 'Write a test that draws a pixel with PIXEL opcode, then reads it with both PEEK and LOAD (via screen-mapped address). Verify both return the same color value.
+      description: 'Write a test that draws a pixel with PIXEL opcode, then reads
+        it with both PEEK and LOAD (via screen-mapped address). Verify both return
+        the same color value.
 
         '
       dependencies:
@@ -2402,7 +2513,9 @@ phases:
     - id: p46.d2.t2
       title: 'Test: STORE to screen matches PIXEL'
       status: done
-      description: 'Write a test that writes a pixel via both PIXEL opcode and STORE to screen-mapped address. Read back with PEEK and verify both wrote the same value.
+      description: 'Write a test that writes a pixel via both PIXEL opcode and STORE
+        to screen-mapped address. Read back with PEEK and verify both wrote the same
+        value.
 
         '
       dependencies:
@@ -2415,20 +2528,26 @@ phases:
     scope_files:
     - src/vm.rs
   - name: Unified memory map documentation
-    description: 'Update all memory map documentation to show the complete unified address space: RAM (0x0000-0x7FFF), canvas (0x8000-0x8FFF), screen (0x10000+). Add a new doc section showing the full map.
+    description: 'Update all memory map documentation to show the complete unified
+      address space: RAM (0x0000-0x7FFF), canvas (0x8000-0x8FFF), screen (0x10000+).
+      Add a new doc section showing the full map.
 
       '
     status: done
     acceptance_criteria:
     - description: All three regions documented in one place
-      validation: grep 'canvas\|screen\|RAM' docs/CANVAS_TEXT_SURFACE.md shows unified map
+      validation: grep 'canvas\|screen\|RAM' docs/CANVAS_TEXT_SURFACE.md shows unified
+        map
       met: true
     tasks:
     - id: p46.d3.t1
       title: Write UNIFIED_MEMORY_MAP section in docs
       status: done
-      description: 'Add a section to CANVAS_TEXT_SURFACE.md (or create UNIFIED_MEMORY_MAP.md) showing the complete address space: 0x0000-0x0FFF: bytecode/data, 0x1000-0x1FFF: canvas bytecode, 0x8000-0x8FFF:
-        canvas grid (mirror), 0x10000-0x1FFFF: screen buffer. Explain the design: one address space, three backing stores, LOAD/STORE as the universal access method.
+      description: 'Add a section to CANVAS_TEXT_SURFACE.md (or create UNIFIED_MEMORY_MAP.md)
+        showing the complete address space: 0x0000-0x0FFF: bytecode/data, 0x1000-0x1FFF:
+        canvas bytecode, 0x8000-0x8FFF: canvas grid (mirror), 0x10000-0x1FFFF: screen
+        buffer. Explain the design: one address space, three backing stores, LOAD/STORE
+        as the universal access method.
 
         '
       dependencies:
@@ -2445,18 +2564,24 @@ phases:
     target: phase-46
     type: hard
     reason: Screen mapping follows the same interception pattern as canvas mapping
-  technical_notes: 'The screen buffer (self.screen) is already a field on the VM struct, unlike canvas_buffer which lives in main.rs. This makes interception simpler -- no sync step needed.
+  technical_notes: 'The screen buffer (self.screen) is already a field on the VM struct,
+    unlike canvas_buffer which lives in main.rs. This makes interception simpler --
+    no sync step needed.
 
-    RAM_SIZE expansion from 0x10000 to 0x20000 adds 256KB of memory (64K u32 cells). At current RAM usage this is fine. The screen mapping at 0x10000 means screen pixels are at screen[y * 256 + x], accessed
-    as RAM[0x10000 + y * 256 + x].
+    RAM_SIZE expansion from 0x10000 to 0x20000 adds 256KB of memory (64K u32 cells).
+    At current RAM usage this is fine. The screen mapping at 0x10000 means screen
+    pixels are at screen[y * 256 + x], accessed as RAM[0x10000 + y * 256 + x].
 
-    Alternative: don''t expand RAM, instead use a separate mapping that redirects LOAD/STORE at 0x9000-0xFFFF to the screen buffer. But this creates an address collision with I/O ports (0xFFB-0xFFF). Expanding
-    RAM is cleaner.
+    Alternative: don''t expand RAM, instead use a separate mapping that redirects
+    LOAD/STORE at 0x9000-0xFFFF to the screen buffer. But this creates an address
+    collision with I/O ports (0xFFB-0xFFF). Expanding RAM is cleaner.
 
     '
   risks:
-  - RAM_SIZE expansion may affect fuzzer or existing test assumptions about address space
-  - Screen buffer is 256x256=64K which exactly fills the expansion -- no room for growth
+  - RAM_SIZE expansion may affect fuzzer or existing test assumptions about address
+    space
+  - Screen buffer is 256x256=64K which exactly fills the expansion -- no room for
+    growth
   - Page translation for screen addresses may need special handling
   scope_lines_total: 220
   test_target: 8
@@ -2464,20 +2589,27 @@ phases:
   title: Self-Assembly Opcode (ASMSELF)
   status: complete
   goal: Add an opcode that lets a running program assemble canvas text into bytecode
-  description: 'Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas text, runs it through the preprocessor and assembler, and stores the resulting bytecode at 0x1000. This lets a program
-    write new assembly onto the canvas grid (using STORE to the canvas range from phase 45) and then compile it without human intervention. Combined, a program can generate its own replacement.
+  description: 'Add the ASMSELF opcode (or RECOMPILE) that reads the current canvas
+    text, runs it through the preprocessor and assembler, and stores the resulting
+    bytecode at 0x1000. This lets a program write new assembly onto the canvas grid
+    (using STORE to the canvas range from phase 45) and then compile it without human
+    intervention. Combined, a program can generate its own replacement.
 
     '
   deliverables:
   - name: ASMSELF opcode implementation
-    description: 'New opcode (suggest 0x52 or next available). When executed: 1. Read the canvas buffer as a text string (same logic as F8 handler) 2. Run through preprocessor::preprocess() 3. Run through
-      assembler::assemble() 4. If success: write bytecode to 0x1000, set a flag 5. If failure: set an error register/port with the error info The VM needs access to the preprocessor and assembler modules.
+    description: 'New opcode (suggest 0x52 or next available). When executed: 1. Read
+      the canvas buffer as a text string (same logic as F8 handler) 2. Run through
+      preprocessor::preprocess() 3. Run through assembler::assemble() 4. If success:
+      write bytecode to 0x1000, set a flag 5. If failure: set an error register/port
+      with the error info The VM needs access to the preprocessor and assembler modules.
 
       '
     status: done
     acceptance_criteria:
     - description: ASMSELF assembles canvas text into bytecode at 0x1000
-      validation: Program writes text to canvas, calls ASMSELF, then LOADs from 0x1000 to verify bytecode
+      validation: Program writes text to canvas, calls ASMSELF, then LOADs from 0x1000
+        to verify bytecode
       met: true
     - description: Assembly errors are reported without crashing the VM
       validation: Write invalid text to canvas, call ASMSELF, VM continues running
@@ -2486,8 +2618,9 @@ phases:
     - id: p47.d1.t1
       title: Add ASMSELF opcode constant and handler skeleton
       status: done
-      description: 'Reserve the next available opcode number for ASMSELF. Add a stub handler in the VM''s execute loop that reads the canvas buffer, converts to text string, and logs "ASMSELF called" for
-        now.
+      description: 'Reserve the next available opcode number for ASMSELF. Add a stub
+        handler in the VM''s execute loop that reads the canvas buffer, converts to
+        text string, and logs "ASMSELF called" for now.
 
         '
       dependencies:
@@ -2500,8 +2633,11 @@ phases:
     - id: p47.d1.t2
       title: Implement canvas-to-text conversion in VM context
       status: done
-      description: 'Extract the canvas-to-text conversion logic from the F8 handler in main.rs into a reusable function. This function takes a &[u32] (canvas buffer slice) and returns a String. The F8 handler
-        and the ASMSELF opcode both call this function. Place it in a shared module (e.g., preprocessor.rs or a new canvas.rs).
+      description: 'Extract the canvas-to-text conversion logic from the F8 handler
+        in main.rs into a reusable function. This function takes a &[u32] (canvas
+        buffer slice) and returns a String. The F8 handler and the ASMSELF opcode
+        both call this function. Place it in a shared module (e.g., preprocessor.rs
+        or a new canvas.rs).
 
         '
       dependencies:
@@ -2515,8 +2651,12 @@ phases:
     - id: p47.d1.t3
       title: Wire preprocessor and assembler into ASMSELF handler
       status: done
-      description: 'In the ASMSELF handler, after getting the text string from the canvas: call preprocessor::preprocess(), then assembler::assemble(). On success, write bytecode bytes to self.ram starting
-        at CANVAS_BYTECODE_ADDR (0x1000). On failure, write the error string to a memory-mapped error port or a designated RAM region. The VM will need to import/use the preprocessor and assembler modules.
+      description: 'In the ASMSELF handler, after getting the text string from the
+        canvas: call preprocessor::preprocess(), then assembler::assemble(). On success,
+        write bytecode bytes to self.ram starting at CANVAS_BYTECODE_ADDR (0x1000).
+        On failure, write the error string to a memory-mapped error port or a designated
+        RAM region. The VM will need to import/use the preprocessor and assembler
+        modules.
 
         '
       dependencies:
@@ -2529,7 +2669,8 @@ phases:
     - id: p47.d1.t4
       title: Add ASMSELF to disassembler
       status: done
-      description: 'Add the ASMSELF opcode to the disassemble() method in vm.rs so it appears correctly in trace output and disassembly views.
+      description: 'Add the ASMSELF opcode to the disassemble() method in vm.rs so
+        it appears correctly in trace output and disassembly views.
 
         '
       dependencies:
@@ -2541,7 +2682,9 @@ phases:
     - id: p47.d1.t5
       title: Add ASMSELF to assembler mnemonic list
       status: done
-      description: 'Add "ASMSELF" to the OPCODES list in preprocessor.rs and the assembler in assembler.rs. It takes no operands (just the opcode byte). Update the opcode count in docs and meta.
+      description: 'Add "ASMSELF" to the OPCODES list in preprocessor.rs and the assembler
+        in assembler.rs. It takes no operands (just the opcode byte). Update the opcode
+        count in docs and meta.
 
         '
       dependencies:
@@ -2559,8 +2702,9 @@ phases:
     - src/assembler.rs
     - src/preprocessor.rs
   - name: Assembly status port
-    description: 'Define a memory-mapped port (e.g., 0xFFE or 0xFFA) where the ASMSELF opcode writes its result: success (bytecode length) or failure (0xFFFFFFFF). Programs poll this port after calling
-      ASMSELF to check if assembly succeeded.
+    description: 'Define a memory-mapped port (e.g., 0xFFE or 0xFFA) where the ASMSELF
+      opcode writes its result: success (bytecode length) or failure (0xFFFFFFFF).
+      Programs poll this port after calling ASMSELF to check if assembly succeeded.
 
       '
     status: done
@@ -2575,8 +2719,9 @@ phases:
     - id: p47.d2.t1
       title: Define ASM_STATUS port and write logic
       status: done
-      description: 'Use existing RAM[0xFFD] (ASM result port) which already exists for this purpose (bytecode word count, or 0xFFFFFFFF on error). Ensure ASMSELF writes to this port identically to how F8
-        assembly does.
+      description: 'Use existing RAM[0xFFD] (ASM result port) which already exists
+        for this purpose (bytecode word count, or 0xFFFFFFFF on error). Ensure ASMSELF
+        writes to this port identically to how F8 assembly does.
 
         '
       dependencies:
@@ -2589,19 +2734,23 @@ phases:
     scope_files:
     - src/vm.rs
   - name: Test suite for ASMSELF
-    description: 'Test that ASMSELF correctly assembles canvas text, handles errors, and the resulting bytecode is executable.
+    description: 'Test that ASMSELF correctly assembles canvas text, handles errors,
+      and the resulting bytecode is executable.
 
       '
     status: done
     acceptance_criteria:
     - description: ASMSELF assembles and the result runs correctly
-      validation: 'Test program: write simple ASM to canvas, ASMSELF, jump to 0x1000, verify behavior'
+      validation: 'Test program: write simple ASM to canvas, ASMSELF, jump to 0x1000,
+        verify behavior'
       met: true
     tasks:
     - id: p47.d3.t1
       title: 'Test: ASMSELF assembles valid canvas text'
       status: done
-      description: 'Pre-fill canvas buffer with "LDI r0, 42\nHALT\n". Execute ASMSELF. Verify RAM[0xFFD] contains a positive byte count. Verify RAM at 0x1000 contains expected bytecode for LDI r0, 42.
+      description: 'Pre-fill canvas buffer with "LDI r0, 42\nHALT\n". Execute ASMSELF.
+        Verify RAM[0xFFD] contains a positive byte count. Verify RAM at 0x1000 contains
+        expected bytecode for LDI r0, 42.
 
         '
       dependencies:
@@ -2613,7 +2762,8 @@ phases:
     - id: p47.d3.t2
       title: 'Test: ASMSELF handles invalid assembly gracefully'
       status: done
-      description: 'Pre-fill canvas with garbage text. Execute ASMSELF. Verify RAM[0xFFD] contains 0xFFFFFFFF. Verify VM did not crash and continues executing.
+      description: 'Pre-fill canvas with garbage text. Execute ASMSELF. Verify RAM[0xFFD]
+        contains 0xFFFFFFFF. Verify VM did not crash and continues executing.
 
         '
       dependencies:
@@ -2625,8 +2775,9 @@ phases:
     - id: p47.d3.t3
       title: 'Test: program writes code to canvas then assembles it'
       status: done
-      description: 'Full integration test: a program uses STORE to write "LDI r0, 99\nHALT\n" to the canvas address range, calls ASMSELF, then jumps to 0x1000 (or uses RUNNEXT from phase 48). Verify r0
-        ends up as 99.
+      description: 'Full integration test: a program uses STORE to write "LDI r0,
+        99\nHALT\n" to the canvas address range, calls ASMSELF, then jumps to 0x1000
+        (or uses RUNNEXT from phase 48). Verify r0 ends up as 99.
 
         '
       dependencies:
@@ -2642,23 +2793,30 @@ phases:
   - source: phase-45
     target: phase-47
     type: hard
-    reason: ASMSELF needs the canvas buffer to be addressable so programs can write to it first
+    reason: ASMSELF needs the canvas buffer to be addressable so programs can write
+      to it first
   - source: phase-46
     target: phase-47
     type: soft
     reason: Screen mapping not required for ASMSELF, but useful for demos
-  technical_notes: 'The assembler and preprocessor are currently called from main.rs. The VM (vm.rs) will need to import them. Since vm.rs is a separate module, this means adding `use crate::assembler;`
-    and `use crate::preprocessor;` to vm.rs.
+  technical_notes: 'The assembler and preprocessor are currently called from main.rs.
+    The VM (vm.rs) will need to import them. Since vm.rs is a separate module, this
+    means adding `use crate::assembler;` and `use crate::preprocessor;` to vm.rs.
 
-    The canvas-to-text conversion currently lives in the F8 handler in main.rs. It reads 4096 cells, converts each u32 to a char, collapses newlines. This logic needs to be extracted into a shared function.
-    The function should be in a neutral module (preprocessor.rs is a good candidate since it already handles text processing).
+    The canvas-to-text conversion currently lives in the F8 handler in main.rs. It
+    reads 4096 cells, converts each u32 to a char, collapses newlines. This logic
+    needs to be extracted into a shared function. The function should be in a neutral
+    module (preprocessor.rs is a good candidate since it already handles text processing).
 
-    ASMSELF takes no operands (1-byte instruction). The assembled bytecode always goes to 0x1000 (CANVAS_BYTECODE_ADDR), same as F8. This means calling ASMSELF overwrites whatever bytecode is currently
-    running. The program should use RUNNEXT (phase 48) to jump to the new bytecode.
+    ASMSELF takes no operands (1-byte instruction). The assembled bytecode always
+    goes to 0x1000 (CANVAS_BYTECODE_ADDR), same as F8. This means calling ASMSELF
+    overwrites whatever bytecode is currently running. The program should use RUNNEXT
+    (phase 48) to jump to the new bytecode.
 
     '
   risks:
-  - ASMSELF during execution replaces the running bytecode -- program must jump to new code carefully
+  - ASMSELF during execution replaces the running bytecode -- program must jump to
+    new code carefully
   - Preprocessor/assembler errors in a running VM context need careful error handling
   - Self-assembly is inherently dangerous (infinite loops, corrupting own code)
   scope_lines_total: 340
@@ -2667,16 +2825,21 @@ phases:
   title: Self-Execution Opcode (RUNNEXT)
   status: complete
   goal: Add an opcode that starts executing the newly assembled bytecode
-  description: 'Add the RUNNEXT opcode that sets PC to 0x1000 (the canvas bytecode region) and continues execution. Combined with ASMSELF, a program can write new code onto the canvas, compile it, and run
-    it -- all from within the VM. This closes the loop: pixels write pixels, pixels assemble pixels, pixels execute pixels.
+  description: 'Add the RUNNEXT opcode that sets PC to 0x1000 (the canvas bytecode
+    region) and continues execution. Combined with ASMSELF, a program can write new
+    code onto the canvas, compile it, and run it -- all from within the VM. This closes
+    the loop: pixels write pixels, pixels assemble pixels, pixels execute pixels.
 
     '
   deliverables:
   - name: RUNNEXT opcode implementation
-    description: 'New opcode (next available after ASMSELF). When executed: 1. Set PC = CANVAS_BYTECODE_ADDR (0x1000) 2. Reset halted flag 3. Clear any error state 4. Execution continues from the new bytecode
-      on the next fetch cycle
+    description: 'New opcode (next available after ASMSELF). When executed: 1. Set
+      PC = CANVAS_BYTECODE_ADDR (0x1000) 2. Reset halted flag 3. Clear any error state
+      4. Execution continues from the new bytecode on the next fetch cycle
 
-      This is essentially JMP 0x1000 but with awareness that the bytecode at 0x1000 was just assembled from canvas text. Could be implemented as a simple PC set, or as JMP with an implicit operand.
+      This is essentially JMP 0x1000 but with awareness that the bytecode at 0x1000
+      was just assembled from canvas text. Could be implemented as a simple PC set,
+      or as JMP with an implicit operand.
 
       '
     status: done
@@ -2691,8 +2854,10 @@ phases:
     - id: p48.d1.t1
       title: Implement RUNNEXT opcode handler
       status: done
-      description: 'Add RUNNEXT opcode in vm.rs execute match. Handler sets self.pc = CANVAS_BYTECODE_ADDR (0x1000). No operands needed (1-byte instruction). Register file is preserved. The VM continues
-        fetching from the new PC on the next cycle.
+      description: 'Add RUNNEXT opcode in vm.rs execute match. Handler sets self.pc
+        = CANVAS_BYTECODE_ADDR (0x1000). No operands needed (1-byte instruction).
+        Register file is preserved. The VM continues fetching from the new PC on the
+        next cycle.
 
         '
       dependencies:
@@ -2705,7 +2870,8 @@ phases:
     - id: p48.d1.t2
       title: Add RUNNEXT to disassembler and assembler
       status: done
-      description: 'Add RUNNEXT to the mnemonic list in assembler.rs, the OPCODES list in preprocessor.rs, and the disassemble() method in vm.rs. No operands.
+      description: 'Add RUNNEXT to the mnemonic list in assembler.rs, the OPCODES
+        list in preprocessor.rs, and the disassemble() method in vm.rs. No operands.
 
         '
       dependencies:
@@ -2723,19 +2889,23 @@ phases:
     - src/assembler.rs
     - src/preprocessor.rs
   - name: Test suite for RUNNEXT
-    description: 'Test the full write-compile-execute cycle. A program writes new code, assembles it, runs it, and the new code''s effects are visible.
+    description: 'Test the full write-compile-execute cycle. A program writes new
+      code, assembles it, runs it, and the new code''s effects are visible.
 
       '
     status: done
     acceptance_criteria:
     - description: Full write-compile-execute cycle works end-to-end
-      validation: Test program writes LDI r0, 77 to canvas, ASMSELF, RUNNEXT, verify r0=77
+      validation: Test program writes LDI r0, 77 to canvas, ASMSELF, RUNNEXT, verify
+        r0=77
       met: true
     tasks:
     - id: p48.d2.t1
       title: 'Test: RUNNEXT executes newly assembled code'
       status: done
-      description: 'Write a test program that: (1) stores "LDI r0, 77\nHALT" to canvas addresses, (2) calls ASMSELF, (3) checks RAM[0xFFD] for success, (4) calls RUNNEXT, (5) verify r0 == 77 after execution.
+      description: 'Write a test program that: (1) stores "LDI r0, 77\nHALT" to canvas
+        addresses, (2) calls ASMSELF, (3) checks RAM[0xFFD] for success, (4) calls
+        RUNNEXT, (5) verify r0 == 77 after execution.
 
         '
       dependencies:
@@ -2748,7 +2918,9 @@ phases:
     - id: p48.d2.t2
       title: 'Test: registers preserved across RUNNEXT'
       status: done
-      description: 'Set r5 = 12345. Write code to canvas that reads r5 and adds 1. ASMSELF, RUNNEXT. Verify r5 is still 12345 in the new program''s context, and that the new program can read it.
+      description: 'Set r5 = 12345. Write code to canvas that reads r5 and adds 1.
+        ASMSELF, RUNNEXT. Verify r5 is still 12345 in the new program''s context,
+        and that the new program can read it.
 
         '
       dependencies:
@@ -2760,8 +2932,9 @@ phases:
     - id: p48.d2.t3
       title: 'Test: chained self-modification'
       status: done
-      description: 'Program A writes Program B to canvas. ASMSELF. RUNNEXT. Program B writes Program C to canvas. ASMSELF. RUNNEXT. Program C HALTs. Verify all three ran in sequence. This is the generational
-        self-modification test.
+      description: 'Program A writes Program B to canvas. ASMSELF. RUNNEXT. Program
+        B writes Program C to canvas. ASMSELF. RUNNEXT. Program C HALTs. Verify all
+        three ran in sequence. This is the generational self-modification test.
 
         '
       dependencies:
@@ -2778,13 +2951,19 @@ phases:
     target: phase-48
     type: hard
     reason: RUNNEXT is meaningless without ASMSELF to produce the bytecode
-  technical_notes: 'RUNNEXT is intentionally simple: it just sets PC = 0x1000. The complexity is in ASMSELF (phase 47). RUNNEXT could alternatively be implemented as a JMP to a label at 0x1000, but having
-    a dedicated opcode makes the intent clear and enables future extensions (e.g., RUNNEXT with a timeout, RUNNEXT in a sandboxed context).
+  technical_notes: 'RUNNEXT is intentionally simple: it just sets PC = 0x1000. The
+    complexity is in ASMSELF (phase 47). RUNNEXT could alternatively be implemented
+    as a JMP to a label at 0x1000, but having a dedicated opcode makes the intent
+    clear and enables future extensions (e.g., RUNNEXT with a timeout, RUNNEXT in
+    a sandboxed context).
 
-    Register preservation: RUNNEXT does NOT reset registers. The new program inherits all register state. This is by design -- it allows data passing between program generations. If a clean slate is needed,
-    the new program can zero registers itself.
+    Register preservation: RUNNEXT does NOT reset registers. The new program inherits
+    all register state. This is by design -- it allows data passing between program
+    generations. If a clean slate is needed, the new program can zero registers itself.
 
-    Stack preservation: the return stack is NOT reset. This means the new program can RET back to the caller if the caller used CALL before RUNNEXT. This is a feature, not a bug -- it enables coroutines.
+    Stack preservation: the return stack is NOT reset. This means the new program
+    can RET back to the caller if the caller used CALL before RUNNEXT. This is a feature,
+    not a bug -- it enables coroutines.
 
     '
   risks:
@@ -2796,14 +2975,18 @@ phases:
   title: 'Self-Modifying Programs: Demos and Patterns'
   status: complete
   goal: Build demonstration programs that showcase the pixel-driving-pixels capability
-  description: 'With phases 45-48 complete, write programs that demonstrate the full self-modifying capability: programs that write their own code, programs whose state IS the display, programs that evolve
-    over time. These demos prove that the pixel-driving-pixels problem is solved.
+  description: 'With phases 45-48 complete, write programs that demonstrate the full
+    self-modifying capability: programs that write their own code, programs whose
+    state IS the display, programs that evolve over time. These demos prove that the
+    pixel-driving-pixels problem is solved.
 
     '
   deliverables:
   - name: 'Demo: Self-writing program'
-    description: 'A program that writes another program onto the canvas grid using STORE to canvas addresses, calls ASMSELF to compile it, and RUNNEXT to execute it. The generated program is different from
-      the original -- it''s a true successor. The human watches text appear on the grid, then sees the new program run.
+    description: 'A program that writes another program onto the canvas grid using
+      STORE to canvas addresses, calls ASMSELF to compile it, and RUNNEXT to execute
+      it. The generated program is different from the original -- it''s a true successor.
+      The human watches text appear on the grid, then sees the new program run.
 
       '
     status: done
@@ -2815,8 +2998,10 @@ phases:
     - id: p49.d1.t1
       title: Write programs/self_writer.asm
       status: done
-      description: 'A program that uses STORE to canvas addresses (0x8000+) to write "LDI r0, 42\nLDI r1, 1\nADD r0, r1\nHALT\n" onto the grid. The text becomes visible as typed glyphs. Then calls ASMSELF
-        and RUNNEXT. The successor runs and r0 = 43.
+      description: 'A program that uses STORE to canvas addresses (0x8000+) to write
+        "LDI r0, 42\nLDI r1, 1\nADD r0, r1\nHALT\n" onto the grid. The text becomes
+        visible as typed glyphs. Then calls ASMSELF and RUNNEXT. The successor runs
+        and r0 = 43.
 
         '
       dependencies:
@@ -2828,8 +3013,11 @@ phases:
       - programs/self_writer.asm
     - id: p49.d1.t2
       title: Write programs/evolving_counter.asm
-      description: 'A program that counts frames (via TICKS port 0xFFE) and writes the count as ASCII digits directly onto the canvas grid. The grid becomes a live dashboard. The count digits are the program''s
-        visible state -- no separate output. The digit changes each frame. This demonstrates that the grid IS the display.
+      description: 'A program that counts frames (via TICKS port 0xFFE) and writes
+        the count as ASCII digits directly onto the canvas grid. The grid becomes
+        a live dashboard. The count digits are the program''s visible state -- no
+        separate output. The digit changes each frame. This demonstrates that the
+        grid IS the display.
 
         '
       dependencies:
@@ -2841,8 +3029,11 @@ phases:
       status: done
     - id: p49.d1.t3
       title: Write programs/game_of_life.asm
-      description: 'Conway''s Game of Life implemented entirely in Geometry OS assembly. Uses PEEK to read the screen, POKE (or STORE to screen-mapped RAM) to write the next generation. The screen IS the
-        cellular automaton. No Rust code involved in the logic -- pure pixel-driven-pixels. Initialize with a glider or blinker pattern.
+      description: 'Conway''s Game of Life implemented entirely in Geometry OS assembly.
+        Uses PEEK to read the screen, POKE (or STORE to screen-mapped RAM) to write
+        the next generation. The screen IS the cellular automaton. No Rust code involved
+        in the logic -- pure pixel-driven-pixels. Initialize with a glider or blinker
+        pattern.
 
         '
       dependencies:
@@ -2855,8 +3046,11 @@ phases:
       status: done
     - id: p49.d1.t4
       title: Write programs/code_evolution.asm
-      description: 'The crown jewel demo. A program that writes increasingly complex versions of itself to the canvas grid. Generation 0 just halts. Generation 1 writes generation 2 which adds a counter.
-        Generation 2 writes generation 3 which adds a screen effect. Each generation writes its successor, compiles, and runs it. The human watches the code evolve on the grid in real time.
+      description: 'The crown jewel demo. A program that writes increasingly complex
+        versions of itself to the canvas grid. Generation 0 just halts. Generation
+        1 writes generation 2 which adds a counter. Generation 2 writes generation
+        3 which adds a screen effect. Each generation writes its successor, compiles,
+        and runs it. The human watches the code evolve on the grid in real time.
 
         '
       dependencies:
@@ -2871,8 +3065,10 @@ phases:
     scope_files:
     - programs/
   - name: 'Documentation: pixel-driving-pixels patterns'
-    description: 'Write a guide for building self-modifying programs. Document the patterns: canvas STORE for writing code, ASMSELF for compiling, RUNNEXT for executing, register passing between generations,
-      and common pitfalls (infinite loops, corrupting your own code).
+    description: 'Write a guide for building self-modifying programs. Document the
+      patterns: canvas STORE for writing code, ASMSELF for compiling, RUNNEXT for
+      executing, register passing between generations, and common pitfalls (infinite
+      loops, corrupting your own code).
 
       '
     status: done
@@ -2884,8 +3080,11 @@ phases:
     - id: p49.d2.t1
       title: Write docs/SELF_MODIFYING_GUIDE.md
       status: done
-      description: 'Create a guide covering: (1) Canvas STORE pattern -- how to write text to canvas cells, (2) ASMSELF + RUNNEXT pattern -- compile and execute, (3) Register passing -- sharing state between
-        generations, (4) Self-reading -- using LOAD from canvas to inspect your own source, (5) Pitfalls -- infinite loops, corruption, error handling. Include code snippets for each pattern.
+      description: 'Create a guide covering: (1) Canvas STORE pattern -- how to write
+        text to canvas cells, (2) ASMSELF + RUNNEXT pattern -- compile and execute,
+        (3) Register passing -- sharing state between generations, (4) Self-reading
+        -- using LOAD from canvas to inspect your own source, (5) Pitfalls -- infinite
+        loops, corruption, error handling. Include code snippets for each pattern.
 
         '
       dependencies:
@@ -2914,10 +3113,14 @@ phases:
     target: phase-49
     type: hard
     reason: RUNNEXT needed for self-writing and code evolution demos
-  technical_notes: 'Demo programs should be small enough to fit on the canvas grid (32 columns, 128 rows). Complex programs may need to use the .org directive for layout. The code_evolution demo is the
-    most ambitious -- it may need careful tuning to keep each generation''s code within grid size limits.
+  technical_notes: 'Demo programs should be small enough to fit on the canvas grid
+    (32 columns, 128 rows). Complex programs may need to use the .org directive for
+    layout. The code_evolution demo is the most ambitious -- it may need careful tuning
+    to keep each generation''s code within grid size limits.
 
-    The game_of_life.asm demo is the purest expression of pixels-driving-pixels. It needs the screen buffer mapping from phase 46 to work optimally, but could also work with just PEEK and PIXEL opcodes.
+    The game_of_life.asm demo is the purest expression of pixels-driving-pixels. It
+    needs the screen buffer mapping from phase 46 to work optimally, but could also
+    work with just PEEK and PIXEL opcodes.
 
     '
   risks:
@@ -2929,30 +3132,38 @@ phases:
   title: 'Reactive Canvas: Live Cell Formulas'
   status: complete
   goal: Make canvas cells react to changes in other cells automatically
-  description: 'Extend the canvas with an optional formula layer. A cell can have a formula instead of a static value. When a referenced cell changes, the formula cell recalculates. This is the spreadsheet
-    model applied to the pixel grid. It makes the canvas reactive without explicit STORE/LOAD loops.
+  description: 'Extend the canvas with an optional formula layer. A cell can have
+    a formula instead of a static value. When a referenced cell changes, the formula
+    cell recalculates. This is the spreadsheet model applied to the pixel grid. It
+    makes the canvas reactive without explicit STORE/LOAD loops.
 
-    This is a future phase -- it depends on phases 45-48 being stable and is a natural evolution of the pixel-driving-pixels concept. Not required for the initial self-modifying capability.
+    This is a future phase -- it depends on phases 45-48 being stable and is a natural
+    evolution of the pixel-driving-pixels concept. Not required for the initial self-modifying
+    capability.
 
     '
   deliverables:
   - name: Formula cell type and evaluation engine
-    description: 'Add a parallel buffer (formula_buffer, same size as canvas_buffer) where each cell can optionally hold a formula instead of a value. Formulas reference other cells by address. When a STORE
-      writes to a cell, the engine checks if any formula depends on that cell and recalculates.
+    description: 'Add a parallel buffer (formula_buffer, same size as canvas_buffer)
+      where each cell can optionally hold a formula instead of a value. Formulas reference
+      other cells by address. When a STORE writes to a cell, the engine checks if
+      any formula depends on that cell and recalculates.
 
       '
     status: done
     tasks: []
   - name: Formula syntax in preprocessor
-    description: 'Extend the preprocessor to recognize formula syntax in canvas text. A line like `= r0 + r1` means "this cell displays the value of r0 + r1". The preprocessor generates the reactive update
-      hooks.
+    description: 'Extend the preprocessor to recognize formula syntax in canvas text.
+      A line like `= r0 + r1` means "this cell displays the value of r0 + r1". The
+      preprocessor generates the reactive update hooks.
 
       '
     status: done
     tasks: []
   - name: 'Demo: live register dashboard'
-    description: 'A program where the canvas grid shows live register values. As the program runs, the grid cells update to show r0, r1, r2 etc. as changing digits. The display IS the debug view. No separate
-      inspector.
+    description: 'A program where the canvas grid shows live register values. As the
+      program runs, the grid cells update to show r0, r1, r2 etc. as changing digits.
+      The display IS the debug view. No separate inspector.
 
       '
     status: done
@@ -2962,12 +3173,16 @@ phases:
     target: phase-50
     type: soft
     reason: Reactive canvas builds on proven self-modifying patterns
-  technical_notes: 'This phase explores the spreadsheet model. Each cell can be: - A literal value (current behavior) - A formula that references other cells or registers - A formula that references screen
-    pixels (PEEK-equivalent)
+  technical_notes: 'This phase explores the spreadsheet model. Each cell can be: -
+    A literal value (current behavior) - A formula that references other cells or
+    registers - A formula that references screen pixels (PEEK-equivalent)
 
-    The dependency graph needs cycle detection to prevent infinite recalculation. Simple approach: single-pass topological sort of formula dependencies, recalculate in order after any STORE to the canvas.
+    The dependency graph needs cycle detection to prevent infinite recalculation.
+    Simple approach: single-pass topological sort of formula dependencies, recalculate
+    in order after any STORE to the canvas.
 
-    This is marked "future" because it''s a significant new feature. The core pixel-driving-pixels capability (phases 45-48) does not require this.
+    This is marked "future" because it''s a significant new feature. The core pixel-driving-pixels
+    capability (phases 45-48) does not require this.
 
     '
   scope_lines_total: 800
@@ -2975,170 +3190,205 @@ phases:
 - id: phase-51
   title: TCP Networking
   status: complete
-  goal: Add TCP client networking opcodes for connecting, sending, receiving, and disconnecting
-  description: 'Four new opcodes (0x7F-0x82) provide TCP client capability. Programs can connect
-    to remote hosts, send and receive data, and close connections. This enables network-aware
-    programs that can communicate with external services.'
+  goal: Add TCP client networking opcodes for connecting, sending, receiving, and
+    disconnecting
+  description: Four new opcodes (0x7F-0x82) provide TCP client capability. Programs
+    can connect to remote hosts, send and receive data, and close connections. This
+    enables network-aware programs that can communicate with external services.
   deliverables:
   - name: CONNECT opcode (0x7F)
-    description: 'Connect to a remote TCP host. Takes addr_reg, port_reg, fd_reg. Stores file descriptor in fd_reg.'
+    description: Connect to a remote TCP host. Takes addr_reg, port_reg, fd_reg. Stores
+      file descriptor in fd_reg.
     status: done
     tasks: []
   - name: SOCKSEND opcode (0x80)
-    description: 'Send data on a TCP connection. Takes fd_reg, buf_reg, len_reg, sent_reg. Returns bytes sent.'
+    description: Send data on a TCP connection. Takes fd_reg, buf_reg, len_reg, sent_reg.
+      Returns bytes sent.
     status: done
     tasks: []
   - name: SOCKRECV opcode (0x81)
-    description: 'Receive data from a TCP connection. Takes fd_reg, buf_reg, max_len_reg, recv_reg. Returns bytes received.'
+    description: Receive data from a TCP connection. Takes fd_reg, buf_reg, max_len_reg,
+      recv_reg. Returns bytes received.
     status: done
     tasks: []
   - name: DISCONNECT opcode (0x82)
-    description: 'Close a TCP connection. Takes fd_reg. Frees the socket.'
+    description: Close a TCP connection. Takes fd_reg. Frees the socket.
     status: done
     tasks: []
   - name: Networking tests
-    description: '12 unit tests covering connect, send, recv, disconnect, and edge cases.'
+    description: 12 unit tests covering connect, send, recv, disconnect, and edge
+      cases.
     status: done
     tasks: []
   - name: Assembler support
-    description: 'All four opcodes recognized by the assembler with proper argument validation.'
+    description: All four opcodes recognized by the assembler with proper argument
+      validation.
     status: done
     tasks: []
-  technical_notes: 'Implementation in src/vm/net.rs (563 LOC). Opcodes 0x7F-0x82. Uses Rust std::net::TcpStream.
-    Non-blocking by default. 12 tests in net.rs.'
+  technical_notes: Implementation in src/vm/net.rs (563 LOC). Opcodes 0x7F-0x82. Uses
+    Rust std::net::TcpStream. Non-blocking by default. 12 tests in net.rs.
   scope_lines_total: 563
   test_target: 12
 - id: phase-52
   title: Episodic Memory
   status: complete
-  goal: Persist diagnostic context across Hermes sessions so the LLM agent can recall past runs
-  description: 'Episodic memory layer for Geometry OS. Stores program run outcomes in JSONL format
-    so the Hermes agent can recall past runs, black-screen incidents, and what fixed them. Part of
-    the AI-Native OS memory taxonomy: Working (context window), Episodic (this), Semantic (RAG),
-    Procedural (skills).'
+  goal: Persist diagnostic context across Hermes sessions so the LLM agent can recall
+    past runs
+  description: 'Episodic memory layer for Geometry OS. Stores program run outcomes
+    in JSONL format so the Hermes agent can recall past runs, black-screen incidents,
+    and what fixed them. Part of the AI-Native OS memory taxonomy: Working (context
+    window), Episodic (this), Semantic (RAG), Procedural (skills).'
   deliverables:
   - name: Episode data structure and JSONL persistence
-    description: 'Episode struct with timestamp, program, total_ops, top_opcodes, screen state, and outcome. Stored as JSONL in episodic_memory/ directory.'
+    description: Episode struct with timestamp, program, total_ops, top_opcodes, screen
+      state, and outcome. Stored as JSONL in episodic_memory/ directory.
     status: done
     tasks: []
   - name: Episode logging and read-back
-    description: 'Log episodes after program runs. Parse top_ops array on read-back. Query by program name or recent episodes.'
+    description: Log episodes after program runs. Parse top_ops array on read-back.
+      Query by program name or recent episodes.
     status: done
     tasks: []
   - name: Episodic memory tests
-    description: '12 unit tests covering episode creation, serialization, read-back, and querying.'
+    description: 12 unit tests covering episode creation, serialization, read-back,
+      and querying.
     status: done
     tasks: []
-  technical_notes: 'Implementation in src/episode_log.rs (689 LOC). Zero external dependencies -- hand-rolled JSON. Includes opcode histogram and screen delta detection.'
+  technical_notes: Implementation in src/episode_log.rs (689 LOC). Zero external dependencies
+    -- hand-rolled JSON. Includes opcode histogram and screen delta detection.
   scope_lines_total: 689
   test_target: 12
 - id: phase-53
   title: Trace Query Opcodes
   status: complete
-  goal: Enable assembly programs to query the execution trace buffer from within the VM
-  description: 'TRACE_READ opcode (0x83) provides 4 modes for introspecting execution history:
-    query count, read entry by index, count opcodes of a specific type, and find all indices
-    matching a specific opcode. This is the foundation for pixel-level time-travel debugging
-    -- programs can analyze their own execution traces to build debuggers, profilers, and
-    visual histories from within the VM.'
+  goal: Enable assembly programs to query the execution trace buffer from within the
+    VM
+  description: 'TRACE_READ opcode (0x83) provides 4 modes for introspecting execution
+    history: query count, read entry by index, count opcodes of a specific type, and
+    find all indices matching a specific opcode. This is the foundation for pixel-level
+    time-travel debugging -- programs can analyze their own execution traces to build
+    debuggers, profilers, and visual histories from within the VM.'
   deliverables:
   - name: TRACE_READ opcode (0x83)
-    description: 'Query execution trace buffer from assembly. Mode 0: entry count. Mode 1: read entry to RAM (20 words). Mode 2: count opcode matches. Mode 3: find matching indices.'
+    description: 'Query execution trace buffer from assembly. Mode 0: entry count.
+      Mode 1: read entry to RAM (20 words). Mode 2: count opcode matches. Mode 3:
+      find matching indices.'
     status: done
     tasks: []
   - name: TraceBuffer query methods
-    description: 'Added get_at(), count_opcode(), and find_opcode_indices() to TraceBuffer in src/vm/trace.rs.'
+    description: Added get_at(), count_opcode(), and find_opcode_indices() to TraceBuffer
+      in src/vm/trace.rs.
     status: done
     tasks: []
   - name: TRACE_READ tests
-    description: '10 unit tests covering all 4 modes, error cases, assembler, and disassembler.'
+    description: 10 unit tests covering all 4 modes, error cases, assembler, and disassembler.
     status: done
     tasks: []
   - name: Assembler and disassembler support
-    description: 'TRACE_READ recognized by assembler and disassembler. Added to preprocessor OPCODES list. Also fixed missing CONNECT/SOCKSEND/SOCKRECV/DISCONNECT from preprocessor.'
+    description: TRACE_READ recognized by assembler and disassembler. Added to preprocessor
+      OPCODES list. Also fixed missing CONNECT/SOCKSEND/SOCKRECV/DISCONNECT from preprocessor.
     status: done
     tasks: []
-  technical_notes: 'Implementation in src/vm/mod.rs (opcode 0x83) + src/vm/trace.rs (3 new query methods). TraceBuffer already existed with 10K-entry ring buffer from Phase 38a. Entry format: [step_lo, step_hi, pc, r0..r15, opcode] = 20 u32 words.'
+  technical_notes: 'Implementation in src/vm/mod.rs (opcode 0x83) + src/vm/trace.rs
+    (3 new query methods). TraceBuffer already existed with 10K-entry ring buffer
+    from Phase 38a. Entry format: [step_lo, step_hi, pc, r0..r15, opcode] = 20 u32
+    words.'
   scope_lines_total: 50
   test_target: 10
 - id: phase-54
   title: Pixel Write History
   status: complete
   goal: Enable programs to query which instructions wrote to specific pixels
-  description: 'PIXEL_HISTORY opcode (0x84) provides 4 modes for introspecting pixel write
-    history: query total entries, count writes to a specific pixel, retrieve recent writes
-    to a pixel into RAM, and get entry by absolute index. This is the foundation for
-    pixel-level time-travel debugging -- programs can analyze their own rendering
-    history to build debuggers and visual tracebacks from within the VM.'
+  description: 'PIXEL_HISTORY opcode (0x84) provides 4 modes for introspecting pixel
+    write history: query total entries, count writes to a specific pixel, retrieve
+    recent writes to a pixel into RAM, and get entry by absolute index. This is the
+    foundation for pixel-level time-travel debugging -- programs can analyze their
+    own rendering history to build debuggers and visual tracebacks from within the
+    VM.'
   deliverables:
   - name: PixelWriteLog ring buffer
-    description: '50K-entry ring buffer in src/vm/trace.rs recording every PSET/PSETI when trace_recording is on. Each entry: x, y, step_lo, step_hi, opcode, color (20 bytes).'
+    description: '50K-entry ring buffer in src/vm/trace.rs recording every PSET/PSETI
+      when trace_recording is on. Each entry: x, y, step_lo, step_hi, opcode, color
+      (20 bytes).'
     status: done
     tasks: []
   - name: PSET/PSETI write logging
-    description: 'PSET (0x40) and PSETI (0x41) now record pixel writes to pixel_write_log when trace_recording is enabled. Zero overhead when off.'
+    description: PSET (0x40) and PSETI (0x41) now record pixel writes to pixel_write_log
+      when trace_recording is enabled. Zero overhead when off.
     status: done
     tasks: []
   - name: PIXEL_HISTORY opcode (0x84)
-    description: 'Query pixel write history from assembly. Mode 0: total entry count. Mode 1: count writes to pixel (r1=x, r2=y). Mode 2: get N most recent writes to pixel into RAM (6 words per entry). Mode 3: get entry at absolute index.'
+    description: 'Query pixel write history from assembly. Mode 0: total entry count.
+      Mode 1: count writes to pixel (r1=x, r2=y). Mode 2: get N most recent writes
+      to pixel into RAM (6 words per entry). Mode 3: get entry at absolute index.'
     status: done
     tasks: []
   - name: Assembler and disassembler support
-    description: 'PIXEL_HISTORY recognized by assembler (core_ops.rs), disassembler (disasm.rs), and preprocessor OPCODES list.'
+    description: PIXEL_HISTORY recognized by assembler (core_ops.rs), disassembler
+      (disasm.rs), and preprocessor OPCODES list.
     status: done
     tasks: []
   - name: PIXEL_HISTORY tests
-    description: '13 unit tests covering PSET recording, PSETI recording, no-recording-when-off, ring buffer overflow, reset clearing, all 4 query modes, invalid mode, buffer overflow check, assembler, and disassembler.'
+    description: 13 unit tests covering PSET recording, PSETI recording, no-recording-when-off,
+      ring buffer overflow, reset clearing, all 4 query modes, invalid mode, buffer
+      overflow check, assembler, and disassembler.
     status: done
     tasks: []
   - name: Demo program
-    description: 'programs/pixel_history_demo.asm demonstrates writing 3 colors to same pixel and querying the history.'
+    description: programs/pixel_history_demo.asm demonstrates writing 3 colors to
+      same pixel and querying the history.
     status: done
     tasks: []
-  technical_notes: 'Implementation in src/vm/ops_extended.rs (opcode 0x84) + src/vm/trace.rs (PixelWriteLog, PixelWriteEntry). pixel_write_log field on Vm struct. Dispatch in mod.rs step() via dedicated 0x84 arm delegating to step_extended().'
+  technical_notes: Implementation in src/vm/ops_extended.rs (opcode 0x84) + src/vm/trace.rs
+    (PixelWriteLog, PixelWriteEntry). pixel_write_log field on Vm struct. Dispatch
+    in mod.rs step() via dedicated 0x84 arm delegating to step_extended().
   scope_lines_total: 200
   test_target: 13
 - id: phase-55
   title: Mouse & GUI Hit Testing
   status: complete
   goal: Add mouse input support with clickable hit regions for GUI interaction
-  description: 'Two new opcodes (0x37, 0x38) provide mouse-driven GUI interaction.
-    HITSET defines clickable rectangular regions on screen. HITQ queries whether
-    a hit occurred in a region. The host feeds mouse coordinates via push_mouse().
-    This enables buttons, menus, and other GUI elements in assembly programs.'
+  description: Two new opcodes (0x37, 0x38) provide mouse-driven GUI interaction.
+    HITSET defines clickable rectangular regions on screen. HITQ queries whether a
+    hit occurred in a region. The host feeds mouse coordinates via push_mouse(). This
+    enables buttons, menus, and other GUI elements in assembly programs.
   deliverables:
   - name: HITSET opcode (0x37)
-    description: 'Define a clickable hit region. HITSET x_reg, y_reg, w_reg, h_reg, id_reg
-      registers a rectangular area with a numeric ID. Up to MAX_HIT_REGIONS regions supported.'
+    description: Define a clickable hit region. HITSET x_reg, y_reg, w_reg, h_reg,
+      id_reg registers a rectangular area with a numeric ID. Up to MAX_HIT_REGIONS
+      regions supported.
     status: done
     tasks: []
   - name: HITQ opcode (0x38)
-    description: 'HITQ result_reg checks if the mouse clicked inside any registered
-      hit region. Returns the region ID in result_reg, or 0 if no hit.'
+    description: HITQ result_reg checks if the mouse clicked inside any registered
+      hit region. Returns the region ID in result_reg, or 0 if no hit.
     status: done
     tasks: []
   - name: Mouse state fields
-    description: 'Vm struct fields: mouse_x, mouse_y (current position), hit_regions (Vec<HitRegion>).
-      Host calls push_mouse(x, y) to update position. Click detection on FRAME boundary.'
+    description: 'Vm struct fields: mouse_x, mouse_y (current position), hit_regions
+      (Vec<HitRegion>). Host calls push_mouse(x, y) to update position. Click detection
+      on FRAME boundary.'
     status: done
     tasks: []
   - name: Disassembler support
-    description: HITSET and HITQ appear correctly in trace output and disassembly views.
+    description: HITSET and HITQ appear correctly in trace output and disassembly
+      views.
     status: done
     tasks: []
-  technical_notes: 'Implementation in src/vm/mod.rs (Vm struct fields, push_mouse, HITSET/HITQ handlers).
-    HitRegion struct stores x, y, w, h, id. MAX_HIT_REGIONS cap prevents unbounded growth.
-    Mouse coordinates updated by host each frame before VM step.'
+  technical_notes: Implementation in src/vm/mod.rs (Vm struct fields, push_mouse,
+    HITSET/HITQ handlers). HitRegion struct stores x, y, w, h, id. MAX_HIT_REGIONS
+    cap prevents unbounded growth. Mouse coordinates updated by host each frame before
+    VM step.
   scope_lines_total: 120
   test_target: 2
 - id: phase-56
   title: Musical Note Opcode
   status: complete
   goal: Extended audio with waveform selection via NOTE opcode
-  description: 'NOTE opcode (0x7E) extends the audio system beyond BEEP (0x03).
-    While BEEP plays a fixed sine wave, NOTE accepts a waveform type register,
-    enabling square waves, sawtooth, triangle, and other timbres for richer
-    game audio and music programs.'
+  description: NOTE opcode (0x7E) extends the audio system beyond BEEP (0x03). While
+    BEEP plays a fixed sine wave, NOTE accepts a waveform type register, enabling
+    square waves, sawtooth, triangle, and other timbres for richer game audio and
+    music programs.
   deliverables:
   - name: NOTE opcode (0x7E)
     description: 'NOTE waveform_reg, freq_reg, dur_reg -- play a musical note with
@@ -3149,23 +3399,23 @@ phases:
     description: NOTE recognized by assembler, preprocessor OPCODES list, and disassembler.
     status: done
     tasks: []
-  technical_notes: 'Implementation in src/vm/mod.rs (0x7E handler). Uses the same
-    audio pipeline as BEEP but with waveform selection. The note field on Vm struct
-    stores (waveform, freq_hz, duration_ms) for host consumption.'
+  technical_notes: Implementation in src/vm/mod.rs (0x7E handler). Uses the same audio
+    pipeline as BEEP but with waveform selection. The note field on Vm struct stores
+    (waveform, freq_hz, duration_ms) for host consumption.
   scope_lines_total: 30
   test_target: 1
 - id: phase-57
   title: Mouse Query Opcode
   status: complete
   goal: Add MOUSEQ opcode for reading mouse position and a paint app demo
-  description: 'MOUSEQ opcode (0x85) reads mouse_x into a register and mouse_y
-    into the next register. Combined with the existing HITSET/HITQ from phase-55,
-    this enables full mouse-driven programs. Includes paint.asm as a demonstration
-    program with 8-color palette, clear button, and line-fill painting.'
+  description: MOUSEQ opcode (0x85) reads mouse_x into a register and mouse_y into
+    the next register. Combined with the existing HITSET/HITQ from phase-55, this
+    enables full mouse-driven programs. Includes paint.asm as a demonstration program
+    with 8-color palette, clear button, and line-fill painting.
   deliverables:
   - name: MOUSEQ opcode (0x85)
-    description: 'MOUSEQ x_reg reads mouse_x into x_reg and mouse_y into x_reg+1.
-      Position updated by host via push_mouse() each frame.'
+    description: MOUSEQ x_reg reads mouse_x into x_reg and mouse_y into x_reg+1. Position
+      updated by host via push_mouse() each frame.
     status: done
     tasks: []
   - name: Assembler and disassembler support
@@ -3173,18 +3423,18 @@ phases:
     status: done
     tasks: []
   - name: paint.asm demo program
-    description: 'Mouse-driven paint app with 8-color palette, clear button, color
-      highlight, and paint-at-mouse with line fill.'
+    description: Mouse-driven paint app with 8-color palette, clear button, color
+      highlight, and paint-at-mouse with line fill.
     status: done
     tasks: []
   - name: MOUSEQ tests
-    description: '16 unit tests covering MOUSEQ functionality, assembler, disassembler,
-      and paint.asm integration.'
+    description: 16 unit tests covering MOUSEQ functionality, assembler, disassembler,
+      and paint.asm integration.
     status: done
     tasks: []
-  technical_notes: 'Implementation in src/vm/mod.rs (0x85 handler). Reads mouse_x/mouse_y
+  technical_notes: Implementation in src/vm/mod.rs (0x85 handler). Reads mouse_x/mouse_y
     fields on Vm struct. paint.asm is 16 tests covering the full paint loop including
-    MOUSEQ integration.'
+    MOUSEQ integration.
   scope_lines_total: 80
   test_target: 16
 - id: phase-58
@@ -3196,18 +3446,18 @@ phases:
     clobbering and branch register bugs. 13 new integration tests.'
   deliverables:
   - name: Scroll support for terminal
-    description: 'Content buffer expanded to 120 rows. When output exceeds visible
-      30 rows, view scrolls to show latest content.'
+    description: Content buffer expanded to 120 rows. When output exceeds visible
+      30 rows, view scrolls to show latest content.
     status: done
     tasks: []
   - name: Shell commands (echo, ls, date, cls)
-    description: 'echo prints its arguments, ls lists files, date shows date string,
-      cls clears screen (alias for clear).'
+    description: echo prints its arguments, ls lists files, date shows date string,
+      cls clears screen (alias for clear).
     status: done
     tasks: []
   - name: Bug fixes (register clobbering, branch register)
-    description: 'Fixed r0 used for space char instead of r6. BLT r0 -> BLT r20
-      for correct branch register.'
+    description: Fixed r0 used for space char instead of r6. BLT r0 -> BLT r20 for
+      correct branch register.
     status: done
     tasks: []
   - name: Terminal v4 tests (13 new)
@@ -3215,8 +3465,8 @@ phases:
       scroll behavior.'
     status: done
     tasks: []
-  technical_notes: 'All changes in terminal.asm (282 lines expanded) + 349 lines
-    of new tests in src/vm/tests.rs. No new opcodes.'
+  technical_notes: All changes in terminal.asm (282 lines expanded) + 349 lines of
+    new tests in src/vm/tests.rs. No new opcodes.
   scope_lines_total: 620
   test_target: 13
 - id: phase-59
@@ -3228,29 +3478,29 @@ phases:
     after OPEN. 423-line file_browser.asm with 196 lines of new integration tests.'
   deliverables:
   - name: file_browser.asm application
-    description: '423-line interactive file browser. HITSET rows with ids 1-12 for
+    description: 423-line interactive file browser. HITSET rows with ids 1-12 for
       clickable file listing. Click to open and read file contents. Displays file
-      content in a scrollable view.'
+      content in a scrollable view.
     status: done
     tasks: []
   - name: HITSET id collision fix
-    description: 'HITSET row 0 used id=0 which collided with HITQ no-match return
-      (0). Renumbered ids 1-12, adjusted click handler bounds.'
+    description: HITSET row 0 used id=0 which collided with HITQ no-match return (0).
+      Renumbered ids 1-12, adjusted click handler bounds.
     status: done
     tasks: []
   - name: CMPI fd clobber fix
-    description: 'CMPI r0, 0xFFFFFFFF after OPEN clobbered r0 (the fd). Fix: MOV
-      r19, r0 after OPEN, use r19 for subsequent fd operations.'
+    description: 'CMPI r0, 0xFFFFFFFF after OPEN clobbered r0 (the fd). Fix: MOV r19,
+      r0 after OPEN, use r19 for subsequent fd operations.'
     status: done
     tasks: []
   - name: File browser integration tests
-    description: '196 lines of new tests covering file browser listing, click-to-open,
-      file read display, and edge cases.'
+    description: 196 lines of new tests covering file browser listing, click-to-open,
+      file read display, and edge cases.
     status: done
     tasks: []
-  technical_notes: 'No new opcodes. Pure application-level code in programs/file_browser.asm.
+  technical_notes: No new opcodes. Pure application-level code in programs/file_browser.asm.
     Tests in src/vm/tests.rs. Bug fixes improve HITSET/HITQ reliability for all future
-    apps.'
+    apps.
   scope_lines_total: 619
   test_target: 0
 - id: phase-60
@@ -3277,9 +3527,9 @@ phases:
       status: done
     acceptance_criteria: STRCMP compares strings correctly, assembles and runs, all
       13 tests pass
-  technical_notes: 'String comparison opcode useful for shell and file_browser. Implemented
+  technical_notes: String comparison opcode useful for shell and file_browser. Implemented
     in src/vm/mod.rs dispatch, src/assembler/system_ops.rs, src/vm/disasm.rs, src/hermes.rs
-    opcode_name. 13 tests in src/vm/tests.rs.'
+    opcode_name. 13 tests in src/vm/tests.rs.
   scope_lines_total: 50
   test_target: 13
 - id: phase-61
@@ -3304,9 +3554,9 @@ phases:
     description: 'Architecture document explaining 3-layer stack: Token->Pixel->GUI'
     status: done
     acceptance_criteria: Document exists and explains the architecture
-  technical_notes: 'gui_calc.asm uses mouse events, drawing primitives, and arithmetic
+  technical_notes: gui_calc.asm uses mouse events, drawing primitives, and arithmetic
     opcodes. 920-line program demonstrating the full GUI capability. TOKEN_PIXEL_GUI.md
-    documents the token-pixel-GUI rendering stack (284 lines).'
+    documents the token-pixel-GUI rendering stack (284 lines).
   scope_lines_total: 1200
   test_target: 1
 - id: phase-62
@@ -3319,8 +3569,8 @@ phases:
     6 new tests.'
   deliverables:
   - name: notepad.asm bug fixes
-    description: 'Fix 5 bugs: draw_status r31 save, r12→r14 clobber, r1 restores
-      after TEXT/RECTF, LDI r0→LDI r2 for null terminate'
+    description: 'Fix 5 bugs: draw_status r31 save, r12→r14 clobber, r1 restores after
+      TEXT/RECTF, LDI r0→LDI r2 for null terminate'
     status: done
     tasks:
     - name: Fix draw_status PUSH/POP r31
@@ -3340,60 +3590,65 @@ phases:
     tasks:
     - name: Write clock.asm with digital clock display
       status: done
-    - name: Add 6 clock tests (assembles, boots, persistent, time updates, day counter, blink)
+    - name: Add 6 clock tests (assembles, boots, persistent, time updates, day counter,
+        blink)
       status: done
     acceptance_criteria: notepad.asm runs correctly, clock.asm runs and displays time
-  technical_notes: 'Commit 5ed4b7951. notepad.asm now 713 lines, clock.asm 494 lines.
-    6 new tests in src/vm/tests.rs. 1485 insertions total.'
+  technical_notes: Commit 5ed4b7951. notepad.asm now 713 lines, clock.asm 494 lines.
+    6 new tests in src/vm/tests.rs. 1485 insertions total.
   scope_lines_total: 1485
   test_target: 6
 - id: phase-63
   title: ABS + RECT Opcodes + Color Picker App
   status: complete
-  goal: Add absolute value and outline rectangle opcodes, ship a color picker GUI app
-  description: 'ABS (0x87) for absolute value of register, RECT (0x88) for outline
+  goal: Add absolute value and outline rectangle opcodes, ship a color picker GUI
+    app
+  description: ABS (0x87) for absolute value of register, RECT (0x88) for outline
     rectangle drawing. Color picker app demonstrates mouse-driven RGB selection with
-    palette swatches, slider indicators, and live preview. 15 new tests, 115 opcodes.'
+    palette swatches, slider indicators, and live preview. 15 new tests, 115 opcodes.
   deliverables:
   - name: ABS opcode (0x87)
-    description: 'ABS rd -- rd = |rd|, handles i32 wraparound for 0x80000000'
+    description: ABS rd -- rd = |rd|, handles i32 wraparound for 0x80000000
     status: done
   - name: RECT opcode (0x88)
-    description: 'RECT x, y, w, h, color -- outline rectangle (4 edges only)'
+    description: RECT x, y, w, h, color -- outline rectangle (4 edges only)
     status: done
   - name: ABS/RECT assembler entries
-    description: Add to assembler system_ops.rs, graphics_ops.rs, preprocessor OPCODES list
+    description: Add to assembler system_ops.rs, graphics_ops.rs, preprocessor OPCODES
+      list
     status: done
   - name: ABS/RECT disassembler entries
     description: Add to vm/disasm.rs
     status: done
   - name: ABS tests
-    description: 'Test positive, negative, zero, large negative, i32::MIN, assembly, disassembly (7 tests)'
+    description: Test positive, negative, zero, large negative, i32::MIN, assembly,
+      disassembly (7 tests)
     status: done
   - name: RECT tests
-    description: 'Test outline corners, interior empty, 1x1, zero dimensions, assembly, disassembly (6 tests)'
+    description: Test outline corners, interior empty, 1x1, zero dimensions, assembly,
+      disassembly (6 tests)
     status: done
   - name: color_picker.asm
-    description: 'Mouse-driven RGB color picker with 8-color palette, slider indicators,
-      RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.'
+    description: Mouse-driven RGB color picker with 8-color palette, slider indicators,
+      RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.
     status: done
   scope_lines_total: 800
   test_target: 10
 - id: phase-64
   title: MIN/MAX + CLAMP Opcodes + Screensaver Demo
-  status: done
+  status: complete
   goal: Add value clamping opcodes and a screensaver demo program
-  description: 'MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app
-    demonstrates idle-time animation with multiple effects.'
+  description: MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app demonstrates
+    idle-time animation with multiple effects.
   deliverables:
   - name: MIN opcode (0x89)
-    description: 'MIN rd, rs -- rd = min(rd, rs)'
+    description: MIN rd, rs -- rd = min(rd, rs)
     status: done
   - name: MAX opcode (0x8A)
-    description: 'MAX rd, rs -- rd = max(rd, rs)'
+    description: MAX rd, rs -- rd = max(rd, rs)
     status: done
   - name: CLAMP opcode (0x8B)
-    description: 'CLAMP rd, min_reg, max_reg -- rd = clamp(rd, min, max)'
+    description: CLAMP rd, min_reg, max_reg -- rd = clamp(rd, min, max)
     status: done
   - name: MIN/MAX/CLAMP assembler + disassembler entries
     status: done
@@ -3401,20 +3656,20 @@ phases:
     description: 'Test edge cases: equal values, negative, overflow'
     status: done
   - name: screensaver.asm
-    description: 'Multi-effect screensaver with bouncing logos, starfield, plasma
-      cycling. Auto-starts after N seconds of no input.'
+    description: Multi-effect screensaver with bouncing logos, starfield, plasma cycling.
+      Auto-starts after N seconds of no input.
     status: done
   scope_lines_total: 900
   test_target: 12
 - id: phase-65
   title: DRAWTEXT (colored text) Opcode + Improved Terminal
-  status: done
+  status: complete
   goal: Add colored text rendering opcode, upgrade terminal with color output
-  description: 'DRAWTEXT (0x8C) renders text with foreground and background colors.
-    Terminal v5 uses DRAWTEXT for colored command output and syntax highlighting.'
+  description: DRAWTEXT (0x8C) renders text with foreground and background colors.
+    Terminal v5 uses DRAWTEXT for colored command output and syntax highlighting.
   deliverables:
   - name: DRAWTEXT opcode (0x8C)
-    description: 'DRAWTEXT x, y, addr, fg_color, bg_color -- text with colors'
+    description: DRAWTEXT x, y, addr, fg_color, bg_color -- text with colors
     status: done
   - name: DRAWTEXT assembler + disassembler entries
     status: done
@@ -3422,25 +3677,25 @@ phases:
     description: Foreground color, background color, transparent (0) bg, newline handling
     status: done
   - name: terminal.asm v5 color upgrade
-    description: 'Green-on-dark title bar, light gray terminal text via DRAWTEXT.'
+    description: Green-on-dark title bar, light gray terminal text via DRAWTEXT.
     status: done
   scope_lines_total: 1000
   test_target: 10
 - id: phase-66
   title: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced
-  status: done
+  status: complete
   goal: Add bitwise manipulation opcodes for flags and state management
-  description: 'BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient
-    bit manipulation. Enhanced Game of Life uses bitwise operations for speed.'
+  description: BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient bit manipulation.
+    Enhanced Game of Life uses bitwise operations for speed.
   deliverables:
   - name: BITSET opcode (0x8D)
-    description: 'BITSET rd, bit_reg -- set bit N in rd (rd |= 1 << N)'
+    description: BITSET rd, bit_reg -- set bit N in rd (rd |= 1 << N)
     status: done
   - name: BITCLR opcode (0x8E)
-    description: 'BITCLR rd, bit_reg -- clear bit N in rd (rd &= ~(1 << N)'
+    description: BITCLR rd, bit_reg -- clear bit N in rd (rd &= ~(1 << N)
     status: done
   - name: BITTEST opcode (0x8F)
-    description: 'BITTEST rd, bit_reg -- r0 = (rd >> N) & 1 (test bit N)'
+    description: BITTEST rd, bit_reg -- r0 = (rd >> N) & 1 (test bit N)
     status: done
   - name: BITSET/BITCLR/BITTEST assembler + disassembler entries
     status: done
@@ -3448,116 +3703,119 @@ phases:
     description: Set/clear/test individual bits, edge cases (bit 0, bit 31)
     status: done
   - name: game_of_life enhanced with bit operations
-    description: 'Deferred: tests prove opcodes. Existing GoL uses PEEK-based neighbor counting.'
+    description: 'Deferred: tests prove opcodes. Existing GoL uses PEEK-based neighbor
+      counting.'
     status: done
   scope_lines_total: 700
   test_target: 15
 - id: phase-67
   title: NOT opcode + INV (invert) Screen Opcode + Invert Demo
-  status: done
+  status: complete
   goal: Add logical NOT and screen invert operations
-  description: 'NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels
-    (XOR 0xFFFFFF). Invert demo shows visual effects.'
+  description: NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels
+    (XOR 0xFFFFFF). Invert demo shows visual effects.
   deliverables:
   - name: NOT opcode (0x90)
-    description: 'NOT rd -- rd = ~rd (bitwise complement)'
+    description: NOT rd -- rd = ~rd (bitwise complement)
     status: done
   - name: INV opcode (0x91)
-    description: 'INV -- invert all screen pixels (XOR 0xFFFFFF)'
+    description: INV -- invert all screen pixels (XOR 0xFFFFFF)
     status: done
   - name: NOT/INV assembler + disassembler entries
     status: done
   - name: NOT/INV tests
     status: done
   - name: invert_demo.asm
-    description: 'Colored stripes cycle between normal and inverted every ~30 frames'
+    description: Colored stripes cycle between normal and inverted every ~30 frames
     status: done
   scope_lines_total: 500
   test_target: 8
 - id: phase-68
   title: WINSYS Opcode
-  status: done
+  status: complete
   goal: Window management opcode that creates, destroys, and manages window regions
-  description: 'WINSYS opcode (0x94) manages rectangular window regions. Each window
-    has an id, position, size, and title. Offscreen buffer per window. The opcode handles
-    create/destroy/bring-to-front/list operations. Rendering blits visible regions to
-    the main canvas in Z-order, clipped at screen edges. WPIXEL (0x95) writes pixels
-    to window offscreen buffers, WREAD (0x96) reads them back.'
+  description: WINSYS opcode (0x94) manages rectangular window regions. Each window
+    has an id, position, size, and title. Offscreen buffer per window. The opcode
+    handles create/destroy/bring-to-front/list operations. Rendering blits visible
+    regions to the main canvas in Z-order, clipped at screen edges. WPIXEL (0x95)
+    writes pixels to window offscreen buffers, WREAD (0x96) reads them back.
   deliverables:
   - name: WINSYS opcode (0x94)
-    description: 'WINSYS op_reg -- op=0:create window (r1=x,r2=y,r3=w,r4=h, r5=title_addr),
-      returns window id in r0. op=1:destroy window (r0=win_id). op=2:bring to front (r0=win_id).
-      op=3:list windows (r0=addr to write list).'
+    description: WINSYS op_reg -- op=0:create window (r1=x,r2=y,r3=w,r4=h, r5=title_addr),
+      returns window id in r0. op=1:destroy window (r0=win_id). op=2:bring to front
+      (r0=win_id). op=3:list windows (r0=addr to write list).
     status: done
   - name: Window data structure
     description: 'Per-window: id, x, y, w, h, z_order, title, process_id, offscreen_buffer
       (w*h u32 pixels). Max 8 windows. Stored on VM state.'
     status: done
   - name: Window blitting to canvas
-    description: 'After FRAME, blit all windows to canvas in Z-order. Front window on top.
-      Clip at screen edges (256x256). Transparent regions (0x00000000) show windows behind.'
+    description: After FRAME, blit all windows to canvas in Z-order. Front window
+      on top. Clip at screen edges (256x256). Transparent regions (0x00000000) show
+      windows behind.
     status: done
   - name: WINSYS assembler + disassembler entries
     status: done
   - name: WINSYS tests
-    description: 'Create/destroy windows, Z-order, clipping, max 8 windows, WPIXEL/WREAD. 17 tests.'
+    description: Create/destroy windows, Z-order, clipping, max 8 windows, WPIXEL/WREAD.
+      17 tests.
     status: done
   scope_lines_total: 500
   test_target: 10
 - id: phase-68b
   title: Window Mouse Interaction + Desktop Demo
-  status: done
+  status: complete
   goal: Mouse-driven window management with drag, focus, and a multi-window desktop
-  description: 'MOUSEQ clicks check window Z-order for hit-testing. Title bar drag to move,
-    body clicks forward to the window process. window_desktop.asm demonstrates 2-3 windows
-    running as child processes communicating via IPC pipes.'
+  description: MOUSEQ clicks check window Z-order for hit-testing. Title bar drag
+    to move, body clicks forward to the window process. window_desktop.asm demonstrates
+    2-3 windows running as child processes communicating via IPC pipes.
   deliverables:
   - name: Window mouse hit-testing
-    description: 'MOUSEQ clicks iterate windows front-to-back. Title bar (top 12px) = drag.
-      Body = forward click coordinates to window process via IPC. WINSYS op=4 (HITTEST),
-      op=5 (MOVETO), op=6 (WINFO). Mouse button state in MOUSEQ reg+2.'
+    description: MOUSEQ clicks iterate windows front-to-back. Title bar (top 12px)
+      = drag. Body = forward click coordinates to window process via IPC. WINSYS op=4
+      (HITTEST), op=5 (MOVETO), op=6 (WINFO). Mouse button state in MOUSEQ reg+2.
     status: done
   - name: window_desktop.asm
-    description: 'Desktop with 3 windows (Hello, Counter, Colors). Each window has its own
-      offscreen buffer content. Drag to move via title bar, click to focus/bring-to-front.
-      Animated counter and color stripes.'
+    description: Desktop with 3 windows (Hello, Counter, Colors). Each window has
+      its own offscreen buffer content. Drag to move via title bar, click to focus/bring-to-front.
+      Animated counter and color stripes.
     status: done
   - name: Window desktop tests
-    description: 'Mouse forwarding, drag updates position, focus changes Z-order, MOVETO,
-      WINFO, hit-test after move, bring-to-front affects hittest. 12 tests.'
+    description: Mouse forwarding, drag updates position, focus changes Z-order, MOVETO,
+      WINFO, hit-test after move, bring-to-front affects hittest. 12 tests.
     status: done
   scope_lines_total: 700
   test_target: 12
 - id: phase-69
   title: Sprite Engine
-  status: done
+  status: complete
   goal: Sprite sheets, transparent blitting, and tile maps for games and visual programs
-  description: 'SPRBLT opcode blits sprites from sprite sheets stored in RAM. Transparent
+  description: SPRBLT opcode blits sprites from sprite sheets stored in RAM. Transparent
     pixels (color=0) are skipped. Sprite sheet is contiguous array of 16x16 pixel
-    sprites. Unlocks real games beyond PSET/RECTF primitives.'
+    sprites. Unlocks real games beyond PSET/RECTF primitives.
   deliverables:
   - name: SPRBLT opcode (0x97)
-    description: 'SPRBLT sheet_addr_reg, sprite_id_reg, x_reg, y_reg -- blit 16x16 sprite
-      from sheet in RAM to screen. Sprite data at sheet_addr + sprite_id * 256.
-      Transparent pixels (color=0) skipped. Clipped to screen boundaries.'
+    description: SPRBLT sheet_addr_reg, sprite_id_reg, x_reg, y_reg -- blit 16x16
+      sprite from sheet in RAM to screen. Sprite data at sheet_addr + sprite_id *
+      256. Transparent pixels (color=0) skipped. Clipped to screen boundaries.
     status: done
   - name: SPRBLT assembler + disassembler entries
     status: done
   - name: Sprite sheet format
-    description: 'Contiguous array in RAM. Each sprite = 16x16 = 256 u32 pixels (row-major).
-      Sprite N starts at sheet_addr + N * 256. Color 0 = transparent.'
+    description: Contiguous array in RAM. Each sprite = 16x16 = 256 u32 pixels (row-major).
+      Sprite N starts at sheet_addr + N * 256. Color 0 = transparent.
     status: done
   - name: TILEMAP opcode (already exists as 0x4C)
-    description: 'TILEMAP already implemented (0x4C, 8 register args). Uses tile index
-      arrays in RAM with configurable tile dimensions.'
+    description: TILEMAP already implemented (0x4C, 8 register args). Uses tile index
+      arrays in RAM with configurable tile dimensions.
     status: done
   - name: sprite_demo.asm
-    description: '4 animated sprites (red square, green square, blue diamond, yellow cross)
-      bouncing around the screen. WASD controls sprite 0. Proves SPRBLT with
-      transparency and animation.'
+    description: 4 animated sprites (red square, green square, blue diamond, yellow
+      cross) bouncing around the screen. WASD controls sprite 0. Proves SPRBLT with
+      transparency and animation.
     status: done
   - name: tilemap_demo.asm
-    description: 'Deferred to future phase. TILEMAP opcode already exists and is tested.'
+    description: Deferred to future phase. TILEMAP opcode already exists and is tested.
     status: todo
   - name: Sprite engine tests
     description: '11 tests: basic blit, second sprite, transparency, screen clipping,
@@ -3568,106 +3826,112 @@ phases:
   test_target: 12
 - id: phase-70
   title: Self-Hosting Pixel Assembler
-  status: planned
+  status: complete
   goal: Write and assemble GO programs entirely inside GO, rendered as pixels
-  description: 'The existing self_host.asm proves the VM can assemble text. Push it to a
-    full pixel-native IDE: text editor (notepad.asm), assembler (self_host.asm), and
-    runner (F5 to execute) all running inside windowed processes. The OS builds itself.'
+  description: 'The existing self_host.asm proves the VM can assemble text. Push it
+    to a full pixel-native IDE: text editor (notepad.asm), assembler (self_host.asm),
+    and runner (F5 to execute) all running inside windowed processes. The OS builds
+    itself.'
   deliverables:
   - name: Enhanced self_host.asm
     description: 'Extend self_host.asm to support all 113 opcodes, labels, .db/.asciz
-    directives, and #define macros. Must be able to assemble every program in programs/.'
-    status: todo
+      directives, and #define macros. Must be able to assemble every program in programs/.'
+    status: done
   - name: ASMSELF opcode enhancement
-    description: 'ASMSELF now returns assembled bytecode in a RAM region that can be
-      executed via RUNNEXT. Full round-trip: type code, assemble, run, see output.'
-    status: todo
+    description: 'ASMSELF now returns assembled bytecode in a RAM region that can
+      be executed via RUNNEXT. Full round-trip: type code, assemble, run, see output.'
+    status: done
   - name: pixel_ide.asm
-    description: 'Windowed IDE with notepad (editor pane), assembler (build pane), and
-      output (screen pane). Three processes in windows. Type code, press F5, see result.'
-    status: todo
+    description: Windowed IDE with notepad (editor pane), assembler (build pane),
+      and output (screen pane). Three processes in windows. Type code, press F5, see
+      result.
+    status: done
   - name: Self-hosting test
-    description: 'Write a simple .asm program using the pixel IDE, assemble it, run it,
-      verify output matches expected result. The OS built and ran its own program.'
-    status: todo
+    description: Write a simple .asm program using the pixel IDE, assemble it, run
+      it, verify output matches expected result. The OS built and ran its own program.
+    status: done
   scope_lines_total: 1500
   test_target: 8
 - id: phase-71
   title: Pixel Network Protocol
-  status: planned
+  status: complete
   goal: Share screens and communicate between Geometry OS instances over network
-  description: 'NET_SEND/NET_RECV opcodes for pixel-level communication. Send a screen
+  description: NET_SEND/NET_RECV opcodes for pixel-level communication. Send a screen
     region to another GO instance. Enables remote desktop, multiplayer games, and
-    pixel-level collaboration. Uses existing net_demo.asm as foundation.'
+    pixel-level collaboration. Uses existing net_demo.asm as foundation.
   deliverables:
-  - name: NET_SEND opcode enhancement (0x6E)
-    description: 'NET_SEND addr, len, dest_addr -- send pixel data to another GO instance.
-      dest_addr is IP:port stored as null-terminated string in RAM.'
-    status: todo
-  - name: NET_RECV opcode enhancement (0x6F)
-    description: 'NET_RECV addr, max_len -- receive pending pixel data into RAM buffer.
-      r0 = bytes received (0 if none). Non-blocking.'
-    status: todo
+  - name: NET_SEND opcode (0x99)
+    description: NET_SEND addr, len, dest_addr -- send pixel data to another GO instance.
+      dest_addr is IP:port stored as null-terminated string in RAM.
+    status: done
+  - name: NET_RECV opcode (0x9A)
+    description: NET_RECV addr, max_len -- receive pending pixel data into RAM buffer.
+      r0 = bytes received (0 if none). Non-blocking.
+    status: done
   - name: Pixel protocol format
     description: 'Frame: [4-byte header: type(1B) + width(1B) + height(1B) + flags(1B)]
       + [pixel data as RGBA u32 array]. Types: screen_share, chat, file.'
-    status: todo
+    status: done
   - name: net_share.asm
-    description: 'Two-instance demo: one GO instance shares its screen, the other displays
-      it in a window. Real-time pixel streaming at ~1 FPS.'
-    status: todo
+    description: 'Two-instance demo: one GO instance shares its screen, the other
+      displays it in a window. Real-time pixel streaming at ~1 FPS.'
+    status: done
   - name: net_chat.asm
     description: 'Simple pixel chat: type messages in terminal, send to peer, messages
       appear on their screen. Proves bidirectional NET_SEND/NET_RECV.'
-    status: todo
+    status: done
   - name: Network tests
-    description: 'Send/receive pixel frames, protocol parsing, connection handling. 10+ tests.'
-    status: todo
+    description: Send/receive pixel frames, protocol parsing, connection handling.
+      10+ tests.
+    status: done
   scope_lines_total: 900
   test_target: 10
 - id: phase-72
   title: Desktop Taskbar + App Launcher
   status: planned
-  goal: Persistent taskbar at bottom of screen with running app icons, clock, and app launcher menu
-  description: 'Taskbar shows running processes as clickable icons. App launcher opens
+  goal: Persistent taskbar at bottom of screen with running app icons, clock, and
+    app launcher menu
+  description: Taskbar shows running processes as clickable icons. App launcher opens
     a grid of available programs. Click to launch. Proves process listing, keyboard/mouse
-    input routing, and persistent UI elements across app switches.'
+    input routing, and persistent UI elements across app switches.
   deliverables:
   - name: taskbar.asm
-    description: 'Bottom bar (16px tall) showing running process icons, current time,
-      and a "Start" button. Click icon to switch focus. Click Start for launcher.'
+    description: Bottom bar (16px tall) showing running process icons, current time,
+      and a "Start" button. Click icon to switch focus. Click Start for launcher.
     status: todo
   - name: launcher.asm
-    description: 'Full-screen grid of available .asm programs from VFS. Scroll with
-      mouse wheel, click to launch via RUNNEXT. ESC to close.'
+    description: Full-screen grid of available .asm programs from VFS. Scroll with
+      mouse wheel, click to launch via RUNNEXT. ESC to close.
     status: todo
   - name: Taskbar + launcher tests
-    description: 'Taskbar renders, launcher lists programs, click launches process. 8+ tests.'
+    description: Taskbar renders, launcher lists programs, click launches process.
+      8+ tests.
     status: todo
   scope_lines_total: 800
   test_target: 8
 - id: phase-73
   title: Core Utilities
-  status: done
+  status: complete
   goal: Unix-style text utilities that work inside the terminal
   description: 'Small focused programs that prove VFS + shell integration. Each is
-    50-200 lines of assembly. Users can pipe output between them: ls | grep .asm | wc.'
+    50-200 lines of assembly. Users can pipe output between them: ls | grep .asm |
+    wc.'
   deliverables:
   - name: ls.asm (standalone)
-    description: 'List VFS directory contents. Uses LS syscall, displays filenames
-      via DRAWTEXT. Shows file count in footer.'
+    description: List VFS directory contents. Uses LS syscall, displays filenames
+      via DRAWTEXT. Shows file count in footer.
     status: done
   - name: grep.asm
-    description: 'Search text buffer for byte pattern matches. Pre-loaded pattern
-      and text in RAM. Outputs match count at RAM[0x7800].'
+    description: Search text buffer for byte pattern matches. Pre-loaded pattern and
+      text in RAM. Outputs match count at RAM[0x7800].
     status: done
   - name: wc.asm
-    description: 'Word count: lines, words, characters from text buffer. Results
-      at RAM[0x7800] (chars), RAM[0x7801] (lines), RAM[0x7802] (words).'
+    description: 'Word count: lines, words, characters from text buffer. Results at
+      RAM[0x7800] (chars), RAM[0x7801] (lines), RAM[0x7802] (words).'
     status: done
   - name: hexdump.asm
-    description: 'Hex viewer for RAM data. Converts bytes to hex ASCII, displays
-      8 bytes per row via DRAWTEXT. Byte count at RAM[0x7800].'
+    description: Hex viewer for RAM data. Converts bytes to hex ASCII, displays 8
+      bytes per row via DRAWTEXT. Byte count at RAM[0x7800].
     status: done
   - name: Core utils tests
     description: '14 tests: assembly, execution, output verification for all 4 utilities.
@@ -3678,11 +3942,11 @@ phases:
   test_target: 10
 - id: phase-74
   title: Image Viewer + Screenshot
-  status: done
+  status: complete
   goal: View images stored in VFS and capture screenshots of the canvas
-  description: 'Pixel-native image viewer renders raw pixel data from VFS files.
-    Screenshot opcode saves the current canvas to a VFS file. Proves binary I/O and
-    pixel file formats.'
+  description: Pixel-native image viewer renders raw pixel data from VFS files. Screenshot
+    opcode saves the current canvas to a VFS file. Proves binary I/O and pixel file
+    formats.
   deliverables:
   - name: SCRSHOT opcode (0x95)
     description: 'SCRSHOT addr -- save canvas to VFS file at path stored in RAM starting
@@ -3693,11 +3957,12 @@ phases:
       renders on canvas. Arrow keys to pan, +/- to zoom. Shows filename at top.'
     status: done
   - name: screenshot.asm
-    description: 'Press P to capture screenshot, saves to VFS as screenshot_N.img.
-      Small overlay confirms "Saved!" for 1 second.'
+    description: Press P to capture screenshot, saves to VFS as screenshot_N.img.
+      Small overlay confirms "Saved!" for 1 second.
     status: done
   - name: Image viewer + screenshot tests
-    description: 'SCRSHOT saves file, imgview loads and renders, round-trip test. 8+ tests.'
+    description: SCRSHOT saves file, imgview loads and renders, round-trip test. 8+
+      tests.
     status: done
   scope_lines_total: 600
   test_target: 8
@@ -3705,21 +3970,21 @@ phases:
   title: Stopwatch + Timer + Calculator (scientific)
   status: complete
   goal: Time management and advanced calculation apps
-  description: 'Stopwatch with lap times, countdown timer with alarm, and scientific
+  description: Stopwatch with lap times, countdown timer with alarm, and scientific
     calculator with trig/log functions. Proves FRAME timing precision and floating-point
-    via integer math.'
+    via integer math.
   deliverables:
   - name: stopwatch.asm
-    description: 'Start/stop/reset with lap times. Shows elapsed time as MM:SS.CC.
-      Space to start/stop, L for lap, R for reset. Stores last 10 laps.'
+    description: Start/stop/reset with lap times. Shows elapsed time as MM:SS.CC.
+      Space to start/stop, L for lap, R for reset. Stores last 10 laps.
     status: done
   - name: timer.asm
-    description: 'Countdown timer. Keys 1-9 set minutes. Space to start/pause.
-      Counts down to zero, plays alarm via BEEP. Proves precise FRAME timing.'
+    description: Countdown timer. Keys 1-9 set minutes. Space to start/pause. Counts
+      down to zero, plays alarm via BEEP. Proves precise FRAME timing.
     status: done
   - name: sci_calc.asm
-    description: 'Scientific calculator with sin/cos (16-entry quarter-wave lookup table),
-      sqrt (Newton method). Basic + - * / arithmetic via keyboard.'
+    description: Scientific calculator with sin/cos (16-entry quarter-wave lookup
+      table), sqrt (Newton method). Basic + - * / arithmetic via keyboard.
     status: done
   - name: Time + calc tests
     description: '14 tests: 5 stopwatch, 4 timer, 5 sci_calc. Assembly, rendering,
@@ -3731,25 +3996,28 @@ phases:
   title: Debugger UI + Memory Inspector
   status: planned
   goal: Visual debugging tools for GO programs running inside GO
-  description: 'Pixel-native debugger shows register state, memory regions, and step-by-step
+  description: Pixel-native debugger shows register state, memory regions, and step-by-step
     execution. Memory inspector shows hex dump of any RAM region. Built on trace buffer
-    (phase 38) and VFS.'
+    (phase 38) and VFS.
   deliverables:
   - name: debugger.asm
-    description: 'Shows: register values (32 registers), PC, current instruction, stack
-      contents. Step/continue/reset buttons. Watchpoints on memory addresses. Proves
-      trace buffer (SNAP_TRACE) integration.'
+    description: 'Shows: register values (32 registers), PC, current instruction,
+      stack contents. Step/continue/reset buttons. Watchpoints on memory addresses.
+      Proves trace buffer (SNAP_TRACE) integration.'
     status: todo
   - name: meminspect.asm
     description: 'Memory inspector: hex dump of RAM regions. Arrow keys to scroll,
-      type address to jump. Edit bytes in-place. Shows ASCII interpretation alongside hex.'
+      type address to jump. Edit bytes in-place. Shows ASCII interpretation alongside
+      hex.'
     status: todo
   - name: disasm.asm
-    description: 'Interactive disassembler: reads bytecode from RAM, shows assembly mnemonics.
-      Step through bytecode, show decoded instructions. Proves disassembler integration.'
+    description: 'Interactive disassembler: reads bytecode from RAM, shows assembly
+      mnemonics. Step through bytecode, show decoded instructions. Proves disassembler
+      integration.'
     status: todo
   - name: Debugger tests
-    description: 'Debugger displays registers, meminspect reads/writes, disasm decodes. 10+ tests.'
+    description: Debugger displays registers, meminspect reads/writes, disasm decodes.
+      10+ tests.
     status: todo
   scope_lines_total: 1500
   test_target: 10
@@ -3757,23 +4025,23 @@ phases:
   title: Settings + Wallpaper + Screensaver
   status: complete
   goal: System customization apps that prove config persistence and idle detection
-  description: 'Settings app with 8 color themes, wallpaper generator with 5 procedural
+  description: Settings app with 8 color themes, wallpaper generator with 5 procedural
     patterns, screensaver from phase-64. Proves theme palettes, sine table rendering,
-    and config state management.'
+    and config state management.
   deliverables:
   - name: settings.asm
-    description: 'Settings panel with 8 color themes (Dark, Ocean, Forest, Sunset,
+    description: Settings panel with 8 color themes (Dark, Ocean, Forest, Sunset,
       Monochrome, Vaporwave, Amber, Matrix), volume slider, key repeat control. W/S
-      navigate, A/D change values. Visual preview swatch.'
+      navigate, A/D change values. Visual preview swatch.
     status: done
   - name: wallpaper.asm
-    description: '5 full-screen procedural wallpaper patterns (gradient, plasma, diamonds,
+    description: 5 full-screen procedural wallpaper patterns (gradient, plasma, diamonds,
       stripes, noise). Parabolic cosine sine table. Keys 1-5 select pattern. Animated
-      via FRAME loop.'
+      via FRAME loop.
     status: done
   - name: screensaver.asm
-    description: 'Already exists from phase-64. Multi-effect screensaver (starfield,
-      bounce, plasma) with MIN/MAX/CLAMP. Any key exits.'
+    description: Already exists from phase-64. Multi-effect screensaver (starfield,
+      bounce, plasma) with MIN/MAX/CLAMP. Any key exits.
     status: done
   - name: Settings + wallpaper tests
     description: '11 tests: wallpaper assembles, sine table built, produces pixels,
@@ -3784,31 +4052,32 @@ phases:
   test_target: 11
 - id: phase-78
   title: Calendar + About + Help System
-  status: done
+  status: complete
   goal: Information apps that round out the desktop experience
-  description: 'Calendar shows month grid. About box shows system info. Help system shows
-    keyboard shortcuts and command reference. Proves text rendering and data display.'
+  description: Calendar shows month grid. About box shows system info. Help system
+    shows keyboard shortcuts and command reference. Proves text rendering and data
+    display.
   deliverables:
   - name: calendar.asm
-    description: 'Monthly calendar grid. Arrow keys to navigate months. Highlights today.
-      Shows day-of-week calculation (Zeller congruence in integer math).'
+    description: Monthly calendar grid. Arrow keys to navigate months. Highlights
+      today. Shows day-of-week calculation (Zeller congruence in integer math).
     status: done
   - name: about.asm
-    description: 'System info panel: Geometry OS version, opcode count, RAM size, process
-      count, uptime in frames, CPU usage estimate. Proves VM introspection.'
+    description: 'System info panel: Geometry OS version, opcode count, RAM size,
+      process count, uptime in frames, CPU usage estimate. Proves VM introspection.'
     status: done
   - name: help.asm
     description: 'Help viewer: keyboard shortcuts, opcode reference, shell commands.
       Reads help text from VFS file /etc/help.txt. Scrollable, searchable.'
     status: done
   - name: Info app tests
-    description: 'Calendar renders correct dates, about shows stats, help loads text. 8+ tests.'
-    status: todo
+    description: Test coverage for calendar, about, and help apps
+    status: done
   scope_lines_total: 800
   test_target: 8
 - id: phase-79
   title: Neural Network Forward Pass (Pixel Neural Net)
-  status: done
+  status: complete
   goal: Run a tiny neural network entirely inside the VM using pixel-stored weights
   description: 'A hand-coded 3-layer MLP (64-32-16 neurons) whose weights are stored
     in RAM as packed u32 fixed-point values. Forward pass uses existing MUL/ADD/SHLI/SHRI
@@ -3816,23 +4085,23 @@ phases:
     VM can do real inference.'
   deliverables:
   - name: MATVEC opcode (0x92)
-    description: 'MATVEC weight_addr, input_addr, output_addr, rows, cols -- matrix-vector
-      multiply using fixed-point (16.16) math.'
+    description: MATVEC weight_addr, input_addr, output_addr, rows, cols -- matrix-vector
+      multiply using fixed-point (16.16) math.
     status: done
   - name: RELU opcode (0x93)
-    description: 'RELU rd -- if rd (signed) < 0, rd = 0. Activation function.'
+    description: RELU rd -- if rd (signed) < 0, rd = 0. Activation function.
     status: done
   - name: Weight packing format
-    description: 'Weights as u32 fixed-point 16.16. Python script trains small network,
-      dumps weights as assembly LDI/STORE sequence.'
+    description: Weights as u32 fixed-point 16.16. Python script trains small network,
+      dumps weights as assembly LDI/STORE sequence.
     status: done
   - name: nn_demo.asm
-    description: 'Load pre-trained XOR weights, run forward pass for all 4 inputs,
-      display results on screen. Green=correct, Red=wrong.'
+    description: Load pre-trained XOR weights, run forward pass for all 4 inputs,
+      display results on screen. Green=correct, Red=wrong.
     status: done
   - name: Neural net tests
-    description: 'MATVEC correctness, RELU activation, full forward pass matches
-      Python reference. 14 tests.'
+    description: MATVEC correctness, RELU activation, full forward pass matches Python
+      reference. 14 tests.
     status: done
   scope_lines_total: 1500
   test_target: 10
@@ -3840,17 +4109,17 @@ phases:
   title: LLM Bridge Opcode (External AI)
   status: planned
   goal: Call external LLMs from inside the VM for text generation and code assistance
-  description: 'LLM opcode sends prompt string from RAM to external API. Response
-    written to RAM buffer. Config in VFS. Enables smart terminal, code completion,
-    natural language interaction.'
+  description: LLM opcode sends prompt string from RAM to external API. Response written
+    to RAM buffer. Config in VFS. Enables smart terminal, code completion, natural
+    language interaction.
   deliverables:
   - name: LLM opcode (0x94)
-    description: 'LLM prompt_addr, response_addr, max_len_reg -- sends prompt to
-      external LLM, writes response to RAM. r0 = response length.'
+    description: LLM prompt_addr, response_addr, max_len_reg -- sends prompt to external
+      LLM, writes response to RAM. r0 = response length.
     status: todo
   - name: LLM configuration
-    description: '/etc/llm.cfg in VFS. Python proxy server (localhost:8321) bridges
-      VM calls to real APIs. Keeps API keys out of VM.'
+    description: /etc/llm.cfg in VFS. Python proxy server (localhost:8321) bridges
+      VM calls to real APIs. Keeps API keys out of VM.
     status: todo
   - name: LLM assembler + disassembler entries
     status: todo
@@ -3859,8 +4128,8 @@ phases:
       to shell command.'
     status: todo
   - name: LLM tests
-    description: 'Mock LLM server returns fixed responses. Test prompt, response,
-      truncation, errors. 8+ tests.'
+    description: Mock LLM server returns fixed responses. Test prompt, response, truncation,
+      errors. 8+ tests.
     status: todo
   scope_lines_total: 1200
   test_target: 8
@@ -3868,8 +4137,8 @@ phases:
   title: HTTP Client + Text Browser
   status: planned
   goal: Fetch web pages and render them as text inside the VM
-  description: 'HTTP GET via TCP opcodes. Parse response. Render plain text. URL
-    bar, scrollable content. Proves network stack handles real protocols.'
+  description: HTTP GET via TCP opcodes. Parse response. Render plain text. URL bar,
+    scrollable content. Proves network stack handles real protocols.
   deliverables:
   - name: http_get.asm
     description: 'HTTP client library: URL in RAM, TCP connect to port 80, send GET,
@@ -3880,11 +4149,11 @@ phases:
       indicator.'
     status: todo
   - name: URL parsing
-    description: 'Split host:port/path from RAM string. Default port 80.'
+    description: Split host:port/path from RAM string. Default port 80.
     status: todo
   - name: HTTP tests
-    description: 'Mock HTTP server. Test GET formatting, response parsing, chunked
-      encoding. 10+ tests.'
+    description: Mock HTTP server. Test GET formatting, response parsing, chunked
+      encoding. 10+ tests.
     status: todo
   scope_lines_total: 1500
   test_target: 10
@@ -3892,28 +4161,28 @@ phases:
   title: HTML Renderer + Interactive Browser
   status: planned
   goal: Parse and render simple HTML with styled text, links, and images
-  description: 'HTML parser for common tags. Links as HITSET regions. Bookmarks in
-    VFS. A real pixel-native web experience.'
+  description: HTML parser for common tags. Links as HITSET regions. Bookmarks in
+    VFS. A real pixel-native web experience.
   deliverables:
   - name: HTML parser
-    description: 'Tokenize HTML. Handle p, br, h1-h3, b, i, a href, img src, hr,
-      ul/li. Assembly-callable library.'
+    description: Tokenize HTML. Handle p, br, h1-h3, b, i, a href, img src, hr, ul/li.
+      Assembly-callable library.
     status: todo
   - name: Styled text renderer
-    description: 'DRAWTEXT with per-line colors. h1=green, h2=yellow, body=white,
-      links=cyan. Paragraph spacing, horizontal rules.'
+    description: DRAWTEXT with per-line colors. h1=green, h2=yellow, body=white, links=cyan.
+      Paragraph spacing, horizontal rules.
     status: todo
   - name: Clickable links
-    description: 'a-tags register HITSET regions. Click triggers new fetch. Navigation
-      history in RAM ring buffer.'
+    description: a-tags register HITSET regions. Click triggers new fetch. Navigation
+      history in RAM ring buffer.
     status: todo
   - name: Bookmarks
-    description: '/etc/bookmarks.cfg in VFS. Start page shows bookmarks. Add/remove
-      via UI.'
+    description: /etc/bookmarks.cfg in VFS. Start page shows bookmarks. Add/remove
+      via UI.
     status: todo
   - name: Browser tests
-    description: 'HTML parser, styled rendering, link clicks, back nav, bookmarks.
-      12+ tests.'
+    description: HTML parser, styled rendering, link clicks, back nav, bookmarks.
+      12+ tests.
     status: todo
   scope_lines_total: 2000
   test_target: 12
@@ -3921,29 +4190,31 @@ phases:
   title: Infinite Map Desktop -- Camera + Player Avatar
   status: planned
   goal: Player-controlled avatar moving across procedural terrain as the desktop surface
-  description: 'The infinite map becomes the desktop. A player avatar (8x8 sprite) moves
-    with arrow keys across procedural terrain. Camera follows the player, rendering a
-    viewport of the world. Programs exist as buildings/structures on the map that the
-    player walks up to and enters. Extends infinite_map_pxpk.asm.'
+  description: The infinite map becomes the desktop. A player avatar (8x8 sprite)
+    moves with arrow keys across procedural terrain. Camera follows the player, rendering
+    a viewport of the world. Programs exist as buildings/structures on the map that
+    the player walks up to and enters. Extends infinite_map_pxpk.asm.
   deliverables:
   - name: Player avatar rendering
-    description: '8x8 pixel sprite rendered at screen center. 4 directions (up/down/left/right).
-      Simple walk animation (2 frames). Uses existing PSET/RECTF primitives.'
+    description: 8x8 pixel sprite rendered at screen center. 4 directions (up/down/left/right).
+      Simple walk animation (2 frames). Uses existing PSET/RECTF primitives.
     status: todo
   - name: Camera follow system
-    description: 'Camera centered on player. Map scrolls as player moves. Uses existing
-      hash-based procedural terrain from infinite_map_pxpk.asm. Edge wrapping (toroidal world).'
+    description: Camera centered on player. Map scrolls as player moves. Uses existing
+      hash-based procedural terrain from infinite_map_pxpk.asm. Edge wrapping (toroidal
+      world).
     status: todo
   - name: Player movement + collision
-    description: 'Arrow keys move player. Water tiles block movement. Mountain tiles block.
-      Grass/forest/sand are walkable. Movement speed tied to terrain type.'
+    description: Arrow keys move player. Water tiles block movement. Mountain tiles
+      block. Grass/forest/sand are walkable. Movement speed tied to terrain type.
     status: todo
   - name: world_desktop.asm
-    description: 'Player walks around infinite procedural world. Terrain generates around
-      them. Shows biome names on HUD. Proves camera + avatar + terrain integration.'
+    description: Player walks around infinite procedural world. Terrain generates
+      around them. Shows biome names on HUD. Proves camera + avatar + terrain integration.
     status: todo
   - name: Player + camera tests
-    description: 'Avatar renders, camera follows, collision blocks, edge wrapping. 10+ tests.'
+    description: Avatar renders, camera follows, collision blocks, edge wrapping.
+      10+ tests.
     status: todo
   scope_lines_total: 800
   test_target: 10
@@ -3951,86 +4222,95 @@ phases:
   title: Infinite Map Desktop -- App Buildings + Entry Points
   status: planned
   goal: Programs exist as structures on the map that the player enters to launch
-  description: 'Apps are rendered as buildings (pixel structures) at deterministic positions
-    on the infinite map. Walking up to a building and pressing E launches the app inside
-    a WINSYS window overlay. The building shows the app name above its door. Exiting the
-    app returns to the map at the building entrance.'
+  description: Apps are rendered as buildings (pixel structures) at deterministic
+    positions on the infinite map. Walking up to a building and pressing E launches
+    the app inside a WINSYS window overlay. The building shows the app name above
+    its door. Exiting the app returns to the map at the building entrance.
   deliverables:
   - name: Building placement system
-    description: 'Buildings placed at deterministic hash-derived positions. Each .asm program
-      gets a building. Building sprite: 24x32 pixels with door, windows, sign. Unique color
-      per app type (red=games, blue=utilities, green=creative, yellow=system).'
+    description: 'Buildings placed at deterministic hash-derived positions. Each .asm
+      program gets a building. Building sprite: 24x32 pixels with door, windows, sign.
+      Unique color per app type (red=games, blue=utilities, green=creative, yellow=system).'
     status: todo
   - name: Proximity detection
-    description: 'When player is within 2 tiles of a building door, show app name tooltip.
-      Press E to enter. Uses distance calculation between player position and building position.'
+    description: When player is within 2 tiles of a building door, show app name tooltip.
+      Press E to enter. Uses distance calculation between player position and building
+      position.
     status: todo
   - name: App launch from map
-    description: 'Pressing E near a building: saves map state, launches app via RUNNEXT in
-      a WINSYS window overlay. Press Q/ESC to exit app, returns to map at building entrance.'
+    description: 'Pressing E near a building: saves map state, launches app via RUNNEXT
+      in a WINSYS window overlay. Press Q/ESC to exit app, returns to map at building
+      entrance.'
     status: todo
   - name: Building rendering
-    description: 'Simple building sprites drawn with RECTF + TEXT for signs. Buildings visible
-      from 8-tile radius. LOD: far buildings are colored rectangles, close ones show detail.'
+    description: 'Simple building sprites drawn with RECTF + TEXT for signs. Buildings
+      visible from 8-tile radius. LOD: far buildings are colored rectangles, close
+      ones show detail.'
     status: todo
   - name: App building tests
-    description: 'Building placement, proximity detection, app launch, state save/restore. 12+ tests.'
+    description: Building placement, proximity detection, app launch, state save/restore.
+      12+ tests.
     status: todo
   scope_lines_total: 1000
   test_target: 12
 - id: phase-85
   title: Infinite Map Desktop -- Full Desktop Integration
   status: planned
-  goal: "Complete desktop experience - infinite world with apps, taskbar, and navigation"
-  description: 'Merges the taskbar, app launcher, and infinite map into one coherent desktop.
-    The taskbar shows at the bottom of the viewport. Mini-map shows player position and
-    nearby buildings. Fast-travel via mini-map click. Boot into the world desktop.'
+  goal: Complete desktop experience - infinite world with apps, taskbar, and navigation
+  description: Merges the taskbar, app launcher, and infinite map into one coherent
+    desktop. The taskbar shows at the bottom of the viewport. Mini-map shows player
+    position and nearby buildings. Fast-travel via mini-map click. Boot into the world
+    desktop.
   deliverables:
   - name: Taskbar overlay on map
-    description: '16px taskbar at bottom of viewport showing: current biome, nearby app count,
-      clock, and a "list apps" button. Semi-transparent background so map shows through.'
+    description: '16px taskbar at bottom of viewport showing: current biome, nearby
+      app count, clock, and a "list apps" button. Semi-transparent background so map
+      shows through.'
     status: todo
   - name: Mini-map with building markers
-    description: '32x32 mini-map in corner. Dots for buildings (colored by type). Player
-      position as white dot. Click on building dot to fast-travel (teleport to entrance).'
+    description: 32x32 mini-map in corner. Dots for buildings (colored by type). Player
+      position as white dot. Click on building dot to fast-travel (teleport to entrance).
     status: todo
   - name: Boot into world desktop
-    description: 'init.asm launches world_desktop.asm as the default shell. First thing
-      the user sees is the infinite terrain with their apps as buildings. Proves the map
-      IS the desktop.'
+    description: init.asm launches world_desktop.asm as the default shell. First thing
+      the user sees is the infinite terrain with their apps as buildings. Proves the
+      map IS the desktop.
     status: todo
   - name: Full desktop integration tests
-    description: 'Taskbar renders, mini-map shows buildings, fast-travel works, boot sequence
-      correct. 10+ tests.'
+    description: Taskbar renders, mini-map shows buildings, fast-travel works, boot
+      sequence correct. 10+ tests.
     status: todo
   scope_lines_total: 1000
   test_target: 10
 - id: phase-86
   title: Hypervisor Building -- Run Linux on the Map
   status: planned
-  goal: Boot a real OS (Linux via QEMU or native RISC-V) inside a building on the infinite map
-  description: 'The hypervisor building is a special structure on the infinite map. Walk
-    up to it, press E, and a WINSYS window opens showing a real Linux boot sequence rendered
-    as pixel text. The HYPERVISOR opcode targets a WINSYS window instead of full-screen.
-    Type commands into the Linux shell from inside Geometry OS. The map has a data center.'
+  goal: Boot a real OS (Linux via QEMU or native RISC-V) inside a building on the
+    infinite map
+  description: The hypervisor building is a special structure on the infinite map.
+    Walk up to it, press E, and a WINSYS window opens showing a real Linux boot sequence
+    rendered as pixel text. The HYPERVISOR opcode targets a WINSYS window instead
+    of full-screen. Type commands into the Linux shell from inside Geometry OS. The
+    map has a data center.
   deliverables:
   - name: WINSYS-aware HYPERVISOR
-    description: 'HYPERVISOR opcode accepts optional window_id parameter. When set, UART
-      output renders into the window offscreen buffer instead of the full canvas. Keyboard
-      input from the window forwards to guest stdin.'
+    description: HYPERVISOR opcode accepts optional window_id parameter. When set,
+      UART output renders into the window offscreen buffer instead of the full canvas.
+      Keyboard input from the window forwards to guest stdin.
     status: todo
   - name: Hypervisor building on map
-    description: 'Special building type (yellow/gold, larger 32x40 sprite). Rendered at a
-      fixed position near spawn. Label: "Linux". Walking up and pressing E opens a large
-      WINSYS window and calls HYPERVISOR to boot Linux.'
+    description: 'Special building type (yellow/gold, larger 32x40 sprite). Rendered
+      at a fixed position near spawn. Label: "Linux". Walking up and pressing E opens
+      a large WINSYS window and calls HYPERVISOR to boot Linux.'
     status: todo
   - name: linux_building.asm
-    description: 'Demo: player walks to hypervisor building, enters it, Linux boots in a
-      window. Player can type commands. Press ESC to detach and return to map. Linux keeps
-      running in background.'
+    description: 'Demo: player walks to hypervisor building, enters it, Linux boots
+      in a window. Player can type commands. Press ESC to detach and return to map.
+      Linux keeps running in background.'
     status: todo
   - name: Hypervisor building tests
-    description: 'HYPERVISOR targets window, keyboard forwarding, detach/reattach. 8+ tests.'
+    description: HYPERVISOR targets window, keyboard forwarding, detach/reattach.
+      8+ tests.
     status: todo
   scope_lines_total: 800
   test_target: 8
@@ -4038,24 +4318,27 @@ phases:
   title: Multi-Hypervisor -- Multiple OS Instances on the Map
   status: planned
   goal: Multiple hypervisor buildings running different guest OSes simultaneously
-  description: 'Each hypervisor building is an independent VM. The map can have multiple
+  description: Each hypervisor building is an independent VM. The map can have multiple
     data centers running different architectures (riscv64, x86_64, aarch64). Background
-    VMs continue executing even when player is exploring the map. Proves true multitasking.'
+    VMs continue executing even when player is exploring the map. Proves true multitasking.
   deliverables:
   - name: Background VM scheduling
-    description: 'When player is on the map, background VMs get time-sliced execution.
-      Each VM gets N instructions per frame. Balances map rendering with guest OS progress.'
+    description: When player is on the map, background VMs get time-sliced execution.
+      Each VM gets N instructions per frame. Balances map rendering with guest OS
+      progress.
     status: todo
   - name: Multiple hypervisor buildings
-    description: 'Support 2-4 concurrent HYPERVISOR instances. Each in its own building.
-      Different arch/config per building. State saved when player enters, restored on return.'
+    description: Support 2-4 concurrent HYPERVISOR instances. Each in its own building.
+      Different arch/config per building. State saved when player enters, restored
+      on return.
     status: todo
   - name: vm_park.asm
-    description: 'Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86, and a
-      bare-metal RISC-V loop. Walk between them, enter any, all run in background.'
+    description: 'Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86,
+      and a bare-metal RISC-V loop. Walk between them, enter any, all run in background.'
     status: todo
   - name: Multi-VM tests
-    description: 'Concurrent VM execution, time-slicing fairness, state save/restore per VM. 10+ tests.'
+    description: Concurrent VM execution, time-slicing fairness, state save/restore
+      per VM. 10+ tests.
     status: todo
   scope_lines_total: 1200
   test_target: 10
@@ -4063,31 +4346,31 @@ phases:
   title: AI Vision Bridge -- Screenshot + Canvas Analysis
   status: planned
   goal: Expose the canvas as a base64 PNG that AI agents can request and analyze
-  description: 'AI_AGENT opcode returns the current canvas state as a base64-encoded PNG
-    written to RAM (or saved to VFS). Agents can take screenshots mid-execution, send them
-    to a vision LLM, and get back analysis of what rendered. Enables visual debugging
-    without human eyes.'
+  description: AI_AGENT opcode returns the current canvas state as a base64-encoded
+    PNG written to RAM (or saved to VFS). Agents can take screenshots mid-execution,
+    send them to a vision LLM, and get back analysis of what rendered. Enables visual
+    debugging without human eyes.
   deliverables:
   - name: AI_AGENT opcode (0x99)
-    description: 'AI_AGENT op_reg -- op=0: screenshot to VFS file, returns path addr in r0.
-      op=1: get canvas checksum (fast comparison for "did it change"). op=2: diff two
-      screenshots, returns changed pixel count in r0. op=3: call external vision API
-      with screenshot + prompt from RAM.'
+    description: 'AI_AGENT op_reg -- op=0: screenshot to VFS file, returns path addr
+      in r0. op=1: get canvas checksum (fast comparison for "did it change"). op=2:
+      diff two screenshots, returns changed pixel count in r0. op=3: call external
+      vision API with screenshot + prompt from RAM.'
     status: todo
   - name: Canvas-to-PNG export
-    description: 'Convert the 256x256 u32 canvas buffer to a PNG file in VFS. No external
-      dependencies -- pure Rust PNG encoder (header + deflate). ~50 lines.'
+    description: Convert the 256x256 u32 canvas buffer to a PNG file in VFS. No external
+      dependencies -- pure Rust PNG encoder (header + deflate). ~50 lines.
     status: todo
   - name: Canvas checksum
-    description: 'Fast hash of the canvas buffer (FNV-1a or simple XOR fold). Lets agents
-      quickly check if a program changed the screen without sending full images.'
+    description: Fast hash of the canvas buffer (FNV-1a or simple XOR fold). Lets
+      agents quickly check if a program changed the screen without sending full images.
     status: todo
   - name: ai_vision.asm
-    description: 'Demo: draw something complex, call AI_AGENT screenshot, compare checksum
-      before/after. Proves the pipeline works.'
+    description: 'Demo: draw something complex, call AI_AGENT screenshot, compare
+      checksum before/after. Proves the pipeline works.'
     status: todo
   - name: AI vision tests
-    description: 'Screenshot saves, checksum matches, diff detects changes. 8+ tests.'
+    description: Screenshot saves, checksum matches, diff detects changes. 8+ tests.
     status: todo
   scope_lines_total: 600
   test_target: 8
@@ -4095,25 +4378,28 @@ phases:
   title: AI Agent Input -- Programmatic Keyboard + Mouse Injection
   status: planned
   goal: Let AI agents inject keyboard and mouse events to interact with running programs
-  description: 'AI agents can simulate user input programmatically. Send keystrokes,
+  description: AI agents can simulate user input programmatically. Send keystrokes,
     move the mouse, click buttons -- all from RAM commands instead of physical hardware.
-    Enables fully autonomous GUI testing and interaction.'
+    Enables fully autonomous GUI testing and interaction.
   deliverables:
   - name: AI_INJECT opcode (0x9A)
-    description: 'AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift state).
-      op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x, r2=y, r3=button).
-      op=3: inject text string (r1=addr of null-terminated string, types each char).'
+    description: 'AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift
+      state). op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x,
+      r2=y, r3=button). op=3: inject text string (r1=addr of null-terminated string,
+      types each char).'
     status: todo
   - name: Event injection queue
-    description: 'Injected events go into the same IKEY/MOUSEQ queue as real hardware events.
-      Agents and humans share the same input system. Injected events tagged with source flag.'
+    description: Injected events go into the same IKEY/MOUSEQ queue as real hardware
+      events. Agents and humans share the same input system. Injected events tagged
+      with source flag.
     status: todo
   - name: ai_interact.asm
-    description: 'Demo: program injects keystrokes into itself. Opens a menu, types text,
-      clicks a button -- all autonomously. Proves AI can drive the GUI.'
+    description: 'Demo: program injects keystrokes into itself. Opens a menu, types
+      text, clicks a button -- all autonomously. Proves AI can drive the GUI.'
     status: todo
   - name: AI input tests
-    description: 'Key injection, mouse move/click, text string injection, event ordering. 10+ tests.'
+    description: Key injection, mouse move/click, text string injection, event ordering.
+      10+ tests.
     status: todo
   scope_lines_total: 500
   test_target: 10
@@ -4121,74 +4407,78 @@ phases:
   title: AI Native Desktop -- Agents on the Map
   status: planned
   goal: AI agents appear as avatars on the infinite map and can interact with buildings
-  description: 'AI agents get their own avatars on the infinite map. They can walk around,
-    enter buildings, use apps, and build things -- all visible to the human player.
-    The map shows both human and AI activity in real time. Agents are citizens of the OS.'
+  description: AI agents get their own avatars on the infinite map. They can walk
+    around, enter buildings, use apps, and build things -- all visible to the human
+    player. The map shows both human and AI activity in real time. Agents are citizens
+    of the OS.
   deliverables:
   - name: Agent avatar system
-    description: 'Up to 4 AI agent avatars on the map. Different color from player (cyan
-      for AI). Agent movement is programmatic via AI_INJECT. Agent pathfinding: walk toward
-      target building, avoid obstacles.'
+    description: 'Up to 4 AI agent avatars on the map. Different color from player
+      (cyan for AI). Agent movement is programmatic via AI_INJECT. Agent pathfinding:
+      walk toward target building, avoid obstacles.'
     status: todo
   - name: Agent building interaction
-    description: 'AI agents can enter buildings, run apps, read output via AI_AGENT screenshot,
-      and report results. Agent enters terminal building, runs command, reads output,
-      returns to map.'
+    description: AI agents can enter buildings, run apps, read output via AI_AGENT
+      screenshot, and report results. Agent enters terminal building, runs command,
+      reads output, returns to map.
     status: todo
   - name: Agent task queue
-    description: 'RAM-based task queue. Human assigns tasks to agents (via terminal command
-      or map UI). Agent picks up task, walks to building, executes, reports back. Proves
-      multi-agent coordination on the map.'
+    description: RAM-based task queue. Human assigns tasks to agents (via terminal
+      command or map UI). Agent picks up task, walks to building, executes, reports
+      back. Proves multi-agent coordination on the map.
     status: todo
   - name: ai_agents_demo.asm
-    description: 'Player assigns "run tests" to an AI agent. Agent walks to terminal building,
-      enters, runs cargo test equivalent, reads output, walks back, reports pass/fail as
-      floating text above avatar.'
+    description: Player assigns "run tests" to an AI agent. Agent walks to terminal
+      building, enters, runs cargo test equivalent, reads output, walks back, reports
+      pass/fail as floating text above avatar.
     status: todo
   - name: Agent avatar tests
-    description: 'Agent renders, pathfinding, building entry, task queue, reporting. 12+ tests.'
+    description: Agent renders, pathfinding, building entry, task queue, reporting.
+      12+ tests.
     status: todo
   scope_lines_total: 1200
   test_target: 12
 - id: phase-91
   title: GlyphLang Frontend -- High-Level Language for the Pixel VM
   status: planned
-  goal: Compile GlyphLang's spatial assembly syntax to Geometry OS bytecode, giving the VM a high-level language
-  description: 'GlyphLang is a stack-based language with concise opcodes. This phase builds
-    a compiler that translates .glyph spatial assembly programs into GeoOS register-based
-    bytecode. Users write in GlyphLang''s compact syntax and the VM runs it. The "C compiler"
-    moment -- a high-level language on top of the pixel machine.'
+  goal: Compile GlyphLang's spatial assembly syntax to Geometry OS bytecode, giving
+    the VM a high-level language
+  description: GlyphLang is a stack-based language with concise opcodes. This phase
+    builds a compiler that translates .glyph spatial assembly programs into GeoOS
+    register-based bytecode. Users write in GlyphLang's compact syntax and the VM
+    runs it. The "C compiler" moment -- a high-level language on top of the pixel
+    machine.
   deliverables:
   - name: GlyphLang lexer
     description: 'Tokenize .glyph spatial assembly: numbers (0-9), operators (+-*/),
-      comparison (>=<), control (?L), metamorphic (M), biological (S), I/O (.@).
-      Library callable from assembly. Ignores comments and whitespace.'
+      comparison (>=<), control (?L), metamorphic (M), biological (S), I/O (.@). Library
+      callable from assembly. Ignores comments and whitespace.'
     status: todo
   - name: Stack-to-register translator
-    description: 'Map GlyphLang stack operations to GeoOS register instructions.
-      Stack depth in r31, RAM 0xF00-0xFFF. Push=STORE, Pop=LOAD. Maps +-*/ to
-      ADD/SUB/MUL/DIV, >=< to CMP+conditional.'
+    description: Map GlyphLang stack operations to GeoOS register instructions. Stack
+      depth in r31, RAM 0xF00-0xFFF. Push=STORE, Pop=LOAD. Maps +-*/ to ADD/SUB/MUL/DIV,
+      >=< to CMP+conditional.
     status: todo
   - name: Spatial opcodes mapped
-    description: 'S (Mitosis) maps to FORK. M (Mutator) maps to self-modifying code.
-      . (output) maps to DRAW. @ maps to HALT. ? maps to JNZ/JZ. L maps to loop.'
+    description: S (Mitosis) maps to FORK. M (Mutator) maps to self-modifying code.
+      . (output) maps to DRAW. @ maps to HALT. ? maps to JNZ/JZ. L maps to loop.
     status: todo
   - name: glyph_compiler.asm
-    description: 'Compiler runs inside the VM. Reads .glyph source from VFS, tokenizes,
+    description: Compiler runs inside the VM. Reads .glyph source from VFS, tokenizes,
       translates to GeoOS bytecode, writes .asm to VFS. Uses self-hosting assembler
-      as backend.'
+      as backend.
     status: todo
   - name: glyph_demo.asm
-    description: 'Runs a GlyphLang program compiled on-the-fly. Source: 3 4 + .
-      Result (7) appears on screen.'
+    description: 'Runs a GlyphLang program compiled on-the-fly. Source: 3 4 + . Result
+      (7) appears on screen.'
     status: todo
   - name: glyph_fib.glyph
-    description: 'Fibonacci in spatial assembly compiles and runs correctly, drawing
-      the sequence on screen.'
+    description: Fibonacci in spatial assembly compiles and runs correctly, drawing
+      the sequence on screen.
     status: todo
   - name: GlyphLang compiler tests
-    description: 'Lexer tokenizes all opcodes, translator maps correctly, full compile+run
-      matches expected output. 12+ tests.'
+    description: Lexer tokenizes all opcodes, translator maps correctly, full compile+run
+      matches expected output. 12+ tests.
     status: todo
   scope_lines_total: 2000
   test_target: 12
@@ -4196,13 +4486,16 @@ global_risks:
 - 'Opcode space: 113 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
-- Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
+- Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager
+  tests passing
 - Filesystem persistence needs host directory -- WASM port needs different backing
-- 'Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces shared-RAM for multiprocess'
+- 'Phase 24 memory protection resolved: page tables + segfaults working, IPC replaces
+  shared-RAM for multiprocess'
 - 'Phase 28 device drivers: IOCTL opcode 0x62, 4 device files at fds 0xE000-0xE003'
 - Self-modifying code is inherently hard to debug -- need good error reporting
 - Assembly inside a running VM may be slow for large programs -- may need optimization
-- The concept of a program rewriting itself challenges test design -- how do you unit test a program that changes?
+- The concept of a program rewriting itself challenges test design -- how do you unit
+  test a program that changes?
 - RAM size expansion (phase 46) affects the fuzzer which generates random addresses
 conventions:
 - Every new opcode gets a test in tests/program_tests.rs

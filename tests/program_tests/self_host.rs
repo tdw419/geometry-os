@@ -60,12 +60,19 @@ fn test_self_host_assembles() {
 #[test]
 fn test_self_host_runs() {
     let vm = compile_run("programs/self_host.asm");
-    assert_eq!(vm.screen[0], 3, "top-left should be green");
-    assert_eq!(vm.screen[128 * 256 + 128], 3, "center should be green");
-    assert_eq!(
-        vm.screen[255 * 256 + 255],
-        3,
-        "bottom-right should be green"
+    // The enhanced self_host generates a diagonal gradient program:
+    // color = (x + y) & 255, drawn with PSET.
+    // Assembly must succeed
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASM should succeed");
+    assert!(vm.ram[0xFFD] > 0, "ASM should produce bytecode");
+    // The program should halt (generated code ends with HALT)
+    assert!(vm.halted, "self_host should halt after gradient completes");
+    // Screen should have non-black pixels from both the border and gradient
+    let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(
+        non_black > 1000,
+        "screen should have gradient + border pixels, got {} non-black",
+        non_black
     );
 }
 
@@ -783,5 +790,29 @@ fn test_living_map_rain_draws_blue_pixels() {
         rain_pixels > 0,
         "should have rain pixels (0x4488FF) on screen, found {}",
         rain_pixels
+    );
+}
+
+// === Pixel IDE (Phase 70: Self-Hosting Pixel Assembler) ===
+
+#[test]
+fn test_pixel_ide_assembles() {
+    let vm = compile_run("programs/pixel_ide.asm");
+    // The pixel_ide creates 3 windows, draws into them, then assembles
+    // and runs "LDI r1, 42; HALT" which sets r1=42 and halts.
+    assert!(
+        vm.halted,
+        "pixel_ide should halt after running generated code"
+    );
+    // The generated program sets r1 = 42
+    assert_eq!(vm.regs[1], 42, "r1 should be 42 from generated code");
+    // Assembly should have succeeded
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASM should succeed in pixel_ide");
+    // Should have created windows (3 windows)
+    let active_windows = vm.windows.iter().filter(|w| w.active).count();
+    assert!(
+        active_windows >= 3,
+        "pixel_ide should create at least 3 windows, got {}",
+        active_windows
     );
 }

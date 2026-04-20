@@ -27,33 +27,21 @@ fn test_sprite_opcode() {
         }
     }
 
-    // Sprite data should be written to RAM at 0x3000
-    // Eye pixels patched at offset 9 (index 1,1) and 14 (index 6,1)
+    // Sprite 0 at 0x3000: solid red square (16x16) - fill_sprite fills all 256 cells
+    // Check that sprite 0 data exists (red pixels)
+    assert_ne!(vm.ram[0x3000], 0, "sprite 0 should have data at start");
     assert_eq!(
-        vm.ram[0x3009], 0x00AAFF,
-        "eye pixel at RAM[0x3009] should be 0x00AAFF"
+        vm.ram[0x3000], 0xFF0000,
+        "sprite 0 top-left should be red (0xFF0000)"
     );
+    // Sprite 1 should be green
     assert_eq!(
-        vm.ram[0x300E], 0x00AAFF,
-        "eye pixel at RAM[0x300E] should be 0x00AAFF"
+        vm.ram[0x3100], 0x00FF00,
+        "sprite 1 start should be green (0x00FF00)"
     );
-    // Shirt rows (offsets 32-47 = 0x3020..0x302F) should be shirt blue
-    assert_eq!(
-        vm.ram[0x3020], 0x3355AA,
-        "shirt pixel at RAM[0x3020] should be 0x3355AA"
-    );
-    // Corner transparent pixels should remain 0
-    assert_eq!(
-        vm.ram[0x3000], 0,
-        "top-left corner of sprite should be transparent"
-    );
-    assert_eq!(
-        vm.ram[0x3007], 0,
-        "top-right corner of sprite should be transparent"
-    );
-    // Screen should have been rendered (player starts at 124,100 — some pixel nearby is non-zero)
-    let player_x = 124usize;
-    let player_y = 100usize;
+    // Screen should have been rendered (sprites start at 20,20)
+    let player_x = 20usize;
+    let player_y = 20usize;
     let row_has_pixels = (player_x..player_x + 8).any(|x| vm.screen[player_y * 256 + x] != 0);
     assert!(
         row_has_pixels,
@@ -2688,4 +2676,33 @@ fn test_roguelike_wall_collision_blocks() {
         let tile = vm.ram[0x5000 + new_py * 64 + new_px];
         assert_eq!(tile, 1, "player moved to non-floor tile: {}", tile);
     }
+}
+
+#[test]
+fn test_sprite_debug() {
+    let source = std::fs::read_to_string("programs/sprite_demo.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Debug: print sprite data
+    eprintln!("RAM[0x3000..0x3010]: {:?}", &vm.ram[0x3000..0x3010]);
+    eprintln!("RAM[0x3100..0x3110]: {:?}", &vm.ram[0x3100..0x3110]);
+    eprintln!("RAM[0x3200..0x3210]: {:?}", &vm.ram[0x3200..0x3210]);
+    eprintln!("RAM[0x3300..0x3310]: {:?}", &vm.ram[0x3300..0x3310]);
+    eprintln!("Frame count: {}", vm.frame_count);
+    eprintln!("Halted: {}", vm.halted);
 }

@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 75/92 phases complete, 0 in progress
+**Progress:** 77/92 phases complete, 0 in progress
 
-**Deliverables:** 319/398 complete
+**Deliverables:** 327/398 complete
 
 **Tasks:** 98/98 complete
 
@@ -82,15 +82,15 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-68 WINSYS Opcode | COMPLETE | 5/5 | 500 | 10 |
 | phase-68b Window Mouse Interaction + Desktop Demo | COMPLETE | 3/3 | 700 | 12 |
 | phase-69 Sprite Engine | COMPLETE | 6/7 | 800 | 12 |
-| phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
-| phase-71 Pixel Network Protocol | PLANNED | 0/6 | 900 | 10 |
+| phase-70 Self-Hosting Pixel Assembler | COMPLETE | 4/4 | 1,500 | 8 |
+| phase-71 Pixel Network Protocol | COMPLETE | 6/6 | 900 | 11 |
 | phase-72 Desktop Taskbar + App Launcher | PLANNED | 0/3 | 800 | 8 |
 | phase-73 Core Utilities | COMPLETE | 5/5 | 1,000 | 10 |
 | phase-74 Image Viewer + Screenshot | COMPLETE | 4/4 | 600 | 8 |
 | phase-75 Stopwatch + Timer + Calculator (scientific) | COMPLETE | 4/4 | 1,200 | 10 |
 | phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |
 | phase-77 Settings + Wallpaper + Screensaver | COMPLETE | 4/4 | 1,000 | 11 |
-| phase-78 Calendar + About + Help System | COMPLETE | 0/4 | 800 | 8 |
+| phase-78 Calendar + About + Help System | COMPLETE | 4/4 | 800 | 8 |
 | phase-79 Neural Network Forward Pass (Pixel Neural Net) | COMPLETE | 5/5 | 1,500 | 10 |
 | phase-80 LLM Bridge Opcode (External AI) | PLANNED | 0/5 | 1,200 | 8 |
 | phase-81 HTTP Client + Text Browser | PLANNED | 0/4 | 1,500 | 10 |
@@ -103,6 +103,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | PLANNED | 0/5 | 600 | 8 |
 | phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | PLANNED | 0/4 | 500 | 10 |
 | phase-90 AI Native Desktop -- Agents on the Map | PLANNED | 0/5 | 1,200 | 12 |
+| phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | PLANNED | 0/7 | - | - |
 
 ## Dependencies
 
@@ -2095,7 +2096,7 @@ SPRBLT opcode blits sprites from sprite sheets stored in RAM. Transparent pixels
 - [ ] **tilemap_demo.asm** -- Deferred to future phase. TILEMAP opcode already exists and is tested.
 - [x] **Sprite engine tests** -- 11 tests: basic blit, second sprite, transparency, screen clipping, negative position, high sprite ID, all transparent, assembler, assembler error, disasm, full end-to-end run.
 
-## [ ] phase-70: Self-Hosting Pixel Assembler (PLANNED)
+## [x] phase-70: Self-Hosting Pixel Assembler (COMPLETE)
 
 **Goal:** Write and assemble GO programs entirely inside GO, rendered as pixels
 
@@ -2108,7 +2109,7 @@ The existing self_host.asm proves the VM can assemble text. Push it to a full pi
 - [ ] **pixel_ide.asm** -- Windowed IDE with notepad (editor pane), assembler (build pane), and output (screen pane). Three processes in windows. Type code, press F5, see result.
 - [ ] **Self-hosting test** -- Write a simple .asm program using the pixel IDE, assemble it, run it, verify output matches expected result. The OS built and ran its own program.
 
-## [ ] phase-71: Pixel Network Protocol (PLANNED)
+## [x] phase-71: Pixel Network Protocol (COMPLETE)
 
 **Goal:** Share screens and communicate between Geometry OS instances over network
 
@@ -2116,12 +2117,12 @@ NET_SEND/NET_RECV opcodes for pixel-level communication. Send a screen region to
 
 ### Deliverables
 
-- [ ] **NET_SEND opcode enhancement (0x6E)** -- NET_SEND addr, len, dest_addr -- send pixel data to another GO instance. dest_addr is IP:port stored as null-terminated string in RAM.
-- [ ] **NET_RECV opcode enhancement (0x6F)** -- NET_RECV addr, max_len -- receive pending pixel data into RAM buffer. r0 = bytes received (0 if none). Non-blocking.
-- [ ] **Pixel protocol format** -- Frame: [4-byte header: type(1B) + width(1B) + height(1B) + flags(1B)] + [pixel data as RGBA u32 array]. Types: screen_share, chat, file.
-- [ ] **net_share.asm** -- Two-instance demo: one GO instance shares its screen, the other displays it in a window. Real-time pixel streaming at ~1 FPS.
-- [ ] **net_chat.asm** -- Simple pixel chat: type messages in terminal, send to peer, messages appear on their screen. Proves bidirectional NET_SEND/NET_RECV.
-- [ ] **Network tests** -- Send/receive pixel frames, protocol parsing, connection handling. 10+ tests.
+- [x] **NET_SEND opcode (0x99)** -- NET_SEND addr, len, dest_addr -- send pixel data to another GO instance. dest_addr is IP:port stored as null-terminated string in RAM.
+- [x] **NET_RECV opcode (0x9A)** -- NET_RECV addr, max_len -- receive pending pixel data into RAM buffer. r0 = bytes received (0 if none). Non-blocking.
+- [x] **Pixel protocol format** -- Frame: [4-byte header: type(1B) + width(1B) + height(1B) + flags(1B)] + [pixel data as RGBA u32 array]. Types: screen_share, chat, file.
+- [x] **net_share.asm** -- Two-instance demo: one GO instance shares its screen, the other displays it in a window. Real-time pixel streaming at ~1 FPS.
+- [x] **net_chat.asm** -- Simple pixel chat: type messages in terminal, send to peer, messages appear on their screen. Proves bidirectional NET_SEND/NET_RECV.
+- [x] **Network tests** -- Send/receive pixel frames, protocol parsing, connection handling. 10+ tests.
 
 ## [ ] phase-72: Desktop Taskbar + App Launcher (PLANNED)
 

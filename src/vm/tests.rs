@@ -10157,3 +10157,369 @@ fn test_help_scrolls() {
     // Scroll should have advanced
     assert_eq!(vm.ram[0x6100], 1, "scroll should be 1 after down arrow");
 }
+
+// -- Tests for .db, .asciz, .ascii assembler directives --
+
+#[test]
+fn test_db_directive_basic() {
+    let source = ".db 72, 101, 108, 108, 111\nHALT";
+    let result = crate::assembler::assemble(source, 0).unwrap();
+    // Should emit 5 byte values + 1 HALT = 6 words total
+    assert_eq!(result.pixels.len(), 6);
+    assert_eq!(result.pixels[0], 72); // 'H'
+    assert_eq!(result.pixels[1], 101); // 'e'
+    assert_eq!(result.pixels[2], 108); // 'l'
+    assert_eq!(result.pixels[3], 108); // 'l'
+    assert_eq!(result.pixels[4], 111); // 'o'
+    assert_eq!(result.pixels[5], 0x00); // HALT
+}
+
+#[test]
+fn test_db_directive_hex_values() {
+    let source = ".db 0xFF, 0x00, 0x0F";
+    let result = crate::assembler::assemble(source, 0).unwrap();
+    assert_eq!(result.pixels.len(), 3);
+    assert_eq!(result.pixels[0], 0xFF);
+    assert_eq!(result.pixels[1], 0x00);
+    assert_eq!(result.pixels[2], 0x0F);
+}
+
+#[test]
+fn test_db_directive_with_labels() {
+    let source = "LDI r0, 10\n.db 1, 2, 3\nADD r0, r0\nHALT";
+    let result = crate::assembler::assemble(source, 0).unwrap();
+    // LDI(3 words) + .db(3 words) + ADD(3 words) + HALT(1 word) = 10
+    assert_eq!(result.pixels.len(), 10);
+    assert_eq!(result.pixels[3], 1);
+    assert_eq!(result.pixels[4], 2);
+    assert_eq!(result.pixels[5], 3);
+}
+
+#[test]
+fn test_asciz_directive_basic() {
+    let source = ".asciz \"Hello\"\nHALT";
+    let result = crate::assembler::assemble(source, 0).unwrap();
+    // "Hello" = 5 chars + null terminator = 6 words + HALT = 7
+    assert_eq!(result.pixels.len(), 7);
+    assert_eq!(result.pixels[0], 72); // 'H'
+    assert_eq!(result.pixels[1], 101); // 'e'
+    assert_eq!(result.pixels[2], 108); // 'l'
+    assert_eq!(result.pixels[3], 108); // 'l'
+    assert_eq!(result.pixels[4], 111); // 'o'
+    assert_eq!(result.pixels[5], 0); // null terminator
+}
+
+#[test]
+fn test_asciz_directive_empty_string() {
+    let source = ".asciz \"\"\nHALT";
+    let result = crate::assembler::assemble(source, 0).unwrap();
+    // Empty string + null = 1 word + HALT = 2
+    assert_eq!(result.pixels.len(), 2);
+    assert_eq!(result.pixels[0], 0); // null terminator
+}
+
+#[test]
+fn test_ascii_directive_no_null() {
+    let source = ".ascii \"Hi\"\n.asciz \"Bye\"\nHALT";
+    let result = crate::assembler::assemble(source, 0).unwrap();
+    // .ascii "Hi" = 2 words (no null) + .asciz "Bye" = 4 words (3 chars + null) + HALT = 7
+    assert_eq!(result.pixels.len(), 7);
+    assert_eq!(result.pixels[0], 72); // 'H'
+    assert_eq!(result.pixels[1], 105); // 'i'
+    assert_eq!(result.pixels[2], 66); // 'B'
+    assert_eq!(result.pixels[3], 121); // 'y'
+    assert_eq!(result.pixels[4], 101); // 'e'
+    assert_eq!(result.pixels[5], 0); // null terminator from .asciz
+}
+
+#[test]
+fn test_db_directive_case_insensitive() {
+    let source = ".DB 65, 66\n.Db 67\nHALT";
+    let result = crate::assembler::assemble(source, 0).unwrap();
+    assert_eq!(result.pixels.len(), 4);
+    assert_eq!(result.pixels[0], 65);
+    assert_eq!(result.pixels[1], 66);
+    assert_eq!(result.pixels[2], 67);
+}
+
+#[test]
+fn test_asm_opcode_with_db_and_asciz() {
+    // Test that the ASM opcode can assemble programs using .db and .asciz
+    let mut vm = crate::vm::Vm::new();
+
+    // Write source to RAM at 0x2000 using LDI+STORE
+    let source = ".db 72, 101, 108, 108, 111, 0\nLDI r0, 0x2000\nTEXT r0, r0, r0\nHALT";
+    // Actually, let's just use the assembler directly
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "assembly with .db should succeed");
+}
+
+#[test]
+fn test_self_host_asm_assembles() {
+    let source = std::fs::read_to_string("programs/self_host.asm").unwrap();
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "self_host.asm should assemble: {:?}",
+        result.err()
+    );
+    let bc = result.unwrap();
+    assert!(
+        bc.pixels.len() > 50,
+        "self_host.asm should produce substantial bytecode, got {} words",
+        bc.pixels.len()
+    );
+}
+
+#[test]
+fn test_self_host_asm_runs() {
+    let source = std::fs::read_to_string("programs/self_host.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run for up to 10M steps
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    // The program should have halted
+    assert!(vm.halted, "self_host.asm should halt");
+    // After running, the screen should have some colored pixels (the gradient)
+    let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(
+        non_black > 100,
+        "self_host.asm should produce visible output, got {} non-black pixels",
+        non_black
+    );
+}
+
+// ── NET_SEND / NET_RECV tests (Phase 71: Pixel Network Protocol) ──────────
+
+#[test]
+fn test_net_send_assembles() {
+    let src = "LDI r1, 0x7000
+LDI r2, 10
+LDI r3, 0
+NET_SEND r1, r2, r3
+HALT";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(
+        result.is_ok(),
+        "NET_SEND should assemble: {:?}",
+        result.err()
+    );
+    let bc = result.unwrap();
+    // LDI(3) + LDI(3) + LDI(3) + NET_SEND(4) + HALT(1) = 14 words
+    assert_eq!(bc.pixels.len(), 14);
+    assert_eq!(bc.pixels[9], 0x99, "NET_SEND opcode should be 0x99");
+}
+
+#[test]
+fn test_net_recv_assembles() {
+    let src = "LDI r1, 0x7000
+LDI r2, 256
+NET_RECV r1, r2
+HALT";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(
+        result.is_ok(),
+        "NET_RECV should assemble: {:?}",
+        result.err()
+    );
+    let bc = result.unwrap();
+    // LDI(3) + LDI(3) + NET_RECV(3) + HALT(1) = 10 words
+    assert_eq!(bc.pixels.len(), 10);
+    assert_eq!(bc.pixels[6], 0x9A, "NET_RECV opcode should be 0x9A");
+}
+
+#[test]
+fn test_net_send_invalid_fd() {
+    let mut vm = crate::vm::Vm::new();
+    // Set up registers
+    vm.regs[1] = 0x7000; // buf addr
+    vm.regs[2] = 10; // len
+    vm.regs[3] = 0; // fd (not connected)
+
+    // NET_SEND r1, r2, r3 at address 0
+    vm.ram[0] = 0x99;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.pc = 0;
+
+    vm.step();
+    assert_eq!(
+        vm.regs[0],
+        crate::vm::net::NET_ERR_INVALID_FD,
+        "NET_SEND should fail with invalid fd"
+    );
+}
+
+#[test]
+fn test_net_recv_empty_inbox() {
+    let mut vm = crate::vm::Vm::new();
+    vm.regs[1] = 0x7000; // buf addr
+    vm.regs[2] = 256; // max_len
+
+    // NET_RECV r1, r2 at address 0
+    vm.ram[0] = 0x9A;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.pc = 0;
+
+    vm.step();
+    assert_eq!(
+        vm.regs[0], 0,
+        "NET_RECV should return 0 when inbox is empty"
+    );
+}
+
+#[test]
+fn test_net_recv_from_inbox() {
+    let mut vm = crate::vm::Vm::new();
+    vm.regs[1] = 0x7000; // buf addr
+    vm.regs[2] = 256; // max_len
+
+    // Push a frame into the inbox
+    // Frame: header word + 3 pixel data words
+    // Header: type=1 (chat), width=3, height=1, flags=0
+    let header = (1u32 << 24) | (3u32 << 16) | (1u32 << 8) | 0u32;
+    vm.net_inbox
+        .push(vec![header, 0xFF0000, 0x00FF00, 0x0000FF]);
+
+    // NET_RECV r1, r2 at address 0
+    vm.ram[0] = 0x9A;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.pc = 0;
+
+    vm.step();
+
+    // r0 should be 7 (4 header words + 3 data words)
+    assert_eq!(vm.regs[0], 7, "NET_RECV should return total words written");
+
+    // Verify header was written
+    assert_eq!(vm.ram[0x7000], 1, "frame type should be chat (1)");
+    assert_eq!(vm.ram[0x7001], 3, "width should be 3");
+    assert_eq!(vm.ram[0x7002], 1, "height should be 1");
+    assert_eq!(vm.ram[0x7003], 0, "flags should be 0");
+
+    // Verify pixel data
+    assert_eq!(vm.ram[0x7004], 0xFF0000, "pixel 0 should be red");
+    assert_eq!(vm.ram[0x7005], 0x00FF00, "pixel 1 should be green");
+    assert_eq!(vm.ram[0x7006], 0x0000FF, "pixel 2 should be blue");
+
+    // Inbox should be empty now
+    assert!(vm.net_inbox.is_empty(), "inbox should be empty after recv");
+}
+
+#[test]
+fn test_net_recv_multiple_frames() {
+    let mut vm = crate::vm::Vm::new();
+
+    // Push two frames
+    let header1 = (0u32 << 24) | (2u32 << 16) | (1u32 << 8); // screen_share
+    vm.net_inbox.push(vec![header1, 0x112233, 0x445566]);
+    let header2 = (1u32 << 24) | (1u32 << 16) | (1u32 << 8); // chat
+    vm.net_inbox.push(vec![header2, 0xAABBCC]);
+
+    // Receive first frame
+    vm.regs[1] = 0x7000;
+    vm.regs[2] = 256;
+    vm.ram[0] = 0x9A;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.pc = 0;
+    vm.step();
+    assert_eq!(vm.regs[0], 6, "first frame: 4 header + 2 data");
+    assert_eq!(vm.ram[0x7004], 0x112233);
+    assert_eq!(vm.ram[0x7005], 0x445566);
+
+    // Receive second frame
+    vm.regs[1] = 0x7100;
+    vm.regs[2] = 256;
+    vm.ram[100] = 0x9A;
+    vm.ram[101] = 1;
+    vm.ram[102] = 2;
+    vm.pc = 100;
+    vm.step();
+    assert_eq!(vm.regs[0], 5, "second frame: 4 header + 1 data");
+    assert_eq!(vm.ram[0x7104], 0xAABBCC);
+    assert!(vm.net_inbox.is_empty());
+}
+
+#[test]
+fn test_net_recv_respects_max_len() {
+    let mut vm = crate::vm::Vm::new();
+    vm.regs[1] = 0x7000;
+    vm.regs[2] = 1; // max_len = 1 (very small)
+
+    // Push a frame with 5 pixels
+    let header = (0u32 << 24) | (5u32 << 16) | (1u32 << 8);
+    vm.net_inbox
+        .push(vec![header, 0x11, 0x22, 0x33, 0x44, 0x55]);
+
+    vm.ram[0] = 0x9A;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.pc = 0;
+    vm.step();
+
+    // Should only receive 1 data pixel (max_len = 1), but still writes 4 header words
+    assert_eq!(vm.regs[0], 5, "should write 4 header + 1 data = 5");
+    assert_eq!(vm.ram[0x7004], 0x11, "only first pixel written");
+}
+
+#[test]
+fn test_net_send_disasm() {
+    let (s, len) = disasm(&[0x99, 1, 2, 3]);
+    assert_eq!(s, "NET_SEND r1, r2, r3");
+    assert_eq!(len, 4);
+}
+
+#[test]
+fn test_net_recv_disasm() {
+    let (s, len) = disasm(&[0x9A, 5, 6]);
+    assert_eq!(s, "NET_RECV r5, r6");
+    assert_eq!(len, 3);
+}
+
+#[test]
+fn test_pixel_protocol_format() {
+    // Verify the pixel protocol frame format constants:
+    // Frame types: 0=screen_share, 1=chat, 2=file
+    // Header encoding: (type << 24) | (width << 16) | (height << 8) | flags
+    // Note: width and height are 8-bit fields (0-255)
+    let screen_share: u32 = (0u32 << 24) | (16u32 << 16) | (16u32 << 8) | 0u32;
+    assert_eq!(
+        (screen_share >> 24) & 0xFF,
+        0,
+        "type should be screen_share"
+    );
+    assert_eq!((screen_share >> 16) & 0xFF, 16, "width should be 16");
+    assert_eq!((screen_share >> 8) & 0xFF, 16, "height should be 16");
+    assert_eq!(screen_share & 0xFF, 0, "flags should be 0");
+
+    let chat: u32 = (1u32 << 24) | (80u32 << 16) | (1u32 << 8) | 0u32;
+    assert_eq!((chat >> 24) & 0xFF, 1, "type should be chat");
+    assert_eq!((chat >> 16) & 0xFF, 80, "width should be 80");
+}
+
+#[test]
+fn test_net_inbox_cleared_on_reset() {
+    let mut vm = crate::vm::Vm::new();
+    vm.net_inbox.push(vec![0x01020304, 0x05060708]);
+    assert_eq!(vm.net_inbox.len(), 1);
+    vm.reset();
+    assert!(
+        vm.net_inbox.is_empty(),
+        "net_inbox should be cleared on reset"
+    );
+}

@@ -753,6 +753,23 @@ impl Vm {
             // SCRSHOT path_addr_reg (0x98) -- save screen to VFS file
             0x98 => (format!("SCRSHOT {}", reg(ram(a + 1))), 2),
 
+            // NET_SEND addr_reg, len_reg, dest_reg (0x99) -- send pixel data
+            0x99 => (
+                format!(
+                    "NET_SEND {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3))
+                ),
+                4,
+            ),
+
+            // NET_RECV addr_reg, max_len_reg (0x9A) -- receive pixel data
+            0x9A => (
+                format!("NET_RECV {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

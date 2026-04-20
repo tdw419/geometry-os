@@ -202,6 +202,73 @@ fn assemble_inner(source: &str, base_addr: usize) -> Result<AsmResult, AsmError>
             continue;
         }
 
+        // .db val1, val2, ... -- alias for .byte (emit raw byte values as u32 words)
+        if line.to_lowercase().starts_with(".db") {
+            let rest = line[3..].trim();
+            // Skip if it looks like a longer directive starting with .db (e.g. .dbprefix)
+            if rest.is_empty() || rest.starts_with(',') {
+                return Err(AsmError {
+                    line: line_num + 1,
+                    message: ".db requires at least one value".into(),
+                });
+            }
+            let parts: Vec<&str> = rest.split(',').collect();
+            for part in parts {
+                let val_str = part.trim();
+                if val_str.is_empty() {
+                    continue;
+                }
+                match parse_imm(val_str, &constants) {
+                    Ok(v) => bytecode.push(v & 0xFF),
+                    Err(e) => {
+                        return Err(AsmError {
+                            line: line_num + 1,
+                            message: format!("invalid .db value '{}': {}", val_str, e),
+                        })
+                    }
+                }
+            }
+            continue;
+        }
+
+        // .asciz "text" -- emit null-terminated string (alias for .str)
+        if line.to_lowercase().starts_with(".asciz") {
+            let rest = line[6..].trim();
+            if !((rest.starts_with('"') && rest.ends_with('"'))
+                || (rest.starts_with('\'') && rest.ends_with('\'')))
+            {
+                return Err(AsmError {
+                    line: line_num + 1,
+                    message: ".asciz requires a quoted string: .asciz \"text\"".into(),
+                });
+            }
+            let s = &rest[1..rest.len() - 1];
+            for ch in s.bytes() {
+                bytecode.push(ch as u32);
+            }
+            bytecode.push(0); // null terminator
+            continue;
+        }
+
+        // .ascii "text" -- emit string WITHOUT null terminator (each char as u32 word)
+        if line.to_lowercase().starts_with(".ascii") && !line.to_lowercase().starts_with(".asciz") {
+            let rest = line[6..].trim();
+            if !((rest.starts_with('"') && rest.ends_with('"'))
+                || (rest.starts_with('\'') && rest.ends_with('\'')))
+            {
+                return Err(AsmError {
+                    line: line_num + 1,
+                    message: ".ascii requires a quoted string: .ascii \"text\"".into(),
+                });
+            }
+            let s = &rest[1..rest.len() - 1];
+            for ch in s.bytes() {
+                bytecode.push(ch as u32);
+            }
+            // No null terminator -- that's the difference from .asciz
+            continue;
+        }
+
         // Check for label (colon outside quotes only)
         let colon_pos = find_colon_outside_quotes(line);
         if let Some(label_end) = colon_pos {
