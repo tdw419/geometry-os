@@ -777,7 +777,7 @@ Just the commands you want executed, in order."#;
 /// Human-readable mnemonic for an opcode byte.
 /// Derived from src/vm/disasm.rs -- the authoritative ISA mapping.
 /// Any gap = opcode not yet assigned (shows as "???").
-fn opcode_name(op: u8) -> &'static str {
+pub(crate) fn opcode_name(op: u8) -> &'static str {
     match op {
         0x00 => "HALT",
         0x01 => "NOP",

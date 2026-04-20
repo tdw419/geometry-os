@@ -22,7 +22,7 @@ impl Vm {
                             self.pixel_write_log.push(
                                 x as u16,
                                 y as u16,
-                                self.trace_buffer.step_counter(),
+                                self.trace_buffer.step_counter().saturating_sub(1),
                                 0x40,
                                 color,
                             );
@@ -42,7 +42,7 @@ impl Vm {
                         self.pixel_write_log.push(
                             x as u16,
                             y as u16,
-                            self.trace_buffer.step_counter(),
+                            self.trace_buffer.step_counter().saturating_sub(1),
                             0x41,
                             color,
                         );

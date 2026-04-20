@@ -142,6 +142,8 @@ pub fn cli_main(extra_args: &[String]) {
                 println!("  step              Step one instruction");
                 println!("  trace [n]         Execute n instructions with log");
                 println!("  bp [addr]         Toggle/list breakpoints");
+                println!("  who_wrote <x> <y> Pixel provenance: what wrote to (x,y)?");
+                println!("  steps_around <step> [radius]  Instruction trace around step");
                 println!("  bpc               Clear all breakpoints");
                 println!("  disasm [addr] [n] Disassemble n instrs");
                 println!("  qemu boot <cfg>   Boot QEMU VM (e.g. qemu boot arch=riscv64 kernel=Image ram=256M)");
@@ -277,6 +279,9 @@ pub fn cli_main(extra_args: &[String]) {
                         // Phase 45: Sync canvas buffer TO VM before execution
                         vm.canvas_buffer.copy_from_slice(&canvas_buffer);
 
+                        // Enable trace recording for pixel provenance
+                        vm.trace_recording = true;
+
                         // Run the VM
                         let mut hit_bp = false;
                         for _ in 0..10_000_000 {
@@ -291,6 +296,9 @@ pub fn cli_main(extra_args: &[String]) {
 
                         // Phase 45: Sync canvas buffer FROM VM after execution
                         canvas_buffer.copy_from_slice(&vm.canvas_buffer);
+
+                        // Disable trace recording after execution
+                        vm.trace_recording = false;
 
                         if hit_bp {
                             println!("BREAK @ PC=0x{:04X}", vm.pc);
@@ -510,6 +518,120 @@ pub fn cli_main(extra_args: &[String]) {
                             break;
                         }
                     }
+                }
+            }
+            "who_wrote" => {
+                // who_wrote <x> <y> -- pixel provenance query
+                if parts.len() < 3 {
+                    println!("Usage: who_wrote <x> <y>");
+                    continue;
+                }
+                let x: u16 = match parts[1].parse() {
+                    Ok(v) if v < 256 => v,
+                    _ => {
+                        println!("x must be 0-255");
+                        continue;
+                    }
+                };
+                let y: u16 = match parts[2].parse() {
+                    Ok(v) if v < 256 => v,
+                    _ => {
+                        println!("y must be 0-255");
+                        continue;
+                    }
+                };
+                let total_writes = vm.pixel_write_log.count_at(x, y);
+                let current_color = vm.screen[y as usize * 256 + x as usize];
+                let buffer_full = vm.pixel_write_log.is_full();
+                if total_writes == 0 {
+                    if current_color != 0 {
+                        println!(
+                            "Pixel ({},{}) has 0 recorded writes BUT is colored 0x{:08X}!",
+                            x, y, current_color
+                        );
+                        println!("WARNING: pixel is colored but provenance data was evicted.");
+                    } else {
+                        println!("Pixel ({},{}) was never written (black/initial)", x, y);
+                    }
+                    println!("  Current color: 0x{:08X}", current_color);
+                } else {
+                    let caveat = if buffer_full {
+                        " (buffer full -- earlier writes may exist)"
+                    } else {
+                        ""
+                    };
+                    println!(
+                        "Pixel ({},{}) was written {} time(s){}:",
+                        x, y, total_writes, caveat
+                    );
+                    let entries = vm.pixel_write_log.recent_at(x, y, 10);
+                    for (i, entry) in entries.iter().enumerate() {
+                        let op_name = crate::hermes::opcode_name(entry.opcode);
+                        let label = if i == 0 { "last" } else { "prev" };
+                        println!(
+                            "  [{}] {} at step {} wrote color 0x{:08X}",
+                            label,
+                            op_name,
+                            entry.step(),
+                            entry.color
+                        );
+                    }
+                    println!("  Current color: 0x{:08X}", current_color);
+                }
+            }
+            "steps_around" => {
+                // steps_around <step> [radius=5]
+                if parts.len() < 2 {
+                    println!("Usage: steps_around <step> [radius=5]");
+                    continue;
+                }
+                let step: u64 = match parts[1].parse() {
+                    Ok(v) => v,
+                    Err(_) => {
+                        println!("Invalid step");
+                        continue;
+                    }
+                };
+                let radius: u64 = if parts.len() >= 3 {
+                    parts[2].parse().unwrap_or(5)
+                } else {
+                    5
+                };
+                let entries = vm.trace_buffer.range_around(step, radius);
+                if entries.is_empty() {
+                    let total = vm.trace_buffer.len();
+                    if total == 0 {
+                        println!("Trace buffer empty. Run a program first.");
+                    } else {
+                        println!(
+                            "No trace entries around step {}. Buffer has {} entries.",
+                            step, total
+                        );
+                    }
+                    continue;
+                }
+                println!(
+                    "=== Instruction trace around step {} (radius={}) ===",
+                    step, radius
+                );
+                for entry in &entries {
+                    let marker = if entry.step_number == step {
+                        ">>>"
+                    } else {
+                        "   "
+                    };
+                    let name = crate::hermes::opcode_name(entry.opcode as u8);
+                    println!(
+                        "{} step {:5} PC=0x{:04X} {:10} r0={:08X} r1={:08X} r2={:08X} r3={:08X}",
+                        marker,
+                        entry.step_number,
+                        entry.pc,
+                        name,
+                        entry.regs[0],
+                        entry.regs[1],
+                        entry.regs[2],
+                        entry.regs[3]
+                    );
                 }
             }
             "disasm" => {
