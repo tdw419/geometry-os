@@ -9640,3 +9640,171 @@ fn test_imgview_runs() {
     let title_pixel = vm.screen[4 * 256 + 4];
     assert_ne!(title_pixel, 0, "title bar should not be black background");
 }
+
+// ── Phase 75: Stopwatch + Timer + Scientific Calculator ─────────
+
+fn boot_app(asm_file: &str, frames: u32) -> Vm {
+    let source = std::fs::read_to_string(asm_file)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {}", asm_file, e));
+    let asm = crate::assembler::assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("Failed to assemble {}: {:?}", asm_file, e));
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + frames {
+            break;
+        }
+    }
+    vm
+}
+
+// ── Stopwatch Tests ──────────────────────────────────
+
+#[test]
+fn test_stopwatch_assembles() {
+    let source = std::fs::read_to_string("programs/stopwatch.asm").unwrap();
+    crate::assembler::assemble(&source, 0).expect("stopwatch.asm should assemble");
+}
+
+#[test]
+fn test_stopwatch_renders_frame() {
+    let vm = boot_app("programs/stopwatch.asm", 1);
+    assert!(!vm.halted, "stopwatch should not halt after boot");
+    // Background between title and time panel should be navy
+    assert_eq!(
+        vm.screen[30 * 256 + 10],
+        0x0D1B2A,
+        "background should be dark navy"
+    );
+    // Title bar region should be rendered
+    assert_eq!(
+        vm.screen[10 * 256 + 10],
+        0x1B3A4B,
+        "title bar should be rendered"
+    );
+}
+
+#[test]
+fn test_stopwatch_initial_state() {
+    let vm = boot_app("programs/stopwatch.asm", 1);
+    assert_eq!(vm.ram[0x4000], 0, "should start stopped");
+    assert_eq!(vm.ram[0x4004], 0, "elapsed should start at 0");
+    assert_eq!(vm.ram[0x400C], 0, "lap count should start at 0");
+}
+
+#[test]
+fn test_stopwatch_time_panel_rendered() {
+    let vm = boot_app("programs/stopwatch.asm", 1);
+    // Time panel edge (far right, away from text) should be dark
+    assert_eq!(
+        vm.screen[50 * 256 + 230],
+        0x060612,
+        "time panel edge should be dark"
+    );
+}
+
+#[test]
+fn test_stopwatch_runs_persistently() {
+    let vm = boot_app("programs/stopwatch.asm", 5);
+    assert!(!vm.halted, "stopwatch should run persistently");
+}
+
+// ── Timer Tests ──────────────────────────────────────
+
+#[test]
+fn test_timer_assembles() {
+    let source = std::fs::read_to_string("programs/timer.asm").unwrap();
+    crate::assembler::assemble(&source, 0).expect("timer.asm should assemble");
+}
+
+#[test]
+fn test_timer_renders_frame() {
+    let vm = boot_app("programs/timer.asm", 1);
+    assert!(!vm.halted, "timer should not halt after boot");
+    assert_eq!(
+        vm.screen[200 * 256 + 250],
+        0x1A0A2E,
+        "background should be dark purple"
+    );
+}
+
+#[test]
+fn test_timer_initial_countdown() {
+    let vm = boot_app("programs/timer.asm", 1);
+    assert_eq!(vm.ram[0x4000], 6000, "timer should start at 6000cs");
+    assert_eq!(vm.ram[0x4004], 0, "should start paused");
+    assert_eq!(vm.ram[0x400C], 0, "no alarm initially");
+}
+
+#[test]
+fn test_timer_countdown_panel() {
+    let vm = boot_app("programs/timer.asm", 1);
+    // Timer panel corner (top-left of panel, away from text)
+    assert_eq!(
+        vm.screen[42 * 256 + 32],
+        0x0A0616,
+        "timer panel should be dark"
+    );
+}
+
+// ── Scientific Calculator Tests ──────────────────────
+
+#[test]
+fn test_sci_calc_assembles() {
+    let source = std::fs::read_to_string("programs/sci_calc.asm").unwrap();
+    crate::assembler::assemble(&source, 0).expect("sci_calc.asm should assemble");
+}
+
+#[test]
+fn test_sci_calc_renders_frame() {
+    let vm = boot_app("programs/sci_calc.asm", 1);
+    assert!(!vm.halted, "sci_calc should not halt after boot");
+    assert_eq!(
+        vm.screen[30 * 256 + 10],
+        0x0D1B2A,
+        "background should be dark navy"
+    );
+}
+
+#[test]
+fn test_sci_calc_initial_display() {
+    let vm = boot_app("programs/sci_calc.asm", 1);
+    assert_eq!(vm.ram[0x4000], 0, "display should start at 0");
+    assert_eq!(vm.ram[0x4008], 0, "no operator initially");
+}
+
+#[test]
+fn test_sci_calc_sin_table_built() {
+    let vm = boot_app("programs/sci_calc.asm", 1);
+    // Quarter-wave table: 16 entries for 0-90 degrees
+    // SIN_QTR at 0x6000
+    assert_eq!(vm.ram[0x6000], 0, "sin(0) should be 0");
+    assert_eq!(vm.ram[0x600F], 1000, "sin(90) should be 1000");
+    // sin(30deg) ~ entry index 5 (30*16/90 = 5.33 -> 5) = 500
+    assert!(
+        vm.ram[0x6005] >= 400,
+        "sin(30deg) should be ~500, got {}",
+        vm.ram[0x6005]
+    );
+    // sin(60deg) ~ entry index 10 (60*16/90 = 10.67 -> 10) = 866
+    assert!(
+        vm.ram[0x600A] >= 800,
+        "sin(60deg) should be ~866, got {}",
+        vm.ram[0x600A]
+    );
+}
+#[test]
+fn test_sci_calc_title_rendered() {
+    let vm = boot_app("programs/sci_calc.asm", 1);
+    assert_eq!(vm.screen[10 * 256 + 10], 0x1B3A4B, "title bar rendered");
+}

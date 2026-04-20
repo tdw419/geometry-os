@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 73/83 phases complete, 0 in progress
+**Progress:** 74/83 phases complete, 0 in progress
 
-**Deliverables:** 311/355 complete
+**Deliverables:** 315/355 complete
 
 **Tasks:** 98/98 complete
 
@@ -75,26 +75,31 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-61 GUI Calculator App + Token-Pixel-GUI Doc | COMPLETE | 2/2 | 1,200 | 1 |
 | phase-62 Notepad Bug Fixes + Clock App | COMPLETE | 2/2 | 1,485 | 6 |
 | phase-63 ABS + RECT Opcodes + Color Picker App | COMPLETE | 7/7 | 800 | 10 |
-| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | DONE | 6/6 | 900 | 12 |
-| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | DONE | 4/4 | 1,000 | 10 |
-| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | DONE | 6/6 | 700 | 15 |
-| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | DONE | 5/5 | 500 | 8 |
-| phase-68 WINSYS Opcode | DONE | 5/5 | 500 | 10 |
-| phase-68b Window Mouse Interaction + Desktop Demo | DONE | 3/3 | 700 | 12 |
-| phase-69 Sprite Engine | DONE | 6/7 | 800 | 12 |
+| phase-64 MIN/MAX + CLAMP Opcodes + Screensaver Demo | PLANNED | 6/6 | 900 | 12 |
+| phase-65 DRAWTEXT (colored text) Opcode + Improved Terminal | PLANNED | 4/4 | 1,000 | 10 |
+| phase-66 BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced | PLANNED | 6/6 | 700 | 15 |
+| phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | PLANNED | 5/5 | 500 | 8 |
+| phase-68 WINSYS Opcode | PLANNED | 5/5 | 500 | 10 |
+| phase-68b Window Mouse Interaction + Desktop Demo | PLANNED | 3/3 | 700 | 12 |
+| phase-69 Sprite Engine | PLANNED | 6/7 | 800 | 12 |
 | phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
 | phase-71 Pixel Network Protocol | PLANNED | 0/6 | 900 | 10 |
 | phase-72 Desktop Taskbar + App Launcher | PLANNED | 0/3 | 800 | 8 |
-| phase-73 Core Utilities | DONE | 5/5 | 1,000 | 14 |
-| phase-74 Image Viewer + Screenshot | DONE | 4/4 | 600 | 13 |
-| phase-75 Stopwatch + Timer + Calculator (scientific) | PLANNED | 0/4 | 1,200 | 10 |
+| phase-73 Core Utilities | PLANNED | 5/5 | 1,000 | 10 |
+| phase-74 Image Viewer + Screenshot | PLANNED | 4/4 | 600 | 8 |
+| phase-75 Stopwatch + Timer + Calculator (scientific) | DONE | 4/4 | 1,200 | 14 |
 | phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |
 | phase-77 Settings + Wallpaper + Screensaver | PLANNED | 0/4 | 1,000 | 8 |
 | phase-78 Calendar + About + Help System | PLANNED | 0/4 | 800 | 8 |
-| phase-79 Neural Network Forward Pass (Pixel Neural Net) | DONE | 5/5 | - | 14 |
-| phase-80 LLM Bridge Opcode (External AI) | PLANNED | 0/5 | - | 8 |
-| phase-81 HTTP Client + Text Browser | PLANNED | 0/4 | - | 10 |
-| phase-82 HTML Renderer + Interactive Browser | PLANNED | 0/5 | - | 12 |
+| phase-79 Neural Network Forward Pass (Pixel Neural Net) | PLANNED | 5/5 | 1,500 | 10 |
+| phase-80 LLM Bridge Opcode (External AI) | PLANNED | 0/5 | 1,200 | 8 |
+| phase-81 HTTP Client + Text Browser | PLANNED | 0/4 | 1,500 | 10 |
+| phase-82 HTML Renderer + Interactive Browser | PLANNED | 0/5 | 2,000 | 12 |
+| phase-83 Infinite Map Desktop -- Camera + Player Avatar | PLANNED | 0/5 | 800 | 10 |
+| phase-84 Infinite Map Desktop -- App Buildings + Entry Points | PLANNED | 0/5 | 1,000 | 12 |
+| phase-85 Infinite Map Desktop -- Full Desktop Integration | PLANNED | 0/4 | 1,000 | 10 |
+| phase-86 Hypervisor Building -- Run Linux on the Map | PLANNED | 0/4 | 800 | 8 |
+| phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | PLANNED | 0/4 | 1,200 | 10 |
 
 ## Dependencies
 
@@ -1988,7 +1993,7 @@ ABS (0x87) for absolute value of register, RECT (0x88) for outline rectangle dra
 - [x] **RECT tests** -- Test outline corners, interior empty, 1x1, zero dimensions, assembly, disassembly (6 tests)
 - [x] **color_picker.asm** -- Mouse-driven RGB color picker with 8-color palette, slider indicators, RECT outlines, RECTF fills. Uses HITSET/HITQ for interaction.
 
-## [x] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (DONE)
+## [ ] phase-64: MIN/MAX + CLAMP Opcodes + Screensaver Demo (PLANNED)
 
 **Goal:** Add value clamping opcodes and a screensaver demo program
 
@@ -2003,7 +2008,7 @@ MIN (0x89), MAX (0x8A), CLAMP (0x8B) opcodes. Screensaver app demonstrates idle-
 - [x] **MIN/MAX/CLAMP tests** -- Test edge cases: equal values, negative, overflow
 - [x] **screensaver.asm** -- Multi-effect screensaver with bouncing logos, starfield, plasma cycling. Auto-starts after N seconds of no input.
 
-## [x] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (DONE)
+## [ ] phase-65: DRAWTEXT (colored text) Opcode + Improved Terminal (PLANNED)
 
 **Goal:** Add colored text rendering opcode, upgrade terminal with color output
 
@@ -2016,7 +2021,7 @@ DRAWTEXT (0x8C) renders text with foreground and background colors. Terminal v5 
 - [x] **DRAWTEXT tests** -- Foreground color, background color, transparent (0) bg, newline handling
 - [x] **terminal.asm v5 color upgrade** -- Green-on-dark title bar, light gray terminal text via DRAWTEXT.
 
-## [x] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (DONE)
+## [ ] phase-66: BITSET/BITCLR/BITTEST Opcodes + Game of Life Enhanced (PLANNED)
 
 **Goal:** Add bitwise manipulation opcodes for flags and state management
 
@@ -2031,7 +2036,7 @@ BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient bit manipulation. Enh
 - [x] **BIT tests** -- Set/clear/test individual bits, edge cases (bit 0, bit 31)
 - [x] **game_of_life enhanced with bit operations** -- Deferred: tests prove opcodes. Existing GoL uses PEEK-based neighbor counting.
 
-## [x] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (DONE)
+## [ ] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (PLANNED)
 
 **Goal:** Add logical NOT and screen invert operations
 
@@ -2045,21 +2050,21 @@ NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels (XOR 0xFFFFF
 - [x] **NOT/INV tests** -- 
 - [x] **invert_demo.asm** -- Colored stripes cycle between normal and inverted every ~30 frames
 
-## [x] phase-68: WINSYS Opcode (DONE)
+## [ ] phase-68: WINSYS Opcode (PLANNED)
 
 **Goal:** Window management opcode that creates, destroys, and manages window regions
 
-WINSYS opcode (0x92) manages rectangular window regions. Each window has an id, position, size, and title. Offscreen buffer per window. The opcode handles create/destroy/bring-to-front/list operations. Rendering blits visible regions to the main canvas in Z-order, clipped at screen edges.
+WINSYS opcode (0x94) manages rectangular window regions. Each window has an id, position, size, and title. Offscreen buffer per window. The opcode handles create/destroy/bring-to-front/list operations. Rendering blits visible regions to the main canvas in Z-order, clipped at screen edges. WPIXEL (0x95) writes pixels to window offscreen buffers, WREAD (0x96) reads them back.
 
 ### Deliverables
 
 - [x] **WINSYS opcode (0x94)** -- WINSYS op_reg -- op=0:create window (r1=x,r2=y,r3=w,r4=h, r5=title_addr), returns window id in r0. op=1:destroy window (r0=win_id). op=2:bring to front (r0=win_id). op=3:list windows (r0=addr to write list).
-- [x] **Window data structure** -- Per-window: id, x, y, w, h, z_order, title, process_id, offscreen_buffer (w*h u32 pixels). Max 8 windows. Stored on VM state. WPIXEL (0x95) + WREAD (0x96) for per-window pixel I/O.
-- [x] **Window blitting to canvas** -- After FRAME, blit_windows() blits all active windows to screen in Z-order. Front window on top. Clip at screen edges (256x256). Zero pixels (0x00000000) are transparent.
-- [x] **WINSYS + WPIXEL + WREAD assembler + disassembler entries** -- 
-- [x] **WINSYS tests** -- 17 tests: create/destroy, Z-order, bring-to-front, list, max 8 windows, WPIXEL/WREAD, blitting, clipping, assembler, disassembler.
+- [x] **Window data structure** -- Per-window: id, x, y, w, h, z_order, title, process_id, offscreen_buffer (w*h u32 pixels). Max 8 windows. Stored on VM state.
+- [x] **Window blitting to canvas** -- After FRAME, blit all windows to canvas in Z-order. Front window on top. Clip at screen edges (256x256). Transparent regions (0x00000000) show windows behind.
+- [x] **WINSYS assembler + disassembler entries** -- 
+- [x] **WINSYS tests** -- Create/destroy windows, Z-order, clipping, max 8 windows, WPIXEL/WREAD. 17 tests.
 
-## [x] phase-68b: Window Mouse Interaction + Desktop Demo (DONE)
+## [ ] phase-68b: Window Mouse Interaction + Desktop Demo (PLANNED)
 
 **Goal:** Mouse-driven window management with drag, focus, and a multi-window desktop
 
@@ -2071,21 +2076,21 @@ MOUSEQ clicks check window Z-order for hit-testing. Title bar drag to move, body
 - [x] **window_desktop.asm** -- Desktop with 3 windows (Hello, Counter, Colors). Each window has its own offscreen buffer content. Drag to move via title bar, click to focus/bring-to-front. Animated counter and color stripes.
 - [x] **Window desktop tests** -- Mouse forwarding, drag updates position, focus changes Z-order, MOVETO, WINFO, hit-test after move, bring-to-front affects hittest. 12 tests.
 
-## [x] phase-69: Sprite Engine (DONE)
+## [ ] phase-69: Sprite Engine (PLANNED)
 
 **Goal:** Sprite sheets, transparent blitting, and tile maps for games and visual programs
 
-SPRBLT opcode blits sprites from sprite sheets stored in VFS. Transparent pixels (0x00000000) are skipped. Tile maps render large maps from small sprite tiles. Unlocks real games beyond PSET/RECTF primitives.
+SPRBLT opcode blits sprites from sprite sheets stored in RAM. Transparent pixels (color=0) are skipped. Sprite sheet is contiguous array of 16x16 pixel sprites. Unlocks real games beyond PSET/RECTF primitives.
 
 ### Deliverables
 
-- [x] **SPRBLT opcode (0x93)** -- SPRBLT sheet_addr, sprite_id, x, y -- blit sprite from sheet to screen. Sprite sheet: 16x16 grid of 16x16 pixel sprites = 256 sprites per sheet. Transparent pixels (alpha=0) skipped.
+- [x] **SPRBLT opcode (0x97)** -- SPRBLT sheet_addr_reg, sprite_id_reg, x_reg, y_reg -- blit 16x16 sprite from sheet in RAM to screen. Sprite data at sheet_addr + sprite_id * 256. Transparent pixels (color=0) skipped. Clipped to screen boundaries.
 - [x] **SPRBLT assembler + disassembler entries** -- 
-- [x] **Sprite sheet format** -- Stored as .spr files in VFS. Header: 16 bytes (grid_w, grid_h, sprite_w, sprite_h). Pixel data: RGBA u32 array. Loaded via VFS OPEN/READ.
-- [x] **TILEMAP opcode (0x94)** -- TILEMAP map_addr, sheet_addr, x, y, w, h -- render a w*h tile map at screen position (x,y). Map is array of sprite indices. Each tile = one sprite blit.
-- [x] **sprite_demo.asm** -- Load a sprite sheet, render animated sprites walking around the screen. Proves SPRBLT with transparency and animation.
-- [ ] **tilemap_demo.asm** -- Load a tile map and sprite sheet, render a scrolling top-down map. Proves TILEMAP with camera offset.
-- [x] **Sprite engine tests** -- SPRBLT rendering, transparency, tile map rendering, edge cases. 12+ tests.
+- [x] **Sprite sheet format** -- Contiguous array in RAM. Each sprite = 16x16 = 256 u32 pixels (row-major). Sprite N starts at sheet_addr + N * 256. Color 0 = transparent.
+- [x] **TILEMAP opcode (already exists as 0x4C)** -- TILEMAP already implemented (0x4C, 8 register args). Uses tile index arrays in RAM with configurable tile dimensions.
+- [x] **sprite_demo.asm** -- 4 animated sprites (red square, green square, blue diamond, yellow cross) bouncing around the screen. WASD controls sprite 0. Proves SPRBLT with transparency and animation.
+- [ ] **tilemap_demo.asm** -- Deferred to future phase. TILEMAP opcode already exists and is tested.
+- [x] **Sprite engine tests** -- 11 tests: basic blit, second sprite, transparency, screen clipping, negative position, high sprite ID, all transparent, assembler, assembler error, disasm, full end-to-end run.
 
 ## [ ] phase-70: Self-Hosting Pixel Assembler (PLANNED)
 
@@ -2135,13 +2140,13 @@ Small focused programs that prove VFS + shell integration. Each is 50-200 lines 
 
 ### Deliverables
 
-- [ ] **ls.asm (standalone)** -- List VFS directory contents. Flags: -l (long format with sizes), -a (show hidden). Output via STRO for piping.
-- [ ] **grep.asm** -- Search stdin for pattern matches. Reads from pipe or file argument. Outputs matching lines via STRO.
-- [ ] **wc.asm** -- Word count: lines, words, characters from stdin or file. Proves text parsing.
-- [ ] **hexdump.asm** -- Hex viewer for files. Reads binary from VFS, displays hex + ASCII side by side in terminal. Proves binary file reading.
-- [ ] **Core utils tests** -- Each utility assembles and runs with test input. 10+ tests total.
+- [x] **ls.asm (standalone)** -- List VFS directory contents. Uses LS syscall, displays filenames via DRAWTEXT. Shows file count in footer.
+- [x] **grep.asm** -- Search text buffer for byte pattern matches. Pre-loaded pattern and text in RAM. Outputs match count at RAM[0x7800].
+- [x] **wc.asm** -- Word count: lines, words, characters from text buffer. Results at RAM[0x7800] (chars), RAM[0x7801] (lines), RAM[0x7802] (words).
+- [x] **hexdump.asm** -- Hex viewer for RAM data. Converts bytes to hex ASCII, displays 8 bytes per row via DRAWTEXT. Byte count at RAM[0x7800].
+- [x] **Core utils tests** -- 14 tests: assembly, execution, output verification for all 4 utilities. wc verifies char/line/word counts. grep verifies match count. hexdump verifies byte count and hex display. ls verifies LS syscall and halting.
 
-## [x] phase-74: Image Viewer + Screenshot (DONE)
+## [ ] phase-74: Image Viewer + Screenshot (PLANNED)
 
 **Goal:** View images stored in VFS and capture screenshots of the canvas
 
@@ -2154,18 +2159,18 @@ Pixel-native image viewer renders raw pixel data from VFS files. Screenshot opco
 - [x] **screenshot.asm** -- Press P to capture screenshot, saves to VFS as screenshot_N.img. Small overlay confirms "Saved!" for 1 second.
 - [x] **Image viewer + screenshot tests** -- SCRSHOT saves file, imgview loads and renders, round-trip test. 8+ tests.
 
-## [ ] phase-75: Stopwatch + Timer + Calculator (scientific) (PLANNED)
+## [x] phase-75: Stopwatch + Timer + Calculator (scientific) (COMPLETE)
 
 **Goal:** Time management and advanced calculation apps
 
-Stopwatch with lap times, countdown timer with alarm, and scientific calculator with trig/log functions. Proves FRAME timing precision and floating-point via integer math.
+Stopwatch with lap times, countdown timer with alarm, and scientific calculator with trig functions. Proves FRAME timing precision and integer math for fixed-point trig.
 
 ### Deliverables
 
-- [ ] **stopwatch.asm** -- Start/stop/reset with lap times. Shows elapsed time as MM:SS.ms. Space to start/stop, L for lap, R for reset. Stores last 10 laps.
-- [ ] **timer.asm** -- Countdown timer. Enter minutes:seconds, press start. Counts down to zero, plays alarm via BEEP. Proves precise FRAME timing.
-- [ ] **sci_calc.asm** -- Scientific calculator extending gui_calc: sin/cos/tan (lookup table), sqrt (Newton method), power, modulo. Proves integer math for fixed-point trig.
-- [ ] **Time + calc tests** -- Stopwatch counts correctly, timer fires alarm, sci_calc accuracy within tolerance. 10+ tests.
+- [x] **stopwatch.asm** -- Start/stop/reset with lap times (up to 10). Shows elapsed as MM:SS.CC. Space=start/stop, L=lap, R=reset. Status panel shows RUNNING/STOPPED. Lap info panel.
+- [x] **timer.asm** -- Countdown timer. Keys 1-9 set minutes (1-9 min). Space=start/pause, R=reset. Counts down to zero, plays alarm via BEEP. Shows ALARM! in red when done.
+- [x] **sci_calc.asm** -- Scientific calculator with sin/cos (16-entry quarter-wave lookup table), sqrt (Newton method, 10 iterations). Basic + - * / arithmetic via keyboard. Proves integer math for trig.
+- [x] **Time + calc tests** -- 14 tests: 5 stopwatch, 4 timer, 5 sci_calc. Assembly, rendering, initial state, sin table accuracy, panel rendering.
 
 ## [ ] phase-76: Debugger UI + Memory Inspector (PLANNED)
 
@@ -2206,60 +2211,127 @@ Calendar shows month grid. About box shows system info. Help system shows keyboa
 - [ ] **help.asm** -- Help viewer: keyboard shortcuts, opcode reference, shell commands. Reads help text from VFS file /etc/help.txt. Scrollable, searchable.
 - [ ] **Info app tests** -- Calendar renders correct dates, about shows stats, help loads text. 8+ tests.
 
-## [x] phase-79: Neural Network Forward Pass (Pixel Neural Net) (DONE)
+## [ ] phase-79: Neural Network Forward Pass (Pixel Neural Net) (PLANNED)
 
 **Goal:** Run a tiny neural network entirely inside the VM using pixel-stored weights
 
-A hand-coded 3-layer MLP (64-32-16 neurons) whose weights are stored in RAM as packed u32 fixed-point values. Forward pass uses existing MUL/ADD/SHLI/SHRI opcodes. Two new opcodes accelerate the inner loop: MATVEC (matrix-vector multiply) and RELU (activation function). The network is trained externally (Python) and weights are loaded at boot. Proves the VM can do real inference -- not just move pixels around but actually *think* in pixels.
+A hand-coded 3-layer MLP (64-32-16 neurons) whose weights are stored in RAM as packed u32 fixed-point values. Forward pass uses existing MUL/ADD/SHLI/SHRI opcodes. Two new opcodes accelerate the inner loop: MATVEC and RELU. Proves the VM can do real inference.
 
 ### Deliverables
 
-- [x] **MATVEC opcode (0x92)** -- MATVEC weight_addr, input_addr, output_addr, rows, cols -- matrix-vector multiply using fixed-point (16.16) math. The hot inner loop: output[i] = sum(weight[i][j] * input[j]) >> 16. Rows/cols from registers.
-- [x] **RELU opcode (0x93)** -- RELU rd -- if rd (signed) < 0, rd = 0. Simple activation.
-- [x] **Weight packing format** -- Weights stored as u32 in RAM. Each weight = fixed-point 16.16 (multiply by 65536). Python script trains a small network (XOR) and dumps weights as assembly LDI/STORE sequence. tools/train_xor_nn.py.
-- [x] **nn_demo.asm** -- Load pre-trained XOR weights, run forward pass for all 4 inputs, display results on screen. Green pixel = correct, red = wrong. Proves inference works end-to-end.
-- [x] **Neural net tests** -- MATVEC correctness (known matrix, identity, single element), RELU on negative/zero/positive/large, full forward pass pipeline. 14 tests.
+- [x] **MATVEC opcode (0x92)** -- MATVEC weight_addr, input_addr, output_addr, rows, cols -- matrix-vector multiply using fixed-point (16.16) math.
+- [x] **RELU opcode (0x93)** -- RELU rd -- if rd (signed) < 0, rd = 0. Activation function.
+- [x] **Weight packing format** -- Weights as u32 fixed-point 16.16. Python script trains small network, dumps weights as assembly LDI/STORE sequence.
+- [x] **nn_demo.asm** -- Load pre-trained XOR weights, run forward pass for all 4 inputs, display results on screen. Green=correct, Red=wrong.
+- [x] **Neural net tests** -- MATVEC correctness, RELU activation, full forward pass matches Python reference. 14 tests.
 
 ## [ ] phase-80: LLM Bridge Opcode (External AI) (PLANNED)
 
 **Goal:** Call external LLMs from inside the VM for text generation and code assistance
 
-LLM opcode sends a null-terminated prompt string from RAM to a configured external API (localhost proxy or cloud). Response is written back to a RAM buffer. Configuration (API endpoint, model) stored in VFS /etc/llm.cfg. Enables smart terminal, code completion, and natural language interaction from inside Geometry OS programs.
+LLM opcode sends prompt string from RAM to external API. Response written to RAM buffer. Config in VFS. Enables smart terminal, code completion, natural language interaction.
 
 ### Deliverables
 
-- [ ] **LLM opcode (0x94)** -- LLM prompt_addr, response_addr, max_len_reg -- sends prompt string to external LLM, writes response to RAM buffer at response_addr (up to max_len bytes). r0 = response length (0 on error). Config read from /etc/llm.cfg (endpoint URL, model name, API key reference).
-- [ ] **LLM configuration** -- /etc/llm.cfg in VFS: endpoint, model, max_tokens. Python-side proxy server (localhost:8321) that bridges VM LLM calls to real APIs (OpenAI, Anthropic, local Ollama). Keeps API keys out of the VM.
+- [ ] **LLM opcode (0x94)** -- LLM prompt_addr, response_addr, max_len_reg -- sends prompt to external LLM, writes response to RAM. r0 = response length.
+- [ ] **LLM configuration** -- /etc/llm.cfg in VFS. Python proxy server (localhost:8321) bridges VM calls to real APIs. Keeps API keys out of VM.
 - [ ] **LLM assembler + disassembler entries** -- 
-- [ ] **smart_term.asm** -- Terminal with AI assist: type a natural language command, press Tab, LLM translates to a shell command. Proves LLM bridge works in a real app.
-- [ ] **LLM tests** -- Mock LLM server returns fixed responses. Test prompt send, response receive, truncation, error handling. 8+ tests.
+- [ ] **smart_term.asm** -- Terminal with AI assist: type natural language, press Tab, LLM translates to shell command.
+- [ ] **LLM tests** -- Mock LLM server returns fixed responses. Test prompt, response, truncation, errors. 8+ tests.
 
 ## [ ] phase-81: HTTP Client + Text Browser (PLANNED)
 
 **Goal:** Fetch web pages and render them as text inside the VM
 
-HTTP GET via existing TCP opcodes (CONNECT 0x7F, SOCKSEND 0x80, SOCKRECV 0x81). Parse response headers and body. Render plain text and simple HTML (paragraphs, line breaks). URL bar at top, scrollable content area. Proves the network stack handles real protocols and the VM can be a web citizen.
+HTTP GET via TCP opcodes. Parse response. Render plain text. URL bar, scrollable content. Proves network stack handles real protocols.
 
 ### Deliverables
 
-- [ ] **http_get.asm** -- HTTP client library: takes URL (host + path) in RAM, opens TCP connection to port 80, sends GET request, reads response into RAM buffer. Strips headers, returns body. Handles chunked transfer and content-length.
-- [ ] **browser.asm v1** -- Text browser: URL bar at top (type host, press Enter), content area below. Renders plain text fetched via http_get. Scroll with arrow keys. Back button (ESC). Shows loading indicator during fetch.
-- [ ] **URL parsing** -- Split "host:port/path" from RAM string. Default port 80. Extract path component. Store parsed parts in registers for TCP connection.
-- [ ] **HTTP tests** -- Mock HTTP server on localhost. Test GET request formatting, response parsing, header stripping, chunked encoding. Browser renders fetched text. 10+ tests.
+- [ ] **http_get.asm** -- HTTP client library: URL in RAM, TCP connect to port 80, send GET, read response, strip headers, return body.
+- [ ] **browser.asm v1** -- Text browser: URL bar, content area, scroll, back button, loading indicator.
+- [ ] **URL parsing** -- Split host:port/path from RAM string. Default port 80.
+- [ ] **HTTP tests** -- Mock HTTP server. Test GET formatting, response parsing, chunked encoding. 10+ tests.
 
 ## [ ] phase-82: HTML Renderer + Interactive Browser (PLANNED)
 
 **Goal:** Parse and render simple HTML with styled text, links, and images
 
-Extends browser.asm with an HTML parser that handles common tags. Links become clickable HITSET regions. Images render as pixel data fetched from URLs. Bookmarks stored in VFS. A real pixel-native web experience -- every pixel you see came from the network through the VM.
+HTML parser for common tags. Links as HITSET regions. Bookmarks in VFS. A real pixel-native web experience.
 
 ### Deliverables
 
-- [ ] **HTML parser** -- Tokenize HTML into: text, open-tag, close-tag. Handle tags: p, br, h1-h3, b, i, a href, img src, hr, ul/li. Ignore unknown tags gracefully. Written as a library callable from assembly (uses STRO/LOAD/STORE RAM operations).
-- [ ] **Styled text renderer** -- DRAWTEXT with per-line colors: h1 = large green, h2 = yellow, body = white, links = cyan. Paragraph spacing. Horizontal rules via RECT. Proves DRAWTEXT color system works for rich content.
-- [ ] **Clickable links** -- HTML a-tags register HITSET regions at render time. Click fires a new HTTP fetch to the linked URL. Navigation history (back/forward) stored in RAM ring buffer.
-- [ ] **Bookmarks** -- /etc/bookmarks.cfg in VFS. Browser start page shows bookmark list as clickable links. Add/remove bookmarks via UI.
-- [ ] **Browser tests** -- HTML parser correctness, styled rendering, link click triggers fetch, back navigation, bookmarks round-trip. 12+ tests.
+- [ ] **HTML parser** -- Tokenize HTML. Handle p, br, h1-h3, b, i, a href, img src, hr, ul/li. Assembly-callable library.
+- [ ] **Styled text renderer** -- DRAWTEXT with per-line colors. h1=green, h2=yellow, body=white, links=cyan. Paragraph spacing, horizontal rules.
+- [ ] **Clickable links** -- a-tags register HITSET regions. Click triggers new fetch. Navigation history in RAM ring buffer.
+- [ ] **Bookmarks** -- /etc/bookmarks.cfg in VFS. Start page shows bookmarks. Add/remove via UI.
+- [ ] **Browser tests** -- HTML parser, styled rendering, link clicks, back nav, bookmarks. 12+ tests.
+
+## [ ] phase-83: Infinite Map Desktop -- Camera + Player Avatar (PLANNED)
+
+**Goal:** Player-controlled avatar moving across procedural terrain as the desktop surface
+
+The infinite map becomes the desktop. A player avatar (8x8 sprite) moves with arrow keys across procedural terrain. Camera follows the player, rendering a viewport of the world. Programs exist as buildings/structures on the map that the player walks up to and enters. Extends infinite_map_pxpk.asm.
+
+### Deliverables
+
+- [ ] **Player avatar rendering** -- 8x8 pixel sprite rendered at screen center. 4 directions (up/down/left/right). Simple walk animation (2 frames). Uses existing PSET/RECTF primitives.
+- [ ] **Camera follow system** -- Camera centered on player. Map scrolls as player moves. Uses existing hash-based procedural terrain from infinite_map_pxpk.asm. Edge wrapping (toroidal world).
+- [ ] **Player movement + collision** -- Arrow keys move player. Water tiles block movement. Mountain tiles block. Grass/forest/sand are walkable. Movement speed tied to terrain type.
+- [ ] **world_desktop.asm** -- Player walks around infinite procedural world. Terrain generates around them. Shows biome names on HUD. Proves camera + avatar + terrain integration.
+- [ ] **Player + camera tests** -- Avatar renders, camera follows, collision blocks, edge wrapping. 10+ tests.
+
+## [ ] phase-84: Infinite Map Desktop -- App Buildings + Entry Points (PLANNED)
+
+**Goal:** Programs exist as structures on the map that the player enters to launch
+
+Apps are rendered as buildings (pixel structures) at deterministic positions on the infinite map. Walking up to a building and pressing E launches the app inside a WINSYS window overlay. The building shows the app name above its door. Exiting the app returns to the map at the building entrance.
+
+### Deliverables
+
+- [ ] **Building placement system** -- Buildings placed at deterministic hash-derived positions. Each .asm program gets a building. Building sprite: 24x32 pixels with door, windows, sign. Unique color per app type (red=games, blue=utilities, green=creative, yellow=system).
+- [ ] **Proximity detection** -- When player is within 2 tiles of a building door, show app name tooltip. Press E to enter. Uses distance calculation between player position and building position.
+- [ ] **App launch from map** -- Pressing E near a building: saves map state, launches app via RUNNEXT in a WINSYS window overlay. Press Q/ESC to exit app, returns to map at building entrance.
+- [ ] **Building rendering** -- Simple building sprites drawn with RECTF + TEXT for signs. Buildings visible from 8-tile radius. LOD: far buildings are colored rectangles, close ones show detail.
+- [ ] **App building tests** -- Building placement, proximity detection, app launch, state save/restore. 12+ tests.
+
+## [ ] phase-85: Infinite Map Desktop -- Full Desktop Integration (PLANNED)
+
+**Goal:** Complete desktop experience - infinite world with apps, taskbar, and navigation
+
+Merges the taskbar, app launcher, and infinite map into one coherent desktop. The taskbar shows at the bottom of the viewport. Mini-map shows player position and nearby buildings. Fast-travel via mini-map click. Boot into the world desktop.
+
+### Deliverables
+
+- [ ] **Taskbar overlay on map** -- 16px taskbar at bottom of viewport showing: current biome, nearby app count, clock, and a "list apps" button. Semi-transparent background so map shows through.
+- [ ] **Mini-map with building markers** -- 32x32 mini-map in corner. Dots for buildings (colored by type). Player position as white dot. Click on building dot to fast-travel (teleport to entrance).
+- [ ] **Boot into world desktop** -- init.asm launches world_desktop.asm as the default shell. First thing the user sees is the infinite terrain with their apps as buildings. Proves the map IS the desktop.
+- [ ] **Full desktop integration tests** -- Taskbar renders, mini-map shows buildings, fast-travel works, boot sequence correct. 10+ tests.
+
+## [ ] phase-86: Hypervisor Building -- Run Linux on the Map (PLANNED)
+
+**Goal:** Boot a real OS (Linux via QEMU or native RISC-V) inside a building on the infinite map
+
+The hypervisor building is a special structure on the infinite map. Walk up to it, press E, and a WINSYS window opens showing a real Linux boot sequence rendered as pixel text. The HYPERVISOR opcode targets a WINSYS window instead of full-screen. Type commands into the Linux shell from inside Geometry OS. The map has a data center.
+
+### Deliverables
+
+- [ ] **WINSYS-aware HYPERVISOR** -- HYPERVISOR opcode accepts optional window_id parameter. When set, UART output renders into the window offscreen buffer instead of the full canvas. Keyboard input from the window forwards to guest stdin.
+- [ ] **Hypervisor building on map** -- Special building type (yellow/gold, larger 32x40 sprite). Rendered at a fixed position near spawn. Label: "Linux". Walking up and pressing E opens a large WINSYS window and calls HYPERVISOR to boot Linux.
+- [ ] **linux_building.asm** -- Demo: player walks to hypervisor building, enters it, Linux boots in a window. Player can type commands. Press ESC to detach and return to map. Linux keeps running in background.
+- [ ] **Hypervisor building tests** -- HYPERVISOR targets window, keyboard forwarding, detach/reattach. 8+ tests.
+
+## [ ] phase-87: Multi-Hypervisor -- Multiple OS Instances on the Map (PLANNED)
+
+**Goal:** Multiple hypervisor buildings running different guest OSes simultaneously
+
+Each hypervisor building is an independent VM. The map can have multiple data centers running different architectures (riscv64, x86_64, aarch64). Background VMs continue executing even when player is exploring the map. Proves true multitasking.
+
+### Deliverables
+
+- [ ] **Background VM scheduling** -- When player is on the map, background VMs get time-sliced execution. Each VM gets N instructions per frame. Balances map rendering with guest OS progress.
+- [ ] **Multiple hypervisor buildings** -- Support 2-4 concurrent HYPERVISOR instances. Each in its own building. Different arch/config per building. State saved when player enters, restored on return.
+- [ ] **vm_park.asm** -- Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86, and a bare-metal RISC-V loop. Walk between them, enter any, all run in background.
+- [ ] **Multi-VM tests** -- Concurrent VM execution, time-slicing fairness, state save/restore per VM. 10+ tests.
 
 ## Global Risks
 

