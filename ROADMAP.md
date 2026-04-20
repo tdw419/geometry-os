@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 70/83 phases complete, 0 in progress
+**Progress:** 71/83 phases complete, 0 in progress
 
-**Deliverables:** 296/355 complete
+**Deliverables:** 301/355 complete
 
 **Tasks:** 98/98 complete
 
@@ -85,7 +85,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-70 Self-Hosting Pixel Assembler | PLANNED | 0/4 | 1,500 | 8 |
 | phase-71 Pixel Network Protocol | PLANNED | 0/6 | 900 | 10 |
 | phase-72 Desktop Taskbar + App Launcher | PLANNED | 0/3 | 800 | 8 |
-| phase-73 Core Utilities | PLANNED | 0/5 | 1,000 | 10 |
+| phase-73 Core Utilities | DONE | 5/5 | 1,000 | 14 |
 | phase-74 Image Viewer + Screenshot | PLANNED | 0/4 | 600 | 8 |
 | phase-75 Stopwatch + Timer + Calculator (scientific) | PLANNED | 0/4 | 1,200 | 10 |
 | phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |

@@ -9000,3 +9000,178 @@ fn test_sprblt_all_transparent() {
         "transparent sprite should not draw"
     );
 }
+
+// ── Core Utilities (Phase 73) ─────────────────────────────────
+
+// Helper: assemble and run an .asm program from programs/ dir
+fn boot_utility(asm_file: &str, max_steps: usize) -> Vm {
+    let source = std::fs::read_to_string(asm_file)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {}", asm_file, e));
+    let asm = crate::assembler::assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("Failed to assemble {}: {:?}", asm_file, e));
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..max_steps {
+        if !vm.step() {
+            break;
+        }
+    }
+    vm
+}
+
+// ── ls.asm tests ──
+
+#[test]
+fn test_ls_assembles() {
+    let source = include_str!("../../programs/ls.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "ls.asm failed to assemble: {:?}", result.err());
+    let bytecode = result.unwrap();
+    assert!(bytecode.pixels.len() > 50, "ls.asm should be substantial");
+    // Verify LS opcode present
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x59),
+        "ls.asm should contain LS opcode (0x59)"
+    );
+    // Verify RECTF opcode present (for header/footer)
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x43),
+        "ls.asm should contain RECTF opcode"
+    );
+    // Verify DRAWTEXT opcode present
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x8C),
+        "ls.asm should contain DRAWTEXT opcode"
+    );
+}
+
+#[test]
+fn test_ls_runs_and_halts() {
+    let vm = boot_utility("programs/ls.asm", 50_000);
+    assert!(vm.halted, "ls.asm should halt after execution");
+}
+
+#[test]
+fn test_ls_calls_ls_syscall() {
+    let vm = boot_utility("programs/ls.asm", 50_000);
+    // LS stores entry count at 0x7800
+    // The count should be a reasonable number (not 0xFFFFFFFF = error)
+    let count = vm.ram[0x7800];
+    assert_ne!(count, 0xFFFFFFFF, "LS syscall should not return error");
+}
+
+// ── wc.asm tests ──
+
+#[test]
+fn test_wc_assembles() {
+    let source = include_str!("../../programs/wc.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "wc.asm failed to assemble: {:?}", result.err());
+    let bytecode = result.unwrap();
+    assert!(bytecode.pixels.len() > 50, "wc.asm should be substantial");
+}
+
+#[test]
+fn test_wc_counts_chars() {
+    let vm = boot_utility("programs/wc.asm", 100_000);
+    assert!(vm.halted, "wc.asm should halt");
+    // "Hello World\nFoo Bar\nBaz" = 23 characters
+    let chars = vm.ram[0x7800];
+    assert_eq!(chars, 23, "wc.asm should count 23 chars, got {}", chars);
+}
+
+#[test]
+fn test_wc_counts_lines() {
+    let vm = boot_utility("programs/wc.asm", 100_000);
+    // 2 newlines = 2 lines
+    let lines = vm.ram[0x7801];
+    assert_eq!(lines, 2, "wc.asm should count 2 lines, got {}", lines);
+}
+
+#[test]
+fn test_wc_counts_words() {
+    let vm = boot_utility("programs/wc.asm", 100_000);
+    // Hello, World, Foo, Bar, Baz = 5 words
+    let words = vm.ram[0x7802];
+    assert_eq!(words, 5, "wc.asm should count 5 words, got {}", words);
+}
+
+// ── grep.asm tests ──
+
+#[test]
+fn test_grep_assembles() {
+    let source = include_str!("../../programs/grep.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "grep.asm failed to assemble: {:?}", result.err());
+    let bytecode = result.unwrap();
+    assert!(bytecode.pixels.len() > 50, "grep.asm should be substantial");
+}
+
+#[test]
+fn test_grep_finds_pattern() {
+    let vm = boot_utility("programs/grep.asm", 100_000);
+    assert!(vm.halted, "grep.asm should halt");
+    // Searching for "oo" in "Hello World\nFoo Bar\nBaz"
+    // Only "Foo" contains "oo" -> 1 match
+    let matches = vm.ram[0x7800];
+    assert_eq!(matches, 1, "grep.asm should find 1 match for 'oo', got {}", matches);
+}
+
+#[test]
+fn test_grep_displays_header() {
+    let vm = boot_utility("programs/grep.asm", 100_000);
+    // Header bar at y=0-12 should have green pixels
+    let header_color = vm.screen[6 * 256 + 4];
+    let bg_color = vm.screen[20 * 256 + 4];
+    assert_ne!(header_color, bg_color, "grep header should differ from background");
+}
+
+// ── hexdump.asm tests ──
+
+#[test]
+fn test_hexdump_assembles() {
+    let source = include_str!("../../programs/hexdump.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "hexdump.asm failed to assemble: {:?}", result.err());
+    let bytecode = result.unwrap();
+    assert!(bytecode.pixels.len() > 50, "hexdump.asm should be substantial");
+}
+
+#[test]
+fn test_hexdump_counts_bytes() {
+    let vm = boot_utility("programs/hexdump.asm", 100_000);
+    assert!(vm.halted, "hexdump.asm should halt");
+    // "Hello, Geometry OS!" = 19 bytes
+    let bytes = vm.ram[0x7800];
+    assert_eq!(bytes, 19, "hexdump.asm should count 19 bytes, got {}", bytes);
+}
+
+#[test]
+fn test_hexdump_displays_hex() {
+    let vm = boot_utility("programs/hexdump.asm", 100_000);
+    // The hex dump area (y=16+) should have green text pixels
+    // Check that some non-background pixels exist in the hex dump area
+    let mut non_bg_pixels = 0;
+    for y in 16..60 {
+        for x in 4..200 {
+            if vm.screen[y * 256 + x] != 0x000011 {
+                non_bg_pixels += 1;
+            }
+        }
+    }
+    assert!(non_bg_pixels > 20, "hexdump should render hex text on screen, found {} non-bg pixels", non_bg_pixels);
+}
+
+#[test]
+fn test_hexdump_header_present() {
+    let vm = boot_utility("programs/hexdump.asm", 100_000);
+    // Header should have purple pixels
+    let header_pixel = vm.screen[6 * 256 + 10];
+    assert_ne!(header_pixel, 0x000011, "hexdump header should differ from dark background");
+}

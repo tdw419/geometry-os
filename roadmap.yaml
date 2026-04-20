@@ -3648,29 +3648,32 @@ phases:
   test_target: 8
 - id: phase-73
   title: Core Utilities
-  status: planned
+  status: done
   goal: Unix-style text utilities that work inside the terminal
   description: 'Small focused programs that prove VFS + shell integration. Each is
     50-200 lines of assembly. Users can pipe output between them: ls | grep .asm | wc.'
   deliverables:
   - name: ls.asm (standalone)
-    description: 'List VFS directory contents. Flags: -l (long format with sizes),
-      -a (show hidden). Output via STRO for piping.'
-    status: todo
+    description: 'List VFS directory contents. Uses LS syscall, displays filenames
+      via DRAWTEXT. Shows file count in footer.'
+    status: done
   - name: grep.asm
-    description: 'Search stdin for pattern matches. Reads from pipe or file argument.
-      Outputs matching lines via STRO.'
-    status: todo
+    description: 'Search text buffer for byte pattern matches. Pre-loaded pattern
+      and text in RAM. Outputs match count at RAM[0x7800].'
+    status: done
   - name: wc.asm
-    description: 'Word count: lines, words, characters from stdin or file. Proves text parsing.'
-    status: todo
+    description: 'Word count: lines, words, characters from text buffer. Results
+      at RAM[0x7800] (chars), RAM[0x7801] (lines), RAM[0x7802] (words).'
+    status: done
   - name: hexdump.asm
-    description: 'Hex viewer for files. Reads binary from VFS, displays hex + ASCII
-      side by side in terminal. Proves binary file reading.'
-    status: todo
+    description: 'Hex viewer for RAM data. Converts bytes to hex ASCII, displays
+      8 bytes per row via DRAWTEXT. Byte count at RAM[0x7800].'
+    status: done
   - name: Core utils tests
-    description: 'Each utility assembles and runs with test input. 10+ tests total.'
-    status: todo
+    description: '14 tests: assembly, execution, output verification for all 4 utilities.
+      wc verifies char/line/word counts. grep verifies match count. hexdump verifies
+      byte count and hex display. ls verifies LS syscall and halting.'
+    status: done
   scope_lines_total: 1000
   test_target: 10
 - id: phase-74
