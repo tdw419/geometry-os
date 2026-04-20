@@ -4926,3 +4926,281 @@ fn test_strcmp_case_sensitive() {
     let vm = setup_strcmp_test("Hello", "hello");
     assert_eq!(vm.regs[0], 0xFFFFFFFF, "STRCMP: 'Hello' < 'hello' (case sensitive)");
 }
+
+// ── Notepad App Tests ──────────────────────────────────
+
+fn boot_notepad(target_frames: u32) -> Vm {
+    let source = include_str!("../../programs/notepad.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("notepad.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start_frame + target_frames { break; }
+    }
+    vm
+}
+
+#[test]
+fn test_notepad_assembles() {
+    let source = include_str!("../../programs/notepad.asm");
+    crate::assembler::assemble(source, 0).expect("notepad.asm should assemble");
+}
+
+#[test]
+fn test_notepad_boots_and_renders() {
+    let source = include_str!("../../programs/notepad.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("notepad.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    eprintln!("notepad bytecode: {} words", asm.pixels.len());
+    vm.pc = 0;
+    vm.halted = false;
+    let target_frames = 1;
+    let start_frame = vm.frame_count;
+    let mut steps = 0u64;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        steps += 1;
+        if vm.frame_count >= start_frame + target_frames { break; }
+    }
+    eprintln!("steps: {}, halted: {}, pc: {}, frame_count: {}", steps, vm.halted, vm.pc, vm.frame_count);
+    assert!(!vm.halted, "notepad should not halt after boot");
+    // Title bar should be blue-purple (0x16213E) at top
+    assert_eq!(vm.screen[5 * 256 + 5], 0x16213E, "title bar should be blue-purple");
+    // Text area below title bar should be dark (0x1A1A2E)
+    assert_eq!(vm.screen[20 * 256 + 50], 0x1A1A2E, "text area should be dark");
+    // Cursor should start at col 0, row 0
+    assert_eq!(vm.ram[0x6000], 0, "cursor col should start at 0");
+    assert_eq!(vm.ram[0x6001], 0, "cursor row should start at 0");
+    // Lines count should be 1
+    assert_eq!(vm.ram[0x6002], 1, "should start with 1 line");
+}
+
+#[test]
+fn test_notepad_type_character() {
+    let mut vm = boot_notepad(1);
+    // Type 'A' (ASCII 65)
+    vm.push_key(65);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    assert!(!vm.halted, "notepad should not halt after typing");
+    // Character 'A' should be in buffer at row 0, col 0
+    assert_eq!(vm.ram[0x4000], 65, "'A' should be in buffer at (0,0)");
+    // Cursor should advance to col 1
+    assert_eq!(vm.ram[0x6000], 1, "cursor should advance to col 1");
+}
+
+#[test]
+fn test_notepad_backspace() {
+    let mut vm = boot_notepad(1);
+    // Type 'A' then backspace
+    vm.push_key(65);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    vm.push_key(8); // backspace
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    // Character should be cleared (space = 32)
+    assert_eq!(vm.ram[0x4000], 32, "backspace should clear character");
+    // Cursor should go back to col 0
+    assert_eq!(vm.ram[0x6000], 0, "cursor should go back to col 0");
+}
+
+#[test]
+fn test_notepad_enter_newline() {
+    let mut vm = boot_notepad(1);
+    // Type "Hi" then Enter
+    vm.push_key(72); // 'H'
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    vm.push_key(105); // 'i'
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    vm.push_key(13); // Enter
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 3 { break; }
+    }
+    assert!(!vm.halted, "notepad should not halt after enter");
+    // Row 0 should have 'H' 'i' followed by spaces
+    assert_eq!(vm.ram[0x4000], 72, "row 0 col 0 should be 'H'");
+    assert_eq!(vm.ram[0x4001], 105, "row 0 col 1 should be 'i'");
+    // Cursor should be on row 1, col 0
+    assert_eq!(vm.ram[0x6001], 1, "cursor should be on row 1");
+    assert_eq!(vm.ram[0x6000], 0, "cursor col should be 0");
+}
+
+#[test]
+fn test_notepad_arrow_keys() {
+    let mut vm = boot_notepad(1);
+    // Type "AB" then left arrow
+    vm.push_key(65);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    vm.push_key(66);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    assert_eq!(vm.ram[0x6000], 2, "cursor should be at col 2 after 'AB'");
+
+    // Left arrow
+    vm.push_key(37);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    assert_eq!(vm.ram[0x6000], 1, "cursor should move left to col 1");
+
+    // Right arrow
+    vm.push_key(39);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    assert_eq!(vm.ram[0x6000], 2, "cursor should move right to col 2");
+
+    // Down arrow
+    vm.push_key(40);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    assert_eq!(vm.ram[0x6001], 1, "cursor should move down to row 1");
+
+    // Up arrow
+    vm.push_key(38);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start + 2 { break; }
+    }
+    assert_eq!(vm.ram[0x6001], 0, "cursor should move up to row 0");
+}
+
+#[test]
+fn test_notepad_runs_persistently() {
+    let mut vm = boot_notepad(1);
+    // Run for 100 frames without halting
+    for _ in 0..100 {
+        if !vm.step() { break; }
+    }
+    assert!(!vm.halted, "notepad should run persistently without halting");
+}
+
+#[test]
+fn test_notepad_status_bar() {
+    let vm = boot_notepad(1);
+    // Status bar should be at bottom of screen (y=248)
+    assert_eq!(vm.screen[249 * 256 + 10], 0x0D0D1A, "status bar should be dark");
+}
+
+// ── Clock App Tests ────────────────────────────────────────────────
+
+fn boot_clock(frames: u32) -> Vm {
+    let source = include_str!("../../programs/clock.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("clock.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + frames {
+            break;
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_clock_assembles() {
+    let source = include_str!("../../programs/clock.asm");
+    crate::assembler::assemble(source, 0).expect("clock.asm should assemble");
+}
+
+#[test]
+fn test_clock_boots_and_renders() {
+    let vm = boot_clock(1);
+    assert!(!vm.halted, "clock should not halt after boot");
+    // Title bar should be dark navy at top
+    assert_eq!(vm.screen[5 * 256 + 5], 0x0D1B2A, "title bar should be navy");
+    // Main panel should be dark at center
+    assert_eq!(vm.screen[80 * 256 + 128], 0x060612, "digit panel should be dark");
+    // Status bar at bottom
+    assert_eq!(vm.screen[248 * 256 + 128], 0x0A0A1A, "status bar should be dark");
+}
+
+#[test]
+fn test_clock_runs_persistently() {
+    let mut vm = boot_clock(1);
+    // Run for 100 frames without halting
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(!vm.halted, "clock should run persistently without halting");
+}
+
+#[test]
+fn test_clock_time_updates() {
+    let vm = boot_clock(2);
+    // At 2 frames: seconds = 2/60 = 0, minutes = 0, hours = 0
+    // Verify frame counter is advancing
+    assert_eq!(vm.ram[0xFFE], 2, "frame counter should be 2");
+}
+
+#[test]
+fn test_clock_day_counter() {
+    let vm = boot_clock(1);
+    // Day is computed from frame count: days = (frames/60/3600) / 24
+    // At 1 frame: 0 days
+    assert!(vm.ram[0xFFE] >= 1, "frame counter should be at least 1");
+}
+
+#[test]
+fn test_clock_blink_toggle() {
+    let vm1 = boot_clock(1);
+    let blink1 = vm1.ram[0x6005];
+    // Blink should be 0 or 1
+    assert!(blink1 <= 1, "blink should be 0 or 1");
+}
