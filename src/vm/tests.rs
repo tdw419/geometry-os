@@ -2874,6 +2874,115 @@ fn test_pixel_history_buf_overflow_check() {
     assert_eq!(vm.regs[0], 0xFFFFFFFF); // error
 }
 
+// ── MOUSEQ ───────────────────────────────────────────────────────
+
+#[test]
+fn test_mouseq_reads_mouse_position() {
+    let mut vm = crate::vm::Vm::new();
+    // MOUSEQ r5 -- should read mouse_x into r5, mouse_y into r6
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 5;
+    vm.pc = 0;
+
+    vm.push_mouse(123, 200);
+    vm.step();
+
+    assert_eq!(vm.regs[5], 123, "r5 should be mouse_x");
+    assert_eq!(vm.regs[6], 200, "r6 should be mouse_y");
+}
+
+#[test]
+fn test_mouseq_default_zero() {
+    let mut vm = crate::vm::Vm::new();
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 10;
+    vm.pc = 0;
+
+    // No push_mouse -- should be 0,0
+    vm.step();
+
+    assert_eq!(vm.regs[10], 0, "mouse_x should default to 0");
+    assert_eq!(vm.regs[11], 0, "mouse_y should default to 0");
+}
+
+#[test]
+fn test_mouseq_updates_on_push() {
+    let mut vm = crate::vm::Vm::new();
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+
+    vm.push_mouse(50, 75);
+    vm.step();
+    assert_eq!(vm.regs[1], 50);
+    assert_eq!(vm.regs[2], 75);
+
+    // Reset and push new position
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.pc = 0;
+    vm.push_mouse(200, 100);
+    vm.step();
+    assert_eq!(vm.regs[1], 200);
+    assert_eq!(vm.regs[2], 100);
+}
+
+#[test]
+fn test_mouseq_disassembler() {
+    let mut vm = crate::vm::Vm::new();
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 7;
+    let (text, len) = vm.disassemble_at(0);
+    assert_eq!(text, "MOUSEQ r7");
+    assert_eq!(len, 2);
+}
+
+#[test]
+fn test_mouseq_assembler() {
+    let src = "MOUSEQ r10\nHALT";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(result.is_ok());
+    let bytecode = result.unwrap();
+    assert_eq!(bytecode.pixels[0], 0x85);
+    assert_eq!(bytecode.pixels[1], 10);
+    assert_eq!(bytecode.pixels[2], 0x00); // HALT
+}
+
+#[test]
+fn test_mouseq_in_paint_loop() {
+    // Simulate a simple paint loop: MOUSEQ r1, PSET r1, r2, r3, FRAME, HALT
+    let mut vm = crate::vm::Vm::new();
+    // MOUSEQ r1
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 1;
+    // LDI r3, 0xFF0000 (red)
+    vm.ram[2] = 0x10;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0xFF0000;
+    // PSET r1, r2, r3
+    vm.ram[5] = 0x40;
+    vm.ram[6] = 1;
+    vm.ram[7] = 2;
+    vm.ram[8] = 3;
+    // FRAME
+    vm.ram[9] = 0x02;
+    // HALT
+    vm.ram[10] = 0x00;
+    vm.pc = 0;
+
+    vm.push_mouse(64, 128);
+    // Run until halt
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Check that pixel was painted at (64, 128)
+    assert_eq!(vm.screen[128 * 256 + 64], 0xFF0000, "pixel should be painted at mouse pos");
+}
+
 // ── Disassembler Tests ───────────────────────────────────────────
 
 /// Helper: create a VM, load a single instruction at address 0, disassemble it.
@@ -4163,4 +4272,137 @@ fn test_pulse_color_changes_over_time() {
     // At least one should have bar drawn (late frame at peak), and colors should differ
     // The late frame bar should be non-background
     assert_ne!(late_pixel, 0x0D0D1A, "late frame should have bar drawn at (100,110)");
+}
+
+// ── Paint App Integration Tests ──────────────────────────
+
+fn boot_paint(target_frames: u32) -> Vm {
+    let source = include_str!("../../programs/paint.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("paint.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start_frame + target_frames {
+            break;
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_paint_app_assembles() {
+    let source = include_str!("../../programs/paint.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "paint.asm failed to assemble: {:?}", result.err());
+    let bytecode = result.unwrap();
+    assert!(bytecode.pixels.len() > 100, "paint should be substantial");
+    // Verify MOUSEQ opcode is present
+    let has_mouseq = bytecode.pixels.iter().any(|&w| w == 0x85);
+    assert!(has_mouseq, "paint.asm should contain MOUSEQ opcode (0x85)");
+}
+
+#[test]
+fn test_paint_app_boots_and_runs() {
+    let vm = boot_paint(1);
+    assert!(!vm.halted, "paint app should not halt after boot");
+}
+
+#[test]
+fn test_paint_app_draws_palette() {
+    let vm = boot_paint(1);
+    // Red swatch at (2, 240) should be red
+    assert_eq!(vm.screen[240 * 256 + 2], 0xFF0000, "red swatch should be red");
+    // Green swatch at (34, 240) should be green
+    assert_eq!(vm.screen[240 * 256 + 34], 0x00FF00, "green swatch should be green");
+    // Blue swatch at (66, 240) should be blue
+    assert_eq!(vm.screen[240 * 256 + 66], 0x0000FF, "blue swatch should be blue");
+}
+
+#[test]
+fn test_paint_app_draws_at_mouse() {
+    let mut vm = boot_paint(1);
+    assert!(!vm.halted);
+    // Push mouse into paint area and run a frame
+    vm.push_mouse(100, 100);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
+    }
+    // Default color is red -- pixel at (100, 100) should be red
+    assert_eq!(
+        vm.screen[100 * 256 + 100],
+        0xFF0000,
+        "pixel at mouse pos should be painted red"
+    );
+}
+
+#[test]
+fn test_paint_app_clear_button() {
+    let mut vm = boot_paint(1);
+    // First paint something
+    vm.push_mouse(50, 50);
+    let start = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start + 2 {
+            break;
+        }
+    }
+    assert_eq!(vm.screen[50 * 256 + 50], 0xFF0000, "should have painted red");
+
+    // Now click clear button (at x=2, y=220, w=40, h=16)
+    vm.push_mouse(20, 228);
+    let start2 = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_count >= start2 + 2 {
+            break;
+        }
+    }
+    // Canvas should be cleared to background
+    assert_eq!(
+        vm.screen[50 * 256 + 50],
+        0x111111,
+        "canvas should be cleared after clicking clear"
+    );
+}
+
+#[test]
+fn test_paint_app_runs_100_frames() {
+    let mut vm = boot_paint(1);
+    for _ in 0..100 {
+        vm.push_mouse(128, 128);
+        let start = vm.frame_count;
+        for _ in 0..500_000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_count >= start + 1 {
+                break;
+            }
+        }
+        if vm.halted {
+            break;
+        }
+    }
+    assert!(!vm.halted, "paint should run 100 frames without halting");
 }

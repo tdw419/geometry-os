@@ -823,6 +823,16 @@ impl Vm {
                     return false;
                 }
             }
+            // MOUSEQ x_reg  (0x85) -- Query mouse position.
+            // Reads current mouse X into x_reg and mouse Y into x_reg+1.
+            // Set by host via push_mouse(x, y). Returns 0,0 if no mouse events.
+            0x85 => {
+                let xr = self.fetch() as usize;
+                if xr < NUM_REGS && xr + 1 < NUM_REGS {
+                    self.regs[xr] = self.mouse_x;
+                    self.regs[xr + 1] = self.mouse_y;
+                }
+            }
             // Unknown opcode: halt
             _ => {
                 self.halted = true;

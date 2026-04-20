@@ -189,6 +189,17 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "MOUSEQ" => {
+            if tokens.len() < 2 {
+                return Err(
+                    "MOUSEQ requires 1 argument: MOUSEQ x_reg (Y goes into x_reg+1)".to_string(),
+                );
+            }
+            bytecode.push(0x85);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

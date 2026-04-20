@@ -650,6 +650,10 @@ impl Vm {
                 let mr = ram(a + 1);
                 (format!("PIXEL_HISTORY {}", reg(mr)), 2)
             }
+            0x85 => {
+                let xr = ram(a + 1);
+                (format!("MOUSEQ {}", reg(xr)), 2)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
