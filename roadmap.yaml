@@ -1,7 +1,7 @@
 title: Geometry OS Roadmap
 version: 1.0.0
 description: 'Pixel-art virtual machine with built-in assembler, debugger, and live GUI.
-  111 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
+  115 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
   the built-in text editor, press F5, watch it run.'
 project_url: https://github.com/tdw419/geometry-os
 meta:
