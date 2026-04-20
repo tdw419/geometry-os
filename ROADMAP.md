@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 75/91 phases complete, 0 in progress
+**Progress:** 75/92 phases complete, 0 in progress
 
-**Deliverables:** 319/391 complete
+**Deliverables:** 319/398 complete
 
 **Tasks:** 98/98 complete
 
@@ -2376,6 +2376,22 @@ AI agents get their own avatars on the infinite map. They can walk around, enter
 - [ ] **Agent task queue** -- RAM-based task queue. Human assigns tasks to agents (via terminal command or map UI). Agent picks up task, walks to building, executes, reports back. Proves multi-agent coordination on the map.
 - [ ] **ai_agents_demo.asm** -- Player assigns "run tests" to an AI agent. Agent walks to terminal building, enters, runs cargo test equivalent, reads output, walks back, reports pass/fail as floating text above avatar.
 - [ ] **Agent avatar tests** -- Agent renders, pathfinding, building entry, task queue, reporting. 12+ tests.
+
+## [ ] phase-91: GlyphLang Frontend -- High-Level Language for the Pixel VM (PLANNED)
+
+**Goal:** Compile GlyphLang's spatial assembly syntax to Geometry OS bytecode, giving the VM a high-level language
+
+GlyphLang is a stack-based language with concise opcodes (0-9 for literals, +-*/ for math, S for spawn/fork, M for self-modify, . for output). This phase builds a compiler that translates `.glyph` spatial assembly programs into GeoOS register-based bytecode. Users write in GlyphLang's compact syntax and the VM runs it. This is the "C compiler" moment -- a high-level language on top of the pixel machine.
+
+### Deliverables
+
+- [ ] **GlyphLang lexer** -- Tokenize `.glyph` spatial assembly: numbers (0-9), operators (+-*/), comparison (>=<), control (?L), metamorphic (M), biological (S), I/O (.@). Written as a library callable from assembly. Ignores comments (#) and whitespace.
+- [ ] **Stack-to-register translator** -- Map GlyphLang's stack operations to GeoOS register instructions. Stack depth tracked in r31 (dedicated stack pointer in RAM 0xF00-0xFFF). Push = STORE to stack, Pop = LOAD from stack. Arithmetic: POP r1, POP r2, OP r1,r2, PUSH r1. Maps +-*/ to ADD/SUB/MUL/DIV, >=< to CMP+conditional jumps.
+- [ ] **Spatial opcodes mapped** -- S (Mitosis) maps to FORK. M (Mutator) maps to existing self-modifying code (STORE to code region). . (output) maps to DRAW or RECTF. @ (terminate) maps to HALT. ? (conditional) maps to JNZ/JZ. L (range) maps to loop with ADDI + CMP.
+- [ ] **glyph_compiler.asm** -- The compiler itself runs inside the VM. Reads `.glyph` source from VFS, tokenizes, translates to GeoOS bytecode, writes output `.asm` to VFS. Proves the VM can host its own language toolchain. Uses the self-hosting assembler (phase 73) as a backend.
+- [ ] **glyph_demo.asm** -- Runs a GlyphLang program compiled on-the-fly. Source: `3 4 + .` (push 3, push 4, add, print). Compiler translates to GeoOS bytecode, VM executes, result (7) appears on screen as a pixel or number.
+- [ ] **glyph_fib.glyph** -- Fibonacci in spatial assembly: `1 1 10 L { dup . + dup }` compiles and runs correctly, drawing the sequence on screen.
+- [ ] **GlyphLang compiler tests** -- Lexer tokenizes all opcodes, translator maps each opcode correctly, full compile+run of simple programs matches expected output. 12+ tests.
 
 ## Global Risks
 
