@@ -470,6 +470,20 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "NOT" => {
+            if tokens.len() < 2 {
+                return Err("NOT requires 1 argument: NOT rd".to_string());
+            }
+            bytecode.push(0x90);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
+        "INV" => {
+            bytecode.push(0x91);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

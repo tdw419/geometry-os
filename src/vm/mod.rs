@@ -1049,6 +1049,21 @@ impl Vm {
                 }
             }
 
+            // NOT rd  (0x90) -- rd = !rd (bitwise complement)
+            0x90 => {
+                let rd = self.fetch() as usize;
+                if rd < NUM_REGS {
+                    self.regs[rd] = !self.regs[rd];
+                }
+            }
+
+            // INV  (0x91) -- invert all screen pixels (XOR 0xFFFFFF)
+            0x91 => {
+                for pixel in self.screen.iter_mut() {
+                    *pixel ^= 0x00FFFFFF;
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

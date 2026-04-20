@@ -684,6 +684,12 @@ impl Vm {
             0x8F => {
                 (format!("BITTEST {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3)
             }
+            0x90 => {
+                (format!("NOT {}", reg(ram(a + 1))), 2)
+            }
+            0x91 => {
+                ("INV".to_string(), 1)
+            }
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }

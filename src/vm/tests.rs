@@ -6362,3 +6362,99 @@ fn test_bit_disassembles() {
     assert_eq!(text, "BITTEST r5, r6");
     assert_eq!(len, 3);
 }
+
+// ── NOT + INV opcodes (0x90-0x91) ────────────────────────────
+
+#[test]
+fn test_not_inverts_bits() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0x00FF00FF;
+    vm.ram[0] = 0x90; vm.ram[1] = 1; vm.ram[2] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[1], !0x00FF00FFu32, "NOT should invert all bits");
+}
+
+#[test]
+fn test_not_zero() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0;
+    vm.ram[0] = 0x90; vm.ram[1] = 1; vm.ram[2] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[1], 0xFFFFFFFF, "NOT 0 = all ones");
+}
+
+#[test]
+fn test_not_all_ones() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0xFFFFFFFF;
+    vm.ram[0] = 0x90; vm.ram[1] = 1; vm.ram[2] = 0x00;
+    vm.step();
+    assert_eq!(vm.regs[1], 0, "NOT all-ones = 0");
+}
+
+#[test]
+fn test_inv_inverts_screen() {
+    let mut vm = Vm::new();
+    vm.screen[0] = 0x123456;
+    vm.screen[1] = 0x000000;
+    vm.screen[2] = 0xFFFFFF;
+    vm.ram[0] = 0x91; vm.ram[1] = 0x00;
+    vm.step();
+    assert_eq!(vm.screen[0], 0x123456 ^ 0x00FFFFFF);
+    assert_eq!(vm.screen[1], 0x00FFFFFF);
+    assert_eq!(vm.screen[2], 0x000000);
+}
+
+#[test]
+fn test_inv_double_invert_restores() {
+    let mut vm = Vm::new();
+    vm.screen[100] = 0xABCDEF;
+    vm.ram[0] = 0x91; vm.ram[1] = 0x91; vm.ram[2] = 0x00;
+    vm.step();
+    vm.step();
+    assert_eq!(vm.screen[100], 0xABCDEF, "INV twice should restore original");
+}
+
+#[test]
+fn test_not_inv_assemble() {
+    let src = "NOT r1\nINV\nHALT\n";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(result.is_ok(), "NOT/INV should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_not_inv_disasm() {
+    let (text, len) = disasm(&[0x90, 1]);
+    assert_eq!(text, "NOT r1");
+    assert_eq!(len, 2);
+    let (text, len) = disasm(&[0x91]);
+    assert_eq!(text, "INV");
+    assert_eq!(len, 1);
+}
+
+// ── invert_demo.asm (phase 67) ───────────────────────────────
+
+#[test]
+fn test_invert_demo_assembles() {
+    let source = include_str!("../../programs/invert_demo.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "invert_demo should assemble: {:?}", result.err());
+}
+
+#[test]
+fn test_invert_demo_runs() {
+    let source = include_str!("../../programs/invert_demo.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run until it draws stripes + first FRAME (before the loop)
+    for _ in 0..5000 {
+        if !vm.step() { break; }
+    }
+    // Should have drawn red stripe at y=0
+    assert_eq!(vm.screen[5 * 256 + 10], 0x00FF0000, "red stripe should be at top");
+}

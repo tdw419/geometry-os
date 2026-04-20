@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 65/78 phases complete, 0 in progress
+**Progress:** 67/78 phases complete, 0 in progress
 
-**Deliverables:** 272/337 complete
+**Deliverables:** 283/347 complete
 
 **Tasks:** 98/98 complete
 
@@ -2026,7 +2026,7 @@ BITSET (0x8D), BITCLR (0x8E), BITTEST (0x8F) for efficient bit manipulation. Enh
 - [x] **BIT tests** -- Set/clear/test individual bits, edge cases (bit 0, bit 31)
 - [x] **game_of_life enhanced with bit operations** -- Deferred: tests prove opcodes. Existing GoL uses PEEK-based neighbor counting; BITTEST optimization is cosmetic.
 
-## [ ] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (PLANNED)
+## [x] phase-67: NOT opcode + INV (invert) Screen Opcode + Invert Demo (DONE)
 
 **Goal:** Add logical NOT and screen invert operations
 
@@ -2034,11 +2034,11 @@ NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels (XOR 0xFFFFF
 
 ### Deliverables
 
-- [ ] **NOT opcode (0x90)** -- NOT rd -- rd = ~rd (bitwise complement)
-- [ ] **INV opcode (0x91)** -- INV -- invert all screen pixels (XOR 0xFFFFFF)
-- [ ] **NOT/INV assembler + disassembler entries** -- 
-- [ ] **NOT/INV tests** -- 
-- [ ] **invert_demo.asm** -- Visual demo cycling between normal and inverted screen
+- [x] **NOT opcode (0x90)** -- NOT rd -- rd = ~rd (bitwise complement)
+- [x] **INV opcode (0x91)** -- INV -- invert all screen pixels (XOR 0xFFFFFF)
+- [x] **NOT/INV assembler + disassembler entries** -- 
+- [x] **NOT/INV tests** -- 
+- [x] **invert_demo.asm** -- Colored stripes cycle between normal and inverted every ~30 frames
 
 ## [ ] phase-68: Pixel Window System (PLANNED)
 

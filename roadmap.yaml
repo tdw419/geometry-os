@@ -3454,24 +3454,24 @@ phases:
   test_target: 15
 - id: phase-67
   title: NOT opcode + INV (invert) Screen Opcode + Invert Demo
-  status: planned
+  status: done
   goal: Add logical NOT and screen invert operations
   description: 'NOT (0x90) bitwise complement, INV (0x91) inverts all screen pixels
     (XOR 0xFFFFFF). Invert demo shows visual effects.'
   deliverables:
   - name: NOT opcode (0x90)
     description: 'NOT rd -- rd = ~rd (bitwise complement)'
-    status: todo
+    status: done
   - name: INV opcode (0x91)
     description: 'INV -- invert all screen pixels (XOR 0xFFFFFF)'
-    status: todo
+    status: done
   - name: NOT/INV assembler + disassembler entries
-    status: todo
+    status: done
   - name: NOT/INV tests
-    status: todo
+    status: done
   - name: invert_demo.asm
-    description: 'Visual demo cycling between normal and inverted screen'
-    status: todo
+    description: 'Colored stripes cycle between normal and inverted every ~30 frames'
+    status: done
   scope_lines_total: 500
   test_target: 8
 - id: phase-68
