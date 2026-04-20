@@ -11,9 +11,9 @@ meta:
   registers: 32
   ram: 65536 words
   opcodes: 112
-  tests: 1310
+  tests: 1769
   programs: 71
-  loc: 41410
+  loc: 41455
 phases:
 - id: phase-1
   title: Core VM + Visual Programs
@@ -3219,6 +3219,40 @@ phases:
     of new tests in src/vm/tests.rs. No new opcodes.'
   scope_lines_total: 620
   test_target: 13
+- id: phase-59
+  title: File Browser App + Bug Fixes
+  status: complete
+  goal: Interactive file browser with click-to-open and read support
+  description: 'File browser application using HITSET for clickable rows. Fixed two
+    critical bugs: HITSET id=0 collision with HITQ no-match return, and CMPI fd clobber
+    after OPEN. 423-line file_browser.asm with 196 lines of new integration tests.'
+  deliverables:
+  - name: file_browser.asm application
+    description: '423-line interactive file browser. HITSET rows with ids 1-12 for
+      clickable file listing. Click to open and read file contents. Displays file
+      content in a scrollable view.'
+    status: done
+    tasks: []
+  - name: HITSET id collision fix
+    description: 'HITSET row 0 used id=0 which collided with HITQ no-match return
+      (0). Renumbered ids 1-12, adjusted click handler bounds.'
+    status: done
+    tasks: []
+  - name: CMPI fd clobber fix
+    description: 'CMPI r0, 0xFFFFFFFF after OPEN clobbered r0 (the fd). Fix: MOV
+      r19, r0 after OPEN, use r19 for subsequent fd operations.'
+    status: done
+    tasks: []
+  - name: File browser integration tests
+    description: '196 lines of new tests covering file browser listing, click-to-open,
+      file read display, and edge cases.'
+    status: done
+    tasks: []
+  technical_notes: 'No new opcodes. Pure application-level code in programs/file_browser.asm.
+    Tests in src/vm/tests.rs. Bug fixes improve HITSET/HITQ reliability for all future
+    apps.'
+  scope_lines_total: 619
+  test_target: 0
 global_risks:
 - 'Opcode space: 112 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard

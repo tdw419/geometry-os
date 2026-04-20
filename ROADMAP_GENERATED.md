@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 58/58 phases complete, 0 in progress
+**Progress:** 59/59 phases complete, 0 in progress
 
-**Deliverables:** 246/246 complete
+**Deliverables:** 250/250 complete
 
 **Tasks:** 84/84 complete
 
@@ -70,6 +70,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 112 o
 | phase-56 Musical Note Opcode | COMPLETE | 2/2 | 30 | 1 |
 | phase-57 Mouse Query Opcode | COMPLETE | 4/4 | 80 | 16 |
 | phase-58 Terminal v4 — Scroll + Shell Commands | COMPLETE | 4/4 | 620 | 13 |
+| phase-59 File Browser App + Bug Fixes | COMPLETE | 4/4 | 619 | - |
 
 ## Dependencies
 
@@ -1653,6 +1654,23 @@ Terminal v4 adds scroll when content exceeds 30 rows (120-row content buffer), n
 ### Technical Notes
 
 All changes in terminal.asm (282 lines expanded) + 349 lines of new tests in src/vm/tests.rs. No new opcodes.
+
+## [x] phase-59: File Browser App + Bug Fixes (COMPLETE)
+
+**Goal:** Interactive file browser with click-to-open and read support
+
+File browser application using HITSET for clickable rows. Fixed two critical bugs: HITSET id=0 collision with HITQ no-match return, and CMPI fd clobber after OPEN. 423-line file_browser.asm with 196 lines of new integration tests.
+
+### Deliverables
+
+- [x] **file_browser.asm application** -- 423-line interactive file browser. HITSET rows with ids 1-12 for clickable file listing. Click to open and read file contents. Displays file content in a scrollable view.
+- [x] **HITSET id collision fix** -- HITSET row 0 used id=0 which collided with HITQ no-match return (0). Renumbered ids 1-12, adjusted click handler bounds.
+- [x] **CMPI fd clobber fix** -- CMPI r0, 0xFFFFFFFF after OPEN clobbered r0 (the fd). Fix: MOV r19, r0 after OPEN, use r19 for subsequent fd operations.
+- [x] **File browser integration tests** -- 196 lines of new tests covering file browser listing, click-to-open, file read display, and edge cases.
+
+### Technical Notes
+
+No new opcodes. Pure application-level code in programs/file_browser.asm. Tests in src/vm/tests.rs. Bug fixes improve HITSET/HITQ reliability for all future apps.
 
 ## Global Risks
 
