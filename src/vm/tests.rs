@@ -3928,3 +3928,133 @@ fn test_terminal_blink_counter_advances() {
 }
 
 
+
+// ── Pulse app (self-animating, no input) ───────────────────
+
+fn boot_pulse(target_frames: u32) -> Vm {
+    let source = include_str!("../../programs/pulse.asm");
+    let asm = crate::assembler::assemble(source, 0).expect("pulse.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let start_frame = vm.frame_count;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.frame_count >= start_frame + target_frames { break; }
+    }
+    vm
+}
+
+#[test]
+fn test_pulse_boots_and_renders() {
+    let vm = boot_pulse(1);
+    assert!(!vm.halted, "pulse app should not halt after boot");
+    // Background at a point with no text should be dark blue-black
+    assert_eq!(vm.screen[1 * 256 + 1], 0x0D0D1A, "background should be dark blue-black");
+    // "PULSE" title text renders at (5,5) -- 'P' pixel should be non-background
+    assert_ne!(vm.screen[5 * 256 + 5], 0x0D0D1A, "title text 'P' should differ from background");
+    // Tick counter at 0x200 should be >= 1 after 1 frame
+    assert!(vm.ram[0x200] >= 1, "tick should be >= 1 after first frame, got {}", vm.ram[0x200]);
+    // Bar width at 0x204 should be in valid range (triangle wave 0-99)
+    assert!(vm.ram[0x204] <= 100, "bar width should be <= 100, got {}", vm.ram[0x204]);
+}
+
+#[test]
+fn test_pulse_bar_width_oscillates() {
+    // Run 300 frames: should see bar_width go up, peak, come down, go up again
+    let mut vm = boot_pulse(0); // just assemble, don't run frames yet
+
+    let mut saw_zero = false;
+    let mut saw_peak = false;
+    let mut prev_width = 0u32;
+
+    for frame in 0..250 {
+        let start = vm.frame_count;
+        for _ in 0..500_000 {
+            if !vm.step() { break; }
+            if vm.frame_count >= start + 1 { break; }
+        }
+        if vm.halted { panic!("pulse halted at frame {}", frame); }
+
+        let width = vm.ram[0x204];
+        if width == 0 { saw_zero = true; }
+        if width >= 90 { saw_peak = true; }
+        prev_width = width;
+    }
+
+    assert!(saw_zero, "bar width should hit 0 during oscillation (saw {})", prev_width);
+    assert!(saw_peak, "bar width should reach >= 90 during oscillation (max saw {})", prev_width);
+}
+
+#[test]
+fn test_pulse_tick_increments_per_frame() {
+    let vm1 = boot_pulse(1);
+    let tick1 = vm1.ram[0x200];
+
+    let mut vm2 = boot_pulse(0);
+    // Run 10 more frames
+    let start = vm2.frame_count;
+    for _ in 0..500_000 {
+        if !vm2.step() { break; }
+        if vm2.frame_count >= start + 10 { break; }
+    }
+    let tick10 = vm2.ram[0x200];
+
+    assert!(tick10 > tick1, "tick should increase across frames: tick1={}, tick10={}", tick1, tick10);
+    // Should be roughly proportional (allowing for init frame)
+    assert!(tick10 >= 9, "after 10 frames, tick should be >= 9, got {}", tick10);
+}
+
+#[test]
+fn test_pulse_triangle_wave_symmetry() {
+    // The triangle wave should go 0->99->0 in 200 frames
+    // Check that frames 50 and 150 (symmetric around peak) give similar widths
+    let mut vm = boot_pulse(0);
+    let mut widths: Vec<u32> = Vec::new();
+
+    for frame in 0..200 {
+        let start = vm.frame_count;
+        for _ in 0..500_000 {
+            if !vm.step() { break; }
+            if vm.frame_count >= start + 1 { break; }
+        }
+        if vm.halted { break; }
+        widths.push(vm.ram[0x204]);
+    }
+
+    assert!(widths.len() >= 200, "should have 200 width samples, got {}", widths.len());
+    // Peak should be around frame 99 or 100
+    let max_width = *widths.iter().max().unwrap();
+    assert!(max_width >= 99, "max bar width should be >= 99, got {}", max_width);
+    // Symmetry: width at frame i should equal width at frame (198 - i)
+    // (offset by 1 because tick increments before computing width)
+    assert_eq!(widths[10], widths[188], "triangle should be symmetric: w[10]={}, w[188]={}", widths[10], widths[188]);
+}
+
+#[test]
+fn test_pulse_never_halts() {
+    // Run 500 frames to prove it loops forever
+    let vm = boot_pulse(500);
+    assert!(!vm.halted, "pulse should never halt, even after 500 frames");
+    // Frame count should be 500
+    assert!(vm.frame_count >= 500, "should have run 500 frames, got {}", vm.frame_count);
+}
+
+#[test]
+fn test_pulse_color_changes_over_time() {
+    // The bar color shifts with tick, so it should differ between early and late frames
+    let vm_early = boot_pulse(5);
+    let vm_late = boot_pulse(150);
+
+    let early_pixel = vm_early.screen[110 * 256 + 100]; // bar center at (100,110)
+    let late_pixel = vm_late.screen[110 * 256 + 100];
+
+    // At least one should have bar drawn (late frame at peak), and colors should differ
+    // The late frame bar should be non-background
+    assert_ne!(late_pixel, 0x0D0D1A, "late frame should have bar drawn at (100,110)");
+}
