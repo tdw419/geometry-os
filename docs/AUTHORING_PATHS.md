@@ -225,6 +225,20 @@ interactive regions). They're two applications of the same idea.
 | `programs/fire.asm` | CTS | Animation via SCROLL + FRAME |
 | `programs/hello_window.asm` | Token-to-pixel | Minimal static UI + hit region |
 | `programs/counter.asm` | Token-to-pixel | Full event loop: click → arithmetic → redraw |
+| `programs/terminal.asm` | Token-to-pixel | Keyboard path: IKEY ring buffer, CALL/RET subroutines, Enter/Backspace via CMPI+JNZ on r0 |
+
+### A load-bearing bug worth remembering (from terminal.asm)
+
+`CMPI rd, imm` writes the comparison result to **r0**, not to `rd`. The
+conditional branches (`JZ`, `JNZ`, `BLT`, `BGE`) read **r0**, not their
+register operand. The first draft of terminal.asm wrote `CMPI r5, 13`
+followed by `JNZ r5`, which branched on the key value (always non-zero)
+instead of the comparison result. Enter, Backspace, and Delete all fell
+through to the character-insertion path.
+
+Fix: `CMPI r5, 13; JZ r0, enter_handler`. Counter.asm had it right; the
+terminal got it wrong. When writing LLM-emitted event handlers, this is
+the single easiest trap. Always branch on r0 after a CMP/CMPI.
 
 ---
 

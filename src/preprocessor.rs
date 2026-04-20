@@ -43,6 +43,8 @@ pub const OPCODES: &[&str] = &[
     "CIRCLE",
     "SCROLL",
     "IKEY",
+    "HITSET",
+    "HITQ",
     "RAND",
     "NEG",
     "CMP",
