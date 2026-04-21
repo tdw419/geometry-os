@@ -90,6 +90,7 @@ pub const OPCODES: &[&str] = &[
     "GETENV",
     "SETENV",
     "GETPID",
+    "PROCLS",
     "EXEC",
     "WRITESTR",
     "READLN",

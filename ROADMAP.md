@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 77/92 phases complete, 0 in progress
+**Progress:** 78/92 phases complete, 0 in progress
 
-**Deliverables:** 327/398 complete
+**Deliverables:** 330/398 complete
 
 **Tasks:** 98/98 complete
 
@@ -84,7 +84,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-69 Sprite Engine | COMPLETE | 6/7 | 800 | 12 |
 | phase-70 Self-Hosting Pixel Assembler | COMPLETE | 4/4 | 1,500 | 8 |
 | phase-71 Pixel Network Protocol | COMPLETE | 6/6 | 900 | 11 |
-| phase-72 Desktop Taskbar + App Launcher | PLANNED | 0/3 | 800 | 8 |
+| phase-72 Desktop Taskbar + App Launcher | COMPLETE | 3/3 | 800 | 10 |
 | phase-73 Core Utilities | COMPLETE | 5/5 | 1,000 | 10 |
 | phase-74 Image Viewer + Screenshot | COMPLETE | 4/4 | 600 | 8 |
 | phase-75 Stopwatch + Timer + Calculator (scientific) | COMPLETE | 4/4 | 1,200 | 10 |
@@ -2124,7 +2124,7 @@ NET_SEND/NET_RECV opcodes for pixel-level communication. Send a screen region to
 - [x] **net_chat.asm** -- Simple pixel chat: type messages in terminal, send to peer, messages appear on their screen. Proves bidirectional NET_SEND/NET_RECV.
 - [x] **Network tests** -- Send/receive pixel frames, protocol parsing, connection handling. 10+ tests.
 
-## [ ] phase-72: Desktop Taskbar + App Launcher (PLANNED)
+## [x] phase-72: Desktop Taskbar + App Launcher (COMPLETE)
 
 **Goal:** Persistent taskbar at bottom of screen with running app icons, clock, and app launcher menu
 
@@ -2132,9 +2132,9 @@ Taskbar shows running processes as clickable icons. App launcher opens a grid of
 
 ### Deliverables
 
-- [ ] **taskbar.asm** -- Bottom bar (16px tall) showing running process icons, current time, and a "Start" button. Click icon to switch focus. Click Start for launcher.
-- [ ] **launcher.asm** -- Full-screen grid of available .asm programs from VFS. Scroll with mouse wheel, click to launch via RUNNEXT. ESC to close.
-- [ ] **Taskbar + launcher tests** -- Taskbar renders, launcher lists programs, click launches process. 8+ tests.
+- [x] **taskbar.asm** -- Bottom bar (16px tall) showing running process icons, current time, and a "Start" button. Click icon to switch focus. Click Start for launcher.
+- [x] **launcher.asm** -- Full-screen grid of available .asm programs from VFS. Scroll with mouse wheel, click to launch via RUNNEXT. ESC to close.
+- [x] **Taskbar + launcher tests** -- 10 tests: PROCLS opcode (no processes, with processes, out-of-range, disasm, assemble), taskbar (assembles, runs, PROCLS integration), launcher (assembles, runs). All 996 tests pass.
 
 ## [x] phase-73: Core Utilities (COMPLETE)
 

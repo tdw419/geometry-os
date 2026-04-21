@@ -1591,6 +1591,34 @@ impl Vm {
                 }
             }
 
+            // PROCLS buf_reg (0x9B) -- list running process PIDs into RAM buffer
+            // Writes PID of each active process (including main PID 0) as u32 words
+            // starting at RAM[buf_reg]. Returns count in r0.
+            0x9B => {
+                let br = self.fetch() as usize;
+                if br < NUM_REGS {
+                    let mut buf_addr = self.regs[br] as usize;
+                    let mut count: u32 = 0;
+                    // Write main process PID (0)
+                    if buf_addr < self.ram.len() {
+                        self.ram[buf_addr] = 0;
+                        count += 1;
+                        buf_addr += 1;
+                    }
+                    // Write spawned process PIDs
+                    for p in &self.processes {
+                        if buf_addr < self.ram.len() {
+                            self.ram[buf_addr] = p.pid;
+                            count += 1;
+                            buf_addr += 1;
+                        }
+                    }
+                    self.regs[0] = count;
+                } else {
+                    self.regs[0] = 0;
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

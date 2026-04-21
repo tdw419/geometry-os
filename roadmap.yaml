@@ -3888,7 +3888,7 @@ phases:
   test_target: 10
 - id: phase-72
   title: Desktop Taskbar + App Launcher
-  status: planned
+  status: complete
   goal: Persistent taskbar at bottom of screen with running app icons, clock, and
     app launcher menu
   description: Taskbar shows running processes as clickable icons. App launcher opens
@@ -3898,15 +3898,15 @@ phases:
   - name: taskbar.asm
     description: Bottom bar (16px tall) showing running process icons, current time,
       and a "Start" button. Click icon to switch focus. Click Start for launcher.
-    status: todo
+    status: done
   - name: launcher.asm
     description: Full-screen grid of available .asm programs from VFS. Scroll with
       mouse wheel, click to launch via RUNNEXT. ESC to close.
-    status: todo
+    status: done
   - name: Taskbar + launcher tests
-    description: Taskbar renders, launcher lists programs, click launches process.
-      8+ tests.
-    status: todo
+    description: 10 tests covering PROCLS opcode, taskbar rendering, launcher rendering.
+      All pass.
+    status: done
   scope_lines_total: 800
   test_target: 8
 - id: phase-73

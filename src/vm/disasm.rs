@@ -770,6 +770,7 @@ impl Vm {
                 3,
             ),
 
+            0x9B => (format!("PROCLS {}", ram(a + 1)), 2),
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

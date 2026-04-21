@@ -212,6 +212,14 @@ pub(super) fn try_parse(
             bytecode.push(0x65);
             Ok(Some(()))
         }
+        "PROCLS" => {
+            if tokens.len() != 2 {
+                return Err("PROCLS requires 1 argument: PROCLS buf_reg".to_string());
+            }
+            bytecode.push(0x9B);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
 
         "EXEC" => {
             if tokens.len() != 2 {

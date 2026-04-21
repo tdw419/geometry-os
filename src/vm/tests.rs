@@ -10523,3 +10523,239 @@ fn test_net_inbox_cleared_on_reset() {
         "net_inbox should be cleared on reset"
     );
 }
+
+// ════════════════════════════════════════════════════════════════
+// Phase 72: Taskbar + Launcher Tests
+// ════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_procls_opcode_no_processes() {
+    let mut vm = crate::vm::Vm::new();
+    // PROCLS with no spawned processes should return 1 (main process PID 0)
+    let buf_addr: usize = 0x4000;
+    vm.ram[0] = 0x9B; // PROCLS opcode
+    vm.ram[1] = 10; // r10
+    vm.regs[10] = buf_addr as u32;
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "should have 1 process (main)");
+    assert_eq!(vm.ram[buf_addr], 0, "first PID should be 0 (main)");
+}
+
+#[test]
+fn test_procls_opcode_with_spawned_process() {
+    let mut vm = crate::vm::Vm::new();
+    // Manually add a spawned process
+    use crate::vm::types::Process;
+    vm.processes.push(Process::new(1, 0, 100));
+    vm.processes.push(Process::new(2, 0, 200));
+
+    let buf_addr: usize = 0x4000;
+    vm.ram[0] = 0x9B; // PROCLS opcode
+    vm.ram[1] = 10; // r10
+    vm.regs[10] = buf_addr as u32;
+    vm.step();
+    assert_eq!(vm.regs[0], 3, "should have 3 processes (main + 2 spawned)");
+    assert_eq!(vm.ram[buf_addr], 0, "first PID should be 0 (main)");
+    assert_eq!(vm.ram[buf_addr + 1], 1, "second PID should be 1");
+    assert_eq!(vm.ram[buf_addr + 2], 2, "third PID should be 2");
+}
+
+#[test]
+fn test_procls_disassembles() {
+    let mut vm = crate::vm::Vm::new();
+    vm.ram[0] = 0x9B;
+    vm.ram[1] = 5;
+    let (s, len) = vm.disassemble_at(0);
+    assert!(
+        s.contains("PROCLS"),
+        "should disassemble as PROCLS, got: {}",
+        s
+    );
+    assert_eq!(len, 2);
+}
+
+#[test]
+fn test_procls_assembles() {
+    use crate::assembler::assemble;
+    let src = "PROCLS r5";
+    let result = assemble(src, 0);
+    assert!(result.is_ok(), "PROCLS should assemble");
+    let asm = result.unwrap();
+    assert_eq!(asm.pixels[0], 0x9B, "opcode byte");
+    assert_eq!(asm.pixels[1], 5, "register r5");
+}
+
+#[test]
+fn test_taskbar_assembles() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/taskbar.asm").expect("taskbar.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "taskbar.asm should assemble");
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 100,
+        "taskbar should produce substantial bytecode, got {} words",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_taskbar_runs() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/taskbar.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let mut frames_seen = 0;
+    for _ in 0..5_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= 2 {
+                break;
+            }
+        }
+    }
+    assert!(
+        frames_seen >= 1,
+        "taskbar should produce at least 1 frame, got {}",
+        frames_seen
+    );
+    // Taskbar should draw something at the bottom of the screen (y=240+)
+    let mut has_taskbar_pixels = false;
+    for y in 240..256 {
+        for x in 0..256 {
+            if vm.screen[y * 256 + x] != 0 {
+                has_taskbar_pixels = true;
+                break;
+            }
+        }
+        if has_taskbar_pixels {
+            break;
+        }
+    }
+    assert!(
+        has_taskbar_pixels,
+        "taskbar should render pixels at y=240..256"
+    );
+}
+
+#[test]
+fn test_launcher_assembles() {
+    use crate::assembler::assemble;
+    let source =
+        std::fs::read_to_string("programs/launcher.asm").expect("launcher.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "launcher.asm should assemble");
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 100,
+        "launcher should produce substantial bytecode, got {} words",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_launcher_runs() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/launcher.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let mut frames_seen = 0;
+    for _ in 0..5_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= 2 {
+                break;
+            }
+        }
+    }
+    assert!(
+        frames_seen >= 1,
+        "launcher should produce at least 1 frame, got {}",
+        frames_seen
+    );
+    // Launcher should draw title bar at top
+    let mut has_title_pixels = false;
+    for y in 0..20 {
+        for x in 0..256 {
+            if vm.screen[y * 256 + x] != 0 {
+                has_title_pixels = true;
+                break;
+            }
+        }
+        if has_title_pixels {
+            break;
+        }
+    }
+    assert!(has_title_pixels, "launcher should render title bar at top");
+}
+
+#[test]
+fn test_procls_buf_register_out_of_range() {
+    let mut vm = crate::vm::Vm::new();
+    vm.ram[0] = 0x9B; // PROCLS
+    vm.ram[1] = 50; // invalid register
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "out-of-range register should return 0");
+}
+
+#[test]
+fn test_taskbar_procls_integration() {
+    // Test that taskbar correctly calls PROCLS and reads the count
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/taskbar.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Add a spawned process
+    use crate::vm::types::Process;
+    vm.processes.push(Process::new(1, 0, 0));
+
+    let mut frames_seen = 0;
+    for _ in 0..5_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= 1 {
+                break;
+            }
+        }
+    }
+    // After running, PROC_COUNT at 0x5100 should be set (2 = main + 1 spawned)
+    let proc_count = vm.ram[0x5100];
+    assert_eq!(
+        proc_count, 2,
+        "taskbar should count 2 processes, got {}",
+        proc_count
+    );
+}

@@ -910,6 +910,9 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0x96 => "WREAD",
         0x97 => "SPRBLT",
         0x98 => "SCRSHOT",
+        0x99 => "NET_SEND",
+        0x9A => "NET_RECV",
+        0x9B => "PROCLS",
         _ => "???",
     }
 }
