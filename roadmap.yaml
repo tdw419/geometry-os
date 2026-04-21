@@ -4767,17 +4767,17 @@ phases:
       in dependency order using SPAWN, monitors them with WAITPID, and restarts crashed
       ones based on policy. Like systemd but in 256 bytes of assembly.'
     name: Config-driven service manager
-    status: planned
+    status: done
   - description: 'boot.cfg format. One service per line: name path restart deps. Example:
       shell /bin/sh.asm always none. Restart policies: always, onfail, never. Dependencies:
       comma-separated service names that must be running first.'
     name: boot.cfg format and parser
-    status: planned
+    status: done
   - description: 'Test: boot.cfg lists 3 services with dependency chain. Init starts
       them in order. Kill the middle one. Init detects crash via WAITPID, restarts
       it. Verify ordering and restart.'
     name: Service manager integration test
-    status: planned
+    status: done
   description: 'An init system that reads a config file, starts services in dependency
     order, monitors for crashes, and restarts based on policy. Uses existing SPAWN,
     WAITPID, EXIT, and VFS opcodes. The difference between a program loader and an
@@ -4786,8 +4786,8 @@ phases:
     and crash recovery
   id: phase-97
   scope_lines_total: 500
-  status: planned
-  test_target: 3
+  status: complete
+  test_target: 5
   title: Init System - Service Manager
 - deliverables:
   - description: 'Per-process font slots. Each process can load a custom 128-entry x

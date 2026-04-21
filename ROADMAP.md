@@ -109,6 +109,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 148 o
 | phase-94 Pixel Boot - Universal Pixel Executable | DONE | 5/5 | 800 | 8 |
 | phase-95 Window Manager | COMPLETE | 4/4 | 600 | 4 |
 | phase-96 System Clipboard | DONE | 3/3 | 200 | 8 |
+| phase-97 Init System - Service Manager | COMPLETE | 3/3 | 500 | 5 |
 
 ## Dependencies
 
