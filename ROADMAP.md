@@ -107,7 +107,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 148 o
 | phase-92 Pixel Boot - Bytecode from PNG | DONE | 4/4 | 400 | 5 |
 | phase-93 Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) | DONE | 4/4 | 500 | 5 |
 | phase-94 Pixel Boot - Universal Pixel Executable | DONE | 5/5 | 800 | 8 |
-| phase-95 Window Manager | PLANNED | 0/4 | 600 | 4 |
+| phase-95 Window Manager | COMPLETE | 4/4 | 600 | 4 |
 | phase-96 System Clipboard | DONE | 3/3 | 200 | 8 |
 
 ## Dependencies

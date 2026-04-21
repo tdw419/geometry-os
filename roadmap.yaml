@@ -4704,22 +4704,22 @@ phases:
       No new opcodes needed -- pure user-space program using MOUSEQ, HITSET, RECTF, and
       SPAWN/KILL.'
     name: Window manager process
-    status: planned
+    status: done
   - description: 'Title bar rendering with draggable regions. Each window gets a colored
       title bar drawn by the manager. HITSET registers the title bar as a drag handle.
       MOUSEQ tracks drag. Manager updates RAM 0xF00-0xF03 and the child re-renders
       in its new bounds.'
     name: Draggable title bars
-    status: planned
+    status: done
   - description: 'Window close buttons (HITSET on a small region in the title bar).
       Click sends KILL to the child PID. Manager reclaims the screen region and
       re-tiles remaining windows.'
     name: Window close and re-tiling
-    status: planned
+    status: done
   - description: 'Test: spawn 3 child processes, drag windows to new positions, close
       one, verify remaining re-tile correctly. Verify children respect new bounds.'
     name: Window manager integration test
-    status: planned
+    status: done
   description: 'A window manager that owns the screen, tracks per-process regions,
     handles mouse drag to move windows, and communicates bounds via the existing
     RAM 0xF00-0xF03 protocol. No new opcodes -- pure user-space program. Makes
@@ -4728,7 +4728,7 @@ phases:
     and re-tiling using existing opcodes
   id: phase-95
   scope_lines_total: 600
-  status: planned
+  status: complete
   test_target: 4
   title: Window Manager
 - deliverables:
