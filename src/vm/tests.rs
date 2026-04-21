@@ -13121,3 +13121,295 @@ fn test_loadpng_opcode_empty_path() {
     // Should return error (0xFFFFFFFF)
     assert_eq!(vm.regs[0], 0xFFFFFFFF, "LOADPNG should fail for empty path");
 }
+
+// ============================================================
+// Phase 93: LOADSRCIMG (0xB2) opcode tests + Source PNG tests
+// ============================================================
+
+#[test]
+fn test_loadsrcimg_opcode_basic() {
+    // Create a simple source program: LDI r1, 42\nHALT
+    let source = "LDI r1, 42\nHALT\n";
+
+    // Encode as source pixelpack PNG
+    let png_data = crate::pixel::encode_source_pixelpack_png(source);
+    let png_path = "/tmp/geo_test_loadsrcimg_basic.png";
+    std::fs::write(png_path, &png_data).unwrap();
+
+    // Set up VM with path string in RAM
+    let mut vm = crate::vm::Vm::new();
+    let path_bytes: Vec<u32> = png_path
+        .chars()
+        .map(|c| c as u32)
+        .chain(std::iter::once(0u32))
+        .collect();
+    for (i, &word) in path_bytes.iter().enumerate() {
+        vm.ram[0x2000 + i] = word;
+    }
+
+    // LDI r5, 0x2000 (path address)
+    // LOADSRCIMG r5
+    // HALT
+    vm.ram[0] = 0x10; // LDI
+    vm.ram[1] = 5; // r5
+    vm.ram[2] = 0x2000;
+
+    vm.ram[3] = 0xB2; // LOADSRCIMG
+    vm.ram[4] = 5; // path_reg = r5
+
+    vm.ram[5] = 0x00; // HALT
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // LOADSRCIMG should succeed: r0 = bytecode word count
+    assert_ne!(vm.regs[0], 0xFFFFFFFF, "LOADSRCIMG should succeed");
+    assert!(
+        vm.regs[0] > 0,
+        "LOADSRCIMG should return bytecode word count > 0"
+    );
+
+    // Verify bytecode was written at 0x1000
+    assert_eq!(vm.ram[0x1000], 0x10, "LDI opcode should be at 0x1000");
+
+    // Now run the loaded program from 0x1000
+    vm.pc = 0x1000;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "loaded program should halt");
+    assert_eq!(vm.regs[1], 42, "LDI r1, 42 should set r1=42");
+
+    // Cleanup
+    let _ = std::fs::remove_file(png_path);
+}
+
+#[test]
+fn test_loadsrcimg_opcode_missing_file() {
+    let mut vm = crate::vm::Vm::new();
+
+    // Store non-existent path in RAM
+    let path = "/tmp/geo_test_nonexistent_src_99999.png";
+    let path_bytes: Vec<u32> = path
+        .chars()
+        .map(|c| c as u32)
+        .chain(std::iter::once(0u32))
+        .collect();
+    for (i, &word) in path_bytes.iter().enumerate() {
+        vm.ram[0x2000 + i] = word;
+    }
+
+    // LDI r5, 0x2000
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x2000;
+    // LOADSRCIMG r5
+    vm.ram[3] = 0xB2;
+    vm.ram[4] = 5;
+    // HALT
+    vm.ram[5] = 0x00;
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Should return error (0xFFFFFFFF)
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "LOADSRCIMG should fail for missing file"
+    );
+}
+
+#[test]
+fn test_loadsrcimg_opcode_empty_path() {
+    let mut vm = crate::vm::Vm::new();
+
+    // Store empty path (just null terminator) in RAM
+    vm.ram[0x2000] = 0;
+
+    // LDI r5, 0x2000
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x2000;
+    // LOADSRCIMG r5
+    vm.ram[3] = 0xB2;
+    vm.ram[4] = 5;
+    // HALT
+    vm.ram[5] = 0x00;
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Should return error (0xFFFFFFFF)
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "LOADSRCIMG should fail for empty path"
+    );
+}
+
+#[test]
+fn test_source_png_round_trip() {
+    // Test encode -> decode round trip for source PNG
+    let source = "LDI r1, 100\nLDI r2, 200\nADD r1, r2\nHALT\n";
+
+    // Encode
+    let png_data = crate::pixel::encode_source_pixelpack_png(source);
+
+    // Verify it is detected as a source PNG
+    assert!(
+        crate::pixel::is_source_png(&png_data),
+        "should detect as source PNG"
+    );
+
+    // Decode
+    let decoded = crate::pixel::decode_pixelpack_source(&png_data).unwrap();
+
+    // Source text should round-trip correctly
+    assert_eq!(
+        decoded, source,
+        "source text should round-trip through PNG encoding"
+    );
+
+    // Verify the decoded source assembles successfully
+    let asm = crate::assembler::assemble(&decoded, 0x1000).unwrap();
+    assert!(
+        asm.pixels.len() > 0,
+        "assembled bytecode should not be empty"
+    );
+}
+
+#[test]
+fn test_source_png_assembles_correctly() {
+    // Test that a source PNG containing a program assembles correctly
+    let source = "LDI r1, 42\nHALT\n";
+
+    let png_data = crate::pixel::encode_source_pixelpack_png(source);
+    let png_path = "/tmp/geo_test_source_asm.png";
+    std::fs::write(png_path, &png_data).unwrap();
+
+    // Use boot_source_png_to_ram to simulate the full CLI boot path
+    let mut canvas_buffer = vec![0u32; 4096];
+    let mut ram = [0u32; 65536];
+
+    let result =
+        crate::pixel::boot_source_png_to_ram(png_path, &mut canvas_buffer, &mut ram).unwrap();
+
+    assert!(result.source_len > 0, "should have source text");
+    assert!(result.bytecode_words > 0, "should have bytecode output");
+    assert_eq!(
+        ram[0x1000], 0x10,
+        "first bytecode word should be LDI (0x10)"
+    );
+
+    // Cleanup
+    let _ = std::fs::remove_file(png_path);
+}
+
+#[test]
+fn test_source_png_distinguishes_from_bytecode() {
+    // A source PNG should have geo_boot=source metadata
+    // A bytecode PNG should NOT have this metadata
+    let source = "HALT\n";
+    let source_png = crate::pixel::encode_source_pixelpack_png(source);
+    assert!(crate::pixel::is_source_png(&source_png));
+
+    // Bytecode PNG should NOT be detected as source
+    let bytecode_bytes = vec![0x00]; // HALT
+    let bytecode_png = crate::pixel::encode_pixelpack_png(&bytecode_bytes);
+    assert!(
+        !crate::pixel::is_source_png(&bytecode_png),
+        "bytecode PNG should not be source PNG"
+    );
+}
+
+#[test]
+fn test_loadsrcimg_canvas_buffer_populated() {
+    // Test that LOADSRCIMG writes source to canvas_buffer
+    let source = "LDI r1, 99\nHALT\n";
+    let png_data = crate::pixel::encode_source_pixelpack_png(source);
+    let png_path = "/tmp/geo_test_loadsrcimg_canvas.png";
+    std::fs::write(png_path, &png_data).unwrap();
+
+    let mut vm = crate::vm::Vm::new();
+    let path_bytes: Vec<u32> = png_path
+        .chars()
+        .map(|c| c as u32)
+        .chain(std::iter::once(0u32))
+        .collect();
+    for (i, &word) in path_bytes.iter().enumerate() {
+        vm.ram[0x2000 + i] = word;
+    }
+
+    // LDI r5, 0x2000
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x2000;
+    // LOADSRCIMG r5
+    vm.ram[3] = 0xB2;
+    vm.ram[4] = 5;
+    // HALT
+    vm.ram[5] = 0x00;
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Verify canvas buffer has the source text characters
+    assert_ne!(
+        vm.canvas_buffer[0], 0,
+        "canvas buffer should have source text"
+    );
+    // First char should be 'L' (0x4C) from "LDI"
+    assert_eq!(
+        vm.canvas_buffer[0], 'L' as u32,
+        "first canvas cell should be 'L'"
+    );
+
+    // Verify bytecode loaded
+    assert_ne!(vm.regs[0], 0xFFFFFFFF, "LOADSRCIMG should succeed");
+
+    let _ = std::fs::remove_file(png_path);
+}
+
+#[test]
+fn test_loadsrcimg_invalid_register() {
+    let mut vm = crate::vm::Vm::new();
+
+    // LOADSRCIMG with invalid register number
+    vm.ram[0] = 0xB2; // LOADSRCIMG
+    vm.ram[1] = 32; // invalid register (max is 31)
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "LOADSRCIMG should fail with invalid register"
+    );
+}

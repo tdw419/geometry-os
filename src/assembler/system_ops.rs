@@ -730,6 +730,19 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "LOADSRCIMG" => {
+            // LOADSRCIMG path_reg
+            // 2 words: [0xB2, path_reg]
+            // Reads PNG file path from RAM at path_reg, decodes pixelpack seeds as source text,
+            // writes to canvas buffer, assembles to bytecode at 0x1000. Returns word count in r0.
+            if tokens.len() < 2 {
+                return Err("LOADSRCIMG requires 1 argument: LOADSRCIMG path_reg".to_string());
+            }
+            bytecode.push(0xB2);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

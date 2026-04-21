@@ -57,18 +57,56 @@ pub fn cli_main(extra_args: &[String]) {
     let mut canvas_buffer: Vec<u32> = vec![0; 4096];
     let mut qemu_bridge: Option<QemuBridge> = None;
     let mut boot_png_mode = false;
+    let mut boot_src_png_mode = false;
 
-    // Check for --boot-png flag
-    let file_args: Vec<&String> = extra_args.iter().filter(|a| *a != "--boot-png").collect();
+    // Check for --boot-png and --boot-src-png flags
+    let file_args: Vec<&String> = extra_args
+        .iter()
+        .filter(|a| *a != "--boot-png" && *a != "--boot-src-png")
+        .collect();
     boot_png_mode = extra_args.iter().any(|a| a == "--boot-png");
+    boot_src_png_mode = extra_args.iter().any(|a| a == "--boot-src-png");
 
     // If extra args given, treat first as a file to load
     if !file_args.is_empty() {
         let path_str = file_args[0];
         let path = PathBuf::from(path_str);
 
-        // Check for pixelpack PNG boot
-        if boot_png_mode || geometry_os::pixel::is_pixelpack_png(path_str) {
+        // Phase 93: Auto-detect source PNG (geo_boot=source metadata)
+        // Explicit --boot-src-png flag takes priority, then auto-detect by metadata
+        if boot_src_png_mode || geometry_os::pixel::is_source_png_file(path_str) {
+            match geometry_os::pixel::boot_source_png_to_ram(
+                path_str,
+                &mut canvas_buffer,
+                &mut vm.ram,
+            ) {
+                Ok(result) => {
+                    println!(
+                        "[src-png-boot] Decoded {} chars ({} source bytes), assembled to {} bytecode words from {}",
+                        result.char_count, result.source_len, result.bytecode_words, path_str
+                    );
+                    vm.canvas_buffer[..4096].copy_from_slice(&canvas_buffer[..4096]);
+                    vm.pc = 0x1000;
+                    vm.halted = false;
+                    loaded_file = Some(path);
+                    canvas_assembled = true;
+                    // Auto-run the bytecode
+                    for _ in 0..10_000_000 {
+                        if !vm.step() {
+                            break;
+                        }
+                    }
+                    println!(
+                        "[src-png-boot] Execution done. PC={:#X} Halted={}",
+                        vm.pc, vm.halted
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[src-png-boot] Error: {}", e);
+                }
+            }
+        } else if boot_png_mode || geometry_os::pixel::is_pixelpack_png(path_str) {
+            // Check for pixelpack PNG bytecode boot (Phase 92)
             match geometry_os::pixel::boot_from_png(path_str, &mut vm.ram, 0x1000) {
                 Ok(result) => {
                     println!(
@@ -184,6 +222,8 @@ pub fn cli_main(extra_args: &[String]) {
                 println!("  qemu boot <cfg>   Boot QEMU VM (e.g. qemu boot arch=riscv64 kernel=Image ram=256M)");
                 println!("  qemu kill         Kill running QEMU");
                 println!("  qemu status       Show QEMU status");
+                println!("  boot-png <file>   Load pixelpack PNG, decode to bytecode, run");
+                println!("  boot-src-png <file> Load source PNG, decode to text, assemble, run");
                 println!("  hermes <prompt>   Ask local LLM to write/run programs");
                 println!("  build <prompt>    Self-build: LLM modifies OS source code");
                 println!("  files             List Rust source files with line counts");
@@ -310,6 +350,46 @@ pub fn cli_main(extra_args: &[String]) {
                     }
                     Err(e) => {
                         println!("[pixel-boot] Error: {}", e);
+                    }
+                }
+            }
+            "boot-src-png" => {
+                if parts.len() < 2 {
+                    println!("Usage: boot-src-png <file.png>");
+                    println!("  Loads a pixelpack-encoded source PNG, decodes to assembly text,");
+                    println!("  writes to canvas, assembles to bytecode, and runs it.");
+                    continue;
+                }
+                let filename = parts[1..].join(" ");
+                let path = if Path::new(&filename).exists() {
+                    filename.clone()
+                } else {
+                    let prefixed = format!("programs/{}", filename);
+                    if Path::new(&prefixed).exists() {
+                        prefixed
+                    } else {
+                        println!("File not found: {}", filename);
+                        continue;
+                    }
+                };
+                match geometry_os::pixel::boot_source_png_to_ram(
+                    &path,
+                    &mut canvas_buffer,
+                    &mut vm.ram,
+                ) {
+                    Ok(result) => {
+                        println!(
+                            "[src-png-boot] Decoded {} chars ({} source bytes), assembled to {} bytecode words from {}",
+                            result.char_count, result.source_len, result.bytecode_words, path
+                        );
+                        vm.canvas_buffer[..4096].copy_from_slice(&canvas_buffer[..4096]);
+                        vm.pc = 0x1000;
+                        vm.halted = false;
+                        loaded_file = Some(PathBuf::from(&path));
+                        canvas_assembled = true;
+                    }
+                    Err(e) => {
+                        println!("[src-png-boot] Error: {}", e);
                     }
                 }
             }

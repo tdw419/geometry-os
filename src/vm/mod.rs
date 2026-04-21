@@ -2293,6 +2293,67 @@ impl Vm {
                 }
             }
 
+            // LOADSRCIMG path_reg (0xB2) -- Load pixelpack-encoded source PNG to canvas
+            // Reads a PNG file path from RAM at path_reg, decodes pixelpack seeds as UTF-8 source,
+            // writes the source text onto the canvas buffer (128x32 grid),
+            // then assembles it to bytecode at 0x1000.
+            // Returns bytecode word count in r0 (0xFFFFFFFF on error).
+            // Encoding: 2 words [0xB2, path_reg]
+            0xB2 => {
+                let path_reg = self.fetch() as usize;
+                if path_reg >= NUM_REGS {
+                    self.regs[0] = 0xFFFFFFFF;
+                } else {
+                    let path_addr = self.regs[path_reg] as usize;
+
+                    // Read path string from RAM (null-terminated)
+                    let mut path_str = String::new();
+                    let mut pa = path_addr;
+                    while pa < self.ram.len() {
+                        let ch = self.ram[pa];
+                        if ch == 0 {
+                            break;
+                        }
+                        if let Some(c) = char::from_u32(ch) {
+                            path_str.push(c);
+                        }
+                        pa += 1;
+                    }
+
+                    if path_str.is_empty() {
+                        self.regs[0] = 0xFFFFFFFF;
+                    } else {
+                        // Decode as source text
+                        match crate::pixel::decode_pixelpack_source_file(&path_str) {
+                            Ok(source) => {
+                                // Write source to canvas buffer (128x32 grid)
+                                crate::pixel::load_source_to_canvas_buffer(
+                                    &source,
+                                    &mut self.canvas_buffer,
+                                );
+
+                                // Assemble the source to bytecode at 0x1000
+                                match crate::assembler::assemble(&source, 0x1000) {
+                                    Ok(asm_result) => {
+                                        let word_count = asm_result.pixels.len().min(4096);
+                                        for i in 0..word_count {
+                                            self.ram[0x1000 + i] = asm_result.pixels[i];
+                                        }
+                                        self.regs[0] = word_count as u32;
+                                    }
+                                    Err(_) => {
+                                        self.regs[0] = 0xFFFFFFFF;
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                self.regs[0] = 0xFFFFFFFF;
+                            }
+                        }
+                    }
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

@@ -1,12 +1,12 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 148 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 93/94 phases complete, 0 in progress
+**Progress:** 94/95 phases complete, 1 planned
 
-**Deliverables:** 416/432 complete
+**Deliverables:** 420/425 complete
 
-**Tasks:** 487/503 complete
+**Tasks:** 0 tasks remaining
 
 ## Scope Summary
 

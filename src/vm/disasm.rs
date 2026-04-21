@@ -849,6 +849,9 @@ impl Vm {
                 3,
             ),
 
+            // LOADSRCIMG path_reg (0xB2) -- Load pixelpack source PNG to canvas + assemble
+            0xB2 => (format!("LOADSRCIMG {}", reg(ram(a + 1))), 2),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

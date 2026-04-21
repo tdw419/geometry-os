@@ -14,6 +14,7 @@ mod font;
 mod hermes;
 mod inode_fs;
 mod keys;
+mod pixel;
 mod preprocessor;
 mod qemu;
 mod render;

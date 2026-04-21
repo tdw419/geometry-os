@@ -498,6 +498,212 @@ pub fn is_pixelpack_png(path: &str) -> bool {
     lower.ends_with(".png") && !lower.ends_with(".rts.png")
 }
 
+// === Phase 93: Source-from-PNG (self-documenting pixel programs) ===
+//
+// A pixelpack PNG can contain assembly source text (not bytecode).
+// The PNG metadata `geo_boot=source` distinguishes it from bytecode PNGs.
+// When loaded, the decoded bytes are interpreted as UTF-8 source text,
+// written onto the canvas grid, assembled, and run.
+
+/// Decode a pixelpack PNG and return the expanded bytes as a UTF-8 string.
+/// Returns an error if the decoded bytes are not valid UTF-8.
+pub fn decode_pixelpack_source(data: &[u8]) -> Result<String, String> {
+    let bytes = decode_pixelpack_png(data)?;
+    String::from_utf8(bytes).map_err(|e| format!("Source PNG contains invalid UTF-8: {}", e))
+}
+
+/// Decode a pixelpack PNG file from disk as source text.
+pub fn decode_pixelpack_source_file(path: &str) -> Result<String, String> {
+    let data = std::fs::read(path).map_err(|e| format!("Cannot read {}: {}", path, e))?;
+    decode_pixelpack_source(&data)
+}
+
+/// Encode source text (assembly) into a pixelpack PNG with geo_boot=source metadata.
+/// Uses strategy A (raw3) for each 3-byte chunk, same as bytecode encoding.
+/// The PNG metadata `geo_boot=source` distinguishes it from bytecode PNGs.
+pub fn encode_source_pixelpack_png(source: &str) -> Vec<u8> {
+    let bytes = source.as_bytes();
+    let mut seeds = Vec::new();
+    let mut i = 0;
+
+    // Pack 3 bytes per seed using strategy A (raw3)
+    while i + 3 <= bytes.len() {
+        let seed = 0xA000_0000
+            | ((bytes[i] as u32) << 16)
+            | ((bytes[i + 1] as u32) << 8)
+            | (bytes[i + 2] as u32);
+        seeds.push(seed);
+        i += 3;
+    }
+    // Handle remaining 1-2 bytes
+    if bytes.len() - i >= 2 {
+        seeds.push(0xA000_0000 | ((bytes[i] as u32) << 16) | (bytes[i + 1] as u32));
+        i += 2;
+    }
+    if bytes.len() > i {
+        seeds.push(0xA000_0000 | ((bytes[i] as u32) << 16));
+    }
+
+    // Write PNG
+    let n = seeds.len();
+    let (width, height) = if n == 0 {
+        (1, 1)
+    } else if n <= 4 {
+        (2, 2)
+    } else {
+        let side = (n as f64).sqrt().ceil() as u32;
+        (side, ((n as f64) / side as f64).ceil() as u32)
+    };
+
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    for row in 0..height {
+        for col in 0..width {
+            let idx = (row * width + col) as usize;
+            if idx < n {
+                let s = seeds[idx];
+                pixels.extend_from_slice(&[
+                    ((s >> 24) & 0xFF) as u8,
+                    ((s >> 16) & 0xFF) as u8,
+                    ((s >> 8) & 0xFF) as u8,
+                    (s & 0xFF) as u8,
+                ]);
+            } else {
+                pixels.extend_from_slice(&[0, 0, 0, 0]);
+            }
+        }
+    }
+
+    let mut buf = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(Cursor::new(&mut buf), width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .add_text_chunk("seedcnt".to_string(), n.to_string())
+            .unwrap();
+        encoder
+            .add_text_chunk("bytecnt".to_string(), bytes.len().to_string())
+            .unwrap();
+        // Key distinction: geo_boot=source (not "bytecode")
+        encoder
+            .add_text_chunk("geo_boot".to_string(), "source".to_string())
+            .unwrap();
+        let mut writer = encoder.write_header().unwrap();
+        writer.write_image_data(&pixels).unwrap();
+    }
+    buf
+}
+
+/// Write decoded source text bytes onto the canvas buffer (128 rows x 32 cols).
+/// Each character goes to canvas_buffer[row * 32 + col]. Lines break on '\n'.
+/// Returns the number of characters written.
+pub fn load_source_to_canvas_buffer(source: &str, canvas_buffer: &mut [u32]) -> usize {
+    const CANVAS_COLS: usize = 32;
+    const CANVAS_MAX_ROWS: usize = 128;
+
+    // Clear canvas
+    for cell in canvas_buffer.iter_mut() {
+        *cell = 0;
+    }
+
+    let mut row = 0usize;
+    let mut col = 0usize;
+    let mut count = 0usize;
+
+    for ch in source.chars() {
+        if row >= CANVAS_MAX_ROWS {
+            break;
+        }
+        if ch == '\n' {
+            row += 1;
+            col = 0;
+        } else if col < CANVAS_COLS {
+            canvas_buffer[row * CANVAS_COLS + col] = ch as u32;
+            col += 1;
+            count += 1;
+        }
+        // Characters beyond column 32 on a single line are dropped
+    }
+
+    count
+}
+
+/// Check if a pixelpack PNG contains source text (geo_boot=source metadata).
+/// Returns None if the file doesn't exist or isn't a valid PNG.
+pub fn is_source_png(data: &[u8]) -> bool {
+    let decoder = Decoder::new(Cursor::new(data));
+    let mut reader = match decoder.read_info() {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    let info = reader.info();
+    info.uncompressed_latin1_text
+        .iter()
+        .any(|c| c.keyword == "geo_boot" && c.text == "source")
+}
+
+/// Check if a file on disk is a source pixelpack PNG.
+pub fn is_source_png_file(path: &str) -> bool {
+    match std::fs::read(path) {
+        Ok(data) => is_source_png(&data),
+        Err(_) => false,
+    }
+}
+
+/// Boot a source PNG: decode the source text, write to canvas buffer, assemble, run.
+/// Returns the source text and assembly result, or an error string.
+pub fn boot_source_from_png(
+    path: &str,
+    canvas_buffer: &mut [u32],
+) -> Result<(String, usize), String> {
+    let source = decode_pixelpack_source_file(path)?;
+    let char_count = load_source_to_canvas_buffer(&source, canvas_buffer);
+
+    // Also write source text to RAM grid at 0x000-0x3FF for canvas display
+    // (This mirrors the source in canvas_buffer)
+    let _ = char_count; // used for diagnostics
+
+    // Assemble the source
+    let asm_result = crate::assembler::assemble(&source, 0x1000)
+        .map_err(|e| format!("Assembly error: {:?}", e))?;
+
+    Ok((source, asm_result.pixels.len()))
+}
+
+/// Boot result for source PNG mode
+pub struct BootSrcPngResult {
+    pub source_len: usize,
+    pub char_count: usize,
+    pub bytecode_words: usize,
+}
+
+/// Full source PNG boot pipeline: decode -> canvas -> assemble -> write bytecode to RAM.
+pub fn boot_source_png_to_ram(
+    path: &str,
+    canvas_buffer: &mut [u32],
+    ram: &mut [u32],
+) -> Result<BootSrcPngResult, String> {
+    let source = decode_pixelpack_source_file(path)?;
+    let source_len = source.len();
+    let char_count = load_source_to_canvas_buffer(&source, canvas_buffer);
+
+    // Assemble
+    let asm_result = crate::assembler::assemble(&source, 0x1000)
+        .map_err(|e| format!("Assembly error: {:?}", e))?;
+
+    // Write bytecode to RAM at 0x1000
+    let bytecode_words = asm_result.pixels.len().min(4096); // 0x1000-0x1FFF = 4096 words
+    for i in 0..bytecode_words {
+        ram[0x1000 + i] = asm_result.pixels[i];
+    }
+
+    Ok(BootSrcPngResult {
+        source_len,
+        char_count,
+        bytecode_words,
+    })
+}
+
 /// Boot context: what we loaded and from where
 pub struct BootPngResult {
     pub seed_count: usize,

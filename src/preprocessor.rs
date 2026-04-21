@@ -162,6 +162,8 @@ pub const OPCODES: &[&str] = &[
     "AI_AGENT",
     // Phase 92: Pixel Boot
     "LOADPNG",
+    // Phase 93: Source from PNG
+    "LOADSRCIMG",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",
