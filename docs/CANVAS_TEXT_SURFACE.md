@@ -351,6 +351,11 @@ Address        Size    Purpose
 0xF000-0xF003  4       Window Bounds Protocol (shared RAM convention)
                        RAM[0xF000]=win_x, [0xF001]=win_y, [0xF002]=win_w, [0xF003]=win_h
                        Primary writes; child processes read to clamp their rendering
+0xF010-0xF01F  16      System Clipboard (Phase 96, shared RAM convention)
+                       RAM[0xF010]=ownership (0=free, 1=writing, PID=owned)
+                       RAM[0xF011]=data_length (0-14 words)
+                       RAM[0xF012-0xF01F]=data (up to 14 u32 words)
+                       For large data, stores VFS path string instead
 0xFFFB         1       Key bitmask port (bits 0-5: up/down/left/right/space/enter, read-only)
 0xFFFC         1       Network port (UDP send/receive)
 0xFFFD         1       ASM result port (bytecode word count, or 0xFFFFFFFF on error)

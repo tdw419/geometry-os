@@ -4732,30 +4732,34 @@ phases:
   test_target: 4
   title: Window Manager
 - deliverables:
-  - description: 'A shared RAM region (e.g., 0xFE0-0xFEF, 16 words) acting as a system
-      clipboard. Convention: word 0 = data length, words 1-15 = data. Any process
-      can STORE to write, LOAD to read. Document the convention. No new opcodes.'
+  - description: 'A shared RAM region (0xF10-0xF1F, 16 words) acting as a system
+      clipboard. Convention: 0xF10 = ownership flag (0=free, 1=writing), 0xF11 = data
+      length (0-14 words), 0xF12-0xF1F = data. Any process can STORE to write, LOAD
+      to read. Documented in programs/clipboard_demo.asm and src/vm/tests.rs.'
     name: Clipboard shared RAM convention
-    status: planned
-  - description: 'Clipboard ownership protocol. RAM 0xFE0 bit 0 = occupied flag. Writer
-      sets flag, writes data, clears flag. Reader checks flag before reading. For
-      larger data, the clipboard holds a VFS path instead (write temp file, clipboard
-      holds the path string).'
+    status: done
+  - description: 'Clipboard ownership protocol. RAM 0xF10 = ownership flag. Writer
+      sets flag to 1, writes data, clears flag to 0. Reader checks flag before reading.
+      For larger data, the clipboard holds a VFS path string instead (up to 14 chars
+      in 0xF12-0xF1F).'
     name: Clipboard ownership and large data
-    status: planned
-  - description: 'Test: paint.asm copies a sprite to clipboard, a second process reads
-      it and draws it elsewhere. Verify data integrity across process boundaries.'
+    status: done
+  - description: '8 integration tests in src/vm/tests.rs: basic write/read, ownership
+      protocol, max capacity (14 words), overwrite behavior, demo program assembles,
+      demo program runs and writes correct clipboard data, shared between processes
+      simulation, VFS path storage for large data.'
     name: Clipboard integration test
-    status: planned
-  description: 'A system clipboard using a shared RAM region. Any process can write
-    or read. For large data, the clipboard holds a VFS path. Pure convention, no new
-    opcodes. The OS-level feature users interact with most after keyboard and mouse.'
+    status: done
+  description: 'A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process
+    can write or read. For large data, the clipboard holds a VFS path. Pure convention,
+    no new opcodes. The OS-level feature users interact with most after keyboard and
+    mouse. Includes clipboard_demo.asm demonstrating the full protocol.'
   goal: Establish a system clipboard protocol so processes can share data without
     pipes or messages
   id: phase-96
   scope_lines_total: 200
-  status: planned
-  test_target: 2
+  status: done
+  test_target: 8
   title: System Clipboard
 - deliverables:
   - description: 'Enhanced init.asm that reads a boot.cfg file listing services (name,

@@ -823,7 +823,10 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
 
             // Step 3: Assemble
             let asm_result = send_socket_cmd("assemble")?;
-            if asm_result.contains("error") || asm_result.contains("Error") || asm_result.contains("ASM ERROR") {
+            if asm_result.contains("error")
+                || asm_result.contains("Error")
+                || asm_result.contains("ASM ERROR")
+            {
                 return Ok(serde_json::json!({
                     "success": false,
                     "error": asm_result,

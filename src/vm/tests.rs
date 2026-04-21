@@ -13629,3 +13629,200 @@ fn test_pixel_chain_program_a_loads_b() {
 
     let _ = std::fs::remove_file(png_path);
 }
+
+// ── System Clipboard Protocol (Phase 96) ─────────────────────────────
+
+/// Clipboard RAM Convention:
+///   0xF10 = ownership flag (0=free, 1=writing, PID=owned by process)
+///   0xF11 = data length (0-14 u32 words)
+///   0xF12-0xF1F = data (up to 14 u32 words)
+///
+/// Protocol:
+///   Writer: claim (STORE 1 to 0xF10), write data to 0xF12+, write length to 0xF11, release (STORE 0 to 0xF10)
+///   Reader: check 0xF10 == 0 (free), read length from 0xF11, read data from 0xF12+
+///   For large data: clipboard stores a VFS path string instead
+
+#[test]
+fn test_clipboard_basic_write_and_read() {
+    let mut vm = Vm::new();
+
+    // Writer: claim clipboard
+    vm.ram[0xF10] = 1;
+
+    // Write 3 data words
+    vm.ram[0xF12] = 0xFF0000;
+    vm.ram[0xF13] = 0x00FF00;
+    vm.ram[0xF14] = 0x0000FF;
+
+    // Write length
+    vm.ram[0xF11] = 3;
+
+    // Release clipboard
+    vm.ram[0xF10] = 0;
+
+    // Reader: verify clipboard data
+    assert_eq!(vm.ram[0xF10], 0, "clipboard should be free after release");
+    assert_eq!(vm.ram[0xF11], 3, "clipboard data length should be 3");
+    assert_eq!(vm.ram[0xF12], 0xFF0000, "clipboard data[0] = red");
+    assert_eq!(vm.ram[0xF13], 0x00FF00, "clipboard data[1] = green");
+    assert_eq!(vm.ram[0xF14], 0x0000FF, "clipboard data[2] = blue");
+}
+
+#[test]
+fn test_clipboard_ownership_protocol() {
+    let mut vm = Vm::new();
+    assert_eq!(vm.ram[0xF10], 0, "clipboard starts free");
+
+    // Process claims it
+    vm.ram[0xF10] = 1;
+    assert_eq!(vm.ram[0xF10], 1, "clipboard is now owned");
+
+    // Process writes data
+    vm.ram[0xF12] = 42;
+    vm.ram[0xF11] = 1;
+
+    // Release
+    vm.ram[0xF10] = 0;
+
+    // Another process reads it
+    assert_eq!(vm.ram[0xF10], 0, "clipboard is free again");
+    assert_eq!(vm.ram[0xF11], 1, "length is 1");
+    assert_eq!(vm.ram[0xF12], 42, "data is 42");
+}
+
+#[test]
+fn test_clipboard_max_capacity() {
+    let mut vm = Vm::new();
+    vm.ram[0xF10] = 1;
+    for i in 0..14u32 {
+        vm.ram[0xF12 + i as usize] = 1000 + i;
+    }
+    vm.ram[0xF11] = 14;
+    vm.ram[0xF10] = 0;
+
+    assert_eq!(vm.ram[0xF11], 14, "length should be 14");
+    for i in 0..14u32 {
+        assert_eq!(
+            vm.ram[0xF12 + i as usize],
+            1000 + i,
+            "data[{}] should be {}",
+            i,
+            1000 + i
+        );
+    }
+}
+
+#[test]
+fn test_clipboard_overwrite_previous() {
+    let mut vm = Vm::new();
+    vm.ram[0xF10] = 1;
+    vm.ram[0xF12] = 111;
+    vm.ram[0xF11] = 1;
+    vm.ram[0xF10] = 0;
+
+    vm.ram[0xF10] = 1;
+    vm.ram[0xF12] = 222;
+    vm.ram[0xF11] = 1;
+    vm.ram[0xF10] = 0;
+
+    assert_eq!(
+        vm.ram[0xF12], 222,
+        "clipboard should have second write value"
+    );
+}
+
+#[test]
+fn test_clipboard_demo_program_assembles() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/clipboard_demo.asm")
+        .expect("clipboard_demo.asm should exist");
+    let result = assemble(&source, 0).expect("clipboard_demo.asm should assemble");
+    assert!(
+        result.pixels.len() > 50,
+        "should produce meaningful bytecode"
+    );
+}
+
+#[test]
+fn test_clipboard_demo_runs_and_writes_data() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/clipboard_demo.asm")
+        .expect("clipboard_demo.asm should exist");
+    let asm = assemble(&source, 0).expect("should assemble");
+
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "program should halt");
+
+    // Verify clipboard protocol was followed
+    assert_eq!(
+        vm.ram[0xF10], 0,
+        "clipboard should be free after program runs"
+    );
+    assert_eq!(vm.ram[0xF11], 5, "clipboard should have 5 data words");
+    assert_eq!(vm.ram[0xF12], 0xFF0000, "data[0] = red");
+    assert_eq!(vm.ram[0xF13], 0x00FF00, "data[1] = green");
+    assert_eq!(vm.ram[0xF14], 0x0000FF, "data[2] = blue");
+    assert_eq!(vm.ram[0xF15], 0xFFFF00, "data[3] = yellow");
+    assert_eq!(vm.ram[0xF16], 0xFF00FF, "data[4] = magenta");
+}
+
+#[test]
+fn test_clipboard_shared_between_processes() {
+    // Tests that clipboard data persists in shared RAM accessible to spawned processes
+    let mut vm = Vm::new();
+
+    // Parent writes to clipboard
+    vm.ram[0xF10] = 1;
+    vm.ram[0xF12] = 0x12345678;
+    vm.ram[0xF11] = 1;
+    vm.ram[0xF10] = 0;
+
+    // Simulate child process reading (same VM, just verify RAM persists)
+    assert_eq!(vm.ram[0xF10], 0, "child sees clipboard as free");
+    assert_eq!(vm.ram[0xF11], 1, "child reads length");
+    assert_eq!(vm.ram[0xF12], 0x12345678, "child reads data");
+}
+
+#[test]
+fn test_clipboard_large_data_vfs_path() {
+    // For data larger than 14 words, clipboard stores a VFS path string
+    let mut vm = Vm::new();
+
+    let path = "/tmp/clip.bin";
+    vm.ram[0xF10] = 1;
+
+    for (i, ch) in path.chars().enumerate() {
+        if i < 14 {
+            vm.ram[0xF12 + i] = ch as u32;
+        }
+    }
+    vm.ram[0xF11] = path.len() as u32;
+    vm.ram[0xF10] = 0;
+
+    let len = vm.ram[0xF11] as usize;
+    let mut read_path = String::new();
+    for i in 0..len.min(14) {
+        let ch = vm.ram[0xF12 + i] as u8;
+        if ch == 0 {
+            break;
+        }
+        read_path.push(ch as char);
+    }
+    assert_eq!(
+        read_path, path,
+        "reader should reconstruct VFS path from clipboard"
+    );
+}

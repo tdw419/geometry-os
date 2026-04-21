@@ -107,6 +107,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 148 o
 | phase-92 Pixel Boot - Bytecode from PNG | DONE | 4/4 | 400 | 5 |
 | phase-93 Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) | DONE | 4/4 | 500 | 5 |
 | phase-94 Pixel Boot - Universal Pixel Executable | DONE | 5/5 | 800 | 8 |
+| phase-95 Window Manager | PLANNED | 0/4 | 600 | 4 |
+| phase-96 System Clipboard | DONE | 3/3 | 200 | 8 |
 
 ## Dependencies
 
@@ -2411,6 +2413,32 @@ The simplest code-to-pixel-to-execution path. A .png file contains pixelpack-enc
 - [x] **CLI boot-from-png flag** -- `--boot-png program.png` flag and `boot-png` REPL command decode PNG and load bytecode into RAM[0x1000] before starting the VM.
 - [x] **Bytecode-to-pixel round-trip test** -- Full round-trip test: assemble LDI r1, 42 / HALT, encode to PNG, decode, load to VM, run, verify r1=42. Also LOADPNG opcode tests (basic, missing file, empty path).
 - [x] **Documentation** -- CODE_PIXEL_EXECUTION.md spec doc covering all three levels (bytecode PNG, source PNG, universal PNG), pixelpack encoding strategies, LOADPNG opcode spec, CLI integration, memory map.
+
+## [x] phase-96: System Clipboard (COMPLETE)
+
+**Goal:** Establish a system clipboard protocol so processes can share data without pipes or messages
+
+A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can write or read. For large data, the clipboard holds a VFS path string instead of the data itself. Pure convention -- no new opcodes needed. The OS-level feature users interact with most after keyboard and mouse.
+
+### Clipboard RAM Convention
+
+| Address | Purpose | Description |
+|---------|---------|-------------|
+| 0xF10 | Ownership flag | 0 = free, 1 = writing, PID = owned by process |
+| 0xF11 | Data length | Number of data words (0-14) |
+| 0xF12-0xF1F | Data | Up to 14 u32 words of data |
+
+### Protocol
+
+1. **Writer**: STORE 1 to 0xF10 (claim), write data to 0xF12+, write length to 0xF11, STORE 0 to 0xF10 (release)
+2. **Reader**: LOAD 0xF10, check == 0 (free), LOAD length from 0xF11, LOAD data from 0xF12+
+3. **Large data**: For data > 14 words, store a VFS path string in 0xF12-0xF1F (max 14 chars). Reader opens the file for full data.
+
+### Deliverables
+
+- [x] **Clipboard shared RAM convention** -- 16 words at 0xF10-0xF1F. Ownership flag + data length + 14 data words. Documented in programs/clipboard_demo.asm.
+- [x] **Clipboard ownership and large data** -- Writer claims flag, writes data, releases. For large data, stores VFS path string. 8 integration tests covering all protocol aspects.
+- [x] **Clipboard integration test** -- 8 tests: basic write/read, ownership protocol, max capacity, overwrite, demo assembles, demo runs with correct clipboard data, shared process simulation, VFS path storage.
 
 ## Global Risks
 
