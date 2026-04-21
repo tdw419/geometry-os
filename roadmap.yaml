@@ -4165,7 +4165,7 @@ phases:
   _claimed_at: 1776733808
 - id: phase-82
   title: HTML Renderer + Interactive Browser
-  status: planned
+  status: in_progress
   goal: Parse and render simple HTML with styled text, links, and images
   description: HTML parser for common tags. Links as HITSET regions. Bookmarks in
     VFS. A real pixel-native web experience.
@@ -4192,6 +4192,8 @@ phases:
     status: todo
   scope_lines_total: 2000
   test_target: 12
+  _claimed_by: worker-0
+  _claimed_at: 1776736857
 - id: phase-83
   title: Infinite Map Desktop -- Camera + Player Avatar
   status: planned
@@ -4218,12 +4220,22 @@ phases:
     description: Player walks around infinite procedural world. Terrain generates
       around them. Shows biome names on HUD. Proves camera + avatar + terrain integration.
     status: todo
+  - name: Socket commands for MCP (player_pos, player_move, viewport_json, terrain)
+    description: Add socket commands that the MCP server wraps. player_pos returns
+      "world_x,world_y,facing". player_move accepts direction or dx/dy. viewport_json
+      returns 32x32 terrain data as JSON. terrain accepts world coords and returns biome info.
+      See docs/MCP_SPEC.md for exact format.
+    status: todo
+  - name: MCP tools: player_position, player_move, map_viewport, map_biome_at
+    description: Add tool handlers to src/mcp_server.rs that wrap the new socket commands.
+      Each tool has typed JSON input/output as defined in docs/MCP_SPEC.md.
+    status: todo
   - name: Player + camera tests
     description: Avatar renders, camera follows, collision blocks, edge wrapping.
-      10+ tests.
+      Socket commands return correct data. 10+ tests.
     status: todo
-  scope_lines_total: 800
-  test_target: 10
+  scope_lines_total: 1000
+  test_target: 12
 - id: phase-84
   title: Infinite Map Desktop -- App Buildings + Entry Points
   status: planned
@@ -4253,12 +4265,20 @@ phases:
       visible from 8-tile radius. LOD: far buildings are colored rectangles, close
       ones show detail.'
     status: todo
+  - name: Socket commands for MCP (buildings, enter_building, exit_building)
+    description: Add socket commands the MCP server wraps. buildings [radius] returns
+      building list. enter_building <id> walks player and launches app. exit_building
+      returns to map. See docs/MCP_SPEC.md for format.
+    status: todo
+  - name: MCP tools: building_list, building_enter, building_exit
+    description: Add tool handlers to src/mcp_server.rs wrapping the new socket commands.
+    status: todo
   - name: App building tests
     description: Building placement, proximity detection, app launch, state save/restore.
-      12+ tests.
+      Socket commands return correct data. 12+ tests.
     status: todo
-  scope_lines_total: 1000
-  test_target: 12
+  scope_lines_total: 1200
+  test_target: 14
 - id: phase-85
   title: Infinite Map Desktop -- Full Desktop Integration
   status: planned
@@ -4282,12 +4302,20 @@ phases:
       the user sees is the infinite terrain with their apps as buildings. Proves the
       map IS the desktop.
     status: todo
+  - name: Socket commands for MCP (desktop_json, launch)
+    description: desktop_json returns full state (player, viewport, buildings, taskbar,
+      windows). launch <app> opens app window without walking to building.
+      See docs/MCP_SPEC.md.
+    status: todo
+  - name: MCP tools: desktop_state, desktop_launch
+    description: Add tool handlers to src/mcp_server.rs wrapping the new socket commands.
+    status: todo
   - name: Full desktop integration tests
     description: Taskbar renders, mini-map shows buildings, fast-travel works, boot
-      sequence correct. 10+ tests.
+      sequence correct. MCP tools return complete state. 10+ tests.
     status: todo
-  scope_lines_total: 1000
-  test_target: 10
+  scope_lines_total: 1200
+  test_target: 12
 - id: phase-86
   title: Hypervisor Building -- Run Linux on the Map
   status: planned
@@ -4314,12 +4342,20 @@ phases:
       in a window. Player can type commands. Press ESC to detach and return to map.
       Linux keeps running in background.'
     status: todo
+  - name: Socket commands for MCP (qemu boot, qemu kill)
+    description: qemu boot <config> boots guest OS in a window. qemu kill stops it.
+      These socket commands may already exist -- verify and wire to MCP.
+      See docs/MCP_SPEC.md.
+    status: todo
+  - name: MCP tools: hypervisor_boot, hypervisor_kill
+    description: Add tool handlers to src/mcp_server.rs wrapping the hypervisor socket commands.
+    status: todo
   - name: Hypervisor building tests
     description: HYPERVISOR targets window, keyboard forwarding, detach/reattach.
-      8+ tests.
+      MCP tools boot/kill guest correctly. 8+ tests.
     status: todo
-  scope_lines_total: 800
-  test_target: 8
+  scope_lines_total: 900
+  test_target: 10
 - id: phase-87
   title: Multi-Hypervisor -- Multiple OS Instances on the Map
   status: planned
@@ -4375,11 +4411,19 @@ phases:
     description: 'Demo: draw something complex, call AI_AGENT screenshot, compare
       checksum before/after. Proves the pipeline works.'
     status: todo
-  - name: AI vision tests
-    description: Screenshot saves, checksum matches, diff detects changes. 8+ tests.
+  - name: Socket commands for MCP (screenshot_b64, canvas_checksum, canvas_diff)
+    description: screenshot_b64 returns base64 PNG. canvas_checksum returns FNV-1a hash.
+      canvas_diff <checksum> returns pixel change stats. See docs/MCP_SPEC.md.
     status: todo
-  scope_lines_total: 600
-  test_target: 8
+  - name: MCP tools: vision_screenshot, vision_checksum, vision_diff
+    description: Add tool handlers to src/mcp_server.rs wrapping the vision socket commands.
+    status: todo
+  - name: AI vision tests
+    description: Screenshot saves, checksum matches, diff detects changes. MCP vision
+      tools return correct base64/JSON. 10+ tests.
+    status: todo
+  scope_lines_total: 800
+  test_target: 10
 - id: phase-89
   title: AI Agent Input -- Programmatic Keyboard + Mouse Injection
   status: planned
@@ -4403,12 +4447,19 @@ phases:
     description: 'Demo: program injects keystrokes into itself. Opens a menu, types
       text, clicks a button -- all autonomously. Proves AI can drive the GUI.'
     status: todo
+  - name: Socket commands for MCP (inject_key, inject_mouse, inject_text)
+    description: inject_key <key> [shift] [ctrl] [alt]. inject_mouse <action> <x> <y> [button].
+      inject_text <text> types each char. See docs/MCP_SPEC.md.
+    status: todo
+  - name: MCP tools: input_key, input_mouse, input_text
+    description: Add tool handlers to src/mcp_server.rs wrapping the input socket commands.
+    status: todo
   - name: AI input tests
     description: Key injection, mouse move/click, text string injection, event ordering.
-      10+ tests.
+      MCP input tools drive the GUI. 12+ tests.
     status: todo
-  scope_lines_total: 500
-  test_target: 10
+  scope_lines_total: 700
+  test_target: 12
 - id: phase-90
   title: AI Native Desktop -- Agents on the Map
   status: planned
@@ -4438,12 +4489,21 @@ phases:
       building, enters, runs cargo test equivalent, reads output, walks back, reports
       pass/fail as floating text above avatar.
     status: todo
+  - name: Socket commands for MCP (agent_spawn, agent_move, agent_enter, agent_cmd, agent_read, agent_list, agent_task)
+    description: All agent socket commands. agent_spawn <name> [color]. agent_move <id> <tx> <ty>.
+      agent_enter <id> [building_id]. agent_cmd <id> <command>. agent_read <id>.
+      agent_list. agent_task <id> <task> [building]. See docs/MCP_SPEC.md.
+    status: todo
+  - name: MCP tools: agent_spawn, agent_move, agent_enter, agent_command, agent_read, agent_list, agent_task_assign
+    description: Add all agent tool handlers to src/mcp_server.rs. This is the full
+      agent orchestration API -- the biggest MCP addition.
+    status: todo
   - name: Agent avatar tests
     description: Agent renders, pathfinding, building entry, task queue, reporting.
-      12+ tests.
+      MCP agent tools spawn/move/command agents correctly. 14+ tests.
     status: todo
-  scope_lines_total: 1200
-  test_target: 12
+  scope_lines_total: 1500
+  test_target: 14
 - id: phase-91
   title: GlyphLang Frontend -- High-Level Language for the Pixel VM
   status: planned
