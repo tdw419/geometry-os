@@ -14584,3 +14584,120 @@ fn test_per_process_font_isolation() {
     assert_eq!(font1[65][0], 0xFF, "proc1 glyph A should be solid");
     assert_eq!(font1[66][0], 0, "proc1 glyph B should be empty (default)");
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 99: Sound Mixer Daemon Tests
+// ═══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_sound_mixer_assembles() {
+    use crate::assembler::assemble;
+    let source =
+        std::fs::read_to_string("programs/sound_mixer.asm").expect("sound_mixer.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "sound_mixer.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 50,
+        "sound_mixer should produce substantial bytecode, got {} words",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_sound_mixer_runs_with_multiproc() {
+    use crate::assembler::assemble;
+    let source =
+        std::fs::read_to_string("programs/sound_mixer.asm").expect("sound_mixer.asm should exist");
+    let asm = assemble(&source, 0).expect("should assemble");
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run with multi-process scheduling (parent + mixer daemon)
+    for _ in 0..2_000_000 {
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
+        vm.step_all_processes();
+    }
+    // Parent should halt after sending shutdown command
+    assert!(
+        vm.halted,
+        "sound_mixer parent should halt after melody + shutdown"
+    );
+    // Should have spawned the mixer daemon
+    assert!(
+        vm.processes.len() >= 1,
+        "should have spawned mixer daemon, got {} processes",
+        vm.processes.len()
+    );
+}
+
+#[test]
+fn test_mixer_demo_assembles() {
+    use crate::assembler::assemble;
+    let source =
+        std::fs::read_to_string("programs/mixer_demo.asm").expect("mixer_demo.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "mixer_demo.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 50,
+        "mixer_demo should produce substantial bytecode, got {} words",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_sound_mixer_shared_ram_ipc() {
+    use crate::assembler::assemble;
+    let source =
+        std::fs::read_to_string("programs/sound_mixer.asm").expect("sound_mixer.asm should exist");
+    let asm = assemble(&source, 0).expect("should assemble");
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let mut notes_played = 0;
+    for _ in 0..2_000_000 {
+        if vm.halted {
+            break;
+        }
+        if !vm.step() {
+            break;
+        }
+        // Check if BEEP was triggered
+        if vm.beep.is_some() {
+            notes_played += 1;
+            vm.beep = None;
+        }
+        vm.step_all_processes();
+        // Note: child process BEEPs are handled through their own step cycle
+    }
+    // The mixer daemon should have played at least some notes via BEEP
+    assert!(
+        notes_played > 0,
+        "mixer daemon should have played notes via BEEP, got {}",
+        notes_played
+    );
+}
