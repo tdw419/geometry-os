@@ -1037,6 +1037,7 @@ fn main() {
                                     &mut canvas_assembled,
                                     &mut status_msg,
                                 );
+                                response.push_str(&format!("{}\n", status_msg));
                             }
                             "run" => {
                                 if vm.halted {

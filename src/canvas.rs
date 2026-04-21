@@ -183,7 +183,12 @@ pub fn canvas_assemble(
         })
         .collect();
 
-    let source = source.replace("\n\n", "\n");
+    // Collapse runs of blank lines into single newlines
+    let source: String = source
+        .split('\n')
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
 
     // Abstraction Layer: Preprocess macros and variables
     let mut pp = preprocessor::Preprocessor::new();

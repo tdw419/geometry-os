@@ -807,25 +807,23 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
                 .ok_or("Missing 'source' parameter")?;
             let _frames = args["frames"].as_i64().unwrap_or(10000) as usize;
 
-            // Step 1: Clear canvas
-            send_socket_cmd("clear").ok();
+            // Step 1: Write source to a temp file
+            let tmp_path = "/tmp/geo_mcp_program.geo";
+            std::fs::write(tmp_path, source)
+                .map_err(|e| format!("Failed to write temp file: {}", e))?;
 
-            // Step 2: Type source onto canvas
-            // Escape backslashes and newlines for the socket protocol
-            let escaped = source.replace("\\", "\\\\").replace("\n", "\\n");
-            let type_result = send_socket_cmd(&format!("type {}", escaped));
-            if type_result.is_err() {
-                // If type fails (too long?), try line by line
-                for line in source.lines() {
-                    let esc_line = line.replace("\\", "\\\\");
-                    send_socket_cmd(&format!("type {}", esc_line)).ok();
-                    send_socket_cmd("type \\n").ok();
-                }
+            // Step 2: Load source file into canvas
+            let load_result = send_socket_cmd(&format!("load {}", tmp_path))?;
+            if load_result.contains("error") {
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "error": load_result,
+                }));
             }
 
             // Step 3: Assemble
             let asm_result = send_socket_cmd("assemble")?;
-            if asm_result.contains("error") || asm_result.contains("Error") {
+            if asm_result.contains("error") || asm_result.contains("Error") || asm_result.contains("ASM ERROR") {
                 return Ok(serde_json::json!({
                     "success": false,
                     "error": asm_result,
@@ -833,7 +831,7 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
                 }));
             }
 
-            // Step 4: Run for N frames
+            // Step 4: Run
             send_socket_cmd("run").ok();
 
             // Wait for execution by polling status
@@ -843,13 +841,11 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
                 std::thread::sleep(poll_interval);
                 waited += 1;
                 if let Ok(status) = send_socket_cmd("status") {
-                    // VM stops running when halted
-                    if status.contains("running=false") || status.contains("halted") {
+                    if status.contains("running=false") || status.contains("halted=true") {
                         break;
                     }
                 }
                 if waited * 50 > 10000 {
-                    // 10 second timeout -- halt it
                     send_socket_cmd("halt").ok();
                     break;
                 }
