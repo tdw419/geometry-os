@@ -33,6 +33,54 @@ impl Vm {
                                 match cmd {
                                     0 => self.regs[0] = 256, // width
                                     1 => self.regs[0] = 256, // height
+                                    // cmd 2: set custom font from RAM address
+                                    // arg = RAM address of 128*8 = 1024 u32 words containing font data
+                                    // Each glyph is 8 u32 words (only low byte used).
+                                    // Sets custom_font on the current process (PID 0 = main process).
+                                    2 => {
+                                        let font_addr = arg as usize;
+                                        if font_addr + 128 * 8 <= self.ram.len() {
+                                            let mut glyphs = vec![[0u8; 8]; 128];
+                                            for g in 0..128 {
+                                                for row in 0..8 {
+                                                    glyphs[g][row] =
+                                                        self.ram[font_addr + g * 8 + row] as u8;
+                                                }
+                                            }
+                                            // Set font on current process
+                                            if self.current_pid == 0 {
+                                                // Main process: no Process struct to store on
+                                                // We store on the first process if it exists
+                                                if let Some(p) = self.processes.first_mut() {
+                                                    p.custom_font = Some(glyphs);
+                                                }
+                                            } else if let Some(p) = self
+                                                .processes
+                                                .iter_mut()
+                                                .find(|p| p.pid == self.current_pid)
+                                            {
+                                                p.custom_font = Some(glyphs);
+                                            }
+                                            self.regs[0] = 0; // success
+                                        } else {
+                                            self.regs[0] = 0xFFFFFFFF; // bad address
+                                        }
+                                    }
+                                    // cmd 3: clear custom font (revert to default)
+                                    3 => {
+                                        if self.current_pid == 0 {
+                                            if let Some(p) = self.processes.first_mut() {
+                                                p.custom_font = None;
+                                            }
+                                        } else if let Some(p) = self
+                                            .processes
+                                            .iter_mut()
+                                            .find(|p| p.pid == self.current_pid)
+                                        {
+                                            p.custom_font = None;
+                                        }
+                                        self.regs[0] = 0; // success
+                                    }
                                     _ => self.regs[0] = 0xFFFFFFFF,
                                 }
                             }
@@ -210,6 +258,7 @@ impl Vm {
                                                     signal_handlers: [0; 4],
                                                     vmas: Process::default_vmas_for_process(),
                                                     brk_pos: PAGE_SIZE as u32,
+                                                    custom_font: None,
                                                 });
                                                 self.regs[0] = pid;
                                                 self.ram[0xFFA] = pid;
@@ -441,6 +490,7 @@ impl Vm {
                                                     signal_handlers: [0; 4],
                                                     vmas: Process::default_vmas_for_process(),
                                                     brk_pos: PAGE_SIZE as u32,
+                                                    custom_font: None,
                                                 });
                                                 // Set up fd redirection for the new child
                                                 let child_pid = pid;

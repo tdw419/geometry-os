@@ -14307,3 +14307,281 @@ fn test_init_service_no_restart_never_policy() {
     assert_eq!(vm.ram[svc_base + 33], 2, "policy should be never");
     assert_eq!(vm.ram[svc_base + 35], 3, "status should remain exited_fail");
 }
+
+// ── Custom Bitmap Fonts (Phase 98) ──────────────────────────────
+
+#[test]
+fn test_font_demo_assembles() {
+    let source = std::fs::read_to_string("programs/font_demo.asm").unwrap();
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "font_demo.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 50,
+        "should have bytecode, got {} words",
+        asm.pixels.len()
+    );
+    // Verify IOCTL opcode present
+    assert!(
+        asm.pixels.iter().any(|&p| p == 0x62),
+        "should contain IOCTL opcode (0x62)"
+    );
+}
+
+#[test]
+fn test_custom_font_ioctl_set_and_clear() {
+    // Test that IOCTL cmd 2 sets a custom font and cmd 3 clears it
+    let mut vm = Vm::new();
+
+    // Write a distinctive glyph at glyph index 65 ('A') in font area 0x2000
+    // 8 rows, each a u32 word
+    let font_base = 0x2000usize;
+    let glyph_a_offset = font_base + 65 * 8;
+    // Row 0 = 0xAA (distinctive pattern)
+    vm.ram[glyph_a_offset] = 0xAA;
+    vm.ram[glyph_a_offset + 1] = 0x55;
+    vm.ram[glyph_a_offset + 2] = 0xAA;
+    vm.ram[glyph_a_offset + 3] = 0x55;
+    vm.ram[glyph_a_offset + 4] = 0xAA;
+    vm.ram[glyph_a_offset + 5] = 0x55;
+    vm.ram[glyph_a_offset + 6] = 0xAA;
+    vm.ram[glyph_a_offset + 7] = 0x55;
+
+    // Create a process to hold the font
+    let proc = crate::vm::types::Process::new(1, 0, 0);
+    vm.processes.push(proc);
+    vm.current_pid = 1;
+
+    // Simulate IOCTL cmd 2 (set font) by running bytecode
+    // Build a minimal program: OPEN + IOCTL + HALT
+    let program = [
+        0x54u32, 0x01, 0x02, // OPEN r1, r2  (we need /dev/screen path)
+        0x00, // HALT
+    ];
+
+    // Actually, let's test via the IOCTL handler directly
+    // Use raw bytecode that calls IOCTL r3, r4, r5
+    // But we need the screen fd first.
+
+    // Simpler approach: just call the IOCTL logic directly through a program
+    // Write "/dev/screen\0" to RAM at 0x3000
+    let path_bytes = b"/dev/screen";
+    for (i, &b) in path_bytes.iter().enumerate() {
+        vm.ram[0x3000 + i] = b as u32;
+    }
+    vm.ram[0x3000 + path_bytes.len()] = 0;
+
+    // Set up registers for OPEN
+    vm.regs[1] = 0x3000; // path addr
+    vm.regs[2] = 0; // mode
+    vm.ram[0] = 0x54; // OPEN
+    vm.ram[1] = 0x01; // r1
+    vm.ram[2] = 0x02; // r2
+    vm.ram[3] = 0x62; // IOCTL
+    vm.ram[4] = 0x03; // r3 (fd, will be set after OPEN)
+    vm.ram[5] = 0x04; // r4 (cmd)
+    vm.ram[6] = 0x05; // r5 (arg = font addr)
+    vm.ram[7] = 0x00; // HALT
+
+    // Run OPEN first
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step(); // OPEN
+    let fd = vm.regs[0];
+
+    // Verify fd is screen device
+    assert_eq!(fd, 0xE000, "should get screen device fd");
+
+    // Set up registers for IOCTL cmd 2
+    vm.regs[3] = fd; // screen fd
+    vm.regs[4] = 2; // cmd = set font
+    vm.regs[5] = 0x2000; // font addr
+    vm.step(); // IOCTL
+
+    // Verify success
+    assert_eq!(vm.regs[0], 0, "IOCTL set font should return 0");
+
+    // Verify custom font is set on process
+    let has_font = vm
+        .processes
+        .iter()
+        .find(|p| p.pid == 1)
+        .and_then(|p| p.custom_font.as_ref())
+        .is_some();
+    assert!(has_font, "process 1 should have custom font");
+
+    // Verify the font data was loaded correctly
+    let font = vm
+        .processes
+        .iter()
+        .find(|p| p.pid == 1)
+        .and_then(|p| p.custom_font.as_ref())
+        .unwrap();
+    assert_eq!(font[65][0], 0xAA, "glyph A row 0 should be 0xAA");
+    assert_eq!(font[65][1], 0x55, "glyph A row 1 should be 0x55");
+    assert_eq!(font[65][7], 0x55, "glyph A row 7 should be 0x55");
+
+    // Now clear font with cmd 3
+    vm.regs[3] = fd;
+    vm.regs[4] = 3; // cmd = clear font
+    vm.regs[5] = 0;
+    vm.ram[vm.pc as usize] = 0x62; // IOCTL
+    vm.ram[vm.pc as usize + 1] = 0x03;
+    vm.ram[vm.pc as usize + 2] = 0x04;
+    vm.ram[vm.pc as usize + 3] = 0x05;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0, "IOCTL clear font should return 0");
+    let has_font_after_clear = vm
+        .processes
+        .iter()
+        .find(|p| p.pid == 1)
+        .and_then(|p| p.custom_font.as_ref())
+        .is_some();
+    assert!(
+        !has_font_after_clear,
+        "process 1 should NOT have custom font after clear"
+    );
+}
+
+#[test]
+fn test_custom_font_renders_differently() {
+    // Test that TEXT opcode renders differently with a custom font
+    let mut vm_no_font = Vm::new();
+    let mut vm_with_font = Vm::new();
+
+    // Write "A" to RAM for both VMs
+    vm_no_font.ram[0x3000] = 65; // 'A'
+    vm_no_font.ram[0x3001] = 0; // null
+
+    vm_with_font.ram[0x3000] = 65;
+    vm_with_font.ram[0x3001] = 0;
+
+    // Set up custom font on vm_with_font
+    // Make glyph 'A' (index 65) all solid = 0xFF every row
+    let font_base = 0x2000usize;
+    let glyph_a_offset = font_base + 65 * 8;
+    for row in 0..8 {
+        vm_with_font.ram[glyph_a_offset + row] = 0xFF;
+    }
+
+    // Create a process and set the font
+    let mut proc = crate::vm::types::Process::new(1, 0, 0);
+    // Load font manually
+    let mut glyphs = vec![[0u8; 8]; 128];
+    for g in 0..128 {
+        for row in 0..8 {
+            glyphs[g][row] = vm_with_font.ram[font_base + g * 8 + row] as u8;
+        }
+    }
+    // Override glyph 65 with all-solid
+    for row in 0..8 {
+        glyphs[65][row] = 0xFF;
+    }
+    proc.custom_font = Some(glyphs);
+    vm_with_font.processes.push(proc);
+    vm_with_font.current_pid = 1;
+
+    // Render "A" in both VMs
+    vm_no_font.regs[1] = 10; // x
+    vm_no_font.regs[2] = 10; // y
+    vm_no_font.regs[3] = 0x3000; // addr
+
+    vm_with_font.regs[1] = 10;
+    vm_with_font.regs[2] = 10;
+    vm_with_font.regs[3] = 0x3000;
+
+    // Execute TEXT opcode directly
+    // TEXT = 0x44, args: x_reg, y_reg, addr_reg
+    vm_no_font.ram[0] = 0x44;
+    vm_no_font.ram[1] = 1; // x reg
+    vm_no_font.ram[2] = 2; // y reg
+    vm_no_font.ram[3] = 3; // addr reg
+    vm_no_font.ram[4] = 0x00; // HALT
+    vm_no_font.pc = 0;
+    vm_no_font.halted = false;
+    vm_no_font.step(); // TEXT
+
+    vm_with_font.ram[0] = 0x44;
+    vm_with_font.ram[1] = 1;
+    vm_with_font.ram[2] = 2;
+    vm_with_font.ram[3] = 3;
+    vm_with_font.ram[4] = 0x00;
+    vm_with_font.pc = 0;
+    vm_with_font.halted = false;
+    vm_with_font.step(); // TEXT
+
+    // With custom font (all-solid 0xFF, 8x8), glyph 'A' should render
+    // pixels at ALL 8 columns for ALL 8 rows
+    // Default font (5x7 mini font) renders fewer pixels
+
+    // Count lit pixels in the 'A' area (x=10..17, y=10..17)
+    let count_pixels = |vm: &Vm, x0: usize, y0: usize, w: usize, h: usize| -> usize {
+        let mut count = 0;
+        for y in y0..(y0 + h) {
+            for x in x0..(x0 + w) {
+                if x < 256 && y < 256 && vm.screen[y * 256 + x] != 0 {
+                    count += 1;
+                }
+            }
+        }
+        count
+    };
+
+    // Custom font 'A' is 8x8 all-solid = 64 lit pixels
+    let custom_count = count_pixels(&vm_with_font, 10, 10, 8, 8);
+    // Default font 'A' is 5x7 with some gaps = fewer than 64 lit pixels
+    let default_count = count_pixels(&vm_no_font, 10, 10, 8, 8);
+
+    assert!(
+        custom_count > default_count,
+        "custom font (8x8 solid, {} pixels) should render more pixels than default ({} pixels)",
+        custom_count,
+        default_count
+    );
+    assert_eq!(
+        custom_count, 64,
+        "custom all-solid font should light all 64 pixels (8x8)"
+    );
+}
+
+#[test]
+fn test_per_process_font_isolation() {
+    // Test that two processes have independent fonts
+    let mut vm = Vm::new();
+
+    // Create two processes
+    let mut proc1 = crate::vm::types::Process::new(1, 0, 0);
+    let proc2 = crate::vm::types::Process::new(2, 0, 0);
+
+    // Give proc1 a custom font where glyph 'A' is all-solid
+    let mut font1 = vec![[0u8; 8]; 128];
+    for row in 0..8 {
+        font1[65][row] = 0xFF; // 'A' = solid block
+    }
+    proc1.custom_font = Some(font1);
+
+    // proc2 has no custom font (uses default)
+    vm.processes.push(proc1);
+    vm.processes.push(proc2);
+
+    // Verify proc1 has custom font
+    assert!(
+        vm.processes[0].custom_font.is_some(),
+        "proc1 should have custom font"
+    );
+    // Verify proc2 has no custom font
+    assert!(
+        vm.processes[1].custom_font.is_none(),
+        "proc2 should NOT have custom font"
+    );
+
+    // Verify proc1's font data is correct
+    let font1 = vm.processes[0].custom_font.as_ref().unwrap();
+    assert_eq!(font1[65][0], 0xFF, "proc1 glyph A should be solid");
+    assert_eq!(font1[66][0], 0, "proc1 glyph B should be empty (default)");
+}

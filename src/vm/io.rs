@@ -75,17 +75,49 @@ impl Vm {
         if !(32..=127).contains(&idx) {
             return;
         }
-        let glyph = &MINI_FONT[idx - 32];
-        for (row, &glyph_row) in glyph.iter().enumerate().take(7usize) {
-            for col in 0..5usize {
-                let px = x + col;
-                let py = y + row;
-                if px < 256 && py < 256 {
-                    let on = glyph_row & (1 << (4 - col)) != 0;
-                    if on {
-                        self.screen[py * 256 + px] = fg;
-                    } else if let Some(bg_color) = bg {
-                        self.screen[py * 256 + px] = bg_color;
+
+        // Check if current process has a custom font (Phase 98)
+        // Custom font overrides the built-in mini font with 8x8 glyphs
+        let custom_font = if self.current_pid == 0 {
+            self.processes.first().and_then(|p| p.custom_font.as_ref())
+        } else {
+            self.processes
+                .iter()
+                .find(|p| p.pid == self.current_pid)
+                .and_then(|p| p.custom_font.as_ref())
+        };
+
+        if let Some(font) = custom_font {
+            // Use custom 8x8 font
+            let glyph = &font[idx];
+            for (row, &glyph_row) in glyph.iter().enumerate().take(8usize) {
+                for col in 0..8usize {
+                    let px = x + col;
+                    let py = y + row;
+                    if px < 256 && py < 256 {
+                        let on = glyph_row & (1 << (7 - col)) != 0;
+                        if on {
+                            self.screen[py * 256 + px] = fg;
+                        } else if let Some(bg_color) = bg {
+                            self.screen[py * 256 + px] = bg_color;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Use built-in 5x7 mini font
+            let glyph = &MINI_FONT[idx - 32];
+            for (row, &glyph_row) in glyph.iter().enumerate().take(7usize) {
+                for col in 0..5usize {
+                    let px = x + col;
+                    let py = y + row;
+                    if px < 256 && py < 256 {
+                        let on = glyph_row & (1 << (4 - col)) != 0;
+                        if on {
+                            self.screen[py * 256 + px] = fg;
+                        } else if let Some(bg_color) = bg {
+                            self.screen[py * 256 + px] = bg_color;
+                        }
                     }
                 }
             }

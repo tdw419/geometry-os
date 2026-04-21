@@ -441,6 +441,11 @@ pub struct Process {
     pub exit_code: u32,
     /// True if the process segfaulted on an unmapped memory access.
     pub segfaulted: bool,
+
+    // ── Fonts (Phase 98: Custom Bitmap Fonts) ──────────────────────
+    /// Per-process custom font override. 128 glyphs × 8 rows each.
+    /// None = use built-in GLYPHS array. Set via /dev/screen IOCTL cmd 2.
+    pub custom_font: Option<Vec<[u8; 8]>>,
 }
 
 /// Backward-compatible alias for Process.
@@ -474,6 +479,7 @@ impl Process {
             brk_pos: 0,
             exit_code: 0,
             segfaulted: false,
+            custom_font: None,
         }
     }
 
