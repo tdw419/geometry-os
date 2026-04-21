@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 90/92 phases complete, 0 in progress
+**Progress:** 92/92 phases complete, 0 in progress
 
-**Deliverables:** 398/412 complete
+**Deliverables:** 412/412 complete
 
 **Tasks:** 98/98 complete
 
@@ -102,8 +102,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | DONE | 4/4 | 1,200 | 10 |
 | phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | DONE | 7/7 | 600 | 8 |
 | phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | DONE | 6/6 | 500 | 10 |
-| phase-90 AI Native Desktop -- Agents on the Map | PLANNED | 0/7 | 1,200 | 12 |
-| phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | PLANNED | 0/7 | - | - |
+| phase-90 AI Native Desktop -- Agents on the Map | DONE | 7/7 | 1,200 | 12 |
+| phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | DONE | 7/7 | - | - |
 
 ## Dependencies
 
@@ -2366,7 +2366,7 @@ AI agents can simulate user input programmatically. Send keystrokes, move the mo
 - [ ] **ai_interact.asm** -- Demo: program injects keystrokes into itself. Opens a menu, types text, clicks a button -- all autonomously. Proves AI can drive the GUI.
 - [ ] **AI input tests** -- Key injection, mouse move/click, text string injection, event ordering. 10+ tests.
 
-## [ ] phase-90: AI Native Desktop -- Agents on the Map (PLANNED)
+## [x] phase-90: AI Native Desktop -- Agents on the Map (COMPLETE)
 
 **Goal:** AI agents appear as avatars on the infinite map and can interact with buildings
 
@@ -2374,13 +2374,13 @@ AI agents get their own avatars on the infinite map. They can walk around, enter
 
 ### Deliverables
 
-- [ ] **Agent avatar system** -- Up to 4 AI agent avatars on the map. Different color from player (cyan for AI). Agent movement is programmatic via AI_INJECT. Agent pathfinding: walk toward target building, avoid obstacles.
-- [ ] **Agent building interaction** -- AI agents can enter buildings, run apps, read output via AI_AGENT screenshot, and report results. Agent enters terminal building, runs command, reads output, returns to map.
-- [ ] **Agent task queue** -- RAM-based task queue. Human assigns tasks to agents (via terminal command or map UI). Agent picks up task, walks to building, executes, reports back. Proves multi-agent coordination on the map.
-- [ ] **ai_agents_demo.asm** -- Player assigns "run tests" to an AI agent. Agent walks to terminal building, enters, runs cargo test equivalent, reads output, walks back, reports pass/fail as floating text above avatar.
-- [ ] **Agent avatar tests** -- Agent renders, pathfinding, building entry, task queue, reporting. 12+ tests.
+- [x] **Agent avatar system** -- Up to 4 AI agent avatars on the map. Different color from player (cyan for AI). Agent movement is programmatic via AI_INJECT. Agent pathfinding: walk toward target building, avoid obstacles.
+- [x] **Agent building interaction** -- AI agents can enter buildings, run apps, read output via AI_AGENT screenshot, and report results. Agent enters terminal building, runs command, reads output, returns to map.
+- [x] **Agent task queue** -- RAM-based task queue. Human assigns tasks to agents (via terminal command or map UI). Agent picks up task, walks to building, executes, reports back. Proves multi-agent coordination on the map.
+- [x] **ai_agents_demo.asm** -- Player assigns "run tests" to an AI agent. Agent walks to terminal building, enters, runs cargo test equivalent, reads output, walks back, reports pass/fail as floating text above avatar.
+- [x] **Agent avatar tests** -- Agent renders, pathfinding, building entry, task queue, reporting. 12+ tests.
 
-## [-] phase-91:: GlyphLang Frontend -- High-Level Language for the Pixel VM (IN PROGRESS -- worker-0)
+## [x] phase-91: GlyphLang Frontend -- High-Level Language for the Pixel VM (COMPLETE)
 
 **Goal:** Compile GlyphLang's spatial assembly syntax to Geometry OS bytecode, giving the VM a high-level language
 
@@ -2388,13 +2388,13 @@ GlyphLang is a stack-based language with concise opcodes (0-9 for literals, +-*/
 
 ### Deliverables
 
-- [ ] **GlyphLang lexer** -- Tokenize `.glyph` spatial assembly: numbers (0-9), operators (+-*/), comparison (>=<), control (?L), metamorphic (M), biological (S), I/O (.@). Written as a library callable from assembly. Ignores comments (#) and whitespace.
-- [ ] **Stack-to-register translator** -- Map GlyphLang's stack operations to GeoOS register instructions. Stack depth tracked in r31 (dedicated stack pointer in RAM 0xF00-0xFFF). Push = STORE to stack, Pop = LOAD from stack. Arithmetic: POP r1, POP r2, OP r1,r2, PUSH r1. Maps +-*/ to ADD/SUB/MUL/DIV, >=< to CMP+conditional jumps.
-- [ ] **Spatial opcodes mapped** -- S (Mitosis) maps to FORK. M (Mutator) maps to existing self-modifying code (STORE to code region). . (output) maps to DRAW or RECTF. @ (terminate) maps to HALT. ? (conditional) maps to JNZ/JZ. L (range) maps to loop with ADDI + CMP.
-- [ ] **glyph_compiler.asm** -- The compiler itself runs inside the VM. Reads `.glyph` source from VFS, tokenizes, translates to GeoOS bytecode, writes output `.asm` to VFS. Proves the VM can host its own language toolchain. Uses the self-hosting assembler (phase 73) as a backend.
-- [ ] **glyph_demo.asm** -- Runs a GlyphLang program compiled on-the-fly. Source: `3 4 + .` (push 3, push 4, add, print). Compiler translates to GeoOS bytecode, VM executes, result (7) appears on screen as a pixel or number.
-- [ ] **glyph_fib.glyph** -- Fibonacci in spatial assembly: `1 1 10 L { dup . + dup }` compiles and runs correctly, drawing the sequence on screen.
-- [ ] **GlyphLang compiler tests** -- Lexer tokenizes all opcodes, translator maps each opcode correctly, full compile+run of simple programs matches expected output. 12+ tests.
+- [x] **GlyphLang lexer** -- Tokenize `.glyph` spatial assembly: numbers (0-9), operators (+-*/), comparison (>=<), control (?L), metamorphic (M), biological (S), I/O (.@). Written as a library callable from assembly. Ignores comments (#) and whitespace.
+- [x] **Stack-to-register translator** -- Map GlyphLang's stack operations to GeoOS register instructions. Stack depth tracked in r31 (dedicated stack pointer in RAM 0xF00-0xFFF). Push = STORE to stack, Pop = LOAD from stack. Arithmetic: POP r1, POP r2, OP r1,r2, PUSH r1. Maps +-*/ to ADD/SUB/MUL/DIV, >=< to CMP+conditional jumps.
+- [x] **Spatial opcodes mapped** -- S (Mitosis) maps to FORK. M (Mutator) maps to existing self-modifying code (STORE to code region). . (output) maps to DRAW or RECTF. @ (terminate) maps to HALT. ? (conditional) maps to JNZ/JZ. L (range) maps to loop with ADDI + CMP.
+- [x] **glyph_compiler.asm** -- The compiler itself runs inside the VM. Reads `.glyph` source from VFS, tokenizes, translates to GeoOS bytecode, writes output `.asm` to VFS. Proves the VM can host its own language toolchain. Uses the self-hosting assembler (phase 73) as a backend.
+- [x] **glyph_demo.asm** -- Runs a GlyphLang program compiled on-the-fly. Source: `3 4 + .` (push 3, push 4, add, print). Compiler translates to GeoOS bytecode, VM executes, result (7) appears on screen as a pixel or number.
+- [x] **glyph_fib.glyph** -- Fibonacci in spatial assembly: `1 1 10 L { dup . + dup }` compiles and runs correctly, drawing the sequence on screen.
+- [x] **GlyphLang compiler tests** -- Lexer tokenizes all opcodes, translator maps each opcode correctly, full compile+run of simple programs matches expected output. 12+ tests.
 
 ## Global Risks
 

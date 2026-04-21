@@ -4530,8 +4530,8 @@ phases:
     of the OS.
   goal: AI agents appear as avatars on the infinite map and can interact with buildings
   id: phase-90
-  scope_lines_total: 1500
-  status: planned
+  priority: 1
+  status: done
   test_target: 14
   title: AI Native Desktop -- Agents on the Map
 - deliverables:
