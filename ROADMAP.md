@@ -2243,7 +2243,7 @@ LLM opcode sends prompt string from RAM to external API. Response written to RAM
 - [x] **smart_term.asm** -- Terminal with AI assist: type natural language, press Tab to query LLM, response displayed on screen. Esc to quit.
 - [x] **LLM tests** -- 10 tests covering: mock response, truncation, empty prompt, null termination, assembler, assembler error, disassembler, multiline response, full program, think block stripping.
 
-## [ ] phase-81: HTTP Client + Text Browser (PLANNED)
+## [-] phase-81:: HTTP Client + Text Browser (IN PROGRESS -- worker-0)
 
 **Goal:** Fetch web pages and render them as text inside the VM
 

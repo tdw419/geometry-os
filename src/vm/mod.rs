@@ -1961,4 +1961,7 @@ pub(crate) use net::MAX_TCP_CONNECTIONS;
 mod scheduler;
 
 #[cfg(test)]
+mod http_tests;
+
+#[cfg(test)]
 mod tests;

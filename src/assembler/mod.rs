@@ -34,8 +34,12 @@ impl std::fmt::Display for AsmError {
 
 impl std::error::Error for AsmError {}
 
+#[derive(Debug)]
 pub struct AsmResult {
     pub pixels: Vec<u32>,
+    /// Label name -> bytecode offset (address in RAM when loaded at base_addr).
+    /// Available after assembly for subroutine-based testing.
+    pub labels: std::collections::HashMap<String, usize>,
 }
 
 /// Assemble source with an optional library search path for .include directives.
@@ -320,7 +324,10 @@ fn assemble_inner(source: &str, base_addr: usize) -> Result<AsmResult, AsmError>
         }
     }
 
-    Ok(AsmResult { pixels: bytecode })
+    Ok(AsmResult {
+        pixels: bytecode,
+        labels,
+    })
 }
 
 /// Parse register: "r0" -> 0, "r31" -> 31, "R5" -> 5

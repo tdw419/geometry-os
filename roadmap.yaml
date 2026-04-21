@@ -4131,15 +4131,15 @@ phases:
       LLM, response displayed on screen. Esc to quit.'
     status: done
   - name: LLM tests
-    description: 10 tests covering mock response, truncation, empty prompt, null
-      termination, assembler, assembler error, disassembler, multiline response,
-      full program, think block stripping.
+    description: 10 tests covering mock response, truncation, empty prompt, null termination,
+      assembler, assembler error, disassembler, multiline response, full program,
+      think block stripping.
     status: done
   scope_lines_total: 1200
   test_target: 8
 - id: phase-81
   title: HTTP Client + Text Browser
-  status: planned
+  status: done
   goal: Fetch web pages and render them as text inside the VM
   description: HTTP GET via TCP opcodes. Parse response. Render plain text. URL bar,
     scrollable content. Proves network stack handles real protocols.
@@ -4147,20 +4147,22 @@ phases:
   - name: http_get.asm
     description: 'HTTP client library: URL in RAM, TCP connect to port 80, send GET,
       read response, strip headers, return body.'
-    status: todo
+    status: done
   - name: browser.asm v1
     description: 'Text browser: URL bar, content area, scroll, back button, loading
       indicator.'
-    status: todo
+    status: done
   - name: URL parsing
     description: Split host:port/path from RAM string. Default port 80.
-    status: todo
+    status: done
   - name: HTTP tests
     description: Mock HTTP server. Test GET formatting, response parsing, chunked
       encoding. 10+ tests.
-    status: todo
+    status: done
   scope_lines_total: 1500
   test_target: 10
+  _claimed_by: worker-0
+  _claimed_at: 1776733808
 - id: phase-82
   title: HTML Renderer + Interactive Browser
   status: planned
