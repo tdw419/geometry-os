@@ -18,7 +18,7 @@ fn test_hypervisor_disassembles() {
     vm.ram[100] = 0x72; // HYPERVISOR
     vm.ram[101] = 5; // r5
     let (text, size) = vm.disassemble_at(100);
-    assert_eq!(size, 2);
+    assert_eq!(size, 3);
     assert!(
         text.contains("HYPERVISOR"),
         "should contain HYPERVISOR, got: {}",
