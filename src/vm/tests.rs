@@ -12663,3 +12663,295 @@ fn test_mcp_vision_tools_in_source() {
         "MCP should have schema"
     );
 }
+
+// ── Phase 89: AI Agent Input Tests ────────────────────────────
+
+#[test]
+fn test_ai_inject_key() {
+    let mut vm = crate::vm::Vm::new();
+    // AI_INJECT op_reg: op=0 (inject key), r[op_reg+1]=keycode, r[op_reg+2]=shift
+    vm.ram[0] = 0xA6; // AI_INJECT
+    vm.ram[1] = 5; // op_reg = r5
+    vm.regs[5] = 0; // op=0 (inject key)
+    vm.regs[6] = 65; // keycode = 'A'
+    vm.regs[7] = 0; // shift = 0
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "AI_INJECT key should return 1 on success");
+    assert_eq!(vm.regs[0], 1, "AI_INJECT key should return 1 on success");
+    // Key was pushed to the key buffer -- verify by reading back with IKEY
+    vm.ram[2] = 0x48; // IKEY
+    vm.ram[3] = 8; // dest = r8
+    vm.pc = 2;
+    vm.step();
+    assert_eq!(vm.regs[8], 65, "IKEY should read injected key 'A'");
+}
+
+#[test]
+fn test_ai_inject_key_buffer_full() {
+    let mut vm = crate::vm::Vm::new();
+    // Fill the key buffer (capacity 15 -- 16 slots, 1 wasted for full detection)
+    for i in 0..15 {
+        assert!(vm.push_key(65 + i as u32), "push {} should succeed", i);
+    }
+    // Now try AI_INJECT -- should fail (buffer full)
+    vm.ram[0] = 0xA6;
+    vm.ram[1] = 5;
+    vm.regs[5] = 0; // op=0 (key)
+    vm.regs[6] = 90; // 'Z'
+    vm.regs[7] = 0;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "AI_INJECT should return 0 when buffer full");
+}
+
+#[test]
+fn test_ai_inject_mouse_move() {
+    let mut vm = crate::vm::Vm::new();
+    // AI_INJECT op=1 (mouse move): r[op_reg+1]=x, r[op_reg+2]=y
+    vm.ram[0] = 0xA6;
+    vm.ram[1] = 5;
+    vm.regs[5] = 1; // op=1 (mouse move)
+    vm.regs[6] = 100; // x
+    vm.regs[7] = 200; // y
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "AI_INJECT mouse move should return 1");
+    assert_eq!(vm.mouse_x, 100, "mouse_x should be 100");
+    assert_eq!(vm.mouse_y, 200, "mouse_y should be 200");
+    // Also check RAM ports
+    assert_eq!(vm.ram[0xFF9], 100, "RAM[0xFF9] should be mouse_x");
+    assert_eq!(vm.ram[0xFFA], 200, "RAM[0xFFA] should be mouse_y");
+}
+
+#[test]
+fn test_ai_inject_mouse_click() {
+    let mut vm = crate::vm::Vm::new();
+    // AI_INJECT op=2 (mouse click): r[op_reg+1]=x, r[op_reg+2]=y, r[op_reg+3]=button
+    vm.ram[0] = 0xA6;
+    vm.ram[1] = 5;
+    vm.regs[5] = 2; // op=2 (click)
+    vm.regs[6] = 128; // x
+    vm.regs[7] = 64; // y
+    vm.regs[8] = 2; // button=2 (click)
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "AI_INJECT click should return 1");
+    assert_eq!(vm.mouse_x, 128, "mouse_x should be 128");
+    assert_eq!(vm.mouse_y, 64, "mouse_y should be 64");
+    assert_eq!(vm.mouse_button, 2, "mouse_button should be 2");
+}
+
+#[test]
+fn test_ai_inject_mouse_then_mouseq() {
+    let mut vm = crate::vm::Vm::new();
+    // Inject mouse move
+    vm.ram[0] = 0xA6;
+    vm.ram[1] = 5;
+    vm.regs[5] = 1; // move
+    vm.regs[6] = 42; // x
+    vm.regs[7] = 87; // y
+    vm.step();
+    // Now read with MOUSEQ
+    vm.ram[2] = 0x85; // MOUSEQ
+    vm.ram[3] = 10; // dest = r10
+    vm.pc = 2;
+    vm.step();
+    assert_eq!(vm.regs[10], 42, "MOUSEQ x should be 42");
+    assert_eq!(vm.regs[11], 87, "MOUSEQ y should be 87");
+}
+
+#[test]
+fn test_ai_inject_text_string() {
+    let mut vm = crate::vm::Vm::new();
+    // Write "ABC" at RAM 0x2000
+    vm.ram[0x2000] = 65; // 'A'
+    vm.ram[0x2001] = 66; // 'B'
+    vm.ram[0x2002] = 67; // 'C'
+    vm.ram[0x2003] = 0; // null terminator
+                        // AI_INJECT op=3 (text string): r[op_reg+1]=addr
+    vm.ram[0] = 0xA6;
+    vm.ram[1] = 5;
+    vm.regs[5] = 3; // op=3 (text)
+    vm.regs[6] = 0x2000; // addr
+    vm.step();
+    assert_eq!(vm.regs[0], 3, "should inject 3 characters");
+    // Read back with IKEY
+    for expected in [65u32, 66, 67] {
+        vm.ram[vm.pc as usize] = 0x48; // IKEY
+        vm.ram[vm.pc as usize + 1] = 8;
+        vm.step();
+        assert_eq!(
+            vm.regs[8], expected,
+            "IKEY should read injected char {}",
+            expected
+        );
+    }
+}
+
+#[test]
+fn test_ai_inject_text_partial() {
+    let mut vm = crate::vm::Vm::new();
+    // Fill key buffer to leave only 3 slots
+    for i in 0..13 {
+        vm.push_key(48 + i as u32);
+    }
+    // Write 5-char string
+    vm.ram[0x2000] = 72; // 'H'
+    vm.ram[0x2001] = 69; // 'E'
+    vm.ram[0x2002] = 76; // 'L'
+    vm.ram[0x2003] = 76; // 'L'
+    vm.ram[0x2004] = 79; // 'O'
+    vm.ram[0x2005] = 0;
+    vm.ram[0] = 0xA6;
+    vm.ram[1] = 5;
+    vm.regs[5] = 3;
+    vm.regs[6] = 0x2000;
+    vm.step();
+    // Ring buffer of 16 uses 1 slot for full detection, so 15 usable.
+    // 13 already pushed, so 2 more can fit (15 - 13 = 2).
+    assert_eq!(
+        vm.regs[0], 2,
+        "should inject only 2 chars before buffer full"
+    );
+}
+
+#[test]
+fn test_ai_inject_unknown_op() {
+    let mut vm = crate::vm::Vm::new();
+    vm.ram[0] = 0xA6;
+    vm.ram[1] = 5;
+    vm.regs[5] = 99; // unknown op
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "unknown op should return 0");
+}
+
+#[test]
+fn test_ai_inject_assembles() {
+    let source = "LDI r1, 0
+AI_INJECT r1
+HALT
+";
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "AI_INJECT should assemble: {:?}", result);
+    let asm = result.unwrap();
+    // LDI r1, 0 is [0x10, 1, 0], AI_INJECT r1 is [0xA6, 1], HALT is [0x00]
+    assert_eq!(asm.pixels[0], 0x10, "first word should be LDI opcode");
+    assert_eq!(
+        asm.pixels[3], 0xA6,
+        "fourth word should be AI_INJECT opcode"
+    );
+    assert_eq!(asm.pixels[4], 1, "fifth word should be register r1");
+}
+
+#[test]
+fn test_ai_inject_disasm() {
+    let mut vm = crate::vm::Vm::new();
+    vm.ram[0] = 0xA6;
+    vm.ram[1] = 5;
+    let (name, len) = vm.disassemble_at(0);
+    assert!(
+        name.contains("AI_INJECT"),
+        "disasm should show AI_INJECT, got: {}",
+        name
+    );
+    assert_eq!(len, 2);
+}
+
+#[test]
+fn test_ai_inject_opcode_name_in_source() {
+    // hermes module is binary-only, check source file instead
+    let source = std::fs::read_to_string("src/hermes.rs").unwrap();
+    assert!(
+        source.contains("0xA6 => \"AI_INJECT\""),
+        "hermes.rs should map 0xA6 to AI_INJECT"
+    );
+}
+
+#[test]
+fn test_ai_inject_preprocessor() {
+    assert!(
+        crate::preprocessor::OPCODES.contains(&"AI_INJECT"),
+        "AI_INJECT should be in preprocessor OPCODES array"
+    );
+}
+
+#[test]
+fn test_ai_inject_in_hermes_source() {
+    // Verify the opcode_name entry exists in source (hermes is binary-only)
+    let source = std::fs::read_to_string("src/hermes.rs").unwrap();
+    assert!(
+        source.contains("AI_INJECT"),
+        "hermes.rs should reference AI_INJECT"
+    );
+}
+
+#[test]
+fn test_mcp_input_tools_in_source() {
+    let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+    assert!(
+        source.contains("\"input_key\""),
+        "MCP should have input_key tool"
+    );
+    assert!(
+        source.contains("\"input_mouse\""),
+        "MCP should have input_mouse tool"
+    );
+    assert!(
+        source.contains("\"input_text\""),
+        "MCP should have input_text tool"
+    );
+    assert!(
+        source.contains("input_key_schema"),
+        "MCP should have input_key schema"
+    );
+    assert!(
+        source.contains("input_mouse_schema"),
+        "MCP should have input_mouse schema"
+    );
+    assert!(
+        source.contains("input_text_schema"),
+        "MCP should have input_text schema"
+    );
+}
+
+#[test]
+fn test_ai_interact_assembles_and_runs() {
+    let source = std::fs::read_to_string("programs/ai_interact.asm").unwrap();
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "ai_interact.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "ai_interact should halt");
+    // The green border at y=0 should be drawn (key injection succeeded)
+    assert_ne!(vm.screen[0], 0, "top border should have pixels (green)");
+}
+
+#[test]
+fn test_socket_inject_commands_in_source() {
+    let source = std::fs::read_to_string("src/main.rs").unwrap();
+    assert!(
+        source.contains("\"inject_key\""),
+        "main.rs should have inject_key socket command"
+    );
+    assert!(
+        source.contains("\"inject_mouse\""),
+        "main.rs should have inject_mouse socket command"
+    );
+    assert!(
+        source.contains("\"inject_text\""),
+        "main.rs should have inject_text socket command"
+    );
+}

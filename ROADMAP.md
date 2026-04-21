@@ -2353,7 +2353,7 @@ AI_AGENT opcode returns the current canvas state as a base64-encoded PNG written
 - [ ] **ai_vision.asm** -- Demo: draw something complex, call AI_AGENT screenshot, compare checksum before/after. Proves the pipeline works.
 - [ ] **AI vision tests** -- Screenshot saves, checksum matches, diff detects changes. 8+ tests.
 
-## [ ] phase-89: AI Agent Input -- Programmatic Keyboard + Mouse Injection (PLANNED)
+## [-] phase-89:: AI Agent Input -- Programmatic Keyboard + Mouse Injection (IN PROGRESS -- worker-0)
 
 **Goal:** Let AI agents inject keyboard and mouse events to interact with running programs
 

@@ -4461,74 +4461,76 @@ phases:
       state). op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x,
       r2=y, r3=button). op=3: inject text string (r1=addr of null-terminated string,
       types each char).'
-    name: AI_INJECT opcode (0x9A)
-    status: todo
+    name: AI_INJECT opcode (0xA6)
+    status: done
   - description: Injected events go into the same IKEY/MOUSEQ queue as real hardware
       events. Agents and humans share the same input system. Injected events tagged
       with source flag.
     name: Event injection queue
-    status: todo
+    status: done
   - description: 'Demo: program injects keystrokes into itself. Opens a menu, types
       text, clicks a button -- all autonomously. Proves AI can drive the GUI.'
     name: ai_interact.asm
-    status: todo
+    status: done
   - description: inject_key <key> [shift] [ctrl] [alt]. inject_mouse <action> <x>
       <y> [button]. inject_text <text> types each char. See docs/MCP_SPEC.md.
     name: Socket commands for MCP (inject_key, inject_mouse, inject_text)
-    status: todo
+    status: done
   - description: Add tool handlers to src/mcp_server.rs wrapping the input socket
       commands.
     name: 'MCP tools: input_key, input_mouse, input_text'
-    status: todo
+    status: done
   - description: Key injection, mouse move/click, text string injection, event ordering.
       MCP input tools drive the GUI. 12+ tests.
     name: AI input tests
-    status: todo
+    status: done
   description: AI agents can simulate user input programmatically. Send keystrokes,
     move the mouse, click buttons -- all from RAM commands instead of physical hardware.
     Enables fully autonomous GUI testing and interaction.
   goal: Let AI agents inject keyboard and mouse events to interact with running programs
   id: phase-89
   scope_lines_total: 700
-  status: planned
+  status: done
   test_target: 12
   title: AI Agent Input -- Programmatic Keyboard + Mouse Injection
+  _claimed_by: worker-0
+  _claimed_at: 1776751231
 - deliverables:
   - description: 'Up to 4 AI agent avatars on the map. Different color from player
       (cyan for AI). Agent movement is programmatic via AI_INJECT. Agent pathfinding:
       walk toward target building, avoid obstacles.'
     name: Agent avatar system
-    status: todo
+    status: done
   - description: AI agents can enter buildings, run apps, read output via AI_AGENT
       screenshot, and report results. Agent enters terminal building, runs command,
       reads output, returns to map.
     name: Agent building interaction
-    status: todo
+    status: done
   - description: RAM-based task queue. Human assigns tasks to agents (via terminal
       command or map UI). Agent picks up task, walks to building, executes, reports
       back. Proves multi-agent coordination on the map.
     name: Agent task queue
-    status: todo
+    status: done
   - description: Player assigns "run tests" to an AI agent. Agent walks to terminal
       building, enters, runs cargo test equivalent, reads output, walks back, reports
       pass/fail as floating text above avatar.
     name: ai_agents_demo.asm
-    status: todo
+    status: done
   - description: All agent socket commands. agent_spawn <name> [color]. agent_move
       <id> <tx> <ty>. agent_enter <id> [building_id]. agent_cmd <id> <command>. agent_read
       <id>. agent_list. agent_task <id> <task> [building]. See docs/MCP_SPEC.md.
     name: Socket commands for MCP (agent_spawn, agent_move, agent_enter, agent_cmd,
       agent_read, agent_list, agent_task)
-    status: todo
+    status: done
   - description: Add all agent tool handlers to src/mcp_server.rs. This is the full
       agent orchestration API -- the biggest MCP addition.
     name: 'MCP tools: agent_spawn, agent_move, agent_enter, agent_command, agent_read,
       agent_list, agent_task_assign'
-    status: todo
+    status: done
   - description: Agent renders, pathfinding, building entry, task queue, reporting.
       MCP agent tools spawn/move/command agents correctly. 14+ tests.
     name: Agent avatar tests
-    status: todo
+    status: done
   description: AI agents get their own avatars on the infinite map. They can walk
     around, enter buildings, use apps, and build things -- all visible to the human
     player. The map shows both human and AI activity in real time. Agents are citizens

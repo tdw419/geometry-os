@@ -1982,6 +1982,86 @@ impl Vm {
                 }
             }
 
+            // ── Phase 89: AI Agent Input ──
+
+            // AI_INJECT op_reg (0xA6) -- AI programmatic input injection
+            // op=0: inject key event. r1=keycode, r2=shift_state. Calls push_key().
+            // op=1: inject mouse move. r1=x, r2=y. Calls push_mouse().
+            // op=2: inject mouse click. r1=x, r2=y, r3=button. Calls push_mouse() + push_mouse_button().
+            // op=3: inject text string. r1=addr of null-terminated string, pushes each char via push_key().
+            // Returns: r0=1 on success, 0 on failure.
+            // Encoding: 2 words [0xA6, op_reg]
+            0xA6 => {
+                let op_reg = self.fetch() as usize;
+                if op_reg >= NUM_REGS {
+                    self.regs[0] = 0; // invalid register
+                } else {
+                    let op = self.regs[op_reg];
+                    match op {
+                        // op=0: inject key event
+                        0 => {
+                            if op_reg + 2 < NUM_REGS {
+                                let keycode = self.regs[op_reg + 1];
+                                let _shift = self.regs[op_reg + 2];
+                                let ok = self.push_key(keycode);
+                                self.regs[0] = if ok { 1 } else { 0 };
+                            } else {
+                                self.regs[0] = 0;
+                            }
+                        }
+                        // op=1: inject mouse move
+                        1 => {
+                            if op_reg + 2 < NUM_REGS {
+                                let x = self.regs[op_reg + 1];
+                                let y = self.regs[op_reg + 2];
+                                self.push_mouse(x, y);
+                                self.regs[0] = 1;
+                            } else {
+                                self.regs[0] = 0;
+                            }
+                        }
+                        // op=2: inject mouse click
+                        2 => {
+                            if op_reg + 3 < NUM_REGS {
+                                let x = self.regs[op_reg + 1];
+                                let y = self.regs[op_reg + 2];
+                                let button = self.regs[op_reg + 3];
+                                self.push_mouse(x, y);
+                                self.push_mouse_button(button);
+                                self.regs[0] = 1;
+                            } else {
+                                self.regs[0] = 0;
+                            }
+                        }
+                        // op=3: inject text string (null-terminated in RAM)
+                        3 => {
+                            if op_reg + 1 < NUM_REGS {
+                                let mut addr = self.regs[op_reg + 1] as usize;
+                                let mut count = 0u32;
+                                // Push each character as a key event
+                                while addr < self.ram.len() {
+                                    let ch = self.ram[addr];
+                                    if ch == 0 {
+                                        break;
+                                    }
+                                    if !self.push_key(ch) {
+                                        break;
+                                    } // buffer full
+                                    count += 1;
+                                    addr += 1;
+                                }
+                                self.regs[0] = count;
+                            } else {
+                                self.regs[0] = 0;
+                            }
+                        }
+                        _ => {
+                            self.regs[0] = 0; // unknown op
+                        }
+                    }
+                }
+            }
+
             // ── Phase 88: AI Vision Bridge ──
 
             // AI_AGENT op_reg (0xB0) -- AI vision operations

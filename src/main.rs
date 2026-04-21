@@ -1409,7 +1409,7 @@ fn main() {
                                 status_msg = "[HALTED]".into();
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             // ── Phase 84: Building & Desktop Socket Commands ──────
@@ -1662,6 +1662,74 @@ fn main() {
                                     response.push_str("same\n");
                                 } else {
                                     response.push_str(&format!("changed: {:08X}\n", current_hash));
+                                }
+                            }
+                            // ── Phase 89: AI Input Injection Socket Commands ──
+                            "inject_key" => {
+                                // inject_key <keycode> [shift]
+                                // Injects a key event into the VM's key buffer
+                                if let Some(keycode_str) = parts.get(1) {
+                                    let keycode = keycode_str.parse::<u32>().unwrap_or_else(|_| {
+                                        // Try single character
+                                        let bytes = keycode_str.as_bytes();
+                                        if bytes.len() == 1 {
+                                            bytes[0] as u32
+                                        } else {
+                                            0
+                                        }
+                                    });
+                                    let ok = vm.push_key(keycode);
+                                    response.push_str(if ok { "ok\n" } else { "buffer_full\n" });
+                                } else {
+                                    response.push_str("[usage: inject_key <keycode>]\n");
+                                }
+                            }
+                            "inject_mouse" => {
+                                // inject_mouse <action> <x> <y> [button]
+                                // action: move, click
+                                let action = parts.get(1).copied().unwrap_or("");
+                                if let (Some(x_str), Some(y_str)) = (parts.get(2), parts.get(3)) {
+                                    let x = x_str.parse::<u32>().unwrap_or(0);
+                                    let y = y_str.parse::<u32>().unwrap_or(0);
+                                    match action {
+                                        "move" => {
+                                            vm.push_mouse(x, y);
+                                            response.push_str("ok\n");
+                                        }
+                                        "click" => {
+                                            let button = parts
+                                                .get(4)
+                                                .and_then(|s| s.parse::<u32>().ok())
+                                                .unwrap_or(2); // default: left click
+                                            vm.push_mouse(x, y);
+                                            vm.push_mouse_button(button);
+                                            response.push_str("ok\n");
+                                        }
+                                        _ => {
+                                            response.push_str("[usage: inject_mouse <move|click> <x> <y> [button]]\n");
+                                        }
+                                    }
+                                } else {
+                                    response.push_str(
+                                        "[usage: inject_mouse <move|click> <x> <y> [button]]\n",
+                                    );
+                                }
+                            }
+                            "inject_text" => {
+                                // inject_text <text>
+                                // Types each character into the VM's key buffer
+                                if line.len() > 12 {
+                                    let text = &line[12..]; // skip "inject_text "
+                                    let mut count = 0u32;
+                                    for ch in text.chars() {
+                                        if !vm.push_key(ch as u32) {
+                                            break;
+                                        }
+                                        count += 1;
+                                    }
+                                    response.push_str(&format!("injected {} chars\n", count));
+                                } else {
+                                    response.push_str("[usage: inject_text <text>]\n");
                                 }
                             }
                             _ => {

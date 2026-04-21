@@ -679,6 +679,23 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        // ── Phase 89: AI Agent Input ──
+        "AI_INJECT" => {
+            // AI_INJECT op_reg
+            // 2 words: [0xA6, op_reg]
+            // op_reg contains the operation number:
+            //   0 = inject key (keycode in r[op_reg+1], shift in r[op_reg+2])
+            //   1 = inject mouse move (x in r[op_reg+1], y in r[op_reg+2])
+            //   2 = inject mouse click (x in r[op_reg+1], y in r[op_reg+2], button in r[op_reg+3])
+            //   3 = inject text string (addr in r[op_reg+1], null-terminated, pushes each char)
+            if tokens.len() < 2 {
+                return Err("AI_INJECT requires 1 argument: AI_INJECT op_reg".to_string());
+            }
+            bytecode.push(0xA6);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         // ── Phase 88: AI Vision Bridge ──
         "AI_AGENT" => {
             // AI_AGENT op_reg

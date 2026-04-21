@@ -234,6 +234,43 @@ fn get_tool_list() -> Vec<serde_json::Value> {
             )],
             vision_diff_schema(),
         ),
+        // -- Phase 89: AI Input Injection Tools --
+        tool(
+            "input_key",
+            "Inject a keyboard event into the running VM",
+            vec![
+                param(
+                    "key",
+                    "string",
+                    "Key code (numeric) or single character",
+                    true,
+                ),
+                param("shift", "integer", "Shift state (0=none, 1=shift)", false),
+            ],
+            input_key_schema(),
+        ),
+        tool(
+            "input_mouse",
+            "Inject a mouse event (move or click) into the running VM",
+            vec![
+                param("action", "string", "Action: 'move' or 'click'", true),
+                param("x", "integer", "X coordinate", true),
+                param("y", "integer", "Y coordinate", true),
+                param(
+                    "button",
+                    "integer",
+                    "Button for click (1=down, 2=click)",
+                    false,
+                ),
+            ],
+            input_mouse_schema(),
+        ),
+        tool(
+            "input_text",
+            "Type a text string into the VM (each character becomes a key event)",
+            vec![param("text", "string", "Text to type", true)],
+            input_text_schema(),
+        ),
     ]
 }
 
@@ -365,6 +402,37 @@ fn vision_diff_schema() -> serde_json::Value {
             "changed": {"type": "boolean"},
             "checksum": {"type": "string", "description": "Current checksum (hex)"},
             "previous_checksum": {"type": "string", "description": "Previous checksum (hex)"}
+        }
+    })
+}
+
+// Phase 89: AI Input Injection schemas
+fn input_key_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "ok": {"type": "boolean"},
+            "keycode": {"type": "integer"}
+        }
+    })
+}
+fn input_mouse_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "ok": {"type": "boolean"},
+            "action": {"type": "string"},
+            "x": {"type": "integer"},
+            "y": {"type": "integer"}
+        }
+    })
+}
+fn input_text_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "ok": {"type": "boolean"},
+            "chars_injected": {"type": "integer"}
         }
     })
 }
@@ -636,6 +704,45 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
                 "changed": !resp.contains("same"),
                 "checksum": resp,
                 "previous_checksum": prev_checksum,
+            }))
+        }
+
+        // ── Phase 89: AI Input Injection Tool Handlers ──
+        "input_key" => {
+            let key_str = args["key"].as_str().unwrap_or("0");
+            let cmd = format!("inject_key {}", key_str);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "response": resp,
+            }))
+        }
+
+        "input_mouse" => {
+            let action = args["action"].as_str().unwrap_or("move");
+            let x = args["x"].as_i64().unwrap_or(0);
+            let y = args["y"].as_i64().unwrap_or(0);
+            let button = args["button"].as_i64().unwrap_or(2);
+            let cmd = match action {
+                "click" => format!("inject_mouse click {} {} {}", x, y, button),
+                _ => format!("inject_mouse move {} {}", x, y),
+            };
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "action": action,
+                "x": x,
+                "y": y,
+            }))
+        }
+
+        "input_text" => {
+            let text = args["text"].as_str().unwrap_or("");
+            let cmd = format!("inject_text {}", text);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": true,
+                "response": resp,
             }))
         }
 
