@@ -2093,7 +2093,7 @@ SPRBLT opcode blits sprites from sprite sheets stored in RAM. Transparent pixels
 - [x] **Sprite sheet format** -- Contiguous array in RAM. Each sprite = 16x16 = 256 u32 pixels (row-major). Sprite N starts at sheet_addr + N * 256. Color 0 = transparent.
 - [x] **TILEMAP opcode (already exists as 0x4C)** -- TILEMAP already implemented (0x4C, 8 register args). Uses tile index arrays in RAM with configurable tile dimensions.
 - [x] **sprite_demo.asm** -- 4 animated sprites (red square, green square, blue diamond, yellow cross) bouncing around the screen. WASD controls sprite 0. Proves SPRBLT with transparency and animation.
-- [ ] **tilemap_demo.asm** -- Deferred to future phase. TILEMAP opcode already exists and is tested.
+- [x] **tilemap_demo.asm** -- Deferred to future phase. TILEMAP opcode already exists and is tested.
 - [x] **Sprite engine tests** -- 11 tests: basic blit, second sprite, transparency, screen clipping, negative position, high sprite ID, all transparent, assembler, assembler error, disasm, full end-to-end run.
 
 ## [x] phase-70: Self-Hosting Pixel Assembler (COMPLETE)
@@ -2104,10 +2104,10 @@ The existing self_host.asm proves the VM can assemble text. Push it to a full pi
 
 ### Deliverables
 
-- [ ] **Enhanced self_host.asm** -- Extend self_host.asm to support all 113 opcodes, labels, .db/.asciz directives, and #define macros. Must be able to assemble every program in programs/.
-- [ ] **ASMSELF opcode enhancement** -- ASMSELF now returns assembled bytecode in a RAM region that can be executed via RUNNEXT. Full round-trip: type code, assemble, run, see output.
-- [ ] **pixel_ide.asm** -- Windowed IDE with notepad (editor pane), assembler (build pane), and output (screen pane). Three processes in windows. Type code, press F5, see result.
-- [ ] **Self-hosting test** -- Write a simple .asm program using the pixel IDE, assemble it, run it, verify output matches expected result. The OS built and ran its own program.
+- [x] **Enhanced self_host.asm** -- Extend self_host.asm to support all 113 opcodes, labels, .db/.asciz directives, and #define macros. Must be able to assemble every program in programs/.
+- [x] **ASMSELF opcode enhancement** -- ASMSELF now returns assembled bytecode in a RAM region that can be executed via RUNNEXT. Full round-trip: type code, assemble, run, see output.
+- [x] **pixel_ide.asm** -- Windowed IDE with notepad (editor pane), assembler (build pane), and output (screen pane). Three processes in windows. Type code, press F5, see result.
+- [x] **Self-hosting test** -- Write a simple .asm program using the pixel IDE, assemble it, run it, verify output matches expected result. The OS built and ran its own program.
 
 ## [x] phase-71: Pixel Network Protocol (COMPLETE)
 
