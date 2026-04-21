@@ -4162,7 +4162,6 @@ phases:
   test_target: 8
   title: LLM Bridge Opcode (External AI)
 - _claimed_at: 1776733808
-  _claimed_by: worker-0
   deliverables:
   - description: 'HTTP client library: URL in RAM, TCP connect to port 80, send GET,
       read response, strip headers, return body.'
@@ -4188,7 +4187,6 @@ phases:
   test_target: 10
   title: HTTP Client + Text Browser
 - _claimed_at: 1776736857
-  _claimed_by: worker-0
   deliverables:
   - description: Tokenize HTML. Handle p, br, h1-h3, b, i, a href, img src, hr, ul/li.
       Assembly-callable library.
@@ -4303,7 +4301,6 @@ phases:
   status: done
   test_target: 14
   title: Infinite Map Desktop -- App Buildings + Entry Points
-  _claimed_by: worker-0
   _claimed_at: 1776744560
 - deliverables:
   - description: '16px taskbar at bottom of viewport showing: current biome, nearby
@@ -4381,7 +4378,6 @@ phases:
   status: done
   test_target: 10
   title: Hypervisor Building -- Run Linux on the Map
-  _claimed_by: worker-0
   _claimed_at: 1776745965
 - deliverables:
   - description: When player is on the map, background VMs get time-sliced execution.
@@ -4411,7 +4407,6 @@ phases:
   status: done
   test_target: 10
   title: Multi-Hypervisor -- Multiple OS Instances on the Map
-  _claimed_by: worker-0
   _claimed_at: 1776748317
 - deliverables:
   - description: 'AI_AGENT op_reg -- op=0: screenshot to VFS file, returns path addr
@@ -4454,7 +4449,6 @@ phases:
   status: done
   test_target: 10
   title: AI Vision Bridge -- Screenshot + Canvas Analysis
-  _claimed_by: worker-0
   _claimed_at: 1776749530
 - deliverables:
   - description: 'AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift
@@ -4493,7 +4487,6 @@ phases:
   status: done
   test_target: 12
   title: AI Agent Input -- Programmatic Keyboard + Mouse Injection
-  _claimed_by: worker-0
   _claimed_at: 1776751231
 - deliverables:
   - description: 'Up to 4 AI agent avatars on the map. Different color from player
@@ -4546,33 +4539,33 @@ phases:
       comparison (>=<), control (?L), metamorphic (M), biological (S), I/O (.@). Library
       callable from assembly. Ignores comments and whitespace.'
     name: GlyphLang lexer
-    status: todo
+    status: done
   - description: Map GlyphLang stack operations to GeoOS register instructions. Stack
       depth in r31, RAM 0xF00-0xFFF. Push=STORE, Pop=LOAD. Maps +-*/ to ADD/SUB/MUL/DIV,
       >=< to CMP+conditional.
     name: Stack-to-register translator
-    status: todo
+    status: done
   - description: S (Mitosis) maps to FORK. M (Mutator) maps to self-modifying code.
       . (output) maps to DRAW. @ maps to HALT. ? maps to JNZ/JZ. L maps to loop.
     name: Spatial opcodes mapped
-    status: todo
+    status: done
   - description: Compiler runs inside the VM. Reads .glyph source from VFS, tokenizes,
       translates to GeoOS bytecode, writes .asm to VFS. Uses self-hosting assembler
       as backend.
     name: glyph_compiler.asm
-    status: todo
+    status: done
   - description: 'Runs a GlyphLang program compiled on-the-fly. Source: 3 4 + . Result
       (7) appears on screen.'
     name: glyph_demo.asm
-    status: todo
+    status: done
   - description: Fibonacci in spatial assembly compiles and runs correctly, drawing
       the sequence on screen.
     name: glyph_fib.glyph
-    status: todo
+    status: done
   - description: Lexer tokenizes all opcodes, translator maps correctly, full compile+run
       matches expected output. 12+ tests.
     name: GlyphLang compiler tests
-    status: todo
+    status: done
   description: GlyphLang is a stack-based language with concise opcodes. This phase
     builds a compiler that translates .glyph spatial assembly programs into GeoOS
     register-based bytecode. Users write in GlyphLang's compact syntax and the VM
@@ -4582,7 +4575,7 @@ phases:
     the VM a high-level language
   id: phase-91
   scope_lines_total: 2000
-  status: planned
+  status: done
   test_target: 12
   title: GlyphLang Frontend -- High-Level Language for the Pixel VM
 project_url: https://github.com/tdw419/geometry-os

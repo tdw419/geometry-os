@@ -1,0 +1,77 @@
+# Fibonacci in GlyphLang -- draws first 8 fib numbers as pixels
+# Output: 1 1 2 3 5 8 13 21
+#
+# Uses registers: a=fib_n, b=fib_n+1
+# Each step: output a, compute temp=a+b, a=b, b=temp
+
+# Initialize fib(1)=1, fib(2)=1
+1 a
+1 b
+
+# Iteration 1: output a=1
+A .
+
+# Iteration 2: a+b=2, a=1->1, b=1->2, output a=1
+A B + b A a B .
+# temp=a+b=2 -> b, old_b=1 -> a, output a=1... wait
+# Actually: A B + gives a+b on stack. We need: new_a=b, new_b=a+b
+# Let me be more careful:
+# 1. compute a+b (push a, push b, add)
+# 2. now stack has [a+b]. We need: a <- old_b, b <- a+b
+# 3. save a+b by storing in register d
+# 4. copy b to a: load b, store in a
+# 5. load d (a+b) into b
+# This needs an extra register d as temp
+
+# Let me redo:
+
+# Reset
+1 a
+1 b
+
+# Step 1: output fib(1) = a = 1
+A .
+
+# Advance: temp = a+b, a = b, b = temp
+A B + d B a D b
+
+# Step 2: output fib(2) = a = 1
+A .
+
+# Advance
+A B + d B a D b
+
+# Step 3: output fib(3) = a = 2
+A .
+
+# Advance
+A B + d B a D b
+
+# Step 4: output fib(4) = a = 3
+A .
+
+# Advance
+A B + d B a D b
+
+# Step 5: output fib(5) = a = 5
+A .
+
+# Advance
+A B + d B a D b
+
+# Step 6: output fib(6) = a = 8
+A .
+
+# Advance
+A B + d B a D b
+
+# Step 7: output fib(7) = a = 13
+A .
+
+# Advance
+A B + d B a D b
+
+# Step 8: output fib(8) = a = 21
+A .
+
+@ # halt

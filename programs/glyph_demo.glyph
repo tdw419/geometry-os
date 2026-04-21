@@ -1,0 +1,3 @@
+# GlyphLang demo: 3 4 + . @
+# Push 3, push 4, add, output result (7), halt
+3 4 + . @

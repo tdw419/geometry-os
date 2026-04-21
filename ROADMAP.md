@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 85/92 phases complete, 0 in progress
+**Progress:** 90/92 phases complete, 0 in progress
 
-**Deliverables:** 368/412 complete
+**Deliverables:** 398/412 complete
 
 **Tasks:** 98/98 complete
 
@@ -99,9 +99,9 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-84 Infinite Map Desktop -- App Buildings + Entry Points | DONE | 7/7 | 1,000 | 12 |
 | phase-85 Infinite Map Desktop -- Full Desktop Integration | DONE | 6/6 | 1,000 | 10 |
 | phase-86 Hypervisor Building -- Run Linux on the Map | DONE | 6/6 | 800 | 16 |
-| phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | PLANNED | 0/4 | 1,200 | 10 |
-| phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | PLANNED | 0/7 | 600 | 8 |
-| phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | PLANNED | 0/6 | 500 | 10 |
+| phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | DONE | 4/4 | 1,200 | 10 |
+| phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | DONE | 7/7 | 600 | 8 |
+| phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | DONE | 6/6 | 500 | 10 |
 | phase-90 AI Native Desktop -- Agents on the Map | PLANNED | 0/7 | 1,200 | 12 |
 | phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | PLANNED | 0/7 | - | - |
 
@@ -2380,7 +2380,7 @@ AI agents get their own avatars on the infinite map. They can walk around, enter
 - [ ] **ai_agents_demo.asm** -- Player assigns "run tests" to an AI agent. Agent walks to terminal building, enters, runs cargo test equivalent, reads output, walks back, reports pass/fail as floating text above avatar.
 - [ ] **Agent avatar tests** -- Agent renders, pathfinding, building entry, task queue, reporting. 12+ tests.
 
-## [ ] phase-91: GlyphLang Frontend -- High-Level Language for the Pixel VM (PLANNED)
+## [-] phase-91:: GlyphLang Frontend -- High-Level Language for the Pixel VM (IN PROGRESS -- worker-0)
 
 **Goal:** Compile GlyphLang's spatial assembly syntax to Geometry OS bytecode, giving the VM a high-level language
 
