@@ -2256,7 +2256,7 @@ HTTP GET via TCP opcodes. Parse response. Render plain text. URL bar, scrollable
 - [ ] **URL parsing** -- Split host:port/path from RAM string. Default port 80.
 - [ ] **HTTP tests** -- Mock HTTP server. Test GET formatting, response parsing, chunked encoding. 10+ tests.
 
-## [ ] phase-82: HTML Renderer + Interactive Browser (PLANNED)
+## [-] phase-82:: HTML Renderer + Interactive Browser (IN PROGRESS -- worker-0)
 
 **Goal:** Parse and render simple HTML with styled text, links, and images
 

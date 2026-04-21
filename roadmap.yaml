@@ -4165,7 +4165,7 @@ phases:
   _claimed_at: 1776733808
 - id: phase-82
   title: HTML Renderer + Interactive Browser
-  status: in_progress
+  status: done
   goal: Parse and render simple HTML with styled text, links, and images
   description: HTML parser for common tags. Links as HITSET regions. Bookmarks in
     VFS. A real pixel-native web experience.
@@ -4173,23 +4173,23 @@ phases:
   - name: HTML parser
     description: Tokenize HTML. Handle p, br, h1-h3, b, i, a href, img src, hr, ul/li.
       Assembly-callable library.
-    status: todo
+    status: done
   - name: Styled text renderer
     description: DRAWTEXT with per-line colors. h1=green, h2=yellow, body=white, links=cyan.
       Paragraph spacing, horizontal rules.
-    status: todo
+    status: done
   - name: Clickable links
     description: a-tags register HITSET regions. Click triggers new fetch. Navigation
       history in RAM ring buffer.
-    status: todo
+    status: done
   - name: Bookmarks
     description: /etc/bookmarks.cfg in VFS. Start page shows bookmarks. Add/remove
       via UI.
-    status: todo
+    status: done
   - name: Browser tests
     description: HTML parser, styled rendering, link clicks, back nav, bookmarks.
       12+ tests.
-    status: todo
+    status: done
   scope_lines_total: 2000
   test_target: 12
   _claimed_by: worker-0

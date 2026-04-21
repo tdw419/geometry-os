@@ -86,6 +86,24 @@ pub struct HitRegion {
     pub id: u32,
 }
 
+/// A styled text line produced by the HTML parser (Phase 82).
+/// Each line has a foreground color and up to 32 characters.
+#[derive(Debug, Clone)]
+pub struct StyledLine {
+    pub fg_color: u32,
+    pub chars: Vec<u32>,
+}
+
+/// A link extracted from HTML during parsing.
+/// Registered as a HITSET region for click detection.
+#[derive(Debug, Clone)]
+pub struct HtmlLink {
+    pub href: String,
+    pub line_index: usize,
+    pub char_start: usize,
+    pub char_end: usize,
+}
+
 /// Memory protection constants (Phase 24: Memory Protection).
 /// RAM is divided into pages. Each process gets a page directory mapping
 /// virtual page numbers to physical page numbers.

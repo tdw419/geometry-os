@@ -566,6 +566,25 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "HTPARSE" => {
+            if tokens.len() != 4 {
+                return Err(
+                    "HTPARSE requires 3 arguments: HTPARSE src_reg, dest_reg, max_lines_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0x9D);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
+        "HITCLR" => {
+            bytecode.push(0x9E);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

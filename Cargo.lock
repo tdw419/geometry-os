@@ -310,6 +310,7 @@ dependencies = [
  "libc",
  "minifb",
  "png",
+ "serde_json",
  "tempfile",
 ]
 

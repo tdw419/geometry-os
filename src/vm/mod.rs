@@ -325,6 +325,7 @@ impl Vm {
         self.mouse_button = 0;
         self.net_inbox.clear();
         self.llm_mock_response = None;
+        self.hit_regions.clear();
         self.llm_config = None;
     }
 
@@ -1686,6 +1687,70 @@ impl Vm {
                 }
             }
 
+            // HTPARSE src_addr_reg, dest_addr_reg, max_lines_reg  (0x9D)
+            // Parse HTML from RAM at src_addr into styled lines at dest_addr.
+            // Each line = 33 u32 words: [fg_color, char0, char1, ..., char31].
+            // Links are registered in hit_regions for HITQ click detection.
+            // Returns: r0 = number of parsed lines.
+            0x9D => {
+                let sr = self.fetch() as usize;
+                let dr = self.fetch() as usize;
+                let mr = self.fetch() as usize;
+                if sr < NUM_REGS && dr < NUM_REGS && mr < NUM_REGS {
+                    let src_addr = self.regs[sr] as usize;
+                    let dest_addr = self.regs[dr] as usize;
+                    let max_lines = self.regs[mr] as usize;
+
+                    // Read HTML from RAM
+                    let mut html = String::new();
+                    let mut a = src_addr;
+                    while a < self.ram.len() {
+                        let ch = self.ram[a];
+                        if ch == 0 {
+                            break;
+                        }
+                        if let Some(c) = char::from_u32(ch) {
+                            html.push(c);
+                        } else {
+                            html.push('?');
+                        }
+                        a += 1;
+                    }
+
+                    // Parse HTML into styled lines
+                    let parsed = self.parse_html_to_lines(&html, max_lines, dest_addr);
+
+                    // Write styled lines to dest_addr
+                    let line_size = 33;
+                    for (line_idx, line) in parsed.iter().enumerate() {
+                        let base = dest_addr + line_idx * line_size;
+                        if base + line_size > self.ram.len() {
+                            break;
+                        }
+                        self.ram[base] = line.fg_color;
+                        for (j, &ch) in line.chars.iter().enumerate() {
+                            if j < 32 {
+                                self.ram[base + 1 + j] = ch;
+                            }
+                        }
+                        for j in line.chars.len()..32 {
+                            if base + 1 + j < self.ram.len() {
+                                self.ram[base + 1 + j] = 0;
+                            }
+                        }
+                    }
+
+                    self.regs[0] = parsed.len() as u32;
+                } else {
+                    self.regs[0] = 0;
+                }
+            }
+
+            // HITCLR  (0x9E) -- clear all hit-test regions
+            0x9E => {
+                self.hit_regions.clear();
+            }
+
             _ => {
                 self.halted = true;
                 return false;
@@ -1870,6 +1935,368 @@ impl Vm {
             String::new(),
         )
     }
+
+    /// Parse HTML into styled lines for the browser (Phase 82).
+    /// Supports: p, br, h1-h3, b, i, a href, img src, hr, ul/li.
+    /// Colors: h1=green, h2=yellow, h3=orange, body=white, links=cyan.
+    /// Links are registered as hit_regions for click detection.
+    fn parse_html_to_lines(
+        &mut self,
+        html: &str,
+        max_lines: usize,
+        dest_base: usize,
+    ) -> Vec<crate::vm::types::StyledLine> {
+        use crate::vm::types::{HtmlLink, StyledLine};
+
+        const COLOR_H1: u32 = 0x00FF00;
+        const COLOR_H2: u32 = 0xFFFF00;
+        const COLOR_H3: u32 = 0xFF8800;
+        const COLOR_BODY: u32 = 0xFFFFFF;
+        const COLOR_LINK: u32 = 0x00FFFF;
+        const COLOR_BOLD: u32 = 0xFFFFFF;
+        const COLOR_ITALIC: u32 = 0xAAAAAA;
+        const COLOR_HR: u32 = 0x666666;
+        const CHARS_PER_LINE: usize = 32;
+
+        let mut lines: Vec<StyledLine> = Vec::new();
+        let mut links: Vec<HtmlLink> = Vec::new();
+        let mut tag_stack: Vec<String> = Vec::new();
+        let mut current_color = COLOR_BODY;
+        let mut current_link_href: Option<String> = None;
+        let mut link_char_start: usize = 0;
+        let mut line_chars: Vec<u32> = Vec::new();
+        let mut line_color = COLOR_BODY;
+        let mut pos = 0;
+        let chars: Vec<char> = html.chars().collect();
+
+        let mut flush_line =
+            |lines: &mut Vec<StyledLine>, lc: &mut Vec<u32>, lcol: &mut u32, ccol: u32| {
+                if !lc.is_empty() || lines.is_empty() {
+                    lines.push(StyledLine {
+                        fg_color: *lcol,
+                        chars: lc.clone(),
+                    });
+                    lc.clear();
+                    *lcol = ccol;
+                }
+            };
+
+        while pos < chars.len() && lines.len() < max_lines {
+            if chars[pos] == '<' {
+                let tag_start = pos + 1;
+                let mut tag_end = tag_start;
+                while tag_end < chars.len() && chars[tag_end] != '>' {
+                    tag_end += 1;
+                }
+                if tag_end >= chars.len() {
+                    pos += 1;
+                    continue;
+                }
+
+                let tag_content: String = chars[tag_start..tag_end].iter().collect();
+                pos = tag_end + 1;
+                let is_closing = tag_content.starts_with('/');
+                let tag_text = if is_closing {
+                    &tag_content[1..]
+                } else {
+                    &tag_content[..]
+                };
+                let tag_name = tag_text
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_lowercase();
+
+                match tag_name.as_str() {
+                    "br" | "br/" => {
+                        lines.push(StyledLine {
+                            fg_color: line_color,
+                            chars: line_chars.clone(),
+                        });
+                        line_chars.clear();
+                        line_color = current_color;
+                    }
+                    "p" => {
+                        if is_closing {
+                            lines.push(StyledLine {
+                                fg_color: line_color,
+                                chars: line_chars.clone(),
+                            });
+                            line_chars.clear();
+                            if lines.len() < max_lines {
+                                lines.push(StyledLine {
+                                    fg_color: COLOR_BODY,
+                                    chars: Vec::new(),
+                                });
+                            }
+                            tag_stack.pop();
+                            current_color = COLOR_BODY;
+                            for t in &tag_stack {
+                                match t.as_str() {
+                                    "h1" => current_color = COLOR_H1,
+                                    "h2" => current_color = COLOR_H2,
+                                    "h3" => current_color = COLOR_H3,
+                                    "a" => current_color = COLOR_LINK,
+                                    "b" => current_color = COLOR_BOLD,
+                                    "i" => current_color = COLOR_ITALIC,
+                                    _ => {}
+                                }
+                            }
+                            line_color = current_color;
+                        } else {
+                            tag_stack.push("p".to_string());
+                            line_color = COLOR_BODY;
+                            current_color = COLOR_BODY;
+                        }
+                    }
+                    "h1" | "h2" | "h3" => {
+                        if is_closing {
+                            lines.push(StyledLine {
+                                fg_color: line_color,
+                                chars: line_chars.clone(),
+                            });
+                            line_chars.clear();
+                            if lines.len() < max_lines {
+                                lines.push(StyledLine {
+                                    fg_color: COLOR_BODY,
+                                    chars: Vec::new(),
+                                });
+                            }
+                            tag_stack.pop();
+                            current_color = COLOR_BODY;
+                            line_color = COLOR_BODY;
+                        } else {
+                            flush_line(&mut lines, &mut line_chars, &mut line_color, current_color);
+                            tag_stack.push(tag_name.clone());
+                            current_color = match tag_name.as_str() {
+                                "h1" => COLOR_H1,
+                                "h2" => COLOR_H2,
+                                "h3" => COLOR_H3,
+                                _ => COLOR_BODY,
+                            };
+                            line_color = current_color;
+                        }
+                    }
+                    "b" => {
+                        if is_closing {
+                            if !line_chars.is_empty() {
+                                flush_line(
+                                    &mut lines,
+                                    &mut line_chars,
+                                    &mut line_color,
+                                    current_color,
+                                );
+                            }
+                            tag_stack.retain(|t| t != "b");
+                            current_color = COLOR_BODY;
+                            for t in &tag_stack {
+                                match t.as_str() {
+                                    "h1" => current_color = COLOR_H1,
+                                    "h2" => current_color = COLOR_H2,
+                                    "h3" => current_color = COLOR_H3,
+                                    "a" => current_color = COLOR_LINK,
+                                    _ => {}
+                                }
+                            }
+                        } else {
+                            tag_stack.push("b".to_string());
+                            current_color = COLOR_BOLD;
+                        }
+                        line_color = current_color;
+                    }
+                    "i" => {
+                        if is_closing {
+                            if !line_chars.is_empty() {
+                                flush_line(
+                                    &mut lines,
+                                    &mut line_chars,
+                                    &mut line_color,
+                                    current_color,
+                                );
+                            }
+                            tag_stack.retain(|t| t != "i");
+                            current_color = COLOR_BODY;
+                            for t in &tag_stack {
+                                match t.as_str() {
+                                    "h1" => current_color = COLOR_H1,
+                                    "h2" => current_color = COLOR_H2,
+                                    "h3" => current_color = COLOR_H3,
+                                    "a" => current_color = COLOR_LINK,
+                                    _ => {}
+                                }
+                            }
+                        } else {
+                            tag_stack.push("i".to_string());
+                            current_color = COLOR_ITALIC;
+                        }
+                        line_color = current_color;
+                    }
+                    "a" => {
+                        if is_closing {
+                            // Flush accumulated text with link color BEFORE resetting
+                            if !line_chars.is_empty() {
+                                flush_line(
+                                    &mut lines,
+                                    &mut line_chars,
+                                    &mut line_color,
+                                    current_color,
+                                );
+                            }
+                            if let Some(href) = current_link_href.take() {
+                                let char_end = 0; // already flushed
+                                links.push(HtmlLink {
+                                    href,
+                                    line_index: if lines.len() > 0 { lines.len() - 1 } else { 0 },
+                                    char_start: 0,
+                                    char_end,
+                                });
+                            }
+                            tag_stack.retain(|t| t != "a");
+                            current_color = COLOR_BODY;
+                            for t in &tag_stack {
+                                match t.as_str() {
+                                    "h1" => current_color = COLOR_H1,
+                                    "h2" => current_color = COLOR_H2,
+                                    "h3" => current_color = COLOR_H3,
+                                    "b" => current_color = COLOR_BOLD,
+                                    "i" => current_color = COLOR_ITALIC,
+                                    _ => {}
+                                }
+                            }
+                            line_color = current_color;
+                        } else {
+                            tag_stack.push("a".to_string());
+                            current_color = COLOR_LINK;
+                            line_color = COLOR_LINK;
+                            link_char_start = line_chars.len();
+                            current_link_href = None;
+                            if let Some(hpos) = tag_text.find("href") {
+                                let rest = &tag_text[hpos + 4..];
+                                let rest = rest.trim_start_matches(|c: char| c == ' ' || c == '=');
+                                let rest = rest.trim_start_matches('"');
+                                if let Some(end) = rest.find('"') {
+                                    current_link_href = Some(rest[..end].to_string());
+                                } else if let Some(end) = rest.find(' ') {
+                                    current_link_href = Some(rest[..end].to_string());
+                                }
+                            }
+                        }
+                    }
+                    "img" => {
+                        let mut alt_text = String::from("IMAGE");
+                        if let Some(apos) = tag_text.find("alt") {
+                            let rest = &tag_text[apos + 3..];
+                            let rest = rest.trim_start_matches(|c: char| c == ' ' || c == '=');
+                            let rest = rest.trim_start_matches('"');
+                            if let Some(end) = rest.find('"') {
+                                alt_text = rest[..end].to_string();
+                            }
+                        }
+                        let img_label = format!("[{}]", alt_text);
+                        for c in img_label.chars() {
+                            if line_chars.len() < CHARS_PER_LINE {
+                                line_chars.push(c as u32);
+                            }
+                        }
+                    }
+                    "hr" => {
+                        flush_line(&mut lines, &mut line_chars, &mut line_color, current_color);
+                        let mut hr_chars = Vec::new();
+                        for _ in 0..CHARS_PER_LINE.min(30) {
+                            hr_chars.push('-' as u32);
+                        }
+                        lines.push(StyledLine {
+                            fg_color: COLOR_HR,
+                            chars: hr_chars,
+                        });
+                    }
+                    "ul" => {
+                        if is_closing {
+                            tag_stack.retain(|t| t != "ul");
+                        } else {
+                            tag_stack.push("ul".to_string());
+                        }
+                    }
+                    "li" => {
+                        flush_line(&mut lines, &mut line_chars, &mut line_color, current_color);
+                        line_chars.push('*' as u32);
+                        line_chars.push(' ' as u32);
+                        line_color = COLOR_BODY;
+                    }
+                    "title" => {
+                        if !is_closing {
+                            tag_stack.push("title".to_string());
+                        } else {
+                            flush_line(&mut lines, &mut line_chars, &mut line_color, current_color);
+                            tag_stack.retain(|t| t != "title");
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                let c = chars[pos];
+                if c == '\n' {
+                    lines.push(StyledLine {
+                        fg_color: line_color,
+                        chars: line_chars.clone(),
+                    });
+                    line_chars.clear();
+                    line_color = current_color;
+                } else if c == '\r' {
+                    // skip carriage return
+                } else {
+                    if line_chars.len() >= CHARS_PER_LINE {
+                        lines.push(StyledLine {
+                            fg_color: line_color,
+                            chars: line_chars.clone(),
+                        });
+                        line_chars.clear();
+                        line_color = current_color;
+                    }
+                    line_chars.push(c as u32);
+                }
+                pos += 1;
+            }
+        }
+
+        if !line_chars.is_empty() {
+            lines.push(StyledLine {
+                fg_color: line_color,
+                chars: line_chars,
+            });
+        }
+
+        // Register links as hit regions for HITQ click detection
+        let line_height: u32 = 8;
+        let char_width: u32 = 6;
+        for (link_idx, link) in links.iter().enumerate() {
+            let line_y = (link.line_index as u32) * line_height;
+            let x_start = (link.char_start as u32) * char_width;
+            let x_end = (link.char_end as u32) * char_width;
+            if self.hit_regions.len() < types::MAX_HIT_REGIONS {
+                self.hit_regions.push(types::HitRegion {
+                    x: x_start,
+                    y: line_y,
+                    w: x_end.saturating_sub(x_start),
+                    h: line_height,
+                    id: link_idx as u32,
+                });
+            }
+            // Store link href in RAM after the styled lines data
+            let href_base = dest_base + max_lines * 33 + link_idx * 64;
+            for (j, byte) in link.href.bytes().enumerate() {
+                if j < 63 && href_base + j < self.ram.len() {
+                    self.ram[href_base + j] = byte as u32;
+                }
+            }
+            let null_pos = href_base + link.href.len().min(63);
+            if null_pos < self.ram.len() {
+                self.ram[null_pos] = 0;
+            }
+        }
+
+        lines
+    }
 }
 
 /// Strip <think/> and <think ...>...</think blocks from text.
@@ -1960,6 +2387,8 @@ mod net;
 pub(crate) use net::MAX_TCP_CONNECTIONS;
 mod scheduler;
 
+#[cfg(test)]
+mod browser_tests;
 #[cfg(test)]
 mod http_tests;
 

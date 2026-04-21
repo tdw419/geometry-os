@@ -784,6 +784,21 @@ impl Vm {
                 4,
             ),
 
+            // HTPARSE src_reg, dest_reg, max_lines_reg (0x9D)
+            // Parse HTML from RAM into styled lines.
+            0x9D => (
+                format!(
+                    "HTPARSE {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3))
+                ),
+                4,
+            ),
+
+            // HITCLR (0x9E) -- clear hit-test regions
+            0x9E => ("HITCLR".to_string(), 1),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }
