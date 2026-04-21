@@ -91,6 +91,9 @@ pub struct Vm {
     /// Hypervisor mode: Qemu (Phase 33) or Native RISC-V (Phase 37).
     /// Detected from config string's mode= parameter.
     pub hypervisor_mode: HypervisorMode,
+    /// Window ID to render hypervisor output into (Phase 86).
+    /// 0 = full canvas (default), >0 = target WINSYS window offscreen buffer.
+    pub hypervisor_window_id: u32,
     /// Opcode execution histogram: counts how many times each opcode (0x00-0xFF) was dispatched.
     /// Zero overhead -- just an array increment per step.
     pub opcode_histogram: [u64; 256],
@@ -208,6 +211,7 @@ impl Vm {
             hypervisor_active: false,
             hypervisor_config: String::new(),
             hypervisor_mode: HypervisorMode::default(),
+            hypervisor_window_id: 0,
             opcode_histogram: [0; 256],
             key_buffer: vec![0; 16],
             key_buffer_head: 0,
@@ -310,6 +314,7 @@ impl Vm {
         self.hypervisor_active = false;
         self.hypervisor_config.clear();
         self.hypervisor_mode = HypervisorMode::default();
+        self.hypervisor_window_id = 0;
         self.opcode_histogram = [0; 256];
         self.formulas.clear();
         for dep_list in self.formula_dep_index.iter_mut() {

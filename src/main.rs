@@ -1408,7 +1408,7 @@ fn main() {
                                 status_msg = "[HALTED]".into();
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             // ── Phase 84: Building & Desktop Socket Commands ──────
@@ -1551,6 +1551,94 @@ fn main() {
                                     _ => "unknown",
                                 };
                                 response.push_str(&format!("{},{},{}\n", px, py, facing_str));
+                            }
+                            "hypervisor_boot" | "hypervisor_boot" => {
+                                // Boot a guest OS via hypervisor
+                                // Usage: hypervisor_boot <config> [window_id]
+                                // e.g. hypervisor_boot arch=riscv64 kernel=Image ram=256M
+                                if parts.len() < 2 {
+                                    response.push_str(
+                                        "[error: hypervisor_boot requires config string]\n",
+                                    );
+                                } else {
+                                    let config_parts: Vec<&str> = parts[1..]
+                                        .iter()
+                                        .take_while(|p| !p.starts_with("window="))
+                                        .cloned()
+                                        .collect();
+                                    let config_str = config_parts.join(" ");
+                                    // Check for optional window_id
+                                    let window_id: u32 = parts
+                                        .iter()
+                                        .find(|p| p.starts_with("window="))
+                                        .and_then(|p| p.split('=').nth(1))
+                                        .and_then(|v| v.parse().ok())
+                                        .unwrap_or(0);
+
+                                    // Write config string to RAM at 0x2000
+                                    let config_bytes: Vec<u32> = config_str
+                                        .chars()
+                                        .map(|c| c as u32)
+                                        .chain(std::iter::once(0))
+                                        .collect();
+                                    for (i, &b) in config_bytes.iter().enumerate() {
+                                        if 0x2000 + i < vm.ram.len() {
+                                            vm.ram[0x2000 + i] = b;
+                                        }
+                                    }
+
+                                    // Set up registers and call HYPERVISOR
+                                    vm.regs[10] = 0x2000; // config addr in r10
+                                    vm.regs[11] = window_id; // window_id in r11
+                                                             // Simulate HYPERVISOR opcode manually
+                                    let addr = vm.regs[10] as usize;
+                                    let config = {
+                                        let mut s = String::new();
+                                        let mut i = addr;
+                                        while i < vm.ram.len() && vm.ram[i] != 0 {
+                                            s.push((vm.ram[i] & 0xFF) as u8 as char);
+                                            i += 1;
+                                        }
+                                        if s.is_empty() {
+                                            None
+                                        } else {
+                                            Some(s)
+                                        }
+                                    };
+                                    match config {
+                                        Some(cfg) => {
+                                            let has_arch = cfg.split_whitespace().any(|t| {
+                                                t.to_lowercase().starts_with("arch=") && t.len() > 5
+                                            });
+                                            if !has_arch {
+                                                response
+                                                    .push_str("[error: missing arch= parameter]\n");
+                                            } else {
+                                                vm.hypervisor_config = cfg.clone();
+                                                vm.hypervisor_window_id = window_id;
+                                                vm.hypervisor_active = true;
+                                                response.push_str(&format!(
+                                                    "[hypervisor: booted config='{}' window={} active={}]\n",
+                                                    cfg, window_id, vm.hypervisor_active
+                                                ));
+                                            }
+                                        }
+                                        None => {
+                                            response.push_str("[error: empty config string]\n");
+                                        }
+                                    }
+                                }
+                            }
+                            "hypervisor_kill" => {
+                                // Kill running hypervisor
+                                if vm.hypervisor_active {
+                                    vm.hypervisor_active = false;
+                                    vm.hypervisor_config.clear();
+                                    vm.hypervisor_window_id = 0;
+                                    response.push_str("[hypervisor: killed]\n");
+                                } else {
+                                    response.push_str("[hypervisor: not running]\n");
+                                }
                             }
                             _ => {
                                 response.push_str(&format!("[unknown: {}]\n", line));

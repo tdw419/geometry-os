@@ -3554,9 +3554,9 @@ fn test_disasm_signal() {
 
 #[test]
 fn test_disasm_hypervisor() {
-    let (m, l) = disasm(&[0x72, 10]);
+    let (m, l) = disasm(&[0x72, 10, 0]);
     assert_eq!(m, "HYPERVISOR r10");
-    assert_eq!(l, 2);
+    assert_eq!(l, 3);
 }
 
 #[test]
@@ -11367,10 +11367,10 @@ fn test_building_table_initialized() {
             break;
         }
     }
-    // Building count at 0x7580 should be 8
+    // Building count at 0x7580 should be 9
     assert_eq!(
-        vm.ram[0x7580], 8,
-        "building count should be 8, got {}",
+        vm.ram[0x7580], 9,
+        "building count should be 9, got {}",
         vm.ram[0x7580]
     );
     // First building at 0x7500 should have world_x = 52
@@ -11801,7 +11801,7 @@ fn test_building_count_correct() {
             break;
         }
     }
-    assert_eq!(vm.ram[0x7580], 8, "building count should be exactly 8");
+    assert_eq!(vm.ram[0x7580], 9, "building count should be exactly 9");
 }
 
 #[test]
@@ -12075,4 +12075,337 @@ fn test_building_no_overlap() {
             );
         }
     }
+}
+
+// ===== Phase 86: Hypervisor Building Tests =====
+
+#[test]
+fn test_hypervisor_opcode_basic() {
+    // HYPERVISOR with no window_id (backward compat)
+    let source = r#"
+        LDI r10, 0x2000
+        STRO r10, "arch=riscv64 kernel=Image ram=256M"
+        HYPERVISOR r10
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.hypervisor_active, "hypervisor should be active");
+    assert!(
+        vm.hypervisor_config.contains("arch=riscv64"),
+        "config should contain arch"
+    );
+    assert_eq!(
+        vm.hypervisor_window_id, 0,
+        "window_id should be 0 (default)"
+    );
+    assert_eq!(vm.regs[0], 0, "r0 should be 0 (success)");
+}
+
+#[test]
+fn test_hypervisor_opcode_with_window() {
+    // HYPERVISOR targeting a WINSYS window
+    let source = r#"
+        LDI r10, 0x2000
+        STRO r10, "arch=riscv64 kernel=Image ram=256M"
+        ; Create window first
+        LDI r1, 0
+        LDI r2, 16
+        LDI r3, 16
+        LDI r4, 200
+        LDI r5, 150
+        LDI r6, 0x2100
+        WINSYS r1
+        ; r0 = window_id from create
+        MOV r11, r0
+        HYPERVISOR r10, r11
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.hypervisor_active, "hypervisor should be active");
+    assert_eq!(vm.regs[0], 0, "r0 should be 0 (success)");
+    // window_id should be 1 (first WINSYS window)
+    assert_eq!(vm.hypervisor_window_id, 1, "window_id should be 1");
+}
+
+#[test]
+fn test_hypervisor_missing_arch() {
+    // HYPERVISOR without arch= parameter should fail
+    let source = r#"
+        LDI r10, 0x2000
+        STRO r10, "kernel=Image ram=256M"
+        HYPERVISOR r10
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(!vm.hypervisor_active, "hypervisor should NOT be active");
+    assert_eq!(vm.regs[0], 0xFFFFFFFD, "r0 should be missing arch error");
+}
+
+#[test]
+fn test_hypervisor_empty_string() {
+    // HYPERVISOR with empty string should fail
+    let source = r#"
+        LDI r10, 0x2000
+        STRO r10, ""
+        HYPERVISOR r10
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(
+        !vm.hypervisor_active,
+        "hypervisor should NOT be active with empty string"
+    );
+}
+
+#[test]
+fn test_hypervisor_mode_native() {
+    // HYPERVISOR with mode=native should set Native mode
+    let source = r#"
+        LDI r10, 0x2000
+        STRO r10, "arch=riscv64 mode=native"
+        HYPERVISOR r10
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.hypervisor_active, "hypervisor should be active");
+    assert!(
+        matches!(vm.hypervisor_mode, crate::vm::HypervisorMode::Native),
+        "mode should be Native"
+    );
+}
+
+#[test]
+fn test_hypervisor_mode_qemu_default() {
+    // HYPERVISOR without mode= should default to Qemu
+    let source = r#"
+        LDI r10, 0x2000
+        STRO r10, "arch=riscv64 kernel=Image"
+        HYPERVISOR r10
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.hypervisor_active, "hypervisor should be active");
+    assert!(
+        matches!(vm.hypervisor_mode, crate::vm::HypervisorMode::Qemu),
+        "mode should be Qemu (default)"
+    );
+}
+
+#[test]
+fn test_hypervisor_window_id_field_persists() {
+    // Verify hypervisor_window_id persists across construction
+    let source = r#"
+        LDI r10, 0x2000
+        STRO r10, "arch=riscv32 mode=qemu"
+        LDI r11, 42
+        HYPERVISOR r10, r11
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.hypervisor_window_id, 42, "window_id should be 42");
+}
+
+#[test]
+fn test_hypervisor_resets_cleanly() {
+    // Verify reset() clears hypervisor state
+    let source = r#"
+        LDI r10, 0x2000
+        STRO r10, "arch=riscv64 kernel=Image"
+        LDI r11, 5
+        HYPERVISOR r10, r11
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.hypervisor_active);
+    assert_eq!(vm.hypervisor_window_id, 5);
+
+    // Reset and verify all fields cleared
+    vm.reset();
+    assert!(!vm.hypervisor_active, "should be inactive after reset");
+    assert!(
+        vm.hypervisor_config.is_empty(),
+        "config should be empty after reset"
+    );
+    assert_eq!(
+        vm.hypervisor_window_id, 0,
+        "window_id should be 0 after reset"
+    );
+}
+
+#[test]
+fn test_hypervisor_assembler_backward_compat() {
+    // HYPERVISOR with single arg (no window) should assemble to 3 words
+    let source = "HYPERVISOR r5";
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    assert_eq!(
+        asm.pixels.len(),
+        3,
+        "should be 3 words: opcode + reg + win_id(0)"
+    );
+    assert_eq!(asm.pixels[0], 0x72); // opcode
+    assert_eq!(asm.pixels[1], 5); // addr_reg = r5
+    assert_eq!(asm.pixels[2], 0); // win_id_reg = r0 (default)
+}
+
+#[test]
+fn test_hypervisor_assembler_with_window() {
+    // HYPERVISOR with two args should assemble correctly
+    let source = "HYPERVISOR r5, r3";
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    assert_eq!(asm.pixels.len(), 3);
+    assert_eq!(asm.pixels[0], 0x72);
+    assert_eq!(asm.pixels[1], 5); // addr_reg = r5
+    assert_eq!(asm.pixels[2], 3); // win_id_reg = r3
+}
+
+#[test]
+fn test_linux_building_assembles() {
+    let source = std::fs::read_to_string("programs/linux_building.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0);
+    assert!(
+        asm.is_ok(),
+        "linux_building.asm should assemble: {:?}",
+        asm.err()
+    );
+}
+
+#[test]
+fn test_world_desktop_has_9_buildings() {
+    // Verify the hypervisor building was added
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    assert!(source.contains("linux"), "should have linux building name");
+    assert!(
+        source.contains("0xFFD700"),
+        "should have gold color for hypervisor building"
+    );
+    assert!(
+        source.contains("0x7680"),
+        "should reference linux name at 0x7680"
+    );
+}
+
+#[test]
+fn test_mcp_hypervisor_tools_in_source() {
+    // Verify hypervisor tools are defined in MCP server source
+    let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+    assert!(
+        source.contains("\"hypervisor_boot\""),
+        "MCP server should define hypervisor_boot tool"
+    );
+    assert!(
+        source.contains("\"hypervisor_kill\""),
+        "MCP server should define hypervisor_kill tool"
+    );
+    assert!(
+        source.contains("hypervisor_boot_schema"),
+        "MCP server should have hypervisor_boot schema"
+    );
+    assert!(
+        source.contains("hypervisor_kill_schema"),
+        "MCP server should have hypervisor_kill schema"
+    );
 }

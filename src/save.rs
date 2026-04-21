@@ -169,6 +169,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         hypervisor_active: false,
         hypervisor_config: String::new(),
         hypervisor_mode: vm::HypervisorMode::default(),
+        hypervisor_window_id: 0,
         opcode_histogram: [0; 256],
         canvas_buffer: vec![0; vm::CANVAS_RAM_SIZE],
         key_buffer: vec![0; 16],

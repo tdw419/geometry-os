@@ -184,6 +184,32 @@ fn get_tool_list() -> Vec<serde_json::Value> {
             vec![],
             player_position_schema(),
         ),
+        // -- Phase 86: Hypervisor Tools --
+        tool(
+            "hypervisor_boot",
+            "Boot a guest OS via hypervisor. Config string specifies arch, kernel, ram.",
+            vec![
+                param(
+                    "config",
+                    "string",
+                    "Config: 'arch=riscv64 kernel=Image ram=256M'",
+                    true,
+                ),
+                param(
+                    "window_id",
+                    "string",
+                    "Optional WINSYS window ID to target",
+                    false,
+                ),
+            ],
+            hypervisor_boot_schema(),
+        ),
+        tool(
+            "hypervisor_kill",
+            "Kill running guest OS",
+            vec![],
+            hypervisor_kill_schema(),
+        ),
     ]
 }
 
@@ -278,6 +304,12 @@ fn desktop_launch_schema() -> serde_json::Value {
 }
 fn player_position_schema() -> serde_json::Value {
     serde_json::json!({"type": "object", "properties": {"world_x": {"type": "integer"}, "world_y": {"type": "integer"}, "facing": {"type": "string"}}})
+}
+fn hypervisor_boot_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"booted": {"type": "boolean"}, "config": {"type": "string"}, "window_id": {"type": "string"}}})
+}
+fn hypervisor_kill_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}}})
 }
 
 // ── Tool Handlers ───────────────────────────────────────
@@ -491,6 +523,35 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
             } else {
                 Ok(serde_json::json!({ "raw": resp }))
             }
+        }
+
+        // Phase 86: Hypervisor tools
+        "hypervisor_boot" => {
+            let config = args["config"]
+                .as_str()
+                .ok_or("Missing 'config' parameter")?;
+            let window_id = args["window_id"].as_str().unwrap_or("0");
+            let cmd = if window_id != "0" {
+                format!("hypervisor_boot {} window={}", config, window_id)
+            } else {
+                format!("hypervisor_boot {}", config)
+            };
+            let resp = send_socket_cmd(&cmd)?;
+            let booted = resp.contains("booted");
+            Ok(serde_json::json!({
+                "booted": booted,
+                "config": config,
+                "window_id": window_id,
+                "response": resp,
+            }))
+        }
+
+        "hypervisor_kill" => {
+            let resp = send_socket_cmd("hypervisor_kill")?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("killed"),
+                "response": resp,
+            }))
         }
 
         _ => Err(format!("Unknown tool: {}", name)),

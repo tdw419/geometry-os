@@ -98,7 +98,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-83 Infinite Map Desktop -- Camera + Player Avatar | DONE | 7/7 | 800 | 10 |
 | phase-84 Infinite Map Desktop -- App Buildings + Entry Points | DONE | 7/7 | 1,000 | 12 |
 | phase-85 Infinite Map Desktop -- Full Desktop Integration | DONE | 6/6 | 1,000 | 10 |
-| phase-86 Hypervisor Building -- Run Linux on the Map | PLANNED | 0/6 | 800 | 8 |
+| phase-86 Hypervisor Building -- Run Linux on the Map | DONE | 6/6 | 800 | 16 |
 | phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | PLANNED | 0/4 | 1,200 | 10 |
 | phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | PLANNED | 0/7 | 600 | 8 |
 | phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | PLANNED | 0/6 | 500 | 10 |
@@ -2311,7 +2311,7 @@ Merges the taskbar, app launcher, and infinite map into one coherent desktop. Th
 - [ ] **Boot into world desktop** -- init.asm launches world_desktop.asm as the default shell. First thing the user sees is the infinite terrain with their apps as buildings. Proves the map IS the desktop.
 - [ ] **Full desktop integration tests** -- Taskbar renders, mini-map shows buildings, fast-travel works, boot sequence correct. 10+ tests.
 
-## [ ] phase-86: Hypervisor Building -- Run Linux on the Map (PLANNED)
+## [x] phase-86:: Hypervisor Building -- Run Linux on the Map (DONE)
 
 **Goal:** Boot a real OS (Linux via QEMU or native RISC-V) inside a building on the infinite map
 
@@ -2319,10 +2319,12 @@ The hypervisor building is a special structure on the infinite map. Walk up to i
 
 ### Deliverables
 
-- [ ] **WINSYS-aware HYPERVISOR** -- HYPERVISOR opcode accepts optional window_id parameter. When set, UART output renders into the window offscreen buffer instead of the full canvas. Keyboard input from the window forwards to guest stdin.
-- [ ] **Hypervisor building on map** -- Special building type (yellow/gold, larger 32x40 sprite). Rendered at a fixed position near spawn. Label: "Linux". Walking up and pressing E opens a large WINSYS window and calls HYPERVISOR to boot Linux.
-- [ ] **linux_building.asm** -- Demo: player walks to hypervisor building, enters it, Linux boots in a window. Player can type commands. Press ESC to detach and return to map. Linux keeps running in background.
-- [ ] **Hypervisor building tests** -- HYPERVISOR targets window, keyboard forwarding, detach/reattach. 8+ tests.
+- [x] **WINSYS-aware HYPERVISOR** -- HYPERVISOR opcode accepts optional window_id parameter. When set, UART output renders into the window offscreen buffer instead of the full canvas. Keyboard input from the window forwards to guest stdin.
+- [x] **Hypervisor building on map** -- Special building type (yellow/gold, larger 32x40 sprite). Rendered at a fixed position near spawn. Label: "Linux". Walking up and pressing E opens a large WINSYS window and calls HYPERVISOR to boot Linux.
+- [x] **linux_building.asm** -- Demo: player walks to hypervisor building, enters it, Linux boots in a window. Player can type commands. Press ESC to detach and return to map. Linux keeps running in background.
+- [x] **Socket commands for MCP (qemu boot, qemu kill)** -- qemu boot/kill commands verified and documented.
+- [x] **MCP tools: hypervisor_boot, hypervisor_kill** -- Tool schemas added to src/mcp_server.rs.
+- [x] **Hypervisor building tests** -- 16 tests: HYPERVISOR opcode (basic, window, modes, errors, reset), disasm, assembler encoding, linux_building.asm, world_desktop integration, MCP source verification.
 
 ## [ ] phase-87: Multi-Hypervisor -- Multiple OS Instances on the Map (PLANNED)
 

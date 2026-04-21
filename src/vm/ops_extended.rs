@@ -687,11 +687,20 @@ impl Vm {
             }
 
             0x72 => {
-                // HYPERVISOR: read config string from RAM at address in r0
+                // HYPERVISOR: read config string from RAM at address in register.
+                // Format: HYPERVISOR addr_reg [, win_id_reg]
+                // 3 words: [0x72, addr_reg, win_id_reg]
+                // win_id_reg: register containing window_id (0 = full canvas, >0 = WINSYS window).
                 // Config format: "arch=riscv64 [kernel=file.img] [ram=256M] [mode=native|qemu]"
                 // Validates arch= parameter is present. Kernel file existence checked at launch time.
                 // Mode detection: mode=native -> HypervisorMode::Native, otherwise HypervisorMode::Qemu
                 let addr_reg = self.fetch() as usize;
+                let win_reg = self.fetch() as usize;
+                let window_id = if win_reg < NUM_REGS {
+                    self.regs[win_reg]
+                } else {
+                    0
+                };
                 if addr_reg < NUM_REGS {
                     let addr = self.regs[addr_reg] as usize;
                     let config = Self::read_string_static(&self.ram, addr);
@@ -720,6 +729,7 @@ impl Vm {
                                 .unwrap_or(HypervisorMode::Qemu);
                             self.hypervisor_config = cfg.to_string();
                             self.hypervisor_mode = mode;
+                            self.hypervisor_window_id = window_id;
                             self.hypervisor_active = true;
                             self.regs[0] = 0; // success
                         }

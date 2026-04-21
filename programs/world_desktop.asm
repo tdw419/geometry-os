@@ -448,12 +448,26 @@ LDI r17, 0x7670
 STORE r20, r17
 ADDI r20, 1
 
+; Building 8: linux hypervisor (gold/0xFFD700)
+LDI r17, 70
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 130
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0xFFD700
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7680
+STORE r20, r17
+ADDI r20, 1
+
 ; Building count
 LDI r17, 0x7580
-LDI r18, 8
+LDI r18, 9
 STORE r17, r18
 
-; ===== Building Name Strings at RAM[0x7600-0x767F] =====
+; ===== Building Name Strings at RAM[0x7600-0x768F] =====
 LDI r20, 0x7600
 STRO r20, "snake"
 LDI r20, 0x7610
@@ -470,6 +484,8 @@ LDI r20, 0x7660
 STRO r20, "init"
 LDI r20, 0x7670
 STRO r20, "shell"
+LDI r20, 0x7680
+STRO r20, "linux"
 
 ; Clear nearby building flag
 LDI r17, 0x7584
@@ -478,6 +494,8 @@ STORE r17, r18          ; nearby_bldg_idx = -1 (none)
 LDI r17, 0x7588
 STORE r17, r18          ; nearby_flag = 0
 
+LDI r17, 0x7808
+LDI r18, 32
 STORE r17, r18          ; player_x = 32
 LDI r17, 0x7809
 LDI r18, 32

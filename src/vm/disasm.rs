@@ -534,7 +534,12 @@ impl Vm {
 
             0x72 => {
                 let ar = ram(a + 1);
-                (format!("HYPERVISOR {}", reg(ar)), 2)
+                let wr = ram(a + 2);
+                if wr == 0 {
+                    (format!("HYPERVISOR {}", reg(ar)), 3)
+                } else {
+                    (format!("HYPERVISOR {}, {}", reg(ar), reg(wr)), 3)
+                }
             }
 
             0x73 => ("ASMSELF".into(), 1),
@@ -1438,10 +1443,18 @@ mod tests {
     // -- Hypervisor (0x72) --
     #[test]
     fn test_hypervisor_disasm() {
-        let vm = load_instruction(&[0x72, 5], 0);
+        let vm = load_instruction(&[0x72, 5, 0], 0);
         let (s, len) = vm.disassemble_at(0);
         assert_eq!(s, "HYPERVISOR r5");
-        assert_eq!(len, 2);
+        assert_eq!(len, 3);
+    }
+
+    #[test]
+    fn test_hypervisor_disasm_with_window() {
+        let vm = load_instruction(&[0x72, 5, 3], 0);
+        let (s, len) = vm.disassemble_at(0);
+        assert_eq!(s, "HYPERVISOR r5, r3");
+        assert_eq!(len, 3);
     }
 
     // -- Assembly/Self ops (0x73-0x74) --

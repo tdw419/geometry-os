@@ -4346,29 +4346,29 @@ phases:
       UART output renders into the window offscreen buffer instead of the full canvas.
       Keyboard input from the window forwards to guest stdin.
     name: WINSYS-aware HYPERVISOR
-    status: todo
+    status: done
   - description: 'Special building type (yellow/gold, larger 32x40 sprite). Rendered
       at a fixed position near spawn. Label: "Linux". Walking up and pressing E opens
       a large WINSYS window and calls HYPERVISOR to boot Linux.'
     name: Hypervisor building on map
-    status: todo
+    status: done
   - description: 'Demo: player walks to hypervisor building, enters it, Linux boots
       in a window. Player can type commands. Press ESC to detach and return to map.
       Linux keeps running in background.'
     name: linux_building.asm
-    status: todo
+    status: done
   - description: qemu boot <config> boots guest OS in a window. qemu kill stops it.
       These socket commands may already exist -- verify and wire to MCP. See docs/MCP_SPEC.md.
     name: Socket commands for MCP (qemu boot, qemu kill)
-    status: todo
+    status: done
   - description: Add tool handlers to src/mcp_server.rs wrapping the hypervisor socket
       commands.
     name: 'MCP tools: hypervisor_boot, hypervisor_kill'
-    status: todo
+    status: done
   - description: HYPERVISOR targets window, keyboard forwarding, detach/reattach.
       MCP tools boot/kill guest correctly. 8+ tests.
     name: Hypervisor building tests
-    status: todo
+    status: done
   description: The hypervisor building is a special structure on the infinite map.
     Walk up to it, press E, and a WINSYS window opens showing a real Linux boot sequence
     rendered as pixel text. The HYPERVISOR opcode targets a WINSYS window instead
@@ -4378,9 +4378,11 @@ phases:
     infinite map
   id: phase-86
   scope_lines_total: 900
-  status: planned
+  status: done
   test_target: 10
   title: Hypervisor Building -- Run Linux on the Map
+  _claimed_by: worker-0
+  _claimed_at: 1776745965
 - deliverables:
   - description: When player is on the map, background VMs get time-sliced execution.
       Each VM gets N instructions per frame. Balances map rendering with guest OS

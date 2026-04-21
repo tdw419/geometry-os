@@ -344,10 +344,19 @@ pub(super) fn try_parse(
 
         "HYPERVISOR" => {
             if tokens.len() < 2 {
-                return Err("HYPERVISOR requires 1 argument: HYPERVISOR addr_reg".to_string());
+                return Err(
+                    "HYPERVISOR requires 1-2 arguments: HYPERVISOR addr_reg [, win_id_reg]"
+                        .to_string(),
+                );
             }
             bytecode.push(0x72);
             bytecode.push(parse_reg(tokens[1])? as u32);
+            // Optional window_id register (default r0 = no window = full canvas)
+            if tokens.len() >= 3 {
+                bytecode.push(parse_reg(tokens[2])? as u32);
+            } else {
+                bytecode.push(0); // r0 = window_id 0 = full canvas
+            }
             Ok(Some(()))
         }
 
