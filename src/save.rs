@@ -189,6 +189,8 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         mouse_button: 0,
         windows: Vec::with_capacity(vm::MAX_WINDOWS),
         next_window_id: 1,
+        llm_mock_response: None,
+        llm_config: None,
     };
 
     // Parse canvas trailer

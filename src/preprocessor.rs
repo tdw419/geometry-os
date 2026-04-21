@@ -145,6 +145,7 @@ pub const OPCODES: &[&str] = &[
     "SCRSHOT",
     "NET_SEND",
     "NET_RECV",
+    "LLM",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

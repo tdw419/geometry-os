@@ -4107,30 +4107,34 @@ phases:
   test_target: 10
 - id: phase-80
   title: LLM Bridge Opcode (External AI)
-  status: planned
+  status: done
   goal: Call external LLMs from inside the VM for text generation and code assistance
   description: LLM opcode sends prompt string from RAM to external API. Response written
     to RAM buffer. Config in VFS. Enables smart terminal, code completion, natural
     language interaction.
   deliverables:
-  - name: LLM opcode (0x94)
-    description: LLM prompt_addr, response_addr, max_len_reg -- sends prompt to external
-      LLM, writes response to RAM. r0 = response length.
-    status: todo
+  - name: LLM opcode (0x9C)
+    description: LLM prompt_addr_reg, response_addr_reg, max_len_reg -- sends prompt
+      to external LLM, writes response to RAM. r0 = response length. Mock response
+      for testing. External curl-based call for real use.
+    status: done
   - name: LLM configuration
-    description: /etc/llm.cfg in VFS. Python proxy server (localhost:8321) bridges
-      VM calls to real APIs. Keeps API keys out of VM.
-    status: todo
+    description: provider.json loaded at runtime. Supports OpenAI-compatible endpoints
+      (Ollama, ZAI, OpenAI). Fallback provider chain. No separate proxy server needed.
+    status: done
   - name: LLM assembler + disassembler entries
-    status: todo
+    description: Assembler `LLM r_prompt, r_response, r_max` pushes 0x9C. Disassembler
+      decodes 3 register args.
+    status: done
   - name: smart_term.asm
-    description: 'Terminal with AI assist: type natural language, press Tab, LLM translates
-      to shell command.'
-    status: todo
+    description: 'Terminal with AI assist: type natural language, press Tab to query
+      LLM, response displayed on screen. Esc to quit.'
+    status: done
   - name: LLM tests
-    description: Mock LLM server returns fixed responses. Test prompt, response, truncation,
-      errors. 8+ tests.
-    status: todo
+    description: 10 tests covering mock response, truncation, empty prompt, null
+      termination, assembler, assembler error, disassembler, multiline response,
+      full program, think block stripping.
+    status: done
   scope_lines_total: 1200
   test_target: 8
 - id: phase-81

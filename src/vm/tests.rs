@@ -11014,3 +11014,279 @@ fn run_util_frames(asm_file: &str, target_frames: usize) -> Vm {
     }
     vm
 }
+
+// ============================================================
+// Phase 80: LLM Bridge Opcode Tests
+// ============================================================
+
+/// Helper: write a null-terminated ASCII string into RAM at the given address.
+/// Each character becomes one u32 word. Returns the length (excluding null).
+fn write_string_to_ram(vm: &mut crate::vm::Vm, addr: usize, s: &str) -> usize {
+    for (i, byte) in s.bytes().enumerate() {
+        if addr + i < vm.ram.len() {
+            vm.ram[addr + i] = byte as u32;
+        }
+    }
+    let null_pos = addr + s.len();
+    if null_pos < vm.ram.len() {
+        vm.ram[null_pos] = 0;
+    }
+    s.len()
+}
+
+/// Helper: read a null-terminated string from RAM.
+fn read_string_from_ram(vm: &crate::vm::Vm, addr: usize) -> String {
+    let mut result = String::new();
+    let mut a = addr;
+    while a < vm.ram.len() {
+        let ch = vm.ram[a];
+        if ch == 0 {
+            break;
+        }
+        if let Some(c) = char::from_u32(ch) {
+            result.push(c);
+        }
+        a += 1;
+    }
+    result
+}
+
+#[test]
+fn test_llm_mock_response() {
+    // Test that LLM opcode uses mock response when set
+    let mut vm = crate::vm::Vm::new();
+    // Write prompt at 0x2000
+    write_string_to_ram(&mut vm, 0x2000, "What is 2+2?");
+    // Set mock response
+    vm.llm_mock_response = Some("4".to_string());
+    // LLM r1, r2, r3 -- prompt_addr=r1(0x2000), response_addr=r2(0x3000), max_len=r3(256)
+    vm.regs[1] = 0x2000;
+    vm.regs[2] = 0x3000;
+    vm.regs[3] = 256;
+    // Execute: 0x9C r1 r2 r3
+    vm.ram[0] = 0x9C;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.halted = false;
+    assert!(vm.step());
+    // r0 should be 1 (length of "4")
+    assert_eq!(vm.regs[0], 1, "response length should be 1");
+    // Response at 0x3000 should be "4"
+    assert_eq!(read_string_from_ram(&vm, 0x3000), "4");
+    // Mock should be consumed
+    assert!(vm.llm_mock_response.is_none());
+}
+
+#[test]
+fn test_llm_mock_truncation() {
+    // Test that response is truncated to max_len
+    let mut vm = crate::vm::Vm::new();
+    write_string_to_ram(&mut vm, 0x2000, "Tell me a long story");
+    vm.llm_mock_response =
+        Some("This is a very long response that should be truncated".to_string());
+    vm.regs[1] = 0x2000;
+    vm.regs[2] = 0x3000;
+    vm.regs[3] = 10; // max_len = 10
+    vm.ram[0] = 0x9C;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.halted = false;
+    vm.step();
+    // r0 should be 10 (truncated)
+    assert_eq!(vm.regs[0], 10, "response should be truncated to 10");
+    // First 10 chars should match
+    let response = read_string_from_ram(&vm, 0x3000);
+    assert_eq!(response.len(), 10);
+    assert_eq!(response, "This is a ");
+}
+
+#[test]
+fn test_llm_empty_prompt() {
+    // Test that empty prompt returns empty response
+    let mut vm = crate::vm::Vm::new();
+    // Write empty string (just null terminator) at 0x2000
+    vm.ram[0x2000] = 0;
+    vm.regs[1] = 0x2000;
+    vm.regs[2] = 0x3000;
+    vm.regs[3] = 256;
+    vm.ram[0] = 0x9C;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.halted = false;
+    vm.step();
+    // Empty prompt should return 0 length
+    assert_eq!(vm.regs[0], 0, "empty prompt should return 0");
+}
+
+#[test]
+fn test_llm_null_termination() {
+    // Test that response is null-terminated
+    let mut vm = crate::vm::Vm::new();
+    write_string_to_ram(&mut vm, 0x2000, "hello");
+    vm.llm_mock_response = Some("world".to_string());
+    vm.regs[1] = 0x2000;
+    vm.regs[2] = 0x3000;
+    vm.regs[3] = 256;
+    vm.ram[0] = 0x9C;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[0], 5);
+    assert_eq!(vm.ram[0x3005], 0, "response should be null-terminated");
+}
+
+#[test]
+fn test_llm_assembler() {
+    // Test that the assembler correctly encodes LLM instruction
+    let source = "LLM r1, r2, r3\nHALT\n";
+    let result = crate::assembler::assemble(source, 0);
+    assert!(
+        result.is_ok(),
+        "assembly should succeed: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    // LDM r1, r2, r3 -> [0x9C, 1, 2, 3]
+    assert_eq!(asm.pixels[0], 0x9C, "opcode should be 0x9C");
+    assert_eq!(asm.pixels[1], 1, "prompt_addr reg should be r1");
+    assert_eq!(asm.pixels[2], 2, "response_addr reg should be r2");
+    assert_eq!(asm.pixels[3], 3, "max_len reg should be r3");
+}
+
+#[test]
+fn test_llm_assembler_error() {
+    // Test wrong argument count
+    let source = "LLM r1, r2\nHALT\n";
+    let result = crate::assembler::assemble(source, 0);
+    match result {
+        Err(err) => {
+            assert!(
+                err.message.contains("3 arguments"),
+                "error should mention 3 arguments: {}",
+                err.message
+            );
+        }
+        Ok(_) => panic!("should fail with wrong arg count"),
+    }
+}
+
+#[test]
+fn test_llm_disassembler() {
+    // Test disassembler recognizes LLM opcode
+    let (mnemonic, len) = disasm(&[0x9Cu32, 1, 2, 3]);
+    assert_eq!(len, 4, "LLM instruction should be 4 words");
+    assert!(mnemonic.contains("LLM"), "should contain LLM: {}", mnemonic);
+    assert!(mnemonic.contains("r1"), "should show r1: {}", mnemonic);
+    assert!(mnemonic.contains("r2"), "should show r2: {}", mnemonic);
+    assert!(mnemonic.contains("r3"), "should show r3: {}", mnemonic);
+}
+
+#[test]
+fn test_llm_multiline_response() {
+    // Test response with newlines
+    let mut vm = crate::vm::Vm::new();
+    write_string_to_ram(&mut vm, 0x2000, "list 3 colors");
+    vm.llm_mock_response = Some("red\ngreen\nblue".to_string());
+    vm.regs[1] = 0x2000;
+    vm.regs[2] = 0x3000;
+    vm.regs[3] = 256;
+    vm.ram[0] = 0x9C;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(
+        vm.regs[0], 14,
+        "response length should be 14 (red\\ngreen\\nblue)"
+    );
+    // Verify the response bytes in RAM
+    let expected = "red\ngreen\nblue";
+    for (i, byte) in expected.bytes().enumerate() {
+        assert_eq!(vm.ram[0x3000 + i], byte as u32, "byte {} mismatch", i);
+    }
+}
+
+#[test]
+fn test_llm_full_program() {
+    // Test a complete program: write prompt, call LLM, verify response
+    let mut vm = crate::vm::Vm::new();
+    // Write "hello" at 0x2000
+    write_string_to_ram(&mut vm, 0x2000, "hello");
+    // Set mock response before running
+    vm.llm_mock_response = Some("Hello! How can I help?".to_string());
+    // Program:
+    //   LDI r1, 0x2000    ; prompt addr
+    //   LDI r2, 0x3000    ; response addr
+    //   LDI r3, 100       ; max_len
+    //   LLM r1, r2, r3    ; call LLM
+    //   HALT
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000; // LDI r1, 0x2000
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 2;
+    vm.ram[5] = 0x3000; // LDI r2, 0x3000
+    vm.ram[6] = 0x10;
+    vm.ram[7] = 3;
+    vm.ram[8] = 100; // LDI r3, 100
+    vm.ram[9] = 0x9C;
+    vm.ram[10] = 1;
+    vm.ram[11] = 2;
+    vm.ram[12] = 3; // LLM r1, r2, r3
+    vm.ram[13] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "program should halt");
+    assert_eq!(vm.regs[0], 22, "response length should be 22");
+    let response = read_string_from_ram(&vm, 0x3000);
+    assert_eq!(response, "Hello! How can I help?");
+}
+
+#[test]
+fn test_strip_think_blocks() {
+    use super::strip_think_blocks;
+    // Self-closing
+    assert_eq!(strip_think_blocks("<think/>Hello"), "Hello");
+    // With space
+    assert_eq!(strip_think_blocks("<think />Hello"), "Hello");
+    // Full block with proper tags
+    assert_eq!(
+        strip_think_blocks("<think\nreasoning here</think Hello"),
+        "Hello"
+    );
+    assert_eq!(
+        strip_think_blocks("Before<think inner</think After"),
+        "BeforeAfter"
+    );
+    // Multiple blocks
+    assert_eq!(strip_think_blocks("<think/>A<think/>B"), "AB");
+}
+
+#[test]
+fn test_extract_json_str() {
+    use super::extract_json_str;
+    let json = r#"{"base_url":"http://localhost:11434","model":"qwen3.5"}"#;
+    assert_eq!(
+        extract_json_str(json, "base_url"),
+        Some("http://localhost:11434".to_string())
+    );
+    assert_eq!(extract_json_str(json, "model"), Some("qwen3.5".to_string()));
+    assert_eq!(extract_json_str(json, "missing"), None);
+    // With escape sequences
+    let json2 = r#"{"text":"hello\nworld"}"#;
+    assert_eq!(
+        extract_json_str(json2, "text"),
+        Some("hello\nworld".to_string())
+    );
+}

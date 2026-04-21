@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 79/92 phases complete, 0 in progress
+**Progress:** 80/92 phases complete, 0 in progress
 
-**Deliverables:** 334/398 complete
+**Deliverables:** 339/398 complete
 
 **Tasks:** 98/98 complete
 
@@ -92,7 +92,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-77 Settings + Wallpaper + Screensaver | COMPLETE | 4/4 | 1,000 | 11 |
 | phase-78 Calendar + About + Help System | COMPLETE | 4/4 | 800 | 8 |
 | phase-79 Neural Network Forward Pass (Pixel Neural Net) | COMPLETE | 5/5 | 1,500 | 10 |
-| phase-80 LLM Bridge Opcode (External AI) | PLANNED | 0/5 | 1,200 | 8 |
+| phase-80 LLM Bridge Opcode (External AI) | DONE | 5/5 | 1,200 | 8 |
 | phase-81 HTTP Client + Text Browser | PLANNED | 0/4 | 1,500 | 10 |
 | phase-82 HTML Renderer + Interactive Browser | PLANNED | 0/5 | 2,000 | 12 |
 | phase-83 Infinite Map Desktop -- Camera + Player Avatar | PLANNED | 0/5 | 800 | 10 |
@@ -2229,7 +2229,7 @@ A hand-coded 3-layer MLP (64-32-16 neurons) whose weights are stored in RAM as p
 - [x] **nn_demo.asm** -- Load pre-trained XOR weights, run forward pass for all 4 inputs, display results on screen. Green=correct, Red=wrong.
 - [x] **Neural net tests** -- MATVEC correctness, RELU activation, full forward pass matches Python reference. 14 tests.
 
-## [ ] phase-80: LLM Bridge Opcode (External AI) (PLANNED)
+## [x] phase-80: LLM Bridge Opcode (External AI) (DONE)
 
 **Goal:** Call external LLMs from inside the VM for text generation and code assistance
 
@@ -2237,11 +2237,11 @@ LLM opcode sends prompt string from RAM to external API. Response written to RAM
 
 ### Deliverables
 
-- [ ] **LLM opcode (0x94)** -- LLM prompt_addr, response_addr, max_len_reg -- sends prompt to external LLM, writes response to RAM. r0 = response length.
-- [ ] **LLM configuration** -- /etc/llm.cfg in VFS. Python proxy server (localhost:8321) bridges VM calls to real APIs. Keeps API keys out of VM.
-- [ ] **LLM assembler + disassembler entries** -- 
-- [ ] **smart_term.asm** -- Terminal with AI assist: type natural language, press Tab, LLM translates to shell command.
-- [ ] **LLM tests** -- Mock LLM server returns fixed responses. Test prompt, response, truncation, errors. 8+ tests.
+- [x] **LLM opcode (0x9C)** -- LLM prompt_addr_reg, response_addr_reg, max_len_reg -- sends prompt to external LLM, writes response to RAM. r0 = response length. Mock response for testing. External curl-based call for real use.
+- [x] **LLM configuration** -- provider.json loaded at runtime. Supports OpenAI-compatible endpoints (Ollama, ZAI, OpenAI). Fallback provider chain. No separate proxy server needed.
+- [x] **LLM assembler + disassembler entries** -- Assembler: `LLM r_prompt, r_response, r_max` pushes 0x9C. Disassembler decodes 3 register args.
+- [x] **smart_term.asm** -- Terminal with AI assist: type natural language, press Tab to query LLM, response displayed on screen. Esc to quit.
+- [x] **LLM tests** -- 10 tests covering: mock response, truncation, empty prompt, null termination, assembler, assembler error, disassembler, multiline response, full program, think block stripping.
 
 ## [ ] phase-81: HTTP Client + Text Browser (PLANNED)
 

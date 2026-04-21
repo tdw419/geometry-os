@@ -552,6 +552,20 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "LLM" => {
+            if tokens.len() != 4 {
+                return Err(
+                    "LLM requires 3 arguments: LLM prompt_addr_reg, response_addr_reg, max_len_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0x9C);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

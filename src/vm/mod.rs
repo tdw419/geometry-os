@@ -141,6 +141,12 @@ pub struct Vm {
     pub windows: Vec<Window>,
     /// Next window ID to assign (monotonically increasing).
     pub next_window_id: u32,
+    /// Mock LLM response for testing. When set, the LLM opcode returns this
+    /// instead of making a real API call. Cleared after use.
+    pub llm_mock_response: Option<String>,
+    /// LLM configuration URL. Defaults to provider.json or local Ollama.
+    /// Can be overridden by tests or host. Format: "url model api_key"
+    pub llm_config: Option<String>,
 }
 
 impl Default for Vm {
@@ -221,6 +227,8 @@ impl Vm {
             net_inbox: Vec::new(),
             windows: Vec::with_capacity(MAX_WINDOWS),
             next_window_id: 1,
+            llm_mock_response: None,
+            llm_config: None,
         }
     }
 
@@ -316,6 +324,8 @@ impl Vm {
         self.next_window_id = 1;
         self.mouse_button = 0;
         self.net_inbox.clear();
+        self.llm_mock_response = None;
+        self.llm_config = None;
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -1619,6 +1629,63 @@ impl Vm {
                 }
             }
 
+            // LLM prompt_addr_reg, response_addr_reg, max_len_reg (0x9C)
+            // Sends null-terminated prompt string from RAM to an LLM API.
+            // Response written to RAM at response_addr. r0 = response length (0 on error).
+            // Uses llm_mock_response if set (for testing), otherwise calls curl.
+            0x9C => {
+                let r_prompt = self.fetch() as usize;
+                let r_response = self.fetch() as usize;
+                let r_max_len = self.fetch() as usize;
+                if r_prompt < NUM_REGS && r_response < NUM_REGS && r_max_len < NUM_REGS {
+                    let prompt_addr = self.regs[r_prompt] as usize;
+                    let response_addr = self.regs[r_response] as usize;
+                    let max_len = self.regs[r_max_len] as usize;
+
+                    // Read null-terminated prompt string from RAM
+                    let mut prompt = String::new();
+                    let mut addr = prompt_addr;
+                    while addr < self.ram.len() {
+                        let ch = self.ram[addr];
+                        if ch == 0 {
+                            break;
+                        }
+                        if let Some(c) = char::from_u32(ch) {
+                            prompt.push(c);
+                        } else {
+                            prompt.push('?');
+                        }
+                        addr += 1;
+                    }
+
+                    // Get response: use mock if available, otherwise call LLM
+                    let response = if let Some(mock) = self.llm_mock_response.take() {
+                        mock
+                    } else if prompt.is_empty() {
+                        String::new()
+                    } else {
+                        // Call external LLM via curl (like hermes.rs call_llm pattern)
+                        self.call_llm_external(&prompt).unwrap_or_default()
+                    };
+
+                    // Write response to RAM, one char per u32 word
+                    let write_len = response.len().min(max_len);
+                    for (i, byte) in response.bytes().take(write_len).enumerate() {
+                        let dest = response_addr + i;
+                        if dest < self.ram.len() {
+                            self.ram[dest] = byte as u32;
+                        }
+                    }
+                    // Null-terminate if space allows
+                    if response_addr + write_len < self.ram.len() {
+                        self.ram[response_addr + write_len] = 0;
+                    }
+                    self.regs[0] = write_len as u32;
+                } else {
+                    self.regs[0] = 0; // error: invalid registers
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;
@@ -1667,6 +1734,224 @@ impl Vm {
             }
         }
     }
+
+    /// Call an external LLM API via curl. Returns the response text or None on error.
+    /// Uses provider.json config (same as hermes agent) or falls back to local Ollama.
+    /// The prompt is sent as a user message with a minimal system prompt.
+    fn call_llm_external(&self, prompt: &str) -> Option<String> {
+        // Load config from provider.json
+        let (base_url, model, api_key) = self.load_llm_config();
+
+        // Escape prompt for JSON
+        let esc_prompt = prompt
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\t', "\\t");
+
+        let system_msg = "You are a helpful assistant running inside Geometry OS, a pixel-art virtual machine. Respond concisely. Your response will be stored in a fixed-size RAM buffer, so keep answers short (under 200 characters when possible).";
+        let esc_sys = system_msg
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\t', "\\t");
+
+        // Build JSON payload
+        let payload = format!(
+            r#"{{"model":"{}","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false,"max_tokens":256,"temperature":0.3}}"#,
+            model, esc_sys, esc_prompt
+        );
+
+        // Write to temp file
+        let tmp_path = "/tmp/geo_llm_payload.json";
+        if std::fs::write(tmp_path, &payload).is_err() {
+            return None;
+        }
+
+        // Build curl command
+        let data_arg = format!("@{}", tmp_path);
+        let mut curl_args: Vec<&str> = vec![
+            "-s",
+            "-X",
+            "POST",
+            &base_url,
+            "-d",
+            &data_arg,
+            "-H",
+            "Content-Type: application/json",
+            "--max-time",
+            "30",
+        ];
+
+        let auth_header;
+        if !api_key.is_empty() {
+            auth_header = format!("Authorization: Bearer {}", api_key);
+            curl_args.push("-H");
+            curl_args.push(&auth_header);
+        }
+
+        let output = match std::process::Command::new("curl").args(&curl_args).output() {
+            Ok(o) => o,
+            Err(_) => return None,
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Check for errors
+        if stdout.contains("\"error\"") {
+            return None;
+        }
+
+        // Parse response: find "content":"..."
+        if let Some(start) = stdout.find("\"content\":\"") {
+            let content_start = start + "\"content\":\"".len();
+            let mut i = content_start;
+            let mut result = String::new();
+            let bytes = stdout.as_bytes();
+            while i < bytes.len() {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    match bytes[i + 1] {
+                        b'n' => result.push('\n'),
+                        b't' => result.push('\t'),
+                        b'"' => result.push('"'),
+                        b'\\' => result.push('\\'),
+                        _ => {
+                            result.push(bytes[i] as char);
+                            result.push(bytes[i + 1] as char);
+                        }
+                    }
+                    i += 2;
+                } else if bytes[i] == b'"' {
+                    break;
+                } else {
+                    result.push(bytes[i] as char);
+                    i += 1;
+                }
+            }
+            // Strip <think/> blocks (some models emit them)
+            let cleaned = strip_think_blocks(&result);
+            Some(cleaned)
+        } else {
+            None
+        }
+    }
+
+    /// Load LLM config from provider.json or self.llm_config override.
+    /// Returns (base_url, model, api_key).
+    fn load_llm_config(&self) -> (String, String, String) {
+        // Check for runtime override first
+        if let Some(ref cfg) = self.llm_config {
+            let parts: Vec<&str> = cfg.splitn(3, ' ').collect();
+            if parts.len() >= 2 {
+                return (
+                    parts[0].to_string(),
+                    parts[1].to_string(),
+                    parts.get(2).unwrap_or(&"").to_string(),
+                );
+            }
+        }
+        // Try loading provider.json
+        let config_path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("provider.json");
+        if config_path.exists() {
+            if let Ok(contents) = std::fs::read_to_string(&config_path) {
+                let base_url = extract_json_str(&contents, "base_url")
+                    .unwrap_or_else(|| "http://localhost:11434/api/chat".to_string());
+                let model = extract_json_str(&contents, "model")
+                    .unwrap_or_else(|| "qwen3.5-tools".to_string());
+                let api_key = extract_json_str(&contents, "api_key").unwrap_or_default();
+                return (base_url, model, api_key);
+            }
+        }
+        // Default to local Ollama
+        (
+            "http://localhost:11434/api/chat".to_string(),
+            "qwen3.5-tools".to_string(),
+            String::new(),
+        )
+    }
+}
+
+/// Strip <think/> and <think ...>...</think blocks from text.
+pub(crate) fn strip_think_blocks(text: &str) -> String {
+    let mut result = text.to_string();
+    // Strip <think/> or <think /> (self-closing)
+    loop {
+        if let Some(pos) = result.find("<think/>") {
+            result.replace_range(pos..pos + 8, "");
+        } else if let Some(pos) = result.find("<think />") {
+            result.replace_range(pos..pos + 9, "");
+        } else {
+            break;
+        }
+    }
+    // Strip <think ...>...</think or <think...</think (non-greedy)
+    // Handles both proper XML (<think reasoning here</think) and
+    // malformed (<think...</think without closing >)
+    loop {
+        let start = result.find("<think");
+        if let Some(s) = start {
+            // Skip self-closing tags (already handled above)
+            let rest = &result[s + 6..];
+            if rest.starts_with("/>") || rest.starts_with(" />") {
+                break;
+            }
+            // Find </think closing tag
+            if let Some(close_offset) = result[s..].find("</think") {
+                let close_start = s + close_offset;
+                // Find the > after </think (or end of tag)
+                let after_close = &result[close_start + 7..];
+                let end_len = if let Some(gt) = after_close.find('>') {
+                    close_start + 7 + gt + 1 - s
+                } else if after_close.starts_with(' ') {
+                    // </think without > but followed by space - strip to end of </think
+                    let sp_end = after_close
+                        .find(|c: char| !c.is_whitespace())
+                        .unwrap_or(after_close.len());
+                    close_start + 7 + sp_end - s
+                } else {
+                    close_start + 7 - s
+                };
+                if s + end_len <= result.len() {
+                    result.replace_range(s..s + end_len, "");
+                    continue;
+                }
+            }
+        }
+        break;
+    }
+    result.trim().to_string()
+}
+
+/// Extract a string value from JSON by key name (minimal parser, no serde dependency).
+pub(crate) fn extract_json_str(json: &str, key: &str) -> Option<String> {
+    let search = format!("\"{}\":\"", key);
+    let start = json.find(&search)?;
+    let val_start = start + search.len();
+    let mut i = val_start;
+    let bytes = json.as_bytes();
+    let mut result = String::new();
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 1 < bytes.len() {
+            match bytes[i + 1] {
+                b'n' => result.push('\n'),
+                b't' => result.push('\t'),
+                b'"' => result.push('"'),
+                b'\\' => result.push('\\'),
+                _ => {
+                    result.push(bytes[i] as char);
+                    result.push(bytes[i + 1] as char);
+                }
+            }
+            i += 2;
+        } else if bytes[i] == b'"' {
+            break;
+        } else {
+            result.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    Some(result)
 }
 
 mod boot;

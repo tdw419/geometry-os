@@ -771,6 +771,19 @@ impl Vm {
             ),
 
             0x9B => (format!("PROCLS {}", ram(a + 1)), 2),
+
+            // LLM prompt_addr_reg, response_addr_reg, max_len_reg (0x9C)
+            // Send prompt to external LLM, write response to RAM.
+            0x9C => (
+                format!(
+                    "LLM {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3))
+                ),
+                4,
+            ),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }
