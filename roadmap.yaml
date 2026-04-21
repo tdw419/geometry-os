@@ -37,7 +37,7 @@ meta:
   ram: 65536 words
   registers: 32
   screen: 256x256 pixels
-  tests: 1203
+  tests: 1206
 phases:
 - deliverables:
   - description: 'Control flow: stop, no-op, yield to renderer'
@@ -4658,31 +4658,31 @@ phases:
       The loader detects the type (via metadata, magic bytes, or file extension) and
       routes to the correct execution engine.
     name: Unified pixel boot loader
-    status: planned
+    status: done
   - description: A running Geometry OS program can LOADPNG from filesystem or network
       port, decode it, and execute the result. The VM bootstraps new code from pixels
       at runtime. Combined with ASMSELF (phase 47), a program can read a .png from
       disk, decode to source, write to canvas, ASMSELF, RUNNEXT. Pixels all the way
       down.
     name: Runtime pixel boot (LOADPNG opcode)
-    status: planned
+    status: done
   - description: 'Test the full chain: program A reads a .png from VFS, the .png contains
       program B source, program A writes it to canvas, calls ASMSELF, calls RUNNEXT,
       program B executes. Also test png-to-bytecode-to-RAM-to-execution.'
     name: Full-chain integration test
-    status: planned
+    status: done
   - description: 'A gallery of .png programs. Each is a small viewable image that
       is also a runnable Geometry OS program. Demonstrates: counter, paint tool, game
       of life, text adventure. Each .png is a self-contained executable artifact.
       The visual pattern of pixels encodes the program that produces the visual pattern.
       Recursive.'
     name: Pixel program gallery
-    status: planned
+    status: done
   - description: CODE_PIXEL_EXECUTION.md covering the three-level architecture, the
       .rts.png format spec for Geometry OS, the boot protocol, and how it unifies
       with the existing RISC-V .rts.png boot path.
     name: Spec document
-    status: planned
+    status: done
   description: 'The unification. One pixel format boots both RISC-V Linux kernels
     and Geometry OS programs. The VM can load and execute .png files at runtime (not
     just CLI boot). Programs can bootstrap other programs from pixels. Combined with
@@ -4694,7 +4694,7 @@ phases:
     OS), and the VM can load .png programs at runtime
   id: phase-94
   scope_lines_total: 800
-  status: planned
+  status: done
   test_target: 8
   title: Pixel Boot - Universal Pixel Executable
 project_url: https://github.com/tdw419/geometry-os

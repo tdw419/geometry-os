@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 94/95 phases complete, 1 planned
+**Progress:** 95/95 phases complete, 0 planned
 
-**Deliverables:** 420/425 complete
+**Deliverables:** 425/425 complete
 
-**Tasks:** 0 tasks remaining
+**Tasks:** All complete
 
 ## Scope Summary
 

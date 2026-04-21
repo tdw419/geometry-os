@@ -13413,3 +13413,219 @@ fn test_loadsrcimg_invalid_register() {
         "LOADSRCIMG should fail with invalid register"
     );
 }
+
+// ============================================================
+// Phase 94: Universal Pixel Executable - Integration Tests
+// ============================================================
+
+#[test]
+fn test_universal_pixel_boot_bytecode() {
+    // Create a bytecode PNG (Level 1) and verify auto-detection
+    let source = "LDI r1, 99\nHALT\n";
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let bytecode_bytes: Vec<u8> = asm.pixels.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let png_data = crate::pixel::encode_pixelpack_png(&bytecode_bytes);
+    let png_path = "/tmp/geo_test_universal_bytecode.png";
+    std::fs::write(png_path, &png_data).unwrap();
+
+    // Verify it's NOT detected as source PNG
+    assert!(
+        !crate::pixel::is_source_png(&png_data),
+        "bytecode PNG should not be detected as source"
+    );
+
+    // Use LOADPNG to load and execute
+    let mut vm = crate::vm::Vm::new();
+    let path_bytes: Vec<u32> = png_path
+        .chars()
+        .map(|c| c as u32)
+        .chain(std::iter::once(0u32))
+        .collect();
+    for (i, &word) in path_bytes.iter().enumerate() {
+        vm.ram[0x2000 + i] = word;
+    }
+
+    // LDI r5, 0x2000; LOADPNG r5, r6 (r6=0x1000); HALT
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x1000;
+    vm.ram[6] = 0xB1;
+    vm.ram[7] = 5;
+    vm.ram[8] = 6;
+    vm.ram[9] = 0x00; // HALT
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_ne!(vm.regs[0], 0xFFFFFFFF, "LOADPNG should succeed");
+    // Bytecode should be at 0x1000
+    assert_eq!(vm.ram[0x1000], 0x10, "LDI opcode at 0x1000");
+
+    // Run loaded program
+    vm.pc = 0x1000;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[1], 99, "LDI r1, 99 should work");
+
+    let _ = std::fs::remove_file(png_path);
+}
+
+#[test]
+fn test_universal_pixel_boot_source() {
+    // Create a source PNG (Level 2) and verify auto-detection
+    let source = "LDI r2, 77\nHALT\n";
+    let png_data = crate::pixel::encode_source_pixelpack_png(source);
+    let png_path = "/tmp/geo_test_universal_source.png";
+    std::fs::write(png_path, &png_data).unwrap();
+
+    // Verify it IS detected as source PNG
+    assert!(
+        crate::pixel::is_source_png(&png_data),
+        "source PNG should be detected as source"
+    );
+
+    // Use LOADSRCIMG to load and execute
+    let mut vm = crate::vm::Vm::new();
+    let path_bytes: Vec<u32> = png_path
+        .chars()
+        .map(|c| c as u32)
+        .chain(std::iter::once(0u32))
+        .collect();
+    for (i, &word) in path_bytes.iter().enumerate() {
+        vm.ram[0x2000 + i] = word;
+    }
+
+    // LDI r5, 0x2000; LOADSRCIMG r5; HALT
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0xB2;
+    vm.ram[4] = 5;
+    vm.ram[5] = 0x00; // HALT
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_ne!(vm.regs[0], 0xFFFFFFFF, "LOADSRCIMG should succeed");
+
+    // Run assembled bytecode
+    vm.pc = 0x1000;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted);
+    assert_eq!(vm.regs[2], 77, "LDI r2, 77 should work");
+
+    let _ = std::fs::remove_file(png_path);
+}
+
+#[test]
+fn test_pixel_chain_program_a_loads_b() {
+    // Program A: loads program B from a source PNG, then runs it
+    // Program B source: LDI r3, 55\nHALT\n
+    let source_b = "LDI r3, 55\nHALT\n";
+    let png_data = crate::pixel::encode_source_pixelpack_png(source_b);
+    let png_path = "/tmp/geo_test_chain_program_b.png";
+    std::fs::write(png_path, &png_data).unwrap();
+
+    let mut vm = crate::vm::Vm::new();
+
+    // Store path to program B PNG in RAM
+    let path_bytes: Vec<u32> = png_path
+        .chars()
+        .map(|c| c as u32)
+        .chain(std::iter::once(0u32))
+        .collect();
+    for (i, &word) in path_bytes.iter().enumerate() {
+        vm.ram[0x2000 + i] = word;
+    }
+
+    // Program A at address 0:
+    // LDI r5, 0x2000  (path to program B PNG)
+    // LOADSRCIMG r5   (load, write to canvas, assemble)
+    // ; Verify r0 > 0 (bytecode loaded)
+    // LDI r4, 0xFFFFFFFF
+    // CMP r0, r4      (r0 should NOT be 0xFFFFFFFF)
+    // BGE r0, chain_ok (success)
+    // HALT             (error case)
+    // chain_ok:
+    // LDI r7, 0x1000
+    // JMP r7           (jump to loaded program B)
+
+    let mut addr = 0usize;
+
+    // LDI r5, 0x2000
+    vm.ram[addr] = 0x10;
+    vm.ram[addr + 1] = 5;
+    vm.ram[addr + 2] = 0x2000;
+    addr += 3;
+
+    // LOADSRCIMG r5
+    vm.ram[addr] = 0xB2;
+    vm.ram[addr + 1] = 5;
+    addr += 2;
+
+    // LDI r4, 0xFFFFFFFF
+    vm.ram[addr] = 0x10;
+    vm.ram[addr + 1] = 4;
+    vm.ram[addr + 2] = 0xFFFFFFFF;
+    addr += 3;
+
+    // CMP r0, r4
+    vm.ram[addr] = 0x50;
+    vm.ram[addr + 1] = 0;
+    vm.ram[addr + 2] = 4;
+    addr += 3;
+
+    // BGE r0, chain_ok (skip error HALT)
+    let chain_ok_addr = (addr + 4) as u32; // +3 for BGE +1 for HALT
+    vm.ram[addr] = 0x36;
+    vm.ram[addr + 1] = 0;
+    vm.ram[addr + 2] = chain_ok_addr;
+    addr += 3;
+
+    // HALT (error path)
+    vm.ram[addr] = 0x00;
+    addr += 1;
+
+    // chain_ok: JMP 0x1000 (jump to loaded program B)
+    assert_eq!(addr, chain_ok_addr as usize, "chain_ok label alignment");
+    vm.ram[addr] = 0x30; // JMP
+    vm.ram[addr + 1] = 0x1000; // target = 0x1000
+    addr += 2;
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Should have loaded program B and executed it
+    assert!(vm.halted, "should halt after program B runs");
+    assert_eq!(vm.regs[3], 55, "program B should have set r3=55");
+
+    let _ = std::fs::remove_file(png_path);
+}
