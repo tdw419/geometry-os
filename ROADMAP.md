@@ -6,7 +6,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 148 o
 
 **Deliverables:** 412/412 complete
 
-**Tasks:** 98/98 complete
+**Tasks:** 483/483 complete
 
 ## Scope Summary
 
@@ -320,11 +320,11 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 ### Deliverables
 
 - [x] **Tests for untested programs** -- ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity
-  - [ ] cargo test all green
-  - [ ] Each untested program has at least one test
+  - [x] cargo test all green
+  - [x] Each untested program has at least one test
   _~220 LOC_
 - [x] **Assembler error line numbers** -- Error messages include source line number
-  - [ ] Error message format: 'line N: unknown opcode: XYZ'
+  - [x] Error message format: 'line N: unknown opcode: XYZ'
   _~30 LOC_
 - [x] **Version string audit** -- Single source of truth for version across banner, CLI, Cargo.toml
   _~10 LOC_
