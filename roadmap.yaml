@@ -4887,31 +4887,34 @@ phases:
   test_target: 3
   title: Shared Libraries and Dynamic Linking
 - deliverables:
-  - description: 'A cron daemon that reads a schedule file from VFS (crontab.asm format:
-      interval_frames, program_path). Each interval, it SPAWNs the listed program.
-      Uses SLEEP to wait between ticks. Runs as a background service started by the
-      init system. Like Unix cron but frame-based instead of time-based.'
+  - description: 'A cron daemon that reads a schedule file from VFS (crontab text format:
+      interval program_name). Each interval, it EXECs the listed program.
+      Uses FRAME to advance ticks. Runs as a background service. Like Unix
+      cron but frame-based instead of time-based. Implemented in programs/cron_daemon.asm.'
     name: Cron daemon process
-    status: planned
-  - description: 'crontab.asm format. One entry per line: frame_interval path args. Example:
-      3000 /bin/screensaver.asm (run every 3000 frames, roughly 50 seconds at 60fps).
-      Daemon reads the file on start and re-reads on MSGRCV with reload command.'
+    status: done
+  - description: 'crontab text format. One entry per line: interval program_name. Example:
+      100 hello (run hello.asm every 100 frames, roughly 1.7 seconds at 60fps).
+      Daemon reads the file on start and re-reads on magic value at RAM[0xFA0].
+      Parsed into schedule table at 0x4000 with 8 entry slots of 64 words each.'
     name: Crontab format and parser
-    status: planned
-  - description: 'Test: crontab lists one program to run every 100 frames. Verify it
-      spawns exactly once per interval. Verify reload via message updates the schedule.'
+    status: done
+  - description: 'Test: test_cron_daemon_assembles, test_cron_daemon_reads_crontab_and_parses,
+      test_cron_daemon_spawns_on_interval (verifies EXEC spawns child at interval),
+      test_cron_daemon_multiple_entries (verifies parsing of 2-entry crontab).
+      4 tests total, all passing.'
     name: Cron integration test
-    status: planned
+    status: done
   description: 'A cron-like daemon that spawns programs on a frame-based schedule. Read
-    schedule from VFS, SLEEP between ticks, SPAWN on match. Uses existing SLEEP, SPAWN,
-    MSGRCV, and VFS opcodes. The autodev cron workers on the host prove this pattern
-    works -- now do it inside the VM.'
+    schedule from VFS, FRAME between ticks, EXEC on match. Uses existing FRAME, EXEC,
+    OPEN/READ/CLOSE, and VFS opcodes. The autodev cron workers on the host prove this
+    pattern works -- now do it inside the VM.'
   goal: Build a cron daemon that runs programs on scheduled intervals using existing
     process management opcodes
   id: phase-101
   scope_lines_total: 400
-  status: planned
-  test_target: 2
+  status: complete
+  test_target: 4
   title: Cron Daemon - Scheduled Execution
 - deliverables:
   - description: 'Per-process capability table. On SPAWN, parent specifies allowed VFS

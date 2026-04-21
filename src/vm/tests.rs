@@ -14932,3 +14932,155 @@ fn test_lib_full_roundtrip() {
         vm.regs[0]
     );
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 101: Cron Daemon Tests
+// ═══════════════════════════════════════════════════════════════
+
+/// Helper: set up a temp VFS dir with a crontab file, return (Vm, TempDir)
+fn setup_cron_vm(crontab_content: &str) -> (crate::vm::Vm, tempfile::TempDir) {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let crontab_path = dir.path().join("crontab");
+    std::fs::write(&crontab_path, crontab_content).expect("write crontab");
+
+    let source = std::fs::read_to_string("programs/cron_daemon.asm").expect("read asm");
+    let asm = crate::assembler::assemble(&source, 0).expect("assemble");
+    let mut vm = crate::vm::Vm::new();
+    vm.vfs.base_dir = dir.path().to_path_buf();
+
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    (vm, dir)
+}
+
+#[test]
+fn test_cron_daemon_assembles() {
+    let source =
+        std::fs::read_to_string("programs/cron_daemon.asm").expect("cron_daemon.asm should exist");
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "cron_daemon.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 100,
+        "cron_daemon should produce meaningful bytecode, got {} words",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_cron_daemon_reads_crontab_and_parses() {
+    let (mut vm, _dir) = setup_cron_vm("100 hello\n");
+
+    // Run until name_len is set (indicates parsing complete for entry 0)
+    for _ in 0..200_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.ram[0x4002] > 0 {
+            break;
+        }
+    }
+
+    // Verify parsed schedule
+    assert_eq!(vm.ram[0x4000], 100, "entry 0 interval should be 100");
+    assert_eq!(vm.ram[0x4001], 0, "entry 0 last_run should be 0");
+    assert_eq!(vm.ram[0x4002], 5, "entry 0 name_len should be 5");
+
+    // Verify name: "hello" = 104, 101, 108, 108, 111
+    assert_eq!(vm.ram[0x4004], 104, "name[0] should be 'h'");
+    assert_eq!(vm.ram[0x4005], 101, "name[1] should be 'e'");
+    assert_eq!(vm.ram[0x4006], 108, "name[2] should be 'l'");
+    assert_eq!(vm.ram[0x4007], 108, "name[3] should be 'l'");
+    assert_eq!(vm.ram[0x4008], 111, "name[4] should be 'o'");
+}
+
+#[test]
+fn test_cron_daemon_spawns_on_interval() {
+    let (mut vm, _dir) = setup_cron_vm("50 hello\n");
+
+    // Run through parsing (wait for name_len > 0)
+    for _ in 0..200_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.ram[0x4002] > 0 {
+            break;
+        }
+    }
+    assert_eq!(vm.ram[0x4000], 50, "interval should be 50");
+    assert_eq!(vm.ram[0x4002], 5, "name_len should be 5");
+
+    // Advance TICKS past interval to trigger spawn
+    vm.frame_count = 60;
+    vm.ram[0xFFE] = 60;
+
+    // Run until EXEC spawns a child process
+    let mut spawned = false;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if !vm.processes.is_empty() {
+            spawned = true;
+            // Don't break immediately -- let the daemon update last_run
+            // (STORE after EXEC needs a few more steps)
+            for _ in 0..50 {
+                if !vm.step() {
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    assert!(spawned, "cron daemon should spawn 'hello' after 50+ frames");
+    let child = &vm.processes[0];
+    assert!(!child.is_halted(), "spawned process should be active");
+    assert_eq!(child.parent_pid, 0, "spawned by main process");
+
+    // Verify last_run was updated
+    assert!(
+        vm.ram[0x4001] >= 50,
+        "last_run should be updated to current ticks, got {}",
+        vm.ram[0x4001]
+    );
+}
+
+#[test]
+fn test_cron_daemon_multiple_entries() {
+    let (mut vm, _dir) = setup_cron_vm("100 hello\n200 border\n");
+
+    // Run until both entries parsed (wait for entry 1 name_len)
+    for _ in 0..300_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.ram[0x4042] > 0 {
+            break;
+        }
+    }
+
+    // Verify first entry
+    assert_eq!(vm.ram[0x4000], 100, "entry 0 interval = 100");
+    assert_eq!(vm.ram[0x4002], 5, "entry 0 name_len = 5");
+    assert_eq!(vm.ram[0x4004], 104, "entry 0 name[0] = 'h'");
+
+    // Verify second entry (at offset 64 = 0x4040)
+    assert_eq!(vm.ram[0x4040], 200, "entry 1 interval = 200");
+    assert_eq!(vm.ram[0x4042], 6, "entry 1 name_len = 6");
+    assert_eq!(vm.ram[0x4044], 98, "entry 1 name[0] = 'b'");
+    assert_eq!(vm.ram[0x4045], 111, "entry 1 name[1] = 'o'");
+    assert_eq!(vm.ram[0x4046], 114, "entry 1 name[2] = 'r'");
+    assert_eq!(vm.ram[0x4047], 100, "entry 1 name[3] = 'd'");
+    assert_eq!(vm.ram[0x4048], 101, "entry 1 name[4] = 'e'");
+    assert_eq!(vm.ram[0x4049], 114, "entry 1 name[5] = 'r'");
+}
