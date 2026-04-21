@@ -10759,3 +10759,258 @@ fn test_taskbar_procls_integration() {
         proc_count
     );
 }
+
+// ── Phase 76: Debugger UI + Memory Inspector ──────────────────
+
+#[test]
+fn test_debugger_assembles() {
+    let source = include_str!("../../programs/debugger.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(
+        result.is_ok(),
+        "debugger.asm failed to assemble: {:?}",
+        result.err()
+    );
+    let bytecode = result.unwrap();
+    assert!(
+        bytecode.pixels.len() > 100,
+        "debugger.asm should be substantial, got {} words",
+        bytecode.pixels.len()
+    );
+}
+
+#[test]
+fn test_debugger_runs_with_frames() {
+    let source = include_str!("../../programs/debugger.asm");
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let mut frames_seen = 0;
+    for _ in 0..2_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= 2 {
+                break;
+            }
+        }
+    }
+    assert!(
+        frames_seen >= 2,
+        "debugger should produce at least 2 frames, got {}",
+        frames_seen
+    );
+}
+
+#[test]
+fn test_debugger_trace_integration() {
+    let source = include_str!("../../programs/debugger.asm");
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run until first frame
+    for _ in 0..2_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+    // The debugger enables trace recording and should have entries
+    let trace_count = vm.trace_buffer.len();
+    assert!(
+        trace_count > 0,
+        "debugger should have trace entries after running, got {}",
+        trace_count
+    );
+}
+
+#[test]
+fn test_debugger_shows_title() {
+    let vm = run_util_frames("programs/debugger.asm", 1);
+    // Title bar should have dark red pixels (0x8B0000) at y=0-15
+    let title_pixel = vm.screen[4 * 256 + 60];
+    assert_ne!(
+        title_pixel, 0x0A0A1E,
+        "debugger title bar should differ from background"
+    );
+}
+
+#[test]
+fn test_debugger_status_bar() {
+    let vm = run_util_frames("programs/debugger.asm", 1);
+    // Status bar area (y=236+) should have non-background pixels
+    let status_pixel = vm.screen[238 * 256 + 10];
+    assert_ne!(
+        status_pixel, 0x0A0A1E,
+        "debugger status bar should be visible"
+    );
+}
+
+#[test]
+fn test_debugger_hex_table_built() {
+    let vm = run_util_frames("programs/debugger.asm", 1);
+    // Hex table at 0x6400 should have '0'-'9' and 'A'-'F'
+    assert_eq!(vm.ram[0x6400], 48, "hex table[0] should be '0'");
+    assert_eq!(vm.ram[0x6409], 57, "hex table[9] should be '9'");
+    assert_eq!(vm.ram[0x640A], 65, "hex table[10] should be 'A'");
+    assert_eq!(vm.ram[0x640F], 70, "hex table[15] should be 'F'");
+}
+
+#[test]
+fn test_meminspect_assembles() {
+    let source = include_str!("../../programs/meminspect.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(
+        result.is_ok(),
+        "meminspect.asm failed to assemble: {:?}",
+        result.err()
+    );
+    let bytecode = result.unwrap();
+    assert!(
+        bytecode.pixels.len() > 50,
+        "meminspect.asm should be substantial"
+    );
+}
+
+#[test]
+fn test_meminspect_shows_hex_dump() {
+    let vm = run_util_frames("programs/meminspect.asm", 1);
+    // The hex dump area (y=22+) should have non-background pixels
+    let mut non_bg = 0;
+    for y in 22..80 {
+        for x in 4..200 {
+            if vm.screen[y * 256 + x] != 0x080818 {
+                non_bg += 1;
+            }
+        }
+    }
+    assert!(
+        non_bg > 20,
+        "meminspect should render hex dump text, found {} non-bg pixels",
+        non_bg
+    );
+}
+
+#[test]
+fn test_meminspect_demo_data() {
+    let vm = run_util_frames("programs/meminspect.asm", 1);
+    // Demo data "Hello, W" should be at 0x2000
+    assert_eq!(vm.ram[0x2000], 72, "demo data[0] should be 'H' (72)");
+    assert_eq!(vm.ram[0x2001], 101, "demo data[1] should be 'e' (101)");
+    assert_eq!(vm.ram[0x2002], 108, "demo data[2] should be 'l' (108)");
+}
+
+#[test]
+fn test_meminspect_title_bar() {
+    let vm = run_util_frames("programs/meminspect.asm", 1);
+    // Title bar pixel
+    let title = vm.screen[3 * 256 + 40];
+    assert_ne!(
+        title, 0x080818,
+        "meminspect title should differ from background"
+    );
+}
+
+#[test]
+fn test_disasm_assembles() {
+    let source = include_str!("../../programs/disasm.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(
+        result.is_ok(),
+        "disasm.asm failed to assemble: {:?}",
+        result.err()
+    );
+    let bytecode = result.unwrap();
+    assert!(
+        bytecode.pixels.len() > 50,
+        "disasm.asm should be substantial"
+    );
+}
+
+#[test]
+fn test_disasm_shows_instructions() {
+    let vm = run_util_frames("programs/disasm.asm", 1);
+    // The disassembly area (y=22+) should have non-background pixels
+    let mut non_bg = 0;
+    for y in 22..80 {
+        for x in 4..180 {
+            if vm.screen[y * 256 + x] != 0x080810 {
+                non_bg += 1;
+            }
+        }
+    }
+    assert!(
+        non_bg > 20,
+        "disasm should render decoded instructions, found {} non-bg pixels",
+        non_bg
+    );
+}
+
+#[test]
+fn test_disasm_opcode_table() {
+    let vm = run_util_frames("programs/disasm.asm", 1);
+    // Check that the opcode table was populated
+    // HALT at OP_TABLE[0] = 'H','A','L','T'
+    assert_eq!(vm.ram[0x6400], 72, "opcode table HALT[0] should be 'H'");
+    assert_eq!(vm.ram[0x6401], 65, "opcode table HALT[1] should be 'A'");
+    assert_eq!(vm.ram[0x6402], 76, "opcode table HALT[2] should be 'L'");
+    assert_eq!(vm.ram[0x6403], 84, "opcode table HALT[3] should be 'T'");
+}
+
+#[test]
+fn test_disasm_demo_bytecode() {
+    let vm = run_util_frames("programs/disasm.asm", 1);
+    // Demo bytecode should be at address 0
+    // LDI r1, 1 -> [0x10, 1, 1]
+    assert_eq!(vm.ram[0], 0x10, "demo byte[0] should be LDI opcode");
+    assert_eq!(vm.ram[1], 1, "demo byte[1] should be r1");
+    assert_eq!(vm.ram[2], 1, "demo byte[2] should be imm 1");
+}
+
+/// Helper: run a utility program until N frames are produced
+fn run_util_frames(asm_file: &str, target_frames: usize) -> Vm {
+    let source = std::fs::read_to_string(asm_file)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {}", asm_file, e));
+    let asm = crate::assembler::assemble(&source, 0)
+        .unwrap_or_else(|e| panic!("Failed to assemble {}: {:?}", asm_file, e));
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let mut frames_seen = 0;
+    for _ in 0..2_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= target_frames {
+                break;
+            }
+        }
+    }
+    vm
+}

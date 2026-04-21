@@ -3994,7 +3994,7 @@ phases:
   test_target: 10
 - id: phase-76
   title: Debugger UI + Memory Inspector
-  status: planned
+  status: done
   goal: Visual debugging tools for GO programs running inside GO
   description: Pixel-native debugger shows register state, memory regions, and step-by-step
     execution. Memory inspector shows hex dump of any RAM region. Built on trace buffer
@@ -4004,21 +4004,21 @@ phases:
     description: 'Shows: register values (32 registers), PC, current instruction,
       stack contents. Step/continue/reset buttons. Watchpoints on memory addresses.
       Proves trace buffer (SNAP_TRACE) integration.'
-    status: todo
+    status: done
   - name: meminspect.asm
     description: 'Memory inspector: hex dump of RAM regions. Arrow keys to scroll,
       type address to jump. Edit bytes in-place. Shows ASCII interpretation alongside
       hex.'
-    status: todo
+    status: done
   - name: disasm.asm
     description: 'Interactive disassembler: reads bytecode from RAM, shows assembly
       mnemonics. Step through bytecode, show decoded instructions. Proves disassembler
       integration.'
-    status: todo
+    status: done
   - name: Debugger tests
     description: Debugger displays registers, meminspect reads/writes, disasm decodes.
       10+ tests.
-    status: todo
+    status: done
   scope_lines_total: 1500
   test_target: 10
 - id: phase-77

@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 78/92 phases complete, 0 in progress
+**Progress:** 79/92 phases complete, 0 in progress
 
-**Deliverables:** 330/398 complete
+**Deliverables:** 334/398 complete
 
 **Tasks:** 98/98 complete
 
@@ -88,7 +88,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-73 Core Utilities | COMPLETE | 5/5 | 1,000 | 10 |
 | phase-74 Image Viewer + Screenshot | COMPLETE | 4/4 | 600 | 8 |
 | phase-75 Stopwatch + Timer + Calculator (scientific) | COMPLETE | 4/4 | 1,200 | 10 |
-| phase-76 Debugger UI + Memory Inspector | PLANNED | 0/4 | 1,500 | 10 |
+| phase-76 Debugger UI + Memory Inspector | COMPLETE | 4/4 | 1,500 | 14 |
 | phase-77 Settings + Wallpaper + Screensaver | COMPLETE | 4/4 | 1,000 | 11 |
 | phase-78 Calendar + About + Help System | COMPLETE | 4/4 | 800 | 8 |
 | phase-79 Neural Network Forward Pass (Pixel Neural Net) | COMPLETE | 5/5 | 1,500 | 10 |
@@ -2176,7 +2176,7 @@ Stopwatch with lap times, countdown timer with alarm, and scientific calculator 
 - [x] **sci_calc.asm** -- Scientific calculator with sin/cos (16-entry quarter-wave lookup table), sqrt (Newton method). Basic + - * / arithmetic via keyboard.
 - [x] **Time + calc tests** -- 14 tests: 5 stopwatch, 4 timer, 5 sci_calc. Assembly, rendering, initial state, sin table accuracy.
 
-## [ ] phase-76: Debugger UI + Memory Inspector (PLANNED)
+## [x] phase-76: Debugger UI + Memory Inspector (COMPLETE)
 
 **Goal:** Visual debugging tools for GO programs running inside GO
 
@@ -2184,10 +2184,10 @@ Pixel-native debugger shows register state, memory regions, and step-by-step exe
 
 ### Deliverables
 
-- [ ] **debugger.asm** -- Shows: register values (32 registers), PC, current instruction, stack contents. Step/continue/reset buttons. Watchpoints on memory addresses. Proves trace buffer (SNAP_TRACE) integration.
-- [ ] **meminspect.asm** -- Memory inspector: hex dump of RAM regions. Arrow keys to scroll, type address to jump. Edit bytes in-place. Shows ASCII interpretation alongside hex.
-- [ ] **disasm.asm** -- Interactive disassembler: reads bytecode from RAM, shows assembly mnemonics. Step through bytecode, show decoded instructions. Proves disassembler integration.
-- [ ] **Debugger tests** -- Debugger displays registers, meminspect reads/writes, disasm decodes. 10+ tests.
+- [x] **debugger.asm** -- Shows: register values (32 registers), PC, current instruction, stack contents. Step/continue/reset buttons. Watchpoints on memory addresses. Proves trace buffer (SNAP_TRACE) integration.
+- [x] **meminspect.asm** -- Memory inspector: hex dump of RAM regions. Arrow keys to scroll, type address to jump. Edit bytes in-place. Shows ASCII interpretation alongside hex.
+- [x] **disasm.asm** -- Interactive disassembler: reads bytecode from RAM, shows assembly mnemonics. Step through bytecode, show decoded instructions. Proves disassembler integration.
+- [x] **Debugger tests** -- Debugger displays registers, meminspect reads/writes, disasm decodes. 10+ tests.
 
 ## [x] phase-77: Settings + Wallpaper + Screensaver (COMPLETE)
 
