@@ -177,6 +177,7 @@ fn test_active_process_count() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     assert_eq!(vm.active_process_count(), 1);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -199,6 +200,7 @@ fn test_active_process_count() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     assert_eq!(vm.active_process_count(), 1);
 }

@@ -38,6 +38,7 @@ fn test_scheduler_basic_child_execution() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     for _ in 0..10 {
         vm.step_all_processes();
@@ -92,6 +93,7 @@ fn test_yield_forfeits_time_slice() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     for _ in 0..100 {
         vm.step_all_processes();
@@ -149,6 +151,7 @@ fn test_sleep_skips_process_until_wake() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     for _ in 0..20 {
         vm.step_all_processes();
@@ -231,6 +234,7 @@ fn test_priority_quantum_allocation() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     // Process B: priority 0 (quantum = 100 * 1 = 100)
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -253,6 +257,7 @@ fn test_priority_quantum_allocation() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
 
     // Run one scheduling round to allocate quantums
@@ -321,6 +326,7 @@ fn test_setpriority_changes_priority() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     for _ in 0..100 {
         vm.step_all_processes();
@@ -364,6 +370,7 @@ fn test_scheduler_tick_increments() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     vm.step_all_processes();
     assert!(vm.sched_tick > initial_tick, "sched_tick should increment");
@@ -408,6 +415,7 @@ fn test_sleep_wakes_and_halts() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     vm.step_all_processes(); // LDI r5, 5
     vm.step_all_processes(); // SLEEP r5
@@ -477,6 +485,7 @@ fn test_priority_execution_order() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x300,
@@ -498,6 +507,7 @@ fn test_priority_execution_order() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         pc: 0x400,
@@ -519,6 +529,7 @@ fn test_priority_execution_order() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     for _ in 0..50 {
         vm.step_all_processes();
@@ -593,6 +604,7 @@ fn test_priority_higher_gets_more_instructions() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     // Process B: priority 0 (low) -- gets 100 instructions per round
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -615,6 +627,7 @@ fn test_priority_higher_gets_more_instructions() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     // Run enough rounds for priority-0 to exhaust twice (200 calls)
     for _ in 0..200 {

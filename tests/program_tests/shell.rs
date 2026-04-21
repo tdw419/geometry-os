@@ -150,6 +150,7 @@ fn test_waitpid_still_running() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     vm.regs[1] = 1; // PID of running process
     step_waitpid(&mut vm);
@@ -180,6 +181,7 @@ fn test_waitpid_halted_process() {
         signal_handlers: [0; 4],
         vmas: Vec::new(),
         brk_pos: 0,
+        custom_font: None,
     });
     vm.regs[1] = 1;
     step_waitpid(&mut vm);
