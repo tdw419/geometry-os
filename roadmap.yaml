@@ -4388,27 +4388,27 @@ phases:
       Each VM gets N instructions per frame. Balances map rendering with guest OS
       progress.
     name: Background VM scheduling
-    status: todo
+    status: done
   - description: Support 2-4 concurrent HYPERVISOR instances. Each in its own building.
       Different arch/config per building. State saved when player enters, restored
       on return.
     name: Multiple hypervisor buildings
-    status: todo
+    status: done
   - description: 'Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86,
       and a bare-metal RISC-V loop. Walk between them, enter any, all run in background.'
     name: vm_park.asm
-    status: todo
+    status: done
   - description: Concurrent VM execution, time-slicing fairness, state save/restore
       per VM. 10+ tests.
     name: Multi-VM tests
-    status: todo
+    status: done
   description: Each hypervisor building is an independent VM. The map can have multiple
     data centers running different architectures (riscv64, x86_64, aarch64). Background
     VMs continue executing even when player is exploring the map. Proves true multitasking.
   goal: Multiple hypervisor buildings running different guest OSes simultaneously
   id: phase-87
   scope_lines_total: 1200
-  status: in_progress
+  status: done
   test_target: 10
   title: Multi-Hypervisor -- Multiple OS Instances on the Map
   _claimed_by: worker-0
