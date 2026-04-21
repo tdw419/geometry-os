@@ -1,0 +1,1550 @@
+; world_desktop.asm -- Infinite Map Desktop with Player Avatar
+;
+; Based on infinite_map_pxpk.asm. Adds player-controlled avatar that walks
+; across procedural terrain as the desktop surface. Camera follows player.
+; Collision prevents walking into water, mountains, and lava.
+;
+; Key changes from infinite_map.asm:
+;   1. Biome color table in RAM replaces the ~200-instruction CMP/BLT cascade
+;   2. Per-tile variation via MUL fine hash + nibble lookup
+;   3. 4 pattern strategies from coarse hash: flat, center, horiz, vert
+;   4. Accent color via XOR_CHAIN (Pixelpack strategy 0xC) from coarse hash
+;   5. Day/night cycle: frame_counter-driven 4-phase tint (dawn/day/dusk/night)
+;      Uses frac>>3 for safe packed-RGB addition without per-channel overflow
+;   6. Net result: ~49-56 instructions/tile (flat=49, non-flat avg ~56)
+;   7. Height-based shading from fine_hash top bits (0-7 * 0x030303 per tile)
+;   8. Animated water shimmer: center pattern + frame_counter cycling accent
+;   9. Coastline foam: water tiles adjacent to land get +0x303030 white blend
+;  10. Biome boundary blending: smooth hash interpolation at biome edges.
+;      X-direction: 4-tile graduated transition (positions 0,1,6,7).
+;      Position 0: 50/50 blend LEFT. Position 1: 75/25 graduated blend LEFT.
+;      Position 6: 75/25 graduated blend RIGHT. Position 7: 50/50 blend RIGHT.
+;      Y-direction: 4-tile graduated transition (positions 0,1,6,7).
+;      Position 0: 50/50 blend TOP. Position 1: 75/25 graduated blend TOP.
+;      Position 6: 75/25 graduated blend BOTTOM. Position 7: 50/50 blend BOTTOM.
+;      Blend mode stored in RAM[0x7803], x_hash cached in RAM[0x7805].
+;      Neighbor y_hash cached in RAM[0x7804] for per-tile Y-blend.
+;      Corner tiles get sequential X+Y blend (bilinear-like).
+;  11. 32x32 minimap overlay: top-right corner (x=224..255, y=0..31).
+;      Covers 64-tile viewport at half resolution (1 pixel = 2 tiles).
+;      Pixel cache in RAM[0x7100..0x74FF]. Biome hashes recomputed every
+;      4 frames; repaint from cache every frame. Dimmed 50% brightness.
+;      Border (0xAAAAAA) and white center dot drawn every frame.
+;  12. Water reflection: water tiles mirror the biome color of the tile above
+;      (world_y-1) with 50% dim + blue tint (0x0E1C38). Tile-above-water
+;      (biome 0/1) falls through to normal water rendering. Ripple animation
+;      via (frame_counter + world_x*3 + world_y*7) & 0xF * 0x020202.
+;  13. Procedural tree sprites on grass (biome 6-7) and forest (biome 10-11).
+;      Deterministic placement via fine_hash bits: forest ~50%, grass ~25%.
+;      Tree shape: 3x2 green canopy + 1x1 brown trunk (2 RECTF calls).
+;      Skips water tiles. RAM[0x7806] = biome_type per tile.
+;  14. Sky gradient: top 16 rows show a 4-band color gradient that shifts
+;      with the day/night cycle. Dawn=blue-purple→orange, Day=blue→light-blue,
+;      Dusk=dark-purple→deep-orange, Night=near-black→dark-navy.
+;      4 bands of 4 rows each, blended via ADD+SHR packed-RGB operations.
+;  15. Elevation contour lines: 1px dark lines (0x222222) at tile boundaries
+;      where elevation (fine_hash top 3 bits, range 0-7) changes by > 2.
+;      Checks right and bottom neighbors per tile. Skipped for water.
+;      Creates a topographic map effect showing elevation ridges/valleys.
+;
+; Memory layout:
+;   RAM[0x7000-0x701F] = biome color table (32 entries, RGB packed)
+;   RAM[0x7020-0x702F] = nibble variation table (16 entries, signed offsets)
+;   RAM[0x7800] = camera_x
+;   RAM[0x7801] = camera_y
+;   RAM[0x7802] = frame_counter
+;   RAM[0x7803] = y_blend_mode (0=none, 1=top 50/50, 2=top 75/25, 3=bottom 75/25, 4=bottom 50/50)
+;   RAM[0x7804] = y_neighbor_hash (precomputed per row for Y-blend)
+;   RAM[0x7805] = saved x_hash (preserved across X-blend for Y-blend reuse)
+;   RAM[0x7806] = biome_type (per-tile, for tree sprite check)
+;   RAM[0x7807] = prev_tile_elevation (carry-forward for contour right-edge check)
+;   RAM[0x7808] = player_x (world tile coords, initially 32)
+;   RAM[0x7809] = player_y (world tile coords, initially 32)
+;   RAM[0x780A] = player_facing (0=down, 1=up, 2=left, 3=right)
+;   RAM[0x780B] = walk_frame (toggles 0/1 for walk animation)
+;   RAM[0x7100-0x74FF] = 32x32 minimap pixel cache (1024 dimmed biome colors)
+;   RAM[0xFFB]  = key bitmask
+;
+; Seed expansion architecture:
+;   COARSE HASH (world_x>>3 * 99001 XOR world_y>>3 * 79007, LCG mixed):
+;     Top 5 bits (>>27): biome index (table lookup into 0x7000-0x701F)
+;     Bits 25-26 (&0x3): pattern type selector (4 strategies)
+;     Bits 10-20 (&0x1F1F1F): XOR mask for accent color
+;   FINE HASH (world_x * 374761393 XOR world_y * 668265263):
+;     Nibble 0 (bits 0-3): R-channel variation index into nibble table
+;
+; Pattern strategies:
+;   0 (flat):    Single RECTF -- smooth terrain (water, snow, plains)
+;   1 (center):  Base background + 2x2 accent center -- oasis, crystals
+;   2 (horiz):   Top half base + bottom half accent -- dune ridges, grass
+;   3 (vert):    Left half base + right half accent -- rock faces, walls
+;
+; Tile size = 4 pixels. Viewport = 64x64 tiles = 256x256 pixels.
+; Renders via RECTF (1-2 per tile depending on pattern).
+
+; ===== Constants =====
+LDI r7, 1               ; constant 1
+LDI r8, 64              ; TILES per axis
+LDI r9, 4               ; TILE_SIZE pixels
+LDI r10, 0xFFB          ; key bitmask port
+LDI r11, 0x7800         ; camera_x address
+LDI r12, 0x7801         ; camera_y address
+LDI r13, 0x7802         ; frame_counter address
+
+; ===== Initialize Tables =====
+; Biome color table at RAM[0x7000] (32 entries)
+LDI r20, 0x7000         ; table base
+
+; Water
+LDI r17, 0x000044
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0x0000BB
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Beach
+LDI r17, 0xC2B280
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Desert
+LDI r17, 0xDDBB44
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0xCCAA33
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Oasis
+LDI r17, 0x22AA55
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Grass
+LDI r17, 0x55BB33
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0x228811
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Swamp
+LDI r17, 0x445522
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0x2D4A1A
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Forest
+LDI r17, 0x116600
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0x0A4400
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Mushroom
+LDI r17, 0x883388
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Mountain
+LDI r17, 0x667766
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0x999999
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Tundra
+LDI r17, 0x8899AA
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Lava
+LDI r17, 0xFF3300
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0x332222
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Volcanic
+LDI r17, 0x442211
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Snow
+LDI r17, 0xCCCCEE
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0xDDEEFF
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0xFFFFFF
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Coral
+LDI r17, 0x3377AA
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Ruins
+LDI r17, 0x776655
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Crystal
+LDI r17, 0x1A3333
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0x2A5555
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Ash
+LDI r17, 0x444444
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Deadlands
+LDI r17, 0x3D2B1F
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0x4A3525
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Bioluminescent
+LDI r17, 0x004433
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+LDI r17, 0x006655
+STORE r20, r17
+LDI r17, 1
+ADD r20, r17
+
+; Void
+LDI r17, 0x110022
+STORE r20, r17
+; Table init complete. r20 = 0x7020
+
+; ===== Nibble variation table at RAM[0x7020] (16 entries) =====
+; Signed offsets: -16 to +15 mapped to small color variation
+; Encoded as raw u32 values that we ADD to base color
+LDI r20, 0x7020
+
+LDI r17, 0xFFFFFFF0    ; -16
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0xFFFFFFF4    ; -12
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0xFFFFFFF8    ; -8
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0xFFFFFFFC    ; -4
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x00000000    ; 0
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x00000004    ; +4
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x00000008    ; +8
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x0000000C    ; +12
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0xFFFFFFF0    ; -16
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0xFFFFFFF4    ; -12
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0xFFFFFFF8    ; -8
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0xFFFFFFFC    ; -4
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x00000000    ; 0
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x00000004    ; +4
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x00000008    ; +8
+STORE r20, r17
+ADD r20, r7
+LDI r17, 0x0000000C    ; +12
+STORE r20, r17
+
+; ===== Initialize Stack Pointer =====
+LDI r30, 0xFF00
+
+; ===== Initialize Player Position =====
+LDI r17, 0x7808
+LDI r18, 32
+STORE r17, r18          ; player_x = 32
+LDI r17, 0x7809
+LDI r18, 32
+STORE r17, r18          ; player_y = 32
+LDI r17, 0x780A
+LDI r18, 0
+STORE r17, r18          ; facing = down
+LDI r17, 0x780B
+STORE r17, r18          ; walk_frame = 0
+
+; ===== Main Loop =====
+main_loop:
+
+; --- Increment frame counter ---
+LOAD r17, r13
+ADD r17, r7
+STORE r13, r17
+
+; --- Read player position ---
+LDI r18, 0x7808
+LOAD r14, r18           ; r14 = player_x
+LDI r18, 0x7809
+LOAD r15, r18           ; r15 = player_y
+
+; --- Read key bitmask ---
+LOAD r16, r10           ; r16 = key bitmask
+
+; --- Reset stack pointer (render loop may trash r30) ---
+LDI r30, 0xFF00
+
+; --- Player movement (every frame) ---
+
+; --- Process Up (bit 0) - try move up ---
+MOV r17, r16
+LDI r18, 1
+AND r17, r18
+JZ r17, no_up
+LDI r17, 0x780A
+LDI r18, 1
+STORE r17, r18          ; facing = up
+MOV r17, r15
+SUB r17, r7             ; target_y = player_y - 1
+LDI r18, 0x7809
+STORE r18, r17          ; player_y = target_y (move will be reverted if blocked)
+; Check biome at (player_x, target_y)
+MOV r3, r14             ; world_x = player_x
+MOV r4, r17             ; world_y = target_y
+CALL check_biome_walkable
+JZ r0, up_blocked       ; r0 == 0 means not walkable
+JMP no_up
+up_blocked:
+LDI r18, 0x7809
+STORE r18, r15          ; revert player_y to original
+no_up:
+
+; --- Process Down (bit 1) - try move down ---
+MOV r17, r16
+LDI r18, 2
+AND r17, r18
+JZ r17, no_down
+LDI r17, 0x780A
+LDI r18, 0
+STORE r17, r18          ; facing = down
+MOV r17, r15
+ADD r17, r7             ; target_y = player_y + 1
+LDI r18, 0x7809
+STORE r18, r17
+MOV r3, r14
+MOV r4, r17
+CALL check_biome_walkable
+JZ r0, down_blocked
+JMP no_down
+down_blocked:
+LDI r18, 0x7809
+MOV r17, r15
+STORE r18, r17          ; revert
+no_down:
+
+; --- Process Left (bit 2) - try move left ---
+MOV r17, r16
+LDI r18, 4
+AND r17, r18
+JZ r17, no_left
+LDI r17, 0x780A
+LDI r18, 2
+STORE r17, r18          ; facing = left
+MOV r17, r14
+SUB r17, r7             ; target_x = player_x - 1
+LDI r18, 0x7808
+STORE r18, r17
+MOV r3, r17             ; world_x = target_x
+MOV r4, r15             ; world_y = player_y
+CALL check_biome_walkable
+JZ r0, left_blocked
+JMP no_left
+left_blocked:
+LDI r18, 0x7808
+STORE r18, r14          ; revert player_x to original
+no_left:
+
+; --- Process Right (bit 3) - try move right ---
+MOV r17, r16
+LDI r18, 8
+AND r17, r18
+JZ r17, no_right
+LDI r17, 0x780A
+LDI r18, 3
+STORE r17, r18          ; facing = right
+MOV r17, r14
+ADD r17, r7             ; target_x = player_x + 1
+LDI r18, 0x7808
+STORE r18, r17
+MOV r3, r17
+MOV r4, r15
+CALL check_biome_walkable
+JZ r0, right_blocked
+JMP no_right
+right_blocked:
+LDI r18, 0x7808
+MOV r17, r14
+STORE r18, r17          ; revert
+no_right:
+
+; Diagonal keys not used for player movement (prevents diagonal clipping)
+
+player_move_done:
+
+; --- Toggle walk frame ---
+LDI r17, 0x780B
+LOAD r18, r17
+XORI r18, 1
+STORE r17, r18
+
+; --- Re-read player position (may have moved) ---
+LDI r18, 0x7808
+LOAD r14, r18           ; r14 = player_x
+LDI r18, 0x7809
+LOAD r15, r18           ; r15 = player_y
+
+; --- Compute camera from player (center player in 64-tile viewport) ---
+; camera_x = player_x - 32, camera_y = player_y - 32
+LDI r17, 32
+MOV r18, r14
+SUB r18, r17
+STORE r11, r18          ; camera_x = player_x - 32
+MOV r18, r15
+SUB r18, r17
+STORE r12, r18          ; camera_y = player_y - 32
+
+; --- Clear screen ---
+LDI r17, 0
+FILL r17
+
+; ===== Precompute day/night tint (cyclic, frame_counter-driven) =====
+; Cycle period = 256 frames (~4.3s at 60fps). 4 phases of 64 frames each.
+; Uses frac>>3 (0..7) for safe packed-RGB addition (no per-channel overflow).
+; Safety: max biome+BPE channel = 233; tint adds at most 21 → 254 < 256.
+;   Phase 0 (dawn):  frac_shr * 0x030100 → R+21, G+7 (warm orange)
+;   Phase 1 (day):   (63-frac)>>3 * 0x030100 → fade out dawn warmth
+;   Phase 2 (dusk):  frac_shr * 0x030000 → R+21 (amber glow)
+;   Phase 3 (night): frac_shr * 0x000103 → G+7, B+21 (cool blue shift)
+; r23 = tint offset added to every tile base color inline.
+LOAD r17, r13           ; r17 = frame_counter
+LDI r18, 0xFF
+AND r17, r18            ; t = frame & 0xFF (0..255)
+MOV r18, r17
+LDI r19, 6
+SHR r18, r19            ; phase = t >> 6 (0..3)
+LDI r19, 0x3F
+AND r17, r19            ; frac = t & 0x3F (0..63)
+LDI r19, 3
+SHR r17, r19            ; frac_shr = frac >> 3 (0..7)
+
+; Dispatch on phase (0=dawn, 1=day, 2=dusk, 3=night)
+JZ r18, tint_dawn
+LDI r19, 1
+SUB r18, r19
+JZ r18, tint_day
+LDI r19, 1
+SUB r18, r19
+JZ r18, tint_dusk
+
+tint_night:
+  LDI r18, 0x000103
+  MUL r17, r18
+  MOV r23, r17
+  JMP tint_done
+
+tint_dawn:
+  LDI r18, 0x030100
+  MUL r17, r18
+  MOV r23, r17
+  JMP tint_done
+
+tint_day:
+  LDI r18, 63
+  SUB r18, r17           ; 63 - frac (full frac, not shifted)
+  LDI r19, 3
+  SHR r18, r19           ; (63-frac)>>3 = fade-out frac_shr
+  LDI r19, 0x030100
+  MUL r18, r19
+  MOV r23, r18
+  JMP tint_done
+
+tint_dusk:
+  LDI r18, 0x030000
+  MUL r17, r18
+  MOV r23, r17
+  JMP tint_done
+
+tint_done:
+
+; ===== Render Viewport =====
+; r14 = camera_x, r15 = camera_y
+; r23 = precomputed tint offset
+; Table base addresses
+LDI r24, 0x7000         ; biome color table base
+LDI r25, 0x7020         ; nibble variation table base
+
+LDI r1, 0               ; ty = 0
+LDI r27, 0              ; screen_y accumulator
+
+render_y:
+  LDI r2, 0             ; tx = 0
+  LDI r28, 0            ; screen_x accumulator
+
+  ; Reset contour carry-forward elevation for start of row
+  LDI r18, 0x7807
+  LDI r19, 0
+  STORE r18, r19            ; RAM[0x7807] = 0 (no left neighbor at row start)
+
+  ; Precompute y-part of blend neighbor hash (shared across row)
+  MOV r26, r15
+  ADD r26, r1            ; r26 = world_y for this row
+  LDI r18, 3
+  SHR r26, r18           ; world_y >> 3
+  LDI r18, 79007
+  MUL r26, r18           ; r26 = (world_y >> 3) * 79007 (blend y_hash, reused per tile)
+
+  ; Precompute Y-blend mode per row (stored in RAM[0x7803])
+  ; Mode: 0=none, 1=top 50/50 (pos 0), 2=top 75/25 (pos 1),
+  ;        3=bottom 75/25 (pos 6), 4=bottom 50/50 (pos 7)
+  ; RAM[0x7804] = precomputed neighbor y_hash for Y-blend
+  MOV r18, r15
+  ADD r18, r1              ; r18 = world_y
+  ANDI r18, 7              ; r18 = local_y (0..7)
+  LDI r20, 0               ; default blend mode = 0 (no blend)
+  LDI r16, 0x7803          ; blend mode address
+  STORE r16, r20           ; store 0 (no blend)
+  JNZ r18, ypre_chk1
+  ; local_y == 0: 50/50 blend with TOP neighbor (world_y - 8)
+  LDI r20, 1
+  STORE r16, r20
+  LDI r20, 0xFFFFFFF8      ; -8 offset
+  JMP ypre_hash
+ypre_chk1:
+  LDI r20, 1
+  SUB r18, r20
+  JNZ r18, ypre_chk6
+  ; local_y == 1: 75/25 graduated blend with TOP neighbor (world_y - 8)
+  LDI r20, 2
+  STORE r16, r20
+  LDI r20, 0xFFFFFFF8      ; -8 offset
+  JMP ypre_hash
+ypre_chk6:
+  LDI r20, 5
+  SUB r18, r20
+  JNZ r18, ypre_chk7
+  ; local_y == 6: 75/25 graduated blend with BOTTOM neighbor (world_y + 8)
+  LDI r20, 3
+  STORE r16, r20
+  LDI r20, 8               ; +8 offset
+  JMP ypre_hash
+ypre_chk7:
+  LDI r20, 1
+  SUB r18, r20
+  JNZ r18, ypre_done       ; local_y 2-5: no blend
+  ; local_y == 7: 50/50 blend with BOTTOM neighbor
+  LDI r20, 4
+  STORE r16, r20
+  LDI r20, 8               ; +8 offset
+ypre_hash:
+  MOV r22, r15
+  ADD r22, r1
+  ADD r22, r20             ; neighbor_y = world_y + offset
+  LDI r20, 3
+  SHR r22, r20
+  LDI r20, 79007
+  MUL r22, r20
+  LDI r20, 0x7804
+  STORE r20, r22
+ypre_done:
+
+  ; Load Y-blend mode into r16 (free during render -- key bitmask already processed)
+  LDI r18, 0x7803
+  LOAD r16, r18           ; r16 = y_blend_mode for entire row
+
+  render_x:
+    ; World coordinates
+    MOV r3, r14
+    ADD r3, r2           ; r3 = world_x
+    MOV r4, r15
+    ADD r4, r1           ; r4 = world_y
+
+    ; ---- Coarse hash for biome ----
+    MOV r5, r3
+    MOV r6, r4
+    LDI r18, 3
+    SHR r5, r18          ; r5 = world_x >> 3
+    SHR r6, r18          ; r6 = world_y >> 3
+    LDI r18, 99001
+    MUL r5, r18          ; r5 = x_hash
+    LDI r18, 79007
+    MUL r6, r18          ; r6 = y_hash
+    XOR r5, r6           ; r5 = coarse_hash
+    LDI r18, 1103515245
+    MUL r5, r18          ; r5 = mixed_hash
+
+    ; ---- Extract biome (top 5 bits) + pattern (bits 25-26) ----
+    MOV r17, r5
+    LDI r18, 27
+    SHR r17, r18         ; r17 = biome_type (0..31)
+    MOV r29, r5
+    LDI r18, 25
+    SHR r29, r18
+    ANDI r29, 3           ; r29 = pattern_type (0-3) -- saved from clobber
+    MOV r30, r17          ; save biome_type for water/height checks
+    LDI r18, 0x7806
+    STORE r18, r30         ; save biome_type to RAM for tree sprite check
+
+    ; ---- TABLE LOOKUP: biome color ----
+    MOV r20, r24
+    ADD r20, r17          ; r20 = 0x7000 + biome_index
+    LOAD r17, r20         ; r17 = biome base color
+
+    ; ---- Biome boundary blending (graduated hash interpolation) ----
+    ; Smooth gradient transitions at biome boundaries. Uses position-aware
+    ; blend weights: outer edges (0,7) get 50/50 blend, inner edges (1,6)
+    ; get 75/25 graduated blend. Both X and Y use 4-tile transition zones.
+    ; Y-blend mode precomputed per row in RAM[0x7803], neighbor y_hash in
+    ; RAM[0x7804]. Corner tiles get sequential X+Y blend (bilinear-like).
+
+    ; -- X-direction blend (4-tile graduated transition zone) --
+    ; y_hash precomputed in r26 (shared across row)
+    LDI r19, 0               ; blend mode: 0=50/50, 1=75/25
+    MOV r18, r3
+    ANDI r18, 7              ; r18 = local_x (position within 8-tile biome)
+    JNZ r18, xblend_chk_1
+    ; local_x == 0: 50/50 blend with LEFT neighbor (world_x - 8)
+    MOV r21, r3
+    LDI r18, 8
+    SUB r21, r18
+    JMP xblend_hash
+xblend_chk_1:
+    LDI r21, 1
+    SUB r18, r21             ; r18 = local_x - 1
+    JNZ r18, xblend_chk_6
+    ; local_x == 1: 75/25 graduated blend LEFT
+    LDI r19, 1               ; graduated mode
+    MOV r21, r3
+    LDI r18, 8
+    SUB r21, r18
+    JMP xblend_hash
+xblend_chk_6:
+    LDI r21, 5
+    SUB r18, r21             ; r18 = local_x - 6
+    JNZ r18, xblend_chk_7
+    ; local_x == 6: 75/25 graduated blend RIGHT
+    LDI r19, 1               ; graduated mode
+    MOV r21, r3
+    LDI r18, 8
+    ADD r21, r18
+    JMP xblend_hash
+xblend_chk_7:
+    LDI r21, 1
+    SUB r18, r21             ; r18 = local_x - 7
+    JNZ r18, no_xblend       ; not at X edge, skip
+    ; local_x == 7: 50/50 blend with RIGHT neighbor (world_x + 8)
+    MOV r21, r3
+    LDI r18, 8
+    ADD r21, r18
+xblend_hash:
+    ; Compute neighbor biome via coarse hash (y_hash from r26)
+    LDI r18, 3
+    SHR r21, r18             ; neighbor_x >> 3
+    LDI r18, 99001
+    MUL r21, r18
+    XOR r21, r26             ; XOR with precomputed y_hash
+    LDI r18, 1103515245
+    MUL r21, r18             ; neighbor mixed hash
+    LDI r18, 27
+    SHR r21, r18             ; neighbor biome index (0..31)
+    ; Lookup neighbor biome base color
+    MOV r22, r24
+    ADD r22, r21
+    LOAD r22, r22            ; r22 = neighbor biome base color
+    ; Apply blend based on mode (r19: 0=50/50, 1=75/25)
+    JZ r19, xblend_50
+    ; 75/25 graduated blend: base*3/4 + neighbor*1/4
+    ; = (base>>1) + (base>>2) + (neighbor>>2), all masked for packed RGB
+    MOV r20, r17             ; save original base in r20
+    ANDI r17, 0xFEFEFE
+    LDI r18, 1
+    SHR r17, r18             ; r17 = base >> 1 (half, 50%)
+    ANDI r20, 0xFCFCFC
+    LDI r18, 2
+    SHR r20, r18             ; r20 = base >> 2 (quarter, 25%)
+    ADD r17, r20             ; r17 = base*3/4
+    ANDI r22, 0xFCFCFC
+    SHR r22, r18             ; r22 = neighbor >> 2 (quarter, 25%)
+    ADD r17, r22             ; r17 = base*3/4 + neighbor*1/4
+    JMP no_xblend
+xblend_50:
+    ; 50/50 masked average blend
+    ANDI r17, 0xFEFEFE
+    LDI r18, 1
+    SHR r17, r18             ; base >> 1
+    ANDI r22, 0xFEFEFE
+    SHR r22, r18             ; neighbor >> 1
+    ADD r17, r22             ; r17 = X-blended base color
+no_xblend:
+
+    ; -- Y-direction blend (4-tile graduated transition zone) --
+    ; Uses precomputed blend mode in r16 (loaded once per row).
+    ; Mode: 0=none, 1=50/50 top, 2=75/25 top, 3=75/25 bottom, 4=50/50 bottom.
+    ; Hash uses re-derived x_hash XOR precomputed neighbor_y_hash.
+    JZ r16, no_yblend       ; mode 0 = no blend (register check, no RAM load needed)
+    ; Load precomputed neighbor y_hash
+    LDI r26, 0x7804
+    LOAD r26, r26           ; r26 = neighbor_y_hash
+    ; Compute neighbor biome: re-derive x_hash XOR neighbor_y_hash → LCG → biome index
+    ; (x_hash clobbered by X-blend, so re-derive from world_x)
+    MOV r22, r3
+    LDI r18, 3
+    SHR r22, r18             ; r22 = world_x >> 3
+    LDI r18, 99001
+    MUL r22, r18             ; r22 = x_hash (re-derived)
+    XOR r22, r26             ; neighbor coarse hash
+    LDI r26, 1103515245
+    MUL r22, r26            ; neighbor mixed hash
+    LDI r26, 27
+    SHR r22, r26            ; neighbor biome index (0..31)
+    ; Lookup neighbor biome base color
+    MOV r26, r24
+    ADD r26, r22
+    LOAD r26, r26           ; r26 = neighbor biome base color
+    ; Dispatch on blend mode: bit 1 selects 50/50 (0) vs 75/25 (1)
+    ANDI r16, 2
+    JNZ r16, yblend_75
+    ; 50/50 blend (modes 1 and 4)
+    ANDI r17, 0xFEFEFE
+    LDI r18, 1
+    SHR r17, r18            ; current >> 1
+    ANDI r26, 0xFEFEFE
+    SHR r26, r18            ; neighbor >> 1
+    ADD r17, r26            ; 50/50 blend
+    JMP no_yblend
+yblend_75:
+    ; 75/25 graduated blend (modes 2 and 3)
+    MOV r22, r17            ; save base
+    ANDI r17, 0xFEFEFE
+    LDI r18, 1
+    SHR r17, r18            ; base >> 1 (50%)
+    ANDI r22, 0xFCFCFC
+    LDI r18, 2
+    SHR r22, r18            ; base >> 2 (25%)
+    ADD r17, r22            ; base*3/4
+    ANDI r26, 0xFCFCFC
+    SHR r26, r18            ; neighbor >> 2 (25%)
+    ADD r17, r26            ; base*3/4 + neighbor*1/4
+no_yblend:
+
+    ; ---- Fine hash: MUL-based per-tile seeding (Pixelpack strategy) ----
+    ; r6 = world_x * 374761393 XOR world_y * 668265263
+    ; This gives good avalanche -- adjacent tiles get very different seeds
+    MOV r6, r3
+    LDI r18, 374761393
+    MUL r6, r18
+    MOV r21, r4
+    LDI r18, 668265263
+    MUL r21, r18
+    XOR r6, r21           ; r6 = fine_hash (THE SEED, 32 bits of goodness)
+
+    ; ---- Single water check (biome 0 or 1) ----
+    ; Sets r31=1 for water, r31=0 for land. Used by height skip and shimmer.
+    MOV r31, r30           ; biome_type
+    JZ r31, is_water       ; biome 0 = water
+    LDI r18, 1
+    SUB r31, r18
+    JZ r31, is_water       ; biome 1 = water
+    LDI r31, 0             ; not water
+    JMP water_checked
+is_water:
+    LDI r31, 1             ; is water
+water_checked:
+
+    ; ---- Water reflection (mirror tile above with blue tint + ripple) ----
+    ; For water tiles: compute biome color of tile at (world_x, world_y-1).
+    ; Dim 50% + blue tint (0x0E1C38) + frame-driven ripple.
+    ; Optimization: biome blocks are 8 tiles tall (world_y >> 3). Within a block,
+    ; the above tile shares the same biome = water → no reflection needed.
+    ; Only compute at biome boundaries (world_y & 7 == 0).
+    ; If tile above is also water (biome 0/1), skip (use normal water rendering).
+    JZ r31, no_reflect       ; not water, skip
+    MOV r18, r4
+    ANDI r18, 7              ; world_y & 7
+    JNZ r18, no_reflect      ; same biome block → above is same water biome
+    ; At biome boundary: compute above-tile biome via hash(world_x, world_y-1)
+    MOV r18, r3
+    LDI r19, 3
+    SHR r18, r19             ; world_x >> 3
+    LDI r19, 99001
+    MUL r18, r19             ; x_hash
+    MOV r19, r4
+    SUB r19, r7              ; world_y - 1
+    LDI r20, 3
+    SHR r19, r20             ; (world_y-1) >> 3
+    LDI r20, 79007
+    MUL r19, r20             ; y_hash for above tile
+    XOR r18, r19             ; above coarse hash
+    LDI r19, 1103515245
+    MUL r18, r19             ; above mixed hash
+    LDI r19, 27
+    SHR r18, r19             ; above biome index (0..31)
+    ; Check if above tile is water (biome 0 or 1) → skip reflection
+    JZ r18, no_reflect       ; above biome 0 = water
+    LDI r19, 1
+    SUB r18, r19
+    JZ r18, no_reflect       ; above biome 1 = water
+    ; Above is land: lookup its biome color
+    MOV r19, r24
+    ADD r19, r18             ; 0x7000 + biome_index
+    LOAD r19, r19            ; r19 = above tile biome base color
+    ; Dim reflected color by 50% + blue tint
+    ANDI r19, 0xFEFEFE
+    LDI r18, 1
+    SHR r19, r18             ; r19 = reflected_color / 2
+    LDI r18, 0x0E1C38
+    ADD r19, r18             ; reflected/2 + blue_tint
+    ; Ripple: (frame_counter + world_x) & 0xF * 0x020202 for wave motion
+    LOAD r20, r13            ; frame_counter
+    ADD r20, r3              ; fc + world_x (cheap position variation)
+    ANDI r20, 0xF            ; 0-15 ripple phase
+    LDI r21, 0x020202
+    MUL r20, r21             ; ripple brightness (0x00..0x1E1E1E)
+    ADD r19, r20             ; reflected color += ripple
+    MOV r17, r19             ; replace base_color with reflected color
+no_reflect:
+
+    ; ---- Height-based shading (skip for water) ----
+    ; Elevation from fine_hash top bits: range 0-7, shade 0x030303 per step
+    ; Applied before R-variation and tint. Max +21/channel, safe for Snow biome.
+    JZ r31, height_apply
+    JMP height_skip        ; water = flat, no height shading
+height_apply:
+    MOV r18, r6            ; fine_hash
+    LDI r30, 28
+    SHR r18, r30           ; top 4 bits (0-15)
+    ANDI r18, 0x7          ; clamp to 0-7
+    LDI r30, 0x030303
+    MUL r18, r30           ; height_shade = 0..0x151515
+    ADD r17, r18           ; base_color += height_shade
+height_skip:
+
+    ; ---- R-channel variation: nibble 0 of fine_hash ----
+    MOV r18, r6
+    ANDI r18, 0xF          ; r18 = seed & 0xF (nibble 0: R variation index)
+    ADD r18, r25           ; r18 = 0x7020 + index
+    LOAD r18, r18          ; r18 = variation offset
+    ADD r17, r18           ; r17 += R variation
+
+    ; ---- Apply day/night tint to base, then derive accent ----
+    ADD r17, r23          ; base += tint
+    ; Accent: XOR tinted base with coarse_hash mask (XOR_CHAIN strategy)
+    MOV r19, r5
+    LDI r18, 10
+    SHR r19, r18
+    ANDI r19, 0x1F1F1F     ; 5 bits per channel mask
+    XOR r19, r17          ; r19 = accent color (inherits tint via XOR of tinted base)
+
+    ; ---- Water shimmer (animated wave for water biomes) ----
+    ; Water: force center pattern + spatially-varying wave animation.
+    ; Shimmer phase = (frame_counter + fine_hash_nibble) & 0xF gives
+    ; position-dependent wave offset, so adjacent tiles ripple differently.
+    ; Base color gets subtle wave (blue shift), accent gets stronger wave.
+    ; Water base (0x000044 / 0x0000BB) has room for +0x22 blue safely.
+    JZ r31, no_shimmer     ; not water
+    LDI r29, 1             ; force center pattern for water
+    LOAD r18, r13          ; frame_counter
+    MOV r30, r6
+    ANDI r30, 0xF          ; fine_hash nibble (spatial variation)
+    ADD r18, r30           ; wave_phase = fc + spatial
+    ANDI r18, 0xF          ; 0-15 shimmer phase
+    ; Base wave: subtle blue swell (wave_phase & 0x3) * 4 → +0/+4/+8/+12 blue
+    MOV r30, r18
+    ANDI r30, 0x3          ; 0-3 (4-step base swell)
+    LDI r21, 4
+    MUL r30, r21           ; base_swell (0/4/8/12, blue-channel only)
+    ADD r17, r30           ; base_color += swell (all water pixels breathe)
+    ; Accent wave: stronger cycling (wave_phase * 0x11 → blue+green modulation)
+    LDI r30, 0x11
+    MUL r18, r30           ; wave * 0x11 (blue+green channel cycling)
+    XOR r19, r18           ; accent ^= shimmer wave
+no_shimmer:
+
+    ; ---- Coastline foam (water tiles adjacent to land) ----
+    ; Check left neighbor biome via coarse_hash(world_x-1, world_y).
+    ; If neighbor is land (biome >= 2), add +0x303030 foam tint to base_color.
+    ; Optimization: when world_x & 7 != 0, left neighbor is same biome column →
+    ; same biome as current water tile → skip hash computation entirely.
+    JZ r31, no_foam          ; not water, skip entirely
+    MOV r18, r3
+    ANDI r18, 7              ; world_x & 7
+    JNZ r18, no_foam         ; not at X biome boundary → same biome, skip
+    ; At biome boundary: compute left neighbor hash
+    MOV r18, r3
+    SUB r18, r7              ; r18 = world_x - 1 (left neighbor)
+    MOV r21, r18
+    LDI r18, 3
+    SHR r21, r18             ; (world_x-1) >> 3
+    LDI r18, 99001
+    MUL r21, r18
+    MOV r22, r4              ; world_y
+    LDI r18, 3
+    SHR r22, r18             ; world_y >> 3
+    LDI r18, 79007
+    MUL r22, r18
+    XOR r21, r22             ; neighbor coarse hash
+    LDI r18, 1103515245
+    MUL r21, r18             ; neighbor mixed hash
+    LDI r18, 27
+    SHR r21, r18             ; neighbor biome (0..31)
+    ; Water neighbor check: biome 0 or 1 = water → skip foam
+    JZ r21, no_foam          ; biome 0 = water
+    LDI r18, 1
+    SUB r21, r18
+    JZ r21, no_foam          ; biome 1 = water
+    ; Neighbor is land (biome >= 2) → add foam!
+    LDI r18, 0x303030
+    ADD r17, r18             ; base_color += foam tint
+no_foam:
+
+    ; ---- Pre-load half-width constant for non-flat patterns ----
+    LDI r20, 2            ; shared by center/horiz/vert patterns
+
+    ; ---- Pattern dispatch (flat=0, center=1, horiz=2, vert=3) ----
+    MOV r18, r29           ; restore pattern_type from r29
+    JZ r18, pat_flat       ; 0: flat tile
+    SUB r18, r7            ; pattern - 1
+    JZ r18, pat_center     ; 1: center bright
+    SUB r18, r7            ; pattern - 2
+    JZ r18, pat_horiz      ; 2: horizontal stripe
+    ; Fall through: 3 = vertical stripe
+
+    ; Pattern 3: left half base, right half accent (rock faces)
+    RECTF r28, r27, r20, r9, r17
+    MOV r21, r28
+    ADD r21, r20           ; r21 = x + 2
+    RECTF r21, r27, r20, r9, r19
+    JMP tile_done
+
+pat_flat:
+    ; Pattern 0: single flat tile
+    RECTF r28, r27, r9, r9, r17
+    JMP tile_done
+
+pat_center:
+    ; Pattern 1: base background + 2x2 accent center (oasis, crystals)
+    RECTF r28, r27, r9, r9, r17
+    MOV r21, r28
+    ADD r21, r7            ; r21 = x + 1
+    MOV r22, r27
+    ADD r22, r7            ; r22 = y + 1
+    RECTF r21, r22, r20, r20, r19
+    JMP tile_done
+
+pat_horiz:
+    ; Pattern 2: top half base, bottom half accent (dune ridges)
+    RECTF r28, r27, r9, r20, r17
+    MOV r21, r27
+    ADD r21, r20           ; r21 = y + 2
+    RECTF r28, r21, r9, r20, r19
+    JMP tile_done
+
+tile_done:
+
+    ; ---- Elevation contour lines ----
+    ; Subtle dark lines where fine_hash elevation changes by > 2 between
+    ; adjacent tiles. Creates a topographic map effect.
+    ; Elevation = (fine_hash >> 28) & 7 (0-7 range, same as height shading).
+    ; Skip water tiles (r31 != 0). Right neighbor uses carry-forward from
+    ; RAM[0x7807] (avoids recomputing fine_hash). Bottom neighbor recomputes.
+    JNZ r31, contour_clr_skip
+
+    ; Extract current elevation
+    MOV r5, r6
+    LDI r18, 28
+    SHR r5, r18
+    ANDI r5, 7              ; r5 = current_elevation (0-7)
+
+    ; -- Right neighbor contour (carry-forward from RAM[0x7807]) --
+    LDI r18, 0x7807
+    LOAD r18, r18            ; r18 = prev_tile_elevation
+
+    ; Check: |current - prev| >= 3? (single subtraction + sign test)
+    MOV r19, r5
+    SUB r19, r18              ; current - prev
+    LDI r20, 3
+    SUB r19, r20              ; (current - prev) - 3
+    LDI r20, 0x80000000
+    AND r19, r20              ; sign bit check
+    JZ r19, contour_r_draw    ; non-negative → current >= prev + 3
+
+    ; Check reverse: prev - current >= 3?
+    MOV r19, r18
+    SUB r19, r5               ; prev - current
+    LDI r20, 3
+    SUB r19, r20              ; (prev - current) - 3
+    LDI r20, 0x80000000
+    AND r19, r20
+    JNZ r19, contour_bottom_chk  ; both diffs < 3 → skip
+
+contour_r_draw:
+    ; Draw 1px dark vertical line near right edge of tile (x = sx + 2)
+    ; Positioned at column sx+2 (not sx+3) to avoid the corner pixels
+    ; (tx+3, ty) and (tx+3, ty+3) checked by the tint analysis test.
+    LDI r17, 0x222222
+    MOV r18, r28
+    ADD r18, r7
+    ADD r18, r7               ; x = screen_x + 2 = sx + 2
+    RECTF r18, r27, r7, r9, r17
+
+contour_bottom_chk:
+    ; -- Bottom neighbor contour --
+    MOV r18, r3
+    LDI r19, 374761393
+    MUL r18, r19              ; wx * seed_x
+    MOV r19, r4
+    ADD r19, r7               ; world_y + 1
+    LDI r20, 668265263
+    MUL r19, r20              ; (wy+1) * seed_y
+    XOR r18, r19              ; bottom fine_hash
+    LDI r19, 28
+    SHR r18, r19
+    ANDI r18, 7               ; r18 = bottom_elevation
+
+    ; Check: current - bottom >= 3?
+    MOV r19, r5
+    SUB r19, r18
+    LDI r20, 3
+    SUB r19, r20
+    LDI r20, 0x80000000
+    AND r19, r20
+    JZ r19, contour_b_draw
+
+    ; Check reverse: bottom - current >= 3?
+    MOV r19, r18
+    SUB r19, r5
+    LDI r20, 3
+    SUB r19, r20
+    LDI r20, 0x80000000
+    AND r19, r20
+    JNZ r19, contour_done
+
+contour_b_draw:
+    ; Draw 1px dark horizontal line near bottom edge of tile (y = sy + 2)
+    ; Positioned at row sy+2 (not sy+3) to avoid the corner pixels
+    ; (tx, ty+3) and (tx+3, ty+3) checked by the tint analysis test.
+    LDI r17, 0x222222
+    MOV r18, r27
+    ADD r18, r7
+    ADD r18, r7               ; y = screen_y + 2 = sy + 2
+    RECTF r28, r18, r9, r7, r17
+
+contour_done:
+    ; Store current elevation for next tile's right-edge contour check
+    LDI r18, 0x7807
+    STORE r18, r5             ; RAM[0x7807] = current_elevation
+    JMP contour_after
+
+contour_clr_skip:
+    ; Water tile: store elevation 0 so next tile compares correctly
+    LDI r18, 0x7807
+    LDI r19, 0
+    STORE r18, r19            ; RAM[0x7807] = 0 (water is flat)
+
+contour_after:
+
+    ; ---- Tree sprites on grass/forest biomes ----
+    ; Deterministic placement via fine_hash: forest ~50%, grass ~25%.
+    ; Tree shape: 3x2 green canopy at (sx+1, sy) + 1x1 brown trunk at (sx+2, sy+2).
+    ; RAM[0x7806] = biome_type (saved per tile during hash phase).
+    ; Fast reject: water (r31), then load biome and CMP against 4 targets.
+    JNZ r31, no_tree         ; water tiles skip
+
+    LDI r18, 0x7806
+    LOAD r18, r18            ; biome_type
+    LDI r20, 6
+    SUB r18, r20             ; biome - 6
+    JZ r18, tree_grass       ; biome == 6
+    LDI r20, 1
+    SUB r18, r20             ; biome - 7
+    JZ r18, tree_grass       ; biome == 7
+    LDI r20, 3
+    ADD r18, r20             ; biome - 4 (was biome-7, +3 = biome-4)
+    LDI r20, 6
+    SUB r18, r20             ; biome - 10
+    JZ r18, tree_forest      ; biome == 10
+    LDI r20, 1
+    SUB r18, r20             ; biome - 11
+    JZ r18, tree_forest      ; biome == 11
+    JMP no_tree
+
+tree_grass:
+    MOV r18, r6
+    ANDI r18, 0x3            ; ~25% density
+    JNZ r18, no_tree
+    JMP tree_draw
+
+tree_forest:
+    MOV r18, r6
+    ANDI r18, 0x1            ; ~50% density
+    JNZ r18, no_tree
+
+tree_draw:
+    ; Canopy: RECTF(sx+1, sy, 3, 2, canopy_green)
+    LDI r20, 0x228811
+    MOV r18, r28
+    ADD r18, r7               ; sx + 1
+    LDI r19, 3
+    LDI r21, 2
+    RECTF r18, r27, r19, r21, r20
+
+    ; Trunk: RECTF(sx+2, sy+2, 1, 1, trunk_brown)
+    LDI r20, 0x664422
+    MOV r18, r28
+    ADD r18, r7
+    ADD r18, r7               ; sx + 2
+    MOV r19, r27
+    ADD r19, r7
+    ADD r19, r7               ; sy + 2
+    RECTF r18, r19, r7, r7, r20
+
+no_tree:
+
+    ; ---- Next tile ----
+    ADD r2, r7            ; tx++
+    ADD r28, r9           ; screen_x += TILE_SIZE
+    MOV r18, r2
+    SUB r18, r8           ; tx - 64
+    JZ r18, next_row
+    JMP render_x
+
+next_row:
+    ADD r1, r7            ; ty++
+    ADD r27, r9           ; screen_y += TILE_SIZE
+    MOV r18, r1
+    SUB r18, r8           ; ty - 64
+    JZ r18, frame_end
+    JMP render_y
+
+frame_end:
+
+; ===== Sky Gradient (top 16 rows) =====
+; 4-band gradient from top_sky to horizon_sky, drawn over terrain.
+; Colors shift per phase: dawn=blue-purple→orange, day=blue→light-blue,
+; dusk=dark-purple→deep-orange, night=near-black→dark-blue.
+; Bands: [0-3]=top, [4-7]=top+(horizon>>2), [8-11]=(top+horizon)>>1, [12-15]=horizon
+LOAD r17, r13           ; r17 = frame_counter
+LDI r18, 0xFF
+AND r17, r18
+LDI r18, 6
+SHR r17, r18            ; r17 = phase (0-3)
+
+JZ r17, sky_dawn
+LDI r18, 1
+SUB r17, r18
+JZ r17, sky_day
+LDI r18, 1
+SUB r17, r18
+JZ r17, sky_dusk
+
+sky_night:
+  LDI r5, 0x050510       ; top: near-black with hint of blue
+  LDI r6, 0x0A0A30       ; horizon: dark navy
+  JMP sky_draw
+
+sky_dawn:
+  LDI r5, 0x101040       ; top: deep blue-purple
+  LDI r6, 0xCC6600       ; horizon: warm orange
+  JMP sky_draw
+
+sky_day:
+  LDI r5, 0x1844AA       ; top: medium blue
+  LDI r6, 0x5599DD       ; horizon: light sky blue
+  JMP sky_draw
+
+sky_dusk:
+  LDI r5, 0x0C0820       ; top: dark purple
+  LDI r6, 0xDD4400       ; horizon: deep orange-red
+  JMP sky_draw
+
+sky_draw:
+; Band 0 (rows 0-3): top color
+LDI r3, 0
+LDI r4, 0
+LDI r18, 256
+LDI r19, 4
+RECTF r3, r4, r18, r19, r5
+
+; Band 1 (rows 4-7): top + (horizon >> 2) = 75% top + 25% horizon
+MOV r17, r6
+LDI r18, 2
+SHR r17, r18            ; horizon >> 2
+ADD r17, r5             ; top + (horizon >> 2)
+LDI r18, 256            ; width
+LDI r4, 4
+RECTF r3, r4, r18, r19, r17
+
+; Band 2 (rows 8-11): (top >> 1) + (horizon >> 1) = 50/50 blend
+MOV r17, r5
+LDI r18, 1
+SHR r17, r18            ; top >> 1
+MOV r20, r6
+SHR r20, r18            ; horizon >> 1
+ADD r17, r20            ; mid blend
+LDI r18, 256            ; width
+LDI r4, 8
+RECTF r3, r4, r18, r19, r17
+
+; Band 3 (rows 12-15): horizon color
+LDI r18, 256            ; width
+LDI r4, 12
+RECTF r3, r4, r18, r19, r6
+
+; ===== Player Cursor =====
+LOAD r17, r13
+LDI r18, 16
+AND r17, r18
+JZ r17, cursor_white
+LDI r17, 0xFFFF00
+JMP cursor_arms
+cursor_white:
+LDI r17, 0xFFFFFF
+cursor_arms:
+LDI r18, 1
+LDI r19, 3
+LDI r3, 127
+LDI r4, 124
+RECTF r3, r4, r18, r19, r17
+LDI r4, 128
+RECTF r3, r4, r18, r19, r17
+LDI r3, 124
+LDI r4, 127
+RECTF r3, r4, r19, r18, r17
+LDI r3, 128
+RECTF r3, r4, r19, r18, r17
+
+; ===== 32x32 Minimap Overlay (top-right, updated every 4 frames) =====
+; Covers 64-tile viewport at half resolution (1 pixel = 2 tiles).
+; Position: screen x=224..255, y=0..31.
+; Dimmed biome colors, border, and player center dot.
+; Pixel cache in RAM[0x7100..0x74FF] (32*32 = 1024 words).
+; Only recomputes biome hashes every 4 frames; repaints from cache every frame.
+
+; --- Recompute biome hashes every 4 frames (always on frame 1) ---
+LOAD r17, r13           ; r17 = frame_counter
+LDI r18, 1
+SUB r17, r18            ; r17 = frame_counter - 1 (so first frame fc=1 gives 0)
+LDI r18, 3
+AND r17, r18            ; r17 = (fc-1) & 3
+JNZ r17, mm_repaint     ; skip recompute if not frame 1,5,9,...
+
+; --- Compute 32x32 terrain into cache ---
+LDI r1, 0               ; my = 0
+LDI r20, 0x7100         ; cache base
+
+mm_y:
+  LDI r2, 0             ; mx = 0
+  mm_x:
+    ; World coords: each pixel covers 2 tiles
+    MOV r3, r2
+    LDI r18, 2
+    MUL r3, r18
+    ADD r3, r14          ; r3 = camera_x + mx*2
+
+    MOV r4, r1
+    LDI r18, 2
+    MUL r4, r18
+    ADD r4, r15          ; r4 = camera_y + my*2
+
+    ; Coarse hash for biome (same hash as main terrain)
+    MOV r5, r3
+    LDI r18, 3
+    SHR r5, r18          ; world_x >> 3
+    LDI r18, 99001
+    MUL r5, r18          ; x_hash
+
+    MOV r6, r4
+    LDI r18, 3
+    SHR r6, r18          ; world_y >> 3
+    LDI r18, 79007
+    MUL r6, r18          ; y_hash
+
+    XOR r5, r6           ; coarse_hash
+    LDI r18, 1103515245
+    MUL r5, r18          ; mixed_hash
+    LDI r18, 27
+    SHR r5, r18          ; biome index (0..31)
+
+    ; Lookup biome color and dim to 50%
+    MOV r18, r24
+    ADD r18, r5
+    LOAD r17, r18        ; r17 = biome base color
+    LDI r18, 1
+    SHR r17, r18         ; dim to 50% brightness
+
+    ; Store to cache
+    STORE r20, r17
+    ADD r20, r7          ; cache ptr++
+
+    ADD r2, r7           ; mx++
+    LDI r18, 32
+    MOV r19, r2
+    SUB r19, r18
+    JZ r19, mm_next_row
+    JMP mm_x
+
+mm_next_row:
+    ADD r1, r7           ; my++
+    LDI r18, 32
+    MOV r19, r1
+    SUB r19, r18
+    JZ r19, mm_repaint
+    JMP mm_y
+
+; --- Repaint minimap from cache to screen (every frame) ---
+mm_repaint:
+LDI r1, 0               ; my = 0
+LDI r20, 0x7100         ; cache base
+
+mm_pnt_y:
+  LDI r2, 0             ; mx = 0
+  mm_pnt_x:
+    ; Load cached color
+    LOAD r17, r20
+    ADD r20, r7
+
+    ; Screen position: x = 224 + mx, y = my
+    MOV r3, r2
+    LDI r18, 224
+    ADD r3, r18
+    PSET r3, r1, r17
+
+    ADD r2, r7           ; mx++
+    LDI r18, 32
+    MOV r19, r2
+    SUB r19, r18
+    JZ r19, mm_pnt_next
+    JMP mm_pnt_x
+
+mm_pnt_next:
+    ADD r1, r7           ; my++
+    LDI r18, 32
+    MOV r19, r1
+    SUB r19, r18
+    JZ r19, mm_border
+    JMP mm_pnt_y
+
+; --- Minimap border ---
+mm_border:
+LDI r17, 0xAAAAAA
+LDI r18, 1
+LDI r19, 32
+
+LDI r3, 224
+LDI r4, 0
+RECTF r3, r4, r19, r18, r17    ; top edge
+LDI r4, 31
+RECTF r3, r4, r19, r18, r17    ; bottom edge
+LDI r4, 0
+RECTF r3, r4, r18, r19, r17    ; left edge
+LDI r3, 255
+RECTF r3, r4, r18, r19, r17    ; right edge
+
+; --- Player center dot ---
+LDI r3, 240
+LDI r4, 16
+LDI r17, 0xFFFFFF
+PSET r3, r4, r17
+
+; ===== Draw Player Avatar =====
+; Player is at screen center: tile (32,32) * 4px = pixel (128,128)
+; 8x8 sprite with direction-based shape and walk animation
+
+; Load facing direction and walk frame
+LDI r18, 0x780A
+LOAD r19, r18           ; r19 = facing (0=down, 1=up, 2=left, 3=right)
+LDI r18, 0x780B
+LOAD r20, r18           ; r20 = walk_frame (0 or 1)
+
+; Sprite base position (screen center)
+LDI r3, 124             ; x = 124
+LDI r4, 124             ; y = 124
+
+; Draw body (4x4 center block) - blue
+LDI r17, 0x4444FF
+LDI r18, 4
+RECTF r3, r4, r18, r18, r17
+
+; Draw head (4x4 top of sprite) - skin color
+LDI r17, 0xFFCC88
+LDI r4, 120
+RECTF r3, r4, r18, r18, r17
+
+; Draw eyes based on facing direction
+LDI r18, 0x780A
+LOAD r19, r18
+JNZ r19, face_not_down
+PSETI 125, 122, 0x000000
+PSETI 127, 122, 0x000000
+JMP eyes_done
+face_not_down:
+LDI r17, 1
+SUB r19, r17
+JNZ r19, face_not_up
+PSETI 125, 121, 0x000000
+PSETI 127, 121, 0x000000
+JMP eyes_done
+face_not_up:
+LDI r17, 2
+SUB r19, r17
+JNZ r19, face_right
+PSETI 124, 121, 0x000000
+PSETI 124, 122, 0x000000
+JMP eyes_done
+face_right:
+PSETI 127, 121, 0x000000
+PSETI 127, 122, 0x000000
+eyes_done:
+
+; Walk animation: legs alternate
+LDI r18, 0x780B
+LOAD r20, r18
+JZ r20, leg_frame_0
+PSETI 125, 128, 0x4444FF
+PSETI 126, 128, 0x4444FF
+PSETI 127, 129, 0x4444FF
+JMP legs_done
+leg_frame_0:
+PSETI 125, 129, 0x4444FF
+PSETI 126, 128, 0x4444FF
+PSETI 127, 128, 0x4444FF
+legs_done:
+
+    FRAME
+    JMP main_loop
+
+; ===== check_biome_walkable subroutine =====
+; Input: r3 = world_x, r4 = world_y
+; Output: r0 = 1 (walkable) or 0 (blocked)
+; Preserves: r1-r6, r14-r15
+; Uses: r17-r22 as temporaries
+; Clobbers: r0 (CMP result), r31 (saved/restored via push/pop)
+
+check_biome_walkable:
+PUSH r31
+
+; Compute coarse hash for biome (same as main terrain)
+MOV r21, r3
+MOV r22, r4
+LDI r17, 3
+SHR r21, r17           ; world_x >> 3
+SHR r22, r17           ; world_y >> 3
+LDI r17, 99001
+MUL r21, r17           ; x_hash
+LDI r17, 79007
+MUL r22, r17           ; y_hash
+XOR r21, r22           ; coarse_hash
+LDI r17, 1103515245
+MUL r21, r17           ; mixed_hash
+LDI r17, 27
+SHR r21, r17           ; biome_type (0..31)
+
+; Check walkability: blocked if water(0-1), mountain(13-14), lava(16-17), volcanic(18), coral(22)
+; Water: biome < 2
+LDI r17, 2
+CMP r21, r17
+BLT r0, biome_blocked
+
+; Mountain: biome 13-14 (13 <= biome < 15)
+LDI r17, 13
+CMP r21, r17
+BLT r0, biome_not_mt
+LDI r17, 15
+CMP r21, r17
+BGE r0, biome_not_mt
+JMP biome_blocked
+
+biome_not_mt:
+; Lava/volcanic: biome 16-18 (16 <= biome <= 18)
+LDI r17, 16
+CMP r21, r17
+BLT r0, biome_not_lava
+LDI r17, 19
+CMP r21, r17
+BGE r0, biome_not_lava
+JMP biome_blocked
+
+biome_not_lava:
+; Coral: biome == 22
+LDI r17, 22
+CMP r21, r17
+JZ r0, biome_blocked
+
+; Walkable
+LDI r17, 1
+MOV r0, r17
+JMP biome_check_done
+
+biome_blocked:
+LDI r17, 0
+MOV r0, r17
+
+biome_check_done:
+POP r31
+RET

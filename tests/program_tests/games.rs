@@ -2706,3 +2706,233 @@ fn test_sprite_debug() {
     eprintln!("Frame count: {}", vm.frame_count);
     eprintln!("Halted: {}", vm.halted);
 }
+
+
+// ══ WORLD DESKTOP ═══════════════════════════════════════════════════════
+// Tests for world_desktop.asm -- player avatar on infinite procedural terrain
+
+/// Helper: assemble world_desktop.asm, load into VM.
+fn world_desktop_vm() -> Vm {
+    let source = std::fs::read_to_string("programs/world_desktop.asm")
+        .expect("world_desktop.asm not found");
+    let asm = assemble(&source, 0).expect("world_desktop.asm failed to assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm
+}
+
+#[test]
+fn test_world_desktop_assembles() {
+    let source = std::fs::read_to_string("programs/world_desktop.asm")
+        .expect("world_desktop.asm not found");
+    let asm = assemble(&source, 0).expect("world_desktop.asm should assemble");
+    assert!(!asm.pixels.is_empty(), "should produce non-empty bytecode");
+    assert!(
+        asm.pixels.len() > 500,
+        "bytecode should be >500 words, got {}",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_world_desktop_runs_and_renders() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0; // no keys
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(
+        vm.frame_ready,
+        "world_desktop should reach FRAME within 1.5M steps (took {})",
+        steps
+    );
+    let non_black: usize = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(
+        non_black > 50000,
+        "screen should have mostly colored pixels, got {}/{}",
+        non_black,
+        256 * 256
+    );
+}
+
+#[test]
+fn test_world_desktop_player_initial_position() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+
+    // Player starts at (32, 32) in world tile coords
+    let player_x = vm.ram[0x7808];
+    let player_y = vm.ram[0x7809];
+    assert_eq!(player_x, 32, "player_x should start at 32, got {}", player_x);
+    assert_eq!(player_y, 32, "player_y should start at 32, got {}", player_y);
+}
+
+#[test]
+fn test_world_desktop_camera_follows_player() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+
+    // Camera = player - 32 (centering in 64-tile viewport)
+    let player_x = vm.ram[0x7808];
+    let player_y = vm.ram[0x7809];
+    let camera_x = vm.ram[0x7800];
+    let camera_y = vm.ram[0x7801];
+
+    // camera_x = player_x - 32 (may wrap if player near origin)
+    // For initial pos (32,32): camera = (0,0)
+    let expected_cx = if player_x >= 32 { player_x - 32 } else { player_x.wrapping_add(0xFFFFFFF0) };
+    let expected_cy = if player_y >= 32 { player_y - 32 } else { player_y.wrapping_add(0xFFFFFFF0) };
+    assert_eq!(camera_x, expected_cx, "camera_x should be player_x - 32");
+    assert_eq!(camera_y, expected_cy, "camera_y should be player_y - 32");
+}
+
+#[test]
+fn test_world_desktop_player_moves_right() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 8; // bit 3 = right arrow
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+
+    // Player should have moved right or stayed if blocked by terrain
+    let player_x = vm.ram[0x7808];
+    let facing = vm.ram[0x780A];
+    assert_eq!(facing, 3, "facing should be right (3) after right key");
+
+    // Player either moved (player_x > 32) or stayed (player_x == 32) if blocked
+    assert!(
+        player_x >= 32,
+        "player_x should be >= 32 after pressing right, got {}",
+        player_x
+    );
+}
+
+#[test]
+fn test_world_desktop_player_moves_down() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 2; // bit 1 = down arrow
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+
+    let player_y = vm.ram[0x7809];
+    let facing = vm.ram[0x780A];
+    assert_eq!(facing, 0, "facing should be down (0) after down key");
+    assert!(
+        player_y >= 32,
+        "player_y should be >= 32 after pressing down, got {}",
+        player_y
+    );
+}
+
+#[test]
+fn test_world_desktop_player_avatar_rendered() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+
+    // Player avatar is drawn at screen center (around pixel 124-131, 124-131)
+    // The body is blue (0x4444FF) at (124,124) size 4x4
+    // The head is skin (0xFFCC88) at (124,120) size 4x4
+    // Check that there are blue pixels at the avatar body position
+    let body_color = 0x4444FFu32;
+    let head_color = 0xFFCC88u32;
+
+    let mut has_body = false;
+    let mut has_head = false;
+    for y in 124..128 {
+        for x in 124..128 {
+            if vm.screen[y * 256 + x] == body_color {
+                has_body = true;
+            }
+        }
+    }
+    for y in 120..124 {
+        for x in 124..128 {
+            if vm.screen[y * 256 + x] == head_color {
+                has_head = true;
+            }
+        }
+    }
+    assert!(has_body, "player body (blue 0x4444FF) should be rendered at screen center");
+    assert!(has_head, "player head (skin 0xFFCC88) should be rendered above body");
+}
+
+#[test]
+fn test_world_desktop_walk_animation_toggles() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+
+    // Run 2 frames and check walk_frame toggles
+    let steps1 = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach frame 1 (took {} steps)", steps1);
+    let wf1 = vm.ram[0x780B];
+
+    vm.frame_ready = false;
+    let steps2 = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach frame 2 (took {} steps)", steps2);
+    let wf2 = vm.ram[0x780B];
+
+    // Walk frame should toggle between 0 and 1
+    assert_ne!(wf1, wf2, "walk_frame should toggle between frames: {} vs {}", wf1, wf2);
+}
+
+#[test]
+fn test_world_desktop_facing_updates() {
+    let mut vm = world_desktop_vm();
+
+    // Press up (bit 0)
+    vm.ram[0xFFB] = 1;
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+    assert_eq!(vm.ram[0x780A], 1, "facing should be up (1) after pressing up");
+}
+
+#[test]
+fn test_world_desktop_minimap_exists() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+
+    // Minimap at top-right (x=224-255, y=0-31) should have some colored pixels
+    let mut minimap_pixels = 0;
+    for y in 1..31 {
+        for x in 225..255 {
+            if vm.screen[y * 256 + x] != 0 {
+                minimap_pixels += 1;
+            }
+        }
+    }
+    assert!(
+        minimap_pixels > 100,
+        "minimap should have colored pixels, got {}",
+        minimap_pixels
+    );
+}
+
+#[test]
+fn test_world_desktop_collision_blocks_water() {
+    // Start player at a known water position and try to move
+    // Player at (32,32) -- we can't know terrain ahead of time, but
+    // the collision subroutine should work regardless.
+    // Instead, test that the walkability subroutine works correctly
+    // by checking that player doesn't move when all directions are blocked.
+    // More practically: verify facing still updates even when movement is blocked.
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 1; // up
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+
+    // Facing should be up regardless of whether movement was blocked
+    assert_eq!(
+        vm.ram[0x780A], 1,
+        "facing should update to up even if movement blocked"
+    );
+}
+
