@@ -148,6 +148,14 @@ pub const OPCODES: &[&str] = &[
     "LLM",
     "HTPARSE",
     "HITCLR",
+    // Phase 87: Multi-Hypervisor opcodes
+    "VM_SPAWN",
+    "VM_KILL",
+    "VM_STATUS",
+    "VM_PAUSE",
+    "VM_RESUME",
+    "VM_SET_BUDGET",
+    "VM_LIST",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

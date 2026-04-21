@@ -4408,9 +4408,11 @@ phases:
   goal: Multiple hypervisor buildings running different guest OSes simultaneously
   id: phase-87
   scope_lines_total: 1200
-  status: planned
+  status: in_progress
   test_target: 10
   title: Multi-Hypervisor -- Multiple OS Instances on the Map
+  _claimed_by: worker-0
+  _claimed_at: 1776748317
 - deliverables:
   - description: 'AI_AGENT op_reg -- op=0: screenshot to VFS file, returns path addr
       in r0. op=1: get canvas checksum (fast comparison for "did it change"). op=2:

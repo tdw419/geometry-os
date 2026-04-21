@@ -916,6 +916,14 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0x9C => "LLM",
         0x9D => "HTPARSE",
         0x9E => "HITCLR",
+        // Phase 87: Multi-Hypervisor opcodes
+        0x9F => "VM_SPAWN",
+        0xA0 => "VM_KILL",
+        0xA1 => "VM_STATUS",
+        0xA2 => "VM_PAUSE",
+        0xA3 => "VM_RESUME",
+        0xA4 => "VM_SET_BUDGET",
+        0xA5 => "VM_LIST",
         _ => "???",
     }
 }

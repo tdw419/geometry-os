@@ -611,3 +611,58 @@ pub enum HypervisorMode {
     /// Use built-in RISC-V interpreter (Phases 34-36, pure Rust, WASM-portable).
     Native,
 }
+
+/// State of a background hypervisor VM (Phase 87: Multi-Hypervisor).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BgVmState {
+    /// VM is actively executing (time-sliced by host).
+    Running,
+    /// VM is paused (not executing, state preserved).
+    Paused,
+    /// VM state was saved to RAM, VM is dormant.
+    Saved,
+}
+
+impl Default for BgVmState {
+    fn default() -> Self {
+        BgVmState::Paused
+    }
+}
+
+/// A background hypervisor VM instance (Phase 87: Multi-Hypervisor).
+/// Each building on the map can host one of these. The host time-slices
+/// between active instances, giving each N instructions per frame.
+#[derive(Debug, Clone)]
+pub struct BackgroundVm {
+    /// Unique instance ID (assigned by VM_SPAWN, 1-based).
+    pub id: u32,
+    /// Config string: "arch=riscv64 [kernel=file.img] [ram=256M] [mode=native|qemu]"
+    pub config: String,
+    /// Execution mode (Qemu or Native).
+    pub mode: HypervisorMode,
+    /// Window ID to render output into (0 = full canvas, >0 = WINSYS window).
+    pub window_id: u32,
+    /// Current state (Running, Paused, Saved).
+    pub state: BgVmState,
+    /// Instructions per frame budget for time-slicing (default: 1000).
+    pub instructions_per_frame: u32,
+    /// Total instructions executed across all time slices.
+    pub total_instructions: u64,
+    /// Number of frames this VM has been active for.
+    pub frames_active: u64,
+}
+
+impl Default for BackgroundVm {
+    fn default() -> Self {
+        BackgroundVm {
+            id: 0,
+            config: String::new(),
+            mode: HypervisorMode::default(),
+            window_id: 0,
+            state: BgVmState::default(),
+            instructions_per_frame: 1000,
+            total_instructions: 0,
+            frames_active: 0,
+        }
+    }
+}

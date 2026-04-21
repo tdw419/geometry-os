@@ -2326,7 +2326,7 @@ The hypervisor building is a special structure on the infinite map. Walk up to i
 - [x] **MCP tools: hypervisor_boot, hypervisor_kill** -- Tool schemas added to src/mcp_server.rs.
 - [x] **Hypervisor building tests** -- 16 tests: HYPERVISOR opcode (basic, window, modes, errors, reset), disasm, assembler encoding, linux_building.asm, world_desktop integration, MCP source verification.
 
-## [ ] phase-87: Multi-Hypervisor -- Multiple OS Instances on the Map (PLANNED)
+## [-] phase-87:: Multi-Hypervisor -- Multiple OS Instances on the Map (IN PROGRESS -- worker-0)
 
 **Goal:** Multiple hypervisor buildings running different guest OSes simultaneously
 

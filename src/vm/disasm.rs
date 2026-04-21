@@ -804,6 +804,35 @@ impl Vm {
             // HITCLR (0x9E) -- clear hit-test regions
             0x9E => ("HITCLR".to_string(), 1),
 
+            // ── Phase 87: Multi-Hypervisor Opcodes ──
+
+            // VM_SPAWN (0x9F) -- create background VM
+            0x9F => (
+                format!("VM_SPAWN {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+
+            // VM_KILL (0xA0) -- kill background VM
+            0xA0 => (format!("VM_KILL {}", reg(ram(a + 1))), 2),
+
+            // VM_STATUS (0xA1) -- query background VM status
+            0xA1 => (format!("VM_STATUS {}", reg(ram(a + 1))), 2),
+
+            // VM_PAUSE (0xA2) -- pause background VM
+            0xA2 => (format!("VM_PAUSE {}", reg(ram(a + 1))), 2),
+
+            // VM_RESUME (0xA3) -- resume background VM
+            0xA3 => (format!("VM_RESUME {}", reg(ram(a + 1))), 2),
+
+            // VM_SET_BUDGET (0xA4) -- set VM time-slice budget
+            0xA4 => (
+                format!("VM_SET_BUDGET {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+
+            // VM_LIST (0xA5) -- list background VM IDs to RAM
+            0xA5 => (format!("VM_LIST {}", reg(ram(a + 1))), 2),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

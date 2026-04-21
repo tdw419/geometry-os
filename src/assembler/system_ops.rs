@@ -594,6 +594,91 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        // ── Phase 87: Multi-Hypervisor Opcodes ──
+        "VM_SPAWN" => {
+            // VM_SPAWN config_reg, window_reg
+            // 3 words: [0x9F, config_reg, window_reg]
+            if tokens.len() < 3 {
+                return Err(
+                    "VM_SPAWN requires 2 arguments: VM_SPAWN config_reg, window_reg".to_string(),
+                );
+            }
+            bytecode.push(0x9F);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
+        "VM_KILL" => {
+            // VM_KILL id_reg
+            // 2 words: [0xA0, id_reg]
+            if tokens.len() < 2 {
+                return Err("VM_KILL requires 1 argument: VM_KILL id_reg".to_string());
+            }
+            bytecode.push(0xA0);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
+        "VM_STATUS" => {
+            // VM_STATUS id_reg
+            // 2 words: [0xA1, id_reg]
+            if tokens.len() < 2 {
+                return Err("VM_STATUS requires 1 argument: VM_STATUS id_reg".to_string());
+            }
+            bytecode.push(0xA1);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
+        "VM_PAUSE" => {
+            // VM_PAUSE id_reg
+            // 2 words: [0xA2, id_reg]
+            if tokens.len() < 2 {
+                return Err("VM_PAUSE requires 1 argument: VM_PAUSE id_reg".to_string());
+            }
+            bytecode.push(0xA2);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
+        "VM_RESUME" => {
+            // VM_RESUME id_reg
+            // 2 words: [0xA3, id_reg]
+            if tokens.len() < 2 {
+                return Err("VM_RESUME requires 1 argument: VM_RESUME id_reg".to_string());
+            }
+            bytecode.push(0xA3);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
+        "VM_SET_BUDGET" => {
+            // VM_SET_BUDGET id_reg, budget_reg
+            // 3 words: [0xA4, id_reg, budget_reg]
+            if tokens.len() < 3 {
+                return Err(
+                    "VM_SET_BUDGET requires 2 arguments: VM_SET_BUDGET id_reg, budget_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0xA4);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
+        "VM_LIST" => {
+            // VM_LIST addr_reg
+            // 2 words: [0xA5, addr_reg]
+            if tokens.len() < 2 {
+                return Err("VM_LIST requires 1 argument: VM_LIST addr_reg".to_string());
+            }
+            bytecode.push(0xA5);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

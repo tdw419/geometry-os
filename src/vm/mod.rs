@@ -150,6 +150,11 @@ pub struct Vm {
     /// LLM configuration URL. Defaults to provider.json or local Ollama.
     /// Can be overridden by tests or host. Format: "url model api_key"
     pub llm_config: Option<String>,
+    /// Background hypervisor VM instances (Phase 87: Multi-Hypervisor).
+    /// Each building on the map can host one. Host time-slices between active ones.
+    pub background_vms: Vec<BackgroundVm>,
+    /// Next background VM ID to assign (monotonically increasing, 1-based).
+    pub next_bg_vm_id: u32,
 }
 
 impl Default for Vm {
@@ -233,6 +238,8 @@ impl Vm {
             next_window_id: 1,
             llm_mock_response: None,
             llm_config: None,
+            background_vms: Vec::new(),
+            next_bg_vm_id: 1,
         }
     }
 
@@ -332,6 +339,8 @@ impl Vm {
         self.llm_mock_response = None;
         self.hit_regions.clear();
         self.llm_config = None;
+        self.background_vms.clear();
+        self.next_bg_vm_id = 1;
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -1756,6 +1765,223 @@ impl Vm {
                 self.hit_regions.clear();
             }
 
+            // ── Phase 87: Multi-Hypervisor Opcodes ──────────────────────
+
+            // VM_SPAWN config_reg, window_reg (0x9F) -- Create background hypervisor VM.
+            // Reads config string from RAM at address in config_reg.
+            // window_reg: WINSYS window_id (0 = full canvas).
+            // Returns VM instance ID in r0 (1-based). 0xFFFFFFFF on error.
+            // Max 4 concurrent VMs. Config must have arch= parameter.
+            // Encoding: 3 words [0x9F, config_reg, window_reg]
+            0x9F => {
+                let config_reg = self.fetch() as usize;
+                let win_reg = self.fetch() as usize;
+                let window_id = if win_reg < NUM_REGS {
+                    self.regs[win_reg]
+                } else {
+                    0
+                };
+                const MAX_BG_VMS: usize = 4;
+                if config_reg >= NUM_REGS {
+                    self.regs[0] = 0xFFFFFFFF;
+                } else if self.background_vms.len() >= MAX_BG_VMS {
+                    self.regs[0] = 0xFFFFFFFE; // max VMs reached
+                } else {
+                    let addr = self.regs[config_reg] as usize;
+                    let config = Self::read_string_static(&self.ram, addr);
+                    match config {
+                        Some(cfg) => {
+                            let has_arch = cfg
+                                .split_whitespace()
+                                .any(|t| t.to_lowercase().starts_with("arch=") && t.len() > 5);
+                            if !has_arch {
+                                self.regs[0] = 0xFFFFFFFD; // missing arch=
+                            } else {
+                                let mode = cfg
+                                    .split_whitespace()
+                                    .find(|t| t.to_lowercase().starts_with("mode="))
+                                    .map(|t| {
+                                        let val = t.split('=').nth(1).unwrap_or("").to_lowercase();
+                                        if val == "native" {
+                                            HypervisorMode::Native
+                                        } else {
+                                            HypervisorMode::Qemu
+                                        }
+                                    })
+                                    .unwrap_or(HypervisorMode::Qemu);
+                                let id = self.next_bg_vm_id;
+                                self.next_bg_vm_id += 1;
+                                let bg_vm = BackgroundVm {
+                                    id,
+                                    config: cfg,
+                                    mode,
+                                    window_id,
+                                    state: BgVmState::Paused,
+                                    instructions_per_frame: 1000,
+                                    total_instructions: 0,
+                                    frames_active: 0,
+                                };
+                                self.background_vms.push(bg_vm);
+                                self.regs[0] = id; // success
+                            }
+                        }
+                        None => {
+                            self.regs[0] = 0xFFFFFFFF; // empty/null config
+                        }
+                    }
+                }
+            }
+
+            // VM_KILL id_reg (0xA0) -- Kill a background VM by ID.
+            // Returns 0 in r0 on success, 0xFFFFFFFF if not found.
+            // Encoding: 2 words [0xA0, id_reg]
+            0xA0 => {
+                let id_reg = self.fetch() as usize;
+                if id_reg < NUM_REGS {
+                    let vm_id = self.regs[id_reg];
+                    let before = self.background_vms.len();
+                    self.background_vms.retain(|v| v.id != vm_id);
+                    if self.background_vms.len() < before {
+                        self.regs[0] = 0; // success
+                    } else {
+                        self.regs[0] = 0xFFFFFFFF; // not found
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // VM_STATUS id_reg (0xA1) -- Query background VM status.
+            // Returns in r0: 0=not found, 1=Running, 2=Paused, 3=Saved.
+            // Also writes total_instructions to RAM at address in r1 (if r1 != 0).
+            // Encoding: 2 words [0xA1, id_reg]
+            0xA1 => {
+                let id_reg = self.fetch() as usize;
+                if id_reg < NUM_REGS {
+                    let vm_id = self.regs[id_reg];
+                    match self.background_vms.iter().find(|v| v.id == vm_id) {
+                        Some(bg) => {
+                            self.regs[0] = match bg.state {
+                                BgVmState::Running => 1,
+                                BgVmState::Paused => 2,
+                                BgVmState::Saved => 3,
+                            };
+                            // Also write stats to r1 if it points to a valid RAM region
+                            if NUM_REGS > 1 {
+                                let stats_addr = self.regs[1] as usize;
+                                if stats_addr > 0 && stats_addr + 1 < self.ram.len() {
+                                    self.ram[stats_addr] = bg.total_instructions as u32;
+                                    self.ram[stats_addr + 1] = bg.frames_active as u32;
+                                }
+                            }
+                        }
+                        None => {
+                            self.regs[0] = 0; // not found
+                        }
+                    }
+                } else {
+                    self.regs[0] = 0;
+                }
+            }
+
+            // VM_PAUSE id_reg (0xA2) -- Pause a running background VM.
+            // Returns 0 on success, 0xFFFFFFFF if not found or already paused.
+            // Encoding: 2 words [0xA2, id_reg]
+            0xA2 => {
+                let id_reg = self.fetch() as usize;
+                if id_reg < NUM_REGS {
+                    let vm_id = self.regs[id_reg];
+                    match self.background_vms.iter_mut().find(|v| v.id == vm_id) {
+                        Some(bg) => {
+                            if bg.state == BgVmState::Running {
+                                bg.state = BgVmState::Paused;
+                                self.regs[0] = 0;
+                            } else {
+                                self.regs[0] = 0xFFFFFFFE; // wrong state
+                            }
+                        }
+                        None => {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // VM_RESUME id_reg (0xA3) -- Resume a paused/saved background VM.
+            // Returns 0 on success, 0xFFFFFFFF if not found or already running.
+            // Encoding: 2 words [0xA3, id_reg]
+            0xA3 => {
+                let id_reg = self.fetch() as usize;
+                if id_reg < NUM_REGS {
+                    let vm_id = self.regs[id_reg];
+                    match self.background_vms.iter_mut().find(|v| v.id == vm_id) {
+                        Some(bg) => {
+                            if bg.state != BgVmState::Running {
+                                bg.state = BgVmState::Running;
+                                self.regs[0] = 0;
+                            } else {
+                                self.regs[0] = 0xFFFFFFFE; // already running
+                            }
+                        }
+                        None => {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // VM_SET_BUDGET id_reg, budget_reg (0xA4) -- Set instructions-per-frame budget.
+            // budget_reg holds the new instruction budget (must be > 0).
+            // Returns 0 on success, 0xFFFFFFFF if not found, 0xFFFFFFFE if budget == 0.
+            // Encoding: 3 words [0xA4, id_reg, budget_reg]
+            0xA4 => {
+                let id_reg = self.fetch() as usize;
+                let budget_reg = self.fetch() as usize;
+                if id_reg < NUM_REGS && budget_reg < NUM_REGS {
+                    let vm_id = self.regs[id_reg];
+                    let budget = self.regs[budget_reg];
+                    match self.background_vms.iter_mut().find(|v| v.id == vm_id) {
+                        Some(bg) => {
+                            if budget == 0 {
+                                self.regs[0] = 0xFFFFFFFE;
+                            } else {
+                                bg.instructions_per_frame = budget;
+                                self.regs[0] = 0;
+                            }
+                        }
+                        None => {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // VM_LIST addr_reg (0xA5) -- List all background VM IDs to RAM.
+            // Writes up to 4 VM IDs starting at RAM address in addr_reg.
+            // Returns count of VMs in r0.
+            // Encoding: 2 words [0xA5, addr_reg]
+            0xA5 => {
+                let addr_reg = self.fetch() as usize;
+                if addr_reg < NUM_REGS {
+                    let base_addr = self.regs[addr_reg] as usize;
+                    let count = self.background_vms.len().min(4);
+                    for (i, bg) in self.background_vms.iter().take(4).enumerate() {
+                        if base_addr + i < self.ram.len() {
+                            self.ram[base_addr + i] = bg.id;
+                        }
+                    }
+                    self.regs[0] = count as u32;
+                } else {
+                    self.regs[0] = 0;
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;
@@ -2399,3 +2625,6 @@ mod http_tests;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tests_bgvm;
