@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 # Library deps (always available)
 libc = "0.2"
+serde_json = "1"
 
 # GUI binary deps (only needed for native build)
 minifb = { version = "0.27", optional = true }
@@ -28,6 +29,10 @@ path = "src/fuzzer.rs"
 [[bin]]
 name = "riscv_fuzzer"
 path = "src/riscv_fuzzer.rs"
+
+[[bin]]
+name = "geo_mcp_server"
+path = "src/mcp_server.rs"
 
 [dev-dependencies]
 tempfile = "3"
