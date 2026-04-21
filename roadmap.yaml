@@ -4226,7 +4226,7 @@ phases:
       returns 32x32 terrain data as JSON. terrain accepts world coords and returns biome info.
       See docs/MCP_SPEC.md for exact format.
     status: todo
-  - name: MCP tools: player_position, player_move, map_viewport, map_biome_at
+  - name: 'MCP tools: player_position, player_move, map_viewport, map_biome_at'
     description: Add tool handlers to src/mcp_server.rs that wrap the new socket commands.
       Each tool has typed JSON input/output as defined in docs/MCP_SPEC.md.
     status: todo
@@ -4270,7 +4270,7 @@ phases:
       building list. enter_building <id> walks player and launches app. exit_building
       returns to map. See docs/MCP_SPEC.md for format.
     status: todo
-  - name: MCP tools: building_list, building_enter, building_exit
+  - name: 'MCP tools: building_list, building_enter, building_exit'
     description: Add tool handlers to src/mcp_server.rs wrapping the new socket commands.
     status: todo
   - name: App building tests
@@ -4307,7 +4307,7 @@ phases:
       windows). launch <app> opens app window without walking to building.
       See docs/MCP_SPEC.md.
     status: todo
-  - name: MCP tools: desktop_state, desktop_launch
+  - name: 'MCP tools: desktop_state, desktop_launch'
     description: Add tool handlers to src/mcp_server.rs wrapping the new socket commands.
     status: todo
   - name: Full desktop integration tests
@@ -4347,7 +4347,7 @@ phases:
       These socket commands may already exist -- verify and wire to MCP.
       See docs/MCP_SPEC.md.
     status: todo
-  - name: MCP tools: hypervisor_boot, hypervisor_kill
+  - name: 'MCP tools: hypervisor_boot, hypervisor_kill'
     description: Add tool handlers to src/mcp_server.rs wrapping the hypervisor socket commands.
     status: todo
   - name: Hypervisor building tests
@@ -4415,7 +4415,7 @@ phases:
     description: screenshot_b64 returns base64 PNG. canvas_checksum returns FNV-1a hash.
       canvas_diff <checksum> returns pixel change stats. See docs/MCP_SPEC.md.
     status: todo
-  - name: MCP tools: vision_screenshot, vision_checksum, vision_diff
+  - name: 'MCP tools: vision_screenshot, vision_checksum, vision_diff'
     description: Add tool handlers to src/mcp_server.rs wrapping the vision socket commands.
     status: todo
   - name: AI vision tests
@@ -4451,7 +4451,7 @@ phases:
     description: inject_key <key> [shift] [ctrl] [alt]. inject_mouse <action> <x> <y> [button].
       inject_text <text> types each char. See docs/MCP_SPEC.md.
     status: todo
-  - name: MCP tools: input_key, input_mouse, input_text
+  - name: 'MCP tools: input_key, input_mouse, input_text'
     description: Add tool handlers to src/mcp_server.rs wrapping the input socket commands.
     status: todo
   - name: AI input tests
@@ -4494,7 +4494,7 @@ phases:
       agent_enter <id> [building_id]. agent_cmd <id> <command>. agent_read <id>.
       agent_list. agent_task <id> <task> [building]. See docs/MCP_SPEC.md.
     status: todo
-  - name: MCP tools: agent_spawn, agent_move, agent_enter, agent_command, agent_read, agent_list, agent_task_assign
+  - name: 'MCP tools: agent_spawn, agent_move, agent_enter, agent_command, agent_read, agent_list, agent_task_assign'
     description: Add all agent tool handlers to src/mcp_server.rs. This is the full
       agent orchestration API -- the biggest MCP addition.
     status: todo
