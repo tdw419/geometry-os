@@ -4578,6 +4578,125 @@ phases:
   status: done
   test_target: 12
   title: GlyphLang Frontend -- High-Level Language for the Pixel VM
+- deliverables:
+  - description: 'Add pixelpack decode dependency to Geometry OS (Rust pixelpack-rs
+      crate or Python subprocess). Wire expand_from_png() or Rust equivalent into
+      a new LOADPNG opcode or CLI flag that takes a .png path, decodes pixelpack seeds
+      to raw bytes, writes them directly to VM RAM at 0x1000. No assembler, no canvas.
+      Pure binary pipeline.'
+    name: Pixelpack decoder integration
+    status: planned
+  - description: 'CLI flag --boot-png program.png that decodes the png and loads
+      bytecode into RAM[0x1000] before starting the VM. The image IS the executable.
+      Works with any pixelpack-encoded bytecode -- hand-assembled, GlyphLang output,
+      or compiler-generated.'
+    name: CLI boot-from-png flag
+    status: planned
+  - description: 'Test that a known bytecode sequence (e.g., LDI r0, 42; HALT) encoded
+      via pixelpack into a .png, loaded via --boot-png, executes correctly with r0=42.
+      Round-trip: assemble, pixelpack encode, png, boot-png, VM, verify registers.'
+    name: Bytecode-to-pixel round-trip test
+    status: planned
+  - description: 'Update docs and memory map with the pixel-boot path. Document that
+      .png files are valid Geometry OS executables. Add CODE_PIXEL_EXECUTION.md spec
+      doc covering all three levels.'
+    name: Documentation
+    status: planned
+  description: 'The simplest code-to-pixel-to-execution path. A .png file contains
+    pixelpack-encoded bytecode. Load the image, decode the seeds, write bytes to
+    RAM[0x1000], run. No assembler step, no canvas text, no source code visible.
+    The image IS the binary executable. This is the infrastructure layer that levels
+    1 and 3 build on.'
+  goal: Boot a Geometry OS program from a pixelpack-encoded .png file, skipping the
+    assembler entirely
+  id: phase-92
+  scope_lines_total: 400
+  status: planned
+  test_target: 5
+  title: Pixel Boot - Bytecode from PNG
+- deliverables:
+  - description: 'Extend LOADPNG or add LOADSRC opcode that decodes a pixelpack-encoded
+      .png, but instead of writing bytecode to RAM, writes the decoded TEXT (assembly
+      source) onto the canvas grid at 0x8000+. The source appears as visible glyphs.
+      Then auto-triggers the F8 assembly pipeline (preprocess + assemble) to produce
+      bytecode at 0x1000.'
+    name: Source-to-canvas loader
+    status: planned
+  - description: 'CLI flag --boot-src-png program.png that loads pixelpack-encoded
+      source onto the canvas grid, assembles it, and runs it. The grid shows the
+      source code. The VM runs the compiled bytecode. Double-click a .png and you
+      see the code AND the output.'
+    name: CLI boot-from-source-png flag
+    status: planned
+  - description: 'Test that fibonacci.asm (or similar) encoded via pixelpack into
+      a .png, loaded via --boot-src-png, appears correctly on the canvas grid as
+      readable assembly text, assembles successfully, and executes with correct output.'
+    name: Source-to-canvas round-trip test
+    status: planned
+  - description: 'A pixelpack-encoded .png that contains a simple visual demo program
+      (e.g., bouncing ball, color fill). When loaded, the source is visible on the
+      canvas, the assembled program runs, and the screen shows the output. The image
+      is both the source code and the executable -- a self-documenting pixel program.'
+    name: Demo program as .png
+    status: planned
+  description: 'The self-documenting path. A .png file contains pixelpack-encoded
+    assembly SOURCE CODE (not bytecode). Load the image, decode it, write the text
+    onto the canvas grid, auto-assemble, auto-run. The grid shows the program as
+    colored syntax-highlighted text. The VM runs it. The .png is both the executable
+    AND its documentation. This is the hello world of code-as-image.'
+  goal: Load pixelpack-encoded assembly source from a .png onto the canvas grid,
+    assemble it, and run it -- the image is both source code and executable
+  id: phase-93
+  scope_lines_total: 500
+  status: planned
+  test_target: 5
+  title: Pixel Boot - Source from PNG (Self-Documenting Pixel Programs)
+- deliverables:
+  - description: 'Unified boot path where the hypervisor, Geometry OS VM, and pixelpack
+      decoder share one pixel-loading pipeline. A .rts.png file can contain either
+      RISC-V kernel bytes OR Geometry OS bytecode OR Geometry OS assembly source.
+      The loader detects the type (via metadata, magic bytes, or file extension)
+      and routes to the correct execution engine.'
+    name: Unified pixel boot loader
+    status: planned
+  - description: 'A running Geometry OS program can LOADPNG from filesystem or network
+      port, decode it, and execute the result. The VM bootstraps new code from pixels
+      at runtime. Combined with ASMSELF (phase 47), a program can read a .png from
+      disk, decode to source, write to canvas, ASMSELF, RUNNEXT. Pixels all the
+      way down.'
+    name: Runtime pixel boot (LOADPNG opcode)
+    status: planned
+  - description: 'Test the full chain: program A reads a .png from VFS, the .png
+      contains program B source, program A writes it to canvas, calls ASMSELF, calls
+      RUNNEXT, program B executes. Also test png-to-bytecode-to-RAM-to-execution.'
+    name: Full-chain integration test
+    status: planned
+  - description: 'A gallery of .png programs. Each is a small viewable image that
+      is also a runnable Geometry OS program. Demonstrates: counter, paint tool,
+      game of life, text adventure. Each .png is a self-contained executable artifact.
+      The visual pattern of pixels encodes the program that produces the visual pattern.
+      Recursive.'
+    name: Pixel program gallery
+    status: planned
+  - description: 'CODE_PIXEL_EXECUTION.md covering the three-level architecture, the
+      .rts.png format spec for Geometry OS, the boot protocol, and how it unifies
+      with the existing RISC-V .rts.png boot path.'
+    name: Spec document
+    status: planned
+  description: 'The unification. One pixel format boots both RISC-V Linux kernels
+    and Geometry OS programs. The VM can load and execute .png files at runtime (not
+    just CLI boot). Programs can bootstrap other programs from pixels. Combined with
+    self-modifying code (phases 45-48), this creates the full loop: a program reads
+    a pixel image, decodes it into code, writes it to the canvas, assembles it, and
+    runs it. The pixels that encode the code are themselves pixels on a screen. Pixels
+    all the way down. This is the pixels as universal executable thesis made real.'
+  goal: Unify the pixel boot path so .rts.png files boot any target (RISC-V or Geometry
+    OS), and the VM can load .png programs at runtime
+  id: phase-94
+  scope_lines_total: 800
+  status: planned
+  test_target: 8
+  title: Pixel Boot - Universal Pixel Executable
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
