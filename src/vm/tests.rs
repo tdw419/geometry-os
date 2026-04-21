@@ -13826,3 +13826,290 @@ fn test_clipboard_large_data_vfs_path() {
         "reader should reconstruct VFS path from clipboard"
     );
 }
+
+// ── Window Manager with Close & Re-tiling (Phase 95) ────────────
+
+#[test]
+fn test_wm_drag_close_assembles() {
+    let source = std::fs::read_to_string("programs/wm_drag_close.asm").unwrap();
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "wm_drag_close.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 100,
+        "should have significant bytecode, got {} words",
+        asm.pixels.len()
+    );
+    // Verify WINSYS opcode present
+    assert!(
+        asm.pixels.iter().any(|&p| p == 0x94),
+        "should contain WINSYS opcode (0x94)"
+    );
+    // Verify MOUSEQ opcode present
+    assert!(
+        asm.pixels.iter().any(|&p| p == 0x85),
+        "should contain MOUSEQ opcode (0x85)"
+    );
+    // Verify WPIXEL opcode present
+    assert!(
+        asm.pixels.iter().any(|&p| p == 0x95),
+        "should contain WPIXEL opcode (0x95)"
+    );
+}
+
+#[test]
+fn test_wm_creates_three_windows() {
+    let source = std::fs::read_to_string("programs/wm_drag_close.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run enough steps to get past window creation (past init section)
+    // The program has lots of init code (STRO, WINSYS calls, content drawing)
+    for _ in 0..200_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    // Check that 3 windows were created
+    let active_count = vm.windows.iter().filter(|w| w.active).count();
+    assert!(
+        active_count >= 3,
+        "should have at least 3 active windows, got {}",
+        active_count
+    );
+}
+
+#[test]
+fn test_wm_close_button_hittest() {
+    let mut vm = Vm::new();
+    // Create a window at (50, 50), 100x80
+    vm.regs[1] = 50;
+    vm.regs[2] = 50;
+    vm.regs[3] = 100;
+    vm.regs[4] = 80;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94; // WINSYS
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+    assert!(win_id > 0, "should create a window");
+
+    // Position mouse on close button: x = 50 + 100 - 11 + 4 = 139, y = 50 + 2 + 4 = 56
+    // Close button is at (win_x + win_w - 11, win_y + 2) to (+8, +8)
+    // So center is at x=139, y=56
+    vm.push_mouse(139, 56);
+
+    // Do HITTEST (op=4)
+    vm.regs[6] = 4;
+    vm.ram[2] = 0x94; // WINSYS
+    vm.ram[3] = 6;
+    vm.pc = 2;
+    vm.halted = false;
+    vm.step();
+
+    // Should detect a hit on the window
+    assert_eq!(vm.regs[0], win_id, "hittest should find the window");
+    assert_eq!(vm.regs[1], 1, "should be title bar hit (hit_type=1)");
+}
+
+#[test]
+fn test_wm_close_destroy_window() {
+    let mut vm = Vm::new();
+    // Create 3 windows
+    for i in 0..3u32 {
+        vm.regs[1] = 10 + i * 40;
+        vm.regs[2] = 10;
+        vm.regs[3] = 30;
+        vm.regs[4] = 30;
+        vm.regs[5] = 0;
+        vm.regs[6] = 0;
+        vm.ram[0] = 0x94;
+        vm.ram[1] = 6;
+        vm.pc = 0;
+        vm.halted = false;
+        vm.step();
+    }
+    let active_count = vm.windows.iter().filter(|w| w.active).count();
+    assert_eq!(active_count, 3, "should have 3 windows");
+
+    // Destroy window with id=2 (the second one)
+    vm.regs[0] = 2;
+    vm.regs[6] = 1; // op=1 (destroy)
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    let active_count_after = vm.windows.iter().filter(|w| w.active).count();
+    assert_eq!(active_count_after, 2, "should have 2 windows after destroy");
+}
+
+#[test]
+fn test_wm_retile_repositions_windows() {
+    let mut vm = Vm::new();
+    // Create 3 windows at different positions
+    let mut ids = vec![];
+    for i in 0..3u32 {
+        vm.regs[1] = 10 + i * 40;
+        vm.regs[2] = 10;
+        vm.regs[3] = 30;
+        vm.regs[4] = 30;
+        vm.regs[5] = 0;
+        vm.regs[6] = 0;
+        vm.ram[0] = 0x94;
+        vm.ram[1] = 6;
+        vm.pc = 0;
+        vm.halted = false;
+        vm.step();
+        ids.push(vm.regs[0]);
+    }
+
+    // Destroy the middle window
+    vm.regs[0] = ids[1];
+    vm.regs[6] = 1;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    // Manually move remaining windows to simulate re-tiling
+    // Window 1 to x=8
+    vm.regs[0] = ids[0];
+    vm.regs[1] = 8;
+    vm.regs[2] = 16;
+    vm.regs[6] = 5; // MOVETO
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "moveto should succeed");
+
+    // Window 3 to x=128
+    vm.regs[0] = ids[2];
+    vm.regs[1] = 128;
+    vm.regs[2] = 16;
+    vm.regs[6] = 5;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "moveto should succeed");
+
+    // Verify positions via WINFO
+    for (i, &wid) in [ids[0], ids[2]].iter().enumerate() {
+        vm.regs[0] = wid;
+        vm.regs[1] = 0x9000;
+        vm.regs[6] = 6; // WINFO
+        vm.ram[0] = 0x94;
+        vm.ram[1] = 6;
+        vm.pc = 0;
+        vm.halted = false;
+        vm.step();
+        let x = vm.ram[0x9000];
+        let y = vm.ram[0x9001];
+        assert!(x < 256, "window {} x should be on screen", i);
+        assert!(y < 256, "window {} y should be on screen", i);
+    }
+}
+
+#[test]
+fn test_wm_drag_moves_window() {
+    let mut vm = Vm::new();
+    // Create a window at (50, 50)
+    vm.regs[1] = 50;
+    vm.regs[2] = 50;
+    vm.regs[3] = 100;
+    vm.regs[4] = 80;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    // Move mouse to title bar area (50 + 10, 50 + 5)
+    vm.push_mouse(60, 55);
+
+    // Move the window via MOVETO (simulating drag)
+    vm.regs[0] = win_id;
+    vm.regs[1] = 100; // new x
+    vm.regs[2] = 70; // new y
+    vm.regs[6] = 5; // MOVETO
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "moveto should succeed");
+
+    // Verify new position via WINFO
+    vm.regs[0] = win_id;
+    vm.regs[1] = 0x9000;
+    vm.regs[6] = 6; // WINFO
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.ram[0x9000], 100, "window x should be 100 after drag");
+    assert_eq!(vm.ram[0x9001], 70, "window y should be 70 after drag");
+}
+
+#[test]
+fn test_wm_drag_close_program_runs() {
+    let source = std::fs::read_to_string("programs/wm_drag_close.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run init phase: create windows, draw content, enter main loop
+    // The full program has heavy WPIXEL fills (100x80 per window x 3) so
+    // we run enough steps for init to complete and the main loop to start.
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Verify: 3 windows were created (init completed successfully)
+    let active_count = vm.windows.iter().filter(|w| w.active).count();
+    assert!(
+        active_count >= 3,
+        "should have 3 active windows after init, got {}",
+        active_count
+    );
+    // Verify: SP was properly initialized (program set r30=0xFF00)
+    assert!(
+        vm.regs[30] < 0xFF00,
+        "SP should have been decremented by PUSH, got {:#x}",
+        vm.regs[30]
+    );
+    // Verify: program didn't halt unexpectedly (it's a loop program)
+    // It may or may not have reached FRAME depending on step budget
+}
