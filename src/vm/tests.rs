@@ -4901,7 +4901,7 @@ fn test_pulse_triangle_wave_symmetry() {
     let mut vm = boot_pulse(0);
     let mut widths: Vec<u32> = Vec::new();
 
-    for frame in 0..200 {
+    for _frame in 0..200 {
         let start = vm.frame_count;
         for _ in 0..500_000 {
             if !vm.step() {
@@ -4957,7 +4957,7 @@ fn test_pulse_color_changes_over_time() {
     let vm_early = boot_pulse(5);
     let vm_late = boot_pulse(150);
 
-    let early_pixel = vm_early.screen[110 * 256 + 100]; // bar center at (100,110)
+    let _early_pixel = vm_early.screen[110 * 256 + 100]; // bar center at (100,110)
     let late_pixel = vm_late.screen[110 * 256 + 100];
 
     // At least one should have bar drawn (late frame at peak), and colors should differ
@@ -6196,7 +6196,7 @@ fn test_multiproc_persistent() {
 
 // ── Color Picker App Tests ──────────────────────────────
 
-fn boot_color_picker(target_frames: u32) -> Vm {
+fn _boot_color_picker(target_frames: u32) -> Vm {
     let source = include_str!("../../programs/color_picker.asm");
     let asm = crate::assembler::assemble(source, 0).expect("color_picker.asm should assemble");
     let mut vm = Vm::new();
@@ -7617,7 +7617,7 @@ fn test_relu_zero_unchanged() {
 #[test]
 fn test_relu_negative_clamped() {
     let mut vm = Vm::new();
-    vm.regs[5] = (-5i32 as u32); // negative in two's complement
+    vm.regs[5] = -5i32 as u32; // negative in two's complement
     vm.ram[0] = 0x93;
     vm.ram[1] = 5;
     vm.ram[2] = 0x00;
@@ -7672,7 +7672,7 @@ fn test_matvec_relu_pipeline() {
     let w_base: usize = 1000;
     // Fixed-point: -2.0 = 0xFFFE0000 (two's complement)
     vm.ram[w_base + 0] = 1 << 16; // 1.0
-    vm.ram[w_base + 1] = ((-2i32 << 16) as u32); // -2.0
+    vm.ram[w_base + 1] = (-2i32 << 16) as u32; // -2.0
     vm.ram[w_base + 2] = 3 << 16; // 3.0
     vm.ram[w_base + 3] = 4 << 16; // 4.0
 
@@ -10245,7 +10245,7 @@ fn test_db_directive_case_insensitive() {
 #[test]
 fn test_asm_opcode_with_db_and_asciz() {
     // Test that the ASM opcode can assemble programs using .db and .asciz
-    let mut vm = crate::vm::Vm::new();
+    let _vm = crate::vm::Vm::new();
 
     // Write source to RAM at 0x2000 using LDI+STORE
     let source = ".db 72, 101, 108, 108, 111, 0\nLDI r0, 0x2000\nTEXT r0, r0, r0\nHALT";
@@ -13613,7 +13613,6 @@ fn test_pixel_chain_program_a_loads_b() {
     assert_eq!(addr, chain_ok_addr as usize, "chain_ok label alignment");
     vm.ram[addr] = 0x30; // JMP
     vm.ram[addr + 1] = 0x1000; // target = 0x1000
-    addr += 2;
 
     vm.pc = 0;
     vm.halted = false;
@@ -14254,7 +14253,7 @@ fn test_init_service_restart_on_crash() {
     let mut vm = Vm::new();
 
     let svc_base = 0x1000usize;
-    let svc_size = 256usize;
+    let _svc_size = 256usize;
 
     // One service with always-restart policy
     vm.ram[svc_base + 32] = 42; // pid
@@ -14292,7 +14291,7 @@ fn test_init_service_no_restart_never_policy() {
     let mut vm = Vm::new();
 
     let svc_base = 0x1000usize;
-    let svc_size = 256usize;
+    let _svc_size = 256usize;
 
     // One service with never-restart policy
     vm.ram[svc_base + 32] = 42; // pid
@@ -14358,7 +14357,7 @@ fn test_custom_font_ioctl_set_and_clear() {
 
     // Simulate IOCTL cmd 2 (set font) by running bytecode
     // Build a minimal program: OPEN + IOCTL + HALT
-    let program = [
+    let _program = [
         0x54u32, 0x01, 0x02, // OPEN r1, r2  (we need /dev/screen path)
         0x00, // HALT
     ];

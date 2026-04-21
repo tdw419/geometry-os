@@ -230,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn test_letter_A_shape() {
+    fn test_letter_a_shape() {
         let glyph = &GLYPHS[0x41];
         // A has a peak at row 0 (bits 3,4,5 set = 0x38 = 0b00111000)
         assert_eq!(glyph[0], 0x38, "A row 0 should be 0x38");

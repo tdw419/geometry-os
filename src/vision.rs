@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn test_checksum_detects_change() {
-        let mut screen_a = vec![0u32; 256 * 256];
+        let screen_a = vec![0u32; 256 * 256];
         let mut screen_b = vec![0u32; 256 * 256];
         screen_b[0] = 0xFF0000; // one pixel changed
         assert_ne!(canvas_checksum(&screen_a), canvas_checksum(&screen_b));
@@ -245,7 +245,7 @@ mod tests {
 
     #[test]
     fn test_diff_single_pixel() {
-        let mut before = vec![0u32; 256 * 256];
+        let before = vec![0u32; 256 * 256];
         let mut after = vec![0u32; 256 * 256];
         after[42] = 0xFFFFFF;
         let (changed, total, pct) = canvas_diff(&before, &after);

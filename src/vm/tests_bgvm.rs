@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod phase87_multi_hypervisor {
     use crate::assembler::assemble;
-    use crate::vm::{BackgroundVm, BgVmState, HypervisorMode, Vm};
+    use crate::vm::{HypervisorMode, Vm};
 
     /// Helper: assemble source, load into VM, run until halt.
     fn compile_run(source: &str) -> Vm {
