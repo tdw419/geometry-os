@@ -4858,23 +4858,23 @@ phases:
       from /lib/, READ it into RAM at a known address via .org, then CALL into exported
       functions. No new opcodes -- just a file format convention and a loader subroutine.'
     name: Shared library file format
-    status: planned
+    status: done
   - description: 'Library loader subroutine in lib/stdlib.asm. LOADLIB macro: takes
       library name and function name, opens .lib from VFS, reads it into RAM, resolves
       function address from export table, CALLs it. Preprocessor expands to OPEN/READ/CALL
       sequence.'
     name: Library loader subroutine
-    status: planned
+    status: done
   - description: 'Convert lib/string.asm and lib/math.asm to .lib format with export
       tables. Programs use LOADLIB to call strlen, memcpy, sin, cos without .include
       bloat. One copy in VFS, shared by all programs.'
     name: Convert stdlib to shared libraries
-    status: planned
+    status: done
   - description: 'Test: program calls strlen from string.lib without .include. Verify
       correct return value. Verify the library code is only in RAM once even if two
       programs use it.'
     name: Shared library test
-    status: planned
+    status: done
   description: 'Dynamic loading of shared libraries from VFS. Like .so on Linux or .dll
     on Windows. Programs load library bytecode at runtime, resolve function names
     from an export table, and CALL into them. Avoids .include bloat -- one copy of
@@ -4883,7 +4883,7 @@ phases:
     .include duplication
   id: phase-100
   scope_lines_total: 600
-  status: planned
+  status: complete
   test_target: 3
   title: Shared Libraries and Dynamic Linking
 - deliverables:

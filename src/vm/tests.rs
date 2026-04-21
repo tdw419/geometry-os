@@ -14701,3 +14701,234 @@ fn test_sound_mixer_shared_ram_ipc() {
         notes_played
     );
 }
+
+// Phase 100: Shared Libraries and Dynamic Linking Tests
+
+/// Helper: create a .lib file in VFS from assembled bytecode.
+/// Binary format:
+///   [magic "LIB\0" (4 bytes), export_count (4 bytes LE),
+///    export_offsets (4 bytes each LE), code (4 bytes per u32 word LE)]
+fn create_lib_file(
+    vfs_dir: &std::path::Path,
+    name: &str,
+    exports: &[(&str, usize)],
+    code: &[u32],
+) -> std::io::Result<()> {
+    use std::io::Write;
+    let path = vfs_dir.join(name);
+    let mut file = std::fs::File::create(&path)?;
+    file.write_all(b"LIB\x00")?;
+    file.write_all(&(exports.len() as u32).to_le_bytes())?;
+    for &(_name, offset) in exports {
+        file.write_all(&(offset as u32).to_le_bytes())?;
+    }
+    for &word in code {
+        file.write_all(&word.to_le_bytes())?;
+    }
+    Ok(())
+}
+
+/// Assemble a snippet at a given base address (for correct label resolution)
+fn assemble_at(source: &str, base_addr: usize) -> Vec<u32> {
+    crate::assembler::assemble(source, base_addr)
+        .expect("snippet should assemble")
+        .pixels
+}
+
+#[test]
+fn test_shared_lib_file_format() {
+    use std::io::Read;
+    let dir = tempfile::tempdir().expect("temp dir");
+    let code = assemble_at("LDI r0, 42\nHALT", 0);
+    create_lib_file(dir.path(), "test.lib", &[("test_func", 0)], &code).expect("create lib");
+
+    let mut file = std::fs::File::open(dir.path().join("test.lib")).expect("open");
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).expect("read");
+
+    assert_eq!(&buf[0..4], b"LIB\x00", "magic should be LIB");
+    let export_count = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]);
+    assert_eq!(export_count, 1, "should have 1 export");
+    let offset = u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]);
+    assert_eq!(offset, 0, "first export should be at offset 0");
+    let first_opcode = u32::from_le_bytes([buf[12], buf[13], buf[14], buf[15]]);
+    assert_eq!(first_opcode, 0x10, "first instruction should be LDI (0x10)");
+}
+
+#[test]
+fn test_lib_test_program_assembles() {
+    let source =
+        std::fs::read_to_string("programs/lib_test.asm").expect("lib_test.asm should exist");
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "lib_test.asm should assemble: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn test_lib_loader_calls_strlen() {
+    // Create strlen bytecode assembled at the load address (0x5000)
+    let strlen_code = assemble_at(
+        "LDI r0, 0\n\
+         strlen_loop:\n\
+         LOAD r2, r1\n\
+         JZ r2, strlen_done\n\
+         LDI r2, 1\n\
+         ADD r1, r2\n\
+         LDI r2, 1\n\
+         ADD r0, r2\n\
+         JMP strlen_loop\n\
+         strlen_done:\n\
+         RET\n",
+        0x5000,
+    );
+
+    let mut vm = crate::vm::Vm::new();
+
+    // Write "Hello" at 0x6000
+    let hello = b"Hello";
+    for (i, &ch) in hello.iter().enumerate() {
+        vm.ram[0x6000 + i] = ch as u32;
+    }
+    vm.ram[0x6000 + hello.len()] = 0;
+
+    // Load strlen bytecode at 0x5000
+    for (i, &word) in strlen_code.iter().enumerate() {
+        vm.ram[0x5000 + i] = word;
+    }
+
+    // Call strlen: set r1 = string addr, jump to 0x5000
+    vm.pc = 0x5000;
+    vm.regs[1] = 0x6000;
+    vm.halted = false;
+
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        vm.regs[0], 5,
+        "strlen('Hello') should return 5, got {}",
+        vm.regs[0]
+    );
+}
+
+#[test]
+fn test_lib_full_roundtrip() {
+    // Create strlen bytecode at base 0x5000
+    let strlen_code = assemble_at(
+        "LDI r0, 0\n\
+         strlen_loop:\n\
+         LOAD r2, r1\n\
+         JZ r2, strlen_done\n\
+         LDI r2, 1\n\
+         ADD r1, r2\n\
+         LDI r2, 1\n\
+         ADD r0, r2\n\
+         JMP strlen_loop\n\
+         strlen_done:\n\
+         RET\n",
+        0x5000,
+    );
+
+    // Create VFS with string.lib
+    let dir = tempfile::tempdir().expect("temp dir");
+    create_lib_file(dir.path(), "string.lib", &[("strlen", 0)], &strlen_code).expect("create lib");
+
+    let mut vm = crate::vm::Vm::new();
+    vm.vfs.base_dir = dir.path().to_path_buf();
+
+    // Directly use VFS fread to load the library into RAM buffer at 0x8000
+    // Write filename to RAM
+    let filename = b"string.lib";
+    for (i, &ch) in filename.iter().enumerate() {
+        vm.ram[0x4000 + i] = ch as u32;
+    }
+    vm.ram[0x4000 + filename.len()] = 0;
+
+    // OPEN via VFS directly
+    let fd = vm.vfs.fopen(&vm.ram, 0x4000, 0, 0);
+    assert!(fd != 0xFFFFFFFF, "OPEN should succeed, got {:X}", fd);
+
+    // READ into RAM at 0x8000
+    let bytes_read = vm.vfs.fread(&mut vm.ram, fd, 0x8000, 512, 0);
+    assert!(
+        bytes_read > 12,
+        "should read header + code, got {} bytes",
+        bytes_read
+    );
+
+    // Parse the binary header from the buffer
+    // Each byte from disk = one RAM word (VFS fread stores low byte per word)
+    assert_eq!(vm.ram[0x8000], b'L' as u32, "magic[0]");
+    assert_eq!(vm.ram[0x8001], b'I' as u32, "magic[1]");
+    assert_eq!(vm.ram[0x8002], b'B' as u32, "magic[2]");
+
+    // Export count at bytes 4-7 (LE u32)
+    let export_count =
+        vm.ram[0x8004] | (vm.ram[0x8005] << 8) | (vm.ram[0x8006] << 16) | (vm.ram[0x8007] << 24);
+    assert_eq!(export_count, 1, "1 export");
+
+    // Export offset at bytes 8-11
+    let export_offset =
+        vm.ram[0x8008] | (vm.ram[0x8009] << 8) | (vm.ram[0x800A] << 16) | (vm.ram[0x800B] << 24);
+    assert_eq!(export_offset, 0, "strlen at offset 0");
+
+    // Code starts at byte 12 (4 magic + 4 count + 4 offset)
+    // Unpack first u32 word from 4 bytes (LE)
+    let code_base = 0x800C;
+    let first_word = vm.ram[code_base]
+        | (vm.ram[code_base + 1] << 8)
+        | (vm.ram[code_base + 2] << 16)
+        | (vm.ram[code_base + 3] << 24);
+    assert_eq!(first_word, 0x10, "LDI opcode, got 0x{:X}", first_word);
+
+    // Unpack and load all bytecode words into RAM at 0x5000
+    let mut code_addr = code_base;
+    let mut ram_addr: usize = 0x5000;
+    while code_addr + 3 < 0x8000 + bytes_read as usize {
+        let word = vm.ram[code_addr]
+            | (vm.ram[code_addr + 1] << 8)
+            | (vm.ram[code_addr + 2] << 16)
+            | (vm.ram[code_addr + 3] << 24);
+        vm.ram[ram_addr] = word;
+        code_addr += 4;
+        ram_addr += 1;
+    }
+
+    // Verify the loaded bytecode matches the original
+    assert!(
+        ram_addr > 0x5000,
+        "should have loaded at least 1 word, loaded {}",
+        ram_addr - 0x5000
+    );
+    assert_eq!(vm.ram[0x5000], 0x10, "first word should be LDI");
+    assert_eq!(vm.ram[0x5001], 0, "second word should be register 0");
+    assert_eq!(vm.ram[0x5002], 0, "third word should be immediate 0");
+
+    // Write test string "Hi" at 0x6000
+    vm.ram[0x6000] = b'H' as u32;
+    vm.ram[0x6001] = b'i' as u32;
+    vm.ram[0x6002] = 0;
+
+    // Call strlen at 0x5000
+    vm.pc = 0x5000;
+    vm.regs[1] = 0x6000;
+    vm.halted = false;
+
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        vm.regs[0], 2,
+        "strlen('Hi') should return 2, got {}",
+        vm.regs[0]
+    );
+}
