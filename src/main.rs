@@ -1408,8 +1408,149 @@ fn main() {
                                 status_msg = "[HALTED]".into();
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
+                            }
+                            // ── Phase 84: Building & Desktop Socket Commands ──────
+                            "buildings" => {
+                                // List buildings from VM RAM (0x7500 table)
+                                // Format: id,world_x,world_y,type_color,name per line
+                                let radius: i32 =
+                                    parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(256);
+                                let player_x = vm.ram[0x7808] as i32;
+                                let player_y = vm.ram[0x7809] as i32;
+                                for i in 0..8u32 {
+                                    let base = 0x7500 + (i as usize) * 4;
+                                    if base + 3 >= vm.ram.len() {
+                                        break;
+                                    }
+                                    let bx = vm.ram[base] as i32;
+                                    let by = vm.ram[base + 1] as i32;
+                                    let color = vm.ram[base + 2];
+                                    let name_addr = vm.ram[base + 3] as usize;
+                                    if radius > 0 {
+                                        let dx = (bx - player_x).abs();
+                                        let dy = (by - player_y).abs();
+                                        if dx > radius || dy > radius {
+                                            continue;
+                                        }
+                                    }
+                                    // Read name from RAM
+                                    let mut name = String::new();
+                                    for j in 0..16 {
+                                        if name_addr + j >= vm.ram.len() {
+                                            break;
+                                        }
+                                        let ch = vm.ram[name_addr + j];
+                                        if ch == 0 || ch > 127 {
+                                            break;
+                                        }
+                                        name.push(ch as u8 as char);
+                                    }
+                                    response.push_str(&format!(
+                                        "{},{},{},{:06x},{}\n",
+                                        i,
+                                        bx,
+                                        by,
+                                        color & 0xFFFFFF,
+                                        name
+                                    ));
+                                }
+                            }
+                            "desktop_json" => {
+                                // Full desktop state as JSON-ish
+                                let player_x = vm.ram[0x7808];
+                                let player_y = vm.ram[0x7809];
+                                let cam_x = vm.ram[0x7800];
+                                let cam_y = vm.ram[0x7801];
+                                let frame = vm.ram[0x7802];
+                                let nearby = vm.ram[0x7588];
+                                response.push_str(&format!(
+                                    "{{\"player\":{{\"x\":{},\"y\":{}}},\"camera\":{{\"x\":{},\"y\":{}}},\"frame\":{},\"nearby_building\":{},\"buildings\":[",
+                                    player_x, player_y, cam_x, cam_y, frame, nearby
+                                ));
+                                for i in 0..8u32 {
+                                    let base = 0x7500 + (i as usize) * 4;
+                                    if base + 3 >= vm.ram.len() {
+                                        break;
+                                    }
+                                    let bx = vm.ram[base];
+                                    let by = vm.ram[base + 1];
+                                    let color = vm.ram[base + 2];
+                                    let name_addr = vm.ram[base + 3] as usize;
+                                    let mut name = String::new();
+                                    for j in 0..16 {
+                                        if name_addr + j >= vm.ram.len() {
+                                            break;
+                                        }
+                                        let ch = vm.ram[name_addr + j];
+                                        if ch == 0 || ch > 127 {
+                                            break;
+                                        }
+                                        name.push(ch as u8 as char);
+                                    }
+                                    if i > 0 {
+                                        response.push(',');
+                                    }
+                                    response.push_str(&format!(
+                                        "{{\"id\":{},\"x\":{},\"y\":{},\"color\":\"{:06x}\",\"name\":\"{}\"}}",
+                                        i, bx, by, color & 0xFFFFFF, name
+                                    ));
+                                }
+                                response.push_str("]}\n");
+                            }
+                            "launch" => {
+                                // Launch an app by name (sets VM state to run the program)
+                                let app_name = parts.get(1).copied().unwrap_or("");
+                                if app_name.is_empty() {
+                                    response.push_str("[error: launch requires app name]\n");
+                                } else {
+                                    // Find the building with matching name
+                                    let mut found = false;
+                                    for i in 0..8u32 {
+                                        let base = 0x7500 + (i as usize) * 4;
+                                        if base + 3 >= vm.ram.len() {
+                                            break;
+                                        }
+                                        let name_addr = vm.ram[base + 3] as usize;
+                                        let mut name = String::new();
+                                        for j in 0..16 {
+                                            if name_addr + j >= vm.ram.len() {
+                                                break;
+                                            }
+                                            let ch = vm.ram[name_addr + j];
+                                            if ch == 0 || ch > 127 {
+                                                break;
+                                            }
+                                            name.push(ch as u8 as char);
+                                        }
+                                        if name == app_name {
+                                            response.push_str(&format!(
+                                                "[launching: {} from building {}]\n",
+                                                app_name, i
+                                            ));
+                                            found = true;
+                                            break;
+                                        }
+                                    }
+                                    if !found {
+                                        response
+                                            .push_str(&format!("[app not found: {}]\n", app_name));
+                                    }
+                                }
+                            }
+                            "player_pos" => {
+                                let px = vm.ram[0x7808];
+                                let py = vm.ram[0x7809];
+                                let facing = vm.ram[0x780A];
+                                let facing_str = match facing {
+                                    0 => "down",
+                                    1 => "up",
+                                    2 => "left",
+                                    3 => "right",
+                                    _ => "unknown",
+                                };
+                                response.push_str(&format!("{},{},{}\n", px, py, facing_str));
                             }
                             _ => {
                                 response.push_str(&format!("[unknown: {}]\n", line));

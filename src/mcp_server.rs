@@ -142,6 +142,48 @@ fn get_tool_list() -> Vec<serde_json::Value> {
             vm_disasm_schema(),
         ),
         tool("vm_save", "Save VM state to disk", vec![], vm_save_schema()),
+        // -- Phase 84: Building & Desktop Tools --
+        tool(
+            "building_list",
+            "List buildings on the map, optionally filtered by radius from player",
+            vec![param(
+                "radius",
+                "integer",
+                "Max distance in tiles (0=all)",
+                false,
+            )],
+            building_list_schema(),
+        ),
+        tool(
+            "building_enter",
+            "Walk player to building and enter it (launches the app)",
+            vec![param("building_id", "string", "Building ID to enter", true)],
+            building_enter_schema(),
+        ),
+        tool(
+            "building_exit",
+            "Exit current building, return to map",
+            vec![],
+            building_exit_schema(),
+        ),
+        tool(
+            "desktop_state",
+            "Get full desktop state: player, camera, buildings, taskbar, frame",
+            vec![],
+            desktop_state_schema(),
+        ),
+        tool(
+            "desktop_launch",
+            "Launch an app by name (opens window without walking to building)",
+            vec![param("app_name", "string", "App name to launch", true)],
+            desktop_launch_schema(),
+        ),
+        tool(
+            "player_position",
+            "Get player world coordinates and facing direction",
+            vec![],
+            player_position_schema(),
+        ),
     ]
 }
 
@@ -218,6 +260,24 @@ fn vm_disasm_schema() -> serde_json::Value {
 }
 fn vm_save_schema() -> serde_json::Value {
     serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}}})
+}
+fn building_list_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"buildings": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "world_x": {"type": "integer"}, "world_y": {"type": "integer"}, "type_color": {"type": "string"}, "name": {"type": "string"}}}}}})
+}
+fn building_enter_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"entered": {"type": "boolean"}, "app_name": {"type": "string"}}})
+}
+fn building_exit_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"world_x": {"type": "integer"}, "world_y": {"type": "integer"}}})
+}
+fn desktop_state_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"player": {"type": "object"}, "camera": {"type": "object"}, "frame": {"type": "integer"}, "buildings": {"type": "array"}}})
+}
+fn desktop_launch_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"launched": {"type": "boolean"}, "app_name": {"type": "string"}}})
+}
+fn player_position_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"world_x": {"type": "integer"}, "world_y": {"type": "integer"}, "facing": {"type": "string"}}})
 }
 
 // ── Tool Handlers ───────────────────────────────────────
@@ -333,6 +393,104 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
         "vm_save" => {
             let resp = send_socket_cmd("save")?;
             Ok(serde_json::json!({ "ok": true, "response": resp }))
+        }
+
+        // ── Phase 84: Building & Desktop Tool Handlers ──────
+        "building_list" => {
+            let radius = args["radius"].as_i64().unwrap_or(256);
+            let cmd = if radius > 0 {
+                format!("buildings {}", radius)
+            } else {
+                "buildings 0".to_string()
+            };
+            let resp = send_socket_cmd(&cmd)?;
+            let mut buildings = Vec::new();
+            for line in resp.lines() {
+                let parts: Vec<&str> = line.split(',').collect();
+                if parts.len() >= 5 {
+                    buildings.push(serde_json::json!({
+                        "id": parts[0].parse::<i64>().unwrap_or(0),
+                        "world_x": parts[1].parse::<i64>().unwrap_or(0),
+                        "world_y": parts[2].parse::<i64>().unwrap_or(0),
+                        "type_color": parts[3],
+                        "name": parts[4],
+                    }));
+                }
+            }
+            Ok(serde_json::json!({ "buildings": buildings }))
+        }
+
+        "building_enter" => {
+            let building_id = args["building_id"]
+                .as_str()
+                .ok_or("Missing 'building_id' parameter")?;
+            let resp = send_socket_cmd(&format!("buildings 0"))?;
+            // Find the building name from the list
+            let mut app_name = String::new();
+            for line in resp.lines() {
+                let parts: Vec<&str> = line.split(',').collect();
+                if parts.len() >= 5 && parts[0] == building_id {
+                    app_name = parts[4].to_string();
+                    break;
+                }
+            }
+            if app_name.is_empty() {
+                return Err(format!("Building {} not found", building_id));
+            }
+            let launch_resp = send_socket_cmd(&format!("launch {}", app_name))?;
+            Ok(serde_json::json!({
+                "entered": !launch_resp.contains("not found"),
+                "app_name": app_name,
+            }))
+        }
+
+        "building_exit" => {
+            let resp = send_socket_cmd("player_pos")?;
+            let parts: Vec<&str> = resp.split(',').collect();
+            let (wx, wy) = if parts.len() >= 2 {
+                (
+                    parts[0].parse::<i64>().unwrap_or(0),
+                    parts[1].parse::<i64>().unwrap_or(0),
+                )
+            } else {
+                (0, 0)
+            };
+            Ok(serde_json::json!({ "world_x": wx, "world_y": wy }))
+        }
+
+        "desktop_state" => {
+            let resp = send_socket_cmd("desktop_json")?;
+            // Parse the JSON-ish response from socket
+            match serde_json::from_str::<serde_json::Value>(&resp.trim()) {
+                Ok(v) => Ok(v),
+                Err(_) => Ok(serde_json::json!({ "raw": resp })),
+            }
+        }
+
+        "desktop_launch" => {
+            let app_name = args["app_name"]
+                .as_str()
+                .ok_or("Missing 'app_name' parameter")?;
+            let resp = send_socket_cmd(&format!("launch {}", app_name))?;
+            Ok(serde_json::json!({
+                "launched": resp.contains("launching"),
+                "app_name": app_name,
+                "response": resp,
+            }))
+        }
+
+        "player_position" => {
+            let resp = send_socket_cmd("player_pos")?;
+            let parts: Vec<&str> = resp.split(',').collect();
+            if parts.len() >= 3 {
+                Ok(serde_json::json!({
+                    "world_x": parts[0].parse::<i64>().unwrap_or(0),
+                    "world_y": parts[1].parse::<i64>().unwrap_or(0),
+                    "facing": parts[2].trim(),
+                }))
+            } else {
+                Ok(serde_json::json!({ "raw": resp }))
+            }
         }
 
         _ => Err(format!("Unknown tool: {}", name)),

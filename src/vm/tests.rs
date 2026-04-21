@@ -11290,3 +11290,404 @@ fn test_extract_json_str() {
         Some("hello\nworld".to_string())
     );
 }
+
+// ── Phase 84: Building & Desktop Integration Tests ────────────────
+
+#[test]
+fn test_world_desktop_assembles() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm")
+        .expect("world_desktop.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "world_desktop.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 1000,
+        "world_desktop should produce substantial bytecode, got {} words",
+        asm.pixels.len()
+    );
+}
+
+#[test]
+fn test_world_desktop_runs_and_produces_frame() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    let mut frames_seen = 0;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= 1 {
+                break;
+            }
+        }
+    }
+    assert!(
+        frames_seen >= 1,
+        "world_desktop should produce at least 1 frame, got {}",
+        frames_seen
+    );
+}
+
+#[test]
+fn test_building_table_initialized() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run through init until first frame
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Building count at 0x7580 should be 8
+    assert_eq!(
+        vm.ram[0x7580], 8,
+        "building count should be 8, got {}",
+        vm.ram[0x7580]
+    );
+    // First building at 0x7500 should have world_x = 52
+    assert_eq!(
+        vm.ram[0x7500], 52,
+        "building 0 world_x should be 52, got {}",
+        vm.ram[0x7500]
+    );
+    // First building world_y = 48
+    assert_eq!(
+        vm.ram[0x7501], 48,
+        "building 0 world_y should be 48, got {}",
+        vm.ram[0x7501]
+    );
+    // First building type color should be red
+    assert_eq!(
+        vm.ram[0x7502], 0xFF4444,
+        "building 0 color should be 0xFF4444, got {:08X}",
+        vm.ram[0x7502]
+    );
+}
+
+#[test]
+fn test_building_names_stored() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Read "snake" from 0x7600
+    let mut name = String::new();
+    for j in 0..16 {
+        let ch = vm.ram[0x7600 + j];
+        if ch == 0 || ch > 127 {
+            break;
+        }
+        name.push(ch as u8 as char);
+    }
+    assert_eq!(
+        name, "snake",
+        "building 0 name should be 'snake', got '{}'",
+        name
+    );
+
+    // Read "ball" from 0x7610
+    let mut name2 = String::new();
+    for j in 0..16 {
+        let ch = vm.ram[0x7610 + j];
+        if ch == 0 || ch > 127 {
+            break;
+        }
+        name2.push(ch as u8 as char);
+    }
+    assert_eq!(
+        name2, "ball",
+        "building 1 name should be 'ball', got '{}'",
+        name2
+    );
+}
+
+#[test]
+fn test_player_position_initialized() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Player position should be initialized
+    let px = vm.ram[0x7808];
+    let py = vm.ram[0x7809];
+    assert!(px > 0, "player_x should be > 0, got {}", px);
+    assert!(py > 0, "player_y should be > 0, got {}", py);
+}
+
+#[test]
+fn test_taskbar_renders_pixels() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+    // Taskbar at y=240..255 should have pixels
+    let mut taskbar_pixels = 0;
+    for y in 240..256 {
+        for x in 0..256 {
+            if vm.screen[y * 256 + x] != 0 {
+                taskbar_pixels += 1;
+            }
+        }
+    }
+    assert!(
+        taskbar_pixels > 100,
+        "taskbar should render pixels at y=240..255, got {} pixels",
+        taskbar_pixels
+    );
+}
+
+#[test]
+fn test_building_types_varied() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Check that buildings have different type colors
+    let colors: Vec<u32> = (0..8).map(|i| vm.ram[0x7500 + i * 4 + 2]).collect();
+    let unique_colors: std::collections::HashSet<u32> = colors.iter().copied().collect();
+    assert!(
+        unique_colors.len() >= 3,
+        "should have at least 3 different building type colors, got {}",
+        unique_colors.len()
+    );
+}
+
+#[test]
+fn test_building_positions_spread() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Buildings should be spread across the map (x range > 100)
+    let xs: Vec<u32> = (0..8).map(|i| vm.ram[0x7500 + i * 4]).collect();
+    let min_x = *xs.iter().min().unwrap_or(&0);
+    let max_x = *xs.iter().max().unwrap_or(&0);
+    assert!(
+        max_x - min_x > 100,
+        "buildings should be spread (x range {}..{} = {})",
+        min_x,
+        max_x,
+        max_x - min_x
+    );
+}
+
+#[test]
+fn test_nearby_building_flag_clears() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run for 2 frames
+    let mut frames = 0;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames += 1;
+            if frames >= 2 {
+                break;
+            }
+        }
+    }
+    // After frame, nearby flag should be 0 (player at 32,32, nearest building at 35,95)
+    let nearby = vm.ram[0x7588];
+    // Player starts at (32,32), buildings are at (52,48), (78,85), etc.
+    // Distance to building 0 at (52,48) is 20+16=36, which is > 4 in both axes
+    // So nearby should be 0
+    assert_eq!(
+        nearby, 0,
+        "nearby_building flag should be 0 when no building within 4 tiles, got {}",
+        nearby
+    );
+}
+
+#[test]
+fn test_camera_follows_player() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    let cam_x = vm.ram[0x7800];
+    let cam_y = vm.ram[0x7801];
+    let player_x = vm.ram[0x7808];
+    let player_y = vm.ram[0x7809];
+    // Camera should center on player: camera = player - 32 (wrapping u32)
+    // Check that camera relates to player (allow wrapping for small values)
+    let expected_cam_x = player_x.wrapping_sub(32);
+    let expected_cam_y = player_y.wrapping_sub(32);
+    assert_eq!(
+        cam_x, expected_cam_x,
+        "camera_x should be player_x({}) - 32 = {}, got {}",
+        player_x, expected_cam_x, cam_x
+    );
+    assert_eq!(
+        cam_y, expected_cam_y,
+        "camera_y should be player_y({}) - 32 = {}, got {}",
+        player_y, expected_cam_y, cam_y
+    );
+}
+
+#[test]
+fn test_desktop_state_ram_readable() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Frame counter should be incrementing
+    let frame = vm.ram[0x7802];
+    assert!(
+        frame > 0,
+        "frame_counter should be > 0 after first frame, got {}",
+        frame
+    );
+
+    // All building name addresses should be non-zero
+    for i in 0..8 {
+        let name_addr = vm.ram[0x7503 + i * 4];
+        assert_ne!(name_addr, 0, "building {} name_addr should not be 0", i);
+    }
+}

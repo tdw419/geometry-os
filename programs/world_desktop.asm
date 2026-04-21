@@ -1,9 +1,19 @@
-; world_desktop.asm -- Infinite Map Desktop with Player Avatar
+; world_desktop.asm -- Infinite Map Desktop with Player Avatar + Buildings
 ;
 ; Based on infinite_map_pxpk.asm. Adds player-controlled avatar that walks
 ; across procedural terrain as the desktop surface. Camera follows player.
 ; Collision prevents walking into water, mountains, and lava.
+; Buildings represent apps (games, utilities, creative, system) placed at
+; deterministic positions on the map. Taskbar at bottom shows biome, app
+; count, and clock. Minimap shows building markers.
 ;
+; Phase 84 additions:
+;   - 8 app buildings at fixed world positions (RAM[0x7500-0x757F])
+;   - Building names stored at RAM[0x7600-0x767F]
+;   - Proximity detection: tooltip when player near building door
+;   - Taskbar at y=240..255 (biome, apps, clock)
+;   - Building markers on minimap
+;   - Socket commands: buildings, desktop_json, launch
 ; Key changes from infinite_map.asm:
 ;   1. Biome color table in RAM replaces the ~200-instruction CMP/BLT cascade
 ;   2. Per-tile variation via MUL fine hash + nibble lookup
@@ -320,7 +330,154 @@ LDI r30, 0xFF00
 
 ; ===== Initialize Player Position =====
 LDI r17, 0x7808
-LDI r18, 32
+
+; ===== Initialize Building Table at RAM[0x7500] =====
+; 8 buildings: [world_x, world_y, type_color, name_addr] per building
+; Colors: red=0xFF4444(games), green=0x44FF44(creative), blue=0x4444FF(utility), yellow=0xFFFF44(system)
+LDI r20, 0x7500
+
+; Building 0: snake (game/red)
+LDI r17, 52
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 48
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0xFF4444
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7600
+STORE r20, r17
+ADDI r20, 1
+
+; Building 1: ball (game/red)
+LDI r17, 78
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 85
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0xFF4444
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7610
+STORE r20, r17
+ADDI r20, 1
+
+; Building 2: plasma (creative/green)
+LDI r17, 110
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 55
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x44FF44
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7620
+STORE r20, r17
+ADDI r20, 1
+
+; Building 3: painter (creative/green)
+LDI r17, 35
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 95
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x44FF44
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7630
+STORE r20, r17
+ADDI r20, 1
+
+; Building 4: colors (utility/blue)
+LDI r17, 140
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 40
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x4444FF
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7640
+STORE r20, r17
+ADDI r20, 1
+
+; Building 5: fire (utility/blue)
+LDI r17, 160
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 120
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x4444FF
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7650
+STORE r20, r17
+ADDI r20, 1
+
+; Building 6: init (system/yellow)
+LDI r17, 25
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 140
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0xFFFF44
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7660
+STORE r20, r17
+ADDI r20, 1
+
+; Building 7: shell (system/yellow)
+LDI r17, 180
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 75
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0xFFFF44
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7670
+STORE r20, r17
+ADDI r20, 1
+
+; Building count
+LDI r17, 0x7580
+LDI r18, 8
+STORE r17, r18
+
+; ===== Building Name Strings at RAM[0x7600-0x767F] =====
+LDI r20, 0x7600
+STRO r20, "snake"
+LDI r20, 0x7610
+STRO r20, "ball"
+LDI r20, 0x7620
+STRO r20, "plasma"
+LDI r20, 0x7630
+STRO r20, "painter"
+LDI r20, 0x7640
+STRO r20, "colors"
+LDI r20, 0x7650
+STRO r20, "fire"
+LDI r20, 0x7660
+STRO r20, "init"
+LDI r20, 0x7670
+STRO r20, "shell"
+
+; Clear nearby building flag
+LDI r17, 0x7584
+LDI r18, 0
+STORE r17, r18          ; nearby_bldg_idx = -1 (none)
+LDI r17, 0x7588
+STORE r17, r18          ; nearby_flag = 0
+
 STORE r17, r18          ; player_x = 32
 LDI r17, 0x7809
 LDI r18, 32
@@ -1467,6 +1624,268 @@ LDI r18, 0x780B
 LOAD r20, r18
 JZ r20, leg_frame_0
 PSETI 125, 128, 0x4444FF
+
+; ===== Render Buildings =====
+; Iterate building table, check visibility, draw
+PUSH r31
+LDI r20, 0x7500
+LDI r17, 0x7580
+LOAD r21, r17           ; r21 = 8 buildings
+LDI r17, 0              ; counter
+
+bldg_loop:
+  MOV r22, r20
+  LOAD r3, r22          ; bldg world_x
+  ADDI r22, 1
+  LOAD r4, r22          ; bldg world_y
+  ADDI r22, 1
+  LOAD r25, r22         ; type_color
+  ADDI r22, 1
+  LOAD r26, r22         ; name_addr
+
+  ; Screen coords: (bldg_x - camera_x) * 4
+  LDI r18, 0x7800
+  LOAD r27, r18         ; camera_x
+  MOV r28, r3
+  SUB r28, r27          ; dx = bldg_x - cam_x
+  LDI r29, 0
+  CMP r28, r29
+  BLT r0, bldg_next     ; off-screen left
+  LDI r29, 62
+  CMP r28, r29
+  BGE r0, bldg_next     ; off-screen right
+
+  LDI r18, 0x7801
+  LOAD r27, r18         ; camera_y
+  MOV r29, r4
+  SUB r29, r27          ; dy = bldg_y - cam_y
+  LDI r18, 0
+  CMP r29, r18
+  BLT r0, bldg_next     ; off-screen top
+  LDI r18, 58
+  CMP r29, r18
+  BGE r0, bldg_next     ; off-screen bottom
+
+  ; Compute pixel position
+  LDI r18, 0x7800
+  LOAD r27, r18
+  MOV r28, r3
+  SUB r28, r27
+  LDI r18, 4
+  MUL r28, r18          ; screen_x = (bldg_x - cam_x) * 4
+
+  LDI r18, 0x7801
+  LOAD r27, r18
+  MOV r29, r4
+  SUB r29, r27
+  LDI r18, 4
+  MUL r29, r18          ; screen_y = (bldg_y - cam_y) * 4
+
+  ; Building body: 24x32 pixels
+  LDI r18, 24
+  LDI r19, 32
+  RECTF r28, r29, r18, r19, r25
+
+  ; Door: 4x8 dark at bottom center
+  MOV r22, r28
+  ADDI r22, 10
+  MOV r23, r29
+  ADDI r23, 24
+  LDI r18, 4
+  LDI r19, 8
+  LDI r17, 0x222222
+  RECTF r22, r23, r18, r19, r17
+
+  ; Windows: 2x 4x4 light blue
+  MOV r22, r28
+  ADDI r22, 3
+  MOV r23, r29
+  ADDI r23, 4
+  LDI r18, 4
+  LDI r19, 4
+  LDI r17, 0x88CCFF
+  RECTF r22, r23, r18, r19, r17
+  MOV r22, r28
+  ADDI r22, 17
+  RECTF r22, r23, r18, r19, r17
+
+  ; Sign: TEXT above door
+  MOV r22, r28
+  ADDI r22, 2
+  MOV r23, r29
+  ADDI r23, 20
+  TEXT r22, r23, r26
+
+  ; Proximity check for tooltip
+  LDI r18, 0x7808
+  LOAD r27, r18         ; player_x
+  LDI r18, 0x7809
+  LOAD r18, r18         ; player_y
+  MOV r22, r3
+  ADDI r22, 3           ; bldg center x
+  MOV r23, r27
+  SUB r23, r22          ; dx = px - bcx
+  LDI r24, 31
+  SAR r23, r24
+  JZ r23, bldg_dx_ok
+  MOV r23, r22
+  SUB r23, r27          ; abs(dx)
+  JMP bldg_dx_abs
+bldg_dx_ok:
+  MOV r23, r27
+  SUB r23, r22
+bldg_dx_abs:
+  LDI r24, 4
+  CMP r23, r24
+  BGE r0, bldg_next
+
+  MOV r22, r4
+  ADDI r22, 4           ; bldg center y
+  MOV r23, r18
+  SUB r23, r22
+  LDI r24, 31
+  SAR r23, r24
+  JZ r23, bldg_dy_ok
+  MOV r23, r22
+  SUB r23, r18
+  JMP bldg_dy_abs
+bldg_dy_ok:
+  MOV r23, r18
+  SUB r23, r22
+bldg_dy_abs:
+  LDI r24, 4
+  CMP r23, r24
+  BGE r0, bldg_next
+
+  ; Nearby! Set flag
+  LDI r17, 0x7584
+  STORE r17, r20         ; save building table ptr as index proxy
+  LDI r17, 1
+  LDI r18, 0x7588
+  STORE r18, r17
+
+bldg_next:
+  ADDI r20, 4
+  ADDI r17, 1
+  MOV r22, r17
+  CMP r22, r21
+  BLT r0, bldg_loop
+POP r31
+
+; ===== Draw Building Markers on Minimap =====
+; Minimap is at screen (224..255, 0..31), 32x32 pixels
+; Each pixel = 2 world tiles. Building marker = colored dot
+PUSH r31
+LDI r20, 0x7500
+LDI r17, 0x7580
+LOAD r21, r17
+LDI r17, 0
+
+mm_bldg_loop:
+  MOV r22, r20
+  LOAD r3, r22          ; bldg world_x
+  ADDI r22, 1
+  LOAD r4, r22          ; bldg world_y
+  ADDI r22, 1
+  LOAD r25, r22         ; type_color
+  ADDI r22, 1
+  ADDI r22, 1           ; skip name_addr
+
+  ; Minimap pixel: mmx = 224 + (bldg_x - camera_x)/2
+  LDI r18, 0x7800
+  LOAD r27, r18
+  MOV r28, r3
+  SUB r28, r27
+  LDI r18, 2
+  DIV r28, r18          ; tile offset / 2
+  ADDI r28, 224         ; screen x
+
+  ; Clamp to minimap area
+  LDI r18, 224
+  CMP r28, r18
+  BLT r0, mm_bldg_skip
+  LDI r18, 255
+  CMP r28, r18
+  BGE r0, mm_bldg_skip
+
+  LDI r18, 0x7801
+  LOAD r27, r18
+  MOV r29, r4
+  SUB r29, r27
+  LDI r18, 2
+  DIV r29, r18
+  ; y already in minimap area (0..31)
+
+  LDI r18, 0
+  CMP r29, r18
+  BLT r0, mm_bldg_skip
+  LDI r18, 31
+  CMP r29, r18
+  BGE r0, mm_bldg_skip
+
+  PSET r28, r29, r25
+
+mm_bldg_skip:
+  ADDI r20, 4
+  ADDI r17, 1
+  MOV r22, r17
+  CMP r22, r21
+  BLT r0, mm_bldg_loop
+POP r31
+
+; ===== Draw Taskbar (y=240..255) =====
+LDI r17, 0x1A1A2E
+LDI r18, 0
+LDI r19, 240
+LDI r22, 256
+LDI r23, 16
+RECTF r18, r19, r22, r23, r17
+
+; Taskbar text: biome at left
+LDI r18, 0
+LDI r19, 241
+LDI r20, 0x5000
+LDI r21, 0xFFFFFF
+LDI r17, 0x1A1A2E
+STRO r20, "GeoDesk"
+DRAWTEXT r18, r19, r20, r21, r17
+
+; Apps count in middle
+LDI r18, 100
+LDI r19, 241
+LDI r20, 0x5010
+STRO r20, "Apps:8"
+LDI r21, 0xFFFFFF
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+
+; Clock (frame counter) at right
+LDI r20, 0x5020
+STRO r20, "T"
+LDI r18, 220
+LDI r19, 241
+LDI r21, 0xFFFFFF
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+
+; ===== Nearby Building Tooltip =====
+LDI r17, 0x7588
+LOAD r17, r17
+JZ r17, no_tooltip
+
+LDI r18, 100
+LDI r19, 112
+LDI r20, 0x5030
+STRO r20, "[E]Enter"
+LDI r21, 0xFFFF88
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+
+no_tooltip:
+LDI r17, 0
+LDI r18, 0x7588
+STORE r18, r17
+
 PSETI 126, 128, 0x4444FF
 PSETI 127, 129, 0x4444FF
 JMP legs_done

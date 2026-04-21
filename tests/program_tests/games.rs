@@ -2707,14 +2707,13 @@ fn test_sprite_debug() {
     eprintln!("Halted: {}", vm.halted);
 }
 
-
 // ══ WORLD DESKTOP ═══════════════════════════════════════════════════════
 // Tests for world_desktop.asm -- player avatar on infinite procedural terrain
 
 /// Helper: assemble world_desktop.asm, load into VM.
 fn world_desktop_vm() -> Vm {
-    let source = std::fs::read_to_string("programs/world_desktop.asm")
-        .expect("world_desktop.asm not found");
+    let source =
+        std::fs::read_to_string("programs/world_desktop.asm").expect("world_desktop.asm not found");
     let asm = assemble(&source, 0).expect("world_desktop.asm failed to assemble");
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
@@ -2727,8 +2726,8 @@ fn world_desktop_vm() -> Vm {
 
 #[test]
 fn test_world_desktop_assembles() {
-    let source = std::fs::read_to_string("programs/world_desktop.asm")
-        .expect("world_desktop.asm not found");
+    let source =
+        std::fs::read_to_string("programs/world_desktop.asm").expect("world_desktop.asm not found");
     let asm = assemble(&source, 0).expect("world_desktop.asm should assemble");
     assert!(!asm.pixels.is_empty(), "should produce non-empty bytecode");
     assert!(
@@ -2767,8 +2766,16 @@ fn test_world_desktop_player_initial_position() {
     // Player starts at (32, 32) in world tile coords
     let player_x = vm.ram[0x7808];
     let player_y = vm.ram[0x7809];
-    assert_eq!(player_x, 32, "player_x should start at 32, got {}", player_x);
-    assert_eq!(player_y, 32, "player_y should start at 32, got {}", player_y);
+    assert_eq!(
+        player_x, 32,
+        "player_x should start at 32, got {}",
+        player_x
+    );
+    assert_eq!(
+        player_y, 32,
+        "player_y should start at 32, got {}",
+        player_y
+    );
 }
 
 #[test]
@@ -2786,8 +2793,16 @@ fn test_world_desktop_camera_follows_player() {
 
     // camera_x = player_x - 32 (may wrap if player near origin)
     // For initial pos (32,32): camera = (0,0)
-    let expected_cx = if player_x >= 32 { player_x - 32 } else { player_x.wrapping_add(0xFFFFFFF0) };
-    let expected_cy = if player_y >= 32 { player_y - 32 } else { player_y.wrapping_add(0xFFFFFFF0) };
+    let expected_cx = if player_x >= 32 {
+        player_x - 32
+    } else {
+        player_x.wrapping_add(0xFFFFFFF0)
+    };
+    let expected_cy = if player_y >= 32 {
+        player_y - 32
+    } else {
+        player_y.wrapping_add(0xFFFFFFF0)
+    };
     assert_eq!(camera_x, expected_cx, "camera_x should be player_x - 32");
     assert_eq!(camera_y, expected_cy, "camera_y should be player_y - 32");
 }
@@ -2859,8 +2874,14 @@ fn test_world_desktop_player_avatar_rendered() {
             }
         }
     }
-    assert!(has_body, "player body (blue 0x4444FF) should be rendered at screen center");
-    assert!(has_head, "player head (skin 0xFFCC88) should be rendered above body");
+    assert!(
+        has_body,
+        "player body (blue 0x4444FF) should be rendered at screen center"
+    );
+    assert!(
+        has_head,
+        "player head (skin 0xFFCC88) should be rendered above body"
+    );
 }
 
 #[test]
@@ -2870,16 +2891,28 @@ fn test_world_desktop_walk_animation_toggles() {
 
     // Run 2 frames and check walk_frame toggles
     let steps1 = step_until_frame(&mut vm, 1_500_000);
-    assert!(vm.frame_ready, "should reach frame 1 (took {} steps)", steps1);
+    assert!(
+        vm.frame_ready,
+        "should reach frame 1 (took {} steps)",
+        steps1
+    );
     let wf1 = vm.ram[0x780B];
 
     vm.frame_ready = false;
     let steps2 = step_until_frame(&mut vm, 1_500_000);
-    assert!(vm.frame_ready, "should reach frame 2 (took {} steps)", steps2);
+    assert!(
+        vm.frame_ready,
+        "should reach frame 2 (took {} steps)",
+        steps2
+    );
     let wf2 = vm.ram[0x780B];
 
     // Walk frame should toggle between 0 and 1
-    assert_ne!(wf1, wf2, "walk_frame should toggle between frames: {} vs {}", wf1, wf2);
+    assert_ne!(
+        wf1, wf2,
+        "walk_frame should toggle between frames: {} vs {}",
+        wf1, wf2
+    );
 }
 
 #[test]
@@ -2890,7 +2923,10 @@ fn test_world_desktop_facing_updates() {
     vm.ram[0xFFB] = 1;
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
-    assert_eq!(vm.ram[0x780A], 1, "facing should be up (1) after pressing up");
+    assert_eq!(
+        vm.ram[0x780A], 1,
+        "facing should be up (1) after pressing up"
+    );
 }
 
 #[test]
@@ -2935,4 +2971,3 @@ fn test_world_desktop_collision_blocks_water() {
         "facing should update to up even if movement blocked"
     );
 }
-

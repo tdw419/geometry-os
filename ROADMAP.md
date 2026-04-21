@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 80/92 phases complete, 0 in progress
+**Progress:** 84/92 phases complete, 0 in progress
 
-**Deliverables:** 339/398 complete
+**Deliverables:** 362/412 complete
 
 **Tasks:** 98/98 complete
 
@@ -81,7 +81,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-67 NOT opcode + INV (invert) Screen Opcode + Invert Demo | COMPLETE | 5/5 | 500 | 8 |
 | phase-68 WINSYS Opcode | COMPLETE | 5/5 | 500 | 10 |
 | phase-68b Window Mouse Interaction + Desktop Demo | COMPLETE | 3/3 | 700 | 12 |
-| phase-69 Sprite Engine | COMPLETE | 6/7 | 800 | 12 |
+| phase-69 Sprite Engine | COMPLETE | 7/7 | 800 | 12 |
 | phase-70 Self-Hosting Pixel Assembler | COMPLETE | 4/4 | 1,500 | 8 |
 | phase-71 Pixel Network Protocol | COMPLETE | 6/6 | 900 | 11 |
 | phase-72 Desktop Taskbar + App Launcher | COMPLETE | 3/3 | 800 | 10 |
@@ -93,16 +93,16 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-78 Calendar + About + Help System | COMPLETE | 4/4 | 800 | 8 |
 | phase-79 Neural Network Forward Pass (Pixel Neural Net) | COMPLETE | 5/5 | 1,500 | 10 |
 | phase-80 LLM Bridge Opcode (External AI) | DONE | 5/5 | 1,200 | 8 |
-| phase-81 HTTP Client + Text Browser | PLANNED | 0/4 | 1,500 | 10 |
-| phase-82 HTML Renderer + Interactive Browser | PLANNED | 0/5 | 2,000 | 12 |
-| phase-83 Infinite Map Desktop -- Camera + Player Avatar | PLANNED | 0/5 | 800 | 10 |
-| phase-84 Infinite Map Desktop -- App Buildings + Entry Points | PLANNED | 0/5 | 1,000 | 12 |
-| phase-85 Infinite Map Desktop -- Full Desktop Integration | PLANNED | 0/4 | 1,000 | 10 |
-| phase-86 Hypervisor Building -- Run Linux on the Map | PLANNED | 0/4 | 800 | 8 |
+| phase-81 HTTP Client + Text Browser | DONE | 4/4 | 1,500 | 10 |
+| phase-82 HTML Renderer + Interactive Browser | DONE | 5/5 | 2,000 | 12 |
+| phase-83 Infinite Map Desktop -- Camera + Player Avatar | DONE | 7/7 | 800 | 10 |
+| phase-84 Infinite Map Desktop -- App Buildings + Entry Points | PLANNED | 0/7 | 1,000 | 12 |
+| phase-85 Infinite Map Desktop -- Full Desktop Integration | PLANNED | 0/6 | 1,000 | 10 |
+| phase-86 Hypervisor Building -- Run Linux on the Map | PLANNED | 0/6 | 800 | 8 |
 | phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | PLANNED | 0/4 | 1,200 | 10 |
-| phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | PLANNED | 0/5 | 600 | 8 |
-| phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | PLANNED | 0/4 | 500 | 10 |
-| phase-90 AI Native Desktop -- Agents on the Map | PLANNED | 0/5 | 1,200 | 12 |
+| phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | PLANNED | 0/7 | 600 | 8 |
+| phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | PLANNED | 0/6 | 500 | 10 |
+| phase-90 AI Native Desktop -- Agents on the Map | PLANNED | 0/7 | 1,200 | 12 |
 | phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | PLANNED | 0/7 | - | - |
 
 ## Dependencies
@@ -2284,7 +2284,7 @@ The infinite map becomes the desktop. A player avatar (8x8 sprite) moves with ar
 - [ ] **world_desktop.asm** -- Player walks around infinite procedural world. Terrain generates around them. Shows biome names on HUD. Proves camera + avatar + terrain integration.
 - [ ] **Player + camera tests** -- Avatar renders, camera follows, collision blocks, edge wrapping. 10+ tests.
 
-## [ ] phase-84: Infinite Map Desktop -- App Buildings + Entry Points (PLANNED)
+## [-] phase-84:: Infinite Map Desktop -- App Buildings + Entry Points (IN PROGRESS -- worker-0)
 
 **Goal:** Programs exist as structures on the map that the player enters to launch
 
