@@ -2426,7 +2426,7 @@ impl Vm {
 
         // Build JSON payload
         let payload = format!(
-            r#"{{"model":"{}","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false,"max_tokens":256,"temperature":0.3}}"#,
+            r#"{{"model":"{}","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false,"max_tokens":1024,"temperature":0.3}}"#,
             model, esc_sys, esc_prompt
         );
 
@@ -2470,38 +2470,45 @@ impl Vm {
             return None;
         }
 
-        // Parse response: find "content":"..."
-        if let Some(start) = stdout.find("\"content\":\"") {
-            let content_start = start + "\"content\":\"".len();
-            let mut i = content_start;
-            let mut result = String::new();
-            let bytes = stdout.as_bytes();
-            while i < bytes.len() {
-                if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                    match bytes[i + 1] {
-                        b'n' => result.push('\n'),
-                        b't' => result.push('\t'),
-                        b'"' => result.push('"'),
-                        b'\\' => result.push('\\'),
-                        _ => {
-                            result.push(bytes[i] as char);
-                            result.push(bytes[i + 1] as char);
+        // Parse response: extract content from JSON.
+        // Some models (e.g. glm-5.1) put text in "reasoning_content" with empty "content".
+        // Try "content" first, fall back to "reasoning_content".
+        let mut extracted: Option<String> = None;
+        for field in &["\"content\":\"", "\"reasoning_content\":\""] {
+            if let Some(start) = stdout.find(field) {
+                let content_start = start + field.len();
+                let mut i = content_start;
+                let mut result = String::new();
+                let bytes = stdout.as_bytes();
+                while i < bytes.len() {
+                    if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                        match bytes[i + 1] {
+                            b'n' => result.push('\n'),
+                            b't' => result.push('\t'),
+                            b'"' => result.push('"'),
+                            b'\\' => result.push('\\'),
+                            _ => {
+                                result.push(bytes[i] as char);
+                                result.push(bytes[i + 1] as char);
+                            }
                         }
+                        i += 2;
+                    } else if bytes[i] == b'"' {
+                        break;
+                    } else {
+                        result.push(bytes[i] as char);
+                        i += 1;
                     }
-                    i += 2;
-                } else if bytes[i] == b'"' {
+                }
+                if !result.is_empty() {
+                    // Strip <think/> blocks (some models emit them)
+                    let cleaned = strip_think_blocks(&result);
+                    extracted = Some(cleaned);
                     break;
-                } else {
-                    result.push(bytes[i] as char);
-                    i += 1;
                 }
             }
-            // Strip <think/> blocks (some models emit them)
-            let cleaned = strip_think_blocks(&result);
-            Some(cleaned)
-        } else {
-            None
         }
+        extracted
     }
 
     /// Load LLM config from provider.json or self.llm_config override.

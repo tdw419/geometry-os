@@ -1409,6 +1409,29 @@ fn main() {
                                 vm.halted = true;
                                 status_msg = "[HALTED]".into();
                             }
+                            "loadbin" => {
+                                // Load a raw binary file directly into VM RAM at address 0
+                                if let Some(path) = parts.get(1) {
+                                    match std::fs::read(path) {
+                                        Ok(bytes) => {
+                                            let len = bytes.len().min(vm.ram.len());
+                                            for (i, &b) in bytes[..len].iter().enumerate() {
+                                                vm.ram[i] = b as u32;
+                                            }
+                                            vm.pc = 0;
+                                            vm.halted = false;
+                                            canvas_assembled = false;
+                                            status_msg = format!("[loaded {} bytes at 0x0000]", len);
+                                            response.push_str(&format!("[loaded {} bytes at 0x0000]\n", len));
+                                        }
+                                        Err(e) => {
+                                            response.push_str(&format!("[error: {}]\n", e));
+                                        }
+                                    }
+                                } else {
+                                    response.push_str("[usage: loadbin <path>]\n");
+                                }
+                            }
                             "help" => {
                                 response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
