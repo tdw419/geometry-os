@@ -210,6 +210,30 @@ fn get_tool_list() -> Vec<serde_json::Value> {
             vec![],
             hypervisor_kill_schema(),
         ),
+        // -- Phase 88: AI Vision Bridge Tools --
+        tool(
+            "vision_screenshot",
+            "Get base64-encoded PNG screenshot of the current canvas",
+            vec![],
+            vision_screenshot_schema(),
+        ),
+        tool(
+            "vision_checksum",
+            "Get FNV-1a checksum of the canvas (fast change detection)",
+            vec![],
+            vision_checksum_schema(),
+        ),
+        tool(
+            "vision_diff",
+            "Compare canvas against a previous checksum to detect changes",
+            vec![param(
+                "checksum",
+                "string",
+                "Previous FNV-1a checksum to compare against (hex)",
+                true,
+            )],
+            vision_diff_schema(),
+        ),
     ]
 }
 
@@ -310,6 +334,39 @@ fn hypervisor_boot_schema() -> serde_json::Value {
 }
 fn hypervisor_kill_schema() -> serde_json::Value {
     serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}}})
+}
+
+// Phase 88: AI Vision Bridge schemas
+fn vision_screenshot_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "png_base64": {"type": "string", "description": "Base64-encoded PNG image of the 256x256 canvas"},
+            "width": {"type": "integer"},
+            "height": {"type": "integer"}
+        }
+    })
+}
+
+fn vision_checksum_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "checksum": {"type": "string", "description": "FNV-1a hash of the canvas (hex)"},
+            "checksum_u32": {"type": "integer", "description": "FNV-1a hash as u32"}
+        }
+    })
+}
+
+fn vision_diff_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "changed": {"type": "boolean"},
+            "checksum": {"type": "string", "description": "Current checksum (hex)"},
+            "previous_checksum": {"type": "string", "description": "Previous checksum (hex)"}
+        }
+    })
 }
 
 // ── Tool Handlers ───────────────────────────────────────
@@ -551,6 +608,34 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
             Ok(serde_json::json!({
                 "ok": resp.contains("killed"),
                 "response": resp,
+            }))
+        }
+
+        // Phase 88: AI Vision Bridge tools
+        "vision_screenshot" => {
+            let resp = send_socket_cmd("screenshot_b64")?;
+            Ok(serde_json::json!({
+                "png_base64": resp,
+                "width": 256,
+                "height": 256,
+            }))
+        }
+
+        "vision_checksum" => {
+            let resp = send_socket_cmd("canvas_checksum")?;
+            Ok(serde_json::json!({
+                "checksum": format!("{:08X}", resp.parse::<u64>().unwrap_or(0)),
+                "checksum_u32": resp.parse::<u64>().unwrap_or(0),
+            }))
+        }
+
+        "vision_diff" => {
+            let prev_checksum = args["checksum"].as_str().unwrap_or("0");
+            let resp = send_socket_cmd(&format!("canvas_diff {}", prev_checksum))?;
+            Ok(serde_json::json!({
+                "changed": !resp.contains("same"),
+                "checksum": resp,
+                "previous_checksum": prev_checksum,
             }))
         }
 

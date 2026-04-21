@@ -2339,7 +2339,7 @@ Each hypervisor building is an independent VM. The map can have multiple data ce
 - [ ] **vm_park.asm** -- Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86, and a bare-metal RISC-V loop. Walk between them, enter any, all run in background.
 - [ ] **Multi-VM tests** -- Concurrent VM execution, time-slicing fairness, state save/restore per VM. 10+ tests.
 
-## [ ] phase-88: AI Vision Bridge -- Screenshot + Canvas Analysis (PLANNED)
+## [-] phase-88:: AI Vision Bridge -- Screenshot + Canvas Analysis (IN PROGRESS -- worker-0)
 
 **Goal:** Expose the canvas as a base64 PNG that AI agents can request and analyze
 

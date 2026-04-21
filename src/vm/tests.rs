@@ -12409,3 +12409,257 @@ fn test_mcp_hypervisor_tools_in_source() {
         "MCP server should have hypervisor_kill schema"
     );
 }
+
+// ── Phase 88: AI Vision Bridge Tests ──
+
+#[test]
+fn test_ai_agent_assembles() {
+    let source = "LDI r10, 1\nAI_AGENT r10\nHALT";
+    let asm = crate::assembler::assemble(source, 0);
+    assert!(asm.is_ok(), "AI_AGENT should assemble: {:?}", asm.err());
+    let pixels = asm.unwrap().pixels;
+    assert_eq!(pixels[0], 0x10); // LDI
+    assert_eq!(pixels[1], 10); // r10
+    assert_eq!(pixels[2], 1); // imm=1
+    assert_eq!(pixels[3], 0xB0); // AI_AGENT
+    assert_eq!(pixels[4], 10); // r10
+    assert_eq!(pixels[5], 0x00); // HALT
+}
+
+#[test]
+fn test_ai_agent_checksum() {
+    let mut vm = crate::vm::Vm::new();
+    vm.regs[10] = 1;
+    vm.ram[0] = 0xB0; // AI_AGENT
+    vm.ram[1] = 10; // r10
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    let hash = vm.regs[0];
+    let expected = crate::vision::canvas_checksum(&vm.screen);
+    assert_eq!(hash, expected, "checksum should match vision module");
+}
+
+#[test]
+fn test_ai_agent_checksum_detects_change() {
+    let mut vm = crate::vm::Vm::new();
+    // Checksum of empty screen
+    vm.regs[10] = 1;
+    vm.ram[0] = 0xB0;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    let hash_empty = vm.regs[0];
+
+    // Draw a pixel and re-check
+    vm.screen[0] = 0xFF0000;
+    vm.halted = false;
+    vm.regs[10] = 1;
+    vm.ram[0] = 0xB0;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    let hash_changed = vm.regs[0];
+
+    assert_ne!(hash_empty, hash_changed, "checksums should differ");
+}
+
+#[test]
+fn test_ai_agent_diff() {
+    let mut vm = crate::vm::Vm::new();
+    // Store screen in RAM at 0x2000 (first 256 pixels only for speed)
+    for i in 0..256 {
+        vm.ram[0x2000 + i] = vm.screen[i];
+    }
+    // Change 3 pixels
+    vm.screen[0] = 0xFFFFFF;
+    vm.screen[1] = 0xFF0000;
+    vm.screen[255] = 0x00FF00;
+
+    vm.regs[10] = 2;
+    vm.regs[11] = 0x2000;
+    vm.ram[0] = 0xB0;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    let changed = vm.regs[0];
+    assert_eq!(changed, 3, "should detect 3 changed pixels");
+}
+
+#[test]
+fn test_ai_agent_diff_no_change() {
+    let mut vm = crate::vm::Vm::new();
+    for i in 0..256 * 256 {
+        if 0x2000 + i < vm.ram.len() {
+            vm.ram[0x2000 + i] = vm.screen[i];
+        }
+    }
+    vm.regs[10] = 2;
+    vm.regs[11] = 0x2000;
+    vm.ram[0] = 0xB0;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[0], 0, "no pixels should have changed");
+}
+
+#[test]
+fn test_ai_agent_vision_api_mock() {
+    let mut vm = crate::vm::Vm::new();
+    vm.llm_mock_response = Some("AI sees red bars".to_string());
+
+    // Write prompt to RAM
+    for (i, b) in b"desc".iter().enumerate() {
+        vm.ram[0x5000 + i] = *b as u32;
+    }
+    vm.ram[0x5004] = 0;
+
+    vm.regs[10] = 3;
+    vm.regs[11] = 0x5000;
+    vm.regs[12] = 0x6000;
+    vm.regs[13] = 256;
+
+    vm.ram[0] = 0xB0;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    let resp_len = vm.regs[0];
+    assert_eq!(resp_len, 16, "response should be 16 bytes");
+
+    let mut response = String::new();
+    for i in 0..resp_len as usize {
+        let ch = vm.ram[0x6000 + i];
+        if ch == 0 {
+            break;
+        }
+        if let Some(c) = char::from_u32(ch) {
+            response.push(c);
+        }
+    }
+    assert_eq!(response, "AI sees red bars");
+    assert!(vm.llm_mock_response.is_none(), "mock should be cleared");
+}
+
+#[test]
+fn test_ai_agent_vision_api_no_mock() {
+    let mut vm = crate::vm::Vm::new();
+    vm.regs[10] = 3;
+    vm.regs[11] = 0x5000;
+    vm.regs[12] = 0x6000;
+    vm.regs[13] = 256;
+    vm.ram[0] = 0xB0;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "should error without mock");
+}
+
+#[test]
+fn test_ai_agent_unknown_op() {
+    let mut vm = crate::vm::Vm::new();
+    vm.regs[10] = 99;
+    vm.ram[0] = 0xB0;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "unknown op should error");
+}
+
+#[test]
+fn test_ai_vision_asm_assembles() {
+    let source = std::fs::read_to_string("programs/ai_vision.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0);
+    assert!(
+        asm.is_ok(),
+        "ai_vision.asm should assemble: {:?}",
+        asm.err()
+    );
+    let pixels = asm.unwrap().pixels;
+    assert!(
+        pixels.iter().any(|&p| p == 0xB0),
+        "should contain AI_AGENT opcode"
+    );
+}
+
+#[test]
+fn test_ai_agent_disasm() {
+    let mut vm = crate::vm::Vm::new();
+    vm.ram[0] = 0xB0;
+    vm.ram[1] = 10;
+    let (name, len) = vm.disassemble_at(0);
+    assert!(
+        name.contains("AI_AGENT"),
+        "disasm should show AI_AGENT, got: {}",
+        name
+    );
+    assert_eq!(len, 2);
+}
+
+#[test]
+fn test_mcp_vision_tools_in_source() {
+    let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+    assert!(
+        source.contains("\"vision_screenshot\""),
+        "MCP should have vision_screenshot"
+    );
+    assert!(
+        source.contains("\"vision_checksum\""),
+        "MCP should have vision_checksum"
+    );
+    assert!(
+        source.contains("\"vision_diff\""),
+        "MCP should have vision_diff"
+    );
+    assert!(
+        source.contains("vision_screenshot_schema"),
+        "MCP should have schema"
+    );
+    assert!(
+        source.contains("vision_checksum_schema"),
+        "MCP should have schema"
+    );
+    assert!(
+        source.contains("vision_diff_schema"),
+        "MCP should have schema"
+    );
+}

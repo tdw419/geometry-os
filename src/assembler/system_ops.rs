@@ -679,6 +679,23 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        // ── Phase 88: AI Vision Bridge ──
+        "AI_AGENT" => {
+            // AI_AGENT op_reg
+            // 2 words: [0xB0, op_reg]
+            // op_reg contains the operation number:
+            //   0 = screenshot to VFS (path addr in r[op_reg+1])
+            //   1 = canvas checksum -> r0
+            //   2 = canvas diff (prev screen addr in r[op_reg+1]) -> r0
+            //   3 = vision API call (prompt_addr in r[op_reg+1], response_addr in r[op_reg+2], max_len in r[op_reg+3])
+            if tokens.len() < 2 {
+                return Err("AI_AGENT requires 1 argument: AI_AGENT op_reg".to_string());
+            }
+            bytecode.push(0xB0);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

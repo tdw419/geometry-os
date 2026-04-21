@@ -19,6 +19,7 @@ mod qemu;
 mod render;
 mod save;
 mod vfs;
+mod vision;
 mod vm;
 
 use qemu::QemuBridge;
@@ -1408,7 +1409,7 @@ fn main() {
                                 status_msg = "[HALTED]".into();
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             // ── Phase 84: Building & Desktop Socket Commands ──────
@@ -1638,6 +1639,29 @@ fn main() {
                                     response.push_str("[hypervisor: killed]\n");
                                 } else {
                                     response.push_str("[hypervisor: not running]\n");
+                                }
+                            }
+                            // Phase 88: AI Vision Bridge socket commands
+                            "screenshot_b64" => {
+                                let b64 = geometry_os::vision::encode_png_base64(&vm.screen);
+                                response.push_str(&b64);
+                                response.push('\n');
+                            }
+                            "canvas_checksum" => {
+                                let hash = geometry_os::vision::canvas_checksum(&vm.screen);
+                                response.push_str(&format!("{}\n", hash));
+                            }
+                            "canvas_diff" => {
+                                // canvas_diff <checksum_hex>
+                                let prev_str = parts.get(1).unwrap_or(&"");
+                                let prev_hash =
+                                    u32::from_str_radix(prev_str.trim_start_matches("0x"), 16)
+                                        .unwrap_or(prev_str.parse::<u32>().unwrap_or(0));
+                                let current_hash = geometry_os::vision::canvas_checksum(&vm.screen);
+                                if current_hash == prev_hash {
+                                    response.push_str("same\n");
+                                } else {
+                                    response.push_str(&format!("changed: {:08X}\n", current_hash));
                                 }
                             }
                             _ => {

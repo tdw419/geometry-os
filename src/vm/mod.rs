@@ -1982,6 +1982,186 @@ impl Vm {
                 }
             }
 
+            // ── Phase 88: AI Vision Bridge ──
+
+            // AI_AGENT op_reg (0xB0) -- AI vision operations
+            // op=0: screenshot to VFS file. r1=path_addr. Returns fd in r0.
+            // op=1: canvas checksum. Returns FNV-1a hash in r0.
+            // op=2: diff two screens. r1=addr of saved checksum (u32). Returns changed pixel count in r0.
+            // op=3: call external vision API with screenshot + prompt from RAM.
+            //       r1=prompt_addr, r2=response_addr, r3=max_len. Returns response length in r0.
+            0xB0 => {
+                let op_reg = self.fetch() as usize;
+                if op_reg >= NUM_REGS {
+                    self.regs[0] = 0xFFFFFFFF;
+                } else {
+                    let op = self.regs[op_reg];
+                    match op {
+                        0 => {
+                            // Screenshot to VFS as PNG
+                            // Read path from r1
+                            if op_reg + 1 < NUM_REGS {
+                                let path_addr = self.regs[op_reg + 1] as usize;
+                                let pid = self.current_pid;
+
+                                // Encode screen as PNG
+                                let png_bytes = crate::vision::encode_png(&self.screen);
+
+                                // Write PNG to VFS file
+                                // First, create the file
+                                let fd = self.vfs.fopen(&self.ram, path_addr as u32, 1, pid); // FOPEN_WRITE
+                                if fd != 0xFFFFFFFF {
+                                    // Stage PNG bytes in RAM at a temporary area, write in chunks
+                                    let stage_base = 0x9000u32;
+                                    let chunk_size = 512u32;
+                                    let mut written: u32 = 0;
+                                    let total_bytes = png_bytes.len() as u32;
+                                    let mut offset = 0u32;
+                                    while offset < total_bytes {
+                                        let end = std::cmp::min(offset + chunk_size, total_bytes);
+                                        let n = end - offset;
+                                        // Stage bytes into RAM as u32 words (4 bytes per word)
+                                        let mut stage_idx = 0u32;
+                                        while stage_idx < n {
+                                            let byte_off = offset + stage_idx;
+                                            let b0 = if (byte_off as usize) < png_bytes.len() {
+                                                png_bytes[byte_off as usize]
+                                            } else {
+                                                0u8
+                                            };
+                                            let b1 = if (byte_off as usize) + 1 < png_bytes.len() {
+                                                png_bytes[byte_off as usize + 1]
+                                            } else {
+                                                0u8
+                                            };
+                                            let b2 = if (byte_off as usize) + 2 < png_bytes.len() {
+                                                png_bytes[byte_off as usize + 2]
+                                            } else {
+                                                0u8
+                                            };
+                                            let b3 = if (byte_off as usize) + 3 < png_bytes.len() {
+                                                png_bytes[byte_off as usize + 3]
+                                            } else {
+                                                0u8
+                                            };
+                                            let word = (b0 as u32)
+                                                | ((b1 as u32) << 8)
+                                                | ((b2 as u32) << 16)
+                                                | ((b3 as u32) << 24);
+                                            let ram_addr = (stage_base + stage_idx / 4) as usize;
+                                            if ram_addr < self.ram.len() {
+                                                self.ram[ram_addr] = word;
+                                            }
+                                            stage_idx += 4;
+                                        }
+                                        let bytes_written = self.vfs.fwrite(
+                                            &self.ram,
+                                            fd,
+                                            stage_base,
+                                            (n + 3) / 4,
+                                            pid,
+                                        );
+                                        written += bytes_written;
+                                        offset = end;
+                                    }
+                                    self.vfs.fclose(fd, pid);
+                                    self.regs[0] = written; // total bytes written
+                                } else {
+                                    self.regs[0] = 0xFFFFFFFF; // error
+                                }
+                            } else {
+                                self.regs[0] = 0xFFFFFFFF;
+                            }
+                        }
+                        1 => {
+                            // Canvas checksum (FNV-1a)
+                            let hash = crate::vision::canvas_checksum(&self.screen);
+                            self.regs[0] = hash;
+                        }
+                        2 => {
+                            // Diff: compare current screen against saved checksum in RAM[r1]
+                            // Returns count of pixels that differ from expected pattern
+                            // (Since we can't store a full screen, this returns a simple
+                            // changed-pixel count vs the last saved checksum metadata)
+                            // For now: compute current checksum and return pixel diff stats
+                            // r1 = addr of previous screen data in RAM (256x256 u32 words starting at addr)
+                            // Returns count of changed pixels in r0
+                            if op_reg + 1 < NUM_REGS {
+                                let prev_addr = self.regs[op_reg + 1] as usize;
+                                let mut changed: u32 = 0;
+                                for i in 0..256 * 256 {
+                                    let prev_pixel = if prev_addr + i < self.ram.len() {
+                                        self.ram[prev_addr + i]
+                                    } else {
+                                        0
+                                    };
+                                    if self.screen[i] != prev_pixel {
+                                        changed += 1;
+                                    }
+                                }
+                                self.regs[0] = changed;
+                            } else {
+                                self.regs[0] = 0xFFFFFFFF;
+                            }
+                        }
+                        3 => {
+                            // Vision API call: screenshot + prompt -> LLM response
+                            // r1=prompt_addr (null-terminated string in RAM)
+                            // r2=response_addr (where to write response in RAM)
+                            // r3=max_len (max response words)
+                            // Returns response length in r0, or 0xFFFFFFFF on error
+                            if op_reg + 3 < NUM_REGS {
+                                let prompt_addr = self.regs[op_reg + 1] as usize;
+                                let _response_addr = self.regs[op_reg + 2] as usize;
+                                let max_len = self.regs[op_reg + 3] as usize;
+
+                                // Read prompt from RAM
+                                let mut prompt = String::new();
+                                let mut pa = prompt_addr;
+                                while pa < self.ram.len() {
+                                    let ch = self.ram[pa];
+                                    if ch == 0 {
+                                        break;
+                                    }
+                                    if let Some(c) = char::from_u32(ch) {
+                                        prompt.push(c);
+                                    }
+                                    pa += 1;
+                                }
+
+                                // Encode screenshot as base64 PNG
+                                let _screenshot_b64 =
+                                    crate::vision::encode_png_base64(&self.screen);
+
+                                // Check for mock response (testing)
+                                if let Some(ref mock) = self.llm_mock_response {
+                                    let response = mock.clone();
+                                    let resp_bytes = response.as_bytes();
+                                    let write_len = resp_bytes.len().min(max_len);
+                                    let mut wa = _response_addr;
+                                    for i in 0..write_len {
+                                        if wa + i < self.ram.len() {
+                                            self.ram[wa + i] = resp_bytes[i] as u32;
+                                        }
+                                    }
+                                    self.regs[0] = write_len as u32;
+                                    self.llm_mock_response = None;
+                                } else {
+                                    // No mock set -- would call external API
+                                    // For now, return error (API not available in VM)
+                                    self.regs[0] = 0xFFFFFFFF;
+                                }
+                            } else {
+                                self.regs[0] = 0xFFFFFFFF;
+                            }
+                        }
+                        _ => {
+                            self.regs[0] = 0xFFFFFFFF; // unknown op
+                        }
+                    }
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

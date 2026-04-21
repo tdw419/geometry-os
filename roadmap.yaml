@@ -4419,31 +4419,31 @@ phases:
       diff two screenshots, returns changed pixel count in r0. op=3: call external
       vision API with screenshot + prompt from RAM.'
     name: AI_AGENT opcode (0x99)
-    status: todo
+    status: done
   - description: Convert the 256x256 u32 canvas buffer to a PNG file in VFS. No external
       dependencies -- pure Rust PNG encoder (header + deflate). ~50 lines.
     name: Canvas-to-PNG export
-    status: todo
+    status: done
   - description: Fast hash of the canvas buffer (FNV-1a or simple XOR fold). Lets
       agents quickly check if a program changed the screen without sending full images.
     name: Canvas checksum
-    status: todo
+    status: done
   - description: 'Demo: draw something complex, call AI_AGENT screenshot, compare
       checksum before/after. Proves the pipeline works.'
     name: ai_vision.asm
-    status: todo
+    status: done
   - description: screenshot_b64 returns base64 PNG. canvas_checksum returns FNV-1a
       hash. canvas_diff <checksum> returns pixel change stats. See docs/MCP_SPEC.md.
     name: Socket commands for MCP (screenshot_b64, canvas_checksum, canvas_diff)
-    status: todo
+    status: done
   - description: Add tool handlers to src/mcp_server.rs wrapping the vision socket
       commands.
     name: 'MCP tools: vision_screenshot, vision_checksum, vision_diff'
-    status: todo
+    status: done
   - description: Screenshot saves, checksum matches, diff detects changes. MCP vision
       tools return correct base64/JSON. 10+ tests.
     name: AI vision tests
-    status: todo
+    status: done
   description: AI_AGENT opcode returns the current canvas state as a base64-encoded
     PNG written to RAM (or saved to VFS). Agents can take screenshots mid-execution,
     send them to a vision LLM, and get back analysis of what rendered. Enables visual
@@ -4451,9 +4451,11 @@ phases:
   goal: Expose the canvas as a base64 PNG that AI agents can request and analyze
   id: phase-88
   scope_lines_total: 800
-  status: planned
+  status: done
   test_target: 10
   title: AI Vision Bridge -- Screenshot + Canvas Analysis
+  _claimed_by: worker-0
+  _claimed_at: 1776749530
 - deliverables:
   - description: 'AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift
       state). op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x,

@@ -156,6 +156,8 @@ pub const OPCODES: &[&str] = &[
     "VM_RESUME",
     "VM_SET_BUDGET",
     "VM_LIST",
+    // Phase 88: AI Vision Bridge
+    "AI_AGENT",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

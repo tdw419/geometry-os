@@ -833,6 +833,11 @@ impl Vm {
             // VM_LIST (0xA5) -- list background VM IDs to RAM
             0xA5 => (format!("VM_LIST {}", reg(ram(a + 1))), 2),
 
+            // ── Phase 88: AI Vision Bridge ──
+
+            // AI_AGENT op_reg (0xB0) -- AI vision operations
+            0xB0 => (format!("AI_AGENT {}", reg(ram(a + 1))), 2),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

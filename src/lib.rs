@@ -11,4 +11,5 @@ pub mod preprocessor;
 pub mod qemu;
 pub mod riscv;
 pub mod vfs;
+pub mod vision;
 pub mod vm;

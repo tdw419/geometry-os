@@ -924,6 +924,7 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0xA3 => "VM_RESUME",
         0xA4 => "VM_SET_BUDGET",
         0xA5 => "VM_LIST",
+        0xB0 => "AI_AGENT",
         _ => "???",
     }
 }
