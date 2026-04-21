@@ -534,8 +534,10 @@ impl Process {
 pub const MAX_WINDOWS: usize = 8;
 
 /// Window title bar height in pixels.
+#[allow(dead_code)]
 pub const WINDOW_TITLE_BAR_H: u32 = 12;
 /// Window border width in pixels.
+#[allow(dead_code)]
 pub const WINDOW_BORDER_W: u32 = 1;
 
 /// A managed window with position, size, Z-order, and offscreen buffer.
@@ -555,6 +557,7 @@ pub struct Window {
     /// Z-order: higher = on top. Auto-assigned on create/bring-to-front.
     pub z_order: u32,
     /// RAM address of null-terminated title string.
+    #[allow(dead_code)]
     pub title_addr: u32,
     /// PID of the process that created this window.
     pub pid: u32,
@@ -620,6 +623,7 @@ pub enum BgVmState {
     /// VM is paused (not executing, state preserved).
     Paused,
     /// VM state was saved to RAM, VM is dormant.
+    #[allow(dead_code)]
     Saved,
 }
 
@@ -637,10 +641,13 @@ pub struct BackgroundVm {
     /// Unique instance ID (assigned by VM_SPAWN, 1-based).
     pub id: u32,
     /// Config string: "arch=riscv64 [kernel=file.img] [ram=256M] [mode=native|qemu]"
+    #[allow(dead_code)]
     pub config: String,
     /// Execution mode (Qemu or Native).
+    #[allow(dead_code)]
     pub mode: HypervisorMode,
     /// Window ID to render output into (0 = full canvas, >0 = WINSYS window).
+    #[allow(dead_code)]
     pub window_id: u32,
     /// Current state (Running, Paused, Saved).
     pub state: BgVmState,

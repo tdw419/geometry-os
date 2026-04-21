@@ -6,10 +6,12 @@ pub mod episode_log;
 pub mod font;
 pub mod glyph_backend;
 pub mod inode_fs;
+#[allow(dead_code)]
 pub mod pixel;
 pub mod preprocessor;
 pub mod qemu;
 pub mod riscv;
 pub mod vfs;
+#[allow(dead_code)]
 pub mod vision;
 pub mod vm;

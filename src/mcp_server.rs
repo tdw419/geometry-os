@@ -10,33 +10,30 @@
 //! Each tool call translates to one or more socket commands.
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
 
 const SOCKET_PATH: &str = "/tmp/geo_cmd.sock";
 
-fn send_socket_cmd(cmd: &str) -> Result<String, String> {
-    let stream = UnixStream::connect(SOCKET_PATH)
+fn send_socket_cmd(_cmd: &str) -> Result<String, String> {
+    let mut stream = UnixStream::connect(SOCKET_PATH)
         .map_err(|e| format!("Cannot connect to {}: {}", SOCKET_PATH, e))?;
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(5)))
         .map_err(|e| format!("Set timeout failed: {}", e))?;
 
+    // Read response -- read all available data until EOF/timeout
     let mut response = String::new();
-
-    // Send command
-    stream.peer_addr().ok(); // Just to verify it's connected
-    let mut writer = stream
-        .try_clone()
-        .map_err(|e| format!("Clone stream failed: {}", e))?;
-    writeln!(writer, "{}", cmd).map_err(|e| format!("Write failed: {}", e))?;
-    writer.flush().ok();
-
-    // Read response
-    let mut reader = BufReader::new(stream);
-    reader
-        .read_line(&mut response)
-        .map_err(|e| format!("Read failed: {}", e))?;
+    let mut buf = [0u8; 65536];
+    loop {
+        match stream.read(&mut buf) {
+            Ok(0) => break, // EOF
+            Ok(n) => response.push_str(&String::from_utf8_lossy(&buf[..n])),
+            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => break,
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(e) => return Err(format!("Read failed: {}", e)),
+        }
+    }
 
     Ok(response.trim().to_string())
 }
@@ -45,6 +42,7 @@ fn send_socket_cmd(cmd: &str) -> Result<String, String> {
 
 #[derive(Debug)]
 struct JsonRpcRequest {
+    #[allow(dead_code)]
     jsonrpc: String,
     id: Option<serde_json::Value>,
     method: String,
@@ -271,6 +269,22 @@ fn get_tool_list() -> Vec<serde_json::Value> {
             vec![param("text", "string", "Text to type", true)],
             input_text_schema(),
         ),
+        // -- Phase 90: AI Program Control Tools --
+        tool(
+            "vm_screen_ascii",
+            "Get the VM framebuffer as ASCII art (64x32). Readable by text-based AI agents.",
+            vec![],
+            vm_screen_ascii_schema(),
+        ),
+        tool(
+            "vm_run_program",
+            "One-shot: write assembly source, assemble, run, wait, return canvas + screen + status. The fastest way to execute a program and see results.",
+            vec![
+                param("source", "string", "Assembly source code to execute", true),
+                param("frames", "integer", "Number of frames to run (default: 10000)", false),
+            ],
+            vm_run_program_schema(),
+        ),
     ]
 }
 
@@ -433,6 +447,29 @@ fn input_text_schema() -> serde_json::Value {
         "properties": {
             "ok": {"type": "boolean"},
             "chars_injected": {"type": "integer"}
+        }
+    })
+}
+fn vm_screen_ascii_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "ascii": {"type": "string"},
+            "width": {"type": "integer"},
+            "height": {"type": "integer"}
+        }
+    })
+}
+fn vm_run_program_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "canvas": {"type": "string"},
+            "screen_ascii": {"type": "string"},
+            "status": {"type": "object"},
+            "registers": {"type": "object"},
+            "error": {"type": "string"}
         }
     })
 }
@@ -743,6 +780,111 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
             Ok(serde_json::json!({
                 "ok": true,
                 "response": resp,
+            }))
+        }
+
+        // ── Phase 90: AI Program Control Handlers ──────
+        "vm_screen_ascii" => {
+            let resp = send_socket_cmd("vmscreen")?;
+            Ok(serde_json::json!({
+                "ascii": resp,
+                "width": 64,
+                "height": 32,
+            }))
+        }
+
+        "vm_run_program" => {
+            let source = args["source"]
+                .as_str()
+                .ok_or("Missing 'source' parameter")?;
+            let _frames = args["frames"].as_i64().unwrap_or(10000) as usize;
+
+            // Step 1: Clear canvas
+            send_socket_cmd("clear").ok();
+
+            // Step 2: Type source onto canvas
+            // Escape backslashes and newlines for the socket protocol
+            let escaped = source.replace("\\", "\\\\").replace("\n", "\\n");
+            let type_result = send_socket_cmd(&format!("type {}", escaped));
+            if type_result.is_err() {
+                // If type fails (too long?), try line by line
+                for line in source.lines() {
+                    let esc_line = line.replace("\\", "\\\\");
+                    send_socket_cmd(&format!("type {}", esc_line)).ok();
+                    send_socket_cmd("type \\n").ok();
+                }
+            }
+
+            // Step 3: Assemble
+            let asm_result = send_socket_cmd("assemble")?;
+            if asm_result.contains("error") || asm_result.contains("Error") {
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "error": asm_result,
+                    "canvas": send_socket_cmd("canvas").unwrap_or_default(),
+                }));
+            }
+
+            // Step 4: Run for N frames
+            send_socket_cmd("run").ok();
+
+            // Wait for execution by polling status
+            let mut waited = 0;
+            let poll_interval = std::time::Duration::from_millis(50);
+            loop {
+                std::thread::sleep(poll_interval);
+                waited += 1;
+                if let Ok(status) = send_socket_cmd("status") {
+                    // VM stops running when halted
+                    if status.contains("running=false") || status.contains("halted") {
+                        break;
+                    }
+                }
+                if waited * 50 > 10000 {
+                    // 10 second timeout -- halt it
+                    send_socket_cmd("halt").ok();
+                    break;
+                }
+            }
+
+            // Step 5: Collect results
+            let canvas = send_socket_cmd("canvas").unwrap_or_default();
+            let screen_ascii = send_socket_cmd("vmscreen").unwrap_or_default();
+            let status_resp = send_socket_cmd("status").unwrap_or_default();
+            let regs_resp = send_socket_cmd("registers").unwrap_or_default();
+
+            // Parse status
+            let mut status_obj = serde_json::Map::new();
+            for part in status_resp.split_whitespace() {
+                if let Some((k, v)) = part.split_once('=') {
+                    match k {
+                        "mode" => {
+                            status_obj.insert("mode".into(), serde_json::Value::String(v.into()))
+                        }
+                        "running" => status_obj
+                            .insert("running".into(), serde_json::Value::Bool(v == "true")),
+                        "assembled" => status_obj
+                            .insert("assembled".into(), serde_json::Value::Bool(v == "true")),
+                        "pc" => status_obj.insert("pc".into(), serde_json::Value::String(v.into())),
+                        _ => None,
+                    };
+                }
+            }
+
+            // Parse registers
+            let mut regs_obj = serde_json::Map::new();
+            for line in regs_resp.lines() {
+                if let Some((name, val)) = line.split_once('=') {
+                    regs_obj.insert(name.into(), serde_json::Value::String(val.into()));
+                }
+            }
+
+            Ok(serde_json::json!({
+                "success": true,
+                "canvas": canvas,
+                "screen_ascii": screen_ascii,
+                "status": serde_json::Value::Object(status_obj),
+                "registers": serde_json::Value::Object(regs_obj),
             }))
         }
 

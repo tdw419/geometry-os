@@ -39,6 +39,7 @@ pub struct AsmResult {
     pub pixels: Vec<u32>,
     /// Label name -> bytecode offset (address in RAM when loaded at base_addr).
     /// Available after assembly for subroutine-based testing.
+    #[allow(dead_code)]
     pub labels: std::collections::HashMap<String, usize>,
 }
 

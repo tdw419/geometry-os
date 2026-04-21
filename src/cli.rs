@@ -56,8 +56,8 @@ pub fn cli_main(extra_args: &[String]) {
     let mut cli_breakpoints: Vec<u32> = Vec::new();
     let mut canvas_buffer: Vec<u32> = vec![0; 4096];
     let mut qemu_bridge: Option<QemuBridge> = None;
-    let mut boot_png_mode = false;
-    let mut boot_src_png_mode = false;
+    let boot_png_mode: bool;
+    let boot_src_png_mode: bool;
 
     // Check for --boot-png and --boot-src-png flags
     let file_args: Vec<&String> = extra_args

@@ -901,7 +901,7 @@ impl Vm {
                 if a1 < NUM_REGS && a2 < NUM_REGS {
                     let mut addr1 = self.regs[a1] as usize;
                     let mut addr2 = self.regs[a2] as usize;
-                    let mut result: i32 = 0;
+                    let result: i32;
                     loop {
                         let c1 = if addr1 < self.ram.len() {
                             (self.ram[addr1] & 0xFF) as u8
@@ -2417,7 +2417,7 @@ impl Vm {
             .replace('\n', "\\n")
             .replace('\t', "\\t");
 
-        let system_msg = "You are a helpful assistant running inside Geometry OS, a pixel-art virtual machine. Respond concisely. Your response will be stored in a fixed-size RAM buffer, so keep answers short (under 200 characters when possible).";
+        let system_msg = "Reply with ONLY the requested information. No explanation, no thinking.";
         let esc_sys = system_msg
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
@@ -2426,7 +2426,7 @@ impl Vm {
 
         // Build JSON payload
         let payload = format!(
-            r#"{{"model":"{}","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false,"max_tokens":2048,"temperature":0.3}}"#,
+            r#"{{"model":"{}","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false,"max_tokens":512,"temperature":0.3}}"#,
             model, esc_sys, esc_prompt
         );
 

@@ -14,12 +14,14 @@ mod font;
 mod hermes;
 mod inode_fs;
 mod keys;
+#[allow(dead_code)]
 mod pixel;
 mod preprocessor;
 mod qemu;
 mod render;
 mod save;
 mod vfs;
+#[allow(dead_code)]
 mod vision;
 mod vm;
 
