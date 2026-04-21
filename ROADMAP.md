@@ -105,6 +105,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 o
 | phase-90 AI Native Desktop -- Agents on the Map | DONE | 7/7 | 1,200 | 12 |
 | phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | DONE | 7/7 | - | - |
 | phase-92 Pixel Boot - Bytecode from PNG | DONE | 4/4 | 400 | 5 |
+| phase-93 Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) | DONE | 4/4 | 500 | 5 |
+| phase-94 Pixel Boot - Universal Pixel Executable | DONE | 5/5 | 800 | 8 |
 
 ## Dependencies
 
