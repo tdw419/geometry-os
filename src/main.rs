@@ -1410,19 +1410,38 @@ fn main() {
                                 status_msg = "[HALTED]".into();
                             }
                             "loadbin" => {
-                                // Load a raw binary file directly into VM RAM at address 0
+                                // Load a binary file directly into VM RAM at address 0.
+                                // Supports both raw byte format (1 byte per word) and
+                                // u32 LE format (4 bytes per word, written by asm_bin).
                                 if let Some(path) = parts.get(1) {
                                     match std::fs::read(path) {
                                         Ok(bytes) => {
-                                            let len = bytes.len().min(vm.ram.len());
-                                            for (i, &b) in bytes[..len].iter().enumerate() {
-                                                vm.ram[i] = b as u32;
-                                            }
+                                            // Auto-detect: if size is divisible by 4 and large enough,
+                                            // treat as u32 LE words (asm_bin output).
+                                            // Otherwise treat as raw bytes.
+                                            let words: Vec<u32> = if bytes.len() > 4
+                                                && bytes.len() % 4 == 0
+                                            {
+                                                bytes
+                                                    .chunks_exact(4)
+                                                    .map(|c| {
+                                                        u32::from_le_bytes([c[0], c[1], c[2], c[3]])
+                                                    })
+                                                    .collect()
+                                            } else {
+                                                bytes.iter().map(|&b| b as u32).collect()
+                                            };
+                                            let len = words.len().min(vm.ram.len());
+                                            vm.ram[..len].copy_from_slice(&words[..len]);
                                             vm.pc = 0;
                                             vm.halted = false;
                                             canvas_assembled = false;
-                                            status_msg = format!("[loaded {} bytes at 0x0000]", len);
-                                            response.push_str(&format!("[loaded {} bytes at 0x0000]\n", len));
+                                            status_msg =
+                                                format!("[loaded {} words at 0x0000]", len);
+                                            response.push_str(&format!(
+                                                "[loaded {} words at 0x0000]\n",
+                                                len
+                                            ));
                                         }
                                         Err(e) => {
                                             response.push_str(&format!("[error: {}]\n", e));
@@ -1433,7 +1452,7 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             // ── Phase 84: Building & Desktop Socket Commands ──────

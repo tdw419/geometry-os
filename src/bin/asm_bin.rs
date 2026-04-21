@@ -12,12 +12,21 @@ fn main() {
     let preprocessed = pp.preprocess(&source);
     match geometry_os::assembler::assemble(&preprocessed, 0x0000) {
         Ok(result) => {
-            let bytes: Vec<u8> = result.pixels.iter().map(|&v| v as u8).collect();
+            // Save as u32 words (4 bytes each, little-endian)
+            let mut bytes = Vec::with_capacity(result.pixels.len() * 4);
+            for &word in &result.pixels {
+                bytes.extend_from_slice(&word.to_le_bytes());
+            }
             std::fs::write(&args[2], &bytes).unwrap_or_else(|e| {
                 eprintln!("Error writing {}: {}", args[2], e);
                 std::process::exit(1);
             });
-            println!("Assembled {} bytes -> {}", bytes.len(), args[2]);
+            println!(
+                "Assembled {} words ({} bytes) -> {}",
+                result.pixels.len(),
+                bytes.len(),
+                args[2]
+            );
         }
         Err(e) => {
             eprintln!("ASM error line {}: {}", e.line, e.message);

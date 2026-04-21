@@ -2426,7 +2426,7 @@ impl Vm {
 
         // Build JSON payload
         let payload = format!(
-            r#"{{"model":"{}","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false,"max_tokens":1024,"temperature":0.3}}"#,
+            r#"{{"model":"{}","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false,"max_tokens":2048,"temperature":0.3}}"#,
             model, esc_sys, esc_prompt
         );
 
@@ -2471,8 +2471,9 @@ impl Vm {
         }
 
         // Parse response: extract content from JSON.
-        // Some models (e.g. glm-5.1) put text in "reasoning_content" with empty "content".
-        // Try "content" first, fall back to "reasoning_content".
+        // Strategy: prefer "content" field. If empty, try "reasoning_content".
+        // Some models (e.g. glm-5.1) put the actual answer in "content" but
+        // "reasoning_content" contains the thinking tokens -- we want the answer.
         let mut extracted: Option<String> = None;
         for field in &["\"content\":\"", "\"reasoning_content\":\""] {
             if let Some(start) = stdout.find(field) {
@@ -2503,8 +2504,23 @@ impl Vm {
                 if !result.is_empty() {
                     // Strip <think/> blocks (some models emit them)
                     let cleaned = strip_think_blocks(&result);
-                    extracted = Some(cleaned);
-                    break;
+                    // For reasoning_content, extract just the last line (usually the answer)
+                    // since the rest is thinking process
+                    let final_text = if field == &"\"reasoning_content\":\"" {
+                        // Take only the last non-empty line
+                        cleaned
+                            .lines()
+                            .filter(|l| !l.trim().is_empty())
+                            .last()
+                            .map(|s| s.to_string())
+                            .unwrap_or(cleaned)
+                    } else {
+                        cleaned
+                    };
+                    if !final_text.is_empty() {
+                        extracted = Some(final_text);
+                        break;
+                    }
                 }
             }
         }
