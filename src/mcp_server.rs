@@ -15,12 +15,20 @@ use std::os::unix::net::UnixStream;
 
 const SOCKET_PATH: &str = "/tmp/geo_cmd.sock";
 
-fn send_socket_cmd(_cmd: &str) -> Result<String, String> {
+fn send_socket_cmd(cmd: &str) -> Result<String, String> {
     let mut stream = UnixStream::connect(SOCKET_PATH)
         .map_err(|e| format!("Cannot connect to {}: {}", SOCKET_PATH, e))?;
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(5)))
         .map_err(|e| format!("Set timeout failed: {}", e))?;
+
+    // Send command
+    let mut writer = stream
+        .try_clone()
+        .map_err(|e| format!("Clone stream failed: {}", e))?;
+    writeln!(writer, "{}", cmd).map_err(|e| format!("Write failed: {}", e))?;
+    writer.flush().ok();
+    drop(writer); // close write side so server sees EOF
 
     // Read response -- read all available data until EOF/timeout
     let mut response = String::new();
