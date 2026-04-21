@@ -4818,7 +4818,7 @@ phases:
     own visual identity
   id: phase-98
   scope_lines_total: 400
-  status: planned
+  status: complete
   test_target: 3
   title: Custom Bitmap Fonts
 - deliverables:
@@ -4849,7 +4849,7 @@ phases:
   goal: Build a pipe-fed multi-channel sound mixer daemon with a music player demo
   id: phase-99
   scope_lines_total: 500
-  status: planned
+  status: in_progress
   test_target: 3
   title: Sound Mixer Daemon
 - deliverables:
