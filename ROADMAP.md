@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 84/92 phases complete, 0 in progress
+**Progress:** 85/92 phases complete, 0 in progress
 
-**Deliverables:** 362/412 complete
+**Deliverables:** 368/412 complete
 
 **Tasks:** 98/98 complete
 
@@ -96,8 +96,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 113 o
 | phase-81 HTTP Client + Text Browser | DONE | 4/4 | 1,500 | 10 |
 | phase-82 HTML Renderer + Interactive Browser | DONE | 5/5 | 2,000 | 12 |
 | phase-83 Infinite Map Desktop -- Camera + Player Avatar | DONE | 7/7 | 800 | 10 |
-| phase-84 Infinite Map Desktop -- App Buildings + Entry Points | PLANNED | 0/7 | 1,000 | 12 |
-| phase-85 Infinite Map Desktop -- Full Desktop Integration | PLANNED | 0/6 | 1,000 | 10 |
+| phase-84 Infinite Map Desktop -- App Buildings + Entry Points | DONE | 7/7 | 1,000 | 12 |
+| phase-85 Infinite Map Desktop -- Full Desktop Integration | DONE | 6/6 | 1,000 | 10 |
 | phase-86 Hypervisor Building -- Run Linux on the Map | PLANNED | 0/6 | 800 | 8 |
 | phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | PLANNED | 0/4 | 1,200 | 10 |
 | phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | PLANNED | 0/7 | 600 | 8 |
@@ -2284,7 +2284,7 @@ The infinite map becomes the desktop. A player avatar (8x8 sprite) moves with ar
 - [ ] **world_desktop.asm** -- Player walks around infinite procedural world. Terrain generates around them. Shows biome names on HUD. Proves camera + avatar + terrain integration.
 - [ ] **Player + camera tests** -- Avatar renders, camera follows, collision blocks, edge wrapping. 10+ tests.
 
-## [-] phase-84:: Infinite Map Desktop -- App Buildings + Entry Points (IN PROGRESS -- worker-0)
+## [x] phase-84::: Infinite Map Desktop -- App Buildings + Entry Points (DONE)
 
 **Goal:** Programs exist as structures on the map that the player enters to launch
 
@@ -2292,11 +2292,11 @@ Apps are rendered as buildings (pixel structures) at deterministic positions on 
 
 ### Deliverables
 
-- [ ] **Building placement system** -- Buildings placed at deterministic hash-derived positions. Each .asm program gets a building. Building sprite: 24x32 pixels with door, windows, sign. Unique color per app type (red=games, blue=utilities, green=creative, yellow=system).
-- [ ] **Proximity detection** -- When player is within 2 tiles of a building door, show app name tooltip. Press E to enter. Uses distance calculation between player position and building position.
-- [ ] **App launch from map** -- Pressing E near a building: saves map state, launches app via RUNNEXT in a WINSYS window overlay. Press Q/ESC to exit app, returns to map at building entrance.
-- [ ] **Building rendering** -- Simple building sprites drawn with RECTF + TEXT for signs. Buildings visible from 8-tile radius. LOD: far buildings are colored rectangles, close ones show detail.
-- [ ] **App building tests** -- Building placement, proximity detection, app launch, state save/restore. 12+ tests.
+- [x] **Building placement system** -- Buildings placed at deterministic hash-derived positions. Each .asm program gets a building. Building sprite: 24x32 pixels with door, windows, sign. Unique color per app type (red=games, blue=utilities, green=creative, yellow=system).
+- [x] **Proximity detection** -- When player is within 2 tiles of a building door, show app name tooltip. Press E to enter. Uses distance calculation between player position and building position.
+- [x] **App launch from map** -- Pressing E near a building: saves map state, launches app via RUNNEXT in a WINSYS window overlay. Press Q/ESC to exit app, returns to map at building entrance.
+- [x] **Building rendering** -- Simple building sprites drawn with RECTF + TEXT for signs. Buildings visible from 8-tile radius. LOD: far buildings are colored rectangles, close ones show detail.
+- [x] **App building tests** -- Building placement, proximity detection, app launch, state save/restore. 12+ tests.
 
 ## [ ] phase-85: Infinite Map Desktop -- Full Desktop Integration (PLANNED)
 

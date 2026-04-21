@@ -11691,3 +11691,388 @@ fn test_desktop_state_ram_readable() {
         assert_ne!(name_addr, 0, "building {} name_addr should not be 0", i);
     }
 }
+
+// ===== Phase 84: Additional Building Tests =====
+
+#[test]
+fn test_building_color_classification() {
+    // Verify type colors: red=games, green=creative, blue=utility, yellow=system
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Building 0 (snake): red game
+    assert_eq!(vm.ram[0x7502], 0xFF4444, "building 0 should be red (game)");
+    // Building 2 (plasma): green creative
+    assert_eq!(
+        vm.ram[0x750A], 0x44FF44,
+        "building 2 should be green (creative)"
+    );
+    // Building 4 (colors): blue utility
+    assert_eq!(
+        vm.ram[0x7512], 0x4444FF,
+        "building 4 should be blue (utility)"
+    );
+    // Building 6 (init): yellow system
+    assert_eq!(
+        vm.ram[0x751A], 0xFFFF44,
+        "building 6 should be yellow (system)"
+    );
+}
+
+#[test]
+fn test_all_building_names_readable() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    let expected = [
+        "snake", "ball", "plasma", "painter", "colors", "fire", "init", "shell",
+    ];
+    for (i, expected_name) in expected.iter().enumerate() {
+        let name_addr = vm.ram[0x7503 + i * 4] as usize;
+        let mut name = String::new();
+        for j in 0..16 {
+            if name_addr + j >= vm.ram.len() {
+                break;
+            }
+            let ch = vm.ram[name_addr + j];
+            if ch == 0 || ch > 127 {
+                break;
+            }
+            name.push(ch as u8 as char);
+        }
+        assert_eq!(
+            name, *expected_name,
+            "building {} name should be '{}', got '{}'",
+            i, expected_name, name
+        );
+    }
+}
+
+#[test]
+fn test_building_count_correct() {
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    assert_eq!(vm.ram[0x7580], 8, "building count should be exactly 8");
+}
+
+#[test]
+fn test_proximity_detection_positive() {
+    // Move player near building 0 at (52,48), verify proximity tooltip renders
+    // The nearby flag is set mid-frame and cleared at frame end,
+    // so we check for tooltip evidence (text area near y=112)
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    // Run first frame to init
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+    // Teleport player to (54, 50) near building 0 center (55, 52)
+    vm.ram[0x7808] = 54; // player_x
+    vm.ram[0x7809] = 50; // player_y
+    vm.ram[0xFFB] = 0; // clear key bitmask
+    vm.halted = false;
+    // Run another frame
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Count non-black pixels in tooltip area (y=108..122, x=90..180)
+    let mut tooltip_pixels = 0;
+    for y in 108..122 {
+        for x in 90..180 {
+            if vm.screen[y * 256 + x] != 0 {
+                tooltip_pixels += 1;
+            }
+        }
+    }
+    assert!(
+        tooltip_pixels > 10,
+        "tooltip area should have pixels when player near building, got {} pixels",
+        tooltip_pixels
+    );
+}
+
+#[test]
+fn test_building_renders_on_screen() {
+    // Verify that when a building is in viewport, its colored pixels appear on screen
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // After frame 1, building 0 at world (52,48) with camera at (0,0)
+    // Building pixel position: (52*4, 48*4) = (208, 192), size 24x32
+    // Check that any building-type pixels appear on screen
+    // Building colors: 0xFF4444 (red games), 0x44FF44 (green), 0x4444FF (blue), 0xFFFF44 (yellow)
+    let mut found_building_pixel = false;
+    for y in 0..240 {
+        for x in 0..256 {
+            let px = vm.screen[y * 256 + x];
+            if px == 0xFF4444 || px == 0x44FF44 || px == 0x4444FF || px == 0xFFFF44 {
+                found_building_pixel = true;
+                break;
+            }
+        }
+        if found_building_pixel {
+            break;
+        }
+    }
+    assert!(
+        found_building_pixel,
+        "should find building-type colored pixels on screen (checked full viewport)"
+    );
+}
+
+#[test]
+fn test_building_door_rendered() {
+    // Verify the dark door (0x222222) is rendered at the bottom of building 0
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Building 0 at pixel (208, 192), door at (208+10, 192+24) = (218, 216), size 4x8
+    let door_x = 52 * 4 + 10; // 218
+    let door_y = 48 * 4 + 24; // 216
+    let mut found_door = false;
+    if door_x + 4 <= 256 && door_y + 8 <= 256 {
+        for y in door_y..door_y + 8 {
+            for x in door_x..door_x + 4 {
+                if vm.screen[y * 256 + x] == 0x222222 {
+                    found_door = true;
+                    break;
+                }
+            }
+            if found_door {
+                break;
+            }
+        }
+    }
+    assert!(
+        found_door,
+        "should find dark door pixels at ({},{})",
+        door_x, door_y
+    );
+}
+
+#[test]
+fn test_minimap_building_markers() {
+    // Verify that the minimap at screen (224..255, 0..31) has colored dots for buildings
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Count non-black pixels in the minimap region (224..255, 0..31)
+    let mut minimap_colored_pixels = 0;
+    for y in 0..32 {
+        for x in 224..256 {
+            if vm.screen[y * 256 + x] != 0 {
+                minimap_colored_pixels += 1;
+            }
+        }
+    }
+    // Minimap should have border + player dot + at least some building markers
+    assert!(
+        minimap_colored_pixels > 20,
+        "minimap should have colored pixels (border + building markers), got {}",
+        minimap_colored_pixels
+    );
+}
+
+#[test]
+fn test_building_door_dark_color() {
+    // Verify the door color (0x222222) appears on screen at building location
+    // Building 0 at world (52,48) should render a dark door
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Count dark pixels (0x222222) anywhere in the game area (not taskbar)
+    let mut dark_pixels = 0;
+    for y in 0..240 {
+        for x in 0..256 {
+            if vm.screen[y * 256 + x] == 0x222222 {
+                dark_pixels += 1;
+            }
+        }
+    }
+    // Each door is 4x8=32 pixels, so should find at least 32 dark pixels
+    assert!(
+        dark_pixels >= 32,
+        "should find dark door pixels (0x222222), got {}",
+        dark_pixels
+    );
+}
+
+#[test]
+fn test_building_no_overlap() {
+    // Verify buildings don't overlap in world space
+    use crate::assembler::assemble;
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+    // Each building is 6 tiles wide (24px / 4px per tile), 8 tiles tall (32px / 4px per tile)
+    // Check that no two buildings overlap
+    for i in 0..8 {
+        for j in (i + 1)..8 {
+            let x1 = vm.ram[0x7500 + i * 4];
+            let y1 = vm.ram[0x7501 + i * 4];
+            let x2 = vm.ram[0x7500 + j * 4];
+            let y2 = vm.ram[0x7501 + j * 4];
+            // Buildings are 6x8 tiles
+            let overlap_x = x1 < x2 + 6 && x2 < x1 + 6;
+            let overlap_y = y1 < y2 + 8 && y2 < y1 + 8;
+            assert!(
+                !(overlap_x && overlap_y),
+                "buildings {} and {} overlap at ({},{}) and ({},{})",
+                i,
+                j,
+                x1,
+                y1,
+                x2,
+                y2
+            );
+        }
+    }
+}

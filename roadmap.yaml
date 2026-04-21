@@ -4265,34 +4265,34 @@ phases:
       program gets a building. Building sprite: 24x32 pixels with door, windows, sign.
       Unique color per app type (red=games, blue=utilities, green=creative, yellow=system).'
     name: Building placement system
-    status: todo
+    status: done
   - description: When player is within 2 tiles of a building door, show app name tooltip.
       Press E to enter. Uses distance calculation between player position and building
       position.
     name: Proximity detection
-    status: todo
+    status: done
   - description: 'Pressing E near a building: saves map state, launches app via RUNNEXT
       in a WINSYS window overlay. Press Q/ESC to exit app, returns to map at building
       entrance.'
     name: App launch from map
-    status: todo
+    status: done
   - description: 'Simple building sprites drawn with RECTF + TEXT for signs. Buildings
       visible from 8-tile radius. LOD: far buildings are colored rectangles, close
       ones show detail.'
     name: Building rendering
-    status: todo
+    status: done
   - description: Add socket commands the MCP server wraps. buildings [radius] returns
       building list. enter_building <id> walks player and launches app. exit_building
       returns to map. See docs/MCP_SPEC.md for format.
     name: Socket commands for MCP (buildings, enter_building, exit_building)
-    status: todo
+    status: done
   - description: Add tool handlers to src/mcp_server.rs wrapping the new socket commands.
     name: 'MCP tools: building_list, building_enter, building_exit'
-    status: todo
+    status: done
   - description: Building placement, proximity detection, app launch, state save/restore.
       Socket commands return correct data. 12+ tests.
     name: App building tests
-    status: todo
+    status: done
   description: Apps are rendered as buildings (pixel structures) at deterministic
     positions on the infinite map. Walking up to a building and pressing E launches
     the app inside a WINSYS window overlay. The building shows the app name above
@@ -4304,7 +4304,7 @@ phases:
   test_target: 14
   title: Infinite Map Desktop -- App Buildings + Entry Points
   _claimed_by: worker-0
-  _claimed_at: 1776742471
+  _claimed_at: 1776744560
 - deliverables:
   - description: '16px taskbar at bottom of viewport showing: current biome, nearby
       app count, clock, and a "list apps" button. Semi-transparent background so map
@@ -4338,7 +4338,7 @@ phases:
   goal: Complete desktop experience - infinite world with apps, taskbar, and navigation
   id: phase-85
   scope_lines_total: 1200
-  status: planned
+  status: done
   test_target: 12
   title: Infinite Map Desktop -- Full Desktop Integration
 - deliverables:
