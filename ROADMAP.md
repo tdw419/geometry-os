@@ -2243,7 +2243,7 @@ LLM opcode sends prompt string from RAM to external API. Response written to RAM
 - [x] **smart_term.asm** -- Terminal with AI assist: type natural language, press Tab to query LLM, response displayed on screen. Esc to quit.
 - [x] **LLM tests** -- 10 tests covering: mock response, truncation, empty prompt, null termination, assembler, assembler error, disassembler, multiline response, full program, think block stripping.
 
-## [-] phase-81:: HTTP Client + Text Browser (IN PROGRESS -- worker-0)
+## [x] phase-81: HTTP Client + Text Browser (COMPLETE)
 
 **Goal:** Fetch web pages and render them as text inside the VM
 
@@ -2251,12 +2251,12 @@ HTTP GET via TCP opcodes. Parse response. Render plain text. URL bar, scrollable
 
 ### Deliverables
 
-- [ ] **http_get.asm** -- HTTP client library: URL in RAM, TCP connect to port 80, send GET, read response, strip headers, return body.
-- [ ] **browser.asm v1** -- Text browser: URL bar, content area, scroll, back button, loading indicator.
-- [ ] **URL parsing** -- Split host:port/path from RAM string. Default port 80.
-- [ ] **HTTP tests** -- Mock HTTP server. Test GET formatting, response parsing, chunked encoding. 10+ tests.
+- [x] **http_get.asm** -- HTTP client library: URL in RAM, TCP connect to port 80, send GET, read response, strip headers, return body.
+- [x] **browser.asm v1** -- Text browser: URL bar, content area, scroll, back button, loading indicator.
+- [x] **URL parsing** -- Split host:port/path from RAM string. Default port 80.
+- [x] **HTTP tests** -- Mock HTTP server. Test GET formatting, response parsing, chunked encoding. 10+ tests.
 
-## [-] phase-82:: HTML Renderer + Interactive Browser (IN PROGRESS -- worker-0)
+## [x] phase-82: HTML Renderer + Interactive Browser (COMPLETE)
 
 **Goal:** Parse and render simple HTML with styled text, links, and images
 
@@ -2264,13 +2264,13 @@ HTML parser for common tags. Links as HITSET regions. Bookmarks in VFS. A real p
 
 ### Deliverables
 
-- [ ] **HTML parser** -- Tokenize HTML. Handle p, br, h1-h3, b, i, a href, img src, hr, ul/li. Assembly-callable library.
-- [ ] **Styled text renderer** -- DRAWTEXT with per-line colors. h1=green, h2=yellow, body=white, links=cyan. Paragraph spacing, horizontal rules.
-- [ ] **Clickable links** -- a-tags register HITSET regions. Click triggers new fetch. Navigation history in RAM ring buffer.
-- [ ] **Bookmarks** -- /etc/bookmarks.cfg in VFS. Start page shows bookmarks. Add/remove via UI.
-- [ ] **Browser tests** -- HTML parser, styled rendering, link clicks, back nav, bookmarks. 12+ tests.
+- [x] **HTML parser** -- Tokenize HTML. Handle p, br, h1-h3, b, i, a href, img src, hr, ul/li. Assembly-callable library.
+- [x] **Styled text renderer** -- DRAWTEXT with per-line colors. h1=green, h2=yellow, body=white, links=cyan. Paragraph spacing, horizontal rules.
+- [x] **Clickable links** -- a-tags register HITSET regions. Click triggers new fetch. Navigation history in RAM ring buffer.
+- [x] **Bookmarks** -- /etc/bookmarks.cfg in VFS. Start page shows bookmarks. Add/remove via UI.
+- [x] **Browser tests** -- HTML parser, styled rendering, link clicks, back nav, bookmarks. 12+ tests.
 
-## [ ] phase-83: Infinite Map Desktop -- Camera + Player Avatar (PLANNED)
+## [x] phase-83: Infinite Map Desktop -- Camera + Player Avatar (COMPLETE)
 
 **Goal:** Player-controlled avatar moving across procedural terrain as the desktop surface
 
@@ -2278,11 +2278,11 @@ The infinite map becomes the desktop. A player avatar (8x8 sprite) moves with ar
 
 ### Deliverables
 
-- [ ] **Player avatar rendering** -- 8x8 pixel sprite rendered at screen center. 4 directions (up/down/left/right). Simple walk animation (2 frames). Uses existing PSET/RECTF primitives.
-- [ ] **Camera follow system** -- Camera centered on player. Map scrolls as player moves. Uses existing hash-based procedural terrain from infinite_map_pxpk.asm. Edge wrapping (toroidal world).
-- [ ] **Player movement + collision** -- Arrow keys move player. Water tiles block movement. Mountain tiles block. Grass/forest/sand are walkable. Movement speed tied to terrain type.
-- [ ] **world_desktop.asm** -- Player walks around infinite procedural world. Terrain generates around them. Shows biome names on HUD. Proves camera + avatar + terrain integration.
-- [ ] **Player + camera tests** -- Avatar renders, camera follows, collision blocks, edge wrapping. 10+ tests.
+- [x] **Player avatar rendering** -- 8x8 pixel sprite rendered at screen center. 4 directions (up/down/left/right). Simple walk animation (2 frames). Uses existing PSET/RECTF primitives.
+- [x] **Camera follow system** -- Camera centered on player. Map scrolls as player moves. Uses existing hash-based procedural terrain from infinite_map_pxpk.asm. Edge wrapping (toroidal world).
+- [x] **Player movement + collision** -- Arrow keys move player. Water tiles block movement. Mountain tiles block. Grass/forest/sand are walkable. Movement speed tied to terrain type.
+- [x] **world_desktop.asm** -- Player walks around infinite procedural world. Terrain generates around them. Shows biome names on HUD. Proves camera + avatar + terrain integration.
+- [x] **Player + camera tests** -- Avatar renders, camera follows, collision blocks, edge wrapping. 10+ tests.
 
 ## [x] phase-84::: Infinite Map Desktop -- App Buildings + Entry Points (DONE)
 
@@ -2298,7 +2298,7 @@ Apps are rendered as buildings (pixel structures) at deterministic positions on 
 - [x] **Building rendering** -- Simple building sprites drawn with RECTF + TEXT for signs. Buildings visible from 8-tile radius. LOD: far buildings are colored rectangles, close ones show detail.
 - [x] **App building tests** -- Building placement, proximity detection, app launch, state save/restore. 12+ tests.
 
-## [ ] phase-85: Infinite Map Desktop -- Full Desktop Integration (PLANNED)
+## [x] phase-85: Infinite Map Desktop -- Full Desktop Integration (COMPLETE)
 
 **Goal:** Complete desktop experience - infinite world with apps, taskbar, and navigation
 
@@ -2306,10 +2306,10 @@ Merges the taskbar, app launcher, and infinite map into one coherent desktop. Th
 
 ### Deliverables
 
-- [ ] **Taskbar overlay on map** -- 16px taskbar at bottom of viewport showing: current biome, nearby app count, clock, and a "list apps" button. Semi-transparent background so map shows through.
-- [ ] **Mini-map with building markers** -- 32x32 mini-map in corner. Dots for buildings (colored by type). Player position as white dot. Click on building dot to fast-travel (teleport to entrance).
-- [ ] **Boot into world desktop** -- init.asm launches world_desktop.asm as the default shell. First thing the user sees is the infinite terrain with their apps as buildings. Proves the map IS the desktop.
-- [ ] **Full desktop integration tests** -- Taskbar renders, mini-map shows buildings, fast-travel works, boot sequence correct. 10+ tests.
+- [x] **Taskbar overlay on map** -- 16px taskbar at bottom of viewport showing: current biome, nearby app count, clock, and a "list apps" button. Semi-transparent background so map shows through.
+- [x] **Mini-map with building markers** -- 32x32 mini-map in corner. Dots for buildings (colored by type). Player position as white dot. Click on building dot to fast-travel (teleport to entrance).
+- [x] **Boot into world desktop** -- init.asm launches world_desktop.asm as the default shell. First thing the user sees is the infinite terrain with their apps as buildings. Proves the map IS the desktop.
+- [x] **Full desktop integration tests** -- Taskbar renders, mini-map shows buildings, fast-travel works, boot sequence correct. 10+ tests.
 
 ## [x] phase-86:: Hypervisor Building -- Run Linux on the Map (DONE)
 
@@ -2326,7 +2326,7 @@ The hypervisor building is a special structure on the infinite map. Walk up to i
 - [x] **MCP tools: hypervisor_boot, hypervisor_kill** -- Tool schemas added to src/mcp_server.rs.
 - [x] **Hypervisor building tests** -- 16 tests: HYPERVISOR opcode (basic, window, modes, errors, reset), disasm, assembler encoding, linux_building.asm, world_desktop integration, MCP source verification.
 
-## [-] phase-87:: Multi-Hypervisor -- Multiple OS Instances on the Map (IN PROGRESS -- worker-0)
+## [x] phase-87: Multi-Hypervisor -- Multiple OS Instances on the Map (COMPLETE)
 
 **Goal:** Multiple hypervisor buildings running different guest OSes simultaneously
 
@@ -2334,12 +2334,12 @@ Each hypervisor building is an independent VM. The map can have multiple data ce
 
 ### Deliverables
 
-- [ ] **Background VM scheduling** -- When player is on the map, background VMs get time-sliced execution. Each VM gets N instructions per frame. Balances map rendering with guest OS progress.
-- [ ] **Multiple hypervisor buildings** -- Support 2-4 concurrent HYPERVISOR instances. Each in its own building. Different arch/config per building. State saved when player enters, restored on return.
-- [ ] **vm_park.asm** -- Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86, and a bare-metal RISC-V loop. Walk between them, enter any, all run in background.
-- [ ] **Multi-VM tests** -- Concurrent VM execution, time-slicing fairness, state save/restore per VM. 10+ tests.
+- [x] **Background VM scheduling** -- When player is on the map, background VMs get time-sliced execution. Each VM gets N instructions per frame. Balances map rendering with guest OS progress.
+- [x] **Multiple hypervisor buildings** -- Support 2-4 concurrent HYPERVISOR instances. Each in its own building. Different arch/config per building. State saved when player enters, restored on return.
+- [x] **vm_park.asm** -- Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86, and a bare-metal RISC-V loop. Walk between them, enter any, all run in background.
+- [x] **Multi-VM tests** -- Concurrent VM execution, time-slicing fairness, state save/restore per VM. 10+ tests.
 
-## [-] phase-88:: AI Vision Bridge -- Screenshot + Canvas Analysis (IN PROGRESS -- worker-0)
+## [x] phase-88: AI Vision Bridge -- Screenshot + Canvas Analysis (COMPLETE)
 
 **Goal:** Expose the canvas as a base64 PNG that AI agents can request and analyze
 
@@ -2347,13 +2347,13 @@ AI_AGENT opcode returns the current canvas state as a base64-encoded PNG written
 
 ### Deliverables
 
-- [ ] **AI_AGENT opcode (0x99)** -- AI_AGENT op_reg -- op=0: screenshot to VFS file, returns path addr in r0. op=1: get canvas checksum (fast comparison for "did it change"). op=2: diff two screenshots, returns changed pixel count in r0. op=3: call external vision API with screenshot + prompt from RAM.
-- [ ] **Canvas-to-PNG export** -- Convert the 256x256 u32 canvas buffer to a PNG file in VFS. No external dependencies -- pure Rust PNG encoder (header + deflate). ~50 lines.
-- [ ] **Canvas checksum** -- Fast hash of the canvas buffer (FNV-1a or simple XOR fold). Lets agents quickly check if a program changed the screen without sending full images.
-- [ ] **ai_vision.asm** -- Demo: draw something complex, call AI_AGENT screenshot, compare checksum before/after. Proves the pipeline works.
-- [ ] **AI vision tests** -- Screenshot saves, checksum matches, diff detects changes. 8+ tests.
+- [x] **AI_AGENT opcode (0x99)** -- AI_AGENT op_reg -- op=0: screenshot to VFS file, returns path addr in r0. op=1: get canvas checksum (fast comparison for "did it change"). op=2: diff two screenshots, returns changed pixel count in r0. op=3: call external vision API with screenshot + prompt from RAM.
+- [x] **Canvas-to-PNG export** -- Convert the 256x256 u32 canvas buffer to a PNG file in VFS. No external dependencies -- pure Rust PNG encoder (header + deflate). ~50 lines.
+- [x] **Canvas checksum** -- Fast hash of the canvas buffer (FNV-1a or simple XOR fold). Lets agents quickly check if a program changed the screen without sending full images.
+- [x] **ai_vision.asm** -- Demo: draw something complex, call AI_AGENT screenshot, compare checksum before/after. Proves the pipeline works.
+- [x] **AI vision tests** -- Screenshot saves, checksum matches, diff detects changes. 8+ tests.
 
-## [-] phase-89:: AI Agent Input -- Programmatic Keyboard + Mouse Injection (IN PROGRESS -- worker-0)
+## [x] phase-89: AI Agent Input -- Programmatic Keyboard + Mouse Injection (COMPLETE)
 
 **Goal:** Let AI agents inject keyboard and mouse events to interact with running programs
 
@@ -2361,10 +2361,10 @@ AI agents can simulate user input programmatically. Send keystrokes, move the mo
 
 ### Deliverables
 
-- [ ] **AI_INJECT opcode (0x9A)** -- AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift state). op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x, r2=y, r3=button). op=3: inject text string (r1=addr of null-terminated string, types each char).
-- [ ] **Event injection queue** -- Injected events go into the same IKEY/MOUSEQ queue as real hardware events. Agents and humans share the same input system. Injected events tagged with source flag.
-- [ ] **ai_interact.asm** -- Demo: program injects keystrokes into itself. Opens a menu, types text, clicks a button -- all autonomously. Proves AI can drive the GUI.
-- [ ] **AI input tests** -- Key injection, mouse move/click, text string injection, event ordering. 10+ tests.
+- [x] **AI_INJECT opcode (0x9A)** -- AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift state). op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x, r2=y, r3=button). op=3: inject text string (r1=addr of null-terminated string, types each char).
+- [x] **Event injection queue** -- Injected events go into the same IKEY/MOUSEQ queue as real hardware events. Agents and humans share the same input system. Injected events tagged with source flag.
+- [x] **ai_interact.asm** -- Demo: program injects keystrokes into itself. Opens a menu, types text, clicks a button -- all autonomously. Proves AI can drive the GUI.
+- [x] **AI input tests** -- Key injection, mouse move/click, text string injection, event ordering. 10+ tests.
 
 ## [x] phase-90: AI Native Desktop -- Agents on the Map (COMPLETE)
 
