@@ -632,7 +632,7 @@ pub fn load_source_to_canvas_buffer(source: &str, canvas_buffer: &mut [u32]) -> 
 /// Returns None if the file doesn't exist or isn't a valid PNG.
 pub fn is_source_png(data: &[u8]) -> bool {
     let decoder = Decoder::new(Cursor::new(data));
-    let mut reader = match decoder.read_info() {
+    let reader = match decoder.read_info() {
         Ok(r) => r,
         Err(_) => return false,
     };

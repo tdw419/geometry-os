@@ -2218,7 +2218,7 @@ impl Vm {
                                     let response = mock.clone();
                                     let resp_bytes = response.as_bytes();
                                     let write_len = resp_bytes.len().min(max_len);
-                                    let mut wa = _response_addr;
+                                    let wa = _response_addr;
                                     for i in 0..write_len {
                                         if wa + i < self.ram.len() {
                                             self.ram[wa + i] = resp_bytes[i] as u32;
@@ -2376,7 +2376,7 @@ impl Vm {
             .collect();
         wins.sort_by_key(|w| w.5); // sort by z_order ascending (lowest first)
 
-        for (win_id, wx, wy, ww, wh, _z) in wins {
+        for (win_id, _wx, _wy, _ww, wh, _z) in wins {
             // Find the window and blit its offscreen buffer
             // We need to clone the relevant parts to avoid borrow issues
             let win_data: Option<(u32, u32, u32, Vec<u32>)> = self
@@ -2573,13 +2573,13 @@ impl Vm {
         let mut tag_stack: Vec<String> = Vec::new();
         let mut current_color = COLOR_BODY;
         let mut current_link_href: Option<String> = None;
-        let mut link_char_start: usize = 0;
+        let mut _link_char_start: usize = 0;
         let mut line_chars: Vec<u32> = Vec::new();
         let mut line_color = COLOR_BODY;
         let mut pos = 0;
         let chars: Vec<char> = html.chars().collect();
 
-        let mut flush_line =
+        let flush_line =
             |lines: &mut Vec<StyledLine>, lc: &mut Vec<u32>, lcol: &mut u32, ccol: u32| {
                 if !lc.is_empty() || lines.is_empty() {
                     lines.push(StyledLine {
@@ -2778,7 +2778,7 @@ impl Vm {
                             tag_stack.push("a".to_string());
                             current_color = COLOR_LINK;
                             line_color = COLOR_LINK;
-                            link_char_start = line_chars.len();
+                            _link_char_start = line_chars.len();
                             current_link_href = None;
                             if let Some(hpos) = tag_text.find("href") {
                                 let rest = &tag_text[hpos + 4..];

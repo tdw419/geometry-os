@@ -1395,13 +1395,13 @@ fn main() {
                             }
                             "step" => {
                                 // Single-step the VM
-                                if !is_running && canvas_assembled {
+                                if !is_running && (!vm.halted || vm.pc > 0) {
                                     vm.step();
                                     response.push_str(&format!("pc=0x{:04X}\n", vm.pc));
                                 } else if is_running {
                                     response.push_str("[vm is running, pause first]\n");
                                 } else {
-                                    response.push_str("[not assembled]\n");
+                                    response.push_str("[not loaded]\n");
                                 }
                             }
                             "halt" => {
@@ -1577,7 +1577,7 @@ fn main() {
                                 };
                                 response.push_str(&format!("{},{},{}\n", px, py, facing_str));
                             }
-                            "hypervisor_boot" | "hypervisor_boot" => {
+                            "hypervisor_boot" => {
                                 // Boot a guest OS via hypervisor
                                 // Usage: hypervisor_boot <config> [window_id]
                                 // e.g. hypervisor_boot arch=riscv64 kernel=Image ram=256M

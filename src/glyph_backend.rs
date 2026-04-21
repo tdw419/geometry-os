@@ -77,7 +77,7 @@ pub fn lex(source: &str) -> Result<Vec<GlyphToken>, GlyphLexError> {
     let mut tokens = Vec::new();
     let mut chars = source.char_indices().peekable();
 
-    while let Some((pos, ch)) = chars.next() {
+    while let Some((_pos, ch)) = chars.next() {
         match ch {
             // Whitespace - skip
             ' ' | '\t' | '\n' | '\r' => {}
