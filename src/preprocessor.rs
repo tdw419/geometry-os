@@ -160,6 +160,8 @@ pub const OPCODES: &[&str] = &[
     "AI_INJECT",
     // Phase 88: AI Vision Bridge
     "AI_AGENT",
+    // Phase 92: Pixel Boot
+    "LOADPNG",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

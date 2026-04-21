@@ -926,6 +926,7 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0xA5 => "VM_LIST",
         0xA6 => "AI_INJECT",
         0xB0 => "AI_AGENT",
+        0xB1 => "LOADPNG",
         _ => "???",
     }
 }

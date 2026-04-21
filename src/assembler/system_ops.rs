@@ -713,6 +713,23 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        // ── Phase 92: Pixel Boot ──
+        "LOADPNG" => {
+            // LOADPNG path_reg, dest_addr_reg
+            // 3 words: [0xB1, path_reg, dest_addr_reg]
+            // Reads PNG file path from RAM at path_reg, decodes pixelpack seeds,
+            // writes bytecode to RAM at dest_addr_reg. Returns byte count in r0.
+            if tokens.len() < 3 {
+                return Err(
+                    "LOADPNG requires 2 arguments: LOADPNG path_reg, dest_addr_reg".to_string(),
+                );
+            }
+            bytecode.push(0xB1);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

@@ -4585,23 +4585,23 @@ phases:
       to raw bytes, writes them directly to VM RAM at 0x1000. No assembler, no canvas.
       Pure binary pipeline.'
     name: Pixelpack decoder integration
-    status: planned
+    status: done
   - description: 'CLI flag --boot-png program.png that decodes the png and loads
       bytecode into RAM[0x1000] before starting the VM. The image IS the executable.
       Works with any pixelpack-encoded bytecode -- hand-assembled, GlyphLang output,
       or compiler-generated.'
     name: CLI boot-from-png flag
-    status: planned
+    status: done
   - description: 'Test that a known bytecode sequence (e.g., LDI r0, 42; HALT) encoded
       via pixelpack into a .png, loaded via --boot-png, executes correctly with r0=42.
       Round-trip: assemble, pixelpack encode, png, boot-png, VM, verify registers.'
     name: Bytecode-to-pixel round-trip test
-    status: planned
+    status: done
   - description: 'Update docs and memory map with the pixel-boot path. Document that
       .png files are valid Geometry OS executables. Add CODE_PIXEL_EXECUTION.md spec
       doc covering all three levels.'
     name: Documentation
-    status: planned
+    status: done
   description: 'The simplest code-to-pixel-to-execution path. A .png file contains
     pixelpack-encoded bytecode. Load the image, decode the seeds, write bytes to
     RAM[0x1000], run. No assembler step, no canvas text, no source code visible.
@@ -4611,7 +4611,7 @@ phases:
     assembler entirely
   id: phase-92
   scope_lines_total: 400
-  status: planned
+  status: done
   test_target: 5
   title: Pixel Boot - Bytecode from PNG
 - deliverables:

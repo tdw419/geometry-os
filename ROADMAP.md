@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 148 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 92/92 phases complete, 0 in progress
+**Progress:** 93/94 phases complete, 0 in progress
 
-**Deliverables:** 412/412 complete
+**Deliverables:** 416/432 complete
 
-**Tasks:** 483/483 complete
+**Tasks:** 487/503 complete
 
 ## Scope Summary
 
@@ -104,6 +104,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 148 o
 | phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | DONE | 6/6 | 500 | 10 |
 | phase-90 AI Native Desktop -- Agents on the Map | DONE | 7/7 | 1,200 | 12 |
 | phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | DONE | 7/7 | - | - |
+| phase-92 Pixel Boot - Bytecode from PNG | DONE | 4/4 | 400 | 5 |
 
 ## Dependencies
 
@@ -2395,6 +2396,19 @@ GlyphLang is a stack-based language with concise opcodes (0-9 for literals, +-*/
 - [x] **glyph_demo.asm** -- Runs a GlyphLang program compiled on-the-fly. Source: `3 4 + .` (push 3, push 4, add, print). Compiler translates to GeoOS bytecode, VM executes, result (7) appears on screen as a pixel or number.
 - [x] **glyph_fib.glyph** -- Fibonacci in spatial assembly: `1 1 10 L { dup . + dup }` compiles and runs correctly, drawing the sequence on screen.
 - [x] **GlyphLang compiler tests** -- Lexer tokenizes all opcodes, translator maps each opcode correctly, full compile+run of simple programs matches expected output. 12+ tests.
+
+## [x] phase-92: Pixel Boot - Bytecode from PNG (COMPLETE)
+
+**Goal:** Boot a Geometry OS program from a pixelpack-encoded .png file, skipping the assembler entirely
+
+The simplest code-to-pixel-to-execution path. A .png file contains pixelpack-encoded bytecode. Load the image, decode the seeds, write bytes to RAM[0x1000], run. No assembler step, no canvas text, no source code visible. The image IS the binary executable. This is the infrastructure layer that levels 2 and 3 build on.
+
+### Deliverables
+
+- [x] **Pixelpack decoder integration** -- LOADPNG opcode (0xB1) and `boot_from_png()` function decode pixelpack seeds to raw bytes and write directly to VM RAM at 0x1000. Pure binary pipeline.
+- [x] **CLI boot-from-png flag** -- `--boot-png program.png` flag and `boot-png` REPL command decode PNG and load bytecode into RAM[0x1000] before starting the VM.
+- [x] **Bytecode-to-pixel round-trip test** -- Full round-trip test: assemble LDI r1, 42 / HALT, encode to PNG, decode, load to VM, run, verify r1=42. Also LOADPNG opcode tests (basic, missing file, empty path).
+- [x] **Documentation** -- CODE_PIXEL_EXECUTION.md spec doc covering all three levels (bytecode PNG, source PNG, universal PNG), pixelpack encoding strategies, LOADPNG opcode spec, CLI integration, memory map.
 
 ## Global Risks
 

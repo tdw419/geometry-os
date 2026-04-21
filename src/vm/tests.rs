@@ -12955,3 +12955,169 @@ fn test_socket_inject_commands_in_source() {
         "main.rs should have inject_text socket command"
     );
 }
+
+// ============================================================
+// Phase 92: LOADPNG (0xB1) opcode test
+// ============================================================
+
+#[test]
+fn test_loadpng_opcode_basic() {
+    // Create a simple program: LDI r1, 42; HALT
+    let source = "LDI r1, 42\nHALT\n";
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+
+    // Convert bytecode to bytes
+    let mut bytecode_bytes = Vec::new();
+    for &word in &asm.pixels {
+        bytecode_bytes.push((word & 0xFF) as u8);
+        bytecode_bytes.push(((word >> 8) & 0xFF) as u8);
+        bytecode_bytes.push(((word >> 16) & 0xFF) as u8);
+        bytecode_bytes.push(((word >> 24) & 0xFF) as u8);
+    }
+
+    // Encode to pixelpack PNG
+    let png_data = crate::pixel::encode_pixelpack_png(&bytecode_bytes);
+    let png_path = "/tmp/geo_test_loadpng_basic.png";
+    std::fs::write(png_path, &png_data).unwrap();
+
+    // Set up VM with path string in RAM
+    let mut vm = crate::vm::Vm::new();
+    let path_bytes: Vec<u32> = png_path
+        .chars()
+        .map(|c| c as u32)
+        .chain(std::iter::once(0u32))
+        .collect();
+    for (i, &word) in path_bytes.iter().enumerate() {
+        vm.ram[0x2000 + i] = word;
+    }
+
+    // LDI r5, 0x2000 (path address)
+    // LDI r6, 0x1000 (dest address)
+    // LOADPNG r5, r6
+    // HALT
+    vm.ram[0] = 0x10; // LDI
+    vm.ram[1] = 5; // r5
+    vm.ram[2] = 0x2000;
+
+    vm.ram[3] = 0x10; // LDI
+    vm.ram[4] = 6; // r6
+    vm.ram[5] = 0x1000;
+
+    vm.ram[6] = 0xB1; // LOADPNG
+    vm.ram[7] = 5; // path_reg = r5
+    vm.ram[8] = 6; // dest_reg = r6
+
+    vm.ram[9] = 0x00; // HALT
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Verify LOADPNG succeeded (r0 = byte count, not 0xFFFFFFFF)
+    assert_ne!(vm.regs[0], 0xFFFFFFFF, "LOADPNG should succeed");
+    assert!(vm.regs[0] > 0, "LOADPNG should return byte count > 0");
+
+    // Verify the program was loaded at 0x1000 and runs correctly
+    // The loaded program is LDI r1, 42; HALT
+    // LDI is [0x10, 1, 42], HALT is [0x00]
+    // So ram[0x1000] should be 0x10 (LDI opcode)
+    assert_eq!(vm.ram[0x1000], 0x10, "LDI opcode should be at 0x1000");
+    assert_eq!(vm.ram[0x1001], 1, "r1 should be the target register");
+
+    // Now run the loaded program
+    vm.pc = 0x1000;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "loaded program should halt");
+    assert_eq!(vm.regs[1], 42, "LDI r1, 42 should set r1=42");
+
+    // Cleanup
+    let _ = std::fs::remove_file(png_path);
+}
+
+#[test]
+fn test_loadpng_opcode_missing_file() {
+    let mut vm = crate::vm::Vm::new();
+
+    // Store non-existent path in RAM
+    let path = "/tmp/geo_test_nonexistent_12345.png";
+    let path_bytes: Vec<u32> = path
+        .chars()
+        .map(|c| c as u32)
+        .chain(std::iter::once(0u32))
+        .collect();
+    for (i, &word) in path_bytes.iter().enumerate() {
+        vm.ram[0x2000 + i] = word;
+    }
+
+    // LDI r5, 0x2000
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x2000;
+    // LDI r6, 0x1000
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x1000;
+    // LOADPNG r5, r6
+    vm.ram[6] = 0xB1;
+    vm.ram[7] = 5;
+    vm.ram[8] = 6;
+    // HALT
+    vm.ram[9] = 0x00;
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Should return error (0xFFFFFFFF)
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "LOADPNG should fail for missing file"
+    );
+}
+
+#[test]
+fn test_loadpng_opcode_empty_path() {
+    let mut vm = crate::vm::Vm::new();
+
+    // Store empty path (just null terminator) in RAM
+    vm.ram[0x2000] = 0;
+
+    // LDI r5, 0x2000
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x2000;
+    // LDI r6, 0x1000
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x1000;
+    // LOADPNG r5, r6
+    vm.ram[6] = 0xB1;
+    vm.ram[7] = 5;
+    vm.ram[8] = 6;
+    // HALT
+    vm.ram[9] = 0x00;
+
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Should return error (0xFFFFFFFF)
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "LOADPNG should fail for empty path");
+}

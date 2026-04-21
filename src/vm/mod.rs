@@ -2242,6 +2242,57 @@ impl Vm {
                 }
             }
 
+            // LOADPNG path_reg, dest_addr_reg (0xB1) -- Load pixelpack-encoded PNG to RAM
+            // Reads a PNG file path from RAM at path_reg, decodes pixelpack seeds to bytes,
+            // writes bytecode to RAM starting at dest_addr_reg.
+            // Returns byte count in r0 (0xFFFFFFFF on error).
+            // Encoding: 3 words [0xB1, path_reg, dest_addr_reg]
+            0xB1 => {
+                let path_reg = self.fetch() as usize;
+                let dest_reg = self.fetch() as usize;
+                if path_reg >= NUM_REGS || dest_reg >= NUM_REGS {
+                    self.regs[0] = 0xFFFFFFFF;
+                } else {
+                    let path_addr = self.regs[path_reg] as usize;
+                    let dest_addr = self.regs[dest_reg] as usize;
+
+                    // Read path string from RAM (null-terminated)
+                    let mut path_str = String::new();
+                    let mut pa = path_addr;
+                    while pa < self.ram.len() {
+                        let ch = self.ram[pa];
+                        if ch == 0 {
+                            break;
+                        }
+                        if let Some(c) = char::from_u32(ch) {
+                            path_str.push(c);
+                        }
+                        pa += 1;
+                    }
+
+                    if path_str.is_empty() {
+                        self.regs[0] = 0xFFFFFFFF;
+                    } else {
+                        // Try to decode as pixelpack PNG
+                        match crate::pixel::decode_pixelpack_file(&path_str) {
+                            Ok(bytes) => {
+                                let byte_count = bytes.len();
+                                let words = crate::pixel::load_bytecode_to_ram(
+                                    &bytes,
+                                    &mut self.ram,
+                                    dest_addr,
+                                );
+                                self.regs[0] = byte_count as u32;
+                                let _ = words; // words written (for debugging)
+                            }
+                            Err(_) => {
+                                self.regs[0] = 0xFFFFFFFF;
+                            }
+                        }
+                    }
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

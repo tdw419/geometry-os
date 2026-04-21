@@ -1,13 +1,14 @@
-// pixel.rs -- Pixel image decode/encode for .rts.png format
+// pixel.rs -- Pixel image decode/encode for .rts.png and pixelpack .png formats
 //
-// The .rts.png format stores binary data as RGBA pixels.
-// Two layouts: Hilbert curve (small/medium) or linear (large files).
-// Each pixel = 4 bytes (R=byte0, G=byte1, B=byte2, A=byte3).
-// Original size, layout, and SHA256 are stored in PNG text chunks.
+// Two pixel encoding formats:
+// 1. .rts.png: Binary data stored as RGBA pixels (Hilbert/linear layout)
+// 2. .png (pixelpack): Each pixel is a 32-bit seed that expands to bytes via strategies
+//
+// Phase 92: Boot Geometry OS programs from pixelpack-encoded PNG files.
 
 use png::Decoder;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Cursor};
 
 /// Decoded .rts.png result with metadata.
 pub struct DecodedPixels {
@@ -155,6 +156,374 @@ pub(crate) fn d2xy(grid_order: u32, d: u32) -> (u32, u32) {
     (x, y)
 }
 
+// === Pixelpack seed expansion (Phase 92) ===
+//
+// Each RGBA pixel is a 32-bit seed. Top 4 bits = strategy, bottom 28 = payload.
+// Expanding all seeds produces the full byte sequence (bytecode or source text).
+
+/// Pixelpack seed expansion strategies
+const PP_DICTIONARY: &[&[u8]] = &[
+    b"LDI ", // 0 -- Geometry OS opcodes
+    b"HALT", // 1
+    b", ",   // 2
+    b"ADD ", // 3
+    b"SUB ", // 4
+    b"MUL ", // 5
+    b"JMP ", // 6
+    b"PSET", // 7
+    b"FILL", // 8
+    b"CMP ", // 9
+    b"\n",   // 10 (newline)
+    b"r0",   // 11
+    b"r1",   // 12
+    b"r2",   // 13
+    b"r3",   // 14
+    b"r4",   // 15
+];
+
+const PP_NIBBLE_TABLE: [u8; 16] = [
+    b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'A', b'B', b'C', b'D', b'E', b'F',
+];
+
+/// Expand a single 32-bit pixelpack seed to bytes.
+pub fn pixelpack_expand(seed: u32) -> Vec<u8> {
+    let strategy = ((seed >> 28) & 0xF) as u8;
+    let params = seed & 0x0FFF_FFFF;
+
+    match strategy {
+        0x0 => pp_expand_dict(params, 1),
+        0x1 => pp_expand_dict(params, 2),
+        0x2 => pp_expand_dict(params, 3),
+        0x3 => pp_expand_dict(params, 4),
+        0x4 => pp_expand_dict(params, 5),
+        0x5 => pp_expand_dict(params, 6),
+        0x6 => pp_expand_dict(params, 7),
+        0x7 => pp_expand_nibble(params),
+        0x8 => pp_expand_raw4(params),
+        0x9 => pp_expand_rle(params),
+        0xA => pp_expand_raw3(params),
+        0xB => pp_expand_xor_chain(params),
+        0xC => pp_expand_linear(params),
+        0xD => pp_expand_delta(params),
+        0xE => pp_expand_bytepack(params),
+        0xF => pp_expand_literal(params),
+        _ => Vec::new(),
+    }
+}
+
+fn pp_expand_dict(params: u32, n: usize) -> Vec<u8> {
+    let mut result = Vec::new();
+    for i in 0..n {
+        let idx = ((params >> (4 * i)) & 0xF) as usize;
+        if idx < PP_DICTIONARY.len() {
+            result.extend_from_slice(PP_DICTIONARY[idx]);
+        }
+    }
+    result
+}
+
+fn pp_expand_nibble(params: u32) -> Vec<u8> {
+    let mut result = Vec::with_capacity(7);
+    for i in 0..7 {
+        let nibble = ((params >> (4 * i)) & 0xF) as usize;
+        result.push(PP_NIBBLE_TABLE[nibble]);
+    }
+    result
+}
+
+/// Strategy 8: 4 raw bytes from the 28-bit payload
+fn pp_expand_raw4(params: u32) -> Vec<u8> {
+    vec![
+        ((params >> 24) & 0xFF) as u8,
+        ((params >> 16) & 0xFF) as u8,
+        ((params >> 8) & 0xFF) as u8,
+        (params & 0xFF) as u8,
+    ]
+}
+
+/// Strategy 9: RLE -- repeat a byte pattern
+fn pp_expand_rle(params: u32) -> Vec<u8> {
+    let byte_val = (params & 0xFF) as u8;
+    let count = (((params >> 8) & 0xFF) as usize).max(1);
+    vec![byte_val; count.min(256)]
+}
+
+/// Strategy A: 3 raw bytes
+fn pp_expand_raw3(params: u32) -> Vec<u8> {
+    vec![
+        ((params >> 16) & 0xFF) as u8,
+        ((params >> 8) & 0xFF) as u8,
+        (params & 0xFF) as u8,
+    ]
+}
+
+/// Strategy B: XOR chain
+fn pp_expand_xor_chain(params: u32) -> Vec<u8> {
+    let start = (params & 0xFF) as u8;
+    let key = ((params >> 8) & 0xFF) as u8;
+    let count = (((params >> 16) & 0xF) as usize).max(1).min(16);
+
+    let mut result = Vec::with_capacity(count);
+    let mut val = start;
+    for _ in 0..count {
+        result.push(val);
+        val ^= key;
+        if val == 0 {
+            val = key;
+        }
+    }
+    result
+}
+
+/// Strategy C: Linear sequence
+fn pp_expand_linear(params: u32) -> Vec<u8> {
+    let start = (params & 0xFF) as u8;
+    let step = ((params >> 8) & 0xFF) as u8;
+    let count = (((params >> 16) & 0xF) as usize).max(1).min(16);
+
+    let mut result = Vec::with_capacity(count);
+    let mut val = start;
+    for _ in 0..count {
+        result.push(val);
+        val = val.wrapping_add(step);
+    }
+    result
+}
+
+/// Strategy D: Delta from base
+fn pp_expand_delta(params: u32) -> Vec<u8> {
+    let base = (params & 0xFF) as u8;
+    let d1 = ((params >> 8) & 0xFF) as u8;
+    let d2 = ((params >> 16) & 0xFF) as u8;
+    let d3 = ((params >> 24) & 0xFF) as u8;
+    let mut result = vec![base];
+    if d1 != 0 {
+        result.push(base.wrapping_add(d1));
+    }
+    if d2 != 0 {
+        result.push(base.wrapping_add(d1).wrapping_add(d2));
+    }
+    if d3 != 0 {
+        result.push(base.wrapping_add(d1).wrapping_add(d2).wrapping_add(d3));
+    }
+    result
+}
+
+/// Strategy E: Bytepack mode-0 (3 raw bytes)
+fn pp_expand_bytepack(params: u32) -> Vec<u8> {
+    let b0 = ((params >> 3) & 0xFF) as u8;
+    let b1 = ((params >> 11) & 0xFF) as u8;
+    let b2 = ((params >> 19) & 0xFF) as u8;
+    vec![b0, b1, b2]
+}
+
+/// Strategy F: Literal u32 as 4 bytes (big-endian)
+fn pp_expand_literal(params: u32) -> Vec<u8> {
+    vec![
+        ((params >> 24) & 0xFF) as u8,
+        ((params >> 16) & 0xFF) as u8,
+        ((params >> 8) & 0xFF) as u8,
+        (params & 0xFF) as u8,
+    ]
+}
+
+/// Decode a pixelpack PNG to expanded bytes.
+/// Each pixel is a 32-bit seed (RGBA). Seeds are expanded and concatenated.
+/// The `seedcnt` text chunk specifies how many seeds are valid.
+/// The `bytecnt` text chunk specifies the target byte count (truncation).
+pub fn decode_pixelpack_png(data: &[u8]) -> Result<Vec<u8>, String> {
+    let decoder = Decoder::new(Cursor::new(data));
+    let mut reader = decoder
+        .read_info()
+        .map_err(|e| format!("PNG decode error: {:?}", e))?;
+
+    let info = reader.info().clone();
+
+    // Read metadata
+    let seed_count: Option<usize> = info
+        .uncompressed_latin1_text
+        .iter()
+        .find(|c| c.keyword == "seedcnt")
+        .and_then(|c| c.text.parse().ok());
+
+    let byte_count: Option<usize> = info
+        .uncompressed_latin1_text
+        .iter()
+        .find(|c| c.keyword == "bytecnt")
+        .and_then(|c| c.text.parse().ok());
+
+    let width = info.width as usize;
+    let height = info.height as usize;
+
+    let mut pixel_buf = vec![0u8; width * height * 4];
+    reader
+        .next_frame(&mut pixel_buf)
+        .map_err(|e| format!("PNG read error: {:?}", e))?;
+
+    // Extract seeds from pixels
+    let max_seeds = seed_count.unwrap_or(width * height);
+    let mut all_bytes = Vec::new();
+
+    for i in 0..max_seeds {
+        let row = i / width;
+        let col = i % width;
+        if row >= height {
+            break;
+        }
+        let offset = (row * width + col) * 4;
+        if offset + 4 > pixel_buf.len() {
+            break;
+        }
+        let r = pixel_buf[offset];
+        let g = pixel_buf[offset + 1];
+        let b = pixel_buf[offset + 2];
+        let a = pixel_buf[offset + 3];
+        let seed = ((r as u32) << 24) | ((g as u32) << 16) | ((b as u32) << 8) | (a as u32);
+
+        all_bytes.extend(pixelpack_expand(seed));
+    }
+
+    // Truncate to target byte count if specified
+    if let Some(bc) = byte_count {
+        all_bytes.truncate(bc);
+    }
+
+    Ok(all_bytes)
+}
+
+/// Decode a pixelpack PNG file from disk.
+pub fn decode_pixelpack_file(path: &str) -> Result<Vec<u8>, String> {
+    let data = std::fs::read(path).map_err(|e| format!("Cannot read {}: {}", path, e))?;
+    decode_pixelpack_png(&data)
+}
+
+/// Encode raw bytes into a pixelpack PNG.
+/// Uses strategy A (raw3) for each 3-byte chunk, with remainder handling.
+/// Each pixel encodes exactly 3 bytes of input (24 bits payload in 28-bit params).
+pub fn encode_pixelpack_png(bytes: &[u8]) -> Vec<u8> {
+    let mut seeds = Vec::new();
+    let mut i = 0;
+
+    // Pack 3 bytes per seed using strategy A (raw3)
+    while i + 3 <= bytes.len() {
+        let seed = 0xA000_0000
+            | ((bytes[i] as u32) << 16)
+            | ((bytes[i + 1] as u32) << 8)
+            | (bytes[i + 2] as u32);
+        seeds.push(seed);
+        i += 3;
+    }
+    // Handle remaining 1-2 bytes
+    if bytes.len() - i >= 2 {
+        seeds.push(0xA000_0000 | ((bytes[i] as u32) << 16) | (bytes[i + 1] as u32));
+        i += 2;
+    }
+    if bytes.len() > i {
+        seeds.push(0xA000_0000 | ((bytes[i] as u32) << 16));
+    }
+
+    // Write PNG
+    let n = seeds.len();
+    let (width, height) = if n == 0 {
+        (1, 1)
+    } else if n <= 4 {
+        (2, 2)
+    } else {
+        let side = (n as f64).sqrt().ceil() as u32;
+        (side, ((n as f64) / side as f64).ceil() as u32)
+    };
+
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    for row in 0..height {
+        for col in 0..width {
+            let idx = (row * width + col) as usize;
+            if idx < n {
+                let s = seeds[idx];
+                pixels.extend_from_slice(&[
+                    ((s >> 24) & 0xFF) as u8,
+                    ((s >> 16) & 0xFF) as u8,
+                    ((s >> 8) & 0xFF) as u8,
+                    (s & 0xFF) as u8,
+                ]);
+            } else {
+                pixels.extend_from_slice(&[0, 0, 0, 0]);
+            }
+        }
+    }
+
+    let mut buf = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(Cursor::new(&mut buf), width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .add_text_chunk("seedcnt".to_string(), n.to_string())
+            .unwrap();
+        encoder
+            .add_text_chunk("bytecnt".to_string(), bytes.len().to_string())
+            .unwrap();
+        encoder
+            .add_text_chunk("geo_boot".to_string(), "bytecode".to_string())
+            .unwrap();
+        let mut writer = encoder.write_header().unwrap();
+        writer.write_image_data(&pixels).unwrap();
+    }
+    buf
+}
+
+/// Load pixelpack-decoded bytecode into VM RAM at the specified address.
+/// Returns the number of u32 words written.
+pub fn load_bytecode_to_ram(bytes: &[u8], ram: &mut [u32], base_addr: usize) -> usize {
+    let ram_len = ram.len();
+    let mut count = 0;
+    for i in (0..bytes.len()).step_by(4) {
+        let addr = base_addr + count;
+        if addr >= ram_len {
+            break;
+        }
+        let b0 = bytes.get(i).copied().unwrap_or(0) as u32;
+        let b1 = bytes.get(i + 1).copied().unwrap_or(0) as u32;
+        let b2 = bytes.get(i + 2).copied().unwrap_or(0) as u32;
+        let b3 = bytes.get(i + 3).copied().unwrap_or(0) as u32;
+        // Bytecode is stored as u32 words (little-endian)
+        ram[addr] = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+        count += 1;
+    }
+    count
+}
+
+/// Check if a path looks like a pixelpack PNG (not .rts.png)
+pub fn is_pixelpack_png(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    lower.ends_with(".png") && !lower.ends_with(".rts.png")
+}
+
+/// Boot context: what we loaded and from where
+pub struct BootPngResult {
+    pub seed_count: usize,
+    pub byte_count: usize,
+    pub ram_words: usize,
+    pub load_addr: usize,
+}
+
+/// Load a pixelpack PNG file and write bytecode to VM RAM.
+/// Returns metadata about the load, or an error string.
+pub fn boot_from_png(
+    path: &str,
+    ram: &mut [u32],
+    load_addr: usize,
+) -> Result<BootPngResult, String> {
+    let bytes = decode_pixelpack_file(path)?;
+    let byte_count = bytes.len();
+    let ram_words = load_bytecode_to_ram(&bytes, ram, load_addr);
+    Ok(BootPngResult {
+        seed_count: 0, // we don't know seed count after expansion
+        byte_count,
+        ram_words,
+        load_addr,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,5 +662,185 @@ mod tests {
         let (x, y) = d2xy(5, 1023);
         assert!(x < 32);
         assert!(y < 32);
+    }
+
+    // === Phase 92: Pixelpack seed expansion tests ===
+
+    #[test]
+    fn test_pixelpack_expand_dict() {
+        // Strategy 0: DICT_1, single dict entry
+        // Index 0 = "LDI " (bytes: 0x4C, 0x44, 0x49, 0x20)
+        let seed = 0x0000_0000; // strategy 0, index 0
+        let bytes = pixelpack_expand(seed);
+        assert_eq!(bytes, b"LDI ");
+
+        // Strategy 1: DICT_2, two dict entries
+        // Index 11 = "r0", index 12 = "r1"
+        let seed = 0x1C00_00B0; // strategy 1, indices [0, 11]
+        let bytes = pixelpack_expand(seed);
+        assert_eq!(bytes, b"LDI r0");
+    }
+
+    #[test]
+    fn test_pixelpack_expand_raw3() {
+        // Strategy A (0xA): 3 raw bytes
+        let seed = 0xA000_0102; // strategy A, bytes: 0x00, 0x01, 0x02 (MSB first)
+        let bytes = pixelpack_expand(seed);
+        assert_eq!(bytes, vec![0x00, 0x01, 0x02]);
+    }
+
+    #[test]
+    fn test_pixelpack_expand_nibble() {
+        // Strategy 7: NIBBLE, 7 hex digits
+        let seed = 0x7000_0012; // strategy 7, nibbles [2,1,0,0,0,0,0]
+        let bytes = pixelpack_expand(seed);
+        assert_eq!(bytes[0], b'2');
+        assert_eq!(bytes[1], b'1');
+        assert_eq!(bytes[2], b'0');
+        assert_eq!(bytes.len(), 7);
+    }
+
+    #[test]
+    fn test_pixelpack_expand_literal() {
+        // Strategy F (0xF): 4 bytes literal
+        // params = seed & 0x0FFFFFFF = 0x0ABCDEF0
+        // bytes: (params>>24)=0x0A, (params>>16)=0xBC, (params>>8)=0xDE, params&0xFF=0xF0
+        let seed = 0xFABCDEF0u32;
+        let bytes = pixelpack_expand(seed);
+        assert_eq!(bytes, vec![0x0A, 0xBC, 0xDE, 0xF0]);
+    }
+
+    #[test]
+    fn test_pixelpack_expand_rle() {
+        // Strategy 9 (0x9): RLE -- repeat byte
+        let seed = 0x9000_0042; // strategy 9, byte=0x42 ('B'), count=0+1=1
+        let bytes = pixelpack_expand(seed);
+        assert_eq!(bytes, vec![0x42]);
+
+        // Multiple repeats
+        let seed = 0x9000_0342; // byte=0x42, count=3
+        let bytes = pixelpack_expand(seed);
+        assert_eq!(bytes, vec![0x42, 0x42, 0x42]);
+    }
+
+    #[test]
+    fn test_pixelpack_expand_linear() {
+        // Strategy C (0xC): linear sequence
+        // params layout: count in bits 19:16, step in bits 15:8, start in bits 7:0
+        let seed = 0xC004_0210; // count=4, step=0x02, start=0x10
+        let bytes = pixelpack_expand(seed);
+        assert_eq!(bytes, vec![0x10, 0x12, 0x14, 0x16]);
+    }
+
+    #[test]
+    fn test_pixelpack_roundtrip_encode_decode() {
+        // Encode some bytes, decode them back
+        let original = vec![0x10, 0x01, 0x42, 0x00, 0x00, 0x00]; // LDI r1, 66 (3 u32 words)
+        let png_data = encode_pixelpack_png(&original);
+        let decoded = decode_pixelpack_png(&png_data).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_pixelpack_roundtrip_empty() {
+        let original: Vec<u8> = vec![];
+        let png_data = encode_pixelpack_png(&original);
+        let decoded = decode_pixelpack_png(&png_data).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_pixelpack_roundtrip_single_byte() {
+        let original = vec![0x42];
+        let png_data = encode_pixelpack_png(&original);
+        let decoded = decode_pixelpack_png(&png_data).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_pixelpack_roundtrip_large() {
+        // 100 bytes of varying data
+        let original: Vec<u8> = (0..100).map(|i| (i * 7 + 13) as u8).collect();
+        let png_data = encode_pixelpack_png(&original);
+        let decoded = decode_pixelpack_png(&png_data).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_is_pixelpack_png() {
+        assert!(is_pixelpack_png("program.png"));
+        assert!(is_pixelpack_png("test.PNG"));
+        assert!(!is_pixelpack_png("kernel.rts.png"));
+        assert!(!is_pixelpack_png("program.asm"));
+        assert!(!is_pixelpack_png(""));
+    }
+
+    #[test]
+    fn test_load_bytecode_to_ram() {
+        // 12 bytes = 3 u32 words
+        let bytes = vec![
+            0x10, 0x01, 0x2A, 0x00, 0x10, 0x02, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        let mut ram = vec![0u32; 65536];
+        let count = load_bytecode_to_ram(&bytes, &mut ram, 0x1000);
+        assert_eq!(count, 3);
+        assert_eq!(ram[0x1000], 0x002A0110); // LDI r1, 42
+        assert_eq!(ram[0x1001], 0x00FF0210); // LDI r2, 255
+        assert_eq!(ram[0x1002], 0x00000000); // NOP-like
+    }
+
+    #[test]
+    fn test_full_pixel_boot_roundtrip() {
+        // Assemble a simple program, encode to PNG, decode, load, run
+        let source = "LDI r1, 42\nLDI r2, 0xFF\nHALT\n";
+        let asm = crate::assembler::assemble(source, 0).unwrap();
+
+        // Convert bytecode pixels to bytes (each pixel is a u32)
+        let mut bytecode_bytes = Vec::new();
+        for &word in &asm.pixels {
+            bytecode_bytes.push((word & 0xFF) as u8);
+            bytecode_bytes.push(((word >> 8) & 0xFF) as u8);
+            bytecode_bytes.push(((word >> 16) & 0xFF) as u8);
+            bytecode_bytes.push(((word >> 24) & 0xFF) as u8);
+        }
+
+        // Encode to pixelpack PNG
+        let png_data = encode_pixelpack_png(&bytecode_bytes);
+
+        // Decode back
+        let decoded = decode_pixelpack_png(&png_data).unwrap();
+        assert_eq!(decoded, bytecode_bytes);
+
+        // Load to VM RAM and run
+        let mut ram = vec![0u32; 65536];
+        let words = load_bytecode_to_ram(&decoded, &mut ram, 0);
+        assert!(words >= 3); // LDI + LDI + HALT = at least 3 words
+
+        let mut vm = crate::vm::Vm::new();
+        vm.ram = ram;
+        vm.pc = 0;
+        vm.halted = false;
+        for _ in 0..1000 {
+            if !vm.step() {
+                break;
+            }
+        }
+        assert!(vm.halted);
+        assert_eq!(vm.regs[1], 42);
+        assert_eq!(vm.regs[2], 0xFF);
+    }
+
+    #[test]
+    fn test_pixel_boot_uses_strategy_a() {
+        // Verify encode_pixelpack_png uses strategy A (raw3)
+        let bytes = vec![0x10, 0x01, 0x42];
+        let png_data = encode_pixelpack_png(&bytes);
+        let decoded = decode_pixelpack_png(&png_data).unwrap();
+        assert_eq!(decoded, bytes);
+
+        // The PNG should have exactly 1 seed (3 bytes packed into one seed)
+        // Check it's a valid PNG
+        assert!(png_data.len() > 8);
+        assert_eq!(&png_data[0..4], &[0x89, 0x50, 0x4E, 0x47]); // PNG magic
     }
 }

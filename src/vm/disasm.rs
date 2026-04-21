@@ -843,6 +843,12 @@ impl Vm {
             // AI_AGENT op_reg (0xB0) -- AI vision operations
             0xB0 => (format!("AI_AGENT {}", reg(ram(a + 1))), 2),
 
+            // LOADPNG path_reg, dest_reg (0xB1) -- Load pixelpack PNG to RAM
+            0xB1 => (
+                format!("LOADPNG {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

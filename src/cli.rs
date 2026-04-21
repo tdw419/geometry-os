@@ -56,17 +56,52 @@ pub fn cli_main(extra_args: &[String]) {
     let mut cli_breakpoints: Vec<u32> = Vec::new();
     let mut canvas_buffer: Vec<u32> = vec![0; 4096];
     let mut qemu_bridge: Option<QemuBridge> = None;
+    let mut boot_png_mode = false;
+
+    // Check for --boot-png flag
+    let file_args: Vec<&String> = extra_args.iter().filter(|a| *a != "--boot-png").collect();
+    boot_png_mode = extra_args.iter().any(|a| a == "--boot-png");
 
     // If extra args given, treat first as a file to load
-    if !extra_args.is_empty() {
-        let path = PathBuf::from(&extra_args[0]);
-        match std::fs::read_to_string(&path) {
-            Ok(src) => {
-                source_text = src;
-                loaded_file = Some(path);
+    if !file_args.is_empty() {
+        let path_str = file_args[0];
+        let path = PathBuf::from(path_str);
+
+        // Check for pixelpack PNG boot
+        if boot_png_mode || geometry_os::pixel::is_pixelpack_png(path_str) {
+            match geometry_os::pixel::boot_from_png(path_str, &mut vm.ram, 0x1000) {
+                Ok(result) => {
+                    println!(
+                        "[pixel-boot] Loaded {} bytes ({} RAM words) from {}",
+                        result.byte_count, result.ram_words, path_str
+                    );
+                    vm.pc = 0x1000;
+                    vm.halted = false;
+                    loaded_file = Some(path);
+                    // Auto-run the bytecode
+                    for _ in 0..10_000_000 {
+                        if !vm.step() {
+                            break;
+                        }
+                    }
+                    println!(
+                        "[pixel-boot] Execution done. PC={:#X} Halted={}",
+                        vm.pc, vm.halted
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[pixel-boot] Error: {}", e);
+                }
             }
-            Err(e) => {
-                eprintln!("Error reading {}: {}", extra_args[0], e);
+        } else {
+            match std::fs::read_to_string(&path) {
+                Ok(src) => {
+                    source_text = src;
+                    loaded_file = Some(path);
+                }
+                Err(e) => {
+                    eprintln!("Error reading {}: {}", path_str, e);
+                }
             }
         }
     }
@@ -241,6 +276,40 @@ pub fn cli_main(extra_args: &[String]) {
                                 println!("Slot or file {} not found", filename_arg);
                             }
                         }
+                    }
+                }
+            }
+            "boot-png" => {
+                if parts.len() < 2 {
+                    println!("Usage: boot-png <file.png>");
+                    println!("  Loads a pixelpack-encoded PNG, decodes to bytecode, runs it.");
+                    continue;
+                }
+                let filename = parts[1..].join(" ");
+                let path = if Path::new(&filename).exists() {
+                    filename.clone()
+                } else {
+                    let prefixed = format!("programs/{}", filename);
+                    if Path::new(&prefixed).exists() {
+                        prefixed
+                    } else {
+                        println!("File not found: {}", filename);
+                        continue;
+                    }
+                };
+                match geometry_os::pixel::boot_from_png(&path, &mut vm.ram, 0x1000) {
+                    Ok(result) => {
+                        println!(
+                            "[pixel-boot] Loaded {} bytes ({} RAM words) from {}",
+                            result.byte_count, result.ram_words, path
+                        );
+                        vm.pc = 0x1000;
+                        vm.halted = false;
+                        loaded_file = Some(PathBuf::from(&path));
+                        canvas_assembled = true;
+                    }
+                    Err(e) => {
+                        println!("[pixel-boot] Error: {}", e);
                     }
                 }
             }
