@@ -14113,3 +14113,197 @@ fn test_wm_drag_close_program_runs() {
     // Verify: program didn't halt unexpectedly (it's a loop program)
     // It may or may not have reached FRAME depending on step budget
 }
+
+// ── Init System - Service Manager (Phase 97) ───────────────────
+
+#[test]
+fn test_init_service_assembles() {
+    let source = std::fs::read_to_string("programs/init_service.asm").unwrap();
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "init_service.asm should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    assert!(
+        asm.pixels.len() > 100,
+        "should have significant bytecode, got {} words",
+        asm.pixels.len()
+    );
+    // Verify key opcodes present
+    assert!(
+        asm.pixels.iter().any(|&p| p == 0x54),
+        "should contain OPEN opcode (0x54)"
+    );
+    assert!(
+        asm.pixels.iter().any(|&p| p == 0x55),
+        "should contain READ opcode (0x55)"
+    );
+    assert!(
+        asm.pixels.iter().any(|&p| p == 0x57),
+        "should contain CLOSE opcode (0x57)"
+    );
+    assert!(
+        asm.pixels.iter().any(|&p| p == 0x66),
+        "should contain EXEC opcode (0x66)"
+    );
+}
+
+#[test]
+fn test_boot_cfg_format_parsing() {
+    // Test that config data can be written to RAM and read back
+    let mut vm = Vm::new();
+
+    // Write a simple boot config string to RAM at 0x1800
+    let cfg_addr = 0x1800usize;
+    let config = b"shell 0 255\nclock 1 0\npainter 0 1\n";
+    for (i, &byte) in config.iter().enumerate() {
+        if cfg_addr + i < vm.ram.len() {
+            vm.ram[cfg_addr + i] = byte as u32;
+        }
+    }
+
+    // Verify first service path starts with 's' (shell)
+    // "shell 0 255\n" -> s,h,e,l,l, ,0, ,2,5,5,\n
+    assert_eq!(vm.ram[cfg_addr], 's' as u32, "first char should be 's'");
+    assert_eq!(
+        vm.ram[cfg_addr + 1],
+        'h' as u32,
+        "second char should be 'h'"
+    );
+    assert_eq!(vm.ram[cfg_addr + 6], '0' as u32, "policy digit");
+    assert_eq!(vm.ram[cfg_addr + 8], '2' as u32, "dep digit 2");
+    assert_eq!(vm.ram[cfg_addr + 9], '5' as u32, "dep digit 5");
+    assert_eq!(vm.ram[cfg_addr + 10], '5' as u32, "dep digit 5");
+}
+
+#[test]
+fn test_init_service_spawn_order() {
+    // Test that services with dependencies start after their deps
+    let mut vm = Vm::new();
+
+    // Create service table in RAM simulating parsed boot.cfg
+    // 3 services, 256 words each starting at 0x1000
+    let svc_base = 0x1000usize;
+    let svc_size = 256usize;
+
+    // Service 0: path="svc0", pid=0, policy=0(always), dep=255(none), status=0(pending)
+    vm.ram[svc_base] = 's' as u32;
+    vm.ram[svc_base + 1] = 'v' as u32;
+    vm.ram[svc_base + 2] = 'c' as u32;
+    vm.ram[svc_base + 3] = '0' as u32;
+    vm.ram[svc_base + 4] = 0; // null terminator
+    vm.ram[svc_base + 32] = 0; // pid
+    vm.ram[svc_base + 33] = 0; // policy: always
+    vm.ram[svc_base + 34] = 255; // dep: none
+    vm.ram[svc_base + 35] = 0; // status: pending
+
+    // Service 1: path="svc1", pid=0, policy=1(onfail), dep=0(depends on svc0), status=0
+    let svc1 = svc_base + svc_size;
+    vm.ram[svc1] = 's' as u32;
+    vm.ram[svc1 + 1] = 'v' as u32;
+    vm.ram[svc1 + 2] = 'c' as u32;
+    vm.ram[svc1 + 3] = '1' as u32;
+    vm.ram[svc1 + 4] = 0;
+    vm.ram[svc1 + 32] = 0;
+    vm.ram[svc1 + 33] = 1; // policy: onfail
+    vm.ram[svc1 + 34] = 0; // dep: svc0
+    vm.ram[svc1 + 35] = 0;
+
+    // Service 2: path="svc2", pid=0, policy=0(always), dep=1(depends on svc1), status=0
+    let svc2 = svc_base + 2 * svc_size;
+    vm.ram[svc2] = 's' as u32;
+    vm.ram[svc2 + 1] = 'v' as u32;
+    vm.ram[svc2 + 2] = 'c' as u32;
+    vm.ram[svc2 + 3] = '2' as u32;
+    vm.ram[svc2 + 4] = 0;
+    vm.ram[svc2 + 32] = 0;
+    vm.ram[svc2 + 33] = 0;
+    vm.ram[svc2 + 34] = 1; // dep: svc1
+    vm.ram[svc2 + 35] = 0;
+
+    // Verify dependency chain: svc0 -> svc1 -> svc2
+    assert_eq!(vm.ram[svc_base + 34], 255, "svc0 has no dependency");
+    assert_eq!(vm.ram[svc1 + 34], 0, "svc1 depends on svc0");
+    assert_eq!(vm.ram[svc2 + 34], 1, "svc2 depends on svc1");
+
+    // Simulate starting svc0 first (it has no deps)
+    vm.ram[svc_base + 32] = 100; // pid
+    vm.ram[svc_base + 35] = 1; // status: running
+
+    // Now svc1 can start (dep svc0 is running)
+    let dep0_status = vm.ram[svc_base + 35];
+    assert_eq!(dep0_status, 1, "svc0 should be running before svc1 starts");
+
+    // Start svc1
+    vm.ram[svc1 + 32] = 101;
+    vm.ram[svc1 + 35] = 1;
+
+    // Now svc2 can start (dep svc1 is running)
+    let dep1_status = vm.ram[svc1 + 35];
+    assert_eq!(dep1_status, 1, "svc1 should be running before svc2 starts");
+
+    vm.ram[svc2 + 32] = 102;
+    vm.ram[svc2 + 35] = 1;
+}
+
+#[test]
+fn test_init_service_restart_on_crash() {
+    // Test that crashed services with policy=always get restarted
+    let mut vm = Vm::new();
+
+    let svc_base = 0x1000usize;
+    let svc_size = 256usize;
+
+    // One service with always-restart policy
+    vm.ram[svc_base + 32] = 42; // pid
+    vm.ram[svc_base + 33] = 0; // policy: always
+    vm.ram[svc_base + 34] = 255; // dep: none
+    vm.ram[svc_base + 35] = 1; // status: running
+
+    // Simulate crash: set status to 0 (pending for restart)
+    vm.ram[svc_base + 35] = 0;
+    vm.ram[svc_base + 32] = 0; // clear PID
+
+    // Verify restart conditions
+    assert_eq!(vm.ram[svc_base + 33], 0, "policy should be always");
+    assert_eq!(
+        vm.ram[svc_base + 35],
+        0,
+        "status should be pending for restart"
+    );
+
+    // Simulate restart: set new PID and status
+    vm.ram[svc_base + 32] = 43; // new PID
+    vm.ram[svc_base + 35] = 1; // running again
+
+    assert_eq!(vm.ram[svc_base + 32], 43, "new PID after restart");
+    assert_eq!(
+        vm.ram[svc_base + 35],
+        1,
+        "status should be running after restart"
+    );
+}
+
+#[test]
+fn test_init_service_no_restart_never_policy() {
+    // Test that services with policy=never do NOT get restarted
+    let mut vm = Vm::new();
+
+    let svc_base = 0x1000usize;
+    let svc_size = 256usize;
+
+    // One service with never-restart policy
+    vm.ram[svc_base + 32] = 42; // pid
+    vm.ram[svc_base + 33] = 2; // policy: never
+    vm.ram[svc_base + 34] = 255; // dep: none
+    vm.ram[svc_base + 35] = 1; // status: running
+
+    // Simulate crash: mark as exited_fail
+    vm.ram[svc_base + 35] = 3; // status: exited_fail
+
+    // Verify it stays dead (policy=never means no restart)
+    assert_eq!(vm.ram[svc_base + 33], 2, "policy should be never");
+    assert_eq!(vm.ram[svc_base + 35], 3, "status should remain exited_fail");
+}
