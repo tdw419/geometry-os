@@ -661,17 +661,38 @@ pub fn render_fullscreen_map(
         *pixel = 0x050508;
     }
 
-    let scale: usize = 3; // 256*3 = 768
-    let map_width = 256 * scale; // 768
-    let _map_height = 256 * scale; // 768
-    let sidebar_x = map_width; // 768
+    // Zoom level determines how much of the 256x256 VM screen we show:
+    //   0 = show all 256x256 at ~2x (512x512, centered in 768 area with padding)
+    //   1 = show all 256x256 at 3x (768x768) -- standard view
+    //   2 = show center 128x128 at 6x (768x768) -- zoomed in 2x
+    //   3 = show center 64x64 at 12x (768x768) -- zoomed in 4x
+    //   4 = show center 32x32 at 24x (768x768) -- zoomed in 8x
+    let zoom = vm.ram.get(0x7812).copied().unwrap_or(2).min(4);
+    let (src_region, scale) = match zoom {
+        0 => (256, 2), // 256px source, 2x scale -> 512x512
+        1 => (256, 3), // 256px source, 3x scale -> 768x768
+        2 => (128, 6), // 128px center, 6x scale -> 768x768
+        3 => (64, 12), // 64px center, 12x scale -> 768x768
+        4 => (32, 24), // 32px center, 24x scale -> 768x768
+        _ => (256, 3),
+    };
+    let src_offset = (256 - src_region) / 2; // center crop
+    let map_display_size = 768; // the 768x768 area
+    let map_offset = (map_display_size - src_region * scale) / 2; // center if < 768
 
-    // ── Blit VM screen at 3x nearest-neighbor ──────────────────
-    for sy in 0..256 {
-        for sx in 0..256 {
-            let color = vm.screen[sy * 256 + sx];
-            let base_x = sx * scale;
-            let base_y = sy * scale;
+    let sidebar_x = 768; // sidebar always starts at x=768
+
+    // ── Blit VM screen with zoom-dependent crop and scale ──────
+    for sy in 0..src_region {
+        for sx in 0..src_region {
+            let vm_x = src_offset + sx;
+            let vm_y = src_offset + sy;
+            if vm_x >= 256 || vm_y >= 256 {
+                continue;
+            }
+            let color = vm.screen[vm_y * 256 + vm_x];
+            let base_x = map_offset + sx * scale;
+            let base_y = map_offset + sy * scale;
             for dy in 0..scale {
                 for dx in 0..scale {
                     let px = base_x + dx;
@@ -684,7 +705,7 @@ pub fn render_fullscreen_map(
         }
     }
 
-    // ── Building icon overlay (scaled to 3x) ───────────────────
+    // ── Building icon overlay (scaled with zoom) ───────────────
     if let Some(icon_cache) = icon_cache {
         let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0).min(32) as usize;
         let cam_x = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
@@ -698,17 +719,22 @@ pub fn render_fullscreen_map(
 
             let mut name = String::new();
             for j in 0..16 {
-                if name_addr + j >= vm.ram.len() { break; }
+                if name_addr + j >= vm.ram.len() {
+                    break;
+                }
                 let ch = vm.ram[name_addr + j];
-                if ch == 0 || ch > 127 { break; }
+                if ch == 0 || ch > 127 {
+                    break;
+                }
                 name.push(ch as u8 as char);
             }
 
             if let Some(icon) = icon_cache.get(&name) {
+                // Building position in VM screen pixels
                 let scr_x = (bldg_x - cam_x) * 4;
                 let scr_y = (bldg_y - cam_y) * 4;
 
-                // Skip if off-screen
+                // Skip if off the VM screen
                 if scr_x + (icon.width as i32) < 0
                     || scr_x >= 256
                     || scr_y + (icon.height as i32) < 0
@@ -717,18 +743,28 @@ pub fn render_fullscreen_map(
                     continue;
                 }
 
-                // Overlay at 3x scale
+                // Apply zoom crop: convert VM coords to display coords
                 for iy in 0..icon.height {
                     for ix in 0..icon.width {
                         let px = scr_x + ix as i32;
                         let py = scr_y + iy as i32;
                         if px >= 0 && px < 256 && py >= 0 && py < 256 {
+                            // Check if this pixel falls within the cropped region
+                            let crop_px = px - src_offset as i32;
+                            let crop_py = py - src_offset as i32;
+                            if crop_px < 0 || crop_px >= src_region as i32
+                                || crop_py < 0 || crop_py >= src_region as i32
+                            {
+                                continue;
+                            }
                             let color = icon.pixels[iy * icon.width + ix];
-                            // Draw at 3x
+                            // Draw at zoom scale
+                            let disp_x = map_offset + crop_px as usize * scale;
+                            let disp_y = map_offset + crop_py as usize * scale;
                             for dy in 0..scale {
                                 for dx in 0..scale {
-                                    let dpx = (px as usize) * scale + dx;
-                                    let dpy = (py as usize) * scale + dy;
+                                    let dpx = disp_x + dx;
+                                    let dpy = disp_y + dy;
                                     if dpx < WIDTH && dpy < HEIGHT {
                                         buffer[dpy * WIDTH + dpx] = color;
                                     }

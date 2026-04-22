@@ -94,12 +94,62 @@
 
 ; ===== Constants =====
 LDI r7, 1               ; constant 1
-LDI r8, 64              ; TILES per axis
-LDI r9, 4               ; TILE_SIZE pixels
 LDI r10, 0xFFB          ; key bitmask port
 LDI r11, 0x7800         ; camera_x address
 LDI r12, 0x7801         ; camera_y address
 LDI r13, 0x7802         ; frame_counter address
+
+; ===== Dynamic tile size from zoom level =====
+; RAM[0x7812]: 0=1px tiles (256x256), 1=2px (128x128), 2=4px (64x64 default),
+;              3=8px (32x32), 4=16px (16x16)
+LDI r17, 0x7812
+LOAD r18, r17            ; r18 = zoom_level
+JZ r18, zoom_0           ; zoom 0 = 1px tiles
+LDI r17, 1
+SUB r18, r17
+JZ r18, zoom_1           ; zoom 1 = 2px tiles
+LDI r17, 1
+SUB r18, r17
+JZ r18, zoom_default     ; zoom 2 = 4px (standard)
+LDI r17, 1
+SUB r18, r17
+JZ r18, zoom_default     ; zoom 3 = still 4px (Rust crops for detail)
+JMP zoom_default         ; zoom 4 = still 4px (Rust crops)
+
+zoom_0:
+LDI r8, 256              ; TILES per axis (zoomed out: see 256 tiles)
+LDI r9, 1                ; TILE_SIZE = 1 pixel
+LDI r30, 0               ; detail_level = 0 (minimal: flat tiles only)
+JMP zoom_set
+
+zoom_1:
+LDI r8, 128              ; TILES per axis (medium: 128 tiles)
+LDI r9, 2                ; TILE_SIZE = 2 pixels
+LDI r30, 1               ; detail_level = 1 (reduced: patterns + shimmer, no trees/contours)
+JMP zoom_set
+
+zoom_default:
+LDI r8, 64               ; TILES per axis (standard: 64 tiles)
+LDI r9, 4                ; TILE_SIZE = 4 pixels
+LDI r30, 2               ; detail_level = 2 (full detail)
+
+zoom_set:
+; Save detail level to RAM[0x7814] for use by feature renderers
+LDI r17, 0x7814
+STORE r17, r30
+
+; If zoom was 0 (uninitialized RAM), set it to 2 (default) so Rust side is consistent
+LDI r17, 0x7812
+LOAD r18, r17
+JNZ r18, zoom_no_init_fix
+LDI r18, 2
+STORE r17, r18
+LDI r8, 64
+LDI r9, 4
+LDI r30, 2
+LDI r17, 0x7814
+STORE r17, r30
+zoom_no_init_fix:
 
 ; ===== Initialize Tables =====
 ; Biome color table at RAM[0x7000] (32 entries)
@@ -476,9 +526,23 @@ LDI r17, 0x7690
 STORE r20, r17
 ADDI r20, 1
 
+; Building 10: smart_term (AI/cyan)
+LDI r17, 100
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 150
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x00FFFF
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x76A0
+STORE r20, r17
+ADDI r20, 1
+
 ; Building count
 LDI r17, 0x7580
-LDI r18, 10
+LDI r18, 11
 STORE r17, r18
 
 ; ===== Building Name Strings at RAM[0x7600-0x768F] =====
@@ -502,6 +566,8 @@ LDI r20, 0x7680
 STRO r20, "linux"
 LDI r20, 0x7690
 STRO r20, "tetris"
+LDI r20, 0x76A0
+STRO r20, "smart_term"
 
 ; Clear nearby building flag
 LDI r17, 0x7584
@@ -651,15 +717,18 @@ LOAD r14, r18           ; r14 = player_x
 LDI r18, 0x7809
 LOAD r15, r18           ; r15 = player_y
 
-; --- Compute camera from player (center player in 64-tile viewport) ---
-; camera_x = player_x - 32, camera_y = player_y - 32
-LDI r17, 32
+; --- Compute camera from player (center player in viewport) ---
+; camera_x = player_x - (tiles/2), camera_y = player_y - (tiles/2)
+; r8 = tiles per axis, so center offset = r8 / 2
+MOV r17, r8
+LDI r18, 1
+SHR r17, r18              ; r17 = tiles/2 (center offset)
 MOV r18, r14
 SUB r18, r17
-STORE r11, r18          ; camera_x = player_x - 32
+STORE r11, r18            ; camera_x = player_x - tiles/2
 MOV r18, r15
 SUB r18, r17
-STORE r12, r18          ; camera_y = player_y - 32
+STORE r12, r18            ; camera_y = player_y - tiles/2
 
 ; --- Clear screen ---
 LDI r17, 0
@@ -856,6 +925,10 @@ ypre_done:
 
     ; -- X-direction blend (4-tile graduated transition zone) --
     ; y_hash precomputed in r26 (shared across row)
+    ; Skip at detail 0 (1px tiles -- blend too expensive, not visible)
+    LDI r18, 0x7814
+    LOAD r18, r18
+    JZ r18, no_xblend
     LDI r19, 0               ; blend mode: 0=50/50, 1=75/25
     MOV r18, r3
     ANDI r18, 7              ; r18 = local_x (position within 8-tile biome)
@@ -939,6 +1012,10 @@ no_xblend:
     ; Mode: 0=none, 1=50/50 top, 2=75/25 top, 3=75/25 bottom, 4=50/50 bottom.
     ; Hash uses re-derived x_hash XOR precomputed neighbor_y_hash.
     JZ r16, no_yblend       ; mode 0 = no blend (register check, no RAM load needed)
+    ; Skip Y-blend at detail 0 (1px tiles)
+    LDI r18, 0x7814
+    LOAD r18, r18
+    JZ r18, no_yblend
     ; Load precomputed neighbor y_hash
     LDI r26, 0x7804
     LOAD r26, r26           ; r26 = neighbor_y_hash
@@ -1016,6 +1093,10 @@ water_checked:
     ; Only compute at biome boundaries (world_y & 7 == 0).
     ; If tile above is also water (biome 0/1), skip (use normal water rendering).
     JZ r31, no_reflect       ; not water, skip
+    ; Skip reflection at detail 0 (1px tiles -- not visible)
+    LDI r18, 0x7814
+    LOAD r18, r18
+    JZ r18, no_reflect
     MOV r18, r4
     ANDI r18, 7              ; world_y & 7
     JNZ r18, no_reflect      ; same biome block → above is same water biome
@@ -1099,6 +1180,10 @@ height_skip:
     ; Base color gets subtle wave (blue shift), accent gets stronger wave.
     ; Water base (0x000044 / 0x0000BB) has room for +0x22 blue safely.
     JZ r31, no_shimmer     ; not water
+    ; Skip shimmer at detail 0 (1px tiles -- animation invisible)
+    LDI r18, 0x7814
+    LOAD r18, r18
+    JZ r18, no_shimmer
     LDI r29, 1             ; force center pattern for water
     LOAD r18, r13          ; frame_counter
     MOV r30, r6
@@ -1123,6 +1208,10 @@ no_shimmer:
     ; Optimization: when world_x & 7 != 0, left neighbor is same biome column →
     ; same biome as current water tile → skip hash computation entirely.
     JZ r31, no_foam          ; not water, skip entirely
+    ; Skip foam at detail 0 (1px tiles -- foam invisible)
+    LDI r18, 0x7814
+    LOAD r18, r18
+    JZ r18, no_foam
     MOV r18, r3
     ANDI r18, 7              ; world_x & 7
     JNZ r18, no_foam         ; not at X biome boundary → same biome, skip
@@ -1156,6 +1245,11 @@ no_foam:
 
     ; ---- Pre-load half-width constant for non-flat patterns ----
     LDI r20, 2            ; shared by center/horiz/vert patterns
+
+    ; ---- Detail level check: skip patterns at zoom 0 (detail=0) ----
+    LDI r18, 0x7814
+    LOAD r18, r18          ; r18 = detail_level
+    JZ r18, pat_flat       ; detail 0 = always flat (1px tiles)
 
     ; ---- Pattern dispatch (flat=0, center=1, horiz=2, vert=3) ----
     MOV r18, r29           ; restore pattern_type from r29
@@ -1204,6 +1298,12 @@ tile_done:
     ; Elevation = (fine_hash >> 28) & 7 (0-7 range, same as height shading).
     ; Skip water tiles (r31 != 0). Right neighbor uses carry-forward from
     ; RAM[0x7807] (avoids recomputing fine_hash). Bottom neighbor recomputes.
+    ; Skip at detail level < 2 (contour lines invisible at low zoom).
+    LDI r18, 0x7814
+    LOAD r18, r18
+    LDI r17, 2
+    CMP r18, r17
+    BLT r0, contour_clr_skip   ; detail < 2 → skip
     JNZ r31, contour_clr_skip
 
     ; Extract current elevation
@@ -1305,6 +1405,12 @@ contour_after:
     ; Tree shape: 3x2 green canopy at (sx+1, sy) + 1x1 brown trunk at (sx+2, sy+2).
     ; RAM[0x7806] = biome_type (saved per tile during hash phase).
     ; Fast reject: water (r31), then load biome and CMP against 4 targets.
+    ; Skip at detail level < 2 (trees invisible at 1-2px tiles).
+    LDI r18, 0x7814
+    LOAD r18, r18
+    LDI r17, 2
+    CMP r18, r17
+    BLT r0, no_tree        ; detail < 2 → skip trees
     JNZ r31, no_tree         ; water tiles skip
 
     LDI r18, 0x7806
@@ -1476,6 +1582,13 @@ RECTF r3, r4, r19, r18, r17
 ; Dimmed biome colors, border, and player center dot.
 ; Pixel cache in RAM[0x7100..0x74FF] (32*32 = 1024 words).
 ; Only recomputes biome hashes every 4 frames; repaints from cache every frame.
+; Skip at detail level < 2 (minimap not needed when fully zoomed out).
+
+LDI r18, 0x7814
+LOAD r18, r18
+LDI r17, 2
+CMP r18, r17
+BLT r0, mm_skip          ; detail < 2 → skip minimap
 
 ; --- Recompute biome hashes every 4 frames (always on frame 1) ---
 LOAD r17, r13           ; r17 = frame_counter
@@ -1603,8 +1716,10 @@ LDI r4, 16
 LDI r17, 0xFFFFFF
 PSET r3, r4, r17
 
+mm_skip:
+
 ; ===== Draw Player Avatar =====
-; Player is at screen center: tile (32,32) * 4px = pixel (128,128)
+; Player is at screen center: tile (tiles/2) * tile_size = pixel center
 ; 8x8 sprite with direction-based shape and walk animation
 
 ; Load facing direction and walk frame
@@ -1612,6 +1727,13 @@ LDI r18, 0x780A
 LOAD r19, r18           ; r19 = facing (0=down, 1=up, 2=left, 3=right)
 LDI r18, 0x780B
 LOAD r20, r18           ; r20 = walk_frame (0 or 1)
+
+; Check detail level for sprite complexity
+LDI r18, 0x7814
+LOAD r18, r18
+LDI r17, 2
+CMP r18, r17
+BLT r0, player_simple   ; detail < 2 → simple marker
 
 ; Sprite base position (screen center)
 LDI r3, 124             ; x = 124
@@ -1661,7 +1783,87 @@ PSETI 125, 128, 0x4444FF
 
 ; ===== Render Buildings =====
 ; Iterate building table, check visibility, draw
+; At detail < 2, draw simple colored dots instead of full building sprites
 PUSH r31
+
+; Check detail level
+LDI r18, 0x7814
+LOAD r18, r18
+LDI r17, 2
+CMP r18, r17
+BLT r0, bldg_simple_dots   ; detail < 2 → simple dots
+JMP bldg_normal_render
+
+bldg_simple_dots:
+; Draw buildings as 2x2 colored dots at their world position
+LDI r20, 0x7500
+LDI r17, 0x7580
+LOAD r21, r17
+LDI r17, 0
+
+bldg_dot_loop:
+  MOV r22, r20
+  LOAD r3, r22          ; bldg world_x
+  ADDI r22, 1
+  LOAD r4, r22          ; bldg world_y
+  ADDI r22, 1
+  LOAD r25, r22         ; type_color
+  ADDI r22, 1
+  ADDI r22, 1           ; skip name_addr
+
+  ; Screen coords: (bldg_x - camera_x) * tile_size
+  LDI r18, 0x7800
+  LOAD r27, r18
+  MOV r28, r3
+  SUB r28, r27          ; dx = bldg_x - cam_x
+  ; Skip if off-screen
+  LDI r29, 0
+  CMP r28, r29
+  BLT r0, bldg_dot_next
+  MOV r29, r8
+  SUB r29, r7           ; tiles - 1
+  CMP r28, r29
+  BGE r0, bldg_dot_next
+
+  LDI r18, 0x7801
+  LOAD r27, r18
+  MOV r29, r4
+  SUB r29, r27          ; dy = bldg_y - cam_y
+  LDI r18, 0
+  CMP r29, r18
+  BLT r0, bldg_dot_next
+  MOV r18, r8
+  SUB r18, r7           ; tiles - 1
+  CMP r29, r18
+  BGE r0, bldg_dot_next
+
+  ; Compute pixel position: dx * tile_size, dy * tile_size
+  MOV r28, r3
+  LDI r18, 0x7800
+  LOAD r27, r18
+  SUB r28, r27
+  MUL r28, r9           ; screen_x = dx * tile_size
+
+  MOV r29, r4
+  LDI r18, 0x7801
+  LOAD r27, r18
+  SUB r29, r27
+  MUL r29, r9           ; screen_y = dy * tile_size
+
+  ; Draw 2x2 colored dot
+  LDI r17, 2
+  RECTF r28, r29, r17, r17, r25
+
+bldg_dot_next:
+  ADDI r20, 4
+  ADDI r17, 1
+  MOV r22, r17
+  CMP r22, r21
+  BLT r0, bldg_dot_loop
+POP r31
+JMP bldg_render_done
+
+bldg_normal_render:
 LDI r20, 0x7500
 LDI r17, 0x7580
 LOAD r21, r17           ; r21 = 8 buildings
@@ -1806,9 +2008,17 @@ bldg_next:
   BLT r0, bldg_loop
 POP r31
 
+bldg_render_done:
+
 ; ===== Draw Building Markers on Minimap =====
 ; Minimap is at screen (224..255, 0..31), 32x32 pixels
 ; Each pixel = 2 world tiles. Building marker = colored dot
+; Skip at detail < 2 (minimap not drawn)
+LDI r18, 0x7814
+LOAD r18, r18
+LDI r17, 2
+CMP r18, r17
+BLT r0, mm_bldg_skip
 PUSH r31
 LDI r20, 0x7500
 LDI r17, 0x7580
@@ -1866,6 +2076,8 @@ mm_bldg_skip:
   CMP r22, r21
   BLT r0, mm_bldg_loop
 POP r31
+
+mm_bldg_skip:
 
 ; ===== Draw Taskbar (y=240..255) =====
 LDI r17, 0x1A1A2E
@@ -1928,6 +2140,40 @@ PSETI 125, 129, 0x4444FF
 PSETI 126, 128, 0x4444FF
 PSETI 127, 128, 0x4444FF
 legs_done:
+
+; ===== Simple Player Marker (for zoom 0/1) =====
+; Just a crosshair at screen center (128,128)
+player_simple:
+; Only draw if detail < 2 (otherwise full sprite was already drawn above)
+LDI r18, 0x7814
+LOAD r18, r18
+LDI r17, 2
+CMP r18, r17
+BGE r0, player_marker_done   ; detail >= 2 → skip (full sprite already drawn)
+; Flashing crosshair at center
+LOAD r17, r13               ; frame_counter
+LDI r18, 16
+AND r17, r18
+JZ r17, pm_white
+LDI r17, 0xFFFF00
+JMP pm_draw
+pm_white:
+LDI r17, 0xFFFFFF
+pm_draw:
+LDI r3, 128
+LDI r4, 128
+PSET r3, r4, r17            ; center dot
+LDI r3, 127
+PSET r3, r4, r17            ; left
+LDI r3, 129
+LDI r4, 128
+PSET r3, r4, r17            ; right
+LDI r3, 128
+LDI r4, 127
+PSET r3, r4, r17            ; up
+LDI r4, 129
+PSET r3, r4, r17            ; down
+player_marker_done:
 
     FRAME
     JMP main_loop

@@ -11367,10 +11367,10 @@ fn test_building_table_initialized() {
             break;
         }
     }
-    // Building count at 0x7580 should be 10
+    // Building count at 0x7580 should be 11
     assert_eq!(
-        vm.ram[0x7580], 10,
-        "building count should be 10, got {}",
+        vm.ram[0x7580], 11,
+        "building count should be 11, got {}",
         vm.ram[0x7580]
     );
     // First building at 0x7500 should have world_x = 52
@@ -11801,7 +11801,7 @@ fn test_building_count_correct() {
             break;
         }
     }
-    assert_eq!(vm.ram[0x7580], 10, "building count should be exactly 10");
+    assert_eq!(vm.ram[0x7580], 11, "building count should be exactly 11");
 }
 
 #[test]
@@ -11928,8 +11928,12 @@ fn test_building_door_rendered() {
         }
     }
     // Building 0 at pixel (208, 192), door at (208+10, 192+24) = (218, 216), size 4x8
-    let door_x = 52 * 4 + 10; // 218
-    let door_y = 48 * 4 + 24; // 216
+    // Camera is at (player_x - 32, player_y - 32), player starts at (32,32)
+    // so camera = (0,0). Building 0 at world (52,48) -> screen (208, 192)
+    let cam_x: i32 = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
+    let cam_y: i32 = vm.ram.get(0x7801).copied().unwrap_or(0) as i32;
+    let door_x = ((52 - cam_x) * 4 + 10) as usize;
+    let door_y = ((48 - cam_y) * 4 + 24) as usize;
     let mut found_door = false;
     if door_x + 4 <= 256 && door_y + 8 <= 256 {
         for y in door_y..door_y + 8 {

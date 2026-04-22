@@ -168,6 +168,7 @@ fn main() {
             ("shell", "shell"),
             ("linux", "linux_building"),
             ("tetris", "tetris"),
+            ("smart_term", "smart_term"),
         ];
         for (app_name, asm_name) in &desktop_apps {
             let pxpk_path = format!("{}.pxpk.png", app_name);
@@ -2059,19 +2060,19 @@ fn main() {
             if mouse_drag_active && mouse_down_now {
                 if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
                     // Drag delta in screen pixels -> convert to tile offset
-                    // At zoom=2 (default), 3 host pixels = 1 VM pixel = 0.25 tiles
-                    // Scale factor: tiles per host pixel = 1 / (zoom_scale * tile_pixels)
-                    // zoom 0=1px, 1=2px, 2=4px, 3=8px, 4=16px
-                    let tile_px = match zoom_level {
-                        0 => 1,
-                        1 => 2,
-                        2 => 4,
-                        3 => 8,
-                        4 => 16,
-                        _ => 4,
+                    // The zoom crop system shows a portion of the 256x256 VM screen:
+                    //   zoom 0: 256px at 2x=512, zoom 1: 256px at 3x=768, zoom 2: 128px at 6x=768,
+                    //   zoom 3: 64px at 12x=768, zoom 4: 32px at 24x=768
+                    // tiles_per_host_pixel = (src_region/4) / (src_region * scale) = 1/(4*scale)
+                    let (_, scale) = match zoom_level {
+                        0 => (256usize, 2usize),
+                        1 => (256, 3),
+                        2 => (128, 6),
+                        3 => (64, 12),
+                        4 => (32, 24),
+                        _ => (128, 6),
                     };
-                    // Host scale is 3x, so 1 host pixel = 1/3 VM pixel = 1/(3*tile_px) tiles
-                    let tiles_per_host_pixel = 1.0 / (3.0 * tile_px as f32);
+                    let tiles_per_host_pixel = 1.0 / (4.0 * scale as f32);
                     let dx = (mx - drag_start.0) * tiles_per_host_pixel;
                     let dy = (my - drag_start.1) * tiles_per_host_pixel;
                     let new_cx = drag_cam_start.0 - dx as i32;
@@ -2166,8 +2167,24 @@ fn main() {
 
                         // Convert window coords to VM screen coords
                         let (vm_sx, vm_sy) = if fullscreen_map {
-                            // Fullscreen: VM screen at (0,0) scaled 3x
-                            ((mx / 3.0) as i32, (my / 3.0) as i32)
+                            // Fullscreen map: zoom-dependent crop+scale
+                            // zoom 0: 256px src at 2x, 1: 256px at 3x, 2: 128px center at 6x,
+                            // 3: 64px center at 12x, 4: 32px center at 24x
+                            let (src_region, scale) = match zoom_level {
+                                0 => (256usize, 2usize),
+                                1 => (256, 3),
+                                2 => (128, 6),
+                                3 => (64, 12),
+                                4 => (32, 24),
+                                _ => (128, 6),
+                            };
+                            let src_offset = (256 - src_region) / 2;
+                            let map_display_size = 768usize;
+                            let map_offset = (map_display_size - src_region * scale) / 2;
+                            // Convert: (mx - map_offset) / scale + src_offset
+                            let sx = ((mx as i32 - map_offset as i32).max(0) / scale as i32) + src_offset as i32;
+                            let sy = ((my as i32 - map_offset as i32).max(0) / scale as i32) + src_offset as i32;
+                            (sx.min(255), sy.min(255))
                         } else {
                             // Normal: VM screen at (VM_SCREEN_X, VM_SCREEN_Y)
                             (mx as i32 - VM_SCREEN_X as i32, my as i32 - VM_SCREEN_Y as i32)
