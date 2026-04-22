@@ -32,7 +32,7 @@ meta:
   gui: minifb
   language: Rust
   loc: '62073'
-  opcodes: 149
+  opcodes: 166
   programs: '128'
   ram: 65536 words
   registers: 32
