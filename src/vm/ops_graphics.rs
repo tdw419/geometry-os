@@ -529,6 +529,7 @@ impl Vm {
                             vmas: Process::default_vmas_for_process(),
                             brk_pos: PAGE_SIZE as u32,
                             custom_font: None,
+                            capabilities: None,
                         });
                         self.ram[0xFFA] = pid;
                     }

@@ -2062,6 +2062,138 @@ impl Vm {
                 }
             }
 
+            // ── Phase 102: Permissions and Capability System ──
+
+            // SPAWNC addr_reg, caps_reg (0xA7) -- Spawn with capabilities.
+            // Like SPAWN but parent passes a capability list from RAM.
+            // RAM layout at caps_reg:
+            //   [n_entries, entry_0, entry_1, ..., entry_n-1, 0xFFFFFFFF sentinel]
+            //   Each entry: [resource_type, pattern_addr, pattern_len, permissions]
+            //   where pattern is a null-terminated string at pattern_addr (pattern_len chars).
+            //   resource_type: 0 = VFS path, 1 = opcode restriction.
+            //   permissions bitmask: bit 0 = read, bit 1 = write, bit 2 = exec.
+            // Returns child PID in RAM[0xFFA], or 0xFFFFFFFF on error.
+            // Encoding: 3 words [0xA7, addr_reg, caps_reg]
+            0xA7 => {
+                let addr_reg = self.fetch() as usize;
+                let caps_reg = self.fetch() as usize;
+                if addr_reg < NUM_REGS && caps_reg < NUM_REGS {
+                    let active_count = self.processes.iter().filter(|p| !p.is_halted()).count();
+                    if active_count >= MAX_PROCESSES {
+                        self.ram[0xFFA] = 0xFFFFFFFF;
+                    } else {
+                        let start_addr = self.regs[addr_reg];
+                        let caps_addr = self.regs[caps_reg] as usize;
+
+                        // Parse capability list from RAM
+                        let mut capabilities = Vec::new();
+                        if caps_addr < self.ram.len() {
+                            let n_entries = self.ram[caps_addr] as usize;
+                            let mut entry_offset = caps_addr + 1;
+                            for _ in 0..n_entries {
+                                if entry_offset + 3 >= self.ram.len() { break; }
+                                let res_type = self.ram[entry_offset] as u8;
+                                let pat_addr = self.ram[entry_offset + 1] as usize;
+                                let pat_len = self.ram[entry_offset + 2] as usize;
+                                let perms = self.ram[entry_offset + 3] as u8;
+
+                                // Read pattern string from RAM
+                                let mut pattern = String::new();
+                                for i in 0..pat_len {
+                                    if pat_addr + i >= self.ram.len() { break; }
+                                    let ch = self.ram[pat_addr + i];
+                                    if ch == 0 { break; }
+                                    if let Some(c) = char::from_u32(ch) {
+                                        pattern.push(c);
+                                    }
+                                }
+
+                                capabilities.push(crate::vm::types::Capability {
+                                    resource_type: res_type,
+                                    pattern,
+                                    permissions: perms,
+                                });
+                                entry_offset += 4;
+                            }
+                        }
+
+                        // Same page directory logic as SPAWN
+                        let start_page = (start_addr as usize) / PAGE_SIZE;
+                        let page_offset = start_addr % (PAGE_SIZE as u32);
+                        let mut pd = vec![PAGE_UNMAPPED; NUM_PAGES];
+                        let child_pc: u32;
+                        let identity_map = start_page < 3;
+
+                        if identity_map {
+                            for (phys_page, pd_entry) in pd.iter_mut().enumerate().take(3) {
+                                if phys_page >= NUM_RAM_PAGES { break; }
+                                *pd_entry = phys_page as u32;
+                                if self.page_ref_count[phys_page] == 0 {
+                                    self.page_ref_count[phys_page] = 1;
+                                }
+                                self.page_ref_count[phys_page] += 1;
+                                self.page_cow |= 1u64 << phys_page;
+                            }
+                            child_pc = start_addr;
+                        } else {
+                            for (vpage, pd_entry) in pd.iter_mut().enumerate().take(PROCESS_PAGES) {
+                                let parent_phys = start_page + vpage;
+                                if parent_phys >= NUM_RAM_PAGES { break; }
+                                if vpage == 3 || parent_phys == 3 {
+                                    *pd_entry = 3;
+                                    self.page_ref_count[3] += 1;
+                                    continue;
+                                }
+                                *pd_entry = parent_phys as u32;
+                                self.page_ref_count[parent_phys] += 1;
+                                self.page_cow |= 1u64 << parent_phys;
+                            }
+                            child_pc = page_offset;
+                        }
+
+                        // Page 3 shared region
+                        if identity_map {
+                            pd[3] = 3;
+                            if self.page_ref_count[3] == 0 {
+                                self.page_ref_count[3] = 1;
+                            }
+                            self.page_ref_count[3] += 1;
+                        }
+
+                        // Page 63 (hardware ports)
+                        pd[63] = 63;
+
+                        let pid = (self.processes.len() + 1) as u32;
+                        self.processes.push(crate::vm::types::SpawnedProcess {
+                            pc: child_pc,
+                            regs: [0; NUM_REGS],
+                            state: crate::vm::types::ProcessState::Ready,
+                            pid,
+                            mode: crate::vm::types::CpuMode::User,
+                            page_dir: Some(pd),
+                            segfaulted: false,
+                            priority: 1,
+                            slice_remaining: 0,
+                            sleep_until: 0,
+                            yielded: false,
+                            kernel_stack: Vec::new(),
+                            msg_queue: Vec::new(),
+                            exit_code: 0,
+                            parent_pid: self.current_pid,
+                            pending_signals: Vec::new(),
+                            signal_handlers: [0; 4],
+                            vmas: crate::vm::types::Process::default_vmas_for_process(),
+                            brk_pos: PAGE_SIZE as u32,
+                            custom_font: None,
+                            capabilities: if capabilities.is_empty() { None } else { Some(capabilities) },
+                        });
+                        self.ram[0xFFA] = pid;
+                    }
+                } else {
+                    self.ram[0xFFA] = 0xFFFFFFFF;
+                }
+            }
+
             // ── Phase 88: AI Vision Bridge ──
 
             // AI_AGENT op_reg (0xB0) -- AI vision operations

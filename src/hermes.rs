@@ -925,6 +925,8 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0xA4 => "VM_SET_BUDGET",
         0xA5 => "VM_LIST",
         0xA6 => "AI_INJECT",
+        // Phase 102: Permissions and Capability System
+        0xA7 => "SPAWNC",
         0xB0 => "AI_AGENT",
         0xB1 => "LOADPNG",
         0xB2 => "LOADSRCIMG",

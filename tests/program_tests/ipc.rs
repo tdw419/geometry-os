@@ -164,6 +164,7 @@ fn test_msgsnd_delivers_to_target() {
         vmas: Vec::new(),
         brk_pos: 0,
         custom_font: None,
+        capabilities: None,
     });
 
     // Set up message data in main process registers
@@ -238,6 +239,7 @@ fn test_msgrcv_receives_message() {
         vmas: Vec::new(),
         brk_pos: 0,
         custom_font: None,
+        capabilities: None,
     });
 
     // MSGRCV bytecode: 0x5F (no args)
@@ -285,6 +287,7 @@ fn test_msgrcv_blocks_when_empty() {
         vmas: Vec::new(),
         brk_pos: 0,
         custom_font: None,
+        capabilities: None,
     });
 
     vm.ram[0x200] = 0x5F; // MSGRCV
@@ -327,6 +330,7 @@ fn test_msgrcv_unblocks_on_msgsnd() {
         vmas: Vec::new(),
         brk_pos: 0,
         custom_font: None,
+        capabilities: None,
     });
 
     // First block process A
@@ -397,6 +401,7 @@ fn test_blocked_process_skipped_by_scheduler() {
         vmas: Vec::new(),
         brk_pos: 0,
         custom_font: None,
+        capabilities: None,
     });
     // Run scheduler 50 times -- blocked process should not execute
     for _ in 0..50 {
@@ -441,6 +446,7 @@ fn test_pipe_write_unblocks_blocked_reader() {
         vmas: Vec::new(),
         brk_pos: 0,
         custom_font: None,
+        capabilities: None,
     });
 
     // Main process writes to the pipe

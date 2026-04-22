@@ -55,6 +55,25 @@ impl Vm {
                     let mut is_device = false;
                     let mut dev_fd = 0xFFFFFFFF;
                     let path_str = Self::read_string_static(&self.ram, path_addr as usize);
+
+                    // Phase 102: Capability enforcement on file open
+                    if let Some(ref path) = path_str {
+                        let pid = self.current_pid;
+                        let caps = self.processes.iter()
+                            .find(|p| p.pid == pid)
+                            .and_then(|p| p.capabilities.clone());
+                        // mode 0 = read, 1 = write
+                        let perm = if mode == 0 {
+                            crate::vm::types::Capability::PERM_READ
+                        } else {
+                            crate::vm::types::Capability::PERM_WRITE
+                        };
+                        if !crate::vm::types::check_path_capability(&caps, path, perm) {
+                            self.regs[0] = 0xFFFFFFFE; // EPERM
+                            return true;
+                        }
+                    }
+
                     if let Some(path) = path_str {
                         for (i, &name) in DEVICE_NAMES.iter().enumerate() {
                             if path == name {

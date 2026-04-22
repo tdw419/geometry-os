@@ -158,6 +158,8 @@ pub const OPCODES: &[&str] = &[
     "VM_LIST",
     // Phase 89: AI Agent Input
     "AI_INJECT",
+    // Phase 102: Permissions and Capability System
+    "SPAWNC",
     // Phase 88: AI Vision Bridge
     "AI_AGENT",
     // Phase 92: Pixel Boot

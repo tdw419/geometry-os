@@ -696,6 +696,23 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        // ── Phase 102: Permissions and Capability System ──
+        "SPAWNC" => {
+            // SPAWNC addr_reg, caps_reg
+            // 3 words: [0xA7, addr_reg, caps_reg]
+            // Spawns a new process at the address in addr_reg with capabilities
+            // specified by the capability list at caps_reg in RAM.
+            if tokens.len() < 3 {
+                return Err(
+                    "SPAWNC requires 2 arguments: SPAWNC addr_reg, caps_reg".to_string(),
+                );
+            }
+            bytecode.push(0xA7);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
         // ── Phase 88: AI Vision Bridge ──
         "AI_AGENT" => {
             // AI_AGENT op_reg

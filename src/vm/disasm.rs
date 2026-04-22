@@ -838,6 +838,14 @@ impl Vm {
             // AI_INJECT op_reg (0xA6) -- programmatic input injection
             0xA6 => (format!("AI_INJECT {}", reg(ram(a + 1))), 2),
 
+            // ── Phase 102: Permissions and Capability System ──
+
+            // SPAWNC addr_reg, caps_reg (0xA7) -- spawn with capabilities
+            0xA7 => (
+                format!("SPAWNC {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+
             // ── Phase 88: AI Vision Bridge ──
 
             // AI_AGENT op_reg (0xB0) -- AI vision operations

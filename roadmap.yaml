@@ -4698,32 +4698,32 @@ phases:
   test_target: 8
   title: Pixel Boot - Universal Pixel Executable
 - deliverables:
-  - description: 'A window manager process that owns the full screen, tracks rectangular
-      regions for each child process, handles MOUSEQ drag events on title bars,
-      and communicates new bounds via the existing Window Bounds Protocol (RAM 0xF00-0xF03).
-      No new opcodes needed -- pure user-space program using MOUSEQ, HITSET, RECTF, and
-      SPAWN/KILL.'
+  - description: A window manager process that owns the full screen, tracks rectangular
+      regions for each child process, handles MOUSEQ drag events on title bars, and
+      communicates new bounds via the existing Window Bounds Protocol (RAM 0xF00-0xF03).
+      No new opcodes needed -- pure user-space program using MOUSEQ, HITSET, RECTF,
+      and SPAWN/KILL.
     name: Window manager process
     status: done
-  - description: 'Title bar rendering with draggable regions. Each window gets a colored
+  - description: Title bar rendering with draggable regions. Each window gets a colored
       title bar drawn by the manager. HITSET registers the title bar as a drag handle.
       MOUSEQ tracks drag. Manager updates RAM 0xF00-0xF03 and the child re-renders
-      in its new bounds.'
+      in its new bounds.
     name: Draggable title bars
     status: done
-  - description: 'Window close buttons (HITSET on a small region in the title bar).
-      Click sends KILL to the child PID. Manager reclaims the screen region and
-      re-tiles remaining windows.'
+  - description: Window close buttons (HITSET on a small region in the title bar).
+      Click sends KILL to the child PID. Manager reclaims the screen region and re-tiles
+      remaining windows.
     name: Window close and re-tiling
     status: done
   - description: 'Test: spawn 3 child processes, drag windows to new positions, close
       one, verify remaining re-tile correctly. Verify children respect new bounds.'
     name: Window manager integration test
     status: done
-  description: 'A window manager that owns the screen, tracks per-process regions,
-    handles mouse drag to move windows, and communicates bounds via the existing
-    RAM 0xF00-0xF03 protocol. No new opcodes -- pure user-space program. Makes
-    multi-process apps feel like a real desktop instead of overlaid pixel writes.'
+  description: A window manager that owns the screen, tracks per-process regions,
+    handles mouse drag to move windows, and communicates bounds via the existing RAM
+    0xF00-0xF03 protocol. No new opcodes -- pure user-space program. Makes multi-process
+    apps feel like a real desktop instead of overlaid pixel writes.
   goal: Build a window manager process that handles window layout, dragging, closing,
     and re-tiling using existing opcodes
   id: phase-95
@@ -4732,16 +4732,16 @@ phases:
   test_target: 4
   title: Window Manager
 - deliverables:
-  - description: 'A shared RAM region (0xF10-0xF1F, 16 words) acting as a system
-      clipboard. Convention: 0xF10 = ownership flag (0=free, 1=writing), 0xF11 = data
-      length (0-14 words), 0xF12-0xF1F = data. Any process can STORE to write, LOAD
-      to read. Documented in programs/clipboard_demo.asm and src/vm/tests.rs.'
+  - description: 'A shared RAM region (0xF10-0xF1F, 16 words) acting as a system clipboard.
+      Convention: 0xF10 = ownership flag (0=free, 1=writing), 0xF11 = data length
+      (0-14 words), 0xF12-0xF1F = data. Any process can STORE to write, LOAD to read.
+      Documented in programs/clipboard_demo.asm and src/vm/tests.rs.'
     name: Clipboard shared RAM convention
     status: done
-  - description: 'Clipboard ownership protocol. RAM 0xF10 = ownership flag. Writer
+  - description: Clipboard ownership protocol. RAM 0xF10 = ownership flag. Writer
       sets flag to 1, writes data, clears flag to 0. Reader checks flag before reading.
       For larger data, the clipboard holds a VFS path string instead (up to 14 chars
-      in 0xF12-0xF1F).'
+      in 0xF12-0xF1F).
     name: Clipboard ownership and large data
     status: done
   - description: '8 integration tests in src/vm/tests.rs: basic write/read, ownership
@@ -4750,10 +4750,10 @@ phases:
       simulation, VFS path storage for large data.'
     name: Clipboard integration test
     status: done
-  description: 'A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process
+  description: A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process
     can write or read. For large data, the clipboard holds a VFS path. Pure convention,
     no new opcodes. The OS-level feature users interact with most after keyboard and
-    mouse. Includes clipboard_demo.asm demonstrating the full protocol.'
+    mouse. Includes clipboard_demo.asm demonstrating the full protocol.
   goal: Establish a system clipboard protocol so processes can share data without
     pipes or messages
   id: phase-96
@@ -4762,10 +4762,10 @@ phases:
   test_target: 8
   title: System Clipboard
 - deliverables:
-  - description: 'Enhanced init.asm that reads a boot.cfg file listing services (name,
+  - description: Enhanced init.asm that reads a boot.cfg file listing services (name,
       program path, restart policy, dependencies). Parses the config, starts services
       in dependency order using SPAWN, monitors them with WAITPID, and restarts crashed
-      ones based on policy. Like systemd but in 256 bytes of assembly.'
+      ones based on policy. Like systemd but in 256 bytes of assembly.
     name: Config-driven service manager
     status: done
   - description: 'boot.cfg format. One service per line: name path restart deps. Example:
@@ -4778,10 +4778,10 @@ phases:
       it. Verify ordering and restart.'
     name: Service manager integration test
     status: done
-  description: 'An init system that reads a config file, starts services in dependency
+  description: An init system that reads a config file, starts services in dependency
     order, monitors for crashes, and restarts based on policy. Uses existing SPAWN,
     WAITPID, EXIT, and VFS opcodes. The difference between a program loader and an
-    OS is whether it manages the lifecycle of running programs.'
+    OS is whether it manages the lifecycle of running programs.
   goal: Build a config-driven init system that manages services with dependency ordering
     and crash recovery
   id: phase-97
@@ -4790,10 +4790,10 @@ phases:
   test_target: 5
   title: Init System - Service Manager
 - deliverables:
-  - description: 'Per-process font slots. Each process can load a custom 128-entry x
-      8-byte glyph table from a VFS .fnt file into a private buffer. The canvas renderer
-      checks if the current process has a custom font and uses it instead of the built-in
-      GLYPHS array. Falls back to default if no custom font loaded.'
+  - description: Per-process font slots. Each process can load a custom 128-entry
+      x 8-byte glyph table from a VFS .fnt file into a private buffer. The canvas
+      renderer checks if the current process has a custom font and uses it instead
+      of the built-in GLYPHS array. Falls back to default if no custom font loaded.
     name: Per-process font loading
     status: planned
   - description: 'Font file format. A .fnt file is 1024 bytes: 128 glyphs x 8 rows
@@ -4801,19 +4801,20 @@ phases:
       to .fnt. Ship at least 2 alternative fonts (bold, wide) in /lib/fonts/.'
     name: Font file format and tools
     status: planned
-  - description: 'SYSCALL or IOCTL to set current process font. cmd 2 on /dev/screen
+  - description: SYSCALL or IOCTL to set current process font. cmd 2 on /dev/screen
       = set font from RAM address. Program LOADs .fnt from VFS into RAM, then IOCTLs
-      the screen device to use it. Simple, no new opcode needed.'
+      the screen device to use it. Simple, no new opcode needed.
     name: Font syscall integration
     status: planned
-  - description: 'Test: process loads a custom font, writes text to canvas, verify different
-      glyphs appear than with default font. Second process still sees default font.'
+  - description: 'Test: process loads a custom font, writes text to canvas, verify
+      different glyphs appear than with default font. Second process still sees default
+      font.'
     name: Font loading test
     status: planned
-  description: 'Allow programs to load custom pixel fonts from VFS files. DOS had .FNT,
+  description: Allow programs to load custom pixel fonts from VFS files. DOS had .FNT,
     Mac made fonts a core concept. The rendering path already indexes GLYPHS[byte]
     -- just needs a per-process override. Ship 2+ alternative fonts. Pure data, no
-    new rendering logic.'
+    new rendering logic.
   goal: Let programs load and use custom bitmap fonts from VFS, giving each app its
     own visual identity
   id: phase-98
@@ -4822,15 +4823,16 @@ phases:
   test_target: 3
   title: Custom Bitmap Fonts
 - deliverables:
-  - description: 'A sound mixer daemon that reads note data from a named pipe, mixes
+  - description: A sound mixer daemon that reads note data from a named pipe, mixes
       multiple channels, and writes PCM samples to /dev/audio. Programs write (frequency,
       duration, channel, volume) tuples into the pipe. The mixer converts to samples
-      and plays via the existing audio backend. Proves IPC works for real-time workloads.'
+      and plays via the existing audio backend. Proves IPC works for real-time workloads.
     name: Multi-channel sound mixer daemon
     status: planned
   - description: 'Audio pipe protocol. 4-word messages: channel_id, frequency, duration_ms,
-      volume. Channel 0-3 supported. Mixer maintains per-channel state (currently playing,
-      position in waveform). Mixes by summing and clipping. 8kHz mono sample rate.'
+      volume. Channel 0-3 supported. Mixer maintains per-channel state (currently
+      playing, position in waveform). Mixes by summing and clipping. 8kHz mono sample
+      rate.'
     name: Audio pipe protocol
     status: planned
   - description: 'Music player program that reads a score file from VFS (list of notes
@@ -4842,10 +4844,10 @@ phases:
       Mixer produces combined output. Verify no buffer overflow, channels stay independent.'
     name: Mixer integration test
     status: planned
-  description: 'A multi-channel sound mixer that reads from pipes and outputs mixed audio.
-    The Amiga had 4 hardware channels in 1985. This proves IPC handles real-time data.
-    Programs write notes to a pipe, the mixer turns them into sound. The OS pattern:
-    the device driver owns the hardware, programs go through IPC.'
+  description: 'A multi-channel sound mixer that reads from pipes and outputs mixed
+    audio. The Amiga had 4 hardware channels in 1985. This proves IPC handles real-time
+    data. Programs write notes to a pipe, the mixer turns them into sound. The OS
+    pattern: the device driver owns the hardware, programs go through IPC.'
   goal: Build a pipe-fed multi-channel sound mixer daemon with a music player demo
   id: phase-99
   scope_lines_total: 500
@@ -4865,9 +4867,9 @@ phases:
       sequence.'
     name: Library loader subroutine
     status: done
-  - description: 'Convert lib/string.asm and lib/math.asm to .lib format with export
+  - description: Convert lib/string.asm and lib/math.asm to .lib format with export
       tables. Programs use LOADLIB to call strlen, memcpy, sin, cos without .include
-      bloat. One copy in VFS, shared by all programs.'
+      bloat. One copy in VFS, shared by all programs.
     name: Convert stdlib to shared libraries
     status: done
   - description: 'Test: program calls strlen from string.lib without .include. Verify
@@ -4875,10 +4877,10 @@ phases:
       programs use it.'
     name: Shared library test
     status: done
-  description: 'Dynamic loading of shared libraries from VFS. Like .so on Linux or .dll
-    on Windows. Programs load library bytecode at runtime, resolve function names
+  description: Dynamic loading of shared libraries from VFS. Like .so on Linux or
+    .dll on Windows. Programs load library bytecode at runtime, resolve function names
     from an export table, and CALL into them. Avoids .include bloat -- one copy of
-    stdlib serves all programs. Pure convention over existing VFS and CALL opcodes.'
+    stdlib serves all programs. Pure convention over existing VFS and CALL opcodes.
   goal: Enable runtime loading of shared libraries so programs share common code without
     .include duplication
   id: phase-100
@@ -4887,28 +4889,28 @@ phases:
   test_target: 3
   title: Shared Libraries and Dynamic Linking
 - deliverables:
-  - description: 'A cron daemon that reads a schedule file from VFS (crontab text format:
-      interval program_name). Each interval, it EXECs the listed program.
-      Uses FRAME to advance ticks. Runs as a background service. Like Unix
-      cron but frame-based instead of time-based. Implemented in programs/cron_daemon.asm.'
+  - description: 'A cron daemon that reads a schedule file from VFS (crontab text
+      format: interval program_name). Each interval, it EXECs the listed program.
+      Uses FRAME to advance ticks. Runs as a background service. Like Unix cron but
+      frame-based instead of time-based. Implemented in programs/cron_daemon.asm.'
     name: Cron daemon process
     status: done
-  - description: 'crontab text format. One entry per line: interval program_name. Example:
-      100 hello (run hello.asm every 100 frames, roughly 1.7 seconds at 60fps).
-      Daemon reads the file on start and re-reads on magic value at RAM[0xFA0].
-      Parsed into schedule table at 0x4000 with 8 entry slots of 64 words each.'
+  - description: 'crontab text format. One entry per line: interval program_name.
+      Example: 100 hello (run hello.asm every 100 frames, roughly 1.7 seconds at 60fps).
+      Daemon reads the file on start and re-reads on magic value at RAM[0xFA0]. Parsed
+      into schedule table at 0x4000 with 8 entry slots of 64 words each.'
     name: Crontab format and parser
     status: done
   - description: 'Test: test_cron_daemon_assembles, test_cron_daemon_reads_crontab_and_parses,
       test_cron_daemon_spawns_on_interval (verifies EXEC spawns child at interval),
-      test_cron_daemon_multiple_entries (verifies parsing of 2-entry crontab).
-      4 tests total, all passing.'
+      test_cron_daemon_multiple_entries (verifies parsing of 2-entry crontab). 4 tests
+      total, all passing.'
     name: Cron integration test
     status: done
-  description: 'A cron-like daemon that spawns programs on a frame-based schedule. Read
-    schedule from VFS, FRAME between ticks, EXEC on match. Uses existing FRAME, EXEC,
-    OPEN/READ/CLOSE, and VFS opcodes. The autodev cron workers on the host prove this
-    pattern works -- now do it inside the VM.'
+  description: A cron-like daemon that spawns programs on a frame-based schedule.
+    Read schedule from VFS, FRAME between ticks, EXEC on match. Uses existing FRAME,
+    EXEC, OPEN/READ/CLOSE, and VFS opcodes. The autodev cron workers on the host prove
+    this pattern works -- now do it inside the VM.
   goal: Build a cron daemon that runs programs on scheduled intervals using existing
     process management opcodes
   id: phase-101
@@ -4917,16 +4919,16 @@ phases:
   test_target: 4
   title: Cron Daemon - Scheduled Execution
 - deliverables:
-  - description: 'Per-process capability table. On SPAWN, parent specifies allowed VFS
-      paths (wildcard patterns) and restricted opcodes. Stored in process metadata.
+  - description: Per-process capability table. On SPAWN, parent specifies allowed
+      VFS paths (wildcard patterns) and restricted opcodes. Stored in process metadata.
       SYSCALL handler checks capability before executing OPEN, WRITE, KILL, IOCTL.
-      Deny-by-default with explicit grants.'
+      Deny-by-default with explicit grants.
     name: Capability table and enforcement
     status: planned
-  - description: 'SPAWNC opcode or enhanced SPAWN with capability argument. Parent passes
-      a RAM address pointing to a capability list: null-terminated path patterns followed
-      by an opcode whitelist. Kernel parses and stores with the new process. Fallback:
-      SYSCALL number for spawn_with_caps.'
+  - description: 'SPAWNC opcode or enhanced SPAWN with capability argument. Parent
+      passes a RAM address pointing to a capability list: null-terminated path patterns
+      followed by an opcode whitelist. Kernel parses and stores with the new process.
+      Fallback: SYSCALL number for spawn_with_caps.'
     name: Spawn with capabilities
     status: planned
   - description: 'Test: spawn process with read-only /tmp/ access. Verify it can OPEN
@@ -4934,44 +4936,46 @@ phases:
       outside /tmp/. Verify KILL is blocked for processes it did not spawn.'
     name: Capability enforcement test
     status: planned
-  - description: 'Sandboxed program demo. A paint program that can only write to /tmp/art/
+  - description: Sandboxed program demo. A paint program that can only write to /tmp/art/
       and read from /lib/fonts/. Cannot access shell, cannot kill other processes.
-      Demonstrates the permission boundary is real.'
+      Demonstrates the permission boundary is real.
     name: Sandboxed program demo
     status: planned
-  description: 'Linux has rwx file permissions. Android has per-app permissions. Geometry
+  description: Linux has rwx file permissions. Android has per-app permissions. Geometry
     OS currently lets any process access any file or kill any other process. A capability
     system gives each process an explicit list of allowed paths and opcodes. Makes
-    the kernel/user boundary actually mean something beyond page tables.'
+    the kernel/user boundary actually mean something beyond page tables.
   goal: Add a per-process capability system so programs can only access explicitly
     permitted resources
   id: phase-102
   scope_lines_total: 600
-  status: planned
+  status: in_progress
   test_target: 3
   title: Permissions and Capability System
+  _claimed_by: worker-0
+  _claimed_at: 1776895045
 - deliverables:
-  - description: 'A terminal multiplexer that manages multiple terminal sessions, each
+  - description: A terminal multiplexer that manages multiple terminal sessions, each
       with its own scrollback buffer in RAM. Switchable with a key combo (e.g., Ctrl+1/2/3
       or Alt+Tab). Each session is a separate process with its own stdin/stdout redirected
-      via pipes. The muxer owns the canvas region and renders the active session.'
+      via pipes. The muxer owns the canvas region and renders the active session.
     name: Terminal multiplexer process
     status: planned
-  - description: 'Session switching and status bar. A thin status bar at the top shows
+  - description: Session switching and status bar. A thin status bar at the top shows
       session names and which is active. Ctrl+N creates new session (SPAWN a new shell).
       Ctrl+number switches. The muxer reads keyboard, routes to active session stdin,
-      reads active session stdout, renders to canvas.'
+      reads active session stdout, renders to canvas.
     name: Session switching UI
     status: planned
-  - description: 'Test: create 2 sessions, run different programs in each, switch between
-      them, verify output is correct for each. Close one session, verify muxer removes
-      it from status bar.'
+  - description: 'Test: create 2 sessions, run different programs in each, switch
+      between them, verify output is correct for each. Close one session, verify muxer
+      removes it from status bar.'
     name: Terminal muxer test
     status: planned
-  description: 'A terminal multiplexer like screen or tmux. Multiple shell sessions,
-    each with independent scrollback, switchable with key combos. The muxer owns
-    the canvas, routes keyboard to the active session, and renders that session output.
-    Proves multi-process IPC, pipe redirection, and window management work together.'
+  description: A terminal multiplexer like screen or tmux. Multiple shell sessions,
+    each with independent scrollback, switchable with key combos. The muxer owns the
+    canvas, routes keyboard to the active session, and renders that session output.
+    Proves multi-process IPC, pipe redirection, and window management work together.
   goal: Build a terminal multiplexer managing multiple shell sessions with switching
     and independent scrollback
   id: phase-103
@@ -4980,27 +4984,27 @@ phases:
   test_target: 2
   title: Terminal Multiplexer
 - deliverables:
-  - description: 'Segfault handler that writes crash info to VFS. On segfault (page fault
-      in user mode), kernel writes a core dump file to /var/core/PID.txt containing:
+  - description: 'Segfault handler that writes crash info to VFS. On segfault (page
+      fault in user mode), kernel writes a core dump file to /var/core/PID.txt containing:
       PID, exit code, PC at crash, all 32 register values, last 16 PC values from
       instruction fetch log, and the faulting address.'
     name: Core dump writer
     status: planned
   - description: 'Crash dialog rendering. After writing the core dump, kernel spawns
-      a crash reporter process that reads the core file and renders a pixel-based dialog:
-      Process X crashed at PC=0x1234, r0=42, fault_addr=0x8000. Press any key to dismiss.
-      Uses RECTF for the dialog box, TEXT for the info.'
+      a crash reporter process that reads the core file and renders a pixel-based
+      dialog: Process X crashed at PC=0x1234, r0=42, fault_addr=0x8000. Press any
+      key to dismiss. Uses RECTF for the dialog box, TEXT for the info.'
     name: Crash dialog renderer
     status: planned
-  - description: 'Test: spawn a process that writes to an unmapped address. Verify segfault
-      triggers, core dump file exists in VFS with correct register values, crash dialog
-      appears on screen.'
+  - description: 'Test: spawn a process that writes to an unmapped address. Verify
+      segfault triggers, core dump file exists in VFS with correct register values,
+      crash dialog appears on screen.'
     name: Crash recovery integration test
     status: planned
-  description: 'When a process crashes, real OSes write core dumps and show what happened.
+  description: When a process crashes, real OSes write core dumps and show what happened.
     Geometry OS currently kills silently. A crash handler that writes register state
     and PC trace to VFS, then displays a pixel-rendered crash dialog. Makes the OS
-    feel trustworthy -- errors are visible and debuggable, not just silent deaths.'
+    feel trustworthy -- errors are visible and debuggable, not just silent deaths.
   goal: Add crash recovery with core dumps and crash dialogs so segfaults are visible
     and debuggable
   id: phase-104
@@ -5017,82 +5021,67 @@ phases:
       met: false
     description: 'Extended claim table at RAM[0x78BF..0x790F]. Count byte at 0x78BF,
       up to 16 entries of 8 words each starting at 0x78C0. Each entry: x1, y1, x2,
-      y2, owner_pid, render_func_ptr, color1, color2. A process writes its claim
-      by storing count+1 and filling the next slot. No opcode needed -- pure RAM
-      protocol.'
+      y2, owner_pid, render_func_ptr, color1, color2. A process writes its claim by
+      storing count+1 and filling the next slot. No opcode needed -- pure RAM protocol.'
     name: Extended claim table with owner and render fields
     status: planned
   - acceptance_criteria:
-    - description: Two buildings spawn child processes, each registers a claim.
-        Their tiles render different patterns simultaneously on the same viewport
+    - description: Two buildings spawn child processes, each registers a claim. Their
+        tiles render different patterns simultaneously on the same viewport
       met: false
     description: 'Claim dispatch in world_desktop.asm checks owner_pid. If nonzero,
-      treats color1/color2 as the render palette. If render_func_ptr is nonzero,
-      it contains a RAM address pointing to a 16-word render subroutine that the
-        claim
+      treats color1/color2 as the render palette. If render_func_ptr is nonzero, it
+      contains a RAM address pointing to a 16-word render subroutine that the claim
       hit path CALLs (via self-modifying CALL instruction). This lets each building
-        run
-      its own tile pattern: checkerboard, stripe, noise, etc.'
+      run its own tile pattern: checkerboard, stripe, noise, etc.'
     name: Per-claim render dispatch with callable render functions
     status: planned
   - acceptance_criteria:
     - description: Oracle walks to an adjacent unclaimed tile, writes a new claim
-        entry
-        expanding its territory by one 8x8 block. Render loop shows the new claim
-        immediately
+        entry expanding its territory by one 8x8 block. Render loop shows the new
+        claim immediately
       met: false
-    description: 'Oracle program (oracle.asm) runs as a background daemon. Each N
-      frames,
+    description: Oracle program (oracle.asm) runs as a background daemon. Each N frames,
       it picks the nearest unclaimed adjacent tile, writes a new claim entry to the
-      table,
-      and increments claim count. Territory grows organically outward from the building''s
-      initial position. Uses FRAME to pace expansion (1 tile per 60 frames = 1 tile/second).'
+      table, and increments claim count. Territory grows organically outward from
+      the building's initial position. Uses FRAME to pace expansion (1 tile per 60
+      frames = 1 tile/second).
     name: Oracle territorial expansion daemon
     status: planned
   - acceptance_criteria:
-    - description: Two oracle-type buildings expand toward each other. When their claims
-        overlap, the one with more total tiles wins the contested region. Verify contested
-        tiles show the majority owner''s render pattern
+    - description: Two oracle-type buildings expand toward each other. When their
+        claims overlap, the one with more total tiles wins the contested region. Verify
+        contested tiles show the majority owner''s render pattern
       met: false
     description: 'Second competing building (competitor.asm) with its own expansion
-      daemon
-      and render pattern. When two claims overlap, the claim with more total tiles
-        wins
-      (51% flip). The loser''s contested tiles render in the winner''s pattern. Implements
-      the Digital Red Queen: both buildings are incentivized to expand faster to hold
-      territory. Claim table resolves conflicts in O(n) per tile by comparing owner
-        claim
-      sizes.'
+      daemon and render pattern. When two claims overlap, the claim with more total
+      tiles wins (51% flip). The loser''s contested tiles render in the winner''s
+      pattern. Implements the Digital Red Queen: both buildings are incentivized to
+      expand faster to hold territory. Claim table resolves conflicts in O(n) per
+      tile by comparing owner claim sizes.'
     name: Competing territory with 51% majority flip
     status: planned
   - acceptance_criteria:
     - description: Test spawns two mock processes that write claims. Verify render
-        loop
-        dispatches correct patterns for each claim region. Verify overlap resolves
-        to
-        majority owner. Verify claim table bounds checking (rejects 17th claim). 8+
-        tests
+        loop dispatches correct patterns for each claim region. Verify overlap resolves
+        to majority owner. Verify claim table bounds checking (rejects 17th claim).
+        8+ tests
       met: false
     description: 'Tests: test_claim_table_dynamic_registration (process writes claim,
-        verify count increments), test_claim_render_dispatch (verify correct render
-        per
-        claim), test_claim_overlap_51_flip (two claims overlap, larger wins), test_claim_boundaries
-        (17th claim rejected), test_oracle_expansion (oracle expands one tile per
-        interval),
-        test_two_competitors (two daemons compete, verify contested tiles).'
+      verify count increments), test_claim_render_dispatch (verify correct render
+      per claim), test_claim_overlap_51_flip (two claims overlap, larger wins), test_claim_boundaries
+      (17th claim rejected), test_oracle_expansion (oracle expands one tile per interval),
+      test_two_competitors (two daemons compete, verify contested tiles).'
     name: Territory competition integration tests
     status: planned
   description: 'The claim table is hardcoded with 1 static entry. This phase makes
-    it
-    dynamic: spawned processes register and expand their own claims at runtime. Buildings
-    become autonomous agents competing for tile territory on the infinite map. When
-    two
-    claims overlap, the larger claim wins (51% majority flip) -- the Digital Red Queen
-    effect where both agents are incentivized to expand faster. Each claim renders
-    with
-    its own visual pattern, making territory borders visible on the map. The Oracle
-    building becomes a living entity that grows outward, and a second competitor creates
-    the first multi-agent territorial dynamic.'
+    it dynamic: spawned processes register and expand their own claims at runtime.
+    Buildings become autonomous agents competing for tile territory on the infinite
+    map. When two claims overlap, the larger claim wins (51% majority flip) -- the
+    Digital Red Queen effect where both agents are incentivized to expand faster.
+    Each claim renders with its own visual pattern, making territory borders visible
+    on the map. The Oracle building becomes a living entity that grows outward, and
+    a second competitor creates the first multi-agent territorial dynamic.'
   goal: Make the claim system dynamic so buildings compete for territory with visible
     render patterns and 51% majority conflict resolution
   id: phase-105

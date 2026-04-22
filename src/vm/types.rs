@@ -377,6 +377,82 @@ impl Vma {
 /// - Memory: page table root (page directory), kernel stack
 /// - Scheduling: state, priority, time slice
 /// - IPC: message queue, signal handlers
+/// A capability granting access to a VFS path pattern.
+/// Used by Phase 102 (Permissions and Capability System).
+///
+/// `resource_type`: 0 = VFS path, 1 = opcode restriction.
+/// `pattern`: glob-like pattern for VFS paths (e.g. "/tmp/*", "/lib/fonts/*").
+/// `permissions`: bitmask — bit 0 = read, bit 1 = write, bit 2 = execute.
+#[derive(Debug, Clone)]
+pub struct Capability {
+    pub resource_type: u8,
+    pub pattern: String,
+    pub permissions: u8,
+}
+
+impl Capability {
+    pub const PERM_READ: u8 = 0x01;
+    pub const PERM_WRITE: u8 = 0x02;
+    pub const PERM_EXEC: u8 = 0x04;
+
+    /// Check if a given path matches this capability's pattern.
+    /// Supports simple glob: trailing `*` matches anything.
+    pub fn matches_path(&self, path: &str) -> bool {
+        if self.resource_type != 0 {
+            return false;
+        }
+        if self.pattern.ends_with('*') {
+            let prefix = &self.pattern[..self.pattern.len() - 1];
+            path.starts_with(prefix)
+        } else {
+            path == self.pattern
+        }
+    }
+
+    /// Check if this capability allows the given permission bits.
+    pub fn allows(&self, perm: u8) -> bool {
+        (self.permissions & perm) != 0
+    }
+}
+
+/// Check if a process with the given capabilities can access a path with a specific permission.
+/// Returns true if access is allowed, false if denied.
+/// If capabilities is None, all access is allowed (backward compatible).
+pub fn check_path_capability(caps: &Option<Vec<Capability>>, path: &str, perm: u8) -> bool {
+    match caps {
+        None => true, // No capability list = full access
+        Some(cap_list) => {
+            // Must find at least one matching capability that grants the permission
+            cap_list.iter().any(|c| c.matches_path(path) && c.allows(perm))
+        }
+    }
+}
+
+/// Check if a process with the given capabilities can execute a restricted opcode.
+/// Returns true if allowed, false if denied.
+pub fn check_opcode_capability(caps: &Option<Vec<Capability>>, opcode: u8) -> bool {
+    match caps {
+        None => true,
+        Some(cap_list) => {
+            // Check if any capability restricts this opcode
+            // Resource type 1 = opcode restriction. Pattern is the opcode number as string.
+            // If a restriction exists and doesn't grant EXEC, deny.
+            let restricted = cap_list.iter().filter(|c| c.resource_type == 1);
+            for r in restricted {
+                if let Ok(restricted_op) = r.pattern.parse::<u8>() {
+                    if restricted_op == opcode && !r.allows(Capability::PERM_EXEC) {
+                        return false;
+                    }
+                }
+            }
+            true
+        }
+    }
+}
+
+/// Per-process capability table. On SPAWN, parent specifies allowed VFS paths (wildcard patterns) and restricted opcodes.
+/// Stores as a list of (resource_type, pattern, permissions) tuples.
+///
 /// - Lifecycle: exit code, zombie tracking
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -446,6 +522,11 @@ pub struct Process {
     /// Per-process custom font override. 128 glyphs × 8 rows each.
     /// None = use built-in GLYPHS array. Set via /dev/screen IOCTL cmd 2.
     pub custom_font: Option<Vec<[u8; 8]>>,
+
+    // ── Capabilities (Phase 102: Permissions and Capability System) ─
+    /// Per-process capability list. None = full access (backward compatible).
+    /// Each capability grants access to a VFS path pattern with specific permissions.
+    pub capabilities: Option<Vec<Capability>>,
 }
 
 /// Backward-compatible alias for Process.
@@ -480,6 +561,7 @@ impl Process {
             exit_code: 0,
             segfaulted: false,
             custom_font: None,
+            capabilities: None,
         }
     }
 
