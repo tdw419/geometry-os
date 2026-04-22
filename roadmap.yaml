@@ -4924,23 +4924,23 @@ phases:
       SYSCALL handler checks capability before executing OPEN, WRITE, KILL, IOCTL.
       Deny-by-default with explicit grants.
     name: Capability table and enforcement
-    status: planned
+    status: done
   - description: 'SPAWNC opcode or enhanced SPAWN with capability argument. Parent
       passes a RAM address pointing to a capability list: null-terminated path patterns
       followed by an opcode whitelist. Kernel parses and stores with the new process.
       Fallback: SYSCALL number for spawn_with_caps.'
     name: Spawn with capabilities
-    status: planned
+    status: done
   - description: 'Test: spawn process with read-only /tmp/ access. Verify it can OPEN
       files in /tmp/ for reading but WRITE returns EPERM. Verify it cannot OPEN files
       outside /tmp/. Verify KILL is blocked for processes it did not spawn.'
     name: Capability enforcement test
-    status: planned
+    status: done
   - description: Sandboxed program demo. A paint program that can only write to /tmp/art/
       and read from /lib/fonts/. Cannot access shell, cannot kill other processes.
       Demonstrates the permission boundary is real.
     name: Sandboxed program demo
-    status: planned
+    status: done
   description: Linux has rwx file permissions. Android has per-app permissions. Geometry
     OS currently lets any process access any file or kill any other process. A capability
     system gives each process an explicit list of allowed paths and opcodes. Makes
@@ -4949,11 +4949,9 @@ phases:
     permitted resources
   id: phase-102
   scope_lines_total: 600
-  status: in_progress
-  test_target: 3
+  status: complete
+  test_target: 16
   title: Permissions and Capability System
-  _claimed_by: worker-0
-  _claimed_at: 1776895045
 - deliverables:
   - description: A terminal multiplexer that manages multiple terminal sessions, each
       with its own scrollback buffer in RAM. Switchable with a key combo (e.g., Ctrl+1/2/3
