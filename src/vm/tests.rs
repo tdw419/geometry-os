@@ -15309,3 +15309,264 @@ fn test_crash_dialog_screen_region() {
         "Should have white text pixels for SEGFAULT! text"
     );
 }
+
+// ── Phase 98: Custom Bitmap Fonts ─────────────────────────────────────
+
+#[test]
+fn test_font_files_exist_and_valid() {
+    // Verify that all three font files exist and are exactly 1024 bytes
+    // (128 glyphs × 8 bytes per glyph)
+    let fonts_dir = std::path::Path::new("fonts");
+    for name in &["default.fnt", "bold.fnt", "wide.fnt"] {
+        let path = fonts_dir.join(name);
+        assert!(path.exists(), "Font file {:?} should exist", path);
+        let metadata = std::fs::metadata(&path).unwrap();
+        assert_eq!(
+            metadata.len(),
+            1024,
+            "Font file {:?} should be 1024 bytes",
+            path
+        );
+    }
+}
+
+#[test]
+fn test_bold_font_differs_from_default() {
+    // Verify bold font has wider strokes than default
+    let default = std::fs::read("fonts/default.fnt").unwrap();
+    let bold = std::fs::read("fonts/bold.fnt").unwrap();
+
+    // Compare glyph for 'A' (index 65, 8 bytes starting at offset 65*8)
+    let a_offset = 65 * 8;
+    let default_a = &default[a_offset..a_offset + 8];
+    let bold_a = &bold[a_offset..a_offset + 8];
+
+    // Bold should have at least some rows that are wider (more bits set)
+    let default_bits: u32 = default_a.iter().map(|&b| b.count_ones()).sum();
+    let bold_bits: u32 = bold_a.iter().map(|&b| b.count_ones()).sum();
+
+    assert!(
+        bold_bits >= default_bits,
+        "Bold font 'A' should have at least as many lit pixels as default (bold={}, default={})",
+        bold_bits,
+        default_bits
+    );
+}
+
+#[test]
+fn test_wide_font_differs_from_default() {
+    // Verify wide font is different from both default and bold
+    let default = std::fs::read("fonts/default.fnt").unwrap();
+    let wide = std::fs::read("fonts/wide.fnt").unwrap();
+
+    let a_offset = 65 * 8;
+    let default_a = &default[a_offset..a_offset + 8];
+    let wide_a = &wide[a_offset..a_offset + 8];
+
+    // Wide should have at least some different bytes
+    let differs = default_a.iter().zip(wide_a.iter()).any(|(a, b)| a != b);
+    assert!(differs, "Wide font 'A' should differ from default");
+}
+
+#[test]
+fn test_font_file_loadable_into_process() {
+    // Test that a .fnt file can be read from disk and loaded into a process
+    // via the IOCTL cmd 2 mechanism
+    let mut vm = Vm::new();
+
+    // Read the bold font file into VM RAM
+    let font_data = std::fs::read("fonts/bold.fnt").expect("bold.fnt should exist");
+    assert_eq!(font_data.len(), 1024);
+
+    let font_base = 0x2000usize;
+    // The IOCTL expects 128*8 u32 words, but font data is bytes.
+    // We load each byte into a u32 RAM cell.
+    for (i, &byte) in font_data.iter().enumerate() {
+        vm.ram[font_base + i] = byte as u32;
+    }
+
+    // Create a process
+    let proc = crate::vm::types::Process::new(1, 0, 0);
+    vm.processes.push(proc);
+    vm.current_pid = 1;
+
+    // Set up OPEN for /dev/screen
+    let path_bytes = b"/dev/screen";
+    for (i, &b) in path_bytes.iter().enumerate() {
+        vm.ram[0x3000 + i] = b as u32;
+    }
+    vm.ram[0x3000 + path_bytes.len()] = 0;
+
+    // OPEN
+    vm.regs[1] = 0x3000;
+    vm.regs[2] = 0;
+    vm.ram[0] = 0x54; // OPEN
+    vm.ram[1] = 0x01;
+    vm.ram[2] = 0x02;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let fd = vm.regs[0];
+    assert_eq!(fd, 0xE000);
+
+    // IOCTL cmd 2: set font from RAM
+    vm.regs[3] = fd;
+    vm.regs[4] = 2;
+    vm.regs[5] = 0x2000;
+    vm.ram[vm.pc as usize] = 0x62; // IOCTL
+    vm.ram[vm.pc as usize + 1] = 0x03;
+    vm.ram[vm.pc as usize + 2] = 0x04;
+    vm.ram[vm.pc as usize + 3] = 0x05;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0, "IOCTL set font should succeed");
+
+    // Verify font was loaded correctly
+    let font = vm
+        .processes
+        .iter()
+        .find(|p| p.pid == 1)
+        .and_then(|p| p.custom_font.as_ref())
+        .expect("process should have custom font");
+
+    // Verify glyph 65 ('A') matches the bold font data
+    let a_offset = 65 * 8;
+    for row in 0..8 {
+        assert_eq!(
+            font[65][row],
+            font_data[a_offset + row],
+            "Glyph 65 row {} should match font file byte {}",
+            row,
+            a_offset + row
+        );
+    }
+}
+
+#[test]
+fn test_multi_process_font_isolation() {
+    // Test that two processes can have different fonts
+    // and each sees only its own font
+    let mut vm = Vm::new();
+
+    // Create two processes
+    let mut proc1 = crate::vm::types::Process::new(1, 0, 100);
+    let mut proc2 = crate::vm::types::Process::new(2, 0, 200);
+
+    // Create distinctive fonts for each process
+    let mut font1 = vec![[0u8; 8]; 128];
+    let mut font2 = vec![[0u8; 8]; 128];
+
+    // Process 1: glyph 'A' (65) is all-0xFF (solid block)
+    for row in 0..8 {
+        font1[65][row] = 0xFF;
+    }
+    // Process 2: glyph 'A' (65) is 0x01 (single pixel)
+    for row in 0..8 {
+        font2[65][row] = 0x01;
+    }
+
+    proc1.custom_font = Some(font1);
+    proc2.custom_font = Some(font2);
+
+    vm.processes.push(proc1);
+    vm.processes.push(proc2);
+
+    // Write "A" to RAM for TEXT opcode
+    vm.ram[0x3000] = 65; // 'A'
+    vm.ram[0x3001] = 0;
+
+    // Set up registers for TEXT
+    vm.regs[1] = 10; // x
+    vm.regs[2] = 10; // y
+    vm.regs[3] = 0x3000; // addr
+
+    // Render with process 1's font
+    vm.current_pid = 1;
+    vm.ram[0] = 0x44; // TEXT
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    // Count lit pixels in process 1's 'A' area (x=10..17, y=10..17)
+    let mut proc1_pixels = 0;
+    for y in 10..18 {
+        for x in 10..18 {
+            if vm.screen[y * 256 + x] != 0 {
+                proc1_pixels += 1;
+            }
+        }
+    }
+    // Process 1 has all-solid 'A' = 64 pixels
+    assert_eq!(
+        proc1_pixels, 64,
+        "Process 1 with solid font should have 64 lit pixels"
+    );
+
+    // Clear screen for process 2
+    for i in 0..65536 {
+        vm.screen[i] = 0;
+    }
+
+    // Render with process 2's font
+    vm.current_pid = 2;
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 0x3000;
+    vm.ram[0] = 0x44;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    // Count lit pixels for process 2's 'A'
+    let mut proc2_pixels = 0;
+    for y in 10..18 {
+        for x in 10..18 {
+            if vm.screen[y * 256 + x] != 0 {
+                proc2_pixels += 1;
+            }
+        }
+    }
+    // Process 2 has single-pixel-per-row 'A' = 8 pixels
+    assert_eq!(
+        proc2_pixels, 8,
+        "Process 2 with sparse font should have 8 lit pixels"
+    );
+
+    // Verify the two processes produced different output
+    assert_ne!(
+        proc1_pixels, proc2_pixels,
+        "Different processes with different fonts should produce different output"
+    );
+}
+
+#[test]
+fn test_ensure_fonts_on_boot() {
+    // Test that ensure_fonts() populates the VFS with font files
+    let mut vm = Vm::new();
+    vm.ensure_fonts();
+
+    let fonts_dir = vm.vfs.base_dir.join("lib").join("fonts");
+    assert!(
+        fonts_dir.exists(),
+        "/lib/fonts/ directory should exist after ensure_fonts()"
+    );
+
+    for name in &["default.fnt", "bold.fnt", "wide.fnt"] {
+        let path = fonts_dir.join(name);
+        assert!(
+            path.exists(),
+            "{:?} should exist after ensure_fonts()",
+            path
+        );
+        let size = std::fs::metadata(&path).unwrap().len();
+        assert_eq!(size, 1024, "{:?} should be 1024 bytes", path);
+    }
+}

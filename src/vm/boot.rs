@@ -14,6 +14,9 @@ impl Vm {
         // Ensure boot.cfg exists in the VFS
         self.ensure_boot_config();
 
+        // Ensure font files are available in VFS /lib/fonts/
+        self.ensure_fonts();
+
         // Assemble and load init.asm as PID 1
         let init_path = std::path::Path::new("programs/init.asm");
         let source = match std::fs::read_to_string(init_path) {
@@ -84,6 +87,25 @@ impl Vm {
         if !boot_cfg_path.exists() {
             let default_cfg = "init=init\nshell=shell\nservices=\n";
             let _ = std::fs::write(&boot_cfg_path, default_cfg);
+        }
+    }
+
+    /// Ensure font files are available in the VFS.
+    /// Copies built-in fonts (default, bold, wide) from the project fonts/ directory
+    /// into the VFS /lib/fonts/ directory if they don't already exist.
+    pub(super) fn ensure_fonts(&mut self) {
+        let fonts_dir = self.vfs.base_dir.join("lib").join("fonts");
+        let _ = std::fs::create_dir_all(&fonts_dir);
+
+        // Source font files are in the project's fonts/ directory
+        let src_dir = std::path::Path::new("fonts");
+        for font_name in &["default.fnt", "bold.fnt", "wide.fnt"] {
+            let dst = fonts_dir.join(font_name);
+            if !dst.exists() {
+                if let Ok(data) = std::fs::read(src_dir.join(font_name)) {
+                    let _ = std::fs::write(&dst, data);
+                }
+            }
         }
     }
 
