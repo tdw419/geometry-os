@@ -155,6 +155,20 @@ pub struct Vm {
     pub background_vms: Vec<BackgroundVm>,
     /// Next background VM ID to assign (monotonically increasing, 1-based).
     pub next_bg_vm_id: u32,
+
+    // ── Crash Recovery (Phase 104) ───────────────────────────────
+    /// Virtual address that caused the last segfault (0 if none).
+    /// Set by trigger_segfault_with_addr.
+    pub segfault_addr: u32,
+    /// Circular buffer of last 16 PC values executed (across all processes).
+    /// Used to reconstruct the instruction trace in core dumps.
+    pub pc_trace: [u32; 16],
+    /// Current write index into pc_trace (wraps around).
+    pub pc_trace_idx: usize,
+    /// True when a crash dialog is being displayed on screen.
+    pub crash_dialog_active: bool,
+    /// PID of the process whose crash dialog is displayed.
+    pub crash_dialog_pid: u32,
 }
 
 impl Default for Vm {
@@ -240,6 +254,11 @@ impl Vm {
             llm_config: None,
             background_vms: Vec::new(),
             next_bg_vm_id: 1,
+            segfault_addr: 0,
+            pc_trace: [0; 16],
+            pc_trace_idx: 0,
+            crash_dialog_active: false,
+            crash_dialog_pid: 0,
         }
     }
 
@@ -341,6 +360,11 @@ impl Vm {
         self.llm_config = None;
         self.background_vms.clear();
         self.next_bg_vm_id = 1;
+        self.segfault_addr = 0;
+        self.pc_trace = [0; 16];
+        self.pc_trace_idx = 0;
+        self.crash_dialog_active = false;
+        self.crash_dialog_pid = 0;
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -411,6 +435,11 @@ impl Vm {
 
         // Log the instruction fetch for the visual debugger
         let pc_addr = self.pc as usize;
+
+        // Record PC in circular trace buffer (Phase 104: Crash Recovery)
+        self.pc_trace[self.pc_trace_idx] = pc_addr as u32;
+        self.pc_trace_idx = (self.pc_trace_idx + 1) % self.pc_trace.len();
+
         self.log_access(pc_addr, MemAccessKind::Read);
 
         let opcode = self.fetch();
@@ -2091,7 +2120,9 @@ impl Vm {
                             let n_entries = self.ram[caps_addr] as usize;
                             let mut entry_offset = caps_addr + 1;
                             for _ in 0..n_entries {
-                                if entry_offset + 3 >= self.ram.len() { break; }
+                                if entry_offset + 3 >= self.ram.len() {
+                                    break;
+                                }
                                 let res_type = self.ram[entry_offset] as u8;
                                 let pat_addr = self.ram[entry_offset + 1] as usize;
                                 let pat_len = self.ram[entry_offset + 2] as usize;
@@ -2100,9 +2131,13 @@ impl Vm {
                                 // Read pattern string from RAM
                                 let mut pattern = String::new();
                                 for i in 0..pat_len {
-                                    if pat_addr + i >= self.ram.len() { break; }
+                                    if pat_addr + i >= self.ram.len() {
+                                        break;
+                                    }
                                     let ch = self.ram[pat_addr + i];
-                                    if ch == 0 { break; }
+                                    if ch == 0 {
+                                        break;
+                                    }
                                     if let Some(c) = char::from_u32(ch) {
                                         pattern.push(c);
                                     }
@@ -2126,7 +2161,9 @@ impl Vm {
 
                         if identity_map {
                             for (phys_page, pd_entry) in pd.iter_mut().enumerate().take(3) {
-                                if phys_page >= NUM_RAM_PAGES { break; }
+                                if phys_page >= NUM_RAM_PAGES {
+                                    break;
+                                }
                                 *pd_entry = phys_page as u32;
                                 if self.page_ref_count[phys_page] == 0 {
                                     self.page_ref_count[phys_page] = 1;
@@ -2138,7 +2175,9 @@ impl Vm {
                         } else {
                             for (vpage, pd_entry) in pd.iter_mut().enumerate().take(PROCESS_PAGES) {
                                 let parent_phys = start_page + vpage;
-                                if parent_phys >= NUM_RAM_PAGES { break; }
+                                if parent_phys >= NUM_RAM_PAGES {
+                                    break;
+                                }
                                 if vpage == 3 || parent_phys == 3 {
                                     *pd_entry = 3;
                                     self.page_ref_count[3] += 1;
@@ -2185,7 +2224,11 @@ impl Vm {
                             vmas: crate::vm::types::Process::default_vmas_for_process(),
                             brk_pos: PAGE_SIZE as u32,
                             custom_font: None,
-                            capabilities: if capabilities.is_empty() { None } else { Some(capabilities) },
+                            capabilities: if capabilities.is_empty() {
+                                None
+                            } else {
+                                Some(capabilities)
+                            },
                         });
                         self.ram[0xFFA] = pid;
                     }
@@ -2604,17 +2647,41 @@ print(r if r else '')";
 
         // Biome lookup: same mapping as world_desktop.asm color table at RAM[0x7000]
         let biome_names = [
-            "Deep Ocean", "Ocean", "Beach", "Desert", "Sandy Desert",
-            "Oasis", "Grassland", "Dark Grass", "Swamp", "Deep Swamp",
-            "Forest", "Dense Forest", "Mushroom Grove", "Mountain",
-            "Snowy Peak", "Tundra", "Lava Field", "Cooled Lava",
-            "Volcanic Rock", "Snowfield", "Packed Snow", "Fresh Snow",
-            "Coral Reef", "Ancient Ruins", "Crystal Cave", "Deep Crystal",
-            "Ash Wastes", "Deadlands", "Barren Deadlands",
-            "Mystic Grove", "Unknown", "Unknown",
+            "Deep Ocean",
+            "Ocean",
+            "Beach",
+            "Desert",
+            "Sandy Desert",
+            "Oasis",
+            "Grassland",
+            "Dark Grass",
+            "Swamp",
+            "Deep Swamp",
+            "Forest",
+            "Dense Forest",
+            "Mushroom Grove",
+            "Mountain",
+            "Snowy Peak",
+            "Tundra",
+            "Lava Field",
+            "Cooled Lava",
+            "Volcanic Rock",
+            "Snowfield",
+            "Packed Snow",
+            "Fresh Snow",
+            "Coral Reef",
+            "Ancient Ruins",
+            "Crystal Cave",
+            "Deep Crystal",
+            "Ash Wastes",
+            "Deadlands",
+            "Barren Deadlands",
+            "Mystic Grove",
+            "Unknown",
+            "Unknown",
         ];
-        let biome_idx = (px.wrapping_add(py.wrapping_mul(79007)).wrapping_mul(12345)
-            >> 27) as usize;
+        let biome_idx =
+            (px.wrapping_add(py.wrapping_mul(79007)).wrapping_mul(12345) >> 27) as usize;
         let biome_name = biome_names.get(biome_idx.min(31)).unwrap_or(&"Unknown");
 
         // Building list
@@ -2627,9 +2694,13 @@ print(r if r else '')";
             let name_addr = self.ram.get(base + 3).copied().unwrap_or(0) as usize;
             let mut name = String::new();
             for j in 0..12 {
-                if name_addr + j >= self.ram.len() { break; }
+                if name_addr + j >= self.ram.len() {
+                    break;
+                }
                 let ch = self.ram[name_addr + j];
-                if ch == 0 || ch > 127 { break; }
+                if ch == 0 || ch > 127 {
+                    break;
+                }
                 name.push(ch as u8 as char);
             }
             if !name.is_empty() {
@@ -2664,13 +2735,20 @@ print(r if r else '')";
             let name_addr = self.ram.get(base + 3).copied().unwrap_or(0) as usize;
             let mut name = String::new();
             for j in 0..12 {
-                if name_addr + j >= self.ram.len() { break; }
+                if name_addr + j >= self.ram.len() {
+                    break;
+                }
                 let ch = self.ram[name_addr + j];
-                if ch == 0 || ch > 127 { break; }
+                if ch == 0 || ch > 127 {
+                    break;
+                }
                 name.push(ch as u8 as char);
             }
             if !name.is_empty() {
-                sys.push_str(&format!("- Player is currently near the {} building\n", name));
+                sys.push_str(&format!(
+                    "- Player is currently near the {} building\n",
+                    name
+                ));
             }
         }
 
@@ -2708,8 +2786,16 @@ print(r if r else '')";
 
         let data_arg = format!("@{}", tmp_path);
         let mut curl_args: Vec<&str> = vec![
-            "-s", "-X", "POST", &base_url, "-d", &data_arg,
-            "-H", "Content-Type: application/json", "--max-time", "30",
+            "-s",
+            "-X",
+            "POST",
+            &base_url,
+            "-d",
+            &data_arg,
+            "-H",
+            "Content-Type: application/json",
+            "--max-time",
+            "30",
         ];
 
         let auth_header;
@@ -3173,6 +3259,178 @@ print(r if r else '')";
         }
 
         lines
+    }
+
+    // ── Crash Recovery (Phase 104) ────────────────────────────────
+
+    /// Write a core dump file to InodeFS for a segfaulted process.
+    /// Creates /var/core/ directory if needed, then writes PID.txt with:
+    /// PID, exit code, PC, faulting address, all 32 registers,
+    /// and the last 16 PC values from the instruction trace buffer.
+    /// Returns true if the core dump was written successfully.
+    pub fn write_core_dump(&mut self, proc_info: &types::Process) -> bool {
+        // Ensure /var/core/ directory exists
+        if self.inode_fs.resolve("/var").is_none() {
+            self.inode_fs.mkdir("/var");
+        }
+        if self.inode_fs.resolve("/var/core").is_none() {
+            self.inode_fs.mkdir("/var/core");
+        }
+
+        // Build core dump content as a string
+        let mut dump = String::new();
+        dump.push_str("=== CORE DUMP ===\n");
+        dump.push_str(&format!("PID: {}\n", proc_info.pid));
+        dump.push_str("Exit: segfault\n");
+        dump.push_str(&format!("PC: 0x{:04X}\n", proc_info.pc));
+        dump.push_str(&format!("Fault: 0x{:04X}\n", self.segfault_addr));
+        dump.push_str(&format!("Tick: {}\n", self.sched_tick));
+        dump.push_str("Registers:\n");
+        for i in 0..32 {
+            dump.push_str(&format!("  r{:02}: 0x{:08X}\n", i, proc_info.regs[i]));
+        }
+        dump.push_str("PC Trace (last 16, oldest first):\n");
+        let start = self.pc_trace_idx; // next write position = oldest
+        for i in 0..16 {
+            let idx = (start + i) % 16;
+            let pc = self.pc_trace[idx];
+            if pc != 0 {
+                dump.push_str(&format!("  {:2}: 0x{:04X}\n", i, pc));
+            }
+        }
+        dump.push_str("=== END DUMP ===\n");
+
+        // Convert string to u32 words (one ASCII char per word, null terminated)
+        let words: Vec<u32> = dump
+            .bytes()
+            .map(|b| b as u32)
+            .chain(std::iter::once(0))
+            .collect();
+
+        // Create the file
+        let path = format!("/var/core/{}.txt", proc_info.pid);
+        let ino = self.inode_fs.create(&path);
+        if ino == 0 {
+            return false;
+        }
+
+        // Write the data
+        let written = self.inode_fs.write_inode(ino, 0, &words);
+        written > 0
+    }
+
+    /// Render a crash dialog on the 256x256 screen showing segfault info.
+    /// Draws a dark red dialog box with white text for PID, PC, fault address.
+    /// Sets crash_dialog_active and crash_dialog_pid for host to check.
+    pub fn render_crash_dialog(&mut self, proc_info: &types::Process) {
+        let dx = 16u32;
+        let dy = 80u32;
+        let dw = 224u32;
+        let dh = 96u32;
+
+        // Dark background (0x1A1A2E)
+        for y in dy..dy + dh {
+            for x in dx..dx + dw {
+                if (x as usize) < 256 && (y as usize) < 256 {
+                    self.screen[y as usize * 256 + x as usize] = 0x1A1A2E;
+                }
+            }
+        }
+
+        // Red border (0xFF0000)
+        let border = 0xFF0000u32;
+        for x in dx..dx + dw {
+            if (x as usize) < 256 {
+                if (dy as usize) < 256 {
+                    self.screen[dy as usize * 256 + x as usize] = border;
+                }
+                let by = (dy + dh - 1) as usize;
+                if by < 256 {
+                    self.screen[by * 256 + x as usize] = border;
+                }
+            }
+        }
+        for y in dy..dy + dh {
+            if (y as usize) < 256 {
+                self.screen[y as usize * 256 + dx as usize] = border;
+                self.screen[y as usize * 256 + (dx + dw - 1) as usize] = border;
+            }
+        }
+
+        // Red title bar
+        for x in (dx + 1)..(dx + dw - 1) {
+            if (x as usize) < 256 {
+                self.screen[(dy + 1) as usize * 256 + x as usize] = 0xCC0000;
+            }
+        }
+
+        // Render text lines using pixel font (white on dark)
+        let white = 0xFFFFFFu32;
+        let gray = 0xAAAAAAu32;
+
+        // Line 1: "SEGFAULT" in title bar
+        let text_y = dy + 3;
+        for (i, ch) in b"SEGFAULT!".iter().enumerate() {
+            let tx = dx + 8 + (i as u32) * 10;
+            Self::render_char(&mut self.screen, *ch, tx, text_y, white);
+        }
+
+        // Line 2: PID
+        let pid_str = format!("PID: {}  Parent: {}", proc_info.pid, proc_info.parent_pid);
+        let text2_y = text_y + 18;
+        for (i, ch) in pid_str.bytes().enumerate() {
+            let tx = dx + 8 + (i as u32) * 8;
+            Self::render_char(&mut self.screen, ch, tx, text2_y, gray);
+        }
+
+        // Line 3: PC and fault address
+        let crash_str = format!(
+            "PC=0x{:04X}  FAULT=0x{:04X}",
+            proc_info.pc, self.segfault_addr
+        );
+        let text3_y = text2_y + 14;
+        for (i, ch) in crash_str.bytes().enumerate() {
+            let tx = dx + 8 + (i as u32) * 8;
+            Self::render_char(&mut self.screen, ch, tx, text3_y, white);
+        }
+
+        // Line 4: r0 value
+        let r0_str = format!("r0=0x{:08X}", proc_info.regs[0]);
+        let text4_y = text3_y + 14;
+        for (i, ch) in r0_str.bytes().enumerate() {
+            let tx = dx + 8 + (i as u32) * 8;
+            Self::render_char(&mut self.screen, ch, tx, text4_y, gray);
+        }
+
+        // Line 5: dismiss prompt
+        let text5_y = text4_y + 16;
+        for (i, ch) in b"Press any key to dismiss".iter().enumerate() {
+            let tx = dx + 8 + (i as u32) * 8;
+            if tx + 8 < 256 {
+                Self::render_char(&mut self.screen, *ch, tx, text5_y, 0x666666);
+            }
+        }
+
+        self.crash_dialog_active = true;
+        self.crash_dialog_pid = proc_info.pid;
+    }
+
+    /// Render a single 8x8 character glyph on the screen buffer.
+    fn render_char(screen: &mut [u32], ch: u8, x: u32, y: u32, color: u32) {
+        let glyph_idx = (ch as usize).min(127);
+        let glyph = &crate::font::GLYPHS[glyph_idx];
+        for row in 0..8u32 {
+            let row_bits = glyph[row as usize];
+            for col in 0..8u32 {
+                if row_bits & (0x80 >> col) != 0 {
+                    let px = x + col;
+                    let py = y + row;
+                    if (px as usize) < 256 && (py as usize) < 256 {
+                        screen[py as usize * 256 + px as usize] = color;
+                    }
+                }
+            }
+        }
     }
 }
 

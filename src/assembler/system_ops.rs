@@ -703,9 +703,7 @@ pub(super) fn try_parse(
             // Spawns a new process at the address in addr_reg with capabilities
             // specified by the capability list at caps_reg in RAM.
             if tokens.len() < 3 {
-                return Err(
-                    "SPAWNC requires 2 arguments: SPAWNC addr_reg, caps_reg".to_string(),
-                );
+                return Err("SPAWNC requires 2 arguments: SPAWNC addr_reg, caps_reg".to_string());
             }
             bytecode.push(0xA7);
             bytecode.push(parse_reg(tokens[1])? as u32);

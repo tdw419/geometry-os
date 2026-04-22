@@ -1,7 +1,7 @@
 // ── Phase 102: Capability System Tests ──────────────────────────────
 
-use geometry_os::vm::*;
 use geometry_os::vm::Vm;
+use geometry_os::vm::*;
 
 // ── Capability struct tests ──────────────────────────────────────
 
@@ -52,8 +52,16 @@ fn test_capability_allows_permissions() {
 
 #[test]
 fn test_check_path_capability_none_is_full_access() {
-    assert!(check_path_capability(&None, "/tmp/test", Capability::PERM_READ));
-    assert!(check_path_capability(&None, "/secret", Capability::PERM_WRITE));
+    assert!(check_path_capability(
+        &None,
+        "/tmp/test",
+        Capability::PERM_READ
+    ));
+    assert!(check_path_capability(
+        &None,
+        "/secret",
+        Capability::PERM_WRITE
+    ));
 }
 
 #[test]
@@ -63,9 +71,21 @@ fn test_check_path_capability_with_caps() {
         pattern: "/tmp/*".to_string(),
         permissions: Capability::PERM_READ,
     }]);
-    assert!(check_path_capability(&caps, "/tmp/file.txt", Capability::PERM_READ));
-    assert!(!check_path_capability(&caps, "/tmp/file.txt", Capability::PERM_WRITE));
-    assert!(!check_path_capability(&caps, "/var/log", Capability::PERM_READ));
+    assert!(check_path_capability(
+        &caps,
+        "/tmp/file.txt",
+        Capability::PERM_READ
+    ));
+    assert!(!check_path_capability(
+        &caps,
+        "/tmp/file.txt",
+        Capability::PERM_WRITE
+    ));
+    assert!(!check_path_capability(
+        &caps,
+        "/var/log",
+        Capability::PERM_READ
+    ));
 }
 
 #[test]
@@ -82,10 +102,26 @@ fn test_check_path_capability_multiple_caps() {
             permissions: Capability::PERM_READ,
         },
     ]);
-    assert!(check_path_capability(&caps, "/tmp/art/pic.raw", Capability::PERM_WRITE));
-    assert!(check_path_capability(&caps, "/lib/fonts/mono.bdf", Capability::PERM_READ));
-    assert!(!check_path_capability(&caps, "/lib/fonts/mono.bdf", Capability::PERM_WRITE));
-    assert!(!check_path_capability(&caps, "/bin/shell", Capability::PERM_READ));
+    assert!(check_path_capability(
+        &caps,
+        "/tmp/art/pic.raw",
+        Capability::PERM_WRITE
+    ));
+    assert!(check_path_capability(
+        &caps,
+        "/lib/fonts/mono.bdf",
+        Capability::PERM_READ
+    ));
+    assert!(!check_path_capability(
+        &caps,
+        "/lib/fonts/mono.bdf",
+        Capability::PERM_WRITE
+    ));
+    assert!(!check_path_capability(
+        &caps,
+        "/bin/shell",
+        Capability::PERM_READ
+    ));
 }
 
 #[test]
@@ -187,7 +223,11 @@ fn test_spawnc_no_capabilities_is_none() {
 
     assert!(vm.processes[0].capabilities.is_none());
     // No caps = full access
-    assert!(check_path_capability(&vm.processes[0].capabilities, "/anything", Capability::PERM_WRITE));
+    assert!(check_path_capability(
+        &vm.processes[0].capabilities,
+        "/anything",
+        Capability::PERM_WRITE
+    ));
 }
 
 #[test]
@@ -204,11 +244,31 @@ fn test_sandboxed_paint_capabilities() {
             permissions: Capability::PERM_READ,
         },
     ]);
-    assert!(check_path_capability(&caps, "/tmp/art/canvas.raw", Capability::PERM_WRITE));
-    assert!(check_path_capability(&caps, "/lib/fonts/mono.bdf", Capability::PERM_READ));
-    assert!(!check_path_capability(&caps, "/lib/fonts/mono.bdf", Capability::PERM_WRITE));
-    assert!(!check_path_capability(&caps, "/bin/shell", Capability::PERM_READ));
-    assert!(!check_path_capability(&caps, "/tmp/other", Capability::PERM_WRITE));
+    assert!(check_path_capability(
+        &caps,
+        "/tmp/art/canvas.raw",
+        Capability::PERM_WRITE
+    ));
+    assert!(check_path_capability(
+        &caps,
+        "/lib/fonts/mono.bdf",
+        Capability::PERM_READ
+    ));
+    assert!(!check_path_capability(
+        &caps,
+        "/lib/fonts/mono.bdf",
+        Capability::PERM_WRITE
+    ));
+    assert!(!check_path_capability(
+        &caps,
+        "/bin/shell",
+        Capability::PERM_READ
+    ));
+    assert!(!check_path_capability(
+        &caps,
+        "/tmp/other",
+        Capability::PERM_WRITE
+    ));
 }
 
 #[test]
@@ -237,9 +297,17 @@ fn test_capability_read_only_denies_write() {
         permissions: Capability::PERM_READ,
     }]);
     // Can read
-    assert!(check_path_capability(&caps, "/tmp/readonly/doc.txt", Capability::PERM_READ));
+    assert!(check_path_capability(
+        &caps,
+        "/tmp/readonly/doc.txt",
+        Capability::PERM_READ
+    ));
     // Cannot write
-    assert!(!check_path_capability(&caps, "/tmp/readonly/doc.txt", Capability::PERM_WRITE));
+    assert!(!check_path_capability(
+        &caps,
+        "/tmp/readonly/doc.txt",
+        Capability::PERM_WRITE
+    ));
 }
 
 #[test]
@@ -249,6 +317,14 @@ fn test_capability_write_only_denies_read() {
         pattern: "/tmp/writeonly/*".to_string(),
         permissions: Capability::PERM_WRITE,
     }]);
-    assert!(!check_path_capability(&caps, "/tmp/writeonly/log.txt", Capability::PERM_READ));
-    assert!(check_path_capability(&caps, "/tmp/writeonly/log.txt", Capability::PERM_WRITE));
+    assert!(!check_path_capability(
+        &caps,
+        "/tmp/writeonly/log.txt",
+        Capability::PERM_READ
+    ));
+    assert!(check_path_capability(
+        &caps,
+        "/tmp/writeonly/log.txt",
+        Capability::PERM_WRITE
+    ));
 }

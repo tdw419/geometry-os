@@ -141,6 +141,9 @@ impl Vm {
             }
         }
 
+        // Save crash PID before restoring parent state
+        let new_crash_pid = self.segfault_pid;
+
         self.pc = saved_pc;
         self.regs = saved_regs;
         self.halted = saved_halted;
@@ -149,7 +152,8 @@ impl Vm {
         self.current_page_dir = saved_page_dir;
         self.current_vmas = saved_vmas;
         self.segfault = saved_segfault;
-        self.segfault_pid = saved_segfault_pid;
+        // Keep the crash PID visible to parent process
+        self.segfault_pid = new_crash_pid;
         self.current_pid = saved_current_pid;
         self.yielded = false;
         self.sleep_frames = 0;
@@ -159,6 +163,21 @@ impl Vm {
 
         procs.extend(std::mem::take(&mut self.processes));
         self.processes = procs;
+
+        // Phase 104: Crash Recovery
+        // After restoring state, check if a new segfault occurred this tick
+        // and write core dump + render crash dialog for the crashed process.
+        if new_crash_pid != 0 && new_crash_pid != saved_segfault_pid {
+            if let Some(proc) = self
+                .processes
+                .iter()
+                .find(|p| p.pid == new_crash_pid)
+                .cloned()
+            {
+                self.write_core_dump(&proc);
+                self.render_crash_dialog(&proc);
+            }
+        }
     }
 
     /// Count active (non-halted) child processes

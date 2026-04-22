@@ -752,8 +752,10 @@ pub fn render_fullscreen_map(
                             // Check if this pixel falls within the cropped region
                             let crop_px = px - src_offset as i32;
                             let crop_py = py - src_offset as i32;
-                            if crop_px < 0 || crop_px >= src_region as i32
-                                || crop_py < 0 || crop_py >= src_region as i32
+                            if crop_px < 0
+                                || crop_px >= src_region as i32
+                                || crop_py < 0
+                                || crop_py >= src_region as i32
                             {
                                 continue;
                             }
@@ -786,17 +788,35 @@ pub fn render_fullscreen_map(
     let cam_y = vm.ram.get(0x7801).copied().unwrap_or(0);
     let zoom = vm.ram.get(0x7812).copied().unwrap_or(2);
     render_text(buffer, sidebar_x + 4, 4, "MAP VIEW", hud_bright);
-    render_text(buffer, sidebar_x + 4, 20, &format!("cam ({},{})", cam_x, cam_y), hud_fg);
+    render_text(
+        buffer,
+        sidebar_x + 4,
+        20,
+        &format!("cam ({},{})", cam_x, cam_y),
+        hud_fg,
+    );
     render_text(buffer, sidebar_x + 4, 34, &format!("zoom {}", zoom), hud_fg);
 
     // Player position
     let px = vm.ram.get(0x7808).copied().unwrap_or(0);
     let py = vm.ram.get(0x7809).copied().unwrap_or(0);
-    render_text(buffer, sidebar_x + 4, 54, &format!("player ({},{})", px, py), hud_fg);
+    render_text(
+        buffer,
+        sidebar_x + 4,
+        54,
+        &format!("player ({},{})", px, py),
+        hud_fg,
+    );
 
     // Building count
     let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0).min(32);
-    render_text(buffer, sidebar_x + 4, 74, &format!("buildings {}", bldg_count), hud_fg);
+    render_text(
+        buffer,
+        sidebar_x + 4,
+        74,
+        &format!("buildings {}", bldg_count),
+        hud_fg,
+    );
 
     // Building list
     for i in 0..bldg_count as usize {
@@ -807,9 +827,13 @@ pub fn render_fullscreen_map(
 
         let mut name = String::new();
         for j in 0..12 {
-            if name_addr + j >= vm.ram.len() { break; }
+            if name_addr + j >= vm.ram.len() {
+                break;
+            }
             let ch = vm.ram[name_addr + j];
-            if ch == 0 || ch > 127 { break; }
+            if ch == 0 || ch > 127 {
+                break;
+            }
             name.push(ch as u8 as char);
         }
 
@@ -818,15 +842,39 @@ pub fn render_fullscreen_map(
             // Highlight if player is near
             let dist = (bx as i32 - px as i32).abs() + (by as i32 - py as i32).abs();
             let color = if dist < 8 { 0x44FF44 } else { hud_fg };
-            render_text(buffer, sidebar_x + 4, y_pos, &format!("{} ({},{})", name, bx, by), color);
+            render_text(
+                buffer,
+                sidebar_x + 4,
+                y_pos,
+                &format!("{} ({},{})", name, bx, by),
+                color,
+            );
         }
     }
 
     // Controls help at bottom of sidebar
-    render_text(buffer, sidebar_x + 4, HEIGHT - 80, "WASD/arrows: move", 0x555566);
-    render_text(buffer, sidebar_x + 4, HEIGHT - 64, "drag: pan map", 0x555566);
+    render_text(
+        buffer,
+        sidebar_x + 4,
+        HEIGHT - 80,
+        "WASD/arrows: move",
+        0x555566,
+    );
+    render_text(
+        buffer,
+        sidebar_x + 4,
+        HEIGHT - 64,
+        "drag: pan map",
+        0x555566,
+    );
     render_text(buffer, sidebar_x + 4, HEIGHT - 48, "scroll: zoom", 0x555566);
-    render_text(buffer, sidebar_x + 4, HEIGHT - 32, "dblclick: enter", 0x555566);
+    render_text(
+        buffer,
+        sidebar_x + 4,
+        HEIGHT - 32,
+        "dblclick: enter",
+        0x555566,
+    );
     render_text(buffer, sidebar_x + 4, HEIGHT - 16, "Esc: exit", 0x555566);
 }
 

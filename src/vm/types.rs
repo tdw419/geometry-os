@@ -423,7 +423,9 @@ pub fn check_path_capability(caps: &Option<Vec<Capability>>, path: &str, perm: u
         None => true, // No capability list = full access
         Some(cap_list) => {
             // Must find at least one matching capability that grants the permission
-            cap_list.iter().any(|c| c.matches_path(path) && c.allows(perm))
+            cap_list
+                .iter()
+                .any(|c| c.matches_path(path) && c.allows(perm))
         }
     }
 }

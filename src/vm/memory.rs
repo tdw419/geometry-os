@@ -250,9 +250,15 @@ impl Vm {
         }
     }
 
-    /// Trigger a segfault: set flag and halt the process.
+    /// Trigger a segfault: set flag, capture faulting address, and halt the process.
     pub(super) fn trigger_segfault(&mut self) {
         self.segfault = true;
         self.halted = true;
+    }
+
+    /// Trigger a segfault with the faulting virtual address.
+    pub(super) fn trigger_segfault_with_addr(&mut self, fault_addr: u32) {
+        self.segfault_addr = fault_addr;
+        self.trigger_segfault();
     }
 }

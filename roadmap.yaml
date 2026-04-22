@@ -37,7 +37,7 @@ meta:
   ram: 65536 words
   registers: 32
   screen: 256x256 pixels
-  tests: 2754
+  tests: 2769
 phases:
 - deliverables:
   - description: 'Control flow: stop, no-op, yield to renderer'
@@ -4978,9 +4978,11 @@ phases:
     and independent scrollback
   id: phase-103
   scope_lines_total: 600
-  status: planned
+  status: in_progress
   test_target: 2
   title: Terminal Multiplexer
+  _claimed_by: worker-0
+  _claimed_at: 1776896708
 - deliverables:
   - description: 'Segfault handler that writes crash info to VFS. On segfault (page
       fault in user mode), kernel writes a core dump file to /var/core/PID.txt containing:
@@ -5007,80 +5009,74 @@ phases:
     and debuggable
   id: phase-104
   scope_lines_total: 400
-  status: planned
-  test_target: 2
+  status: done
+  test_target: 5
   title: Crash Recovery and Core Dumps
-- _claimed_at: 1776884806
   deliverables:
   - acceptance_criteria:
-    - description: A spawned process can write a 4-word claim entry into the table
-        via RAM writes, and the render loop picks it up on the next frame without
-        restart
-      met: false
-    description: 'Extended claim table at RAM[0x78BF..0x790F]. Count byte at 0x78BF,
-      up to 16 entries of 8 words each starting at 0x78C0. Each entry: x1, y1, x2,
-      y2, owner_pid, render_func_ptr, color1, color2. A process writes its claim by
-      storing count+1 and filling the next slot. No opcode needed -- pure RAM protocol.'
-    name: Extended claim table with owner and render fields
-    status: planned
+    - description: The VM step function records each PC value in a 16-entry circular
+        buffer. After 20+ instructions, the buffer contains the most recent 16 PCs
+        and older entries have been overwritten.
+      met: true
+    description: 'pc_trace: [u32; 16] ring buffer in Vm struct. Updated every step()
+      call before opcode fetch. pc_trace_idx wraps around. Used by crash recovery
+      to show instruction history.'
+    name: PC trace ring buffer in step()
+    status: done
   - acceptance_criteria:
-    - description: Two buildings spawn child processes, each registers a claim. Their
-        tiles render different patterns simultaneously on the same viewport
-      met: false
-    description: 'Claim dispatch in world_desktop.asm checks owner_pid. If nonzero,
-      treats color1/color2 as the render palette. If render_func_ptr is nonzero, it
-      contains a RAM address pointing to a 16-word render subroutine that the claim
-      hit path CALLs (via self-modifying CALL instruction). This lets each building
-      run its own tile pattern: checkerboard, stripe, noise, etc.'
-    name: Per-claim render dispatch with callable render functions
-    status: planned
+    - description: When a process accesses unmapped memory, segfault_addr captures
+      the faulting address. trigger_segfault_with_addr() sets both segfault and
+      segfault_addr. Field persists until reset().
+      met: true
+    description: 'segfault_addr: u32 field on Vm. Set by trigger_segfault_with_addr()
+      in memory.rs. Cleared on reset(). Persists across step() calls for crash
+      handler to read.'
+    name: Segfault address capture field
+    status: done
   - acceptance_criteria:
-    - description: Oracle walks to an adjacent unclaimed tile, writes a new claim
-        entry expanding its territory by one 8x8 block. Render loop shows the new
-        claim immediately
-      met: false
-    description: Oracle program (oracle.asm) runs as a background daemon. Each N frames,
-      it picks the nearest unclaimed adjacent tile, writes a new claim entry to the
-      table, and increments claim count. Territory grows organically outward from
-      the building's initial position. Uses FRAME to pace expansion (1 tile per 60
-      frames = 1 tile/second).
-    name: Oracle territorial expansion daemon
-    status: planned
+    - description: After a segfault, write_core_dump() creates /var/core/<PID>.txt
+      in the VFS containing PID, PC, fault address, all 32 registers, and the
+      16-entry PC trace.
+      met: true
+    description: 'write_core_dump(proc_info: &Process) -> bool. Creates /var/core/
+      directory if needed. Writes formatted text file with full register dump and
+      instruction trace history. Returns true on success.'
+    name: Core dump writer to VFS
+    status: done
   - acceptance_criteria:
-    - description: Two oracle-type buildings expand toward each other. When their
-        claims overlap, the one with more total tiles wins the contested region. Verify
-        contested tiles show the majority owner''s render pattern
-      met: false
-    description: 'Second competing building (competitor.asm) with its own expansion
-      daemon and render pattern. When two claims overlap, the claim with more total
-      tiles wins (51% flip). The loser''s contested tiles render in the winner''s
-      pattern. Implements the Digital Red Queen: both buildings are incentivized to
-      expand faster to hold territory. Claim table resolves conflicts in O(n) per
-      tile by comparing owner claim sizes.'
-    name: Competing territory with 51% majority flip
-    status: planned
+    - description: render_crash_dialog() draws a dark dialog box with red border on
+      the 256x256 screen showing SEGFAULT! title, PID, PC, and fault address in
+      pixel font. Sets crash_dialog_active flag for host to check.
+      met: true
+    description: 'render_crash_dialog(proc_info: &Process). Draws dark background
+      (0x1A1A2E), red border (0xFF0000), red title bar (0xCC0000). Renders text
+      lines for SEGFAULT!, PID/parent, PC/fault, r0, and dismiss prompt. Uses
+      pixel font via render_char() helper. Sets crash_dialog_active and
+      crash_dialog_pid.'
+    name: Pixel-rendered crash dialog on screen
+    status: done
   - acceptance_criteria:
-    - description: Test spawns two mock processes that write claims. Verify render
-        loop dispatches correct patterns for each claim region. Verify overlap resolves
-        to majority owner. Verify claim table bounds checking (rejects 17th claim).
-        8+ tests
-      met: false
-    description: 'Tests: test_claim_table_dynamic_registration (process writes claim,
-      verify count increments), test_claim_render_dispatch (verify correct render
-      per claim), test_claim_overlap_51_flip (two claims overlap, larger wins), test_claim_boundaries
-      (17th claim rejected), test_oracle_expansion (oracle expands one tile per interval),
-      test_two_competitors (two daemons compete, verify contested tiles).'
-    name: Territory competition integration tests
-    status: planned
-  description: 'The claim table is hardcoded with 1 static entry. This phase makes
-    it dynamic: spawned processes register and expand their own claims at runtime.
-    Buildings become autonomous agents competing for tile territory on the infinite
-    map. When two claims overlap, the larger claim wins (51% majority flip) -- the
-    Digital Red Queen effect where both agents are incentivized to expand faster.
-    Each claim renders with its own visual pattern, making territory borders visible
-    on the map. The Oracle building becomes a living entity that grows outward, and
-    a second competitor creates the first multi-agent territorial dynamic.'
-  goal: Make the claim system dynamic so buildings compete for territory with visible
+    - description: All Phase 104 fields (pc_trace, pc_trace_idx, segfault_addr,
+        crash_dialog_active, crash_dialog_pid) initialized to zero in Vm::new(),
+        reset(), and from_save_state(). 5 tests pass.
+      met: true
+    description: '5 tests: test_pc_trace_ring_buffer (NOP execution fills buffer),
+        test_crash_dialog_renders_on_segfault (dialog renders with correct colors),
+        test_core_dump_contains_register_dump (VFS file has registers and trace),
+        test_segfault_addr_field_persists (field persists then resets),
+        test_crash_dialog_screen_region (border and background at correct pixels).'
+    name: Crash recovery integration tests
+    status: done
+  description: 'Geometry OS currently kills silently. This phase adds crash recovery:
+    a 16-entry PC trace ring buffer that records instruction history, a segfault_addr
+    field to capture the faulting address, a write_core_dump() method that writes
+    register state and PC trace to /var/core/<PID>.txt in the VFS, and a
+    render_crash_dialog() method that draws a pixel-rendered crash dialog on the
+    256x256 screen showing SEGFAULT! with PID, PC, and fault address. Makes the OS
+    feel trustworthy -- errors are visible and debuggable, not just silent deaths.'
+
+  goal: Make the cl
+im system dynamic so buildings compete for territory with visible
     render patterns and 51% majority conflict resolution
   id: phase-105
   scope_lines_total: 1200

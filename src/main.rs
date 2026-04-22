@@ -1518,8 +1518,7 @@ fn main() {
                                 if let Some(path) = parts.get(1) {
                                     match std::fs::read_to_string(path) {
                                         Ok(source) => {
-                                            let mut pp =
-                                                crate::preprocessor::Preprocessor::new();
+                                            let mut pp = crate::preprocessor::Preprocessor::new();
                                             let preprocessed = pp.preprocess(&source);
                                             match crate::assembler::assemble(
                                                 &preprocessed,
@@ -1528,8 +1527,7 @@ fn main() {
                                                 Ok(asm_result) => {
                                                     let ram_len = vm.ram.len();
                                                     let base = crate::render::CANVAS_BYTECODE_ADDR;
-                                                    for v in vm.ram
-                                                        [base..ram_len.min(base + 8192)]
+                                                    for v in vm.ram[base..ram_len.min(base + 8192)]
                                                         .iter_mut()
                                                     {
                                                         *v = 0;
@@ -1565,10 +1563,7 @@ fn main() {
                                             }
                                         }
                                         Err(e) => {
-                                            response.push_str(&format!(
-                                                "[error: {}]\n",
-                                                e
-                                            ));
+                                            response.push_str(&format!("[error: {}]\n", e));
                                         }
                                     }
                                 } else {
@@ -1707,10 +1702,8 @@ fn main() {
                                                     ) {
                                                         Ok(asm_result) => {
                                                             let ram_len = vm.ram.len();
-                                                            for v in vm.ram
-                                                                [base_addr
-                                                                    ..ram_len
-                                                                        .min(base_addr + 8192)]
+                                                            for v in vm.ram[base_addr
+                                                                ..ram_len.min(base_addr + 8192)]
                                                                 .iter_mut()
                                                             {
                                                                 *v = 0;
@@ -2017,14 +2010,17 @@ fn main() {
                         let mut pp = crate::preprocessor::Preprocessor::new();
                         let preprocessed = pp.preprocess(&source);
                         let base_addr = crate::render::CANVAS_BYTECODE_ADDR;
-                        if let Ok(asm_result) = crate::assembler::assemble(&preprocessed, base_addr) {
+                        if let Ok(asm_result) = crate::assembler::assemble(&preprocessed, base_addr)
+                        {
                             let ram_len = vm.ram.len();
                             for v in vm.ram[base_addr..ram_len.min(base_addr + 8192)].iter_mut() {
                                 *v = 0;
                             }
                             for (idx, &word) in asm_result.pixels.iter().enumerate() {
                                 let addr = base_addr + idx;
-                                if addr < ram_len { vm.ram[addr] = word; }
+                                if addr < ram_len {
+                                    vm.ram[addr] = word;
+                                }
                             }
                             vm.pc = base_addr as u32;
                             vm.halted = false;
@@ -2114,8 +2110,12 @@ fn main() {
 
         // Write zoom level and map flags to RAM every frame when in map mode
         if fullscreen_map {
-            if (0x7812) < vm.ram.len() { vm.ram[0x7812] = zoom_level; }
-            if (0x7813) < vm.ram.len() { vm.ram[0x7813] = 1; }
+            if (0x7812) < vm.ram.len() {
+                vm.ram[0x7812] = zoom_level;
+            }
+            if (0x7813) < vm.ram.len() {
+                vm.ram[0x7813] = 1;
+            }
         }
 
         // ── Render ───────────────────────────────────────────────
@@ -2183,12 +2183,17 @@ fn main() {
                             let map_display_size = 768usize;
                             let map_offset = (map_display_size - src_region * scale) / 2;
                             // Convert: (mx - map_offset) / scale + src_offset
-                            let sx = ((mx as i32 - map_offset as i32).max(0) / scale as i32) + src_offset as i32;
-                            let sy = ((my as i32 - map_offset as i32).max(0) / scale as i32) + src_offset as i32;
+                            let sx = ((mx as i32 - map_offset as i32).max(0) / scale as i32)
+                                + src_offset as i32;
+                            let sy = ((my as i32 - map_offset as i32).max(0) / scale as i32)
+                                + src_offset as i32;
                             (sx.min(255), sy.min(255))
                         } else {
                             // Normal: VM screen at (VM_SCREEN_X, VM_SCREEN_Y)
-                            (mx as i32 - VM_SCREEN_X as i32, my as i32 - VM_SCREEN_Y as i32)
+                            (
+                                mx as i32 - VM_SCREEN_X as i32,
+                                my as i32 - VM_SCREEN_Y as i32,
+                            )
                         };
 
                         if vm_sx >= 0 && vm_sx < 256 && vm_sy >= 0 && vm_sy < 256 {
@@ -2200,7 +2205,8 @@ fn main() {
                             let click_world_y = vm_sy / 4 + cam_y;
 
                             // Search building table for a hit
-                            let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0).min(32) as usize;
+                            let bldg_count =
+                                vm.ram.get(0x7580).copied().unwrap_or(0).min(32) as usize;
                             for i in 0..bldg_count {
                                 let base = 0x7500 + i * 4;
                                 let bx = vm.ram.get(base).copied().unwrap_or(0) as i32;
@@ -2208,15 +2214,21 @@ fn main() {
                                 let name_addr = vm.ram.get(base + 3).copied().unwrap_or(0) as usize;
 
                                 // Building is 6 world-tiles wide (24px / 4 = 6), 8 tall (32px / 4 = 8)
-                                if click_world_x >= bx && click_world_x < bx + 6
-                                    && click_world_y >= by && click_world_y < by + 8
+                                if click_world_x >= bx
+                                    && click_world_x < bx + 6
+                                    && click_world_y >= by
+                                    && click_world_y < by + 8
                                 {
                                     // Read building name
                                     let mut app_name = String::new();
                                     for j in 0..16 {
-                                        if name_addr + j >= vm.ram.len() { break; }
+                                        if name_addr + j >= vm.ram.len() {
+                                            break;
+                                        }
                                         let ch = vm.ram[name_addr + j];
-                                        if ch == 0 || ch > 127 { break; }
+                                        if ch == 0 || ch > 127 {
+                                            break;
+                                        }
                                         app_name.push(ch as u8 as char);
                                     }
 
@@ -2225,28 +2237,43 @@ fn main() {
                                         let prog_path = format!("programs/{}.asm", app_name);
                                         match std::fs::read_to_string(&prog_path) {
                                             Ok(source) => {
-                                                let mut pp = crate::preprocessor::Preprocessor::new();
+                                                let mut pp =
+                                                    crate::preprocessor::Preprocessor::new();
                                                 let preprocessed = pp.preprocess(&source);
                                                 let base_addr = crate::render::CANVAS_BYTECODE_ADDR;
-                                                match crate::assembler::assemble(&preprocessed, base_addr) {
+                                                match crate::assembler::assemble(
+                                                    &preprocessed,
+                                                    base_addr,
+                                                ) {
                                                     Ok(asm_result) => {
                                                         let ram_len = vm.ram.len();
-                                                        for v in vm.ram[base_addr..ram_len.min(base_addr + 8192)].iter_mut() {
+                                                        for v in vm.ram[base_addr
+                                                            ..ram_len.min(base_addr + 8192)]
+                                                            .iter_mut()
+                                                        {
                                                             *v = 0;
                                                         }
-                                                        for (idx, &word) in asm_result.pixels.iter().enumerate() {
+                                                        for (idx, &word) in
+                                                            asm_result.pixels.iter().enumerate()
+                                                        {
                                                             let addr = base_addr + idx;
-                                                            if addr < ram_len { vm.ram[addr] = word; }
+                                                            if addr < ram_len {
+                                                                vm.ram[addr] = word;
+                                                            }
                                                         }
                                                         vm.pc = base_addr as u32;
                                                         vm.halted = false;
                                                         canvas_assembled = true;
                                                         is_running = true;
                                                         hit_breakpoint = false;
-                                                        status_msg = format!("[LAUNCHED: {} (dbl-click)]", app_name);
+                                                        status_msg = format!(
+                                                            "[LAUNCHED: {} (dbl-click)]",
+                                                            app_name
+                                                        );
                                                         // Track that we launched from map so we can return
                                                         if fullscreen_map {
-                                                            launched_from_map = Some(app_name.clone());
+                                                            launched_from_map =
+                                                                Some(app_name.clone());
                                                         }
                                                     }
                                                     Err(e) => {

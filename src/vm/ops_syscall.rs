@@ -59,7 +59,9 @@ impl Vm {
                     // Phase 102: Capability enforcement on file open
                     if let Some(ref path) = path_str {
                         let pid = self.current_pid;
-                        let caps = self.processes.iter()
+                        let caps = self
+                            .processes
+                            .iter()
                             .find(|p| p.pid == pid)
                             .and_then(|p| p.capabilities.clone());
                         // mode 0 = read, 1 = write

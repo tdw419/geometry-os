@@ -15088,3 +15088,224 @@ fn test_cron_daemon_multiple_entries() {
     assert_eq!(vm.ram[0x4048], 101, "entry 1 name[4] = 'e'");
     assert_eq!(vm.ram[0x4049], 114, "entry 1 name[5] = 'r'");
 }
+
+// ── Phase 104: Crash Recovery Tests ────────────────────────────────
+
+#[test]
+fn test_pc_trace_ring_buffer() {
+    // Verify that pc_trace records PC values in a ring buffer
+    let mut vm = Vm::new();
+
+    // Run 15 NOPs + HALT
+    for i in 0..15 {
+        vm.ram[i] = 0x01; // NOP
+    }
+    vm.ram[15] = 0x00; // HALT
+    vm.halted = false;
+
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(
+        vm.pc_trace.len() == 16,
+        "pc_trace buffer should be 16 entries"
+    );
+    let has_nonzero = vm.pc_trace.iter().any(|&pc| pc != 0);
+    assert!(
+        has_nonzero,
+        "pc_trace should have non-zero entries after execution"
+    );
+}
+
+#[test]
+fn test_crash_dialog_renders_on_segfault() {
+    // Manually trigger a segfault scenario and verify crash dialog renders.
+    use crate::vm::types::Process;
+    let mut vm = Vm::new();
+
+    // Create a process that has segfaulted
+    let mut proc = Process::new(1, 0, 0x100);
+    proc.pc = 0x103;
+    let proc_ref = proc.clone();
+    vm.processes.push(proc);
+
+    // Manually set segfault state
+    vm.segfault_pid = 1;
+    vm.segfault = true;
+    vm.segfault_addr = 0xFE00;
+
+    // Write core dump first (use clone to avoid borrow conflict)
+    let result = vm.write_core_dump(&proc_ref);
+    assert!(result, "Core dump should succeed");
+
+    // Verify VFS file was created
+    let ino = vm.inode_fs.resolve("/var/core/1.txt");
+    assert!(
+        ino.is_some(),
+        "Core dump file /var/core/1.txt should exist in VFS"
+    );
+
+    // Render the crash dialog
+    vm.render_crash_dialog(&proc_ref);
+
+    // Verify crash dialog is rendered on screen
+    let has_dark_bg = vm.screen.iter().any(|&pixel| pixel == 0x1A1A2E);
+    assert!(
+        has_dark_bg,
+        "Crash dialog background (0x1A1A2E) should be rendered"
+    );
+
+    let has_red_border = vm.screen.iter().any(|&pixel| pixel == 0xFF0000);
+    assert!(
+        has_red_border,
+        "Crash dialog should have red border (0xFF0000)"
+    );
+
+    assert!(vm.crash_dialog_active, "crash_dialog_active should be true");
+    assert_eq!(vm.crash_dialog_pid, 1, "crash_dialog_pid should be 1");
+}
+
+#[test]
+fn test_core_dump_contains_register_dump() {
+    // Verify the core dump VFS file contains register values and PC trace.
+    use crate::vm::types::Process;
+    let mut vm = Vm::new();
+
+    // Create a process with specific register values
+    let mut proc = Process::new(7, 0, 0x1234);
+    proc.regs[0] = 0xDEADBEEF;
+    proc.regs[1] = 0x12345678;
+    proc.regs[5] = 42;
+    vm.processes.push(proc);
+
+    vm.segfault_addr = 0xABCD;
+
+    // Populate some PC trace entries
+    vm.pc_trace[0] = 0x100;
+    vm.pc_trace[1] = 0x200;
+    vm.pc_trace[2] = 0x300;
+    vm.pc_trace_idx = 3;
+
+    let proc_snapshot = vm.processes[0].clone();
+    let result = vm.write_core_dump(&proc_snapshot);
+    assert!(result, "Core dump should succeed");
+
+    // Read back the core dump from VFS
+    let ino = vm
+        .inode_fs
+        .resolve("/var/core/7.txt")
+        .expect("core dump file should exist");
+    let mut buf = vec![0u32; 4096];
+    let n = vm.inode_fs.read_inode(ino, 0, &mut buf);
+    assert!(n > 0, "Should read non-zero bytes from core dump");
+
+    // Convert to string
+    let mut dump_text = String::new();
+    for i in 0..n as usize {
+        if buf[i] == 0 {
+            break;
+        }
+        dump_text.push((buf[i] & 0xFF) as u8 as char);
+    }
+
+    // Verify core dump contents
+    assert!(
+        dump_text.contains("CORE DUMP"),
+        "Should contain CORE DUMP header, got: {}",
+        &dump_text[..dump_text.len().min(200)]
+    );
+    assert!(
+        dump_text.contains("PID: 7"),
+        "Should contain PID, got: {}",
+        &dump_text[..dump_text.len().min(200)]
+    );
+    assert!(
+        dump_text.contains("0x1234"),
+        "Should contain PC, got: {}",
+        &dump_text[..dump_text.len().min(200)]
+    );
+    assert!(
+        dump_text.contains("0xABCD"),
+        "Should contain fault address, got: {}",
+        &dump_text[..dump_text.len().min(200)]
+    );
+    assert!(
+        dump_text.contains("DEADBEEF"),
+        "Should contain register r0 value"
+    );
+    assert!(
+        dump_text.contains("12345678"),
+        "Should contain register r1 value"
+    );
+    assert!(
+        dump_text.contains("0x0100"),
+        "Should contain PC trace entry"
+    );
+}
+
+#[test]
+fn test_segfault_addr_field_persists() {
+    // Verify segfault_addr is properly set and persists.
+    let mut vm = Vm::new();
+    assert_eq!(vm.segfault_addr, 0, "Initial segfault_addr should be 0");
+
+    vm.segfault_addr = 0xBEEF;
+    assert_eq!(vm.segfault_addr, 0xBEEF, "segfault_addr should persist");
+
+    // After reset, should be cleared
+    vm.reset();
+    assert_eq!(
+        vm.segfault_addr, 0,
+        "segfault_addr should be cleared after reset"
+    );
+    assert_eq!(
+        vm.crash_dialog_active, false,
+        "crash_dialog_active should be false after reset"
+    );
+    assert_eq!(
+        vm.crash_dialog_pid, 0,
+        "crash_dialog_pid should be 0 after reset"
+    );
+}
+
+#[test]
+fn test_crash_dialog_screen_region() {
+    // Verify the crash dialog renders in the expected screen region.
+    use crate::vm::types::Process;
+    let mut vm = Vm::new();
+
+    let proc = Process::new(42, 0, 0x5678);
+    let proc_ref = proc.clone();
+    vm.processes.push(proc);
+    vm.segfault_addr = 0x1234;
+
+    vm.render_crash_dialog(&proc_ref);
+
+    // Dialog is at dx=16, dy=80, dw=224, dh=96
+    // Check border color at top-left
+    let border = 0xFF0000u32;
+    let bg = 0x1A1A2Eu32;
+
+    // Top-left corner of dialog (dx, dy)
+    assert_eq!(
+        vm.screen[80 * 256 + 16],
+        border,
+        "Top-left should be border"
+    );
+    // Inside should be background
+    assert_eq!(
+        vm.screen[82 * 256 + 20],
+        bg,
+        "Inside should be dark background"
+    );
+
+    // Check that white text pixels exist (SEGFAULT! text)
+    let has_white = vm.screen.iter().any(|&p| p == 0xFFFFFF);
+    assert!(
+        has_white,
+        "Should have white text pixels for SEGFAULT! text"
+    );
+}
