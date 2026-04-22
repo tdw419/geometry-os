@@ -1998,6 +1998,7 @@ phases:
       - Inode types: regular file, directory, device, pipe
       - Path resolution and read/write with offset tracking
       - FMKDIR, FSTAT, FUNLINK opcodes with assembler and disassembler support
+
       - 30+ unit tests for inode operations
       id: p43.d1.t1
       status: done
@@ -3998,6 +3999,7 @@ phases:
   - description: Countdown timer. Keys 1-9 set minutes. Space to start/pause. Counts
       down to zero, plays alarm via BEEP. Proves precise FRAME timing.
     name: timer.asm
+
     status: done
   - description: Scientific calculator with sin/cos (16-entry quarter-wave lookup
       table), sqrt (Newton method). Basic + - * / arithmetic via keyboard.
@@ -5024,9 +5026,9 @@ phases:
     name: PC trace ring buffer in step()
     status: done
   - acceptance_criteria:
-    - description: When a process accesses unmapped memory, segfault_addr captures
+    - description: 'When a process accesses unmapped memory, segfault_addr captures
       the faulting address. trigger_segfault_with_addr() sets both segfault and
-      segfault_addr. Field persists until reset().
+      segfault_addr. Field persists until reset().'
       met: true
     description: 'segfault_addr: u32 field on Vm. Set by trigger_segfault_with_addr()
       in memory.rs. Cleared on reset(). Persists across step() calls for crash
@@ -5034,9 +5036,9 @@ phases:
     name: Segfault address capture field
     status: done
   - acceptance_criteria:
-    - description: After a segfault, write_core_dump() creates /var/core/<PID>.txt
+    - description: 'After a segfault, write_core_dump() creates /var/core/<PID>.txt
       in the VFS containing PID, PC, fault address, all 32 registers, and the
-      16-entry PC trace.
+      16-entry PC trace.'
       met: true
     description: 'write_core_dump(proc_info: &Process) -> bool. Creates /var/core/
       directory if needed. Writes formatted text file with full register dump and
@@ -5044,9 +5046,9 @@ phases:
     name: Core dump writer to VFS
     status: done
   - acceptance_criteria:
-    - description: render_crash_dialog() draws a dark dialog box with red border on
+    - description: 'render_crash_dialog() draws a dark dialog box with red border on
       the 256x256 screen showing SEGFAULT! title, PID, PC, and fault address in
-      pixel font. Sets crash_dialog_active flag for host to check.
+      pixel font. Sets crash_dialog_active flag for host to check.'
       met: true
     description: 'render_crash_dialog(proc_info: &Process). Draws dark background
       (0x1A1A2E), red border (0xFF0000), red title bar (0xCC0000). Renders text
@@ -5075,10 +5077,7 @@ phases:
     256x256 screen showing SEGFAULT! with PID, PC, and fault address. Makes the OS
     feel trustworthy -- errors are visible and debuggable, not just silent deaths.'
 
-  goal: Make the cl
-im system dynamic so buildings compete for territory with visible
-    render patterns and 51% majority conflict resolution
-  id: phase-105
+  goal: 'Make the claim system dynamic so buildings compete for territory with visible render patterns and 51% majority conflict resolution'
   scope_lines_total: 1200
   status: planned
   test_target: 8
@@ -5086,3 +5085,4 @@ im system dynamic so buildings compete for territory with visible
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
+
