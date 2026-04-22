@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 101/105 phases complete, 2 in_progress, 2 planned
+**Progress:** 105/105 phases complete, 0 in_progress, 0 planned
 
-**Deliverables:** 451/462 complete
+**Deliverables:** 462/462 complete
 
 ## Scope Summary
 
@@ -109,12 +109,12 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 o
 | phase-96 System Clipboard | DONE | 3/3 | 200 | 8 |
 | phase-97 Init System - Service Manager | COMPLETE | 3/3 | 500 | 5 |
 | phase-101 Cron Daemon - Scheduled Execution | COMPLETE | 3/3 | 400 | 4 |
-| phase-98 Custom Bitmap Fonts | IN_PROGRESS | 0/4 | 400 | 3 |
-| phase-99 Sound Mixer Daemon | PLANNED | 4/4 | 500 | 3 |
+| phase-98 Custom Bitmap Fonts | COMPLETE | 4/4 | 400 | 3 |
+| phase-99 Sound Mixer Daemon | DONE | 4/4 | 500 | 3 |
 | phase-100 Shared Libraries and Dynamic Linking | COMPLETE | 3/3 | 600 | 3 |
-| phase-102 Permissions and Capability System | COMPLETE | 0/3 | 600 | 16 |
-| phase-103 Terminal Multiplexer | IN_PROGRESS | 5/5 | 600 | 2 |
-| phase-104 Dynamic Territory Competition and Digital Red Queen | PLANNED | 0/0 | 1,200 | 8 |
+| phase-102 Permissions and Capability System | COMPLETE | 4/4 | 600 | 16 |
+| phase-103 Terminal Multiplexer | COMPLETE | 3/3 | 600 | 2 |
+| phase-104 Dynamic Territory Competition and Digital Red Queen | COMPLETE | 5/5 | 1,200 | 8 |
 
 ## Dependencies
 
