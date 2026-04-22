@@ -5,6 +5,132 @@ use crate::preprocessor;
 use crate::vm;
 use std::collections::VecDeque;
 
+// ── Building Icon Cache ─────────────────────────────────────────
+/// A scaled-down RGBA thumbnail of a pixelpack PNG, for use as a building icon.
+pub struct BuildingIcon {
+    pub width: usize,
+    pub height: usize,
+    pub pixels: Vec<u32>, // RGBA packed as 0xRRGGBBAA
+}
+
+/// Cache of building icons keyed by app name (e.g., "tetris").
+/// Loaded once at startup, passed to render each frame.
+pub struct BuildingIconCache {
+    icons: std::collections::HashMap<String, BuildingIcon>,
+}
+
+impl BuildingIconCache {
+    pub fn new() -> Self {
+        Self {
+            icons: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Load a pixelpack PNG, downscale to target size, and cache it.
+    pub fn load_icon(
+        &mut self,
+        name: &str,
+        pxpk_path: &str,
+        target_w: usize,
+        target_h: usize,
+    ) -> bool {
+        let data = match std::fs::read(pxpk_path) {
+            Ok(d) => d,
+            Err(_) => return false,
+        };
+
+        // Decode PNG to RGBA pixels using png crate directly
+        let decoder = png::Decoder::new(std::io::Cursor::new(data));
+        let mut reader = match decoder.read_info() {
+            Ok(r) => r,
+            Err(_) => return false,
+        };
+
+        let info = reader.info().clone();
+        let w = info.width as usize;
+        let h = info.height as usize;
+        let mut buf = vec![0u8; w * h * 4];
+        if reader.next_frame(&mut buf).is_err() {
+            return false;
+        }
+
+        // Downscale using nearest-neighbor sampling to target_w x target_h
+        let mut pixels = Vec::with_capacity(target_w * target_h);
+        for ty in 0..target_h {
+            let src_y = ty * h / target_h;
+            for tx in 0..target_w {
+                let src_x = tx * w / target_w;
+                let off = (src_y * w + src_x) * 4;
+                let r = buf[off] as u32;
+                let g = buf[off + 1] as u32;
+                let b = buf[off + 2] as u32;
+                // Pack as RGB for the display buffer
+                pixels.push((r << 16) | (g << 8) | b);
+            }
+        }
+
+        self.icons.insert(
+            name.to_string(),
+            BuildingIcon {
+                width: target_w,
+                height: target_h,
+                pixels,
+            },
+        );
+        true
+    }
+
+    pub fn get(&self, name: &str) -> Option<&BuildingIcon> {
+        self.icons.get(name)
+    }
+
+    /// Load an icon from raw PNG data (e.g., freshly encoded pixelpack PNG).
+    pub fn load_icon_from_data(
+        &mut self,
+        name: &str,
+        png_data: &[u8],
+        target_w: usize,
+        target_h: usize,
+    ) -> bool {
+        let decoder = png::Decoder::new(std::io::Cursor::new(png_data));
+        let mut reader = match decoder.read_info() {
+            Ok(r) => r,
+            Err(_) => return false,
+        };
+
+        let info = reader.info().clone();
+        let w = info.width as usize;
+        let h = info.height as usize;
+        let mut buf = vec![0u8; w * h * 4];
+        if reader.next_frame(&mut buf).is_err() {
+            return false;
+        }
+
+        let mut pixels = Vec::with_capacity(target_w * target_h);
+        for ty in 0..target_h {
+            let src_y = ty * h / target_h;
+            for tx in 0..target_w {
+                let src_x = tx * w / target_w;
+                let off = (src_y * w + src_x) * 4;
+                let r = buf[off] as u32;
+                let g = buf[off + 1] as u32;
+                let b = buf[off + 2] as u32;
+                pixels.push((r << 16) | (g << 8) | b);
+            }
+        }
+
+        self.icons.insert(
+            name.to_string(),
+            BuildingIcon {
+                width: target_w,
+                height: target_h,
+                pixels,
+            },
+        );
+        true
+    }
+}
+
 // ── Layout constants ─────────────────────────────────────────────
 pub const WIDTH: usize = 1024;
 pub const HEIGHT: usize = 768;
@@ -78,6 +204,7 @@ pub fn render(
     ram_kind: &[vm::MemAccessKind],
     pc_history: &VecDeque<u32>,
     ram_view_base: usize,
+    icon_cache: Option<&BuildingIconCache>,
 ) {
     for pixel in buffer.iter_mut() {
         *pixel = BG;
@@ -219,6 +346,69 @@ pub fn render(
             let sy = VM_SCREEN_Y + y;
             if sx < WIDTH && sy < HEIGHT {
                 buffer[sy * WIDTH + sx] = color;
+            }
+        }
+    }
+
+    // ── Building icon overlay ───────────────────────────────────
+    // After VM screen blit, overlay pixelpack PNG icons on buildings.
+    // Read building table from RAM (same layout as world_desktop.asm).
+    // RAM[0x7500-0x757F]: buildings [world_x, world_y, type_color, name_addr] x 10
+    // RAM[0x7580]: building count
+    // RAM[0x7800]: camera_x, RAM[0x7801]: camera_y
+    if let Some(icon_cache) = icon_cache {
+        let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0).min(32) as usize;
+        let cam_x = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
+        let cam_y = vm.ram.get(0x7801).copied().unwrap_or(0) as i32;
+
+        for i in 0..bldg_count {
+            let base = 0x7500 + i * 4;
+            let bldg_x = vm.ram.get(base).copied().unwrap_or(0) as i32;
+            let bldg_y = vm.ram.get(base + 1).copied().unwrap_or(0) as i32;
+            let name_addr = vm.ram.get(base + 3).copied().unwrap_or(0) as usize;
+
+            // Read building name from RAM
+            let mut name = String::new();
+            for j in 0..16 {
+                if name_addr + j >= vm.ram.len() {
+                    break;
+                }
+                let ch = vm.ram[name_addr + j];
+                if ch == 0 || ch > 127 {
+                    break;
+                }
+                name.push(ch as u8 as char);
+            }
+
+            if let Some(icon) = icon_cache.get(&name) {
+                // Compute screen position: (bldg_x - cam_x) * 4 + VM_SCREEN_X, etc.
+                let scr_x = (bldg_x - cam_x) * 4;
+                let scr_y = (bldg_y - cam_y) * 4;
+
+                // Skip if off-screen
+                if scr_x + (icon.width as i32) < 0
+                    || scr_x >= 256
+                    || scr_y + (icon.height as i32) < 0
+                    || scr_y >= 256
+                {
+                    continue;
+                }
+
+                // Overlay icon pixels onto the VM screen area of the display buffer
+                for iy in 0..icon.height {
+                    for ix in 0..icon.width {
+                        let px = scr_x + ix as i32;
+                        let py = scr_y + iy as i32;
+                        if px >= 0 && px < 256 && py >= 0 && py < 256 {
+                            let color = icon.pixels[iy * icon.width + ix];
+                            let sx = VM_SCREEN_X + px as usize;
+                            let sy = VM_SCREEN_Y + py as usize;
+                            if sx < WIDTH && sy < HEIGHT {
+                                buffer[sy * WIDTH + sx] = color;
+                            }
+                        }
+                    }
+                }
             }
         }
     }

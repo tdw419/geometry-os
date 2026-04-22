@@ -153,6 +153,39 @@ fn main() {
     // without overlapping bytecode at 0x1000)
     let mut canvas_buffer: Vec<u32> = vec![0; CANVAS_MAX_ROWS * CANVAS_COLS];
 
+    // Building icon cache: load pixelpack PNGs as scaled thumbnails
+    let mut icon_cache = render::BuildingIconCache::new();
+    {
+        // (building_name, primary_asm_file)
+        let desktop_apps = [
+            ("snake", "snake"),
+            ("ball", "ball"),
+            ("plasma", "plasma"),
+            ("painter", "painter"),
+            ("colors", "colors"),
+            ("fire", "fire"),
+            ("init", "init"),
+            ("shell", "shell"),
+            ("linux", "linux_building"),
+            ("tetris", "tetris"),
+        ];
+        for (app_name, asm_name) in &desktop_apps {
+            let pxpk_path = format!("{}.pxpk.png", app_name);
+            let asm_path = format!("programs/{}.asm", asm_name);
+            // Try loading pixelpack PNG first, fall back to generating from .asm
+            if icon_cache.load_icon(app_name, &pxpk_path, 24, 32) {
+                // loaded from existing pxpk.png
+            } else if let Ok(source) = std::fs::read_to_string(&asm_path) {
+                // Generate icon from assembly source on the fly
+                let bytes = source.as_bytes();
+                let pxpk_data = crate::pixel::encode_pixelpack_png(bytes);
+                if !pxpk_data.is_empty() {
+                    let _ = icon_cache.load_icon_from_data(app_name, &pxpk_data, 24, 32);
+                }
+            }
+        }
+    }
+
     // Status bar message
     let mut status_msg = String::from("[TERM: type commands, Enter=run]");
 
@@ -1955,6 +1988,7 @@ fn main() {
             &ram_kind,
             &pc_history,
             ram_view_base,
+            Some(&icon_cache),
         );
         if let Err(e) = window.update_with_buffer(&buffer, WIDTH, HEIGHT) {
             eprintln!("Render error: {}. Exiting.", e);

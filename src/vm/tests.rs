@@ -11367,10 +11367,10 @@ fn test_building_table_initialized() {
             break;
         }
     }
-    // Building count at 0x7580 should be 9
+    // Building count at 0x7580 should be 10
     assert_eq!(
-        vm.ram[0x7580], 9,
-        "building count should be 9, got {}",
+        vm.ram[0x7580], 10,
+        "building count should be 10, got {}",
         vm.ram[0x7580]
     );
     // First building at 0x7500 should have world_x = 52
@@ -11801,7 +11801,7 @@ fn test_building_count_correct() {
             break;
         }
     }
-    assert_eq!(vm.ram[0x7580], 9, "building count should be exactly 9");
+    assert_eq!(vm.ram[0x7580], 10, "building count should be exactly 10");
 }
 
 #[test]
