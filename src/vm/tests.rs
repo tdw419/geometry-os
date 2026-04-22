@@ -4660,6 +4660,7 @@ fn test_terminal_cmd_ls() {
     );
     // Prompt should appear after the last listed file
     // Find the prompt row by checking for '$'
+    // VFS may have 1-6 entries, so prompt could be on rows 2-7
     let mut found_prompt = false;
     for row in 1..8 {
         if vm.ram[0x4000 + 42 * row] == b'$' as u32 {
