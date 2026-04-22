@@ -200,6 +200,17 @@ fn main() {
     let double_click_threshold_ms: u64 = 500;
     let double_click_dist: f32 = 8.0; // max pixels between two clicks
 
+    // ── Fullscreen Map Mode ─────────────────────────────────────
+    // When a map/desktop program is running, the VM screen fills the window.
+    let mut fullscreen_map: bool = false;
+    let mut mouse_drag_active: bool = false;
+    let mut drag_start: (f32, f32) = (0.0, 0.0);
+    let mut drag_cam_start: (i32, i32) = (0, 0);
+    // Zoom: 2 = default (4px tiles), 0-1 = zoomed out, 3-4 = zoomed in
+    let mut zoom_level: u32 = 2;
+    // Last launched app name (for detecting return to map)
+    let mut launched_from_map: Option<String> = None;
+
     // If --boot flag, perform boot sequence: load init.asm as PID 1
     if boot_mode {
         match vm.boot() {
@@ -1981,23 +1992,152 @@ fn main() {
             pc_history.clear();
         }
 
+        // ── Detect fullscreen map mode ──────────────────────────
+        // When running with buildings defined (RAM[0x7580] > 0), we're in map mode
+        if is_running {
+            let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0);
+            if bldg_count > 0 {
+                if !fullscreen_map {
+                    fullscreen_map = true;
+                    zoom_level = 2; // default zoom
+                }
+            } else if launched_from_map.is_none() {
+                fullscreen_map = false;
+            }
+        } else {
+            // If a launched app halted, return to map
+            if launched_from_map.is_some() && vm.halted {
+                // Reload the map program
+                if let Some(ref app_name) = launched_from_map {
+                    // The map was running before, reload world_desktop
+                    let map_path = "programs/world_desktop.asm";
+                    if let Ok(source) = std::fs::read_to_string(map_path) {
+                        let mut pp = crate::preprocessor::Preprocessor::new();
+                        let preprocessed = pp.preprocess(&source);
+                        let base_addr = crate::render::CANVAS_BYTECODE_ADDR;
+                        if let Ok(asm_result) = crate::assembler::assemble(&preprocessed, base_addr) {
+                            let ram_len = vm.ram.len();
+                            for v in vm.ram[base_addr..ram_len.min(base_addr + 8192)].iter_mut() {
+                                *v = 0;
+                            }
+                            for (idx, &word) in asm_result.pixels.iter().enumerate() {
+                                let addr = base_addr + idx;
+                                if addr < ram_len { vm.ram[addr] = word; }
+                            }
+                            vm.pc = base_addr as u32;
+                            vm.halted = false;
+                            canvas_assembled = true;
+                            is_running = true;
+                            hit_breakpoint = false;
+                            fullscreen_map = true;
+                            status_msg = format!("[MAP RESTORED after {}]", app_name);
+                        }
+                    }
+                }
+                launched_from_map = None;
+            } else if !fullscreen_map {
+                fullscreen_map = false;
+            }
+        }
+
+        // ── Mouse drag for map panning ──────────────────────────
+        if fullscreen_map && is_running {
+            let mouse_down_now = window.get_mouse_down(MouseButton::Left);
+
+            if mouse_down_now && !mouse_drag_active {
+                // Start drag
+                if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
+                    mouse_drag_active = true;
+                    drag_start = (mx, my);
+                    drag_cam_start = (
+                        vm.ram.get(0x7800).copied().unwrap_or(0) as i32,
+                        vm.ram.get(0x7801).copied().unwrap_or(0) as i32,
+                    );
+                }
+            }
+
+            if mouse_drag_active && mouse_down_now {
+                if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
+                    // Drag delta in screen pixels -> convert to tile offset
+                    // At zoom=2 (default), 3 host pixels = 1 VM pixel = 0.25 tiles
+                    // Scale factor: tiles per host pixel = 1 / (zoom_scale * tile_pixels)
+                    // zoom 0=1px, 1=2px, 2=4px, 3=8px, 4=16px
+                    let tile_px = match zoom_level {
+                        0 => 1,
+                        1 => 2,
+                        2 => 4,
+                        3 => 8,
+                        4 => 16,
+                        _ => 4,
+                    };
+                    // Host scale is 3x, so 1 host pixel = 1/3 VM pixel = 1/(3*tile_px) tiles
+                    let tiles_per_host_pixel = 1.0 / (3.0 * tile_px as f32);
+                    let dx = (mx - drag_start.0) * tiles_per_host_pixel;
+                    let dy = (my - drag_start.1) * tiles_per_host_pixel;
+                    let new_cx = drag_cam_start.0 - dx as i32;
+                    let new_cy = drag_cam_start.1 - dy as i32;
+                    if (new_cx as usize) < vm.ram.len() {
+                        vm.ram[0x7800] = new_cx as u32;
+                    }
+                    if (new_cy as usize) < vm.ram.len() {
+                        vm.ram[0x7801] = new_cy as u32;
+                    }
+                }
+            }
+
+            if !mouse_down_now {
+                mouse_drag_active = false;
+            }
+        }
+
+        // ── Scroll wheel zoom ────────────────────────────────────
+        if fullscreen_map && is_running {
+            if let Some((_sx, sy)) = window.get_scroll_wheel() {
+                // sy > 0 = scroll up = zoom in, sy < 0 = zoom out
+                if sy > 0.0 && zoom_level < 4 {
+                    zoom_level += 1;
+                } else if sy < 0.0 && zoom_level > 0 {
+                    zoom_level -= 1;
+                }
+                // Write zoom to RAM for asm program to read
+                if (0x7812) < vm.ram.len() {
+                    vm.ram[0x7812] = zoom_level;
+                }
+                // Write map_flags
+                if (0x7813) < vm.ram.len() {
+                    vm.ram[0x7813] = 1; // fullscreen active
+                }
+            }
+        }
+
+        // Write zoom level and map flags to RAM every frame when in map mode
+        if fullscreen_map {
+            if (0x7812) < vm.ram.len() { vm.ram[0x7812] = zoom_level; }
+            if (0x7813) < vm.ram.len() { vm.ram[0x7813] = 1; }
+        }
+
         // ── Render ───────────────────────────────────────────────
-        render(
-            &mut buffer,
-            &vm,
-            &canvas_buffer,
-            cursor_row,
-            cursor_col,
-            scroll_offset,
-            is_running,
-            hit_breakpoint,
-            &status_msg,
-            &ram_intensity,
-            &ram_kind,
-            &pc_history,
-            ram_view_base,
-            Some(&icon_cache),
-        );
+        if fullscreen_map && is_running {
+            // Fullscreen map: VM screen scaled 3x to fill window
+            render_fullscreen_map(&mut buffer, &vm, Some(&icon_cache));
+        } else {
+            render(
+                &mut buffer,
+                &vm,
+                &canvas_buffer,
+                cursor_row,
+                cursor_col,
+                scroll_offset,
+                is_running,
+                hit_breakpoint,
+                &status_msg,
+                &ram_intensity,
+                &ram_kind,
+                &pc_history,
+                ram_view_base,
+                Some(&icon_cache),
+            );
+        }
         // ── Double-click building detection ──────────────────────
         // Only when running (desktop is active) and VM screen is visible
         // Rising-edge only: detect click press, not hold
@@ -2025,8 +2165,13 @@ fn main() {
                         click_count = 0; // reset
 
                         // Convert window coords to VM screen coords
-                        let vm_sx = mx as i32 - VM_SCREEN_X as i32;
-                        let vm_sy = my as i32 - VM_SCREEN_Y as i32;
+                        let (vm_sx, vm_sy) = if fullscreen_map {
+                            // Fullscreen: VM screen at (0,0) scaled 3x
+                            ((mx / 3.0) as i32, (my / 3.0) as i32)
+                        } else {
+                            // Normal: VM screen at (VM_SCREEN_X, VM_SCREEN_Y)
+                            (mx as i32 - VM_SCREEN_X as i32, my as i32 - VM_SCREEN_Y as i32)
+                        };
 
                         if vm_sx >= 0 && vm_sx < 256 && vm_sy >= 0 && vm_sy < 256 {
                             // Convert VM screen coords to world tile coords
@@ -2081,6 +2226,10 @@ fn main() {
                                                         is_running = true;
                                                         hit_breakpoint = false;
                                                         status_msg = format!("[LAUNCHED: {} (dbl-click)]", app_name);
+                                                        // Track that we launched from map so we can return
+                                                        if fullscreen_map {
+                                                            launched_from_map = Some(app_name.clone());
+                                                        }
                                                     }
                                                     Err(e) => {
                                                         status_msg = format!("[asm error: {}]", e);

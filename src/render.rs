@@ -638,6 +638,162 @@ pub fn render(
     );
 }
 
+// ── Fullscreen Map Rendering ────────────────────────────────────
+// RAM ports for map control (written by host, read by asm + render):
+//   0x7800: camera_x (integer tile coords, written by asm or host)
+//   0x7801: camera_y (integer tile coords)
+//   0x7802: frame_counter
+//   0x7810: camera_frac_x (fixed-point 16.16 fractional camera offset)
+//   0x7811: camera_frac_y (fixed-point 16.16 fractional camera offset)
+//   0x7812: zoom_level (0=far/1px tiles, 1=2px, 2=4px default, 3=8px, 4=16px)
+//   0x7813: map_flags (bit0=fullscreen mode active, bit1=show_debug_hud)
+
+/// Scale the 256x256 VM screen to fill the 1024x768 window.
+/// Uses nearest-neighbor scaling. The map is 768x768 (3x scale) centered
+/// with a 128px sidebar on the right for debug info.
+pub fn render_fullscreen_map(
+    buffer: &mut [u32],
+    vm: &vm::Vm,
+    icon_cache: Option<&BuildingIconCache>,
+) {
+    // Clear to black
+    for pixel in buffer.iter_mut() {
+        *pixel = 0x050508;
+    }
+
+    let scale: usize = 3; // 256*3 = 768
+    let map_width = 256 * scale; // 768
+    let _map_height = 256 * scale; // 768
+    let sidebar_x = map_width; // 768
+
+    // ── Blit VM screen at 3x nearest-neighbor ──────────────────
+    for sy in 0..256 {
+        for sx in 0..256 {
+            let color = vm.screen[sy * 256 + sx];
+            let base_x = sx * scale;
+            let base_y = sy * scale;
+            for dy in 0..scale {
+                for dx in 0..scale {
+                    let px = base_x + dx;
+                    let py = base_y + dy;
+                    if px < WIDTH && py < HEIGHT {
+                        buffer[py * WIDTH + px] = color;
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Building icon overlay (scaled to 3x) ───────────────────
+    if let Some(icon_cache) = icon_cache {
+        let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0).min(32) as usize;
+        let cam_x = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
+        let cam_y = vm.ram.get(0x7801).copied().unwrap_or(0) as i32;
+
+        for i in 0..bldg_count {
+            let base = 0x7500 + i * 4;
+            let bldg_x = vm.ram.get(base).copied().unwrap_or(0) as i32;
+            let bldg_y = vm.ram.get(base + 1).copied().unwrap_or(0) as i32;
+            let name_addr = vm.ram.get(base + 3).copied().unwrap_or(0) as usize;
+
+            let mut name = String::new();
+            for j in 0..16 {
+                if name_addr + j >= vm.ram.len() { break; }
+                let ch = vm.ram[name_addr + j];
+                if ch == 0 || ch > 127 { break; }
+                name.push(ch as u8 as char);
+            }
+
+            if let Some(icon) = icon_cache.get(&name) {
+                let scr_x = (bldg_x - cam_x) * 4;
+                let scr_y = (bldg_y - cam_y) * 4;
+
+                // Skip if off-screen
+                if scr_x + (icon.width as i32) < 0
+                    || scr_x >= 256
+                    || scr_y + (icon.height as i32) < 0
+                    || scr_y >= 256
+                {
+                    continue;
+                }
+
+                // Overlay at 3x scale
+                for iy in 0..icon.height {
+                    for ix in 0..icon.width {
+                        let px = scr_x + ix as i32;
+                        let py = scr_y + iy as i32;
+                        if px >= 0 && px < 256 && py >= 0 && py < 256 {
+                            let color = icon.pixels[iy * icon.width + ix];
+                            // Draw at 3x
+                            for dy in 0..scale {
+                                for dx in 0..scale {
+                                    let dpx = (px as usize) * scale + dx;
+                                    let dpy = (py as usize) * scale + dy;
+                                    if dpx < WIDTH && dpy < HEIGHT {
+                                        buffer[dpy * WIDTH + dpx] = color;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Sidebar: debug HUD ──────────────────────────────────────
+    let hud_fg = 0x888899;
+    let hud_bright = 0xCCCCEE;
+
+    // Camera position
+    let cam_x = vm.ram.get(0x7800).copied().unwrap_or(0);
+    let cam_y = vm.ram.get(0x7801).copied().unwrap_or(0);
+    let zoom = vm.ram.get(0x7812).copied().unwrap_or(2);
+    render_text(buffer, sidebar_x + 4, 4, "MAP VIEW", hud_bright);
+    render_text(buffer, sidebar_x + 4, 20, &format!("cam ({},{})", cam_x, cam_y), hud_fg);
+    render_text(buffer, sidebar_x + 4, 34, &format!("zoom {}", zoom), hud_fg);
+
+    // Player position
+    let px = vm.ram.get(0x7808).copied().unwrap_or(0);
+    let py = vm.ram.get(0x7809).copied().unwrap_or(0);
+    render_text(buffer, sidebar_x + 4, 54, &format!("player ({},{})", px, py), hud_fg);
+
+    // Building count
+    let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0).min(32);
+    render_text(buffer, sidebar_x + 4, 74, &format!("buildings {}", bldg_count), hud_fg);
+
+    // Building list
+    for i in 0..bldg_count as usize {
+        let base = 0x7500 + i * 4;
+        let bx = vm.ram.get(base).copied().unwrap_or(0);
+        let by = vm.ram.get(base + 1).copied().unwrap_or(0);
+        let name_addr = vm.ram.get(base + 3).copied().unwrap_or(0) as usize;
+
+        let mut name = String::new();
+        for j in 0..12 {
+            if name_addr + j >= vm.ram.len() { break; }
+            let ch = vm.ram[name_addr + j];
+            if ch == 0 || ch > 127 { break; }
+            name.push(ch as u8 as char);
+        }
+
+        let y_pos = 96 + i * 14;
+        if y_pos + 12 < HEIGHT {
+            // Highlight if player is near
+            let dist = (bx as i32 - px as i32).abs() + (by as i32 - py as i32).abs();
+            let color = if dist < 8 { 0x44FF44 } else { hud_fg };
+            render_text(buffer, sidebar_x + 4, y_pos, &format!("{} ({},{})", name, bx, by), color);
+        }
+    }
+
+    // Controls help at bottom of sidebar
+    render_text(buffer, sidebar_x + 4, HEIGHT - 80, "WASD/arrows: move", 0x555566);
+    render_text(buffer, sidebar_x + 4, HEIGHT - 64, "drag: pan map", 0x555566);
+    render_text(buffer, sidebar_x + 4, HEIGHT - 48, "scroll: zoom", 0x555566);
+    render_text(buffer, sidebar_x + 4, HEIGHT - 32, "dblclick: enter", 0x555566);
+    render_text(buffer, sidebar_x + 4, HEIGHT - 16, "Esc: exit", 0x555566);
+}
+
 /// Render a text string into the framebuffer using the 8x8 font
 pub fn render_text(buffer: &mut [u32], x0: usize, y0: usize, text: &str, color: u32) {
     let mut cx = x0;
