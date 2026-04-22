@@ -1998,7 +1998,6 @@ phases:
       - Inode types: regular file, directory, device, pipe
       - Path resolution and read/write with offset tracking
       - FMKDIR, FSTAT, FUNLINK opcodes with assembler and disassembler support
-
       - 30+ unit tests for inode operations
       id: p43.d1.t1
       status: done
@@ -3999,7 +3998,6 @@ phases:
   - description: Countdown timer. Keys 1-9 set minutes. Space to start/pause. Counts
       down to zero, plays alarm via BEEP. Proves precise FRAME timing.
     name: timer.asm
-
     status: done
   - description: Scientific calculator with sin/cos (16-entry quarter-wave lookup
       table), sqrt (Newton method). Basic + - * / arithmetic via keyboard.
@@ -4797,22 +4795,22 @@ phases:
       renderer checks if the current process has a custom font and uses it instead
       of the built-in GLYPHS array. Falls back to default if no custom font loaded.
     name: Per-process font loading
-    status: planned
+    status: done
   - description: 'Font file format. A .fnt file is 1024 bytes: 128 glyphs x 8 rows
       x 1 byte per row (same layout as GLYPHS). Tools to convert popular pixel fonts
       to .fnt. Ship at least 2 alternative fonts (bold, wide) in /lib/fonts/.'
     name: Font file format and tools
-    status: planned
+    status: done
   - description: SYSCALL or IOCTL to set current process font. cmd 2 on /dev/screen
       = set font from RAM address. Program LOADs .fnt from VFS into RAM, then IOCTLs
       the screen device to use it. Simple, no new opcode needed.
     name: Font syscall integration
-    status: planned
+    status: done
   - description: 'Test: process loads a custom font, writes text to canvas, verify
       different glyphs appear than with default font. Second process still sees default
       font.'
     name: Font loading test
-    status: planned
+    status: done
   description: Allow programs to load custom pixel fonts from VFS files. DOS had .FNT,
     Mac made fonts a core concept. The rendering path already indexes GLYPHS[byte]
     -- just needs a per-process override. Ship 2+ alternative fonts. Pure data, no
@@ -4824,6 +4822,8 @@ phases:
   status: complete
   test_target: 3
   title: Custom Bitmap Fonts
+  _claimed_by: worker-0
+  _claimed_at: 1776899382
 - deliverables:
   - description: A sound mixer daemon that reads note data from a named pipe, mixes
       multiple channels, and writes PCM samples to /dev/audio. Programs write (frequency,
@@ -4853,7 +4853,7 @@ phases:
   goal: Build a pipe-fed multi-channel sound mixer daemon with a music player demo
   id: phase-99
   scope_lines_total: 500
-  status: complete
+  status: planned
   test_target: 3
   title: Sound Mixer Daemon
 - deliverables:
@@ -4986,35 +4986,6 @@ phases:
   _claimed_by: worker-0
   _claimed_at: 1776896708
 - deliverables:
-  - description: 'Segfault handler that writes crash info to VFS. On segfault (page
-      fault in user mode), kernel writes a core dump file to /var/core/PID.txt containing:
-      PID, exit code, PC at crash, all 32 register values, last 16 PC values from
-      instruction fetch log, and the faulting address.'
-    name: Core dump writer
-    status: planned
-  - description: 'Crash dialog rendering. After writing the core dump, kernel spawns
-      a crash reporter process that reads the core file and renders a pixel-based
-      dialog: Process X crashed at PC=0x1234, r0=42, fault_addr=0x8000. Press any
-      key to dismiss. Uses RECTF for the dialog box, TEXT for the info.'
-    name: Crash dialog renderer
-    status: planned
-  - description: 'Test: spawn a process that writes to an unmapped address. Verify
-      segfault triggers, core dump file exists in VFS with correct register values,
-      crash dialog appears on screen.'
-    name: Crash recovery integration test
-    status: planned
-  description: When a process crashes, real OSes write core dumps and show what happened.
-    Geometry OS currently kills silently. A crash handler that writes register state
-    and PC trace to VFS, then displays a pixel-rendered crash dialog. Makes the OS
-    feel trustworthy -- errors are visible and debuggable, not just silent deaths.
-  goal: Add crash recovery with core dumps and crash dialogs so segfaults are visible
-    and debuggable
-  id: phase-104
-  scope_lines_total: 400
-  status: done
-  test_target: 5
-  title: Crash Recovery and Core Dumps
-  deliverables:
   - acceptance_criteria:
     - description: The VM step function records each PC value in a 16-entry circular
         buffer. After 20+ instructions, the buffer contains the most recent 16 PCs
@@ -5026,19 +4997,19 @@ phases:
     name: PC trace ring buffer in step()
     status: done
   - acceptance_criteria:
-    - description: 'When a process accesses unmapped memory, segfault_addr captures
-      the faulting address. trigger_segfault_with_addr() sets both segfault and
-      segfault_addr. Field persists until reset().'
+    - description: When a process accesses unmapped memory, segfault_addr captures
+        the faulting address. trigger_segfault_with_addr() sets both segfault and
+        segfault_addr. Field persists until reset().
       met: true
     description: 'segfault_addr: u32 field on Vm. Set by trigger_segfault_with_addr()
-      in memory.rs. Cleared on reset(). Persists across step() calls for crash
-      handler to read.'
+      in memory.rs. Cleared on reset(). Persists across step() calls for crash handler
+      to read.'
     name: Segfault address capture field
     status: done
   - acceptance_criteria:
-    - description: 'After a segfault, write_core_dump() creates /var/core/<PID>.txt
-      in the VFS containing PID, PC, fault address, all 32 registers, and the
-      16-entry PC trace.'
+    - description: After a segfault, write_core_dump() creates /var/core/<PID>.txt
+        in the VFS containing PID, PC, fault address, all 32 registers, and the 16-entry
+        PC trace.
       met: true
     description: 'write_core_dump(proc_info: &Process) -> bool. Creates /var/core/
       directory if needed. Writes formatted text file with full register dump and
@@ -5046,38 +5017,38 @@ phases:
     name: Core dump writer to VFS
     status: done
   - acceptance_criteria:
-    - description: 'render_crash_dialog() draws a dark dialog box with red border on
-      the 256x256 screen showing SEGFAULT! title, PID, PC, and fault address in
-      pixel font. Sets crash_dialog_active flag for host to check.'
+    - description: render_crash_dialog() draws a dark dialog box with red border on
+        the 256x256 screen showing SEGFAULT! title, PID, PC, and fault address in
+        pixel font. Sets crash_dialog_active flag for host to check.
       met: true
     description: 'render_crash_dialog(proc_info: &Process). Draws dark background
-      (0x1A1A2E), red border (0xFF0000), red title bar (0xCC0000). Renders text
-      lines for SEGFAULT!, PID/parent, PC/fault, r0, and dismiss prompt. Uses
-      pixel font via render_char() helper. Sets crash_dialog_active and
-      crash_dialog_pid.'
+      (0x1A1A2E), red border (0xFF0000), red title bar (0xCC0000). Renders text lines
+      for SEGFAULT!, PID/parent, PC/fault, r0, and dismiss prompt. Uses pixel font
+      via render_char() helper. Sets crash_dialog_active and crash_dialog_pid.'
     name: Pixel-rendered crash dialog on screen
     status: done
   - acceptance_criteria:
-    - description: All Phase 104 fields (pc_trace, pc_trace_idx, segfault_addr,
-        crash_dialog_active, crash_dialog_pid) initialized to zero in Vm::new(),
-        reset(), and from_save_state(). 5 tests pass.
+    - description: All Phase 104 fields (pc_trace, pc_trace_idx, segfault_addr, crash_dialog_active,
+        crash_dialog_pid) initialized to zero in Vm::new(), reset(), and from_save_state().
+        5 tests pass.
       met: true
     description: '5 tests: test_pc_trace_ring_buffer (NOP execution fills buffer),
-        test_crash_dialog_renders_on_segfault (dialog renders with correct colors),
-        test_core_dump_contains_register_dump (VFS file has registers and trace),
-        test_segfault_addr_field_persists (field persists then resets),
-        test_crash_dialog_screen_region (border and background at correct pixels).'
+      test_crash_dialog_renders_on_segfault (dialog renders with correct colors),
+      test_core_dump_contains_register_dump (VFS file has registers and trace), test_segfault_addr_field_persists
+      (field persists then resets), test_crash_dialog_screen_region (border and background
+      at correct pixels).'
     name: Crash recovery integration tests
     status: done
   description: 'Geometry OS currently kills silently. This phase adds crash recovery:
     a 16-entry PC trace ring buffer that records instruction history, a segfault_addr
     field to capture the faulting address, a write_core_dump() method that writes
-    register state and PC trace to /var/core/<PID>.txt in the VFS, and a
-    render_crash_dialog() method that draws a pixel-rendered crash dialog on the
-    256x256 screen showing SEGFAULT! with PID, PC, and fault address. Makes the OS
-    feel trustworthy -- errors are visible and debuggable, not just silent deaths.'
-
-  goal: 'Make the claim system dynamic so buildings compete for territory with visible render patterns and 51% majority conflict resolution'
+    register state and PC trace to /var/core/<PID>.txt in the VFS, and a render_crash_dialog()
+    method that draws a pixel-rendered crash dialog on the 256x256 screen showing
+    SEGFAULT! with PID, PC, and fault address. Makes the OS feel trustworthy -- errors
+    are visible and debuggable, not just silent deaths.'
+  goal: Make the claim system dynamic so buildings compete for territory with visible
+    render patterns and 51% majority conflict resolution
+  id: phase-104
   scope_lines_total: 1200
   status: planned
   test_target: 8
@@ -5085,4 +5056,3 @@ phases:
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
-
