@@ -45,10 +45,12 @@
     STORE r10, r0            ; session_1_output_len = 0
 
     ; Initialize scrollback buffers to zero
+    ; NOTE: r0 is CMP result register, so use r9 for zero
+    LDI r9, 0
     LDI r11, 0x5000
     LDI r12, 0x7000
 init_buffers:
-    STORE r11, r0
+    STORE r11, r9
     ADD r11, r7
     CMP r11, r12
     BLT r0, init_buffers

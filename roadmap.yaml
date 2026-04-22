@@ -4830,22 +4830,22 @@ phases:
       duration, channel, volume) tuples into the pipe. The mixer converts to samples
       and plays via the existing audio backend. Proves IPC works for real-time workloads.
     name: Multi-channel sound mixer daemon
-    status: planned
+    status: done
   - description: 'Audio pipe protocol. 4-word messages: channel_id, frequency, duration_ms,
       volume. Channel 0-3 supported. Mixer maintains per-channel state (currently
       playing, position in waveform). Mixes by summing and clipping. 8kHz mono sample
       rate.'
     name: Audio pipe protocol
-    status: planned
+    status: done
   - description: 'Music player program that reads a score file from VFS (list of notes
       with timing) and plays it through the mixer pipe. Demonstrates the full chain:
       file read, pipe write, mixer read, audio output.'
     name: Music player demo
-    status: planned
+    status: done
   - description: 'Test: two processes write different frequencies to different channels.
       Mixer produces combined output. Verify no buffer overflow, channels stay independent.'
     name: Mixer integration test
-    status: planned
+    status: done
   description: 'A multi-channel sound mixer that reads from pipes and outputs mixed
     audio. The Amiga had 4 hardware channels in 1985. This proves IPC handles real-time
     data. Programs write notes to a pipe, the mixer turns them into sound. The OS
@@ -4853,7 +4853,7 @@ phases:
   goal: Build a pipe-fed multi-channel sound mixer daemon with a music player demo
   id: phase-99
   scope_lines_total: 500
-  status: planned
+  status: done
   test_target: 3
   title: Sound Mixer Daemon
 - deliverables:

@@ -15570,3 +15570,49 @@ fn test_ensure_fonts_on_boot() {
         assert_eq!(size, 1024, "{:?} should be 1024 bytes", path);
     }
 }
+
+#[test]
+fn test_term_mux_assembles() {
+    let source = std::fs::read_to_string("programs/term_mux.asm").unwrap();
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(result.is_ok(), "term_mux.asm should assemble: {:?}", result);
+}
+
+#[test]
+fn test_term_mux_pipe_creation() {
+    // Test that the terminal multiplexer creates pipe pairs correctly
+    let source = std::fs::read_to_string("programs/term_mux.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until HALT
+    for _ in 0..100_000 {
+        if !vm.step() { break; }
+    }
+
+    // Verify pipes were created - check that pipe fds are stored in RAM
+    let s0_stdout_read = vm.ram[0x4000];
+    let s0_stdin_write = vm.ram[0x4001];
+    let s1_stdout_read = vm.ram[0x4010];
+    let s1_stdin_write = vm.ram[0x4011];
+
+    // Pipe fds should be in the expected ranges
+    assert!(s0_stdout_read >= 0x8000, "session 0 stdout read fd should be a pipe fd, got {:X}", s0_stdout_read);
+    assert!(s0_stdin_write >= 0xC000, "session 0 stdin write fd should be a pipe fd, got {:X}", s0_stdin_write);
+    assert!(s1_stdout_read >= 0x8000, "session 1 stdout read fd should be a pipe fd, got {:X}", s1_stdout_read);
+    assert!(s1_stdin_write >= 0xC000, "session 1 stdin write fd should be a pipe fd, got {:X}", s1_stdin_write);
+
+    // Active session should default to 0
+    assert_eq!(vm.ram[0xF00], 0, "active session should default to 0");
+
+    // Verify scrollback buffers were initialized (should be zero)
+    assert_eq!(vm.ram[0x5000], 0, "session 0 scrollback should be initialized to 0");
+    assert_eq!(vm.ram[0x6000], 0, "session 1 scrollback should be initialized to 0");
+}
