@@ -31,13 +31,13 @@ global_risks:
 meta:
   gui: minifb
   language: Rust
-  loc: 58114
+  loc: '62073'
   opcodes: 149
-  programs: 115
+  programs: '128'
   ram: 65536 words
   registers: 32
   screen: 256x256 pixels
-  tests: 2769
+  tests: '2794'
 phases:
 - deliverables:
   - description: 'Control flow: stop, no-op, yield to renderer'
@@ -5050,7 +5050,7 @@ phases:
     render patterns and 51% majority conflict resolution
   id: phase-104
   scope_lines_total: 1200
-  status: planned
+  status: complete
   test_target: 8
   title: Dynamic Territory Competition and Digital Red Queen
 project_url: https://github.com/tdw419/geometry-os
