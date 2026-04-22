@@ -27,7 +27,7 @@ mod vm;
 
 use qemu::QemuBridge;
 
-use minifb::{Key, KeyRepeat, Window, WindowOptions};
+use minifb::{Key, KeyRepeat, MouseButton, MouseMode, Window, WindowOptions};
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
@@ -191,6 +191,14 @@ fn main() {
 
     // Last loaded file (for Ctrl+F8 reload)
     let mut loaded_file: Option<PathBuf> = None;
+
+    // Double-click detection for building launch
+    let mut last_click_time: std::time::Instant = std::time::Instant::now();
+    let mut last_click_screen: (f32, f32) = (-1.0, -1.0);
+    let mut click_count: u8 = 0;
+    let mut prev_mouse_down: bool = false;
+    let double_click_threshold_ms: u64 = 500;
+    let double_click_dist: f32 = 8.0; // max pixels between two clicks
 
     // If --boot flag, perform boot sequence: load init.asm as PID 1
     if boot_mode {
@@ -1990,6 +1998,110 @@ fn main() {
             ram_view_base,
             Some(&icon_cache),
         );
+        // ── Double-click building detection ──────────────────────
+        // Only when running (desktop is active) and VM screen is visible
+        // Rising-edge only: detect click press, not hold
+        if is_running {
+            let mouse_down = window.get_mouse_down(MouseButton::Left);
+            if mouse_down && !prev_mouse_down {
+                if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
+                    let now = std::time::Instant::now();
+                    let elapsed = now.duration_since(last_click_time).as_millis() as u64;
+                    let dx = mx - last_click_screen.0;
+                    let dy = my - last_click_screen.1;
+                    let dist = (dx * dx + dy * dy).sqrt();
+
+                    if elapsed < double_click_threshold_ms && dist < double_click_dist {
+                        click_count += 1;
+                    } else {
+                        click_count = 1;
+                    }
+
+                    last_click_time = now;
+                    last_click_screen = (mx, my);
+
+                    // On double-click: check if click is on a building in VM screen area
+                    if click_count >= 2 {
+                        click_count = 0; // reset
+
+                        // Convert window coords to VM screen coords
+                        let vm_sx = mx as i32 - VM_SCREEN_X as i32;
+                        let vm_sy = my as i32 - VM_SCREEN_Y as i32;
+
+                        if vm_sx >= 0 && vm_sx < 256 && vm_sy >= 0 && vm_sy < 256 {
+                            // Convert VM screen coords to world tile coords
+                            let cam_x = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
+                            let cam_y = vm.ram.get(0x7801).copied().unwrap_or(0) as i32;
+                            // screen_pos = (world - cam) * 4, so world = screen/4 + cam
+                            let click_world_x = vm_sx / 4 + cam_x;
+                            let click_world_y = vm_sy / 4 + cam_y;
+
+                            // Search building table for a hit
+                            let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0).min(32) as usize;
+                            for i in 0..bldg_count {
+                                let base = 0x7500 + i * 4;
+                                let bx = vm.ram.get(base).copied().unwrap_or(0) as i32;
+                                let by = vm.ram.get(base + 1).copied().unwrap_or(0) as i32;
+                                let name_addr = vm.ram.get(base + 3).copied().unwrap_or(0) as usize;
+
+                                // Building is 6 world-tiles wide (24px / 4 = 6), 8 tall (32px / 4 = 8)
+                                if click_world_x >= bx && click_world_x < bx + 6
+                                    && click_world_y >= by && click_world_y < by + 8
+                                {
+                                    // Read building name
+                                    let mut app_name = String::new();
+                                    for j in 0..16 {
+                                        if name_addr + j >= vm.ram.len() { break; }
+                                        let ch = vm.ram[name_addr + j];
+                                        if ch == 0 || ch > 127 { break; }
+                                        app_name.push(ch as u8 as char);
+                                    }
+
+                                    if !app_name.is_empty() {
+                                        // Launch the app (same logic as "launch" CLI command)
+                                        let prog_path = format!("programs/{}.asm", app_name);
+                                        match std::fs::read_to_string(&prog_path) {
+                                            Ok(source) => {
+                                                let mut pp = crate::preprocessor::Preprocessor::new();
+                                                let preprocessed = pp.preprocess(&source);
+                                                let base_addr = crate::render::CANVAS_BYTECODE_ADDR;
+                                                match crate::assembler::assemble(&preprocessed, base_addr) {
+                                                    Ok(asm_result) => {
+                                                        let ram_len = vm.ram.len();
+                                                        for v in vm.ram[base_addr..ram_len.min(base_addr + 8192)].iter_mut() {
+                                                            *v = 0;
+                                                        }
+                                                        for (idx, &word) in asm_result.pixels.iter().enumerate() {
+                                                            let addr = base_addr + idx;
+                                                            if addr < ram_len { vm.ram[addr] = word; }
+                                                        }
+                                                        vm.pc = base_addr as u32;
+                                                        vm.halted = false;
+                                                        canvas_assembled = true;
+                                                        is_running = true;
+                                                        hit_breakpoint = false;
+                                                        status_msg = format!("[LAUNCHED: {} (dbl-click)]", app_name);
+                                                    }
+                                                    Err(e) => {
+                                                        status_msg = format!("[asm error: {}]", e);
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                status_msg = format!("[no prog: {}]", e);
+                                            }
+                                        }
+                                    }
+                                    break; // only launch first hit
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            prev_mouse_down = mouse_down;
+        }
+
         if let Err(e) = window.update_with_buffer(&buffer, WIDTH, HEIGHT) {
             eprintln!("Render error: {}. Exiting.", e);
             break;
