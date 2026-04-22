@@ -4960,18 +4960,18 @@ phases:
       or Alt+Tab). Each session is a separate process with its own stdin/stdout redirected
       via pipes. The muxer owns the canvas region and renders the active session.
     name: Terminal multiplexer process
-    status: planned
+    status: done
   - description: Session switching and status bar. A thin status bar at the top shows
       session names and which is active. Ctrl+N creates new session (SPAWN a new shell).
       Ctrl+number switches. The muxer reads keyboard, routes to active session stdin,
       reads active session stdout, renders to canvas.
     name: Session switching UI
-    status: planned
+    status: done
   - description: 'Test: create 2 sessions, run different programs in each, switch
       between them, verify output is correct for each. Close one session, verify muxer
       removes it from status bar.'
     name: Terminal muxer test
-    status: planned
+    status: done
   description: A terminal multiplexer like screen or tmux. Multiple shell sessions,
     each with independent scrollback, switchable with key combos. The muxer owns the
     canvas, routes keyboard to the active session, and renders that session output.
@@ -4980,7 +4980,7 @@ phases:
     and independent scrollback
   id: phase-103
   scope_lines_total: 600
-  status: in_progress
+  status: complete
   test_target: 2
   title: Terminal Multiplexer
   _claimed_by: worker-0
