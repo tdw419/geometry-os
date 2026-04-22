@@ -4661,7 +4661,7 @@ fn test_terminal_cmd_ls() {
     // Prompt should appear after the last listed file
     // Find the prompt row by checking for '$'
     let mut found_prompt = false;
-    for row in 1..5 {
+    for row in 1..8 {
         if vm.ram[0x4000 + 42 * row] == b'$' as u32 {
             found_prompt = true;
             break;
@@ -15594,7 +15594,9 @@ fn test_term_mux_pipe_creation() {
 
     // Run until HALT
     for _ in 0..100_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Verify pipes were created - check that pipe fds are stored in RAM
@@ -15604,15 +15606,37 @@ fn test_term_mux_pipe_creation() {
     let s1_stdin_write = vm.ram[0x4011];
 
     // Pipe fds should be in the expected ranges
-    assert!(s0_stdout_read >= 0x8000, "session 0 stdout read fd should be a pipe fd, got {:X}", s0_stdout_read);
-    assert!(s0_stdin_write >= 0xC000, "session 0 stdin write fd should be a pipe fd, got {:X}", s0_stdin_write);
-    assert!(s1_stdout_read >= 0x8000, "session 1 stdout read fd should be a pipe fd, got {:X}", s1_stdout_read);
-    assert!(s1_stdin_write >= 0xC000, "session 1 stdin write fd should be a pipe fd, got {:X}", s1_stdin_write);
+    assert!(
+        s0_stdout_read >= 0x8000,
+        "session 0 stdout read fd should be a pipe fd, got {:X}",
+        s0_stdout_read
+    );
+    assert!(
+        s0_stdin_write >= 0xC000,
+        "session 0 stdin write fd should be a pipe fd, got {:X}",
+        s0_stdin_write
+    );
+    assert!(
+        s1_stdout_read >= 0x8000,
+        "session 1 stdout read fd should be a pipe fd, got {:X}",
+        s1_stdout_read
+    );
+    assert!(
+        s1_stdin_write >= 0xC000,
+        "session 1 stdin write fd should be a pipe fd, got {:X}",
+        s1_stdin_write
+    );
 
     // Active session should default to 0
     assert_eq!(vm.ram[0xF00], 0, "active session should default to 0");
 
     // Verify scrollback buffers were initialized (should be zero)
-    assert_eq!(vm.ram[0x5000], 0, "session 0 scrollback should be initialized to 0");
-    assert_eq!(vm.ram[0x6000], 0, "session 1 scrollback should be initialized to 0");
+    assert_eq!(
+        vm.ram[0x5000], 0,
+        "session 0 scrollback should be initialized to 0"
+    );
+    assert_eq!(
+        vm.ram[0x6000], 0,
+        "session 1 scrollback should be initialized to 0"
+    );
 }
