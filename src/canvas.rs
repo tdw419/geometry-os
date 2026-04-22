@@ -177,8 +177,14 @@ pub fn canvas_assemble(
             let val = cell & 0xFF;
             if val == 0 || val == 0x0A {
                 '\n'
-            } else {
+            } else if val >= 0x20 && val < 0x7F {
+                // Printable ASCII -- safe
                 (val as u8) as char
+            } else {
+                // Non-printable or high byte of a multi-byte Unicode char
+                // (e.g. ─ U+2500 has & 0xFF == 0x00).  Replace with space
+                // to avoid injecting false newlines or garbage opcodes.
+                ' '
             }
         })
         .collect();

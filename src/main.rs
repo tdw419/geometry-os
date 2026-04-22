@@ -1455,8 +1455,71 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
+                            }
+                            "loadasm" => {
+                                // Assemble a .asm file directly into VM RAM at
+                                // CANVAS_BYTECODE_ADDR, bypassing the canvas text buffer.
+                                if let Some(path) = parts.get(1) {
+                                    match std::fs::read_to_string(path) {
+                                        Ok(source) => {
+                                            let mut pp =
+                                                crate::preprocessor::Preprocessor::new();
+                                            let preprocessed = pp.preprocess(&source);
+                                            match crate::assembler::assemble(
+                                                &preprocessed,
+                                                crate::render::CANVAS_BYTECODE_ADDR,
+                                            ) {
+                                                Ok(asm_result) => {
+                                                    let ram_len = vm.ram.len();
+                                                    let base = crate::render::CANVAS_BYTECODE_ADDR;
+                                                    for v in vm.ram
+                                                        [base..ram_len.min(base + 8192)]
+                                                        .iter_mut()
+                                                    {
+                                                        *v = 0;
+                                                    }
+                                                    for (i, &word) in
+                                                        asm_result.pixels.iter().enumerate()
+                                                    {
+                                                        let addr = base + i;
+                                                        if addr < ram_len {
+                                                            vm.ram[addr] = word;
+                                                        }
+                                                    }
+                                                    vm.pc = base as u32;
+                                                    vm.halted = false;
+                                                    canvas_assembled = true;
+                                                    status_msg = format!(
+                                                        "[loadasm OK: {} words at 0x{:04X}]",
+                                                        asm_result.pixels.len(),
+                                                        base
+                                                    );
+                                                    response.push_str(&format!(
+                                                        "[loaded {} words at 0x{:04X}]\n",
+                                                        asm_result.pixels.len(),
+                                                        base
+                                                    ));
+                                                }
+                                                Err(e) => {
+                                                    response.push_str(&format!(
+                                                        "[assembly error: {}]\n",
+                                                        e
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            response.push_str(&format!(
+                                                "[error: {}]\n",
+                                                e
+                                            ));
+                                        }
+                                    }
+                                } else {
+                                    response.push_str("[usage: loadasm <path>]\n");
+                                }
                             }
                             // ── Phase 84: Building & Desktop Socket Commands ──────
                             "buildings" => {
@@ -1466,7 +1529,8 @@ fn main() {
                                     parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(256);
                                 let player_x = vm.ram[0x7808] as i32;
                                 let player_y = vm.ram[0x7809] as i32;
-                                for i in 0..8u32 {
+                                let bldg_count = vm.ram[0x7580].min(32) as u32;
+                                for i in 0..bldg_count {
                                     let base = 0x7500 + (i as usize) * 4;
                                     if base + 3 >= vm.ram.len() {
                                         break;
@@ -1516,7 +1580,8 @@ fn main() {
                                     "{{\"player\":{{\"x\":{},\"y\":{}}},\"camera\":{{\"x\":{},\"y\":{}}},\"frame\":{},\"nearby_building\":{},\"buildings\":[",
                                     player_x, player_y, cam_x, cam_y, frame, nearby
                                 ));
-                                for i in 0..8u32 {
+                                let bldg_count = vm.ram[0x7580].min(32) as u32;
+                                for i in 0..bldg_count {
                                     let base = 0x7500 + (i as usize) * 4;
                                     if base + 3 >= vm.ram.len() {
                                         break;
@@ -1554,7 +1619,8 @@ fn main() {
                                 } else {
                                     // Find the building with matching name
                                     let mut found = false;
-                                    for i in 0..8u32 {
+                                    let bldg_count = vm.ram[0x7580].min(32) as u32;
+                                    for i in 0..bldg_count {
                                         let base = 0x7500 + (i as usize) * 4;
                                         if base + 3 >= vm.ram.len() {
                                             break;
@@ -1572,10 +1638,62 @@ fn main() {
                                             name.push(ch as u8 as char);
                                         }
                                         if name == app_name {
-                                            response.push_str(&format!(
-                                                "[launching: {} from building {}]\n",
-                                                app_name, i
-                                            ));
+                                            // Load and assemble the program
+                                            let prog_path = format!("programs/{}.asm", app_name);
+                                            match std::fs::read_to_string(&prog_path) {
+                                                Ok(source) => {
+                                                    let mut pp =
+                                                        crate::preprocessor::Preprocessor::new();
+                                                    let preprocessed = pp.preprocess(&source);
+                                                    let base_addr =
+                                                        crate::render::CANVAS_BYTECODE_ADDR;
+                                                    match crate::assembler::assemble(
+                                                        &preprocessed,
+                                                        base_addr,
+                                                    ) {
+                                                        Ok(asm_result) => {
+                                                            let ram_len = vm.ram.len();
+                                                            for v in vm.ram
+                                                                [base_addr
+                                                                    ..ram_len
+                                                                        .min(base_addr + 8192)]
+                                                                .iter_mut()
+                                                            {
+                                                                *v = 0;
+                                                            }
+                                                            for (idx, &word) in
+                                                                asm_result.pixels.iter().enumerate()
+                                                            {
+                                                                let addr = base_addr + idx;
+                                                                if addr < ram_len {
+                                                                    vm.ram[addr] = word;
+                                                                }
+                                                            }
+                                                            vm.pc = base_addr as u32;
+                                                            vm.halted = false;
+                                                            canvas_assembled = true;
+                                                            is_running = true;
+                                                            hit_breakpoint = false;
+                                                            response.push_str(&format!(
+                                                                "[launching: {} from building {} ({} words)]\n",
+                                                                app_name, i, asm_result.pixels.len()
+                                                            ));
+                                                        }
+                                                        Err(e) => {
+                                                            response.push_str(&format!(
+                                                                "[assembly error for {}: {}]\n",
+                                                                app_name, e
+                                                            ));
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    response.push_str(&format!(
+                                                        "[no program file for {}: {}]\n",
+                                                        app_name, e
+                                                    ));
+                                                }
+                                            }
                                             found = true;
                                             break;
                                         }

@@ -462,9 +462,23 @@ LDI r17, 0x7680
 STORE r20, r17
 ADDI r20, 1
 
+; Building 9: tetris (game/magenta)
+LDI r17, 200
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 60
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0xFF00FF
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x7690
+STORE r20, r17
+ADDI r20, 1
+
 ; Building count
 LDI r17, 0x7580
-LDI r18, 9
+LDI r18, 10
 STORE r17, r18
 
 ; ===== Building Name Strings at RAM[0x7600-0x768F] =====
@@ -486,6 +500,8 @@ LDI r20, 0x7670
 STRO r20, "shell"
 LDI r20, 0x7680
 STRO r20, "linux"
+LDI r20, 0x7690
+STRO r20, "tetris"
 
 ; Clear nearby building flag
 LDI r17, 0x7584
