@@ -37,7 +37,7 @@ meta:
   ram: 65536 words
   registers: 32
   screen: 256x256 pixels
-  tests: 2680
+  tests: 2754
 phases:
 - deliverables:
   - description: 'Control flow: stop, no-op, yield to renderer'
@@ -5008,6 +5008,98 @@ phases:
   status: planned
   test_target: 2
   title: Crash Recovery and Core Dumps
+- _claimed_at: 1776884806
+  deliverables:
+  - acceptance_criteria:
+    - description: A spawned process can write a 4-word claim entry into the table
+        via RAM writes, and the render loop picks it up on the next frame without
+        restart
+      met: false
+    description: 'Extended claim table at RAM[0x78BF..0x790F]. Count byte at 0x78BF,
+      up to 16 entries of 8 words each starting at 0x78C0. Each entry: x1, y1, x2,
+      y2, owner_pid, render_func_ptr, color1, color2. A process writes its claim
+      by storing count+1 and filling the next slot. No opcode needed -- pure RAM
+      protocol.'
+    name: Extended claim table with owner and render fields
+    status: planned
+  - acceptance_criteria:
+    - description: Two buildings spawn child processes, each registers a claim.
+        Their tiles render different patterns simultaneously on the same viewport
+      met: false
+    description: 'Claim dispatch in world_desktop.asm checks owner_pid. If nonzero,
+      treats color1/color2 as the render palette. If render_func_ptr is nonzero,
+      it contains a RAM address pointing to a 16-word render subroutine that the
+        claim
+      hit path CALLs (via self-modifying CALL instruction). This lets each building
+        run
+      its own tile pattern: checkerboard, stripe, noise, etc.'
+    name: Per-claim render dispatch with callable render functions
+    status: planned
+  - acceptance_criteria:
+    - description: Oracle walks to an adjacent unclaimed tile, writes a new claim
+        entry
+        expanding its territory by one 8x8 block. Render loop shows the new claim
+        immediately
+      met: false
+    description: 'Oracle program (oracle.asm) runs as a background daemon. Each N
+      frames,
+      it picks the nearest unclaimed adjacent tile, writes a new claim entry to the
+      table,
+      and increments claim count. Territory grows organically outward from the building''s
+      initial position. Uses FRAME to pace expansion (1 tile per 60 frames = 1 tile/second).'
+    name: Oracle territorial expansion daemon
+    status: planned
+  - acceptance_criteria:
+    - description: Two oracle-type buildings expand toward each other. When their claims
+        overlap, the one with more total tiles wins the contested region. Verify contested
+        tiles show the majority owner''s render pattern
+      met: false
+    description: 'Second competing building (competitor.asm) with its own expansion
+      daemon
+      and render pattern. When two claims overlap, the claim with more total tiles
+        wins
+      (51% flip). The loser''s contested tiles render in the winner''s pattern. Implements
+      the Digital Red Queen: both buildings are incentivized to expand faster to hold
+      territory. Claim table resolves conflicts in O(n) per tile by comparing owner
+        claim
+      sizes.'
+    name: Competing territory with 51% majority flip
+    status: planned
+  - acceptance_criteria:
+    - description: Test spawns two mock processes that write claims. Verify render
+        loop
+        dispatches correct patterns for each claim region. Verify overlap resolves
+        to
+        majority owner. Verify claim table bounds checking (rejects 17th claim). 8+
+        tests
+      met: false
+    description: 'Tests: test_claim_table_dynamic_registration (process writes claim,
+        verify count increments), test_claim_render_dispatch (verify correct render
+        per
+        claim), test_claim_overlap_51_flip (two claims overlap, larger wins), test_claim_boundaries
+        (17th claim rejected), test_oracle_expansion (oracle expands one tile per
+        interval),
+        test_two_competitors (two daemons compete, verify contested tiles).'
+    name: Territory competition integration tests
+    status: planned
+  description: 'The claim table is hardcoded with 1 static entry. This phase makes
+    it
+    dynamic: spawned processes register and expand their own claims at runtime. Buildings
+    become autonomous agents competing for tile territory on the infinite map. When
+    two
+    claims overlap, the larger claim wins (51% majority flip) -- the Digital Red Queen
+    effect where both agents are incentivized to expand faster. Each claim renders
+    with
+    its own visual pattern, making territory borders visible on the map. The Oracle
+    building becomes a living entity that grows outward, and a second competitor creates
+    the first multi-agent territorial dynamic.'
+  goal: Make the claim system dynamic so buildings compete for territory with visible
+    render patterns and 51% majority conflict resolution
+  id: phase-105
+  scope_lines_total: 1200
+  status: planned
+  test_target: 8
+  title: Dynamic Territory Competition and Digital Red Queen
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

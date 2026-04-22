@@ -169,6 +169,7 @@ fn main() {
             ("linux", "linux_building"),
             ("tetris", "tetris"),
             ("smart_term", "smart_term"),
+            ("oracle", "oracle"),
         ];
         for (app_name, asm_name) in &desktop_apps {
             let pxpk_path = format!("{}.pxpk.png", app_name);

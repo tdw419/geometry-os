@@ -2407,10 +2407,150 @@ impl Vm {
     /// Uses provider.json config (same as hermes agent) or falls back to local Ollama.
     /// The prompt is sent as a user message with a minimal system prompt.
     fn call_llm_external(&self, prompt: &str) -> Option<String> {
-        // Load config from provider.json
+        // Use model_choice library for smart provider routing, fallback, and
+        // Ollama lifecycle management. Falls back to raw curl if model_choice
+        // is unavailable.
+        //
+        // model_choice handles: provider selection (Ollama/ZAI/cloud), auto-start
+        // Ollama, rate limiting, response caching, and fallback chains.
+        //
+        // We call it via Python subprocess since Geometry OS is Rust.
+        // The prompt and system context are written to temp files.
+
+        let prompt_path = "/tmp/geo_llm_prompt.txt";
+        let system_path = "/tmp/geo_llm_system.txt";
+        if std::fs::write(prompt_path, prompt).is_err() {
+            return None;
+        }
+
+        // Build world-aware system prompt from VM state
+        let system = self.build_llm_system_prompt();
+        if std::fs::write(system_path, &system).is_err() {
+            return None;
+        }
+
+        // Python script: load system + user prompt, call generate with system prompt
+        let py_code = "\
+import sys\n\
+from model_choice import generate\n\
+p = open('/tmp/geo_llm_prompt.txt').read()\n\
+s = open('/tmp/geo_llm_system.txt').read()\n\
+r = generate(p, complexity='fast', system=s)\n\
+print(r if r else '')";
+
+        let output = match std::process::Command::new("python3")
+            .args(["-c", py_code])
+            .env("MODEL_CHOICE_TEMPLATE", "ai_daemon")
+            .output()
+        {
+            Ok(o) => o,
+            Err(_) => {
+                return self.call_llm_curl(prompt);
+            }
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let result = stdout.trim().to_string();
+
+        if result.is_empty() {
+            return self.call_llm_curl(prompt);
+        }
+
+        let cleaned = strip_think_blocks(&result);
+        Some(cleaned)
+    }
+
+    /// Build a world-aware system prompt from current VM state.
+    /// Reads player position, camera, biome, and nearby buildings from RAM.
+    fn build_llm_system_prompt(&self) -> String {
+        let px = self.ram.get(0x7808).copied().unwrap_or(0);
+        let py = self.ram.get(0x7809).copied().unwrap_or(0);
+        let cam_x = self.ram.get(0x7800).copied().unwrap_or(0);
+        let cam_y = self.ram.get(0x7801).copied().unwrap_or(0);
+        let zoom = self.ram.get(0x7812).copied().unwrap_or(2);
+        let frame = self.ram.get(0x7802).copied().unwrap_or(0);
+
+        // Biome lookup: same mapping as world_desktop.asm color table at RAM[0x7000]
+        let biome_names = [
+            "Deep Ocean", "Ocean", "Beach", "Desert", "Sandy Desert",
+            "Oasis", "Grassland", "Dark Grass", "Swamp", "Deep Swamp",
+            "Forest", "Dense Forest", "Mushroom Grove", "Mountain",
+            "Snowy Peak", "Tundra", "Lava Field", "Cooled Lava",
+            "Volcanic Rock", "Snowfield", "Packed Snow", "Fresh Snow",
+            "Coral Reef", "Ancient Ruins", "Crystal Cave", "Deep Crystal",
+            "Ash Wastes", "Deadlands", "Barren Deadlands",
+            "Mystic Grove", "Unknown", "Unknown",
+        ];
+        let biome_idx = (px.wrapping_add(py.wrapping_mul(79007)).wrapping_mul(12345)
+            >> 27) as usize;
+        let biome_name = biome_names.get(biome_idx.min(31)).unwrap_or(&"Unknown");
+
+        // Building list
+        let bldg_count = self.ram.get(0x7580).copied().unwrap_or(0).min(32);
+        let mut buildings = Vec::new();
+        for i in 0..bldg_count as usize {
+            let base = 0x7500 + i * 4;
+            let bx = self.ram.get(base).copied().unwrap_or(0);
+            let by = self.ram.get(base + 1).copied().unwrap_or(0);
+            let name_addr = self.ram.get(base + 3).copied().unwrap_or(0) as usize;
+            let mut name = String::new();
+            for j in 0..12 {
+                if name_addr + j >= self.ram.len() { break; }
+                let ch = self.ram[name_addr + j];
+                if ch == 0 || ch > 127 { break; }
+                name.push(ch as u8 as char);
+            }
+            if !name.is_empty() {
+                let dist = ((bx as i32 - px as i32).abs() + (by as i32 - py as i32).abs()) as u32;
+                buildings.push(format!("{} ({},{}) dist={}", name, bx, by, dist));
+            }
+        }
+
+        let mut sys = format!(
+            "You are the Oracle of Geometry OS, an AI guide inside a procedurally generated infinite world. \
+             You speak concisely (1-3 sentences). You have spatial awareness of the world.\n\n\
+             Current world state:\n\
+             - Player position: ({}, {})\n\
+             - Camera: ({}, {}) zoom={}\n\
+             - Frame: {}\n\
+             - Player biome: {} (index {})\n",
+            px, py, cam_x, cam_y, zoom, frame, biome_name, biome_idx
+        );
+
+        if !buildings.is_empty() {
+            sys.push_str("- Buildings on map:\n");
+            for b in &buildings {
+                sys.push_str(&format!("  - {}\n", b));
+            }
+        }
+
+        // Check if player is near a building
+        let nearby_flag = self.ram.get(0x7588).copied().unwrap_or(0);
+        if nearby_flag == 1 {
+            let nearby_idx = self.ram.get(0x7584).copied().unwrap_or(0) as usize;
+            let base = 0x7500 + nearby_idx * 4;
+            let name_addr = self.ram.get(base + 3).copied().unwrap_or(0) as usize;
+            let mut name = String::new();
+            for j in 0..12 {
+                if name_addr + j >= self.ram.len() { break; }
+                let ch = self.ram[name_addr + j];
+                if ch == 0 || ch > 127 { break; }
+                name.push(ch as u8 as char);
+            }
+            if !name.is_empty() {
+                sys.push_str(&format!("- Player is currently near the {} building\n", name));
+            }
+        }
+
+        sys.push_str("\nAnswer questions about the world, suggest where to explore, describe the terrain, or help with anything the player asks.");
+        sys
+    }
+
+    /// Fallback: raw curl-based LLM call using provider.json config.
+    /// Used when model_choice is unavailable.
+    fn call_llm_curl(&self, prompt: &str) -> Option<String> {
         let (base_url, model, api_key) = self.load_llm_config();
 
-        // Escape prompt for JSON
         let esc_prompt = prompt
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
@@ -2424,31 +2564,20 @@ impl Vm {
             .replace('\n', "\\n")
             .replace('\t', "\\t");
 
-        // Build JSON payload
         let payload = format!(
             r#"{{"model":"{}","messages":[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}],"stream":false,"max_tokens":512,"temperature":0.3}}"#,
             model, esc_sys, esc_prompt
         );
 
-        // Write to temp file
         let tmp_path = "/tmp/geo_llm_payload.json";
         if std::fs::write(tmp_path, &payload).is_err() {
             return None;
         }
 
-        // Build curl command
         let data_arg = format!("@{}", tmp_path);
         let mut curl_args: Vec<&str> = vec![
-            "-s",
-            "-X",
-            "POST",
-            &base_url,
-            "-d",
-            &data_arg,
-            "-H",
-            "Content-Type: application/json",
-            "--max-time",
-            "30",
+            "-s", "-X", "POST", &base_url, "-d", &data_arg,
+            "-H", "Content-Type: application/json", "--max-time", "30",
         ];
 
         let auth_header;
@@ -2464,16 +2593,10 @@ impl Vm {
         };
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-
-        // Check for errors
         if stdout.contains("\"error\"") {
             return None;
         }
 
-        // Parse response: extract content from JSON.
-        // Strategy: prefer "content" field. If empty, try "reasoning_content".
-        // Some models (e.g. glm-5.1) put the actual answer in "content" but
-        // "reasoning_content" contains the thinking tokens -- we want the answer.
         let mut extracted: Option<String> = None;
         for field in &["\"content\":\"", "\"reasoning_content\":\""] {
             if let Some(start) = stdout.find(field) {
@@ -2502,12 +2625,8 @@ impl Vm {
                     }
                 }
                 if !result.is_empty() {
-                    // Strip <think/> blocks (some models emit them)
                     let cleaned = strip_think_blocks(&result);
-                    // For reasoning_content, extract just the last line (usually the answer)
-                    // since the rest is thinking process
                     let final_text = if field == &"\"reasoning_content\":\"" {
-                        // Take only the last non-empty line
                         cleaned
                             .lines()
                             .filter(|l| !l.trim().is_empty())
