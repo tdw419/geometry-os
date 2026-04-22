@@ -327,6 +327,9 @@ fn test_all_programs_assemble() {
         "programs/push_pop_test.asm",
         "programs/sfx_demo.asm",
         "programs/music_demo.asm",
+        "programs/oracle.asm",
+        "programs/smart_term.asm",
+        "programs/world_desktop.asm",
     ];
     for path in programs {
         let source = std::fs::read_to_string(path)

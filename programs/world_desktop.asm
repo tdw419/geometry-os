@@ -540,10 +540,44 @@ LDI r17, 0x76A0
 STORE r20, r17
 ADDI r20, 1
 
+; Building 11: oracle (AI/purple 0xBB44FF)
+LDI r17, 130
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 90
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0xBB44FF
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x76B0
+STORE r20, r17
+ADDI r20, 1
+
 ; Building count
 LDI r17, 0x7580
-LDI r18, 11
+LDI r18, 12
 STORE r17, r18
+
+; ===== Claim Table =====
+; Count at RAM[0x78BF], entries at RAM[0x78C0..0x78DF] (up to 8 entries).
+LDI r20, 0x78BF
+LDI r17, 1
+STORE r20, r17               ; claim count = 1
+
+LDI r20, 0x78C0
+LDI r17, 40                  ; x1
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 28                  ; y1
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 48                  ; x2 (exclusive)
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 36                  ; y2 (exclusive)
+STORE r20, r17
+ADDI r20, 1
 
 ; ===== Building Name Strings at RAM[0x7600-0x768F] =====
 LDI r20, 0x7600
@@ -568,6 +602,8 @@ LDI r20, 0x7690
 STRO r20, "tetris"
 LDI r20, 0x76A0
 STRO r20, "smart_term"
+LDI r20, 0x76B0
+STRO r20, "oracle"
 
 ; Clear nearby building flag
 LDI r17, 0x7584
@@ -884,6 +920,55 @@ ypre_done:
     ADD r3, r2           ; r3 = world_x
     MOV r4, r15
     ADD r4, r1           ; r4 = world_y
+
+    ; ---- Claim dispatch ----
+    ; Check if tile is inside a claimed region. Claimed tiles skip the
+    ; default biome pipeline and render with a competing hash function.
+    LDI r18, 0x78BF
+    LOAD r18, r18        ; r18 = claim count
+    JZ r18, no_claim
+    LDI r21, 0x78C0      ; r21 = first entry base
+claim_loop:
+    LOAD r22, r21        ; x1
+    CMP r3, r22
+    BLT r0, claim_miss
+    ADDI r21, 2
+    LOAD r22, r21        ; x2 (exclusive)
+    CMP r3, r22
+    BGE r0, claim_x_pass
+    JMP claim_miss
+claim_x_pass:
+    SUBI r21, 1
+    LOAD r22, r21        ; y1
+    CMP r4, r22
+    BLT r0, claim_miss
+    ADDI r21, 2
+    LOAD r22, r21        ; y2 (exclusive)
+    CMP r4, r22
+    BGE r0, claim_hit
+    JMP claim_miss
+claim_hit:
+    ; Tile claimed -- render with competing checkerboard hash
+    MOV r22, r3
+    ADD r22, r4
+    ANDI r22, 1
+    JZ r22, claim_teal
+    LDI r23, 0xFF00FF     ; magenta
+    JMP claim_draw
+claim_teal:
+    LDI r23, 0x00FFAA     ; neon teal
+claim_draw:
+    RECTF r28, r27, r9, r9, r23
+    JMP claim_next_tile
+claim_miss:
+    ; Restore r21 to entry start and advance by 4 for next iteration
+    LDI r21, 0x78C0
+    LDI r22, 4
+    SUBI r18, 1
+    MUL r22, r18         ; r22 = 4 * (remaining entries - 1)
+    ADD r21, r22
+    JNZ r18, claim_loop
+no_claim:
 
     ; ---- Coarse hash for biome ----
     MOV r5, r3
@@ -1463,6 +1548,7 @@ tree_draw:
 
 no_tree:
 
+claim_next_tile:
     ; ---- Next tile ----
     ADD r2, r7            ; tx++
     ADD r28, r9           ; screen_x += TILE_SIZE
