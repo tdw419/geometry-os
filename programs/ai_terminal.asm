@@ -41,6 +41,8 @@
 #define HISTORY 0x7400
 #define ASM_STATUS 0xFFD
 #define RUN_PENDING 0x7830   ; Nonzero = compiled bytecode waiting for /yes
+#define CHILD_PID     0x7843   ; PID of last spawned child (set by cmd_yes)
+#define RECOVERY_MODE 0x7844   ; 1 = auto-execute LLM response without /yes
 #define LAST_HEARTBEAT 0x7840
 #define WATCHDOG_TIMER 0x7841
 #define WATCHDOG_STRIKES 0x7842
@@ -967,6 +969,9 @@ cmd_yes:
     JZ r0, yes_spawn_failed
 
     ; Success -- child PID in r0
+    ; Store child PID for watchdog/recovery
+    LDI r20, CHILD_PID
+    STORE r20, r0
     LDI r20, SCRATCH
     STRO r20, "Sandbox running."
     CALL write_line_to_buf
@@ -1893,24 +1898,284 @@ cw_done:
     RET
 
 ; =========================================
-; TRIGGER_HEAL -- Handle child flatline
+; TRIGGER_HEAL -- Autonomous fault recovery
+; Kills flatlined child, sends fault context to LLM,
+; sets RECOVERY_MODE so the response auto-executes.
 ; =========================================
 trigger_heal:
-    ; Print fault message
-    LDI r20, SCRATCH
-    STRO r20, "FAULT: Child flatline detected!"
-    CALL write_line_to_buf
+    PUSH r31
 
-    ; Recovery Strategy: Kill and re-spawn
-    ; In a full implementation, we'd call the LLM here.
-    ; For now, just reset the strikes so we don't spam.
+    ; Log the fault
+    LDI r20, SCRATCH
+    STRO r20, "FAULT: Child flatline!"
+    CALL write_line_to_buf
+    LDI r1, 1
+
+    ; Kill the old child
+    LDI r20, CHILD_PID
+    LOAD r10, r20
+    LDI r11, 0              ; Signal 0 = SIGTERM
+    SIGNAL r10, r11
+    ; Ignore result -- child may already be dead
+
+    LDI r20, SCRATCH
+    STRO r20, "Killed child process"
+    CALL write_line_to_buf
+    LDI r1, 1
+
+    ; ── Build fault prompt in PROMPT_BUF ──
+    LDI r19, PROMPT_BUF
+
+    ; System context
+    STRO r19, "You are a debugging AI inside Geometry OS. A program you wrote just crashed. "
+    CALL advance_to_null
+    STRO r19, "Fix the bug. Output ONLY the corrected assembly code in a code block. Be concise."
+    CALL advance_to_null
+
+    ; Newline
+    LDI r12, 10
+    STORE r19, r12
+    ADDI r19, 1
+    STORE r19, r12
+    ADDI r19, 1
+
+    ; Fault context
+    STRO r19, "FAULT: Program flatlined (heartbeat stopped for 3 seconds)."
+    CALL advance_to_null
+    LDI r12, 10
+    STORE r19, r12
+    ADDI r19, 1
+
+    ; Checkpoint PC
+    STRO r19, "Last checkpoint PC: 0x"
+    CALL advance_to_null
+    LDI r20, DEBUG_CHECKPOINT
+    LOAD r0, r20
+    CALL write_hex_to_buf   ; writes 8 hex chars to r19
+
+    LDI r12, 10
+    STORE r19, r12
+    ADDI r19, 1
+
+    ; Append source if available (RESP_BUF still has last LLM output)
+    LDI r20, RESP_BUF
+    LOAD r12, r20
+    LDI r13, 0
+    CMP r12, r13
+    JZ r0, heal_no_source
+
+    STRO r19, "Original source:"
+    CALL advance_to_null
+    LDI r12, 10
+    STORE r19, r12
+    ADDI r19, 1
+    LDI r18, RESP_BUF
+    CALL copy_until_null
+
+heal_no_source:
+    ; Null-terminate
+    LDI r12, 0
+    STORE r19, r12
+
+    ; Set recovery mode so LLM response auto-executes
+    LDI r20, RECOVERY_MODE
+    LDI r0, 1
+    STORE r20, r0
+
+    ; Reset watchdog strikes
     LDI r20, WATCHDOG_STRIKES
     LDI r0, 0
     STORE r20, r0
 
-    ; Log recovery attempt
-    LDI r20, SCRATCH
-    STRO r20, "Watchdog: recovery loop engaged"
-    CALL write_line_to_buf
+    ; Clear child PID (it's dead)
+    LDI r20, CHILD_PID
+    LDI r0, 0
+    STORE r20, r0
 
+    ; Call LLM
+    LDI r3, PROMPT_BUF
+    LDI r4, RESP_BUF
+    LDI r5, 3840
+    LLM r3, r4, r5
+
+    ; Show status
+    LDI r20, SCRATCH
+    STRO r20, "Recovery: LLM consulted"
+    CALL write_line_to_buf
+    LDI r1, 1
+
+    ; ── Auto-execute: assemble the LLM's fix and re-spawn ──
+    ; Check if LLM returned anything
+    LDI r20, RESP_BUF
+    LOAD r0, r20
+    LDI r6, 0
+    CMP r0, r6
+    JZ r0, heal_no_response
+
+    ; Assemble the response
+    LDI r20, SCRATCH
+    STRO r20, "Recovery: assembling fix..."
+    CALL write_line_to_buf
+    LDI r1, 1
+
+    LDI r10, RESP_BUF
+    ASM_RAM r10
+
+    ; Check assembly status
+    LDI r20, ASM_STATUS
+    LOAD r0, r20
+    LDI r6, 0xFFFFFFFF
+    CMP r0, r6
+    JZ r0, heal_asm_failed
+
+    LDI r6, 0
+    CMP r0, r6
+    JZ r0, heal_asm_empty
+
+    ; Assembly succeeded -- spawn directly (no /yes gate)
+    LDI r20, SCRATCH
+    STRO r20, "Recovery: re-spawning..."
+    CALL write_line_to_buf
+    LDI r1, 1
+
+    CALL build_sandbox_caps
+    LDI r1, 1
+    LDI r10, 0x1000
+    LDI r11, SANDBOX_CAPS
+    SPAWNC r10, r11
+
+    ; Check spawn result
+    LDI r21, 0xFFA
+    LOAD r0, r21
+    LDI r6, 0xFFFFFFFF
+    CMP r0, r6
+    JZ r0, heal_spawn_failed
+
+    ; Success -- store new child PID
+    LDI r20, CHILD_PID
+    STORE r20, r0
+
+    LDI r20, SCRATCH
+    STRO r20, "Recovery: child respawned!"
+    CALL write_line_to_buf
+    LDI r1, 1
+    JMP heal_done
+
+heal_no_response:
+    LDI r20, SCRATCH
+    STRO r20, "Recovery: LLM returned nothing"
+    CALL write_line_to_buf
+    LDI r1, 1
+    JMP heal_done
+
+heal_asm_failed:
+    LDI r20, SCRATCH
+    STRO r20, "Recovery: assembly failed"
+    CALL write_line_to_buf
+    LDI r1, 1
+    JMP heal_done
+
+heal_asm_empty:
+    LDI r20, SCRATCH
+    STRO r20, "Recovery: empty assembly"
+    CALL write_line_to_buf
+    LDI r1, 1
+    JMP heal_done
+
+heal_spawn_failed:
+    LDI r20, SCRATCH
+    STRO r20, "Recovery: spawn failed"
+    CALL write_line_to_buf
+    LDI r1, 1
+
+heal_done:
+    ; Clear recovery mode
+    LDI r20, RECOVERY_MODE
+    LDI r0, 0
+    STORE r20, r0
+
+    POP r31
+    RET
+
+; =========================================
+; WRITE_HEX_TO_BUF -- write 8-char hex of r0 to buffer at r19
+; Input: r0 = value, r19 = buffer position
+; Advances r19 by 8. Uses r2, r3 as scratch.
+; =========================================
+write_hex_to_buf:
+    PUSH r31
+    PUSH r0
+    LDI r1, 1
+
+    ; Nibble 7 (bits 31-28)
+    PUSH r0
+    SHRI r0, 28
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r19, r0
+    ADDI r19, 1
+    POP r0
+
+    ; Nibble 6 (bits 27-24)
+    PUSH r0
+    SHRI r0, 24
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r19, r0
+    ADDI r19, 1
+    POP r0
+
+    ; Nibble 5 (bits 23-20)
+    PUSH r0
+    SHRI r0, 20
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r19, r0
+    ADDI r19, 1
+    POP r0
+
+    ; Nibble 4 (bits 19-16)
+    PUSH r0
+    SHRI r0, 16
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r19, r0
+    ADDI r19, 1
+    POP r0
+
+    ; Nibble 3 (bits 15-12)
+    PUSH r0
+    SHRI r0, 12
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r19, r0
+    ADDI r19, 1
+    POP r0
+
+    ; Nibble 2 (bits 11-8)
+    PUSH r0
+    SHRI r0, 8
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r19, r0
+    ADDI r19, 1
+    POP r0
+
+    ; Nibble 1 (bits 7-4)
+    PUSH r0
+    SHRI r0, 4
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r19, r0
+    ADDI r19, 1
+    POP r0
+
+    ; Nibble 0 (bits 3-0)
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r19, r0
+    ADDI r19, 1
+
+    POP r0
+    POP r31
     RET
