@@ -408,7 +408,7 @@ impl Vm {
         self.current_pid = snap.current_pid;
     }
 }
-mod types;
+pub mod types;
 pub use types::*;
 
 // Execution trace ring buffer (Phase 38a)
@@ -1219,6 +1219,7 @@ impl Vm {
                     match op {
                         0 => {
                             // CREATE: r1=x, r2=y, r3=w, r4=h, r5=title_addr
+                            // When RAM[WINDOW_WORLD_COORDS_ADDR] == 1, r1/r2 are world coords.
                             // Phase 107: if RAM[0x7810] == 1, r1/r2 are world-space coords
                             let active_count = self.windows.iter().filter(|w| w.active).count();
                             if active_count >= MAX_WINDOWS {
@@ -1323,14 +1324,20 @@ impl Vm {
                         5 => {
                             // MOVETO: Move window to new position.
                             // r0=win_id, r1=new_x, r2=new_y.
+                            // For world-space windows, updates world_x/world_y.
                             let win_id = self.regs[0];
                             let new_x = if 1 < NUM_REGS { self.regs[1] } else { 0 };
                             let new_y = if 2 < NUM_REGS { self.regs[2] } else { 0 };
                             if let Some(w) =
                                 self.windows.iter_mut().find(|w| w.id == win_id && w.active)
                             {
-                                w.x = new_x;
-                                w.y = new_y;
+                                if w.is_world_space() {
+                                    w.world_x = new_x;
+                                    w.world_y = new_y;
+                                } else {
+                                    w.x = new_x;
+                                    w.y = new_y;
+                                }
                                 self.regs[0] = 1; // success
                             } else {
                                 self.regs[0] = 0; // not found
@@ -1338,7 +1345,7 @@ impl Vm {
                         }
                         6 => {
                             // WINFO: Get window info.
-                            // r0=win_id. Writes [x, y, w, h, z_order, pid] to RAM
+                            // r0=win_id. Writes [x, y, w, h, z_order, pid, world_x, world_y] to RAM
                             // starting at address in r1.
                             let win_id = self.regs[0];
                             let addr = if 1 < NUM_REGS {
@@ -1349,7 +1356,10 @@ impl Vm {
                             if let Some(w) =
                                 self.windows.iter().find(|w| w.id == win_id && w.active)
                             {
-                                let info = [w.x, w.y, w.w, w.h, w.z_order, w.pid];
+                                let info = [
+                                    w.x, w.y, w.w, w.h, w.z_order, w.pid,
+                                    w.world_x, w.world_y,
+                                ];
                                 for (i, &val) in info.iter().enumerate() {
                                     let slot = addr + i;
                                     if slot < self.ram.len() {
@@ -2572,12 +2582,14 @@ impl Vm {
     /// Non-zero pixels in the offscreen buffer overwrite the screen.
     /// Zero pixels (0x00000000) are transparent -- they don't overwrite.
     /// Clip at screen edges (256x256).
+    /// Phase 107: World-space windows (is_world_space() == true) are skipped here
+    /// and composited separately by the host renderer via blit_world_windows().
     pub fn blit_windows(&mut self) {
-        // Collect (id, x, y, w, h, z_order) for active windows, sorted by z_order ascending
+        // Collect (id, x, y, w, h, z_order) for active SCREEN-SPACE windows, sorted by z_order ascending
         let mut wins: Vec<(u32, u32, u32, u32, u32, u32)> = self
             .windows
             .iter()
-            .filter(|w| w.active)
+            .filter(|w| w.active && !w.is_world_space())
             .map(|w| (w.id, w.x, w.y, w.w, w.h, w.z_order))
             .collect();
         wins.sort_by_key(|w| w.5); // sort by z_order ascending (lowest first)

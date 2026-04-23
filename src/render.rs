@@ -705,6 +705,68 @@ pub fn render_fullscreen_map(
         }
     }
 
+    // ── Phase 107: Blit world-space windows (scaled with zoom) ──
+    // World-space windows are positioned in tile coordinates and pan with the camera.
+    // They use the viewport module to convert world coords to screen coords.
+    {
+        use crate::viewport::Viewport;
+        use crate::vm::types::WORLD_COORD_UNSET;
+
+        let zoom_level = vm.ram.get(0x7812).copied().unwrap_or(2).min(4);
+        let viewport = Viewport::from_ram(&vm.ram, zoom_level);
+
+        // Collect world-space windows sorted by z_order
+        let mut world_wins: Vec<&crate::vm::Window> = vm
+            .windows
+            .iter()
+            .filter(|w| {
+                w.active
+                    && w.is_world_space()
+                    && w.world_x != WORLD_COORD_UNSET
+                    && w.world_y != WORLD_COORD_UNSET
+            })
+            .collect();
+        world_wins.sort_by_key(|w| w.z_order);
+
+        for win in &world_wins {
+            // Convert world tile coords to world pixel coords
+            let world_px = (win.world_x as i32) * 8; // 8 pixels per tile
+            let world_py = (win.world_y as i32) * 8;
+
+            // Check visibility
+            if !viewport.is_rect_visible(world_px, world_py, win.w, win.h) {
+                continue;
+            }
+
+            // Get screen position
+            let (sx, sy) = viewport.world_pixels_to_screen(world_px, world_py);
+            let s_scale = viewport.zoom.scale as i32;
+
+            // Blit offscreen buffer with scale
+            let ww = win.w as usize;
+            for py in 0..win.h as usize {
+                for px in 0..ww {
+                    let color = win.offscreen_buffer[py * ww + px];
+                    if color == 0 {
+                        continue; // transparent
+                    }
+                    // Scale each pixel
+                    let base_x = sx + (px as i32) * s_scale;
+                    let base_y = sy + (py as i32) * s_scale;
+                    for dy in 0..s_scale {
+                        for dx in 0..s_scale {
+                            let px_out = base_x + dx;
+                            let py_out = base_y + dy;
+                            if px_out >= 0 && px_out < WIDTH as i32 && py_out >= 0 && py_out < HEIGHT as i32 {
+                                buffer[(py_out as usize) * WIDTH + (px_out as usize)] = color;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ── Building icon overlay (scaled with zoom) ───────────────
     if let Some(icon_cache) = icon_cache {
         let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0).min(32) as usize;

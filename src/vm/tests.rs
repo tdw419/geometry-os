@@ -11368,10 +11368,10 @@ fn test_building_table_initialized() {
             break;
         }
     }
-    // Building count at 0x7580 should be 12 (oracle added)
+    // Building count at 0x7580 should be 13 (ai_terminal added)
     assert_eq!(
-        vm.ram[0x7580], 12,
-        "building count should be 12, got {}",
+        vm.ram[0x7580], 13,
+        "building count should be 13, got {}",
         vm.ram[0x7580]
     );
     // First building at 0x7500 should have world_x = 52
@@ -11802,7 +11802,7 @@ fn test_building_count_correct() {
             break;
         }
     }
-    assert_eq!(vm.ram[0x7580], 12, "building count should be exactly 12");
+    assert_eq!(vm.ram[0x7580], 13, "building count should be exactly 13");
 }
 
 #[test]
@@ -15988,4 +15988,253 @@ fn test_demo_tour_exists() {
         std::path::Path::new("docs/demo_tour.md").exists(),
         "docs/demo_tour.md should exist for AI guided demo"
     );
+}
+
+
+// ── Phase 107: World-Space Window Placement ──────────────────
+
+#[test]
+fn test_winsys_create_world_space_window() {
+    // When RAM[0x7810] == 1, WINSYS op=0 creates a world-space window
+    let mut vm = Vm::new();
+    vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1; // enable world-space mode
+
+    vm.regs[1] = 100; // world_x
+    vm.regs[2] = 200; // world_y
+    vm.regs[3] = 64;  // w
+    vm.regs[4] = 48;  // h
+    vm.regs[5] = 0;   // title_addr
+    vm.regs[6] = 0;   // op = create
+
+    vm.ram[0] = 0x94; // WINSYS
+    vm.ram[1] = 6;    // op_reg = r6
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
+
+    assert_eq!(vm.regs[0], 1, "first window should have id 1");
+    assert_eq!(vm.windows.len(), 1);
+    let w = &vm.windows[0];
+    assert!(w.is_world_space(), "window should be world-space");
+    assert_eq!(w.world_x, 100);
+    assert_eq!(w.world_y, 200);
+    assert_eq!(w.w, 64);
+    assert_eq!(w.h, 48);
+    assert_eq!(w.x, 0, "screen x should be 0 (computed at render time)");
+    assert_eq!(w.y, 0, "screen y should be 0 (computed at render time)");
+}
+
+#[test]
+fn test_winsys_create_screen_space_window_default() {
+    // Without RAM[0x7810] set, WINSYS op=0 creates screen-space windows (legacy)
+    let mut vm = Vm::new();
+    // RAM[0x7810] defaults to 0 -- no world-space mode
+
+    vm.regs[1] = 10; // screen x
+    vm.regs[2] = 20; // screen y
+    vm.regs[3] = 64; // w
+    vm.regs[4] = 48; // h
+    vm.regs[5] = 0;  // title_addr
+    vm.regs[6] = 0;  // op = create
+
+    vm.ram[0] = 0x94; // WINSYS
+    vm.ram[1] = 6;    // op_reg = r6
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
+
+    assert_eq!(vm.regs[0], 1, "first window should have id 1");
+    let w = &vm.windows[0];
+    assert!(!w.is_world_space(), "window should be screen-space (default)");
+    assert_eq!(w.x, 10);
+    assert_eq!(w.y, 20);
+    assert_eq!(w.world_x, WORLD_COORD_UNSET);
+    assert_eq!(w.world_y, WORLD_COORD_UNSET);
+}
+
+#[test]
+fn test_winsys_moveto_world_space_window() {
+    // MOVETO on a world-space window updates world_x/world_y
+    let mut vm = Vm::new();
+    vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
+
+    // Create window (op=0) in world-space
+    vm.regs[1] = 50;  // world_x
+    vm.regs[2] = 60;  // world_y
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step(); // WINSYS
+    let win_id = vm.regs[0];
+    assert_eq!(win_id, 1);
+
+    // MOVETO (op=5): update world position
+    vm.regs[0] = win_id;
+    vm.regs[1] = 150; // new world_x
+    vm.regs[2] = 250; // new world_y
+    vm.regs[6] = 5;   // moveto
+    vm.ram[3] = 0x94;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x00;
+    vm.pc = 3;
+    vm.step(); // MOVETO
+    vm.step(); // HALT
+
+    assert_eq!(vm.regs[0], 1, "moveto should succeed");
+    let w = &vm.windows[0];
+    assert_eq!(w.world_x, 150, "world_x should be updated");
+    assert_eq!(w.world_y, 250, "world_y should be updated");
+}
+
+#[test]
+fn test_winsys_moveto_screen_space_window() {
+    // MOVETO on a screen-space window updates x/y (legacy behavior)
+    let mut vm = Vm::new();
+    // RAM[0x7810] = 0 (default, screen-space)
+
+    // Create window (op=0) in screen-space
+    vm.regs[1] = 10;
+    vm.regs[2] = 20;
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step(); // WINSYS
+    let win_id = vm.regs[0];
+
+    // MOVETO (op=5): update screen position
+    vm.regs[0] = win_id;
+    vm.regs[1] = 30;
+    vm.regs[2] = 40;
+    vm.regs[6] = 5; // moveto
+    vm.ram[3] = 0x94;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x00;
+    vm.pc = 3;
+    vm.step(); // MOVETO
+    vm.step(); // HALT
+
+    assert_eq!(vm.regs[0], 1, "moveto should succeed");
+    let w = &vm.windows[0];
+    assert_eq!(w.x, 30, "screen x should be updated");
+    assert_eq!(w.y, 40, "screen y should be updated");
+}
+
+#[test]
+fn test_winsys_winfo_includes_world_coords() {
+    // WINFO (op=6) now returns 8 values: [x, y, w, h, z_order, pid, world_x, world_y]
+    let mut vm = Vm::new();
+    vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
+
+    // Create world-space window
+    vm.regs[1] = 42;  // world_x
+    vm.regs[2] = 99;  // world_y
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step(); // WINSYS create
+    let win_id = vm.regs[0];
+
+    // WINFO (op=6): write to RAM at 0x3000
+    let info_addr: usize = 0x3000;
+    vm.regs[0] = win_id;
+    vm.regs[1] = info_addr as u32;
+    vm.regs[6] = 6; // winfo
+    vm.ram[2] = 0x94;
+    vm.ram[3] = 6;
+    vm.ram[4] = 0x00; // HALT
+    vm.step(); // WINSYS winfo
+    vm.step(); // HALT
+
+    assert_eq!(vm.regs[0], 1, "winfo should succeed");
+    // [0]=x, [1]=y, [2]=w, [3]=h, [4]=z_order, [5]=pid, [6]=world_x, [7]=world_y
+    assert_eq!(vm.ram[info_addr + 2], 64, "w");
+    assert_eq!(vm.ram[info_addr + 3], 48, "h");
+    assert_eq!(vm.ram[info_addr + 6], 42, "world_x");
+    assert_eq!(vm.ram[info_addr + 7], 99, "world_y");
+}
+
+#[test]
+fn test_winsys_winfo_screen_space_world_unset() {
+    // For screen-space windows, world_x/world_y should be WORLD_COORD_UNSET
+    let mut vm = Vm::new();
+    // RAM[0x7810] = 0 (default, screen-space)
+
+    // Create screen-space window
+    vm.regs[1] = 10;
+    vm.regs[2] = 20;
+    vm.regs[3] = 32;
+    vm.regs[4] = 32;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step(); // WINSYS create
+    let win_id = vm.regs[0];
+
+    // WINFO (op=6)
+    let info_addr: usize = 0x3000;
+    vm.regs[0] = win_id;
+    vm.regs[1] = info_addr as u32;
+    vm.regs[6] = 6; // winfo
+    vm.ram[2] = 0x94;
+    vm.ram[3] = 6;
+    vm.ram[4] = 0x00; // HALT
+    vm.step();
+    vm.step();
+
+    assert_eq!(vm.ram[info_addr + 0], 10, "x");
+    assert_eq!(vm.ram[info_addr + 1], 20, "y");
+    assert_eq!(vm.ram[info_addr + 6], WORLD_COORD_UNSET, "world_x should be unset");
+    assert_eq!(vm.ram[info_addr + 7], WORLD_COORD_UNSET, "world_y should be unset");
+}
+
+#[test]
+fn test_existing_programs_screen_space_unchanged() {
+    // Existing programs that use screen-space WINSYS continue to work
+    // (flag defaults to off) -- verify by creating a window without setting RAM[0x7810]
+    let mut vm = Vm::new();
+
+    vm.regs[1] = 50;
+    vm.regs[2] = 60;
+    vm.regs[3] = 80;
+    vm.regs[4] = 60;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
+
+    let w = &vm.windows[0];
+    assert!(!w.is_world_space());
+    assert_eq!(w.x, 50);
+    assert_eq!(w.y, 60);
+    assert_eq!(w.w, 80);
+    assert_eq!(w.h, 60);
 }

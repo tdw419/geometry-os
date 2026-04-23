@@ -21,6 +21,7 @@ mod qemu;
 mod render;
 mod save;
 mod vfs;
+mod viewport;
 #[allow(dead_code)]
 mod vision;
 mod vm;
@@ -170,6 +171,7 @@ fn main() {
             ("tetris", "tetris"),
             ("smart_term", "smart_term"),
             ("oracle", "oracle"),
+            ("ai_terminal", "ai_terminal"),
         ];
         for (app_name, asm_name) in &desktop_apps {
             let pxpk_path = format!("{}.pxpk.png", app_name);

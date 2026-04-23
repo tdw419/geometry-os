@@ -554,9 +554,23 @@ LDI r17, 0x76B0
 STORE r20, r17
 ADDI r20, 1
 
+; Building 12: ai_terminal (AI/cyan 0x00FFFF)
+LDI r17, 160
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 90
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x00FFFF
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x76C0
+STORE r20, r17
+ADDI r20, 1
+
 ; Building count
 LDI r17, 0x7580
-LDI r18, 12
+LDI r18, 13
 STORE r17, r18
 
 ; ===== Claim Table =====
@@ -604,6 +618,8 @@ LDI r20, 0x76A0
 STRO r20, "smart_term"
 LDI r20, 0x76B0
 STRO r20, "oracle"
+LDI r20, 0x76C0
+STRO r20, "ai_terminal"
 
 ; Clear nearby building flag
 LDI r17, 0x7584
