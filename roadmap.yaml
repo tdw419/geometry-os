@@ -5277,6 +5277,7 @@ phases:
   goal: AI-written code can never corrupt parent VM state or access
     unauthorized filesystem paths.
   id: phase-108
+  title: Sandboxed AI Execution
   status: complete
   test_target: 8
   scope_lines_total: 180
@@ -5366,6 +5367,7 @@ phases:
     the AI Terminal as a diagnostic tool for the OS itself.
   goal: Make the AI Terminal's asm_dev system prompt self-truthful so generated assembly cannot invoke opcodes that don't exist.
   id: phase-109
+  title: Opcode Focus Filter
   status: complete
   test_target: 7
   scope_lines_total: 110
@@ -5411,6 +5413,7 @@ phases:
     can be steered toward targeted diagnostic output from the keyboard.
   goal: Wire Phase 109 prompt-context hooks to user-facing commands in ai_terminal.asm.
   id: phase-110
+  title: Self-Analysis Program
   status: complete
   test_target: 4
   scope_lines_total: 200
@@ -5456,6 +5459,7 @@ phases:
     becoming its own QA agent.
   goal: Build a self-analysis program using SCREENP and LLM opcodes for AI-inside-AI QA loop.
   id: phase-111
+  title: Enhanced Glyph Backend
   status: complete
   test_target: 4
   scope_lines_total: 362
@@ -5489,6 +5493,7 @@ phases:
     moving away from assembly-based UI management toward font-atomic spatial programs.
   goal: Evolve the GlyphLang compiler and implement a purely Glyph-native desktop shell.
   id: phase-112
+  title: Tetris in GlyphLang
   status: complete
   test_target: 2
   scope_lines_total: 150
@@ -5515,6 +5520,7 @@ phases:
     then to bytecode.
   goal: Build a playable Tetris game entirely in GlyphLang.
   id: phase-113
+  title: BC4 Hardware Compression Thesis
   status: complete
   test_target: 2
   scope_lines_total: 265
