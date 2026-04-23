@@ -1,0 +1,73 @@
+# Glyph Shell
+# A purely Glyph-native desktop shell
+
+# Initialize selection index (a = 0)
+0 a
+
+:main
+  # Clear screen to dark blue
+  0x1A1A2E |
+
+  # Draw Title Bar
+  0 0 256 20 0x2D0050 [
+  10 4 "Glyph Shell v1" 0xFFFFFF 0x2D0050 {
+
+  # Draw Apps List
+  10 30 "1. Ball" 0xCCCCCC 0 {
+  10 50 "2. Snake" 0xCCCCCC 0 {
+  10 70 "3. About" 0xCCCCCC 0 {
+
+  # Draw Footer
+  10 240 "Enter: Run  W/S: Select" 0x888888 0 {
+
+  # Draw selection cursor based on 'a' register
+  # x = 4, y = 32 + (a * 20)
+  4 A 20 * 32 + 4 10 0x00FF00 [
+
+:loop
+  ! # FRAME
+  ^ k # IKEY stored in k
+  
+  # Check if key is 0
+  K (loop
+  
+  # Handle W (87)
+  K 87 = )move_up
+  
+  # Handle S (83)
+  K 83 = )move_down
+  
+  # Handle Enter (13)
+  K 13 = )run_app
+  
+  ~loop
+
+:move_up
+  A 0 > )dec_a
+  ~main
+:dec_a
+  A 1 - a
+  ~main
+
+:move_down
+  A 2 < )inc_a
+  ~main
+:inc_a
+  A 1 + a
+  ~main
+
+:run_app
+  # Select app based on 'a'
+  A 0 = )run_ball
+  A 1 = )run_snake
+  A 2 = )run_about
+  ~main
+
+:run_ball
+  "ball.asm" & ~main
+
+:run_snake
+  "snake.asm" & ~main
+
+:run_about
+  "about.asm" & ~main

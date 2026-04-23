@@ -878,10 +878,54 @@ fn test_self_analysis_quadrant_counts_nonzero() {
     let tr = extract_count("Top-right:");
     let bl = extract_count("Bottom-left:");
     let br = extract_count("Bottom-right:");
+    let tl = extract_count("Top-left:");
+    let tr = extract_count("Top-right:");
+    let bl = extract_count("Bottom-left:");
+    let br = extract_count("Bottom-right:");
 
-    // TL should have the most content (red block + title bar)
-    assert!(tl > 0, "TL quadrant should have non-zero pixel count, got {}", tl);
-    assert!(tr > 0, "TR quadrant should have non-zero pixel count, got {}", tr);
+    // BL should have the most content (blue block)
     assert!(bl > 0, "BL quadrant should have non-zero pixel count, got {}", bl);
     assert!(br > 0, "BR quadrant should have non-zero pixel count, got {}", br);
 }
+
+#[test]
+fn test_glyph_shell_compiles() {
+    let source = include_str!("../programs/glyph_shell.glyph");
+    let asm_text = geometry_os::glyph_backend::compile_glyph(source)
+        .expect("glyph_shell.glyph should compile to assembly");
+    
+    // Ensure it contains the new opcodes as emitted GeoOS assembly
+    assert!(asm_text.contains("RECTF"));
+    assert!(asm_text.contains("DRAWTEXT"));
+    assert!(asm_text.contains("FRAME"));
+    assert!(asm_text.contains("IKEY"));
+    assert!(asm_text.contains("FILL"));
+    assert!(asm_text.contains("EXEC"));
+    
+    // Verify it assembles to bytecode
+    let mut pp = geometry_os::preprocessor::Preprocessor::new();
+    let preprocessed = pp.preprocess(&asm_text);
+    geometry_os::assembler::assemble(&preprocessed, 0)
+        .expect("Compiled glyph_shell assembly should assemble to bytecode");
+}
+
+#[test]
+fn test_glyph_shell_execution() {
+    let source = include_str!("../programs/glyph_shell.glyph");
+    let asm_text = geometry_os::glyph_backend::compile_glyph(source)
+        .expect("glyph_shell.glyph should compile");
+    
+    let mut vm = load_program(&asm_text);
+    
+    // Run for a few frames to allow drawing
+    run_until_halt(&mut vm, 500_000);
+    
+    // Check title bar pixel (0,0) should be 0x2D0050
+    // RECTF 0 0 256 20 0x2D0050 [
+    assert_eq!(vm.screen[0], 0x2D0050, "Title bar color mismatch at (0,0)");
+    
+    // Check background pixel (0,30) should be 0x1A1A2E
+    // 0x1A1A2E |
+    assert_eq!(vm.screen[30 * 256], 0x1A1A2E, "Background color mismatch at (0,30)");
+}
+

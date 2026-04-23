@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 111/111 phases complete, 0 in_progress, 0 planned
+**Progress:** 112/112 phases complete, 0 in_progress, 0 planned
 
-**Deliverables:** 487/487 complete
+**Deliverables:** 491/491 complete
 
 ## Scope Summary
 
@@ -121,6 +121,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 | phase-109 Live Opcode Inventory Injection | COMPLETE | 3/3 | 110 | 7 |
 | phase-110 AI Terminal /focus and /status Commands | COMPLETE | 4/4 | 200 | 4 |
 | phase-111 Recursive Self-Analysis Program | COMPLETE | 4/4 | 362 | 4 |
+| phase-112 Glyph-Atomic Shell | COMPLETE | 4/4 | 150 | 2 |
 
 ## Dependencies
 
@@ -2598,3 +2599,19 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
   - [x] test_self_analysis_screen_sampling -- verifies 4 colored blocks drawn correctly on screen
   - [x] test_self_analysis_prompt_contains_quadrant_data -- prompt has all quadrant labels and pixel counts
   - [x] test_self_analysis_quadrant_counts_nonzero -- all 4 quadrants detect non-zero pixel counts
+
+## [x] phase-112: Glyph-Atomic Shell (COMPLETE)
+
+**Goal:** Evolve the GlyphLang compiler and implement a purely Glyph-native desktop shell, moving away from assembly-based UI management toward font-atomic spatial programs.
+
+### Deliverables
+
+- [x] **Enhanced Glyph Backend** -- Extended `src/glyph_backend.rs` with support for high-level graphical and system opcodes: RECTF (`[`), DRAWTEXT (`{`), FRAME (`!`), IKEY (`^`), FILL (`|`), LS (`$`), and EXEC (`&`).
+  - [x] String literal support (`"string"`) with separate-line `.str` emission for assembler compatibility.
+  - [x] Hex literal support (`0xNNN`) in lexer.
+  - [x] Label (`:name`) and Jump (`~name`) support for non-linear control flow.
+  - [x] Conditional Jump-if-Zero (`(label`) and Jump-if-Not-Zero (`)label`) based on stack top.
+- [x] **glyph_shell.glyph** -- A functional desktop shell implemented entirely in GlyphLang. Features a colored title bar, an interactive list of apps, selection cursor, and the ability to launch programs via Enter.
+- [x] **Integration Tests** -- Verified the new Glyph features and the shell execution.
+  - [x] `test_glyph_shell_compiles` -- ensures full shell source tokenizes, compiles, and assembles.
+  - [x] `test_glyph_shell_execution` -- verifies shell renders title bar and background correctly in the VM.

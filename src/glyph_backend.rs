@@ -49,6 +49,30 @@ pub enum GlyphToken {
     StoreReg(u8),
     /// Load from register (uppercase A-Z) -> register index 1-26
     LoadReg(u8),
+    /// Push a string address onto the stack
+    StringLiteral(String),
+    /// Graphics: [ (x y w h color -- )
+    Rectf,
+    /// Text: { (x y addr color bg -- )
+    DrawText,
+    /// Frame: ! (yield)
+    Frame,
+    /// Input: ^ (-- key)
+    Ikey,
+    /// Screen: | (color -- )
+    Fill,
+    /// Filesystem: $ (addr -- count)
+    Ls,
+    /// Label definition: :name
+    Label(String),
+    /// Jump to label: >name
+    Jump(String),
+    /// Execution: & (addr -- )
+    Exec,
+    /// Jump if zero: (name (pop stack, if 0 jump to name)
+    Jz(String),
+    /// Jump if not zero: )name (pop stack, if !0 jump to name)
+    Jnz(String),
 }
 
 // ── Lexer Error ────────────────────────────────────────────────
@@ -92,18 +116,23 @@ pub fn lex(source: &str) -> Result<Vec<GlyphToken>, GlyphLexError> {
                 }
             }
 
-            // Numbers 0-9
+            // Numbers 0-9 and hex 0x
             '0'..='9' => {
-                // Check for multi-digit numbers
-                let mut val = (ch as u32) - ('0' as u32);
+                let mut s = ch.to_string();
                 while let Some(&(_, c)) = chars.peek() {
-                    if c.is_ascii_digit() {
-                        val = val * 10 + (c as u32) - ('0' as u32);
+                    if c.is_ascii_hexdigit() || c == 'x' || c == 'X' {
+                        s.push(c);
                         chars.next();
                     } else {
                         break;
                     }
                 }
+                
+                let val = if s.starts_with("0x") || s.starts_with("0X") {
+                    u32::from_str_radix(&s[2..], 16).unwrap_or(0)
+                } else {
+                    s.parse::<u32>().unwrap_or(0)
+                };
                 tokens.push(GlyphToken::Number(val));
             }
 
@@ -143,6 +172,82 @@ pub fn lex(source: &str) -> Result<Vec<GlyphToken>, GlyphLexError> {
                 tokens.push(GlyphToken::LoadReg(reg_idx));
             }
 
+            // String literals: "hello"
+            '"' => {
+                let mut s = String::new();
+                while let Some((_, c)) = chars.next() {
+                    if c == '"' {
+                        break;
+                    }
+                    s.push(c);
+                }
+                tokens.push(GlyphToken::StringLiteral(s));
+            }
+
+            // New opcodes
+            '[' => tokens.push(GlyphToken::Rectf),
+            '{' => tokens.push(GlyphToken::DrawText),
+            '!' => tokens.push(GlyphToken::Frame),
+            '^' => tokens.push(GlyphToken::Ikey),
+            '|' => tokens.push(GlyphToken::Fill),
+            '$' => tokens.push(GlyphToken::Ls),
+
+            // Labels: :start
+            ':' => {
+                let mut name = String::new();
+                while let Some(&(_, c)) = chars.peek() {
+                    if c.is_alphanumeric() || c == '_' {
+                        name.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                tokens.push(GlyphToken::Label(name));
+            }
+
+            // Jumps: ~start
+            '~' => {
+                let mut name = String::new();
+                while let Some(&(_, c)) = chars.peek() {
+                    if c.is_alphanumeric() || c == '_' {
+                        name.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                tokens.push(GlyphToken::Jump(name));
+            }
+
+            '&' => tokens.push(GlyphToken::Exec),
+
+            '(' => {
+                let mut name = String::new();
+                while let Some(&(_, c)) = chars.peek() {
+                    if c.is_alphanumeric() || c == '_' {
+                        name.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                tokens.push(GlyphToken::Jz(name));
+            }
+
+            ')' => {
+                let mut name = String::new();
+                while let Some(&(_, c)) = chars.peek() {
+                    if c.is_alphanumeric() || c == '_' {
+                        name.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                tokens.push(GlyphToken::Jnz(name));
+            }
+
             // Unknown character - skip silently
             _ => {}
         }
@@ -178,6 +283,7 @@ pub fn compile_glyph(source: &str) -> Result<String, GlyphCompileError> {
 /// Compile pre-lexed tokens into Geometry OS assembly.
 pub fn compile_tokens(tokens: &[GlyphToken]) -> Result<String, GlyphCompileError> {
     let mut asm = String::new();
+    let mut strings = Vec::new();
     let mut label_counter: u32 = 0;
 
     // Fresh label generator to avoid collisions
@@ -355,12 +461,93 @@ pub fn compile_tokens(tokens: &[GlyphToken]) -> Result<String, GlyphCompileError
                 // Push register onto stack
                 asm.push_str(&format!("PUSH r{}\n", idx));
             }
+
+            GlyphToken::StringLiteral(s) => {
+                let lbl = format!("_str{}", strings.len());
+                strings.push((lbl.clone(), s.clone()));
+                asm.push_str(&format!("LDI r27, {}\n", lbl));
+                asm.push_str("PUSH r27\n");
+            }
+
+            GlyphToken::Rectf => {
+                // x y w h color [
+                asm.push_str("POP r29 ; color\n");
+                asm.push_str("POP r28 ; h\n");
+                asm.push_str("POP r27 ; w\n");
+                asm.push_str("POP r26 ; y\n");
+                asm.push_str("POP r25 ; x\n");
+                asm.push_str("RECTF r25, r26, r27, r28, r29\n");
+            }
+
+            GlyphToken::DrawText => {
+                // x y addr color bg {
+                asm.push_str("POP r29 ; bg\n");
+                asm.push_str("POP r28 ; color\n");
+                asm.push_str("POP r27 ; addr\n");
+                asm.push_str("POP r26 ; y\n");
+                asm.push_str("POP r25 ; x\n");
+                asm.push_str("DRAWTEXT r25, r26, r27, r28, r29\n");
+            }
+
+            GlyphToken::Frame => {
+                asm.push_str("FRAME\n");
+            }
+
+            GlyphToken::Ikey => {
+                asm.push_str("IKEY r27\n");
+                asm.push_str("PUSH r27\n");
+            }
+
+            GlyphToken::Fill => {
+                asm.push_str("POP r27 ; color\n");
+                asm.push_str("FILL r27\n");
+            }
+
+            GlyphToken::Ls => {
+                // addr $ -- count
+                asm.push_str("POP r27 ; addr\n");
+                asm.push_str("LS r27\n");
+                asm.push_str("PUSH r0 ; push file count result\n");
+            }
+
+            GlyphToken::Label(name) => {
+                asm.push_str(&format!("{}:\n", name));
+            }
+
+            GlyphToken::Jump(name) => {
+                asm.push_str(&format!("JMP {}\n", name));
+            }
+
+            GlyphToken::Exec => {
+                // addr &
+                asm.push_str("POP r27 ; addr\n");
+                asm.push_str("EXEC r27\n");
+            }
+
+            GlyphToken::Jz(name) => {
+                asm.push_str("POP r27 ; condition\n");
+                asm.push_str(&format!("JZ r27, {}\n", name));
+            }
+
+            GlyphToken::Jnz(name) => {
+                asm.push_str("POP r27 ; condition\n");
+                asm.push_str(&format!("JNZ r27, {}\n", name));
+            }
         }
     }
 
     // Ensure program always ends with HALT
     if !asm.contains("HALT") {
         asm.push_str("HALT\n");
+    }
+
+    // Append strings
+    if !strings.is_empty() {
+        asm.push('\n');
+        for (lbl, s) in strings {
+            asm.push_str(&format!("{}:\n", lbl));
+            asm.push_str(&format!("  .str \"{}\"\n", s));
+        }
     }
 
     Ok(asm)
@@ -586,6 +773,72 @@ mod tests {
     fn test_compile_halt_always_present() {
         let asm = compile_glyph("3 4 +").unwrap();
         assert!(asm.contains("HALT")); // auto-added
+    }
+
+    #[test]
+    fn test_lex_new_opcodes() {
+        let tokens = lex("[ { ! ^ |").unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                GlyphToken::Rectf,
+                GlyphToken::DrawText,
+                GlyphToken::Frame,
+                GlyphToken::Ikey,
+                GlyphToken::Fill,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lex_string_literal() {
+        let tokens = lex("\"hello world\"").unwrap();
+        assert_eq!(
+            tokens,
+            vec![GlyphToken::StringLiteral("hello world".to_string())]
+        );
+    }
+
+    #[test]
+    fn test_compile_rectf() {
+        let asm = compile_glyph("0 0 10 10 0xFF [ @").unwrap();
+        assert!(asm.contains("RECTF r25, r26, r27, r28, r29"));
+    }
+
+    #[test]
+    fn test_compile_drawtext_with_string() {
+        let asm = compile_glyph("0 0 \"hi\" 0xFF 0 { @").unwrap();
+        assert!(asm.contains("DRAWTEXT r25, r26, r27, r28, r29"));
+        assert!(asm.contains("_str0:"));
+        assert!(asm.contains(".str \"hi\""));
+    }
+
+    #[test]
+    fn test_compile_frame_ikey_fill() {
+        let asm = compile_glyph("! ^ | @").unwrap();
+        assert!(asm.contains("FRAME"));
+        assert!(asm.contains("IKEY r27"));
+        assert!(asm.contains("FILL r27"));
+    }
+
+    #[test]
+    fn test_compile_ls() {
+        let asm = compile_glyph("0x4000 $ @").unwrap();
+        assert!(asm.contains("LS r27"));
+        assert!(asm.contains("PUSH r0"));
+    }
+
+    #[test]
+    fn test_compile_labels_and_jumps() {
+        let asm = compile_glyph(":start 1 1 + ~start @").unwrap();
+        assert!(asm.contains("start:"));
+        assert!(asm.contains("JMP start"));
+    }
+
+    #[test]
+    fn test_compile_exec() {
+        let asm = compile_glyph("\"shell\" & @").unwrap();
+        assert!(asm.contains("EXEC r27"));
     }
 
     // ── Full Pipeline Tests (Lexer -> Compiler -> Assembler -> VM) ─
