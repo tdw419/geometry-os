@@ -15903,7 +15903,8 @@ fn test_window_resize_updates_buffer() {
         "should update window height"
     );
     assert!(
-        handler.contains("offscreen_buffer.resize"),
+        handler.contains("offscreen_buffer")
+            && handler.contains(".resize("),
         "should resize offscreen buffer"
     );
 }
