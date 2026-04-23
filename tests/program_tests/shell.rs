@@ -24,7 +24,7 @@ fn test_readln_char_accumulation() {
     step_readln(&mut vm, 72);
     assert_eq!(vm.ram[0x200], 72, "Should store 'H' in buffer");
     assert_eq!(vm.ram[0x300], 1, "Position should be 1");
-    assert_eq!(vm.ram[0xFFF], 0, "Key port should be cleared");
+    assert_eq!(vm.key_port, 0, "Key port should be cleared");
 
     // Re-set r0 (buf addr) since READLN returns result in r0
     vm.regs[0] = 0x200;
@@ -96,7 +96,7 @@ fn test_readln_non_printable_discarded() {
     // Send ESC (27) -- non-printable, should be discarded
     step_readln(&mut vm, 27);
     assert_eq!(vm.ram[0x300], 0, "Position should stay 0 for non-printable");
-    assert_eq!(vm.ram[0xFFF], 0, "Key should be consumed");
+    assert_eq!(vm.key_port, 0, "Key should be consumed");
 }
 
 // ── READLN buffer full test ──────────────────────────────────

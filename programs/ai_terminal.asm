@@ -41,6 +41,9 @@
 #define HISTORY 0x7400
 #define ASM_STATUS 0xFFD
 #define RUN_PENDING 0x7830   ; Nonzero = compiled bytecode waiting for /yes
+#define LAST_HEARTBEAT 0x7840
+#define WATCHDOG_TIMER 0x7841
+#define WATCHDOG_STRIKES 0x7842
 #define SANDBOX_CAPS 0x7500  ; Sandbox capability list for SPAWNC
 #define SANDBOX_STRS 0x7600  ; Pattern strings for sandbox capabilities
 #define DEBUG_MAGIC      0x0C00  ; Page 3 debug mailbox
@@ -49,6 +52,8 @@
 #define DEBUG_COMMAND    0x0C03
 #define DEBUG_STATUS     0x0C04
 #define DEBUG_RESPONSE   0x0C05
+#define DEBUG_HEARTBEAT   0x0C27
+#define DEBUG_CHECKPOINT 0x0C28
 
 ; =========================================
 ; INIT
@@ -144,6 +149,14 @@ LDI r20, CUR_COL
 LDI r0, 2
 STORE r20, r0
 
+; Init watchdog
+LDI r20, WATCHDOG_TIMER
+LDI r0, 60
+STORE r20, r0
+LDI r20, WATCHDOG_STRIKES
+LDI r0, 0
+STORE r20, r0
+
 ; Welcome message
 LDI r20, SCRATCH
 STRO r20, "AI Terminal v1.0"
@@ -166,6 +179,9 @@ CALL write_prompt
 ; =========================================
 main_loop:
     LDI r1, 1
+
+    ; Watchdog
+    CALL check_watchdog
 
     ; Blink counter
     LDI r20, BLINK
@@ -1817,4 +1833,84 @@ build_sandbox_caps:
 
 hk_ret:
     POP r31
+    RET
+
+; =========================================
+; CHECK_WATCHDOG -- monitor child heartbeat
+; =========================================
+check_watchdog:
+    PUSH r31
+    LDI r1, 1
+
+    ; Decrement watchdog timer
+    LDI r20, WATCHDOG_TIMER
+    LOAD r0, r20
+    SUBI r0, 1
+    STORE r20, r0
+    CMPI r0, 0
+    JNZ r0, cw_done     ; Not time to check yet
+
+    ; Reset timer to 60 frames (1 second)
+    LDI r0, 60
+    STORE r20, r0
+
+    ; Check if child is active (DEBUG_MAGIC)
+    LDI r20, DEBUG_MAGIC
+    LOAD r22, r20
+    LDI r23, 0xDB9900
+    CMP r22, r23
+    JNZ r0, cw_done     ; No child active
+
+    ; Read heartbeat
+    LDI r20, DEBUG_HEARTBEAT
+    LOAD r22, r20
+
+    ; Compare with last seen heartbeat
+    LDI r20, LAST_HEARTBEAT
+    LOAD r23, r20
+    CMP r22, r23
+    JZ r0, cw_flatline   ; Heartbeat hasn't changed!
+
+    ; Heartbeat is moving. Store new value and clear strikes.
+    STORE r20, r22
+    LDI r20, WATCHDOG_STRIKES
+    LDI r0, 0
+    STORE r20, r0
+    JMP cw_done
+
+cw_flatline:
+    ; Heartbeat is stuck. Increment strikes.
+    LDI r20, WATCHDOG_STRIKES
+    LOAD r0, r20
+    ADDI r0, 1
+    STORE r20, r0
+    CMPI r0, 3          ; 3 strikes (3 seconds of flatline)
+    BGE r0, trigger_heal
+    JMP cw_done
+
+cw_done:
+    POP r31
+    RET
+
+; =========================================
+; TRIGGER_HEAL -- Handle child flatline
+; =========================================
+trigger_heal:
+    ; Print fault message
+    LDI r20, SCRATCH
+    STRO r20, "FAULT: Child flatline detected!"
+    CALL write_line_to_buf
+
+    ; Recovery Strategy: Kill and re-spawn
+    ; In a full implementation, we'd call the LLM here.
+    ; For now, just reset the strikes so we don't spam.
+    LDI r20, WATCHDOG_STRIKES
+    LDI r0, 0
+    STORE r20, r0
+
+    ; Log recovery attempt
+    LDI r20, SCRATCH
+    STRO r20, "Watchdog: recovery loop engaged"
+    CALL write_line_to_buf
+
     RET

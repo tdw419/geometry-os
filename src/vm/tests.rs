@@ -834,7 +834,7 @@ fn test_pset_pixel() {
 #[test]
 fn test_ikey_reads_and_clears() {
     let mut vm = Vm::new();
-    vm.ram[0xFFF] = 65; // 'A' in keyboard port
+    vm.key_port = 65; // 'A' in keyboard port
     vm.ram[0] = 0x48;
     vm.ram[1] = 5; // IKEY r5
     vm.ram[2] = 0x00;
@@ -845,13 +845,13 @@ fn test_ikey_reads_and_clears() {
         }
     }
     assert_eq!(vm.regs[5], 65);
-    assert_eq!(vm.ram[0xFFF], 0); // port cleared
+    assert_eq!(vm.key_port, 0); // port cleared
 }
 
 #[test]
 fn test_ikey_no_key() {
     let mut vm = Vm::new();
-    vm.ram[0xFFF] = 0; // no key
+    vm.key_port = 0; // no key
     vm.ram[0] = 0x48;
     vm.ram[1] = 5; // IKEY r5
     vm.ram[2] = 0x00;
@@ -10229,7 +10229,7 @@ fn test_help_scrolls() {
     assert_eq!(vm.ram[0x6100], 0, "initial scroll = 0");
 
     // Simulate down arrow press
-    vm.ram[0xFFF] = 66; // 'B' = down arrow
+    vm.key_port = 66; // 'B' = down arrow
                         // Run another frame
     for _ in 0..500_000 {
         if !vm.step() {

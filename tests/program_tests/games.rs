@@ -346,7 +346,7 @@ fn test_maze_peek_collision_blocks_wall() {
     assert_eq!(vm.ram[0x5311], 0, "player_y should start at 0");
 
     // Press W (87) -- move up into the top border wall
-    vm.ram[0xFFF] = 87;
+    vm.key_port = 87;
 
     // Run until next FRAME
     for _ in 0..100_000 {
@@ -2645,7 +2645,7 @@ fn test_roguelike_wall_collision_blocks() {
     let init_py = vm.ram[0x6241];
 
     // Try to move up (W = 87)
-    vm.ram[0xFFF] = 87; // IKEY reads from 0xFFF
+    vm.key_port = 87; // IKEY reads from 0xFFF
     for _ in 0..50_000 {
         if !vm.step() {
             break;

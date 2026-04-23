@@ -232,7 +232,7 @@ fn test_user_mode_ikey_halts() {
     // User mode IKEY should halt
     let mut vm = Vm::new();
     vm.mode = geometry_os::vm::CpuMode::User;
-    vm.ram[0xFFF] = 65; // keyboard has a key
+    vm.key_port = 65; // keyboard has a key
 
     // IKEY r0
     vm.ram[0] = 0x48;
@@ -253,7 +253,7 @@ fn test_kernel_mode_ikey_works() {
     // Kernel mode IKEY should work normally
     let mut vm = Vm::new();
     vm.mode = geometry_os::vm::CpuMode::Kernel;
-    vm.ram[0xFFF] = 65;
+    vm.key_port = 65;
 
     // IKEY r0
     vm.ram[0] = 0x48;
@@ -262,7 +262,7 @@ fn test_kernel_mode_ikey_works() {
 
     vm.step();
     assert_eq!(vm.regs[0], 65, "Kernel mode IKEY should read key");
-    assert_eq!(vm.ram[0xFFF], 0, "Kernel mode IKEY should clear port");
+    assert_eq!(vm.key_port, 0, "Kernel mode IKEY should clear port");
 }
 
 #[test]

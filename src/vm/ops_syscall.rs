@@ -119,10 +119,10 @@ impl Vm {
                         let mut count = 0usize;
                         match dev_idx {
                             1 => {
-                                // /dev/keyboard -- read key from RAM[0xFFF]
+                                // /dev/keyboard -- read key from key_port
                                 if len > 0 && buf_addr < self.ram.len() {
-                                    self.ram[buf_addr] = self.ram[0xFFF];
-                                    self.ram[0xFFF] = 0; // clear port like IKEY
+                                    self.ram[buf_addr] = self.key_port;
+                                    self.key_port = 0; // clear port like IKEY
                                     count = 1;
                                 }
                             }

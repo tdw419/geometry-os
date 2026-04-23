@@ -182,7 +182,7 @@ pub fn write_string(ram: &mut [u32], addr: usize, s: &str) {
 /// Helper: place instruction bytes at vm.pc, then call step().
 /// The opcode and args are placed starting at pc (step reads from pc).
 pub fn step_readln(vm: &mut Vm, key: u32) {
-    vm.ram[0xFFF] = key;
+    vm.key_port = key;
     vm.ram[vm.pc as usize] = 0x68; // READLN
     vm.ram[vm.pc as usize + 1] = 0; // r0 = buf_addr
     vm.ram[vm.pc as usize + 2] = 1; // r1 = max_len

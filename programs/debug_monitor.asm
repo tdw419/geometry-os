@@ -23,6 +23,8 @@
 #define DEBUG_RESPONSE   0x0C05
 #define DEBUG_ADDR       0x0C25
 #define DEBUG_VALUE      0x0C26
+#define DEBUG_HEARTBEAT   0x0C27
+#define DEBUG_CHECKPOINT 0x0C28
 
 LDI r1, 1
 LDI r30, 0xFD00
@@ -57,11 +59,13 @@ GETPID
 LDI r20, DEBUG_CHILD_PID
 STORE r20, r0
 
-; Clear status
+; Clear status and heartbeat
 LDI r0, 0
 LDI r20, DEBUG_STATUS
 STORE r20, r0
 LDI r20, DEBUG_COMMAND
+STORE r20, r0
+LDI r20, DEBUG_HEARTBEAT
 STORE r20, r0
 
 ; Frame counter for pulsing indicator
@@ -70,6 +74,17 @@ LDI r6, 0
 ; ── Main loop ──
 main_loop:
     FRAME
+
+    ; Update heartbeat
+    LDI r20, DEBUG_HEARTBEAT
+    LOAD r0, r20
+    ADDI r0, 1
+    STORE r20, r0
+
+    ; Update checkpoint (approximate current PC)
+    LDI r20, DEBUG_CHECKPOINT
+    LDI r0, main_loop
+    STORE r20, r0
 
     ; Pulse the indicator (color oscillates)
     LDI r6, 1

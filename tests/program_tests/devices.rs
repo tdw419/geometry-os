@@ -250,7 +250,7 @@ fn test_read_device_keyboard() {
     // READ from /dev/keyboard should read RAM[0xFFF] and clear it
     let mut vm = Vm::new();
     vm.mode = geometry_os::vm::CpuMode::Kernel;
-    vm.ram[0xFFF] = 65; // 'A' key pressed
+    vm.key_port = 65; // 'A' key pressed
     vm.regs[1] = 0xE001; // /dev/keyboard fd
     vm.regs[2] = 0x1000; // buf addr
     vm.regs[3] = 1; // len
@@ -261,7 +261,7 @@ fn test_read_device_keyboard() {
     vm.step();
     assert_eq!(vm.regs[0], 1, "READ keyboard should return 1 byte");
     assert_eq!(vm.ram[0x1000], 65, "Buffer should contain the key");
-    assert_eq!(vm.ram[0xFFF], 0, "Keyboard port should be cleared");
+    assert_eq!(vm.key_port, 0, "Keyboard port should be cleared");
 }
 
 #[test]
@@ -505,7 +505,7 @@ fn test_device_read_keyboard() {
     // READ from /dev/keyboard should read RAM[0xFFF] and clear it
     let mut vm = Vm::new();
     vm.mode = geometry_os::vm::CpuMode::Kernel;
-    vm.ram[0xFFF] = 65; // pretend 'A' key pressed
+    vm.key_port = 65; // pretend 'A' key pressed
 
     // READ fd=0xE001 (keyboard), buf=r1, len=r2
     vm.regs[0] = 0xE001; // keyboard fd
@@ -519,7 +519,7 @@ fn test_device_read_keyboard() {
     assert_eq!(vm.regs[0], 1, "READ should return 1 byte read");
     assert_eq!(vm.ram[0x2000], 65, "Buffer should contain the key value");
     assert_eq!(
-        vm.ram[0xFFF], 0,
+        vm.key_port, 0,
         "Keyboard port should be cleared after read"
     );
 }

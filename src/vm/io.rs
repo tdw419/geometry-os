@@ -310,6 +310,7 @@ impl Vm {
             key_buffer: vec![0; 16],
             key_buffer_head: 0,
             key_buffer_tail: 0,
+            key_port: 0,
             formulas: Vec::new(),
             formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
             trace_recording: false,

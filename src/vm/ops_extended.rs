@@ -336,7 +336,7 @@ impl Vm {
                     let max_len = self.regs[mr] as usize;
                     let pos_addr = self.regs[pr] as usize;
                     let pos = self.ram[pos_addr] as usize;
-                    let key = self.ram[0xFFF];
+                    let key = self.key_port;
 
                     if key == 0 {
                         // No key available -- yield
@@ -349,14 +349,14 @@ impl Vm {
                         }
                         self.regs[0] = pos as u32;
                         self.ram[pos_addr] = 0; // reset position
-                        self.ram[0xFFF] = 0; // consume key
+                        self.key_port = 0; // consume key
                     } else if key == 8 {
                         // Backspace
                         if pos > 0 {
                             self.ram[pos_addr] = (pos - 1) as u32;
                         }
                         self.regs[0] = 0;
-                        self.ram[0xFFF] = 0;
+                        self.key_port = 0;
                     } else if key >= 32 && pos < max_len {
                         // Printable character
                         if buf_addr + pos < self.ram.len() {
@@ -364,11 +364,11 @@ impl Vm {
                         }
                         self.ram[pos_addr] = (pos + 1) as u32;
                         self.regs[0] = 0;
-                        self.ram[0xFFF] = 0;
+                        self.key_port = 0;
                     } else {
                         // Non-printable or buffer full -- discard
                         self.regs[0] = 0;
-                        self.ram[0xFFF] = 0;
+                        self.key_port = 0;
                     }
                 } else {
                     self.regs[0] = 0xFFFFFFFF;

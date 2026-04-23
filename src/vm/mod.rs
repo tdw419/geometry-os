@@ -108,6 +108,11 @@ pub struct Vm {
     pub key_buffer_head: usize,
     /// Key buffer tail (next write position)
     pub key_buffer_tail: usize,
+    /// Legacy single-key port (replaces RAM[0xFFF] to avoid bytecode overlap).
+    /// Programs loaded at address 0 may extend past 0xFFF (e.g., ai_terminal.asm
+    /// at 4479 words). Using a separate field prevents IKEY/push_key from
+    /// clobbering bytecode at that address.
+    pub key_port: u32,
     /// Active formulas on canvas cells (Phase 50: Reactive Canvas).
     pub formulas: Vec<Formula>,
     /// Reverse dependency index: dep_idx -> list of formula indices in self.formulas.
@@ -240,6 +245,7 @@ impl Vm {
             key_buffer: vec![0; 16],
             key_buffer_head: 0,
             key_buffer_tail: 0,
+            key_port: 0,
             formulas: Vec::new(),
             formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
             trace_recording: false,
@@ -276,8 +282,8 @@ impl Vm {
         }
         self.key_buffer[self.key_buffer_tail] = key;
         self.key_buffer_tail = next_tail;
-        // Also write to legacy RAM[0xFFF] port for backward compatibility
-        self.ram[0xFFF] = key;
+        // Write to key_port field (separate from RAM to avoid bytecode overlap)
+        self.key_port = key;
         true
     }
 
@@ -370,6 +376,7 @@ impl Vm {
         self.pc_trace_idx = 0;
         self.crash_dialog_active = false;
         self.crash_dialog_pid = 0;
+        self.key_port = 0;
     }
 
     /// Internal helper to log a memory access with a safety cap.

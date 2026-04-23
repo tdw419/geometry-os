@@ -146,7 +146,7 @@ fn test_ikey_opcode() {
         vm.ram[i] = v;
     }
     // Simulate key press: write ASCII 'A' (65) to keyboard port
-    vm.ram[0xFFF] = 65;
+    vm.key_port = 65;
     for _ in 0..10_000 {
         if !vm.step() {
             break;
@@ -154,7 +154,7 @@ fn test_ikey_opcode() {
     }
     assert!(vm.halted);
     assert_eq!(vm.regs[1], 65, "IKEY should read key code 65 into r1");
-    assert_eq!(vm.ram[0xFFF], 0, "IKEY should clear the keyboard port");
+    assert_eq!(vm.key_port, 0, "IKEY should clear the keyboard port");
 }
 
 // ── RAND ─────────────────────────────────────────────────────────

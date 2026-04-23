@@ -194,7 +194,7 @@ impl Vm {
                 }
             }
 
-            // IKEY reg  -- read keyboard from ring buffer (or legacy RAM[0xFFF] port)
+            // IKEY reg  -- read keyboard from ring buffer (or legacy key_port)
             0x48 => {
                 let rd = self.fetch() as usize;
                 // Blocked in User mode (hardware port access requires syscall)
@@ -209,10 +209,10 @@ impl Vm {
                         self.key_buffer[self.key_buffer_head] = 0;
                         self.key_buffer_head = (self.key_buffer_head + 1) % self.key_buffer.len();
                     } else {
-                        // Fallback to legacy single-key port
-                        self.regs[rd] = self.ram[0xFFF];
+                        // Fallback to key_port field (separate from RAM)
+                        self.regs[rd] = self.key_port;
                     }
-                    self.ram[0xFFF] = 0;
+                    self.key_port = 0;
                 }
             }
 
