@@ -29,13 +29,13 @@ global_risks:
 meta:
   gui: minifb
   language: Rust
-  loc: '64842'
+  loc: '64851'
   opcodes: 167
-  programs: '130'
+  programs: '134'
   ram: 65536 words
   registers: 32
   screen: 256x256 pixels
-  tests: '2912'
+  tests: '2919'
 phases:
 - deliverables:
   - description: 'Control flow: stop, no-op, yield to renderer'
