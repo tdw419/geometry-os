@@ -31,8 +31,8 @@ global_risks:
 meta:
   gui: minifb
   language: Rust
-  loc: '64114'
-  opcodes: 166
+  loc: '64379'
+  opcodes: 167
   programs: '129'
   ram: 65536 words
   registers: 32
