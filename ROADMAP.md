@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 110/110 phases complete, 0 in_progress, 0 planned
+**Progress:** 111/111 phases complete, 0 in_progress, 0 planned
 
-**Deliverables:** 483/483 complete
+**Deliverables:** 487/487 complete
 
 ## Scope Summary
 
@@ -120,6 +120,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 | phase-108 Sandboxed AI Execution | COMPLETE | 3/3 | 180 | 8 |
 | phase-109 Live Opcode Inventory Injection | COMPLETE | 3/3 | 110 | 7 |
 | phase-110 AI Terminal /focus and /status Commands | COMPLETE | 4/4 | 200 | 4 |
+| phase-111 Recursive Self-Analysis Program | COMPLETE | 4/4 | 362 | 4 |
 
 ## Dependencies
 
@@ -2578,3 +2579,22 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
   - [x] test_ai_terminal_focus_off_clears_ram -- "/focus off" clears RAM[0x7821]
   - [x] test_ai_terminal_status_command_runs -- "/status" executes without crash
   - [x] test_ai_terminal_focus_bad_arg_no_crash -- bad arg leaves RAM unchanged
+
+## [x] phase-111: Recursive Self-Analysis Program (COMPLETE)
+
+**Goal:** Build a program that uses the OS's own SCREENP and LLM opcodes to inspect its own visual output, build a natural-language description of what it sees, and call the LLM to analyze it. This is the "AI inside AI" loop -- the OS becoming its own QA agent.
+
+### Deliverables
+
+- [x] **self_analysis.asm** -- 362-line program that draws 4 colored quadrant blocks (red, green, blue, yellow), samples a 16x16 pixel grid via SCREENP, counts non-background pixels per quadrant, builds a prompt describing the screen state in natural language, calls LLM (0x9C opcode) for analysis, writes result to /tmp/screen_analysis.txt via VFS (OPEN/WRITESTR/CLOSE), and displays response on screen.
+  - [x] Phase 1: Draw visual content (FILL, RECTF, DRAWTEXT)
+  - [x] Phase 2: Screen sampling via SCREENP in 16x16 grid
+  - [x] Phase 3: Prompt construction with quadrant counts (append_number decimal conversion)
+  - [x] Phase 4: LLM call with mock support
+  - [x] Phase 5: VFS file write of analysis result
+  - [x] Phase 6: Screen display of LLM response and quadrant stats
+- [x] **Integration tests** -- 4 tests loading full self_analysis.asm, running with llm_mock_response, verifying screen pixels, prompt content, and quadrant counts.
+  - [x] test_self_analysis_assembles -- assembly compiles clean
+  - [x] test_self_analysis_screen_sampling -- verifies 4 colored blocks drawn correctly on screen
+  - [x] test_self_analysis_prompt_contains_quadrant_data -- prompt has all quadrant labels and pixel counts
+  - [x] test_self_analysis_quadrant_counts_nonzero -- all 4 quadrants detect non-zero pixel counts
