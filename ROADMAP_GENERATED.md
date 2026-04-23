@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 87/105 phases complete, 0 in progress
+**Progress:** 107/107 phases complete, 0 in progress
 
-**Deliverables:** 462/462 complete
+**Deliverables:** 473/473 complete
 
 **Tasks:** 98/98 complete
 
@@ -88,35 +88,37 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 o
 | phase-73 Core Utilities | COMPLETE | 5/5 | 1,000 | 10 |
 | phase-74 Image Viewer + Screenshot | COMPLETE | 4/4 | 600 | 8 |
 | phase-75 Stopwatch + Timer + Calculator (scientific) | COMPLETE | 4/4 | 1,200 | 10 |
-| phase-76 Debugger UI + Memory Inspector | PLANNED | 4/4 | 1,500 | 10 |
+| phase-76 Debugger UI + Memory Inspector | COMPLETE | 4/4 | 1,500 | 10 |
 | phase-77 Settings + Wallpaper + Screensaver | COMPLETE | 4/4 | 1,000 | 11 |
 | phase-78 Calendar + About + Help System | COMPLETE | 4/4 | 800 | 8 |
 | phase-79 Neural Network Forward Pass (Pixel Neural Net) | COMPLETE | 5/5 | 1,500 | 10 |
-| phase-80 LLM Bridge Opcode (External AI) | PLANNED | 5/5 | 1,200 | 8 |
-| phase-81 HTTP Client + Text Browser | PLANNED | 4/4 | 1,500 | 10 |
-| phase-82 HTML Renderer + Interactive Browser | PLANNED | 5/5 | 2,000 | 12 |
-| phase-83 Infinite Map Desktop -- Camera + Player Avatar | PLANNED | 7/7 | 1,000 | 12 |
-| phase-84 Infinite Map Desktop -- App Buildings + Entry Points | PLANNED | 7/7 | 1,200 | 14 |
-| phase-85 Infinite Map Desktop -- Full Desktop Integration | PLANNED | 6/6 | 1,200 | 12 |
-| phase-86 Hypervisor Building -- Run Linux on the Map | PLANNED | 6/6 | 900 | 10 |
-| phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | PLANNED | 4/4 | 1,200 | 10 |
-| phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | PLANNED | 7/7 | 800 | 10 |
-| phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | PLANNED | 6/6 | 700 | 12 |
-| phase-90 AI Native Desktop -- Agents on the Map | PLANNED | 7/7 | - | 14 |
-| phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | PLANNED | 7/7 | 2,000 | 12 |
-| phase-92 Pixel Boot - Bytecode from PNG | PLANNED | 4/4 | 400 | 5 |
-| phase-93 Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) | PLANNED | 4/4 | 500 | 5 |
-| phase-94 Pixel Boot - Universal Pixel Executable | PLANNED | 5/5 | 800 | 8 |
+| phase-80 LLM Bridge Opcode (External AI) | COMPLETE | 5/5 | 1,200 | 8 |
+| phase-81 HTTP Client + Text Browser | COMPLETE | 4/4 | 1,500 | 10 |
+| phase-82 HTML Renderer + Interactive Browser | COMPLETE | 5/5 | 2,000 | 12 |
+| phase-83 Infinite Map Desktop -- Camera + Player Avatar | COMPLETE | 7/7 | 1,000 | 12 |
+| phase-84 Infinite Map Desktop -- App Buildings + Entry Points | COMPLETE | 7/7 | 1,200 | 14 |
+| phase-85 Infinite Map Desktop -- Full Desktop Integration | COMPLETE | 6/6 | 1,200 | 12 |
+| phase-86 Hypervisor Building -- Run Linux on the Map | COMPLETE | 6/6 | 900 | 10 |
+| phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | COMPLETE | 4/4 | 1,200 | 10 |
+| phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | COMPLETE | 7/7 | 800 | 10 |
+| phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | COMPLETE | 6/6 | 700 | 12 |
+| phase-90 AI Native Desktop -- Agents on the Map | COMPLETE | 7/7 | - | 14 |
+| phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | COMPLETE | 7/7 | 2,000 | 12 |
+| phase-92 Pixel Boot - Bytecode from PNG | COMPLETE | 4/4 | 400 | 5 |
+| phase-93 Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) | COMPLETE | 4/4 | 500 | 5 |
+| phase-94 Pixel Boot - Universal Pixel Executable | COMPLETE | 5/5 | 800 | 8 |
 | phase-95 Window Manager | COMPLETE | 4/4 | 600 | 4 |
-| phase-96 System Clipboard | PLANNED | 3/3 | 200 | 8 |
+| phase-96 System Clipboard | COMPLETE | 3/3 | 200 | 8 |
 | phase-97 Init System - Service Manager | COMPLETE | 3/3 | 500 | 5 |
 | phase-98 Custom Bitmap Fonts | COMPLETE | 4/4 | 400 | 3 |
-| phase-99 Sound Mixer Daemon | PLANNED | 4/4 | 500 | 3 |
+| phase-99 Sound Mixer Daemon | COMPLETE | 4/4 | 500 | 3 |
 | phase-100 Shared Libraries and Dynamic Linking | COMPLETE | 4/4 | 600 | 3 |
 | phase-101 Cron Daemon - Scheduled Execution | COMPLETE | 3/3 | 400 | 4 |
 | phase-102 Permissions and Capability System | COMPLETE | 4/4 | 600 | 16 |
 | phase-103 Terminal Multiplexer | COMPLETE | 3/3 | 600 | 2 |
 | phase-104 Dynamic Territory Competition and Digital Red Queen | COMPLETE | 5/5 | 1,200 | 8 |
+| phase-106 AI Desktop Control and Guided Demo | COMPLETE | 5/5 | 930 | 10 |
+| phase-107 Infinite Spatial Desktop | COMPLETE | 6/6 | 1,220 | 12 |
 
 ## Dependencies
 
@@ -2189,7 +2191,7 @@ Stopwatch with lap times, countdown timer with alarm, and scientific calculator 
 - [x] **sci_calc.asm** -- Scientific calculator with sin/cos (16-entry quarter-wave lookup table), sqrt (Newton method). Basic + - * / arithmetic via keyboard.
 - [x] **Time + calc tests** -- 14 tests: 5 stopwatch, 4 timer, 5 sci_calc. Assembly, rendering, initial state, sin table accuracy.
 
-## [ ] phase-76: Debugger UI + Memory Inspector (PLANNED)
+## [x] phase-76: Debugger UI + Memory Inspector (COMPLETE)
 
 **Goal:** Visual debugging tools for GO programs running inside GO
 
@@ -2242,7 +2244,7 @@ A hand-coded 3-layer MLP (64-32-16 neurons) whose weights are stored in RAM as p
 - [x] **nn_demo.asm** -- Load pre-trained XOR weights, run forward pass for all 4 inputs, display results on screen. Green=correct, Red=wrong.
 - [x] **Neural net tests** -- MATVEC correctness, RELU activation, full forward pass matches Python reference. 14 tests.
 
-## [ ] phase-80: LLM Bridge Opcode (External AI) (PLANNED)
+## [x] phase-80: LLM Bridge Opcode (External AI) (COMPLETE)
 
 **Goal:** Call external LLMs from inside the VM for text generation and code assistance
 
@@ -2256,7 +2258,7 @@ LLM opcode sends prompt string from RAM to external API. Response written to RAM
 - [x] **smart_term.asm** -- Terminal with AI assist: type natural language, press Tab to query LLM, response displayed on screen. Esc to quit.
 - [x] **LLM tests** -- 10 tests covering mock response, truncation, empty prompt, null termination, assembler, assembler error, disassembler, multiline response, full program, think block stripping.
 
-## [ ] phase-81: HTTP Client + Text Browser (PLANNED)
+## [x] phase-81: HTTP Client + Text Browser (COMPLETE)
 
 **Goal:** Fetch web pages and render them as text inside the VM
 
@@ -2269,7 +2271,7 @@ HTTP GET via TCP opcodes. Parse response. Render plain text. URL bar, scrollable
 - [x] **URL parsing** -- Split host:port/path from RAM string. Default port 80.
 - [x] **HTTP tests** -- Mock HTTP server. Test GET formatting, response parsing, chunked encoding. 10+ tests.
 
-## [ ] phase-82: HTML Renderer + Interactive Browser (PLANNED)
+## [x] phase-82: HTML Renderer + Interactive Browser (COMPLETE)
 
 **Goal:** Parse and render simple HTML with styled text, links, and images
 
@@ -2283,7 +2285,7 @@ HTML parser for common tags. Links as HITSET regions. Bookmarks in VFS. A real p
 - [x] **Bookmarks** -- /etc/bookmarks.cfg in VFS. Start page shows bookmarks. Add/remove via UI.
 - [x] **Browser tests** -- HTML parser, styled rendering, link clicks, back nav, bookmarks. 12+ tests.
 
-## [ ] phase-83: Infinite Map Desktop -- Camera + Player Avatar (PLANNED)
+## [x] phase-83: Infinite Map Desktop -- Camera + Player Avatar (COMPLETE)
 
 **Goal:** Player-controlled avatar moving across procedural terrain as the desktop surface
 
@@ -2299,7 +2301,7 @@ The infinite map becomes the desktop. A player avatar (8x8 sprite) moves with ar
 - [x] **MCP tools: player_position, player_move, map_viewport, map_biome_at** -- Add tool handlers to src/mcp_server.rs that wrap the new socket commands. Each tool has typed JSON input/output as defined in docs/MCP_SPEC.md.
 - [x] **Player + camera tests** -- Avatar renders, camera follows, collision blocks, edge wrapping. Socket commands return correct data. 10+ tests.
 
-## [ ] phase-84: Infinite Map Desktop -- App Buildings + Entry Points (PLANNED)
+## [x] phase-84: Infinite Map Desktop -- App Buildings + Entry Points (COMPLETE)
 
 **Goal:** Programs exist as structures on the map that the player enters to launch
 
@@ -2315,7 +2317,7 @@ Apps are rendered as buildings (pixel structures) at deterministic positions on 
 - [x] **MCP tools: building_list, building_enter, building_exit** -- Add tool handlers to src/mcp_server.rs wrapping the new socket commands.
 - [x] **App building tests** -- Building placement, proximity detection, app launch, state save/restore. Socket commands return correct data. 12+ tests.
 
-## [ ] phase-85: Infinite Map Desktop -- Full Desktop Integration (PLANNED)
+## [x] phase-85: Infinite Map Desktop -- Full Desktop Integration (COMPLETE)
 
 **Goal:** Complete desktop experience - infinite world with apps, taskbar, and navigation
 
@@ -2330,7 +2332,7 @@ Merges the taskbar, app launcher, and infinite map into one coherent desktop. Th
 - [x] **MCP tools: desktop_state, desktop_launch** -- Add tool handlers to src/mcp_server.rs wrapping the new socket commands.
 - [x] **Full desktop integration tests** -- Taskbar renders, mini-map shows buildings, fast-travel works, boot sequence correct. MCP tools return complete state. 10+ tests.
 
-## [ ] phase-86: Hypervisor Building -- Run Linux on the Map (PLANNED)
+## [x] phase-86: Hypervisor Building -- Run Linux on the Map (COMPLETE)
 
 **Goal:** Boot a real OS (Linux via QEMU or native RISC-V) inside a building on the infinite map
 
@@ -2345,7 +2347,7 @@ The hypervisor building is a special structure on the infinite map. Walk up to i
 - [x] **MCP tools: hypervisor_boot, hypervisor_kill** -- Add tool handlers to src/mcp_server.rs wrapping the hypervisor socket commands.
 - [x] **Hypervisor building tests** -- HYPERVISOR targets window, keyboard forwarding, detach/reattach. MCP tools boot/kill guest correctly. 8+ tests.
 
-## [ ] phase-87: Multi-Hypervisor -- Multiple OS Instances on the Map (PLANNED)
+## [x] phase-87: Multi-Hypervisor -- Multiple OS Instances on the Map (COMPLETE)
 
 **Goal:** Multiple hypervisor buildings running different guest OSes simultaneously
 
@@ -2358,7 +2360,7 @@ Each hypervisor building is an independent VM. The map can have multiple data ce
 - [x] **vm_park.asm** -- Map region with 3 hypervisor buildings: Linux RISC-V, Linux x86, and a bare-metal RISC-V loop. Walk between them, enter any, all run in background.
 - [x] **Multi-VM tests** -- Concurrent VM execution, time-slicing fairness, state save/restore per VM. 10+ tests.
 
-## [ ] phase-88: AI Vision Bridge -- Screenshot + Canvas Analysis (PLANNED)
+## [x] phase-88: AI Vision Bridge -- Screenshot + Canvas Analysis (COMPLETE)
 
 **Goal:** Expose the canvas as a base64 PNG that AI agents can request and analyze
 
@@ -2374,7 +2376,7 @@ AI_AGENT opcode returns the current canvas state as a base64-encoded PNG written
 - [x] **MCP tools: vision_screenshot, vision_checksum, vision_diff** -- Add tool handlers to src/mcp_server.rs wrapping the vision socket commands.
 - [x] **AI vision tests** -- Screenshot saves, checksum matches, diff detects changes. MCP vision tools return correct base64/JSON. 10+ tests.
 
-## [ ] phase-89: AI Agent Input -- Programmatic Keyboard + Mouse Injection (PLANNED)
+## [x] phase-89: AI Agent Input -- Programmatic Keyboard + Mouse Injection (COMPLETE)
 
 **Goal:** Let AI agents inject keyboard and mouse events to interact with running programs
 
@@ -2389,7 +2391,7 @@ AI agents can simulate user input programmatically. Send keystrokes, move the mo
 - [x] **MCP tools: input_key, input_mouse, input_text** -- Add tool handlers to src/mcp_server.rs wrapping the input socket commands.
 - [x] **AI input tests** -- Key injection, mouse move/click, text string injection, event ordering. MCP input tools drive the GUI. 12+ tests.
 
-## [ ] phase-90: AI Native Desktop -- Agents on the Map (PLANNED)
+## [x] phase-90: AI Native Desktop -- Agents on the Map (COMPLETE)
 
 **Goal:** AI agents appear as avatars on the infinite map and can interact with buildings
 
@@ -2405,7 +2407,7 @@ AI agents get their own avatars on the infinite map. They can walk around, enter
 - [x] **MCP tools: agent_spawn, agent_move, agent_enter, agent_command, agent_read, agent_list, agent_task_assign** -- Add all agent tool handlers to src/mcp_server.rs. This is the full agent orchestration API -- the biggest MCP addition.
 - [x] **Agent avatar tests** -- Agent renders, pathfinding, building entry, task queue, reporting. MCP agent tools spawn/move/command agents correctly. 14+ tests.
 
-## [ ] phase-91: GlyphLang Frontend -- High-Level Language for the Pixel VM (PLANNED)
+## [x] phase-91: GlyphLang Frontend -- High-Level Language for the Pixel VM (COMPLETE)
 
 **Goal:** Compile GlyphLang's spatial assembly syntax to Geometry OS bytecode, giving the VM a high-level language
 
@@ -2421,7 +2423,7 @@ GlyphLang is a stack-based language with concise opcodes. This phase builds a co
 - [x] **glyph_fib.glyph** -- Fibonacci in spatial assembly compiles and runs correctly, drawing the sequence on screen.
 - [x] **GlyphLang compiler tests** -- Lexer tokenizes all opcodes, translator maps correctly, full compile+run matches expected output. 12+ tests.
 
-## [ ] phase-92: Pixel Boot - Bytecode from PNG (PLANNED)
+## [x] phase-92: Pixel Boot - Bytecode from PNG (COMPLETE)
 
 **Goal:** Boot a Geometry OS program from a pixelpack-encoded .png file, skipping the assembler entirely
 
@@ -2434,7 +2436,7 @@ The simplest code-to-pixel-to-execution path. A .png file contains pixelpack-enc
 - [x] **Bytecode-to-pixel round-trip test** -- Test that a known bytecode sequence (e.g., LDI r0, 42; HALT) encoded via pixelpack into a .png, loaded via --boot-png, executes correctly with r0=42. Round-trip: assemble, pixelpack encode, png, boot-png, VM, verify registers.
 - [x] **Documentation** -- Update docs and memory map with the pixel-boot path. Document that .png files are valid Geometry OS executables. Add CODE_PIXEL_EXECUTION.md spec doc covering all three levels.
 
-## [ ] phase-93: Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) (PLANNED)
+## [x] phase-93: Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) (COMPLETE)
 
 **Goal:** Load pixelpack-encoded assembly source from a .png onto the canvas grid, assemble it, and run it -- the image is both source code and executable
 
@@ -2447,7 +2449,7 @@ The self-documenting path. A .png file contains pixelpack-encoded assembly SOURC
 - [x] **Source-to-canvas round-trip test** -- Test that fibonacci.asm (or similar) encoded via pixelpack into a .png, loaded via --boot-src-png, appears correctly on the canvas grid as readable assembly text, assembles successfully, and executes with correct output.
 - [x] **Demo program as .png** -- A pixelpack-encoded .png that contains a simple visual demo program (e.g., bouncing ball, color fill). When loaded, the source is visible on the canvas, the assembled program runs, and the screen shows the output. The image is both the source code and the executable -- a self-documenting pixel program.
 
-## [ ] phase-94: Pixel Boot - Universal Pixel Executable (PLANNED)
+## [x] phase-94: Pixel Boot - Universal Pixel Executable (COMPLETE)
 
 **Goal:** Unify the pixel boot path so .rts.png files boot any target (RISC-V or Geometry OS), and the VM can load .png programs at runtime
 
@@ -2474,7 +2476,7 @@ A window manager that owns the screen, tracks per-process regions, handles mouse
 - [x] **Window close and re-tiling** -- Window close buttons (HITSET on a small region in the title bar). Click sends KILL to the child PID. Manager reclaims the screen region and re-tiles remaining windows.
 - [x] **Window manager integration test** -- Test: spawn 3 child processes, drag windows to new positions, close one, verify remaining re-tile correctly. Verify children respect new bounds.
 
-## [ ] phase-96: System Clipboard (PLANNED)
+## [x] phase-96: System Clipboard (COMPLETE)
 
 **Goal:** Establish a system clipboard protocol so processes can share data without pipes or messages
 
@@ -2511,7 +2513,7 @@ Allow programs to load custom pixel fonts from VFS files. DOS had .FNT, Mac made
 - [x] **Font syscall integration** -- SYSCALL or IOCTL to set current process font. cmd 2 on /dev/screen = set font from RAM address. Program LOADs .fnt from VFS into RAM, then IOCTLs the screen device to use it. Simple, no new opcode needed.
 - [x] **Font loading test** -- Test: process loads a custom font, writes text to canvas, verify different glyphs appear than with default font. Second process still sees default font.
 
-## [ ] phase-99: Sound Mixer Daemon (PLANNED)
+## [x] phase-99: Sound Mixer Daemon (COMPLETE)
 
 **Goal:** Build a pipe-fed multi-channel sound mixer daemon with a music player demo
 
@@ -2592,6 +2594,92 @@ Geometry OS currently kills silently. This phase adds crash recovery: a 16-entry
   - [x] render_crash_dialog() draws a dark dialog box with red border on the 256x256 screen showing SEGFAULT! title, PID, PC, and fault address in pixel font. Sets crash_dialog_active flag for host to check.
 - [x] **Crash recovery integration tests** -- 5 tests: test_pc_trace_ring_buffer (NOP execution fills buffer), test_crash_dialog_renders_on_segfault (dialog renders with correct colors), test_core_dump_contains_register_dump (VFS file has registers and trace), test_segfault_addr_field_persists (field persists then resets), test_crash_dialog_screen_region (border and background at correct pixels).
   - [x] All Phase 104 fields (pc_trace, pc_trace_idx, segfault_addr, crash_dialog_active, crash_dialog_pid) initialized to zero in Vm::new(), reset(), and from_save_state(). 5 tests pass.
+
+## [x] phase-106: AI Desktop Control and Guided Demo (COMPLETE)
+
+**Goal:** Expose WINSYS ops through MCP tools so an external AI can manage windows, inject input, and observe the desktop -- enabling guided demos and autonomous desktop control.
+
+Bridge existing VM window management (WINSYS ops), input injection, and vision capabilities to the MCP socket layer so external AI agents can control the Geometry OS desktop. Most hard work already exists: WINSYS has create/destroy/focus/list/hittest/moveto/winfo (ops 0-6), mouse/keyboard registers are wired, vision checksum/diff works. This phase adds: RESIZE op (WINSYS op=7), window management MCP tools (window_list, window_move, window_close, window_focus, window_resize, process_kill), desktop-aware input tools (desktop_key, desktop_mouse_move, desktop_mouse_click), desktop_vision tool (structured JSON + ASCII overlay), and a demo tour script proving end-to-end AI control. ~800 LOC, 10+ tests.
+
+### Deliverables
+
+- [x] **Window management socket commands + MCP tools** -- Socket commands: window_list, window_move, window_close, window_focus, window_resize, process_kill. Bridges existing WINSYS ops (0x94) to the socket layer. Adds WINSYS op=7 (RESIZE) for window resizing. Adds process_kill to destroy all windows belonging to a PID.
+  - [ ] window_list returns JSON array of active windows with id, title, pid, x, y, w, h, z_order
+  - [ ] window_move <id> <x> <y> moves window and returns success
+  - [ ] window_close <id> destroys window and returns success
+  - [ ] window_focus <id> brings window to front
+  - [ ] window_resize <id> <w> <h> resizes window offscreen buffer
+  - [ ] process_kill <pid> kills all windows for a PID
+  _~300 LOC_
+- [x] **Desktop input injection MCP tools** -- MCP tools: desktop_key, desktop_mouse_move, desktop_mouse_click. Aliases for input_key/input_mouse with desktop-specific semantics. Documents that these target the VM keyboard buffer and mouse registers, not the hypervisor.
+  - [ ] desktop_key injects key into VM key buffer (same as inject_key but named for desktop context)
+  - [ ] desktop_mouse_move updates mouse_x, mouse_y registers
+  - [ ] desktop_mouse_click updates mouse position then triggers mouse button
+  _~80 LOC_
+- [x] **Desktop-aware vision MCP tool** -- desktop_vision MCP tool returns structured JSON: which windows are open, what PID owns them, which has focus (highest z_order), and ASCII art of the desktop with window boundaries drawn as box-drawing characters. The AI's eyes -- no vision model needed for basic awareness.
+  - [ ] desktop_vision returns JSON with windows array, focused_window, ascii_desktop (ASCII art with window boundaries overlaid)
+  - [ ] vision_screenshot includes window bounding boxes with labels
+  _~200 LOC_
+- [x] **AI demo tour prompt** -- demo_tour.md: A guided walkthrough script for AI agents. Walk the map, enter buildings, launch shell/notepad/calculator/paint/tetris, demonstrate window management, boot a RISC-V guest, narrate each step. Proves the full MCP bridge works end-to-end.
+  _~150 LOC_
+- [x] **Integration tests** -- 10+ tests: socket command tests, MCP tool tests, integration tests. Each new socket command and MCP tool gets a dedicated test.
+  - [ ] test_window_list_socket verifies socket command returns window data
+  - [ ] test_window_move_socket verifies window moves
+  - [ ] test_window_close_socket verifies window destruction
+  - [ ] test_window_focus_socket verifies z_order change
+  - [ ] test_window_resize_socket verifies buffer resize
+  - [ ] test_process_kill_socket verifies all PID windows destroyed
+  - [ ] test_desktop_key_mcp verifies MCP tool translation
+  - [ ] test_desktop_mouse_mcp verifies MCP tool translation
+  - [ ] test_desktop_vision_mcp verifies JSON structure
+  - [ ] test_vision_screenshot_annotations verifies window labels
+  _~200 LOC_
+
+## [x] phase-107: Infinite Spatial Desktop (COMPLETE)
+
+**Goal:** Enable a spatial desktop where apps are windows placed on the infinite procedural map. Walk the map, launch apps into windows, drag them around, zoom in/out -- the desktop IS the map.
+
+Transform the map from a launcher into an infinite spatial desktop where app windows coexist with the terrain. Windows live in world-space coordinates and pan with the map. Multiple apps run simultaneously in separate windows via time-shared multi-process execution. This is the biggest architectural change since Phase 84 -- it merges the map and app modes into a unified spatial computing surface.
+
+### Deliverables
+
+- [x] **World-space window placement** -- Extend Window struct with world_x/world_y fields. Add a VM flag (RAM[0x7810]) that switches WINSYS op=0 from screen-space to world-space coordinates. When set, windows are placed in the infinite map coordinate system instead of the 256x256 framebuffer. This is the foundation: no rendering changes yet, just the data model.
+  - [ ] WINSYS op=0 accepts world_x, world_y in r1,r2 instead of screen x,y when window_world_coords flag is set
+  - [ ] Window struct gains world_x, world_y fields (separate from screen x,y)
+  - [ ] Existing programs that use screen-space WINSYS continue to work (flag defaults to off)
+  _~120 LOC_
+- [x] **Viewport coordinate transform module** -- Add a viewport module that converts between world coordinates (tile-based, infinite range) and screen coordinates (256x256 framebuffer). This is pure math -- no rendering. The viewport tracks camera position and zoom level, already partially in RAM[0x7800-0x7801].
+  - [ ] viewport struct tracks (cam_x, cam_y, zoom) mapping world tiles to framebuffer pixels
+  - [ ] world_to_screen(world_x, world_y) returns screen (x, y) or None if offscreen
+  - [ ] world_to_screen handles zoom (8px, 4px, 2px, 1px per tile)
+  _~100 LOC_
+- [x] **Composite rendering -- windows on map** -- Modify the rendering loop in main.rs: after world_desktop renders terrain, iterate WINSYS windows with world coords, convert to screen space via viewport, and blit their offscreen buffers onto the framebuffer. Windows that are offscreen are culled. This is the visual integration -- windows become part of the map surface.
+  - [ ] world_desktop.asm renders terrain below windows, windows render on top
+  - [ ] Windows pan with the map as camera moves
+  - [ ] Windows outside viewport are skipped (no rendering cost)
+  - [ ] Z-order works correctly (terrain < windows < taskbar)
+  _~150 LOC_
+- [x] **Multi-process app execution in windows** -- The current launch flow replaces the map program with the app, then reloads the map when the app halts. For the infinite desktop, apps need to run as sub-processes inside WINSYS windows while the map continues running. Add a multi-process execution model: the main loop time-shares between the map program and windowed app programs. Each app gets a RAM slice and its own PC/registers. On app HALT, only that app's windows are destroyed.
+  - [ ] launch command supports --window flag that loads app into a WINSYS window instead of replacing map
+  - [ ] App HALT only kills its own process/windows, map keeps running
+  - [ ] Multiple apps can run simultaneously in separate windows
+  - [ ] Each windowed app gets its own RAM region (0x8000+N*4096)
+  _~400 LOC_
+- [x] **Window drag and mouse routing** -- Extend the mouse handling to support dragging windows in world space. When the mouse clicks on a window's title bar (top 8 pixels), enter drag mode. Mouse movement updates the window's world_x, world_y. MOUSEQ events from programs are translated relative to the window's screen-space position so the app thinks it has its own mouse.
+  - [ ] Dragging a window by its title bar updates world_x, world_y
+  - [ ] Click on window brings it to front (z_order update)
+  - [ ] Window title bars render as clickable regions
+  - [ ] MOUSEQ events routed to correct window based on world-space hit test
+  _~200 LOC_
+- [x] **Integration tests** -- 12+ integration tests covering the new coordinate model, rendering, multi-process execution, drag, and mouse routing.
+  - [ ] test_world_space_window_placement verifies world_x/world_y set correctly
+  - [ ] test_viewport_transform verifies coordinate math at all zoom levels
+  - [ ] test_composite_rendering verifies window blit at correct screen position
+  - [ ] test_multi_process_launch verifies two apps run simultaneously
+  - [ ] test_window_drag verifies world_x/world_y update on mouse drag
+  - [ ] test_offscreen_culling verifies windows outside viewport are skipped
+  - [ ] test_mouse_routing verifies MOUSEQ events reach correct window
+  _~250 LOC_
 
 ## Global Risks
 

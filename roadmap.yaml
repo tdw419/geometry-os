@@ -4042,7 +4042,7 @@ phases:
   goal: Visual debugging tools for GO programs running inside GO
   id: phase-76
   scope_lines_total: 1500
-  status: done
+  status: complete
   test_target: 10
   title: Debugger UI + Memory Inspector
 - deliverables:
@@ -4158,7 +4158,7 @@ phases:
   goal: Call external LLMs from inside the VM for text generation and code assistance
   id: phase-80
   scope_lines_total: 1200
-  status: done
+  status: complete
   test_target: 8
   title: LLM Bridge Opcode (External AI)
 - _claimed_at: 1776733808
@@ -4183,7 +4183,7 @@ phases:
   goal: Fetch web pages and render them as text inside the VM
   id: phase-81
   scope_lines_total: 1500
-  status: done
+  status: complete
   test_target: 10
   title: HTTP Client + Text Browser
 - _claimed_at: 1776736857
@@ -4213,7 +4213,7 @@ phases:
   goal: Parse and render simple HTML with styled text, links, and images
   id: phase-82
   scope_lines_total: 2000
-  status: done
+  status: complete
   test_target: 12
   title: HTML Renderer + Interactive Browser
 - deliverables:
@@ -4255,7 +4255,7 @@ phases:
   goal: Player-controlled avatar moving across procedural terrain as the desktop surface
   id: phase-83
   scope_lines_total: 1000
-  status: done
+  status: complete
   test_target: 12
   title: Infinite Map Desktop -- Camera + Player Avatar
 - deliverables:
@@ -4298,7 +4298,7 @@ phases:
   goal: Programs exist as structures on the map that the player enters to launch
   id: phase-84
   scope_lines_total: 1200
-  status: done
+  status: complete
   test_target: 14
   title: Infinite Map Desktop -- App Buildings + Entry Points
   _claimed_at: 1776744560
@@ -4335,7 +4335,7 @@ phases:
   goal: Complete desktop experience - infinite world with apps, taskbar, and navigation
   id: phase-85
   scope_lines_total: 1200
-  status: done
+  status: complete
   test_target: 12
   title: Infinite Map Desktop -- Full Desktop Integration
 - deliverables:
@@ -4375,7 +4375,7 @@ phases:
     infinite map
   id: phase-86
   scope_lines_total: 900
-  status: done
+  status: complete
   test_target: 10
   title: Hypervisor Building -- Run Linux on the Map
   _claimed_at: 1776745965
@@ -4404,7 +4404,7 @@ phases:
   goal: Multiple hypervisor buildings running different guest OSes simultaneously
   id: phase-87
   scope_lines_total: 1200
-  status: done
+  status: complete
   test_target: 10
   title: Multi-Hypervisor -- Multiple OS Instances on the Map
   _claimed_at: 1776748317
@@ -4446,7 +4446,7 @@ phases:
   goal: Expose the canvas as a base64 PNG that AI agents can request and analyze
   id: phase-88
   scope_lines_total: 800
-  status: done
+  status: complete
   test_target: 10
   title: AI Vision Bridge -- Screenshot + Canvas Analysis
   _claimed_at: 1776749530
@@ -4484,7 +4484,7 @@ phases:
   goal: Let AI agents inject keyboard and mouse events to interact with running programs
   id: phase-89
   scope_lines_total: 700
-  status: done
+  status: complete
   test_target: 12
   title: AI Agent Input -- Programmatic Keyboard + Mouse Injection
   _claimed_at: 1776751231
@@ -4531,7 +4531,7 @@ phases:
   goal: AI agents appear as avatars on the infinite map and can interact with buildings
   id: phase-90
   priority: 1
-  status: done
+  status: complete
   test_target: 14
   title: AI Native Desktop -- Agents on the Map
 - deliverables:
@@ -4575,7 +4575,7 @@ phases:
     the VM a high-level language
   id: phase-91
   scope_lines_total: 2000
-  status: done
+  status: complete
   test_target: 12
   title: GlyphLang Frontend -- High-Level Language for the Pixel VM
 - deliverables:
@@ -4611,7 +4611,7 @@ phases:
     assembler entirely
   id: phase-92
   scope_lines_total: 400
-  status: done
+  status: complete
   test_target: 5
   title: Pixel Boot - Bytecode from PNG
 - deliverables:
@@ -4648,7 +4648,7 @@ phases:
     it, and run it -- the image is both source code and executable
   id: phase-93
   scope_lines_total: 500
-  status: done
+  status: complete
   test_target: 5
   title: Pixel Boot - Source from PNG (Self-Documenting Pixel Programs)
 - deliverables:
@@ -4694,7 +4694,7 @@ phases:
     OS), and the VM can load .png programs at runtime
   id: phase-94
   scope_lines_total: 800
-  status: done
+  status: complete
   test_target: 8
   title: Pixel Boot - Universal Pixel Executable
 - deliverables:
@@ -4758,7 +4758,7 @@ phases:
     pipes or messages
   id: phase-96
   scope_lines_total: 200
-  status: done
+  status: complete
   test_target: 8
   title: System Clipboard
 - deliverables:
@@ -4853,7 +4853,7 @@ phases:
   goal: Build a pipe-fed multi-channel sound mixer daemon with a music player demo
   id: phase-99
   scope_lines_total: 500
-  status: done
+  status: complete
   test_target: 3
   title: Sound Mixer Daemon
 - deliverables:
@@ -5143,7 +5143,7 @@ phases:
     desktop control.
   id: phase-106
   scope_lines_total: 930
-  status: done
+  status: complete
   test_target: 10
   title: AI Desktop Control and Guided Demo
   _claimed_by: worker-0
@@ -5262,7 +5262,7 @@ phases:
     the desktop IS the map.
   id: phase-107
   scope_lines_total: 1220
-  status: done
+  status: complete
   test_target: 12
   title: Infinite Spatial Desktop
   _claimed_by: worker-0
