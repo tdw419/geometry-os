@@ -117,6 +117,58 @@ void main() {
     f = texelFetch(u_qkv, ivec2(c.x + u_D * 2, c.y), 0).r;
 }
 """,
+        # Fused operations for fewer passes
+        'mm_bias': """
+#version 450
+uniform sampler2D u_w;
+uniform sampler2D u_x;
+uniform sampler2D u_b;
+uniform int u_K;
+uniform int u_Ww;
+uniform int u_Wh;
+uniform int u_B;
+out float f;
+void main() {
+    int j = int(gl_FragCoord.x);
+    int b = int(gl_FragCoord.y);
+    float s = 0.0;
+    for (int k = 0; k < u_K; k++) {
+        float w = texture(u_w, vec2((float(k)+0.5)/float(u_Ww), (float(j)+0.5)/float(u_Wh))).r;
+        float a = texture(u_x, vec2((float(k)+0.5)/float(u_K), (float(b)+0.5)/float(u_B))).r;
+        s += w * a;
+    }
+    f = s + texelFetch(u_b, ivec2(j, 0), 0).r;
+}
+""",
+        'ln_fused': """
+#version 450
+// Fused LayerNorm: compute stats and normalize in one pass
+// Requires two passes would be needed for true reduction, but for batch=1
+// we can't do parallel reduction efficiently. Instead we do it all here.
+uniform sampler2D u_x;
+uniform sampler2D u_g;
+uniform sampler2D u_bt;
+uniform int u_K;
+out float f;
+void main() {
+    int i = int(gl_FragCoord.x);
+    int b = int(gl_FragCoord.y);
+    // Pass 1: compute mean and variance
+    float sum = 0.0, sum2 = 0.0;
+    for (int k = 0; k < u_K; k++) {
+        float v = texelFetch(u_x, ivec2(k, b), 0).r;
+        sum += v;
+        sum2 += v * v;
+    }
+    float mean = sum / float(u_K);
+    float var = sum2 / float(u_K) - mean * mean;
+    // Pass 2: normalize
+    float x = texelFetch(u_x, ivec2(i, b), 0).r;
+    float g = texelFetch(u_g, ivec2(i, 0), 0).r;
+    float bt = texelFetch(u_bt, ivec2(i, 0), 0).r;
+    f = ((x - mean) / sqrt(var + 1e-5)) * g + bt;
+}
+""",
     }
 
 
@@ -350,6 +402,46 @@ class GPT2V6B:
         buf = self._get_buf('D', self.D, 1)
         return self._render('extract_v', [('u_qkv', qkv, 0)], buf, {'u_D': self.D})
     
+    def _mm_bias(self, wname, in_tex, bias_name):
+        """Fused matmul + bias add."""
+        wt = self.wt[wname]
+        K, M = wt.size
+        buf = self._get_buf('D' if M == self.D else 'FFN' if M == 3072 else 'QKV', M, 1)
+        return self._render('mm_bias',
+            [('u_w', wt, 0), ('u_x', in_tex, 1), ('u_b', self.wt[bias_name], 2)],
+            buf,
+            {'u_K': K, 'u_Ww': K, 'u_Wh': M, 'u_B': 1})
+    
+    def _ln_fused(self, x, gamma, beta):
+        """Fused LayerNorm (stats + normalize in one pass)."""
+        buf = self._get_buf('D', self.D, 1)
+        return self._render('ln_fused',
+            [('u_x', x, 0), ('u_g', self.wt[gamma], 1), ('u_bt', self.wt[beta], 2)],
+            buf,
+            {'u_K': self.D})
+    
+    def _block_fused(self, x, layer):
+        """Transformer block with fused operations (fewer passes)."""
+        p = f"transformer_h_{layer}"
+        
+        # LN1 -> QKV+bias (fused)
+        ln1 = self._ln_fused(x, f"{p}_ln_1_weight", f"{p}_ln_1_bias")
+        qkv = self._mm_bias(f"{p}_attn_c_attn_weight", ln1, f"{p}_attn_c_attn_bias")
+        
+        # Attention (seq_len=1: V only)
+        attn = self._extract_v(qkv)
+        
+        # Proj+bias + residual
+        proj = self._mm_bias(f"{p}_attn_c_proj_weight", attn, f"{p}_attn_c_proj_bias")
+        res1 = self._add(x, proj)
+        
+        # LN2 -> FC+bias -> GELU -> MLP+bias + residual
+        ln2 = self._ln_fused(res1, f"{p}_ln_2_weight", f"{p}_ln_2_bias")
+        fc = self._mm_bias(f"{p}_mlp_c_fc_weight", ln2, f"{p}_mlp_c_fc_bias")
+        g = self._gelu(fc)
+        mlp = self._mm_bias(f"{p}_mlp_c_proj_weight", g, f"{p}_mlp_c_proj_bias")
+        return self._add(res1, mlp)
+    
     def _block(self, x, layer):
         """Transformer block."""
         p = f"transformer_h_{layer}"
@@ -388,13 +480,13 @@ class GPT2V6B:
         x_tex = self._pool['D0'][0]
         x_tex.write(x_np.astype(np.float32).tobytes())
         
-        # Run blocks
+        # Run blocks (fused operations)
         cur = x_tex
         for i in range(self.L):
-            cur = self._block(cur, i)
+            cur = self._block_fused(cur, i)
         
-        # Final LN
-        cur = self._ln(cur, "transformer_ln_f_weight", "transformer_ln_f_bias")
+        # Final LN (fused)
+        cur = self._ln_fused(cur, "transformer_ln_f_weight", "transformer_ln_f_bias")
         
         # LM Head
         if "lm_head_weight_tiled" in self.wt:
