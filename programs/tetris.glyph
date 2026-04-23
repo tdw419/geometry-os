@@ -1,0 +1,265 @@
+# Tetris in GlyphLang
+# A minimal Tetris with I, O, T pieces
+# Controls: A=left, D=right, W=rotate, S=drop
+
+# Registers:
+#   a = piece x (0-9, left edge of bounding box)
+#   b = piece y (0-19, top of bounding box)
+#   c = piece shape (0=I, 1=O, 2=T)
+#   d = piece rotation (0-3)
+#   e = score (lines cleared)
+#   f = game over flag (0=playing, 1=done)
+#   g = tick counter
+#   h = gravity speed (frames between drops)
+#   i = next key
+
+# Initialize
+0 a              # x = 3 (center)
+3 a
+0 b              # y = 0
+0 c              # shape = 0 (I)
+0 d              # rotation = 0
+0 e              # score = 0
+0 f              # not game over
+0 g              # tick = 0
+15 h             # gravity = 15 frames
+
+# Constants
+# Playfield: x_offset=80, y_offset=16, cell_size=11
+# Playfield width=110 (10*11), height=220 (20*11)
+# Colors: piece=0x33FF33, border=0x555555, bg=0x1A1A2E, grid=0x222244
+
+:main_loop
+  f )game_over_screen
+  
+  # Clear screen
+  0x1A1A2E |
+  
+  # Draw playfield border
+  78 14 114 224 0x555555 [
+  
+  # Draw playfield background
+  80 16 110 220 0x222244 [
+  
+  # Draw grid lines (vertical)
+  80 16 1 220 0x333355 [
+  91 16 1 220 0x333355 [
+  102 16 1 220 0x333355 [
+  113 16 1 220 0x333355 [
+  124 16 1 220 0x333355 [
+  135 16 1 220 0x333355 [
+  146 16 1 220 0x333355 [
+  157 16 1 220 0x333355 [
+  168 16 1 220 0x333355 [
+  179 16 1 220 0x333355 [
+  190 16 1 220 0x333355 [
+  
+  # Draw horizontal grid lines (every 11 pixels)
+  80 16 110 1 0x333355 [
+  80 27 110 1 0x333355 [
+  80 38 110 1 0x333355 [
+  80 49 110 1 0x333355 [
+  80 60 110 1 0x333355 [
+  80 71 110 1 0x333355 [
+  80 82 110 1 0x333355 [
+  80 93 110 1 0x333355 [
+  80 104 110 1 0x333355 [
+  80 115 110 1 0x333355 [
+  80 126 110 1 0x333355 [
+  80 137 110 1 0x333355 [
+  80 148 110 1 0x333355 [
+  80 159 110 1 0x333355 [
+  80 170 110 1 0x333355 [
+  80 181 110 1 0x333355 [
+  80 192 110 1 0x333355 [
+  80 203 110 1 0x333355 [
+  80 214 110 1 0x333355 [
+  80 225 110 1 0x333355 [
+  80 236 110 1 0x333355 [
+  
+  # Draw current piece
+  # I-piece: 4 cells tall x 1 wide (rotation 0)
+  # Compute screen position: sx = 80 + a*11, sy = 16 + b*11
+  # For I-piece (shape 0, rotation 0): draw 4 blocks at (a, b) to (a, b+3)
+  A 11 * 81 +     # sx = a*11 + 81 (leave 1px border)
+  B 11 * 17 +     # sy = b*11 + 17
+  
+  # Draw I-piece: 1 cell wide, 4 cells tall (rotation 0)
+  C 0 = )not_i_piece
+  # I-piece rotation 0: 4 tall, 1 wide
+  9 0xFF4444 [    # draw 1 cell: w=9, color at stack top
+  # Need to draw 4 blocks. Let's draw each one.
+  # First block already positioned
+  A 11 * 81 +
+  B 11 * 17 + 11 +
+  9 0xFF4444 [
+  A 11 * 81 +
+  B 11 * 17 + 22 +
+  9 0xFF4444 [
+  A 11 * 81 +
+  B 11 * 17 + 33 +
+  9 0xFF4444 [
+  ~draw_score
+  
+:not_i_piece
+  C 1 = )not_o_piece
+  # O-piece: 2x2 block
+  A 11 * 81 +
+  B 11 * 17 +
+  9 0xFFAA00 [
+  A 11 * 81 + 11 +
+  B 11 * 17 +
+  9 0xFFAA00 [
+  A 11 * 81 +
+  B 11 * 17 + 11 +
+  9 0xFFAA00 [
+  A 11 * 81 + 11 +
+  B 11 * 17 + 11 +
+  9 0xFFAA00 [
+  ~draw_score
+  
+:not_o_piece
+  # T-piece: 3 wide, 2 tall (T shape)
+  # Top row: 3 cells
+  # Bottom row: center cell only
+  A 11 * 81 +
+  B 11 * 17 +
+  9 0xAA44FF [
+  A 11 * 81 + 11 +
+  B 11 * 17 +
+  9 0xAA44FF [
+  A 11 * 81 + 22 +
+  B 11 * 17 +
+  9 0xAA44FF [
+  A 11 * 81 + 11 +
+  B 11 * 17 + 11 +
+  9 0xAA44FF [
+  
+:draw_score
+  # Draw score label on the right side
+  200 16 "Score:" 0xCCCCCC 0 [
+  # Draw score value (we just show "0" for now since we can't convert numbers)
+  # Score is in register e
+  200 30 "0" 0x00FF00 0 [
+  
+  # Draw controls help
+  200 50 "A:Left" 0x888888 0 [
+  200 62 "D:Right" 0x888888 0 [
+  200 74 "W:Rotate" 0x888888 0 [
+  200 86 "S:Drop" 0x888888 0 [
+  
+  # Title
+  4 2 "TETRIS" 0xFFFFFF 0x1A1A2E {
+  
+  # Frame + input
+  !
+  ^ i
+  
+  # Check key
+  I 0 = )no_key
+  
+  # A = 65 (left)
+  I 65 = )move_left
+  
+  # D = 68 (right)
+  I 68 = )move_right
+  
+  # W = 87 (rotate)
+  I 87 = )rotate
+  
+  # S = 83 (drop)
+  I 83 = )drop
+  
+  ~gravity_check
+  
+:move_left
+  A 0 > )skip_left
+  ~gravity_check
+:skip_left
+  A 1 - a
+  ~gravity_check
+
+:move_right
+  C 0 = )i_right
+  A 8 < )do_right
+  ~gravity_check
+:i_right
+  A 9 < )do_right
+  ~gravity_check
+:do_right
+  A 1 + a
+  ~gravity_check
+  
+:rotate
+  D 1 + d
+  D 4 = )reset_rot
+  ~gravity_check
+:reset_rot
+  0 d
+  ~gravity_check
+
+:drop
+  # Move piece down fast (just advance y by 3)
+  B 16 < )do_drop
+  ~gravity_check
+:do_drop
+  B 3 + b
+  ~gravity_check
+
+:no_key
+  ~gravity_check
+  
+:gravity_check
+  # Increment tick counter
+  G 1 + g
+  
+  # Check if it's time to drop
+  G H < )main_loop
+  
+  # Gravity: move piece down
+  0 g
+  B 1 + b
+  
+  # Check if piece hit bottom (y >= 17 for I-piece, 18 for others)
+  C 0 = )check_i_bottom
+  B 18 > )lock_piece
+  ~main_loop
+:check_i_bottom
+  B 16 > )lock_piece
+  ~main_loop
+  
+:lock_piece
+  # Piece locked. Reset position for new piece.
+  3 a
+  0 b
+  0 d
+  # Cycle shape: 0 -> 1 -> 2 -> 0
+  C 1 + c
+  C 3 = )reset_shape
+  ~main_loop
+:reset_shape
+  0 c
+  ~main_loop
+
+:game_over_screen
+  # Dark overlay
+  0x0A0A14 |
+  80 80 "GAME OVER" 0xFF3333 0 [
+  70 100 "Press R to restart" 0xAAAAAA 0 [
+  !
+  ^ i
+  I 82 = )restart   # R key
+  ~game_over_screen
+  
+:restart
+  0 a
+  3 a
+  0 b
+  0 c
+  0 d
+  0 e
+  0 f
+  0 g
+  ~main_loop
+
+@ 
