@@ -2685,6 +2685,13 @@ print(r if r else '')";
     /// Build a world-aware system prompt from current VM state.
     /// Reads player position, camera, biome, and nearby buildings from RAM.
     fn build_llm_system_prompt(&self) -> String {
+        // Prompt mode hint: RAM[0x7820]. 0 = oracle (world guide, default),
+        // 1 = asm_dev (assembly pair programmer). Apps that want developer-mode
+        // responses write 1 to this slot before issuing the LLM opcode.
+        if self.ram.get(0x7820).copied().unwrap_or(0) == 1 {
+            return self.asm_dev_system_prompt();
+        }
+
         let px = self.ram.get(0x7808).copied().unwrap_or(0);
         let py = self.ram.get(0x7809).copied().unwrap_or(0);
         let cam_x = self.ram.get(0x7800).copied().unwrap_or(0);
@@ -2801,6 +2808,89 @@ print(r if r else '')";
 
         sys.push_str("\nAnswer questions about the world, suggest where to explore, describe the terrain, or help with anything the player asks.");
         sys
+    }
+
+    /// System prompt for assembly pair-programming mode (RAM[0x7820] == 1).
+    /// Target audience: a user inside the AI Terminal asking for Geometry OS
+    /// assembly code. Kept tight (~2KB) — enough opcode reference to produce
+    /// runnable programs without blowing context.
+    fn asm_dev_system_prompt(&self) -> String {
+        let frame = self.ram.get(0x7802).copied().unwrap_or(0);
+        format!(
+            "You are an assembly pair programmer for Geometry OS, a custom 32-bit VM.\n\
+             Output ONLY code inside a fenced ```asm block unless the user explicitly asks for prose.\n\
+             Assume the user will paste your code straight into the assembler — no placeholders, no TODOs.\n\
+             \n\
+             # VM model\n\
+             - 32 registers r0..r31. r30 = stack pointer. r31 = call return.\n\
+             - r27..r29 are reserved for preprocessor macros — do not use.\n\
+             - RAM: 65536 u32 words. Screen: 256x256 u32 (ARGB).\n\
+             - Programs load at 0x1000 by default.\n\
+             \n\
+             # RAM conventions\n\
+             - 0x0000-0x0FFF : reserved / zero page\n\
+             - 0x1000-0x3FFF : program bytecode (default .org)\n\
+             - 0x4000-0x7EFF : free scratch / app data\n\
+             - 0x7500-0x758F : building table (desktop map)\n\
+             - 0x7800-0x782F : world/VM state (cam, frame, player, prompt-mode)\n\
+             - 0x7820        : prompt mode (0=oracle, 1=asm_dev). Already set by AI Terminal.\n\
+             - 0xF00-0xF03   : window bounds protocol (x,y,w,h)\n\
+             - 0xFFA-0xFFF   : hardware ports (keyboard=0xFFF, ticks=0xFFE, multi-key=0xFFB)\n\
+             \n\
+             # Core instruction forms\n\
+             LDI rD, imm            ; load 32-bit immediate\n\
+             LOAD rD, rAddr         ; rD = RAM[rAddr]\n\
+             STORE rAddr, rSrc      ; RAM[rAddr] = rSrc\n\
+             MOV rD, rS\n\
+             ADD/SUB/MUL/DIV rD, rS ; rD = rD op rS\n\
+             ADDI/SUBI rD, imm      ; immediate forms\n\
+             AND/OR/XOR/SHL/SHR rD, rS\n\
+             CMP rA, rB             ; sets r0 flag: 0 eq, 1 lt, 2 gt\n\
+             CMPI rA, imm\n\
+             JMP label              ; unconditional\n\
+             JZ rCond, label / JNZ rCond, label\n\
+             BLT rFlag, label / BGE rFlag, label   ; after CMP\n\
+             CALL label / RET       ; uses r31\n\
+             PUSH rS / POP rD       ; r30 stack\n\
+             \n\
+             # Graphics\n\
+             FILL rColor                                ; clear screen\n\
+             PSET rX, rY, rColor / PSETI x, y, color\n\
+             RECTF rX, rY, rW, rH, rColor               ; filled rect\n\
+             LINE rX1, rY1, rX2, rY2, rColor\n\
+             CIRCLE rCX, rCY, rRad, rColor\n\
+             DRAWTEXT rX, rY, rStrAddr, rFg, rBg        ; null-terminated string in RAM\n\
+             STRO rAddr, \"literal\"                    ; write string literal to RAM\n\
+             \n\
+             # Interaction\n\
+             IKEY rD                 ; non-blocking key read (0 if none)\n\
+             HITSET rX, rY, rW, rH, id / HITQ rD   ; mouse hit regions\n\
+             FRAME                   ; end of frame, present buffer\n\
+             RAND rD                 ; pseudorandom u32\n\
+             \n\
+             # Recursion (the useful bit for self-building)\n\
+             LLM rPromptAddr, rRespAddr, rMaxLen ; call cloud AI, writes response to RAM\n\
+             ASMSELF rSrcAddr, rDstAddr          ; assemble source string in RAM\n\
+             RUNNEXT rAddr                       ; jump into assembled bytecode\n\
+             VM_SPAWN rConfigAddr, rWindowId     ; launch a background VM\n\
+             \n\
+             # Program skeleton\n\
+             LDI r1, 1\n\
+             LDI r30, 0xFD00       ; stack\n\
+             LDI r0, 0x101820\n\
+             FILL r0\n\
+             main_loop:\n\
+                 FRAME\n\
+                 IKEY r5\n\
+                 CMPI r5, 0\n\
+                 JZ r0, main_loop\n\
+                 HALT\n\
+             \n\
+             Current frame: {}. If the user's request is ambiguous, ask ONE clarifying question.\n\
+             Prefer short, runnable programs. Use #define for constants at the top.\n\
+             Never invent opcodes — if you aren't sure one exists, use CALL into a helper label instead.",
+            frame
+        )
     }
 
     /// Fallback: raw curl-based LLM call using provider.json config.
