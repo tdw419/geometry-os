@@ -878,12 +878,10 @@ fn test_self_analysis_quadrant_counts_nonzero() {
     let tr = extract_count("Top-right:");
     let bl = extract_count("Bottom-left:");
     let br = extract_count("Bottom-right:");
-    let tl = extract_count("Top-left:");
-    let tr = extract_count("Top-right:");
-    let bl = extract_count("Bottom-left:");
-    let br = extract_count("Bottom-right:");
 
-    // BL should have the most content (blue block)
+    // All quadrants should have non-zero content (colored blocks)
+    assert!(tl > 0, "TL quadrant should have non-zero pixel count, got {}", tl);
+    assert!(tr > 0, "TR quadrant should have non-zero pixel count, got {}", tr);
     assert!(bl > 0, "BL quadrant should have non-zero pixel count, got {}", bl);
     assert!(br > 0, "BR quadrant should have non-zero pixel count, got {}", br);
 }
