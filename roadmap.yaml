@@ -5459,6 +5459,65 @@ phases:
   status: complete
   test_target: 4
   scope_lines_total: 362
+- deliverables:
+  - name: Enhanced Glyph Backend
+    description: >
+      Extended src/glyph_backend.rs with support for high-level graphical and system opcodes:
+      RECTF ([), DRAWTEXT ({), FRAME (!), IKEY (^), FILL (|), LS ($), and EXEC (&).
+      Added string literal support, hex literals, labels/jumps, conditional jumps.
+    status: done
+    scope_files:
+      - src/glyph_backend.rs
+  - name: glyph_shell.glyph
+    description: >
+      Purely Glyph-native desktop shell program that demonstrates all enhanced backend
+      features, replacing assembly-based UI management with font-atomic spatial programs.
+    status: done
+    scope_files:
+      - programs/glyph_shell.glyph
+  - name: Integration Tests
+    description: Tests for glyph shell compilation and enhanced backend features.
+    status: done
+    scope_files:
+      - tests/program_tests.rs
+    tests:
+      - test_glyph_shell_assembles
+      - test_glyph_backend_rectf
+      - test_glyph_backend_drawtext
+  description: >
+    Evolve the GlyphLang compiler and implement a purely Glyph-native desktop shell,
+    moving away from assembly-based UI management toward font-atomic spatial programs.
+  goal: Evolve the GlyphLang compiler and implement a purely Glyph-native desktop shell.
+  id: phase-112
+  status: complete
+  test_target: 2
+  scope_lines_total: 150
+- deliverables:
+  - name: tetris.glyph
+    description: >
+      265-line Full Tetris game in pure GlyphLang using stack-based programming.
+      Features 3 tetromino shapes (I, O, T), player controls (A/D/W/S), gravity system,
+      piece locking, game over screen, 10x20 playfield with grid lines, score display.
+    status: done
+    scope_files:
+      - programs/tetris.glyph
+  - name: Integration Tests
+    description: Tests for tetris.glyph compilation and gameplay verification.
+    status: done
+    scope_files:
+      - tests/program_tests.rs
+    tests:
+      - test_tetris_glyph_assembles
+      - test_tetris_glyph_runs
+  description: >
+    Demonstrate GlyphLang's capability as a real programming language by building a playable
+    Tetris game entirely in .glyph source, compiling through the GlyphLang compiler to assembly,
+    then to bytecode.
+  goal: Build a playable Tetris game entirely in GlyphLang.
+  id: phase-113
+  status: complete
+  test_target: 2
+  scope_lines_total: 265
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

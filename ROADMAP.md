@@ -4,7 +4,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 
 **Progress:** 113/113 phases complete, 0 in_progress, 0 planned
 
-**Deliverables:** 493/493 complete
+**Deliverables:** 490/490 complete
 
 ## Scope Summary
 
@@ -120,8 +120,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 | phase-108 Sandboxed AI Execution | COMPLETE | 3/3 | 180 | 8 |
 | phase-109 Live Opcode Inventory Injection | COMPLETE | 3/3 | 110 | 7 |
 | phase-110 AI Terminal /focus and /status Commands | COMPLETE | 4/4 | 200 | 4 |
-| phase-111 Recursive Self-Analysis Program | COMPLETE | 4/4 | 362 | 4 |
-| phase-112 Glyph-Atomic Shell | COMPLETE | 4/4 | 150 | 2 |
+| phase-111 Recursive Self-Analysis Program | COMPLETE | 2/2 | 362 | 4 |
+| phase-112 Glyph-Atomic Shell | COMPLETE | 3/3 | 150 | 2 |
 | phase-113 Tetris in GlyphLang | COMPLETE | 2/2 | 265 | 2 |
 
 ## Dependencies
