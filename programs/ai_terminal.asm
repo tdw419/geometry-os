@@ -1230,45 +1230,6 @@ status_final:
     JMP hk_ret
 
 ; =========================================
-; HEX_DIGIT_VAL -- convert ASCII hex char to value
-; Input: r22 = ASCII char
-; Output: r0 = 0-15, or 0xFF if invalid
-; =========================================
-hex_digit_val:
-    ; '0'-'9' -> 0-9
-    CMPI r22, 48
-    BLT r0, hex_val_bad
-    CMPI r22, 58          ; '9'+1
-    BGE r0, hex_val_try_upper
-    SUBI r22, 48
-    MOV r0, r22
-    RET
-
-hex_val_try_upper:
-    ; 'A'-'F' -> 10-15
-    CMPI r22, 65          ; 'A'
-    BLT r0, hex_val_try_lower
-    CMPI r22, 71          ; 'F'+1
-    BGE r0, hex_val_try_lower
-    SUBI r22, 55          ; 'A'-10
-    MOV r0, r22
-    RET
-
-hex_val_try_lower:
-    ; 'a'-'f' -> 10-15
-    CMPI r22, 97          ; 'a'
-    BLT r0, hex_val_bad
-    CMPI r22, 103         ; 'f'+1
-    BGE r0, hex_val_bad
-    SUBI r22, 87          ; 'a'-10
-    MOV r0, r22
-    RET
-
-hex_val_bad:
-    LDI r0, 0xFF
-    RET
-
-; =========================================
 ; HEX_DIGIT_CHAR -- convert nibble (0-15) to ASCII hex char
 ; Input: r0 = nibble value (0-15)
 ; Output: r0 = ASCII char
