@@ -994,6 +994,15 @@ fn test_tetris_glyph_compiles() {
     let asm_text = geometry_os::glyph_backend::compile_glyph(source)
         .expect("tetris.glyph should compile to assembly");
 
+    eprintln!("Compiled assembly has {} lines", asm_text.lines().count());
+    // Print first 200 lines for debugging
+    for (i, line) in asm_text.lines().take(200).enumerate() {
+        eprintln!("{:4}: {}", i, line);
+    }
+    if asm_text.lines().count() > 200 {
+        eprintln!("... ({} more lines)", asm_text.lines().count() - 200);
+    }
+
     // Should contain game opcodes
     assert!(asm_text.contains("RECTF"), "Tetris should use RECTF for drawing");
     assert!(asm_text.contains("FRAME"), "Tetris should use FRAME for game loop");
