@@ -2959,3 +2959,209 @@ fn test_world_desktop_collision_blocks_water() {
         "facing should update to up even if movement blocked"
     );
 }
+
+// ── Command bar tests (world_desktop.asm) ───────────────────────────
+
+/// Helper: run world_desktop to first FRAME, inject a key, run to next FRAME.
+fn world_desktop_run_frame_with_key(vm: &mut Vm, key: u32) {
+    vm.frame_ready = false;
+    vm.push_key(key);
+    // Run until frame completes (needs to process key + full render)
+    let steps = step_until_frame(vm, 2_000_000);
+    assert!(vm.frame_ready, "should reach FRAME after key injection (took {} steps)", steps);
+}
+
+/// Helper: inject multiple keys one per frame (simulates typing).
+fn world_desktop_type_keys(vm: &mut Vm, keys: &[u32]) {
+    for &key in keys {
+        world_desktop_run_frame_with_key(vm, key);
+    }
+}
+
+#[test]
+fn test_cmd_bar_slash_enters_type_mode() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0; // no arrow keys
+
+    // Run to first frame to establish baseline
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+
+    // CMD_MODE should start at 0
+    assert_eq!(vm.ram[0x7830], 0, "CMD_MODE should start as 0 (move mode)");
+
+    // Inject '/' key
+    world_desktop_run_frame_with_key(&mut vm, 47); // '/' = ASCII 47
+
+    // CMD_MODE should now be 1
+    assert_eq!(vm.ram[0x7830], 1, "CMD_MODE should be 1 after pressing /");
+    // CMD_LEN should be 0 (we don't add '/' to buffer)
+    assert_eq!(vm.ram[0x7831], 0, "CMD_LEN should be 0 (slash not stored in buffer)");
+}
+
+#[test]
+fn test_cmd_bar_escape_exits_type_mode() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+
+    // Enter type mode
+    step_until_frame(&mut vm, 1_500_000);
+    world_desktop_run_frame_with_key(&mut vm, 47); // '/'
+    assert_eq!(vm.ram[0x7830], 1, "should be in type mode");
+
+    // Type a char first
+    world_desktop_run_frame_with_key(&mut vm, 65); // 'A'
+    assert_eq!(vm.ram[0x7831], 1, "CMD_LEN should be 1");
+
+    // Press Escape
+    world_desktop_run_frame_with_key(&mut vm, 27); // ESC
+    assert_eq!(vm.ram[0x7830], 0, "CMD_MODE should be 0 after Escape");
+    assert_eq!(vm.ram[0x7831], 0, "CMD_LEN should be cleared after Escape");
+}
+
+#[test]
+fn test_cmd_bar_type_and_backspace() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+
+    step_until_frame(&mut vm, 1_500_000);
+    world_desktop_run_frame_with_key(&mut vm, 47); // '/' enter type mode
+
+    // Type "hi"
+    world_desktop_run_frame_with_key(&mut vm, 104); // 'h'
+    assert_eq!(vm.ram[0x7831], 1, "CMD_LEN after 'h'");
+    assert_eq!(vm.ram[0x7832], 104, "CMD_BUF[0] should be 'h'");
+
+    world_desktop_run_frame_with_key(&mut vm, 105); // 'i'
+    assert_eq!(vm.ram[0x7831], 2, "CMD_LEN after 'hi'");
+    assert_eq!(vm.ram[0x7833], 105, "CMD_BUF[1] should be 'i'");
+
+    // Backspace
+    world_desktop_run_frame_with_key(&mut vm, 8); // BS
+    assert_eq!(vm.ram[0x7831], 1, "CMD_LEN after backspace");
+}
+
+#[test]
+fn test_cmd_bar_tp_teleports() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+
+    step_until_frame(&mut vm, 1_500_000);
+    assert_eq!(vm.ram[0x7808], 32, "player_x starts at 32");
+    assert_eq!(vm.ram[0x7809], 32, "player_y starts at 32");
+
+    // Enter type mode and type "/tp 100 200"
+    let keys: &[u32] = &[
+        47, // '/'
+    ];
+    world_desktop_type_keys(&mut vm, keys);
+    assert_eq!(vm.ram[0x7830], 1, "in type mode");
+
+    // Type "/tp 100 200" character by character
+    let tp_keys: &[u32] = &[
+        b'/' as u32, b't' as u32, b'p' as u32, b' ' as u32,
+        b'1' as u32, b'0' as u32, b'0' as u32, b' ' as u32,
+        b'2' as u32, b'0' as u32, b'0' as u32,
+    ];
+    // Reset: we're already in type mode, now type the command
+    // But wait -- pressing '/' while already in type mode types it into the buffer.
+    // The actual flow is: press / to enter type mode, then type the command.
+    // The initial / is consumed by the toggle, not echoed. Type starts after.
+    let cmd_keys: &[u32] = &[
+        b'/' as u32, b't' as u32, b'p' as u32, b' ' as u32,
+        b'1' as u32, b'0' as u32, b'0' as u32, b' ' as u32,
+        b'2' as u32, b'0' as u32, b'0' as u32,
+    ];
+    world_desktop_type_keys(&mut vm, cmd_keys);
+
+    // Verify buffer has "/tp 100 200"
+    assert_eq!(vm.ram[0x7831], 11, "CMD_LEN should be 11 for '/tp 100 200'");
+    assert_eq!(vm.ram[0x7832], b'/' as u32, "first char is /");
+    assert_eq!(vm.ram[0x7833], b't' as u32, "second char is t");
+
+    // Press Enter to execute
+    world_desktop_run_frame_with_key(&mut vm, 13);
+
+    // Player should be teleported
+    assert_eq!(vm.ram[0x7808], 100, "player_x should be 100 after /tp 100 200");
+    assert_eq!(vm.ram[0x7809], 200, "player_y should be 200 after /tp 100 200");
+
+    // CMD_MODE should be back to 0
+    assert_eq!(vm.ram[0x7830], 0, "CMD_MODE should be 0 after Enter");
+
+    // Note: ORACLE_RESP_READY auto-clears after the frame renders the overlay,
+    // so we can't reliably check it after step_until_frame. The teleport
+    // itself (player_x/y change) is the persistent proof it worked.
+}
+
+#[test]
+fn test_cmd_bar_build_adds_building() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+
+    step_until_frame(&mut vm, 1_500_000);
+    let initial_count = vm.ram[0x7580];
+
+    // Enter type mode
+    world_desktop_run_frame_with_key(&mut vm, 47); // '/'
+
+    // Type "/build tower"
+    let cmd_keys: &[u32] = &[
+        b'/' as u32, b'b' as u32, b'u' as u32, b'i' as u32,
+        b'l' as u32, b'd' as u32, b' ' as u32,
+        b't' as u32, b'o' as u32, b'w' as u32, b'e' as u32,
+        b'r' as u32,
+    ];
+    world_desktop_type_keys(&mut vm, cmd_keys);
+    assert_eq!(vm.ram[0x7831], 12, "CMD_LEN for '/build tower'");
+
+    // Press Enter
+    world_desktop_run_frame_with_key(&mut vm, 13);
+
+    // Building count should have incremented
+    assert_eq!(
+        vm.ram[0x7580],
+        initial_count + 1,
+        "building count should have incremented"
+    );
+
+    // New building should be at player position
+    let idx = initial_count as usize;
+    let base = 0x7500 + idx * 4;
+    assert_eq!(vm.ram[base], 32, "new building x should be player_x (32)");
+    assert_eq!(vm.ram[base + 1], 32, "new building y should be player_y (32)");
+    assert_eq!(vm.ram[base + 2], 0x00FFFF, "new building color should be cyan");
+
+    // Name should be "tower"
+    let name_addr = vm.ram[base + 3] as usize;
+    assert_eq!(vm.ram[name_addr], b't' as u32, "building name starts with 't'");
+    assert_eq!(vm.ram[name_addr + 1], b'o' as u32, "building name second char 'o'");
+    assert_eq!(vm.ram[name_addr + 5], 0, "building name null-terminated");
+
+    // ORACLE_RESP_READY auto-clears when the overlay renders, so we verify
+    // the persistent state (building count + data) instead of the flag.
+}
+
+#[test]
+fn test_cmd_bar_movement_blocked_in_type_mode() {
+    let mut vm = world_desktop_vm();
+    vm.ram[0xFFB] = 0;
+
+    step_until_frame(&mut vm, 1_500_000);
+    let px_before = vm.ram[0x7808];
+    let py_before = vm.ram[0x7809];
+
+    // Enter type mode
+    world_desktop_run_frame_with_key(&mut vm, 47); // '/'
+
+    // Try to move with arrow keys (bitmask)
+    vm.ram[0xFFB] = 1; // up arrow
+    vm.frame_ready = false;
+    vm.push_key(65); // also push a typeable char to keep type mode
+    let steps = step_until_frame(&mut vm, 2_000_000);
+    assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
+
+    // Player should NOT have moved (movement blocked in type mode)
+    assert_eq!(vm.ram[0x7808], px_before, "player_x should not change in type mode");
+    assert_eq!(vm.ram[0x7809], py_before, "player_y should not change in type mode");
+}

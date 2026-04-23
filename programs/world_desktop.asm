@@ -2649,7 +2649,7 @@ RET
 ; PARSE_NEXT_NUMBER -- parse decimal number from string
 ; Input: r17 = pointer to string (position in CMD_BUF)
 ; Output: r0 = parsed number, r17 = advanced past number + space
-; Preserves: r1
+; Uses r2 as accumulator (r0 is clobbered by CMPI!)
 ; =========================================
 parse_next_number:
 PUSH r31
@@ -2664,7 +2664,7 @@ ADDI r17, 1
 JMP pnn_skip
 
 pnn_digit_start:
-LDI r0, 0                   ; accumulator = 0
+LDI r2, 0                   ; accumulator in r2 (NOT r0, CMPI clobbers r0)
 
 pnn_loop:
 LOAD r18, r17
@@ -2676,15 +2676,16 @@ BLT r0, pnn_done
 CMPI r18, 58                ; '9'+1
 BGE r0, pnn_done
 
-; r0 = r0 * 10 + (char - '0')
+; r2 = r2 * 10 + (char - '0')
 LDI r19, 10
-MUL r0, r19
+MUL r2, r19
 SUBI r18, 48                ; char - '0'
-ADD r0, r18
+ADD r2, r18
 ADDI r17, 1
 JMP pnn_loop
 
 pnn_done:
+MOV r0, r2                  ; move result to r0 for caller
 POP r31
 RET
 
