@@ -1,6 +1,6 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 166 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
 **Progress:** 107/107 phases complete, 0 in progress
 
@@ -2683,7 +2683,7 @@ Transform the map from a launcher into an infinite spatial desktop where app win
 
 ## Global Risks
 
-- Opcode space: 149 of ~256 slots used, plenty of room
+- Opcode space: 166 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
