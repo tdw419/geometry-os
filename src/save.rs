@@ -151,6 +151,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         vfs: vfs::Vfs::new(),
         inode_fs: inode_fs::InodeFs::new(),
         current_pid: 0,
+        current_capabilities: None,
         sched_tick: 0,
         default_time_slice: vm::DEFAULT_TIME_SLICE,
         yielded: false,

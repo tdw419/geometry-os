@@ -285,6 +285,7 @@ impl Vm {
             vfs: crate::vfs::Vfs::new(),
             inode_fs: crate::inode_fs::InodeFs::new(),
             current_pid: 0,
+            current_capabilities: None,
             sched_tick: 0,
             default_time_slice: DEFAULT_TIME_SLICE,
             yielded: false,

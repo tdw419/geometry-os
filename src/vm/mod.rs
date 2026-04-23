@@ -50,6 +50,10 @@ pub struct Vm {
     pub inode_fs: crate::inode_fs::InodeFs,
     /// PID of currently executing context (0 = main, 1+ = children)
     pub current_pid: u32,
+    /// Cached capabilities of the currently executing context.
+    /// Set by the scheduler when dispatching child processes.
+    /// None = no capabilities (full access, backward compatible).
+    pub current_capabilities: Option<Vec<crate::vm::types::Capability>>,
     /// Monotonically increasing scheduler tick (incremented each step)
     pub sched_tick: u64,
     /// Base time slice length for priority-1 processes
@@ -211,6 +215,7 @@ impl Vm {
             vfs: crate::vfs::Vfs::new(),
             inode_fs: crate::inode_fs::InodeFs::new(),
             current_pid: 0,
+            current_capabilities: None,
             sched_tick: 0,
             default_time_slice: DEFAULT_TIME_SLICE,
             yielded: false,

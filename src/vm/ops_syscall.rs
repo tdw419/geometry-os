@@ -58,12 +58,17 @@ impl Vm {
 
                     // Phase 102: Capability enforcement on file open
                     if let Some(ref path) = path_str {
-                        let pid = self.current_pid;
-                        let caps = self
-                            .processes
-                            .iter()
-                            .find(|p| p.pid == pid)
-                            .and_then(|p| p.capabilities.clone());
+                        // Use current_capabilities (set by scheduler) first,
+                        // fall back to searching processes (for direct step() in tests)
+                        let caps = if self.current_capabilities.is_some() {
+                            self.current_capabilities.clone()
+                        } else {
+                            let pid = self.current_pid;
+                            self.processes
+                                .iter()
+                                .find(|p| p.pid == pid)
+                                .and_then(|p| p.capabilities.clone())
+                        };
                         // mode 0 = read, 1 = write
                         let perm = if mode == 0 {
                             crate::vm::types::Capability::PERM_READ

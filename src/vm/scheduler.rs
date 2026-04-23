@@ -24,6 +24,7 @@ impl Vm {
         let saved_segfault = self.segfault;
         let saved_segfault_pid = self.segfault_pid;
         let saved_current_pid = self.current_pid;
+        let saved_current_caps = self.current_capabilities.take();
 
         // Check if all runnable (non-halted, non-sleeping) processes have
         // exhausted their slices. If so, start a new scheduling round.
@@ -85,6 +86,8 @@ impl Vm {
             self.current_vmas = std::mem::take(&mut proc.vmas);
             self.segfault = false;
             self.current_pid = proc.pid;
+            // Cache the process's capabilities for direct access during syscalls
+            self.current_capabilities = proc.capabilities.clone();
 
             // Reset per-step scheduler flags
             self.yielded = false;
@@ -155,6 +158,7 @@ impl Vm {
         // Keep the crash PID visible to parent process
         self.segfault_pid = new_crash_pid;
         self.current_pid = saved_current_pid;
+        self.current_capabilities = saved_current_caps;
         self.yielded = false;
         self.sleep_frames = 0;
         self.new_priority = 0;
