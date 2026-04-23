@@ -994,10 +994,6 @@ fn test_tetris_glyph_compiles() {
     let asm_text = geometry_os::glyph_backend::compile_glyph(source)
         .expect("tetris.glyph should compile to assembly");
 
-    // Dump compiled assembly for debugging
-    std::fs::write("/tmp/tetris_compiled.asm", &asm_text).unwrap();
-    eprintln!("Compiled assembly has {} lines (dumped to /tmp/tetris_compiled.asm)", asm_text.lines().count());
-
     // Should contain game opcodes
     assert!(asm_text.contains("RECTF"), "Tetris should use RECTF for drawing");
     assert!(asm_text.contains("FRAME"), "Tetris should use FRAME for game loop");
@@ -1021,16 +1017,20 @@ fn test_tetris_glyph_execution() {
 
     let mut vm = load_program(&asm_text);
 
-    // Run just enough to execute the FILL opcode (line ~39 in compiled asm).
-    // The first FILL paints the entire screen. FILL is expensive in debug mode
-    // (65K pixels), so we keep cycles low but enough to reach it.
-    run_until_halt(&mut vm, 5_000);
+    // Run enough to execute FILL (should happen by instruction ~39).
+    // Note: GlyphLang produces verbose push/pop assembly, so 1668 lines.
+    // Each loop iteration is ~1500 instructions. FILL is expensive in debug
+    // mode (65K pixels), so we cap at 100 cycles just to verify FILL executes.
+    for _ in 0..100 {
+        if vm.halted {
+            break;
+        }
+        vm.step();
+    }
 
-    // After FILL with 0x1A1A2E, the screen should have content.
-    // Just check that pixel (0,0) is the FILL color (dark purple background)
-    let pixel = vm.screen[0];
+    // After ~40 steps we should have hit FILL, painting the screen.
     assert_ne!(
-        pixel, 0,
-        "Screen should have been painted by FILL, pixel (0,0) is still 0"
+        vm.screen[0], 0,
+        "FILL should have painted pixel (0,0), still 0 after 100 steps"
     );
 }
