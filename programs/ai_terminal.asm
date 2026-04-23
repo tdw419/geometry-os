@@ -8,7 +8,7 @@
 ; capability restrictions). The child has memory isolation via COW
 ; page tables and VFS access limited to /tmp/* (read+write) and
 ; /lib/* (read only). If SPAWNC fails, falls back to RUNNEXT (legacy).
-; Commands: /clear /help /sys /run /yes /focus /status
+; Commands: /clear /help /sys /run /yes /focus /status /debug
 ;
 ; RAM Layout:
 ;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
@@ -43,6 +43,12 @@
 #define RUN_PENDING 0x7830   ; Nonzero = compiled bytecode waiting for /yes
 #define SANDBOX_CAPS 0x7500  ; Sandbox capability list for SPAWNC
 #define SANDBOX_STRS 0x7600  ; Pattern strings for sandbox capabilities
+#define DEBUG_MAGIC      0x0C00  ; Page 3 debug mailbox
+#define DEBUG_PARENT_PID 0x0C01
+#define DEBUG_CHILD_PID  0x0C02
+#define DEBUG_COMMAND    0x0C03
+#define DEBUG_STATUS     0x0C04
+#define DEBUG_RESPONSE   0x0C05
 
 ; =========================================
 ; INIT
@@ -507,18 +513,51 @@ try_status_cmd:
     ADD r20, r1           ; skip '/'
     LOAD r22, r20
     CMPI r22, 115        ; 's'
-    JNZ r0, send_to_llm
+    JNZ r0, try_debug_cmd
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 116        ; 't'
-    JNZ r0, send_to_llm
+    JNZ r0, try_debug_cmd
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 97         ; 'a'
-    JNZ r0, send_to_llm
+    JNZ r0, try_debug_cmd
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 116        ; 't'
+    JNZ r0, try_debug_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 117        ; 'u'
+    JNZ r0, try_debug_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
+    JNZ r0, try_debug_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_debug_cmd
+    JMP cmd_status
+
+; =========================================
+; SEND_TO_LLM
+; Build prompt from user input + history, call LLM, display response
+; =========================================
+; ── /debug command dispatch ──
+try_debug_cmd:
+    LDI r20, SCRATCH
+    ADD r20, r1           ; skip '/'
+    LOAD r22, r20
+    CMPI r22, 100        ; 'd'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 101        ; 'e'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 98         ; 'b'
     JNZ r0, send_to_llm
     ADD r20, r1
     LOAD r22, r20
@@ -526,18 +565,10 @@ try_status_cmd:
     JNZ r0, send_to_llm
     ADD r20, r1
     LOAD r22, r20
-    CMPI r22, 115        ; 's'
+    CMPI r22, 103        ; 'g'
     JNZ r0, send_to_llm
-    ADD r20, r1
-    LOAD r22, r20
-    CMPI r22, 0          ; null
-    JNZ r0, send_to_llm
-    JMP cmd_status
+    JMP cmd_debug
 
-; =========================================
-; SEND_TO_LLM
-; Build prompt from user input + history, call LLM, display response
-; =========================================
 send_to_llm:
     LDI r1, 1
     ; Cancel any pending /run -- a new chat turn supersedes prior output.
@@ -1230,6 +1261,198 @@ status_final:
     JMP hk_ret
 
 ; =========================================
+; =========================================
+; /debug -- inspect spawned child via Page 3 mailbox
+; Usage: /debug ping   -- ping child's debug stub
+;        /debug regs   -- dump child's registers
+; =========================================
+cmd_debug:
+    LDI r1, 1
+    LDI r20, SCRATCH
+    ADDI r20, 7
+    LOAD r22, r20
+    CMPI r22, 0
+    JZ r0, debug_usage
+
+debug_skip_space:
+    CMPI r22, 32
+    JNZ r0, debug_parse_arg
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 0
+    JNZ r0, debug_skip_space
+    JMP debug_usage
+
+debug_parse_arg:
+    CMPI r22, 112
+    JNZ r0, debug_try_regs
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 105
+    JNZ r0, debug_try_regs
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 110
+    JNZ r0, debug_try_regs
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 103
+    JNZ r0, debug_try_regs
+    JMP debug_do_ping
+
+debug_try_regs:
+    LDI r20, SCRATCH
+    ADDI r20, 7
+debug_regs_skip:
+    LOAD r22, r20
+    CMPI r22, 32
+    JNZ r0, debug_regs_check
+    ADDI r20, 1
+    JMP debug_regs_skip
+debug_regs_check:
+    CMPI r22, 114
+    JNZ r0, debug_usage
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 101
+    JNZ r0, debug_usage
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 103
+    JNZ r0, debug_usage
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 115
+    JNZ r0, debug_usage
+    JMP debug_do_regs
+
+debug_do_ping:
+    LDI r20, DEBUG_MAGIC
+    LOAD r22, r20
+    LDI r23, 0xDB9900
+    CMP r22, r23
+    JNZ r0, debug_no_stub
+    LDI r0, 3
+    LDI r20, DEBUG_COMMAND
+    STORE r20, r0
+    LDI r0, 1
+    LDI r20, DEBUG_STATUS
+    STORE r20, r0
+    LDI r6, 200
+debug_ping_wait:
+    FRAME
+    LDI r20, DEBUG_STATUS
+    LOAD r22, r20
+    CMPI r22, 2
+    JZ r0, debug_ping_ok
+    SUBI r6, 1
+    CMPI r6, 0
+    JNZ r0, debug_ping_wait
+    JMP debug_timeout
+
+debug_ping_ok:
+    LDI r0, 0
+    LDI r20, DEBUG_STATUS
+    STORE r20, r0
+    LDI r20, SCRATCH
+    STRO r20, "Debug stub: PONG"
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+debug_do_regs:
+    LDI r20, DEBUG_MAGIC
+    LOAD r22, r20
+    LDI r23, 0xDB9900
+    CMP r22, r23
+    JNZ r0, debug_no_stub
+    LDI r0, 1
+    LDI r20, DEBUG_COMMAND
+    STORE r20, r0
+    LDI r0, 1
+    LDI r20, DEBUG_STATUS
+    STORE r20, r0
+    LDI r6, 200
+debug_regs_wait:
+    FRAME
+    LDI r20, DEBUG_STATUS
+    LOAD r22, r20
+    CMPI r22, 2
+    JZ r0, debug_regs_got
+    SUBI r6, 1
+    CMPI r6, 0
+    JNZ r0, debug_regs_wait
+    JMP debug_timeout
+
+debug_regs_got:
+    LDI r0, 0
+    LDI r20, DEBUG_STATUS
+    STORE r20, r0
+    LDI r20, SCRATCH
+    STRO r20, "r0="
+    CALL advance_to_null
+    LDI r21, DEBUG_RESPONSE
+    LOAD r22, r21
+    CALL append_hex8
+    CALL write_line_to_buf
+    LDI r1, 1
+    LDI r20, SCRATCH
+    STRO r20, "r1="
+    CALL advance_to_null
+    LDI r21, DEBUG_RESPONSE
+    ADDI r21, 1
+    LOAD r22, r21
+    CALL append_hex8
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+append_hex8:
+    PUSH r22
+    PUSH r23
+    LDI r23, 28
+ah8_loop:
+    MOV r0, r22
+    SHR r0, r23
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r20, r0
+    ADDI r20, 1
+    SUBI r23, 4
+    CMPI r23, 0
+    BGE r0, ah8_loop
+    LDI r0, 0
+    STORE r20, r0
+    POP r23
+    POP r22
+    RET
+
+debug_no_stub:
+    LDI r20, SCRATCH
+    STRO r20, "No debug stub detected"
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+debug_timeout:
+    LDI r20, SCRATCH
+    STRO r20, "Debug: timeout"
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+debug_usage:
+    LDI r20, SCRATCH
+    STRO r20, "Usage: /debug ping|regs"
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
 ; HEX_DIGIT_CHAR -- convert nibble (0-15) to ASCII hex char
 ; Input: r0 = nibble value (0-15)
 ; Output: r0 = ASCII char
