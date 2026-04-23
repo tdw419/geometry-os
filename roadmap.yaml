@@ -5281,7 +5281,7 @@ phases:
   status: complete
   test_target: 8
   scope_lines_total: 180
-  features:
+  deliverables:
     - name: SPAWNC sandbox in ai_terminal.asm
       description: >
         cmd_yes now calls build_sandbox_caps to construct a capability list
