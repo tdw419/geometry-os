@@ -758,6 +758,20 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "ASM_RAM" => {
+            // ASM_RAM src_addr_reg
+            // 2 words: [0xB3, src_addr_reg]
+            // Reads null-terminated assembly source from RAM at src_addr_reg,
+            // assembles to bytecode at 0x1000. Auto-strips ```asm fences.
+            // Status: RAM[0xFFD] = word count (success) or 0xFFFFFFFF (error).
+            if tokens.len() < 2 {
+                return Err("ASM_RAM requires 1 argument: ASM_RAM src_addr_reg".to_string());
+            }
+            bytecode.push(0xB3);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

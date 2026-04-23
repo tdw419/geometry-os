@@ -1797,6 +1797,84 @@ fn test_asmself_with_preprocessor_macros() {
 }
 
 #[test]
+fn test_asm_ram_assembles_from_ram() {
+    // ASM_RAM (0xB3): reads null-terminated assembly source from RAM,
+    // runs preprocessor + assembler, writes bytecode to 0x1000.
+    // RAM[0xFFD] = word count on success, 0xFFFFFFFF on error.
+
+    let mut vm = Vm::new();
+
+    // Write "LDI r1, 42\nHALT\n" as null-terminated string at RAM address 0x3000
+    let source = "LDI r1, 42\nHALT\n";
+    let mut addr = 0x3000usize;
+    for ch in source.bytes() {
+        vm.ram[addr] = ch as u32;
+        addr += 1;
+    }
+    vm.ram[addr] = 0; // null terminator
+
+    // Set up: LDI r5, 0x3000; ASM_RAM r5; RUNNEXT
+    // We'll execute these as raw bytecode
+    vm.ram[0] = 0x10; // LDI
+    vm.ram[1] = 5;    // r5
+    vm.ram[2] = 0x3000; // address
+
+    vm.ram[3] = 0xB3; // ASM_RAM
+    vm.ram[4] = 5;    // r5
+
+    vm.ram[5] = 0x74; // RUNNEXT
+
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run for enough steps
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+    }
+
+    // Verify assembly succeeded
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASM_RAM should succeed");
+    assert!(vm.ram[0xFFD] > 0, "Should produce bytecode");
+
+    // After RUNNEXT, PC jumps to 0x1000 and executes the assembled code.
+    // "LDI r1, 42; HALT" sets r1=42 then halts.
+    assert_eq!(vm.regs[1], 42, "r1 should be 42 from assembled code");
+    assert!(vm.halted, "VM should halt after executing assembled code");
+}
+
+#[test]
+fn test_asm_ram_error_on_invalid_source() {
+    // ASM_RAM with invalid assembly source should set RAM[0xFFD] = 0xFFFFFFFF
+    let mut vm = Vm::new();
+
+    // Write invalid assembly at 0x3000
+    let source = "GARBAGE_OPCODE r1, r2\n";
+    let mut addr = 0x3000usize;
+    for ch in source.bytes() {
+        vm.ram[addr] = ch as u32;
+        addr += 1;
+    }
+    vm.ram[addr] = 0; // null terminator
+
+    // LDI r5, 0x3000; ASM_RAM r5
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x3000;
+    vm.ram[3] = 0xB3;
+    vm.ram[4] = 5;
+    vm.ram[5] = 0x00; // HALT
+
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..100 {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.ram[0xFFD], 0xFFFFFFFF, "ASM_RAM should fail on invalid source");
+}
+
+#[test]
 fn test_store_writes_successor_to_canvas_then_asmself_executes() {
     // Phase 47 integration test: the program itself uses STORE to write
     // "LDI r0, 99\nHALT\n" to the canvas RAM range (0x8000-0x8FFF).

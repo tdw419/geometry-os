@@ -2574,6 +2574,70 @@ impl Vm {
                 }
             }
 
+            // ASM_RAM src_addr_reg (0xB3) -- Assemble source string from RAM.
+            // Reads null-terminated assembly source from RAM at the address in src_addr_reg.
+            // Runs preprocessor + assembler, writes bytecode to 0x1000.
+            // RAM[0xFFD] = bytecode word count on success, 0xFFFFFFFF on error.
+            // r0 = same value as RAM[0xFFD].
+            // Encoding: 2 words [0xB3, src_addr_reg]
+            0xB3 => {
+                let src_reg = self.fetch() as usize;
+                if src_reg < NUM_REGS {
+                    let addr = self.regs[src_reg] as usize;
+                    // Read null-terminated string from RAM
+                    let mut source = String::new();
+                    let mut a = addr;
+                    while a < self.ram.len() {
+                        let ch = self.ram[a];
+                        if ch == 0 {
+                            break;
+                        }
+                        if let Some(c) = char::from_u32(ch) {
+                            source.push(c);
+                        } else {
+                            source.push('?');
+                        }
+                        a += 1;
+                    }
+
+                    // Strip ```asm / ``` fences if present (AI responses)
+                    let source = source
+                        .replace("```asm", "")
+                        .replace("```", "");
+
+                    // Run preprocessor then assembler
+                    let mut pp = crate::preprocessor::Preprocessor::new();
+                    let preprocessed = pp.preprocess(&source);
+
+                    match crate::assembler::assemble(&preprocessed, 0x1000) {
+                        Ok(asm_result) => {
+                            // Clear bytecode region
+                            let end = (0x1000 + 4096).min(self.ram.len());
+                            for baddr in 0x1000..end {
+                                self.ram[baddr] = 0;
+                            }
+                            // Write bytecode
+                            let word_count = asm_result.pixels.len().min(4096);
+                            for (i, &word) in asm_result.pixels.iter().enumerate().take(word_count) {
+                                let dest = 0x1000 + i;
+                                if dest < self.ram.len() {
+                                    self.ram[dest] = word;
+                                }
+                            }
+                            self.ram[0xFFD] = word_count as u32;
+                            self.regs[0] = word_count as u32;
+                        }
+                        Err(_) => {
+                            self.ram[0xFFD] = 0xFFFFFFFF;
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    }
+                } else {
+                    self.ram[0xFFD] = 0xFFFFFFFF;
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

@@ -166,6 +166,8 @@ pub const OPCODES: &[&str] = &[
     "LOADPNG",
     // Phase 93: Source from PNG
     "LOADSRCIMG",
+    // Assemble source from RAM address (for AI Terminal /run)
+    "ASM_RAM",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

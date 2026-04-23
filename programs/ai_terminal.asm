@@ -3,7 +3,8 @@
 ; Connects to cloud AI (ZAI) via LLM opcode (0x9C).
 ; Type a message, press Enter to send. Response appears below.
 ; Conversation history is maintained for context.
-; Commands: /clear /help /sys
+; /run assembles and executes the last AI response as GeoOS assembly.
+; Commands: /clear /help /sys /run
 ;
 ; RAM Layout:
 ;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
@@ -32,6 +33,7 @@
 #define PROMPT_BUF 0x5400
 #define RESP_BUF 0x6400
 #define HISTORY 0x7400
+#define ASM_STATUS 0xFFD
 
 ; =========================================
 ; INIT
@@ -408,20 +410,41 @@ try_sys_cmd:
     ADD r20, r1           ; skip '/'
     LOAD r22, r20
     CMPI r22, 115        ; 's'
-    JNZ r0, send_to_llm
+    JNZ r0, try_run_cmd
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 121        ; 'y'
-    JNZ r0, send_to_llm
+    JNZ r0, try_run_cmd
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 115        ; 's'
+    JNZ r0, try_run_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_run_cmd
+    JMP cmd_sys
+
+try_run_cmd:
+    ; Check /run
+    LDI r20, SCRATCH
+    ADD r20, r1           ; skip '/'
+    LOAD r22, r20
+    CMPI r22, 114        ; 'r'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 117        ; 'u'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 110        ; 'n'
     JNZ r0, send_to_llm
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 0          ; null
     JNZ r0, send_to_llm
-    JMP cmd_sys
+    JMP cmd_run
 
 ; =========================================
 ; SEND_TO_LLM
@@ -661,6 +684,80 @@ cmd_sys:
     LDI r1, 1
     LDI r20, SCRATCH
     STRO r20, "LLM opcode 0x9C"
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+cmd_run:
+    LDI r1, 1
+
+    ; Check if there's a response to run
+    LDI r20, RESP_BUF
+    LOAD r0, r20
+    LDI r6, 0
+    CMP r0, r6
+    JNZ r0, run_has_resp
+
+    ; No response -- show error
+    LDI r20, SCRATCH
+    STRO r20, "No AI response to run"
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+run_has_resp:
+    ; Show status
+    LDI r20, SCRATCH
+    STRO r20, "Assembling response..."
+    CALL write_line_to_buf
+    LDI r1, 1
+
+    ; ASM_RAM uses RESP_BUF address -- the opcode strips ``` fences automatically
+    LDI r10, RESP_BUF
+    ASM_RAM r10
+
+    ; Check status at RAM[0xFFD]
+    LDI r20, ASM_STATUS
+    LOAD r0, r20
+    LDI r6, 0
+    LDI r7, 0xFFFFFFFF
+    CMP r0, r7
+    JNZ r0, run_check_zero
+
+    ; Assembly failed
+    LDI r20, SCRATCH
+    STRO r20, "Assembly failed!"
+    CALL write_line_to_buf
+    LDI r1, 1
+    LDI r20, SCRATCH
+    STRO r20, "(Check AI output for errors)"
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+run_check_zero:
+    CMP r0, r6
+    JZ r0, run_failed_empty
+
+    ; Success! r0 = word count. Show it.
+    ; We can't easily print a number, so just say "Running..."
+    LDI r20, SCRATCH
+    STRO r20, "Compiled! Running..."
+    CALL write_line_to_buf
+    LDI r1, 1
+
+    ; Jump into the assembled bytecode
+    RUNNEXT
+    ; Note: RUNNEXT never returns. It jumps PC to 0x1000.
+    ; If it somehow does return (shouldn't happen), fall through:
+    JMP hk_ret
+
+run_failed_empty:
+    LDI r20, SCRATCH
+    STRO r20, "Assembly produced 0 words"
     CALL write_line_to_buf
     LDI r1, 1
     CALL write_prompt
