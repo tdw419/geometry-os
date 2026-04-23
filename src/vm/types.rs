@@ -632,13 +632,18 @@ pub const WINDOW_BORDER_W: u32 = 1;
 
 /// A managed window with position, size, Z-order, and offscreen buffer.
 /// Created by WINSYS op=0, destroyed by WINSYS op=1.
+///
+/// Phase 107: Windows can live in world-space (infinite map coordinates)
+/// or screen-space (256x256 framebuffer). When `world_x`/`world_y` are set,
+/// the window is positioned in the infinite map and pans with the camera.
+/// RAM[0x7810] = 1 enables world-space mode for WINSYS op=0.
 #[derive(Debug, Clone)]
 pub struct Window {
     /// Window ID (1-based, 0 = invalid/no window).
     pub id: u32,
-    /// Left edge X coordinate.
+    /// Left edge X coordinate (screen-space, or computed from world coords).
     pub x: u32,
-    /// Top edge Y coordinate.
+    /// Top edge Y coordinate (screen-space, or computed from world coords).
     pub y: u32,
     /// Window width in pixels.
     pub w: u32,
@@ -656,7 +661,19 @@ pub struct Window {
     /// Offscreen pixel buffer (w * h pixels). Initialized to all black (0).
     /// Programs write pixels here; FRAME blits to main screen in Z-order.
     pub offscreen_buffer: Vec<u32>,
+    // ── Phase 107: World-space coordinates ──
+    /// World-space X position (tile coordinate). 0xFFFFFFFF = unset (screen-space window).
+    pub world_x: u32,
+    /// World-space Y position (tile coordinate). 0xFFFFFFFF = unset (screen-space window).
+    pub world_y: u32,
 }
+
+/// Sentinel value: world coords unset, window uses screen-space positioning.
+pub const WORLD_COORD_UNSET: u32 = 0xFFFFFFFF;
+
+/// RAM address for the window world-coords flag.
+/// When RAM[0x7810] == 1, WINSYS op=0 uses r1/r2 as world-space coordinates.
+pub const WINDOW_WORLD_COORDS_ADDR: usize = 0x7810;
 
 impl Window {
     /// Create a new window with the given parameters.
@@ -674,7 +691,42 @@ impl Window {
             pid,
             active: true,
             offscreen_buffer: vec![0u32; buf_size],
+            world_x: WORLD_COORD_UNSET,
+            world_y: WORLD_COORD_UNSET,
         }
+    }
+
+    /// Create a new window positioned in world-space.
+    /// Screen x,y will be computed from viewport at render time.
+    pub fn new_world(
+        id: u32,
+        world_x: u32,
+        world_y: u32,
+        w: u32,
+        h: u32,
+        title_addr: u32,
+        pid: u32,
+    ) -> Self {
+        let buf_size = (w as usize) * (h as usize);
+        Window {
+            id,
+            x: 0, // computed at render time
+            y: 0,
+            w,
+            h,
+            z_order: 0,
+            title_addr,
+            pid,
+            active: true,
+            offscreen_buffer: vec![0u32; buf_size],
+            world_x,
+            world_y,
+        }
+    }
+
+    /// Returns true if this window is positioned in world-space.
+    pub fn is_world_space(&self) -> bool {
+        self.world_x != WORLD_COORD_UNSET && self.world_y != WORLD_COORD_UNSET
     }
 }
 

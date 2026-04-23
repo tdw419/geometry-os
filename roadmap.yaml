@@ -5148,6 +5148,122 @@ phases:
   title: AI Desktop Control and Guided Demo
   _claimed_by: worker-0
   _claimed_at: 1776905288
+- deliverables:
+  - acceptance_criteria:
+    - description: WINSYS op=0 accepts world_x, world_y in r1,r2 instead of screen
+        x,y when window_world_coords flag is set
+    - description: Window struct gains world_x, world_y fields (separate from screen
+        x,y)
+    - description: Existing programs that use screen-space WINSYS continue to work
+        (flag defaults to off)
+    description: 'Extend Window struct with world_x/world_y fields. Add a VM flag
+    (RAM[0x7810]) that switches WINSYS op=0 from screen-space to world-space coordinates.
+    When set, windows are placed in the infinite map coordinate system instead of
+    the 256x256 framebuffer. This is the foundation: no rendering changes yet, just
+    the data model.'
+    name: World-space window placement
+    scope_files:
+    - src/vm/types.rs
+    - src/vm/mod.rs
+    scope_lines: 120
+    status: planned
+  - acceptance_criteria:
+    - description: viewport struct tracks (cam_x, cam_y, zoom) mapping world tiles
+        to framebuffer pixels
+    - description: world_to_screen(world_x, world_y) returns screen (x, y) or None
+        if offscreen
+    - description: world_to_screen handles zoom (8px, 4px, 2px, 1px per tile)
+    description: 'Add a viewport module that converts between world coordinates (tile-based,
+    infinite range) and screen coordinates (256x256 framebuffer). This is pure math
+    -- no rendering. The viewport tracks camera position and zoom level, already partially
+    in RAM[0x7800-0x7801].'
+    name: Viewport coordinate transform module
+    scope_files:
+    - src/viewport.rs
+    scope_lines: 100
+    status: planned
+  - acceptance_criteria:
+    - description: world_desktop.asm renders terrain below windows, windows render
+        on top
+    - description: Windows pan with the map as camera moves
+    - description: Windows outside viewport are skipped (no rendering cost)
+    - description: Z-order works correctly (terrain < windows < taskbar)
+    description: 'Modify the rendering loop in main.rs: after world_desktop renders
+    terrain, iterate WINSYS windows with world coords, convert to screen space via
+    viewport, and blit their offscreen buffers onto the framebuffer. Windows that
+    are offscreen are culled. This is the visual integration -- windows become part
+    of the map surface.'
+    name: Composite rendering -- windows on map
+    scope_files:
+    - src/main.rs
+    scope_lines: 150
+    status: planned
+  - acceptance_criteria:
+    - description: launch command supports --window flag that loads app into a WINSYS
+        window instead of replacing map
+    - description: App HALT only kills its own process/windows, map keeps running
+    - description: Multiple apps can run simultaneously in separate windows
+    - description: Each windowed app gets its own RAM region (0x8000+N*4096)
+    description: 'The current launch flow replaces the map program with the app, then
+    reloads the map when the app halts. For the infinite desktop, apps need to run
+    as sub-processes inside WINSYS windows while the map continues running. Add a
+    multi-process execution model: the main loop time-shares between the map program
+    and windowed app programs. Each app gets a RAM slice and its own PC/registers.
+    On app HALT, only that app''s windows are destroyed.'
+    name: Multi-process app execution in windows
+    scope_files:
+    - src/main.rs
+    - src/vm/mod.rs
+    - src/vm/types.rs
+    scope_lines: 400
+    status: planned
+  - acceptance_criteria:
+    - description: Dragging a window by its title bar updates world_x, world_y
+    - description: Click on window brings it to front (z_order update)
+    - description: Window title bars render as clickable regions
+    - description: MOUSEQ events routed to correct window based on world-space hit
+        test
+    description: 'Extend the mouse handling to support dragging windows in world space.
+    When the mouse clicks on a window''s title bar (top 8 pixels), enter drag mode.
+    Mouse movement updates the window''s world_x, world_y. MOUSEQ events from programs
+    are translated relative to the window''s screen-space position so the app thinks
+    it has its own mouse.'
+    name: Window drag and mouse routing
+    scope_files:
+    - src/main.rs
+    - src/vm/mod.rs
+    scope_lines: 200
+    status: planned
+  - acceptance_criteria:
+    - description: test_world_space_window_placement verifies world_x/world_y set
+        correctly
+    - description: test_viewport_transform verifies coordinate math at all zoom levels
+    - description: test_composite_rendering verifies window blit at correct screen
+        position
+    - description: test_multi_process_launch verifies two apps run simultaneously
+    - description: test_window_drag verifies world_x/world_y update on mouse drag
+    - description: test_offscreen_culling verifies windows outside viewport are skipped
+    - description: test_mouse_routing verifies MOUSEQ events reach correct window
+    description: '12+ integration tests covering the new coordinate model, rendering,
+    multi-process execution, drag, and mouse routing.'
+    name: Integration tests
+    scope_files:
+    - src/vm/tests.rs
+    scope_lines: 250
+    status: planned
+  description: 'Transform the map from a launcher into an infinite spatial desktop
+  where app windows coexist with the terrain. Windows live in world-space coordinates
+  and pan with the map. Multiple apps run simultaneously in separate windows via time-shared
+  multi-process execution. This is the biggest architectural change since Phase 84
+  -- it merges the map and app modes into a unified spatial computing surface.'
+  goal: Enable a spatial desktop where apps are windows placed on the infinite procedural
+    map. Walk the map, launch apps into windows, drag them around, zoom in/out --
+    the desktop IS the map.
+  id: phase-107
+  scope_lines_total: 1220
+  status: planned
+  test_target: 12
+  title: Infinite Spatial Desktop
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

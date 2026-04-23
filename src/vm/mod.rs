@@ -1219,21 +1219,32 @@ impl Vm {
                     match op {
                         0 => {
                             // CREATE: r1=x, r2=y, r3=w, r4=h, r5=title_addr
+                            // Phase 107: if RAM[0x7810] == 1, r1/r2 are world-space coords
                             let active_count = self.windows.iter().filter(|w| w.active).count();
                             if active_count >= MAX_WINDOWS {
                                 self.regs[0] = 0; // no slots
                             } else {
                                 let id = self.next_window_id;
                                 self.next_window_id += 1;
-                                let x = if 1 < NUM_REGS { self.regs[1] } else { 0 };
-                                let y = if 2 < NUM_REGS { self.regs[2] } else { 0 };
+                                let arg1 = if 1 < NUM_REGS { self.regs[1] } else { 0 };
+                                let arg2 = if 2 < NUM_REGS { self.regs[2] } else { 0 };
                                 let w = if 3 < NUM_REGS { self.regs[3] } else { 64 };
                                 let h = if 4 < NUM_REGS { self.regs[4] } else { 48 };
                                 let title_addr = if 5 < NUM_REGS { self.regs[5] } else { 0 };
                                 let max_z =
                                     self.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
-                                let mut win =
-                                    Window::new(id, x, y, w, h, title_addr, self.current_pid);
+
+                                // Check world-space flag: RAM[0x7810]
+                                let world_mode = self.ram.get(0x7810).copied().unwrap_or(0) == 1;
+                                let mut win = if world_mode {
+                                    // r1=world_x, r2=world_y (tile coords)
+                                    Window::new_world(
+                                        id, arg1, arg2, w, h, title_addr, self.current_pid,
+                                    )
+                                } else {
+                                    // r1=screen_x, r2=screen_y (legacy)
+                                    Window::new(id, arg1, arg2, w, h, title_addr, self.current_pid)
+                                };
                                 win.z_order = max_z + 1;
                                 self.windows.push(win);
                                 self.regs[0] = id;

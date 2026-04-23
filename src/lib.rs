@@ -12,6 +12,7 @@ pub mod preprocessor;
 pub mod qemu;
 pub mod riscv;
 pub mod vfs;
+pub mod viewport;
 #[allow(dead_code)]
 pub mod vision;
 pub mod vm;
