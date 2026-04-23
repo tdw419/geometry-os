@@ -13,3 +13,4 @@ Cargo.lock
 # GPT-2 weight files (too large for GitHub)
 *.npy
 pixelflow/gpt2_weights/
+__pycache__/
