@@ -21,6 +21,7 @@ pub const FB_H: u32 = 256;
 #[derive(Debug, Clone, Copy)]
 pub struct ZoomLevel {
     /// Source region in VM pixels (how many VM pixels of the 256x256 we show).
+    #[allow(dead_code)]
     pub src_region: u32,
     /// Scale factor (host pixels per VM pixel).
     pub scale: u32,
@@ -57,11 +58,13 @@ impl ZoomLevel {
     }
 
     /// Pixels per tile on screen at this zoom level.
+    #[allow(dead_code)]
     pub fn pixels_per_tile(&self) -> u32 {
         TILE_SIZE * self.scale
     }
 
     /// Number of tiles visible across the framebuffer at this zoom.
+    #[allow(dead_code)]
     pub fn tiles_visible(&self) -> u32 {
         self.src_region / TILE_SIZE
     }
@@ -89,6 +92,7 @@ impl Viewport {
 
     /// Convert world tile coordinates to framebuffer pixel coordinates.
     /// Returns None if the position is outside the visible viewport.
+    #[allow(dead_code)]
     pub fn world_to_screen(&self, world_x: i32, world_y: i32) -> Option<(i32, i32)> {
         let px_per_tile = self.zoom.pixels_per_tile() as i32;
         let sx = (world_x - self.cam_x) * px_per_tile;
@@ -104,6 +108,7 @@ impl Viewport {
 
     /// Convert world tile coordinates to framebuffer pixels, always returning a value.
     /// Useful for rendering where partial visibility is acceptable.
+    #[allow(dead_code)]
     pub fn world_to_screen_unchecked(&self, world_x: i32, world_y: i32) -> (i32, i32) {
         let px_per_tile = self.zoom.pixels_per_tile() as i32;
         (
@@ -135,6 +140,7 @@ impl Viewport {
     }
 
     /// Convert screen pixel coordinates to world tile coordinates.
+    #[allow(dead_code)]
     pub fn screen_to_world(&self, screen_x: i32, screen_y: i32) -> (i32, i32) {
         let px_per_tile = self.zoom.pixels_per_tile() as i32;
         (

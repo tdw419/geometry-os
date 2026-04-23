@@ -224,7 +224,7 @@ fn main() {
     const APP_CODE_SIZE: usize = 0x2000;
     /// Maximum concurrent windowed apps
     const MAX_WINDOWED_APPS: usize = 4;
-    /// Track which app slots are in use: (slot_index, pid, app_name)
+    // Track which app slots are in use: (slot_index, pid, app_name)
     let mut active_apps: Vec<(usize, u32, String)> = Vec::new();
 
     // ── Window Drag (Phase 107) ────────────────────────────────

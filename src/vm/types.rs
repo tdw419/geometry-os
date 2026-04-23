@@ -393,6 +393,7 @@ pub struct Capability {
 impl Capability {
     pub const PERM_READ: u8 = 0x01;
     pub const PERM_WRITE: u8 = 0x02;
+    #[allow(dead_code)]
     pub const PERM_EXEC: u8 = 0x04;
 
     /// Check if a given path matches this capability's pattern.
@@ -432,6 +433,7 @@ pub fn check_path_capability(caps: &Option<Vec<Capability>>, path: &str, perm: u
 
 /// Check if a process with the given capabilities can execute a restricted opcode.
 /// Returns true if allowed, false if denied.
+#[allow(dead_code)]
 pub fn check_opcode_capability(caps: &Option<Vec<Capability>>, opcode: u8) -> bool {
     match caps {
         None => true,

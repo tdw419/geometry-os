@@ -257,6 +257,7 @@ impl Vm {
     }
 
     /// Trigger a segfault with the faulting virtual address.
+    #[allow(dead_code)]
     pub(super) fn trigger_segfault_with_addr(&mut self, fault_addr: u32) {
         self.segfault_addr = fault_addr;
         self.trigger_segfault();
