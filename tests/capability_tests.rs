@@ -638,9 +638,17 @@ fn test_ai_terminal_focus_command_sets_ram() {
 
     // "/focus 0x40\r"
     let keys: Vec<u32> = vec![
-        b'/' as u32, b'f' as u32, b'o' as u32, b'c' as u32,
-        b'u' as u32, b's' as u32, b' ' as u32,
-        b'0' as u32, b'x' as u32, b'4' as u32, b'0' as u32,
+        b'/' as u32,
+        b'f' as u32,
+        b'o' as u32,
+        b'c' as u32,
+        b'u' as u32,
+        b's' as u32,
+        b' ' as u32,
+        b'0' as u32,
+        b'x' as u32,
+        b'4' as u32,
+        b'0' as u32,
         13, // Enter
     ];
     run_frames_with_keys(&mut vm, &keys, 100_000);
@@ -659,9 +667,17 @@ fn test_ai_terminal_focus_off_clears_ram() {
 
     // First set focus
     let set_keys: Vec<u32> = vec![
-        b'/' as u32, b'f' as u32, b'o' as u32, b'c' as u32,
-        b'u' as u32, b's' as u32, b' ' as u32,
-        b'0' as u32, b'x' as u32, b'4' as u32, b'0' as u32,
+        b'/' as u32,
+        b'f' as u32,
+        b'o' as u32,
+        b'c' as u32,
+        b'u' as u32,
+        b's' as u32,
+        b' ' as u32,
+        b'0' as u32,
+        b'x' as u32,
+        b'4' as u32,
+        b'0' as u32,
         13,
     ];
     run_frames_with_keys(&mut vm, &set_keys, 100_000);
@@ -669,9 +685,16 @@ fn test_ai_terminal_focus_off_clears_ram() {
 
     // Now clear it: "/focus off\r"
     let off_keys: Vec<u32> = vec![
-        b'/' as u32, b'f' as u32, b'o' as u32, b'c' as u32,
-        b'u' as u32, b's' as u32, b' ' as u32,
-        b'o' as u32, b'f' as u32, b'f' as u32,
+        b'/' as u32,
+        b'f' as u32,
+        b'o' as u32,
+        b'c' as u32,
+        b'u' as u32,
+        b's' as u32,
+        b' ' as u32,
+        b'o' as u32,
+        b'f' as u32,
+        b'f' as u32,
         13,
     ];
     run_frames_with_keys(&mut vm, &off_keys, 100_000);
@@ -689,8 +712,13 @@ fn test_ai_terminal_status_command_runs() {
     let mut vm = load_ai_terminal();
 
     let keys: Vec<u32> = vec![
-        b'/' as u32, b's' as u32, b't' as u32, b'a' as u32,
-        b't' as u32, b'u' as u32, b's' as u32,
+        b'/' as u32,
+        b's' as u32,
+        b't' as u32,
+        b'a' as u32,
+        b't' as u32,
+        b'u' as u32,
+        b's' as u32,
         13,
     ];
     run_frames_with_keys(&mut vm, &keys, 100_000);
@@ -709,9 +737,16 @@ fn test_ai_terminal_focus_bad_arg_no_crash() {
     let mut vm = load_ai_terminal();
 
     let keys: Vec<u32> = vec![
-        b'/' as u32, b'f' as u32, b'o' as u32, b'c' as u32,
-        b'u' as u32, b's' as u32, b' ' as u32,
-        b'x' as u32, b'y' as u32, b'z' as u32,
+        b'/' as u32,
+        b'f' as u32,
+        b'o' as u32,
+        b'c' as u32,
+        b'u' as u32,
+        b's' as u32,
+        b' ' as u32,
+        b'x' as u32,
+        b'y' as u32,
+        b'z' as u32,
         13,
     ];
     run_frames_with_keys(&mut vm, &keys, 100_000);
@@ -729,8 +764,7 @@ fn test_ai_terminal_focus_bad_arg_no_crash() {
 fn load_program(source: &str) -> geometry_os::vm::Vm {
     let mut pp = geometry_os::preprocessor::Preprocessor::new();
     let preprocessed = pp.preprocess(source);
-    let asm = geometry_os::assembler::assemble(&preprocessed, 0)
-        .expect("program should assemble");
+    let asm = geometry_os::assembler::assemble(&preprocessed, 0).expect("program should assemble");
 
     let mut vm = geometry_os::vm::Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
@@ -773,8 +807,7 @@ fn test_self_analysis_assembles() {
     let source = include_str!("../programs/self_analysis.asm");
     let mut pp = geometry_os::preprocessor::Preprocessor::new();
     let preprocessed = pp.preprocess(source);
-    geometry_os::assembler::assemble(&preprocessed, 0)
-        .expect("self_analysis.asm should assemble");
+    geometry_os::assembler::assemble(&preprocessed, 0).expect("self_analysis.asm should assemble");
 }
 
 #[test]
@@ -788,7 +821,10 @@ fn test_self_analysis_screen_sampling() {
     vm.llm_mock_response = Some("The screen has four colored blocks.".to_string());
 
     let cycles = run_until_halt(&mut vm, 200_000);
-    assert!(!vm.halted || cycles < 200_000, "program should halt normally");
+    assert!(
+        !vm.halted || cycles < 200_000,
+        "program should halt normally"
+    );
 
     // The LLM response should be written to RESP_BUF (0x1800)
     let response = read_ram_string(&vm, 0x1800);
@@ -814,7 +850,10 @@ fn test_self_analysis_screen_sampling() {
 
     // Verify yellow block (BR) at center ~ (221, 201)
     let yellow_pixel = vm.screen[201 * 256 + 221];
-    assert_eq!(yellow_pixel, 0xFFFF33, "BR quadrant should have yellow block");
+    assert_eq!(
+        yellow_pixel, 0xFFFF33,
+        "BR quadrant should have yellow block"
+    );
 }
 
 #[test]
@@ -880,10 +919,26 @@ fn test_self_analysis_quadrant_counts_nonzero() {
     let br = extract_count("Bottom-right:");
 
     // All quadrants should have non-zero content (colored blocks)
-    assert!(tl > 0, "TL quadrant should have non-zero pixel count, got {}", tl);
-    assert!(tr > 0, "TR quadrant should have non-zero pixel count, got {}", tr);
-    assert!(bl > 0, "BL quadrant should have non-zero pixel count, got {}", bl);
-    assert!(br > 0, "BR quadrant should have non-zero pixel count, got {}", br);
+    assert!(
+        tl > 0,
+        "TL quadrant should have non-zero pixel count, got {}",
+        tl
+    );
+    assert!(
+        tr > 0,
+        "TR quadrant should have non-zero pixel count, got {}",
+        tr
+    );
+    assert!(
+        bl > 0,
+        "BL quadrant should have non-zero pixel count, got {}",
+        bl
+    );
+    assert!(
+        br > 0,
+        "BR quadrant should have non-zero pixel count, got {}",
+        br
+    );
 }
 
 #[test]
@@ -891,7 +946,7 @@ fn test_glyph_shell_compiles() {
     let source = include_str!("../programs/glyph_shell.glyph");
     let asm_text = geometry_os::glyph_backend::compile_glyph(source)
         .expect("glyph_shell.glyph should compile to assembly");
-    
+
     // Ensure it contains the new opcodes as emitted GeoOS assembly
     assert!(asm_text.contains("RECTF"));
     assert!(asm_text.contains("DRAWTEXT"));
@@ -899,7 +954,7 @@ fn test_glyph_shell_compiles() {
     assert!(asm_text.contains("IKEY"));
     assert!(asm_text.contains("FILL"));
     assert!(asm_text.contains("EXEC"));
-    
+
     // Verify it assembles to bytecode
     let mut pp = geometry_os::preprocessor::Preprocessor::new();
     let preprocessed = pp.preprocess(&asm_text);
@@ -912,18 +967,21 @@ fn test_glyph_shell_execution() {
     let source = include_str!("../programs/glyph_shell.glyph");
     let asm_text = geometry_os::glyph_backend::compile_glyph(source)
         .expect("glyph_shell.glyph should compile");
-    
+
     let mut vm = load_program(&asm_text);
-    
+
     // Run for a few frames to allow drawing
     run_until_halt(&mut vm, 500_000);
-    
+
     // Check title bar pixel (0,0) should be 0x2D0050
     // RECTF 0 0 256 20 0x2D0050 [
     assert_eq!(vm.screen[0], 0x2D0050, "Title bar color mismatch at (0,0)");
-    
+
     // Check background pixel (0,30) should be 0x1A1A2E
     // 0x1A1A2E |
-    assert_eq!(vm.screen[30 * 256], 0x1A1A2E, "Background color mismatch at (0,30)");
+    assert_eq!(
+        vm.screen[30 * 256],
+        0x1A1A2E,
+        "Background color mismatch at (0,30)"
+    );
 }
-

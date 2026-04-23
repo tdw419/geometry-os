@@ -127,7 +127,7 @@ pub fn lex(source: &str) -> Result<Vec<GlyphToken>, GlyphLexError> {
                         break;
                     }
                 }
-                
+
                 let val = if s.starts_with("0x") || s.starts_with("0X") {
                     u32::from_str_radix(&s[2..], 16).unwrap_or(0)
                 } else {
