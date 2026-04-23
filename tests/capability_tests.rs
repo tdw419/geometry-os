@@ -985,3 +985,55 @@ fn test_glyph_shell_execution() {
         "Background color mismatch at (0,30)"
     );
 }
+
+// ── Phase 113: Tetris in GlyphLang ────────────────────
+
+#[test]
+fn test_tetris_glyph_compiles() {
+    let source = include_str!("../programs/tetris.glyph");
+    let asm_text = geometry_os::glyph_backend::compile_glyph(source)
+        .expect("tetris.glyph should compile to assembly");
+
+    // Should contain game opcodes
+    assert!(asm_text.contains("RECTF"), "Tetris should use RECTF for drawing");
+    assert!(asm_text.contains("FRAME"), "Tetris should use FRAME for game loop");
+    assert!(asm_text.contains("IKEY"), "Tetris should use IKEY for input");
+
+    // Verify it assembles to bytecode
+    let mut pp = geometry_os::preprocessor::Preprocessor::new();
+    let preprocessed = pp.preprocess(&asm_text);
+    let bytecode = geometry_os::assembler::assemble(&preprocessed, 0)
+        .expect("Compiled tetris assembly should assemble to bytecode");
+
+    // Should be a non-trivial program
+    assert!(bytecode.pixels.len() > 100, "Tetris should produce meaningful bytecode");
+}
+
+#[test]
+fn test_tetris_glyph_execution() {
+    let source = include_str!("../programs/tetris.glyph");
+    let asm_text = geometry_os::glyph_backend::compile_glyph(source)
+        .expect("tetris.glyph should compile");
+
+    let mut vm = load_program(&asm_text);
+
+    // Run for several frames
+    run_until_halt(&mut vm, 500_000);
+
+    // Verify screen was drawn to (not all black)
+    let non_black = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(
+        non_black > 100,
+        "Tetris should draw content to screen, found {} non-black pixels",
+        non_black
+    );
+
+    // Verify playfield background is drawn (around y=16, x=80)
+    // The playfield bg color is 0x222244
+    let playfield_pixel = vm.screen[16 * 256 + 85];
+    assert_eq!(
+        playfield_pixel, 0x222244,
+        "Playfield background should be 0x222244 at (85,16), got 0x{:06X}",
+        playfield_pixel
+    );
+}
