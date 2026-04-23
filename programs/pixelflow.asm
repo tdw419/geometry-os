@@ -47,8 +47,7 @@ main_loop:
     LDI r10, 4
     LDI r11, 2
     LDI r15, STATUS_BUF
-    LDI r16, 0x000000
-    TEXT r10, r11, r15, r16
+    DRAWTEXT r10, r11, r15, r16, r5
 
     ; Draw weight visualization area (green border)
     LDI r5, 0x00FF00
@@ -108,14 +107,14 @@ main_loop:
     LDI r16, 0       ; bar counter
     bar_loop:
         ; Bar color: gradient from green to red
-        SHL r16, 5
+        SHLI r16, 5
         LDI r17, 0x00FF00
         ADD r17, r16     ; shift hue
         MOV r5, r17
         
         ; Bar position
         LDI r1, 1
-        SHL r16, 5       ; x = counter * 32
+        SHLI r16, 5       ; x = counter * 32
         ADD r16, r1      ; +1
         ADD r16, r1      ; +1 = +2
         LDI r10, 8       ; x start
@@ -137,8 +136,7 @@ main_loop:
     LDI r10, 4
     LDI r11, 246
     LDI r15, STATUS_BUF
-    LDI r16, 0x888888
-    TEXT r10, r11, r15, r16
+    DRAWTEXT r10, r11, r15, r16, r2
 
     ; Render frame
     FRAME
