@@ -5053,6 +5053,101 @@ phases:
   status: complete
   test_target: 8
   title: Dynamic Territory Competition and Digital Red Queen
+- deliverables:
+  - acceptance_criteria:
+    - description: window_list returns JSON array of active windows with id, title,
+        pid, x, y, w, h, z_order
+    - description: window_move <id> <x> <y> moves window and returns success
+    - description: window_close <id> destroys window and returns success
+    - description: window_focus <id> brings window to front
+    - description: window_resize <id> <w> <h> resizes window offscreen buffer
+    - description: process_kill <pid> kills all windows for a PID
+    description: 'Socket commands: window_list, window_move, window_close, window_focus,
+      window_resize, process_kill. Bridges existing WINSYS ops (0x94) to the socket
+      layer. Adds WINSYS op=7 (RESIZE) for window resizing. Adds process_kill to destroy
+      all windows belonging to a PID.'
+    name: Window management socket commands + MCP tools
+    scope_files:
+    - src/main.rs
+    - src/mcp_server.rs
+    - src/vm/mod.rs
+    scope_lines: 300
+    status: done
+  - acceptance_criteria:
+    - description: desktop_key injects key into VM key buffer (same as inject_key
+        but named for desktop context)
+    - description: desktop_mouse_move updates mouse_x, mouse_y registers
+    - description: desktop_mouse_click updates mouse position then triggers mouse
+        button
+    description: 'MCP tools: desktop_key, desktop_mouse_move, desktop_mouse_click.
+      Aliases for input_key/input_mouse with desktop-specific semantics. Documents
+      that these target the VM keyboard buffer and mouse registers, not the hypervisor.'
+    name: Desktop input injection MCP tools
+    scope_files:
+    - src/mcp_server.rs
+    scope_lines: 80
+    status: done
+  - acceptance_criteria:
+    - description: desktop_vision returns JSON with windows array, focused_window,
+        ascii_desktop (ASCII art with window boundaries overlaid)
+    - description: vision_screenshot includes window bounding boxes with labels
+    description: 'desktop_vision MCP tool returns structured JSON: which windows are
+      open, what PID owns them, which has focus (highest z_order), and ASCII art of
+      the desktop with window boundaries drawn as box-drawing characters. The AI''s
+      eyes -- no vision model needed for basic awareness.'
+    name: Desktop-aware vision MCP tool
+    scope_files:
+    - src/main.rs
+    - src/mcp_server.rs
+    scope_lines: 200
+    status: done
+  - description: 'demo_tour.md: A guided walkthrough script for AI agents. Walk the
+      map, enter buildings, launch shell/notepad/calculator/paint/tetris, demonstrate
+      window management, boot a RISC-V guest, narrate each step. Proves the full MCP
+      bridge works end-to-end.'
+    name: AI demo tour prompt
+    scope_files:
+    - docs/demo_tour.md
+    scope_lines: 150
+    status: done
+  - acceptance_criteria:
+    - description: test_window_list_socket verifies socket command returns window
+        data
+    - description: test_window_move_socket verifies window moves
+    - description: test_window_close_socket verifies window destruction
+    - description: test_window_focus_socket verifies z_order change
+    - description: test_window_resize_socket verifies buffer resize
+    - description: test_process_kill_socket verifies all PID windows destroyed
+    - description: test_desktop_key_mcp verifies MCP tool translation
+    - description: test_desktop_mouse_mcp verifies MCP tool translation
+    - description: test_desktop_vision_mcp verifies JSON structure
+    - description: test_vision_screenshot_annotations verifies window labels
+    description: '10+ tests: socket command tests, MCP tool tests, integration tests.
+      Each new socket command and MCP tool gets a dedicated test.'
+    name: Integration tests
+    scope_files:
+    - src/vm/tests.rs
+    scope_lines: 200
+    status: done
+  description: 'Bridge existing VM window management (WINSYS ops), input injection,
+    and vision capabilities to the MCP socket layer so external AI agents can control
+    the Geometry OS desktop. Most hard work already exists: WINSYS has create/destroy/focus/list/hittest/moveto/winfo
+    (ops 0-6), mouse/keyboard registers are wired, vision checksum/diff works. This
+    phase adds: RESIZE op (WINSYS op=7), window management MCP tools (window_list,
+    window_move, window_close, window_focus, window_resize, process_kill), desktop-aware
+    input tools (desktop_key, desktop_mouse_move, desktop_mouse_click), desktop_vision
+    tool (structured JSON + ASCII overlay), and a demo tour script proving end-to-end
+    AI control. ~800 LOC, 10+ tests.'
+  goal: Expose WINSYS ops through MCP tools so an external AI can manage windows,
+    inject input, and observe the desktop -- enabling guided demos and autonomous
+    desktop control.
+  id: phase-106
+  scope_lines_total: 930
+  status: done
+  test_target: 10
+  title: AI Desktop Control and Guided Demo
+  _claimed_by: worker-0
+  _claimed_at: 1776905288
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

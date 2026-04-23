@@ -293,6 +293,85 @@ fn get_tool_list() -> Vec<serde_json::Value> {
             ],
             vm_run_program_schema(),
         ),
+        // -- Phase 106: Window Management + Desktop Control Tools --
+        tool(
+            "window_list",
+            "List all active WINSYS windows with id, title, pid, position, size, z_order",
+            vec![],
+            window_list_mcp_schema(),
+        ),
+        tool(
+            "window_move",
+            "Move a window to a new position",
+            vec![
+                param("window_id", "string", "Window ID to move", true),
+                param("x", "integer", "New X position", true),
+                param("y", "integer", "New Y position", true),
+            ],
+            window_move_mcp_schema(),
+        ),
+        tool(
+            "window_close",
+            "Close (destroy) a window",
+            vec![param("window_id", "string", "Window ID to close", true)],
+            window_close_mcp_schema(),
+        ),
+        tool(
+            "window_focus",
+            "Bring a window to the front (highest z-order)",
+            vec![param("window_id", "string", "Window ID to focus", true)],
+            window_focus_mcp_schema(),
+        ),
+        tool(
+            "window_resize",
+            "Resize a window's offscreen buffer",
+            vec![
+                param("window_id", "string", "Window ID to resize", true),
+                param("w", "integer", "New width (1-256)", true),
+                param("h", "integer", "New height (1-256)", true),
+            ],
+            window_resize_mcp_schema(),
+        ),
+        tool(
+            "process_kill",
+            "Kill all windows belonging to a process (PID)",
+            vec![param("pid", "integer", "Process ID to kill windows for", true)],
+            process_kill_mcp_schema(),
+        ),
+        tool(
+            "desktop_key",
+            "Inject a key event into the VM desktop (alias for input_key with desktop semantics)",
+            vec![
+                param("key", "string", "Key code (numeric) or single character", true),
+                param("shift", "integer", "Shift state (0=none, 1=shift)", false),
+            ],
+            desktop_key_schema(),
+        ),
+        tool(
+            "desktop_mouse_move",
+            "Move the mouse cursor on the VM desktop",
+            vec![
+                param("x", "integer", "X coordinate", true),
+                param("y", "integer", "Y coordinate", true),
+            ],
+            desktop_mouse_move_schema(),
+        ),
+        tool(
+            "desktop_mouse_click",
+            "Click the mouse at a position on the VM desktop",
+            vec![
+                param("x", "integer", "X coordinate", true),
+                param("y", "integer", "Y coordinate", true),
+                param("button", "integer", "Button (1=down, 2=click)", false),
+            ],
+            desktop_mouse_click_schema(),
+        ),
+        tool(
+            "desktop_vision",
+            "Get structured desktop state: open windows, focused window, ASCII art overlay of the desktop with window boundaries",
+            vec![],
+            desktop_vision_schema(),
+        ),
     ]
 }
 
@@ -482,6 +561,72 @@ fn vm_run_program_schema() -> serde_json::Value {
     })
 }
 
+// Phase 106: Window Management + Desktop Control schemas
+fn window_list_mcp_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "count": {"type": "integer"},
+            "windows": {"type": "array", "items": {"type": "object", "properties": {
+                "id": {"type": "integer"}, "x": {"type": "integer"}, "y": {"type": "integer"},
+                "w": {"type": "integer"}, "h": {"type": "integer"},
+                "z_order": {"type": "integer"}, "pid": {"type": "integer"}, "title": {"type": "string"}
+            }}}
+        }
+    })
+}
+fn window_move_mcp_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {
+        "ok": {"type": "boolean"}, "window_id": {"type": "string"}, "x": {"type": "integer"}, "y": {"type": "integer"}
+    }})
+}
+fn window_close_mcp_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}, "window_id": {"type": "string"}}})
+}
+fn window_focus_mcp_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {
+        "ok": {"type": "boolean"}, "window_id": {"type": "string"}, "z_order": {"type": "integer"}
+    }})
+}
+fn window_resize_mcp_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {
+        "ok": {"type": "boolean"}, "window_id": {"type": "string"}, "w": {"type": "integer"}, "h": {"type": "integer"}
+    }})
+}
+fn process_kill_mcp_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {
+        "ok": {"type": "boolean"}, "pid": {"type": "integer"}, "windows_killed": {"type": "integer"}
+    }})
+}
+fn desktop_key_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {
+        "ok": {"type": "boolean"}, "keycode": {"type": "integer"}
+    }})
+}
+fn desktop_mouse_move_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {
+        "ok": {"type": "boolean"}, "x": {"type": "integer"}, "y": {"type": "integer"}
+    }})
+}
+fn desktop_mouse_click_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {
+        "ok": {"type": "boolean"}, "x": {"type": "integer"}, "y": {"type": "integer"}, "button": {"type": "integer"}
+    }})
+}
+fn desktop_vision_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "windows": {"type": "array", "items": {"type": "object", "properties": {
+                "id": {"type": "integer"}, "x": {"type": "integer"}, "y": {"type": "integer"},
+                "w": {"type": "integer"}, "h": {"type": "integer"},
+                "z_order": {"type": "integer"}, "pid": {"type": "integer"}, "title": {"type": "string"}
+            }}},
+            "focused_window": {"type": "integer"},
+            "ascii_desktop": {"type": "string"}
+        }
+    })
+}
 // ── Tool Handlers ───────────────────────────────────────
 
 fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -895,6 +1040,186 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
             }))
         }
 
+        // ── Phase 106: AI Desktop Control Tool Handlers ──
+        "window_list" => {
+            let resp = send_socket_cmd("window_list")?;
+            let resp_lines: Vec<&str> = resp.lines().collect();
+            let count = resp_lines
+                .first()
+                .and_then(|l| l.parse::<usize>().ok())
+                .unwrap_or(0);
+            let mut windows = Vec::new();
+            for line in resp_lines.iter().skip(1).take(count) {
+                let fields: Vec<&str> = line.split(',').collect();
+                if fields.len() >= 7 {
+                    windows.push(serde_json::json!({
+                        "id": fields[0].parse::<u32>().unwrap_or(0),
+                        "x": fields[1].parse::<u32>().unwrap_or(0),
+                        "y": fields[2].parse::<u32>().unwrap_or(0),
+                        "w": fields[3].parse::<u32>().unwrap_or(0),
+                        "h": fields[4].parse::<u32>().unwrap_or(0),
+                        "z_order": fields[5].parse::<u32>().unwrap_or(0),
+                        "pid": fields[6].parse::<u32>().unwrap_or(0),
+                        "title": if fields.len() > 7 { fields[7..].join(",") } else { String::new() },
+                    }));
+                }
+            }
+            Ok(serde_json::json!({
+                "count": count,
+                "windows": windows,
+            }))
+        }
+
+        "window_move" => {
+            let win_id = args["window_id"].as_str().unwrap_or("0");
+            let x = args["x"].as_i64().unwrap_or(0);
+            let y = args["y"].as_i64().unwrap_or(0);
+            let cmd = format!("window_move {} {} {}", win_id, x, y);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "window_id": win_id,
+                "x": x,
+                "y": y,
+                "response": resp,
+            }))
+        }
+
+        "window_close" => {
+            let win_id = args["window_id"].as_str().unwrap_or("0");
+            let cmd = format!("window_close {}", win_id);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "window_id": win_id,
+                "response": resp,
+            }))
+        }
+
+        "window_focus" => {
+            let win_id = args["window_id"].as_str().unwrap_or("0");
+            let cmd = format!("window_focus {}", win_id);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "window_id": win_id,
+                "response": resp,
+            }))
+        }
+
+        "window_resize" => {
+            let win_id = args["window_id"].as_str().unwrap_or("0");
+            let w = args["w"].as_i64().unwrap_or(64);
+            let h = args["h"].as_i64().unwrap_or(48);
+            let cmd = format!("window_resize {} {} {}", win_id, w, h);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "window_id": win_id,
+                "w": w,
+                "h": h,
+                "response": resp,
+            }))
+        }
+
+        "process_kill" => {
+            let pid = args["pid"].as_i64().unwrap_or(0);
+            let cmd = format!("process_kill {}", pid);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "pid": pid,
+                "response": resp,
+            }))
+        }
+
+        "desktop_key" => {
+            let key = args["key"].as_str().unwrap_or("0");
+            let shift = args["shift"].as_i64().unwrap_or(0);
+            let cmd = format!("inject_key {} {}", key, shift);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "key": key,
+                "shift": shift,
+                "response": resp,
+            }))
+        }
+
+        "desktop_mouse_move" => {
+            let x = args["x"].as_i64().unwrap_or(0);
+            let y = args["y"].as_i64().unwrap_or(0);
+            let cmd = format!("inject_mouse move {} {}", x, y);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "x": x,
+                "y": y,
+                "response": resp,
+            }))
+        }
+
+        "desktop_mouse_click" => {
+            let x = args["x"].as_i64().unwrap_or(0);
+            let y = args["y"].as_i64().unwrap_or(0);
+            let button = args["button"].as_i64().unwrap_or(2);
+            let cmd = format!("inject_mouse click {} {} {}", x, y, button);
+            let resp = send_socket_cmd(&cmd)?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("ok"),
+                "x": x,
+                "y": y,
+                "button": button,
+                "response": resp,
+            }))
+        }
+
+        "desktop_vision" => {
+            let win_resp = send_socket_cmd("window_list")?;
+            let win_lines: Vec<&str> = win_resp.lines().collect();
+            let win_count = win_lines
+                .first()
+                .and_then(|l| l.parse::<usize>().ok())
+                .unwrap_or(0);
+            let mut windows = Vec::new();
+            let mut focused_id: u32 = 0;
+            let mut max_z: u32 = 0;
+            for line in win_lines.iter().skip(1).take(win_count) {
+                let fields: Vec<&str> = line.split(',').collect();
+                if fields.len() >= 7 {
+                    let z = fields[5].parse::<u32>().unwrap_or(0);
+                    let id = fields[0].parse::<u32>().unwrap_or(0);
+                    let pid = fields[6].parse::<u32>().unwrap_or(0);
+                    let title = if fields.len() > 7 {
+                        fields[7..].join(",")
+                    } else {
+                        String::new()
+                    };
+                    if z > max_z {
+                        max_z = z;
+                        focused_id = id;
+                    }
+                    windows.push(serde_json::json!({
+                        "id": id,
+                        "x": fields[1].parse::<u32>().unwrap_or(0),
+                        "y": fields[2].parse::<u32>().unwrap_or(0),
+                        "w": fields[3].parse::<u32>().unwrap_or(0),
+                        "h": fields[4].parse::<u32>().unwrap_or(0),
+                        "z_order": z,
+                        "pid": pid,
+                        "title": title,
+                    }));
+                }
+            }
+
+            let screen = send_socket_cmd("vmscreen").unwrap_or_default();
+
+            Ok(serde_json::json!({
+                "windows": windows,
+                "focused_window_id": focused_id,
+                "ascii_desktop": screen,
+            }))
+        }
         _ => Err(format!("Unknown tool: {}", name)),
     }
 }

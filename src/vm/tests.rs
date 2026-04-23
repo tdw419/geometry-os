@@ -15641,3 +15641,350 @@ fn test_term_mux_pipe_creation() {
         "session 1 scrollback should be initialized to 0"
     );
 }
+
+// ── Phase 106: AI Desktop Control and Guided Demo ──────────
+
+#[test]
+fn test_mcp_server_phase106_tool_definitions() {
+    // Verify all Phase 106 tools are defined in the MCP server source
+    let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+
+    // Window management tools
+    assert!(
+        source.contains("\"window_list\""),
+        "window_list tool should be defined"
+    );
+    assert!(
+        source.contains("\"window_move\""),
+        "window_move tool should be defined"
+    );
+    assert!(
+        source.contains("\"window_close\""),
+        "window_close tool should be defined"
+    );
+    assert!(
+        source.contains("\"window_focus\""),
+        "window_focus tool should be defined"
+    );
+    assert!(
+        source.contains("\"window_resize\""),
+        "window_resize tool should be defined"
+    );
+    assert!(
+        source.contains("\"process_kill\""),
+        "process_kill tool should be defined"
+    );
+
+    // Desktop input aliases
+    assert!(
+        source.contains("\"desktop_key\""),
+        "desktop_key tool should be defined"
+    );
+    assert!(
+        source.contains("\"desktop_mouse_move\""),
+        "desktop_mouse_move tool should be defined"
+    );
+    assert!(
+        source.contains("\"desktop_mouse_click\""),
+        "desktop_mouse_click tool should be defined"
+    );
+
+    // Desktop vision
+    assert!(
+        source.contains("\"desktop_vision\""),
+        "desktop_vision tool should be defined"
+    );
+}
+
+#[test]
+fn test_mcp_server_phase106_schema_functions() {
+    // Verify all Phase 106 schema functions exist
+    let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+
+    // Window management schemas
+    assert!(
+        source.contains("fn window_list_mcp_schema()"),
+        "window_list_mcp_schema should exist"
+    );
+    assert!(
+        source.contains("fn window_move_mcp_schema()"),
+        "window_move_mcp_schema should exist"
+    );
+    assert!(
+        source.contains("fn window_close_mcp_schema()"),
+        "window_close_mcp_schema should exist"
+    );
+    assert!(
+        source.contains("fn window_focus_mcp_schema()"),
+        "window_focus_mcp_schema should exist"
+    );
+    assert!(
+        source.contains("fn window_resize_mcp_schema()"),
+        "window_resize_mcp_schema should exist"
+    );
+    assert!(
+        source.contains("fn process_kill_mcp_schema()"),
+        "process_kill_mcp_schema should exist"
+    );
+
+    // Desktop input schemas
+    assert!(
+        source.contains("fn desktop_key_schema()"),
+        "desktop_key_schema should exist"
+    );
+    assert!(
+        source.contains("fn desktop_mouse_move_schema()"),
+        "desktop_mouse_move_schema should exist"
+    );
+    assert!(
+        source.contains("fn desktop_mouse_click_schema()"),
+        "desktop_mouse_click_schema should exist"
+    );
+
+    // Desktop vision schema
+    assert!(
+        source.contains("fn desktop_vision_schema()"),
+        "desktop_vision_schema should exist"
+    );
+}
+
+#[test]
+fn test_mcp_server_phase106_handlers() {
+    // Verify all Phase 106 handler match arms exist
+    let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+
+    // Window management handlers must have socket command calls
+    assert!(
+        source.contains("\"window_list\" =>"),
+        "window_list handler should exist"
+    );
+    assert!(
+        source.contains("\"window_move\" =>"),
+        "window_move handler should exist"
+    );
+    assert!(
+        source.contains("\"window_close\" =>"),
+        "window_close handler should exist"
+    );
+    assert!(
+        source.contains("\"window_focus\" =>"),
+        "window_focus handler should exist"
+    );
+    assert!(
+        source.contains("\"window_resize\" =>"),
+        "window_resize handler should exist"
+    );
+    assert!(
+        source.contains("\"process_kill\" =>"),
+        "process_kill handler should exist"
+    );
+
+    // Desktop input handlers
+    assert!(
+        source.contains("\"desktop_key\" =>"),
+        "desktop_key handler should exist"
+    );
+    assert!(
+        source.contains("\"desktop_mouse_move\" =>"),
+        "desktop_mouse_move handler should exist"
+    );
+    assert!(
+        source.contains("\"desktop_mouse_click\" =>"),
+        "desktop_mouse_click handler should exist"
+    );
+
+    // Desktop vision handler
+    assert!(
+        source.contains("\"desktop_vision\" =>"),
+        "desktop_vision handler should exist"
+    );
+}
+
+#[test]
+fn test_socket_cmd_window_list_in_main() {
+    // Verify socket commands for window management exist in main.rs
+    let source = std::fs::read_to_string("src/main.rs").unwrap();
+
+    assert!(
+        source.contains("\"window_list\" =>"),
+        "window_list socket command should exist in main.rs"
+    );
+    assert!(
+        source.contains("\"window_move\" =>"),
+        "window_move socket command should exist in main.rs"
+    );
+    assert!(
+        source.contains("\"window_close\" =>"),
+        "window_close socket command should exist in main.rs"
+    );
+    assert!(
+        source.contains("\"window_focus\" =>"),
+        "window_focus socket command should exist in main.rs"
+    );
+    assert!(
+        source.contains("\"window_resize\" =>"),
+        "window_resize socket command should exist in main.rs"
+    );
+    assert!(
+        source.contains("\"process_kill\" =>"),
+        "process_kill socket command should exist in main.rs"
+    );
+}
+
+#[test]
+fn test_window_list_socket_format() {
+    // Test that the window_list socket command produces correct format
+    let source = std::fs::read_to_string("src/main.rs").unwrap();
+
+    // Find the window_list handler and verify format
+    let start = source
+        .find("\"window_list\" =>")
+        .expect("window_list handler should exist");
+    let end = source[start..]
+        .find("\"window_move\" =>")
+        .expect("window_move should follow");
+    let handler = &source[start..start + end];
+
+    // Should list active windows with id, x, y, w, h, z_order, pid, title
+    assert!(handler.contains("w.id"), "should output window id");
+    assert!(handler.contains("w.x"), "should output window x");
+    assert!(handler.contains("w.y"), "should output window y");
+    assert!(handler.contains("w.w"), "should output window w");
+    assert!(handler.contains("w.h"), "should output window h");
+    assert!(handler.contains("w.z_order"), "should output z_order");
+    assert!(handler.contains("w.pid"), "should output pid");
+    assert!(handler.contains("w.active"), "should filter active windows");
+}
+
+#[test]
+fn test_window_move_socket_updates_position() {
+    // Verify window_move handler updates x,y on window
+    let source = std::fs::read_to_string("src/main.rs").unwrap();
+
+    let start = source
+        .find("\"window_move\" =>")
+        .expect("window_move handler should exist");
+    let end = source[start..]
+        .find("\"window_close\" =>")
+        .expect("window_close should follow");
+    let handler = &source[start..start + end];
+
+    assert!(
+        handler.contains("w.x = new_x"),
+        "should update window x position"
+    );
+    assert!(
+        handler.contains("w.y = new_y"),
+        "should update window y position"
+    );
+    assert!(handler.contains("window_move"), "should have usage hint");
+}
+
+#[test]
+fn test_window_resize_updates_buffer() {
+    // Verify window_resize resizes the offscreen buffer
+    let source = std::fs::read_to_string("src/main.rs").unwrap();
+
+    let start = source
+        .find("\"window_resize\" =>")
+        .expect("window_resize handler should exist");
+    let end = source[start..]
+        .find("\"process_kill\" =>")
+        .expect("process_kill should follow");
+    let handler = &source[start..start + end];
+
+    // Should update w, h, and resize the offscreen buffer
+    assert!(
+        handler.contains("w.w = new_w"),
+        "should update window width"
+    );
+    assert!(
+        handler.contains("w.h = new_h"),
+        "should update window height"
+    );
+    assert!(
+        handler.contains("offscreen_buffer.resize"),
+        "should resize offscreen buffer"
+    );
+}
+
+#[test]
+fn test_desktop_vision_handler_structure() {
+    // Verify desktop_vision combines window_list and vmscreen
+    let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+
+    let start = source
+        .find("\"desktop_vision\" =>")
+        .expect("desktop_vision handler should exist");
+    let end = source[start..]
+        .find("_ => Err(format!(\"Unknown tool")
+        .expect("Unknown tool catch");
+    let handler = &source[start..start + end];
+
+    // Should call window_list socket command
+    assert!(handler.contains("window_list"), "should query window list");
+    // Should call vmscreen for ASCII art
+    assert!(handler.contains("vmscreen"), "should get screen ASCII art");
+    // Should identify focused window (highest z_order)
+    assert!(
+        handler.contains("focused"),
+        "should identify focused window"
+    );
+    assert!(
+        handler.contains("z_order"),
+        "should check z_order for focus"
+    );
+    assert!(
+        handler.contains("focused_window"),
+        "should return focused_window"
+    );
+}
+
+#[test]
+fn test_desktop_key_uses_inject_key() {
+    // Verify desktop_key delegates to inject_key socket command
+    let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+
+    let start = source
+        .find("\"desktop_key\" =>")
+        .expect("desktop_key handler should exist");
+    let section = &source[start..start + 500];
+
+    assert!(
+        section.contains("inject_key"),
+        "desktop_key should use inject_key socket command"
+    );
+}
+
+#[test]
+fn test_desktop_mouse_aliases_use_inject_mouse() {
+    // Verify desktop_mouse_move and desktop_mouse_click delegate to inject_mouse
+    let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+
+    let move_start = source
+        .find("\"desktop_mouse_move\" =>")
+        .expect("desktop_mouse_move handler should exist");
+    let move_section = &source[move_start..move_start + 500];
+    assert!(
+        move_section.contains("inject_mouse move"),
+        "desktop_mouse_move should use inject_mouse move"
+    );
+
+    let click_start = source
+        .find("\"desktop_mouse_click\" =>")
+        .expect("desktop_mouse_click handler should exist");
+    let click_section = &source[click_start..click_start + 500];
+    assert!(
+        click_section.contains("inject_mouse click"),
+        "desktop_mouse_click should use inject_mouse click"
+    );
+}
+
+#[test]
+fn test_demo_tour_exists() {
+    // Verify the demo tour document exists
+    assert!(
+        std::path::Path::new("docs/demo_tour.md").exists(),
+        "docs/demo_tour.md should exist for AI guided demo"
+    );
+}

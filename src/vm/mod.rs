@@ -1350,6 +1350,26 @@ impl Vm {
                                 self.regs[0] = 0; // not found
                             }
                         }
+                        7 => {
+                            // RESIZE: Resize window offscreen buffer.
+                            // r0=win_id, r1=new_w, r2=new_h.
+                            let win_id = self.regs[0];
+                            let new_w = if 1 < NUM_REGS { self.regs[1] } else { 64 };
+                            let new_h = if 2 < NUM_REGS { self.regs[2] } else { 48 };
+                            if new_w == 0 || new_h == 0 || new_w > 256 || new_h > 256 {
+                                self.regs[0] = 0; // invalid size
+                            } else if let Some(w) =
+                                self.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                            {
+                                w.w = new_w;
+                                w.h = new_h;
+                                w.offscreen_buffer
+                                    .resize((new_w as usize) * (new_h as usize), 0);
+                                self.regs[0] = 1; // success
+                            } else {
+                                self.regs[0] = 0; // not found
+                            }
+                        }
                         _ => {
                             // Unknown op -- r0 = 0 (error)
                             self.regs[0] = 0;

@@ -1509,7 +1509,7 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             "loadasm" => {
@@ -1942,6 +1942,222 @@ fn main() {
                                 } else {
                                     response.push_str("[usage: inject_text <text>]\n");
                                 }
+                            }
+                            // ── Phase 106: Window Management Socket Commands ──────
+                            "window_list" => {
+                                // List all active WINSYS windows
+                                let active: Vec<&crate::vm::Window> =
+                                    vm.windows.iter().filter(|w| w.active).collect();
+                                response.push_str(&format!("{}\n", active.len()));
+                                for w in &active {
+                                    // Read title from RAM
+                                    let mut title = String::new();
+                                    if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
+                                        for j in 0..32 {
+                                            let addr = w.title_addr as usize + j;
+                                            if addr >= vm.ram.len() {
+                                                break;
+                                            }
+                                            let ch = vm.ram[addr];
+                                            if ch == 0 || ch > 127 {
+                                                break;
+                                            }
+                                            title.push(ch as u8 as char);
+                                        }
+                                    }
+                                    response.push_str(&format!(
+                                        "{},{},{},{},{},{},{},{}\n",
+                                        w.id, w.x, w.y, w.w, w.h, w.z_order, w.pid, title
+                                    ));
+                                }
+                            }
+                            "window_move" => {
+                                // window_move <id> <x> <y>
+                                if let (Some(id_str), Some(x_str), Some(y_str)) =
+                                    (parts.get(1), parts.get(2), parts.get(3))
+                                {
+                                    let win_id = id_str.parse::<u32>().unwrap_or(0);
+                                    let new_x = x_str.parse::<u32>().unwrap_or(0);
+                                    let new_y = y_str.parse::<u32>().unwrap_or(0);
+                                    if let Some(w) =
+                                        vm.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                                    {
+                                        w.x = new_x;
+                                        w.y = new_y;
+                                        response.push_str(&format!(
+                                            "ok {}->{},{}\n",
+                                            win_id, new_x, new_y
+                                        ));
+                                    } else {
+                                        response
+                                            .push_str(&format!("[window {} not found]\n", win_id));
+                                    }
+                                } else {
+                                    response.push_str("[usage: window_move <id> <x> <y>]\n");
+                                }
+                            }
+                            "window_close" => {
+                                // window_close <id>
+                                if let Some(id_str) = parts.get(1) {
+                                    let win_id = id_str.parse::<u32>().unwrap_or(0);
+                                    if let Some(w) =
+                                        vm.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                                    {
+                                        w.active = false;
+                                        response.push_str(&format!("ok closed {}\n", win_id));
+                                    } else {
+                                        response
+                                            .push_str(&format!("[window {} not found]\n", win_id));
+                                    }
+                                } else {
+                                    response.push_str("[usage: window_close <id>]\n");
+                                }
+                            }
+                            "window_focus" => {
+                                // window_focus <id> -- bring to front
+                                if let Some(id_str) = parts.get(1) {
+                                    let win_id = id_str.parse::<u32>().unwrap_or(0);
+                                    let max_z =
+                                        vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                                    if let Some(w) =
+                                        vm.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                                    {
+                                        w.z_order = max_z + 1;
+                                        response.push_str(&format!(
+                                            "ok focus {} z={}\n",
+                                            win_id,
+                                            max_z + 1
+                                        ));
+                                    } else {
+                                        response
+                                            .push_str(&format!("[window {} not found]\n", win_id));
+                                    }
+                                } else {
+                                    response.push_str("[usage: window_focus <id>]\n");
+                                }
+                            }
+                            "window_resize" => {
+                                // window_resize <id> <w> <h>
+                                if let (Some(id_str), Some(w_str), Some(h_str)) =
+                                    (parts.get(1), parts.get(2), parts.get(3))
+                                {
+                                    let win_id = id_str.parse::<u32>().unwrap_or(0);
+                                    let new_w = w_str.parse::<u32>().unwrap_or(0);
+                                    let new_h = h_str.parse::<u32>().unwrap_or(0);
+                                    if new_w == 0 || new_h == 0 || new_w > 256 || new_h > 256 {
+                                        response.push_str("[error: invalid size (1-256)]\n");
+                                    } else if let Some(w) =
+                                        vm.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                                    {
+                                        w.w = new_w;
+                                        w.h = new_h;
+                                        w.offscreen_buffer
+                                            .resize((new_w as usize) * (new_h as usize), 0);
+                                        response.push_str(&format!(
+                                            "ok resize {} {}x{}\n",
+                                            win_id, new_w, new_h
+                                        ));
+                                    } else {
+                                        response
+                                            .push_str(&format!("[window {} not found]\n", win_id));
+                                    }
+                                } else {
+                                    response.push_str("[usage: window_resize <id> <w> <h>]\n");
+                                }
+                            }
+                            "process_kill" => {
+                                // process_kill <pid> -- destroy all windows for a PID
+                                if let Some(pid_str) = parts.get(1) {
+                                    let pid = pid_str.parse::<u32>().unwrap_or(0);
+                                    let mut count = 0u32;
+                                    for w in vm.windows.iter_mut() {
+                                        if w.pid == pid && w.active {
+                                            w.active = false;
+                                            count += 1;
+                                        }
+                                    }
+                                    response.push_str(&format!(
+                                        "ok killed {} windows for pid {}\n",
+                                        count, pid
+                                    ));
+                                } else {
+                                    response.push_str("[usage: process_kill <pid>]\n");
+                                }
+                            }
+                            "desktop_vision" => {
+                                // Return structured JSON: windows array, focused_window, ascii_desktop
+                                let active: Vec<&crate::vm::Window> =
+                                    vm.windows.iter().filter(|w| w.active).collect();
+                                let mut max_z: u32 = 0;
+                                let mut focused_id: u32 = 0;
+                                for w in &active {
+                                    if w.z_order > max_z {
+                                        max_z = w.z_order;
+                                        focused_id = w.id;
+                                    }
+                                }
+                                // Build ASCII overlay (32x32 grid mapping 256x256 screen)
+                                // Each char represents an 8x8 pixel block
+                                let mut grid = [['.'; 32]; 32];
+                                for w in &active {
+                                    let x0 = (w.x / 8) as usize;
+                                    let y0 = (w.y / 8) as usize;
+                                    let x1 = ((w.x + w.w).min(256) / 8) as usize;
+                                    let y1 = ((w.y + w.h).min(256) / 8) as usize;
+                                    for gy in y0.min(32)..y1.min(32) {
+                                        for gx in x0.min(32)..x1.min(32) {
+                                            // Draw borders and corners
+                                            if gy == y0 && gx == x0 {
+                                                grid[gy][gx] = '\u{250C}'; // top-left corner
+                                            } else if gy == y0 && gx + 1 >= x1 {
+                                                grid[gy][gx] = '\u{2510}'; // top-right corner
+                                            } else if gy + 1 >= y1 && gx == x0 {
+                                                grid[gy][gx] = '\u{2514}'; // bottom-left corner
+                                            } else if gy + 1 >= y1 && gx + 1 >= x1 {
+                                                grid[gy][gx] = '\u{2518}'; // bottom-right corner
+                                            } else if gy == y0 || gy + 1 >= y1 {
+                                                grid[gy][gx] = '\u{2500}'; // horizontal
+                                            } else if gx == x0 || gx + 1 >= x1 {
+                                                grid[gy][gx] = '\u{2502}'; // vertical
+                                            } else {
+                                                let digit = (w.id % 10) as u8;
+                                                grid[gy][gx] = (b'0' + digit) as char;
+                                            }
+                                        }
+                                    }
+                                }
+                                let mut ascii = String::new();
+                                for row in &grid {
+                                    let line: String = row.iter().collect();
+                                    ascii.push_str(&line);
+                                    ascii.push('\n');
+                                }
+                                // Build response
+                                response.push_str(&format!("focused={}\n", focused_id));
+                                response.push_str(&format!("count={}\n", active.len()));
+                                for w in &active {
+                                    // Read title from RAM
+                                    let mut title = String::new();
+                                    if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
+                                        for j in 0..32 {
+                                            let addr = w.title_addr as usize + j;
+                                            if addr >= vm.ram.len() {
+                                                break;
+                                            }
+                                            let ch = vm.ram[addr];
+                                            if ch == 0 || ch > 127 {
+                                                break;
+                                            }
+                                            title.push(ch as u8 as char);
+                                        }
+                                    }
+                                    response.push_str(&format!(
+                                        "win:{},{},{},{},{},{},{},{}\n",
+                                        w.id, w.x, w.y, w.w, w.h, w.z_order, w.pid, title
+                                    ));
+                                }
+                                response.push_str("ascii:\n");
+                                response.push_str(&ascii);
                             }
                             _ => {
                                 response.push_str(&format!("[unknown: {}]\n", line));
