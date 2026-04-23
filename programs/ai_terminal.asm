@@ -630,11 +630,11 @@ history_done:
 cmd_help:
     LDI r1, 1
     LDI r20, SCRATCH
-    STRO r20, "Commands: /help /clear /sys"
+    STRO r20, "Commands: /help /clear /sys /run"
     CALL write_line_to_buf
     LDI r1, 1
     LDI r20, SCRATCH
-    STRO r20, "Or just type to chat with AI"
+    STRO r20, "Type to chat, /run executes AI code"
     CALL write_line_to_buf
     LDI r1, 1
     CALL write_prompt
