@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 107/107 phases complete, 0 in_progress, 0 planned
+**Progress:** 109/109 phases complete, 0 in_progress, 0 planned
 
-**Deliverables:** 473/473 complete
+**Deliverables:** 479/479 complete
 
 ## Scope Summary
 
@@ -117,6 +117,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 o
 | phase-104 Dynamic Territory Competition and Digital Red Queen | COMPLETE | 5/5 | 1,200 | 8 |
 | phase-106 AI Desktop Control and Guided Demo | COMPLETE | 5/5 | 930 | 10 |
 | phase-107 Infinite Spatial Desktop | COMPLETE | 6/6 | 1,220 | 12 |
+| phase-108 Sandboxed AI Execution | COMPLETE | 3/3 | 180 | 8 |
+| phase-109 Live Opcode Inventory Injection | COMPLETE | 3/3 | 110 | 7 |
 
 ## Dependencies
 
@@ -2514,3 +2516,46 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
   - [x] test_mouse_routing verifies MOUSEQ events reach correct window
 - [x] **Integration tests** -- 12+ tests covering coordinate model, rendering, multi-process, drag, and mouse routing
   - [x] test_offscreen_culling verifies viewport culling
+
+## [x] phase-108: Sandboxed AI Execution (COMPLETE)
+
+**Goal:** Sandboxed AI execution with capability-based process isolation for child processes spawned from AI terminal.
+
+### Deliverables
+
+- [x] **SPAWNC sandbox in ai_terminal.asm** -- cmd_yes builds sandbox capabilities (/tmp/* read+write, /lib/* read-only) and uses SPAWNC instead of RUNNEXT. Child starts at 0x1000 with COW memory isolation.
+  - [x] SPAWNC creates child with capability restrictions
+  - [x] COW memory isolation enforced
+- [x] **Scheduler capability cache** -- current_capabilities field in Vm, populated by scheduler when dispatching child processes. OPEN syscall uses cached value instead of searching processes vector. Fixes latent bug where capability checks were bypassed during scheduled child execution.
+  - [x] Capability checks work during step_all_processes
+- [x] **Sandbox capability tests** -- 8 new tests covering child process creation, capability enforcement, VFS path restriction, and memory isolation.
+  - [x] test_spawnc_sandbox_child_runs_code
+  - [x] test_spawnc_sandbox_child_has_memory_isolation
+  - [x] test_spawnc_sandbox_creates_child_with_capabilities
+  - [x] test_spawnc_sandbox_denies_vfs_path_outside_capabilities
+  - [x] test_spawnc_sandbox_allows_vfs_tmp_write
+  - [x] test_ai_terminal_build_sandbox_caps_assembles
+  - [x] test_sandboxed_paint_capabilities
+  - [x] test_spawnc_no_capabilities_is_none
+
+## [x] phase-109: Live Opcode Inventory Injection (COMPLETE)
+
+**Goal:** Make the AI Terminal's asm_dev system prompt self-truthful so generated assembly cannot invoke opcodes that don't exist. First step toward using the AI Terminal as a diagnostic tool for the OS itself.
+
+### Deliverables
+
+- [x] **valid_opcode_mnemonics() probe in disasm.rs** -- runtime-derived inventory of real opcodes by probing disassemble_at with zeroed operands. Single source of truth; can't drift from disasm match arms because it *is* the disasm.
+  - [x] Helper filters out ??? unknowns
+  - [x] Sorted (opcode, mnemonic) pairs returned
+- [x] **asm_dev_system_prompt embeds full inventory + diagnostic hooks** -- complete NAME(0xNN) list appended so LLM can't hallucinate. RAM[0x7821] selects a focus opcode for targeted diagnostic programs; RAM[0xFFD] surfaces last assemble status so follow-up questions have context.
+  - [x] Focus opcode section appears only when RAM[0x7821] is set
+  - [x] Last assemble status surfaces FAILED state for debugging
+  - [x] Oracle mode (RAM[0x7820]=0) still omits the asm inventory
+- [x] **Regression tests** -- 7 tests covering probe coverage, mnemonic purity, prompt embedding, focus injection, assemble-status surfacing, and oracle isolation.
+  - [x] test_valid_opcode_mnemonics_covers_core_ops
+  - [x] test_valid_opcode_mnemonics_excludes_unknown
+  - [x] asm_dev_prompt_embeds_full_opcode_inventory
+  - [x] asm_dev_prompt_without_focus_omits_focus_section
+  - [x] asm_dev_prompt_with_focus_injects_targeted_hint
+  - [x] asm_dev_prompt_surfaces_last_assemble_failure
+  - [x] oracle_mode_prompt_has_no_opcode_inventory

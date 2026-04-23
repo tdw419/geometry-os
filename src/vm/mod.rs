@@ -2884,6 +2884,35 @@ print(r if r else '')";
     /// runnable programs without blowing context.
     fn asm_dev_system_prompt(&self) -> String {
         let frame = self.ram.get(0x7802).copied().unwrap_or(0);
+        let opcode_inventory = build_opcode_inventory_line();
+        let focus = self.ram.get(0x7821).copied().unwrap_or(0);
+        let focus_hint = if focus != 0 && focus <= 0xFF {
+            let name = crate::vm::disasm::valid_opcode_mnemonics()
+                .into_iter()
+                .find(|(op, _)| *op as u32 == focus)
+                .map(|(_, n)| n)
+                .unwrap_or_else(|| "???".to_string());
+            format!(
+                "\n# Focus opcode\nThe user is debugging opcode 0x{:02X} ({}). Prefer programs that exercise this opcode at boundary conditions and write pass/fail markers to RAM so the caller can inspect results.\n",
+                focus, name
+            )
+        } else {
+            String::new()
+        };
+        let asm_status = self.ram.get(0xFFD).copied().unwrap_or(0);
+        let asm_status_line = if asm_status != 0 {
+            let note = if asm_status == 0xFFFFFFFF {
+                "assembly FAILED"
+            } else {
+                "assembly succeeded"
+            };
+            format!(
+                "\n# Last assemble result (RAM[0xFFD])\n0x{:08X} ({}). Use this when the user asks why their last generation didn't run.\n",
+                asm_status, note
+            )
+        } else {
+            String::new()
+        };
         format!(
             "You are an assembly pair programmer for Geometry OS, a custom 32-bit VM.\n\
              Output ONLY code inside a fenced ```asm block unless the user explicitly asks for prose.\n\
@@ -2958,10 +2987,13 @@ print(r if r else '')";
                  JZ r0, main_loop\n\
                  HALT\n\
              \n\
+             # Valid opcodes (complete inventory — anything not here does not exist)\n\
+             {}\n\
+             {}{}\n\
              Current frame: {}. If the user's request is ambiguous, ask ONE clarifying question.\n\
              Prefer short, runnable programs. Use #define for constants at the top.\n\
-             Never invent opcodes — if you aren't sure one exists, use CALL into a helper label instead.",
-            frame
+             Never invent opcodes — if a name isn't in the inventory above, it doesn't exist. Use CALL into a helper label instead.",
+            opcode_inventory, focus_hint, asm_status_line, frame
         )
     }
 
@@ -3723,6 +3755,22 @@ pub(crate) fn extract_json_str(json: &str, key: &str) -> Option<String> {
         }
     }
     Some(result)
+}
+
+/// Build a compact, deduplicated, comma-separated list of valid opcode mnemonics
+/// with their hex codes. Emitted into the asm_dev system prompt as the authoritative
+/// inventory the LLM may emit. Sorted by opcode.
+fn build_opcode_inventory_line() -> String {
+    let mut pairs = crate::vm::disasm::valid_opcode_mnemonics();
+    pairs.sort_by_key(|(op, _)| *op);
+    let mut out = String::with_capacity(pairs.len() * 16);
+    for (i, (op, name)) in pairs.iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(&format!("{}(0x{:02X})", name, op));
+    }
+    out
 }
 
 mod boot;

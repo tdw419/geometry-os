@@ -868,6 +868,32 @@ impl Vm {
     }
 }
 
+/// Probe every opcode byte against a zeroed scratch VM and return the set of
+/// opcodes that disassemble to a real mnemonic (everything except `???`).
+/// The returned pair is `(opcode_byte, mnemonic)` where mnemonic is the first
+/// whitespace-separated token from the disassembler — the bare instruction name
+/// with no operands. Used to inject a truthful opcode inventory into LLM
+/// system prompts so generated assembly can't invoke opcodes that don't exist.
+pub fn valid_opcode_mnemonics() -> Vec<(u8, String)> {
+    let mut probe = Vm::new();
+    let mut out = Vec::with_capacity(160);
+    for op in 0u32..=0xFFu32 {
+        for cell in probe.ram.iter_mut().take(16) {
+            *cell = 0;
+        }
+        probe.ram[0] = op;
+        let (text, _) = probe.disassemble_at(0);
+        if text.starts_with("???") {
+            continue;
+        }
+        let name = text.split_whitespace().next().unwrap_or("").to_string();
+        if !name.is_empty() {
+            out.push((op as u8, name));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::Vm;
@@ -1743,5 +1769,37 @@ mod tests {
         let after_quote: String = s.split('"').nth(1).unwrap().to_string();
         assert_eq!(after_quote.len(), 32, "STRO should truncate to 32 chars");
         assert_eq!(len, 53); // 3 header + 50 chars
+    }
+
+    #[test]
+    fn test_valid_opcode_mnemonics_covers_core_ops() {
+        let pairs = super::valid_opcode_mnemonics();
+        let lookup: std::collections::HashMap<u8, String> = pairs.into_iter().collect();
+        // Sanity: core opcodes listed by project memory must be present with the right mnemonic.
+        assert_eq!(lookup.get(&0x00).map(String::as_str), Some("HALT"));
+        assert_eq!(lookup.get(&0x01).map(String::as_str), Some("NOP"));
+        assert_eq!(lookup.get(&0x02).map(String::as_str), Some("FRAME"));
+        assert_eq!(lookup.get(&0x10).map(String::as_str), Some("LDI"));
+        // Total opcode count should match the number of non-??? match arms in disasm.
+        // As of phase 108 that was ~150; guard against regression by requiring >= 100.
+        assert!(
+            lookup.len() >= 100,
+            "valid_opcode_mnemonics returned only {} entries",
+            lookup.len()
+        );
+    }
+
+    #[test]
+    fn test_valid_opcode_mnemonics_excludes_unknown() {
+        let pairs = super::valid_opcode_mnemonics();
+        // Verify no mnemonic contains "???" — the probe filters those out.
+        for (op, name) in &pairs {
+            assert!(
+                !name.contains("???"),
+                "opcode 0x{:02X} leaked ??? into mnemonic: {}",
+                op,
+                name
+            );
+        }
     }
 }

@@ -16622,3 +16622,85 @@ fn test_world_space_window_hit_test() {
     assert_eq!(w.x, 0);
     assert_eq!(w.y, 0);
 }
+
+// ── asm_dev system prompt injection (Phase 109) ────────────────────────────
+
+#[test]
+#[ignore]
+fn dump_asm_dev_prompt_for_inspection() {
+    let mut vm = Vm::new();
+    vm.ram[0x7820] = 1;
+    vm.ram[0x7821] = 0x40; // focus PSET
+    vm.ram[0xFFD] = 0xFFFFFFFF; // last assemble failed
+    let p = vm.build_llm_system_prompt();
+    eprintln!("=== prompt length: {} bytes ===", p.len());
+    eprintln!("{}", p);
+}
+
+#[test]
+fn asm_dev_prompt_embeds_full_opcode_inventory() {
+    // RAM[0x7820]=1 selects asm_dev mode. The resulting prompt must list the
+    // real opcode inventory so the LLM cannot hallucinate instructions.
+    let mut vm = Vm::new();
+    vm.ram[0x7820] = 1;
+    let prompt = vm.build_llm_system_prompt();
+    assert!(
+        prompt.contains("HALT(0x00)"),
+        "prompt missing HALT entry. Full prompt:\n{}",
+        prompt
+    );
+    assert!(prompt.contains("FRAME(0x02)"));
+    assert!(prompt.contains("LDI(0x10)"));
+    assert!(prompt.contains("# Valid opcodes"));
+}
+
+#[test]
+fn asm_dev_prompt_without_focus_omits_focus_section() {
+    let mut vm = Vm::new();
+    vm.ram[0x7820] = 1;
+    vm.ram[0x7821] = 0; // no focus
+    let prompt = vm.build_llm_system_prompt();
+    assert!(!prompt.contains("# Focus opcode"));
+}
+
+#[test]
+fn asm_dev_prompt_with_focus_injects_targeted_hint() {
+    // RAM[0x7821] is a diagnostic hint: if nonzero, tell the LLM to target
+    // that specific opcode. 0x40 is PSET.
+    let mut vm = Vm::new();
+    vm.ram[0x7820] = 1;
+    vm.ram[0x7821] = 0x40;
+    let prompt = vm.build_llm_system_prompt();
+    assert!(
+        prompt.contains("# Focus opcode"),
+        "missing focus section:\n{}",
+        prompt
+    );
+    assert!(prompt.contains("0x40"));
+}
+
+#[test]
+fn asm_dev_prompt_surfaces_last_assemble_failure() {
+    // RAM[0xFFD] carries the ASMSELF/ASM_RAM status. 0xFFFFFFFF means the
+    // last generation failed to assemble — the prompt should surface that
+    // so follow-up questions like "why didn't it run?" have context.
+    let mut vm = Vm::new();
+    vm.ram[0x7820] = 1;
+    vm.ram[0xFFD] = 0xFFFFFFFF;
+    let prompt = vm.build_llm_system_prompt();
+    assert!(
+        prompt.contains("assembly FAILED"),
+        "prompt should note failed assembly:\n{}",
+        prompt
+    );
+}
+
+#[test]
+fn oracle_mode_prompt_has_no_opcode_inventory() {
+    // Default mode (RAM[0x7820]=0) is Oracle — the player-facing world guide.
+    // It must NOT leak the opcode inventory into user-facing narration.
+    let vm = Vm::new();
+    let prompt = vm.build_llm_system_prompt();
+    assert!(!prompt.contains("HALT(0x00)"));
+    assert!(prompt.contains("Oracle"));
+}
