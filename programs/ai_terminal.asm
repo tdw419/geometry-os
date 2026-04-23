@@ -3,8 +3,10 @@
 ; Connects to cloud AI (ZAI) via LLM opcode (0x9C).
 ; Type a message, press Enter to send. Response appears below.
 ; Conversation history is maintained for context.
-; /run assembles and executes the last AI response as GeoOS assembly.
-; Commands: /clear /help /sys /run
+; /run assembles the last AI response. /yes confirms and executes it.
+; AI-written bytecode has full VM privileges, so the /run + /yes two-step
+; is intentional -- any other input between the two cancels the pending run.
+; Commands: /clear /help /sys /run /yes
 ;
 ; RAM Layout:
 ;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
@@ -34,6 +36,7 @@
 #define RESP_BUF 0x6400
 #define HISTORY 0x7400
 #define ASM_STATUS 0xFFD
+#define RUN_PENDING 0x7830   ; Nonzero = compiled bytecode waiting for /yes
 
 ; =========================================
 ; INIT
@@ -431,20 +434,41 @@ try_run_cmd:
     ADD r20, r1           ; skip '/'
     LOAD r22, r20
     CMPI r22, 114        ; 'r'
-    JNZ r0, send_to_llm
+    JNZ r0, try_yes_cmd
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 117        ; 'u'
-    JNZ r0, send_to_llm
+    JNZ r0, try_yes_cmd
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 110        ; 'n'
+    JNZ r0, try_yes_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_yes_cmd
+    JMP cmd_run
+
+try_yes_cmd:
+    ; Check /yes -- confirms a pending /run
+    LDI r20, SCRATCH
+    ADD r20, r1           ; skip '/'
+    LOAD r22, r20
+    CMPI r22, 121        ; 'y'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 101        ; 'e'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
     JNZ r0, send_to_llm
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 0          ; null
     JNZ r0, send_to_llm
-    JMP cmd_run
+    JMP cmd_yes
 
 ; =========================================
 ; SEND_TO_LLM
@@ -452,6 +476,10 @@ try_run_cmd:
 ; =========================================
 send_to_llm:
     LDI r1, 1
+    ; Cancel any pending /run -- a new chat turn supersedes prior output.
+    LDI r20, RUN_PENDING
+    LDI r0, 0
+    STORE r20, r0
 
     ; Show "Thinking..." status
     LDI r20, SCRATCH
@@ -629,12 +657,20 @@ history_done:
 
 cmd_help:
     LDI r1, 1
+    ; Cancel any pending /run -- asking for help is not confirmation.
+    LDI r20, RUN_PENDING
+    LDI r0, 0
+    STORE r20, r0
     LDI r20, SCRATCH
-    STRO r20, "Commands: /help /clear /sys /run"
+    STRO r20, "Commands: /help /clear /sys /run /yes"
     CALL write_line_to_buf
     LDI r1, 1
     LDI r20, SCRATCH
-    STRO r20, "Type to chat, /run executes AI code"
+    STRO r20, "Type to chat. /run compiles AI code,"
+    CALL write_line_to_buf
+    LDI r1, 1
+    LDI r20, SCRATCH
+    STRO r20, "/yes confirms and executes it."
     CALL write_line_to_buf
     LDI r1, 1
     CALL write_prompt
@@ -642,6 +678,10 @@ cmd_help:
 
 cmd_clear:
     LDI r1, 1
+    ; Cancel any pending /run.
+    LDI r20, RUN_PENDING
+    LDI r0, 0
+    STORE r20, r0
     ; Clear text buffer to spaces
     LDI r20, BUF
     LDI r6, 32
@@ -674,6 +714,10 @@ cc_clear:
 
 cmd_sys:
     LDI r1, 1
+    ; Cancel any pending /run.
+    LDI r20, RUN_PENDING
+    LDI r0, 0
+    STORE r20, r0
     LDI r20, SCRATCH
     STRO r20, "Geometry OS v2.0"
     CALL write_line_to_buf
@@ -742,22 +786,60 @@ run_check_zero:
     CMP r0, r6
     JZ r0, run_failed_empty
 
-    ; Success! r0 = word count. Show it.
-    ; We can't easily print a number, so just say "Running..."
-    LDI r20, SCRATCH
-    STRO r20, "Compiled! Running..."
-    CALL write_line_to_buf
+    ; Success -- r0 = word count. Park it in RUN_PENDING and wait for /yes.
+    ; AI-generated code has full VM privileges (files, network, shutdown),
+    ; so we require an explicit second keystroke before RUNNEXT.
+    LDI r20, RUN_PENDING
+    STORE r20, r0
     LDI r1, 1
 
-    ; Jump into the assembled bytecode
-    RUNNEXT
-    ; Note: RUNNEXT never returns. It jumps PC to 0x1000.
-    ; If it somehow does return (shouldn't happen), fall through:
+    LDI r20, SCRATCH
+    STRO r20, "Compiled OK. /yes to run."
+    CALL write_line_to_buf
+    LDI r1, 1
+    LDI r20, SCRATCH
+    STRO r20, "Any other input cancels."
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
     JMP hk_ret
 
 run_failed_empty:
+    ; Treat zero-word output as a failure -- nothing to run.
+    LDI r20, RUN_PENDING
+    LDI r0, 0
+    STORE r20, r0
     LDI r20, SCRATCH
     STRO r20, "Assembly produced 0 words"
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+cmd_yes:
+    LDI r1, 1
+    ; Check RUN_PENDING -- if zero, nothing to confirm.
+    LDI r20, RUN_PENDING
+    LOAD r0, r20
+    LDI r6, 0
+    CMP r0, r6
+    JZ r0, yes_nothing_pending
+
+    ; Clear pending flag then jump into bytecode at 0x1000.
+    LDI r20, RUN_PENDING
+    LDI r6, 0
+    STORE r20, r6
+    LDI r20, SCRATCH
+    STRO r20, "Running..."
+    CALL write_line_to_buf
+    LDI r1, 1
+    RUNNEXT
+    ; RUNNEXT never returns.
+    JMP hk_ret
+
+yes_nothing_pending:
+    LDI r20, SCRATCH
+    STRO r20, "Nothing to confirm. Use /run first."
     CALL write_line_to_buf
     LDI r1, 1
     CALL write_prompt
