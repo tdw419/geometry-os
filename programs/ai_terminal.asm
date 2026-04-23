@@ -4,8 +4,10 @@
 ; Type a message, press Enter to send. Response appears below.
 ; Conversation history is maintained for context.
 ; /run assembles the last AI response. /yes confirms and executes it.
-; AI-written bytecode has full VM privileges, so the /run + /yes two-step
-; is intentional -- any other input between the two cancels the pending run.
+; AI-written bytecode runs in a sandboxed child process (SPAWNC with
+; capability restrictions). The child has memory isolation via COW
+; page tables and VFS access limited to /tmp/* (read+write) and
+; /lib/* (read only). If SPAWNC fails, falls back to RUNNEXT (legacy).
 ; Commands: /clear /help /sys /run /yes
 ;
 ; RAM Layout:
@@ -17,6 +19,8 @@
 ;   0x5400-0x63FF  LLM prompt buffer (4K)
 ;   0x6400-0x73FF  LLM response buffer (4K)
 ;   0x7400-0x74FF  Conversation history (last response only, for context)
+;   0x7500-0x7509  Sandbox capability list (for SPAWNC)
+;   0x7600-0x762F  Sandbox pattern strings ("/tmp/*", "/lib/*")
 ;
 ; Registers:
 ;   r0: CMP result (reserved)
@@ -37,6 +41,8 @@
 #define HISTORY 0x7400
 #define ASM_STATUS 0xFFD
 #define RUN_PENDING 0x7830   ; Nonzero = compiled bytecode waiting for /yes
+#define SANDBOX_CAPS 0x7500  ; Sandbox capability list for SPAWNC
+#define SANDBOX_STRS 0x7600  ; Pattern strings for sandbox capabilities
 
 ; =========================================
 ; INIT
@@ -825,16 +831,51 @@ cmd_yes:
     CMP r0, r6
     JZ r0, yes_nothing_pending
 
-    ; Clear pending flag then jump into bytecode at 0x1000.
+    ; Clear pending flag.
     LDI r20, RUN_PENDING
     LDI r6, 0
     STORE r20, r6
+
+    ; Build sandbox capability list and spawn child process.
+    ; The child runs the assembled bytecode at 0x1000 with restricted
+    ; VFS access (read/write /tmp/*, read /lib/*) and memory isolation
+    ; via copy-on-write page tables.
+    CALL build_sandbox_caps
+    LDI r1, 1
+
     LDI r20, SCRATCH
-    STRO r20, "Running..."
+    STRO r20, "Spawning sandbox..."
     CALL write_line_to_buf
     LDI r1, 1
+
+    ; SPAWNC r10, r11 -- r10=start addr, r11=caps list addr
+    LDI r10, 0x1000
+    LDI r11, SANDBOX_CAPS
+    SPAWNC r10, r11
+
+    ; Check result in RAM[0xFFA]
+    LDI r20, ASM_STATUS
+    LDI r21, 0xFFA
+    LOAD r0, r21
+    LDI r6, 0xFFFFFFFF
+    CMP r0, r6
+    JZ r0, yes_spawn_failed
+
+    ; Success -- child PID in r0
+    LDI r20, SCRATCH
+    STRO r20, "Sandbox running."
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+yes_spawn_failed:
+    LDI r20, SCRATCH
+    STRO r20, "Spawn failed! Falling back to RUNNEXT."
+    CALL write_line_to_buf
+    LDI r1, 1
+    ; Fallback -- run in-process (legacy behavior)
     RUNNEXT
-    ; RUNNEXT never returns.
     JMP hk_ret
 
 yes_nothing_pending:
@@ -1118,6 +1159,78 @@ cb_loop:
 cb_done:
     POP r16
     POP r12
+    POP r31
+    RET
+
+; =========================================
+; BUILD_SANDBOX_CAPS -- construct capability
+; list at SANDBOX_CAPS for SPAWNC.
+; Grants: /tmp/* (read+write), /lib/* (read)
+; Pattern strings at SANDBOX_STRS.
+; =========================================
+build_sandbox_caps:
+    PUSH r31
+    LDI r1, 1
+
+    ; Write pattern strings
+    ; "/tmp/*" at SANDBOX_STRS (0x7600)
+    LDI r20, SANDBOX_STRS
+    STRO r20, "/tmp/*"
+
+    ; "/lib/*" at SANDBOX_STRS+16 (0x7610)
+    LDI r20, SANDBOX_STRS
+    ADDI r20, 16
+    STRO r20, "/lib/*"
+
+    ; Build capability struct at SANDBOX_CAPS (0x7500)
+    ; [0x7500]: 2 (n_entries)
+    LDI r20, SANDBOX_CAPS
+    LDI r6, 2
+    STORE r20, r6
+
+    ; Entry 0: VFS path /tmp/* with read+write (0x03)
+    ; [0x7501]: resource_type = 0 (VFS path)
+    LDI r20, SANDBOX_CAPS
+    ADDI r20, 1
+    LDI r6, 0
+    STORE r20, r6
+    ; [0x7502]: pattern_addr = 0x7600
+    ADDI r20, 1
+    LDI r6, SANDBOX_STRS
+    STORE r20, r6
+    ; [0x7503]: pattern_len = 6
+    ADDI r20, 1
+    LDI r6, 6
+    STORE r20, r6
+    ; [0x7504]: permissions = 0x03 (read+write)
+    ADDI r20, 1
+    LDI r6, 3
+    STORE r20, r6
+
+    ; Entry 1: VFS path /lib/* with read (0x01)
+    ; [0x7505]: resource_type = 0 (VFS path)
+    ADDI r20, 1
+    LDI r6, 0
+    STORE r20, r6
+    ; [0x7506]: pattern_addr = 0x7610
+    ADDI r20, 1
+    LDI r6, SANDBOX_STRS
+    ADDI r6, 16
+    STORE r20, r6
+    ; [0x7507]: pattern_len = 6
+    ADDI r20, 1
+    LDI r6, 6
+    STORE r20, r6
+    ; [0x7508]: permissions = 0x01 (read only)
+    ADDI r20, 1
+    LDI r6, 1
+    STORE r20, r6
+
+    ; [0x7509]: sentinel 0xFFFFFFFF
+    ADDI r20, 1
+    LDI r6, 0xFFFFFFFF
+    STORE r20, r6
+
     POP r31
     RET
 
