@@ -575,3 +575,150 @@ fn test_ai_terminal_build_sandbox_caps_assembles() {
     geometry_os::assembler::assemble(&preprocessed, 0)
         .expect("ai_terminal.asm with sandbox caps should assemble");
 }
+
+// ── Phase 110: /focus and /status commands ────────────────────
+
+/// Helper: load ai_terminal.asm into a VM, run for initial frames to get past init.
+fn load_ai_terminal() -> geometry_os::vm::Vm {
+    let source = include_str!("../programs/ai_terminal.asm");
+    let mut pp = geometry_os::preprocessor::Preprocessor::new();
+    let preprocessed = pp.preprocess(source);
+    let asm = geometry_os::assembler::assemble(&preprocessed, 0)
+        .expect("ai_terminal.asm should assemble");
+
+    let mut vm = geometry_os::vm::Vm::new();
+    // Load program
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm
+}
+
+/// Helper: run the AI terminal for some frames, yielding between key injections.
+/// Pushes keys into the key buffer, runs until processed.
+fn run_frames_with_keys(vm: &mut geometry_os::vm::Vm, keys: &[u32], max_cycles_per_key: usize) {
+    // Run initial frames to get past init
+    for _ in 0..20 {
+        let mut cycles = 0;
+        while !vm.yielded && !vm.halted && cycles < 50000 {
+            vm.step();
+            cycles += 1;
+        }
+        vm.yielded = false;
+    }
+
+    // Inject keys one at a time
+    for &key in keys {
+        vm.push_key(key);
+        let mut cycles = 0;
+        while !vm.yielded && !vm.halted && cycles < max_cycles_per_key {
+            vm.step();
+            cycles += 1;
+        }
+        vm.yielded = false;
+        // Run a few more frames to let the command process
+        for _ in 0..3 {
+            let mut c = 0;
+            while !vm.yielded && !vm.halted && c < 50000 {
+                vm.step();
+                c += 1;
+            }
+            vm.yielded = false;
+        }
+    }
+}
+
+#[test]
+fn test_ai_terminal_focus_command_sets_ram() {
+    // Type "/focus 0x40" + Enter into the AI terminal.
+    // This should write 0x40 to RAM[0x7821].
+    let mut vm = load_ai_terminal();
+
+    // "/focus 0x40\r"
+    let keys: Vec<u32> = vec![
+        b'/' as u32, b'f' as u32, b'o' as u32, b'c' as u32,
+        b'u' as u32, b's' as u32, b' ' as u32,
+        b'0' as u32, b'x' as u32, b'4' as u32, b'0' as u32,
+        13, // Enter
+    ];
+    run_frames_with_keys(&mut vm, &keys, 100_000);
+
+    assert_eq!(
+        vm.ram[0x7821], 0x40,
+        "/focus 0x40 should set RAM[0x7821] to 0x40, got 0x{:X}",
+        vm.ram[0x7821]
+    );
+}
+
+#[test]
+fn test_ai_terminal_focus_off_clears_ram() {
+    // Type "/focus 0x40" then "/focus off" + Enter.
+    let mut vm = load_ai_terminal();
+
+    // First set focus
+    let set_keys: Vec<u32> = vec![
+        b'/' as u32, b'f' as u32, b'o' as u32, b'c' as u32,
+        b'u' as u32, b's' as u32, b' ' as u32,
+        b'0' as u32, b'x' as u32, b'4' as u32, b'0' as u32,
+        13,
+    ];
+    run_frames_with_keys(&mut vm, &set_keys, 100_000);
+    assert_eq!(vm.ram[0x7821], 0x40, "precondition: focus should be 0x40");
+
+    // Now clear it: "/focus off\r"
+    let off_keys: Vec<u32> = vec![
+        b'/' as u32, b'f' as u32, b'o' as u32, b'c' as u32,
+        b'u' as u32, b's' as u32, b' ' as u32,
+        b'o' as u32, b'f' as u32, b'f' as u32,
+        13,
+    ];
+    run_frames_with_keys(&mut vm, &off_keys, 100_000);
+    assert_eq!(
+        vm.ram[0x7821], 0,
+        "/focus off should clear RAM[0x7821], got 0x{:X}",
+        vm.ram[0x7821]
+    );
+}
+
+#[test]
+fn test_ai_terminal_status_command_runs() {
+    // "/status\r" should run without crashing.
+    // After init, RAM[0xFFD] should be 0 (no assembly yet).
+    let mut vm = load_ai_terminal();
+
+    let keys: Vec<u32> = vec![
+        b'/' as u32, b's' as u32, b't' as u32, b'a' as u32,
+        b't' as u32, b'u' as u32, b's' as u32,
+        13,
+    ];
+    run_frames_with_keys(&mut vm, &keys, 100_000);
+
+    // If we got here without a panic, the /status command executed.
+    // Check the init set asm_dev mode: RAM[0x7820] = 1
+    assert_eq!(
+        vm.ram[0x7820], 1,
+        "ai_terminal should set RAM[0x7820]=1 for asm_dev mode"
+    );
+}
+
+#[test]
+fn test_ai_terminal_focus_bad_arg_no_crash() {
+    // "/focus xyz\r" should show usage, not crash.
+    let mut vm = load_ai_terminal();
+
+    let keys: Vec<u32> = vec![
+        b'/' as u32, b'f' as u32, b'o' as u32, b'c' as u32,
+        b'u' as u32, b's' as u32, b' ' as u32,
+        b'x' as u32, b'y' as u32, b'z' as u32,
+        13,
+    ];
+    run_frames_with_keys(&mut vm, &keys, 100_000);
+
+    // Should not have changed focus (remains 0 from init)
+    assert_eq!(
+        vm.ram[0x7821], 0,
+        "bad /focus arg should leave RAM[0x7821] unchanged"
+    );
+}

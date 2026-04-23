@@ -8,7 +8,7 @@
 ; capability restrictions). The child has memory isolation via COW
 ; page tables and VFS access limited to /tmp/* (read+write) and
 ; /lib/* (read only). If SPAWNC fails, falls back to RUNNEXT (legacy).
-; Commands: /clear /help /sys /run /yes
+; Commands: /clear /help /sys /run /yes /focus /status
 ;
 ; RAM Layout:
 ;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
@@ -461,10 +461,68 @@ try_yes_cmd:
     ADD r20, r1           ; skip '/'
     LOAD r22, r20
     CMPI r22, 121        ; 'y'
-    JNZ r0, send_to_llm
+    JNZ r0, try_focus_cmd
     ADD r20, r1
     LOAD r22, r20
     CMPI r22, 101        ; 'e'
+    JNZ r0, try_focus_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
+    JNZ r0, try_focus_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 0          ; null
+    JNZ r0, try_focus_cmd
+    JMP cmd_yes
+
+try_focus_cmd:
+    ; Check /focus -- set focus opcode for targeted LLM diagnostics
+    LDI r20, SCRATCH
+    ADD r20, r1           ; skip '/'
+    LOAD r22, r20
+    CMPI r22, 102        ; 'f'
+    JNZ r0, try_status_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 111        ; 'o'
+    JNZ r0, try_status_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 99         ; 'c'
+    JNZ r0, try_status_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 117        ; 'u'
+    JNZ r0, try_status_cmd
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
+    JNZ r0, try_status_cmd
+    JMP cmd_focus
+
+try_status_cmd:
+    ; Check /status -- show current focus opcode and last assemble result
+    LDI r20, SCRATCH
+    ADD r20, r1           ; skip '/'
+    LOAD r22, r20
+    CMPI r22, 115        ; 's'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 116        ; 't'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 97         ; 'a'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 116        ; 't'
+    JNZ r0, send_to_llm
+    ADD r20, r1
+    LOAD r22, r20
+    CMPI r22, 117        ; 'u'
     JNZ r0, send_to_llm
     ADD r20, r1
     LOAD r22, r20
@@ -474,7 +532,7 @@ try_yes_cmd:
     LOAD r22, r20
     CMPI r22, 0          ; null
     JNZ r0, send_to_llm
-    JMP cmd_yes
+    JMP cmd_status
 
 ; =========================================
 ; SEND_TO_LLM
@@ -672,7 +730,7 @@ cmd_help:
     CALL write_line_to_buf
     LDI r1, 1
     LDI r20, SCRATCH
-    STRO r20, "Type to chat. /run compiles AI code,"
+    STRO r20, "/focus 0xNN /status /run /yes"
     CALL write_line_to_buf
     LDI r1, 1
     LDI r20, SCRATCH
@@ -885,6 +943,345 @@ yes_nothing_pending:
     LDI r1, 1
     CALL write_prompt
     JMP hk_ret
+
+; =========================================
+; /focus -- set focus opcode for targeted diagnostics
+; Usage: /focus 0x40   (set focus to PSET)
+;        /focus off    (clear focus)
+; Writes the parsed value to RAM[0x7821].
+; The asm_dev system prompt will then inject a targeted hint
+; telling the LLM to exercise that specific opcode.
+; =========================================
+cmd_focus:
+    LDI r1, 1
+
+    ; Walk SCRATCH past "/focus" to the argument.
+    ; SCRATCH+7 should be first char of argument (or space or null).
+    LDI r20, SCRATCH
+    ADDI r20, 7           ; skip "/focus"
+    LOAD r22, r20
+    CMPI r22, 0
+    JZ r0, focus_show     ; bare "/focus" with no arg -> show current
+
+    ; Skip spaces between /focus and arg
+focus_skip_space:
+    CMPI r22, 32          ; space
+    JNZ r0, focus_parse_arg
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 0
+    JNZ r0, focus_skip_space
+    JMP focus_show        ; trailing spaces only -> show current
+
+focus_parse_arg:
+    ; Check for "off" -> clear focus
+    CMPI r22, 111         ; 'o'
+    JNZ r0, focus_try_hex
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 102         ; 'f'
+    JNZ r0, focus_try_hex
+    ADDI r20, 1
+    LOAD r22, r20
+    CMPI r22, 102         ; 'f'
+    JNZ r0, focus_try_hex
+    ; "off" matched -- clear focus
+    LDI r20, 0x7821
+    LDI r0, 0
+    STORE r20, r0
+    LDI r20, SCRATCH
+    STRO r20, "Focus cleared."
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+focus_try_hex:
+    ; Expect "0x" prefix then 2 hex digits
+    ; r20 currently points to first char of argument (after "/focus ")
+    ; We reload from SCRATCH+7 and re-skip spaces because r20 may be stale.
+    LDI r21, SCRATCH
+    ADDI r21, 7           ; reset to after "/focus"
+    ; Re-skip spaces
+focus_hex_skip:
+    LOAD r22, r21
+    CMPI r22, 32
+    JZ r0, focus_hex_next
+    JMP focus_hex_check
+focus_hex_next:
+    ADDI r21, 1
+    JMP focus_hex_skip
+
+focus_hex_check:
+    LOAD r22, r21
+    CMPI r22, 48          ; '0'
+    JNZ r0, focus_bad_arg
+    ADDI r21, 1
+    LOAD r22, r21
+    CMPI r22, 120         ; 'x'
+    JNZ r0, focus_bad_arg
+    ADDI r21, 1
+
+    ; Parse first hex digit into r23 (high nibble)
+    LOAD r22, r21
+    LDI r23, 0
+    ; Check '0'-'9': r22 >= 48 AND r22 < 58
+    CMPI r22, 48
+    BLT r0, focus_hi_not_digit   ; r22 < 48, not '0'-'9'
+    CMPI r22, 58
+    BGE r0, focus_hi_not_digit   ; r22 >= 58, past '9'
+    ; It IS '0'-'9'
+    SUBI r22, 48
+    MOV r23, r22
+    SHLI r23, 4
+    JMP focus_lo_digit_start
+
+focus_hi_not_digit:
+    ; Check 'A'-'F': r22 >= 65 AND r22 < 71
+    CMPI r22, 65
+    BLT r0, focus_hi_not_upper   ; < 'A'
+    CMPI r22, 71
+    BGE r0, focus_hi_not_upper   ; > 'F'
+    ; It IS 'A'-'F'
+    SUBI r22, 55                 ; 'A'=65 -> 10
+    MOV r23, r22
+    SHLI r23, 4
+    JMP focus_lo_digit_start
+
+focus_hi_not_upper:
+    ; Check 'a'-'f': r22 >= 97 AND r22 < 103
+    CMPI r22, 97
+    BLT r0, focus_bad_arg
+    CMPI r22, 103
+    BGE r0, focus_bad_arg
+    ; It IS 'a'-'f'
+    SUBI r22, 87                 ; 'a'=97 -> 10
+    MOV r23, r22
+    SHLI r23, 4
+
+focus_lo_digit_start:
+    ADDI r21, 1
+
+    ; Parse second hex digit
+    LOAD r22, r21
+    ; Check '0'-'9'
+    CMPI r22, 48
+    BLT r0, focus_lo_not_digit
+    CMPI r22, 58
+    BGE r0, focus_lo_not_digit
+    SUBI r22, 48
+    OR r23, r22
+    JMP focus_write
+
+focus_lo_not_digit:
+    ; Check 'A'-'F'
+    CMPI r22, 65
+    BLT r0, focus_lo_not_upper
+    CMPI r22, 71
+    BGE r0, focus_lo_not_upper
+    SUBI r22, 55
+    OR r23, r22
+    JMP focus_write
+
+focus_lo_not_upper:
+    ; Check 'a'-'f'
+    CMPI r22, 97
+    BLT r0, focus_bad_arg
+    CMPI r22, 103
+    BGE r0, focus_bad_arg
+    SUBI r22, 87
+    OR r23, r22
+
+focus_write:
+
+    ; Write to RAM[0x7821]
+    LDI r20, 0x7821
+    STORE r20, r23
+
+    ; Show confirmation
+    LDI r20, SCRATCH
+    STRO r20, "Focus set: 0x"
+    CALL advance_to_null
+    ; Append 2 hex digits
+    MOV r0, r23
+    SHRI r0, 4
+    CALL hex_digit_char
+    STORE r20, r0
+    ADDI r20, 1
+    MOV r0, r23
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r20, r0
+    ADDI r20, 1
+    LDI r0, 0
+    STORE r20, r0
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+focus_show:
+    ; Show current focus value
+    LDI r20, 0x7821
+    LOAD r23, r20
+    LDI r20, SCRATCH
+    STRO r20, "Focus: 0x"
+    CALL advance_to_null
+    MOV r0, r23
+    SHRI r0, 4
+    CALL hex_digit_char
+    STORE r20, r0
+    ADDI r20, 1
+    MOV r0, r23
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r20, r0
+    ADDI r20, 1
+    LDI r0, 0
+    STORE r20, r0
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+focus_bad_arg:
+    LDI r20, SCRATCH
+    STRO r20, "Usage: /focus 0xNN or /focus off"
+    CALL write_line_to_buf
+    LDI r1, 1
+    CALL write_prompt
+    JMP hk_ret
+
+; =========================================
+; /status -- display focus opcode and last assemble result
+; =========================================
+cmd_status:
+    LDI r1, 1
+
+    ; Show focus opcode
+    LDI r20, 0x7821
+    LOAD r23, r20
+    LDI r20, SCRATCH
+    STRO r20, "Focus opcode: 0x"
+    CALL advance_to_null
+    MOV r0, r23
+    SHRI r0, 4
+    CALL hex_digit_char
+    STORE r20, r0
+    ADDI r20, 1
+    MOV r0, r23
+    ANDI r0, 0xF
+    CALL hex_digit_char
+    STORE r20, r0
+    ADDI r20, 1
+    LDI r0, 0
+    STORE r20, r0
+    CALL write_line_to_buf
+    LDI r1, 1
+
+    ; Show last assemble status (simplified: FAILED / OK / no assembly yet)
+    LDI r20, ASM_STATUS
+    LOAD r23, r20
+    LDI r7, 0xFFFFFFFF
+    CMP r23, r7
+    JNZ r0, status_not_failed
+    LDI r20, SCRATCH
+    STRO r20, "ASM: FAILED"
+    CALL write_line_to_buf
+    LDI r1, 1
+    JMP status_done
+
+status_not_failed:
+    LDI r7, 0
+    CMP r23, r7
+    JNZ r0, status_has_count
+    LDI r20, SCRATCH
+    STRO r20, "ASM: no assembly yet"
+    CALL write_line_to_buf
+    LDI r1, 1
+    JMP status_done
+
+status_has_count:
+    LDI r20, SCRATCH
+    STRO r20, "ASM: compiled OK"
+    CALL write_line_to_buf
+    LDI r1, 1
+
+status_done:
+    ; Show prompt mode
+    LDI r20, 0x7820
+    LOAD r23, r20
+    CMPI r23, 1
+    JNZ r0, status_oracle_mode
+    LDI r20, SCRATCH
+    STRO r20, "Prompt: asm_dev (opcode-aware)"
+    CALL write_line_to_buf
+    LDI r1, 1
+    JMP status_final
+
+status_oracle_mode:
+    LDI r20, SCRATCH
+    STRO r20, "Prompt: oracle (world guide)"
+    CALL write_line_to_buf
+    LDI r1, 1
+
+status_final:
+    CALL write_prompt
+    JMP hk_ret
+
+; =========================================
+; HEX_DIGIT_VAL -- convert ASCII hex char to value
+; Input: r22 = ASCII char
+; Output: r0 = 0-15, or 0xFF if invalid
+; =========================================
+hex_digit_val:
+    ; '0'-'9' -> 0-9
+    CMPI r22, 48
+    BLT r0, hex_val_bad
+    CMPI r22, 58          ; '9'+1
+    BGE r0, hex_val_try_upper
+    SUBI r22, 48
+    MOV r0, r22
+    RET
+
+hex_val_try_upper:
+    ; 'A'-'F' -> 10-15
+    CMPI r22, 65          ; 'A'
+    BLT r0, hex_val_try_lower
+    CMPI r22, 71          ; 'F'+1
+    BGE r0, hex_val_try_lower
+    SUBI r22, 55          ; 'A'-10
+    MOV r0, r22
+    RET
+
+hex_val_try_lower:
+    ; 'a'-'f' -> 10-15
+    CMPI r22, 97          ; 'a'
+    BLT r0, hex_val_bad
+    CMPI r22, 103         ; 'f'+1
+    BGE r0, hex_val_bad
+    SUBI r22, 87          ; 'a'-10
+    MOV r0, r22
+    RET
+
+hex_val_bad:
+    LDI r0, 0xFF
+    RET
+
+; =========================================
+; HEX_DIGIT_CHAR -- convert nibble (0-15) to ASCII hex char
+; Input: r0 = nibble value (0-15)
+; Output: r0 = ASCII char
+; =========================================
+hex_digit_char:
+    CMPI r0, 10
+    BGE r0, hdc_alpha
+    ADDI r0, 48           ; '0' + val
+    RET
+
+hdc_alpha:
+    ADDI r0, 55           ; 'A' + (val-10)
+    RET
 
 ; =========================================
 ; WRITE_PROMPT -- write "> " on current row

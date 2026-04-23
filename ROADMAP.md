@@ -1,10 +1,10 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 109/109 phases complete, 0 in_progress, 0 planned
+**Progress:** 110/110 phases complete, 0 in_progress, 0 planned
 
-**Deliverables:** 479/479 complete
+**Deliverables:** 483/483 complete
 
 ## Scope Summary
 
@@ -119,6 +119,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 o
 | phase-107 Infinite Spatial Desktop | COMPLETE | 6/6 | 1,220 | 12 |
 | phase-108 Sandboxed AI Execution | COMPLETE | 3/3 | 180 | 8 |
 | phase-109 Live Opcode Inventory Injection | COMPLETE | 3/3 | 110 | 7 |
+| phase-110 AI Terminal /focus and /status Commands | COMPLETE | 4/4 | 200 | 4 |
 
 ## Dependencies
 
@@ -2559,3 +2560,21 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
   - [x] asm_dev_prompt_with_focus_injects_targeted_hint
   - [x] asm_dev_prompt_surfaces_last_assemble_failure
   - [x] oracle_mode_prompt_has_no_opcode_inventory
+
+## [x] phase-110: AI Terminal /focus and /status Commands (COMPLETE)
+
+**Goal:** Wire the Phase 109 prompt-context hooks (RAM[0x7821] focus, RAM[0xFFD] status) to user-facing commands in ai_terminal.asm so the AI Terminal can be steered toward targeted diagnostic output from the keyboard.
+
+### Deliverables
+
+- [x] **`/focus 0xNN` command** -- parses 2-hex-digit opcode byte, writes to RAM[0x7821]. Bare `/focus` shows current value. `/focus off` clears it. Inline hex parser using CMPI+BLT/BGE range checks (no subroutine needed).
+  - [x] Hex range check: '0'-'9', 'A'-'F', 'a'-'f'
+  - [x] Confirmation message with hex display
+  - [x] Usage error on bad input
+- [x] **`/status` command** -- displays focus opcode (RAM[0x7821]), last assemble result (RAM[0xFFD]: FAILED/OK/no assembly yet), and prompt mode (asm_dev vs oracle).
+- [x] **Command dispatch** -- inserted after `/yes` in the do_enter chain. `/focus` falls through to `/status`, which falls through to `send_to_llm`. Updated `/help` text.
+- [x] **Integration tests** -- 4 tests loading full ai_terminal.asm, injecting keystrokes via push_key(), verifying RAM state changes.
+  - [x] test_ai_terminal_focus_command_sets_ram -- "/focus 0x40" sets RAM[0x7821]=0x40
+  - [x] test_ai_terminal_focus_off_clears_ram -- "/focus off" clears RAM[0x7821]
+  - [x] test_ai_terminal_status_command_runs -- "/status" executes without crash
+  - [x] test_ai_terminal_focus_bad_arg_no_crash -- bad arg leaves RAM unchanged
