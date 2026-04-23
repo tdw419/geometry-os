@@ -6,6 +6,12 @@
 ; Buildings represent apps (games, utilities, creative, system) placed at
 ; deterministic positions on the map. Taskbar at bottom shows biome, app
 ; count, and clock. Minimap shows building markers.
+; Command bar: press / to enter type mode. Type a command and press Enter.
+;   /tp X Y        -- teleport player to coordinates
+;   /build NAME    -- add building at current player position
+;   plain text     -- send to Oracle LLM for a response
+;   Escape         -- exit type mode without executing
+; Oracle responses appear as an overlay at the top of the screen.
 ;
 ; Phase 84 additions:
 ;   - 8 app buildings at fixed world positions (RAM[0x7500-0x757F])
@@ -72,6 +78,11 @@
 ;   RAM[0x7809] = player_y (world tile coords, initially 32)
 ;   RAM[0x780A] = player_facing (0=down, 1=up, 2=left, 3=right)
 ;   RAM[0x780B] = walk_frame (toggles 0/1 for walk animation)
+;   RAM[0x7830] = CMD_MODE (0=move, 1=type). Press / to toggle.
+;   RAM[0x7831] = CMD_LEN (current input length, 0-63)
+;   RAM[0x7832..0x7871] = CMD_BUF (64 chars typed command)
+;   RAM[0x7872] = ORACLE_RESP_READY (0=no response, 1=response waiting)
+;   RAM[0x7873..0x7A72] = ORACLE_RESP_BUF (Oracle response text, max 895 chars)
 ;   RAM[0x7100-0x74FF] = 32x32 minimap pixel cache (1024 dimmed biome colors)
 ;   RAM[0xFFB]  = key bitmask
 ;
@@ -640,6 +651,14 @@ STORE r17, r18          ; facing = down
 LDI r17, 0x780B
 STORE r17, r18          ; walk_frame = 0
 
+; ===== Init Command Mode =====
+LDI r17, 0x7830
+STORE r17, r18          ; CMD_MODE = 0 (move mode)
+LDI r17, 0x7831
+STORE r17, r18          ; CMD_LEN = 0
+LDI r17, 0x7872
+STORE r17, r18          ; ORACLE_RESP_READY = 0
+
 ; ===== Main Loop =====
 main_loop:
 
@@ -659,6 +678,88 @@ LOAD r16, r10           ; r16 = key bitmask
 
 ; --- Reset stack pointer (render loop may trash r30) ---
 LDI r30, 0xFF00
+
+; ===== Command Mode Key Handling =====
+; IKEY reads one char per frame from the key ring buffer.
+; In MOVE mode: check for '/' to toggle to TYPE mode.
+; In TYPE mode: capture keystrokes into CMD_BUF.
+LDI r17, 0x7830
+LOAD r17, r17           ; r17 = CMD_MODE
+JZ r17, check_slash_toggle   ; CMD_MODE == 0 → check for / toggle
+
+; --- TYPE MODE: capture keystroke ---
+IKEY r17
+JZ r17, cmd_type_no_key      ; no key pressed
+
+; Escape (27) exits type mode
+CMPI r17, 27
+JNZ r0, cmd_not_escape
+LDI r17, 0x7830
+LDI r18, 0
+STORE r17, r18               ; CMD_MODE = 0
+LDI r17, 0x7831
+STORE r17, r18               ; CMD_LEN = 0
+JMP cmd_type_no_key
+
+cmd_not_escape:
+; Enter (13) executes command
+CMPI r17, 13
+JNZ r0, cmd_not_enter
+CALL cmd_execute
+LDI r17, 0x7830
+LDI r18, 0
+STORE r17, r18               ; CMD_MODE = 0 (back to move mode)
+LDI r17, 0x7831
+STORE r17, r18               ; CMD_LEN = 0
+JMP cmd_type_no_key
+
+cmd_not_enter:
+; Backspace (8 or 127)
+CMPI r17, 8
+JZ r0, cmd_do_bs
+CMPI r17, 127
+JNZ r0, cmd_do_char
+cmd_do_bs:
+LDI r17, 0x7831
+LOAD r18, r17                ; r18 = CMD_LEN
+JZ r18, cmd_type_no_key      ; already empty
+SUBI r18, 1
+STORE r17, r18               ; CMD_LEN--
+JMP cmd_type_no_key
+
+cmd_do_char:
+; Append char to CMD_BUF if room. IKEY char is in r17.
+MOV r27, r17                  ; save char in r27 (not used by main loop yet)
+LDI r17, 0x7831
+LOAD r18, r17                 ; r18 = CMD_LEN
+CMPI r18, 63
+BGE r0, cmd_type_no_key       ; buffer full
+LDI r19, 0x7832
+ADD r19, r18                  ; r19 = CMD_BUF + CMD_LEN
+STORE r19, r27                ; CMD_BUF[len] = char
+ADDI r18, 1
+STORE r17, r18                ; CMD_LEN = len + 1
+JMP cmd_type_no_key
+
+check_slash_toggle:
+; MOVE MODE: check if '/' pressed to enter type mode
+IKEY r17
+JZ r17, cmd_move_no_key
+CMPI r17, 47                 ; '/'
+JNZ r0, cmd_move_no_key
+LDI r17, 0x7830
+LDI r18, 1
+STORE r17, r18               ; CMD_MODE = 1
+LDI r17, 0x7831
+LDI r18, 0
+STORE r17, r18               ; CMD_LEN = 0
+cmd_move_no_key:
+
+; If in TYPE mode, skip player movement
+cmd_type_no_key:
+LDI r17, 0x7830
+LOAD r17, r17
+JNZ r17, player_move_done    ; type mode → no movement
 
 ; --- Player movement (every frame) ---
 
@@ -2181,6 +2282,91 @@ POP r31
 
 mm_bldg_skip:
 
+; ===== Draw Command Bar (y=228..239) =====
+; Shows "> " prompt when in type mode, dim "/" hint when in move mode.
+; Also shows Oracle response overlay if one is waiting.
+LDI r17, 0x0D0D1A          ; dark background
+LDI r18, 0
+LDI r19, 228
+LDI r22, 256
+LDI r23, 12
+RECTF r18, r19, r22, r23, r17
+
+; Check CMD_MODE
+LDI r17, 0x7830
+LOAD r17, r17
+JNZ r17, cmd_bar_type_mode
+
+; Move mode: show dim "/" hint
+LDI r18, 4
+LDI r19, 229
+LDI r20, 0x5000
+STRO r20, "/cmd"
+LDI r21, 0x555566
+LDI r17, 0x0D0D1A
+DRAWTEXT r18, r19, r20, r21, r17
+JMP cmd_bar_done
+
+cmd_bar_type_mode:
+; Type mode: show "> " + CMD_BUF contents
+LDI r20, 0x5000
+STRO r20, "> "
+LDI r18, 4
+LDI r19, 229
+LDI r21, 0x44FF44        ; green prompt
+LDI r17, 0x0D0D1A
+DRAWTEXT r18, r19, r20, r21, r17
+
+; Draw CMD_BUF contents after "> "
+LDI r17, 0x7831
+LOAD r18, r17              ; r18 = CMD_LEN
+JZ r18, cmd_bar_done       ; nothing typed
+
+; Null-terminate CMD_BUF at position CMD_LEN
+LDI r17, 0x7832
+ADD r17, r18               ; r17 = CMD_BUF + CMD_LEN
+LDI r19, 0
+STORE r17, r19             ; null terminate
+
+; Render at x=20 (after "> ")
+LDI r18, 20
+LDI r19, 229
+LDI r20, 0x7832
+LDI r21, 0xFFFFFF          ; white text
+LDI r17, 0x0D0D1A
+DRAWTEXT r18, r19, r20, r21, r17
+
+cmd_bar_done:
+
+; ===== Draw Oracle Response Overlay =====
+; If ORACLE_RESP_READY, show response text at top-center of screen
+LDI r17, 0x7872
+LOAD r17, r17
+JZ r17, oracle_no_resp
+
+; Semi-transparent background box at y=4..60
+LDI r17, 0x0A0A14
+LDI r18, 20
+LDI r19, 4
+LDI r22, 216
+LDI r23, 56
+RECTF r18, r19, r22, r23, r17
+
+; Draw response text
+LDI r18, 24
+LDI r19, 6
+LDI r20, 0x7873
+LDI r21, 0x00FFAA        ; cyan-green
+LDI r17, 0x0A0A14
+DRAWTEXT r18, r19, r20, r21, r17
+
+; Auto-clear after display (set ready=0, text persists but won't redraw)
+LDI r17, 0x7872
+LDI r18, 0
+STORE r17, r18
+
+oracle_no_resp:
+
 ; ===== Draw Taskbar (y=240..255) =====
 LDI r17, 0x1A1A2E
 LDI r18, 0
@@ -2198,11 +2384,11 @@ LDI r17, 0x1A1A2E
 STRO r20, "GeoDesk"
 DRAWTEXT r18, r19, r20, r21, r17
 
-; Apps count in middle
+; Apps count in middle (dynamic)
 LDI r18, 100
 LDI r19, 241
 LDI r20, 0x5010
-STRO r20, "Apps:8"
+STRO r20, "Apps:"
 LDI r21, 0xFFFFFF
 LDI r17, 0x1A1A2E
 DRAWTEXT r18, r19, r20, r21, r17
@@ -2279,6 +2465,228 @@ player_marker_done:
 
     FRAME
     JMP main_loop
+
+; =========================================
+; CMD_EXECUTE -- parse and run typed command
+; CMD_BUF has the text (null terminated), CMD_LEN has the length.
+; =========================================
+cmd_execute:
+PUSH r31
+LDI r1, 1
+
+; Null-terminate CMD_BUF
+LDI r17, 0x7831
+LOAD r18, r17
+LDI r17, 0x7832
+ADD r17, r18
+LDI r19, 0
+STORE r17, r19
+
+; Check first char
+LDI r17, 0x7832
+LOAD r18, r17
+CMPI r18, 47               ; '/'
+JNZ r0, cmd_oracle          ; not a / command → send to Oracle
+
+; --- Parse / commands ---
+ADDI r17, 1                  ; skip '/'
+LOAD r18, r17
+
+; /tp X Y -- teleport player
+CMPI r18, 116               ; 't'
+JNZ r0, cmd_try_build
+ADDI r17, 1
+LOAD r18, r17
+CMPI r18, 112               ; 'p'
+JNZ r0, cmd_oracle          ; not /tp, fall through to oracle
+
+; Parse first number (x) after /tp
+ADDI r17, 1                  ; skip 'p'
+CALL parse_next_number       ; r0 = number, r17 advanced past it
+LDI r19, 0x7808
+STORE r19, r0                ; player_x = parsed x
+
+; Parse second number (y)
+CALL parse_next_number
+LDI r19, 0x7809
+STORE r19, r0                ; player_y = parsed y
+
+; Show confirmation in Oracle response buffer
+LDI r17, 0x7872
+LDI r18, 1
+STORE r17, r18               ; ORACLE_RESP_READY = 1
+LDI r17, 0x7873
+STRO r17, "Teleported!"
+JMP cmd_exec_done
+
+cmd_try_build:
+; /build NAME -- add building at player position
+; Check 'b'
+LDI r17, 0x7832
+ADDI r17, 1                  ; skip '/'
+LOAD r18, r17
+CMPI r18, 98                ; 'b'
+JNZ r0, cmd_oracle
+ADDI r17, 1
+LOAD r18, r17
+CMPI r18, 117               ; 'u'
+JNZ r0, cmd_oracle
+ADDI r17, 1
+LOAD r18, r17
+CMPI r18, 105               ; 'i'
+JNZ r0, cmd_oracle
+ADDI r17, 1
+LOAD r18, r17
+CMPI r18, 108               ; 'l'
+JNZ r0, cmd_oracle
+ADDI r17, 1
+LOAD r18, r17
+CMPI r18, 100               ; 'd'
+JNZ r0, cmd_oracle
+
+; It's /build. Skip space, copy name from CMD_BUF+7 to name slot.
+; Find next building slot: building_count at 0x7580
+LDI r17, 0x7580
+LOAD r18, r17                ; r18 = current count
+CMPI r18, 32
+BGE r0, cmd_build_full       ; max 32 buildings
+
+; New building at index = count
+MOV r19, r18                 ; r19 = index
+LDI r20, 4
+MUL r19, r20                 ; r19 = index * 4
+LDI r20, 0x7500
+ADD r20, r19                 ; r20 = building base address
+
+; world_x = player_x
+LDI r17, 0x7808
+LOAD r18, r17
+STORE r20, r18
+ADDI r20, 1
+
+; world_y = player_y
+LDI r17, 0x7809
+LOAD r18, r17
+STORE r20, r18
+ADDI r20, 1
+
+; type_color = cyan (AI building)
+LDI r17, 0x00FFFF
+STORE r20, r17
+ADDI r20, 1
+
+; name_addr = 0x76D0 + index*16
+LDI r17, 0x7580
+LOAD r18, r17
+LDI r19, 16
+MUL r18, r19
+LDI r17, 0x76D0
+ADD r17, r18                 ; r17 = name_addr
+STORE r20, r17               ; building[3] = name_addr
+
+; Copy name from CMD_BUF+7 (skip "/build ") to name_addr
+LDI r20, 0x7839              ; CMD_BUF + 7 (past "/build ")
+cmd_build_copy:
+LOAD r18, r20
+JZ r18, cmd_build_copy_done
+STORE r17, r18
+ADDI r20, 1
+ADDI r17, 1
+JMP cmd_build_copy
+cmd_build_copy_done:
+; Null terminate name
+LDI r18, 0
+STORE r17, r18
+
+; Increment building count
+LDI r17, 0x7580
+LOAD r18, r17
+ADDI r18, 1
+STORE r17, r18
+
+; Show confirmation
+LDI r17, 0x7872
+LDI r18, 1
+STORE r17, r18
+LDI r17, 0x7873
+STRO r17, "Building added!"
+JMP cmd_exec_done
+
+cmd_build_full:
+LDI r17, 0x7872
+LDI r18, 1
+STORE r17, r18
+LDI r17, 0x7873
+STRO r17, "Max 32 buildings!"
+JMP cmd_exec_done
+
+cmd_oracle:
+; Not a recognized / command, or plain text → send to Oracle LLM.
+; Copy CMD_BUF to ORACLE prompt area (reuse CMD_BUF as prompt text).
+; Set RAM[0x7820] = 0 (Oracle mode, not asm_dev)
+LDI r17, 0x7820
+LDI r18, 0
+STORE r17, r18
+
+; LLM call: prompt from CMD_BUF (0x7832), response to ORACLE_RESP_BUF (0x7873)
+; The build_llm_system_prompt() on Rust side will read player pos/buildings
+; and prepend the Oracle system prompt.
+LDI r3, 0x7832              ; prompt = CMD_BUF text
+LDI r4, 0x7873              ; response buffer
+LDI r5, 895                 ; max response length
+LLM r3, r4, r5
+
+; Mark response as ready
+LDI r17, 0x7872
+LDI r18, 1
+STORE r17, r18
+
+cmd_exec_done:
+POP r31
+RET
+
+; =========================================
+; PARSE_NEXT_NUMBER -- parse decimal number from string
+; Input: r17 = pointer to string (position in CMD_BUF)
+; Output: r0 = parsed number, r17 = advanced past number + space
+; Preserves: r1
+; =========================================
+parse_next_number:
+PUSH r31
+LDI r1, 1
+
+; Skip spaces
+pnn_skip:
+LOAD r18, r17
+CMPI r18, 32                ; space
+JNZ r0, pnn_digit_start
+ADDI r17, 1
+JMP pnn_skip
+
+pnn_digit_start:
+LDI r0, 0                   ; accumulator = 0
+
+pnn_loop:
+LOAD r18, r17
+JZ r18, pnn_done            ; null terminator
+CMPI r18, 32                ; space = end of number
+JZ r0, pnn_done
+CMPI r18, 48                ; '0'
+BLT r0, pnn_done
+CMPI r18, 58                ; '9'+1
+BGE r0, pnn_done
+
+; r0 = r0 * 10 + (char - '0')
+LDI r19, 10
+MUL r0, r19
+SUBI r18, 48                ; char - '0'
+ADD r0, r18
+ADDI r17, 1
+JMP pnn_loop
+
+pnn_done:
+POP r31
+RET
 
 ; ===== check_biome_walkable subroutine =====
 ; Input: r3 = world_x, r4 = world_y
