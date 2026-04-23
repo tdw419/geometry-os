@@ -37,7 +37,7 @@ meta:
   ram: 65536 words
   registers: 32
   screen: 256x256 pixels
-  tests: '2868'
+  tests: '2874'
 phases:
 - deliverables:
   - description: 'Control flow: stop, no-op, yield to renderer'
