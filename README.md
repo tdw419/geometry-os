@@ -12,7 +12,7 @@ There is no compiler. No runtime. No garbage collector. You write the opcodes, t
 
 ## Programs
 
-129 programs included -- static art, animations, interactive games, and system utilities:
+130 programs included -- static art, animations, interactive games, and system utilities:
 
 **Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes, plasma, starfield, wirecube
 
@@ -50,7 +50,7 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
-## The Instruction Set (149 opcodes)
+## The Instruction Set (167 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -386,7 +386,7 @@ child:
 │  └──────────────┘  └──────────────────┘     │
 └──────────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 149 opcodes, 8 concurrent processes
+VM: 32 registers, 65536-word RAM, 167 opcodes, 8 concurrent processes
 Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
 
@@ -402,8 +402,8 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 ## Stats
 
 - 56,371 lines of Rust
-- 149 opcodes
-- 114 programs
+- 167 opcodes
+- 130 programs
 - 2,616 tests
 - MIT licensed
 
