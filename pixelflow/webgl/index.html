@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>pixelflow -- WebGL LLM Inference</title>
+<style>
+body { background: #0a0a0a; color: #e0e0e0; font-family: monospace; padding: 20px; }
+#output { background: #111; border: 1px solid #333; padding: 15px; min-height: 300px; white-space: pre-wrap; font-size: 14px; line-height: 1.5; }
+#stats { color: #888; margin-top: 10px; font-size: 12px; }
+#prompt-input { width: 100%; background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; padding: 10px; font-family: monospace; font-size: 14px; box-sizing: border-box; }
+button { background: #2a2a2a; color: #e0e0e0; border: 1px solid #444; padding: 8px 16px; cursor: pointer; font-family: monospace; margin-top: 10px; }
+button:hover { background: #3a3a3a; }
+h1 { font-size: 18px; color: #6a9; }
+h2 { font-size: 14px; color: #8ab; margin-top: 20px; }
+canvas { display: none; }
+</style>
+</head>
+<body>
+<h1>pixelflow -- WebGL Fragment Shader Inference</h1>
+<p>Matrix multiply via WebGL fragment shaders. Each pixel computes one output element.</p>
+
+<canvas id="gl-canvas" width="1024" height="1024"></canvas>
+
+<h2>Matmul Benchmark</h2>
+<div id="output">Loading WebGL context...</div>
+<div id="stats"></div>
+
+<h2>Interactive Test</h2>
+<input id="prompt-input" placeholder="Enter matrix size (e.g. 128)" value="128">
+<button onclick="runBenchmark()">Run Benchmark</button>
+<button onclick="runAccuracyTest()">Accuracy Test</button>
+
+<script>
+// ============================================================
+// pixelflow WebGL inference engine
+// ============================================================
+
+class PixelflowWebGL {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.gl = canvas.getContext('webgl2');
+        if (!this.gl) {
+            throw new Error('WebGL 2 not available');
+        }
+        this.programs = {};
+        this.textures = {};
+        this._loadShaders();
+    }
+
+    _loadShaders() {
+        // Vertex shader: fullscreen triangle pair (covers entire clip space)
+        const vsSource = `#version 300 es
+        in vec2 a_position;
+        void main() {
+            gl_Position = vec4(a_position, 0.0, 1.0);
+        }`;
+
+        // Matmul fragment shader
+        // Each pixel (x, y) computes C[y][x] = sum over k of A[y][k] * B[x][k]
+        // B = weight matrix (M x K), stored as texture (K wide, M tall)
+        // A = input vector (1 x K), stored as texture (K wide, 1 tall)
+        const fsSource = `#version 300 es
+        precision highp float;
+        precision highp int;
+        
+        uniform sampler2D u_weights;  // B: (M x K)
+        uniform sampler2D u_input;    // A: (1 x K)
+        uniform int u_K;              // shared dimension
+        uniform int u_Ww;             // weight texture width
+        uniform int u_Wh;             // weight texture height
+        
+        out vec4 fragColor;
+        
+        void main() {
+            int out_idx = int(gl_FragCoord.x);
+            int batch_idx = int(gl_FragCoord.y);
+            
+            float sum = 0.0;
+            for (int k = 0; k < u_K; k++) {
+                vec2 w_uv = vec2(
+                    (float(k) + 0.5) / float(u_Ww),
+                    (float(out_idx) + 0.5) / float(u_Wh)
+                );
+                float w = texture(u_weights, w_uv).r;
+                
+                vec2 a_uv = vec2(
+                    (float(k) + 0.5) / float(u_K),
+                    (float(batch_idx) + 0.5) / 1.0
+                );
+                float a = texture(u_input, a_uv).r;
+                
+                sum += w * a;
+            }
+            fragColor = vec4(sum, 0.0, 0.0, 1.0);
+        }`;
+
+        this.programs.matmul = this._createProgram(vsSource, fsSource);
+
+        // Setup fullscreen quad
+        const gl = this.gl;
+        const quadBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -1, -1,  1, -1,  -1, 1,  1, 1
+        ]), gl.STATIC_DRAW);
+
+        this.quadBuffer = quadBuffer;
+    }
+
+    _createProgram(vsSource, fsSource) {
+        const gl = this.gl;
+        const vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, vsSource);
+        gl.compileShader(vs);
+        if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+            throw new Error('VS: ' + gl.getShaderInfoLog(vs));
+        }
+
+        const fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, fsSource);
+        gl.compileShader(fs);
+        if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+            throw new Error('FS: ' + gl.getShaderInfoLog(fs));
+        }
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, vs);
+        gl.attachShader(prog, fs);
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            throw new Error('Link: ' + gl.getProgramInfoLog(prog));
+        }
+        return prog;
+    }
+
+    uploadTexture(name, data, width, height) {
+        const gl = this.gl;
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, width, height, 0, gl.RED, gl.FLOAT, data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        this.textures[name] = { tex, width, height };
+        return tex;
+    }
+
+    matmul(weightName, input, K, M) {
+        const gl = this.gl;
+
+        // Upload input
+        this.uploadTexture('_input', new Float32Array(input), K, 1);
+
+        // Create output framebuffer
+        const outTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, outTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, M, 1, 0, gl.RED, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+        const fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, outTex, 0);
+
+        gl.viewport(0, 0, M, 1);
+
+        // Setup program
+        const prog = this.programs.matmul;
+        gl.useProgram(prog);
+
+        // Bind weight texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures[weightName].tex);
+        gl.uniform1i(gl.getUniformLocation(prog, 'u_weights'), 0);
+
+        // Bind input texture
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures['_input'].tex);
+        gl.uniform1i(gl.getUniformLocation(prog, 'u_input'), 1);
+
+        // Set uniforms
+        gl.uniform1i(gl.getUniformLocation(prog, 'u_K'), K);
+        gl.uniform1i(gl.getUniformLocation(prog, 'u_Ww'), this.textures[weightName].width);
+        gl.uniform1i(gl.getUniformLocation(prog, 'u_Wh'), this.textures[weightName].height);
+
+        // Draw fullscreen quad
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+        const posLoc = gl.getAttribLocation(prog, 'a_position');
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // Read back
+        const result = new Float32Array(M);
+        gl.readPixels(0, 0, M, 1, gl.RED, gl.FLOAT, result);
+
+        // Cleanup
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.deleteFramebuffer(fbo);
+        gl.deleteTexture(outTex);
+
+        return result;
+    }
+
+    benchmark(M, K, runs = 20) {
+        // Generate random weights and input
+        const W = new Float32Array(M * K);
+        const x = new Float32Array(K);
+        for (let i = 0; i < M * K; i++) W[i] = (Math.random() - 0.5) * 0.1;
+        for (let i = 0; i < K; i++) x[i] = (Math.random() - 0.5) * 0.1;
+
+        // Upload weights
+        this.uploadTexture('bench_W', W, K, M);
+
+        // Warmup
+        for (let i = 0; i < 5; i++) this.matmul('bench_W', x, K, M);
+
+        // Timed runs
+        const times = [];
+        for (let i = 0; i < runs; i++) {
+            const t0 = performance.now();
+            const result = this.matmul('bench_W', x, K, M);
+            times.push(performance.now() - t0);
+        }
+
+        // NumPy-style reference (CPU JS)
+        const expected = new Float32Array(M);
+        const t0 = performance.now();
+        for (let j = 0; j < M; j++) {
+            let sum = 0;
+            for (let k = 0; k < K; k++) {
+                sum += x[k] * W[j * K + k];
+            }
+            expected[j] = sum;
+        }
+        const cpuTime = performance.now() - t0;
+
+        // Accuracy
+        let maxErr = 0;
+        const result = this.matmul('bench_W', x, K, M);
+        for (let i = 0; i < M; i++) {
+            maxErr = Math.max(maxErr, Math.abs(result[i] - expected[i]));
+        }
+
+        const avgGpu = times.reduce((a, b) => a + b, 0) / times.length;
+        const gflops = (2 * M * K) / (avgGpu / 1000) / 1e9;
+
+        return {
+            shape: `(${M}, ${K})`,
+            gpu_ms: avgGpu.toFixed(2),
+            cpu_ms: cpuTime.toFixed(2),
+            max_error: maxErr.toExponential(3),
+            gflops: gflops.toFixed(1),
+            ratio: (avgGpu / cpuTime).toFixed(2),
+        };
+    }
+}
+
+// ============================================================
+// UI
+// ============================================================
+
+let engine;
+let outputEl = document.getElementById('output');
+let statsEl = document.getElementById('stats');
+
+try {
+    engine = new PixelflowWebGL(document.getElementById('gl-canvas'));
+    outputEl.textContent = 'WebGL 2 context ready. Shader compiled.\n\nClick "Run Benchmark" to test matmul performance.';
+    
+    // Auto-run a quick test
+    const test = engine.benchmark(64, 64, 10);
+    statsEl.textContent = `Quick test (64x64): GPU ${test.gpu_ms}ms, CPU ${test.cpu_ms}ms, error ${test.max_error}`;
+} catch (e) {
+    outputEl.textContent = 'Error: ' + e.message;
+}
+
+function runBenchmark() {
+    if (!engine) return;
+    const size = parseInt(document.getElementById('prompt-input').value) || 128;
+    
+    outputEl.textContent = 'Running benchmarks...\n';
+    
+    const sizes = [32, 64, 128, 256, 512, 1024];
+    if (!sizes.includes(size)) sizes.push(size);
+    sizes.sort((a, b) => a - b);
+    
+    let text = 'pixelflow WebGL Benchmark Results\n';
+    text += '='.repeat(70) + '\n';
+    text += `${'Size'.padEnd(14)} ${'GPU(ms)'.padEnd(10)} ${'CPU(ms)'.padEnd(10)} ${'Ratio'.padEnd(8)} ${'GFLOPS'.padEnd(10)} ${'MaxErr'.padEnd(12)}\n`;
+    text += '-'.repeat(70) + '\n';
+    
+    for (const s of sizes) {
+        const r = engine.benchmark(s, s, 20);
+        text += `${r.shape.padEnd(14)} ${r.gpu_ms.padEnd(10)} ${r.cpu_ms.padEnd(10)} ${r.ratio.padEnd(8)} ${r.gflops.padEnd(10)} ${r.max_error.padEnd(12)}\n`;
+    }
+    
+    text += '\nGPU = WebGL fragment shader, CPU = JavaScript loop';
+    outputEl.textContent = text;
+}
+
+function runAccuracyTest() {
+    if (!engine) return;
+    const size = parseInt(document.getElementById('prompt-input').value) || 128;
+    
+    outputEl.textContent = `Running accuracy test (${size}x${size})...\n`;
+    
+    const W = new Float32Array(size * size);
+    const x = new Float32Array(size);
+    for (let i = 0; i < size * size; i++) W[i] = (Math.random() - 0.5) * 0.1;
+    for (let i = 0; i < size; i++) x[i] = (Math.random() - 0.5) * 0.1;
+    
+    engine.uploadTexture('acc_W', W, size, size);
+    const result = engine.matmul('acc_W', x, size, size);
+    
+    // CPU reference
+    let maxErr = 0, meanErr = 0;
+    for (let j = 0; j < size; j++) {
+        let expected = 0;
+        for (let k = 0; k < size; k++) {
+            expected += x[k] * W[j * size + k];
+        }
+        const err = Math.abs(result[j] - expected);
+        maxErr = Math.max(maxErr, err);
+        meanErr += err;
+    }
+    meanErr /= size;
+    
+    let text = `Accuracy Test: ${size}x${size} matrix multiply\n`;
+    text += '='.repeat(50) + '\n';
+    text += `Max error:  ${maxErr.toExponential(6)}\n`;
+    text += `Mean error: ${meanErr.toExponential(6)}\n`;
+    text += `Result[0:5]:   ${Array.from(result.slice(0, 5)).map(v => v.toFixed(6)).join(', ')}\n`;
+    
+    // Expected
+    const expected = [];
+    for (let j = 0; j < Math.min(5, size); j++) {
+        let s = 0;
+        for (let k = 0; k < size; k++) s += x[k] * W[j * size + k];
+        expected.push(s);
+    }
+    text += `Expected[0:5]: ${expected.map(v => v.toFixed(6)).join(', ')}\n`;
+    text += `\n${maxErr < 1e-4 ? 'PASS' : 'FAIL'}: max error ${maxErr < 1e-4 ? '<' : '>'} 1e-4`;
+    
+    outputEl.textContent = text;
+}
+</script>
+</body>
+</html>

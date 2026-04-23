@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "pixelflow"
+version = "0.1.0"
+description = "GPU fragment shader inference engine for LLMs"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "moderngl>=5.0",
+    "pygame>=2.0",
+    "glcontext",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "torch"]
