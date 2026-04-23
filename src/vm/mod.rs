@@ -2895,13 +2895,13 @@ print(r if r else '')";
              - 0x0000-0x0FFF : reserved / zero page\n\
              - 0x1000-0x3FFF : program bytecode (default .org)\n\
              - 0x4000-0x7EFF : free scratch / app data\n\
-             - 0x7500-0x758F : building table (desktop map). Each entry = [world_x, world_y, type_color, name_addr]. 4 words per building. Count at 0x7580. Max 32.\\n\
-             - 0x7600-0x76CF : building name strings (each 16 chars). 0x76D0+ for dynamic buildings.\\n\
-             - 0x7800-0x782F : world/VM state (cam, frame, player, prompt-mode)\\n\
-             - 0x7808        : player_x (tile coords). Write to teleport.\\n\
-             - 0x7809        : player_y (tile coords). Write to teleport.\\n\
-             - 0x780A        : player_facing (0=down,1=up,2=left,3=right)\\n\
-             - 0x7820        : prompt mode (0=oracle, 1=asm_dev). Already set by AI Terminal.\\n\
+             - 0x7500-0x758F : building table. Each entry = [world_x, world_y, type_color, name_addr], 4 words. Count at 0x7580, max 32.\n\
+             - 0x7600-0x76CF : building name strings (16 chars each). 0x76D0+ for dynamic buildings.\n\
+             - 0x7800-0x782F : world/VM state (cam, frame, player, prompt-mode)\n\
+             - 0x7808        : player_x (tile coords). Write to teleport.\n\
+             - 0x7809        : player_y (tile coords). Write to teleport.\n\
+             - 0x780A        : player_facing (0=down,1=up,2=left,3=right)\n\
+             - 0x7820        : prompt mode (0=oracle, 1=asm_dev). Already set by AI Terminal.\n\
              - 0xF00-0xF03   : window bounds protocol (x,y,w,h)\n\
              - 0xFFA-0xFFF   : hardware ports (keyboard=0xFFF, ticks=0xFFE, multi-key=0xFFB)\n\
              \n\
