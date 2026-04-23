@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 105/105 phases complete, 0 in_progress, 0 planned
+**Progress:** 107/107 phases complete, 0 in_progress, 0 planned
 
-**Deliverables:** 461/461 complete
+**Deliverables:** 472/472 complete
 
 ## Scope Summary
 
@@ -115,6 +115,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 o
 | phase-102 Permissions and Capability System | COMPLETE | 4/4 | 600 | 16 |
 | phase-103 Terminal Multiplexer | COMPLETE | 3/3 | 600 | 2 |
 | phase-104 Dynamic Territory Competition and Digital Red Queen | COMPLETE | 5/5 | 1,200 | 8 |
+| phase-106 AI Desktop Control and Guided Demo | COMPLETE | 5/5 | 930 | 10 |
+| phase-107 Infinite Spatial Desktop | COMPLETE | 6/6 | 1,220 | 12 |
 
 ## Dependencies
 
@@ -2473,3 +2475,42 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
 - Canvas and screen mappings use LOAD/STORE interception, not new opcodes
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
+
+## [x] phase-106: AI Desktop Control and Guided Demo (COMPLETE)
+
+**Goal:** Expose WINSYS ops through MCP tools so an external AI can manage windows, inject input, and observe the desktop -- enabling guided demos and autonomous desktop control.
+
+### Deliverables
+
+- [x] **Window management socket commands + MCP tools** -- WINSYS op=7 (RESIZE), MCP tools: window_list, window_move, window_close, window_focus, window_resize, process_kill
+  - [x] RESIZE op (WINSYS op=7)
+  - [x] MCP window management tools functional
+- [x] **Desktop input injection MCP tools** -- desktop_key, desktop_mouse_move, desktop_mouse_click for AI-driven input
+  - [x] Keyboard and mouse injection via MCP
+- [x] **Desktop-aware vision MCP tool** -- Structured JSON + ASCII overlay for desktop state
+  - [x] Vision checksum/diff exposed via MCP
+- [x] **AI demo tour prompt** -- End-to-end demo script proving AI control of the desktop
+  - [x] Demo tour runs successfully
+- [x] **Integration tests** -- 10+ tests covering socket commands and MCP tools
+  - [x] test_vision_screenshot_annotations verifies window labels
+
+## [x] phase-107: Infinite Spatial Desktop (COMPLETE)
+
+**Goal:** Enable a spatial desktop where apps are windows placed on the infinite procedural map. Walk the map, launch apps into windows, drag them around, zoom in/out -- the desktop IS the map.
+
+### Deliverables
+
+- [x] **World-space window placement** -- Extend Window struct with world_x/world_y fields, RAM[0x7810] flag switches WINSYS op=0 from screen-space to world-space coordinates
+  - [x] WINSYS op=0 accepts world_x, world_y when flag set
+  - [x] Existing screen-space programs remain compatible
+- [x] **Viewport coordinate transform module** -- World-to-screen and screen-to-world coordinate transforms for rendering
+  - [x] Camera position maps world coords to 256x256 framebuffer
+- [x] **Composite rendering -- windows on map** -- Windows render at world-space positions on the procedural map background
+  - [x] Offscreen windows culled correctly
+- [x] **Multi-process app execution in windows** -- Multiple apps run simultaneously in separate windows via time-shared multi-process execution
+  - [x] test_multi_process_launch verifies two apps run simultaneously
+- [x] **Window drag and mouse routing** -- Windows draggable in world-space, MOUSEQ events routed to correct window
+  - [x] test_window_drag verifies world_x/world_y update
+  - [x] test_mouse_routing verifies MOUSEQ events reach correct window
+- [x] **Integration tests** -- 12+ tests covering coordinate model, rendering, multi-process, drag, and mouse routing
+  - [x] test_offscreen_culling verifies viewport culling
