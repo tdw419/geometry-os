@@ -30,12 +30,12 @@ fn load_program(source: &str) -> Vm {
 
 fn run_frames(vm: &mut Vm, count: usize) {
     for _ in 0..count {
+        vm.frame_ready = false;
         let mut c = 0;
-        while !vm.yielded && !vm.halted && c < 100_000 {
+        while !vm.frame_ready && !vm.halted && c < 100_000 {
             vm.step();
             c += 1;
         }
-        vm.yielded = false;
     }
 }
 
@@ -162,4 +162,56 @@ fn test_debug_monitor_ram_read() {
     let addr = vm.ram[0x0C06];
     assert_eq!(value, 0xDEADBEEF, "Should read back 0xDEADBEEF, got 0x{:X}", value);
     assert_eq!(addr, 0x500, "Address should be 0x500, got 0x{:X}", addr);
+}
+
+#[test]
+fn test_flatliner_heartbeat_stops() {
+    // Verify that the flatliner program updates heartbeat then stops
+    let source = include_str!("../programs/flatliner.asm");
+    let mut vm = load_program(source);
+    
+    // Run 2 frames -- heartbeat should be incrementing (init takes 0 frames)
+    run_frames(&mut vm, 2);
+    let hb1 = vm.ram[0x0C27];
+    assert!(hb1 > 0, "Heartbeat should be >0 after 2 frames, got {}", hb1);
+    
+    // Run 1 more frame -- still incrementing
+    run_frames(&mut vm, 1);
+    let hb2 = vm.ram[0x0C27];
+    assert!(hb2 > hb1, "Heartbeat should keep incrementing: {} -> {}", hb1, hb2);
+    
+    // Run past crash (5 beats total, then dead_loop with no FRAME)
+    // Frame 6+ will hit the 100K step limit (no FRAME in dead_loop)
+    run_frames(&mut vm, 10);
+    let hb3 = vm.ram[0x0C27];
+    
+    // Run more -- heartbeat should NOT change
+    run_frames(&mut vm, 5);
+    let hb4 = vm.ram[0x0C27];
+    assert_eq!(hb3, hb4, "Heartbeat should stop after crash: {} == {}", hb3, hb4);
+}
+
+#[test]
+fn test_watchdog_detects_flatline() {
+    // Simulate the watchdog mechanism with two VMs
+    let source = include_str!("../programs/flatliner.asm");
+    let mut child_vm = load_program(source);
+    
+    // Run child for 3 frames (heartbeat incrementing)
+    run_frames(&mut child_vm, 3);
+    let hb_alive = child_vm.ram[0x0C27];
+    assert!(hb_alive >= 2, "Child should have heartbeats, got {}", hb_alive);
+    
+    // Run child past crash
+    run_frames(&mut child_vm, 10);
+    let hb_after_crash = child_vm.ram[0x0C27];
+    
+    // Run more -- heartbeat frozen
+    run_frames(&mut child_vm, 10);
+    let hb_frozen = child_vm.ram[0x0C27];
+    assert_eq!(hb_after_crash, hb_frozen, "Heartbeat should be frozen after crash");
+    
+    // The watchdog pattern: last_seen == current for 3 consecutive checks = flatline
+    assert!(hb_frozen <= 5, "Flatliner should stop after 5 heartbeats, got {}", hb_frozen);
+    println!("Watchdog test: heartbeat {} -> {} (frozen at {})", hb_alive, hb_after_crash, hb_frozen);
 }
