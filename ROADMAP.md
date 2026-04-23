@@ -4,7 +4,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 149 o
 
 **Progress:** 105/105 phases complete, 0 in_progress, 0 planned
 
-**Deliverables:** 462/462 complete
+**Deliverables:** 461/461 complete
 
 ## Scope Summary
 
