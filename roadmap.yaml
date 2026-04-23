@@ -5320,6 +5320,145 @@ phases:
         - test_ai_terminal_build_sandbox_caps_assembles
         - test_sandboxed_paint_capabilities
         - test_spawnc_no_capabilities_is_none
+- deliverables:
+  - name: valid_opcode_mnemonics() probe in disasm.rs
+    description: >
+      Runtime-derived inventory of real opcodes by probing disassemble_at
+      with zeroed operands. Single source of truth; can't drift from disasm
+      match arms because it *is* the disasm.
+    status: done
+    acceptance_criteria:
+      - description: Helper filters out ??? unknowns
+        met: true
+      - description: Sorted (opcode, mnemonic) pairs returned
+        met: true
+  - name: asm_dev_system_prompt embeds full inventory + diagnostic hooks
+    description: >
+      Complete NAME(0xNN) list appended so LLM can't hallucinate. RAM[0x7821]
+      selects a focus opcode for targeted diagnostic programs; RAM[0xFFD]
+      surfaces last assemble status so follow-up questions have context.
+    status: done
+    acceptance_criteria:
+      - description: Focus opcode section appears only when RAM[0x7821] is set
+        met: true
+      - description: Last assemble status surfaces FAILED state for debugging
+        met: true
+      - description: Oracle mode (RAM[0x7820]=0) still omits the asm inventory
+        met: true
+  - name: Regression tests
+    description: >
+      7 tests covering probe coverage, mnemonic purity, prompt embedding,
+      focus injection, assemble-status surfacing, and oracle isolation.
+    status: done
+    scope_files:
+      - tests/program_tests.rs
+    tests:
+      - test_valid_opcode_mnemonics_covers_core_ops
+      - test_valid_opcode_mnemonics_excludes_unknown
+      - asm_dev_prompt_embeds_full_opcode_inventory
+      - asm_dev_prompt_without_focus_omits_focus_section
+      - asm_dev_prompt_with_focus_injects_targeted_hint
+      - asm_dev_prompt_surfaces_last_assemble_failure
+      - oracle_mode_prompt_has_no_opcode_inventory
+  description: >
+    Make the AI Terminal's asm_dev system prompt self-truthful so generated
+    assembly cannot invoke opcodes that don't exist. First step toward using
+    the AI Terminal as a diagnostic tool for the OS itself.
+  goal: Make the AI Terminal's asm_dev system prompt self-truthful so generated assembly cannot invoke opcodes that don't exist.
+  id: phase-109
+  status: complete
+  test_target: 7
+  scope_lines_total: 110
+- deliverables:
+  - name: /focus 0xNN command
+    description: >
+      Parses 2-hex-digit opcode byte, writes to RAM[0x7821]. Bare /focus
+      shows current value. /focus off clears it. Inline hex parser using
+      CMPI+BLT/BGE range checks (no subroutine needed).
+    status: done
+    acceptance_criteria:
+      - description: Hex range check 0-9, A-F, a-f
+        met: true
+      - description: Confirmation message with hex display
+        met: true
+      - description: Usage error on bad input
+        met: true
+  - name: /status command
+    description: >
+      Displays focus opcode (RAM[0x7821]), last assemble result (RAM[0xFFD]:
+      FAILED/OK/no assembly yet), and prompt mode (asm_dev vs oracle).
+    status: done
+  - name: Command dispatch
+    description: >
+      Inserted after /yes in the do_enter chain. /focus falls through to
+      /status, which falls through to send_to_llm. Updated /help text.
+    status: done
+  - name: Integration tests
+    description: >
+      4 tests loading full ai_terminal.asm, injecting keystrokes via
+      push_key(), verifying RAM state changes.
+    status: done
+    scope_files:
+      - tests/program_tests.rs
+    tests:
+      - test_ai_terminal_focus_command_sets_ram
+      - test_ai_terminal_focus_off_clears_ram
+      - test_ai_terminal_status_command_runs
+      - test_ai_terminal_focus_bad_arg_no_crash
+  description: >
+    Wire the Phase 109 prompt-context hooks (RAM[0x7821] focus, RAM[0xFFD]
+    status) to user-facing commands in ai_terminal.asm so the AI Terminal
+    can be steered toward targeted diagnostic output from the keyboard.
+  goal: Wire Phase 109 prompt-context hooks to user-facing commands in ai_terminal.asm.
+  id: phase-110
+  status: complete
+  test_target: 4
+  scope_lines_total: 200
+- deliverables:
+  - name: self_analysis.asm
+    description: >
+      362-line program that draws 4 colored quadrant blocks (red, green, blue,
+      yellow), samples a 16x16 pixel grid via SCREENP, counts non-background
+      pixels per quadrant, builds a prompt describing the screen state in
+      natural language, calls LLM (0x9C opcode) for analysis, writes result
+      to /tmp/screen_analysis.txt via VFS (OPEN/WRITESTR/CLOSE), and displays
+      response on screen.
+    status: done
+    acceptance_criteria:
+      - description: Phase 1 - Draw visual content (FILL, RECTF, DRAWTEXT)
+        met: true
+      - description: Phase 2 - Screen sampling via SCREENP in 16x16 grid
+        met: true
+      - description: Phase 3 - Prompt construction with quadrant counts
+        met: true
+      - description: Phase 4 - LLM call with mock support
+        met: true
+      - description: Phase 5 - VFS file write of analysis result
+        met: true
+      - description: Phase 6 - Screen display of LLM response and quadrant stats
+        met: true
+  - name: Integration tests
+    description: >
+      4 tests loading full self_analysis.asm, running with llm_mock_response,
+      verifying screen pixels, prompt content, and quadrant counts.
+    status: done
+    scope_files:
+      - tests/program_tests.rs
+    tests:
+      - test_self_analysis_assembles
+      - test_self_analysis_screen_sampling
+      - test_self_analysis_prompt_contains_quadrant_data
+      - test_self_analysis_quadrant_counts_nonzero
+  description: >
+    Build a program that uses the OS's own SCREENP and LLM opcodes to inspect
+    its own visual output, build a natural-language description of what it sees,
+    and call the LLM to analyze it. This is the AI inside AI loop -- the OS
+    becoming its own QA agent.
+  goal: Build a self-analysis program using SCREENP and LLM opcodes for AI-inside-AI QA loop.
+  id: phase-111
+  status: complete
+  test_target: 4
+  scope_lines_total: 362
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
