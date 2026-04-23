@@ -2601,9 +2601,7 @@ impl Vm {
                     }
 
                     // Strip ```asm / ``` fences if present (AI responses)
-                    let source = source
-                        .replace("```asm", "")
-                        .replace("```", "");
+                    let source = source.replace("```asm", "").replace("```", "");
 
                     // Run preprocessor then assembler
                     let mut pp = crate::preprocessor::Preprocessor::new();
@@ -2618,7 +2616,8 @@ impl Vm {
                             }
                             // Write bytecode
                             let word_count = asm_result.pixels.len().min(4096);
-                            for (i, &word) in asm_result.pixels.iter().enumerate().take(word_count) {
+                            for (i, &word) in asm_result.pixels.iter().enumerate().take(word_count)
+                            {
                                 let dest = 0x1000 + i;
                                 if dest < self.ram.len() {
                                     self.ram[dest] = word;

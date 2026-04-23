@@ -4,6 +4,7 @@
 // Originally a single 6400+ line file.
 
 use geometry_os::assembler::{assemble, assemble_with_lib};
+use geometry_os::preprocessor::Preprocessor;
 use geometry_os::vm::Vm;
 
 /// Helper: assemble a .asm file and run it in the VM

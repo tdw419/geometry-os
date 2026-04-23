@@ -313,35 +313,59 @@ fn test_shift_operations() {
 
 #[test]
 fn test_all_programs_assemble() {
-    let programs = [
-        "programs/fill_screen.asm",
-        "programs/border.asm",
-        "programs/diagonal.asm",
-        "programs/gradient.asm",
-        "programs/stripes.asm",
-        "programs/nested_rects.asm",
-        "programs/blink.asm",
-        "programs/painter.asm",
-        "programs/calculator.asm",
-        "programs/shift_test.asm",
-        "programs/push_pop_test.asm",
-        "programs/sfx_demo.asm",
-        "programs/music_demo.asm",
-        "programs/oracle.asm",
-        "programs/smart_term.asm",
-        "programs/world_desktop.asm",
+    // Known-broken programs that use unsupported features (.db strings, multiple .org, etc.)
+    let skip = [
+        "canvas_grid_writer.asm", // uses .db with strings
+        "device_test.asm",        // uses .db with strings
+        "pipe_demo.asm",          // uses unsupported .db directive
+        "pipe_test.asm",          // multiple .org with .org 0x0
+        "pixel_history_demo.asm", // passes number where register expected
+        "window_desktop.asm",     // passes immediate where register expected
+        "net_demo.asm",           // JNZ wrong arg count
+        "stdlib_test.asm",        // multiple .org with .org 0x0
     ];
-    for path in programs {
-        let source = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", path, e));
-        let result = assemble(&source, 0);
-        assert!(
-            result.is_ok(),
-            "{} should assemble: {:?}",
-            path,
-            result.err()
-        );
+    let mut failures = Vec::new();
+    let mut count = 0u32;
+    let mut skipped = 0u32;
+    let entries = std::fs::read_dir("programs").expect("programs/ directory should exist");
+    for entry in entries {
+        let entry = entry.expect("read_dir entry");
+        let path = entry.path();
+        let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext != "asm" {
+            continue;
+        }
+        if skip.contains(&fname) {
+            skipped += 1;
+            continue;
+        }
+        count += 1;
+        let path_str = path.to_str().unwrap();
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {}", path_str, e));
+        // Run preprocessor (expands VAR/SET/GET/INC/DEC macros)
+        let mut pp = Preprocessor::new();
+        let preprocessed = pp.preprocess(&source);
+        let result = assemble(&preprocessed, 0);
+        if let Err(e) = result {
+            failures.push(format!("{}: {:?}", path_str, e));
+        }
     }
+    assert!(
+        failures.is_empty(),
+        "{} of {} programs failed to assemble ({} skipped):\n{}",
+        failures.len(),
+        count,
+        skipped,
+        failures.join("\n")
+    );
+    assert!(
+        count > 100,
+        "should have 100+ programs, got {} ({} skipped)",
+        count,
+        skipped
+    );
 }
 
 // ── PUSH/POP ──────────────────────────────────────────────────────
@@ -989,7 +1013,10 @@ fn test_mandelbrot_assembles() {
     // Verify the program assembles without errors
     let source =
         std::fs::read_to_string("programs/mandelbrot.asm").expect("mandelbrot.asm should exist");
-    let result = assemble(&source, 0);
+    // Run preprocessor (expands VAR/SET/GET/INC/DEC macros)
+    let mut pp = Preprocessor::new();
+    let preprocessed = pp.preprocess(&source);
+    let result = assemble(&preprocessed, 0);
     assert!(
         result.is_ok(),
         "mandelbrot.asm should assemble: {:?}",
@@ -1077,7 +1104,10 @@ fn test_mandelbrot_renders() {
 fn test_wirecube_assembles() {
     let source =
         std::fs::read_to_string("programs/wirecube.asm").expect("wirecube.asm should exist");
-    let result = assemble(&source, 0);
+    // Run preprocessor (expands VAR/SET/GET/INC/DEC macros)
+    let mut pp = Preprocessor::new();
+    let preprocessed = pp.preprocess(&source);
+    let result = assemble(&preprocessed, 0);
     assert!(
         result.is_ok(),
         "wirecube.asm should assemble: {:?}",

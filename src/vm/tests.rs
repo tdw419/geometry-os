@@ -1816,11 +1816,11 @@ fn test_asm_ram_assembles_from_ram() {
     // Set up: LDI r5, 0x3000; ASM_RAM r5; RUNNEXT
     // We'll execute these as raw bytecode
     vm.ram[0] = 0x10; // LDI
-    vm.ram[1] = 5;    // r5
+    vm.ram[1] = 5; // r5
     vm.ram[2] = 0x3000; // address
 
     vm.ram[3] = 0xB3; // ASM_RAM
-    vm.ram[4] = 5;    // r5
+    vm.ram[4] = 5; // r5
 
     vm.ram[5] = 0x74; // RUNNEXT
 
@@ -1829,7 +1829,9 @@ fn test_asm_ram_assembles_from_ram() {
 
     // Run for enough steps
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     // Verify assembly succeeded
@@ -1868,10 +1870,15 @@ fn test_asm_ram_error_on_invalid_source() {
     vm.halted = false;
 
     for _ in 0..100 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
-    assert_eq!(vm.ram[0xFFD], 0xFFFFFFFF, "ASM_RAM should fail on invalid source");
+    assert_eq!(
+        vm.ram[0xFFD], 0xFFFFFFFF,
+        "ASM_RAM should fail on invalid source"
+    );
 }
 
 #[test]

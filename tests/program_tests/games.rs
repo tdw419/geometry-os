@@ -2968,7 +2968,11 @@ fn world_desktop_run_frame_with_key(vm: &mut Vm, key: u32) {
     vm.push_key(key);
     // Run until frame completes (needs to process key + full render)
     let steps = step_until_frame(vm, 2_000_000);
-    assert!(vm.frame_ready, "should reach FRAME after key injection (took {} steps)", steps);
+    assert!(
+        vm.frame_ready,
+        "should reach FRAME after key injection (took {} steps)",
+        steps
+    );
 }
 
 /// Helper: inject multiple keys one per frame (simulates typing).
@@ -2996,7 +3000,10 @@ fn test_cmd_bar_slash_enters_type_mode() {
     // CMD_MODE should now be 1
     assert_eq!(vm.ram[0x7830], 1, "CMD_MODE should be 1 after pressing /");
     // CMD_LEN should be 0 (we don't add '/' to buffer)
-    assert_eq!(vm.ram[0x7831], 0, "CMD_LEN should be 0 (slash not stored in buffer)");
+    assert_eq!(
+        vm.ram[0x7831], 0,
+        "CMD_LEN should be 0 (slash not stored in buffer)"
+    );
 }
 
 #[test]
@@ -3059,18 +3066,34 @@ fn test_cmd_bar_tp_teleports() {
 
     // Type "/tp 100 200" character by character
     let tp_keys: &[u32] = &[
-        b'/' as u32, b't' as u32, b'p' as u32, b' ' as u32,
-        b'1' as u32, b'0' as u32, b'0' as u32, b' ' as u32,
-        b'2' as u32, b'0' as u32, b'0' as u32,
+        b'/' as u32,
+        b't' as u32,
+        b'p' as u32,
+        b' ' as u32,
+        b'1' as u32,
+        b'0' as u32,
+        b'0' as u32,
+        b' ' as u32,
+        b'2' as u32,
+        b'0' as u32,
+        b'0' as u32,
     ];
     // Reset: we're already in type mode, now type the command
     // But wait -- pressing '/' while already in type mode types it into the buffer.
     // The actual flow is: press / to enter type mode, then type the command.
     // The initial / is consumed by the toggle, not echoed. Type starts after.
     let cmd_keys: &[u32] = &[
-        b'/' as u32, b't' as u32, b'p' as u32, b' ' as u32,
-        b'1' as u32, b'0' as u32, b'0' as u32, b' ' as u32,
-        b'2' as u32, b'0' as u32, b'0' as u32,
+        b'/' as u32,
+        b't' as u32,
+        b'p' as u32,
+        b' ' as u32,
+        b'1' as u32,
+        b'0' as u32,
+        b'0' as u32,
+        b' ' as u32,
+        b'2' as u32,
+        b'0' as u32,
+        b'0' as u32,
     ];
     world_desktop_type_keys(&mut vm, cmd_keys);
 
@@ -3083,8 +3106,14 @@ fn test_cmd_bar_tp_teleports() {
     world_desktop_run_frame_with_key(&mut vm, 13);
 
     // Player should be teleported
-    assert_eq!(vm.ram[0x7808], 100, "player_x should be 100 after /tp 100 200");
-    assert_eq!(vm.ram[0x7809], 200, "player_y should be 200 after /tp 100 200");
+    assert_eq!(
+        vm.ram[0x7808], 100,
+        "player_x should be 100 after /tp 100 200"
+    );
+    assert_eq!(
+        vm.ram[0x7809], 200,
+        "player_y should be 200 after /tp 100 200"
+    );
 
     // CMD_MODE should be back to 0
     assert_eq!(vm.ram[0x7830], 0, "CMD_MODE should be 0 after Enter");
@@ -3107,9 +3136,17 @@ fn test_cmd_bar_build_adds_building() {
 
     // Type "/build tower"
     let cmd_keys: &[u32] = &[
-        b'/' as u32, b'b' as u32, b'u' as u32, b'i' as u32,
-        b'l' as u32, b'd' as u32, b' ' as u32,
-        b't' as u32, b'o' as u32, b'w' as u32, b'e' as u32,
+        b'/' as u32,
+        b'b' as u32,
+        b'u' as u32,
+        b'i' as u32,
+        b'l' as u32,
+        b'd' as u32,
+        b' ' as u32,
+        b't' as u32,
+        b'o' as u32,
+        b'w' as u32,
+        b'e' as u32,
         b'r' as u32,
     ];
     world_desktop_type_keys(&mut vm, cmd_keys);
@@ -3129,13 +3166,28 @@ fn test_cmd_bar_build_adds_building() {
     let idx = initial_count as usize;
     let base = 0x7500 + idx * 4;
     assert_eq!(vm.ram[base], 32, "new building x should be player_x (32)");
-    assert_eq!(vm.ram[base + 1], 32, "new building y should be player_y (32)");
-    assert_eq!(vm.ram[base + 2], 0x00FFFF, "new building color should be cyan");
+    assert_eq!(
+        vm.ram[base + 1],
+        32,
+        "new building y should be player_y (32)"
+    );
+    assert_eq!(
+        vm.ram[base + 2],
+        0x00FFFF,
+        "new building color should be cyan"
+    );
 
     // Name should be "tower"
     let name_addr = vm.ram[base + 3] as usize;
-    assert_eq!(vm.ram[name_addr], b't' as u32, "building name starts with 't'");
-    assert_eq!(vm.ram[name_addr + 1], b'o' as u32, "building name second char 'o'");
+    assert_eq!(
+        vm.ram[name_addr], b't' as u32,
+        "building name starts with 't'"
+    );
+    assert_eq!(
+        vm.ram[name_addr + 1],
+        b'o' as u32,
+        "building name second char 'o'"
+    );
     assert_eq!(vm.ram[name_addr + 5], 0, "building name null-terminated");
 
     // ORACLE_RESP_READY auto-clears when the overlay renders, so we verify
@@ -3162,6 +3214,12 @@ fn test_cmd_bar_movement_blocked_in_type_mode() {
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
 
     // Player should NOT have moved (movement blocked in type mode)
-    assert_eq!(vm.ram[0x7808], px_before, "player_x should not change in type mode");
-    assert_eq!(vm.ram[0x7809], py_before, "player_y should not change in type mode");
+    assert_eq!(
+        vm.ram[0x7808], px_before,
+        "player_x should not change in type mode"
+    );
+    assert_eq!(
+        vm.ram[0x7809], py_before,
+        "player_y should not change in type mode"
+    );
 }
