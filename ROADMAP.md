@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 112/112 phases complete, 0 in_progress, 0 planned
+**Progress:** 113/113 phases complete, 0 in_progress, 0 planned
 
-**Deliverables:** 491/491 complete
+**Deliverables:** 493/493 complete
 
 ## Scope Summary
 
@@ -122,6 +122,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 | phase-110 AI Terminal /focus and /status Commands | COMPLETE | 4/4 | 200 | 4 |
 | phase-111 Recursive Self-Analysis Program | COMPLETE | 4/4 | 362 | 4 |
 | phase-112 Glyph-Atomic Shell | COMPLETE | 4/4 | 150 | 2 |
+| phase-113 Tetris in GlyphLang | COMPLETE | 2/2 | 265 | 2 |
 
 ## Dependencies
 
@@ -2615,3 +2616,29 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
 - [x] **Integration Tests** -- Verified the new Glyph features and the shell execution.
   - [x] `test_glyph_shell_compiles` -- ensures full shell source tokenizes, compiles, and assembles.
   - [x] `test_glyph_shell_execution` -- verifies shell renders title bar and background correctly in the VM.
+
+## [x] phase-113: Tetris in GlyphLang (COMPLETE)
+
+**Goal:** Demonstrate GlyphLang's capability as a real programming language by building a playable Tetris game entirely in .glyph source, compiling through the GlyphLang compiler to assembly, then to bytecode.
+
+### Deliverables
+
+- [x] **tetris.glyph** (265 lines) -- Full Tetris game in pure GlyphLang using stack-based programming.
+  - [x] 3 tetromino shapes: I-piece (red), O-piece (orange), T-piece (purple)
+  - [x] Player controls: A=left, D=right, W=rotate, S=drop via IKEY (`^`)
+  - [x] Gravity system with configurable tick speed (register h)
+  - [x] Piece locking and shape cycling
+  - [x] Game over screen with restart (R key)
+  - [x] Playfield: 10x20 grid centered on 256x256 screen with grid lines
+  - [x] Score display and controls help text via DRAWTEXT (`{`)
+  - [x] All rendering via RECTF (`[`), FILL (`|`), DRAWTEXT
+- [x] **Integration Tests**
+  - [x] test_tetris_glyph_compiles -- verifies tokenization, compilation, and assembly (1668 lines of generated assembly)
+  - [x] test_tetris_glyph_execution -- loads bytecode in VM, verifies FILL paints screen
+
+### Key Insights
+
+- GlyphLang produces verbose assembly (1668 lines from 265 .glyph lines) due to stack push/pop overhead
+- FILL opcode is expensive in debug mode (65K pixel iteration) -- execution tests use minimal cycle counts
+- Stack-based programming maps naturally to game state: registers a-z for persistent state, stack for transient values
+- The `=` comparison compiles to CMP + LDI 1/0 + JZ pattern (~10 instructions per comparison)
