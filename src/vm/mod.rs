@@ -1240,7 +1240,13 @@ impl Vm {
                                 let mut win = if world_mode {
                                     // r1=world_x, r2=world_y (tile coords)
                                     Window::new_world(
-                                        id, arg1, arg2, w, h, title_addr, self.current_pid,
+                                        id,
+                                        arg1,
+                                        arg2,
+                                        w,
+                                        h,
+                                        title_addr,
+                                        self.current_pid,
                                     )
                                 } else {
                                     // r1=screen_x, r2=screen_y (legacy)
@@ -1356,10 +1362,8 @@ impl Vm {
                             if let Some(w) =
                                 self.windows.iter().find(|w| w.id == win_id && w.active)
                             {
-                                let info = [
-                                    w.x, w.y, w.w, w.h, w.z_order, w.pid,
-                                    w.world_x, w.world_y,
-                                ];
+                                let info =
+                                    [w.x, w.y, w.w, w.h, w.z_order, w.pid, w.world_x, w.world_y];
                                 for (i, &val) in info.iter().enumerate() {
                                     let slot = addr + i;
                                     if slot < self.ram.len() {
@@ -2653,12 +2657,12 @@ import sys\n\
 from model_choice import generate\n\
 p = open('/tmp/geo_llm_prompt.txt').read()\n\
 s = open('/tmp/geo_llm_system.txt').read()\n\
-r = generate(p, complexity='fast', system=s)\n\
+r = generate(p, complexity='balanced', system=s)\n\
 print(r if r else '')";
 
         let output = match std::process::Command::new("python3")
             .args(["-c", py_code])
-            .env("MODEL_CHOICE_TEMPLATE", "ai_daemon")
+            .env("MODEL_CHOICE_TEMPLATE", "agent")
             .output()
         {
             Ok(o) => o,

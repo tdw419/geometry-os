@@ -215,6 +215,24 @@ fn main() {
     // Last launched app name (for detecting return to map)
     let mut launched_from_map: Option<String> = None;
 
+    // ── Windowed App Execution (Phase 107) ──────────────────────
+    // Multiple apps can run simultaneously in world-space windows.
+    // Each app gets its own process with bytecode in a private RAM region.
+    /// Base address for app bytecode (each app gets 8K = 0x2000 cells)
+    const APP_CODE_BASE: usize = 0x4000;
+    /// Size of each app's code region
+    const APP_CODE_SIZE: usize = 0x2000;
+    /// Maximum concurrent windowed apps
+    const MAX_WINDOWED_APPS: usize = 4;
+    /// Track which app slots are in use: (slot_index, pid, app_name)
+    let mut active_apps: Vec<(usize, u32, String)> = Vec::new();
+
+    // ── Window Drag (Phase 107) ────────────────────────────────
+    let mut window_drag_active: bool = false;
+    let mut window_drag_id: u32 = 0; // window id being dragged
+    let mut window_drag_start: (f32, f32) = (0.0, 0.0);
+    let mut window_drag_world_start: (i32, i32) = (0, 0);
+
     // If --boot flag, perform boot sequence: load init.asm as PID 1
     if boot_mode {
         match vm.boot() {
@@ -1029,6 +1047,40 @@ fn main() {
         }
         if let Some((wave, freq, dur)) = vm.note.take() {
             audio::play_note(audio::Waveform::from_u32(wave), freq, dur);
+        }
+
+        // ── Windowed app process cleanup (Phase 107) ─────────────
+        // Check for halted windowed app processes and clean them up.
+        {
+            let mut to_remove: Vec<usize> = Vec::new();
+            for (idx, (_, pid, name)) in active_apps.iter().enumerate() {
+                let pid_val = *pid;
+                let is_halted = vm
+                    .processes
+                    .iter()
+                    .any(|p| p.pid == pid_val && p.is_halted());
+                if is_halted {
+                    // Destroy windows owned by this process
+                    vm.windows.retain(|w| w.pid != pid_val);
+                    // Mark slot for removal
+                    to_remove.push(idx);
+                    status_msg = format!("[APP CLOSED: {} (PID {})]", name, pid_val);
+                }
+            }
+            // Remove halted apps from tracking (reverse order to preserve indices)
+            for &idx in to_remove.iter().rev() {
+                let (slot, _, _) = active_apps[idx];
+                // Clear app code region
+                let app_base = APP_CODE_BASE + slot * APP_CODE_SIZE;
+                let ram_len = vm.ram.len();
+                if app_base < ram_len {
+                    let end = (app_base + APP_CODE_SIZE).min(ram_len);
+                    for v in &mut vm.ram[app_base..end] {
+                        *v = 0;
+                    }
+                }
+                active_apps.remove(idx);
+            }
         }
 
         // ── Shutdown check ────────────────────────────────────────
@@ -2256,30 +2308,26 @@ fn main() {
             }
         }
 
-        // ── Mouse drag for map panning ──────────────────────────
+        // ── Mouse drag: window drag or map panning (Phase 107) ────
         if fullscreen_map && is_running {
             let mouse_down_now = window.get_mouse_down(MouseButton::Left);
+            let (_, scale) = match zoom_level {
+                0 => (256usize, 2usize),
+                1 => (256, 3),
+                2 => (128, 6),
+                3 => (64, 12),
+                4 => (32, 24),
+                _ => (128, 6),
+            };
 
-            if mouse_down_now && !mouse_drag_active {
-                // Start drag
+            if mouse_down_now && !mouse_drag_active && !window_drag_active {
+                // Check if click is on a window title bar first
                 if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
-                    mouse_drag_active = true;
-                    drag_start = (mx, my);
-                    drag_cam_start = (
-                        vm.ram.get(0x7800).copied().unwrap_or(0) as i32,
-                        vm.ram.get(0x7801).copied().unwrap_or(0) as i32,
-                    );
-                }
-            }
+                    use crate::viewport::Viewport;
+                    let viewport = Viewport::from_ram(&vm.ram, zoom_level);
 
-            if mouse_drag_active && mouse_down_now {
-                if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
-                    // Drag delta in screen pixels -> convert to tile offset
-                    // The zoom crop system shows a portion of the 256x256 VM screen:
-                    //   zoom 0: 256px at 2x=512, zoom 1: 256px at 3x=768, zoom 2: 128px at 6x=768,
-                    //   zoom 3: 64px at 12x=768, zoom 4: 32px at 24x=768
-                    // tiles_per_host_pixel = (src_region/4) / (src_region * scale) = 1/(4*scale)
-                    let (_, scale) = match zoom_level {
+                    // Convert host coords to VM screen coords
+                    let (src_region, _) = match zoom_level {
                         0 => (256usize, 2usize),
                         1 => (256, 3),
                         2 => (128, 6),
@@ -2287,6 +2335,79 @@ fn main() {
                         4 => (32, 24),
                         _ => (128, 6),
                     };
+                    let src_offset = (256 - src_region) / 2;
+                    let map_display_size = 768usize;
+                    let map_offset = (map_display_size - src_region * scale) / 2;
+                    let vm_sx =
+                        ((mx as i32 - map_offset as i32).max(0) / scale as i32) + src_offset as i32;
+                    let vm_sy =
+                        ((my as i32 - map_offset as i32).max(0) / scale as i32) + src_offset as i32;
+
+                    // Check if click hits a world-space window title bar (top 12 pixels)
+                    let mut hit_window = false;
+                    let mut sorted_wins: Vec<_> = vm
+                        .windows
+                        .iter()
+                        .filter(|w| w.active && w.is_world_space())
+                        .collect();
+                    sorted_wins.sort_by_key(|w| std::cmp::Reverse(w.z_order));
+
+                    for win in sorted_wins {
+                        let world_px = (win.world_x as i32) * 8;
+                        let world_py = (win.world_y as i32) * 8;
+                        let (sx, sy) = viewport.world_pixels_to_screen(world_px, world_py);
+                        let s_scale = viewport.zoom.scale as i32;
+                        let win_screen_w = win.w as i32 * s_scale;
+                        let title_bar_h = 12 * s_scale;
+
+                        if vm_sx >= sx
+                            && vm_sx < sx + win_screen_w
+                            && vm_sy >= sy
+                            && vm_sy < sy + title_bar_h
+                        {
+                            // Click on title bar: start window drag
+                            window_drag_active = true;
+                            window_drag_id = win.id;
+                            window_drag_start = (mx, my);
+                            window_drag_world_start = (win.world_x as i32, win.world_y as i32);
+                            hit_window = true;
+                            break;
+                        }
+                    }
+
+                    // If no window hit, start map pan
+                    if !hit_window {
+                        mouse_drag_active = true;
+                        drag_start = (mx, my);
+                        drag_cam_start = (
+                            vm.ram.get(0x7800).copied().unwrap_or(0) as i32,
+                            vm.ram.get(0x7801).copied().unwrap_or(0) as i32,
+                        );
+                    }
+                }
+            }
+
+            // Handle window drag
+            if window_drag_active && mouse_down_now {
+                if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
+                    // Convert pixel delta to world tile delta
+                    let px_per_tile = (8 * scale) as f32; // 8 VM px * host scale
+                    let dx = (mx - window_drag_start.0) / px_per_tile;
+                    let dy = (my - window_drag_start.1) / px_per_tile;
+                    let new_wx = window_drag_world_start.0 + dx as i32;
+                    let new_wy = window_drag_world_start.1 + dy as i32;
+
+                    // Update window position
+                    if let Some(w) = vm.windows.iter_mut().find(|w| w.id == window_drag_id) {
+                        w.world_x = if new_wx >= 0 { new_wx as u32 } else { 0 };
+                        w.world_y = if new_wy >= 0 { new_wy as u32 } else { 0 };
+                    }
+                }
+            }
+
+            // Handle map pan drag
+            if mouse_drag_active && mouse_down_now {
+                if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
                     let tiles_per_host_pixel = 1.0 / (4.0 * scale as f32);
                     let dx = (mx - drag_start.0) * tiles_per_host_pixel;
                     let dy = (my - drag_start.1) * tiles_per_host_pixel;
@@ -2303,6 +2424,7 @@ fn main() {
 
             if !mouse_down_now {
                 mouse_drag_active = false;
+                window_drag_active = false;
             }
         }
 
@@ -2451,47 +2573,112 @@ fn main() {
                                     }
 
                                     if !app_name.is_empty() {
-                                        // Launch the app (same logic as "launch" CLI command)
+                                        // Phase 107: Launch app in a windowed process
+                                        // instead of replacing the map program.
                                         let prog_path = format!("programs/{}.asm", app_name);
                                         match std::fs::read_to_string(&prog_path) {
                                             Ok(source) => {
                                                 let mut pp =
                                                     crate::preprocessor::Preprocessor::new();
                                                 let preprocessed = pp.preprocess(&source);
-                                                let base_addr = crate::render::CANVAS_BYTECODE_ADDR;
-                                                match crate::assembler::assemble(
-                                                    &preprocessed,
-                                                    base_addr,
-                                                ) {
+                                                // Assemble at address 0 (relocatable)
+                                                match crate::assembler::assemble(&preprocessed, 0) {
                                                     Ok(asm_result) => {
-                                                        let ram_len = vm.ram.len();
-                                                        for v in vm.ram[base_addr
-                                                            ..ram_len.min(base_addr + 8192)]
-                                                            .iter_mut()
-                                                        {
-                                                            *v = 0;
-                                                        }
-                                                        for (idx, &word) in
-                                                            asm_result.pixels.iter().enumerate()
-                                                        {
-                                                            let addr = base_addr + idx;
-                                                            if addr < ram_len {
-                                                                vm.ram[addr] = word;
+                                                        // Find a free app slot
+                                                        let used_slots: Vec<usize> = active_apps
+                                                            .iter()
+                                                            .map(|a| a.0)
+                                                            .collect();
+                                                        let slot = (0..MAX_WINDOWED_APPS)
+                                                            .find(|s| !used_slots.contains(s));
+
+                                                        if let Some(slot_idx) = slot {
+                                                            let app_base = APP_CODE_BASE
+                                                                + slot_idx * APP_CODE_SIZE;
+                                                            let ram_len = vm.ram.len();
+
+                                                            // Clear app code region
+                                                            if app_base < ram_len {
+                                                                let end = (app_base
+                                                                    + APP_CODE_SIZE)
+                                                                    .min(ram_len);
+                                                                for v in &mut vm.ram[app_base..end]
+                                                                {
+                                                                    *v = 0;
+                                                                }
                                                             }
-                                                        }
-                                                        vm.pc = base_addr as u32;
-                                                        vm.halted = false;
-                                                        canvas_assembled = true;
-                                                        is_running = true;
-                                                        hit_breakpoint = false;
-                                                        status_msg = format!(
-                                                            "[LAUNCHED: {} (dbl-click)]",
-                                                            app_name
-                                                        );
-                                                        // Track that we launched from map so we can return
-                                                        if fullscreen_map {
-                                                            launched_from_map =
-                                                                Some(app_name.clone());
+
+                                                            // Load app bytecode
+                                                            for (idx, &word) in
+                                                                asm_result.pixels.iter().enumerate()
+                                                            {
+                                                                let addr = app_base + idx;
+                                                                if addr < ram_len {
+                                                                    vm.ram[addr] = word;
+                                                                }
+                                                            }
+
+                                                            // Create a SpawnedProcess for the app
+                                                            let pid =
+                                                                (vm.processes.len() + 1) as u32;
+                                                            let mut proc = crate::vm::types::SpawnedProcess::new(pid, 0, app_base as u32);
+                                                            proc.parent_pid = 0; // kernel-spawned
+                                                            proc.priority = 1;
+
+                                                            // Create a world-space WINSYS window for the app
+                                                            let win_w = 128u32;
+                                                            let win_h = 96u32;
+                                                            let win_world_x = bx; // building world X
+                                                            let win_world_y = by;
+
+                                                            // Enable world-space mode for window creation
+                                                            vm.ram[crate::vm::types::WINDOW_WORLD_COORDS_ADDR] = 1;
+                                                            let win_id =
+                                                                vm.windows.len() as u32 + 1;
+                                                            let mut win =
+                                                                crate::vm::types::Window::new_world(
+                                                                    win_id,
+                                                                    win_world_x as u32,
+                                                                    win_world_y as u32,
+                                                                    win_w,
+                                                                    win_h,
+                                                                    0, // title addr
+                                                                    pid,
+                                                                );
+                                                            // Set window title from app name
+                                                            let title_base = 0x7900 + slot_idx * 32;
+                                                            for (j, b) in
+                                                                app_name.bytes().enumerate()
+                                                            {
+                                                                if title_base + j < ram_len {
+                                                                    vm.ram[title_base + j] =
+                                                                        b as u32;
+                                                                }
+                                                            }
+                                                            win.title_addr = title_base as u32;
+                                                            vm.windows.push(win);
+
+                                                            // Push the process
+                                                            vm.processes.push(proc);
+
+                                                            // Track active app
+                                                            active_apps.push((
+                                                                slot_idx,
+                                                                pid,
+                                                                app_name.clone(),
+                                                            ));
+
+                                                            // Map stays running
+                                                            is_running = true;
+                                                            hit_breakpoint = false;
+                                                            status_msg = format!(
+                                                                "[WINDOWED: {} PID={} slot={}]",
+                                                                app_name, pid, slot_idx
+                                                            );
+                                                        } else {
+                                                            status_msg =
+                                                                "[MAX APPS: close a window first]"
+                                                                    .into();
                                                         }
                                                     }
                                                     Err(e) => {

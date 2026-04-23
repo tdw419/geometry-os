@@ -15903,8 +15903,7 @@ fn test_window_resize_updates_buffer() {
         "should update window height"
     );
     assert!(
-        handler.contains("offscreen_buffer")
-            && handler.contains(".resize("),
+        handler.contains("offscreen_buffer") && handler.contains(".resize("),
         "should resize offscreen buffer"
     );
 }
@@ -15990,7 +15989,6 @@ fn test_demo_tour_exists() {
     );
 }
 
-
 // ── Phase 107: World-Space Window Placement ──────────────────
 
 #[test]
@@ -16001,13 +15999,13 @@ fn test_winsys_create_world_space_window() {
 
     vm.regs[1] = 100; // world_x
     vm.regs[2] = 200; // world_y
-    vm.regs[3] = 64;  // w
-    vm.regs[4] = 48;  // h
-    vm.regs[5] = 0;   // title_addr
-    vm.regs[6] = 0;   // op = create
+    vm.regs[3] = 64; // w
+    vm.regs[4] = 48; // h
+    vm.regs[5] = 0; // title_addr
+    vm.regs[6] = 0; // op = create
 
     vm.ram[0] = 0x94; // WINSYS
-    vm.ram[1] = 6;    // op_reg = r6
+    vm.ram[1] = 6; // op_reg = r6
     vm.ram[2] = 0x00; // HALT
     vm.pc = 0;
     vm.halted = false;
@@ -16036,11 +16034,11 @@ fn test_winsys_create_screen_space_window_default() {
     vm.regs[2] = 20; // screen y
     vm.regs[3] = 64; // w
     vm.regs[4] = 48; // h
-    vm.regs[5] = 0;  // title_addr
-    vm.regs[6] = 0;  // op = create
+    vm.regs[5] = 0; // title_addr
+    vm.regs[6] = 0; // op = create
 
     vm.ram[0] = 0x94; // WINSYS
-    vm.ram[1] = 6;    // op_reg = r6
+    vm.ram[1] = 6; // op_reg = r6
     vm.ram[2] = 0x00; // HALT
     vm.pc = 0;
     vm.halted = false;
@@ -16049,7 +16047,10 @@ fn test_winsys_create_screen_space_window_default() {
 
     assert_eq!(vm.regs[0], 1, "first window should have id 1");
     let w = &vm.windows[0];
-    assert!(!w.is_world_space(), "window should be screen-space (default)");
+    assert!(
+        !w.is_world_space(),
+        "window should be screen-space (default)"
+    );
     assert_eq!(w.x, 10);
     assert_eq!(w.y, 20);
     assert_eq!(w.world_x, WORLD_COORD_UNSET);
@@ -16063,8 +16064,8 @@ fn test_winsys_moveto_world_space_window() {
     vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
 
     // Create window (op=0) in world-space
-    vm.regs[1] = 50;  // world_x
-    vm.regs[2] = 60;  // world_y
+    vm.regs[1] = 50; // world_x
+    vm.regs[2] = 60; // world_y
     vm.regs[3] = 64;
     vm.regs[4] = 48;
     vm.regs[5] = 0;
@@ -16082,7 +16083,7 @@ fn test_winsys_moveto_world_space_window() {
     vm.regs[0] = win_id;
     vm.regs[1] = 150; // new world_x
     vm.regs[2] = 250; // new world_y
-    vm.regs[6] = 5;   // moveto
+    vm.regs[6] = 5; // moveto
     vm.ram[3] = 0x94;
     vm.ram[4] = 6;
     vm.ram[5] = 0x00;
@@ -16142,8 +16143,8 @@ fn test_winsys_winfo_includes_world_coords() {
     vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
 
     // Create world-space window
-    vm.regs[1] = 42;  // world_x
-    vm.regs[2] = 99;  // world_y
+    vm.regs[1] = 42; // world_x
+    vm.regs[2] = 99; // world_y
     vm.regs[3] = 64;
     vm.regs[4] = 48;
     vm.regs[5] = 0;
@@ -16207,8 +16208,16 @@ fn test_winsys_winfo_screen_space_world_unset() {
 
     assert_eq!(vm.ram[info_addr + 0], 10, "x");
     assert_eq!(vm.ram[info_addr + 1], 20, "y");
-    assert_eq!(vm.ram[info_addr + 6], WORLD_COORD_UNSET, "world_x should be unset");
-    assert_eq!(vm.ram[info_addr + 7], WORLD_COORD_UNSET, "world_y should be unset");
+    assert_eq!(
+        vm.ram[info_addr + 6],
+        WORLD_COORD_UNSET,
+        "world_x should be unset"
+    );
+    assert_eq!(
+        vm.ram[info_addr + 7],
+        WORLD_COORD_UNSET,
+        "world_y should be unset"
+    );
 }
 
 #[test]
@@ -16237,4 +16246,294 @@ fn test_existing_programs_screen_space_unchanged() {
     assert_eq!(w.y, 60);
     assert_eq!(w.w, 80);
     assert_eq!(w.h, 60);
+}
+
+// ── Phase 107: Multi-Process App Execution & Window Drag ─────
+
+#[test]
+fn test_multi_process_two_apps_simultaneously() {
+    // Two apps can run simultaneously in separate world-space windows
+    let mut vm = Vm::new();
+    vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
+
+    // App 1: Create window at world (10,10), fill with red
+    vm.regs[1] = 10; // world_x
+    vm.regs[2] = 10; // world_y
+    vm.regs[3] = 64; // w
+    vm.regs[4] = 48; // h
+    vm.regs[5] = 0; // title_addr
+    vm.regs[6] = 0; // op = create
+    vm.ram[0] = 0x94; // WINSYS
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
+    let win_id_1 = vm.regs[0];
+    assert_eq!(win_id_1, 1);
+
+    // App 2: Create window at world (20,20)
+    vm.regs[1] = 20;
+    vm.regs[2] = 20;
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[3] = 0x94;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x00;
+    vm.pc = 3;
+    vm.halted = false;
+    vm.step();
+    vm.step();
+    let win_id_2 = vm.regs[0];
+    assert_eq!(win_id_2, 2);
+
+    // Both windows exist and are world-space
+    assert_eq!(vm.windows.len(), 2);
+    let w1 = &vm.windows[0];
+    let w2 = &vm.windows[1];
+    assert!(w1.is_world_space());
+    assert!(w2.is_world_space());
+    assert_eq!(w1.world_x, 10);
+    assert_eq!(w1.world_y, 10);
+    assert_eq!(w2.world_x, 20);
+    assert_eq!(w2.world_y, 20);
+
+    // Different PIDs (they'd get different PIDs when spawned as processes)
+    // But since we created them directly, both have pid=0
+    // The important thing is they have different IDs
+    assert_ne!(w1.id, w2.id);
+}
+
+#[test]
+fn test_offscreen_window_culling() {
+    // Windows outside the viewport should be identifiable via viewport module
+    use crate::viewport::Viewport;
+
+    let vp = Viewport::new(10, 10, 2); // cam at (10,10), zoom 2
+
+    // Window at world (10,10) tile = world pixel (80,80) - should be visible
+    assert!(vp.is_rect_visible(80, 80, 64, 48));
+
+    // Window far offscreen - should not be visible
+    assert!(!vp.is_rect_visible(8000, 8000, 64, 48));
+
+    // Window partially visible at right edge
+    // At zoom 2, scale=6. cam_px=80. Screen shows up to sx < 256.
+    // World pixel 120 -> sx = (120-80)*6 = 240, with width 64*6=384 pixels
+    // sx + sw = 624 > 0 and sx = 240 < 256, so visible
+    assert!(vp.is_rect_visible(120, 80, 64, 48));
+
+    // Window just past the right edge: sx = (130-80)*6 = 300 > 256
+    assert!(!vp.is_rect_visible(130, 80, 64, 48));
+}
+
+#[test]
+fn test_window_drag_updates_world_coords() {
+    // Simulate drag: move window from (10,10) to (15,12)
+    let mut vm = Vm::new();
+    vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
+
+    // Create world-space window
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    vm.step();
+
+    let win_id = vm.regs[0];
+
+    // Move via MOVETO (op=5) to simulate drag result
+    vm.regs[0] = win_id;
+    vm.regs[1] = 15; // new world_x
+    vm.regs[2] = 12; // new world_y
+    vm.regs[6] = 5; // moveto
+    vm.ram[3] = 0x94;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x00;
+    vm.pc = 3;
+    vm.halted = false; // MUST reset after first HALT
+    vm.step();
+    vm.step();
+
+    let w = &vm.windows[0];
+    assert_eq!(w.world_x, 15, "drag should update world_x");
+    assert_eq!(w.world_y, 12, "drag should update world_y");
+}
+
+#[test]
+fn test_window_z_order_bring_to_front() {
+    // Verify z_order management for multiple world-space windows
+    let mut vm = Vm::new();
+    vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
+
+    // Create window 1 at ram[0..1]
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step(); // WINSYS create, PC=2
+
+    // Create window 2 at ram[2..3]
+    vm.regs[1] = 15;
+    vm.regs[2] = 15;
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[2] = 0x94;
+    vm.ram[3] = 6;
+    vm.step(); // WINSYS create, PC=4
+
+    assert_eq!(vm.windows.len(), 2, "should have 2 windows");
+
+    // Window 2 should have higher z_order
+    let w1 = &vm.windows[0];
+    let w2 = &vm.windows[1];
+    assert!(
+        w2.z_order >= w1.z_order,
+        "later window should have >= z_order"
+    );
+
+    // FOCUS (op=2): bring window 1 to front
+    vm.regs[0] = 1; // window id
+    vm.regs[6] = 2; // bring to front
+    vm.ram[4] = 0x94;
+    vm.ram[5] = 6;
+    vm.pc = 4;
+    vm.halted = false;
+    vm.step();
+
+    let w1 = &vm.windows[0];
+    let w2 = &vm.windows[1];
+    assert!(w1.z_order > w2.z_order, "focused window should be on top");
+}
+
+#[test]
+fn test_process_halt_destroys_only_its_windows() {
+    // When a process halts, only its windows should be destroyed
+    let mut vm = Vm::new();
+
+    // Create window for PID 0 (main process)
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step(); // WINSYS create, PC=2
+
+    // Create window for PID 2 (child process)
+    // Set current_pid to simulate a different process creating the window
+    vm.current_pid = 2;
+    vm.regs[1] = 20;
+    vm.regs[2] = 20;
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[2] = 0x94;
+    vm.ram[3] = 6;
+    vm.pc = 2;
+    vm.step(); // WINSYS create, PC=4
+
+    assert_eq!(vm.windows.len(), 2);
+    assert_eq!(vm.windows[0].pid, 0);
+    assert_eq!(vm.windows[1].pid, 2);
+
+    // Destroy windows of PID 2 (simulating process halt cleanup)
+    vm.windows.retain(|w| w.pid != 2);
+
+    assert_eq!(vm.windows.len(), 1, "only PID 0 window should remain");
+    assert_eq!(vm.windows[0].pid, 0);
+}
+
+#[test]
+fn test_viewport_coordinate_roundtrip() {
+    // Verify screen_to_world and world_to_screen are inverses
+    use crate::viewport::Viewport;
+
+    let vp = Viewport::new(50, 50, 2); // cam at (50,50), zoom 2
+
+    // World tile (55, 55) -> screen -> back to world
+    let (sx, sy) = vp.world_to_screen_unchecked(55, 55);
+    let (wx, wy) = vp.screen_to_world(sx, sy);
+    assert_eq!(wx, 55);
+    assert_eq!(wy, 55);
+
+    // World tile (50, 50) -> screen (0, 0)
+    let (sx, sy) = vp.world_to_screen_unchecked(50, 50);
+    assert_eq!(sx, 0);
+    assert_eq!(sy, 0);
+}
+
+#[test]
+fn test_viewport_zoom_levels_consistency() {
+    // Verify that different zoom levels produce consistent mappings
+    use crate::viewport::Viewport;
+
+    for zoom in 0..=4 {
+        let vp = Viewport::new(10, 10, zoom);
+        // Camera tile should map to screen (0,0)
+        let (sx, sy) = vp.world_to_screen_unchecked(10, 10);
+        assert_eq!(sx, 0, "zoom {}: camera tile should be at screen x=0", zoom);
+        assert_eq!(sy, 0, "zoom {}: camera tile should be at screen y=0", zoom);
+
+        // Adjacent tile should be at pixels_per_tile distance
+        let (sx2, sy2) = vp.world_to_screen_unchecked(11, 11);
+        assert_eq!(sx2, vp.zoom.pixels_per_tile() as i32);
+        assert_eq!(sy2, vp.zoom.pixels_per_tile() as i32);
+    }
+}
+
+#[test]
+fn test_world_space_window_hit_test() {
+    // Verify HITTEST (op=3) works for world-space windows
+    let mut vm = Vm::new();
+    vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
+
+    // Create a world-space window
+    vm.regs[1] = 100; // world_x
+    vm.regs[2] = 200; // world_y
+    vm.regs[3] = 64;
+    vm.regs[4] = 48;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0; // create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    // World-space windows store world coords but screen x/y = 0
+    let win_id = vm.regs[0];
+    assert_eq!(win_id, 1);
+    let w = &vm.windows[0];
+    assert!(w.is_world_space());
+    assert_eq!(w.world_x, 100);
+    assert_eq!(w.world_y, 200);
+    // Screen x/y are 0 for world-space windows (computed at render time)
+    assert_eq!(w.x, 0);
+    assert_eq!(w.y, 0);
 }

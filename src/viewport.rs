@@ -29,12 +29,30 @@ pub struct ZoomLevel {
 impl ZoomLevel {
     pub fn from_level(level: u32) -> Self {
         match level {
-            0 => ZoomLevel { src_region: 256, scale: 2 },
-            1 => ZoomLevel { src_region: 256, scale: 3 },
-            2 => ZoomLevel { src_region: 128, scale: 6 },
-            3 => ZoomLevel { src_region: 64, scale: 12 },
-            4 => ZoomLevel { src_region: 32, scale: 24 },
-            _ => ZoomLevel { src_region: 128, scale: 6 },
+            0 => ZoomLevel {
+                src_region: 256,
+                scale: 2,
+            },
+            1 => ZoomLevel {
+                src_region: 256,
+                scale: 3,
+            },
+            2 => ZoomLevel {
+                src_region: 128,
+                scale: 6,
+            },
+            3 => ZoomLevel {
+                src_region: 64,
+                scale: 12,
+            },
+            4 => ZoomLevel {
+                src_region: 32,
+                scale: 24,
+            },
+            _ => ZoomLevel {
+                src_region: 128,
+                scale: 6,
+            },
         }
     }
 
@@ -97,11 +115,7 @@ impl Viewport {
     /// Convert world tile coordinates + pixel offset within a tile to screen pixels.
     /// This handles the sub-tile positioning that world-space windows need.
     /// `world_x` and `world_y` can be multiplied by TILE_SIZE to get pixel offsets.
-    pub fn world_pixels_to_screen(
-        &self,
-        world_pixel_x: i32,
-        world_pixel_y: i32,
-    ) -> (i32, i32) {
+    pub fn world_pixels_to_screen(&self, world_pixel_x: i32, world_pixel_y: i32) -> (i32, i32) {
         let scale = self.zoom.scale as i32;
         let cam_px = self.cam_x * TILE_SIZE as i32;
         let cam_py = self.cam_y * TILE_SIZE as i32;
@@ -113,13 +127,7 @@ impl Viewport {
 
     /// Check if a rectangle in world-pixel coordinates is visible on screen.
     /// Returns true if any part of the rectangle overlaps the framebuffer.
-    pub fn is_rect_visible(
-        &self,
-        world_px: i32,
-        world_py: i32,
-        width: u32,
-        height: u32,
-    ) -> bool {
+    pub fn is_rect_visible(&self, world_px: i32, world_py: i32, width: u32, height: u32) -> bool {
         let (sx, sy) = self.world_pixels_to_screen(world_px, world_py);
         let sw = (width as i32) * (self.zoom.scale as i32);
         let sh = (height as i32) * (self.zoom.scale as i32);
@@ -170,7 +178,7 @@ mod tests {
     #[test]
     fn test_world_to_screen_centered() {
         let vp = Viewport::new(10, 10, 2); // zoom 2: 48px per tile
-        // Camera at (10,10), world tile (10,10) should be at screen (0,0)
+                                           // Camera at (10,10), world tile (10,10) should be at screen (0,0)
         let (sx, sy) = vp.world_to_screen_unchecked(10, 10);
         assert_eq!(sx, 0);
         assert_eq!(sy, 0);
@@ -180,8 +188,8 @@ mod tests {
     fn test_world_to_screen_offset() {
         let vp = Viewport::new(10, 10, 2); // 48px per tile
         let (sx, sy) = vp.world_to_screen_unchecked(12, 11);
-        assert_eq!(sx, 96);  // (12-10)*48
-        assert_eq!(sy, 48);  // (11-10)*48
+        assert_eq!(sx, 96); // (12-10)*48
+        assert_eq!(sy, 48); // (11-10)*48
     }
 
     #[test]
@@ -196,7 +204,7 @@ mod tests {
     #[test]
     fn test_world_pixels_to_screen() {
         let vp = Viewport::new(10, 10, 2); // scale=6
-        // World pixel (10*8+4, 10*8+2) = (84, 82)
+                                           // World pixel (10*8+4, 10*8+2) = (84, 82)
         let (sx, sy) = vp.world_pixels_to_screen(84, 82);
         // cam_px = 10*8 = 80
         // (84-80)*6 = 24, (82-80)*6 = 12

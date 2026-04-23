@@ -5166,7 +5166,7 @@ phases:
     - src/vm/types.rs
     - src/vm/mod.rs
     scope_lines: 120
-    status: planned
+    status: done
   - acceptance_criteria:
     - description: viewport struct tracks (cam_x, cam_y, zoom) mapping world tiles
         to framebuffer pixels
@@ -5181,7 +5181,7 @@ phases:
     scope_files:
     - src/viewport.rs
     scope_lines: 100
-    status: planned
+    status: done
   - acceptance_criteria:
     - description: world_desktop.asm renders terrain below windows, windows render
         on top
@@ -5197,7 +5197,7 @@ phases:
     scope_files:
     - src/main.rs
     scope_lines: 150
-    status: planned
+    status: done
   - acceptance_criteria:
     - description: launch command supports --window flag that loads app into a WINSYS
         window instead of replacing map
@@ -5216,7 +5216,7 @@ phases:
     - src/vm/mod.rs
     - src/vm/types.rs
     scope_lines: 400
-    status: planned
+    status: done
   - acceptance_criteria:
     - description: Dragging a window by its title bar updates world_x, world_y
     - description: Click on window brings it to front (z_order update)
@@ -5233,7 +5233,7 @@ phases:
     - src/main.rs
     - src/vm/mod.rs
     scope_lines: 200
-    status: planned
+    status: done
   - acceptance_criteria:
     - description: test_world_space_window_placement verifies world_x/world_y set
         correctly
@@ -5250,7 +5250,7 @@ phases:
     scope_files:
     - src/vm/tests.rs
     scope_lines: 250
-    status: planned
+    status: done
   description: Transform the map from a launcher into an infinite spatial desktop
     where app windows coexist with the terrain. Windows live in world-space coordinates
     and pan with the map. Multiple apps run simultaneously in separate windows via
@@ -5262,7 +5262,7 @@ phases:
     the desktop IS the map.
   id: phase-107
   scope_lines_total: 1220
-  status: in_progress
+  status: done
   test_target: 12
   title: Infinite Spatial Desktop
   _claimed_by: worker-0

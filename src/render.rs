@@ -757,7 +757,11 @@ pub fn render_fullscreen_map(
                         for dx in 0..s_scale {
                             let px_out = base_x + dx;
                             let py_out = base_y + dy;
-                            if px_out >= 0 && px_out < WIDTH as i32 && py_out >= 0 && py_out < HEIGHT as i32 {
+                            if px_out >= 0
+                                && px_out < WIDTH as i32
+                                && py_out >= 0
+                                && py_out < HEIGHT as i32
+                            {
                                 buffer[(py_out as usize) * WIDTH + (px_out as usize)] = color;
                             }
                         }
