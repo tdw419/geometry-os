@@ -4,7 +4,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 
 **Progress:** 118/118 phases complete
 
-**Deliverables:** 494/495 complete
+**Deliverables:** 495/495 complete
 
 ## Scope Summary
 
@@ -126,8 +126,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 | phase-114 Project Hygiene and README Accuracy | COMPLETE | 1/1 | 60 | 0 |
 | phase-115 Self-Modification Showcase Demos | COMPLETE | 1/1 | 450 | 6 |
 | phase-116 Living Map Entities | COMPLETE | 1/1 | 500 | 8 |
-| phase-117 Performance Benchmarking and Profiling | IN PROGRESS | 0/1 | 300 | 4 |
-| phase-118 Showtime -- First Run Experience | PLANNED | 0/1 | 400 | 5 |
+| phase-117 Performance Benchmarking and Profiling | COMPLETE | 1/1 | 300 | 4 |
+| phase-118 Showtime -- First Run Experience | COMPLETE | 1/1 | 400 | 5 |
 
 ## Dependencies
 
@@ -2687,7 +2687,7 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
 
 ### Deliverables
 
-- [ ] **Criterion benchmarks** -- cargo bench shows throughput for at least 3 subsystems, profiling identifies top 3 hotspots, at least one optimization applied
+- [x] **Criterion benchmarks** -- cargo bench shows throughput for at least 3 subsystems, profiling identifies top 3 hotspots, at least one optimization applied
 
 ## [x] phase-118: Showtime -- First Run Experience (COMPLETE)
 
