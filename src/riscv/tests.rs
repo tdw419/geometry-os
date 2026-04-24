@@ -660,17 +660,42 @@ fn test_rdtime_advances_with_clint_tick() {
 
 #[test]
 fn test_c_hello_world_bare_metal() {
-    // Boot a bare-metal RISC-V program compiled from C/assembly
+    // Boot a bare-metal C program compiled with riscv64-linux-gnu-gcc
     // through the Geometry OS hypervisor and verify UART output.
     //
-    // Build (RV32IMAC!): cd /tmp/geo_c_test && ./build.sh hello.c
-    // NOTE: Geometry OS CPU is RV32 -- do NOT use rv64imac/lp64.
-    let elf_path = "/tmp/geo_c_test/hello.elf";
+    // Build: cd examples/riscv-hello && ./build.sh hello.c
+    // The ELF is checked into examples/riscv-hello/hello_c.elf
+    let elf_path = "examples/riscv-hello/hello_c.elf";
+
+    // If cross-compiler not available, rebuild ELF from source
     let elf_data = match std::fs::read(elf_path) {
         Ok(d) => d,
         Err(_) => {
-            eprintln!("Skipping: {} not found (build with /tmp/geo_c_test/build.sh)", elf_path);
-            return;
+            // Try to build it
+            let status = std::process::Command::new("./examples/riscv-hello/build.sh")
+                .arg("hello.c")
+                .current_dir(env!("CARGO_MANIFEST_DIR"))
+                .status()
+                .ok();
+            match status {
+                Some(s) if s.success() => {
+                    let build_path =
+                        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                            .join("examples/riscv-hello/hello.elf");
+                    std::fs::read(&build_path).unwrap_or_else(|e| {
+                        panic!(
+                            "Built hello.elf but can't read it: {} ({:?})",
+                            e, build_path
+                        )
+                    })
+                }
+                _ => {
+                    panic!(
+                        "Cannot build or find {} -- is riscv64-linux-gnu-gcc installed?",
+                        elf_path
+                    );
+                }
+            }
         }
     };
 
@@ -679,12 +704,15 @@ fn test_c_hello_world_bare_metal() {
     let mut vm = RiscvVm::new(1024 * 1024);
     let mut bridge = UartBridge::new();
 
-    let result = vm.boot_guest(&elf_data, 1, 500_000).expect("boot should succeed");
+    let result = vm
+        .boot_guest(&elf_data, 1, 500_000)
+        .expect("boot should succeed");
 
     eprintln!(
         "Boot: {} instructions, entry=0x{:08X}",
         result.instructions, result.entry
     );
+    assert_eq!(result.entry, 0x8000_0000, "entry should be at 0x80000000");
 
     // Drain UART to canvas buffer
     let mut canvas = make_canvas();
@@ -705,6 +733,42 @@ fn test_c_hello_world_bare_metal() {
     assert!(
         uart_str.contains("hello from C"),
         "Expected 'hello from C' in UART output, got: {:?}",
+        uart_str
+    );
+}
+
+#[test]
+fn test_asm_hello_world_bare_metal() {
+    // Same test but for the assembly version
+    let elf_path = "examples/riscv-hello/hello_asm.elf";
+    let elf_data = match std::fs::read(elf_path) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln!(
+                "Skipping: {} not found (build with examples/riscv-hello/build.sh)",
+                elf_path
+            );
+            return;
+        }
+    };
+
+    let mut vm = RiscvVm::new(1024 * 1024);
+    let mut bridge = UartBridge::new();
+
+    vm.boot_guest(&elf_data, 1, 500_000).expect("boot ok");
+
+    let mut canvas = make_canvas();
+    bridge.drain_uart_to_canvas(&mut vm.bus, &mut canvas);
+
+    let mut uart_str = String::new();
+    for &ch in &canvas {
+        if ch == 0 { break; }
+        uart_str.push((ch & 0xFF) as u8 as char);
+    }
+
+    assert!(
+        uart_str.contains("hello from C"),
+        "Expected 'hello from C', got: {:?}",
         uart_str
     );
 }
