@@ -37,7 +37,19 @@ ROADMAP.md      -- Human-readable roadmap with priority checkboxes
 5. **Programs prove the need** -- no speculative opcodes
 6. **The OPCODES list in preprocessor.rs must sync with assembler.rs**
 7. **Temp registers r27-r29 are reserved** for preprocessor macros
-8. **Opcode 0x52+** is where new OS opcodes go (SYSCALL, RETK, etc.)
+8. **Promotion Rule:** New opcodes are earned. Implement as Layer 2 pixel patterns first; promote to macro/subroutine; only promote to VM opcode if stable and high-performance requirement exists.
+9. **Opcode 0x52+** is where new OS opcodes go (SYSCALL, RETK, etc.)
+
+## UI & Visual Philosophy: Token -> Pixel -> GUI
+
+Geometry OS uses a three-layer visual stack. **Layer 2 (Pixel)** is the primary authoring substrate. **Layer 3 (GUI)** is a convention of Layer 2 patterns, not a set of VM features. Do not propose high-level GUI opcodes (like `DRAW_WINDOW`) until they have been proven as stable pixel patterns across multiple apps.
+
+## Visual Authoring: Canvas Text Surface
+
+The grid acts as a text editor (TEXT mode) where "the letter IS the colored pixels."
+- **F8 Assembly:** Reads grid -> Preprocessor -> Assembler -> Bytecode at `0x1000`.
+- **Macros:** Use `VAR`, `SET`, `GET`, `INC`, `DEC` to reduce boilerplate.
+- **Memory Map:** Bytecode at `0x1000`, Grid RAM at `0x8000`, Screen Buffer at `0x10000`.
 
 ## VM State
 

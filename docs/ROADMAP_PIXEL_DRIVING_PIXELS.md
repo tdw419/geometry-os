@@ -3,7 +3,7 @@
 Make the Geometry OS canvas programmable from within the VM. Programs read and write the grid they live on, assemble new programs onto the grid, and execute their own replacements. Pixels drive pixels.
 
 
-**Progress:** 0/6 phases complete, 0 in progress
+**Progress:** 6/6 phases complete (all built: canvas RAM mapping, screen RAM mapping, ASMSELF, RUNNEXT, self-modifying demos)
 
 **Deliverables:** 0/18 complete
 

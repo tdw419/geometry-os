@@ -404,7 +404,7 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 - 64,851 lines of Rust
 - 167 opcodes
 - 139 programs
-- 2,921 tests
+- 3,023 tests
 - MIT licensed
 
 ## License

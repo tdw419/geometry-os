@@ -5524,6 +5524,129 @@ phases:
   status: complete
   test_target: 2
   scope_lines_total: 265
+- deliverables:
+  - acceptance_criteria:
+    - description: README accurately reflects 2922+ tests, 167+ opcodes, 139+ programs
+      validation: grep the README for the numbers
+    - description: No stale "0/6 phases" or "921 tests" claims remain
+      validation: grep for known stale strings
+    - description: All .md docs in docs/ have consistent stats
+      validation: spot check 3 docs
+    met: false
+  description: >
+    The README has stale stats (921 tests in one place, 2921 in another).
+    ROADMAP_PIXEL_DRIVING_PIXELS.md says "0/6 phases complete" when all are done.
+    There's a "CANVAS_TEXT_SURFACE (Copy).md" duplicate file. The default-run is
+    missing from Cargo.toml so `cargo run` fails. Fix these so the project presents
+    cleanly to anyone who clones it.
+  goal: Fix stale docs, duplicate files, and missing Cargo.toml default-run
+  id: phase-114
+  risks:
+  - Changing stats requires recounting from actual source (not trusting existing numbers)
+  scope_lines_total: 60
+  status: todo
+  test_target: 0
+  title: Project Hygiene and README Accuracy
+- deliverables:
+  - acceptance_criteria:
+    - description: At least 3 new demo programs that use ASMSELF + RUNNEXT
+      validation: ls programs/ shows new files, each uses 0x73/0x74
+    - description: Each demo showcases a different self-modification pattern
+      validation: code review shows distinct approaches
+    - description: All demos pass their test assertions
+      validation: cargo test passes
+    met: false
+  description: >
+    The self-modification primitives (ASMSELF, RUNNEXT, ASM_RAM, canvas RAM mapping)
+    exist but have minimal demo coverage beyond code_evolution.asm and the AI terminal.
+    Build showcase programs:
+    1. mirror.asm -- reads screen pixels, writes assembly to canvas that reproduces them
+    2. fractal_gen.asm -- generates Mandelbrot iteration counts, writes the visualization
+       as PSET calls to canvas, assembles and runs itself to render
+    3. chatbot.asm -- simple ELIZA-style pattern matcher that lives on the canvas,
+       reads typed input from canvas cells, writes responses to other cells
+    Each demo exercises the full token->pixel->GUI loop.
+  goal: Build self-modifying showcase demos proving pixels drive pixels
+  id: phase-115
+  risks:
+  - Canvas text input requires understanding the canvas_buffer encoding (low byte = ASCII char)
+  - Complex demos may exceed 4096-cell canvas limit
+  scope_lines_total: 450
+  status: todo
+  test_target: 6
+  title: Self-Modification Showcase Demos
+- deliverables:
+  - acceptance_criteria:
+    - description: Map entities have positions and can be rendered on the infinite map
+      validation: entity renders at specified tile coordinates
+    - description: At least 2 entity types (program, agent) with distinct visual representations
+      validation: entities look different on the map
+    - description: Entities can be entered/interacted with from the map
+      validation: walking into an entity opens its window/content
+    met: false
+  description: >
+    The map exists. Buildings can be entered to launch apps. But there are no "living"
+    entities -- things that move, respond, or evolve on their own. Add map entities:
+    program-nodes that display running VM output, and agent-nodes that run simple AI
+    behaviors. These use the existing SPAWNC/process infrastructure but appear as
+    interactive objects on the map rather than just static buildings.
+  goal: Add living entities (programs and agents) to the infinite map
+  id: phase-116
+  risks:
+  - Map rendering may need sprite batching for many entities
+  - Process-per-entity could hit scheduler limits
+  - Entity state persistence across frames needs careful design
+  scope_lines_total: 500
+  status: todo
+  test_target: 8
+  title: Living Map Entities
+- deliverables:
+  - acceptance_criteria:
+    - description: cargo bench shows throughput for at least 3 subsystems
+      validation: cargo bench runs and produces numbers
+    - description: Profiling data identifies the top 3 hotspots
+      validation: benchmark report shows clear bottleneck ranking
+    - description: At least one optimization applied that measurably improves throughput
+      validation: before/after benchmark comparison
+    met: false
+  description: >
+    2922 tests pass but we have no performance data. The VM runs 60fps but we don't
+    know where time is spent. Add criterion benchmarks for: (1) VM step execution,
+    (2) page table translation, (3) canvas buffer operations, (4) assembler throughput.
+    Profile the renderer. Identify and fix the top bottleneck.
+  goal: Benchmark the system and optimize the biggest bottleneck
+  id: phase-117
+  risks:
+  - criterion may not be in Cargo.toml yet
+  - GPU rendering profiling needs wgpu-specific tools
+  scope_lines_total: 300
+  status: todo
+  test_target: 4
+  title: Performance Benchmarking and Profiling
+- deliverables:
+  - acceptance_criteria:
+    - description: A single command builds a release binary that runs without dev tools
+      validation: cargo build --release produces a working binary
+    - description: The binary boots to a usable desktop with at least 3 working apps
+      validation: launch terminal, paint, and file manager from the desktop
+    - description: A screen recording or screenshot gallery exists in docs/
+      validation: ls docs/screenshots/ shows PNG files
+    met: false
+  description: >
+    Make Geometry OS showable. Right now you need to know the CLI flags and keyboard
+    shortcuts to do anything. Fix: (1) default-run in Cargo.toml, (2) a proper desktop
+    with app launcher, (3) screenshot gallery for the README, (4) a "first 5 minutes"
+    quickstart in the README. The goal is: someone clones, cargo run, sees something
+    impressive within 30 seconds.
+  goal: Make Geometry OS presentable to someone who just cloned it
+  id: phase-118
+  risks:
+  - Release build may surface different optimization issues
+  - Desktop app launcher needs window manager support that may be partial
+  scope_lines_total: 400
+  status: todo
+  test_target: 5
+  title: Showtime -- First Run Experience
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
