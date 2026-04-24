@@ -3,18 +3,18 @@
 ; then self-assembles and runs the generated code.
 ; This proves: pixel -> text -> assembly -> bytecode -> pixel
 ;
-; The program draws a traffic light (red/yellow/green),
+; The program draws 3 colored pixels (red, green, blue),
 ; then generates PSETI instructions to reproduce it on canvas,
 ; clears the screen, and self-assembles + runs the canvas code.
 
 ; ===== Phase 1: Draw initial pattern =====
 LDI r1, 0xFF0000
 PSETI 100, 80, 0xFF0000
-PSETI 100, 100, 0xFFFF00
-PSETI 100, 120, 0x00FF00
+PSETI 100, 100, 0x00FF00
+PSETI 100, 120, 0x0000FF
 
 ; ===== Phase 2: Generate PSETI assembly on canvas =====
-; Write "PSETI 100,80,0xFF0000\nPSETI 100,100,0xFFFF00\nPSETI 100,120,0x00FF00\nHALT"
+; Write "PSETI 100,80,0xFF0000\nPSETI 100,100,0x00FF00\nPSETI 100,120,0x0000FF\nHALT"
 ; to the canvas buffer at 0x8000.
 ; Then ASMSELF + RUNNEXT will compile and execute this code.
 
@@ -143,13 +143,13 @@ ADD r14, r15
 LDI r17, 120            ; 'x'
 STORE r14, r17
 ADD r14, r15
-LDI r17, 70             ; 'F'
+LDI r17, 48             ; '0'
 STORE r14, r17
 ADD r14, r15
-LDI r17, 70             ; 'F'
+LDI r17, 48             ; '0'
 STORE r14, r17
 ADD r14, r15
-; "FF00" for yellow 0xFFFF00
+; "FF00" rest of green 0x00FF00
 LDI r17, 70             ; 'F'
 STORE r14, r17
 ADD r14, r15
@@ -215,7 +215,13 @@ ADD r14, r15
 LDI r17, 120            ; 'x'
 STORE r14, r17
 ADD r14, r15
-; "00FF00" for green 0x00FF00
+; "0000FF" for blue
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
 LDI r17, 48             ; '0'
 STORE r14, r17
 ADD r14, r15
@@ -226,12 +232,6 @@ LDI r17, 70             ; 'F'
 STORE r14, r17
 ADD r14, r15
 LDI r17, 70             ; 'F'
-STORE r14, r17
-ADD r14, r15
-LDI r17, 48             ; '0'
-STORE r14, r17
-ADD r14, r15
-LDI r17, 48             ; '0'
 STORE r14, r17
 ADD r14, r15
 LDI r17, 10             ; '\n'

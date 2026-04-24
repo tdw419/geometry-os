@@ -816,3 +816,209 @@ fn test_pixel_ide_assembles() {
         active_windows
     );
 }
+
+// === Self-Modification Showcase Demos (Phase 115) ===
+
+#[test]
+fn test_mirror_self_modifies() {
+    // mirror.asm draws 3 colored pixels, then generates PSETI instructions
+    // on the canvas to reproduce them, then ASMSELF+RUNNEXT.
+    let vm = compile_run("programs/mirror.asm");
+
+    assert!(
+        vm.halted,
+        "mirror should halt after self-assembled code runs"
+    );
+
+    // ASMSELF should have succeeded
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should not report error");
+    assert!(vm.ram[0xFFD] > 0, "ASMSELF should produce bytecode");
+
+    // Verify self-assembled code drew pixels on screen
+    // Original program draws at (100,80), (100,100), (100,120)
+    // Then clears screen, then self-assembled code redraws them
+    let has_red = vm.screen.iter().any(|&p| p == 0xFF0000);
+    let has_green = vm.screen.iter().any(|&p| p == 0x00FF00);
+    let has_blue = vm.screen.iter().any(|&p| p == 0x0000FF);
+    assert!(
+        has_red,
+        "screen should have red pixels from self-assembled code"
+    );
+    assert!(
+        has_green,
+        "screen should have green pixels from self-assembled code"
+    );
+    assert!(
+        has_blue,
+        "screen should have blue pixels from self-assembled code"
+    );
+}
+
+#[test]
+fn test_fractal_gen_sierpinski() {
+    // fractal_gen.asm computes a Sierpinski pattern (x AND y == 0),
+    // writes PSETI instructions to canvas, then ASMSELF+RUNNEXT.
+    let vm = compile_run("programs/fractal_gen.asm");
+
+    assert!(
+        vm.halted,
+        "fractal_gen should halt after self-assembled code runs"
+    );
+
+    // ASMSELF should have succeeded
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should not report error");
+    assert!(vm.ram[0xFFD] > 0, "ASMSELF should produce bytecode");
+
+    // Verify screen has colored pixels (red from top row, yellow/green from others)
+    let has_colored_pixels = vm.screen.iter().filter(|&&p| p != 0).count();
+    assert!(
+        has_colored_pixels > 0,
+        "fractal should produce colored pixels, found {}",
+        has_colored_pixels
+    );
+
+    // Sierpinski property: (0,0) should be colored (0 AND 0 == 0)
+    assert_ne!(
+        vm.screen[0], 0,
+        "pixel (0,0) should be colored in Sierpinski"
+    );
+}
+
+#[test]
+fn test_chatbot_smiley_default() {
+    // chatbot.asm with pattern code 0 (default/smiley)
+    let source = std::fs::read_to_string("programs/chatbot.asm").unwrap();
+    let asm = geometry_os::assembler::assemble(&source, 0).unwrap();
+    let mut vm = geometry_os::vm::Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.ram[0x7000] = 0; // default = smiley
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..500_000 {
+        if vm.halted {
+            break;
+        }
+        vm.step();
+    }
+
+    assert!(
+        vm.halted,
+        "chatbot should halt after self-assembled code runs"
+    );
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+
+    // Verify green smiley pixels on screen
+    let green = 0x00FF00u32;
+    let green_count = vm.screen.iter().filter(|&&p| p == green).count();
+    assert!(
+        green_count >= 5,
+        "should have at least 5 green smiley pixels, got {}",
+        green_count
+    );
+}
+
+#[test]
+fn test_chatbot_sun_pattern() {
+    // chatbot.asm with pattern code 1 (sun = yellow cross)
+    let source = std::fs::read_to_string("programs/chatbot.asm").unwrap();
+    let asm = geometry_os::assembler::assemble(&source, 0).unwrap();
+    let mut vm = geometry_os::vm::Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.ram[0x7000] = 1; // sun
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..500_000 {
+        if vm.halted {
+            break;
+        }
+        vm.step();
+    }
+
+    assert!(vm.halted, "chatbot sun should halt");
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+
+    // Verify yellow cross pixels
+    let yellow = 0xFFFF00u32;
+    let yellow_count = vm.screen.iter().filter(|&&p| p == yellow).count();
+    assert!(
+        yellow_count >= 5,
+        "should have at least 5 yellow sun pixels, got {}",
+        yellow_count
+    );
+}
+
+#[test]
+fn test_chatbot_rain_pattern() {
+    // chatbot.asm with pattern code 2 (rain = blue drops)
+    let source = std::fs::read_to_string("programs/chatbot.asm").unwrap();
+    let asm = geometry_os::assembler::assemble(&source, 0).unwrap();
+    let mut vm = geometry_os::vm::Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.ram[0x7000] = 2; // rain
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..500_000 {
+        if vm.halted {
+            break;
+        }
+        vm.step();
+    }
+
+    assert!(vm.halted, "chatbot rain should halt");
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+
+    // Verify blue rain pixels
+    let rain_color = 0x4444FFu32;
+    let rain_count = vm.screen.iter().filter(|&&p| p == rain_color).count();
+    assert!(
+        rain_count >= 5,
+        "should have at least 5 blue rain pixels, got {}",
+        rain_count
+    );
+}
+
+#[test]
+fn test_chatbot_star_pattern() {
+    // chatbot.asm with pattern code 3 (star = white starburst)
+    let source = std::fs::read_to_string("programs/chatbot.asm").unwrap();
+    let asm = geometry_os::assembler::assemble(&source, 0).unwrap();
+    let mut vm = geometry_os::vm::Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.ram[0x7000] = 3; // star
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..500_000 {
+        if vm.halted {
+            break;
+        }
+        vm.step();
+    }
+
+    assert!(vm.halted, "chatbot star should halt");
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+
+    // Verify white star pixels
+    let white = 0xFFFFFFu32;
+    let white_count = vm.screen.iter().filter(|&&p| p == white).count();
+    assert!(
+        white_count >= 5,
+        "should have at least 5 white star pixels, got {}",
+        white_count
+    );
+}

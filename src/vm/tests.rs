@@ -2477,7 +2477,7 @@ fn test_chatbot_assembles() {
 
 #[test]
 fn test_chatbot_default_response() {
-    // With empty canvas input, chatbot should give default response
+    // Default pattern code (0) = smiley (green pixels)
     use crate::assembler::assemble;
 
     let source = include_str!("../../programs/chatbot.asm");
@@ -2488,34 +2488,33 @@ fn test_chatbot_default_response() {
             vm.ram[i] = pixel;
         }
     }
+    // RAM[0x7000] = 0 (default/smiley pattern)
+    vm.ram[0x7000] = 0;
     vm.pc = 0;
     vm.halted = false;
 
-    for _ in 0..2_000_000 {
+    for _ in 0..500_000 {
         if !vm.step() {
             break;
         }
     }
 
-    assert!(vm.halted, "chatbot should halt");
-
-    // Check that canvas row 4 (offset 128) has the default response text
-    // "I do not understand. Try HELP"
-    // First char should be 'I' (73)
-    assert_ne!(
-        vm.canvas_buffer[128], 0,
-        "chatbot should write response to canvas row 4"
-    );
-    assert_eq!(
-        vm.canvas_buffer[128],
-        73, // 'I'
-        "default response should start with 'I'"
+    assert!(vm.halted, "chatbot should halt after self-assembly");
+    // ASMSELF should have succeeded
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+    // Green pixels on screen (smiley pattern)
+    let green = 0x00FF00u32;
+    let green_count = vm.screen.iter().filter(|&&p| p == green).count();
+    assert!(
+        green_count >= 5,
+        "default should draw green smiley pixels, got {}",
+        green_count
     );
 }
 
 #[test]
 fn test_chatbot_hello_response() {
-    // Pre-load "HELLO" on canvas row 0, run chatbot, check response
+    // Pattern code 1 = SUN (yellow cross)
     use crate::assembler::assemble;
 
     let source = include_str!("../../programs/chatbot.asm");
@@ -2527,38 +2526,31 @@ fn test_chatbot_hello_response() {
         }
     }
 
-    // Write "HELLO" to canvas row 0
-    write_to_canvas(&mut vm.canvas_buffer, 0, "HELLO");
-
+    vm.ram[0x7000] = 1; // SUN pattern
     vm.pc = 0;
     vm.halted = false;
 
-    for _ in 0..2_000_000 {
+    for _ in 0..500_000 {
         if !vm.step() {
             break;
         }
     }
 
-    assert!(vm.halted, "chatbot should halt on HELLO input");
-
-    // Response on row 4 should be "Hello! I am GEO bot."
-    // First char = 'H' (72)
-    assert_eq!(
-        vm.canvas_buffer[128],
-        72, // 'H'
-        "HELLO response should start with 'H'"
-    );
-    // Second char = 'e' (101)
-    assert_eq!(
-        vm.canvas_buffer[129],
-        101, // 'e'
-        "HELLO response second char should be 'e'"
+    assert!(vm.halted, "chatbot should halt on SUN pattern");
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+    // Yellow cross pixels
+    let yellow = 0xFFFF00u32;
+    let yellow_count = vm.screen.iter().filter(|&&p| p == yellow).count();
+    assert!(
+        yellow_count >= 5,
+        "SUN should draw yellow pixels, got {}",
+        yellow_count
     );
 }
 
 #[test]
 fn test_chatbot_bye_response() {
-    // Test BYE keyword
+    // Pattern code 2 = RAIN (blue drops)
     use crate::assembler::assemble;
 
     let source = include_str!("../../programs/chatbot.asm");
@@ -2570,25 +2562,25 @@ fn test_chatbot_bye_response() {
         }
     }
 
-    write_to_canvas(&mut vm.canvas_buffer, 0, "BYE");
-
+    vm.ram[0x7000] = 2; // RAIN pattern
     vm.pc = 0;
     vm.halted = false;
 
-    for _ in 0..2_000_000 {
+    for _ in 0..500_000 {
         if !vm.step() {
             break;
         }
     }
 
-    assert!(vm.halted, "chatbot should halt on BYE input");
-
-    // Response should be "Goodbye! Pixels forever."
-    // 'G' = 71
-    assert_eq!(
-        vm.canvas_buffer[128],
-        71, // 'G'
-        "BYE response should start with 'G'"
+    assert!(vm.halted, "chatbot should halt on RAIN pattern");
+    assert_ne!(vm.ram[0xFFD], 0xFFFFFFFF, "ASMSELF should succeed");
+    // Blue rain pixels
+    let rain = 0x4444FFu32;
+    let rain_count = vm.screen.iter().filter(|&&p| p == rain).count();
+    assert!(
+        rain_count >= 5,
+        "RAIN should draw blue pixels, got {}",
+        rain_count
     );
 }
 
