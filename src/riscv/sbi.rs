@@ -49,6 +49,28 @@ const SBI_DBCN_CONSOLE_WRITE: u32 = 0;
 const SBI_DBCN_CONSOLE_READ: u32 = 1;
 const SBI_DBCN_CONSOLE_WRITE_BYTE: u32 = 2;
 
+// Geometry OS-specific SBI extension. EID is ASCII "GEO\0".
+// Function 0: GEO_VFS_READ(name_ptr, name_len, buf_ptr, buf_len) -> bytes_read
+//   Reads the file identified by the UTF-8 path at guest addr [name_ptr, name_ptr+name_len)
+//   from the Geometry OS VFS (base: $PWD/.geometry_os/fs). Copies up to buf_len bytes
+//   into guest addr [buf_ptr, buf_ptr+buf_len). Returns bytes actually copied in a0,
+//   or SBI_ERR_INVALID_PARAM / SBI_ERR_FAILURE on bad name / missing file.
+const SBI_EXT_GEOMETRY: u32 = 0x47454F00; // "GEO\0"
+const GEO_FN_VFS_READ: u32 = 0;
+
+/// Pending GEO_VFS_READ request: set by handle_ecall, fulfilled by the caller
+/// which has access to guest memory. The caller reads the filename bytes from
+/// `name_addr..name_addr+name_len`, looks up the file in the host VFS, writes up
+/// to `buf_len` bytes to `buf_addr`, and overwrites a0 with the byte count (or
+/// SBI_ERR_INVALID_PARAM / SBI_ERR_FAILURE on error).
+#[derive(Debug, Clone, Copy)]
+pub struct GeoVfsReadReq {
+    pub name_addr: u64,
+    pub name_len: u32,
+    pub buf_addr: u64,
+    pub buf_len: u32,
+}
+
 /// SBI device: handles ECALL-based SBI calls and HTIF memory-mapped I/O.
 pub struct Sbi {
     /// UART for console output (shared reference via write callback).
@@ -63,6 +85,8 @@ pub struct Sbi {
     /// Set by handle_ecall when DBCN_CONSOLE_WRITE is called.
     /// The caller must read from bus memory and fulfill the request.
     pub dbcn_pending_write: Option<(u64, usize)>,
+    /// Pending GEO_VFS_READ request. Caller fulfills after handle_ecall returns.
+    pub geo_vfs_read_pending: Option<GeoVfsReadReq>,
 }
 
 impl Sbi {
@@ -73,6 +97,7 @@ impl Sbi {
             shutdown_requested: false,
             ecall_log: Vec::new(),
             dbcn_pending_write: None,
+            geo_vfs_read_pending: None,
         }
     }
 
@@ -188,6 +213,7 @@ impl Sbi {
                                 | SBI_EXT_RFENCE
                                 | SBI_EXT_IPI
                                 | SBI_EXT_DBCN
+                                | SBI_EXT_GEOMETRY
                         );
                         Some((0, if available { 1 } else { 0 }))
                     }
@@ -280,6 +306,20 @@ impl Sbi {
                     _ => Some((SBI_ERR_NOT_SUPPORTED as u32, 0)),
                 }
             }
+            SBI_EXT_GEOMETRY => match a6 {
+                GEO_FN_VFS_READ => {
+                    // Stage the request for the caller to fulfill with guest
+                    // memory access. a0 will be overwritten with bytes_read.
+                    self.geo_vfs_read_pending = Some(GeoVfsReadReq {
+                        name_addr: a0 as u64,
+                        name_len: _a1,
+                        buf_addr: _a2 as u64,
+                        buf_len: _a3,
+                    });
+                    Some((SBI_SUCCESS as u32, 0))
+                }
+                _ => Some((SBI_ERR_NOT_SUPPORTED as u32, 0)),
+            },
             _ => None, // Not an SBI call
         }
     }

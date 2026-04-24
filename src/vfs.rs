@@ -28,7 +28,29 @@ pub const FSEEK_END: u32 = 2;
 pub const FD_ERROR: u32 = 0xFFFFFFFF;
 
 /// VFS root directory name
-const FS_DIR: &str = ".geometry_os/fs";
+pub const FS_DIR: &str = ".geometry_os/fs";
+
+/// Validate a VFS filename against the same sanitization rules as `fopen`:
+/// non-empty, no path separators, no parent-dir traversal, at most 64 bytes.
+/// Returns `true` if the name is safe to use.
+pub fn is_valid_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains("..")
+        && name.len() <= 64
+}
+
+/// Read a file from the VFS by name, bypassing fd tables. Used by non-pixel
+/// callers (e.g. the RISC-V SBI bridge) that don't have a GeoVM RAM slice.
+/// Returns None for invalid names or missing/unreadable files.
+pub fn read_file_by_name(name: &str) -> Option<Vec<u8>> {
+    if !is_valid_name(name) {
+        return None;
+    }
+    let path = PathBuf::from(FS_DIR).join(name);
+    fs::read(path).ok()
+}
 
 /// An open file handle inside the VFS.
 /// Stores the host file object, the filename, and the open mode.
