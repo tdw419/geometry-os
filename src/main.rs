@@ -1857,6 +1857,133 @@ fn main() {
                                 };
                                 response.push_str(&format!("{},{},{}\n", px, py, facing_str));
                             }
+                            // ── AI Navigation Commands ─────────────────────────────
+                            "goto" => {
+                                // goto <name_or_id> -- teleport player to building
+                                let target = parts.get(1).copied().unwrap_or("");
+                                if target.is_empty() {
+                                    response.push_str("[usage: goto <building_name_or_id>]\n");
+                                } else {
+                                    // Try to find building by name or id
+                                    let mut found_x: i32 = -1;
+                                    let mut found_y: i32 = -1;
+                                    let mut found_name = String::new();
+                                    let bldg_count = vm.ram[0x7580].min(32) as u32;
+                                    // Check if target is a numeric id
+                                    let target_id: Option<u32> = target.parse().ok();
+                                    for i in 0..bldg_count {
+                                        let base = 0x7500 + (i as usize) * 4;
+                                        if base + 3 >= vm.ram.len() { break; }
+                                        let bx = vm.ram[base] as i32;
+                                        let by = vm.ram[base + 1] as i32;
+                                        let name_addr = vm.ram[base + 3] as usize;
+                                        let mut name = String::new();
+                                        for j in 0..16 {
+                                            if name_addr + j >= vm.ram.len() { break; }
+                                            let ch = vm.ram[name_addr + j];
+                                            if ch == 0 || ch > 127 { break; }
+                                            name.push(ch as u8 as char);
+                                        }
+                                        let matches = name == target
+                                            || target_id == Some(i);
+                                        if matches {
+                                            found_x = bx;
+                                            found_y = by;
+                                            found_name = name;
+                                            break;
+                                        }
+                                    }
+                                    if found_x >= 0 {
+                                        // Teleport player 2 tiles below the building (in front of door)
+                                        vm.ram[0x7808] = (found_x) as u32;
+                                        vm.ram[0x7809] = (found_y + 2) as u32;
+                                        // Update camera to center on player
+                                        let tile_size = match vm.ram[0x7812] {
+                                            0 => 1, 1 => 2, _ => 4,
+                                        };
+                                        let tiles_per_axis = 256 / tile_size as i32;
+                                        vm.ram[0x7800] = (found_x - tiles_per_axis / 2).max(0) as u32;
+                                        vm.ram[0x7801] = (found_y + 2 - tiles_per_axis / 2).max(0) as u32;
+                                        response.push_str(&format!(
+                                            "[teleported to {} ({},{}), camera updated]\n",
+                                            found_name, found_x, found_y + 2
+                                        ));
+                                    } else {
+                                        response.push_str(&format!(
+                                            "[building '{}' not found. Use 'buildings' to list.]\n",
+                                            target
+                                        ));
+                                    }
+                                }
+                            }
+                            "nearby" => {
+                                // List buildings sorted by distance from player
+                                let player_x = vm.ram[0x7808] as i32;
+                                let player_y = vm.ram[0x7809] as i32;
+                                let bldg_count = vm.ram[0x7580].min(32) as u32;
+                                let mut bldgs: Vec<(u32, i32, i32, i32, String)> = Vec::new();
+                                for i in 0..bldg_count {
+                                    let base = 0x7500 + (i as usize) * 4;
+                                    if base + 3 >= vm.ram.len() { break; }
+                                    let bx = vm.ram[base] as i32;
+                                    let by = vm.ram[base + 1] as i32;
+                                    let name_addr = vm.ram[base + 3] as usize;
+                                    let mut name = String::new();
+                                    for j in 0..16 {
+                                        if name_addr + j >= vm.ram.len() { break; }
+                                        let ch = vm.ram[name_addr + j];
+                                        if ch == 0 || ch > 127 { break; }
+                                        name.push(ch as u8 as char);
+                                    }
+                                    let dist = (bx - player_x).abs() + (by - player_y).abs();
+                                    bldgs.push((i, bx, by, dist, name));
+                                }
+                                bldgs.sort_by_key(|b| b.3);
+                                response.push_str(&format!(
+                                    "player=({},{}), {} buildings:\n",
+                                    player_x, player_y, bldgs.len()
+                                ));
+                                for (id, bx, by, dist, name) in &bldgs {
+                                    response.push_str(&format!(
+                                        "  [{}] {} ({},{}) dist={}\n",
+                                        id, name, bx, by, dist
+                                    ));
+                                }
+                            }
+                            "menu" => {
+                                // Numbered menu of all apps for AI to pick from
+                                let bldg_count = vm.ram[0x7580].min(32) as u32;
+                                let player_x = vm.ram[0x7808] as i32;
+                                let player_y = vm.ram[0x7809] as i32;
+                                response.push_str(&format!(
+                                    "=== Geometry OS Desktop Menu ({} apps) ===\n",
+                                    bldg_count
+                                ));
+                                response.push_str(&format!(
+                                    "Player: ({},{}) | Commands: goto <N>, launch <name>\n",
+                                    player_x, player_y
+                                ));
+                                for i in 0..bldg_count {
+                                    let base = 0x7500 + (i as usize) * 4;
+                                    if base + 3 >= vm.ram.len() { break; }
+                                    let bx = vm.ram[base] as i32;
+                                    let by = vm.ram[base + 1] as i32;
+                                    let name_addr = vm.ram[base + 3] as usize;
+                                    let mut name = String::new();
+                                    for j in 0..16 {
+                                        if name_addr + j >= vm.ram.len() { break; }
+                                        let ch = vm.ram[name_addr + j];
+                                        if ch == 0 || ch > 127 { break; }
+                                        name.push(ch as u8 as char);
+                                    }
+                                    let dist = (bx - player_x).abs() + (by - player_y).abs();
+                                    response.push_str(&format!(
+                                        "  [{}] {} (at {},{}, dist {})\n",
+                                        i, name, bx, by, dist
+                                    ));
+                                }
+                                response.push_str("=== End Menu ===\n");
+                            }
                             "hypervisor_boot" => {
                                 // Boot a guest OS via hypervisor
                                 // Usage: hypervisor_boot <config> [window_id]
