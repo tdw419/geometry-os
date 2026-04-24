@@ -18193,8 +18193,8 @@ fn test_world_desktop_entities_initialized() {
             break;
         }
     }
-    // Entity count at 0x7900 should be 6
-    assert_eq!(vm.ram[0x7900], 6, "entity_count should be 6");
+    // Entity count at 0x7900 should be 8
+    assert_eq!(vm.ram[0x7900], 8, "entity_count should be 8");
 
     // Entity 0: program-node at (42, 35)
     assert_eq!(vm.ram[0x7901], 42, "entity 0 world_x should be 42");
@@ -18236,6 +18236,38 @@ fn test_world_desktop_entities_initialized() {
     assert_eq!(vm.ram[0x791F], 60, "entity 6 world_x should be 60");
     assert_eq!(vm.ram[0x7920], 40, "entity 6 world_y should be 40");
     assert_eq!(vm.ram[0x7921], 4, "entity 6 type should be 4 (ghost)");
+
+    // Entity 7: area_agent at (45, 42)
+    assert_eq!(vm.ram[0x7924], 45, "entity 7 world_x should be 45");
+    assert_eq!(vm.ram[0x7925], 42, "entity 7 world_y should be 42");
+    assert_eq!(vm.ram[0x7926], 5, "entity 7 type should be 5 (area_agent)");
+
+    // Entity 8: area_agent at (60, 55)
+    assert_eq!(vm.ram[0x7929], 60, "entity 8 world_x should be 60");
+    assert_eq!(vm.ram[0x792A], 55, "entity 8 world_y should be 55");
+    assert_eq!(vm.ram[0x792B], 5, "entity 8 type should be 5 (area_agent)");
+
+    // Agent task tables should be initialized
+    // Agent0 at 0x7950: target=-1, status=0, task_type=0, home_x=45, home_y=42
+    assert_eq!(
+        vm.ram[0x7950], 0xFFFFFFFF,
+        "agent0 target should be -1 (none)"
+    );
+    assert_eq!(vm.ram[0x7951], 0, "agent0 status should be 0 (idle)");
+    assert_eq!(vm.ram[0x7954], 45, "agent0 home_x should be 45");
+    assert_eq!(vm.ram[0x7955], 42, "agent0 home_y should be 42");
+
+    // Agent1 at 0x7960: target=-1, status=0, home_x=60, home_y=55
+    assert_eq!(
+        vm.ram[0x7960], 0xFFFFFFFF,
+        "agent1 target should be -1 (none)"
+    );
+    assert_eq!(vm.ram[0x7961], 0, "agent1 status should be 0 (idle)");
+    assert_eq!(vm.ram[0x7964], 60, "agent1 home_x should be 60");
+    assert_eq!(vm.ram[0x7965], 55, "agent1 home_y should be 55");
+
+    // Communication mailbox at 0x7970: msg_count=0
+    assert_eq!(vm.ram[0x7970], 0, "mailbox msg_count should be 0");
 }
 
 #[test]
@@ -18302,7 +18334,10 @@ fn test_world_desktop_agent_entities_wander() {
 
     // At least verify the entity system works - entities exist and have valid positions
     let entity_count = vm.ram[0x7900];
-    assert_eq!(entity_count, 6, "should have 6 entities after running");
+    assert_eq!(
+        entity_count, 8,
+        "should have 8 entities after running (6 original + 2 area_agents)"
+    );
 }
 
 #[test]

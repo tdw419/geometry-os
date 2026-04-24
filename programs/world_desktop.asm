@@ -701,12 +701,13 @@ STORE r17, r18          ; ORACLE_RESP_READY = 0
 ;         2=guard (patrols near buildings, approaches player, red)
 ;         3=animal (flees from player, green)
 ;         4=ghost (passes through all terrain, purple)
+;         5=area_agent (autonomous explorer, seeks buildings, teal)
 ;   dir_seed: packed (direction<<16 | seed), direction 0-3
 ;   anim_frame: animation counter, incremented each update tick
 
 LDI r20, 0x7900
-LDI r17, 6
-STORE r20, r17               ; entity_count = 6
+LDI r17, 8
+STORE r20, r17               ; entity_count = 8
 
 ; Entity 0: program-node at (42, 35)
 ADDI r20, 1
@@ -824,6 +825,117 @@ STORE r20, r17               ; dir_seed = dir=2, seed=0
 ADDI r20, 1
 LDI r17, 0
 STORE r20, r17
+
+; Entity 7: area_agent at (45, 42) - autonomous building explorer
+ADDI r20, 1
+LDI r17, 45
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 42
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 5
+STORE r20, r17               ; type = area_agent
+ADDI r20, 1
+LDI r17, 0x00030000
+STORE r20, r17               ; dir_seed = dir=3, seed=0
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17
+
+; Entity 8: area_agent at (60, 55) - autonomous building explorer
+ADDI r20, 1
+LDI r17, 60
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 55
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 5
+STORE r20, r17               ; type = area_agent
+ADDI r20, 1
+LDI r17, 0x00010000
+STORE r20, r17               ; dir_seed = dir=1, seed=0
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17
+
+; ===== Agent Task Table at RAM[0x7950-0x796F] =====
+; Per-agent (16 words each, 2 agents = 32 words from 0x7950):
+;   [target_bldg_idx, status, task_type, result, home_x, home_y,
+;    step_counter, visit_count, msg_out, msg_in, reserved...]
+; status: 0=idle, 1=moving_to_bldg, 2=entering, 3=inside_bldg, 4=exiting, 5=returning
+; task_type: 0=patrol, 1=visit_bldg, 2=scan_area, 3=report
+LDI r20, 0x7950
+LDI r17, 0xFFFFFFFF
+STORE r20, r17               ; agent0 target_bldg = -1 (none)
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent0 status = idle
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent0 task_type = patrol
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent0 result = 0
+ADDI r20, 1
+LDI r17, 45
+STORE r20, r17               ; agent0 home_x
+ADDI r20, 1
+LDI r17, 42
+STORE r20, r17               ; agent0 home_y
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent0 step_counter
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent0 visit_count
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent0 msg_out
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent0 msg_in
+
+LDI r20, 0x7960
+LDI r17, 0xFFFFFFFF
+STORE r20, r17               ; agent1 target_bldg = -1
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent1 status = idle
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent1 task_type = patrol
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent1 result
+ADDI r20, 1
+LDI r17, 60
+STORE r20, r17               ; agent1 home_x
+ADDI r20, 1
+LDI r17, 55
+STORE r20, r17               ; agent1 home_y
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent1 step_counter
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent1 visit_count
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent1 msg_out
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; agent1 msg_in
+
+; ===== Agent Communication Mailbox at RAM[0x7970-0x797F] =====
+; Shared RAM for inter-agent and agent-player communication.
+; Layout: [msg_count, msg0_sender, msg0_type, msg0_data,
+;          msg1_sender, msg1_type, msg1_data, ...]
+; msg_type: 1=arrival, 2=report, 3=alert, 4=request
+LDI r20, 0x7970
+LDI r17, 0
+STORE r20, r17               ; mailbox msg_count = 0
 
 ; RAM[0x7930] = entity_nearby_idx (-1 = none, 0..7 = entity player is touching)
 LDI r20, 0x7930
@@ -1087,6 +1199,7 @@ ent_not_program:
 
   ; --- Entity AI Dispatch ---
   ; type 1=wander (random walk), 2=guard (approach player), 3=animal (flee), 4=ghost (walk through walls)
+  ; type 5=area_agent (autonomous explorer, seeks buildings)
   LDI r22, 1
   CMP r17, r22
   JZ r0, ent_ai_wander     ; wanderer
@@ -1096,7 +1209,13 @@ ent_not_program:
   LDI r22, 3
   CMP r17, r22
   JZ r0, ent_ai_animal     ; animal (flee)
-  JMP ent_ai_ghost          ; ghost (type 4+)
+  LDI r22, 4
+  CMP r17, r22
+  JZ r0, ent_ai_ghost      ; ghost
+  LDI r22, 5
+  CMP r17, r22
+  JZ r0, ent_ai_area_agent ; area_agent
+  JMP ent_next              ; unknown type, skip
 
   ; ===== Wanderer AI (type 1): random walk =====
 ent_ai_wander:
@@ -1195,6 +1314,326 @@ ent_ai_ghost:
   LDI r23, 3
   AND r25, r23              ; random direction 0-3
   JMP ent_compute_target_no_walkability
+
+  ; ===== Area Agent AI (type 5): autonomous building explorer =====
+  ; State machine: idle -> pick target building -> move toward it -> enter -> explore -> exit -> return
+  ; Uses agent task table at 0x7950+ (agent0) or 0x7960+ (agent1) based on entity index.
+  ; Temp storage: RAM[0x797E] = agent_table_base for this agent
+ent_ai_area_agent:
+  ; Compute agent_table_idx: entity_index - 7, clamped 0-1
+  LDI r22, 7
+  CMP r26, r22
+  BGE r0, ent_agent_use_idx1
+  LDI r17, 0                ; agent0
+  JMP ent_agent_have_idx
+ent_agent_use_idx1:
+  LDI r17, 1                ; agent1
+ent_agent_have_idx:
+  ; Compute agent table base: 0x7950 + (agent_idx * 16)
+  LDI r22, 16
+  MUL r17, r22
+  LDI r22, 0x7950
+  ADD r22, r17              ; r22 = agent table base
+  ; Save to temp RAM
+  LDI r23, 0x797E
+  STORE r23, r22
+
+  ; Load agent status (offset 1 from base)
+  ADDI r22, 1
+  LOAD r17, r22             ; r17 = agent status
+
+  ; State dispatch
+  JNZ r17, ent_agent_not_idle
+  JMP ent_agent_state_idle
+ent_agent_not_idle:
+  LDI r22, 1
+  CMP r17, r22
+  JZ r0, ent_agent_state_moving
+  LDI r22, 3
+  CMP r17, r22
+  JZ r0, ent_agent_state_inside
+  LDI r22, 5
+  CMP r17, r22
+  JZ r0, ent_agent_state_returning
+  JMP ent_agent_state_idle   ; fallback to idle
+
+  ; --- State: idle (0) - pick a target building ---
+ent_agent_state_idle:
+  LDI r23, 0x797E
+  LOAD r22, r23             ; reload agent table base
+  ; Pick a random building index (0..14)
+  RAND r17
+  LDI r23, 15
+  AND r17, r23              ; building index 0-14
+  ; Store target_bldg_idx (offset 0)
+  LDI r23, 0x797E
+  LOAD r22, r23
+  STORE r22, r17
+  ; Set status = moving_to_bldg (1)
+  ADDI r22, 1
+  LDI r23, 1
+  STORE r22, r23
+  ; Reset step counter (offset 6)
+  ADDI r22, 5
+  LDI r23, 0
+  STORE r22, r23
+  ; Fall through to moving state
+
+  ; --- State: moving_to_bldg (1) - greedy path to target building ---
+ent_agent_state_moving:
+  ; Reload agent table base
+  LDI r23, 0x797E
+  LOAD r22, r23
+  ; Load target building index (offset 0)
+  LOAD r17, r22             ; target_bldg_idx
+  ; Load target building coords: base = 0x7500 + bldg_idx * 4
+  LDI r22, 4
+  MUL r17, r22
+  LDI r22, 0x7500
+  ADD r22, r17              ; r22 = &buildings[bldg_idx]
+  LOAD r23, r22             ; target_x = building world_x
+  ADDI r22, 1
+  LOAD r24, r22             ; target_y = building world_y
+  ; Compute dx = target_x - entity_x, dy = target_y - entity_y
+  MOV r22, r23
+  SUB r22, r3               ; dx = target_x - entity_x
+  MOV r17, r24
+  SUB r17, r4               ; dy = target_y - entity_y
+  ; Save target coords to temp RAM for later use
+  LDI r25, 0x797C
+  STORE r25, r23            ; save target_x
+  ADDI r25, 1
+  STORE r25, r24            ; save target_y
+
+  ; Check if arrived: |dx| <= 1 AND |dy| <= 1
+  ; Check |dx|
+  LDI r25, 31
+  MOV r23, r22
+  SAR r23, r25              ; sign of dx
+  JNZ r23, ent_agent_dx_neg
+  ; dx >= 0
+  LDI r23, 2
+  CMP r22, r23
+  BLT r0, ent_agent_check_dy  ; dx < 2, check dy
+  JMP ent_agent_move_dx       ; dx >= 2, move
+ent_agent_dx_neg:
+  NEG r22                   ; |dx|
+  LDI r23, 2
+  CMP r22, r23
+  BLT r0, ent_agent_check_dy  ; |dx| < 2
+  JMP ent_agent_move_dx
+ent_agent_check_dy:
+  LDI r25, 31
+  MOV r23, r17
+  SAR r23, r25
+  JNZ r23, ent_agent_dy_neg
+  LDI r23, 2
+  CMP r17, r23
+  BLT r0, ent_agent_arrived   ; dy < 2, arrived!
+  JMP ent_agent_move_dy
+ent_agent_dy_neg:
+  NEG r17
+  LDI r23, 2
+  CMP r17, r23
+  BLT r0, ent_agent_arrived   ; |dy| < 2, arrived!
+  JMP ent_agent_move_dy
+
+ent_agent_arrived:
+  ; Agent reached the building! Enter it.
+  LDI r22, 0x797E
+  LOAD r22, r22             ; reload agent table base
+  ; Set status = inside_bldg (3)
+  ADDI r22, 1
+  LDI r17, 3
+  STORE r22, r17
+  ; Reset step counter for inside duration (offset 6)
+  ADDI r22, 5
+  LDI r17, 0
+  STORE r22, r17
+  ; Increment visit_count (offset 7)
+  ADDI r22, 1
+  LOAD r17, r22
+  ADDI r17, 1
+  STORE r22, r17
+  ; Send arrival message to mailbox at 0x7970
+  LDI r22, 0x7970
+  LOAD r17, r22             ; msg_count
+  LDI r23, 4
+  CMP r17, r23
+  BGE r0, ent_agent_arrived_done  ; mailbox full
+  ADDI r17, 1
+  STORE r22, r17            ; increment msg_count
+  ; Compute message slot: 0x7970 + 1 + (msg_count-1) * 3 = 0x7971 + (msg_count-1)*3
+  SUBI r17, 1               ; 0-based index
+  LDI r23, 3
+  MUL r17, r23
+  LDI r23, 0x7971
+  ADD r23, r17              ; msg slot base
+  ; sender = entity_index (r26)
+  STORE r23, r26
+  ADDI r23, 1
+  LDI r17, 1                ; type = arrival
+  STORE r23, r17
+  ADDI r23, 1
+  ; data = target_bldg_idx
+  LDI r22, 0x797E
+  LOAD r22, r22
+  LOAD r17, r22             ; target_bldg_idx
+  STORE r23, r17
+ent_agent_arrived_done:
+  JMP ent_next
+
+  ; --- Greedy movement toward target building ---
+ent_agent_move_dx:
+  ; Need sign of original dx (before NEG). Reload target_x and recompute.
+  LDI r22, 0x797C
+  LOAD r22, r22             ; target_x
+  SUB r22, r3               ; dx = target_x - entity_x
+  LDI r23, 31
+  MOV r25, r22
+  SAR r25, r23              ; sign of dx
+  JNZ r25, ent_agent_dx_left
+  LDI r25, 3                ; dx > 0: move right
+  JMP ent_compute_target
+ent_agent_dx_left:
+  LDI r25, 2                ; dx < 0: move left
+  JMP ent_compute_target
+
+ent_agent_move_dy:
+  ; Need sign of original dy
+  LDI r22, 0x797D
+  LOAD r22, r22             ; target_y
+  SUB r22, r4               ; dy = target_y - entity_y
+  LDI r23, 31
+  MOV r25, r22
+  SAR r25, r23
+  JNZ r25, ent_agent_dy_up
+  LDI r25, 1                ; dy > 0: move down
+  JMP ent_compute_target
+ent_agent_dy_up:
+  LDI r25, 0                ; dy < 0: move up
+  JMP ent_compute_target
+
+  ; --- State: inside_bldg (3) - wait some frames then exit ---
+ent_agent_state_inside:
+  LDI r22, 0x797E
+  LOAD r22, r22             ; reload agent table base
+  ; Increment step counter (offset 6)
+  ADDI r22, 6
+  LOAD r17, r22
+  ADDI r17, 1
+  STORE r22, r17
+  ; Stay inside for 20 ticks
+  LDI r23, 20
+  CMP r17, r23
+  BLT r0, ent_agent_stay_inside
+  ; Time to leave -- set status = returning (5)
+  LDI r22, 0x797E
+  LOAD r22, r22
+  ADDI r22, 1               ; status field
+  LDI r17, 5
+  STORE r22, r17
+  ; Reset step counter
+  ADDI r22, 5
+  LDI r17, 0
+  STORE r22, r17
+ent_agent_stay_inside:
+  JMP ent_next
+
+  ; --- State: returning (5) - move back toward home ---
+ent_agent_state_returning:
+  LDI r22, 0x797E
+  LOAD r22, r22             ; reload agent table base
+  ; Load home coords (offsets 4, 5)
+  ADDI r22, 4
+  LOAD r23, r22             ; home_x
+  ADDI r22, 1
+  LOAD r24, r22             ; home_y
+  ; Save to temp RAM
+  LDI r25, 0x797C
+  STORE r25, r23            ; save home_x as target_x
+  ADDI r25, 1
+  STORE r25, r24            ; save home_y as target_y
+  ; Compute distance to home
+  MOV r22, r23
+  SUB r22, r3               ; dx = home_x - entity_x
+  MOV r17, r24
+  SUB r17, r4               ; dy = home_y - entity_y
+
+  ; Check if home: |dx| <= 1 AND |dy| <= 1
+  LDI r25, 31
+  MOV r24, r22
+  SAR r24, r25
+  JNZ r24, ent_agent_home_dx_neg
+  LDI r24, 2
+  CMP r22, r24
+  BLT r0, ent_agent_home_check_dy
+  JMP ent_agent_home_move_dx
+ent_agent_home_dx_neg:
+  NEG r22
+  LDI r24, 2
+  CMP r22, r24
+  BLT r0, ent_agent_home_check_dy
+  JMP ent_agent_home_move_dx
+
+ent_agent_home_check_dy:
+  LDI r25, 31
+  MOV r24, r17
+  SAR r24, r25
+  JNZ r24, ent_agent_home_dy_neg
+  LDI r24, 2
+  CMP r17, r24
+  BLT r0, ent_agent_home_arrived
+  JMP ent_agent_home_move_dy
+ent_agent_home_dy_neg:
+  NEG r17
+  LDI r24, 2
+  CMP r17, r24
+  BLT r0, ent_agent_home_arrived
+  JMP ent_agent_home_move_dy
+
+ent_agent_home_arrived:
+  ; Back home, set status = idle (0)
+  LDI r22, 0x797E
+  LOAD r22, r22
+  ADDI r22, 1
+  LDI r17, 0
+  STORE r22, r17
+  ; Clear target
+  LDI r22, 0x797E
+  LOAD r22, r22
+  LDI r17, 0xFFFFFFFF
+  STORE r22, r17
+  JMP ent_next
+
+ent_agent_home_move_dx:
+  ; Reuse ent_agent_move_dx logic (target is in 0x797C already)
+  LDI r22, 0x797C
+  LOAD r22, r22             ; target_x (home_x)
+  SUB r22, r3               ; dx
+  LDI r23, 31
+  MOV r25, r22
+  SAR r25, r23
+  JNZ r25, ent_agent_home_dx_left
+  LDI r25, 3
+  JMP ent_compute_target
+ent_agent_home_dx_left:
+  LDI r25, 2
+  JMP ent_compute_target
+
+ent_agent_home_move_dy:
+  LDI r22, 0x797D
+  LOAD r22, r22             ; target_y (home_y)
+  SUB r22, r4               ; dy
+  LDI r23, 31
+  MOV r25, r22
+  SAR r25, r23
+  JNZ r25, ent_agent_home_dy_up
+  LDI r25, 1
+  JMP ent_compute_target
+ent_agent_home_dy_up:
+  LDI r25, 0
+  JMP ent_compute_target
 
   ; ===== Compute target position from direction =====
 ent_compute_target:
@@ -2873,6 +3312,7 @@ POP r31
 ; Draw living entities on the map with distinct visuals per type.
 ; Program-nodes: pulsing cyan/magenta diamond (4 pixels).
 ; Agent-nodes: wandering orange/yellow circle (4 pixels) with direction indicator.
+; Area-agents: teal diamond with white antenna (5 pixels + flicker when inside buildings).
 PUSH r31
 
 LDI r20, 0x7900
@@ -2938,7 +3378,7 @@ ent_render_loop:
   JMP ent_render_program
 ent_render_not_program:
 
-  ; Type dispatch for agent rendering
+  ; Type dispatch for entity rendering
   LDI r25, 1
   CMP r17, r25
   JZ r0, ent_render_agent   ; wanderer
@@ -2951,7 +3391,15 @@ ent_render_not_program:
   CMP r17, r25
   JZ r0, ent_render_animal  ; animal
 
-  JMP ent_render_ghost      ; ghost (type 4+)
+  LDI r25, 4
+  CMP r17, r25
+  JZ r0, ent_render_ghost   ; ghost
+
+  LDI r25, 5
+  CMP r17, r25
+  JZ r0, ent_render_area_agent ; area_agent
+
+  JMP ent_render_next       ; unknown type
 
   ; --- Wanderer: orange/yellow pulsing circle ---
 ent_render_agent:
@@ -3187,6 +3635,77 @@ ent_ghost_draw:
   JMP ent_render_next
 
 ent_ghost_simple:
+  LDI r25, 2
+  RECTF r27, r28, r25, r25, r17
+  JMP ent_render_next
+
+  ; --- Area Agent: teal/cyan diamond with antenna and status indicator ---
+ent_render_area_agent:
+  ; Color: teal with pulse based on anim_frame
+  LDI r25, 1
+  AND r25, r19
+  JZ r25, ent_aagent_teal
+  LDI r25, 0x00E5CC        ; light teal
+  JMP ent_aagent_color
+ent_aagent_teal:
+  LDI r25, 0x008B8B        ; dark teal
+ent_aagent_color:
+  MOV r17, r25
+
+  ; Check if agent is inside a building (check status from task table)
+  LDI r22, 0x797E
+  LOAD r22, r22             ; agent table base
+  ADDI r22, 1               ; status field
+  LOAD r25, r22
+  LDI r22, 3
+  CMP r25, r22
+  JNZ r0, ent_aagent_not_inside
+  ; Inside building: render as dim/flickering
+  RAND r25
+  LDI r22, 1
+  AND r25, r22
+  JNZ r25, ent_aagent_render_dim
+  JMP ent_render_next       ; flicker: invisible this frame
+ent_aagent_render_dim:
+  LDI r17, 0x004040        ; very dim teal
+  JMP ent_aagent_do_render
+ent_aagent_not_inside:
+
+  ; Check detail level
+  LDI r25, 0x7814
+  LOAD r25, r25
+  LDI r6, 2
+  CMP r25, r6
+  BLT r0, ent_aagent_simple
+
+ent_aagent_do_render:
+  ; Detailed: draw diamond shape (5 pixels in cross pattern) with antenna
+  ; Top pixel
+  LDI r25, 1
+  ADD r27, r25              ; center_x
+  PSET r27, r28, r17        ; top of diamond
+  ; Middle row
+  ADDI r28, 1
+  SUBI r27, 1               ; left
+  PSET r27, r28, r17
+  ADDI r27, 1               ; center
+  PSET r27, r28, r17
+  ADDI r27, 1               ; right
+  PSET r27, r28, r17
+  ; Bottom pixel
+  ADDI r28, 1
+  SUBI r27, 1               ; center
+  PSET r27, r28, r17
+  ; Antenna: white pixel above diamond
+  SUBI r28, 2               ; above top
+  LDI r6, 0xFFFFFF
+  PSET r27, r28, r6
+  ; Restore coords
+  ADDI r28, 1
+  SUBI r27, 1
+  JMP ent_render_next
+
+ent_aagent_simple:
   LDI r25, 2
   RECTF r27, r28, r25, r25, r17
   JMP ent_render_next

@@ -5932,7 +5932,7 @@ phases:
   _claimed_at: 1777055122
 - id: phase-121
   title: Area Agent System
-  status: planned
+  status: in_progress
   goal: Autonomous agents that patrol the infinite map and interact with buildings
   description: Introduce AI-controlled entities (Area Agents) that wander the map,
     enter buildings, run programs, and report results. Agents have a position, direction,
@@ -5980,6 +5980,8 @@ phases:
     reason: Living map entities needed first
   scope_lines_total: 71000
   test_target: 2046
+  _claimed_by: worker-0
+  _claimed_at: 1777056634
 - id: phase-122
   title: RISC-V Guest Write Path
   status: planned
