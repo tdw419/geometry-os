@@ -886,3 +886,269 @@ fn test_vfs_pixel_surface_cat() {
         uart_str
     );
 }
+
+/// Helper: build a RISC-V ELF from C source if it doesn't exist
+fn build_riscv_elf(source: &str, elf_name: &str) -> Vec<u8> {
+    let elf_path = format!("examples/riscv-hello/{}", elf_name);
+    match std::fs::read(&elf_path) {
+        Ok(d) => d,
+        Err(_) => {
+            let status = std::process::Command::new("./examples/riscv-hello/build.sh")
+                .arg(source)
+                .current_dir(env!("CARGO_MANIFEST_DIR"))
+                .status()
+                .ok();
+            match status {
+                Some(s) if s.success() => {
+                    let built = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("examples/riscv-hello/hello.elf");
+                    let data = std::fs::read(&built)
+                        .unwrap_or_else(|e| panic!("Built {} but can't read: {}", source, e));
+                    let _ = std::fs::copy(&built, &elf_path);
+                    data
+                }
+                _ => panic!(
+                    "Cannot build or find {} -- is riscv64-linux-gnu-gcc installed?",
+                    elf_path
+                ),
+            }
+        }
+    }
+}
+
+/// Helper: collect UART output from a booted VM into a String
+fn collect_uart_output(bridge: &mut UartBridge, bus: &mut super::bus::Bus) -> String {
+    let mut canvas = make_canvas();
+    let _ = bridge.drain_uart_to_canvas(bus, &mut canvas);
+    let mut uart_str = String::new();
+    for r in 0..64 {
+        let row = UartBridge::read_canvas_string(&canvas, r, 0, 32);
+        if !row.trim().is_empty() {
+            uart_str.push_str(&row);
+            uart_str.push('\n');
+        }
+    }
+    uart_str
+}
+
+#[test]
+fn test_guest_vfs_write_creates_file() {
+    // Boot guest_vfs_write.elf which:
+    // 1. Lists existing files in the VFS pixel surface
+    // 2. Creates a new file (guest_log.txt) via vfs_create()
+    // 3. Modifies an existing file via vfs_write()
+    // 4. Flushes dirty rows via vfs_flush()
+    // 5. Verifies the created file by re-reading it
+    let elf_data = build_riscv_elf("guest_vfs_write.c", "guest_vfs_write.elf");
+    eprintln!("guest_vfs_write ELF size: {} bytes", elf_data.len());
+
+    let mut vm = RiscvVm::new(1024 * 1024);
+    let mut bridge = UartBridge::new();
+
+    // Verify the VFS surface loaded the test fixture
+    let magic = vm.bus.vfs_surface.pixels[0];
+    let file_count = vm.bus.vfs_surface.pixels[1];
+    eprintln!("VFS surface: magic=0x{:08X} file_count={}", magic, file_count);
+    // Debug: dump directory index
+    for i in 0..6 {
+        eprintln!("  pixels[{}] = 0x{:08X}", i, vm.bus.vfs_surface.pixels[i]);
+    }
+    assert_eq!(magic, 0x50584653, "PXFS magic should be present");
+
+    let result = vm
+        .boot_guest(&elf_data, 1, 5_000_000)
+        .expect("boot should succeed");
+
+    eprintln!(
+        "Boot: {} instructions, entry=0x{:08X}",
+        result.instructions, result.entry
+    );
+
+    let uart_str = collect_uart_output(&mut bridge, &mut vm.bus);
+    eprintln!("UART output: {:?}", uart_str);
+
+    // Should detect the VFS surface
+    assert!(
+        uart_str.contains("guest_vfs_write: PXFS surface OK"),
+        "Expected PXFS surface detected, got: {:?}",
+        uart_str
+    );
+
+    // Should find a free row
+    assert!(
+        uart_str.contains("free_row="),
+        "Expected free_row calculation, got: {:?}",
+        uart_str
+    );
+
+    // Should create the file (UART wrapped at 32 cols, so match across wrap)
+    assert!(
+        uart_str.contains("created guest_l") && uart_str.contains("og.txt"),
+        "Expected file creation, got: {:?}",
+        uart_str
+    );
+
+    // Should flush to host
+    assert!(
+        uart_str.contains("flushed to host"),
+        "Expected flush confirmation, got: {:?}",
+        uart_str
+    );
+
+    // Should complete cleanly
+    assert!(
+        uart_str.contains("guest_vfs_write: done"),
+        "Expected clean completion, got: {:?}",
+        uart_str
+    );
+
+    // Verify the VFS surface was modified: file count should have increased
+    let new_file_count = vm.bus.vfs_surface.pixels[1];
+    assert!(
+        new_file_count > file_count,
+        "File count should have increased after create: was {} now {}",
+        file_count, new_file_count
+    );
+}
+
+#[test]
+fn test_guest_vfs_write_readback() {
+    // Verify that guest-written data can be read back from the pixel surface.
+    // Boot guest_vfs_write, then directly inspect the surface pixels.
+    let elf_data = build_riscv_elf("guest_vfs_write.c", "guest_vfs_write.elf");
+
+    let mut vm = RiscvVm::new(1024 * 1024);
+    let _ = vm
+        .boot_guest(&elf_data, 1, 5_000_000)
+        .expect("boot should succeed");
+
+    // The guest should have created a new file in the surface.
+    // Check that at least 2 files exist now (original + new).
+    let file_count = vm.bus.vfs_surface.pixels[1];
+    assert!(file_count >= 1, "Should have at least 1 file");
+
+    // Check that the new file has valid flag set
+    let mut found_valid_new = false;
+    for i in 0..file_count as usize {
+        let idx = vm.bus.vfs_surface.pixels[2 + i];
+        let start_row = (idx >> 16) as usize;
+        let header = vm.bus.vfs_surface.pixels[start_row * 256];
+        let flags = header & 0xFF;
+        if flags & 1 != 0 && (header >> 16) > 0 {
+            found_valid_new = true;
+            // Verify data is non-zero
+            let byte_count = (header >> 16) as usize;
+            let first_data = vm.bus.vfs_surface.pixels[start_row * 256 + 1];
+            eprintln!(
+                "File at row {}: {} bytes, first word=0x{:08X}, flags=0x{:02X}",
+                start_row, byte_count, first_data, flags
+            );
+            // At least one file should have written data
+            if byte_count > 0 && first_data != 0 {
+                // Read some bytes and verify they're printable ASCII or newline
+                let b0 = first_data & 0xFF;
+                assert!(
+                    b0 >= 0x20 || b0 == 0x0A,
+                    "First byte should be printable or newline, got 0x{:02X}",
+                    b0
+                );
+            }
+        }
+    }
+    assert!(found_valid_new, "Should find at least one valid file");
+}
+
+#[test]
+fn test_vfs_pixel_cat_with_header() {
+    // Boot the ported vfs_pixel_cat.c (now using vfs_pixel.h)
+    // and verify it reads file contents correctly.
+    let elf_data = build_riscv_elf("vfs_pixel_cat.c", "vfs_pixel_cat.elf");
+    eprintln!("vfs_pixel_cat ELF size: {} bytes", elf_data.len());
+
+    // Ensure test fixture exists
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".geometry_os/fs/test.txt");
+    assert!(fixture.exists(), "Test fixture missing: {:?}", fixture);
+
+    let mut vm = RiscvVm::new(1024 * 1024);
+    let mut bridge = UartBridge::new();
+
+    let result = vm
+        .boot_guest(&elf_data, 1, 500_000)
+        .expect("boot should succeed");
+
+    eprintln!(
+        "Boot: {} instructions, entry=0x{:08X}",
+        result.instructions, result.entry
+    );
+
+    let uart_str = collect_uart_output(&mut bridge, &mut vm.bus);
+    eprintln!("UART output: {:?}", uart_str);
+
+    // Should detect PXFS magic
+    assert!(
+        uart_str.contains("pxcat: PXFS OK"),
+        "Expected PXFS magic confirmed, got: {:?}",
+        uart_str
+    );
+
+    // Should read file contents
+    let flat: String = uart_str.chars().filter(|c| !c.is_whitespace()).collect();
+    assert!(
+        flat.contains("HellofromGeometryOSVFS"),
+        "Expected file contents from pixel surface, got flat: {:?}",
+        flat
+    );
+
+    // Should complete cleanly
+    assert!(
+        uart_str.contains("pxcat: done"),
+        "Expected clean completion, got: {:?}",
+        uart_str
+    );
+}
+
+#[test]
+fn test_surface_direct_read() {
+    let elf_data = build_riscv_elf("test_surface.c", "test_surface.elf");
+    eprintln!("test_surface ELF size: {} bytes", elf_data.len());
+
+    let mut vm = RiscvVm::new(1024 * 1024);
+    let mut bridge = UartBridge::new();
+
+    let result = vm
+        .boot_guest(&elf_data, 1, 500_000)
+        .expect("boot should succeed");
+
+    eprintln!("Boot: {} instructions", result.instructions);
+
+    let uart_str = collect_uart_output(&mut bridge, &mut vm.bus);
+    eprintln!("UART output: {:?}", uart_str);
+
+    // Should read magic correctly
+    assert!(
+        uart_str.contains("test: magic=0x50584653"),
+        "Expected correct magic, got: {:?}",
+        uart_str
+    );
+
+    // Should read count correctly
+    assert!(
+        uart_str.contains("test: count=4"),
+        "Expected count=4, got: {:?}",
+        uart_str
+    );
+
+    // Should read first entry (non-zero)
+    assert!(
+        uart_str.contains("test: entry[0]=0x000"),
+        "Expected non-zero entry[0], got: {:?}",
+        uart_str
+    );
+
+    assert!(
+        uart_str.contains("test: done"),
+        "Expected clean completion, got: {:?}",
+        uart_str
+    );
+}

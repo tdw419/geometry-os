@@ -5984,7 +5984,7 @@ phases:
   _claimed_at: 1777056634
 - id: phase-122
   title: RISC-V Guest Write Path
-  status: planned
+  status: in_progress
   goal: Guest OS can create, write, and delete files via the VFS pixel surface
   description: 'Extend the RISC-V guest to use the VFS pixel surface for file creation
     and modification. Write a guest-side C library (vfs_pixel.h) with vfs_create,
@@ -6025,6 +6025,8 @@ phases:
     reason: Needs VFS surface MMIO
   scope_lines_total: 71300
   test_target: 2048
+  _claimed_by: worker-0
+  _claimed_at: 1777058062
 - id: phase-123
   title: Alpine Linux Live Tile
   status: planned

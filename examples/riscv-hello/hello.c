@@ -12,12 +12,12 @@
 static inline void sbi_console_putchar(int ch) {
     register int a0 asm("a0") = ch;
     register int a7 asm("a7") = 1;
-    asm volatile("ecall" : "+r"(a0) : "r"(a7) : "memory");
+    asm volatile("ecall" : "+r"(a0) : "r"(a7) : "memory", "a1");
 }
 
 static __attribute__((noreturn)) void sbi_shutdown(void) {
     register int a7 asm("a7") = 8;
-    asm volatile("ecall" : : "r"(a7) : "memory");
+    asm volatile("ecall" : : "r"(a7) : "memory", "a0", "a1");
     __builtin_unreachable();
 }
 

@@ -21,14 +21,14 @@
 static inline long sbi_console_putchar(int ch) {
     register long a0 __asm__("a0") = ch;
     register long a7 __asm__("a7") = 1;
-    __asm__ volatile("ecall" : "+r"(a0) : "r"(a7) : "memory");
+    __asm__ volatile("ecall" : "+r"(a0) : "r"(a7) : "memory", "a1");
     return a0;
 }
 
 /* SBI shutdown: halt the machine */
 static __attribute__((noreturn)) void sbi_shutdown(void) {
     register long a7 __asm__("a7") = 8;
-    __asm__ volatile("ecall" : : "r"(a7) : "memory");
+    __asm__ volatile("ecall" : : "r"(a7) : "memory", "a0", "a1");
     __builtin_unreachable();
 }
 
