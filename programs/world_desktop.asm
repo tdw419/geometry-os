@@ -2498,201 +2498,73 @@ LDI r9, 4
 ai_zoom_set:
 
 ; ── Ring 0: The Beacon (32,32) ──
-; Draw a bright marker at spawn point
+; Draw a bright marker at spawn point. No visibility check -- if off-screen, no harm.
 LDI r18, 0x7800
 LOAD r3, r18             ; camera_x
-LDI r18, 32
-SUB r18, r3              ; dx = 32 - cam_x
-LDI r17, 0
-CMP r18, r17
-BLT r0, ai_ring1         ; skip if off-screen left
-CMP r18, r8
-BGE r0, ai_ring1         ; skip if off-screen right
 LDI r19, 0x7801
 LOAD r4, r19             ; camera_y
+
+; Compute screen pixel for world (32,32)
 LDI r17, 32
-SUB r17, r4              ; dy = 32 - cam_y
-LDI r19, 0
-CMP r17, r19
-BLT r0, ai_ring1         ; skip if off-screen top
-CMP r17, r8
-BGE r0, ai_ring1         ; skip if off-screen bottom
-; Compute pixel coords
-LDI r19, 32
-SUB r19, r3
-MUL r19, r9              ; px_x = (32 - cam_x) * tile_size
+SUB r17, r3
+MUL r17, r9              ; px_x = (32 - cam_x) * tile_size
+MOV r18, r17             ; save px_x
+
 LDI r17, 32
 SUB r17, r4
 MUL r17, r9              ; px_y = (32 - cam_y) * tile_size
-; Draw beacon marker (4x4 bright cyan)
-LDI r20, 4
-LDI r21, 0x00FFFF
-RECTF r19, r17, r20, r20, r21
-; Draw "AI HOME" label above beacon
+
+; Draw beacon marker (8x8 bright cyan)
+LDI r19, 8
+LDI r20, 0x00FFFF
+RECTF r18, r17, r19, r19, r20
+
+; Draw "AI HOME" label at beacon position
 LDI r20, 0x5000
 STRO r20, ">> AI HOME <<"
 LDI r21, 0x00FFFF
 LDI r22, 0x000033
-DRAWTEXT r19, r17, r20, r21, r22
+DRAWTEXT r18, r17, r20, r21, r22
 
 ai_ring1:
-; ── Ring 1: Core Commands (world y=30, x=29..37) ──
-; "load_src  assemble  run  vmscreen  save_asm"
-; These are the 5 steps of the canvas-as-IDE loop.
-; Positioned in a row 2 tiles above the beacon.
-
-; Check if row y=30 is visible
-LDI r19, 0x7801
-LOAD r4, r19             ; camera_y
-LDI r17, 30
-SUB r17, r4              ; dy = 30 - cam_y
-LDI r18, 0
-CMP r17, r18
-BLT r0, ai_ring2
-LDI r18, 0
-ADD r18, r8
-CMP r17, r18
-BGE r0, ai_ring2
-; Row is visible. Compute y pixel
-LDI r17, 30
-SUB r17, r4
-MUL r17, r9              ; base_y = (30 - cam_y) * tile_size
-; Add tile_size offset to put text below the tile row
-ADD r17, r9
-
-; Draw each command at its world x position
-LDI r18, 0x7800
-LOAD r3, r18             ; camera_x
-
-; "1.load_src" at world x=27
-LDI r19, 27
-SUB r19, r3
-MUL r19, r9
-LDI r20, 0x5000
-STRO r20, "1.load_src"
-LDI r21, 0x44FF44
-LDI r22, 0x0A1A0A
-DRAWTEXT r19, r17, r20, r21, r22
-
-; "2.asm" at world x=29
-LDI r19, 29
-SUB r19, r3
-MUL r19, r9
-LDI r20, 0x5000
-STRO r20, "2.asm"
-LDI r21, 0x44FF44
-LDI r22, 0x0A1A0A
-DRAWTEXT r19, r17, r20, r21, r22
-
-; "3.run" at world x=31
-LDI r19, 31
-SUB r19, r3
-MUL r19, r9
-LDI r20, 0x5000
-STRO r20, "3.run"
-LDI r21, 0x44FF44
-LDI r22, 0x0A1A0A
-DRAWTEXT r19, r17, r20, r21, r22
-
-; "4.screen" at world x=33
-LDI r19, 33
-SUB r19, r3
-MUL r19, r9
-LDI r20, 0x5000
-STRO r20, "4.screen"
-LDI r21, 0x44FF44
-LDI r22, 0x0A1A0A
-DRAWTEXT r19, r17, r20, r21, r22
-
-; "5.save_asm" at world x=35
-LDI r19, 35
-SUB r19, r3
-MUL r19, r9
-LDI r20, 0x5000
-STRO r20, "5.save_asm"
-LDI r21, 0x44FF44
-LDI r22, 0x0A1A0A
-DRAWTEXT r19, r17, r20, r21, r22
-
-ai_ring2:
-; ── Ring 2: Key Opcodes (world y=34, x=25..39) ──
-; Row of important opcodes 2 tiles below beacon
+; ── Ring 1: Core Commands (world y=30) ──
+; The 5 steps of the canvas-as-IDE loop. 2 tiles above beacon.
 LDI r19, 0x7801
 LOAD r4, r19
-LDI r17, 34
-SUB r17, r4
-LDI r18, 0
-CMP r17, r18
-BLT r0, ai_ring3
-LDI r18, 0
-ADD r18, r8
-CMP r17, r18
-BGE r0, ai_ring3
-
-LDI r17, 34
+LDI r17, 30
 SUB r17, r4
 MUL r17, r9
-ADD r17, r9
+MOV r23, r17             ; r23 = base_y for ring 1
 
 LDI r18, 0x7800
 LOAD r3, r18
 
-; Opcodes row
-LDI r19, 25
+LDI r19, 26
 SUB r19, r3
 MUL r19, r9
 LDI r20, 0x5000
-STRO r20, "LDI PSET RECTF"
-LDI r21, 0xFFAA22
-LDI r22, 0x1A1000
-DRAWTEXT r19, r17, r20, r21, r22
-
-LDI r19, 29
-SUB r19, r3
-MUL r19, r9
-LDI r20, 0x5000
-STRO r20, "DRAWTEXT HALT"
-LDI r21, 0xFFAA22
-LDI r22, 0x1A1000
-DRAWTEXT r19, r17, r20, r21, r22
+STRO r20, "1.load 2.asm 3.run"
+LDI r21, 0x44FF44
+LDI r22, 0x0A1A0A
+DRAWTEXT r19, r23, r20, r21, r22
 
 LDI r19, 33
 SUB r19, r3
 MUL r19, r9
 LDI r20, 0x5000
-STRO r20, "ADD SUB MUL JMP"
-LDI r21, 0xFFAA22
-LDI r22, 0x1A1000
-DRAWTEXT r19, r17, r20, r21, r22
+STRO r20, "4.screen 5.save"
+LDI r21, 0x44FF44
+LDI r22, 0x0A1A0A
+DRAWTEXT r19, r23, r20, r21, r22
 
-LDI r19, 37
-SUB r19, r3
-MUL r19, r9
-LDI r20, 0x5000
-STRO r20, "CMP JZ STRO LOAD"
-LDI r21, 0xFFAA22
-LDI r22, 0x1A1000
-DRAWTEXT r19, r17, r20, r21, r22
-
-ai_ring3:
-; ── Ring 3: Extended Reference (world y=28 and y=36) ──
-; Top row: tools & socket commands
+ai_ring2:
+; ── Ring 2: Key Opcodes (world y=34) ──
 LDI r19, 0x7801
 LOAD r4, r19
-LDI r17, 28
-SUB r17, r4
-LDI r18, 0
-CMP r17, r18
-BLT r0, ai_ring3_bot
-LDI r18, 0
-ADD r18, r8
-CMP r17, r18
-BGE r0, ai_ring3_bot
-
-LDI r17, 28
+LDI r17, 34
 SUB r17, r4
 MUL r17, r9
-ADD r17, r9
+MOV r23, r17
 
 LDI r18, 0x7800
 LOAD r3, r18
@@ -2701,77 +2573,83 @@ LDI r19, 24
 SUB r19, r3
 MUL r19, r9
 LDI r20, 0x5000
-STRO r20, "Socket: status canvas help"
-LDI r21, 0x8888AA
-LDI r22, 0x0A0A14
-DRAWTEXT r19, r17, r20, r21, r22
+STRO r20, "LDI PSET RECTF DRAWTEXT"
+LDI r21, 0xFFAA22
+LDI r22, 0x1A1000
+DRAWTEXT r19, r23, r20, r21, r22
 
-LDI r19, 30
+LDI r19, 32
 SUB r19, r3
 MUL r19, r9
 LDI r20, 0x5000
-STRO r20, "goto <id> launch <app>"
-LDI r21, 0x8888AA
-LDI r22, 0x0A0A14
-DRAWTEXT r19, r17, r20, r21, r22
+STRO r20, "ADD SUB MUL JMP HALT"
+LDI r21, 0xFFAA22
+LDI r22, 0x1A1000
+DRAWTEXT r19, r23, r20, r21, r22
 
-LDI r19, 36
-SUB r19, r3
-MUL r19, r9
-LDI r20, 0x5000
-STRO r20, "buildings nearby menu"
-LDI r21, 0x8888AA
-LDI r22, 0x0A0A14
-DRAWTEXT r19, r17, r20, r21, r22
-
-ai_ring3_bot:
-; Bottom row: architecture notes
+ai_ring3:
+; ── Ring 3: Extended Reference (y=28 and y=36) ──
 LDI r19, 0x7801
 LOAD r4, r19
-LDI r17, 36
-SUB r17, r4
-LDI r18, 0
-CMP r17, r18
-BLT r0, ai_beacon_done
-LDI r18, 0
-ADD r18, r8
-CMP r17, r18
-BGE r0, ai_beacon_done
-
-LDI r17, 36
-SUB r17, r4
-MUL r17, r9
-ADD r17, r9
-
 LDI r18, 0x7800
 LOAD r3, r18
 
-LDI r19, 23
+; Top row (y=28): socket commands
+LDI r17, 28
+SUB r17, r4
+MUL r17, r9
+MOV r23, r17
+
+LDI r19, 22
+SUB r19, r3
+MUL r19, r9
+LDI r20, 0x5000
+STRO r20, "Socket: status canvas help goto"
+LDI r21, 0x8888AA
+LDI r22, 0x0A0A14
+DRAWTEXT r19, r23, r20, r21, r22
+
+LDI r19, 33
+SUB r19, r3
+MUL r19, r9
+LDI r20, 0x5000
+STRO r20, "launch buildings nearby"
+LDI r21, 0x8888AA
+LDI r22, 0x0A0A14
+DRAWTEXT r19, r23, r20, r21, r22
+
+; Bottom row (y=36): architecture
+LDI r17, 36
+SUB r17, r4
+MUL r17, r9
+MOV r23, r17
+
+LDI r19, 21
 SUB r19, r3
 MUL r19, r9
 LDI r20, 0x5000
 STRO r20, "RAM: 0x7000 biome 0x7500 bldg"
 LDI r21, 0x666688
 LDI r22, 0x0A0A14
-DRAWTEXT r19, r17, r20, r21, r22
+DRAWTEXT r19, r23, r20, r21, r22
 
-LDI r19, 31
+LDI r19, 32
 SUB r19, r3
 MUL r19, r9
 LDI r20, 0x5000
-STRO r20, "Player: 0x7808(x) 0x7809(y)"
+STRO r20, "Player 0x7808(x) 0x7809(y)"
 LDI r21, 0x666688
 LDI r22, 0x0A0A14
-DRAWTEXT r19, r17, r20, r21, r22
+DRAWTEXT r19, r23, r20, r21, r22
 
 LDI r19, 37
 SUB r19, r3
 MUL r19, r9
 LDI r20, 0x5000
-STRO r20, "Tile=4px View=64x64=256x256"
+STRO r20, "Tile=4px 64x64=256x256"
 LDI r21, 0x666688
 LDI r22, 0x0A0A14
-DRAWTEXT r19, r17, r20, r21, r22
+DRAWTEXT r19, r23, r20, r21, r22
 
 ai_beacon_done:
 POP r31
