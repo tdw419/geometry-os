@@ -52,6 +52,121 @@ pub fn read_file_by_name(name: &str) -> Option<Vec<u8>> {
     fs::read(path).ok()
 }
 
+/// Encode all VFS files as a pixel surface for "pixels move pixels" visualization.
+///
+/// Returns a `width * height` pixel buffer (u32 RGBA) suitable for blitting
+/// into a window offscreen buffer.
+///
+/// Layout:
+///   Row 0: Directory index
+///     Col 0:   magic 0x50584653 ("PXFS")
+///     Col 1:   file_count
+///     Col 2..: one pixel per file: [start_row(16) | name_hash(16)]
+///   Row 1+:  Per-file regions
+///     Col 0:   header: [byte_count(16) | name_hash_8(8) | flags(8)]
+///     Col 1+:  data pixels (each pixel = 4 bytes of file content in RGBA channels)
+///
+/// The files are visible as colored pixels. The storage IS the display.
+pub fn encode_pixel_surface(width: usize, height: usize) -> Vec<u32> {
+    let mut surface = vec![0u32; width * height];
+    if width == 0 || height == 0 {
+        return surface;
+    }
+
+    // Magic
+    surface[0] = 0x50584653; // "PXFS"
+
+    let fs_dir = PathBuf::from(FS_DIR);
+    let entries = match fs::read_dir(&fs_dir) {
+        Ok(rd) => rd,
+        Err(_) => {
+            surface[1] = 0; // file_count = 0
+            return surface;
+        }
+    };
+
+    // Collect files
+    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+    for e in entries.flatten() {
+        if let Ok(metadata) = e.metadata() {
+            if metadata.is_file() {
+                if let Some(name) = e.file_name().to_str() {
+                    if !name.starts_with('.') && name.len() <= 64 {
+                        if let Ok(data) = fs::read(e.path()) {
+                            files.push((name.to_string(), data));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut current_row = 1usize;
+    let mut file_count = 0u32;
+
+    for (name, data) in &files {
+        if current_row >= height || file_count >= 254 {
+            break;
+        }
+
+        let name_hash = fnv1a_32(name);
+        let byte_count = data.len().min(0xFFFF);
+        let pixel_count = (byte_count + 3) / 4;
+        // Header takes 1 pixel at col 0, data starts at col 1
+        let rows_needed = 1 + (pixel_count + width - 1) / width;
+
+        if current_row + rows_needed > height {
+            break;
+        }
+
+        // Directory index entry (row 0, col 2+file_idx)
+        let idx_col = 2 + file_count as usize;
+        if idx_col < width {
+            surface[idx_col] =
+                ((current_row as u32) << 16) | ((name_hash as u32) & 0xFFFF);
+        }
+
+        // File header at (current_row, 0)
+        let header_pixel =
+            ((byte_count as u32) << 16) | (((name_hash as u32) & 0xFF) << 8) | 0x01; // valid flag
+        surface[current_row * width] = header_pixel;
+
+        // Data pixels starting at (current_row, 1)
+        for i in 0..pixel_count {
+            let mut pixel = 0u32;
+            for j in 0..4 {
+                let byte_idx = i * 4 + j;
+                if byte_idx < byte_count {
+                    pixel |= (data[byte_idx] as u32) << (j * 8);
+                }
+            }
+            let col = 1 + i;
+            let row = current_row + col / width;
+            let col_in_row = col % width;
+            if row < height {
+                surface[row * width + col_in_row] = pixel;
+            }
+        }
+
+        current_row += rows_needed;
+        file_count += 1;
+    }
+
+    surface[1] = file_count;
+    surface
+}
+
+/// FNV-1a 32-bit hash.
+fn fnv1a_32(s: &str) -> u32 {
+    let mut hash = 0x811c9dc5u32;
+    for b in s.as_bytes() {
+        hash ^= *b as u32;
+        hash = hash.wrapping_mul(0x01000193);
+    }
+    hash
+}
+
 /// An open file handle inside the VFS.
 /// Stores the host file object, the filename, and the open mode.
 #[derive(Debug)]

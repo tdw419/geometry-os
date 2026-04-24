@@ -1428,6 +1428,33 @@ impl Vm {
                                 self.regs[0] = 0; // not found
                             }
                         }
+                        8 => {
+                            // VFS_BLIT: Paint the VFS pixel surface into a window.
+                            // r0=win_id. Reads all files from .geometry_os/fs/,
+                            // encodes them as RGBA pixels, and writes into the
+                            // window's offscreen buffer. "Pixels move pixels" --
+                            // the files ARE the visible pixels.
+                            // r0=1 on success, 0 on error.
+                            let win_id = self.regs[0];
+                            if let Some(w) =
+                                self.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                            {
+                                let surface = crate::vfs::encode_pixel_surface(
+                                    w.w as usize,
+                                    w.h as usize,
+                                );
+                                // Blit surface into window offscreen buffer
+                                let buf_len = w.offscreen_buffer.len();
+                                for (i, &px) in surface.iter().enumerate() {
+                                    if i < buf_len {
+                                        w.offscreen_buffer[i] = px;
+                                    }
+                                }
+                                self.regs[0] = 1; // success
+                            } else {
+                                self.regs[0] = 0; // window not found
+                            }
+                        }
                         _ => {
                             // Unknown op -- r0 = 0 (error)
                             self.regs[0] = 0;
