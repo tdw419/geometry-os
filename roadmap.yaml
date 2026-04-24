@@ -5590,9 +5590,8 @@ phases:
       validation: code review shows distinct approaches
     - description: All demos pass their test assertions
       validation: cargo test passes
-    met: false
+    met: true
   description: "The self-modification primitives (ASMSELF, RUNNEXT, ASM_RAM, canvas\
-    \ RAM mapping) exist but have minimal demo coverage beyond code_evolution.asm\
     \ and the AI terminal. Build showcase programs: 1. mirror.asm -- reads screen\
     \ pixels, writes assembly to canvas that reproduces them 2. fractal_gen.asm --\
     \ generates Mandelbrot iteration counts, writes the visualization\n   as PSET\
@@ -5607,11 +5606,9 @@ phases:
     = ASCII char)
   - Complex demos may exceed 4096-cell canvas limit
   scope_lines_total: 450
-  status: in_progress
+  status: complete
   test_target: 6
   title: Self-Modification Showcase Demos
-  _claimed_by: worker-0
-  _claimed_at: 1777031308
 - deliverables:
   - acceptance_criteria:
     - description: Map entities have positions and can be rendered on the infinite
