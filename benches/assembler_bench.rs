@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use geometry_os::assembler::assemble;
 
 /// Small program (hello world size)
@@ -11,18 +11,18 @@ HALT
 
 /// Medium program (with labels and jumps)
 const MEDIUM_PROGRAM: &str = r#"
-LDI r0, 0
+LDI r10, 0
 LDI r1, 1
 LDI r5, 256
 loop:
-  ADD r0, r1
-  CMP r0, r5
+  ADD r10, r1
+  CMP r10, r5
   BLT r0, loop
 done:
 HALT
 "#;
 
-/// Large program (many instructions, simulating a game)
+/// Large program (many instructions, simulating a game init + render loop)
 const LARGE_PROGRAM: &str = r#"
 ; Initialize sine table
 LDI r16, 0x2000
@@ -53,57 +53,49 @@ do_square:
   ADD r10, r7
   CMP r10, r15
   BLT r0, build_sine
-
-; Draw gradient
-LDI r1, 0
-LDI r2, 0
-LDI r3, 1
-LDI r4, 256
-LDI r5, 0xFF0000
-yloop:
-  LDI r2, 0
-xloop:
-  PSET r2, r1, r5
-  ADD r2, r3
-  CMP r2, r4
-  BLT r0, xloop
-  ADD r1, r3
-  CMP r1, r4
-  BLT r0, yloop
 HALT
 "#;
 
 /// Benchmark: Assembler throughput for small programs
 fn bench_assemble_small(c: &mut Criterion) {
-    c.bench_function("assemble_small_4_lines", |b| {
+    let mut group = c.benchmark_group("assembler");
+    group.throughput(Throughput::Elements(4));
+    group.bench_function("small_4_lines", |b| {
         b.iter(|| {
             let result = assemble(black_box(SMALL_PROGRAM), 0);
             black_box(&result);
         });
     });
+    group.finish();
 }
 
 /// Benchmark: Assembler throughput for medium programs
 fn bench_assemble_medium(c: &mut Criterion) {
-    c.bench_function("assemble_medium_12_lines", |b| {
+    let mut group = c.benchmark_group("assembler");
+    group.throughput(Throughput::Elements(10));
+    group.bench_function("medium_10_lines", |b| {
         b.iter(|| {
             let result = assemble(black_box(MEDIUM_PROGRAM), 0);
             black_box(&result);
         });
     });
+    group.finish();
 }
 
 /// Benchmark: Assembler throughput for large programs
 fn bench_assemble_large(c: &mut Criterion) {
-    c.bench_function("assemble_large_50_lines", |b| {
+    let mut group = c.benchmark_group("assembler");
+    group.throughput(Throughput::Elements(30));
+    group.bench_function("large_30_lines", |b| {
         b.iter(|| {
             let result = assemble(black_box(LARGE_PROGRAM), 0);
             black_box(&result);
         });
     });
+    group.finish();
 }
 
-/// Benchmark: Assembler with many labels
+/// Benchmark: Assembler with many labels (two-pass resolution cost)
 fn bench_assemble_many_labels(c: &mut Criterion) {
     let mut source = String::new();
     for i in 0..100 {
@@ -111,11 +103,41 @@ fn bench_assemble_many_labels(c: &mut Criterion) {
     }
     source.push_str("HALT\n");
 
-    let mut group = c.benchmark_group("assemble_many_labels");
-    group.throughput(Throughput::Elements(300)); // ~300 lines
-    group.bench_function("100_labels", |b| {
+    let mut group = c.benchmark_group("assembler");
+    group.throughput(Throughput::Elements(300));
+    group.bench_function("100_labels_300_lines", |b| {
         b.iter(|| {
             let result = assemble(black_box(&source), 0);
+            black_box(&result);
+        });
+    });
+    group.finish();
+}
+
+/// Benchmark: Assembler with .org directives (multi-segment)
+fn bench_assemble_org(c: &mut Criterion) {
+    let source = r#"
+        LDI r1, child
+        SPAWN r1
+        LDI r2, 1000
+    loop:
+        ADD r1, r2
+        CMP r1, r2
+        BLT r0, loop
+        HALT
+    .org 0x400
+    child:
+        LDI r10, 0
+    cloop:
+        ADD r10, r1
+        JMP cloop
+    "#;
+
+    let mut group = c.benchmark_group("assembler");
+    group.throughput(Throughput::Elements(14));
+    group.bench_function("with_org_directive", |b| {
+        b.iter(|| {
+            let result = assemble(black_box(source), 0);
             black_box(&result);
         });
     });
@@ -128,5 +150,6 @@ criterion_group!(
     bench_assemble_medium,
     bench_assemble_large,
     bench_assemble_many_labels,
+    bench_assemble_org,
 );
 criterion_main!(benches);
