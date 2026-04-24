@@ -18368,3 +18368,69 @@ fn test_benchmark_vm_construction_throughput() {
         per_vm
     );
 }
+
+// ── VFS_BLIT (WINSYS op=8) ─────────────────────────────────────
+
+#[test]
+fn test_winsys_vfs_blit() {
+    // WINSYS op=8 (VFS_BLIT): Paint the VFS pixel surface into a window.
+    // "Pixels move pixels" -- files become visible colored pixels.
+    let mut vm = Vm::new();
+
+    // Ensure test.txt exists in VFS
+    let fs_dir = std::path::Path::new(".geometry_os/fs");
+    let _ = std::fs::create_dir_all(fs_dir);
+    let test_file = fs_dir.join("test.txt");
+    if !test_file.exists() {
+        std::fs::write(&test_file, b"Hello from Geometry OS VFS!\n").unwrap();
+    }
+
+    // Create a window: op=0, x=0, y=0, w=64, h=32
+    vm.regs[1] = 0;  // x
+    vm.regs[2] = 0;  // y
+    vm.regs[3] = 64; // w
+    vm.regs[4] = 32; // h
+    vm.regs[5] = 0;  // title_addr (null = no title)
+    vm.regs[6] = 0;  // op=0 (create)
+    vm.ram[0] = 0x94; // WINSYS
+    vm.ram[1] = 6;    // reg 6 holds op
+    vm.pc = 0;
+    vm.step();
+    let win_id = vm.regs[0];
+    assert!(win_id > 0, "Window creation should return positive id");
+
+    // VFS_BLIT: op=8, r0=win_id
+    vm.regs[0] = win_id;
+    vm.regs[6] = 8; // op=8 (VFS_BLIT)
+    vm.ram[2] = 0x94; // WINSYS
+    vm.ram[3] = 6;    // reg 6 holds op
+    vm.pc = 2;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 1, "VFS_BLIT should return 1 (success)");
+
+    // Verify the window offscreen buffer has PXFS magic at pixel 0
+    let win = vm.windows.iter().find(|w| w.id == win_id).unwrap();
+    assert_eq!(win.offscreen_buffer[0], 0x50584653, "First pixel should be PXFS magic");
+
+    // Verify file_count > 0 at pixel 1
+    let file_count = win.offscreen_buffer[1];
+    assert!(file_count > 0, "Should have at least one file in surface");
+
+    // Verify there are non-zero pixels beyond the header
+    let non_zero = win.offscreen_buffer.iter().filter(|&&p| p != 0).count();
+    assert!(non_zero > 3, "Surface should have many non-zero pixels, got {}", non_zero);
+}
+
+#[test]
+fn test_winsys_vfs_blit_invalid_window() {
+    // VFS_BLIT with non-existent window should return 0
+    let mut vm = Vm::new();
+    vm.regs[0] = 999; // non-existent window id
+    vm.regs[6] = 8;   // op=8 (VFS_BLIT)
+    vm.ram[0] = 0x94;  // WINSYS
+    vm.ram[1] = 6;     // reg 6 holds op
+    vm.pc = 0;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "VFS_BLIT with bad window id should return 0");
+}
