@@ -1,64 +1,36 @@
-# vfs_viewer.asm -- VFS Pixel Surface Viewer
-#
-# "Pixels move pixels" -- creates a window and paints the filesystem
-# into it as visible colored pixels. Files ARE the pixels.
-#
-# Uses WINSYS op=8 (VFS_BLIT) to encode all files from .geometry_os/fs/
-# as RGBA pixels and blit them directly into the window.
-#
-# Row 0: Directory index (magic, file count, per-file entries)
-# Row 1+: File data as pixels (each pixel = 4 bytes of content)
-#
-# The user can SEE their files as colored patterns on the desktop.
+; vfs_viewer.asm -- VFS Pixel Surface Viewer
+;
+; "Pixels move pixels" -- creates a window and paints the filesystem
+; into it as visible colored pixels. Files ARE the pixels.
+;
+; Uses WINSYS op=8 (VFS_BLIT) to encode all files from .geometry_os/fs/
+; as RGBA pixels and blit them directly into the window.
+;
+; Row 0: Directory index (magic, file count, per-file entries)
+; Row 1+: File data as pixels (each pixel = 4 bytes of content)
+;
+; The user can SEE their files as colored patterns on the desktop.
 
-# Window parameters
-LDI r1, 160       # x = 160 (right side of desktop)
-LDI r2, 32        # y = 32 (below taskbar)
-LDI r3, 64        # w = 64 pixels wide
-LDI r4, 64        # h = 64 pixels tall
-LDI r5, 0         # title_addr = 0 (no title)
-LDI r6, 0         # WINSYS op=0 (CREATE)
+; Window parameters
+LDI r1, 160       ; x = 160 (right side of desktop)
+LDI r2, 32        ; y = 32 (below taskbar)
+LDI r3, 64        ; w = 64 pixels wide
+LDI r4, 64        ; h = 64 pixels tall
+LDI r5, 0         ; title_addr = 0 (no title)
+LDI r6, 0         ; WINSYS op=0 (CREATE)
 WINSYS r6
 
-# Check if window was created
-BEQZ r0, fail
-
-# Save window id
+; Save window id (r0 has result)
 MOV r10, r0
 
-# VFS_BLIT: Paint the filesystem into the window
-MOV r0, r10       # window id
-LDI r6, 8         # WINSYS op=8 (VFS_BLIT)
+; VFS_BLIT: Paint the filesystem into the window
+MOV r0, r10       ; window id
+LDI r6, 8         ; WINSYS op=8 (VFS_BLIT)
 WINSYS r6
 
-# Check result
-BEQZ r0, blit_fail
-
-# Success -- loop forever showing the window
-# The files are now visible as pixels on the desktop.
-# What you see IS your data.
+; Spin loop showing the window.
+; The files are now visible as pixels on the desktop.
+; What you see IS your data.
 loop:
-  IKEY r7         # Check for keypress
-  LDI r8, 'q'
-  BEQ r7, r8, done # Press 'q' to quit
   YIELD
-  J loop
-
-fail:
-  # Could not create window
-  LDI r0, 0xFF0000  # red
-  PIXEL 0, 0, r0
-  HALT
-
-blit_fail:
-  # VFS_BLIT failed
-  LDI r0, 0xFFFF00  # yellow
-  PIXEL 0, 0, r0
-  HALT
-
-done:
-  # Destroy window and exit
-  MOV r0, r10
-  LDI r6, 1        # WINSYS op=1 (DESTROY)
-  WINSYS r6
-  HALT
+  JMP loop
