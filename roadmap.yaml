@@ -5718,7 +5718,7 @@ phases:
       validation: ls docs/screenshots/ shows PNG files
     met: true
     name: Phase phase-118 deliverable
-    status: todo
+    status: done
     description: 'Make Geometry OS showable. Right now you need to know the CLI flags
       and keyboard shortcuts to do anything. Fix: (1) default-run in Cargo.toml, (2)
       a proper desktop with app launcher, (3) screenshot gallery for the README, (4)
@@ -5739,7 +5739,7 @@ phases:
   - Release build may surface different optimization issues
   - Desktop app launcher needs window manager support that may be partial
   scope_lines_total: 400
-  status: in_progress
+  status: complete
   test_target: 5
   title: Showtime -- First Run Experience
   _claimed_by: worker-0
