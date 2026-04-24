@@ -885,8 +885,14 @@ mod tests {
 
         // Flush ASID 1 only
         tlb.flush_asid(1);
-        assert!(tlb.lookup(0x100, 1).is_none(), "ASID 1 entry should be flushed");
-        assert!(tlb.lookup(0x200, 1).is_none(), "ASID 1 entry should be flushed");
+        assert!(
+            tlb.lookup(0x100, 1).is_none(),
+            "ASID 1 entry should be flushed"
+        );
+        assert!(
+            tlb.lookup(0x200, 1).is_none(),
+            "ASID 1 entry should be flushed"
+        );
         assert!(tlb.lookup(0x100, 2).is_some(), "ASID 2 entry should remain");
         assert!(tlb.lookup(0x300, 2).is_some(), "ASID 2 entry should remain");
     }
@@ -919,9 +925,18 @@ mod tests {
         tlb.insert(0x200, 1, 0xCCC, PTE_V | PTE_R);
 
         tlb.flush_va(0x100);
-        assert!(tlb.lookup(0x100, 1).is_none(), "VPN 0x100 ASID 1 should be flushed");
-        assert!(tlb.lookup(0x100, 2).is_none(), "VPN 0x100 ASID 2 should be flushed");
-        assert!(tlb.lookup(0x200, 1).is_some(), "VPN 0x200 ASID 1 should remain");
+        assert!(
+            tlb.lookup(0x100, 1).is_none(),
+            "VPN 0x100 ASID 1 should be flushed"
+        );
+        assert!(
+            tlb.lookup(0x100, 2).is_none(),
+            "VPN 0x100 ASID 2 should be flushed"
+        );
+        assert!(
+            tlb.lookup(0x200, 1).is_some(),
+            "VPN 0x200 ASID 1 should remain"
+        );
     }
 
     /// TLB flush by (VPN, ASID) pair removes only that specific entry.
@@ -932,7 +947,10 @@ mod tests {
         tlb.insert(0x100, 2, 0xBBB, PTE_V | PTE_R);
 
         tlb.flush_va_asid(0x100, 1);
-        assert!(tlb.lookup(0x100, 1).is_none(), "flushed entry should be gone");
+        assert!(
+            tlb.lookup(0x100, 1).is_none(),
+            "flushed entry should be gone"
+        );
         assert!(tlb.lookup(0x100, 2).is_some(), "other ASID should remain");
     }
 

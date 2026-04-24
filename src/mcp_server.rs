@@ -761,9 +761,7 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
         }
 
         "vm_save_asm" => {
-            let name = args["name"]
-                .as_str()
-                .ok_or("Missing 'name' parameter")?;
+            let name = args["name"].as_str().ok_or("Missing 'name' parameter")?;
             let resp = send_socket_cmd(&format!("save_asm {}", name))?;
             let ok = resp.contains("[saved:");
             Ok(serde_json::json!({ "ok": ok, "response": resp }))

@@ -2743,6 +2743,82 @@ POP r31
 
 mm_bldg_skip:
 
+
+; ===== Draw Entity Markers on Minimap =====
+; Skip at detail < 2 (minimap not drawn)
+LDI r18, 0x7814
+LOAD r18, r18
+LDI r17, 2
+CMP r18, r17
+BLT r0, mm_ent_skip
+PUSH r31
+
+LDI r20, 0x7900
+LOAD r21, r20
+ADDI r20, 1
+LDI r26, 0
+
+mm_ent_loop:
+  CMP r26, r21
+  BGE r0, mm_ent_done
+
+  ; Load entity position
+  MOV r22, r20
+  LOAD r3, r22             ; world_x
+  ADDI r22, 1
+  LOAD r4, r22             ; world_y
+  ADDI r22, 1
+  LOAD r17, r22            ; type
+
+  ; Minimap coords: mmx = 224 + (world_x - camera_x)/2
+  LDI r18, 0x7800
+  LOAD r27, r18
+  MOV r28, r3
+  SUB r28, r27
+  LDI r18, 2
+  DIV r28, r18
+  ADDI r28, 224
+
+  ; Clamp to minimap
+  LDI r18, 224
+  CMP r28, r18
+  BLT r0, mm_ent_next
+  LDI r18, 255
+  CMP r28, r18
+  BGE r0, mm_ent_next
+
+  LDI r18, 0x7801
+  LOAD r27, r18
+  MOV r25, r4
+  SUB r25, r27
+  LDI r18, 2
+  DIV r25, r18
+  ; Clamp y to minimap range
+  LDI r18, 32
+  CMP r25, r18
+  BGE r0, mm_ent_next
+
+  ; Draw entity marker on minimap
+  ; Program-node: cyan dot, Agent-node: orange dot
+  JZ r17, mm_ent_program
+  LDI r18, 0xFF8800        ; orange
+  JMP mm_ent_dot
+mm_ent_program:
+  LDI r18, 0x00FFFF        ; cyan
+mm_ent_dot:
+  PSET r28, r25, r18
+
+mm_ent_next:
+  LDI r18, 5
+  ADD r20, r18
+  ADDI r26, 1
+  JMP mm_ent_loop
+
+mm_ent_done:
+POP r31
+
+mm_ent_skip:
+
 ; ===== Draw Command Bar (y=228..239) =====
 ; Shows "> " prompt when in type mode, dim "/" hint when in move mode.
 ; Also shows Oracle response overlay if one is waiting.
@@ -2880,6 +2956,48 @@ no_tooltip:
 LDI r17, 0
 LDI r18, 0x7588
 STORE r18, r17
+
+
+; ===== Nearby Entity Tooltip =====
+LDI r17, 0x7920
+LOAD r17, r17              ; entity_nearby_idx
+LDI r18, 0xFFFFFFFF
+CMP r17, r18
+JZ r0, no_entity_tooltip   ; -1 = no entity nearby
+
+; Determine entity type for tooltip text
+LDI r20, 0x7900
+LOAD r18, r20              ; entity_count
+ADDI r20, 1                ; first entity
+; Skip to correct entity (5 words per entity)
+LDI r19, 5
+MUL r17, r19
+ADD r20, r17               ; r20 -> entity[idx]
+ADDI r20, 2                ; type field
+LOAD r17, r20              ; type
+JZ r17, ent_tooltip_program
+
+; Agent tooltip
+LDI r20, 0x5040
+STRO r20, "Agent"
+LDI r18, 100
+LDI r19, 124
+LDI r21, 0xFF8800          ; orange text
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+JMP no_entity_tooltip
+
+ent_tooltip_program:
+LDI r20, 0x5040
+STRO r20, "Program"
+LDI r18, 100
+LDI r19, 124
+LDI r21, 0x00FFFF          ; cyan text
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+
+no_entity_tooltip:
+
 
 PSETI 126, 128, 0x4444FF
 PSETI 127, 129, 0x4444FF

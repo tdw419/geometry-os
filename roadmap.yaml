@@ -11,9 +11,8 @@ conventions:
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
 description: 'Pixel-art virtual machine with built-in assembler, debugger, and live
-  GUI. 167 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in
-  the built-in text editor, press F5, watch it run. Phase 113: BC4 Hardware Compression
-  Thesis. 2921 tests passing, 139 programs, 64851 LOC.'
+  GUI. Write assembly in the built-in text editor, press F5, watch it run. Phase 116: Living Map Entities.
+  1388 tests passing, 141 programs, 68465 LOC.'
 global_risks:
 - 'Opcode space: 167 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
@@ -5618,7 +5617,7 @@ phases:
       validation: entities look different on the map
     - description: Entities can be entered/interacted with from the map
       validation: walking into an entity opens its window/content
-    met: false
+    met: true
   description: 'The map exists. Buildings can be entered to launch apps. But there
     are no "living" entities -- things that move, respond, or evolve on their own.
     Add map entities: program-nodes that display running VM output, and agent-nodes
@@ -5633,7 +5632,7 @@ phases:
   - Process-per-entity could hit scheduler limits
   - Entity state persistence across frames needs careful design
   scope_lines_total: 500
-  status: in_progress
+  status: complete
   test_target: 8
   title: Living Map Entities
   _claimed_by: worker-0

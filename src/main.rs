@@ -1199,11 +1199,13 @@ fn main() {
                                 // Usage: save_asm <name>   -> writes to programs/<name>.asm
                                 if let Some(name) = parts.get(1) {
                                     // Sanitize name: only alphanumerics, underscores, hyphens
-                                    let safe: String = name.chars()
+                                    let safe: String = name
+                                        .chars()
                                         .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
                                         .collect();
                                     if safe.is_empty() {
-                                        response.push_str("[error: empty name after sanitization]\n");
+                                        response
+                                            .push_str("[error: empty name after sanitization]\n");
                                     } else {
                                         let filename = format!("programs/{}.asm", safe);
                                         let mut source = String::new();
@@ -1228,12 +1230,15 @@ fn main() {
                                                 let lines = source.lines().count();
                                                 response.push_str(&format!(
                                                     "[saved: {} ({} lines, {} bytes)]\n",
-                                                    filename, lines, source.len()
+                                                    filename,
+                                                    lines,
+                                                    source.len()
                                                 ));
                                             }
                                             Err(e) => {
                                                 response.push_str(&format!(
-                                                    "[save_asm error: {}]\n", e
+                                                    "[save_asm error: {}]\n",
+                                                    e
                                                 ));
                                             }
                                         }
@@ -1280,7 +1285,9 @@ fn main() {
                                         cursor_row, cursor_col
                                     ));
                                 } else {
-                                    response.push_str("[usage: load_source <asm source with \\n for newlines>]\n");
+                                    response.push_str(
+                                        "[usage: load_source <asm source with \\n for newlines>]\n",
+                                    );
                                 }
                             }
                             "status" => {
@@ -1393,7 +1400,10 @@ fn main() {
                                                 }
                                             }
                                         }
-                                        if total == 0 { row.push(' '); continue; }
+                                        if total == 0 {
+                                            row.push(' ');
+                                            continue;
+                                        }
                                         let r = rr / total;
                                         let g = gg / total;
                                         let b = bb / total;
@@ -1412,10 +1422,22 @@ fn main() {
                                                 '^'
                                             } else if r < 80 && g > 120 && b < 80 {
                                                 // Green: land, forest
-                                                if lum > 140 { '#' } else if lum > 80 { '+' } else { ':' }
+                                                if lum > 140 {
+                                                    '#'
+                                                } else if lum > 80 {
+                                                    '+'
+                                                } else {
+                                                    ':'
+                                                }
                                             } else if r < 80 && g < 80 && b > 120 {
                                                 // Blue: water
-                                                if lum > 120 { '~' } else if lum > 50 { '=' } else { '-' }
+                                                if lum > 120 {
+                                                    '~'
+                                                } else if lum > 50 {
+                                                    '='
+                                                } else {
+                                                    '-'
+                                                }
                                             } else if r > 150 && g > 100 && b < 60 {
                                                 // Brown/yellow: desert, beach
                                                 '%'
@@ -1962,19 +1984,24 @@ fn main() {
                                     let target_id: Option<u32> = target.parse().ok();
                                     for i in 0..bldg_count {
                                         let base = 0x7500 + (i as usize) * 4;
-                                        if base + 3 >= vm.ram.len() { break; }
+                                        if base + 3 >= vm.ram.len() {
+                                            break;
+                                        }
                                         let bx = vm.ram[base] as i32;
                                         let by = vm.ram[base + 1] as i32;
                                         let name_addr = vm.ram[base + 3] as usize;
                                         let mut name = String::new();
                                         for j in 0..16 {
-                                            if name_addr + j >= vm.ram.len() { break; }
+                                            if name_addr + j >= vm.ram.len() {
+                                                break;
+                                            }
                                             let ch = vm.ram[name_addr + j];
-                                            if ch == 0 || ch > 127 { break; }
+                                            if ch == 0 || ch > 127 {
+                                                break;
+                                            }
                                             name.push(ch as u8 as char);
                                         }
-                                        let matches = name == target
-                                            || target_id == Some(i);
+                                        let matches = name == target || target_id == Some(i);
                                         if matches {
                                             found_x = bx;
                                             found_y = by;
@@ -1988,14 +2015,20 @@ fn main() {
                                         vm.ram[0x7809] = (found_y + 2) as u32;
                                         // Update camera to center on player
                                         let tile_size = match vm.ram[0x7812] {
-                                            0 => 1, 1 => 2, _ => 4,
+                                            0 => 1,
+                                            1 => 2,
+                                            _ => 4,
                                         };
                                         let tiles_per_axis = 256 / tile_size as i32;
-                                        vm.ram[0x7800] = (found_x - tiles_per_axis / 2).max(0) as u32;
-                                        vm.ram[0x7801] = (found_y + 2 - tiles_per_axis / 2).max(0) as u32;
+                                        vm.ram[0x7800] =
+                                            (found_x - tiles_per_axis / 2).max(0) as u32;
+                                        vm.ram[0x7801] =
+                                            (found_y + 2 - tiles_per_axis / 2).max(0) as u32;
                                         response.push_str(&format!(
                                             "[teleported to {} ({},{}), camera updated]\n",
-                                            found_name, found_x, found_y + 2
+                                            found_name,
+                                            found_x,
+                                            found_y + 2
                                         ));
                                     } else {
                                         response.push_str(&format!(
@@ -2013,15 +2046,21 @@ fn main() {
                                 let mut bldgs: Vec<(u32, i32, i32, i32, String)> = Vec::new();
                                 for i in 0..bldg_count {
                                     let base = 0x7500 + (i as usize) * 4;
-                                    if base + 3 >= vm.ram.len() { break; }
+                                    if base + 3 >= vm.ram.len() {
+                                        break;
+                                    }
                                     let bx = vm.ram[base] as i32;
                                     let by = vm.ram[base + 1] as i32;
                                     let name_addr = vm.ram[base + 3] as usize;
                                     let mut name = String::new();
                                     for j in 0..16 {
-                                        if name_addr + j >= vm.ram.len() { break; }
+                                        if name_addr + j >= vm.ram.len() {
+                                            break;
+                                        }
                                         let ch = vm.ram[name_addr + j];
-                                        if ch == 0 || ch > 127 { break; }
+                                        if ch == 0 || ch > 127 {
+                                            break;
+                                        }
                                         name.push(ch as u8 as char);
                                     }
                                     let dist = (bx - player_x).abs() + (by - player_y).abs();
@@ -2030,7 +2069,9 @@ fn main() {
                                 bldgs.sort_by_key(|b| b.3);
                                 response.push_str(&format!(
                                     "player=({},{}), {} buildings:\n",
-                                    player_x, player_y, bldgs.len()
+                                    player_x,
+                                    player_y,
+                                    bldgs.len()
                                 ));
                                 for (id, bx, by, dist, name) in &bldgs {
                                     response.push_str(&format!(
@@ -2054,15 +2095,21 @@ fn main() {
                                 ));
                                 for i in 0..bldg_count {
                                     let base = 0x7500 + (i as usize) * 4;
-                                    if base + 3 >= vm.ram.len() { break; }
+                                    if base + 3 >= vm.ram.len() {
+                                        break;
+                                    }
                                     let bx = vm.ram[base] as i32;
                                     let by = vm.ram[base + 1] as i32;
                                     let name_addr = vm.ram[base + 3] as usize;
                                     let mut name = String::new();
                                     for j in 0..16 {
-                                        if name_addr + j >= vm.ram.len() { break; }
+                                        if name_addr + j >= vm.ram.len() {
+                                            break;
+                                        }
                                         let ch = vm.ram[name_addr + j];
-                                        if ch == 0 || ch > 127 { break; }
+                                        if ch == 0 || ch > 127 {
+                                            break;
+                                        }
                                         name.push(ch as u8 as char);
                                     }
                                     let dist = (bx - player_x).abs() + (by - player_y).abs();
