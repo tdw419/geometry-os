@@ -390,6 +390,20 @@ VM: 32 registers, 65536-word RAM, 167 opcodes, 8 concurrent processes
 Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
 
+## Screenshot Gallery
+
+| ![Infinite Map](docs/screenshots/infinite_map.png) | ![Plasma](docs/screenshots/plasma.png) | ![Fire](docs/screenshots/fire.png) |
+|:--:|:--:|:--:|
+| Infinite procedural terrain | Plasma color waves | Scrolling fire |
+
+| ![Snake](docs/screenshots/snake.png) | ![Tetris](docs/screenshots/tetris.png) | ![Starfield](docs/screenshots/starfield.png) |
+|:--:|:--:|:--:|
+| Snake game | Tetris | 3D starfield |
+
+| ![Ball](docs/screenshots/ball.png) | ![Painter](docs/screenshots/painter.png) | ![Colors](docs/screenshots/colors.png) |
+|:--:|:--:|:--:|
+| Bouncing ball | Freehand painting | Color palette |
+
 ## Documentation
 
 - **docs/CANVAS_TEXT_SURFACE.md** -- The text editor, assembly pipeline, preprocessor macros
@@ -401,10 +415,10 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 
 ## Stats
 
-- 64,851 lines of Rust
+- 68,622 lines of Rust
 - 167 opcodes
-- 139 programs
-- 3,023 tests
+- 141 programs
+- 3,055 tests
 - MIT licensed
 
 ## License

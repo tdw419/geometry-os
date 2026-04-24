@@ -11,8 +11,8 @@ conventions:
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
 description: 'Pixel-art virtual machine with built-in assembler, debugger, and live
-  GUI. Write assembly in the built-in text editor, press F5, watch it run. Phase 116: Living Map Entities.
-  1388 tests passing, 141 programs, 68465 LOC.'
+  GUI. Write assembly in the built-in text editor, press F5, watch it run. Phase 118: Showtime.
+  3055 tests passing, 141 programs, 68622 LOC.'
 global_risks:
 - 'Opcode space: 167 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
@@ -31,13 +31,13 @@ global_risks:
 meta:
   gui: minifb
   language: Rust
-  loc: '64851'
+  loc: '68622'
   opcodes: 167
-  programs: '139'
+  programs: '141'
   ram: 65536 words
   registers: 32
   screen: 256x256 pixels
-  tests: '2921'
+  tests: '3055'
 phases:
 - deliverables:
   - description: 'Control flow: stop, no-op, yield to renderer'
@@ -5673,7 +5673,7 @@ phases:
       validation: launch terminal, paint, and file manager from the desktop
     - description: A screen recording or screenshot gallery exists in docs/
       validation: ls docs/screenshots/ shows PNG files
-    met: false
+    met: true
   description: 'Make Geometry OS showable. Right now you need to know the CLI flags
     and keyboard shortcuts to do anything. Fix: (1) default-run in Cargo.toml, (2)
     a proper desktop with app launcher, (3) screenshot gallery for the README, (4)
@@ -5687,7 +5687,7 @@ phases:
   - Release build may surface different optimization issues
   - Desktop app launcher needs window manager support that may be partial
   scope_lines_total: 400
-  status: planned
+  status: complete
   test_target: 5
   title: Showtime -- First Run Experience
 project_url: https://github.com/tdw419/geometry-os
