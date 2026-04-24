@@ -50,6 +50,38 @@ geo> run
 cd wasm && wasm-pack build --target web
 ```
 
+### First 5 Minutes
+
+Running `cargo run --release` drops you into the **infinite map desktop** — a procedurally generated world with biomes, animated water, a day/night cycle, and 12+ app buildings. Here's what to try:
+
+1. **Explore the map** — Use WASD or arrow keys to walk across the terrain. The camera follows your player avatar (cyan dot). Each biome has unique colors: oceans, forests, deserts, tundra, mountains, and more.
+
+2. **Find an app building** — Walk toward the colored rectangles on the map. When you get close, a tooltip shows the app name. Visit the **Snake** building, **Tetris** building, or **Painter** building.
+
+3. **Use the minimap** — The 16x16 minimap in the top-right corner shows your position (white crosshair) and building locations (colored dots).
+
+4. **Open the terminal** — Press Escape to pause the map and enter the `geo>` terminal. Type `help` to see all commands. Try:
+   ```
+   geo> load snake     — load a program
+   geo> run             — execute it (or press F5)
+   geo> edit            — open the text editor
+   ```
+   Press Escape again to quit the terminal.
+
+5. **Type some assembly** — In the editor, type a program:
+   ```
+   LDI r1, 0xFF0000
+   LDI r2, 128
+   LDI r3, 128
+   CIRCLE r2, r3, 50, r1
+   HALT
+   ```
+   Press F8 to assemble, then F5 to run. You just wrote a red circle!
+
+6. **Key bindings**: F8=assemble, F5=run, F6=step, F7=save, F9=screenshot, Escape=quit/terminal
+
+**Going deeper:** Read `docs/CANVAS_TEXT_SURFACE.md` for the full specification, or browse `programs/` for 139 example programs ranging from visual demos to games to a Unix-like shell.
+
 ## The Instruction Set (167 opcodes)
 
 ### Control

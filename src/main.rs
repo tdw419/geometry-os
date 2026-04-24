@@ -264,12 +264,12 @@ fn main() {
         term_output_row = write_line_to_canvas(
             &mut canvas_buffer,
             term_output_row,
-            "40 opcodes | 32 regs | 256x256",
+            "167 opcodes | 32 regs | 256x256",
         );
         term_output_row = write_line_to_canvas(
             &mut canvas_buffer,
             term_output_row,
-            "Type 'help' for commands.",
+            "WASD/arrows=move  /=commands  Esc=terminal",
         );
         term_output_row = write_line_to_canvas(&mut canvas_buffer, term_output_row, "");
         term_prompt_row = term_output_row;
@@ -305,12 +305,73 @@ fn main() {
     }
 
     // Restore saved state on startup (only if no command-line arg)
+    let mut _state_restored = false;
     if std::env::args().nth(1).is_none() {
         if let Ok((saved_vm, saved_canvas, saved_assembled)) = load_state(SAVE_FILE) {
             vm = saved_vm;
             canvas_buffer = saved_canvas;
             canvas_assembled = saved_assembled;
             status_msg = String::from("[state restored from geometry_os.sav]");
+            _state_restored = true;
+        }
+    }
+
+    // ── Auto-showcase: if no args, no saved state, auto-run the desktop ──
+    // First-run experience: someone clones and `cargo run` sees something amazing
+    if std::env::args().nth(1).is_none() && !_state_restored {
+        let showcase_path = PathBuf::from("programs/world_desktop.asm");
+        if let Ok(source) = std::fs::read_to_string(&showcase_path) {
+            // Load source into canvas buffer for display in editor
+            load_source_to_canvas(
+                &mut canvas_buffer,
+                &source,
+                &mut cursor_row,
+                &mut cursor_col,
+            );
+            loaded_file = Some(showcase_path.clone());
+
+            // Assemble directly from source file (avoids canvas blank-line stripping)
+            let mut pp = preprocessor::Preprocessor::new();
+            let preprocessed = pp.preprocess(&source);
+            match assembler::assemble(&preprocessed, CANVAS_BYTECODE_ADDR) {
+                Ok(asm_result) => {
+                    let ram_len = vm.ram.len();
+                    for v in vm.ram[CANVAS_BYTECODE_ADDR
+                        ..ram_len.min(CANVAS_BYTECODE_ADDR + 8192)]
+                        .iter_mut()
+                    {
+                        *v = 0;
+                    }
+                    for (i, &pixel) in asm_result.pixels.iter().enumerate() {
+                        let addr = CANVAS_BYTECODE_ADDR + i;
+                        if addr < ram_len {
+                            vm.ram[addr] = pixel;
+                        }
+                    }
+                    canvas_assembled = true;
+                    vm.pc = CANVAS_BYTECODE_ADDR as u32;
+                    vm.halted = false;
+                    is_running = true;
+                    status_msg = String::from(
+                        "[Geometry OS Desktop — WASD/arrows to move, / for commands, Escape for terminal]",
+                    );
+                }
+                Err(_e) => {
+                    // Fallback: try canvas pipeline (for diagnostics)
+                    canvas_assemble(
+                        &canvas_buffer,
+                        &mut vm,
+                        &mut canvas_assembled,
+                        &mut status_msg,
+                    );
+                    if canvas_assembled {
+                        is_running = true;
+                        status_msg = String::from(
+                            "[Geometry OS Desktop — WASD to move, Escape for terminal]",
+                        );
+                    }
+                }
+            }
         }
     }
 

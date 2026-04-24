@@ -5683,11 +5683,11 @@ phases:
     status: done
     description: 'Phase 117 complete. Added comprehensive criterion benchmarks covering
       10 categories: VM construction, arithmetic loops, memory access, graphics opcodes,
-      canvas buffer interception, branch prediction, CALL/RET, MUL/DIV, SPAWN/KILL, and
-      preprocessor+assembler pipeline. Total: 15 benchmarks in 2 benchmark files. Results:
-      ~88M VM instructions/sec, 5.4 Gpixel/s FILL, 3M lines/sec assembly. Full report
-      in docs/PERFORMANCE_BENCHMARK.md. No optimization needed - all programs within frame
-      budget.
+      canvas buffer interception, branch prediction, CALL/RET, MUL/DIV, SPAWN/KILL,
+      and preprocessor+assembler pipeline. Total: 15 benchmarks in 2 benchmark files.
+      Results: ~88M VM instructions/sec, 5.4 Gpixel/s FILL, 3M lines/sec assembly.
+      Full report in docs/PERFORMANCE_BENCHMARK.md. No optimization needed - all programs
+      within frame budget.
 
       '
   description: '2922 tests pass but we have no performance data. The VM runs 60fps
@@ -5739,9 +5739,11 @@ phases:
   - Release build may surface different optimization issues
   - Desktop app launcher needs window manager support that may be partial
   scope_lines_total: 400
-  status: planned
+  status: in_progress
   test_target: 5
   title: Showtime -- First Run Experience
+  _claimed_by: worker-0
+  _claimed_at: 1777054241
 - id: phase-119
   title: VFS Pixel Surface -- Pixels Move Pixels
   status: complete

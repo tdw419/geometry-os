@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 151 opcodes, 2026 tests, 143 programs, 69763 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
-**Progress:** 115/125 phases complete, 0 in progress
+**Progress:** 118/125 phases complete, 1 in progress
 
-**Deliverables:** 495/511 complete
+**Deliverables:** 498/511 complete
 
 **Tasks:** 111/142 complete
 
@@ -126,10 +126,10 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 | phase-112 Tetris in GlyphLang | COMPLETE | 3/3 | 150 | 2 |
 | phase-113 BC4 Hardware Compression Thesis | COMPLETE | 2/2 | 265 | 2 |
 | phase-114 Project Hygiene and README Accuracy | COMPLETE | 1/1 | 60 | - |
-| phase-115 Self-Modification Showcase Demos | PLANNED | 0/1 | 450 | 6 |
-| phase-116 Living Map Entities | PLANNED | 0/1 | 500 | 8 |
-| phase-117 Performance Benchmarking and Profiling | PLANNED | 0/1 | 300 | 4 |
-| phase-118 Showtime -- First Run Experience | PLANNED | 0/1 | 400 | 5 |
+| phase-115 Self-Modification Showcase Demos | COMPLETE | 1/1 | 450 | 6 |
+| phase-116 Living Map Entities | COMPLETE | 1/1 | 500 | 8 |
+| phase-117 Performance Benchmarking and Profiling | COMPLETE | 1/1 | 300 | 4 |
+| phase-118 Showtime -- First Run Experience | IN PROGRESS | 0/1 | 400 | 5 |
 | phase-119 VFS Pixel Surface -- Pixels Move Pixels | COMPLETE | 4/4 | 70,000 | 2026 |
 | phase-120 VFS File Manager Desktop App | PLANNED | 0/2 | 70,400 | 2036 |
 | phase-121 Area Agent System | PLANNED | 0/2 | 71,000 | 2046 |
