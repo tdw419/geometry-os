@@ -9,6 +9,7 @@
 
 LDI r15, 1
 LDI r14, 0x8000
+LDI r30, 0xFF00
 
 ; Main loop - iterate 8x8 grid
 LDI r11, 0

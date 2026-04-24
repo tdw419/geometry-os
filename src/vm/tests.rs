@@ -2395,8 +2395,8 @@ fn test_fractal_gen_assembles() {
 
 #[test]
 fn test_fractal_gen_produces_colored_grid() {
-    // fractal_gen.asm: computes Mandelbrot iterations for 4x4 grid,
-    // generates PSETI instructions, self-assembles and runs.
+    // fractal_gen.asm: generates Sierpinski triangle via self-modification.
+    // 8x8 grid, each cell 32x32 pixels. Colored if (x AND y) == 0.
     use crate::assembler::assemble;
 
     let source = include_str!("../../programs/fractal_gen.asm");
@@ -2419,12 +2419,12 @@ fn test_fractal_gen_produces_colored_grid() {
     assert!(vm.halted, "fractal_gen should halt after self-assembly");
 
     // Check that the generated code produced some non-black pixels
-    // The 4x4 grid tiles are at (0,0), (64,0), (128,0), (192,0), etc.
+    // 8x8 grid at 32px intervals. Sierpinski: colored if (x AND y) == 0
     let mut colored_pixels = 0;
-    for ty in 0usize..4 {
-        for tx in 0usize..4 {
-            let x = tx * 64;
-            let y = ty * 64;
+    for ty in 0usize..8 {
+        for tx in 0usize..8 {
+            let x = tx * 32;
+            let y = ty * 32;
             if x < 256 && y < 256 {
                 if vm.screen[y * 256 + x] != 0 {
                     colored_pixels += 1;
@@ -2433,28 +2433,28 @@ fn test_fractal_gen_produces_colored_grid() {
         }
     }
 
-    // At least some tiles should be non-black (the Mandelbrot set boundary has colors)
+    // Sierpinski pattern has ~36 colored cells out of 64 (x AND y == 0)
     assert!(
-        colored_pixels > 0,
-        "fractal_gen should produce at least 1 colored tile, got {}",
+        colored_pixels > 10,
+        "fractal_gen should produce Sierpinski pattern, got {} colored cells",
         colored_pixels
     );
 
-    // Verify different colors exist (Mandelbrot should produce varied iterations)
+    // Verify different colors: red (y==0), yellow (x==0), green (interior)
     let mut unique_colors = std::collections::HashSet::new();
-    for ty in 0usize..4 {
-        for tx in 0usize..4 {
-            let x = tx * 64;
-            let y = ty * 64;
+    for ty in 0usize..8 {
+        for tx in 0usize..8 {
+            let x = tx * 32;
+            let y = ty * 32;
             if x < 256 && y < 256 {
                 unique_colors.insert(vm.screen[y * 256 + x]);
             }
         }
     }
-    // Should have at least 2 unique colors (black + some escape color)
+    // Should have at least 3 unique colors (red, yellow, green + black background)
     assert!(
-        unique_colors.len() >= 2,
-        "fractal_gen should produce varied colors across tiles, got {} unique",
+        unique_colors.len() >= 3,
+        "fractal_gen should produce red/yellow/green colors, got {} unique",
         unique_colors.len()
     );
 }
