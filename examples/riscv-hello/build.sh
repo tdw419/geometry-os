@@ -7,7 +7,11 @@
 #   ./build.sh hello.S  # builds hello.S (assembly)
 #
 # Output: hello.elf in the current directory.
-# Boot: hypervisor_boot arch=riscv64 kernel=hello.elf ram=1
+# Boot: hypervisor_boot arch=riscv32 kernel=hello.elf ram=1
+#
+# IMPORTANT: Geometry OS CPU is RV32I (see src/riscv/cpu/mod.rs). We compile
+# with -march=rv32imac -mabi=ilp32 -- do NOT change to rv64/lp64 or the
+# compiler will emit ld/sd/addiw instructions the CPU cannot execute.
 
 set -e
 cd "$(dirname "$0")"
@@ -29,8 +33,8 @@ riscv64-linux-gnu-gcc \
     -nostdlib \
     -nostartfiles \
     -fno-pic \
-    -march=rv64imac \
-    -mabi=lp64 \
+    -march=rv32imac \
+    -mabi=ilp32 \
     -T hello.ld \
     -O2 \
     -static \

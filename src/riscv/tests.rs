@@ -663,6 +663,9 @@ fn test_c_hello_world_bare_metal() {
     // Boot a bare-metal C program compiled with riscv64-linux-gnu-gcc
     // through the Geometry OS hypervisor and verify UART output.
     //
+    // IMPORTANT: Geometry OS CPU is RV32I (see src/riscv/cpu/mod.rs).
+    // build.sh uses -march=rv32imac -mabi=ilp32. Do not change to rv64.
+    //
     // Build: cd examples/riscv-hello && ./build.sh hello.c
     // The ELF is checked into examples/riscv-hello/hello_c.elf
     let elf_path = "examples/riscv-hello/hello_c.elf";
