@@ -2311,6 +2311,251 @@ fn test_self_writer_registers_inherited_across_generations() {
     );
 }
 
+// ============================================================
+// Phase 115: Self-Modification Showcase Demos
+// mirror.asm, fractal_gen.asm, chatbot.asm
+// ============================================================
+
+#[test]
+fn test_mirror_assembles() {
+    let source = include_str!("../../programs/mirror.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "mirror.asm should assemble: {:?}", result.err());
+    let asm = result.unwrap();
+    assert!(asm.pixels.len() > 100, "mirror should produce substantial bytecode");
+}
+
+#[test]
+fn test_mirror_reads_pixel_and_generates_code() {
+    // mirror.asm: draws dots, reads via SCREENP, generates PSETI on canvas,
+    // then ASMSELF + RUNNEXT to reproduce the dot at a shifted position.
+    use crate::assembler::assemble;
+
+    let source = include_str!("../../programs/mirror.asm");
+    let asm = assemble(source, 0).expect("mirror.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until halt (mirror uses ASMSELF+RUNNEXT so it may take many steps)
+    for _ in 0..5_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "mirror should halt after self-assembly and execution");
+
+    // The program draws a red dot at (32,32), then generates PSETI at (40,40)
+    // After FILL+clear + RUNNEXT, the pixel at (40,40) should be red
+    assert_ne!(
+        vm.screen[40 * 256 + 40], 0,
+        "mirror should produce a non-black pixel at (40,40)"
+    );
+}
+
+#[test]
+fn test_fractal_gen_assembles() {
+    let source = include_str!("../../programs/fractal_gen.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "fractal_gen.asm should assemble: {:?}", result.err());
+    let asm = result.unwrap();
+    assert!(asm.pixels.len() > 200, "fractal_gen should produce substantial bytecode");
+}
+
+#[test]
+fn test_fractal_gen_produces_colored_grid() {
+    // fractal_gen.asm: computes Mandelbrot iterations for 4x4 grid,
+    // generates PSETI instructions, self-assembles and runs.
+    use crate::assembler::assemble;
+
+    let source = include_str!("../../programs/fractal_gen.asm");
+    let asm = assemble(source, 0).expect("fractal_gen.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..5_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "fractal_gen should halt after self-assembly");
+
+    // Check that the generated code produced some non-black pixels
+    // The 4x4 grid tiles are at (0,0), (64,0), (128,0), (192,0), etc.
+    let mut colored_pixels = 0;
+    for ty in 0usize..4 {
+        for tx in 0usize..4 {
+            let x = tx * 64;
+            let y = ty * 64;
+            if x < 256 && y < 256 {
+                if vm.screen[y * 256 + x] != 0 {
+                    colored_pixels += 1;
+                }
+            }
+        }
+    }
+
+    // At least some tiles should be non-black (the Mandelbrot set boundary has colors)
+    assert!(
+        colored_pixels > 0,
+        "fractal_gen should produce at least 1 colored tile, got {}",
+        colored_pixels
+    );
+
+    // Verify different colors exist (Mandelbrot should produce varied iterations)
+    let mut unique_colors = std::collections::HashSet::new();
+    for ty in 0usize..4 {
+        for tx in 0usize..4 {
+            let x = tx * 64;
+            let y = ty * 64;
+            if x < 256 && y < 256 {
+                unique_colors.insert(vm.screen[y * 256 + x]);
+            }
+        }
+    }
+    // Should have at least 2 unique colors (black + some escape color)
+    assert!(
+        unique_colors.len() >= 2,
+        "fractal_gen should produce varied colors across tiles, got {} unique",
+        unique_colors.len()
+    );
+}
+
+#[test]
+fn test_chatbot_assembles() {
+    let source = include_str!("../../programs/chatbot.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok(), "chatbot.asm should assemble: {:?}", result.err());
+    let asm = result.unwrap();
+    assert!(asm.pixels.len() > 500, "chatbot should produce substantial bytecode");
+}
+
+#[test]
+fn test_chatbot_default_response() {
+    // With empty canvas input, chatbot should give default response
+    use crate::assembler::assemble;
+
+    let source = include_str!("../../programs/chatbot.asm");
+    let asm = assemble(source, 0).expect("chatbot.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..2_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "chatbot should halt");
+
+    // Check that canvas row 4 (offset 128) has the default response text
+    // "I do not understand. Try HELP"
+    // First char should be 'I' (73)
+    assert_ne!(
+        vm.canvas_buffer[128], 0,
+        "chatbot should write response to canvas row 4"
+    );
+    assert_eq!(
+        vm.canvas_buffer[128], 73, // 'I'
+        "default response should start with 'I'"
+    );
+}
+
+#[test]
+fn test_chatbot_hello_response() {
+    // Pre-load "HELLO" on canvas row 0, run chatbot, check response
+    use crate::assembler::assemble;
+
+    let source = include_str!("../../programs/chatbot.asm");
+    let asm = assemble(source, 0).expect("chatbot.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+
+    // Write "HELLO" to canvas row 0
+    write_to_canvas(&mut vm.canvas_buffer, 0, "HELLO");
+
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..2_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "chatbot should halt on HELLO input");
+
+    // Response on row 4 should be "Hello! I am GEO bot."
+    // First char = 'H' (72)
+    assert_eq!(
+        vm.canvas_buffer[128], 72, // 'H'
+        "HELLO response should start with 'H'"
+    );
+    // Second char = 'e' (101)
+    assert_eq!(
+        vm.canvas_buffer[129], 101, // 'e'
+        "HELLO response second char should be 'e'"
+    );
+}
+
+#[test]
+fn test_chatbot_bye_response() {
+    // Test BYE keyword
+    use crate::assembler::assemble;
+
+    let source = include_str!("../../programs/chatbot.asm");
+    let asm = assemble(source, 0).expect("chatbot.asm should assemble");
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+
+    write_to_canvas(&mut vm.canvas_buffer, 0, "BYE");
+
+    vm.pc = 0;
+    vm.halted = false;
+
+    for _ in 0..2_000_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(vm.halted, "chatbot should halt on BYE input");
+
+    // Response should be "Goodbye! Pixels forever."
+    // 'G' = 71
+    assert_eq!(
+        vm.canvas_buffer[128], 71, // 'G'
+        "BYE response should start with 'G'"
+    );
+}
+
 #[test]
 fn test_infinite_map_assembles_and_runs() {
     use crate::assembler::assemble;
