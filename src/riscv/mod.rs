@@ -3,6 +3,13 @@
 // Pure Rust RISC-V interpreter for Geometry OS.
 // Boots guest OS kernels on the canvas text surface.
 // See docs/RISCV_HYPERVISOR.md for full architecture.
+//
+// GPU multicore execution (Phase: Foundation):
+//   gpu.rs           - GpuExecutor (wgpu compute pipeline), tile state init
+//   gpu_reference.rs - CPU reference interpreter for GPU verification
+//   gpu_loader.rs    - Cartridge builders (fibonacci, counter)
+//   riscv_executor.wgsl - WGSL compute shader
+// Enable with: cargo build --features gpu
 
 pub mod boot;
 pub mod bridge;
@@ -12,6 +19,9 @@ pub mod cpu;
 pub mod csr;
 pub mod decode;
 pub mod dtb;
+pub mod gpu;
+pub mod gpu_loader;
+pub mod gpu_reference;
 pub mod loader;
 pub mod memory;
 pub mod mmu;
