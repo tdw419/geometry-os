@@ -5662,11 +5662,11 @@ phases:
   - Process-per-entity could hit scheduler limits
   - Entity state persistence across frames needs careful design
   scope_lines_total: 500
-  status: planned
+  status: in_progress
   test_target: 8
   title: Living Map Entities
   _claimed_by: worker-0
-  _claimed_at: 1777032340
+  _claimed_at: 1777051825
 - deliverables:
   - acceptance_criteria:
     - description: cargo bench shows throughput for at least 3 subsystems

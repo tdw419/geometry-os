@@ -661,16 +661,20 @@ STORE r17, r18          ; ORACLE_RESP_READY = 0
 
 
 ; ===== Entity Table at RAM[0x7900] =====
-; Living map entities: program-nodes and agent-nodes.
+; Living map entities: diverse types with distinct behaviors.
 ; Layout: RAM[0x7900]=count, entries at 0x7901+ (5 words each):
 ;   [world_x, world_y, type, dir_seed, anim_frame]
-;   type: 0=program-node (pulsing display), 1=agent-node (wandering)
-;   dir_seed: packed (direction<<16 | seed), direction 0-3 for agent wander
+;   type: 0=program-node (pulsing display, stationary)
+;         1=wanderer (random walk, orange)
+;         2=guard (patrols near buildings, approaches player, red)
+;         3=animal (flees from player, green)
+;         4=ghost (passes through all terrain, purple)
+;   dir_seed: packed (direction<<16 | seed), direction 0-3
 ;   anim_frame: animation counter, incremented each update tick
 
 LDI r20, 0x7900
-LDI r17, 4
-STORE r20, r17               ; entity_count = 4
+LDI r17, 6
+STORE r20, r17               ; entity_count = 6
 
 ; Entity 0: program-node at (42, 35)
 ADDI r20, 1
@@ -704,7 +708,7 @@ STORE r20, r17
 ADDI r20, 1
 STORE r20, r17
 
-; Entity 2: agent-node at (55, 45)
+; Entity 2: wanderer at (55, 45)
 ADDI r20, 1
 LDI r17, 55
 STORE r20, r17
@@ -713,7 +717,7 @@ LDI r17, 45
 STORE r20, r17
 ADDI r20, 1
 LDI r17, 1
-STORE r20, r17               ; type = agent-node
+STORE r20, r17               ; type = wanderer
 ADDI r20, 1
 LDI r17, 0x00020000
 STORE r20, r17               ; dir_seed = dir=2, seed=0
@@ -721,7 +725,7 @@ ADDI r20, 1
 LDI r17, 0
 STORE r20, r17
 
-; Entity 3: agent-node at (70, 30)
+; Entity 3: wanderer at (70, 30)
 ADDI r20, 1
 LDI r17, 70
 STORE r20, r17
@@ -730,7 +734,7 @@ LDI r17, 30
 STORE r20, r17
 ADDI r20, 1
 LDI r17, 1
-STORE r20, r17               ; type = agent-node
+STORE r20, r17               ; type = wanderer
 ADDI r20, 1
 LDI r17, 0x00010000
 STORE r20, r17               ; dir_seed = dir=1, seed=0
@@ -738,8 +742,59 @@ ADDI r20, 1
 LDI r17, 0
 STORE r20, r17
 
-; RAM[0x7920] = entity_nearby_idx (-1 = none, 0..3 = entity player is touching)
-LDI r20, 0x7920
+; Entity 4: guard at (38, 38) - patrols near spawn area
+ADDI r20, 1
+LDI r17, 38
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 38
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 2
+STORE r20, r17               ; type = guard
+ADDI r20, 1
+LDI r17, 0x00010000
+STORE r20, r17               ; dir_seed = dir=1, seed=0
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17
+
+; Entity 5: animal at (50, 50) - flees from player
+ADDI r20, 1
+LDI r17, 50
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 50
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 3
+STORE r20, r17               ; type = animal
+ADDI r20, 1
+LDI r17, 0x00000000
+STORE r20, r17               ; dir_seed = dir=0, seed=0
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17
+
+; Entity 6: ghost at (60, 40) - passes through walls
+ADDI r20, 1
+LDI r17, 60
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 40
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 4
+STORE r20, r17               ; type = ghost
+ADDI r20, 1
+LDI r17, 0x00020000
+STORE r20, r17               ; dir_seed = dir=2, seed=0
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17
+
+; RAM[0x7930] = entity_nearby_idx (-1 = none, 0..7 = entity player is touching)
+LDI r20, 0x7930
 LDI r17, 0xFFFFFFFF
 STORE r20, r17
 
@@ -993,51 +1048,147 @@ ent_update_loop:
   AND r19, r25             ; wrap anim_frame to 0..15
   STORE r22, r19
 
-  ; Type check: only agent-nodes wander
-  JZ r17, ent_next         ; type 0 = program-node, skip wander
+  ; Type check: program-nodes are stationary
+  JNZ r17, ent_not_program
+  JMP ent_next              ; type 0 = program-node, skip all AI
+ent_not_program:
 
-  ; --- Agent Wander AI ---
-  ; Extract direction from dir_seed (upper 16 bits)
-  MOV r25, r18
-  LDI r22, 16
-  SHR r25, r22             ; direction = dir_seed >> 16
+  ; --- Entity AI Dispatch ---
+  ; type 1=wander (random walk), 2=guard (approach player), 3=animal (flee), 4=ghost (walk through walls)
+  LDI r22, 1
+  CMP r17, r22
+  JZ r0, ent_ai_wander     ; wanderer
+  LDI r22, 2
+  CMP r17, r22
+  JZ r0, ent_ai_guard      ; guard
+  LDI r22, 3
+  CMP r17, r22
+  JZ r0, ent_ai_animal     ; animal (flee)
+  JMP ent_ai_ghost          ; ghost (type 4+)
 
-  ; Random direction change: ~12.5% chance
+  ; ===== Wanderer AI (type 1): random walk =====
+ent_ai_wander:
+  ; Random direction change ~25%
+  RAND r22
+  LDI r23, 3
+  AND r22, r23
+  JNZ r22, ent_wander_no_change
+  RAND r25
+  LDI r23, 3
+  AND r25, r23
+ent_wander_no_change:
+  JMP ent_compute_target
+
+  ; ===== Guard AI (type 2): patrol, approach player when close =====
+ent_ai_guard:
+  ; Simple proximity check: if within 8 tiles on x-axis, approach
+  LDI r22, 0x7808
+  LOAD r22, r22             ; player_x
+  MOV r25, r3
+  SUB r25, r22              ; dx = entity_x - player_x
+  ; Quick check: if |dx| < 8, approach. Use SAR sign check.
+  LDI r23, 31
+  MOV r24, r25
+  SAR r24, r23              ; sign bit
+  ; If sign=0, dx >= 0 (entity right of player), else dx < 0
+  JNZ r24, ent_guard_player_left
+  ; dx >= 0: check if close enough (dx < 8)
+  LDI r22, 8
+  CMP r25, r22
+  BGE r0, ent_guard_patrol
+  ; Close enough: move left toward player
+  LDI r25, 2                ; direction = left
+  JMP ent_compute_target
+ent_guard_player_left:
+  ; dx < 0: entity left of player. Check if close: -dx < 8
+  NEG r25                   ; r25 = |dx|
+  LDI r22, 8
+  CMP r25, r22
+  BGE r0, ent_guard_patrol
+  ; Close: move right toward player
+  LDI r25, 3                ; direction = right
+  JMP ent_compute_target
+
+ent_guard_patrol:
+  ; Patrol: mostly keep direction, occasional turn
   RAND r22
   LDI r23, 7
   AND r22, r23
-  JNZ r22, ent_no_dir_change
-  ; New random direction
-  RAND r22
+  JNZ r22, ent_guard_no_turn
+  RAND r25
   LDI r23, 3
-  AND r22, r23             ; 0-3
-  MOV r25, r22
-ent_no_dir_change:
+  AND r25, r23
+ent_guard_no_turn:
+  JMP ent_compute_target
 
-  ; Compute target position from direction
+  ; ===== Animal AI (type 3): flee from player =====
+ent_ai_animal:
+  ; Simple flee: check if player within 6 tiles on x-axis
+  LDI r22, 0x7808
+  LOAD r22, r22             ; player_x
+  MOV r25, r3
+  SUB r25, r22              ; dx = entity_x - player_x
+  LDI r23, 31
+  MOV r24, r25
+  SAR r24, r23              ; sign bit
+  JNZ r24, ent_animal_player_left
+  ; dx >= 0: entity right of player. Check distance
+  LDI r22, 6
+  CMP r25, r22
+  BGE r0, ent_animal_calm
+  ; Close: flee right
+  LDI r25, 3                ; direction = right
+  JMP ent_compute_target_no_walkability
+ent_animal_player_left:
+  ; dx < 0: entity left of player. Check |dx|
+  NEG r25
+  LDI r22, 6
+  CMP r25, r22
+  BGE r0, ent_animal_calm
+  ; Close: flee left
+  LDI r25, 2                ; direction = left
+  JMP ent_compute_target_no_walkability
+
+ent_animal_calm:
+  ; Calm: random walk
+  RAND r25
+  LDI r23, 3
+  AND r25, r23
+  JMP ent_compute_target
+
+  ; ===== Ghost AI (type 4): random walk through all terrain =====
+ent_ai_ghost:
+  ; Ghost: always random direction, ignores terrain
+  RAND r25
+  LDI r23, 3
+  AND r25, r23              ; random direction 0-3
+  JMP ent_compute_target_no_walkability
+
+  ; ===== Compute target position from direction =====
+ent_compute_target:
   ; dir 0=up(y-1), 1=down(y+1), 2=left(x-1), 3=right(x+1)
   MOV r22, r3              ; target_x = world_x
   MOV r23, r4              ; target_y = world_y
   JNZ r25, ent_not_up
   SUB r23, r7              ; target_y -= 1
-  JMP ent_do_move
+  JMP ent_do_biome_check
 ent_not_up:
   LDI r24, 1
   CMP r25, r24
   JNZ r0, ent_not_down
   ADD r23, r7              ; target_y += 1
-  JMP ent_do_move
+  JMP ent_do_biome_check
 ent_not_down:
   LDI r24, 2
   CMP r25, r24
   JNZ r0, ent_not_left
   SUB r22, r7              ; target_x -= 1
-  JMP ent_do_move
+  JMP ent_do_biome_check
 ent_not_left:
   ADD r22, r7              ; target_x += 1 (right)
-ent_do_move:
+ent_do_biome_check:
 
-  ; Check biome walkability
+  ; Check biome walkability (all types except ghost)
   MOV r3, r22              ; target coords for biome check
   MOV r4, r23
   CALL check_biome_walkable
@@ -1051,9 +1202,40 @@ ent_do_move:
 
   ; Update dir_seed with new direction
   ADDI r24, 2              ; skip to dir_seed field
-  MOV r25, r25
   LDI r22, 16
   SHL r25, r22             ; direction << 16
+  STORE r24, r25
+  JMP ent_next
+
+ent_compute_target_no_walkability:
+  ; Same as above but skip biome check (ghost/animal flee)
+  MOV r22, r3              ; target_x = world_x
+  MOV r23, r4              ; target_y = world_y
+  JNZ r25, ent_nt_up2
+  SUB r23, r7
+  JMP ent_do_move_no_check
+ent_nt_up2:
+  LDI r24, 1
+  CMP r25, r24
+  JNZ r0, ent_nt_down2
+  ADD r23, r7
+  JMP ent_do_move_no_check
+ent_nt_down2:
+  LDI r24, 2
+  CMP r25, r24
+  JNZ r0, ent_nt_left2
+  SUB r22, r7
+  JMP ent_do_move_no_check
+ent_nt_left2:
+  ADD r22, r7
+ent_do_move_no_check:
+  MOV r24, r20
+  STORE r24, r22           ; world_x = target_x
+  ADDI r24, 1
+  STORE r24, r23           ; world_y = target_y
+  ADDI r24, 2              ; skip to dir_seed field
+  LDI r22, 16
+  SHL r25, r22
   STORE r24, r25
   JMP ent_next
 
@@ -1078,7 +1260,7 @@ ent_update_done:
 ent_update_skip:
 
 ; ===== Check Entity Proximity (player touching entity?) =====
-LDI r20, 0x7920
+LDI r20, 0x7930
 LDI r17, 0xFFFFFFFF
 STORE r20, r17             ; entity_nearby_idx = -1
 
@@ -1108,7 +1290,7 @@ ent_prox_loop:
   JNZ r0, ent_prox_next
 
   ; Player is on this entity!
-  LDI r22, 0x7920
+  LDI r22, 0x7930
   STORE r22, r26           ; entity_nearby_idx = entity_index
   JMP ent_prox_done
 
@@ -2720,10 +2902,27 @@ ent_render_loop:
   LOAD r25, r25
 
   ; Check entity type for rendering style
-  JZ r17, ent_render_program
+  JNZ r17, ent_render_not_program
+  JMP ent_render_program
+ent_render_not_program:
 
-  ; --- Agent-node: orange/yellow wandering circle ---
-  ; Pulsing color: alternate between orange and yellow based on anim_frame
+  ; Type dispatch for agent rendering
+  LDI r25, 1
+  CMP r17, r25
+  JZ r0, ent_render_agent   ; wanderer
+
+  LDI r25, 2
+  CMP r17, r25
+  JZ r0, ent_render_guard   ; guard
+
+  LDI r25, 3
+  CMP r17, r25
+  JZ r0, ent_render_animal  ; animal
+
+  JMP ent_render_ghost      ; ghost (type 4+)
+
+  ; --- Wanderer: orange/yellow pulsing circle ---
+ent_render_agent:
   LDI r25, 1
   AND r25, r19
   JZ r25, ent_agent_orange
@@ -2742,14 +2941,13 @@ ent_agent_color:
   BLT r0, ent_agent_simple
 
   ; Detailed: draw 3x3 circle with direction indicator
-  ; Center pixel
   LDI r25, 1
   ADD r27, r25             ; center_x = screen_x + 1
   LDI r25, 1
   ADD r28, r25             ; center_y = screen_y + 1
   PSET r27, r28, r17
 
-  ; Direction indicator (bright dot showing which way agent faces)
+  ; Direction indicator
   MOV r25, r18
   LDI r6, 16
   SHR r25, r6         ; direction
@@ -2807,7 +3005,156 @@ ent_agent_dir_done:
   JMP ent_render_next
 
 ent_agent_simple:
-  ; Simple: 2x2 colored rect
+  LDI r25, 2
+  RECTF r27, r28, r25, r25, r17
+  JMP ent_render_next
+
+  ; --- Guard: red/dark-red square with white cross ---
+ent_render_guard:
+  LDI r25, 2
+  AND r25, r19
+  JZ r25, ent_guard_red
+  LDI r25, 0xCC0000        ; dark red
+  JMP ent_guard_color
+ent_guard_red:
+  LDI r25, 0xFF2020        ; bright red
+ent_guard_color:
+  MOV r17, r25
+
+  ; Check detail
+  LDI r25, 0x7814
+  LOAD r25, r25
+  LDI r6, 2
+  CMP r25, r6
+  BLT r0, ent_guard_simple
+
+  ; Detailed: 3x3 body with white cross marking
+  LDI r25, 3
+  RECTF r27, r28, r25, r25, r17
+  ; White cross in center
+  LDI r25, 1
+  ADD r27, r25             ; center_x
+  ADDI r28, 1              ; center_y
+  LDI r6, 0xFFFFFF
+  PSET r27, r28, r6
+  ; Top of cross
+  SUBI r28, 1
+  PSET r27, r28, r6
+  ; Bottom of cross
+  ADDI r28, 2
+  PSET r27, r28, r6
+  SUBI r28, 1              ; restore center_y
+  ; Left/right of cross
+  SUBI r27, 1
+  ADDI r28, 1
+  PSET r27, r28, r6
+  ADDI r27, 2
+  PSET r27, r28, r6
+  SUBI r27, 1              ; restore center_x
+  SUBI r28, 1              ; restore center_y
+  JMP ent_render_next
+
+ent_guard_simple:
+  LDI r25, 3
+  RECTF r27, r28, r25, r25, r17
+  JMP ent_render_next
+
+  ; --- Animal: green/brown small shape with ears ---
+ent_render_animal:
+  LDI r25, 1
+  AND r25, r19
+  JZ r25, ent_animal_green
+  LDI r25, 0x55AA22        ; green-brown
+  JMP ent_animal_color
+ent_animal_green:
+  LDI r25, 0x33CC33        ; bright green
+ent_animal_color:
+  MOV r17, r25
+
+  ; Check detail
+  LDI r25, 0x7814
+  LOAD r25, r25
+  LDI r6, 2
+  CMP r25, r6
+  BLT r0, ent_animal_simple
+
+  ; Detailed: 2x2 body with 2 ear pixels
+  LDI r25, 1
+  ADD r27, r25             ; offset into tile
+  ADDI r28, 1
+  LDI r25, 2
+  RECTF r27, r28, r25, r25, r17
+  ; Ears (dark green dots above body)
+  LDI r6, 0x116611
+  SUBI r28, 1              ; above body
+  PSET r27, r28, r6        ; left ear
+  ADDI r27, 1
+  PSET r27, r28, r6        ; right ear
+  JMP ent_render_next
+
+ent_animal_simple:
+  LDI r25, 2
+  RECTF r27, r28, r25, r25, r17
+  JMP ent_render_next
+
+  ; --- Ghost: translucent purple, flickering ---
+ent_render_ghost:
+  ; Flickering: 25% chance of invisible each frame
+  RAND r25
+  LDI r6, 3
+  AND r25, r6
+  JNZ r25, ent_ghost_visible
+  JMP ent_render_next      ; invisible this frame
+ent_ghost_visible:
+  ; Purple tint, varies with anim_frame
+  MOV r25, r19
+  LDI r6, 3
+  AND r25, r6              ; 0-3 phase
+  LDI r17, 0x9933FF        ; purple base
+  LDI r6, 1
+  CMP r25, r6
+  JNZ r0, ent_ghost_not_p2
+  LDI r17, 0xBB66FF        ; light purple
+  JMP ent_ghost_draw
+ent_ghost_not_p2:
+  LDI r6, 2
+  CMP r25, r6
+  JNZ r0, ent_ghost_not_p3
+  LDI r17, 0x7722CC        ; dark purple
+  JMP ent_ghost_draw
+ent_ghost_not_p3:
+  LDI r6, 3
+  CMP r25, r6
+  JNZ r0, ent_ghost_draw
+  LDI r17, 0xDD99FF        ; very light purple (spectral)
+ent_ghost_draw:
+  ; Check detail
+  LDI r25, 0x7814
+  LOAD r25, r25
+  LDI r6, 2
+  CMP r25, r6
+  BLT r0, ent_ghost_simple
+
+  ; Detailed: 3x4 ghost shape (body + wavy bottom)
+  LDI r25, 3
+  RECTF r27, r28, r25, r25, r17
+  ; Wavy bottom edge: alternating pixels
+  ADDI r28, 3              ; below body
+  PSET r27, r28, r17       ; left bump
+  ADDI r27, 2
+  PSET r27, r28, r17       ; right bump
+  ; Eyes (white dots)
+  SUBI r27, 1              ; center column
+  SUBI r28, 2              ; eye row
+  LDI r6, 0xFFFFFF
+  PSET r27, r28, r6        ; center eye
+  SUBI r27, 1
+  PSET r27, r28, r6        ; left eye
+  ADDI r27, 2
+  PSET r27, r28, r6        ; right eye
+  JMP ent_render_next
+
+ent_ghost_simple:
   LDI r25, 2
   RECTF r27, r28, r25, r25, r17
   JMP ent_render_next
@@ -2989,12 +3336,30 @@ mm_ent_loop:
   BGE r0, mm_ent_next
 
   ; Draw entity marker on minimap
-  ; Program-node: cyan dot, Agent-node: orange dot
-  JZ r17, mm_ent_program
-  LDI r18, 0xFF8800        ; orange
+  ; Different color per entity type
+  JNZ r17, mm_ent_not_program
+  LDI r18, 0x00FFFF        ; cyan (program-node)
   JMP mm_ent_dot
-mm_ent_program:
-  LDI r18, 0x00FFFF        ; cyan
+mm_ent_not_program:
+  LDI r25, 1
+  CMP r17, r25
+  JNZ r0, mm_ent_not_wanderer
+  LDI r18, 0xFF8800        ; orange (wanderer)
+  JMP mm_ent_dot
+mm_ent_not_wanderer:
+  LDI r25, 2
+  CMP r17, r25
+  JNZ r0, mm_ent_not_guard
+  LDI r18, 0xFF2020        ; red (guard)
+  JMP mm_ent_dot
+mm_ent_not_guard:
+  LDI r25, 3
+  CMP r17, r25
+  JNZ r0, mm_ent_not_animal
+  LDI r18, 0x33CC33        ; green (animal)
+  JMP mm_ent_dot
+mm_ent_not_animal:
+  LDI r18, 0xBB66FF        ; purple (ghost)
 mm_ent_dot:
   PSET r28, r25, r18
 
@@ -3149,7 +3514,7 @@ STORE r18, r17
 
 
 ; ===== Nearby Entity Tooltip =====
-LDI r17, 0x7920
+LDI r17, 0x7930
 LOAD r17, r17              ; entity_nearby_idx
 LDI r18, 0xFFFFFFFF
 CMP r17, r18
@@ -3167,12 +3532,78 @@ ADDI r20, 2                ; type field
 LOAD r17, r20              ; type
 JZ r17, ent_tooltip_program
 
-; Agent tooltip
+; Dispatch by entity type
+LDI r18, 1
+CMP r17, r18
+JZ r0, ent_tooltip_wanderer
+LDI r18, 2
+CMP r17, r18
+JZ r0, ent_tooltip_guard
+LDI r18, 3
+CMP r17, r18
+JZ r0, ent_tooltip_animal
+JMP ent_tooltip_ghost
+
+ent_tooltip_wanderer:
 LDI r20, 0x5040
-STRO r20, "Agent"
+STRO r20, "Wanderer"
 LDI r18, 100
-LDI r19, 124
+LDI r19, 118
 LDI r21, 0xFF8800          ; orange text
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+JMP no_entity_tooltip
+
+ent_tooltip_guard:
+LDI r20, 0x5040
+STRO r20, "Guard"
+LDI r18, 100
+LDI r19, 118
+LDI r21, 0xFF2020          ; red text
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+; Second line: interaction hint
+LDI r20, 0x5050
+STRO r20, "[Talk]"
+LDI r18, 100
+LDI r19, 128
+LDI r21, 0xFFFF88
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+JMP no_entity_tooltip
+
+ent_tooltip_animal:
+LDI r20, 0x5040
+STRO r20, "Animal"
+LDI r18, 100
+LDI r19, 118
+LDI r21, 0x33CC33          ; green text
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+; Show behavior
+LDI r20, 0x5050
+STRO r20, "(flees)"
+LDI r18, 100
+LDI r19, 128
+LDI r21, 0x33CC33
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+JMP no_entity_tooltip
+
+ent_tooltip_ghost:
+LDI r20, 0x5040
+STRO r20, "Ghost"
+LDI r18, 100
+LDI r19, 118
+LDI r21, 0xBB66FF          ; purple text
+LDI r17, 0x1A1A2E
+DRAWTEXT r18, r19, r20, r21, r17
+; Show behavior
+LDI r20, 0x5050
+STRO r20, "(spectral)"
+LDI r18, 100
+LDI r19, 128
+LDI r21, 0xBB66FF
 LDI r17, 0x1A1A2E
 DRAWTEXT r18, r19, r20, r21, r17
 JMP no_entity_tooltip
