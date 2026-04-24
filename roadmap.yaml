@@ -6029,7 +6029,7 @@ phases:
   _claimed_at: 1777058062
 - id: phase-123
   title: Alpine Linux Live Tile
-  status: planned
+  status: done
   goal: Run Alpine Linux as a live-updating tile on the Geometry OS desktop
   description: Extend the hypervisor to render the RISC-V guest framebuffer as a live
     window on the desktop. The Alpine Linux boot process becomes visible in real-time.
@@ -6038,32 +6038,32 @@ phases:
   deliverables:
   - name: Hypervisor-to-window bridge
     description: Connect the RISC-V framebuffer output to a WINSYS window
-    status: todo
+    status: done
     tasks:
     - id: p123.d1.t1
       title: Map guest framebuffer to window offscreen_buffer
-      status: todo
+      status: done
       description: During hypervisor tick, copy guest FB to window pixels
     - id: p123.d1.t2
       title: Forward keyboard input from window to guest
-      status: todo
+      status: done
       description: IKEY events in window context forwarded to guest UART
     - id: p123.d1.t3
       title: Auto-create window when hypervisor boots
-      status: todo
+      status: done
       description: WINSYS CREATE + VFS_BLIT on hypervisor launch
     scope_lines: 200
   - name: Alpine Linux boot demo
     description: Boot Alpine Linux in a window, show shell prompt
-    status: todo
+    status: done
     tasks:
     - id: p123.d2.t1
       title: Prepare minimal Alpine rootfs for RV32
-      status: todo
+      status: done
       description: Build or download rootfs with busybox + dropbear
     - id: p123.d2.t2
       title: Boot to shell in window, verify interactive
-      status: todo
+      status: done
       description: Type commands, see output in window
     scope_lines: 150
   dependencies:
