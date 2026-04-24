@@ -3,9 +3,7 @@
 //! Implementation of RV32I base integer instruction set.
 //! Used to verify GPU execution by running the same code on CPU and comparing results.
 
-pub const STATUS_RUNNING: u32 = 0x1;
-pub const STATUS_HALTED: u32 = 0x2;
-pub const STATUS_ERROR: u32 = 0x4;
+use crate::gpu::{STATUS_HALTED, STATUS_RUNNING, STATUS_ERROR};
 
 pub struct ReferenceVm {
     pub regs: [u32; 32],
@@ -152,7 +150,7 @@ impl ReferenceVm {
                 let val2 = self.read_reg(rs2);
                 let alt = (inst >> 30) & 1 == 1;
                 let mul = (inst >> 25) & 1 == 1;
-                
+
                 let result = if mul {
                     match funct3 {
                         0 => (val1 as i32).wrapping_mul(val2 as i32) as u32, // MUL
