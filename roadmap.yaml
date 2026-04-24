@@ -5880,7 +5880,7 @@ phases:
   test_target: 2026
 - id: phase-120
   title: VFS File Manager Desktop App
-  status: planned
+  status: done
   goal: Interactive file explorer using the pixel VFS surface
   description: Build a persistent desktop app (file_manager.asm) that renders the
     VFS surface as an interactive file browser. Shows file names, sizes, and content
@@ -5889,36 +5889,36 @@ phases:
   deliverables:
   - name: File manager app with directory listing
     description: Reads VFS surface directory index, renders file list in a window
-    status: todo
+    status: done
     tasks:
     - id: p120.d1.t1
       title: Parse PXFS directory index from pixel surface
-      status: todo
+      status: done
       description: Read row 0 magic, file count, and index entries
     - id: p120.d1.t2
       title: Render file list with names and sizes
-      status: todo
+      status: done
       description: Draw text labels for each file showing name hash and byte count
     - id: p120.d1.t3
       title: Arrow key navigation and selection highlight
-      status: todo
+      status: done
       description: Cursor up/down to select files, highlight current
     scope_lines: 200
   - name: File content viewer and hex editor
     description: View file content as hex dump or ASCII. Edit bytes and save via VFS_SYNC.
-    status: todo
+    status: done
     tasks:
     - id: p120.d2.t1
       title: Hex dump view of selected file data
-      status: todo
+      status: done
       description: Read data pixels and render as hex bytes in window
     - id: p120.d2.t2
       title: ASCII text view toggle
-      status: todo
+      status: done
       description: Switch between hex and text view with Tab key
     - id: p120.d2.t3
       title: Byte editing and save via VFS_SYNC
-      status: todo
+      status: done
       description: Edit bytes in hex view, press S to save with WINSYS op=9
     scope_lines: 150
   dependencies:
@@ -5928,6 +5928,8 @@ phases:
     reason: Needs VFS surface and WINSYS ops 8/9
   scope_lines_total: 70400
   test_target: 2036
+  _claimed_by: worker-0
+  _claimed_at: 1777055122
 - id: phase-121
   title: Area Agent System
   status: planned

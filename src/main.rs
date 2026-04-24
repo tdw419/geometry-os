@@ -336,8 +336,7 @@ fn main() {
             match assembler::assemble(&preprocessed, CANVAS_BYTECODE_ADDR) {
                 Ok(asm_result) => {
                     let ram_len = vm.ram.len();
-                    for v in vm.ram[CANVAS_BYTECODE_ADDR
-                        ..ram_len.min(CANVAS_BYTECODE_ADDR + 8192)]
+                    for v in vm.ram[CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 8192)]
                         .iter_mut()
                     {
                         *v = 0;

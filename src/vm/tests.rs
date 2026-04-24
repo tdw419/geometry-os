@@ -9572,6 +9572,158 @@ fn test_hexdump_header_present() {
     );
 }
 
+// ── hex_viewer.asm tests (Phase 120) ──
+
+#[test]
+fn test_hex_viewer_assembles() {
+    let source = include_str!("../../programs/hex_viewer.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(
+        result.is_ok(),
+        "hex_viewer.asm failed to assemble: {:?}",
+        result.err()
+    );
+    let bytecode = result.unwrap();
+    assert!(
+        bytecode.pixels.len() > 500,
+        "hex_viewer.asm should be substantial, got {} words",
+        bytecode.pixels.len()
+    );
+    // Verify key opcodes present
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x59),
+        "should contain LS opcode (0x59)"
+    );
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x54),
+        "should contain OPEN opcode (0x54)"
+    );
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x55),
+        "should contain READ opcode (0x55)"
+    );
+    assert!(
+        bytecode.pixels.iter().any(|&w| w == 0x57),
+        "should contain CLOSE opcode (0x57)"
+    );
+}
+
+#[test]
+fn test_hex_viewer_hex_table_initialized() {
+    // Boot hex_viewer and check hex lookup table at 0x2100
+    let source = include_str!("../../programs/hex_viewer.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok());
+    let bytecode = result.unwrap();
+    let mut vm = Vm::new();
+    let load_addr = 0usize;
+    for (i, &word) in bytecode.pixels.iter().enumerate() {
+        let addr = load_addr + i;
+        if addr < vm.ram.len() {
+            vm.ram[addr] = word;
+        }
+    }
+    vm.pc = load_addr as u32;
+    vm.halted = false;
+    // Run until first frame
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+    // Check hex lookup table at 0x2100
+    assert_eq!(vm.ram[0x2100], 48, "hex_table[0] should be '0'");
+    assert_eq!(vm.ram[0x2109], 57, "hex_table[9] should be '9'");
+    assert_eq!(vm.ram[0x210A], 65, "hex_table[10] should be 'A'");
+    assert_eq!(vm.ram[0x210F], 70, "hex_table[15] should be 'F'");
+}
+
+#[test]
+fn test_hex_viewer_boots_and_lists_files() {
+    let source = include_str!("../../programs/hex_viewer.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok());
+    let bytecode = result.unwrap();
+    let mut vm = Vm::new();
+    let load_addr = 0usize;
+    for (i, &word) in bytecode.pixels.iter().enumerate() {
+        let addr = load_addr + i;
+        if addr < vm.ram.len() {
+            vm.ram[addr] = word;
+        }
+    }
+    vm.pc = load_addr as u32;
+    vm.halted = false;
+    // Run until first frame
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+    assert!(!vm.halted, "hex_viewer should not halt after boot");
+    // Mode should be 0 (list view)
+    assert_eq!(vm.ram[0x800], 0, "mode should be 0 (list view)");
+    // Should have listed files
+    let file_count = vm.ram[0x804];
+    assert!(
+        file_count >= 1,
+        "should list at least 1 file, got {}",
+        file_count
+    );
+    // Title bar should differ from background
+    let title_pixel = vm.screen[6 * 256 + 10];
+    let bg_pixel = vm.screen[28 * 256 + 10];
+    assert_ne!(
+        title_pixel, bg_pixel,
+        "title bar should differ from background"
+    );
+}
+
+#[test]
+fn test_hex_viewer_title_present() {
+    let source = include_str!("../../programs/hex_viewer.asm");
+    let result = crate::assembler::assemble(source, 0);
+    assert!(result.is_ok());
+    let bytecode = result.unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in bytecode.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+    // Title bar at y=0..22 should have non-dark pixels
+    let mut title_pixels = 0;
+    for x in 8..100 {
+        if vm.screen[6 * 256 + x] != 0x0d1117 {
+            title_pixels += 1;
+        }
+    }
+    assert!(
+        title_pixels > 3,
+        "title should have visible text, found {} pixels",
+        title_pixels
+    );
+}
+
 // ── SCRSHOT Opcode (Phase 74) ────────────────────────────────
 
 #[test]
@@ -11726,10 +11878,10 @@ fn test_building_table_initialized() {
             break;
         }
     }
-    // Building count at 0x7580 should be 13 (ai_terminal added)
+    // Building count at 0x7580 should be 15 (file_browser + hex_viewer added)
     assert_eq!(
-        vm.ram[0x7580], 13,
-        "building count should be 13, got {}",
+        vm.ram[0x7580], 15,
+        "building count should be 15, got {}",
         vm.ram[0x7580]
     );
     // First building at 0x7500 should have world_x = 52
@@ -12160,7 +12312,7 @@ fn test_building_count_correct() {
             break;
         }
     }
-    assert_eq!(vm.ram[0x7580], 13, "building count should be exactly 13");
+    assert_eq!(vm.ram[0x7580], 15, "building count should be exactly 15");
 }
 
 #[test]
@@ -18135,13 +18287,22 @@ fn test_world_desktop_agent_entities_wander() {
     assert_eq!(vm.ram[0x7912], 1, "entity 3 should still be wanderer");
 
     // Entities should be in reasonable world bounds (0-200)
-    assert!(e2_x < 200 && e2_y < 200, "entity 2 should be in bounds: ({},{})", e2_x, e2_y);
-    assert!(e3_x < 200 && e3_y < 200, "entity 3 should be in bounds: ({},{})", e3_x, e3_y);
+    assert!(
+        e2_x < 200 && e2_y < 200,
+        "entity 2 should be in bounds: ({},{})",
+        e2_x,
+        e2_y
+    );
+    assert!(
+        e3_x < 200 && e3_y < 200,
+        "entity 3 should be in bounds: ({},{})",
+        e3_x,
+        e3_y
+    );
 
     // At least verify the entity system works - entities exist and have valid positions
     let entity_count = vm.ram[0x7900];
     assert_eq!(entity_count, 6, "should have 6 entities after running");
-
 }
 
 #[test]

@@ -579,9 +579,37 @@ LDI r17, 0x76C0
 STORE r20, r17
 ADDI r20, 1
 
+; Building 13: file_browser (utility/cyan 0x44CCFF)
+LDI r17, 95
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 160
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x44CCFF
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x76D0
+STORE r20, r17
+ADDI r20, 1
+
+; Building 14: hex_viewer (utility/green 0x44DD88)
+LDI r17, 120
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 165
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x44DD88
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x76E0
+STORE r20, r17
+ADDI r20, 1
+
 ; Building count
 LDI r17, 0x7580
-LDI r18, 13
+LDI r18, 15
 STORE r17, r18
 
 ; ===== Claim Table =====
@@ -631,6 +659,10 @@ LDI r20, 0x76B0
 STRO r20, "oracle"
 LDI r20, 0x76C0
 STRO r20, "ai_terminal"
+LDI r20, 0x76D0
+STRO r20, "file_browser"
+LDI r20, 0x76E0
+STRO r20, "hex_viewer"
 
 ; Clear nearby building flag
 LDI r17, 0x7584
