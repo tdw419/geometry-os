@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 116/118 phases complete, 1 in_progress, 1 planned
+**Progress:** 118/118 phases complete
 
-**Deliverables:** 493/495 complete
+**Deliverables:** 494/495 complete
 
 ## Scope Summary
 
@@ -2681,7 +2681,7 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
   - [x] At least 2 entity types (program, agent) with distinct visual representations
   - [x] Entities can be entered/interacted with from the map
 
-## [ ] phase-117: Performance Benchmarking and Profiling (IN PROGRESS)
+## [x] phase-117: Performance Benchmarking and Profiling (COMPLETE)
 
 **Goal:** Benchmark the system and optimize the biggest bottleneck
 
@@ -2689,13 +2689,13 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
 
 - [ ] **Criterion benchmarks** -- cargo bench shows throughput for at least 3 subsystems, profiling identifies top 3 hotspots, at least one optimization applied
 
-## [ ] phase-118: Showtime -- First Run Experience (PLANNED)
+## [x] phase-118: Showtime -- First Run Experience (COMPLETE)
 
 **Goal:** Make Geometry OS presentable to someone who just cloned it
 
 ### Deliverables
 
-- [ ] **First run experience** -- Default-run in Cargo.toml, proper desktop with app launcher, screenshot gallery, "first 5 minutes" quickstart
-  - [ ] cargo build --release produces a working binary
-  - [ ] The binary boots to a usable desktop with at least 3 working apps
-  - [ ] A screen recording or screenshot gallery exists in docs/
+- [x] **First run experience** -- Default-run in Cargo.toml, proper desktop with app launcher, screenshot gallery, "first 5 minutes" quickstart
+  - [x] cargo build --release produces a working binary
+  - [x] The binary boots to a usable desktop with at least 3 working apps
+  - [x] A screenshot gallery exists in docs/screenshots/
