@@ -176,7 +176,7 @@ impl GpuExecutor {
             device_type: wgpu::DeviceType::Other,
             driver: String::new(),
             driver_info: String::new(),
-            backend: wgpu::Backend::Empty,
+            backend: wgpu::Backend::Noop,
         }
     }
 
@@ -283,6 +283,8 @@ impl GpuExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "gpu")]
+    use crate::riscv::{gpu_loader, gpu_reference};
 
     #[test]
     fn test_init_tile_states_single() {
@@ -399,7 +401,7 @@ mod tests {
             .expect("GPU execution failed");
 
         let status = tile_data[33];
-        assert_ne!(
+        assert_eq!(
             status & STATUS_ERROR,
             0,
             "Tile should not have errored, status=0x{:x}",
@@ -449,7 +451,10 @@ mod tests {
         let gpu_pc = tile_data[32];
         let gpu_status = tile_data[33];
         let gpu_inst_count = tile_data[34];
-        let gpu_uart = extract_uart(&tile_data);
+        let gpu_uart_len = tile_data[37] as usize;
+        let gpu_uart_bytes: Vec<u8> = (0..gpu_uart_len.min(UART_BUF_WORDS))
+            .map(|i| (tile_data[STATE_HEADER_WORDS + i] & 0xFF) as u8)
+            .collect();
         let mut gpu_regs = [0u32; 32];
         gpu_regs.copy_from_slice(&tile_data[0..32]);
 
@@ -462,8 +467,6 @@ mod tests {
         }
         let mut ref_vm = gpu_reference::ReferenceVm::new(ram);
         ref_vm.run(max_steps);
-
-        let ref_uart = String::from_utf8_lossy(&ref_vm.uart_output).to_string();
 
         // Compare
         assert_eq!(
@@ -484,14 +487,85 @@ mod tests {
             );
         }
         assert_eq!(
-            gpu_uart, ref_uart,
-            "[{}] UART mismatch: GPU='{}', Ref='{}'",
-            name, gpu_uart, ref_uart
+            gpu_uart_bytes, ref_vm.uart_output,
+            "[{}] UART mismatch: GPU={:?}, Ref={:?}",
+            name, gpu_uart_bytes, ref_vm.uart_output
         );
 
         eprintln!(
-            "[PASS] {} - GPU matches reference ({} insts, uart='{}')",
-            name, gpu_inst_count, gpu_uart
+            "[PASS] {} - GPU matches reference ({} insts, {} uart bytes)",
+            name,
+            gpu_inst_count,
+            gpu_uart_bytes.len()
         );
+    }
+
+    // Benchmark: GPU vs CPU reference interpreter on identical workloads.
+    // Run with: cargo test --features gpu --lib -- --ignored bench_gpu_vs_cpu --nocapture
+    #[cfg(feature = "gpu")]
+    #[test]
+    #[ignore]
+    fn bench_gpu_vs_cpu() {
+        use std::time::Instant;
+
+        let executor =
+            pollster::block_on(GpuExecutor::new()).expect("GPU initialization failed");
+
+        // Two workloads: light (fib(10), ~42 insts/tile) and heavy
+        // (counter(500), ~2500 insts/tile). Heavy workload is the one
+        // where GPU parallelism has a chance to overcome dispatch overhead.
+        let workloads: [(&str, Vec<u32>, u32); 2] = [
+            ("fib(10)   ", gpu_loader::build_fibonacci_cartridge(), 1000),
+            ("counter500", gpu_loader::build_counter_cartridge(500), 10_000),
+        ];
+
+        for (label, cartridge, max_steps) in &workloads {
+            eprintln!("\nworkload: {}", label);
+        for &num_tiles in &[1usize, 16, 64, 256] {
+            let mut tile_data = init_tile_states(num_tiles, cartridge, *max_steps);
+
+            // Warm-up (first GPU dispatch pays pipeline/driver startup).
+            if num_tiles == 1 {
+                executor.run_tiles(&mut tile_data, 1).unwrap();
+                tile_data = init_tile_states(num_tiles, cartridge, *max_steps);
+            }
+
+            let t_gpu = Instant::now();
+            executor
+                .run_tiles(&mut tile_data, num_tiles as u32)
+                .unwrap();
+            let gpu_ms = t_gpu.elapsed().as_secs_f64() * 1000.0;
+            let gpu_insts: u64 = (0..num_tiles)
+                .map(|i| tile_data[i * TILE_STATE_WORDS + 34] as u64)
+                .sum();
+
+            let t_cpu = Instant::now();
+            let mut cpu_insts: u64 = 0;
+            for _ in 0..num_tiles {
+                let mut ram = vec![0u32; RAM_WORDS];
+                for (j, &w) in cartridge.iter().enumerate() {
+                    if j < RAM_WORDS {
+                        ram[j] = w;
+                    }
+                }
+                let mut vm = gpu_reference::ReferenceVm::new(ram);
+                vm.run(*max_steps);
+                cpu_insts += vm.instruction_count as u64;
+            }
+            let cpu_ms = t_cpu.elapsed().as_secs_f64() * 1000.0;
+
+            eprintln!(
+                "[bench] tiles={:>3} | GPU: {:>7.2}ms ({:>8} insts, {:>6.1} Minst/s) | CPU: {:>7.2}ms ({:>8} insts, {:>6.1} Minst/s) | ratio={:.2}x",
+                num_tiles,
+                gpu_ms,
+                gpu_insts,
+                (gpu_insts as f64) / (gpu_ms * 1000.0),
+                cpu_ms,
+                cpu_insts,
+                (cpu_insts as f64) / (cpu_ms * 1000.0),
+                gpu_ms / cpu_ms
+            );
+        }
+        }
     }
 }
