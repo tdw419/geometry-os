@@ -5984,7 +5984,7 @@ phases:
   _claimed_at: 1777056634
 - id: phase-122
   title: RISC-V Guest Write Path
-  status: in_progress
+  status: done
   goal: Guest OS can create, write, and delete files via the VFS pixel surface
   description: 'Extend the RISC-V guest to use the VFS pixel surface for file creation
     and modification. Write a guest-side C library (vfs_pixel.h) with vfs_create,
@@ -5994,28 +5994,28 @@ phases:
   deliverables:
   - name: Guest-side vfs_pixel.h C library
     description: Header-only C library for pixel surface file access
-    status: todo
+    status: done
     tasks:
     - id: p122.d1.t1
       title: Write vfs_pixel.h with list/read/write/create/delete
-      status: todo
+      status: done
       description: Inline functions using volatile uint32_t pointers to 0x70000000
     - id: p122.d1.t2
       title: Port vfs_pixel_cat.c to use new header
-      status: todo
+      status: done
       description: Replace hand-coded asm with vfs_read_file() from header
     scope_lines: 200
   - name: Guest file creation demo
     description: RISC-V guest creates and writes a file visible on host
-    status: todo
+    status: done
     tasks:
     - id: p122.d2.t1
       title: Write guest_vfs_write.c demo
-      status: todo
+      status: done
       description: Guest creates a file via pixel surface, writes data, triggers flush
     - id: p122.d2.t2
       title: 'Test: host reads file created by guest'
-      status: todo
+      status: done
       description: 'Integration test: boot guest, verify host fs has new file'
     scope_lines: 100
   dependencies:
