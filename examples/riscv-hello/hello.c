@@ -1,25 +1,33 @@
 /*
  * hello.c -- Bare-metal C hello world for Geometry OS RISC-V hypervisor.
  *
- * Writes "hello from C\n" to the UART at 0x10000000.
- * No libc, no startup code. Compiled with -fno-pic to avoid GOT.
+ * Uses SBI (Supervisor Binary Interface) instead of raw UART MMIO:
+ *   a7=1 (SBI_CONSOLE_PUTCHAR), a0=char  -> print one character
+ *   a7=8 (SBI_SHUTDOWN)                  -> clean halt
+ *
+ * The Geometry OS SBI dispatcher (src/riscv/sbi.rs) intercepts the ecall,
+ * routes the byte through the UART, and UartBridge renders it on the canvas.
  */
-typedef volatile unsigned char *uart_ptr;
 
-#define UART0 ((uart_ptr)0x10000000)
-
-static void uart_putc(char c) {
-    *UART0 = c;
+static inline void sbi_console_putchar(int ch) {
+    register int a0 asm("a0") = ch;
+    register int a7 asm("a7") = 1;
+    asm volatile("ecall" : "+r"(a0) : "r"(a7) : "memory");
 }
 
-static void uart_puts(const char *s) {
+static __attribute__((noreturn)) void sbi_shutdown(void) {
+    register int a7 asm("a7") = 8;
+    asm volatile("ecall" : : "r"(a7) : "memory");
+    __builtin_unreachable();
+}
+
+static void sbi_puts(const char *s) {
     while (*s) {
-        uart_putc(*s);
-        s++;
+        sbi_console_putchar(*s++);
     }
 }
 
 void _start(void) {
-    uart_puts("hello from C\n");
-    while (1) {}
+    sbi_puts("hello from C\n");
+    sbi_shutdown();
 }
