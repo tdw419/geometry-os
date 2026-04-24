@@ -58,11 +58,7 @@ impl RiscvVm {
                 StepResult::Ok
                 | StepResult::FetchFault
                 | StepResult::LoadFault
-                | StepResult::StoreFault => {
-                    // Page faults are delivered as traps by translate_va
-                    // (mepc/mcause/mtval set, PC jumped to trap vector).
-                    // The guest OS trap handler will handle them.
-                }
+                | StepResult::StoreFault => {}
                 StepResult::Ebreak => break,
                 StepResult::Ecall => {} // ECALL is normal during boot
             }

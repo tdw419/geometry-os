@@ -21,12 +21,18 @@ OUT="hello.elf"
 
 # Detect C vs assembly source
 case "$SRC" in
-    *.c) LANG_FLAGS="-fno-pic" ;;
-    *.S) LANG_FLAGS="" ;;
+    *.c)
+        LANG_FLAGS="-fno-pic"
+        EXTRA_SRCS="crt0.S"
+        ;;
+    *.S)
+        LANG_FLAGS=""
+        EXTRA_SRCS=""
+        ;;
     *)   echo "Unknown source type: $SRC"; exit 1 ;;
 esac
 
-echo "Building $SRC -> $OUT"
+echo "Building $SRC (with $EXTRA_SRCS) -> $OUT"
 
 riscv64-linux-gnu-gcc \
     -ffreestanding \
@@ -44,7 +50,7 @@ riscv64-linux-gnu-gcc \
     -Wl,-e,_start \
     -Wl,--gc-sections \
     $LANG_FLAGS \
-    -o "$OUT" "$SRC"
+    -o "$OUT" $EXTRA_SRCS "$SRC"
 
 ENTRY=$(riscv64-linux-gnu-readelf -h "$OUT" | grep 'Entry point' | awk '{print $NF}')
 SIZE=$(stat --format=%s "$OUT")

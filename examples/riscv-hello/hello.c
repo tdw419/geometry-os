@@ -27,7 +27,7 @@ static void sbi_puts(const char *s) {
     }
 }
 
-void _start(void) {
+void c_start(void) {
     sbi_puts("hello from C\n");
     sbi_shutdown();
 }

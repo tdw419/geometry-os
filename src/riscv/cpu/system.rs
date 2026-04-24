@@ -57,14 +57,6 @@ impl RiscvCpu {
                     let a4 = self.x[14];
                     let a5 = self.x[15];
 
-                    // Debug: log all SBI calls
-                    if self.ecall_count <= 30 || a7 == 0x4442434E {
-                        eprintln!(
-                            "[sbi] ECALL #{}: a7=0x{:08X} a6={} a0=0x{:08X} a1=0x{:08X}",
-                            self.ecall_count, a7, a6, a0, a1
-                        );
-                    }
-
                     let sbi_result = bus.sbi.handle_ecall(
                         a7,
                         a6,
@@ -92,6 +84,14 @@ impl RiscvCpu {
                                     }
                                 }
                             }
+                        }
+
+                        // Handle GEO_VFS_READ pending request: read filename from
+                        // guest memory, look up file in host VFS, write bytes back.
+                        if let Some(req) = bus.sbi.geo_vfs_read_pending.take() {
+                            let result_bytes = self.fulfill_geo_vfs_read(bus, &req);
+                            // Overwrite a0 with the result (bytes read or error)
+                            self.x[10] = result_bytes;
                         }
 
                         self.pc = next_pc;
@@ -232,5 +232,51 @@ impl RiscvCpu {
 
             _ => unreachable!("execute_system called with non-system op"),
         }
+    }
+
+    /// Fulfill a pending GEO_VFS_READ request from the SBI layer.
+    ///
+    /// Reads the filename from guest memory, looks it up in the host VFS,
+    /// and copies up to buf_len bytes into guest memory at buf_addr.
+    /// Returns the number of bytes written, or an SBI error code (u32 with
+    /// top bit set) on failure.
+    pub(super) fn fulfill_geo_vfs_read(
+        &self,
+        bus: &mut Bus,
+        req: &super::super::sbi::GeoVfsReadReq,
+    ) -> u32 {
+        use super::super::sbi::{SBI_ERR_FAILURE, SBI_ERR_INVALID_PARAM};
+
+        // Read filename from guest memory
+        let name_len = req.name_len as usize;
+        if name_len == 0 || name_len > 256 {
+            return SBI_ERR_INVALID_PARAM as u32;
+        }
+        let mut name_bytes = vec![0u8; name_len];
+        for i in 0..name_len {
+            match bus.read_byte(req.name_addr + i as u64) {
+                Ok(b) => name_bytes[i] = b,
+                Err(_) => return SBI_ERR_FAILURE as u32,
+            }
+        }
+        let name = match std::str::from_utf8(&name_bytes) {
+            Ok(s) => s,
+            Err(_) => return SBI_ERR_INVALID_PARAM as u32,
+        };
+
+        // Look up file in host VFS
+        let data = match crate::vfs::read_file_by_name(name) {
+            Some(d) => d,
+            None => return SBI_ERR_FAILURE as u32,
+        };
+
+        // Copy up to buf_len bytes into guest memory
+        let copy_len = (data.len() as u32).min(req.buf_len) as usize;
+        for i in 0..copy_len {
+            if bus.write_byte(req.buf_addr + i as u64, data[i]).is_err() {
+                return i as u32; // partial write
+            }
+        }
+        copy_len as u32
     }
 }

@@ -1,0 +1,3 @@
+Hello from Geometry OS VFS!
+This file was read by a bare-metal RISC-V C program
+through the GEO_VFS_READ SBI hypercall.
