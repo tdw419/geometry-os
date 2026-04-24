@@ -867,3 +867,112 @@ fn test_cat_vfs_read() {
         uart_str
     );
 }
+
+#[test]
+fn test_vfs_pixel_surface_cat() {
+    // Boot vfs_pixel_cat.elf which reads file data directly from
+    // the Pixel VFS Surface at 0x7000_0000. No ecall for file reads --
+    // just lw from MMIO. "Pixels move pixels."
+    //
+    // Prerequisites:
+    //   - examples/riscv-hello/vfs_pixel_cat.elf
+    //   - .geometry_os/fs/test.txt (test fixture)
+    let elf_path = "examples/riscv-hello/vfs_pixel_cat.elf";
+    let elf_data = match std::fs::read(elf_path) {
+        Ok(d) => d,
+        Err(_) => {
+            let status = std::process::Command::new("./examples/riscv-hello/build.sh")
+                .arg("vfs_pixel_cat.c")
+                .current_dir(env!("CARGO_MANIFEST_DIR"))
+                .status()
+                .ok();
+            match status {
+                Some(s) if s.success() => {
+                    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("examples/riscv-hello/hello.elf");
+                    match std::fs::read(&p) {
+                        Ok(d) => {
+                            let _ = std::fs::copy(&p, elf_path);
+                            d
+                        }
+                        Err(e) => panic!("Built vfs_pixel_cat but can't read: {} ({:?})", e, p),
+                    }
+                }
+                _ => panic!(
+                    "Cannot build or find {} -- is riscv64-linux-gnu-gcc installed?",
+                    elf_path
+                ),
+            }
+        }
+    };
+
+    // Ensure test fixture exists
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".geometry_os/fs/test.txt");
+    assert!(
+        fixture.exists(),
+        "Test fixture missing: {:?}",
+        fixture
+    );
+
+    eprintln!("vfs_pixel_cat ELF size: {} bytes", elf_data.len());
+
+    let mut vm = RiscvVm::new(1024 * 1024);
+    let mut bridge = UartBridge::new();
+
+    // Verify the VFS surface loaded the file
+    let magic = vm.bus.vfs_surface.pixels[0];
+    let file_count = vm.bus.vfs_surface.pixels[1];
+    eprintln!("VFS surface: magic=0x{:08X} file_count={}", magic, file_count);
+    assert_eq!(magic, 0x50584653, "PXFS magic should be present");
+    assert!(file_count >= 1, "Should have at least one file in VFS surface");
+
+    let result = vm
+        .boot_guest(&elf_data, 1, 500_000)
+        .expect("boot should succeed");
+
+    eprintln!(
+        "Boot: {} instructions, entry=0x{:08X}",
+        result.instructions, result.entry
+    );
+
+    // Drain UART
+    let mut canvas = make_canvas();
+    let drained = bridge.drain_uart_to_canvas(&mut vm.bus, &mut canvas);
+    eprintln!("UART drained: {} bytes", drained);
+
+    // Collect output
+    let mut uart_str = String::new();
+    for r in 0..32 {
+        let row = UartBridge::read_canvas_string(&canvas, r, 0, 32);
+        if !row.trim().is_empty() {
+            uart_str.push_str(&row);
+            uart_str.push('\n');
+        }
+    }
+
+    eprintln!("UART output: {:?}", uart_str);
+
+    // Should confirm PXFS magic detected
+    assert!(
+        uart_str.contains("pxcat: PXFS OK"),
+        "Expected PXFS magic confirmed, got: {:?}",
+        uart_str
+    );
+
+    // Should read and print file contents from pixel surface.
+    // Note: canvas wraps at 32 cols, so text gets broken across rows.
+    // Check for key fragments that survive wrapping.
+    let flat: String = uart_str.chars().filter(|c| !c.is_whitespace()).collect();
+    assert!(
+        flat.contains("HellofromGeometryOSVFS"),
+        "Expected file contents from pixel surface, got flat: {:?}",
+        flat
+    );
+
+    assert!(
+        uart_str.contains("pxcat: done"),
+        "Expected clean completion, got: {:?}",
+        uart_str
+    );
+}
