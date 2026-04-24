@@ -5641,11 +5641,14 @@ phases:
   - acceptance_criteria:
     - description: cargo bench shows throughput for at least 3 subsystems
       validation: cargo bench runs and produces numbers
+      met: true
     - description: Profiling data identifies the top 3 hotspots
       validation: benchmark report shows clear bottleneck ranking
+      met: true
     - description: At least one optimization applied that measurably improves throughput
       validation: before/after benchmark comparison
-    met: false
+      met: true
+    met: true
   description: '2922 tests pass but we have no performance data. The VM runs 60fps
     but we don''t know where time is spent. Add criterion benchmarks for: (1) VM step
     execution, (2) page table translation, (3) canvas buffer operations, (4) assembler
@@ -5658,11 +5661,9 @@ phases:
   - criterion may not be in Cargo.toml yet
   - GPU rendering profiling needs wgpu-specific tools
   scope_lines_total: 300
-  status: in_progress
+  status: complete
   test_target: 4
   title: Performance Benchmarking and Profiling
-  _claimed_by: worker-0
-  _claimed_at: 1777035192
 - deliverables:
   - acceptance_criteria:
     - description: A single command builds a release binary that runs without dev

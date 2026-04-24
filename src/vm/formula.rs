@@ -41,9 +41,7 @@ impl Vm {
 
         // Update reverse dependency index
         for &dep in &deps {
-            if dep < self.formula_dep_index.len() {
-                self.formula_dep_index[dep].push(fidx);
-            }
+            self.formula_dep_index.entry(dep).or_default().push(fidx);
         }
         true
     }
@@ -56,7 +54,7 @@ impl Vm {
             .position(|f| f.target_idx == target_idx)
         {
             // Remove from dep index
-            for dep_list in self.formula_dep_index.iter_mut() {
+            for dep_list in self.formula_dep_index.values_mut() {
                 dep_list.retain(|&fi| fi != pos);
                 // Shift indices > pos down by 1 since we're removing
                 for fi in dep_list.iter_mut() {
@@ -136,10 +134,10 @@ impl Vm {
     /// Recalculate all formulas that depend on `changed_idx`.
     /// Called after a STORE to a canvas cell.
     pub fn formula_recalc(&mut self, changed_idx: usize) {
-        if changed_idx >= self.formula_dep_index.len() {
-            return;
-        }
-        let affected: Vec<usize> = self.formula_dep_index[changed_idx].clone();
+        let affected: Vec<usize> = match self.formula_dep_index.get(&changed_idx) {
+            Some(v) => v.clone(),
+            None => return,
+        };
         if affected.is_empty() {
             return;
         }
@@ -164,8 +162,6 @@ impl Vm {
     /// Clear all formulas and rebuild the dependency index.
     pub fn formula_clear_all(&mut self) {
         self.formulas.clear();
-        for dep_list in self.formula_dep_index.iter_mut() {
-            dep_list.clear();
-        }
+        self.formula_dep_index.clear();
     }
 }

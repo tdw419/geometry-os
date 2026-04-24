@@ -117,7 +117,10 @@ pub struct Vm {
     pub formulas: Vec<Formula>,
     /// Reverse dependency index: dep_idx -> list of formula indices in self.formulas.
     /// Used to quickly find which formulas need recalculation when a cell changes.
-    pub formula_dep_index: Vec<Vec<usize>>,
+    /// Reverse dependency index for reactive canvas formulas.
+    /// Maps canvas cell index -> list of formula indices that depend on it.
+    /// Uses HashMap for lazy allocation (no 4096 empty Vecs at construction).
+    pub formula_dep_index: std::collections::HashMap<usize, Vec<usize>>,
     /// When true, every instruction execution is recorded to trace_buffer.
     /// Off by default for zero-overhead forward execution.
     pub trace_recording: bool,
@@ -253,7 +256,7 @@ impl Vm {
             key_buffer_tail: 0,
             key_port: 0,
             formulas: Vec::new(),
-            formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
+            formula_dep_index: std::collections::HashMap::new(),
             trace_recording: false,
             trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
             frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
@@ -362,7 +365,7 @@ impl Vm {
         self.hypervisor_window_id = 0;
         self.opcode_histogram = [0; 256];
         self.formulas.clear();
-        for dep_list in self.formula_dep_index.iter_mut() {
+        for dep_list in self.formula_dep_index.values_mut() {
             dep_list.clear();
         }
         self.trace_recording = false;

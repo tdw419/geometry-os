@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
 
-**Progress:** 113/113 phases complete, 0 in_progress, 0 planned
+**Progress:** 116/118 phases complete, 1 in_progress, 1 planned
 
-**Deliverables:** 490/490 complete
+**Deliverables:** 493/495 complete
 
 ## Scope Summary
 
@@ -123,6 +123,11 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 | phase-111 Recursive Self-Analysis Program | COMPLETE | 2/2 | 362 | 4 |
 | phase-112 Glyph-Atomic Shell | COMPLETE | 3/3 | 150 | 2 |
 | phase-113 Tetris in GlyphLang | COMPLETE | 2/2 | 265 | 2 |
+| phase-114 Project Hygiene and README Accuracy | COMPLETE | 1/1 | 60 | 0 |
+| phase-115 Self-Modification Showcase Demos | COMPLETE | 1/1 | 450 | 6 |
+| phase-116 Living Map Entities | COMPLETE | 1/1 | 500 | 8 |
+| phase-117 Performance Benchmarking and Profiling | IN PROGRESS | 0/1 | 300 | 4 |
+| phase-118 Showtime -- First Run Experience | PLANNED | 0/1 | 400 | 5 |
 
 ## Dependencies
 
@@ -2642,3 +2647,55 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
 - FILL opcode is expensive in debug mode (65K pixel iteration) -- execution tests use minimal cycle counts
 - Stack-based programming maps naturally to game state: registers a-z for persistent state, stack for transient values
 - The `=` comparison compiles to CMP + LDI 1/0 + JZ pattern (~10 instructions per comparison)
+
+## [x] phase-114: Project Hygiene and README Accuracy (COMPLETE)
+
+**Goal:** Fix stale docs, duplicate files, and missing Cargo.toml default-run
+
+### Deliverables
+
+- [x] **README accuracy audit** -- All stale stats (921 tests, 0/6 phases) updated to reflect actual numbers
+  - [x] README accurately reflects 2922+ tests, 167+ opcodes, 139+ programs
+  - [x] No stale "0/6 phases" or "921 tests" claims remain
+  - [x] All .md docs in docs/ have consistent stats
+
+## [x] phase-115: Self-Modification Showcase Demos (COMPLETE)
+
+**Goal:** Build self-modifying showcase demos proving pixels drive pixels
+
+### Deliverables
+
+- [x] **Self-modification demos** -- 3 new programs using ASMSELF + RUNNEXT (mirror.asm, fractal_gen.asm, chatbot.asm)
+  - [x] At least 3 new demo programs that use ASMSELF + RUNNEXT
+  - [x] Each demo showcases a different self-modification pattern
+  - [x] All demos pass their test assertions
+
+## [x] phase-116: Living Map Entities (COMPLETE)
+
+**Goal:** Add living entities (programs and agents) to the infinite map
+
+### Deliverables
+
+- [x] **Map entities** -- Living entities rendered on the infinite map with 2+ entity types
+  - [x] Map entities have positions and can be rendered on the infinite map
+  - [x] At least 2 entity types (program, agent) with distinct visual representations
+  - [x] Entities can be entered/interacted with from the map
+
+## [ ] phase-117: Performance Benchmarking and Profiling (IN PROGRESS)
+
+**Goal:** Benchmark the system and optimize the biggest bottleneck
+
+### Deliverables
+
+- [ ] **Criterion benchmarks** -- cargo bench shows throughput for at least 3 subsystems, profiling identifies top 3 hotspots, at least one optimization applied
+
+## [ ] phase-118: Showtime -- First Run Experience (PLANNED)
+
+**Goal:** Make Geometry OS presentable to someone who just cloned it
+
+### Deliverables
+
+- [ ] **First run experience** -- Default-run in Cargo.toml, proper desktop with app launcher, screenshot gallery, "first 5 minutes" quickstart
+  - [ ] cargo build --release produces a working binary
+  - [ ] The binary boots to a usable desktop with at least 3 working apps
+  - [ ] A screen recording or screenshot gallery exists in docs/

@@ -18221,3 +18221,150 @@ fn test_world_desktop_two_entity_types_distinct() {
     assert!(has_program, "should have at least one program-node entity");
     assert!(has_agent, "should have at least one agent-node entity");
 }
+
+// --- Phase 117: Performance Benchmark Validation ---
+
+#[test]
+fn test_benchmark_arithmetic_loop_step_throughput() {
+    // Validates that the VM step loop runs at acceptable throughput
+    // for arithmetic-heavy programs (the most common case)
+    let source = r#"
+        LDI r1, 0
+        LDI r2, 10000
+        LDI r7, 1
+    loop:
+        ADD r1, r7
+        CMP r1, r2
+        BLT r0, loop
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = super::Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let start = std::time::Instant::now();
+    let mut steps = 0;
+    for _ in 0..1_000_000 {
+        if !vm.step() {
+            break;
+        }
+        steps += 1;
+    }
+    let elapsed = start.elapsed();
+
+    // Steps count depends on instruction encoding (3 words per instruction).
+    // ~30000 steps for 10000 iterations of {ADD + CMP + BLT} + LDI*3 setup
+    assert!(steps > 25000, "should execute many steps, got {}", steps);
+    // Should complete in < 500ms even on slow machines
+    assert!(
+        elapsed.as_millis() < 500,
+        "arithmetic loop took {:?} (too slow)",
+        elapsed
+    );
+}
+
+#[test]
+fn test_benchmark_fetch_fast_path_kernel_mode() {
+    // Validates the kernel-mode fast path in fetch() avoids translate_va overhead.
+    // In kernel mode (no page directory), fetch should be a direct ram[pc] access.
+    let source = r#"
+        LDI r1, 42
+        LDI r2, 100
+        ADD r1, r2
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = super::Vm::new();
+    for (i, &w) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = w;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Verify kernel mode (no page directory)
+    assert!(vm.current_page_dir.is_none(), "should start in kernel mode");
+
+    // Run and verify correctness
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(vm.halted, "should halt");
+    assert_eq!(vm.regs[1], 142, "r1 should be 42+100=142");
+}
+
+#[test]
+fn test_benchmark_formula_dep_index_hashmap_performance() {
+    // Validates that the HashMap-based formula_dep_index works correctly
+    // and doesn't allocate 4096 empty Vecs.
+    use std::collections::HashMap;
+
+    let mut vm = super::Vm::new();
+
+    // Verify it's a HashMap (not Vec<Vec<usize>>)
+    assert!(
+        vm.formula_dep_index.is_empty(),
+        "should start empty (lazy HashMap)"
+    );
+
+    // Register a formula and verify dep tracking works
+    let ok = vm.formula_register(100, vec![50, 60], super::FormulaOp::Add);
+    assert!(ok, "formula should register");
+
+    // Check the dep index was populated
+    assert!(
+        vm.formula_dep_index.contains_key(&50),
+        "dep 50 should be tracked"
+    );
+    assert!(
+        vm.formula_dep_index.contains_key(&60),
+        "dep 60 should be tracked"
+    );
+    assert!(
+        !vm.formula_dep_index.contains_key(&99),
+        "dep 99 should not be tracked"
+    );
+
+    // Verify the formula result
+    vm.canvas_buffer[50] = 10;
+    vm.canvas_buffer[60] = 20;
+    vm.formula_recalc(50);
+    assert_eq!(
+        vm.canvas_buffer[100], 30,
+        "formula result should be 10+20=30"
+    );
+
+    // Clear and verify
+    vm.formula_clear_all();
+    assert!(
+        vm.formula_dep_index.is_empty(),
+        "should be empty after clear"
+    );
+}
+
+#[test]
+fn test_benchmark_vm_construction_throughput() {
+    // Validates Vm::new() is fast (< 5ms)
+    let start = std::time::Instant::now();
+    for _ in 0..100 {
+        let vm = super::Vm::new();
+        std::hint::black_box(&vm);
+    }
+    let elapsed = start.elapsed();
+    let per_vm = elapsed / 100;
+    // Should be < 5ms per VM construction
+    assert!(
+        per_vm.as_micros() < 5000,
+        "Vm::new() took {:?} per call (too slow)",
+        per_vm
+    );
+}

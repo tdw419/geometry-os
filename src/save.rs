@@ -178,7 +178,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         key_buffer_tail: 0,
         key_port: 0,
         formulas: Vec::new(),
-        formula_dep_index: vec![Vec::new(); vm::CANVAS_RAM_SIZE],
+        formula_dep_index: std::collections::HashMap::new(),
         trace_recording: false,
         trace_buffer: vm::TraceBuffer::new(vm::DEFAULT_TRACE_CAPACITY),
         frame_checkpoints: vm::FrameCheckBuffer::new(vm::DEFAULT_FRAME_CHECK_CAPACITY),

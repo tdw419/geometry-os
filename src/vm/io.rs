@@ -44,11 +44,22 @@ impl Vm {
 
 impl Vm {
     pub(super) fn fetch(&mut self) -> u32 {
-        let phys = match self.translate_va(self.pc) {
-            Some(addr) if addr < self.ram.len() => addr,
-            _ => {
+        // Fast path: kernel mode (no page directory) uses identity mapping.
+        // Avoids Option match + virtual address translation per instruction word.
+        let phys = if self.current_page_dir.is_none() {
+            let addr = self.pc as usize;
+            if addr >= self.ram.len() {
                 self.trigger_segfault();
                 return 0;
+            }
+            addr
+        } else {
+            match self.translate_va(self.pc) {
+                Some(addr) if addr < self.ram.len() => addr,
+                _ => {
+                    self.trigger_segfault();
+                    return 0;
+                }
             }
         };
         let val = self.ram[phys];
@@ -312,7 +323,7 @@ impl Vm {
             key_buffer_tail: 0,
             key_port: 0,
             formulas: Vec::new(),
-            formula_dep_index: vec![Vec::new(); CANVAS_RAM_SIZE],
+            formula_dep_index: std::collections::HashMap::new(),
             trace_recording: false,
             trace_buffer: TraceBuffer::new(DEFAULT_TRACE_CAPACITY),
             frame_checkpoints: FrameCheckBuffer::new(DEFAULT_FRAME_CHECK_CAPACITY),
