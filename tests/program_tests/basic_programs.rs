@@ -323,6 +323,8 @@ fn test_all_programs_assemble() {
         "window_desktop.asm",     // passes immediate where register expected
         "net_demo.asm",           // JNZ wrong arg count
         "stdlib_test.asm",        // multiple .org with .org 0x0
+        "vfs_viewer.asm",         // uses # comments and BEQZ (not GeoASM syntax)
+        "test_vfs_pixel.asm",     // RISC-V assembly (li/lw/sw/ecall), not GeoASM
     ];
     let mut failures = Vec::new();
     let mut count = 0u32;

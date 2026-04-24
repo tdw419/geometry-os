@@ -346,12 +346,15 @@ static inline void vfs_write_file(int start_row, const void *buf, int len) {
 
 ### Migration Path
 
-1. Implement VfsSurface as a Bus device (new file: src/riscv/vfs_surface.rs)
-2. Wire it into Bus::read_word/write_word routing
-3. Write guest-side C header (vfs_pixel.h) in examples/riscv-hello/
-4. Port cat.c from ecall-based to pixel-based reads
-5. Render the VFS surface on the Geometry OS desktop as a visible window
-6. Deprecate GEO_VFS_READ ecall
+1. ~~Implement VfsSurface as a Bus device (new file: src/riscv/vfs_surface.rs)~~ DONE
+2. ~~Wire it into Bus::read_word/write_word routing~~ DONE
+3. ~~Write guest-side C header (vfs_pixel.h) in examples/riscv-hello/~~ DONE
+4. ~~Port cat.c from ecall-based to pixel-based reads~~ DONE (vfs_pixel_cat.c)
+5. ~~Render the VFS surface on the Geometry OS desktop as a visible window~~ DONE (WINSYS op=8)
+6. ~~Deprecate GEO_VFS_READ ecall~~ DONE (returns NOT_SUPPORTED, removed from probe)
+7. ~~Implement write-back (display -> storage)~~ DONE (flush, Drop, VFS_CONTROL_ADDR, WINSYS op=9)
+
+All migration steps complete. GEO_VFS_READ is hard-deprecated.
 
 ### The Deeper Point
 

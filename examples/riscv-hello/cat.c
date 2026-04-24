@@ -1,8 +1,13 @@
 /*
- * cat.c -- Read a file from Geometry OS VFS via SBI GEO_VFS_READ
- * and print its contents to the console.
+ * cat.c -- DEPRECATED: Read a file from Geometry OS VFS via SBI GEO_VFS_READ.
  *
- * SBI calls used:
+ * THIS EXAMPLE IS DEPRECATED. GEO_VFS_READ now returns NOT_SUPPORTED.
+ * Use vfs_pixel_cat.c instead, which reads file data directly from
+ * the Pixel VFS Surface at 0x7000_0000 (no ecall needed).
+ *
+ * See docs/design/pixel-vfs-surface.md for the replacement API.
+ *
+ * Original SBI calls used:
  *   a7=1 (SBI_CONSOLE_PUTCHAR), a0=char    -> print one char
  *   a7=0x47454F00 (SBI_EXT_GEOMETRY), a6=0 (GEO_VFS_READ)
  *     a0=name_ptr, a1=name_len, a2=buf_ptr, a3=buf_len

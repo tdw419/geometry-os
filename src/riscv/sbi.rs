@@ -63,7 +63,11 @@ const GEO_FN_VFS_READ: u32 = 0;
 /// `name_addr..name_addr+name_len`, looks up the file in the host VFS, writes up
 /// to `buf_len` bytes to `buf_addr`, and overwrites a0 with the byte count (or
 /// SBI_ERR_INVALID_PARAM / SBI_ERR_FAILURE on error).
+///
+/// DEPRECATED: GEO_VFS_READ is replaced by the Pixel VFS Surface at 0x7000_0000.
+/// This struct is retained for reference but the ecall now returns NOT_SUPPORTED.
 #[derive(Debug, Clone, Copy)]
+#[deprecated(note = "Use Pixel VFS Surface at 0x7000_0000 instead")]
 pub struct GeoVfsReadReq {
     pub name_addr: u64,
     pub name_len: u32,
@@ -85,13 +89,17 @@ pub struct Sbi {
     /// Set by handle_ecall when DBCN_CONSOLE_WRITE is called.
     /// The caller must read from bus memory and fulfill the request.
     pub dbcn_pending_write: Option<(u64, usize)>,
-    /// Pending GEO_VFS_READ request. Caller fulfills after handle_ecall returns.
+    /// Pending GEO_VFS_READ request. DEPRECATED -- no longer set by handle_ecall.
+    /// Retained for struct compatibility. Will be removed in a future version.
+    #[deprecated(note = "Use Pixel VFS Surface")]
     pub geo_vfs_read_pending: Option<GeoVfsReadReq>,
 }
 
 impl Sbi {
     /// Create a new SBI handler with empty console output.
+    #[allow(deprecated)]
     pub fn new() -> Self {
+        #[allow(deprecated)]
         Self {
             console_output: Vec::new(),
             shutdown_requested: false,
@@ -200,6 +208,8 @@ impl Sbi {
                     // SBI_BASE_PROBE_EXTENSION (3)
                     3 => {
                         // Probe if extension `a0` is available
+                        // NOTE: SBI_EXT_GEOMETRY removed -- GEO_VFS_READ deprecated.
+                        //       Use Pixel VFS Surface (0x7000_0000) instead.
                         let available = matches!(
                             a0,
                             SBI_EXT_BASE
@@ -213,7 +223,6 @@ impl Sbi {
                                 | SBI_EXT_RFENCE
                                 | SBI_EXT_IPI
                                 | SBI_EXT_DBCN
-                                | SBI_EXT_GEOMETRY
                         );
                         Some((0, if available { 1 } else { 0 }))
                     }
@@ -308,15 +317,14 @@ impl Sbi {
             }
             SBI_EXT_GEOMETRY => match a6 {
                 GEO_FN_VFS_READ => {
-                    // Stage the request for the caller to fulfill with guest
-                    // memory access. a0 will be overwritten with bytes_read.
-                    self.geo_vfs_read_pending = Some(GeoVfsReadReq {
-                        name_addr: a0 as u64,
-                        name_len: _a1,
-                        buf_addr: _a2 as u64,
-                        buf_len: _a3,
-                    });
-                    Some((SBI_SUCCESS as u32, 0))
+                    // DEPRECATED: GEO_VFS_READ is replaced by the Pixel VFS Surface
+                    // at 0x7000_0000. Guests should use lw/sw to read/write file data
+                    // as pixels instead of using this ecall. See docs/design/pixel-vfs-surface.md.
+                    eprintln!(
+                        "WARNING: GEO_VFS_READ ecall is deprecated. \
+                         Use Pixel VFS Surface at 0x7000_0000 instead."
+                    );
+                    Some((SBI_ERR_NOT_SUPPORTED as u32, 0))
                 }
                 _ => Some((SBI_ERR_NOT_SUPPORTED as u32, 0)),
             },
@@ -326,6 +334,7 @@ impl Sbi {
 }
 
 impl Default for Sbi {
+    #[allow(deprecated)]
     fn default() -> Self {
         Self::new()
     }

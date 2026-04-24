@@ -86,9 +86,12 @@ impl RiscvCpu {
                             }
                         }
 
-                        // Handle GEO_VFS_READ pending request: read filename from
-                        // guest memory, look up file in host VFS, write bytes back.
+                        // GEO_VFS_READ pending request handling.
+                        // DEPRECATED: The ecall now returns NOT_SUPPORTED, so this
+                        // branch is dead code. Retained for safety during transition.
+                        #[allow(deprecated)]
                         if let Some(req) = bus.sbi.geo_vfs_read_pending.take() {
+                            #[allow(deprecated)]
                             let result_bytes = self.fulfill_geo_vfs_read(bus, &req);
                             // Overwrite a0 with the result (bytes read or error)
                             self.x[10] = result_bytes;
@@ -236,10 +239,11 @@ impl RiscvCpu {
 
     /// Fulfill a pending GEO_VFS_READ request from the SBI layer.
     ///
-    /// Reads the filename from guest memory, looks it up in the host VFS,
-    /// and copies up to buf_len bytes into guest memory at buf_addr.
-    /// Returns the number of bytes written, or an SBI error code (u32 with
-    /// top bit set) on failure.
+    /// DEPRECATED: GEO_VFS_READ is replaced by the Pixel VFS Surface at 0x7000_0000.
+    /// This function is dead code -- the ecall returns NOT_SUPPORTED.
+    /// Retained for reference during transition period.
+    #[allow(deprecated)]
+    #[deprecated(note = "Use Pixel VFS Surface")]
     pub(super) fn fulfill_geo_vfs_read(
         &self,
         bus: &mut Bus,
