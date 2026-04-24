@@ -5932,7 +5932,7 @@ phases:
   _claimed_at: 1777055122
 - id: phase-121
   title: Area Agent System
-  status: in_progress
+  status: done
   goal: Autonomous agents that patrol the infinite map and interact with buildings
   description: Introduce AI-controlled entities (Area Agents) that wander the map,
     enter buildings, run programs, and report results. Agents have a position, direction,
@@ -5941,36 +5941,36 @@ phases:
   deliverables:
   - name: Agent entity type with wander behavior
     description: New entity type that moves autonomously on the map
-    status: todo
+    status: done
     tasks:
     - id: p121.d1.t1
       title: Add Agent entity variant to world_desktop
-      status: todo
+      status: done
       description: Entity struct with position, direction, speed, task_queue
     - id: p121.d1.t2
       title: 'Wander AI: random walk with collision avoidance'
-      status: todo
+      status: done
       description: Agents move semi-randomly, avoid water and mountains
     - id: p121.d1.t3
       title: 'Agent rendering: distinct color/shape from player'
-      status: todo
+      status: done
       description: Agents render as different colored markers on map
     scope_lines: 200
   - name: Building interaction and task execution
     description: Agents can enter buildings, run programs, and report back
-    status: todo
+    status: done
     tasks:
     - id: p121.d2.t1
       title: Agent pathfinding to nearest building
-      status: todo
+      status: done
       description: Simple A* or greedy path to building entrance
     - id: p121.d2.t2
       title: Agent executes program on building entry
-      status: todo
+      status: done
       description: Spawn VM, run program, collect result
     - id: p121.d2.t3
       title: Agent communication channel (IPC)
-      status: todo
+      status: done
       description: Agents can send messages to player or other agents
     scope_lines: 300
   dependencies:
