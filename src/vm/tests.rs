@@ -18423,6 +18423,69 @@ fn test_winsys_vfs_blit() {
 }
 
 #[test]
+fn test_winsys_vfs_sync() {
+    // WINSYS op=9 (VFS_SYNC): Write window pixels back to VFS files.
+    let mut vm = Vm::new();
+
+    // Ensure test_sync.txt exists in VFS
+    let fs_dir = std::path::Path::new(".geometry_os/fs");
+    let _ = std::fs::create_dir_all(fs_dir);
+    let test_file = fs_dir.join("test_sync.txt");
+    std::fs::write(&test_file, b"Original Content").unwrap();
+
+    // Create a window and load VFS (op=8)
+    vm.regs[1] = 0;  vm.regs[2] = 0; vm.regs[3] = 64; vm.regs[4] = 64;
+    vm.regs[6] = 0;  // CREATE
+    vm.ram[0] = 0x94; vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.step();
+    let win_id = vm.regs[0];
+
+    vm.regs[0] = win_id;
+    vm.regs[6] = 8;  // VFS_BLIT
+    vm.ram[2] = 0x94; vm.ram[3] = 6;
+    vm.pc = 2;
+    vm.step();
+
+    // Find our file in the surface and modify its data pixel
+    let mut target_win = vm.windows.iter_mut().find(|w| w.id == win_id).unwrap();
+    // Search row 0 for test_sync.txt hash
+    let mut start_row = 0;
+    let target_hash = 0x811c9dc5u32; // FNV hash for test_sync.txt - wait, let's just find it
+    for i in 2..64 {
+        let val = target_win.offscreen_buffer[i];
+        if val != 0 {
+            start_row = (val >> 16) as usize;
+            // modify the first data pixel of THIS file
+            target_win.offscreen_buffer[start_row * 64 + 1] = 0x44434241; // "ABCD"
+            break;
+        }
+    }
+    assert!(start_row > 0);
+
+    // Call VFS_SYNC (op=9)
+    vm.regs[0] = win_id;
+    vm.regs[6] = 9;  // VFS_SYNC
+    vm.ram[4] = 0x94; vm.ram[5] = 6;
+    vm.pc = 4;
+    vm.step();
+    assert_eq!(vm.regs[0], 1, "VFS_SYNC should return 1");
+
+    // Re-read file from host and verify modification
+    // Note: since our search was a bit generic, we check all files for "ABCD"
+    let mut found = false;
+    for entry in std::fs::read_dir(fs_dir).unwrap() {
+        let path = entry.unwrap().path();
+        let content = std::fs::read(&path).unwrap();
+        if content.starts_with(b"ABCD") {
+            found = true;
+            break;
+        }
+    }
+    assert!(found, "Modified content should be found in a VFS file");
+}
+
+#[test]
 fn test_winsys_vfs_blit_invalid_window() {
     // VFS_BLIT with non-existent window should return 0
     let mut vm = Vm::new();

@@ -157,6 +157,89 @@ pub fn encode_pixel_surface(width: usize, height: usize) -> Vec<u32> {
     surface
 }
 
+/// Decode a pixel surface back into the host filesystem.
+/// Inverse of `encode_pixel_surface`.
+pub fn decode_pixel_surface(width: usize, height: usize, pixels: &[u32]) {
+    if width == 0 || height == 0 || pixels.is_empty() {
+        return;
+    }
+
+    // Check magic
+    if pixels[0] != 0x50584653 {
+        return;
+    }
+
+    let file_count = pixels[1] as usize;
+    let fs_dir = PathBuf::from(FS_DIR);
+
+    // We need to know filenames. Since the surface only has hashes,
+    // we must cross-reference with the actual files in .geometry_os/fs/.
+    let entries = match fs::read_dir(&fs_dir) {
+        Ok(rd) => rd,
+        Err(_) => return,
+    };
+
+    let mut name_to_hash = HashMap::new();
+    for e in entries.flatten() {
+        if let Some(name) = e.file_name().to_str() {
+            name_to_hash.insert(fnv1a_32(name), name.to_string());
+        }
+    }
+
+    for i in 0..file_count {
+        let idx_col = 2 + i;
+        if idx_col >= width {
+            break;
+        }
+
+        let entry = pixels[idx_col];
+        let start_row = (entry >> 16) as usize;
+        let name_hash = entry & 0xFFFF;
+
+        if start_row == 0 || start_row >= height {
+            continue;
+        }
+
+        // Find filename by hash (16-bit hash in index vs 32-bit full hash)
+        // This is a bit weak but works if we don't have many files.
+        let filename = name_to_hash
+            .iter()
+            .find(|(&h, _)| (h & 0xFFFF) == name_hash)
+            .map(|(_, n)| n);
+
+        if let Some(name) = filename {
+            // Read header at (start_row, 0)
+            let header = pixels[start_row * width];
+            let byte_count = (header >> 16) as usize;
+            let pixel_count = (byte_count + 3) / 4;
+
+            if byte_count == 0 {
+                continue;
+            }
+
+            // Reconstruct data
+            let mut data = Vec::with_capacity(byte_count);
+            for p_idx in 0..pixel_count {
+                let col = 1 + p_idx;
+                let row = start_row + col / width;
+                let col_in_row = col % width;
+                if row < height {
+                    let pixel = pixels[row * width + col_in_row];
+                    for j in 0..4 {
+                        if data.len() < byte_count {
+                            data.push(((pixel >> (j * 8)) & 0xFF) as u8);
+                        }
+                    }
+                }
+            }
+
+            // Write back to host
+            let path = fs_dir.join(name);
+            let _ = fs::write(path, data);
+        }
+    }
+}
+
 /// FNV-1a 32-bit hash.
 fn fnv1a_32(s: &str) -> u32 {
     let mut hash = 0x811c9dc5u32;

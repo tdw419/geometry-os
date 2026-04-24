@@ -1455,6 +1455,23 @@ impl Vm {
                                 self.regs[0] = 0; // window not found
                             }
                         }
+                        9 => {
+                            // VFS_SYNC: Write the window's pixels back to the VFS files.
+                            // Inverse of VFS_BLIT. r0=win_id.
+                            let win_id = self.regs[0];
+                            if let Some(w) =
+                                self.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                            {
+                                crate::vfs::decode_pixel_surface(
+                                    w.w as usize,
+                                    w.h as usize,
+                                    &w.offscreen_buffer,
+                                );
+                                self.regs[0] = 1; // success
+                            } else {
+                                self.regs[0] = 0; // window not found
+                            }
+                        }
                         _ => {
                             // Unknown op -- r0 = 0 (error)
                             self.regs[0] = 0;

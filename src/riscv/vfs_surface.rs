@@ -4,6 +4,7 @@
 // 256x256 surface. Row 0 contains a directory index.
 // Subsequent rows contain file headers and data.
 
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -11,6 +12,8 @@ use std::path::PathBuf;
 pub const VFS_SURFACE_BASE: u64 = 0x7000_0000;
 /// Total size of the VFS Surface (256x256 pixels * 4 bytes/pixel = 256KB)
 pub const VFS_SURFACE_SIZE: usize = 256 * 256 * 4;
+/// Control register for the VFS Surface (e.g., bit 0 = sync/flush)
+pub const VFS_CONTROL_ADDR: u64 = VFS_SURFACE_BASE + VFS_SURFACE_SIZE as u64;
 
 /// PXFS Magic number: "PXFS"
 const PXFS_MAGIC: u32 = 0x50584653;
@@ -21,6 +24,10 @@ pub struct VfsSurface {
     pub pixels: Vec<u32>,
     /// Base directory on host for VFS files
     pub base_dir: PathBuf,
+    /// Mapping of start_row -> filename for write-back
+    pub file_map: HashMap<u16, String>,
+    /// Set of rows that have been modified and need flushing
+    pub dirty_rows: HashSet<u16>,
 }
 
 impl Default for VfsSurface {
@@ -40,7 +47,12 @@ impl VfsSurface {
         pixels[0] = PXFS_MAGIC;
         pixels[1] = 0; // file_count
 
-        VfsSurface { pixels, base_dir }
+        VfsSurface {
+            pixels,
+            base_dir,
+            file_map: HashMap::new(),
+            dirty_rows: HashSet::new(),
+        }
     }
 
     /// Load files from the host filesystem into the pixel surface.
@@ -49,6 +61,8 @@ impl VfsSurface {
         for p in &mut self.pixels[2..] {
             *p = 0;
         }
+        self.file_map.clear();
+        self.dirty_rows.clear();
 
         let entries = match fs::read_dir(&self.base_dir) {
             Ok(rd) => rd,
@@ -89,6 +103,9 @@ impl VfsSurface {
             if current_row + rows_needed >= 256 {
                 break;
             }
+
+            // Store mapping for write-back
+            self.file_map.insert(current_row as u16, name.clone());
 
             // Write into directory index (Row 0)
             // Pixel 2+i: [start_row(16) | name_hash(16)]
@@ -133,6 +150,13 @@ impl VfsSurface {
 
     /// Write a 32-bit word to the surface (MMIO).
     pub fn write(&mut self, addr: u64, val: u32) {
+        if addr == VFS_CONTROL_ADDR {
+            if val & 1 != 0 {
+                self.flush();
+            }
+            return;
+        }
+
         let offset = match addr.checked_sub(VFS_SURFACE_BASE) {
             Some(o) => o as usize,
             None => return,
@@ -141,10 +165,61 @@ impl VfsSurface {
             return;
         }
         let pixel_idx = offset / 4;
+        let old_val = self.pixels[pixel_idx];
+        if old_val == val {
+            return;
+        }
         self.pixels[pixel_idx] = val;
 
-        // Note: In a full implementation, we would track "dirty" bits
-        // and flush changed pixels back to host files.
+        // Mark row as dirty for write-back
+        let row = (pixel_idx / 256) as u16;
+        self.dirty_rows.insert(row);
+    }
+
+    /// Flush dirty rows back to the host filesystem.
+    pub fn flush(&mut self) {
+        if self.dirty_rows.is_empty() {
+            return;
+        }
+
+        // We iterate through all mapped files and check if their rows are dirty.
+        // A file starts at `start_row` and occupies `rows_needed`.
+        for (&start_row, filename) in &self.file_map {
+            // Read header to get current byte_count (guest might have changed it)
+            let header = self.pixels[start_row as usize * 256];
+            let byte_count = (header >> 16) as usize;
+            let pixel_count = (byte_count + 3) / 4;
+            let rows_needed = (1 + pixel_count + 255) / 256;
+
+            let mut is_file_dirty = false;
+            for r in start_row..start_row + rows_needed as u16 {
+                if self.dirty_rows.contains(&r) {
+                    is_file_dirty = true;
+                    break;
+                }
+            }
+
+            if is_file_dirty {
+                // Reconstruct data
+                let mut data = Vec::with_capacity(byte_count);
+                for i in 0..pixel_count {
+                    let pixel = self.pixels[start_row as usize * 256 + 1 + i];
+                    for j in 0..4 {
+                        if data.len() < byte_count {
+                            data.push(((pixel >> (j * 8)) & 0xFF) as u8);
+                        }
+                    }
+                }
+
+                // Write back to host
+                let path = self.base_dir.join(filename);
+                if let Err(e) = fs::write(path, data) {
+                    eprintln!("VFS Surface: Failed to flush file {}: {}", filename, e);
+                }
+            }
+        }
+
+        self.dirty_rows.clear();
     }
 
     /// FNV-1a hash (32-bit) for filename lookups.
@@ -159,7 +234,13 @@ impl VfsSurface {
 
     /// Check if an address is within this device's MMIO range.
     pub fn contains(addr: u64) -> bool {
-        (VFS_SURFACE_BASE..VFS_SURFACE_BASE + VFS_SURFACE_SIZE as u64).contains(&addr)
+        (VFS_SURFACE_BASE..VFS_SURFACE_BASE + VFS_SURFACE_SIZE as u64 + 4).contains(&addr)
+    }
+}
+
+impl Drop for VfsSurface {
+    fn drop(&mut self) {
+        self.flush();
     }
 }
 
@@ -205,6 +286,37 @@ mod tests {
         // Check data pixels: Pixel (1,1) and (1,2)
         assert_eq!(surface.pixels[256 + 1], 0x44332211);
         assert_eq!(surface.pixels[256 + 2], 0x88776655);
+
+        let _ = fs::remove_dir_all(&test_dir);
+    }
+
+    #[test]
+    fn test_vfs_surface_write_back_flush() {
+        let mut surface = VfsSurface::new();
+        let test_dir = std::env::temp_dir().join("geo_vfs_surface_flush_test");
+        let _ = fs::remove_dir_all(&test_dir);
+        let _ = fs::create_dir_all(&test_dir);
+        surface.base_dir = test_dir.clone();
+
+        // Create a test file
+        let file_content = vec![0x11, 0x22, 0x33, 0x44];
+        fs::write(test_dir.join("test.bin"), &file_content).unwrap();
+
+        surface.load_files();
+        assert_eq!(surface.pixels[256 + 1], 0x44332211);
+
+        // Modify pixel in surface
+        let addr = VFS_SURFACE_BASE + (256 + 1) * 4;
+        surface.write(addr, 0xAABBCCDD);
+        assert!(surface.dirty_rows.contains(&1));
+
+        // Flush back to host
+        surface.flush();
+        assert!(surface.dirty_rows.is_empty());
+
+        // Verify file on host has changed
+        let new_content = fs::read(test_dir.join("test.bin")).unwrap();
+        assert_eq!(new_content, vec![0xDD, 0xCC, 0xBB, 0xAA]);
 
         let _ = fs::remove_dir_all(&test_dir);
     }
