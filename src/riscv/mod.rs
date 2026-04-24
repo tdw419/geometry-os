@@ -30,6 +30,7 @@ pub mod sbi;
 pub mod syscall;
 pub mod trace;
 pub mod uart;
+pub mod vfs_surface;
 pub mod virtio_blk;
 
 #[cfg(test)]

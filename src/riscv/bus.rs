@@ -9,6 +9,7 @@ use super::memory::{GuestMemory, MemoryError};
 use super::plic::Plic;
 use super::sbi::Sbi;
 use super::uart::Uart;
+use super::vfs_surface::VfsSurface;
 use super::virtio_blk::VirtioBlk;
 use std::collections::HashSet;
 
@@ -28,6 +29,8 @@ pub struct Bus {
     pub plic: Plic,
     /// Virtio block device.
     pub virtio_blk: VirtioBlk,
+    /// VFS Pixel Surface MMIO device.
+    pub vfs_surface: VfsSurface,
     /// SBI (Supervisor Binary Interface) handler.
     /// Intercepts SBI ECALLs from the kernel before they reach the trap vector.
     pub sbi: Sbi,
@@ -84,12 +87,16 @@ pub struct Bus {
 impl Bus {
     /// Create a new bus with the given RAM base address and size.
     pub fn new(ram_base: u64, ram_size: usize) -> Self {
+        let mut vfs_surface = VfsSurface::new();
+        vfs_surface.load_files();
+
         Self {
             mem: GuestMemory::new(ram_base, ram_size),
             clint: Clint::new(),
             uart: Uart::new(),
             plic: Plic::new(),
             virtio_blk: VirtioBlk::new(),
+            vfs_surface,
             sbi: Sbi::new(),
             syscall_log: Vec::new(),
             mmu_log: Vec::new(),
@@ -128,6 +135,10 @@ impl Bus {
             self.plic.read(addr).ok_or(MemoryError { addr, size: 4 })
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
             self.virtio_blk
+                .read(addr)
+                .ok_or(MemoryError { addr, size: 4 })
+        } else if super::vfs_surface::VfsSurface::contains(addr) {
+            self.vfs_surface
                 .read(addr)
                 .ok_or(MemoryError { addr, size: 4 })
         } else if addr < self.mem.ram_base {
@@ -180,6 +191,9 @@ impl Bus {
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
             self.virtio_blk.write(addr, val);
             Ok(())
+        } else if super::vfs_surface::VfsSurface::contains(addr) {
+            self.vfs_surface.write(addr, val);
+            Ok(())
         } else if addr < self.mem.ram_base {
             // Silently accept writes to unmapped addresses below RAM
             Ok(())
@@ -220,6 +234,13 @@ impl Bus {
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
             let word = self
                 .virtio_blk
+                .read(addr & !3)
+                .ok_or(MemoryError { addr, size: 1 })?;
+            let byte_off = (addr & 3) as usize;
+            Ok((word >> (byte_off * 8)) as u8)
+        } else if super::vfs_surface::VfsSurface::contains(addr) {
+            let word = self
+                .vfs_surface
                 .read(addr & !3)
                 .ok_or(MemoryError { addr, size: 1 })?;
             let byte_off = (addr & 3) as usize;
@@ -271,6 +292,13 @@ impl Bus {
             }
         } else if super::virtio_blk::VirtioBlk::contains(addr) {
             // Virtio doesn't have byte-level writes; ignore
+            Ok(())
+        } else if super::vfs_surface::VfsSurface::contains(addr) {
+            let word_addr = addr & !3;
+            let byte_off = (addr & 3) as usize;
+            let mut word = self.vfs_surface.read(word_addr).unwrap_or(0);
+            word = (word & !(0xFF << (byte_off * 8))) | ((val as u32) << (byte_off * 8));
+            self.vfs_surface.write(word_addr, word);
             Ok(())
         } else if addr < self.mem.ram_base {
             Ok(())
