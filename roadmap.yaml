@@ -5659,9 +5659,11 @@ phases:
   - criterion may not be in Cargo.toml yet
   - GPU rendering profiling needs wgpu-specific tools
   scope_lines_total: 300
-  status: planned
+  status: in_progress
   test_target: 4
   title: Performance Benchmarking and Profiling
+  _claimed_by: worker-0
+  _claimed_at: 1777035192
 - deliverables:
   - acceptance_criteria:
     - description: A single command builds a release binary that runs without dev

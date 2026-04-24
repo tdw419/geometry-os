@@ -954,6 +954,173 @@ LOAD r14, r18           ; r14 = player_x
 LDI r18, 0x7809
 LOAD r15, r18           ; r15 = player_y
 
+
+; ===== Update Entities (throttled to ~7.5 updates/sec) =====
+; Agent-nodes wander via random walk. Program-nodes just animate.
+PUSH r31
+
+; Throttle: only update entities every 8th frame
+LOAD r17, r13              ; frame_counter
+LDI r18, 7
+AND r17, r18
+JNZ r17, ent_update_skip
+
+; Iterate entities
+LDI r20, 0x7900
+LOAD r21, r20              ; r21 = entity_count
+ADDI r20, 1                ; point to first entity
+LDI r26, 0                 ; entity index
+
+ent_update_loop:
+  CMP r26, r21
+  BGE r0, ent_update_done
+
+  ; Load entity fields
+  MOV r22, r20
+  LOAD r3, r22             ; world_x (r3 for biome check)
+  ADDI r22, 1
+  LOAD r4, r22             ; world_y (r4 for biome check)
+  ADDI r22, 1
+  LOAD r17, r22            ; type
+  ADDI r22, 1
+  LOAD r18, r22            ; dir_seed
+  ADDI r22, 1
+  LOAD r19, r22            ; anim_frame
+
+  ; Increment animation frame for all entities
+  ADDI r19, 1
+  LDI r25, 15
+  AND r19, r25             ; wrap anim_frame to 0..15
+  STORE r22, r19
+
+  ; Type check: only agent-nodes wander
+  JZ r17, ent_next         ; type 0 = program-node, skip wander
+
+  ; --- Agent Wander AI ---
+  ; Extract direction from dir_seed (upper 16 bits)
+  MOV r25, r18
+  LDI r22, 16
+  SHR r25, r22             ; direction = dir_seed >> 16
+
+  ; Random direction change: ~12.5% chance
+  RAND r22
+  LDI r23, 7
+  AND r22, r23
+  JNZ r22, ent_no_dir_change
+  ; New random direction
+  RAND r22
+  LDI r23, 3
+  AND r22, r23             ; 0-3
+  MOV r25, r22
+ent_no_dir_change:
+
+  ; Compute target position from direction
+  ; dir 0=up(y-1), 1=down(y+1), 2=left(x-1), 3=right(x+1)
+  MOV r22, r3              ; target_x = world_x
+  MOV r23, r4              ; target_y = world_y
+  JNZ r25, ent_not_up
+  SUB r23, r7              ; target_y -= 1
+  JMP ent_do_move
+ent_not_up:
+  LDI r24, 1
+  CMP r25, r24
+  JNZ r0, ent_not_down
+  ADD r23, r7              ; target_y += 1
+  JMP ent_do_move
+ent_not_down:
+  LDI r24, 2
+  CMP r25, r24
+  JNZ r0, ent_not_left
+  SUB r22, r7              ; target_x -= 1
+  JMP ent_do_move
+ent_not_left:
+  ADD r22, r7              ; target_x += 1 (right)
+ent_do_move:
+
+  ; Check biome walkability
+  MOV r3, r22              ; target coords for biome check
+  MOV r4, r23
+  CALL check_biome_walkable
+  JZ r0, ent_move_blocked  ; not walkable, skip move
+
+  ; Update entity position
+  MOV r24, r20
+  STORE r24, r22           ; world_x = target_x
+  ADDI r24, 1
+  STORE r24, r23           ; world_y = target_y
+
+  ; Update dir_seed with new direction
+  ADDI r24, 2              ; skip to dir_seed field
+  MOV r25, r25
+  LDI r22, 16
+  SHL r25, r22             ; direction << 16
+  STORE r24, r25
+  JMP ent_next
+
+ent_move_blocked:
+  ; Try a different direction next time
+  RAND r22
+  LDI r23, 3
+  AND r22, r23
+  ADDI r24, 2              ; dir_seed field
+  LDI r23, 16
+  SHL r22, r23
+  STORE r24, r22
+
+ent_next:
+  ; Advance to next entity (5 words per entity)
+  LDI r22, 5
+  ADD r20, r22
+  ADDI r26, 1
+  JMP ent_update_loop
+
+ent_update_done:
+ent_update_skip:
+
+; ===== Check Entity Proximity (player touching entity?) =====
+LDI r20, 0x7920
+LDI r17, 0xFFFFFFFF
+STORE r20, r17             ; entity_nearby_idx = -1
+
+LDI r20, 0x7900
+LOAD r21, r20
+ADDI r20, 1
+LDI r26, 0
+
+ent_prox_loop:
+  CMP r26, r21
+  BGE r0, ent_prox_done
+
+  ; Load entity position
+  MOV r22, r20
+  LOAD r17, r22            ; entity world_x
+  ADDI r22, 1
+  LOAD r18, r22            ; entity world_y
+
+  ; Compare with player position
+  LDI r19, 0x7808
+  LOAD r19, r19            ; player_x
+  CMP r17, r19
+  JNZ r0, ent_prox_next
+  LDI r19, 0x7809
+  LOAD r19, r19            ; player_y
+  CMP r18, r19
+  JNZ r0, ent_prox_next
+
+  ; Player is on this entity!
+  LDI r22, 0x7920
+  STORE r22, r26           ; entity_nearby_idx = entity_index
+  JMP ent_prox_done
+
+ent_prox_next:
+  LDI r22, 5
+  ADD r20, r22
+  ADDI r26, 1
+  JMP ent_prox_loop
+
+ent_prox_done:
+POP r31
+
 ; --- Compute camera from player (center player in viewport) ---
 ; camera_x = player_x - (tiles/2), camera_y = player_y - (tiles/2)
 ; r8 = tiles per axis, so center offset = r8 / 2
@@ -2296,6 +2463,216 @@ bldg_next:
 POP r31
 
 bldg_render_done:
+
+
+; ===== Render Entities =====
+; Draw living entities on the map with distinct visuals per type.
+; Program-nodes: pulsing cyan/magenta diamond (4 pixels).
+; Agent-nodes: wandering orange/yellow circle (4 pixels) with direction indicator.
+PUSH r31
+
+LDI r20, 0x7900
+LOAD r21, r20              ; entity_count
+ADDI r20, 1                ; first entity
+LDI r26, 0                 ; entity index
+
+ent_render_loop:
+  CMP r26, r21
+  BGE r0, ent_render_done
+
+  ; Load entity fields
+  MOV r22, r20
+  LOAD r3, r22             ; world_x
+  ADDI r22, 1
+  LOAD r4, r22             ; world_y
+  ADDI r22, 1
+  LOAD r17, r22            ; type
+  ADDI r22, 1
+  LOAD r18, r22            ; dir_seed
+  ADDI r22, 1
+  LOAD r19, r22            ; anim_frame
+
+  ; Compute screen position: (world_x - camera_x) * tile_size
+  LDI r25, 0x7800
+  LOAD r25, r25            ; camera_x
+  MOV r27, r3
+  SUB r27, r25             ; dx = world_x - camera_x
+
+  ; Skip if off-screen (x)
+  LDI r25, 0
+  CMP r27, r25
+  BLT r0, ent_render_next
+  MOV r25, r8
+  SUB r25, r7              ; tiles - 1
+  CMP r27, r25
+  BGE r0, ent_render_next
+
+  LDI r25, 0x7801
+  LOAD r25, r25            ; camera_y
+  MOV r28, r4
+  SUB r28, r25             ; dy = world_y - camera_y
+
+  ; Skip if off-screen (y)
+  LDI r25, 0
+  CMP r28, r25
+  BLT r0, ent_render_next
+  MOV r25, r8
+  SUB r25, r7
+  CMP r28, r25
+  BGE r0, ent_render_next
+
+  ; Convert to pixel coords
+  MUL r27, r9              ; screen_x = dx * tile_size
+  MUL r28, r9              ; screen_y = dy * tile_size
+
+  ; Load detail level
+  LDI r25, 0x7814
+  LOAD r25, r25
+
+  ; Check entity type for rendering style
+  JZ r17, ent_render_program
+
+  ; --- Agent-node: orange/yellow wandering circle ---
+  ; Pulsing color: alternate between orange and yellow based on anim_frame
+  LDI r25, 1
+  AND r25, r19
+  JZ r25, ent_agent_orange
+  LDI r25, 0xFFFF00        ; yellow
+  JMP ent_agent_color
+ent_agent_orange:
+  LDI r25, 0xFF8800        ; orange
+ent_agent_color:
+  MOV r17, r25             ; r17 = agent color
+
+  ; Check detail for render mode
+  LDI r25, 0x7814
+  LOAD r25, r25
+  LDI r6, 2
+  CMP r25, r6
+  BLT r0, ent_agent_simple
+
+  ; Detailed: draw 3x3 circle with direction indicator
+  ; Center pixel
+  LDI r25, 1
+  ADD r27, r25             ; center_x = screen_x + 1
+  LDI r25, 1
+  ADD r28, r25             ; center_y = screen_y + 1
+  PSET r27, r28, r17
+
+  ; Direction indicator (bright dot showing which way agent faces)
+  MOV r25, r18
+  LDI r6, 16
+  SHR r25, r6         ; direction
+  LDI r6, 0
+  CMP r25, r6
+  JNZ r0, ent_agent_not_up2
+  LDI r25, 0
+  ADD r25, r27             ; dx=0
+  SUB r28, r7              ; dy=-1
+  LDI r6, 0xFFFFFF
+  PSET r25, r28, r6   ; white dot above
+  ADDI r28, 1              ; restore y
+  JMP ent_agent_dir_done
+ent_agent_not_up2:
+  LDI r6, 1
+  CMP r25, r6
+  JNZ r0, ent_agent_not_down2
+  LDI r25, 0
+  ADD r25, r27
+  ADD r28, r7              ; dy=+1
+  LDI r6, 0xFFFFFF
+  PSET r25, r28, r6
+  SUB r28, r7
+  JMP ent_agent_dir_done
+ent_agent_not_down2:
+  LDI r6, 2
+  CMP r25, r6
+  JNZ r0, ent_agent_not_left2
+  SUB r27, r7              ; dx=-1
+  LDI r25, 0
+  ADD r25, r28
+  LDI r6, 0xFFFFFF
+  PSET r27, r25, r6
+  ADDI r27, 1
+  JMP ent_agent_dir_done
+ent_agent_not_left2:
+  ADD r27, r7              ; dx=+1
+  LDI r25, 0
+  ADD r25, r28
+  LDI r6, 0xFFFFFF
+  PSET r27, r25, r6
+  SUB r27, r7
+ent_agent_dir_done:
+
+  ; Side pixels for 3px wide circle
+  LDI r25, 1
+  SUB r27, r25             ; left
+  LDI r6, 1
+  ADD r28, r6         ; center_y+1
+  PSET r27, r28, r17
+  ADDI r27, 2              ; right
+  PSET r27, r28, r17
+  SUBI r27, 1              ; restore center_x
+  SUBI r28, 1              ; restore center_y
+  JMP ent_render_next
+
+ent_agent_simple:
+  ; Simple: 2x2 colored rect
+  LDI r25, 2
+  RECTF r27, r28, r25, r25, r17
+  JMP ent_render_next
+
+ent_render_program:
+  ; --- Program-node: pulsing cyan/magenta diamond ---
+  ; Animate between cyan and magenta based on anim_frame
+  LDI r25, 1
+  AND r25, r19
+  JZ r25, ent_prog_cyan
+  LDI r25, 0xFF00FF       ; magenta
+  JMP ent_prog_color
+ent_prog_cyan:
+  LDI r25, 0x00FFFF       ; cyan
+ent_prog_color:
+  MOV r17, r25
+
+  ; Check detail
+  LDI r25, 0x7814
+  LOAD r25, r25
+  LDI r6, 2
+  CMP r25, r6
+  BLT r0, ent_prog_simple
+
+  ; Detailed: draw diamond pattern (4 pixels in cross pattern)
+  ; Top pixel
+  LDI r25, 1
+  ADD r27, r25             ; center_x
+  PSET r27, r28, r17       ; top
+  ADDI r28, 1              ; y+1
+  LDI r25, 0
+  ADD r25, r27
+  SUBI r27, 1              ; left
+  PSET r27, r28, r17
+  ADDI r27, 2              ; right
+  PSET r27, r28, r17
+  SUBI r27, 1              ; center
+  ADDI r28, 1              ; y+2
+  PSET r27, r28, r17       ; bottom
+  SUBI r28, 2              ; restore y
+  JMP ent_render_next
+
+ent_prog_simple:
+  ; Simple: 2x2 colored rect
+  LDI r25, 2
+  RECTF r27, r28, r25, r25, r17
+
+ent_render_next:
+  LDI r25, 5
+  ADD r20, r25             ; next entity
+  ADDI r26, 1
+  JMP ent_render_loop
+
+ent_render_done:
+POP r31
 
 ; ===== Draw Building Markers on Minimap =====
 ; Minimap is at screen (224..255, 0..31), 32x32 pixels
