@@ -16954,3 +16954,792 @@ fn benchmark_pset_loop_vs_max_steps() {
 
     assert!(true, "benchmark completed successfully");
 }
+
+// ── Instruction Reference Tests: compare reference vs GPU output ────────
+// Issue #15: Systematic per-opcode screen output verification
+// Each test runs an instruction in isolation and verifies exact screen/register/RAM state
+
+// ── Graphics opcodes: screen output verification ──────────────────────
+
+#[test]
+fn test_rectf_fills_rectangle() {
+    let mut vm = Vm::new();
+    // RECTF r1, r2, r3, r4, r5  -- x=10, y=20, w=30, h=15, color=red
+    vm.regs[1] = 10;
+    vm.regs[2] = 20;
+    vm.regs[3] = 30;
+    vm.regs[4] = 15;
+    vm.regs[5] = 0xFF0000;
+    vm.ram[0] = 0x43;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
+    vm.ram[6] = 0x00;
+    vm.pc = 0;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(vm.screen[20 * 256 + 10], 0xFF0000, "top-left should be red");
+    assert_eq!(
+        vm.screen[20 * 256 + 39],
+        0xFF0000,
+        "top-right should be red"
+    );
+    assert_eq!(
+        vm.screen[34 * 256 + 10],
+        0xFF0000,
+        "bottom-left should be red"
+    );
+    assert_eq!(
+        vm.screen[34 * 256 + 39],
+        0xFF0000,
+        "bottom-right should be red"
+    );
+    assert_eq!(vm.screen[25 * 256 + 20], 0xFF0000, "center should be red");
+    assert_eq!(vm.screen[20 * 256 + 9], 0, "left of rect should be black");
+    assert_eq!(vm.screen[19 * 256 + 10], 0, "above rect should be black");
+    assert_eq!(vm.screen[35 * 256 + 10], 0, "below rect should be black");
+    assert_eq!(vm.screen[20 * 256 + 40], 0, "right of rect should be black");
+}
+
+#[test]
+fn test_rectf_clips_to_screen() {
+    let mut vm = Vm::new();
+    // RECTF starting at (250, 250) with w=10, h=10 -- extends past screen edges
+    // Only pixels within [0,256) should be drawn
+    vm.regs[1] = 250; // x
+    vm.regs[2] = 250; // y
+    vm.regs[3] = 10; // w
+    vm.regs[4] = 10; // h
+    vm.regs[5] = 0x00FF00; // green
+    vm.ram[0] = 0x43;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
+    vm.ram[6] = 0x00;
+    vm.pc = 0;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    // Pixels at (250,250) through (255,255) should be green
+    assert_eq!(
+        vm.screen[250 * 256 + 250],
+        0x00FF00,
+        "pixel at (250,250) should be green"
+    );
+    assert_eq!(
+        vm.screen[255 * 256 + 255],
+        0x00FF00,
+        "pixel at (255,255) should be green"
+    );
+    // Pixels outside 256x256 should NOT be drawn (no out-of-bounds write)
+    assert_eq!(vm.screen[0], 0, "pixel at (0,0) should still be black");
+}
+
+#[test]
+fn test_pseti_sets_pixel_immediate() {
+    let mut vm = Vm::new();
+    vm.ram[0] = 0x41; // PSETI
+    vm.ram[1] = 42;
+    vm.ram[2] = 73;
+    vm.ram[3] = 0xFF00FF;
+    vm.ram[4] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(
+        vm.screen[73 * 256 + 42],
+        0xFF00FF,
+        "pixel should be magenta"
+    );
+    assert_eq!(
+        vm.screen[73 * 256 + 43],
+        0,
+        "adjacent pixel should be black"
+    );
+}
+
+#[test]
+fn test_line_horizontal() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 10;
+    vm.regs[2] = 50;
+    vm.regs[3] = 60;
+    vm.regs[4] = 50;
+    vm.regs[5] = 0x0000FF;
+    vm.ram[0] = 0x45;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
+    vm.ram[6] = 0x00;
+    vm.pc = 0;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    for x in 10..=60 {
+        assert_eq!(
+            vm.screen[50 * 256 + x],
+            0x0000FF,
+            "pixel at ({},50) should be blue",
+            x
+        );
+    }
+    assert_eq!(
+        vm.screen[49 * 256 + 30],
+        0,
+        "pixel above line should be black"
+    );
+}
+
+#[test]
+fn test_line_diagonal() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 10;
+    vm.regs[4] = 10;
+    vm.regs[5] = 0xFFFF00;
+    vm.ram[0] = 0x45;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
+    vm.ram[6] = 0x00;
+    vm.pc = 0;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    for i in 0..=10 {
+        assert_eq!(
+            vm.screen[i * 256 + i],
+            0xFFFF00,
+            "diagonal pixel ({},{}) should be yellow",
+            i,
+            i
+        );
+    }
+    assert_eq!(vm.screen[0 * 256 + 1], 0, "off-diagonal should be black");
+}
+
+#[test]
+fn test_line_vertical() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 100;
+    vm.regs[2] = 10;
+    vm.regs[3] = 100;
+    vm.regs[4] = 60;
+    vm.regs[5] = 0x00FFFF;
+    vm.ram[0] = 0x45;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
+    vm.ram[6] = 0x00;
+    vm.pc = 0;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    for y in 10..=60 {
+        assert_eq!(
+            vm.screen[y * 256 + 100],
+            0x00FFFF,
+            "pixel at (100,{}) should be cyan",
+            y
+        );
+    }
+    assert_eq!(
+        vm.screen[20 * 256 + 99],
+        0,
+        "pixel beside line should be black"
+    );
+}
+
+#[test]
+fn test_circle_draws_outline() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 128;
+    vm.regs[2] = 128;
+    vm.regs[3] = 10;
+    vm.regs[4] = 0xFFFFFF;
+    vm.ram[0] = 0x46;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 0x00;
+    vm.pc = 0;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    // Center should NOT be drawn (outline only)
+    assert_eq!(
+        vm.screen[128 * 256 + 128],
+        0,
+        "center should be black (outline only)"
+    );
+    assert_eq!(vm.screen[118 * 256 + 128], 0xFFFFFF, "top should be white");
+    assert_eq!(
+        vm.screen[138 * 256 + 128],
+        0xFFFFFF,
+        "bottom should be white"
+    );
+    assert_eq!(vm.screen[128 * 256 + 118], 0xFFFFFF, "left should be white");
+    assert_eq!(
+        vm.screen[128 * 256 + 138],
+        0xFFFFFF,
+        "right should be white"
+    );
+}
+
+#[test]
+fn test_scroll_shifts_pixels_up() {
+    let mut vm = Vm::new();
+    vm.screen[20 * 256 + 10] = 0xFF0000;
+    vm.regs[1] = 5;
+    vm.ram[0] = 0x47;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(
+        vm.screen[15 * 256 + 10],
+        0xFF0000,
+        "pixel should have moved up 5 rows"
+    );
+    assert_eq!(
+        vm.screen[20 * 256 + 10],
+        0,
+        "original position should be cleared"
+    );
+}
+
+#[test]
+fn test_sprite_blits_pixels() {
+    let mut vm = Vm::new();
+    vm.ram[0x2000] = 0xFF0000;
+    vm.ram[0x2001] = 0x00FF00;
+    vm.ram[0x2002] = 0x0000FF;
+    vm.ram[0x2003] = 0xFFFF00;
+    vm.ram[0x2004] = 0;
+    vm.ram[0x2005] = 0xFFFFFF;
+    vm.regs[1] = 50;
+    vm.regs[2] = 60;
+    vm.regs[3] = 0x2000;
+    vm.regs[4] = 3;
+    vm.regs[5] = 2;
+    vm.ram[0] = 0x4A;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
+    vm.ram[6] = 0x00;
+    vm.pc = 0;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.screen[60 * 256 + 50], 0xFF0000, "sprite red");
+    assert_eq!(vm.screen[60 * 256 + 51], 0x00FF00, "sprite green");
+    assert_eq!(vm.screen[60 * 256 + 52], 0x0000FF, "sprite blue");
+    assert_eq!(vm.screen[61 * 256 + 50], 0xFFFF00, "sprite yellow");
+    assert_eq!(vm.screen[61 * 256 + 51], 0, "sprite transparent");
+    assert_eq!(vm.screen[61 * 256 + 52], 0xFFFFFF, "sprite white");
+}
+
+#[test]
+fn test_tilemap_renders_tiles() {
+    let mut vm = Vm::new();
+    // 2x2 tile map at 0x3000, tiles at 0x3100
+    vm.ram[0x3000] = 1;
+    vm.ram[0x3001] = 2;
+    vm.ram[0x3002] = 3;
+    vm.ram[0x3003] = 0;
+    // Tile 1: 2x2 red
+    vm.ram[0x3100] = 0xFF0000;
+    vm.ram[0x3101] = 0xFF0000;
+    vm.ram[0x3102] = 0xFF0000;
+    vm.ram[0x3103] = 0xFF0000;
+    // Tile 2: 2x2 green
+    vm.ram[0x3104] = 0x00FF00;
+    vm.ram[0x3105] = 0x00FF00;
+    vm.ram[0x3106] = 0x00FF00;
+    vm.ram[0x3107] = 0x00FF00;
+    // Tile 3: 2x2 blue
+    vm.ram[0x3108] = 0x0000FF;
+    vm.ram[0x3109] = 0x0000FF;
+    vm.ram[0x310A] = 0x0000FF;
+    vm.ram[0x310B] = 0x0000FF;
+    // TILEMAP x=10, y=20, map=0x3000, tiles=0x3100, gw=2, gh=2, tw=2, th=2
+    vm.regs[1] = 10;
+    vm.regs[2] = 20;
+    vm.regs[3] = 0x3000;
+    vm.regs[4] = 0x3100;
+    vm.regs[5] = 2;
+    vm.regs[6] = 2;
+    vm.regs[7] = 2;
+    vm.regs[8] = 2;
+    vm.ram[0] = 0x4C;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
+    vm.ram[6] = 6;
+    vm.ram[7] = 7;
+    vm.ram[8] = 8;
+    vm.ram[9] = 0x00;
+    vm.pc = 0;
+    for _ in 0..5000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    // Tile 1 at (10,20): 2x2 red
+    assert_eq!(vm.screen[20 * 256 + 10], 0xFF0000, "tile1");
+    assert_eq!(vm.screen[21 * 256 + 11], 0xFF0000, "tile1");
+    // Tile 2 at (14,20): 2x2 green (col*2 offset)
+    assert_eq!(vm.screen[20 * 256 + 12], 0x00FF00, "tile2");
+    assert_eq!(vm.screen[21 * 256 + 13], 0x00FF00, "tile2");
+    // Tile 3 at (10,24): 2x2 blue (row*2 offset)
+    assert_eq!(vm.screen[22 * 256 + 10], 0x0000FF, "tile3");
+    assert_eq!(vm.screen[23 * 256 + 11], 0x0000FF, "tile3");
+    // Empty tile at (14,24)
+    assert_eq!(vm.screen[22 * 256 + 12], 0, "empty tile");
+}
+
+#[test]
+fn test_text_renders_string_to_screen() {
+    let mut vm = Vm::new();
+    vm.ram[0x2000] = 0x41; // 'A'
+    vm.ram[0x2001] = 0x42; // 'B'
+    vm.ram[0x2002] = 0;
+    vm.regs[1] = 10;
+    vm.regs[2] = 20;
+    vm.regs[3] = 0x2000;
+    vm.ram[0] = 0x44;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00;
+    vm.pc = 0;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    let mut found_white = false;
+    for y in 20..28 {
+        for x in 10..22 {
+            if vm.screen[y * 256 + x] == 0xFFFFFF {
+                found_white = true;
+                break;
+            }
+        }
+    }
+    assert!(found_white, "TEXT should render white pixels for 'AB'");
+}
+
+// ── Immediate arithmetic opcodes ──────────────────────────────────────
+
+#[test]
+fn test_addi_adds_immediate() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 100;
+    vm.ram[0] = 0x1B;
+    vm.ram[1] = 5;
+    vm.ram[2] = 42;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 142);
+}
+
+#[test]
+fn test_addi_wrapping_overflow() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 0xFFFFFFFF;
+    vm.ram[0] = 0x1B;
+    vm.ram[1] = 5;
+    vm.ram[2] = 1;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 0);
+}
+
+#[test]
+fn test_subi_subtracts_immediate() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 100;
+    vm.ram[0] = 0x1C;
+    vm.ram[1] = 5;
+    vm.ram[2] = 30;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 70);
+}
+
+#[test]
+fn test_subi_wrapping_underflow() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 0;
+    vm.ram[0] = 0x1C;
+    vm.ram[1] = 5;
+    vm.ram[2] = 1;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 0xFFFFFFFF);
+}
+
+#[test]
+fn test_andi_bits_and_immediate() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 0xFF00FF;
+    vm.ram[0] = 0x1D;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x0F0F0F;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 0x0F000F);
+}
+
+#[test]
+fn test_ori_bits_or_immediate() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 0x00FF00;
+    vm.ram[0] = 0x1E;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0xFF0000;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 0xFFFF00);
+}
+
+#[test]
+fn test_xori_bits_xor_immediate() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 0xFF00FF;
+    vm.ram[0] = 0x1F;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0xFF00FF;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 0);
+}
+
+#[test]
+fn test_shli_shifts_left_immediate() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 1;
+    vm.ram[0] = 0x18;
+    vm.ram[1] = 5;
+    vm.ram[2] = 4;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 16);
+}
+
+#[test]
+fn test_shri_shifts_right_immediate() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 256;
+    vm.ram[0] = 0x19;
+    vm.ram[1] = 5;
+    vm.ram[2] = 4;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 16);
+}
+
+#[test]
+fn test_sari_arithmetic_shift_right_immediate() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 0x80000000;
+    vm.ram[0] = 0x1A;
+    vm.ram[1] = 5;
+    vm.ram[2] = 4;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 0xF8000000);
+}
+
+#[test]
+fn test_sari_positive_value() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 0x7FFFFFFF;
+    vm.ram[0] = 0x1A;
+    vm.ram[1] = 5;
+    vm.ram[2] = 4;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[5], 0x07FFFFFF);
+}
+
+#[test]
+fn test_cmpi_less_than() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 5;
+    vm.ram[0] = 0x15;
+    vm.ram[1] = 5;
+    vm.ram[2] = 10;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[0], 0xFFFFFFFF);
+}
+
+#[test]
+fn test_cmpi_equal() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 10;
+    vm.ram[0] = 0x15;
+    vm.ram[1] = 5;
+    vm.ram[2] = 10;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[0], 0);
+}
+
+#[test]
+fn test_cmpi_greater_than() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 20;
+    vm.ram[0] = 0x15;
+    vm.ram[1] = 5;
+    vm.ram[2] = 10;
+    vm.ram[3] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[0], 1);
+}
+
+// ── STRO opcode ────────────────────────────────────────────────────────
+
+#[test]
+fn test_stro_writes_string_to_ram() {
+    let mut vm = Vm::new();
+    vm.regs[5] = 0x2000;
+    vm.ram[0] = 0x14;
+    vm.ram[1] = 5;
+    vm.ram[2] = 2;
+    vm.ram[3] = 72; // 'H'
+    vm.ram[4] = 105; // 'i'
+    vm.ram[5] = 0x00;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.ram[0x2000], 72, "first char should be H");
+    assert_eq!(vm.ram[0x2001], 105, "second char should be i");
+    assert_eq!(vm.ram[0x2002], 0, "STRO should null-terminate");
+}
+
+// ── Screen readback consistency ────────────────────────────────────────
+
+#[test]
+fn test_pset_then_peek_roundtrip() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 42;
+    vm.regs[2] = 73;
+    vm.regs[3] = 0xABCDEF;
+    vm.ram[0] = 0x40;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.pc = 0;
+    vm.step();
+    vm.regs[10] = 0;
+    vm.ram[4] = 0x4F;
+    vm.ram[5] = 1;
+    vm.ram[6] = 2;
+    vm.ram[7] = 10;
+    vm.ram[8] = 0x00;
+    vm.pc = 4;
+    vm.step();
+    assert_eq!(vm.regs[10], 0xABCDEF);
+}
+
+#[test]
+fn test_pset_then_screenp_roundtrip() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 42;
+    vm.regs[2] = 73;
+    vm.regs[3] = 0x123456;
+    vm.ram[0] = 0x40;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.pc = 0;
+    vm.step();
+    vm.regs[10] = 0;
+    vm.ram[4] = 0x6D;
+    vm.ram[5] = 10;
+    vm.ram[6] = 1;
+    vm.ram[7] = 2;
+    vm.ram[8] = 0x00;
+    vm.pc = 4;
+    vm.step();
+    assert_eq!(vm.regs[10], 0x123456);
+}
+
+#[test]
+fn test_fill_then_peek_center() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 0xFF8800;
+    vm.ram[0] = 0x42;
+    vm.ram[1] = 1;
+    vm.pc = 0;
+    vm.step();
+    vm.regs[10] = 0;
+    vm.regs[1] = 128;
+    vm.regs[2] = 128;
+    vm.ram[2] = 0x4F;
+    vm.ram[3] = 1;
+    vm.ram[4] = 2;
+    vm.ram[5] = 10;
+    vm.ram[6] = 0x00;
+    vm.pc = 2;
+    vm.step();
+    assert_eq!(vm.regs[10], 0xFF8800);
+}
+
+#[test]
+fn test_rectf_then_line_overlap() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 10;
+    vm.regs[2] = 10;
+    vm.regs[3] = 30;
+    vm.regs[4] = 20;
+    vm.regs[5] = 0x0000FF;
+    vm.ram[0] = 0x43;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 4;
+    vm.ram[5] = 5;
+    vm.pc = 0;
+    vm.step();
+    vm.regs[1] = 10;
+    vm.regs[2] = 15;
+    vm.regs[3] = 39;
+    vm.regs[4] = 15;
+    vm.regs[5] = 0xFF0000;
+    vm.ram[6] = 0x45;
+    vm.ram[7] = 1;
+    vm.ram[8] = 2;
+    vm.ram[9] = 3;
+    vm.ram[10] = 4;
+    vm.ram[11] = 5;
+    vm.ram[12] = 0x00;
+    vm.pc = 6;
+    vm.step();
+    assert_eq!(
+        vm.screen[15 * 256 + 20],
+        0xFF0000,
+        "LINE should overwrite RECTF"
+    );
+    assert_eq!(
+        vm.screen[14 * 256 + 20],
+        0x0000FF,
+        "above line should still be blue"
+    );
+    assert_eq!(vm.screen[30 * 256 + 20], 0, "below rect should be black");
+}

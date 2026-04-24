@@ -131,10 +131,7 @@ impl GpuExecutor {
             .context("No GPU adapter found")?;
 
         let info = adapter.get_info();
-        eprintln!(
-            "[gpu] Adapter: {} (backend: {:?})",
-            info.name, info.backend
-        );
+        eprintln!("[gpu] Adapter: {} (backend: {:?})", info.name, info.backend);
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
@@ -204,10 +201,7 @@ impl GpuExecutor {
 
         // Upload tile data to GPU
         let byte_slice: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                tile_data.as_ptr() as *const u8,
-                tile_data.len() * 4,
-            )
+            std::slice::from_raw_parts(tile_data.as_ptr() as *const u8, tile_data.len() * 4)
         };
         self.queue.write_buffer(&buffer, 0, byte_slice);
 
@@ -223,9 +217,11 @@ impl GpuExecutor {
         });
 
         // Dispatch compute
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("RISC-V Dispatch"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("RISC-V Dispatch"),
+            });
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -237,14 +233,11 @@ impl GpuExecutor {
             pass.dispatch_workgroups(num_tiles, 1, 1);
         }
 
-        self.queue
-            .submit(Some(encoder.finish()));
-        let _ = self
-            .device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            });
+        self.queue.submit(Some(encoder.finish()));
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         // Read back results
         let read_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -254,31 +247,32 @@ impl GpuExecutor {
             mapped_at_creation: false,
         });
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Copy Back"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Copy Back"),
+            });
         encoder.copy_buffer_to_buffer(&buffer, 0, &read_buffer, 0, buffer_size);
         self.queue.submit(Some(encoder.finish()));
 
         // Wait for copy
         let (tx, rx) = std::sync::mpsc::channel();
-        read_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
-            let _ = tx.send(result);
-        });
-        let _ = self
-            .device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
+        read_buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                let _ = tx.send(result);
             });
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         rx.recv()?
             .map_err(|e| anyhow::anyhow!("Map failed: {:?}", e))?;
 
         {
             let data = read_buffer.slice(..).get_mapped_range();
-            let result_slice: &[u32] = unsafe {
-                std::slice::from_raw_parts(data.as_ptr() as *const u32, data.len() / 4)
-            };
+            let result_slice: &[u32] =
+                unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u32, data.len() / 4) };
             tile_data.copy_from_slice(result_slice);
         }
 
@@ -375,11 +369,11 @@ mod tests {
         );
         // PC at offset 32
         assert_eq!(32, 32); // regs[0..31] then pc
-        // status at offset 33
-        // instruction_count at 34
-        // max_steps at 35
-        // tile_id at 36
-        // uart_len at 37
+                            // status at offset 33
+                            // instruction_count at 34
+                            // max_steps at 35
+                            // tile_id at 36
+                            // uart_len at 37
     }
 
     #[test]
@@ -395,8 +389,7 @@ mod tests {
     #[cfg(feature = "gpu")]
     #[test]
     fn test_gpu_fibonacci_single_tile() {
-        let executor = pollster::block_on(GpuExecutor::new())
-            .expect("GPU initialization failed");
+        let executor = pollster::block_on(GpuExecutor::new()).expect("GPU initialization failed");
 
         let cartridge = gpu_loader::build_fibonacci_cartridge();
         let mut tile_data = init_tile_states(1, &cartridge, 1000);
@@ -431,8 +424,7 @@ mod tests {
     #[cfg(feature = "gpu")]
     #[test]
     fn test_gpu_vs_reference() {
-        let executor = pollster::block_on(GpuExecutor::new())
-            .expect("GPU initialization failed");
+        let executor = pollster::block_on(GpuExecutor::new()).expect("GPU initialization failed");
 
         let fib = gpu_loader::build_fibonacci_cartridge();
         verify_against_reference(&executor, "fibonacci(10)", &fib, 1000);

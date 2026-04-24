@@ -7,7 +7,7 @@
 // This module is always compiled (no gpu feature required) so that
 // verification can be used in any test context.
 
-use super::gpu::{STATUS_ERROR, STATUS_HALTED, STATUS_RUNNING, RAM_WORDS};
+use super::gpu::{RAM_WORDS, STATUS_ERROR, STATUS_HALTED, STATUS_RUNNING};
 
 /// Reference RISC-V VM for verification against GPU execution.
 ///
@@ -131,12 +131,12 @@ impl ReferenceVm {
                 let val1 = self.read_reg(rs1);
                 let val2 = self.read_reg(rs2);
                 let take = match funct3 {
-                    0 => val1 == val2,                     // BEQ
-                    1 => val1 != val2,                     // BNE
-                    4 => (val1 as i32) < (val2 as i32),   // BLT
-                    5 => (val1 as i32) >= (val2 as i32),  // BGE
-                    6 => val1 < val2,                      // BLTU
-                    7 => val1 >= val2,                     // BGEU
+                    0 => val1 == val2,                   // BEQ
+                    1 => val1 != val2,                   // BNE
+                    4 => (val1 as i32) < (val2 as i32),  // BLT
+                    5 => (val1 as i32) >= (val2 as i32), // BGE
+                    6 => val1 < val2,                    // BLTU
+                    7 => val1 >= val2,                   // BGEU
                     _ => false,
                 };
                 if take {
@@ -161,8 +161,8 @@ impl ReferenceVm {
                 let val1 = self.read_reg(rs1);
                 let shamt = rs2; // imm[4:0]
                 let result = match funct3 {
-                    0 => val1.wrapping_add(imm_i as u32),                    // ADDI
-                    1 => val1 << shamt,                                      // SLLI
+                    0 => val1.wrapping_add(imm_i as u32), // ADDI
+                    1 => val1 << shamt,                   // SLLI
                     2 => {
                         if (val1 as i32) < imm_i {
                             1
@@ -177,7 +177,7 @@ impl ReferenceVm {
                             0
                         }
                     } // SLTIU
-                    4 => val1 ^ (imm_i as u32),                             // XORI
+                    4 => val1 ^ (imm_i as u32),           // XORI
                     5 => {
                         if (inst >> 30) & 1 == 1 {
                             ((val1 as i32) >> shamt) as u32 // SRAI
@@ -185,8 +185,8 @@ impl ReferenceVm {
                             val1 >> shamt // SRLI
                         }
                     }
-                    6 => val1 | (imm_i as u32),                             // ORI
-                    7 => val1 & (imm_i as u32),                             // ANDI
+                    6 => val1 | (imm_i as u32), // ORI
+                    7 => val1 & (imm_i as u32), // ANDI
                     _ => 0,
                 };
                 self.write_reg(rd, result);
@@ -200,8 +200,8 @@ impl ReferenceVm {
 
                 let result = if mul {
                     match funct3 {
-                        0 => (val1 as i32).wrapping_mul(val2 as i32) as u32,  // MUL
-                        1 => (((val1 as i64) * (val2 as i64)) >> 32) as u32,  // MULH
+                        0 => (val1 as i32).wrapping_mul(val2 as i32) as u32, // MUL
+                        1 => (((val1 as i64) * (val2 as i64)) >> 32) as u32, // MULH
                         _ => 0,
                     }
                 } else {
@@ -213,7 +213,7 @@ impl ReferenceVm {
                                 val1.wrapping_add(val2)
                             }
                         } // ADD/SUB
-                        1 => val1 << (val2 & 0x1F),                          // SLL
+                        1 => val1 << (val2 & 0x1F), // SLL
                         2 => {
                             if (val1 as i32) < (val2 as i32) {
                                 1
@@ -228,7 +228,7 @@ impl ReferenceVm {
                                 0
                             }
                         } // SLTU
-                        4 => val1 ^ val2,                                     // XOR
+                        4 => val1 ^ val2,           // XOR
                         5 => {
                             if alt {
                                 ((val1 as i32) >> (val2 & 0x1F)) as u32
@@ -236,8 +236,8 @@ impl ReferenceVm {
                                 val1 >> (val2 & 0x1F)
                             }
                         } // SRL/SRA
-                        6 => val1 | val2,                                     // OR
-                        7 => val1 & val2,                                     // AND
+                        6 => val1 | val2,           // OR
+                        7 => val1 & val2,           // AND
                         _ => 0,
                     }
                 };

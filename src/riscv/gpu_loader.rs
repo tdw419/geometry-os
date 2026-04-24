@@ -89,7 +89,9 @@ fn encode_btype(funct3: u32, rs1: u32, rs2: u32, offset_bytes: i32) -> u32 {
     let imm4_1 = (imm >> 1) & 0xF;
     let imm11 = (imm >> 11) & 0x1;
 
-    0x63 | (funct3 << 12) | (rs1 << 15) | (rs2 << 20)
+    0x63 | (funct3 << 12)
+        | (rs1 << 15)
+        | (rs2 << 20)
         | (imm4_1 << 8)
         | (imm10_5 << 25)
         | (imm11 << 7)
@@ -103,16 +105,34 @@ mod tests {
     #[test]
     fn test_fibonacci_cartridge_structure() {
         let cart = build_fibonacci_cartridge();
-        assert!(cart.len() > 10, "Fibonacci cartridge should have multiple instructions");
-        assert_eq!(cart[0] & 0x7F, 0x13, "First instruction should be ADDI (opcode 0x13)");
-        assert_eq!(*cart.last().unwrap(), 0x00000073, "Last instruction should be ECALL");
+        assert!(
+            cart.len() > 10,
+            "Fibonacci cartridge should have multiple instructions"
+        );
+        assert_eq!(
+            cart[0] & 0x7F,
+            0x13,
+            "First instruction should be ADDI (opcode 0x13)"
+        );
+        assert_eq!(
+            *cart.last().unwrap(),
+            0x00000073,
+            "Last instruction should be ECALL"
+        );
     }
 
     #[test]
     fn test_counter_cartridge_structure() {
         let cart = build_counter_cartridge(7);
-        assert!(cart.len() > 5, "Counter cartridge should have multiple instructions");
-        assert_eq!(*cart.last().unwrap(), 0x00000073, "Last instruction should be ECALL");
+        assert!(
+            cart.len() > 5,
+            "Counter cartridge should have multiple instructions"
+        );
+        assert_eq!(
+            *cart.last().unwrap(),
+            0x00000073,
+            "Last instruction should be ECALL"
+        );
     }
 
     #[test]
@@ -138,11 +158,18 @@ mod tests {
     fn test_cartridges_fit_in_ram() {
         use super::super::gpu::RAM_WORDS;
         let fib = build_fibonacci_cartridge();
-        assert!(fib.len() <= RAM_WORDS, "Fibonacci cartridge must fit in RAM");
+        assert!(
+            fib.len() <= RAM_WORDS,
+            "Fibonacci cartridge must fit in RAM"
+        );
 
         for n in [1, 5, 10, 50, 100] {
             let cnt = build_counter_cartridge(n);
-            assert!(cnt.len() <= RAM_WORDS, "Counter({}) cartridge must fit in RAM", n);
+            assert!(
+                cnt.len() <= RAM_WORDS,
+                "Counter({}) cartridge must fit in RAM",
+                n
+            );
         }
     }
 }
