@@ -2475,9 +2475,27 @@ bldg_render_done:
 
 PUSH r31
 
-; Helper: draw_world_label(world_x, world_y, text_addr, fg, bg)
-; Computes screen position from world coords, skips if off-screen.
-; Uses r2-r6 as scratch. r8=tile_count, r9=tile_size, r11=cam_x addr, r12=cam_y addr.
+; Reload tile_count and tile_size (may have been clobbered by building render)
+LDI r17, 0x7812
+LOAD r18, r17            ; zoom_level
+LDI r17, 1
+SUB r18, r17
+JZ r0, ai_zoom_1
+LDI r17, 1
+SUB r18, r17
+JZ r0, ai_zoom_default
+JMP ai_zoom_default
+
+ai_zoom_1:
+LDI r8, 128
+LDI r9, 2
+JMP ai_zoom_set
+
+ai_zoom_default:
+LDI r8, 64
+LDI r9, 4
+
+ai_zoom_set:
 
 ; ── Ring 0: The Beacon (32,32) ──
 ; Draw a bright marker at spawn point
