@@ -518,10 +518,7 @@ fn test_device_read_keyboard() {
     vm.step();
     assert_eq!(vm.regs[0], 1, "READ should return 1 byte read");
     assert_eq!(vm.ram[0x2000], 65, "Buffer should contain the key value");
-    assert_eq!(
-        vm.key_port, 0,
-        "Keyboard port should be cleared after read"
-    );
+    assert_eq!(vm.key_port, 0, "Keyboard port should be cleared after read");
 }
 
 #[test]

@@ -165,6 +165,12 @@ pub struct Vm {
     /// Next background VM ID to assign (monotonically increasing, 1-based).
     pub next_bg_vm_id: u32,
 
+    // ── Inter-Tile Mailbox (Phase 4.1) ──────────────────────────
+    /// Write buffer for mailbox sends. Messages are committed on FRAME.
+    pub mailbox_write_buf: Vec<MailboxEntry>,
+    /// Read buffer for mailbox receives. Swapped from write_buf on FRAME.
+    pub mailbox_read_buf: Vec<MailboxEntry>,
+
     // ── Crash Recovery (Phase 104) ───────────────────────────────
     /// Virtual address that caused the last segfault (0 if none).
     /// Set by trigger_segfault_with_addr.
@@ -265,6 +271,8 @@ impl Vm {
             llm_config: None,
             background_vms: Vec::new(),
             next_bg_vm_id: 1,
+            mailbox_write_buf: vec![MailboxEntry::default(); MAILBOX_SIZE],
+            mailbox_read_buf: vec![MailboxEntry::default(); MAILBOX_SIZE],
             segfault_addr: 0,
             pc_trace: [0; 16],
             pc_trace_idx: 0,
@@ -371,6 +379,8 @@ impl Vm {
         self.llm_config = None;
         self.background_vms.clear();
         self.next_bg_vm_id = 1;
+        self.mailbox_write_buf = vec![MailboxEntry::default(); MAILBOX_SIZE];
+        self.mailbox_read_buf = vec![MailboxEntry::default(); MAILBOX_SIZE];
         self.segfault_addr = 0;
         self.pc_trace = [0; 16];
         self.pc_trace_idx = 0;
@@ -489,6 +499,14 @@ impl Vm {
                 }
                 // Phase 68: blit active windows to screen in Z-order (lowest z first)
                 self.blit_windows();
+                // Phase 4.1: swap mailbox buffers on FRAME boundary
+                // write_buf -> read_buf for consumption next frame, clear write_buf
+                std::mem::swap(&mut self.mailbox_write_buf, &mut self.mailbox_read_buf);
+                for entry in self.mailbox_write_buf.iter_mut() {
+                    entry.valid = false;
+                    entry.sender_id = 0;
+                    entry.data = 0;
+                }
                 return true; // keep running (host checks frame_ready to pace rendering)
             }
 

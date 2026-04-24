@@ -156,6 +156,34 @@ pub const DEVICE_AUDIO: u32 = 2; // /dev/audio -> fd 0xE002
 #[allow(dead_code)]
 pub const DEVICE_NET: u32 = 3; // /dev/net -> fd 0xE003
 pub const DEVICE_COUNT: usize = 4;
+
+/// Mailbox constants (Phase 4.1: Inter-tile mailbox communication).
+/// Each tile has one incoming message slot. Messages are (sender_id, data) pairs.
+/// Double-buffered: writes go to write_buf, FRAME swaps write_buf into read_buf.
+/// Max 256 tiles (supports 16x16 tile grid at 16px tiles).
+pub const MAILBOX_SIZE: usize = 256;
+/// MMIO base address for mailbox region (documented convention).
+pub const MAILBOX_RAM_BASE: usize = 0x5000;
+/// A single mailbox message entry.
+/// Stored per-destination-tile. sender_id identifies the source tile.
+/// valid=false means no message pending (slot empty).
+#[derive(Debug, Clone, Copy)]
+pub struct MailboxEntry {
+    pub valid: bool,
+    pub sender_id: u32,
+    pub data: u32,
+}
+
+impl Default for MailboxEntry {
+    fn default() -> Self {
+        Self {
+            valid: false,
+            sender_id: 0,
+            data: 0,
+        }
+    }
+}
+
 /// Device names (indexed by device type).
 pub const DEVICE_NAMES: &[&str] = &["/dev/screen", "/dev/keyboard", "/dev/audio", "/dev/net"];
 

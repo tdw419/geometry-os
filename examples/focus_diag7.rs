@@ -7,12 +7,14 @@ fn main() {
     let mut pp = Preprocessor::new();
     let preprocessed = pp.preprocess(&source);
     let asm = assemble(&preprocessed, 0).expect("should assemble");
-    
+
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
-    
+
     // Disassemble 660-680
     let mut addr = 660u32;
     while addr < 685 {
@@ -20,7 +22,7 @@ fn main() {
         println!("{:04}: {} ({})", addr, mnem, len);
         addr += len as u32;
     }
-    
+
     // Also check what the do_enter code looks like
     println!("\n=== do_enter area (330-380) ===");
     addr = 330;

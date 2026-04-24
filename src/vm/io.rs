@@ -335,6 +335,14 @@ impl Vm {
             pc_trace_idx: 0,
             crash_dialog_active: false,
             crash_dialog_pid: 0,
+            mailbox_write_buf: vec![
+                super::types::MailboxEntry::default();
+                super::types::MAILBOX_SIZE
+            ],
+            mailbox_read_buf: vec![
+                super::types::MailboxEntry::default();
+                super::types::MAILBOX_SIZE
+            ],
         })
     }
 }

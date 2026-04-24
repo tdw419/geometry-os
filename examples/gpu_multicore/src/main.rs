@@ -15,6 +15,8 @@
 use anyhow::{Context, Result};
 use std::time::Instant;
 
+mod reference;
+
 // WGSL compute shader for RISC-V tile execution
 const RISCV_EXECUTOR_WGSL: &str = include_str!("riscv_executor.wgsl");
 
@@ -460,6 +462,86 @@ fn benchmark(executor: &GpuExecutor) -> Result<()> {
     Ok(())
 }
 
+/// Verify a cartridge by running it on both GPU and reference CPU interpreter
+fn verify_cartridge(executor: &GpuExecutor, name: &str, cartridge: &[u32], max_steps: u32) -> Result<()> {
+    println!("--- Verifying {} ---", name);
+    
+    // 1. Run on GPU (1 tile)
+    let mut tile_data = init_tile_states(1, cartridge, max_steps);
+    executor.run_tiles(&mut tile_data, 1)?;
+    
+    let gpu_status = tile_data[33];
+    let gpu_inst_count = tile_data[34];
+    let gpu_pc = tile_data[32];
+    let gpu_uart = extract_uart(&tile_data[..TILE_STATE_WORDS]);
+    let mut gpu_regs = [0u32; 32];
+    gpu_regs.copy_from_slice(&tile_data[0..32]);
+
+    // 2. Run on Reference (CPU)
+    let mut ram = vec![0u32; RAM_WORDS];
+    for (i, &word) in cartridge.iter().enumerate() {
+        if i < RAM_WORDS {
+            ram[i] = word;
+        }
+    }
+    let mut ref_vm = reference::ReferenceVm::new(ram);
+    ref_vm.run(max_steps);
+    
+    let ref_uart = String::from_utf8_lossy(&ref_vm.uart_output).to_string();
+    
+    // 3. Compare results
+    println!("  Reference: insts={} status=0x{:x} pc=0x{:x} uart=\"{}\"", 
+             ref_vm.instruction_count, ref_vm.status, ref_vm.pc, ref_uart);
+    println!("  GPU      : insts={} status=0x{:x} pc=0x{:x} uart=\"{}\"", 
+             gpu_inst_count, gpu_status, gpu_pc, gpu_uart);
+             
+    let mut mismatch = false;
+    if gpu_pc != ref_vm.pc {
+        println!("  [ERR] PC mismatch: GPU=0x{:x}, Ref=0x{:x}", gpu_pc, ref_vm.pc);
+        mismatch = true;
+    }
+    if gpu_status != ref_vm.status {
+        println!("  [ERR] Status mismatch: GPU=0x{:x}, Ref=0x{:x}", gpu_status, ref_vm.status);
+        mismatch = true;
+    }
+    for i in 0..32 {
+        if gpu_regs[i] != ref_vm.regs[i] {
+            println!("  [ERR] Reg x{} mismatch: GPU=0x{:x}, Ref=0x{:x}", i, gpu_regs[i], ref_vm.regs[i]);
+            mismatch = true;
+        }
+    }
+
+    if !mismatch {
+        println!("  [PASS] GPU matches reference exactly.");
+    } else {
+        println!("  [FAIL] Mismatch detected!");
+    }
+    println!();
+    
+    if mismatch {
+        anyhow::bail!("Verification failed for {}", name);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gpu_vs_reference() -> Result<()> {
+        let executor = pollster::block_on(GpuExecutor::new())?;
+        
+        let fib = build_fibonacci_cartridge();
+        verify_cartridge(&executor, "fibonacci(10)", &fib, 1000)?;
+        
+        let cnt7 = build_counter_cartridge(7);
+        verify_cartridge(&executor, "counter(7)", &cnt7, 1000)?;
+        
+        Ok(())
+    }
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let mode = args.get(1).map(|s| s.as_str()).unwrap_or("ignition");
@@ -487,14 +569,22 @@ fn main() -> Result<()> {
         "bench" => {
             benchmark(&executor)?;
         }
+        "verify" => {
+            let fib = build_fibonacci_cartridge();
+            verify_cartridge(&executor, "fibonacci(10)", &fib, 1000)?;
+            
+            let cnt7 = build_counter_cartridge(7);
+            verify_cartridge(&executor, "counter(7)", &cnt7, 1000)?;
+        }
         _ => {
             println!("Unknown mode: {}", mode);
-            println!("Usage: gpu_multicore [ignition|commander|bench] [num_tiles]");
+            println!("Usage: gpu_multicore [ignition|commander|bench|verify] [num_tiles]");
             println!();
             println!("Modes:");
             println!("  ignition [N]  - Run N tiles with fibonacci (default: 10)");
             println!("  commander     - Run 4 tiles with different programs");
             println!("  bench         - Benchmark at 1/4/16/64/128/256 tiles");
+            println!("  verify        - Verify GPU against CPU reference interpreter");
         }
     }
     

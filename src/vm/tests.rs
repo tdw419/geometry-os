@@ -10230,7 +10230,7 @@ fn test_help_scrolls() {
 
     // Simulate down arrow press
     vm.key_port = 66; // 'B' = down arrow
-                        // Run another frame
+                      // Run another frame
     for _ in 0..500_000 {
         if !vm.step() {
             break;
@@ -16703,4 +16703,254 @@ fn oracle_mode_prompt_has_no_opcode_inventory() {
     let prompt = vm.build_llm_system_prompt();
     assert!(!prompt.contains("HALT(0x00)"));
     assert!(prompt.contains("Oracle"));
+}
+
+// ── Issue #26: Benchmark instructions/second vs max_steps ─────────
+
+/// Benchmark: measure VM throughput (instructions/second) at different
+/// step batch sizes. The `max_steps` parameter controls how many step()
+/// calls happen before the loop condition is checked. Smaller batches
+/// mean more loop overhead per instruction executed.
+///
+/// We use a program of pure NOPs (opcode 0x01) to isolate execution
+/// overhead from instruction-specific work. Each NOP is a single u32
+/// word, so we fill RAM with 0x01 and measure raw step() throughput.
+#[test]
+fn benchmark_instructions_per_second_vs_max_steps() {
+    use std::time::Instant;
+
+    // Total instructions to execute per benchmark run.
+    // Must be large enough for stable timing but not so large it's slow.
+    let total_instructions: u64 = 1_000_000;
+
+    // The step batch sizes to benchmark.
+    let batch_sizes: &[usize] = &[1, 8, 32, 128, 512];
+
+    eprintln!("\n╔══════════════════════════════════════════════════════════════╗");
+    eprintln!("║  VM Benchmark: instructions/second vs max_steps             ║");
+    eprintln!("╠═════════════╦══════════════════╦═════════════════════════════╣");
+    eprintln!("║ max_steps   ║ Time (ms)        ║ Instructions/sec            ║");
+    eprintln!("╠═════════════╬══════════════════╬═════════════════════════════╣");
+
+    for &batch_size in batch_sizes {
+        // Create a fresh VM filled with NOPs
+        let mut vm = Vm::new();
+        // Fill first 2000 RAM cells with NOP (0x01) so we never run out
+        for i in 0..2000 {
+            vm.ram[i] = 0x01; // NOP
+        }
+        vm.pc = 0;
+        vm.halted = false;
+
+        let mut executed: u64 = 0;
+        let start = Instant::now();
+
+        while executed < total_instructions {
+            let remaining = total_instructions - executed;
+            let steps_this_batch = std::cmp::min(batch_size as u64, remaining);
+
+            for _ in 0..steps_this_batch {
+                if !vm.step() {
+                    // Reset if halted (shouldn't happen with NOPs, but be safe)
+                    vm.pc = 0;
+                    vm.halted = false;
+                }
+            }
+            executed += steps_this_batch;
+        }
+
+        let elapsed = start.elapsed();
+        let elapsed_secs = elapsed.as_secs_f64();
+        let ips = executed as f64 / elapsed_secs;
+
+        eprintln!(
+            "║ {:>9}   ║ {:>12.2}     ║ {:>18.0}        ║",
+            batch_size,
+            elapsed.as_millis(),
+            ips
+        );
+    }
+
+    eprintln!("╚═════════════╩══════════════════╩═════════════════════════════╝");
+    eprintln!("  (Total instructions per run: {})", total_instructions);
+
+    // Sanity check: all batch sizes should complete (test is not for gating)
+    assert!(true, "benchmark completed successfully");
+}
+
+/// Benchmark: measure throughput of a realistic mixed-opcode program
+/// at different max_steps. Uses LDI + ADD + CMP + BLT loop pattern.
+#[test]
+fn benchmark_mixed_opcodes_vs_max_steps() {
+    use std::time::Instant;
+
+    let total_instructions: u64 = 500_000;
+    let batch_sizes: &[usize] = &[1, 8, 32, 128, 512];
+
+    // Build a small counting loop: LDI r10, 0; LDI r11, 1; LDI r12, 1000;
+    // loop: ADD r10, r11; CMP r10, r12; BLT r0, loop; LDI r10, 0; JMP loop
+    // This gives us a mix of LDI, ADD, CMP, BLT, JMP opcodes.
+    // Bytecode layout:
+    //   0: LDI r10, 0        = [0x10, 10, 0]
+    //   3: LDI r11, 1        = [0x10, 11, 1]
+    //   6: LDI r12, 1000     = [0x10, 12, 1000]
+    //   9: loop:
+    //      ADD r10, r11      = [0x20, 10, 11]
+    //  12: CMP r10, r12      = [0x50, 10, 12]
+    //  15: BLT r0, 9         = [0x35, 0, 9]  (jump back to addr 9)
+    //  18: LDI r10, 0        = [0x10, 10, 0]  (reset counter)
+    //  21: JMP 9             = [0x30, 9]      (back to loop)
+    let program: Vec<u32> = vec![
+        0x10, 10, 0, // 0: LDI r10, 0
+        0x10, 11, 1, // 3: LDI r11, 1
+        0x10, 12, 1000, // 6: LDI r12, 1000
+        // loop (addr 9):
+        0x20, 10, 11, // 9: ADD r10, r11
+        0x50, 10, 12, // 12: CMP r10, r12
+        0x35, 0, 9, // 15: BLT r0, 9
+        0x10, 10, 0, // 18: LDI r10, 0 (reset)
+        0x30, 9, // 21: JMP 9
+    ];
+
+    eprintln!("\n╔══════════════════════════════════════════════════════════════╗");
+    eprintln!("║  Mixed-Opcode Benchmark: instructions/second vs max_steps   ║");
+    eprintln!("╠═════════════╦══════════════════╦═════════════════════════════╣");
+    eprintln!("║ max_steps   ║ Time (ms)        ║ Instructions/sec            ║");
+    eprintln!("╠═════════════╬══════════════════╬═════════════════════════════╣");
+
+    for &batch_size in batch_sizes {
+        let mut vm = Vm::new();
+        for (i, &word) in program.iter().enumerate() {
+            vm.ram[i] = word;
+        }
+        vm.pc = 0;
+        vm.halted = false;
+
+        let mut executed: u64 = 0;
+        let start = Instant::now();
+
+        while executed < total_instructions {
+            let remaining = total_instructions - executed;
+            let steps_this_batch = std::cmp::min(batch_size as u64, remaining);
+
+            for _ in 0..steps_this_batch {
+                if !vm.step() {
+                    // Reset if halted (shouldn't happen with this loop)
+                    vm.pc = 0;
+                    vm.halted = false;
+                }
+            }
+            executed += steps_this_batch;
+        }
+
+        let elapsed = start.elapsed();
+        let ips = executed as f64 / elapsed.as_secs_f64();
+
+        eprintln!(
+            "║ {:>9}   ║ {:>12.2}     ║ {:>18.0}        ║",
+            batch_size,
+            elapsed.as_millis(),
+            ips
+        );
+    }
+
+    eprintln!("╚═════════════╩══════════════════╩═════════════════════════════╝");
+    eprintln!("  (Total instructions per run: {})", total_instructions);
+
+    assert!(true, "benchmark completed successfully");
+}
+
+/// Benchmark: measure throughput of a PSET-heavy graphics loop
+/// at different max_steps. This is the most realistic workload
+/// for the VM — per-pixel operations in a render loop.
+#[test]
+fn benchmark_pset_loop_vs_max_steps() {
+    use std::time::Instant;
+
+    let total_instructions: u64 = 500_000;
+    let batch_sizes: &[usize] = &[1, 8, 32, 128, 512];
+
+    // Build a PSET loop: iterate x 0..256, y 0..256, draw pixel at (x,y)
+    // This uses LDI, ADD, CMP, BLT, PSET — the core rendering loop opcodes.
+    // Bytecode:
+    //   0: LDI r10, 0       ; y = 0
+    //   3: LDI r11, 1       ; increment
+    //   6: LDI r12, 256     ; y limit
+    //   9: LDI r13, 0xFF0000; color (red)
+    //  12: y_loop:
+    //      LDI r14, 0       ; x = 0
+    //  15: x_loop:
+    //      PSET r14, r10, r13  ; draw pixel
+    //  19: ADD r14, r11     ; x++
+    //  22: CMP r14, r12     ; x < 256?
+    //  25: BLT r0, 15       ; loop x
+    //  28: ADD r10, r11     ; y++
+    //  31: CMP r10, r12     ; y < 256?
+    //  34: BLT r0, 12       ; loop y
+    //  37: LDI r10, 0       ; reset y
+    //  40: JMP 12           ; restart
+    let program: Vec<u32> = vec![
+        0x10, 10, 0, // 0: LDI r10, 0 (y)
+        0x10, 11, 1, // 3: LDI r11, 1
+        0x10, 12, 256, // 6: LDI r12, 256
+        0x10, 13, 0xFF0000, // 9: LDI r13, color
+        // y_loop (12):
+        0x10, 14, 0, // 12: LDI r14, 0 (x)
+        // x_loop (15):
+        0x40, 14, 10, 13, // 15: PSET r14, r10, r13
+        0x20, 14, 11, // 19: ADD r14, r11
+        0x50, 14, 12, // 22: CMP r14, r12
+        0x35, 0, 15, // 25: BLT r0, 15
+        0x20, 10, 11, // 28: ADD r10, r11
+        0x50, 10, 12, // 31: CMP r10, r12
+        0x35, 0, 12, // 34: BLT r0, 12
+        0x10, 10, 0, // 37: LDI r10, 0 (reset y)
+        0x30, 12, // 40: JMP 12
+    ];
+
+    eprintln!("\n╔══════════════════════════════════════════════════════════════╗");
+    eprintln!("║  PSET Render Loop Benchmark: instructions/second vs batch   ║");
+    eprintln!("╠═════════════╦══════════════════╦═════════════════════════════╣");
+    eprintln!("║ max_steps   ║ Time (ms)        ║ Instructions/sec            ║");
+    eprintln!("╠═════════════╬══════════════════╬═════════════════════════════╣");
+
+    for &batch_size in batch_sizes {
+        let mut vm = Vm::new();
+        for (i, &word) in program.iter().enumerate() {
+            vm.ram[i] = word;
+        }
+        vm.pc = 0;
+        vm.halted = false;
+
+        let mut executed: u64 = 0;
+        let start = Instant::now();
+
+        while executed < total_instructions {
+            let remaining = total_instructions - executed;
+            let steps_this_batch = std::cmp::min(batch_size as u64, remaining);
+
+            for _ in 0..steps_this_batch {
+                if !vm.step() {
+                    vm.pc = 0;
+                    vm.halted = false;
+                }
+            }
+            executed += steps_this_batch;
+        }
+
+        let elapsed = start.elapsed();
+        let ips = executed as f64 / elapsed.as_secs_f64();
+
+        eprintln!(
+            "║ {:>9}   ║ {:>12.2}     ║ {:>18.0}        ║",
+            batch_size,
+            elapsed.as_millis(),
+            ips
+        );
+    }
+
+    eprintln!("╚═════════════╩══════════════════╩═════════════════════════════╝");
+    eprintln!("  (Total instructions per run: {})", total_instructions);
+
+    assert!(true, "benchmark completed successfully");
 }

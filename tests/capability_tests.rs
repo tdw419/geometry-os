@@ -995,9 +995,18 @@ fn test_tetris_glyph_compiles() {
         .expect("tetris.glyph should compile to assembly");
 
     // Should contain game opcodes
-    assert!(asm_text.contains("RECTF"), "Tetris should use RECTF for drawing");
-    assert!(asm_text.contains("FRAME"), "Tetris should use FRAME for game loop");
-    assert!(asm_text.contains("IKEY"), "Tetris should use IKEY for input");
+    assert!(
+        asm_text.contains("RECTF"),
+        "Tetris should use RECTF for drawing"
+    );
+    assert!(
+        asm_text.contains("FRAME"),
+        "Tetris should use FRAME for game loop"
+    );
+    assert!(
+        asm_text.contains("IKEY"),
+        "Tetris should use IKEY for input"
+    );
 
     // Verify it assembles to bytecode
     let mut pp = geometry_os::preprocessor::Preprocessor::new();
@@ -1006,7 +1015,10 @@ fn test_tetris_glyph_compiles() {
         .expect("Compiled tetris assembly should assemble to bytecode");
 
     // Should be a non-trivial program
-    assert!(bytecode.pixels.len() > 100, "Tetris should produce meaningful bytecode");
+    assert!(
+        bytecode.pixels.len() > 100,
+        "Tetris should produce meaningful bytecode"
+    );
 }
 
 #[test]
