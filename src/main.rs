@@ -1276,7 +1276,9 @@ fn main() {
                                 }
                             }
                             "vmscreen" => {
-                                // ASCII art of the 256x256 VM screen (compressed to 64x32)
+                                // Color-aware ASCII art of the 256x256 VM screen (64x32)
+                                // Different hues map to different character sets so AI can
+                                // distinguish water(~), land(#), buildings(^), text("), etc.
                                 let scale_x = 4;
                                 let scale_y = 8;
                                 for y in 0..32 {
@@ -1284,37 +1286,74 @@ fn main() {
                                     for x in 0..64 {
                                         let sx = x * scale_x;
                                         let sy = y * scale_y;
-                                        let mut lit = 0u32;
+                                        // Average color in this cell
+                                        let mut rr = 0u32;
+                                        let mut gg = 0u32;
+                                        let mut bb = 0u32;
                                         let mut total = 0u32;
                                         for dy in 0..scale_y {
                                             for dx in 0..scale_x {
                                                 let py = sy + dy;
                                                 let px = sx + dx;
                                                 if py < 256 && px < 256 {
-                                                    if vm.screen[py * 256 + px] != 0 {
-                                                        lit += 1;
-                                                    }
+                                                    let c = vm.screen[py * 256 + px];
+                                                    rr += (c >> 16) & 0xFF;
+                                                    gg += (c >> 8) & 0xFF;
+                                                    bb += c & 0xFF;
                                                     total += 1;
                                                 }
                                             }
                                         }
-                                        let ratio = if total > 0 {
-                                            lit as f32 / total as f32
+                                        if total == 0 { row.push(' '); continue; }
+                                        let r = rr / total;
+                                        let g = gg / total;
+                                        let b = bb / total;
+                                        let lum = (299 * r + 587 * g + 114 * b) / 1000;
+
+                                        if lum < 8 {
+                                            // Pure black -- empty space
+                                            row.push(' ');
                                         } else {
-                                            0.0
-                                        };
-                                        let ch = if ratio > 0.75 {
-                                            '#'
-                                        } else if ratio > 0.50 {
-                                            '@'
-                                        } else if ratio > 0.25 {
-                                            '+'
-                                        } else if ratio > 0.05 {
-                                            '.'
-                                        } else {
-                                            ' '
-                                        };
-                                        row.push(ch);
+                                            // Classify by dominant channel for hue-based chars
+                                            let ch = if r > 200 && g > 200 && b > 200 {
+                                                // White/bright: text, borders
+                                                '"'
+                                            } else if r > 180 && g < 100 && b < 100 {
+                                                // Red: buildings, markers
+                                                '^'
+                                            } else if r < 80 && g > 120 && b < 80 {
+                                                // Green: land, forest
+                                                if lum > 140 { '#' } else if lum > 80 { '+' } else { ':' }
+                                            } else if r < 80 && g < 80 && b > 120 {
+                                                // Blue: water
+                                                if lum > 120 { '~' } else if lum > 50 { '=' } else { '-' }
+                                            } else if r > 150 && g > 100 && b < 60 {
+                                                // Brown/yellow: desert, beach
+                                                '%'
+                                            } else if r > 100 && g < 80 && b > 100 {
+                                                // Purple: mountains
+                                                'M'
+                                            } else if r < 60 && g > 100 && b > 100 {
+                                                // Cyan/teal: shallow water
+                                                '~'
+                                            } else if r > 180 && g > 180 && b < 100 {
+                                                // Yellow: taskbar, highlights
+                                                '*'
+                                            } else if r < 30 && g < 30 && b < 30 {
+                                                // Very dark: night sky, deep space
+                                                '.'
+                                            } else if lum > 180 {
+                                                // Bright but mixed
+                                                '@'
+                                            } else if lum > 100 {
+                                                // Mid-tone mixed
+                                                '+'
+                                            } else {
+                                                // Dark mixed
+                                                ':'
+                                            };
+                                            row.push(ch);
+                                        }
                                     }
                                     response.push_str(&(row.trim_end().to_string() + "\n"));
                                 }
