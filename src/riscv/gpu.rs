@@ -508,53 +508,56 @@ mod tests {
     fn bench_gpu_vs_cpu() {
         use std::time::Instant;
 
-        let executor =
-            pollster::block_on(GpuExecutor::new()).expect("GPU initialization failed");
+        let executor = pollster::block_on(GpuExecutor::new()).expect("GPU initialization failed");
 
         // Two workloads: light (fib(10), ~42 insts/tile) and heavy
         // (counter(500), ~2500 insts/tile). Heavy workload is the one
         // where GPU parallelism has a chance to overcome dispatch overhead.
         let workloads: [(&str, Vec<u32>, u32); 2] = [
             ("fib(10)   ", gpu_loader::build_fibonacci_cartridge(), 1000),
-            ("counter500", gpu_loader::build_counter_cartridge(500), 10_000),
+            (
+                "counter500",
+                gpu_loader::build_counter_cartridge(500),
+                10_000,
+            ),
         ];
 
         for (label, cartridge, max_steps) in &workloads {
             eprintln!("\nworkload: {}", label);
-        for &num_tiles in &[1usize, 16, 64, 256] {
-            let mut tile_data = init_tile_states(num_tiles, cartridge, *max_steps);
+            for &num_tiles in &[1usize, 16, 64, 256] {
+                let mut tile_data = init_tile_states(num_tiles, cartridge, *max_steps);
 
-            // Warm-up (first GPU dispatch pays pipeline/driver startup).
-            if num_tiles == 1 {
-                executor.run_tiles(&mut tile_data, 1).unwrap();
-                tile_data = init_tile_states(num_tiles, cartridge, *max_steps);
-            }
-
-            let t_gpu = Instant::now();
-            executor
-                .run_tiles(&mut tile_data, num_tiles as u32)
-                .unwrap();
-            let gpu_ms = t_gpu.elapsed().as_secs_f64() * 1000.0;
-            let gpu_insts: u64 = (0..num_tiles)
-                .map(|i| tile_data[i * TILE_STATE_WORDS + 34] as u64)
-                .sum();
-
-            let t_cpu = Instant::now();
-            let mut cpu_insts: u64 = 0;
-            for _ in 0..num_tiles {
-                let mut ram = vec![0u32; RAM_WORDS];
-                for (j, &w) in cartridge.iter().enumerate() {
-                    if j < RAM_WORDS {
-                        ram[j] = w;
-                    }
+                // Warm-up (first GPU dispatch pays pipeline/driver startup).
+                if num_tiles == 1 {
+                    executor.run_tiles(&mut tile_data, 1).unwrap();
+                    tile_data = init_tile_states(num_tiles, cartridge, *max_steps);
                 }
-                let mut vm = gpu_reference::ReferenceVm::new(ram);
-                vm.run(*max_steps);
-                cpu_insts += vm.instruction_count as u64;
-            }
-            let cpu_ms = t_cpu.elapsed().as_secs_f64() * 1000.0;
 
-            eprintln!(
+                let t_gpu = Instant::now();
+                executor
+                    .run_tiles(&mut tile_data, num_tiles as u32)
+                    .unwrap();
+                let gpu_ms = t_gpu.elapsed().as_secs_f64() * 1000.0;
+                let gpu_insts: u64 = (0..num_tiles)
+                    .map(|i| tile_data[i * TILE_STATE_WORDS + 34] as u64)
+                    .sum();
+
+                let t_cpu = Instant::now();
+                let mut cpu_insts: u64 = 0;
+                for _ in 0..num_tiles {
+                    let mut ram = vec![0u32; RAM_WORDS];
+                    for (j, &w) in cartridge.iter().enumerate() {
+                        if j < RAM_WORDS {
+                            ram[j] = w;
+                        }
+                    }
+                    let mut vm = gpu_reference::ReferenceVm::new(ram);
+                    vm.run(*max_steps);
+                    cpu_insts += vm.instruction_count as u64;
+                }
+                let cpu_ms = t_cpu.elapsed().as_secs_f64() * 1000.0;
+
+                eprintln!(
                 "[bench] tiles={:>3} | GPU: {:>7.2}ms ({:>8} insts, {:>6.1} Minst/s) | CPU: {:>7.2}ms ({:>8} insts, {:>6.1} Minst/s) | ratio={:.2}x",
                 num_tiles,
                 gpu_ms,
@@ -565,7 +568,7 @@ mod tests {
                 (cpu_insts as f64) / (cpu_ms * 1000.0),
                 gpu_ms / cpu_ms
             );
-        }
+            }
         }
     }
 }

@@ -123,13 +123,11 @@ pub fn encode_pixel_surface(width: usize, height: usize) -> Vec<u32> {
         // Directory index entry (row 0, col 2+file_idx)
         let idx_col = 2 + file_count as usize;
         if idx_col < width {
-            surface[idx_col] =
-                ((current_row as u32) << 16) | ((name_hash as u32) & 0xFFFF);
+            surface[idx_col] = ((current_row as u32) << 16) | ((name_hash as u32) & 0xFFFF);
         }
 
         // File header at (current_row, 0)
-        let header_pixel =
-            ((byte_count as u32) << 16) | (((name_hash as u32) & 0xFF) << 8) | 0x01; // valid flag
+        let header_pixel = ((byte_count as u32) << 16) | (((name_hash as u32) & 0xFF) << 8) | 0x01; // valid flag
         surface[current_row * width] = header_pixel;
 
         // Data pixels starting at (current_row, 1)

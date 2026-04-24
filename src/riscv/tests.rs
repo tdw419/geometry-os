@@ -682,9 +682,8 @@ fn test_c_hello_world_bare_metal() {
                 .ok();
             match status {
                 Some(s) if s.success() => {
-                    let build_path =
-                        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                            .join("examples/riscv-hello/hello.elf");
+                    let build_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("examples/riscv-hello/hello.elf");
                     std::fs::read(&build_path).unwrap_or_else(|e| {
                         panic!(
                             "Built hello.elf but can't read it: {} ({:?})",
@@ -765,7 +764,9 @@ fn test_asm_hello_world_bare_metal() {
 
     let mut uart_str = String::new();
     for &ch in &canvas {
-        if ch == 0 { break; }
+        if ch == 0 {
+            break;
+        }
         uart_str.push((ch & 0xFF) as u8 as char);
     }
 
@@ -815,13 +816,8 @@ fn test_vfs_pixel_surface_cat() {
     };
 
     // Ensure test fixture exists
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".geometry_os/fs/test.txt");
-    assert!(
-        fixture.exists(),
-        "Test fixture missing: {:?}",
-        fixture
-    );
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".geometry_os/fs/test.txt");
+    assert!(fixture.exists(), "Test fixture missing: {:?}", fixture);
 
     eprintln!("vfs_pixel_cat ELF size: {} bytes", elf_data.len());
 
@@ -831,9 +827,15 @@ fn test_vfs_pixel_surface_cat() {
     // Verify the VFS surface loaded the file
     let magic = vm.bus.vfs_surface.pixels[0];
     let file_count = vm.bus.vfs_surface.pixels[1];
-    eprintln!("VFS surface: magic=0x{:08X} file_count={}", magic, file_count);
+    eprintln!(
+        "VFS surface: magic=0x{:08X} file_count={}",
+        magic, file_count
+    );
     assert_eq!(magic, 0x50584653, "PXFS magic should be present");
-    assert!(file_count >= 1, "Should have at least one file in VFS surface");
+    assert!(
+        file_count >= 1,
+        "Should have at least one file in VFS surface"
+    );
 
     let result = vm
         .boot_guest(&elf_data, 1, 500_000)

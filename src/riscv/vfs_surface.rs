@@ -115,7 +115,8 @@ impl VfsSurface {
             // Write File Header Pixel: [byte_count(16) | name_hash_8(8) | flags(8)]
             // flags: bit 0 = valid
             let flags = 1u32;
-            let header_pixel = ((byte_count as u32) << 16) | ((name_hash as u32 & 0xFF) << 8) | flags;
+            let header_pixel =
+                ((byte_count as u32) << 16) | ((name_hash as u32 & 0xFF) << 8) | flags;
             self.pixels[current_row * 256] = header_pixel;
 
             // Write Data Pixels

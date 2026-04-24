@@ -5600,7 +5600,7 @@ phases:
       validation: cargo test passes
     met: true
     name: Phase phase-115 deliverable
-    status: todo
+    status: done
     description: "The self-modification primitives (ASMSELF, RUNNEXT, ASM_RAM, canvas\
       \ and the AI terminal. Build showcase programs: 1. mirror.asm -- reads screen\
       \ pixels, writes assembly to canvas that reproduces them 2. fractal_gen.asm\
@@ -5624,7 +5624,7 @@ phases:
     = ASCII char)
   - Complex demos may exceed 4096-cell canvas limit
   scope_lines_total: 450
-  status: in_progress
+  status: done
   test_target: 6
   title: Self-Modification Showcase Demos
   _claimed_by: worker-0

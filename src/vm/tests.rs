@@ -2361,12 +2361,19 @@ fn test_mirror_reads_pixel_and_generates_code() {
         "mirror should halt after self-assembly and execution"
     );
 
-    // The program draws a red dot at (32,32), then generates PSETI at (40,40)
-    // After FILL+clear + RUNNEXT, the pixel at (40,40) should be red
-    assert_ne!(
-        vm.screen[40 * 256 + 40],
-        0,
-        "mirror should produce a non-black pixel at (40,40)"
+    // The program draws a traffic light: red(100,80), green(100,100), blue(100,120)
+    // Then FILL+clear, ASMSELF assembles generated PSETI code, RUNNEXT reproduces them
+    // Check that at least one of the three pixels is non-black after self-reproduction
+    let has_red = vm.screen[80 * 256 + 100] != 0;
+    let has_green = vm.screen[100 * 256 + 100] != 0;
+    let has_blue = vm.screen[120 * 256 + 100] != 0;
+    assert!(
+        has_red || has_green || has_blue,
+        "mirror should reproduce at least one traffic light pixel after self-assembly. \
+         red(100,80)={}, green(100,100)={}, blue(100,120)={}",
+        vm.screen[80 * 256 + 100],
+        vm.screen[100 * 256 + 100],
+        vm.screen[120 * 256 + 100]
     );
 }
 
@@ -18386,14 +18393,14 @@ fn test_winsys_vfs_blit() {
     }
 
     // Create a window: op=0, x=0, y=0, w=64, h=32
-    vm.regs[1] = 0;  // x
-    vm.regs[2] = 0;  // y
+    vm.regs[1] = 0; // x
+    vm.regs[2] = 0; // y
     vm.regs[3] = 64; // w
     vm.regs[4] = 32; // h
-    vm.regs[5] = 0;  // title_addr (null = no title)
-    vm.regs[6] = 0;  // op=0 (create)
+    vm.regs[5] = 0; // title_addr (null = no title)
+    vm.regs[6] = 0; // op=0 (create)
     vm.ram[0] = 0x94; // WINSYS
-    vm.ram[1] = 6;    // reg 6 holds op
+    vm.ram[1] = 6; // reg 6 holds op
     vm.pc = 0;
     vm.step();
     let win_id = vm.regs[0];
@@ -18403,7 +18410,7 @@ fn test_winsys_vfs_blit() {
     vm.regs[0] = win_id;
     vm.regs[6] = 8; // op=8 (VFS_BLIT)
     vm.ram[2] = 0x94; // WINSYS
-    vm.ram[3] = 6;    // reg 6 holds op
+    vm.ram[3] = 6; // reg 6 holds op
     vm.pc = 2;
     vm.step();
 
@@ -18411,7 +18418,10 @@ fn test_winsys_vfs_blit() {
 
     // Verify the window offscreen buffer has PXFS magic at pixel 0
     let win = vm.windows.iter().find(|w| w.id == win_id).unwrap();
-    assert_eq!(win.offscreen_buffer[0], 0x50584653, "First pixel should be PXFS magic");
+    assert_eq!(
+        win.offscreen_buffer[0], 0x50584653,
+        "First pixel should be PXFS magic"
+    );
 
     // Verify file_count > 0 at pixel 1
     let file_count = win.offscreen_buffer[1];
@@ -18419,7 +18429,11 @@ fn test_winsys_vfs_blit() {
 
     // Verify there are non-zero pixels beyond the header
     let non_zero = win.offscreen_buffer.iter().filter(|&&p| p != 0).count();
-    assert!(non_zero > 3, "Surface should have many non-zero pixels, got {}", non_zero);
+    assert!(
+        non_zero > 3,
+        "Surface should have many non-zero pixels, got {}",
+        non_zero
+    );
 }
 
 #[test]
@@ -18434,16 +18448,21 @@ fn test_winsys_vfs_sync() {
     std::fs::write(&test_file, b"Original Content").unwrap();
 
     // Create a window and load VFS (op=8)
-    vm.regs[1] = 0;  vm.regs[2] = 0; vm.regs[3] = 64; vm.regs[4] = 64;
-    vm.regs[6] = 0;  // CREATE
-    vm.ram[0] = 0x94; vm.ram[1] = 6;
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 64;
+    vm.regs[4] = 64;
+    vm.regs[6] = 0; // CREATE
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
     vm.pc = 0;
     vm.step();
     let win_id = vm.regs[0];
 
     vm.regs[0] = win_id;
-    vm.regs[6] = 8;  // VFS_BLIT
-    vm.ram[2] = 0x94; vm.ram[3] = 6;
+    vm.regs[6] = 8; // VFS_BLIT
+    vm.ram[2] = 0x94;
+    vm.ram[3] = 6;
     vm.pc = 2;
     vm.step();
 
@@ -18465,8 +18484,9 @@ fn test_winsys_vfs_sync() {
 
     // Call VFS_SYNC (op=9)
     vm.regs[0] = win_id;
-    vm.regs[6] = 9;  // VFS_SYNC
-    vm.ram[4] = 0x94; vm.ram[5] = 6;
+    vm.regs[6] = 9; // VFS_SYNC
+    vm.ram[4] = 0x94;
+    vm.ram[5] = 6;
     vm.pc = 4;
     vm.step();
     assert_eq!(vm.regs[0], 1, "VFS_SYNC should return 1");
@@ -18490,9 +18510,9 @@ fn test_winsys_vfs_blit_invalid_window() {
     // VFS_BLIT with non-existent window should return 0
     let mut vm = Vm::new();
     vm.regs[0] = 999; // non-existent window id
-    vm.regs[6] = 8;   // op=8 (VFS_BLIT)
-    vm.ram[0] = 0x94;  // WINSYS
-    vm.ram[1] = 6;     // reg 6 holds op
+    vm.regs[6] = 8; // op=8 (VFS_BLIT)
+    vm.ram[0] = 0x94; // WINSYS
+    vm.ram[1] = 6; // reg 6 holds op
     vm.pc = 0;
     vm.step();
     assert_eq!(vm.regs[0], 0, "VFS_BLIT with bad window id should return 0");

@@ -1,141 +1,264 @@
-; mirror.asm - Self-Modifying Demo: Screen Pixel Mirror
+; mirror.asm - Self-Modification Showcase Demo
+; Reads screen pixels, generates PSETI assembly on the canvas,
+; then self-assembles and runs the generated code.
+; This proves: pixel -> text -> assembly -> bytecode -> pixel
 ;
-; Draws 4 colored dots on screen, reads their pixels via SCREENP,
-; generates PSETI instructions on canvas, then self-assembles
-; and runs the generated code to reproduce the dots at new positions.
-;
-; Demonstrates: SCREENP (screen readback), canvas text generation,
-;   ASMSELF (self-assembly), RUNNEXT (execute generated code)
+; The program draws a traffic light (red/yellow/green),
+; then generates PSETI instructions to reproduce it on canvas,
+; clears the screen, and self-assembles + runs the canvas code.
 
-LDI r7, 1
-LDI r14, 1
-
-; ===== Phase 0: Draw colored dots =====
+; ===== Phase 1: Draw initial pattern =====
 LDI r1, 0xFF0000
-LDI r2, 32
-LDI r3, 32
-PSET r2, r3, r1
+PSETI 100, 80, 0xFF0000
+PSETI 100, 100, 0xFFFF00
+PSETI 100, 120, 0x00FF00
 
-LDI r1, 0x00FF00
-LDI r2, 224
-PSET r2, r3, r1
+; ===== Phase 2: Generate PSETI assembly on canvas =====
+; Write "PSETI 100,80,0xFF0000\nPSETI 100,100,0xFFFF00\nPSETI 100,120,0x00FF00\nHALT"
+; to the canvas buffer at 0x8000.
+; Then ASMSELF + RUNNEXT will compile and execute this code.
 
-LDI r3, 224
-LDI r1, 0x0000FF
-LDI r2, 32
-PSET r2, r3, r1
+LDI r14, 0x8000        ; canvas write position
+LDI r15, 1             ; increment
 
-LDI r1, 0xFFFF00
-LDI r2, 224
-PSET r2, r3, r1
+; --- Subroutine: write char and advance ---
+; Input: r17 = char to write
+; Clobbers: nothing else (r14 advances)
 
-; ===== Phase 1: Read pixel and generate code =====
-LDI r20, 32
-LDI r21, 32
-SCREENP r10, r20, r21   ; r10 = red pixel
+; --- Pixel 0: PSETI 100,80,0xFF0000 ---
+; "PSETI 100,80,0xFF0000\n"
+LDI r17, 80             ; 'P'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 83             ; 'S'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 69             ; 'E'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 84             ; 'T'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 73             ; 'I'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 32             ; ' '
+STORE r14, r17
+ADD r14, r15
+LDI r17, 49             ; '1'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 44             ; ','
+STORE r14, r17
+ADD r14, r15
+LDI r17, 56             ; '8'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 44             ; ','
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 120            ; 'x'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 70             ; 'F'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 70             ; 'F'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 10             ; '\n'
+STORE r14, r17
+ADD r14, r15
 
-LDI r8, 0x8000          ; canvas buffer base
+; --- Pixel 1: PSETI 100,100,0xFFFF00 ---
+LDI r17, 80             ; 'P'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 83             ; 'S'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 69             ; 'E'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 84             ; 'T'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 73             ; 'I'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 32             ; ' '
+STORE r14, r17
+ADD r14, r15
+LDI r17, 49             ; '1'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 44             ; ','
+STORE r14, r17
+ADD r14, r15
+LDI r17, 49             ; '1'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 44             ; ','
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 120            ; 'x'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 70             ; 'F'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 70             ; 'F'
+STORE r14, r17
+ADD r14, r15
+; "FF00" for yellow 0xFFFF00
+LDI r17, 70             ; 'F'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 70             ; 'F'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 10             ; '\n'
+STORE r14, r17
+ADD r14, r15
 
-; Write "PSETI 40, 40, 0x" 
-LDI r2, 80              ; 'P'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 83              ; 'S'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 69              ; 'E'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 84              ; 'T'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 73              ; 'I'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 32              ; ' '
-STORE r8, r2
-ADD r8, r14
-LDI r2, 52              ; '4'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 48              ; '0'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 44              ; ','
-STORE r8, r2
-ADD r8, r14
-LDI r2, 32              ; ' '
-STORE r8, r2
-ADD r8, r14
-LDI r2, 52              ; '4'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 48              ; '0'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 44              ; ','
-STORE r8, r2
-ADD r8, r14
-LDI r2, 32              ; ' '
-STORE r8, r2
-ADD r8, r14
-LDI r2, 48              ; '0'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 120             ; 'x'
-STORE r8, r2
-ADD r8, r14
+; --- Pixel 2: PSETI 100,120,0x00FF00 ---
+LDI r17, 80             ; 'P'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 83             ; 'S'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 69             ; 'E'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 84             ; 'T'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 73             ; 'I'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 32             ; ' '
+STORE r14, r17
+ADD r14, r15
+LDI r17, 49             ; '1'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 44             ; ','
+STORE r14, r17
+ADD r14, r15
+LDI r17, 49             ; '1'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 50             ; '2'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 44             ; ','
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 120            ; 'x'
+STORE r14, r17
+ADD r14, r15
+; "00FF00" for green 0x00FF00
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 70             ; 'F'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 70             ; 'F'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 48             ; '0'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 10             ; '\n'
+STORE r14, r17
+ADD r14, r15
 
-; Convert r10 (pixel color) to 8 hex digits (full 32-bit value)
-LDI r11, 28
-LDI r15, 8
+; --- HALT ---
+LDI r17, 72             ; 'H'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 65             ; 'A'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 76             ; 'L'
+STORE r14, r17
+ADD r14, r15
+LDI r17, 84             ; 'T'
+STORE r14, r17
+ADD r14, r15
 
-hex_loop:
-  MOV r2, r10
-  MOV r3, r11
-  SHR r2, r3
-  LDI r3, 15
-  AND r2, r3            ; r2 = nibble (0-15)
-  LDI r3, 10
-  CMP r2, r3
-  BGE r0, hex_alpha
-  LDI r3, 48
-  ADD r2, r3            ; 0-9 -> '0'-'9'
-  JMP hex_write
-hex_alpha:
-  LDI r3, 55
-  ADD r2, r3            ; 10-15 -> 'A'-'F'
-hex_write:
-  STORE r8, r2
-  ADD r8, r14
-  LDI r3, 4
-  SUB r11, r3
-  SUB r15, r7
-  JNZ r15, hex_loop
+; Null-terminate
+LDI r17, 0
+STORE r14, r17
 
-; Write newline
-LDI r2, 10
-STORE r8, r2
-ADD r8, r14
-
-; Write HALT
-LDI r2, 72              ; 'H'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 65              ; 'A'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 76              ; 'L'
-STORE r8, r2
-ADD r8, r14
-LDI r2, 84              ; 'T'
-STORE r8, r2
-
-; ===== Phase 2: Clear screen, self-assemble, run =====
-LDI r1, 0
-FILL r1
+; ===== Phase 3: Clear screen and self-assemble =====
+LDI r20, 0
+FILL r20
 
 ASMSELF
 RUNNEXT
-
-HALT

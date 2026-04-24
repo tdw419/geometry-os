@@ -1439,10 +1439,8 @@ impl Vm {
                             if let Some(w) =
                                 self.windows.iter_mut().find(|w| w.id == win_id && w.active)
                             {
-                                let surface = crate::vfs::encode_pixel_surface(
-                                    w.w as usize,
-                                    w.h as usize,
-                                );
+                                let surface =
+                                    crate::vfs::encode_pixel_surface(w.w as usize, w.h as usize);
                                 // Blit surface into window offscreen buffer
                                 let buf_len = w.offscreen_buffer.len();
                                 for (i, &px) in surface.iter().enumerate() {
