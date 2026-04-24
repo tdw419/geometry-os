@@ -5640,7 +5640,7 @@ phases:
       validation: walking into an entity opens its window/content
     met: true
     name: Phase phase-116 deliverable
-    status: todo
+    status: done
     description: 'The map exists. Buildings can be entered to launch apps. But there
       are no "living" entities -- things that move, respond, or evolve on their own.
       Add map entities: program-nodes that display running VM output, and agent-nodes
@@ -5662,7 +5662,7 @@ phases:
   - Process-per-entity could hit scheduler limits
   - Entity state persistence across frames needs careful design
   scope_lines_total: 500
-  status: in_progress
+  status: done
   test_target: 8
   title: Living Map Entities
   _claimed_by: worker-0
