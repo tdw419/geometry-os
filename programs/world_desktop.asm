@@ -659,6 +659,90 @@ STORE r17, r18          ; CMD_LEN = 0
 LDI r17, 0x7872
 STORE r17, r18          ; ORACLE_RESP_READY = 0
 
+
+; ===== Entity Table at RAM[0x7900] =====
+; Living map entities: program-nodes and agent-nodes.
+; Layout: RAM[0x7900]=count, entries at 0x7901+ (5 words each):
+;   [world_x, world_y, type, dir_seed, anim_frame]
+;   type: 0=program-node (pulsing display), 1=agent-node (wandering)
+;   dir_seed: packed (direction<<16 | seed), direction 0-3 for agent wander
+;   anim_frame: animation counter, incremented each update tick
+
+LDI r20, 0x7900
+LDI r17, 4
+STORE r20, r17               ; entity_count = 4
+
+; Entity 0: program-node at (42, 35)
+ADDI r20, 1
+LDI r17, 42
+STORE r20, r17               ; world_x
+ADDI r20, 1
+LDI r17, 35
+STORE r20, r17               ; world_y
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; type = program-node
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; dir_seed = 0
+ADDI r20, 1
+STORE r20, r17               ; anim_frame = 0
+
+; Entity 1: program-node at (88, 60)
+ADDI r20, 1
+LDI r17, 88
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 60
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17               ; type = program-node
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17
+ADDI r20, 1
+STORE r20, r17
+
+; Entity 2: agent-node at (55, 45)
+ADDI r20, 1
+LDI r17, 55
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 45
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 1
+STORE r20, r17               ; type = agent-node
+ADDI r20, 1
+LDI r17, 0x00020000
+STORE r20, r17               ; dir_seed = dir=2, seed=0
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17
+
+; Entity 3: agent-node at (70, 30)
+ADDI r20, 1
+LDI r17, 70
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 30
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 1
+STORE r20, r17               ; type = agent-node
+ADDI r20, 1
+LDI r17, 0x00010000
+STORE r20, r17               ; dir_seed = dir=1, seed=0
+ADDI r20, 1
+LDI r17, 0
+STORE r20, r17
+
+; RAM[0x7920] = entity_nearby_idx (-1 = none, 0..3 = entity player is touching)
+LDI r20, 0x7920
+LDI r17, 0xFFFFFFFF
+STORE r20, r17
+
 ; ===== Main Loop =====
 main_loop:
 

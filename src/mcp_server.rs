@@ -148,6 +148,18 @@ fn get_tool_list() -> Vec<serde_json::Value> {
             vm_disasm_schema(),
         ),
         tool("vm_save", "Save VM state to disk", vec![], vm_save_schema()),
+        tool(
+            "vm_save_asm",
+            "Save canvas content to programs/<name>.asm on disk",
+            vec![param("name", "string", "Program name (saved as programs/<name>.asm)", true)],
+            vm_save_asm_schema(),
+        ),
+        tool(
+            "vm_load_source",
+            "Load multi-line ASM source into canvas (clears canvas first). Use \\n for newlines.",
+            vec![param("source", "string", "Full ASM source text", true)],
+            vm_load_source_schema(),
+        ),
         // -- Phase 84: Building & Desktop Tools --
         tool(
             "building_list",
@@ -449,6 +461,12 @@ fn vm_disasm_schema() -> serde_json::Value {
 fn vm_save_schema() -> serde_json::Value {
     serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}}})
 }
+fn vm_save_asm_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}, "filename": {"type": "string"}, "lines": {"type": "integer"}}})
+}
+fn vm_load_source_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}, "cursor": {"type": "string"}}})
+}
 fn building_list_schema() -> serde_json::Value {
     serde_json::json!({"type": "object", "properties": {"buildings": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "world_x": {"type": "integer"}, "world_y": {"type": "integer"}, "type_color": {"type": "string"}, "name": {"type": "string"}}}}}})
 }
@@ -740,6 +758,26 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
         "vm_save" => {
             let resp = send_socket_cmd("save")?;
             Ok(serde_json::json!({ "ok": true, "response": resp }))
+        }
+
+        "vm_save_asm" => {
+            let name = args["name"]
+                .as_str()
+                .ok_or("Missing 'name' parameter")?;
+            let resp = send_socket_cmd(&format!("save_asm {}", name))?;
+            let ok = resp.contains("[saved:");
+            Ok(serde_json::json!({ "ok": ok, "response": resp }))
+        }
+
+        "vm_load_source" => {
+            let source = args["source"]
+                .as_str()
+                .ok_or("Missing 'source' parameter")?;
+            // Convert real newlines to \n (backslash-n) for socket protocol
+            let escaped = source.replace('\n', "\\n");
+            let resp = send_socket_cmd(&format!("load_source {}", escaped))?;
+            let ok = resp.contains("[loaded:");
+            Ok(serde_json::json!({ "ok": ok, "response": resp }))
         }
 
         // ── Phase 84: Building & Desktop Tool Handlers ──────

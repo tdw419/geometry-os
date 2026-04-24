@@ -1194,6 +1194,95 @@ fn main() {
                                 scroll_offset = 0;
                                 term_output_row = 0;
                             }
+                            "save_asm" => {
+                                // Dump canvas text content to programs/<name>.asm on disk.
+                                // Usage: save_asm <name>   -> writes to programs/<name>.asm
+                                if let Some(name) = parts.get(1) {
+                                    // Sanitize name: only alphanumerics, underscores, hyphens
+                                    let safe: String = name.chars()
+                                        .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+                                        .collect();
+                                    if safe.is_empty() {
+                                        response.push_str("[error: empty name after sanitization]\n");
+                                    } else {
+                                        let filename = format!("programs/{}.asm", safe);
+                                        let mut source = String::new();
+                                        for row in 0..CANVAS_MAX_ROWS {
+                                            let mut ln = String::new();
+                                            for col in 0..CANVAS_COLS {
+                                                let val = canvas_buffer[row * CANVAS_COLS + col];
+                                                if val > 0 && val < 128 {
+                                                    ln.push(val as u8 as char);
+                                                } else {
+                                                    ln.push(' ');
+                                                }
+                                            }
+                                            let trimmed = ln.trim_end();
+                                            if !trimmed.is_empty() {
+                                                source.push_str(trimmed);
+                                                source.push('\n');
+                                            }
+                                        }
+                                        match std::fs::write(&filename, &source) {
+                                            Ok(()) => {
+                                                let lines = source.lines().count();
+                                                response.push_str(&format!(
+                                                    "[saved: {} ({} lines, {} bytes)]\n",
+                                                    filename, lines, source.len()
+                                                ));
+                                            }
+                                            Err(e) => {
+                                                response.push_str(&format!(
+                                                    "[save_asm error: {}]\n", e
+                                                ));
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    response.push_str("[usage: save_asm <name>]\n");
+                                }
+                            }
+                            "load_source" => {
+                                // Bulk-load multi-line source into canvas, replacing the
+                                // clunky type \\n dance. Usage: load_source <full source text>
+                                // Newlines can be literal \n (backslash-n) or actual newlines
+                                // (socket protocol usually strips real newlines per line, so
+                                // this accepts the rest of the line after "load_source ").
+                                canvas_buffer.fill(0);
+                                cursor_row = 0;
+                                cursor_col = 0;
+                                scroll_offset = 0;
+                                term_output_row = 0;
+                                if line.len() > 12 {
+                                    let text = line[12..].replace("\\n", "\n");
+                                    for ch in text.chars() {
+                                        if ch == '\n' {
+                                            cursor_col = 0;
+                                            cursor_row += 1;
+                                            if cursor_row >= CANVAS_MAX_ROWS {
+                                                cursor_row = CANVAS_MAX_ROWS - 1;
+                                            }
+                                        } else if cursor_col < CANVAS_COLS {
+                                            canvas_buffer[cursor_row * CANVAS_COLS + cursor_col] =
+                                                ch as u32;
+                                            cursor_col += 1;
+                                            if cursor_col >= CANVAS_COLS {
+                                                cursor_col = 0;
+                                                cursor_row += 1;
+                                                if cursor_row >= CANVAS_MAX_ROWS {
+                                                    cursor_row = CANVAS_MAX_ROWS - 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    response.push_str(&format!(
+                                        "[loaded: cursor at ({},{})]\n",
+                                        cursor_row, cursor_col
+                                    ));
+                                } else {
+                                    response.push_str("[usage: load_source <asm source with \\n for newlines>]\n");
+                                }
+                            }
                             "status" => {
                                 response.push_str(&format!(
                                     "mode={:?} running={} assembled={} pc=0x{:04X} cursor=({},{})\n",
@@ -1602,7 +1691,7 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             "loadasm" => {
