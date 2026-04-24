@@ -657,3 +657,54 @@ fn test_rdtime_advances_with_clint_tick() {
     }
     assert_eq!(vm.cpu.x[13], 11);
 }
+
+#[test]
+fn test_c_hello_world_bare_metal() {
+    // Boot a bare-metal RISC-V program compiled from C/assembly
+    // through the Geometry OS hypervisor and verify UART output.
+    //
+    // Build (RV32IMAC!): cd /tmp/geo_c_test && ./build.sh hello.c
+    // NOTE: Geometry OS CPU is RV32 -- do NOT use rv64imac/lp64.
+    let elf_path = "/tmp/geo_c_test/hello.elf";
+    let elf_data = match std::fs::read(elf_path) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln!("Skipping: {} not found (build with /tmp/geo_c_test/build.sh)", elf_path);
+            return;
+        }
+    };
+
+    eprintln!("ELF size: {} bytes", elf_data.len());
+
+    let mut vm = RiscvVm::new(1024 * 1024);
+    let mut bridge = UartBridge::new();
+
+    let result = vm.boot_guest(&elf_data, 1, 500_000).expect("boot should succeed");
+
+    eprintln!(
+        "Boot: {} instructions, entry=0x{:08X}",
+        result.instructions, result.entry
+    );
+
+    // Drain UART to canvas buffer
+    let mut canvas = make_canvas();
+    let drained = bridge.drain_uart_to_canvas(&mut vm.bus, &mut canvas);
+    eprintln!("UART drained: {} bytes", drained);
+
+    // Extract string from canvas
+    let mut uart_str = String::new();
+    for &ch in &canvas {
+        if ch == 0 {
+            break;
+        }
+        uart_str.push((ch & 0xFF) as u8 as char);
+    }
+
+    eprintln!("UART output: {:?}", uart_str);
+
+    assert!(
+        uart_str.contains("hello from C"),
+        "Expected 'hello from C' in UART output, got: {:?}",
+        uart_str
+    );
+}
