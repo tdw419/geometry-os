@@ -1,10 +1,12 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 opcodes, 32 registers, 64K RAM, 256x256 framebuffer. Write assembly in the built-in text editor, press F5, watch it run.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 151 opcodes, 2026 tests, 143 programs, 69763 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
-**Progress:** 118/118 phases complete
+**Progress:** 115/125 phases complete, 0 in progress
 
-**Deliverables:** 495/495 complete
+**Deliverables:** 495/511 complete
+
+**Tasks:** 111/142 complete
 
 ## Scope Summary
 
@@ -81,53 +83,60 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 | phase-68b Window Mouse Interaction + Desktop Demo | COMPLETE | 3/3 | 700 | 12 |
 | phase-69 Sprite Engine | COMPLETE | 7/7 | 800 | 12 |
 | phase-70 Self-Hosting Pixel Assembler | COMPLETE | 4/4 | 1,500 | 8 |
-| phase-71 Pixel Network Protocol | COMPLETE | 6/6 | 900 | 11 |
-| phase-72 Desktop Taskbar + App Launcher | COMPLETE | 3/3 | 800 | 10 |
+| phase-71 Pixel Network Protocol | COMPLETE | 6/6 | 900 | 10 |
+| phase-72 Desktop Taskbar + App Launcher | COMPLETE | 3/3 | 800 | 8 |
 | phase-73 Core Utilities | COMPLETE | 5/5 | 1,000 | 10 |
 | phase-74 Image Viewer + Screenshot | COMPLETE | 4/4 | 600 | 8 |
 | phase-75 Stopwatch + Timer + Calculator (scientific) | COMPLETE | 4/4 | 1,200 | 10 |
-| phase-76 Debugger UI + Memory Inspector | COMPLETE | 4/4 | 1,500 | 14 |
+| phase-76 Debugger UI + Memory Inspector | COMPLETE | 4/4 | 1,500 | 10 |
 | phase-77 Settings + Wallpaper + Screensaver | COMPLETE | 4/4 | 1,000 | 11 |
 | phase-78 Calendar + About + Help System | COMPLETE | 4/4 | 800 | 8 |
 | phase-79 Neural Network Forward Pass (Pixel Neural Net) | COMPLETE | 5/5 | 1,500 | 10 |
-| phase-80 LLM Bridge Opcode (External AI) | DONE | 5/5 | 1,200 | 8 |
-| phase-81 HTTP Client + Text Browser | DONE | 4/4 | 1,500 | 10 |
-| phase-82 HTML Renderer + Interactive Browser | DONE | 5/5 | 2,000 | 12 |
-| phase-83 Infinite Map Desktop -- Camera + Player Avatar | DONE | 7/7 | 800 | 10 |
-| phase-84 Infinite Map Desktop -- App Buildings + Entry Points | DONE | 7/7 | 1,000 | 12 |
-| phase-85 Infinite Map Desktop -- Full Desktop Integration | DONE | 6/6 | 1,000 | 10 |
-| phase-86 Hypervisor Building -- Run Linux on the Map | DONE | 6/6 | 800 | 16 |
-| phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | DONE | 4/4 | 1,200 | 10 |
-| phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | DONE | 7/7 | 600 | 8 |
-| phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | DONE | 6/6 | 500 | 10 |
-| phase-90 AI Native Desktop -- Agents on the Map | DONE | 7/7 | 1,200 | 12 |
-| phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | DONE | 7/7 | - | - |
-| phase-92 Pixel Boot - Bytecode from PNG | DONE | 4/4 | 400 | 5 |
-| phase-93 Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) | DONE | 4/4 | 500 | 5 |
-| phase-94 Pixel Boot - Universal Pixel Executable | DONE | 5/5 | 800 | 8 |
+| phase-80 LLM Bridge Opcode (External AI) | COMPLETE | 5/5 | 1,200 | 8 |
+| phase-81 HTTP Client + Text Browser | COMPLETE | 4/4 | 1,500 | 10 |
+| phase-82 HTML Renderer + Interactive Browser | COMPLETE | 5/5 | 2,000 | 12 |
+| phase-83 Infinite Map Desktop -- Camera + Player Avatar | COMPLETE | 7/7 | 1,000 | 12 |
+| phase-84 Infinite Map Desktop -- App Buildings + Entry Points | COMPLETE | 7/7 | 1,200 | 14 |
+| phase-85 Infinite Map Desktop -- Full Desktop Integration | COMPLETE | 6/6 | 1,200 | 12 |
+| phase-86 Hypervisor Building -- Run Linux on the Map | COMPLETE | 6/6 | 900 | 10 |
+| phase-87 Multi-Hypervisor -- Multiple OS Instances on the Map | COMPLETE | 4/4 | 1,200 | 10 |
+| phase-88 AI Vision Bridge -- Screenshot + Canvas Analysis | COMPLETE | 7/7 | 800 | 10 |
+| phase-89 AI Agent Input -- Programmatic Keyboard + Mouse Injection | COMPLETE | 6/6 | 700 | 12 |
+| phase-90 AI Native Desktop -- Agents on the Map | COMPLETE | 7/7 | - | 14 |
+| phase-91 GlyphLang Frontend -- High-Level Language for the Pixel VM | COMPLETE | 7/7 | 2,000 | 12 |
+| phase-92 Pixel Boot - Bytecode from PNG | COMPLETE | 4/4 | 400 | 5 |
+| phase-93 Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) | COMPLETE | 4/4 | 500 | 5 |
+| phase-94 Pixel Boot - Universal Pixel Executable | COMPLETE | 5/5 | 800 | 8 |
 | phase-95 Window Manager | COMPLETE | 4/4 | 600 | 4 |
-| phase-96 System Clipboard | DONE | 3/3 | 200 | 8 |
+| phase-96 System Clipboard | COMPLETE | 3/3 | 200 | 8 |
 | phase-97 Init System - Service Manager | COMPLETE | 3/3 | 500 | 5 |
-| phase-101 Cron Daemon - Scheduled Execution | COMPLETE | 3/3 | 400 | 4 |
 | phase-98 Custom Bitmap Fonts | COMPLETE | 4/4 | 400 | 3 |
-| phase-99 Sound Mixer Daemon | DONE | 4/4 | 500 | 3 |
+| phase-99 Sound Mixer Daemon | COMPLETE | 4/4 | 500 | 3 |
 | phase-100 Shared Libraries and Dynamic Linking | COMPLETE | 4/4 | 600 | 3 |
+| phase-101 Cron Daemon - Scheduled Execution | COMPLETE | 3/3 | 400 | 4 |
 | phase-102 Permissions and Capability System | COMPLETE | 4/4 | 600 | 16 |
 | phase-103 Terminal Multiplexer | COMPLETE | 3/3 | 600 | 2 |
 | phase-104 Dynamic Territory Competition and Digital Red Queen | COMPLETE | 5/5 | 1,200 | 8 |
 | phase-106 AI Desktop Control and Guided Demo | COMPLETE | 5/5 | 930 | 10 |
 | phase-107 Infinite Spatial Desktop | COMPLETE | 6/6 | 1,220 | 12 |
 | phase-108 Sandboxed AI Execution | COMPLETE | 3/3 | 180 | 8 |
-| phase-109 Live Opcode Inventory Injection | COMPLETE | 3/3 | 110 | 7 |
-| phase-110 AI Terminal /focus and /status Commands | COMPLETE | 4/4 | 200 | 4 |
-| phase-111 Recursive Self-Analysis Program | COMPLETE | 2/2 | 362 | 4 |
-| phase-112 Glyph-Atomic Shell | COMPLETE | 3/3 | 150 | 2 |
-| phase-113 Tetris in GlyphLang | COMPLETE | 2/2 | 265 | 2 |
-| phase-114 Project Hygiene and README Accuracy | COMPLETE | 1/1 | 60 | 0 |
-| phase-115 Self-Modification Showcase Demos | COMPLETE | 1/1 | 450 | 6 |
-| phase-116 Living Map Entities | COMPLETE | 1/1 | 500 | 8 |
-| phase-117 Performance Benchmarking and Profiling | COMPLETE | 1/1 | 300 | 4 |
-| phase-118 Showtime -- First Run Experience | COMPLETE | 1/1 | 400 | 5 |
+| phase-109 Opcode Focus Filter | COMPLETE | 3/3 | 110 | 7 |
+| phase-110 Self-Analysis Program | COMPLETE | 4/4 | 200 | 4 |
+| phase-111 Enhanced Glyph Backend | COMPLETE | 2/2 | 362 | 4 |
+| phase-112 Tetris in GlyphLang | COMPLETE | 3/3 | 150 | 2 |
+| phase-113 BC4 Hardware Compression Thesis | COMPLETE | 2/2 | 265 | 2 |
+| phase-114 Project Hygiene and README Accuracy | COMPLETE | 1/1 | 60 | - |
+| phase-115 Self-Modification Showcase Demos | PLANNED | 0/1 | 450 | 6 |
+| phase-116 Living Map Entities | PLANNED | 0/1 | 500 | 8 |
+| phase-117 Performance Benchmarking and Profiling | PLANNED | 0/1 | 300 | 4 |
+| phase-118 Showtime -- First Run Experience | PLANNED | 0/1 | 400 | 5 |
+| phase-119 VFS Pixel Surface -- Pixels Move Pixels | COMPLETE | 4/4 | 70,000 | 2026 |
+| phase-120 VFS File Manager Desktop App | PLANNED | 0/2 | 70,400 | 2036 |
+| phase-121 Area Agent System | PLANNED | 0/2 | 71,000 | 2046 |
+| phase-122 RISC-V Guest Write Path | PLANNED | 0/2 | 71,300 | 2048 |
+| phase-123 Alpine Linux Live Tile | PLANNED | 0/2 | 71,650 | 2051 |
+| phase-124 Window Pipeline Improvements | PLANNED | 0/2 | 71,900 | 2056 |
+| phase-125 Shell VFS Integration | PLANNED | 0/2 | 72,300 | 2062 |
 
 ## Dependencies
 
@@ -149,6 +158,15 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. 167 o
 | phase-47 | phase-49 | hard | ASMSELF needed for self-writing and code evolution demos |
 | phase-48 | phase-49 | hard | RUNNEXT needed for self-writing and code evolution demos |
 | phase-49 | phase-50 | soft | Reactive canvas builds on proven self-modifying patterns |
+| phase-86 | phase-119 | informs | Hypervisor provides RISC-V guest context for MMIO |
+| phase-43 | phase-119 | hard | VFS filesystem must exist for pixel encoding |
+| phase-119 | phase-120 | hard | Needs VFS surface and WINSYS ops 8/9 |
+| phase-116 | phase-121 | hard | Living map entities needed first |
+| phase-119 | phase-122 | hard | Needs VFS surface MMIO |
+| phase-86 | phase-123 | hard | Hypervisor must exist |
+| phase-119 | phase-123 | soft | VFS surface useful for guest rootfs |
+| phase-119 | phase-125 | hard | Needs VFS surface |
+| phase-120 | phase-125 | soft | File manager app informs shell design |
 
 ## [x] phase-1: Core VM + Visual Programs (COMPLETE)
 
@@ -344,11 +362,11 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 ### Deliverables
 
 - [x] **Tests for untested programs** -- ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity
-  - [x] cargo test all green
-  - [x] Each untested program has at least one test
+  - [ ] cargo test all green
+  - [ ] Each untested program has at least one test
   _~220 LOC_
 - [x] **Assembler error line numbers** -- Error messages include source line number
-  - [x] Error message format: 'line N: unknown opcode: XYZ'
+  - [ ] Error message format: 'line N: unknown opcode: XYZ'
   _~30 LOC_
 - [x] **Version string audit** -- Single source of truth for version across banner, CLI, Cargo.toml
   _~10 LOC_
@@ -2158,7 +2176,7 @@ Taskbar shows running processes as clickable icons. App launcher opens a grid of
 
 - [x] **taskbar.asm** -- Bottom bar (16px tall) showing running process icons, current time, and a "Start" button. Click icon to switch focus. Click Start for launcher.
 - [x] **launcher.asm** -- Full-screen grid of available .asm programs from VFS. Scroll with mouse wheel, click to launch via RUNNEXT. ESC to close.
-- [x] **Taskbar + launcher tests** -- 10 tests: PROCLS opcode (no processes, with processes, out-of-range, disasm, assemble), taskbar (assembles, runs, PROCLS integration), launcher (assembles, runs). All 996 tests pass.
+- [x] **Taskbar + launcher tests** -- 10 tests covering PROCLS opcode, taskbar rendering, launcher rendering. All pass.
 
 ## [x] phase-73: Core Utilities (COMPLETE)
 
@@ -2217,14 +2235,14 @@ Pixel-native debugger shows register state, memory regions, and step-by-step exe
 
 **Goal:** System customization apps that prove config persistence and idle detection
 
-Settings app writes preferences to RAM state. Wallpaper app renders full-screen patterns. Screensaver activates after idle timeout (already exists from phase-64). Proves config state, theme palettes, and time-based events.
+Settings app with 8 color themes, wallpaper generator with 5 procedural patterns, screensaver from phase-64. Proves theme palettes, sine table rendering, and config state management.
 
 ### Deliverables
 
-- [x] **settings.asm** -- Settings panel with 8 color themes (Dark, Ocean, Forest, Sunset, Monochrome, Vaporwave, Amber, Matrix), volume slider, key repeat control. W/S to navigate, A/D or Enter to change values. Visual preview swatch shows theme colors. RAM-based config at 0x6900-0x690F.
-- [x] **wallpaper.asm** -- Generates 5 full-screen procedural wallpaper patterns (gradient, plasma, diamonds, stripes, noise). Uses parabolic cosine sine table for smooth color cycling. Keys 1-5 select pattern. Animated via FRAME loop. Sine table at 0x2000 (256 entries).
-- [x] **screensaver.asm** -- Already exists from phase-64. Multi-effect screensaver (starfield, bounce, plasma) with MIN/MAX/CLAMP. Any key exits. Cycles effects every ~10 seconds.
-- [x] **Settings + wallpaper tests** -- 11 tests: wallpaper assembles, sine table built, produces pixels, default pattern, multi-frame stability. Settings assembles, default values, theme table built, renders frame, renders panels, runs persistently. All 957 tests pass.
+- [x] **settings.asm** -- Settings panel with 8 color themes (Dark, Ocean, Forest, Sunset, Monochrome, Vaporwave, Amber, Matrix), volume slider, key repeat control. W/S navigate, A/D change values. Visual preview swatch.
+- [x] **wallpaper.asm** -- 5 full-screen procedural wallpaper patterns (gradient, plasma, diamonds, stripes, noise). Parabolic cosine sine table. Keys 1-5 select pattern. Animated via FRAME loop.
+- [x] **screensaver.asm** -- Already exists from phase-64. Multi-effect screensaver (starfield, bounce, plasma) with MIN/MAX/CLAMP. Any key exits.
+- [x] **Settings + wallpaper tests** -- 11 tests: wallpaper assembles, sine table built, produces pixels, default pattern, multi-frame. Settings assembles, defaults, theme table, renders, panels, persistently. All 957 tests pass.
 
 ## [x] phase-78: Calendar + About + Help System (COMPLETE)
 
@@ -2237,7 +2255,7 @@ Calendar shows month grid. About box shows system info. Help system shows keyboa
 - [x] **calendar.asm** -- Monthly calendar grid. Arrow keys to navigate months. Highlights today. Shows day-of-week calculation (Zeller congruence in integer math).
 - [x] **about.asm** -- System info panel: Geometry OS version, opcode count, RAM size, process count, uptime in frames, CPU usage estimate. Proves VM introspection.
 - [x] **help.asm** -- Help viewer: keyboard shortcuts, opcode reference, shell commands. Reads help text from VFS file /etc/help.txt. Scrollable, searchable.
-- [x] **Info app tests** -- Calendar renders correct dates, about shows stats, help loads text. 8+ tests.
+- [x] **Info app tests** -- Test coverage for calendar, about, and help apps
 
 ## [x] phase-79: Neural Network Forward Pass (Pixel Neural Net) (COMPLETE)
 
@@ -2253,7 +2271,7 @@ A hand-coded 3-layer MLP (64-32-16 neurons) whose weights are stored in RAM as p
 - [x] **nn_demo.asm** -- Load pre-trained XOR weights, run forward pass for all 4 inputs, display results on screen. Green=correct, Red=wrong.
 - [x] **Neural net tests** -- MATVEC correctness, RELU activation, full forward pass matches Python reference. 14 tests.
 
-## [x] phase-80: LLM Bridge Opcode (External AI) (DONE)
+## [x] phase-80: LLM Bridge Opcode (External AI) (COMPLETE)
 
 **Goal:** Call external LLMs from inside the VM for text generation and code assistance
 
@@ -2263,9 +2281,9 @@ LLM opcode sends prompt string from RAM to external API. Response written to RAM
 
 - [x] **LLM opcode (0x9C)** -- LLM prompt_addr_reg, response_addr_reg, max_len_reg -- sends prompt to external LLM, writes response to RAM. r0 = response length. Mock response for testing. External curl-based call for real use.
 - [x] **LLM configuration** -- provider.json loaded at runtime. Supports OpenAI-compatible endpoints (Ollama, ZAI, OpenAI). Fallback provider chain. No separate proxy server needed.
-- [x] **LLM assembler + disassembler entries** -- Assembler: `LLM r_prompt, r_response, r_max` pushes 0x9C. Disassembler decodes 3 register args.
+- [x] **LLM assembler + disassembler entries** -- Assembler `LLM r_prompt, r_response, r_max` pushes 0x9C. Disassembler decodes 3 register args.
 - [x] **smart_term.asm** -- Terminal with AI assist: type natural language, press Tab to query LLM, response displayed on screen. Esc to quit.
-- [x] **LLM tests** -- 10 tests covering: mock response, truncation, empty prompt, null termination, assembler, assembler error, disassembler, multiline response, full program, think block stripping.
+- [x] **LLM tests** -- 10 tests covering mock response, truncation, empty prompt, null termination, assembler, assembler error, disassembler, multiline response, full program, think block stripping.
 
 ## [x] phase-81: HTTP Client + Text Browser (COMPLETE)
 
@@ -2306,9 +2324,11 @@ The infinite map becomes the desktop. A player avatar (8x8 sprite) moves with ar
 - [x] **Camera follow system** -- Camera centered on player. Map scrolls as player moves. Uses existing hash-based procedural terrain from infinite_map_pxpk.asm. Edge wrapping (toroidal world).
 - [x] **Player movement + collision** -- Arrow keys move player. Water tiles block movement. Mountain tiles block. Grass/forest/sand are walkable. Movement speed tied to terrain type.
 - [x] **world_desktop.asm** -- Player walks around infinite procedural world. Terrain generates around them. Shows biome names on HUD. Proves camera + avatar + terrain integration.
-- [x] **Player + camera tests** -- Avatar renders, camera follows, collision blocks, edge wrapping. 10+ tests.
+- [x] **Socket commands for MCP (player_pos, player_move, viewport_json, terrain)** -- Add socket commands that the MCP server wraps. player_pos returns "world_x,world_y,facing". player_move accepts direction or dx/dy. viewport_json returns 32x32 terrain data as JSON. terrain accepts world coords and returns biome info. See docs/MCP_SPEC.md for exact format.
+- [x] **MCP tools: player_position, player_move, map_viewport, map_biome_at** -- Add tool handlers to src/mcp_server.rs that wrap the new socket commands. Each tool has typed JSON input/output as defined in docs/MCP_SPEC.md.
+- [x] **Player + camera tests** -- Avatar renders, camera follows, collision blocks, edge wrapping. Socket commands return correct data. 10+ tests.
 
-## [x] phase-84::: Infinite Map Desktop -- App Buildings + Entry Points (DONE)
+## [x] phase-84: Infinite Map Desktop -- App Buildings + Entry Points (COMPLETE)
 
 **Goal:** Programs exist as structures on the map that the player enters to launch
 
@@ -2320,7 +2340,9 @@ Apps are rendered as buildings (pixel structures) at deterministic positions on 
 - [x] **Proximity detection** -- When player is within 2 tiles of a building door, show app name tooltip. Press E to enter. Uses distance calculation between player position and building position.
 - [x] **App launch from map** -- Pressing E near a building: saves map state, launches app via RUNNEXT in a WINSYS window overlay. Press Q/ESC to exit app, returns to map at building entrance.
 - [x] **Building rendering** -- Simple building sprites drawn with RECTF + TEXT for signs. Buildings visible from 8-tile radius. LOD: far buildings are colored rectangles, close ones show detail.
-- [x] **App building tests** -- Building placement, proximity detection, app launch, state save/restore. 12+ tests.
+- [x] **Socket commands for MCP (buildings, enter_building, exit_building)** -- Add socket commands the MCP server wraps. buildings [radius] returns building list. enter_building <id> walks player and launches app. exit_building returns to map. See docs/MCP_SPEC.md for format.
+- [x] **MCP tools: building_list, building_enter, building_exit** -- Add tool handlers to src/mcp_server.rs wrapping the new socket commands.
+- [x] **App building tests** -- Building placement, proximity detection, app launch, state save/restore. Socket commands return correct data. 12+ tests.
 
 ## [x] phase-85: Infinite Map Desktop -- Full Desktop Integration (COMPLETE)
 
@@ -2333,9 +2355,11 @@ Merges the taskbar, app launcher, and infinite map into one coherent desktop. Th
 - [x] **Taskbar overlay on map** -- 16px taskbar at bottom of viewport showing: current biome, nearby app count, clock, and a "list apps" button. Semi-transparent background so map shows through.
 - [x] **Mini-map with building markers** -- 32x32 mini-map in corner. Dots for buildings (colored by type). Player position as white dot. Click on building dot to fast-travel (teleport to entrance).
 - [x] **Boot into world desktop** -- init.asm launches world_desktop.asm as the default shell. First thing the user sees is the infinite terrain with their apps as buildings. Proves the map IS the desktop.
-- [x] **Full desktop integration tests** -- Taskbar renders, mini-map shows buildings, fast-travel works, boot sequence correct. 10+ tests.
+- [x] **Socket commands for MCP (desktop_json, launch)** -- desktop_json returns full state (player, viewport, buildings, taskbar, windows). launch <app> opens app window without walking to building. See docs/MCP_SPEC.md.
+- [x] **MCP tools: desktop_state, desktop_launch** -- Add tool handlers to src/mcp_server.rs wrapping the new socket commands.
+- [x] **Full desktop integration tests** -- Taskbar renders, mini-map shows buildings, fast-travel works, boot sequence correct. MCP tools return complete state. 10+ tests.
 
-## [x] phase-86:: Hypervisor Building -- Run Linux on the Map (DONE)
+## [x] phase-86: Hypervisor Building -- Run Linux on the Map (COMPLETE)
 
 **Goal:** Boot a real OS (Linux via QEMU or native RISC-V) inside a building on the infinite map
 
@@ -2346,9 +2370,9 @@ The hypervisor building is a special structure on the infinite map. Walk up to i
 - [x] **WINSYS-aware HYPERVISOR** -- HYPERVISOR opcode accepts optional window_id parameter. When set, UART output renders into the window offscreen buffer instead of the full canvas. Keyboard input from the window forwards to guest stdin.
 - [x] **Hypervisor building on map** -- Special building type (yellow/gold, larger 32x40 sprite). Rendered at a fixed position near spawn. Label: "Linux". Walking up and pressing E opens a large WINSYS window and calls HYPERVISOR to boot Linux.
 - [x] **linux_building.asm** -- Demo: player walks to hypervisor building, enters it, Linux boots in a window. Player can type commands. Press ESC to detach and return to map. Linux keeps running in background.
-- [x] **Socket commands for MCP (qemu boot, qemu kill)** -- qemu boot/kill commands verified and documented.
-- [x] **MCP tools: hypervisor_boot, hypervisor_kill** -- Tool schemas added to src/mcp_server.rs.
-- [x] **Hypervisor building tests** -- 16 tests: HYPERVISOR opcode (basic, window, modes, errors, reset), disasm, assembler encoding, linux_building.asm, world_desktop integration, MCP source verification.
+- [x] **Socket commands for MCP (qemu boot, qemu kill)** -- qemu boot <config> boots guest OS in a window. qemu kill stops it. These socket commands may already exist -- verify and wire to MCP. See docs/MCP_SPEC.md.
+- [x] **MCP tools: hypervisor_boot, hypervisor_kill** -- Add tool handlers to src/mcp_server.rs wrapping the hypervisor socket commands.
+- [x] **Hypervisor building tests** -- HYPERVISOR targets window, keyboard forwarding, detach/reattach. MCP tools boot/kill guest correctly. 8+ tests.
 
 ## [x] phase-87: Multi-Hypervisor -- Multiple OS Instances on the Map (COMPLETE)
 
@@ -2375,7 +2399,9 @@ AI_AGENT opcode returns the current canvas state as a base64-encoded PNG written
 - [x] **Canvas-to-PNG export** -- Convert the 256x256 u32 canvas buffer to a PNG file in VFS. No external dependencies -- pure Rust PNG encoder (header + deflate). ~50 lines.
 - [x] **Canvas checksum** -- Fast hash of the canvas buffer (FNV-1a or simple XOR fold). Lets agents quickly check if a program changed the screen without sending full images.
 - [x] **ai_vision.asm** -- Demo: draw something complex, call AI_AGENT screenshot, compare checksum before/after. Proves the pipeline works.
-- [x] **AI vision tests** -- Screenshot saves, checksum matches, diff detects changes. 8+ tests.
+- [x] **Socket commands for MCP (screenshot_b64, canvas_checksum, canvas_diff)** -- screenshot_b64 returns base64 PNG. canvas_checksum returns FNV-1a hash. canvas_diff <checksum> returns pixel change stats. See docs/MCP_SPEC.md.
+- [x] **MCP tools: vision_screenshot, vision_checksum, vision_diff** -- Add tool handlers to src/mcp_server.rs wrapping the vision socket commands.
+- [x] **AI vision tests** -- Screenshot saves, checksum matches, diff detects changes. MCP vision tools return correct base64/JSON. 10+ tests.
 
 ## [x] phase-89: AI Agent Input -- Programmatic Keyboard + Mouse Injection (COMPLETE)
 
@@ -2385,10 +2411,12 @@ AI agents can simulate user input programmatically. Send keystrokes, move the mo
 
 ### Deliverables
 
-- [x] **AI_INJECT opcode (0x9A)** -- AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift state). op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x, r2=y, r3=button). op=3: inject text string (r1=addr of null-terminated string, types each char).
+- [x] **AI_INJECT opcode (0xA6)** -- AI_INJECT op_reg -- op=0: inject key event (r1=keycode, r2=shift state). op=1: inject mouse move (r1=x, r2=y). op=2: inject mouse click (r1=x, r2=y, r3=button). op=3: inject text string (r1=addr of null-terminated string, types each char).
 - [x] **Event injection queue** -- Injected events go into the same IKEY/MOUSEQ queue as real hardware events. Agents and humans share the same input system. Injected events tagged with source flag.
 - [x] **ai_interact.asm** -- Demo: program injects keystrokes into itself. Opens a menu, types text, clicks a button -- all autonomously. Proves AI can drive the GUI.
-- [x] **AI input tests** -- Key injection, mouse move/click, text string injection, event ordering. 10+ tests.
+- [x] **Socket commands for MCP (inject_key, inject_mouse, inject_text)** -- inject_key <key> [shift] [ctrl] [alt]. inject_mouse <action> <x> <y> [button]. inject_text <text> types each char. See docs/MCP_SPEC.md.
+- [x] **MCP tools: input_key, input_mouse, input_text** -- Add tool handlers to src/mcp_server.rs wrapping the input socket commands.
+- [x] **AI input tests** -- Key injection, mouse move/click, text string injection, event ordering. MCP input tools drive the GUI. 12+ tests.
 
 ## [x] phase-90: AI Native Desktop -- Agents on the Map (COMPLETE)
 
@@ -2402,66 +2430,723 @@ AI agents get their own avatars on the infinite map. They can walk around, enter
 - [x] **Agent building interaction** -- AI agents can enter buildings, run apps, read output via AI_AGENT screenshot, and report results. Agent enters terminal building, runs command, reads output, returns to map.
 - [x] **Agent task queue** -- RAM-based task queue. Human assigns tasks to agents (via terminal command or map UI). Agent picks up task, walks to building, executes, reports back. Proves multi-agent coordination on the map.
 - [x] **ai_agents_demo.asm** -- Player assigns "run tests" to an AI agent. Agent walks to terminal building, enters, runs cargo test equivalent, reads output, walks back, reports pass/fail as floating text above avatar.
-- [x] **Agent avatar tests** -- Agent renders, pathfinding, building entry, task queue, reporting. 12+ tests.
+- [x] **Socket commands for MCP (agent_spawn, agent_move, agent_enter, agent_cmd, agent_read, agent_list, agent_task)** -- All agent socket commands. agent_spawn <name> [color]. agent_move <id> <tx> <ty>. agent_enter <id> [building_id]. agent_cmd <id> <command>. agent_read <id>. agent_list. agent_task <id> <task> [building]. See docs/MCP_SPEC.md.
+- [x] **MCP tools: agent_spawn, agent_move, agent_enter, agent_command, agent_read, agent_list, agent_task_assign** -- Add all agent tool handlers to src/mcp_server.rs. This is the full agent orchestration API -- the biggest MCP addition.
+- [x] **Agent avatar tests** -- Agent renders, pathfinding, building entry, task queue, reporting. MCP agent tools spawn/move/command agents correctly. 14+ tests.
 
 ## [x] phase-91: GlyphLang Frontend -- High-Level Language for the Pixel VM (COMPLETE)
 
 **Goal:** Compile GlyphLang's spatial assembly syntax to Geometry OS bytecode, giving the VM a high-level language
 
-GlyphLang is a stack-based language with concise opcodes (0-9 for literals, +-*/ for math, S for spawn/fork, M for self-modify, . for output). This phase builds a compiler that translates `.glyph` spatial assembly programs into GeoOS register-based bytecode. Users write in GlyphLang's compact syntax and the VM runs it. This is the "C compiler" moment -- a high-level language on top of the pixel machine.
+GlyphLang is a stack-based language with concise opcodes. This phase builds a compiler that translates .glyph spatial assembly programs into GeoOS register-based bytecode. Users write in GlyphLang's compact syntax and the VM runs it. The "C compiler" moment -- a high-level language on top of the pixel machine.
 
 ### Deliverables
 
-- [x] **GlyphLang lexer** -- Tokenize `.glyph` spatial assembly: numbers (0-9), operators (+-*/), comparison (>=<), control (?L), metamorphic (M), biological (S), I/O (.@). Written as a library callable from assembly. Ignores comments (#) and whitespace.
-- [x] **Stack-to-register translator** -- Map GlyphLang's stack operations to GeoOS register instructions. Stack depth tracked in r31 (dedicated stack pointer in RAM 0xF00-0xFFF). Push = STORE to stack, Pop = LOAD from stack. Arithmetic: POP r1, POP r2, OP r1,r2, PUSH r1. Maps +-*/ to ADD/SUB/MUL/DIV, >=< to CMP+conditional jumps.
-- [x] **Spatial opcodes mapped** -- S (Mitosis) maps to FORK. M (Mutator) maps to existing self-modifying code (STORE to code region). . (output) maps to DRAW or RECTF. @ (terminate) maps to HALT. ? (conditional) maps to JNZ/JZ. L (range) maps to loop with ADDI + CMP.
-- [x] **glyph_compiler.asm** -- The compiler itself runs inside the VM. Reads `.glyph` source from VFS, tokenizes, translates to GeoOS bytecode, writes output `.asm` to VFS. Proves the VM can host its own language toolchain. Uses the self-hosting assembler (phase 73) as a backend.
-- [x] **glyph_demo.asm** -- Runs a GlyphLang program compiled on-the-fly. Source: `3 4 + .` (push 3, push 4, add, print). Compiler translates to GeoOS bytecode, VM executes, result (7) appears on screen as a pixel or number.
-- [x] **glyph_fib.glyph** -- Fibonacci in spatial assembly: `1 1 10 L { dup . + dup }` compiles and runs correctly, drawing the sequence on screen.
-- [x] **GlyphLang compiler tests** -- Lexer tokenizes all opcodes, translator maps each opcode correctly, full compile+run of simple programs matches expected output. 12+ tests.
+- [x] **GlyphLang lexer** -- Tokenize .glyph spatial assembly: numbers (0-9), operators (+-*/), comparison (>=<), control (?L), metamorphic (M), biological (S), I/O (.@). Library callable from assembly. Ignores comments and whitespace.
+- [x] **Stack-to-register translator** -- Map GlyphLang stack operations to GeoOS register instructions. Stack depth in r31, RAM 0xF00-0xFFF. Push=STORE, Pop=LOAD. Maps +-*/ to ADD/SUB/MUL/DIV, >=< to CMP+conditional.
+- [x] **Spatial opcodes mapped** -- S (Mitosis) maps to FORK. M (Mutator) maps to self-modifying code. . (output) maps to DRAW. @ maps to HALT. ? maps to JNZ/JZ. L maps to loop.
+- [x] **glyph_compiler.asm** -- Compiler runs inside the VM. Reads .glyph source from VFS, tokenizes, translates to GeoOS bytecode, writes .asm to VFS. Uses self-hosting assembler as backend.
+- [x] **glyph_demo.asm** -- Runs a GlyphLang program compiled on-the-fly. Source: 3 4 + . Result (7) appears on screen.
+- [x] **glyph_fib.glyph** -- Fibonacci in spatial assembly compiles and runs correctly, drawing the sequence on screen.
+- [x] **GlyphLang compiler tests** -- Lexer tokenizes all opcodes, translator maps correctly, full compile+run matches expected output. 12+ tests.
 
 ## [x] phase-92: Pixel Boot - Bytecode from PNG (COMPLETE)
 
 **Goal:** Boot a Geometry OS program from a pixelpack-encoded .png file, skipping the assembler entirely
 
-The simplest code-to-pixel-to-execution path. A .png file contains pixelpack-encoded bytecode. Load the image, decode the seeds, write bytes to RAM[0x1000], run. No assembler step, no canvas text, no source code visible. The image IS the binary executable. This is the infrastructure layer that levels 2 and 3 build on.
+The simplest code-to-pixel-to-execution path. A .png file contains pixelpack-encoded bytecode. Load the image, decode the seeds, write bytes to RAM[0x1000], run. No assembler step, no canvas text, no source code visible. The image IS the binary executable. This is the infrastructure layer that levels 1 and 3 build on.
 
 ### Deliverables
 
-- [x] **Pixelpack decoder integration** -- LOADPNG opcode (0xB1) and `boot_from_png()` function decode pixelpack seeds to raw bytes and write directly to VM RAM at 0x1000. Pure binary pipeline.
-- [x] **CLI boot-from-png flag** -- `--boot-png program.png` flag and `boot-png` REPL command decode PNG and load bytecode into RAM[0x1000] before starting the VM.
-- [x] **Bytecode-to-pixel round-trip test** -- Full round-trip test: assemble LDI r1, 42 / HALT, encode to PNG, decode, load to VM, run, verify r1=42. Also LOADPNG opcode tests (basic, missing file, empty path).
-- [x] **Documentation** -- CODE_PIXEL_EXECUTION.md spec doc covering all three levels (bytecode PNG, source PNG, universal PNG), pixelpack encoding strategies, LOADPNG opcode spec, CLI integration, memory map.
+- [x] **Pixelpack decoder integration** -- Add pixelpack decode dependency to Geometry OS (Rust pixelpack-rs crate or Python subprocess). Wire expand_from_png() or Rust equivalent into a new LOADPNG opcode or CLI flag that takes a .png path, decodes pixelpack seeds to raw bytes, writes them directly to VM RAM at 0x1000. No assembler, no canvas. Pure binary pipeline.
+- [x] **CLI boot-from-png flag** -- CLI flag --boot-png program.png that decodes the png and loads bytecode into RAM[0x1000] before starting the VM. The image IS the executable. Works with any pixelpack-encoded bytecode -- hand-assembled, GlyphLang output, or compiler-generated.
+- [x] **Bytecode-to-pixel round-trip test** -- Test that a known bytecode sequence (e.g., LDI r0, 42; HALT) encoded via pixelpack into a .png, loaded via --boot-png, executes correctly with r0=42. Round-trip: assemble, pixelpack encode, png, boot-png, VM, verify registers.
+- [x] **Documentation** -- Update docs and memory map with the pixel-boot path. Document that .png files are valid Geometry OS executables. Add CODE_PIXEL_EXECUTION.md spec doc covering all three levels.
+
+## [x] phase-93: Pixel Boot - Source from PNG (Self-Documenting Pixel Programs) (COMPLETE)
+
+**Goal:** Load pixelpack-encoded assembly source from a .png onto the canvas grid, assemble it, and run it -- the image is both source code and executable
+
+The self-documenting path. A .png file contains pixelpack-encoded assembly SOURCE CODE (not bytecode). Load the image, decode it, write the text onto the canvas grid, auto-assemble, auto-run. The grid shows the program as colored syntax-highlighted text. The VM runs it. The .png is both the executable AND its documentation. This is the hello world of code-as-image.
+
+### Deliverables
+
+- [x] **Source-to-canvas loader** -- Extend LOADPNG or add LOADSRC opcode that decodes a pixelpack-encoded .png, but instead of writing bytecode to RAM, writes the decoded TEXT (assembly source) onto the canvas grid at 0x8000+. The source appears as visible glyphs. Then auto-triggers the F8 assembly pipeline (preprocess + assemble) to produce bytecode at 0x1000.
+- [x] **CLI boot-from-source-png flag** -- CLI flag --boot-src-png program.png that loads pixelpack-encoded source onto the canvas grid, assembles it, and runs it. The grid shows the source code. The VM runs the compiled bytecode. Double-click a .png and you see the code AND the output.
+- [x] **Source-to-canvas round-trip test** -- Test that fibonacci.asm (or similar) encoded via pixelpack into a .png, loaded via --boot-src-png, appears correctly on the canvas grid as readable assembly text, assembles successfully, and executes with correct output.
+- [x] **Demo program as .png** -- A pixelpack-encoded .png that contains a simple visual demo program (e.g., bouncing ball, color fill). When loaded, the source is visible on the canvas, the assembled program runs, and the screen shows the output. The image is both the source code and the executable -- a self-documenting pixel program.
+
+## [x] phase-94: Pixel Boot - Universal Pixel Executable (COMPLETE)
+
+**Goal:** Unify the pixel boot path so .rts.png files boot any target (RISC-V or Geometry OS), and the VM can load .png programs at runtime
+
+The unification. One pixel format boots both RISC-V Linux kernels and Geometry OS programs. The VM can load and execute .png files at runtime (not just CLI boot). Programs can bootstrap other programs from pixels. Combined with self-modifying code (phases 45-48), this creates the full loop: a program reads a pixel image, decodes it into code, writes it to the canvas, assembles it, and runs it. The pixels that encode the code are themselves pixels on a screen. Pixels all the way down. This is the pixels as universal executable thesis made real.
+
+### Deliverables
+
+- [x] **Unified pixel boot loader** -- Unified boot path where the hypervisor, Geometry OS VM, and pixelpack decoder share one pixel-loading pipeline. A .rts.png file can contain either RISC-V kernel bytes OR Geometry OS bytecode OR Geometry OS assembly source. The loader detects the type (via metadata, magic bytes, or file extension) and routes to the correct execution engine.
+- [x] **Runtime pixel boot (LOADPNG opcode)** -- A running Geometry OS program can LOADPNG from filesystem or network port, decode it, and execute the result. The VM bootstraps new code from pixels at runtime. Combined with ASMSELF (phase 47), a program can read a .png from disk, decode to source, write to canvas, ASMSELF, RUNNEXT. Pixels all the way down.
+- [x] **Full-chain integration test** -- Test the full chain: program A reads a .png from VFS, the .png contains program B source, program A writes it to canvas, calls ASMSELF, calls RUNNEXT, program B executes. Also test png-to-bytecode-to-RAM-to-execution.
+- [x] **Pixel program gallery** -- A gallery of .png programs. Each is a small viewable image that is also a runnable Geometry OS program. Demonstrates: counter, paint tool, game of life, text adventure. Each .png is a self-contained executable artifact. The visual pattern of pixels encodes the program that produces the visual pattern. Recursive.
+- [x] **Spec document** -- CODE_PIXEL_EXECUTION.md covering the three-level architecture, the .rts.png format spec for Geometry OS, the boot protocol, and how it unifies with the existing RISC-V .rts.png boot path.
+
+## [x] phase-95: Window Manager (COMPLETE)
+
+**Goal:** Build a window manager process that handles window layout, dragging, closing, and re-tiling using existing opcodes
+
+A window manager that owns the screen, tracks per-process regions, handles mouse drag to move windows, and communicates bounds via the existing RAM 0xF00-0xF03 protocol. No new opcodes -- pure user-space program. Makes multi-process apps feel like a real desktop instead of overlaid pixel writes.
+
+### Deliverables
+
+- [x] **Window manager process** -- A window manager process that owns the full screen, tracks rectangular regions for each child process, handles MOUSEQ drag events on title bars, and communicates new bounds via the existing Window Bounds Protocol (RAM 0xF00-0xF03). No new opcodes needed -- pure user-space program using MOUSEQ, HITSET, RECTF, and SPAWN/KILL.
+- [x] **Draggable title bars** -- Title bar rendering with draggable regions. Each window gets a colored title bar drawn by the manager. HITSET registers the title bar as a drag handle. MOUSEQ tracks drag. Manager updates RAM 0xF00-0xF03 and the child re-renders in its new bounds.
+- [x] **Window close and re-tiling** -- Window close buttons (HITSET on a small region in the title bar). Click sends KILL to the child PID. Manager reclaims the screen region and re-tiles remaining windows.
+- [x] **Window manager integration test** -- Test: spawn 3 child processes, drag windows to new positions, close one, verify remaining re-tile correctly. Verify children respect new bounds.
 
 ## [x] phase-96: System Clipboard (COMPLETE)
 
 **Goal:** Establish a system clipboard protocol so processes can share data without pipes or messages
 
-A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can write or read. For large data, the clipboard holds a VFS path string instead of the data itself. Pure convention -- no new opcodes needed. The OS-level feature users interact with most after keyboard and mouse.
-
-### Clipboard RAM Convention
-
-| Address | Purpose | Description |
-|---------|---------|-------------|
-| 0xF10 | Ownership flag | 0 = free, 1 = writing, PID = owned by process |
-| 0xF11 | Data length | Number of data words (0-14) |
-| 0xF12-0xF1F | Data | Up to 14 u32 words of data |
-
-### Protocol
-
-1. **Writer**: STORE 1 to 0xF10 (claim), write data to 0xF12+, write length to 0xF11, STORE 0 to 0xF10 (release)
-2. **Reader**: LOAD 0xF10, check == 0 (free), LOAD length from 0xF11, LOAD data from 0xF12+
-3. **Large data**: For data > 14 words, store a VFS path string in 0xF12-0xF1F (max 14 chars). Reader opens the file for full data.
+A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can write or read. For large data, the clipboard holds a VFS path. Pure convention, no new opcodes. The OS-level feature users interact with most after keyboard and mouse. Includes clipboard_demo.asm demonstrating the full protocol.
 
 ### Deliverables
 
-- [x] **Clipboard shared RAM convention** -- 16 words at 0xF10-0xF1F. Ownership flag + data length + 14 data words. Documented in programs/clipboard_demo.asm.
-- [x] **Clipboard ownership and large data** -- Writer claims flag, writes data, releases. For large data, stores VFS path string. 8 integration tests covering all protocol aspects.
-- [x] **Clipboard integration test** -- 8 tests: basic write/read, ownership protocol, max capacity, overwrite, demo assembles, demo runs with correct clipboard data, shared process simulation, VFS path storage.
+- [x] **Clipboard shared RAM convention** -- A shared RAM region (0xF10-0xF1F, 16 words) acting as a system clipboard. Convention: 0xF10 = ownership flag (0=free, 1=writing), 0xF11 = data length (0-14 words), 0xF12-0xF1F = data. Any process can STORE to write, LOAD to read. Documented in programs/clipboard_demo.asm and src/vm/tests.rs.
+- [x] **Clipboard ownership and large data** -- Clipboard ownership protocol. RAM 0xF10 = ownership flag. Writer sets flag to 1, writes data, clears flag to 0. Reader checks flag before reading. For larger data, the clipboard holds a VFS path string instead (up to 14 chars in 0xF12-0xF1F).
+- [x] **Clipboard integration test** -- 8 integration tests in src/vm/tests.rs: basic write/read, ownership protocol, max capacity (14 words), overwrite behavior, demo program assembles, demo program runs and writes correct clipboard data, shared between processes simulation, VFS path storage for large data.
+
+## [x] phase-97: Init System - Service Manager (COMPLETE)
+
+**Goal:** Build a config-driven init system that manages services with dependency ordering and crash recovery
+
+An init system that reads a config file, starts services in dependency order, monitors for crashes, and restarts based on policy. Uses existing SPAWN, WAITPID, EXIT, and VFS opcodes. The difference between a program loader and an OS is whether it manages the lifecycle of running programs.
+
+### Deliverables
+
+- [x] **Config-driven service manager** -- Enhanced init.asm that reads a boot.cfg file listing services (name, program path, restart policy, dependencies). Parses the config, starts services in dependency order using SPAWN, monitors them with WAITPID, and restarts crashed ones based on policy. Like systemd but in 256 bytes of assembly.
+- [x] **boot.cfg format and parser** -- boot.cfg format. One service per line: name path restart deps. Example: shell /bin/sh.asm always none. Restart policies: always, onfail, never. Dependencies: comma-separated service names that must be running first.
+- [x] **Service manager integration test** -- Test: boot.cfg lists 3 services with dependency chain. Init starts them in order. Kill the middle one. Init detects crash via WAITPID, restarts it. Verify ordering and restart.
+
+## [x] phase-98: Custom Bitmap Fonts (COMPLETE)
+
+**Goal:** Let programs load and use custom bitmap fonts from VFS, giving each app its own visual identity
+
+Allow programs to load custom pixel fonts from VFS files. DOS had .FNT, Mac made fonts a core concept. The rendering path already indexes GLYPHS[byte] -- just needs a per-process override. Ship 2+ alternative fonts. Pure data, no new rendering logic.
+
+### Deliverables
+
+- [x] **Per-process font loading** -- Per-process font slots. Each process can load a custom 128-entry x 8-byte glyph table from a VFS .fnt file into a private buffer. The canvas renderer checks if the current process has a custom font and uses it instead of the built-in GLYPHS array. Falls back to default if no custom font loaded.
+- [x] **Font file format and tools** -- Font file format. A .fnt file is 1024 bytes: 128 glyphs x 8 rows x 1 byte per row (same layout as GLYPHS). Tools to convert popular pixel fonts to .fnt. Ship at least 2 alternative fonts (bold, wide) in /lib/fonts/.
+- [x] **Font syscall integration** -- SYSCALL or IOCTL to set current process font. cmd 2 on /dev/screen = set font from RAM address. Program LOADs .fnt from VFS into RAM, then IOCTLs the screen device to use it. Simple, no new opcode needed.
+- [x] **Font loading test** -- Test: process loads a custom font, writes text to canvas, verify different glyphs appear than with default font. Second process still sees default font.
+
+## [x] phase-99: Sound Mixer Daemon (COMPLETE)
+
+**Goal:** Build a pipe-fed multi-channel sound mixer daemon with a music player demo
+
+A multi-channel sound mixer that reads from pipes and outputs mixed audio. The Amiga had 4 hardware channels in 1985. This proves IPC handles real-time data. Programs write notes to a pipe, the mixer turns them into sound. The OS pattern: the device driver owns the hardware, programs go through IPC.
+
+### Deliverables
+
+- [x] **Multi-channel sound mixer daemon** -- A sound mixer daemon that reads note data from a named pipe, mixes multiple channels, and writes PCM samples to /dev/audio. Programs write (frequency, duration, channel, volume) tuples into the pipe. The mixer converts to samples and plays via the existing audio backend. Proves IPC works for real-time workloads.
+- [x] **Audio pipe protocol** -- Audio pipe protocol. 4-word messages: channel_id, frequency, duration_ms, volume. Channel 0-3 supported. Mixer maintains per-channel state (currently playing, position in waveform). Mixes by summing and clipping. 8kHz mono sample rate.
+- [x] **Music player demo** -- Music player program that reads a score file from VFS (list of notes with timing) and plays it through the mixer pipe. Demonstrates the full chain: file read, pipe write, mixer read, audio output.
+- [x] **Mixer integration test** -- Test: two processes write different frequencies to different channels. Mixer produces combined output. Verify no buffer overflow, channels stay independent.
+
+## [x] phase-100: Shared Libraries and Dynamic Linking (COMPLETE)
+
+**Goal:** Enable runtime loading of shared libraries so programs share common code without .include duplication
+
+Dynamic loading of shared libraries from VFS. Like .so on Linux or .dll on Windows. Programs load library bytecode at runtime, resolve function names from an export table, and CALL into them. Avoids .include bloat -- one copy of stdlib serves all programs. Pure convention over existing VFS and CALL opcodes.
+
+### Deliverables
+
+- [x] **Shared library file format** -- Shared library format. A .lib file contains: header (export table with name-to-address mappings), code section (bytecode). Programs OPEN a .lib from /lib/, READ it into RAM at a known address via .org, then CALL into exported functions. No new opcodes -- just a file format convention and a loader subroutine.
+- [x] **Library loader subroutine** -- Library loader subroutine in lib/stdlib.asm. LOADLIB macro: takes library name and function name, opens .lib from VFS, reads it into RAM, resolves function address from export table, CALLs it. Preprocessor expands to OPEN/READ/CALL sequence.
+- [x] **Convert stdlib to shared libraries** -- Convert lib/string.asm and lib/math.asm to .lib format with export tables. Programs use LOADLIB to call strlen, memcpy, sin, cos without .include bloat. One copy in VFS, shared by all programs.
+- [x] **Shared library test** -- Test: program calls strlen from string.lib without .include. Verify correct return value. Verify the library code is only in RAM once even if two programs use it.
+
+## [x] phase-101: Cron Daemon - Scheduled Execution (COMPLETE)
+
+**Goal:** Build a cron daemon that runs programs on scheduled intervals using existing process management opcodes
+
+A cron-like daemon that spawns programs on a frame-based schedule. Read schedule from VFS, FRAME between ticks, EXEC on match. Uses existing FRAME, EXEC, OPEN/READ/CLOSE, and VFS opcodes. The autodev cron workers on the host prove this pattern works -- now do it inside the VM.
+
+### Deliverables
+
+- [x] **Cron daemon process** -- A cron daemon that reads a schedule file from VFS (crontab text format: interval program_name). Each interval, it EXECs the listed program. Uses FRAME to advance ticks. Runs as a background service. Like Unix cron but frame-based instead of time-based. Implemented in programs/cron_daemon.asm.
+- [x] **Crontab format and parser** -- crontab text format. One entry per line: interval program_name. Example: 100 hello (run hello.asm every 100 frames, roughly 1.7 seconds at 60fps). Daemon reads the file on start and re-reads on magic value at RAM[0xFA0]. Parsed into schedule table at 0x4000 with 8 entry slots of 64 words each.
+- [x] **Cron integration test** -- Test: test_cron_daemon_assembles, test_cron_daemon_reads_crontab_and_parses, test_cron_daemon_spawns_on_interval (verifies EXEC spawns child at interval), test_cron_daemon_multiple_entries (verifies parsing of 2-entry crontab). 4 tests total, all passing.
+
+## [x] phase-102: Permissions and Capability System (COMPLETE)
+
+**Goal:** Add a per-process capability system so programs can only access explicitly permitted resources
+
+Linux has rwx file permissions. Android has per-app permissions. Geometry OS currently lets any process access any file or kill any other process. A capability system gives each process an explicit list of allowed paths and opcodes. Makes the kernel/user boundary actually mean something beyond page tables.
+
+### Deliverables
+
+- [x] **Capability table and enforcement** -- Per-process capability table. On SPAWN, parent specifies allowed VFS paths (wildcard patterns) and restricted opcodes. Stored in process metadata. SYSCALL handler checks capability before executing OPEN, WRITE, KILL, IOCTL. Deny-by-default with explicit grants.
+- [x] **Spawn with capabilities** -- SPAWNC opcode or enhanced SPAWN with capability argument. Parent passes a RAM address pointing to a capability list: null-terminated path patterns followed by an opcode whitelist. Kernel parses and stores with the new process. Fallback: SYSCALL number for spawn_with_caps.
+- [x] **Capability enforcement test** -- Test: spawn process with read-only /tmp/ access. Verify it can OPEN files in /tmp/ for reading but WRITE returns EPERM. Verify it cannot OPEN files outside /tmp/. Verify KILL is blocked for processes it did not spawn.
+- [x] **Sandboxed program demo** -- Sandboxed program demo. A paint program that can only write to /tmp/art/ and read from /lib/fonts/. Cannot access shell, cannot kill other processes. Demonstrates the permission boundary is real.
+
+## [x] phase-103: Terminal Multiplexer (COMPLETE)
+
+**Goal:** Build a terminal multiplexer managing multiple shell sessions with switching and independent scrollback
+
+A terminal multiplexer like screen or tmux. Multiple shell sessions, each with independent scrollback, switchable with key combos. The muxer owns the canvas, routes keyboard to the active session, and renders that session output. Proves multi-process IPC, pipe redirection, and window management work together.
+
+### Deliverables
+
+- [x] **Terminal multiplexer process** -- A terminal multiplexer that manages multiple terminal sessions, each with its own scrollback buffer in RAM. Switchable with a key combo (e.g., Ctrl+1/2/3 or Alt+Tab). Each session is a separate process with its own stdin/stdout redirected via pipes. The muxer owns the canvas region and renders the active session.
+- [x] **Session switching UI** -- Session switching and status bar. A thin status bar at the top shows session names and which is active. Ctrl+N creates new session (SPAWN a new shell). Ctrl+number switches. The muxer reads keyboard, routes to active session stdin, reads active session stdout, renders to canvas.
+- [x] **Terminal muxer test** -- Test: create 2 sessions, run different programs in each, switch between them, verify output is correct for each. Close one session, verify muxer removes it from status bar.
+
+## [x] phase-104: Dynamic Territory Competition and Digital Red Queen (COMPLETE)
+
+**Goal:** Make the claim system dynamic so buildings compete for territory with visible render patterns and 51% majority conflict resolution
+
+Geometry OS currently kills silently. This phase adds crash recovery: a 16-entry PC trace ring buffer that records instruction history, a segfault_addr field to capture the faulting address, a write_core_dump() method that writes register state and PC trace to /var/core/<PID>.txt in the VFS, and a render_crash_dialog() method that draws a pixel-rendered crash dialog on the 256x256 screen showing SEGFAULT! with PID, PC, and fault address. Makes the OS feel trustworthy -- errors are visible and debuggable, not just silent deaths.
+
+### Deliverables
+
+- [x] **PC trace ring buffer in step()** -- pc_trace: [u32; 16] ring buffer in Vm struct. Updated every step() call before opcode fetch. pc_trace_idx wraps around. Used by crash recovery to show instruction history.
+  - [x] The VM step function records each PC value in a 16-entry circular buffer. After 20+ instructions, the buffer contains the most recent 16 PCs and older entries have been overwritten.
+- [x] **Segfault address capture field** -- segfault_addr: u32 field on Vm. Set by trigger_segfault_with_addr() in memory.rs. Cleared on reset(). Persists across step() calls for crash handler to read.
+  - [x] When a process accesses unmapped memory, segfault_addr captures the faulting address. trigger_segfault_with_addr() sets both segfault and segfault_addr. Field persists until reset().
+- [x] **Core dump writer to VFS** -- write_core_dump(proc_info: &Process) -> bool. Creates /var/core/ directory if needed. Writes formatted text file with full register dump and instruction trace history. Returns true on success.
+  - [x] After a segfault, write_core_dump() creates /var/core/<PID>.txt in the VFS containing PID, PC, fault address, all 32 registers, and the 16-entry PC trace.
+- [x] **Pixel-rendered crash dialog on screen** -- render_crash_dialog(proc_info: &Process). Draws dark background (0x1A1A2E), red border (0xFF0000), red title bar (0xCC0000). Renders text lines for SEGFAULT!, PID/parent, PC/fault, r0, and dismiss prompt. Uses pixel font via render_char() helper. Sets crash_dialog_active and crash_dialog_pid.
+  - [x] render_crash_dialog() draws a dark dialog box with red border on the 256x256 screen showing SEGFAULT! title, PID, PC, and fault address in pixel font. Sets crash_dialog_active flag for host to check.
+- [x] **Crash recovery integration tests** -- 5 tests: test_pc_trace_ring_buffer (NOP execution fills buffer), test_crash_dialog_renders_on_segfault (dialog renders with correct colors), test_core_dump_contains_register_dump (VFS file has registers and trace), test_segfault_addr_field_persists (field persists then resets), test_crash_dialog_screen_region (border and background at correct pixels).
+  - [x] All Phase 104 fields (pc_trace, pc_trace_idx, segfault_addr, crash_dialog_active, crash_dialog_pid) initialized to zero in Vm::new(), reset(), and from_save_state(). 5 tests pass.
+
+## [x] phase-106: AI Desktop Control and Guided Demo (COMPLETE)
+
+**Goal:** Expose WINSYS ops through MCP tools so an external AI can manage windows, inject input, and observe the desktop -- enabling guided demos and autonomous desktop control.
+
+Bridge existing VM window management (WINSYS ops), input injection, and vision capabilities to the MCP socket layer so external AI agents can control the Geometry OS desktop. Most hard work already exists: WINSYS has create/destroy/focus/list/hittest/moveto/winfo (ops 0-6), mouse/keyboard registers are wired, vision checksum/diff works. This phase adds: RESIZE op (WINSYS op=7), window management MCP tools (window_list, window_move, window_close, window_focus, window_resize, process_kill), desktop-aware input tools (desktop_key, desktop_mouse_move, desktop_mouse_click), desktop_vision tool (structured JSON + ASCII overlay), and a demo tour script proving end-to-end AI control. ~800 LOC, 10+ tests.
+
+### Deliverables
+
+- [x] **Window management socket commands + MCP tools** -- Socket commands: window_list, window_move, window_close, window_focus, window_resize, process_kill. Bridges existing WINSYS ops (0x94) to the socket layer. Adds WINSYS op=7 (RESIZE) for window resizing. Adds process_kill to destroy all windows belonging to a PID.
+  - [ ] window_list returns JSON array of active windows with id, title, pid, x, y, w, h, z_order
+  - [ ] window_move <id> <x> <y> moves window and returns success
+  - [ ] window_close <id> destroys window and returns success
+  - [ ] window_focus <id> brings window to front
+  - [ ] window_resize <id> <w> <h> resizes window offscreen buffer
+  - [ ] process_kill <pid> kills all windows for a PID
+  _~300 LOC_
+- [x] **Desktop input injection MCP tools** -- MCP tools: desktop_key, desktop_mouse_move, desktop_mouse_click. Aliases for input_key/input_mouse with desktop-specific semantics. Documents that these target the VM keyboard buffer and mouse registers, not the hypervisor.
+  - [ ] desktop_key injects key into VM key buffer (same as inject_key but named for desktop context)
+  - [ ] desktop_mouse_move updates mouse_x, mouse_y registers
+  - [ ] desktop_mouse_click updates mouse position then triggers mouse button
+  _~80 LOC_
+- [x] **Desktop-aware vision MCP tool** -- desktop_vision MCP tool returns structured JSON: which windows are open, what PID owns them, which has focus (highest z_order), and ASCII art of the desktop with window boundaries drawn as box-drawing characters. The AI's eyes -- no vision model needed for basic awareness.
+  - [ ] desktop_vision returns JSON with windows array, focused_window, ascii_desktop (ASCII art with window boundaries overlaid)
+  - [ ] vision_screenshot includes window bounding boxes with labels
+  _~200 LOC_
+- [x] **AI demo tour prompt** -- demo_tour.md: A guided walkthrough script for AI agents. Walk the map, enter buildings, launch shell/notepad/calculator/paint/tetris, demonstrate window management, boot a RISC-V guest, narrate each step. Proves the full MCP bridge works end-to-end.
+  _~150 LOC_
+- [x] **Integration tests** -- 10+ tests: socket command tests, MCP tool tests, integration tests. Each new socket command and MCP tool gets a dedicated test.
+  - [ ] test_window_list_socket verifies socket command returns window data
+  - [ ] test_window_move_socket verifies window moves
+  - [ ] test_window_close_socket verifies window destruction
+  - [ ] test_window_focus_socket verifies z_order change
+  - [ ] test_window_resize_socket verifies buffer resize
+  - [ ] test_process_kill_socket verifies all PID windows destroyed
+  - [ ] test_desktop_key_mcp verifies MCP tool translation
+  - [ ] test_desktop_mouse_mcp verifies MCP tool translation
+  - [ ] test_desktop_vision_mcp verifies JSON structure
+  - [ ] test_vision_screenshot_annotations verifies window labels
+  _~200 LOC_
+
+## [x] phase-107: Infinite Spatial Desktop (COMPLETE)
+
+**Goal:** Enable a spatial desktop where apps are windows placed on the infinite procedural map. Walk the map, launch apps into windows, drag them around, zoom in/out -- the desktop IS the map.
+
+Transform the map from a launcher into an infinite spatial desktop where app windows coexist with the terrain. Windows live in world-space coordinates and pan with the map. Multiple apps run simultaneously in separate windows via time-shared multi-process execution. This is the biggest architectural change since Phase 84 -- it merges the map and app modes into a unified spatial computing surface.
+
+### Deliverables
+
+- [x] **World-space window placement** -- Extend Window struct with world_x/world_y fields. Add a VM flag (RAM[0x7810]) that switches WINSYS op=0 from screen-space to world-space coordinates. When set, windows are placed in the infinite map coordinate system instead of the 256x256 framebuffer. This is the foundation: no rendering changes yet, just the data model.
+  - [ ] WINSYS op=0 accepts world_x, world_y in r1,r2 instead of screen x,y when window_world_coords flag is set
+  - [ ] Window struct gains world_x, world_y fields (separate from screen x,y)
+  - [ ] Existing programs that use screen-space WINSYS continue to work (flag defaults to off)
+  _~120 LOC_
+- [x] **Viewport coordinate transform module** -- Add a viewport module that converts between world coordinates (tile-based, infinite range) and screen coordinates (256x256 framebuffer). This is pure math -- no rendering. The viewport tracks camera position and zoom level, already partially in RAM[0x7800-0x7801].
+  - [ ] viewport struct tracks (cam_x, cam_y, zoom) mapping world tiles to framebuffer pixels
+  - [ ] world_to_screen(world_x, world_y) returns screen (x, y) or None if offscreen
+  - [ ] world_to_screen handles zoom (8px, 4px, 2px, 1px per tile)
+  _~100 LOC_
+- [x] **Composite rendering -- windows on map** -- Modify the rendering loop in main.rs: after world_desktop renders terrain, iterate WINSYS windows with world coords, convert to screen space via viewport, and blit their offscreen buffers onto the framebuffer. Windows that are offscreen are culled. This is the visual integration -- windows become part of the map surface.
+  - [ ] world_desktop.asm renders terrain below windows, windows render on top
+  - [ ] Windows pan with the map as camera moves
+  - [ ] Windows outside viewport are skipped (no rendering cost)
+  - [ ] Z-order works correctly (terrain < windows < taskbar)
+  _~150 LOC_
+- [x] **Multi-process app execution in windows** -- The current launch flow replaces the map program with the app, then reloads the map when the app halts. For the infinite desktop, apps need to run as sub-processes inside WINSYS windows while the map continues running. Add a multi-process execution model: the main loop time-shares between the map program and windowed app programs. Each app gets a RAM slice and its own PC/registers. On app HALT, only that app's windows are destroyed.
+  - [ ] launch command supports --window flag that loads app into a WINSYS window instead of replacing map
+  - [ ] App HALT only kills its own process/windows, map keeps running
+  - [ ] Multiple apps can run simultaneously in separate windows
+  - [ ] Each windowed app gets its own RAM region (0x8000+N*4096)
+  _~400 LOC_
+- [x] **Window drag and mouse routing** -- Extend the mouse handling to support dragging windows in world space. When the mouse clicks on a window's title bar (top 8 pixels), enter drag mode. Mouse movement updates the window's world_x, world_y. MOUSEQ events from programs are translated relative to the window's screen-space position so the app thinks it has its own mouse.
+  - [ ] Dragging a window by its title bar updates world_x, world_y
+  - [ ] Click on window brings it to front (z_order update)
+  - [ ] Window title bars render as clickable regions
+  - [ ] MOUSEQ events routed to correct window based on world-space hit test
+  _~200 LOC_
+- [x] **Integration tests** -- 12+ integration tests covering the new coordinate model, rendering, multi-process execution, drag, and mouse routing.
+  - [ ] test_world_space_window_placement verifies world_x/world_y set correctly
+  - [ ] test_viewport_transform verifies coordinate math at all zoom levels
+  - [ ] test_composite_rendering verifies window blit at correct screen position
+  - [ ] test_multi_process_launch verifies two apps run simultaneously
+  - [ ] test_window_drag verifies world_x/world_y update on mouse drag
+  - [ ] test_offscreen_culling verifies windows outside viewport are skipped
+  - [ ] test_mouse_routing verifies MOUSEQ events reach correct window
+  _~250 LOC_
+
+## [x] phase-108: Sandboxed AI Execution (COMPLETE)
+
+**Goal:** AI-written code can never corrupt parent VM state or access unauthorized filesystem paths.
+
+Replace the insecure RUNNEXT execution model in the AI Terminal's /yes command with SPAWNC capability-based sandboxing. AI-generated bytecode now runs in an isolated child VM with restricted memory and VFS access. The parent process (ai_terminal) is fully protected from corruption. Also fixes the scheduler capability enforcement bug where capabilities were invisible during step_all_processes() because the processes vector is taken out.
+
+
+### Deliverables
+
+- [x] **SPAWNC sandbox in ai_terminal.asm** -- cmd_yes now calls build_sandbox_caps to construct a capability list (/tmp/* read+write, /lib/* read-only) then uses SPAWNC instead of RUNNEXT. The child process starts at 0x1000 with COW memory isolation.
+
+- [x] **Scheduler capability cache** -- Added current_capabilities field to Vm, populated by the scheduler when dispatching child processes. OPEN syscall now uses this cached value instead of searching the processes vector (which is empty during step_all_processes). Fixes a latent bug where all capability checks were silently bypassed during scheduled child execution.
+
+- [x] **Sandbox capability tests** -- 8 new tests covering child process creation, capability enforcement, VFS path restriction, and memory isolation. Includes the first end-to-end test of SPAWNC with VFS capability enforcement.
+
+
+## [x] phase-109: Opcode Focus Filter (COMPLETE)
+
+**Goal:** Make the AI Terminal's asm_dev system prompt self-truthful so generated assembly cannot invoke opcodes that don't exist.
+
+Make the AI Terminal's asm_dev system prompt self-truthful so generated assembly cannot invoke opcodes that don't exist. First step toward using the AI Terminal as a diagnostic tool for the OS itself.
+
+
+### Deliverables
+
+- [x] **valid_opcode_mnemonics() probe in disasm.rs** -- Runtime-derived inventory of real opcodes by probing disassemble_at with zeroed operands. Single source of truth; can't drift from disasm match arms because it *is* the disasm.
+
+  - [x] Helper filters out ??? unknowns
+  - [x] Sorted (opcode, mnemonic) pairs returned
+- [x] **asm_dev_system_prompt embeds full inventory + diagnostic hooks** -- Complete NAME(0xNN) list appended so LLM can't hallucinate. RAM[0x7821] selects a focus opcode for targeted diagnostic programs; RAM[0xFFD] surfaces last assemble status so follow-up questions have context.
+
+  - [x] Focus opcode section appears only when RAM[0x7821] is set
+  - [x] Last assemble status surfaces FAILED state for debugging
+  - [x] Oracle mode (RAM[0x7820]=0) still omits the asm inventory
+- [x] **Regression tests** -- 7 tests covering probe coverage, mnemonic purity, prompt embedding, focus injection, assemble-status surfacing, and oracle isolation.
+
+
+## [x] phase-110: Self-Analysis Program (COMPLETE)
+
+**Goal:** Wire Phase 109 prompt-context hooks to user-facing commands in ai_terminal.asm.
+
+Wire the Phase 109 prompt-context hooks (RAM[0x7821] focus, RAM[0xFFD] status) to user-facing commands in ai_terminal.asm so the AI Terminal can be steered toward targeted diagnostic output from the keyboard.
+
+
+### Deliverables
+
+- [x] **/focus 0xNN command** -- Parses 2-hex-digit opcode byte, writes to RAM[0x7821]. Bare /focus shows current value. /focus off clears it. Inline hex parser using CMPI+BLT/BGE range checks (no subroutine needed).
+
+  - [x] Hex range check 0-9, A-F, a-f
+  - [x] Confirmation message with hex display
+  - [x] Usage error on bad input
+- [x] **/status command** -- Displays focus opcode (RAM[0x7821]), last assemble result (RAM[0xFFD]: FAILED/OK/no assembly yet), and prompt mode (asm_dev vs oracle).
+
+- [x] **Command dispatch** -- Inserted after /yes in the do_enter chain. /focus falls through to /status, which falls through to send_to_llm. Updated /help text.
+
+- [x] **Integration tests** -- 4 tests loading full ai_terminal.asm, injecting keystrokes via push_key(), verifying RAM state changes.
+
+
+## [x] phase-111: Enhanced Glyph Backend (COMPLETE)
+
+**Goal:** Build a self-analysis program using SCREENP and LLM opcodes for AI-inside-AI QA loop.
+
+Build a program that uses the OS's own SCREENP and LLM opcodes to inspect its own visual output, build a natural-language description of what it sees, and call the LLM to analyze it. This is the AI inside AI loop -- the OS becoming its own QA agent.
+
+
+### Deliverables
+
+- [x] **self_analysis.asm** -- 362-line program that draws 4 colored quadrant blocks (red, green, blue, yellow), samples a 16x16 pixel grid via SCREENP, counts non-background pixels per quadrant, builds a prompt describing the screen state in natural language, calls LLM (0x9C opcode) for analysis, writes result to /tmp/screen_analysis.txt via VFS (OPEN/WRITESTR/CLOSE), and displays response on screen.
+
+  - [x] Phase 1 - Draw visual content (FILL, RECTF, DRAWTEXT)
+  - [x] Phase 2 - Screen sampling via SCREENP in 16x16 grid
+  - [x] Phase 3 - Prompt construction with quadrant counts
+  - [x] Phase 4 - LLM call with mock support
+  - [x] Phase 5 - VFS file write of analysis result
+  - [x] Phase 6 - Screen display of LLM response and quadrant stats
+- [x] **Integration tests** -- 4 tests loading full self_analysis.asm, running with llm_mock_response, verifying screen pixels, prompt content, and quadrant counts.
+
+
+## [x] phase-112: Tetris in GlyphLang (COMPLETE)
+
+**Goal:** Evolve the GlyphLang compiler and implement a purely Glyph-native desktop shell.
+
+Evolve the GlyphLang compiler and implement a purely Glyph-native desktop shell, moving away from assembly-based UI management toward font-atomic spatial programs.
+
+
+### Deliverables
+
+- [x] **Enhanced Glyph Backend** -- Extended src/glyph_backend.rs with support for high-level graphical and system opcodes: RECTF ([), DRAWTEXT ({), FRAME (!), IKEY (^), FILL (|), LS ($), and EXEC (&). Added string literal support, hex literals, labels/jumps, conditional jumps.
+
+- [x] **glyph_shell.glyph** -- Purely Glyph-native desktop shell program that demonstrates all enhanced backend features, replacing assembly-based UI management with font-atomic spatial programs.
+
+- [x] **Integration Tests** -- Tests for glyph shell compilation and enhanced backend features.
+
+## [x] phase-113: BC4 Hardware Compression Thesis (COMPLETE)
+
+**Goal:** Build a playable Tetris game entirely in GlyphLang.
+
+Demonstrate GlyphLang's capability as a real programming language by building a playable Tetris game entirely in .glyph source, compiling through the GlyphLang compiler to assembly, then to bytecode.
+
+
+### Deliverables
+
+- [x] **tetris.glyph** -- 265-line Full Tetris game in pure GlyphLang using stack-based programming. Features 3 tetromino shapes (I, O, T), player controls (A/D/W/S), gravity system, piece locking, game over screen, 10x20 playfield with grid lines, score display.
+
+- [x] **Integration Tests** -- Tests for tetris.glyph compilation and gameplay verification.
+
+## [x] phase-114: Project Hygiene and README Accuracy (COMPLETE)
+
+**Goal:** Fix stale docs, duplicate files, and missing Cargo.toml default-run
+
+The README has stale stats (921 tests in one place, 2921 in another). ROADMAP_PIXEL_DRIVING_PIXELS.md says "0/6 phases complete" when all are done. There's a "CANVAS_TEXT_SURFACE (Copy).md" duplicate file. The default-run is missing from Cargo.toml so `cargo run` fails. Fix these so the project presents cleanly to anyone who clones it.
+
+
+### Deliverables
+
+- [x] **** -- 
+  - [x] README accurately reflects 2922+ tests, 167+ opcodes, 139+ programs
+    _Validation: grep the README for the numbers_
+  - [x] No stale "0/6 phases" or "921 tests" claims remain
+    _Validation: grep for known stale strings_
+  - [x] All .md docs in docs/ have consistent stats
+    _Validation: spot check 3 docs_
+
+### Risks
+
+- Changing stats requires recounting from actual source (not trusting existing numbers)
+
+## [ ] phase-115: Self-Modification Showcase Demos (PLANNED)
+
+**Goal:** Build self-modifying showcase demos proving pixels drive pixels
+
+The self-modification primitives (ASMSELF, RUNNEXT, ASM_RAM, canvas and the AI terminal. Build showcase programs: 1. mirror.asm -- reads screen pixels, writes assembly to canvas that reproduces them 2. fractal_gen.asm -- generates Mandelbrot iteration counts, writes the visualization
+   as PSET calls to canvas, assembles and runs itself to render
+3. chatbot.asm -- simple ELIZA-style pattern matcher that lives on the canvas,
+   reads typed input from canvas cells, writes responses to other cells
+Each demo exercises the full token->pixel->GUI loop.
+
+
+### Deliverables
+
+- [ ] **Phase phase-115 deliverable** -- The self-modification primitives (ASMSELF, RUNNEXT, ASM_RAM, canvas and the AI terminal. Build showcase programs: 1. mirror.asm -- reads screen pixels, writes assembly to canvas that reproduces them 2. fractal_gen.asm -- generates Mandelbrot iteration counts, writes the visualization
+   as PSET calls to canvas, assembles and runs itself to render
+3. chatbot.asm -- simple ELIZA-style pattern matcher that lives on the canvas,
+   reads typed input from canvas cells, writes responses to other cells
+Each demo exercises the full token->pixel->GUI loop.
+
+  - [ ] At least 3 new demo programs that use ASMSELF + RUNNEXT
+    _Validation: ls programs/ shows new files, each uses 0x73/0x74_
+  - [ ] Each demo showcases a different self-modification pattern
+    _Validation: code review shows distinct approaches_
+  - [ ] All demos pass their test assertions
+    _Validation: cargo test passes_
+
+### Risks
+
+- Canvas text input requires understanding the canvas_buffer encoding (low byte = ASCII char)
+- Complex demos may exceed 4096-cell canvas limit
+
+## [ ] phase-116: Living Map Entities (PLANNED)
+
+**Goal:** Add living entities (programs and agents) to the infinite map
+
+The map exists. Buildings can be entered to launch apps. But there are no "living" entities -- things that move, respond, or evolve on their own. Add map entities: program-nodes that display running VM output, and agent-nodes that run simple AI behaviors. These use the existing SPAWNC/process infrastructure but appear as interactive objects on the map rather than just static buildings.
+
+
+### Deliverables
+
+- [ ] **Phase phase-116 deliverable** -- The map exists. Buildings can be entered to launch apps. But there are no "living" entities -- things that move, respond, or evolve on their own. Add map entities: program-nodes that display running VM output, and agent-nodes that run simple AI behaviors. These use the existing SPAWNC/process infrastructure but appear as interactive objects on the map rather than just static buildings.
+
+  - [ ] Map entities have positions and can be rendered on the infinite map
+    _Validation: entity renders at specified tile coordinates_
+  - [ ] At least 2 entity types (program, agent) with distinct visual representations
+    _Validation: entities look different on the map_
+  - [ ] Entities can be entered/interacted with from the map
+    _Validation: walking into an entity opens its window/content_
+
+### Risks
+
+- Map rendering may need sprite batching for many entities
+- Process-per-entity could hit scheduler limits
+- Entity state persistence across frames needs careful design
+
+## [ ] phase-117: Performance Benchmarking and Profiling (PLANNED)
+
+**Goal:** Benchmark the system and optimize the biggest bottleneck
+
+2922 tests pass but we have no performance data. The VM runs 60fps but we don't know where time is spent. Add criterion benchmarks for: (1) VM step execution, (2) page table translation, (3) canvas buffer operations, (4) assembler throughput. Profile the renderer. Identify and fix the top bottleneck.
+
+
+### Deliverables
+
+- [ ] **Phase phase-117 deliverable** -- 2922 tests pass but we have no performance data. The VM runs 60fps but we don't know where time is spent. Add criterion benchmarks for: (1) VM step execution, (2) page table translation, (3) canvas buffer operations, (4) assembler throughput. Profile the renderer. Identify and fix the top bottleneck.
+
+  - [x] cargo bench shows throughput for at least 3 subsystems
+    _Validation: cargo bench runs and produces numbers_
+  - [x] Profiling data identifies the top 3 hotspots
+    _Validation: benchmark report shows clear bottleneck ranking_
+  - [x] At least one optimization applied that measurably improves throughput
+    _Validation: before/after benchmark comparison_
+
+### Risks
+
+- criterion may not be in Cargo.toml yet
+- GPU rendering profiling needs wgpu-specific tools
+
+## [ ] phase-118: Showtime -- First Run Experience (PLANNED)
+
+**Goal:** Make Geometry OS presentable to someone who just cloned it
+
+Make Geometry OS showable. Right now you need to know the CLI flags and keyboard shortcuts to do anything. Fix: (1) default-run in Cargo.toml, (2) a proper desktop with app launcher, (3) screenshot gallery for the README, (4) a "first 5 minutes" quickstart in the README. The goal is: someone clones, cargo run, sees something impressive within 30 seconds.
+
+
+### Deliverables
+
+- [ ] **Phase phase-118 deliverable** -- Make Geometry OS showable. Right now you need to know the CLI flags and keyboard shortcuts to do anything. Fix: (1) default-run in Cargo.toml, (2) a proper desktop with app launcher, (3) screenshot gallery for the README, (4) a "first 5 minutes" quickstart in the README. The goal is: someone clones, cargo run, sees something impressive within 30 seconds.
+
+  - [ ] A single command builds a release binary that runs without dev tools
+    _Validation: cargo build --release produces a working binary_
+  - [ ] The binary boots to a usable desktop with at least 3 working apps
+    _Validation: launch terminal, paint, and file manager from the desktop_
+  - [ ] A screen recording or screenshot gallery exists in docs/
+    _Validation: ls docs/screenshots/ shows PNG files_
+
+### Risks
+
+- Release build may surface different optimization issues
+- Desktop app launcher needs window manager support that may be partial
+
+## [x] phase-119: VFS Pixel Surface -- Pixels Move Pixels (COMPLETE)
+
+**Goal:** Replace ecall-based VFS with MMIO pixel surface at 0x7000_0000
+
+The VFS Pixel Surface is a 256x256 RGBA framebuffer at MMIO 0x7000_0000. Files are encoded as colored pixels -- Row 0 is a directory index, subsequent rows contain file headers and data. Guest reads files with a single lw instruction (no ecall, no trap). Guest writes files by painting pixels and setting dirty bits. The host flushes changes back to the real filesystem. "Pixels move pixels" -- storage and display are the same thing.
+
+### Deliverables
+
+- [x] **VFS Surface MMIO device (vfs_surface.rs)** -- 256x256 pixel surface at 0x7000_0000. Encodes files from .geometry_os/fs/ into pixels. Dirty row tracking for write-back.
+  - [x] `p119.d1.t1` Implement VfsSurface struct with load_files()
+    > Created vfs_surface.rs with pixel encoding of host files
+  - [x] `p119.d1.t2` Wire into Bus MMIO routing
+    > Added to bus.rs read_word/write_word at 0x7000_0000
+  - [x] `p119.d1.t3` Add VFS_CONTROL_ADDR for explicit sync
+    > Control register at 0x7004_0000, bit 0 = flush
+  - [x] Surface loads files into pixel rows at init
+    _Validation: test_vfs_surface_load_
+  - [x] Read/write via MMIO works for RISC-V guests
+    _Validation: test_vfs_surface_read_write_
+  _~250 LOC_
+- [x] **Bidirectional write-back (flush + Drop)** -- Dirty rows flushed to host filesystem. VFS_CONTROL_ADDR triggers sync. Drop impl auto-flushes on VM shutdown.
+  - [x] `p119.d2.t1` Implement flush() with dirty row tracking
+    > HashMap file_map + HashSet dirty_rows for efficient write-back
+  - [x] `p119.d2.t2` Add VFS_CONTROL_ADDR (0x7004_0000)
+    > Guest writes 1 to trigger flush
+  - [x] `p119.d2.t3` Implement Drop for VfsSurface
+    > Auto-flush on VM shutdown
+  - [x] Pixel changes persist to host files
+    _Validation: test_vfs_surface_write_back_flush_
+  - [x] Drop flushes remaining dirty rows
+    _Validation: Drop impl calls flush()_
+  _~100 LOC_
+- [x] **GeoVM WINSYS integration (op=8 VFS_BLIT, op=9 VFS_SYNC)** -- Desktop programs can blit filesystem into a window (op=8) and sync pixel changes back (op=9). vfs_viewer.asm demonstrates both.
+  - [x] `p119.d3.t1` Add WINSYS op=8 (VFS_BLIT)
+    > encode_pixel_surface() into window offscreen buffer
+  - [x] `p119.d3.t2` Add WINSYS op=9 (VFS_SYNC)
+    > decode_pixel_surface() writes window pixels back to host fs
+  - [x] `p119.d3.t3` Fix vfs_viewer.asm with correct opcodes
+    > Replaced BEQZ/BEQ/J/PIXEL with CMP/JZ/JNZ/JMP/PSET
+  - [x] WINSYS op=8 blits VFS surface into window
+    _Validation: test_winsys_vfs_blit_
+  - [x] WINSYS op=9 writes window pixels back to VFS
+    _Validation: test_winsys_vfs_sync_
+  _~150 LOC_
+- [x] **GEO_VFS_READ deprecation** -- Legacy SBI ecall (a7=0x47454F00) returns SBI_ERR_NOT_SUPPORTED. Removed from probe list. Legacy code retained with #[deprecated] annotations.
+  - [x] `p119.d4.t1` Return NOT_SUPPORTED from GEO_VFS_READ handler
+    > Hard deprecation with eprintln warning
+  - [x] `p119.d4.t2` Remove SBI_EXT_GEOMETRY from probe list
+    > Guests detect deprecation via probe
+  - [x] `p119.d4.t3` Mark legacy structs as #[deprecated]
+    > GeoVfsReadReq, geo_vfs_read_pending, fulfill_geo_vfs_read
+  - [x] `p119.d4.t4` Update design doc migration checklist
+    > All 7 steps marked DONE
+  - [x] GEO_VFS_READ returns NOT_SUPPORTED
+    _Validation: sbi.rs match arm returns error_
+  - [x] SBI_EXT_GEOMETRY removed from probe
+    _Validation: test_sbi_base_probe_extension_
+  _~50 LOC_
+
+### Technical Notes
+
+The VFS Surface uses FNV-1a hashing for filename lookup. 16-bit hash in directory index with full 32-bit hash available. File data stored in little-endian byte order within pixels. Max file size ~64KB (65535 bytes). Surface auto-loads on init, auto-flushes on Drop. Guest C API defined in design doc for vfs_pixel.h pattern.
+
+### Risks
+
+- 16-bit hash collisions possible with many files
+- No append/resize support yet
+
+## [ ] phase-120: VFS File Manager Desktop App (PLANNED)
+
+**Goal:** Interactive file explorer using the pixel VFS surface
+
+Build a persistent desktop app (file_manager.asm) that renders the VFS surface as an interactive file browser. Shows file names, sizes, and content previews. Supports navigation with arrow keys, file selection with Enter, and editing. Uses WINSYS op=8 to display the VFS surface and op=9 to save changes.
+
+### Deliverables
+
+- [ ] **File manager app with directory listing** -- Reads VFS surface directory index, renders file list in a window
+  - [ ] `p120.d1.t1` Parse PXFS directory index from pixel surface
+    > Read row 0 magic, file count, and index entries
+  - [ ] `p120.d1.t2` Render file list with names and sizes
+    > Draw text labels for each file showing name hash and byte count
+  - [ ] `p120.d1.t3` Arrow key navigation and selection highlight
+    > Cursor up/down to select files, highlight current
+  _~200 LOC_
+- [ ] **File content viewer and hex editor** -- View file content as hex dump or ASCII. Edit bytes and save via VFS_SYNC.
+  - [ ] `p120.d2.t1` Hex dump view of selected file data
+    > Read data pixels and render as hex bytes in window
+  - [ ] `p120.d2.t2` ASCII text view toggle
+    > Switch between hex and text view with Tab key
+  - [ ] `p120.d2.t3` Byte editing and save via VFS_SYNC
+    > Edit bytes in hex view, press S to save with WINSYS op=9
+  _~150 LOC_
+
+## [ ] phase-121: Area Agent System (PLANNED)
+
+**Goal:** Autonomous agents that patrol the infinite map and interact with buildings
+
+Introduce AI-controlled entities (Area Agents) that wander the map, enter buildings, run programs, and report results. Agents have a position, direction, task queue, and communication channel. They demonstrate that Geometry OS is a multi-agent environment where programs can spawn and control other entities.
+
+### Deliverables
+
+- [ ] **Agent entity type with wander behavior** -- New entity type that moves autonomously on the map
+  - [ ] `p121.d1.t1` Add Agent entity variant to world_desktop
+    > Entity struct with position, direction, speed, task_queue
+  - [ ] `p121.d1.t2` Wander AI: random walk with collision avoidance
+    > Agents move semi-randomly, avoid water and mountains
+  - [ ] `p121.d1.t3` Agent rendering: distinct color/shape from player
+    > Agents render as different colored markers on map
+  _~200 LOC_
+- [ ] **Building interaction and task execution** -- Agents can enter buildings, run programs, and report back
+  - [ ] `p121.d2.t1` Agent pathfinding to nearest building
+    > Simple A* or greedy path to building entrance
+  - [ ] `p121.d2.t2` Agent executes program on building entry
+    > Spawn VM, run program, collect result
+  - [ ] `p121.d2.t3` Agent communication channel (IPC)
+    > Agents can send messages to player or other agents
+  _~300 LOC_
+
+## [ ] phase-122: RISC-V Guest Write Path (PLANNED)
+
+**Goal:** Guest OS can create, write, and delete files via the VFS pixel surface
+
+Extend the RISC-V guest to use the VFS pixel surface for file creation and modification. Write a guest-side C library (vfs_pixel.h) with vfs_create, vfs_write, vfs_delete functions that paint pixels to create new file entries. Port existing cat.c examples. Demo: guest OS writes a log file that appears in the host filesystem.
+
+### Deliverables
+
+- [ ] **Guest-side vfs_pixel.h C library** -- Header-only C library for pixel surface file access
+  - [ ] `p122.d1.t1` Write vfs_pixel.h with list/read/write/create/delete
+    > Inline functions using volatile uint32_t pointers to 0x70000000
+  - [ ] `p122.d1.t2` Port vfs_pixel_cat.c to use new header
+    > Replace hand-coded asm with vfs_read_file() from header
+  _~200 LOC_
+- [ ] **Guest file creation demo** -- RISC-V guest creates and writes a file visible on host
+  - [ ] `p122.d2.t1` Write guest_vfs_write.c demo
+    > Guest creates a file via pixel surface, writes data, triggers flush
+  - [ ] `p122.d2.t2` Test: host reads file created by guest
+    > Integration test: boot guest, verify host fs has new file
+  _~100 LOC_
+
+## [ ] phase-123: Alpine Linux Live Tile (PLANNED)
+
+**Goal:** Run Alpine Linux as a live-updating tile on the Geometry OS desktop
+
+Extend the hypervisor to render the RISC-V guest framebuffer as a live window on the desktop. The Alpine Linux boot process becomes visible in real-time. The guest console output maps to the window content. This proves that Geometry OS can host full operating systems as first-class visual elements.
+
+### Deliverables
+
+- [ ] **Hypervisor-to-window bridge** -- Connect the RISC-V framebuffer output to a WINSYS window
+  - [ ] `p123.d1.t1` Map guest framebuffer to window offscreen_buffer
+    > During hypervisor tick, copy guest FB to window pixels
+  - [ ] `p123.d1.t2` Forward keyboard input from window to guest
+    > IKEY events in window context forwarded to guest UART
+  - [ ] `p123.d1.t3` Auto-create window when hypervisor boots
+    > WINSYS CREATE + VFS_BLIT on hypervisor launch
+  _~200 LOC_
+- [ ] **Alpine Linux boot demo** -- Boot Alpine Linux in a window, show shell prompt
+  - [ ] `p123.d2.t1` Prepare minimal Alpine rootfs for RV32
+    > Build or download rootfs with busybox + dropbear
+  - [ ] `p123.d2.t2` Boot to shell in window, verify interactive
+    > Type commands, see output in window
+  _~150 LOC_
+
+## [ ] phase-124: Window Pipeline Improvements (PLANNED)
+
+**Goal:** Make desktop windows more robust: stacking, dragging, resize, z-order
+
+Improve the WINSYS window manager to support proper window stacking (z-order), drag-to-move with mouse, and window resize. Add window title bars and close buttons. These are essential for multi-window desktop usage when running apps like file manager alongside the VFS viewer and Alpine Linux tile.
+
+### Deliverables
+
+- [ ] **Window title bars and close buttons** -- Each window has a draggable title bar with name and X button
+  - [ ] `p124.d1.t1` Render title bar above window content
+    > Draw window name in title bar region
+  - [ ] `p124.d1.t2` Click X to close (WINSYS DESTROY)
+    > Mouse hit test on title bar close area
+  _~100 LOC_
+- [ ] **Drag-to-move and z-order stacking** -- Click title bar to bring to front, drag to move
+  - [ ] `p124.d2.t1` Z-order tracking and bring-to-front
+    > Window focus brings to top of render stack
+  - [ ] `p124.d2.t2` Drag title bar to reposition window
+    > MOUSE_DRAG on title bar moves window
+  _~150 LOC_
+
+## [ ] phase-125: Shell VFS Integration (PLANNED)
+
+**Goal:** Geometry OS shell commands for VFS file operations
+
+Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open file in canvas editor), save (write canvas to VFS file), rm (delete file), and cp (copy file). The shell becomes a real file manager that works with the pixel VFS surface as its backing store.
+
+### Deliverables
+
+- [ ] **Shell file commands (ls, cat, edit)** -- Core read-only file commands via VFS surface
+  - [ ] `p125.d1.t1` ls command: list files from VFS surface
+    > Read directory index, print filenames and sizes
+  - [ ] `p125.d1.t2` cat command: read file to terminal
+    > Read data pixels, output as text to terminal window
+  - [ ] `p125.d1.t3` edit command: open file in canvas editor
+    > Load file content into canvas text surface for editing
+  _~200 LOC_
+- [ ] **Shell write commands (save, rm, cp)** -- Write operations that modify the VFS surface and flush
+  - [ ] `p125.d2.t1` save command: write canvas to VFS file
+    > Paint canvas content as pixels, trigger flush
+  - [ ] `p125.d2.t2` rm command: delete file from surface
+    > Zero out file rows, update directory index
+  - [ ] `p125.d2.t3` cp command: copy file within VFS
+    > Read source pixels, write to new rows
+  _~200 LOC_
 
 ## Global Risks
 
-- Opcode space: 113 of ~256 slots used, plenty of room
+- Opcode space: 167 of ~256 slots used, plenty of room
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
@@ -2472,6 +3157,8 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
 - Assembly inside a running VM may be slow for large programs -- may need optimization
 - The concept of a program rewriting itself challenges test design -- how do you unit test a program that changes?
 - RAM size expansion (phase 46) affects the fuzzer which generates random addresses
+- VFS pixel surface hash collisions with many files
+- Alpine Linux boot may require more RAM or MMU support
 
 ## Conventions
 
@@ -2486,216 +3173,3 @@ A system clipboard using a shared RAM region at 0xF10-0xF1F. Any process can wri
 - Canvas and screen mappings use LOAD/STORE interception, not new opcodes
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
-
-## [x] phase-106: AI Desktop Control and Guided Demo (COMPLETE)
-
-**Goal:** Expose WINSYS ops through MCP tools so an external AI can manage windows, inject input, and observe the desktop -- enabling guided demos and autonomous desktop control.
-
-### Deliverables
-
-- [x] **Window management socket commands + MCP tools** -- WINSYS op=7 (RESIZE), MCP tools: window_list, window_move, window_close, window_focus, window_resize, process_kill
-  - [x] RESIZE op (WINSYS op=7)
-  - [x] MCP window management tools functional
-- [x] **Desktop input injection MCP tools** -- desktop_key, desktop_mouse_move, desktop_mouse_click for AI-driven input
-  - [x] Keyboard and mouse injection via MCP
-- [x] **Desktop-aware vision MCP tool** -- Structured JSON + ASCII overlay for desktop state
-  - [x] Vision checksum/diff exposed via MCP
-- [x] **AI demo tour prompt** -- End-to-end demo script proving AI control of the desktop
-  - [x] Demo tour runs successfully
-- [x] **Integration tests** -- 10+ tests covering socket commands and MCP tools
-  - [x] test_vision_screenshot_annotations verifies window labels
-
-## [x] phase-107: Infinite Spatial Desktop (COMPLETE)
-
-**Goal:** Enable a spatial desktop where apps are windows placed on the infinite procedural map. Walk the map, launch apps into windows, drag them around, zoom in/out -- the desktop IS the map.
-
-### Deliverables
-
-- [x] **World-space window placement** -- Extend Window struct with world_x/world_y fields, RAM[0x7810] flag switches WINSYS op=0 from screen-space to world-space coordinates
-  - [x] WINSYS op=0 accepts world_x, world_y when flag set
-  - [x] Existing screen-space programs remain compatible
-- [x] **Viewport coordinate transform module** -- World-to-screen and screen-to-world coordinate transforms for rendering
-  - [x] Camera position maps world coords to 256x256 framebuffer
-- [x] **Composite rendering -- windows on map** -- Windows render at world-space positions on the procedural map background
-  - [x] Offscreen windows culled correctly
-- [x] **Multi-process app execution in windows** -- Multiple apps run simultaneously in separate windows via time-shared multi-process execution
-  - [x] test_multi_process_launch verifies two apps run simultaneously
-- [x] **Window drag and mouse routing** -- Windows draggable in world-space, MOUSEQ events routed to correct window
-  - [x] test_window_drag verifies world_x/world_y update
-  - [x] test_mouse_routing verifies MOUSEQ events reach correct window
-- [x] **Integration tests** -- 12+ tests covering coordinate model, rendering, multi-process, drag, and mouse routing
-  - [x] test_offscreen_culling verifies viewport culling
-
-## [x] phase-108: Sandboxed AI Execution (COMPLETE)
-
-**Goal:** Sandboxed AI execution with capability-based process isolation for child processes spawned from AI terminal.
-
-### Deliverables
-
-- [x] **SPAWNC sandbox in ai_terminal.asm** -- cmd_yes builds sandbox capabilities (/tmp/* read+write, /lib/* read-only) and uses SPAWNC instead of RUNNEXT. Child starts at 0x1000 with COW memory isolation.
-  - [x] SPAWNC creates child with capability restrictions
-  - [x] COW memory isolation enforced
-- [x] **Scheduler capability cache** -- current_capabilities field in Vm, populated by scheduler when dispatching child processes. OPEN syscall uses cached value instead of searching processes vector. Fixes latent bug where capability checks were bypassed during scheduled child execution.
-  - [x] Capability checks work during step_all_processes
-- [x] **Sandbox capability tests** -- 8 new tests covering child process creation, capability enforcement, VFS path restriction, and memory isolation.
-  - [x] test_spawnc_sandbox_child_runs_code
-  - [x] test_spawnc_sandbox_child_has_memory_isolation
-  - [x] test_spawnc_sandbox_creates_child_with_capabilities
-  - [x] test_spawnc_sandbox_denies_vfs_path_outside_capabilities
-  - [x] test_spawnc_sandbox_allows_vfs_tmp_write
-  - [x] test_ai_terminal_build_sandbox_caps_assembles
-  - [x] test_sandboxed_paint_capabilities
-  - [x] test_spawnc_no_capabilities_is_none
-
-## [x] phase-109: Live Opcode Inventory Injection (COMPLETE)
-
-**Goal:** Make the AI Terminal's asm_dev system prompt self-truthful so generated assembly cannot invoke opcodes that don't exist. First step toward using the AI Terminal as a diagnostic tool for the OS itself.
-
-### Deliverables
-
-- [x] **valid_opcode_mnemonics() probe in disasm.rs** -- runtime-derived inventory of real opcodes by probing disassemble_at with zeroed operands. Single source of truth; can't drift from disasm match arms because it *is* the disasm.
-  - [x] Helper filters out ??? unknowns
-  - [x] Sorted (opcode, mnemonic) pairs returned
-- [x] **asm_dev_system_prompt embeds full inventory + diagnostic hooks** -- complete NAME(0xNN) list appended so LLM can't hallucinate. RAM[0x7821] selects a focus opcode for targeted diagnostic programs; RAM[0xFFD] surfaces last assemble status so follow-up questions have context.
-  - [x] Focus opcode section appears only when RAM[0x7821] is set
-  - [x] Last assemble status surfaces FAILED state for debugging
-  - [x] Oracle mode (RAM[0x7820]=0) still omits the asm inventory
-- [x] **Regression tests** -- 7 tests covering probe coverage, mnemonic purity, prompt embedding, focus injection, assemble-status surfacing, and oracle isolation.
-  - [x] test_valid_opcode_mnemonics_covers_core_ops
-  - [x] test_valid_opcode_mnemonics_excludes_unknown
-  - [x] asm_dev_prompt_embeds_full_opcode_inventory
-  - [x] asm_dev_prompt_without_focus_omits_focus_section
-  - [x] asm_dev_prompt_with_focus_injects_targeted_hint
-  - [x] asm_dev_prompt_surfaces_last_assemble_failure
-  - [x] oracle_mode_prompt_has_no_opcode_inventory
-
-## [x] phase-110: AI Terminal /focus and /status Commands (COMPLETE)
-
-**Goal:** Wire the Phase 109 prompt-context hooks (RAM[0x7821] focus, RAM[0xFFD] status) to user-facing commands in ai_terminal.asm so the AI Terminal can be steered toward targeted diagnostic output from the keyboard.
-
-### Deliverables
-
-- [x] **`/focus 0xNN` command** -- parses 2-hex-digit opcode byte, writes to RAM[0x7821]. Bare `/focus` shows current value. `/focus off` clears it. Inline hex parser using CMPI+BLT/BGE range checks (no subroutine needed).
-  - [x] Hex range check: '0'-'9', 'A'-'F', 'a'-'f'
-  - [x] Confirmation message with hex display
-  - [x] Usage error on bad input
-- [x] **`/status` command** -- displays focus opcode (RAM[0x7821]), last assemble result (RAM[0xFFD]: FAILED/OK/no assembly yet), and prompt mode (asm_dev vs oracle).
-- [x] **Command dispatch** -- inserted after `/yes` in the do_enter chain. `/focus` falls through to `/status`, which falls through to `send_to_llm`. Updated `/help` text.
-- [x] **Integration tests** -- 4 tests loading full ai_terminal.asm, injecting keystrokes via push_key(), verifying RAM state changes.
-  - [x] test_ai_terminal_focus_command_sets_ram -- "/focus 0x40" sets RAM[0x7821]=0x40
-  - [x] test_ai_terminal_focus_off_clears_ram -- "/focus off" clears RAM[0x7821]
-  - [x] test_ai_terminal_status_command_runs -- "/status" executes without crash
-  - [x] test_ai_terminal_focus_bad_arg_no_crash -- bad arg leaves RAM unchanged
-
-## [x] phase-111: Recursive Self-Analysis Program (COMPLETE)
-
-**Goal:** Build a program that uses the OS's own SCREENP and LLM opcodes to inspect its own visual output, build a natural-language description of what it sees, and call the LLM to analyze it. This is the "AI inside AI" loop -- the OS becoming its own QA agent.
-
-### Deliverables
-
-- [x] **self_analysis.asm** -- 362-line program that draws 4 colored quadrant blocks (red, green, blue, yellow), samples a 16x16 pixel grid via SCREENP, counts non-background pixels per quadrant, builds a prompt describing the screen state in natural language, calls LLM (0x9C opcode) for analysis, writes result to /tmp/screen_analysis.txt via VFS (OPEN/WRITESTR/CLOSE), and displays response on screen.
-  - [x] Phase 1: Draw visual content (FILL, RECTF, DRAWTEXT)
-  - [x] Phase 2: Screen sampling via SCREENP in 16x16 grid
-  - [x] Phase 3: Prompt construction with quadrant counts (append_number decimal conversion)
-  - [x] Phase 4: LLM call with mock support
-  - [x] Phase 5: VFS file write of analysis result
-  - [x] Phase 6: Screen display of LLM response and quadrant stats
-- [x] **Integration tests** -- 4 tests loading full self_analysis.asm, running with llm_mock_response, verifying screen pixels, prompt content, and quadrant counts.
-  - [x] test_self_analysis_assembles -- assembly compiles clean
-  - [x] test_self_analysis_screen_sampling -- verifies 4 colored blocks drawn correctly on screen
-  - [x] test_self_analysis_prompt_contains_quadrant_data -- prompt has all quadrant labels and pixel counts
-  - [x] test_self_analysis_quadrant_counts_nonzero -- all 4 quadrants detect non-zero pixel counts
-
-## [x] phase-112: Glyph-Atomic Shell (COMPLETE)
-
-**Goal:** Evolve the GlyphLang compiler and implement a purely Glyph-native desktop shell, moving away from assembly-based UI management toward font-atomic spatial programs.
-
-### Deliverables
-
-- [x] **Enhanced Glyph Backend** -- Extended `src/glyph_backend.rs` with support for high-level graphical and system opcodes: RECTF (`[`), DRAWTEXT (`{`), FRAME (`!`), IKEY (`^`), FILL (`|`), LS (`$`), and EXEC (`&`).
-  - [x] String literal support (`"string"`) with separate-line `.str` emission for assembler compatibility.
-  - [x] Hex literal support (`0xNNN`) in lexer.
-  - [x] Label (`:name`) and Jump (`~name`) support for non-linear control flow.
-  - [x] Conditional Jump-if-Zero (`(label`) and Jump-if-Not-Zero (`)label`) based on stack top.
-- [x] **glyph_shell.glyph** -- A functional desktop shell implemented entirely in GlyphLang. Features a colored title bar, an interactive list of apps, selection cursor, and the ability to launch programs via Enter.
-- [x] **Integration Tests** -- Verified the new Glyph features and the shell execution.
-  - [x] `test_glyph_shell_compiles` -- ensures full shell source tokenizes, compiles, and assembles.
-  - [x] `test_glyph_shell_execution` -- verifies shell renders title bar and background correctly in the VM.
-
-## [x] phase-113: Tetris in GlyphLang (COMPLETE)
-
-**Goal:** Demonstrate GlyphLang's capability as a real programming language by building a playable Tetris game entirely in .glyph source, compiling through the GlyphLang compiler to assembly, then to bytecode.
-
-### Deliverables
-
-- [x] **tetris.glyph** (265 lines) -- Full Tetris game in pure GlyphLang using stack-based programming.
-  - [x] 3 tetromino shapes: I-piece (red), O-piece (orange), T-piece (purple)
-  - [x] Player controls: A=left, D=right, W=rotate, S=drop via IKEY (`^`)
-  - [x] Gravity system with configurable tick speed (register h)
-  - [x] Piece locking and shape cycling
-  - [x] Game over screen with restart (R key)
-  - [x] Playfield: 10x20 grid centered on 256x256 screen with grid lines
-  - [x] Score display and controls help text via DRAWTEXT (`{`)
-  - [x] All rendering via RECTF (`[`), FILL (`|`), DRAWTEXT
-- [x] **Integration Tests**
-  - [x] test_tetris_glyph_compiles -- verifies tokenization, compilation, and assembly (1668 lines of generated assembly)
-  - [x] test_tetris_glyph_execution -- loads bytecode in VM, verifies FILL paints screen
-
-### Key Insights
-
-- GlyphLang produces verbose assembly (1668 lines from 265 .glyph lines) due to stack push/pop overhead
-- FILL opcode is expensive in debug mode (65K pixel iteration) -- execution tests use minimal cycle counts
-- Stack-based programming maps naturally to game state: registers a-z for persistent state, stack for transient values
-- The `=` comparison compiles to CMP + LDI 1/0 + JZ pattern (~10 instructions per comparison)
-
-## [x] phase-114: Project Hygiene and README Accuracy (COMPLETE)
-
-**Goal:** Fix stale docs, duplicate files, and missing Cargo.toml default-run
-
-### Deliverables
-
-- [x] **README accuracy audit** -- All stale stats (921 tests, 0/6 phases) updated to reflect actual numbers
-  - [x] README accurately reflects 2922+ tests, 167+ opcodes, 139+ programs
-  - [x] No stale "0/6 phases" or "921 tests" claims remain
-  - [x] All .md docs in docs/ have consistent stats
-
-## [x] phase-115: Self-Modification Showcase Demos (COMPLETE)
-
-**Goal:** Build self-modifying showcase demos proving pixels drive pixels
-
-### Deliverables
-
-- [x] **Self-modification demos** -- 3 new programs using ASMSELF + RUNNEXT (mirror.asm, fractal_gen.asm, chatbot.asm)
-  - [x] At least 3 new demo programs that use ASMSELF + RUNNEXT
-  - [x] Each demo showcases a different self-modification pattern
-  - [x] All demos pass their test assertions
-
-## [x] phase-116: Living Map Entities (COMPLETE)
-
-**Goal:** Add living entities (programs and agents) to the infinite map
-
-### Deliverables
-
-- [x] **Map entities** -- Living entities rendered on the infinite map with 2+ entity types
-  - [x] Map entities have positions and can be rendered on the infinite map
-  - [x] At least 2 entity types (program, agent) with distinct visual representations
-  - [x] Entities can be entered/interacted with from the map
-
-## [x] phase-117: Performance Benchmarking and Profiling (COMPLETE)
-
-**Goal:** Benchmark the system and optimize the biggest bottleneck
-
-### Deliverables
-
-- [x] **Criterion benchmarks** -- cargo bench shows throughput for at least 3 subsystems, profiling identifies top 3 hotspots, at least one optimization applied
-
-## [x] phase-118: Showtime -- First Run Experience (COMPLETE)
-
-**Goal:** Make Geometry OS presentable to someone who just cloned it
-
-### Deliverables
-
-- [x] **First run experience** -- Default-run in Cargo.toml, proper desktop with app launcher, screenshot gallery, "first 5 minutes" quickstart
-  - [x] cargo build --release produces a working binary
-  - [x] The binary boots to a usable desktop with at least 3 working apps
-  - [x] A screenshot gallery exists in docs/screenshots/

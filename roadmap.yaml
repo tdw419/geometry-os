@@ -10,9 +10,10 @@ conventions:
 - Canvas and screen mappings use LOAD/STORE interception, not new opcodes
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
-description: 'Pixel-art virtual machine with built-in assembler, debugger, and live
-  GUI. Write assembly in the built-in text editor, press F5, watch it run. Phase 118: Showtime.
-  3055 tests passing, 141 programs, 68622 LOC.'
+description: Pixel-art virtual machine with built-in assembler, debugger, and live
+  GUI. Write assembly in the built-in text editor, press F5, watch it run. 151 opcodes,
+  2026 tests, 143 programs, 69763 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor.
+  Infinite map desktop.
 global_risks:
 - 'Opcode space: 167 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
@@ -28,16 +29,24 @@ global_risks:
 - The concept of a program rewriting itself challenges test design -- how do you unit
   test a program that changes?
 - RAM size expansion (phase 46) affects the fuzzer which generates random addresses
+- VFS pixel surface hash collisions with many files
+- Alpine Linux boot may require more RAM or MMU support
 meta:
   gui: minifb
   language: Rust
-  loc: '68622'
-  opcodes: 167
-  programs: '141'
+  loc: 69763
+  opcodes: 151
+  programs: 143
   ram: 65536 words
   registers: 32
   screen: 256x256 pixels
-  tests: '3055'
+  source_files: 88
+  tests: 2026
+  integration_tests: 624
+  lib_tests: 1402
+  vfs_surface: 0x7000_0000 (256x256)
+  riscv_guest: true
+  hypervisor: true
 phases:
 - deliverables:
   - description: 'Control flow: stop, no-op, yield to renderer'
@@ -5590,6 +5599,16 @@ phases:
     - description: All demos pass their test assertions
       validation: cargo test passes
     met: true
+    name: Phase phase-115 deliverable
+    status: todo
+    description: "The self-modification primitives (ASMSELF, RUNNEXT, ASM_RAM, canvas\
+      \ and the AI terminal. Build showcase programs: 1. mirror.asm -- reads screen\
+      \ pixels, writes assembly to canvas that reproduces them 2. fractal_gen.asm\
+      \ -- generates Mandelbrot iteration counts, writes the visualization\n   as\
+      \ PSET calls to canvas, assembles and runs itself to render\n3. chatbot.asm\
+      \ -- simple ELIZA-style pattern matcher that lives on the canvas,\n   reads\
+      \ typed input from canvas cells, writes responses to other cells\nEach demo\
+      \ exercises the full token->pixel->GUI loop.\n"
   description: "The self-modification primitives (ASMSELF, RUNNEXT, ASM_RAM, canvas\
     \ and the AI terminal. Build showcase programs: 1. mirror.asm -- reads screen\
     \ pixels, writes assembly to canvas that reproduces them 2. fractal_gen.asm --\
@@ -5605,9 +5624,11 @@ phases:
     = ASCII char)
   - Complex demos may exceed 4096-cell canvas limit
   scope_lines_total: 450
-  status: complete
+  status: in_progress
   test_target: 6
   title: Self-Modification Showcase Demos
+  _claimed_by: worker-0
+  _claimed_at: 1777050076
 - deliverables:
   - acceptance_criteria:
     - description: Map entities have positions and can be rendered on the infinite
@@ -5618,6 +5639,15 @@ phases:
     - description: Entities can be entered/interacted with from the map
       validation: walking into an entity opens its window/content
     met: true
+    name: Phase phase-116 deliverable
+    status: todo
+    description: 'The map exists. Buildings can be entered to launch apps. But there
+      are no "living" entities -- things that move, respond, or evolve on their own.
+      Add map entities: program-nodes that display running VM output, and agent-nodes
+      that run simple AI behaviors. These use the existing SPAWNC/process infrastructure
+      but appear as interactive objects on the map rather than just static buildings.
+
+      '
   description: 'The map exists. Buildings can be entered to launch apps. But there
     are no "living" entities -- things that move, respond, or evolve on their own.
     Add map entities: program-nodes that display running VM output, and agent-nodes
@@ -5632,7 +5662,7 @@ phases:
   - Process-per-entity could hit scheduler limits
   - Entity state persistence across frames needs careful design
   scope_lines_total: 500
-  status: complete
+  status: planned
   test_target: 8
   title: Living Map Entities
   _claimed_by: worker-0
@@ -5649,6 +5679,14 @@ phases:
       validation: before/after benchmark comparison
       met: true
     met: true
+    name: Phase phase-117 deliverable
+    status: todo
+    description: '2922 tests pass but we have no performance data. The VM runs 60fps
+      but we don''t know where time is spent. Add criterion benchmarks for: (1) VM
+      step execution, (2) page table translation, (3) canvas buffer operations, (4)
+      assembler throughput. Profile the renderer. Identify and fix the top bottleneck.
+
+      '
   description: '2922 tests pass but we have no performance data. The VM runs 60fps
     but we don''t know where time is spent. Add criterion benchmarks for: (1) VM step
     execution, (2) page table translation, (3) canvas buffer operations, (4) assembler
@@ -5661,7 +5699,7 @@ phases:
   - criterion may not be in Cargo.toml yet
   - GPU rendering profiling needs wgpu-specific tools
   scope_lines_total: 300
-  status: complete
+  status: planned
   test_target: 4
   title: Performance Benchmarking and Profiling
 - deliverables:
@@ -5674,6 +5712,15 @@ phases:
     - description: A screen recording or screenshot gallery exists in docs/
       validation: ls docs/screenshots/ shows PNG files
     met: true
+    name: Phase phase-118 deliverable
+    status: todo
+    description: 'Make Geometry OS showable. Right now you need to know the CLI flags
+      and keyboard shortcuts to do anything. Fix: (1) default-run in Cargo.toml, (2)
+      a proper desktop with app launcher, (3) screenshot gallery for the README, (4)
+      a "first 5 minutes" quickstart in the README. The goal is: someone clones, cargo
+      run, sees something impressive within 30 seconds.
+
+      '
   description: 'Make Geometry OS showable. Right now you need to know the CLI flags
     and keyboard shortcuts to do anything. Fix: (1) default-run in Cargo.toml, (2)
     a proper desktop with app launcher, (3) screenshot gallery for the README, (4)
@@ -5687,9 +5734,428 @@ phases:
   - Release build may surface different optimization issues
   - Desktop app launcher needs window manager support that may be partial
   scope_lines_total: 400
-  status: complete
+  status: planned
   test_target: 5
   title: Showtime -- First Run Experience
+- id: phase-119
+  title: VFS Pixel Surface -- Pixels Move Pixels
+  status: complete
+  goal: Replace ecall-based VFS with MMIO pixel surface at 0x7000_0000
+  description: The VFS Pixel Surface is a 256x256 RGBA framebuffer at MMIO 0x7000_0000.
+    Files are encoded as colored pixels -- Row 0 is a directory index, subsequent
+    rows contain file headers and data. Guest reads files with a single lw instruction
+    (no ecall, no trap). Guest writes files by painting pixels and setting dirty bits.
+    The host flushes changes back to the real filesystem. "Pixels move pixels" --
+    storage and display are the same thing.
+  deliverables:
+  - name: VFS Surface MMIO device (vfs_surface.rs)
+    description: 256x256 pixel surface at 0x7000_0000. Encodes files from .geometry_os/fs/
+      into pixels. Dirty row tracking for write-back.
+    status: done
+    acceptance_criteria:
+    - description: Surface loads files into pixel rows at init
+      validation: test_vfs_surface_load
+      met: true
+    - description: Read/write via MMIO works for RISC-V guests
+      validation: test_vfs_surface_read_write
+      met: true
+    tasks:
+    - id: p119.d1.t1
+      title: Implement VfsSurface struct with load_files()
+      status: done
+      description: Created vfs_surface.rs with pixel encoding of host files
+    - id: p119.d1.t2
+      title: Wire into Bus MMIO routing
+      status: done
+      description: Added to bus.rs read_word/write_word at 0x7000_0000
+    - id: p119.d1.t3
+      title: Add VFS_CONTROL_ADDR for explicit sync
+      status: done
+      description: Control register at 0x7004_0000, bit 0 = flush
+    scope_lines: 250
+  - name: Bidirectional write-back (flush + Drop)
+    description: Dirty rows flushed to host filesystem. VFS_CONTROL_ADDR triggers
+      sync. Drop impl auto-flushes on VM shutdown.
+    status: done
+    acceptance_criteria:
+    - description: Pixel changes persist to host files
+      validation: test_vfs_surface_write_back_flush
+      met: true
+    - description: Drop flushes remaining dirty rows
+      validation: Drop impl calls flush()
+      met: true
+    tasks:
+    - id: p119.d2.t1
+      title: Implement flush() with dirty row tracking
+      status: done
+      description: HashMap file_map + HashSet dirty_rows for efficient write-back
+    - id: p119.d2.t2
+      title: Add VFS_CONTROL_ADDR (0x7004_0000)
+      status: done
+      description: Guest writes 1 to trigger flush
+    - id: p119.d2.t3
+      title: Implement Drop for VfsSurface
+      status: done
+      description: Auto-flush on VM shutdown
+    scope_lines: 100
+  - name: GeoVM WINSYS integration (op=8 VFS_BLIT, op=9 VFS_SYNC)
+    description: Desktop programs can blit filesystem into a window (op=8) and sync
+      pixel changes back (op=9). vfs_viewer.asm demonstrates both.
+    status: done
+    acceptance_criteria:
+    - description: WINSYS op=8 blits VFS surface into window
+      validation: test_winsys_vfs_blit
+      met: true
+    - description: WINSYS op=9 writes window pixels back to VFS
+      validation: test_winsys_vfs_sync
+      met: true
+    tasks:
+    - id: p119.d3.t1
+      title: Add WINSYS op=8 (VFS_BLIT)
+      status: done
+      description: encode_pixel_surface() into window offscreen buffer
+    - id: p119.d3.t2
+      title: Add WINSYS op=9 (VFS_SYNC)
+      status: done
+      description: decode_pixel_surface() writes window pixels back to host fs
+    - id: p119.d3.t3
+      title: Fix vfs_viewer.asm with correct opcodes
+      status: done
+      description: Replaced BEQZ/BEQ/J/PIXEL with CMP/JZ/JNZ/JMP/PSET
+    scope_lines: 150
+  - name: GEO_VFS_READ deprecation
+    description: 'Legacy SBI ecall (a7=0x47454F00) returns SBI_ERR_NOT_SUPPORTED.
+      Removed from probe list. Legacy code retained with #[deprecated] annotations.'
+    status: done
+    acceptance_criteria:
+    - description: GEO_VFS_READ returns NOT_SUPPORTED
+      validation: sbi.rs match arm returns error
+      met: true
+    - description: SBI_EXT_GEOMETRY removed from probe
+      validation: test_sbi_base_probe_extension
+      met: true
+    tasks:
+    - id: p119.d4.t1
+      title: Return NOT_SUPPORTED from GEO_VFS_READ handler
+      status: done
+      description: Hard deprecation with eprintln warning
+    - id: p119.d4.t2
+      title: Remove SBI_EXT_GEOMETRY from probe list
+      status: done
+      description: Guests detect deprecation via probe
+    - id: p119.d4.t3
+      title: 'Mark legacy structs as #[deprecated]'
+      status: done
+      description: GeoVfsReadReq, geo_vfs_read_pending, fulfill_geo_vfs_read
+    - id: p119.d4.t4
+      title: Update design doc migration checklist
+      status: done
+      description: All 7 steps marked DONE
+    scope_lines: 50
+  dependencies:
+  - source: phase-86
+    target: phase-119
+    type: informs
+    reason: Hypervisor provides RISC-V guest context for MMIO
+  - source: phase-43
+    target: phase-119
+    type: hard
+    reason: VFS filesystem must exist for pixel encoding
+  technical_notes: The VFS Surface uses FNV-1a hashing for filename lookup. 16-bit
+    hash in directory index with full 32-bit hash available. File data stored in little-endian
+    byte order within pixels. Max file size ~64KB (65535 bytes). Surface auto-loads
+    on init, auto-flushes on Drop. Guest C API defined in design doc for vfs_pixel.h
+    pattern.
+  risks:
+  - 16-bit hash collisions possible with many files
+  - No append/resize support yet
+  scope_lines_total: 70000
+  test_target: 2026
+- id: phase-120
+  title: VFS File Manager Desktop App
+  status: planned
+  goal: Interactive file explorer using the pixel VFS surface
+  description: Build a persistent desktop app (file_manager.asm) that renders the
+    VFS surface as an interactive file browser. Shows file names, sizes, and content
+    previews. Supports navigation with arrow keys, file selection with Enter, and
+    editing. Uses WINSYS op=8 to display the VFS surface and op=9 to save changes.
+  deliverables:
+  - name: File manager app with directory listing
+    description: Reads VFS surface directory index, renders file list in a window
+    status: todo
+    tasks:
+    - id: p120.d1.t1
+      title: Parse PXFS directory index from pixel surface
+      status: todo
+      description: Read row 0 magic, file count, and index entries
+    - id: p120.d1.t2
+      title: Render file list with names and sizes
+      status: todo
+      description: Draw text labels for each file showing name hash and byte count
+    - id: p120.d1.t3
+      title: Arrow key navigation and selection highlight
+      status: todo
+      description: Cursor up/down to select files, highlight current
+    scope_lines: 200
+  - name: File content viewer and hex editor
+    description: View file content as hex dump or ASCII. Edit bytes and save via VFS_SYNC.
+    status: todo
+    tasks:
+    - id: p120.d2.t1
+      title: Hex dump view of selected file data
+      status: todo
+      description: Read data pixels and render as hex bytes in window
+    - id: p120.d2.t2
+      title: ASCII text view toggle
+      status: todo
+      description: Switch between hex and text view with Tab key
+    - id: p120.d2.t3
+      title: Byte editing and save via VFS_SYNC
+      status: todo
+      description: Edit bytes in hex view, press S to save with WINSYS op=9
+    scope_lines: 150
+  dependencies:
+  - source: phase-119
+    target: phase-120
+    type: hard
+    reason: Needs VFS surface and WINSYS ops 8/9
+  scope_lines_total: 70400
+  test_target: 2036
+- id: phase-121
+  title: Area Agent System
+  status: planned
+  goal: Autonomous agents that patrol the infinite map and interact with buildings
+  description: Introduce AI-controlled entities (Area Agents) that wander the map,
+    enter buildings, run programs, and report results. Agents have a position, direction,
+    task queue, and communication channel. They demonstrate that Geometry OS is a
+    multi-agent environment where programs can spawn and control other entities.
+  deliverables:
+  - name: Agent entity type with wander behavior
+    description: New entity type that moves autonomously on the map
+    status: todo
+    tasks:
+    - id: p121.d1.t1
+      title: Add Agent entity variant to world_desktop
+      status: todo
+      description: Entity struct with position, direction, speed, task_queue
+    - id: p121.d1.t2
+      title: 'Wander AI: random walk with collision avoidance'
+      status: todo
+      description: Agents move semi-randomly, avoid water and mountains
+    - id: p121.d1.t3
+      title: 'Agent rendering: distinct color/shape from player'
+      status: todo
+      description: Agents render as different colored markers on map
+    scope_lines: 200
+  - name: Building interaction and task execution
+    description: Agents can enter buildings, run programs, and report back
+    status: todo
+    tasks:
+    - id: p121.d2.t1
+      title: Agent pathfinding to nearest building
+      status: todo
+      description: Simple A* or greedy path to building entrance
+    - id: p121.d2.t2
+      title: Agent executes program on building entry
+      status: todo
+      description: Spawn VM, run program, collect result
+    - id: p121.d2.t3
+      title: Agent communication channel (IPC)
+      status: todo
+      description: Agents can send messages to player or other agents
+    scope_lines: 300
+  dependencies:
+  - source: phase-116
+    target: phase-121
+    type: hard
+    reason: Living map entities needed first
+  scope_lines_total: 71000
+  test_target: 2046
+- id: phase-122
+  title: RISC-V Guest Write Path
+  status: planned
+  goal: Guest OS can create, write, and delete files via the VFS pixel surface
+  description: 'Extend the RISC-V guest to use the VFS pixel surface for file creation
+    and modification. Write a guest-side C library (vfs_pixel.h) with vfs_create,
+    vfs_write, vfs_delete functions that paint pixels to create new file entries.
+    Port existing cat.c examples. Demo: guest OS writes a log file that appears in
+    the host filesystem.'
+  deliverables:
+  - name: Guest-side vfs_pixel.h C library
+    description: Header-only C library for pixel surface file access
+    status: todo
+    tasks:
+    - id: p122.d1.t1
+      title: Write vfs_pixel.h with list/read/write/create/delete
+      status: todo
+      description: Inline functions using volatile uint32_t pointers to 0x70000000
+    - id: p122.d1.t2
+      title: Port vfs_pixel_cat.c to use new header
+      status: todo
+      description: Replace hand-coded asm with vfs_read_file() from header
+    scope_lines: 200
+  - name: Guest file creation demo
+    description: RISC-V guest creates and writes a file visible on host
+    status: todo
+    tasks:
+    - id: p122.d2.t1
+      title: Write guest_vfs_write.c demo
+      status: todo
+      description: Guest creates a file via pixel surface, writes data, triggers flush
+    - id: p122.d2.t2
+      title: 'Test: host reads file created by guest'
+      status: todo
+      description: 'Integration test: boot guest, verify host fs has new file'
+    scope_lines: 100
+  dependencies:
+  - source: phase-119
+    target: phase-122
+    type: hard
+    reason: Needs VFS surface MMIO
+  scope_lines_total: 71300
+  test_target: 2048
+- id: phase-123
+  title: Alpine Linux Live Tile
+  status: planned
+  goal: Run Alpine Linux as a live-updating tile on the Geometry OS desktop
+  description: Extend the hypervisor to render the RISC-V guest framebuffer as a live
+    window on the desktop. The Alpine Linux boot process becomes visible in real-time.
+    The guest console output maps to the window content. This proves that Geometry
+    OS can host full operating systems as first-class visual elements.
+  deliverables:
+  - name: Hypervisor-to-window bridge
+    description: Connect the RISC-V framebuffer output to a WINSYS window
+    status: todo
+    tasks:
+    - id: p123.d1.t1
+      title: Map guest framebuffer to window offscreen_buffer
+      status: todo
+      description: During hypervisor tick, copy guest FB to window pixels
+    - id: p123.d1.t2
+      title: Forward keyboard input from window to guest
+      status: todo
+      description: IKEY events in window context forwarded to guest UART
+    - id: p123.d1.t3
+      title: Auto-create window when hypervisor boots
+      status: todo
+      description: WINSYS CREATE + VFS_BLIT on hypervisor launch
+    scope_lines: 200
+  - name: Alpine Linux boot demo
+    description: Boot Alpine Linux in a window, show shell prompt
+    status: todo
+    tasks:
+    - id: p123.d2.t1
+      title: Prepare minimal Alpine rootfs for RV32
+      status: todo
+      description: Build or download rootfs with busybox + dropbear
+    - id: p123.d2.t2
+      title: Boot to shell in window, verify interactive
+      status: todo
+      description: Type commands, see output in window
+    scope_lines: 150
+  dependencies:
+  - source: phase-86
+    target: phase-123
+    type: hard
+    reason: Hypervisor must exist
+  - source: phase-119
+    target: phase-123
+    type: soft
+    reason: VFS surface useful for guest rootfs
+  scope_lines_total: 71650
+  test_target: 2051
+- id: phase-124
+  title: Window Pipeline Improvements
+  status: planned
+  goal: 'Make desktop windows more robust: stacking, dragging, resize, z-order'
+  description: Improve the WINSYS window manager to support proper window stacking
+    (z-order), drag-to-move with mouse, and window resize. Add window title bars and
+    close buttons. These are essential for multi-window desktop usage when running
+    apps like file manager alongside the VFS viewer and Alpine Linux tile.
+  deliverables:
+  - name: Window title bars and close buttons
+    description: Each window has a draggable title bar with name and X button
+    status: todo
+    tasks:
+    - id: p124.d1.t1
+      title: Render title bar above window content
+      status: todo
+      description: Draw window name in title bar region
+    - id: p124.d1.t2
+      title: Click X to close (WINSYS DESTROY)
+      status: todo
+      description: Mouse hit test on title bar close area
+    scope_lines: 100
+  - name: Drag-to-move and z-order stacking
+    description: Click title bar to bring to front, drag to move
+    status: todo
+    tasks:
+    - id: p124.d2.t1
+      title: Z-order tracking and bring-to-front
+      status: todo
+      description: Window focus brings to top of render stack
+    - id: p124.d2.t2
+      title: Drag title bar to reposition window
+      status: todo
+      description: MOUSE_DRAG on title bar moves window
+    scope_lines: 150
+  dependencies: []
+  scope_lines_total: 71900
+  test_target: 2056
+- id: phase-125
+  title: Shell VFS Integration
+  status: planned
+  goal: Geometry OS shell commands for VFS file operations
+  description: 'Add shell commands: ls (list VFS files), cat (read file to terminal),
+    edit (open file in canvas editor), save (write canvas to VFS file), rm (delete
+    file), and cp (copy file). The shell becomes a real file manager that works with
+    the pixel VFS surface as its backing store.'
+  deliverables:
+  - name: Shell file commands (ls, cat, edit)
+    description: Core read-only file commands via VFS surface
+    status: todo
+    tasks:
+    - id: p125.d1.t1
+      title: 'ls command: list files from VFS surface'
+      status: todo
+      description: Read directory index, print filenames and sizes
+    - id: p125.d1.t2
+      title: 'cat command: read file to terminal'
+      status: todo
+      description: Read data pixels, output as text to terminal window
+    - id: p125.d1.t3
+      title: 'edit command: open file in canvas editor'
+      status: todo
+      description: Load file content into canvas text surface for editing
+    scope_lines: 200
+  - name: Shell write commands (save, rm, cp)
+    description: Write operations that modify the VFS surface and flush
+    status: todo
+    tasks:
+    - id: p125.d2.t1
+      title: 'save command: write canvas to VFS file'
+      status: todo
+      description: Paint canvas content as pixels, trigger flush
+    - id: p125.d2.t2
+      title: 'rm command: delete file from surface'
+      status: todo
+      description: Zero out file rows, update directory index
+    - id: p125.d2.t3
+      title: 'cp command: copy file within VFS'
+      status: todo
+      description: Read source pixels, write to new rows
+    scope_lines: 200
+  dependencies:
+  - source: phase-119
+    target: phase-125
+    type: hard
+    reason: Needs VFS surface
+  - source: phase-120
+    target: phase-125
+    type: soft
+    reason: File manager app informs shell design
+  scope_lines_total: 72300
+  test_target: 2062
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
