@@ -660,6 +660,11 @@ pub const WINDOW_TITLE_BAR_H: u32 = 12;
 #[allow(dead_code)]
 pub const WINDOW_BORDER_W: u32 = 1;
 
+/// Taskbar occupies the bottom 16 rows of the 256x256 screen.
+/// This region must always render on top of windows (Z-order: terrain < windows < taskbar).
+pub const TASKBAR_Y: usize = 240;
+pub const TASKBAR_H: usize = 16;
+
 /// A managed window with position, size, Z-order, and offscreen buffer.
 /// Created by WINSYS op=0, destroyed by WINSYS op=1.
 ///

@@ -808,6 +808,46 @@ pub fn render_fullscreen_map(
         }
     }
 
+    // ── Taskbar overlay (always on top of world-space windows) ───────
+    // Z-order: terrain < windows < taskbar. The taskbar occupies y=240..255
+    // in the 256x256 VM screen. Re-blit these rows on top of windows.
+    {
+        let tbar_y: i32 = vm::types::TASKBAR_Y as i32;
+        let tbar_h: i32 = vm::types::TASKBAR_H as i32;
+        let so = src_offset as i32;
+        let sr = src_region as i32;
+        let sc = scale as i32;
+
+        for ty in 0..tbar_h {
+            let vm_y = tbar_y + ty;
+            let crop_y = vm_y - so;
+            if crop_y < 0 || crop_y >= sr {
+                continue; // taskbar row outside cropped view
+            }
+            let disp_base_y = map_offset as i32 + crop_y * sc;
+            for tx in 0..256i32 {
+                let crop_x = tx - so;
+                if crop_x < 0 || crop_x >= sr {
+                    continue; // pixel outside cropped view
+                }
+                let color = vm.screen[(vm_y as usize) * 256 + (tx as usize)];
+                if color == 0 {
+                    continue; // transparent
+                }
+                let disp_base_x = map_offset as i32 + crop_x * sc;
+                for dy in 0..sc {
+                    for dx in 0..sc {
+                        let px = disp_base_x + dx;
+                        let py = disp_base_y + dy;
+                        if px >= 0 && px < WIDTH as i32 && py >= 0 && py < HEIGHT as i32 {
+                            buffer[(py as usize) * WIDTH + (px as usize)] = color;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ── Building icon overlay (scaled with zoom) ───────────────
     if let Some(icon_cache) = icon_cache {
         let bldg_count = vm.ram.get(0x7580).copied().unwrap_or(0).min(32) as usize;

@@ -19741,3 +19741,62 @@ fn test_vision_screenshot_annotations() {
         "vision_screenshot response must include windows field"
     );
 }
+
+#[test]
+fn test_z_order_taskbar_on_top_of_windows() {
+    // Z-order: terrain < windows < taskbar
+    // The taskbar occupies y=240..255. A window extending into that region
+    // should NOT overwrite taskbar pixels after blit_windows().
+    let mut vm = Vm::new();
+
+    // 1. Paint "terrain" at screen pixel (10, 242) = green
+    vm.screen[242 * 256 + 10] = 0x00FF00;
+
+    // 2. Paint "taskbar" at screen pixel (10, 242) = yellow (on top of terrain)
+    vm.screen[242 * 256 + 10] = 0xFFFF00;
+
+    // 3. Create a screen-space window that overlaps the taskbar region
+    //    Position it at y=230 so it extends into y=240+ (taskbar area)
+    let mut win = types::Window::new(1, 5, 230, 20, 30, 0, 1);
+    // Fill window offscreen buffer with red
+    for y in 0..30 {
+        for x in 0..20 {
+            win.offscreen_buffer[y * 20 + x] = 0xFF0000;
+        }
+    }
+    vm.windows.push(win);
+
+    // 4. Call blit_windows
+    vm.blit_windows();
+
+    // 5. Verify: taskbar pixel at (10, 242) should be yellow, NOT red from the window
+    //    The window content starts at y = 230 + TITLE_BAR_H(12) = 242, so pixel
+    //    (10, 242) would be in the window's content area. But taskbar should prevail.
+    let pixel = vm.screen[242 * 256 + 10];
+    assert_eq!(
+        pixel, 0xFFFF00,
+        "taskbar pixel at (10, 242) should be yellow (0xFFFF00), got 0x{:06X} -- taskbar must be on top of windows",
+        pixel
+    );
+
+    // 6. Verify: window title bar pixels ABOVE the taskbar (e.g., y=235) should be present
+    //    Title bar color for active window is 0x3A3A5A
+    let pixel_above = vm.screen[235 * 256 + 10];
+    assert_ne!(
+        pixel_above, 0,
+        "window title bar pixel at (10, 235) should be non-zero (title bar rendered)"
+    );
+}
+
+#[test]
+fn test_z_order_taskbar_preserved_no_windows() {
+    // When there are no windows, taskbar pixels should be untouched by blit_windows
+    let mut vm = Vm::new();
+    vm.screen[245 * 256 + 50] = 0xABCDEF;
+    vm.blit_windows();
+    assert_eq!(
+        vm.screen[245 * 256 + 50],
+        0xABCDEF,
+        "taskbar pixel should be preserved when no windows exist"
+    );
+}

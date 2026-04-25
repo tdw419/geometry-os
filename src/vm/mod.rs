@@ -2989,6 +2989,16 @@ impl Vm {
 
         let max_z = wins.iter().map(|w| w.5).max().unwrap_or(0);
 
+        // Save the taskbar region (y=240..255) so it stays on top of all windows.
+        // Z-order: terrain < windows < taskbar.
+        let mut taskbar_saved = [0u32; 256 * types::TASKBAR_H];
+        for ty in 0..types::TASKBAR_H {
+            let screen_row = types::TASKBAR_Y + ty;
+            for tx in 0..256 {
+                taskbar_saved[ty * 256 + tx] = self.screen[screen_row * 256 + tx];
+            }
+        }
+
         for (win_id, _wx, _wy, _ww, wh, _z) in wins {
             // Find the window and blit its offscreen buffer + title bar
             let win_data: Option<(u32, u32, u32, Vec<u32>, u32, String)> =
@@ -3028,6 +3038,18 @@ impl Vm {
                     &display_title,
                     is_active,
                 );
+            }
+        }
+
+        // Restore the taskbar region on top of all windows.
+        // This ensures Z-order: terrain < windows < taskbar.
+        for ty in 0..types::TASKBAR_H {
+            let screen_row = types::TASKBAR_Y + ty;
+            for tx in 0..256 {
+                let saved_pixel = taskbar_saved[ty * 256 + tx];
+                if saved_pixel != 0 {
+                    self.screen[screen_row * 256 + tx] = saved_pixel;
+                }
             }
         }
     }
