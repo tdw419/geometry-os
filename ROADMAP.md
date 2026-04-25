@@ -6,7 +6,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 
 **Deliverables:** 511/511 complete
 
-**Tasks:** 1032/1075 complete
+**Tasks:** 1050/1075 complete
 
 ## Scope Summary
 
@@ -2671,9 +2671,9 @@ Transform the map from a launcher into an infinite spatial desktop where app win
 ### Deliverables
 
 - [x] **World-space window placement** -- Extend Window struct with world_x/world_y fields. Add a VM flag (RAM[0x7810]) that switches WINSYS op=0 from screen-space to world-space coordinates. When set, windows are placed in the infinite map coordinate system instead of the 256x256 framebuffer. This is the foundation: no rendering changes yet, just the data model.
-  - [ ] WINSYS op=0 accepts world_x, world_y in r1,r2 instead of screen x,y when window_world_coords flag is set
-  - [ ] Window struct gains world_x, world_y fields (separate from screen x,y)
-  - [ ] Existing programs that use screen-space WINSYS continue to work (flag defaults to off)
+  - [x] WINSYS op=0 accepts world_x, world_y in r1,r2 instead of screen x,y when window_world_coords flag is set
+  - [x] Window struct gains world_x, world_y fields (separate from screen x,y)
+  - [x] Existing programs that use screen-space WINSYS continue to work (flag defaults to off)
   _~120 LOC_
 - [x] **Viewport coordinate transform module** -- Add a viewport module that converts between world coordinates (tile-based, infinite range) and screen coordinates (256x256 framebuffer). This is pure math -- no rendering. The viewport tracks camera position and zoom level, already partially in RAM[0x7800-0x7801].
   - [ ] viewport struct tracks (cam_x, cam_y, zoom) mapping world tiles to framebuffer pixels
