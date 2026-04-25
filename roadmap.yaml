@@ -6079,7 +6079,7 @@ phases:
   test_target: 2051
 - id: phase-124
   title: Window Pipeline Improvements
-  status: planned
+  status: done
   goal: 'Make desktop windows more robust: stacking, dragging, resize, z-order'
   description: Improve the WINSYS window manager to support proper window stacking
     (z-order), drag-to-move with mouse, and window resize. Add window title bars and
@@ -6088,28 +6088,28 @@ phases:
   deliverables:
   - name: Window title bars and close buttons
     description: Each window has a draggable title bar with name and X button
-    status: todo
+    status: done
     tasks:
     - id: p124.d1.t1
       title: Render title bar above window content
-      status: todo
+      status: done
       description: Draw window name in title bar region
     - id: p124.d1.t2
       title: Click X to close (WINSYS DESTROY)
-      status: todo
+      status: done
       description: Mouse hit test on title bar close area
     scope_lines: 100
   - name: Drag-to-move and z-order stacking
     description: Click title bar to bring to front, drag to move
-    status: todo
+    status: done
     tasks:
     - id: p124.d2.t1
       title: Z-order tracking and bring-to-front
-      status: todo
+      status: done
       description: Window focus brings to top of render stack
     - id: p124.d2.t2
       title: Drag title bar to reposition window
-      status: todo
+      status: done
       description: MOUSE_DRAG on title bar moves window
     scope_lines: 150
   dependencies: []
