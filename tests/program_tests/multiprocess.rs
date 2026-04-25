@@ -1417,3 +1417,200 @@ fn test_window_drag_negative_clamps_to_zero() {
     assert_eq!(win.world_y, 0, "world_y should clamp to 0 on negative drag");
 }
 
+#[test]
+fn test_world_space_window_placement() {
+    // Verifies world_x/world_y are set correctly across multiple placement scenarios:
+    // 1. Screen-space window gets WORLD_COORD_UNSET for world coords
+    // 2. World-space window at origin (0, 0)
+    // 3. World-space window at large coordinates
+    // 4. Two world-space windows at different coords
+    // 5. Screen-space window created after disabling world mode
+
+    let unset: u32 = 0xFFFFFFFF;
+
+    // --- Scenario 1: Screen-space window (default, no world-space flag) ---
+    let source_screen = "
+        LDI r17, 0x7810
+        LDI r18, 0
+        STORE r17, r18
+        ; Create screen-space window at (10, 20)
+        LDI r1, 10
+        LDI r2, 20
+        LDI r3, 32
+        LDI r4, 24
+        LDI r5, 0x2000
+        LDI r6, 0
+        WINSYS r6
+        HALT
+    ";
+    let asm = assemble(source_screen, 0).expect("screen-space assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.windows.len(), 1, "scenario 1: one screen-space window");
+    let win = &vm.windows[0];
+    assert!(!win.is_world_space(), "scenario 1: window should NOT be world-space");
+    assert_eq!(win.world_x, unset, "scenario 1: world_x should be UNSET");
+    assert_eq!(win.world_y, unset, "scenario 1: world_y should be UNSET");
+    assert_eq!(win.x, 10, "scenario 1: screen x should be 10");
+    assert_eq!(win.y, 20, "scenario 1: screen y should be 20");
+
+    // --- Scenario 2: World-space window at origin (0, 0) ---
+    let source_origin = "
+        LDI r17, 0x7810
+        LDI r18, 1
+        STORE r17, r18
+        ; Create world-space window at world (0, 0)
+        LDI r1, 0
+        LDI r2, 0
+        LDI r3, 48
+        LDI r4, 32
+        LDI r5, 0x2000
+        LDI r6, 0
+        WINSYS r6
+        HALT
+    ";
+    let asm = assemble(source_origin, 0).expect("origin assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.windows.len(), 1, "scenario 2: one world-space window");
+    let win = &vm.windows[0];
+    assert!(win.is_world_space(), "scenario 2: window should be world-space");
+    assert_eq!(win.world_x, 0, "scenario 2: world_x should be 0");
+    assert_eq!(win.world_y, 0, "scenario 2: world_y should be 0");
+
+    // --- Scenario 3: World-space window at large coordinates ---
+    let source_large = "
+        LDI r17, 0x7810
+        LDI r18, 1
+        STORE r17, r18
+        ; Create world-space window at (500, 300)
+        LDI r1, 500
+        LDI r2, 300
+        LDI r3, 64
+        LDI r4, 48
+        LDI r5, 0x2000
+        LDI r6, 0
+        WINSYS r6
+        HALT
+    ";
+    let asm = assemble(source_large, 0).expect("large coords assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..1000 {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.windows.len(), 1, "scenario 3: one window");
+    let win = &vm.windows[0];
+    assert!(win.is_world_space(), "scenario 3: window should be world-space");
+    assert_eq!(win.world_x, 500, "scenario 3: world_x should be 500");
+    assert_eq!(win.world_y, 300, "scenario 3: world_y should be 300");
+    assert_eq!(win.w, 64, "scenario 3: width should be 64");
+    assert_eq!(win.h, 48, "scenario 3: height should be 48");
+
+    // --- Scenario 4: Two world-space windows at different coords ---
+    let source_two = "
+        LDI r17, 0x7810
+        LDI r18, 1
+        STORE r17, r18
+        ; First window at world (20, 15)
+        LDI r1, 20
+        LDI r2, 15
+        LDI r3, 40
+        LDI r4, 30
+        LDI r5, 0x2000
+        LDI r6, 0
+        WINSYS r6
+        ; Save first window id
+        MOV r10, r0
+        ; Second window at world (80, 60)
+        LDI r1, 80
+        LDI r2, 60
+        LDI r3, 50
+        LDI r4, 40
+        LDI r5, 0x3000
+        LDI r6, 0
+        WINSYS r6
+        HALT
+    ";
+    let asm = assemble(source_two, 0).expect("two windows assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..2000 {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.windows.len(), 2, "scenario 4: two windows");
+    let win0 = &vm.windows[0];
+    let win1 = &vm.windows[1];
+    assert!(win0.is_world_space(), "scenario 4: window 0 should be world-space");
+    assert!(win1.is_world_space(), "scenario 4: window 1 should be world-space");
+    assert_eq!(win0.world_x, 20, "scenario 4: win0 world_x should be 20");
+    assert_eq!(win0.world_y, 15, "scenario 4: win0 world_y should be 15");
+    assert_eq!(win1.world_x, 80, "scenario 4: win1 world_x should be 80");
+    assert_eq!(win1.world_y, 60, "scenario 4: win1 world_y should be 60");
+
+    // --- Scenario 5: Switch from world-space to screen-space within same VM ---
+    let source_switch = "
+        ; First: world-space window
+        LDI r17, 0x7810
+        LDI r18, 1
+        STORE r17, r18
+        LDI r1, 100
+        LDI r2, 200
+        LDI r3, 32
+        LDI r4, 32
+        LDI r5, 0x2000
+        LDI r6, 0
+        WINSYS r6
+        ; Then: disable world-space and create screen-space window
+        LDI r17, 0x7810
+        LDI r18, 0
+        STORE r17, r18
+        LDI r1, 30
+        LDI r2, 40
+        LDI r3, 24
+        LDI r4, 16
+        LDI r5, 0x4000
+        LDI r6, 0
+        WINSYS r6
+        HALT
+    ";
+    let asm = assemble(source_switch, 0).expect("switch assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..2000 {
+        if !vm.step() { break; }
+    }
+
+    assert_eq!(vm.windows.len(), 2, "scenario 5: two windows (one world, one screen)");
+    let win_ws = &vm.windows[0];
+    let win_ss = &vm.windows[1];
+    assert!(win_ws.is_world_space(), "scenario 5: first window should be world-space");
+    assert!(!win_ss.is_world_space(), "scenario 5: second window should be screen-space");
+    assert_eq!(win_ws.world_x, 100, "scenario 5: world-space world_x should be 100");
+    assert_eq!(win_ws.world_y, 200, "scenario 5: world-space world_y should be 200");
+    assert_eq!(win_ss.world_x, unset, "scenario 5: screen-space world_x should be UNSET");
+    assert_eq!(win_ss.world_y, unset, "scenario 5: screen-space world_y should be UNSET");
+    assert_eq!(win_ss.x, 30, "scenario 5: screen-space x should be 30");
+    assert_eq!(win_ss.y, 40, "scenario 5: screen-space y should be 40");
+}
+
