@@ -222,5 +222,7 @@ pub mod scheduling;
 pub mod self_host;
 #[path = "program_tests/shell.rs"]
 pub mod shell;
+#[path = "program_tests/shell_vfs.rs"]
+pub mod shell_vfs;
 #[path = "program_tests/vm_state.rs"]
 pub mod vm_state;
