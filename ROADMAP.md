@@ -357,7 +357,7 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
   - [x] Each untested program has at least one test
   _~220 LOC_
 - [x] **Assembler error line numbers** -- Error messages include source line number
-  - [ ] Error message format: 'line N: unknown opcode: XYZ'
+  - [x] Error message format: 'line N: unknown opcode: XYZ'
   _~30 LOC_
 - [x] **Version string audit** -- Single source of truth for version across banner, CLI, Cargo.toml
   _~10 LOC_
