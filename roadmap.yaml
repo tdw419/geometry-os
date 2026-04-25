@@ -6369,7 +6369,7 @@ phases:
   _claimed_at: 1777152489
 - id: phase-129
   title: Host Terminal -- Keyboard Shortcuts and Productivity
-  status: in_progress
+  status: done
   goal: Make the terminal feel like a real terminal emulator with copy/paste, scrollback,
     and keyboard shortcuts
   description: 'Add essential terminal productivity features: scrollback buffer (scroll
@@ -6381,52 +6381,52 @@ phases:
     description: Maintain a scrollback ring buffer of the last N screens of output
       (e.g., 10 pages = 300 rows). Shift+PageUp scrolls back through history, Shift+PageDown
       scrolls forward. Scrollback indicator shows position (e.g., '3/10').
-    status: todo
+    status: done
     tasks:
     - id: p129.d1.t1
       title: Extend text buffer to support scrollback pages
-      status: todo
+      status: done
       description: Add scrollback ring buffer in RAM (0x6100-0x7FFF = ~8K rows)
     - id: p129.d1.t2
       title: Shift+PageUp/Down scroll through history
-      status: todo
+      status: done
       description: Track scrollback_offset, render from history instead of live buffer
     - id: p129.d1.t3
       title: Scrollback position indicator in status bar
-      status: todo
+      status: done
       description: 'Show ''history: 3/10'' when scrolled back, hide when at live view'
     scope_lines: 120
   - name: Copy/paste integration
     description: Ctrl+Shift+C copies selected text (or last command output). Ctrl+Shift+V
       pastes from host clipboard. Use the existing clipboard opcode (phase-96) to
       bridge host clipboard into the PTY.
-    status: todo
+    status: done
     tasks:
     - id: p129.d2.t1
       title: Paste from host clipboard via PTYWRITE
-      status: todo
+      status: done
       description: Ctrl+Shift+V reads clipboard, splits to bytes, PTYWRITE to bash
     - id: p129.d2.t2
       title: Copy current line or selection to host clipboard
-      status: todo
+      status: done
       description: Ctrl+Shift+C copies text buffer content to host clipboard
     scope_lines: 80
   - name: Ctrl+L clear screen, Ctrl+Shift+T new tab
     description: Ctrl+L sends clear to bash (already works via PTYWRITE). Ctrl+Shift+T
       opens new tab. Ctrl+Shift+W closes current tab. Ctrl+1-4 switches tabs by number.
-    status: todo
+    status: done
     tasks:
     - id: p129.d3.t1
       title: Ctrl+Shift+T opens new terminal tab
-      status: todo
+      status: done
       description: Detect Ctrl+Shift+T in IKEY handler, trigger new PTYOPEN
     - id: p129.d3.t2
       title: Ctrl+Shift+W closes current tab
-      status: todo
+      status: done
       description: Send PTYCLOSE for current tab, switch to next available
     - id: p129.d3.t3
       title: Ctrl+1 through Ctrl+4 switch tabs
-      status: todo
+      status: done
       description: Direct tab switching via number keys with Ctrl modifier
     scope_lines: 60
   scope_lines_total: 73400
