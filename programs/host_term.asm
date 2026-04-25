@@ -1,26 +1,26 @@
-; host_term.asm -- Host Shell Terminal for Geometry OS (v2)
+; host_term.asm -- Host Shell Terminal for Geometry OS (v3)
 ;
 ; Spawns bash inside a real PTY via the PTYOPEN opcode. Pipes keystrokes
 ; through PTYWRITE, drains PTY output through PTYREAD each frame.
 ;
-; v2 improvements:
-;   - ANSI escape stripping (ESC [ ... letter sequences silently skipped)
-;   - OSC sequence stripping (ESC ] ... BEL/ST sequences skipped)
-;   - Backspace/Delete support
-;   - Ctrl-C sends 0x03, Ctrl-D sends 0x04
-;   - Tab sends 0x09
-;   - Scrolling text buffer (42x30)
+; v3 improvements:
+;   - SMALLTEXT opcode (3x5 font) for 85 columns
+;   - Arrow key support (ESC [ A/B/C/D sequences)
+;   - Shift-aware lowercase text input
+;   - ANSI escape stripping (CSI + OSC sequences)
+;   - Backspace/Delete, Ctrl-C (0x03), Ctrl-D (0x04), Tab (0x09)
 ;
 ; RAM Layout:
-;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
-;   0x4800         Cursor column
-;   0x4801         Cursor row
-;   0x4802         Blink counter
-;   0x4803         PTY handle
-;   0x4804         ANSI state (0=normal, 1=saw ESC, 2=in CSI, 3=in OSC)
+;   0x4000-0x49F5  Text buffer (85*30 = 2550 u32 cells, row-major)
+;   0x4A00         Cursor column
+;   0x4A01         Cursor row
+;   0x4A02         Blink counter
+;   0x4A03         PTY handle
+;   0x4A04         ANSI state (0=normal, 1=saw ESC, 2=in CSI, 3=in OSC)
 ;   0x5000         Empty cmd string (null -> default $SHELL)
-;   0x5400         Send buffer (one byte per PTYWRITE)
+;   0x5400         Send buffer (multi-byte for arrow key sequences)
 ;   0x5800-0x5FFF  Receive buffer (2048 cells)
+;   0x6000-0x60FF  Scratch buffer for SMALLTEXT rendering (128 chars)
 ;
 ; Registers:
 ;   r0  CMP/result
@@ -28,18 +28,19 @@
 ;   r28 PTY handle (live copy)
 ;   r30 stack pointer
 
-#define COLS 42
-#define ROWS 30
+#define COLS 85
+#define ROWS 40
 #define BUF 0x4000
-#define BUF_END 0x44EC
-#define CUR_COL 0x4800
-#define CUR_ROW 0x4801
-#define BLINK 0x4802
-#define PTY_HANDLE 0x4803
-#define ANSI_STATE 0x4804
+#define BUF_END 0x49F6
+#define CUR_COL 0x4A00
+#define CUR_ROW 0x4A01
+#define BLINK 0x4A02
+#define PTY_HANDLE 0x4A03
+#define ANSI_STATE 0x4A04
 #define CMD_BUF 0x5000
 #define SEND_BUF 0x5400
 #define RECV_BUF 0x5800
+#define SCRATCH 0x6000
 
 ; ANSI states
 #define ANS_NORMAL 0
@@ -47,14 +48,22 @@
 #define ANS_CSI    2
 #define ANS_OSC    3
 
+; Extended key codes (from keys.rs)
+#define KEY_UP    0x80
+#define KEY_DOWN  0x81
+#define KEY_LEFT  0x82
+#define KEY_RIGHT 0x83
+#define KEY_HOME  0x84
+#define KEY_END   0x85
+
 ; =========================================
 ; INIT
 ; =========================================
 LDI r1, 1
 LDI r30, 0xFD00
 
-; Background fill
-LDI r0, 0x0C0C0C
+; Background fill -- dark gray
+LDI r0, 0x0A0A0A
 FILL r0
 
 ; Clear text buffer to spaces
@@ -81,29 +90,29 @@ LDI r20, ANSI_STATE
 LDI r0, 0
 STORE r20, r0
 
-; Title bar
+; Title bar (compact -- 10px high since tiny font is 5px)
 LDI r1, 0
 LDI r2, 0
 LDI r3, 256
-LDI r4, 16
-LDI r5, 0x002211
+LDI r4, 10
+LDI r5, 0x1A1A2E
 RECTF r1, r2, r3, r4, r5
 
-; Title text
-LDI r20, SEND_BUF
-STRO r20, "Host Shell v2"
-LDI r1, 4
-LDI r2, 4
-LDI r3, SEND_BUF
-LDI r4, 0x44FF44
-LDI r5, 0x002211
+; Title text (using DRAWTEXT for readability in title bar)
+LDI r20, SCRATCH
+STRO r20, "host shell"
+LDI r1, 2
+LDI r2, 1
+LDI r3, SCRATCH
+LDI r4, 0x44DD44
+LDI r5, 0x1A1A2E
 DRAWTEXT r1, r2, r3, r4, r5
 
 ; Close button hit region
-LDI r1, 220
+LDI r1, 230
 LDI r2, 0
-LDI r3, 36
-LDI r4, 16
+LDI r3, 26
+LDI r4, 10
 HITSET r1, r2, r3, r4, 99
 
 ; Empty cmd string for PTYOPEN
@@ -131,7 +140,7 @@ main_loop:
 
     ; Drain pty into text buffer
     LDI r6, RECV_BUF
-    LDI r7, 256
+    LDI r7, 512
     PTYREAD r28, r6, r7
     ; r0 = bytes drained (0 = nothing, 0xFFFFFFFF = closed)
     CMPI r0, 0
@@ -176,24 +185,21 @@ after_drain:
     IKEY r5
     JZ r5, main_loop
 
-    ; Translate special keys
+    ; Translate key and send to PTY
     CALL translate_key
-    ; If r0 == 0 after translate, don't send
+    ; r0 = number of bytes to send (0 = ignore, 1 = single, 3 = arrow escape)
     CMPI r0, 0
     JZ r0, main_loop
 
-    ; Send translated byte
-    LDI r20, SEND_BUF
-    STORE r20, r0
+    ; Send bytes from SEND_BUF
     LDI r6, SEND_BUF
-    LDI r7, 1
-    PTYWRITE r28, r6, r7
+    PTYWRITE r28, r6, r0
     JMP main_loop
 
 ; =========================================
 ; PROCESS_BYTE -- ANSI state machine + text buffer append
 ; r5 = byte from PTY
-; Uses ANSI_STATE at 0x4804
+; Uses ANSI_STATE at 0x4A04
 ; =========================================
 process_byte:
     PUSH r31
@@ -248,8 +254,7 @@ pb_esc_check_osc:
 
 pb_esc_other:
     ; Any other char after ESC: not a recognized sequence.
-    ; Some two-char ESC sequences (like ESC M, ESC 7, ESC 8) -- just skip.
-    ; Reset to normal, don't display.
+    ; Two-char ESC sequences (ESC M, ESC 7, ESC 8) -- skip.
     LDI r20, ANSI_STATE
     LDI r0, ANS_NORMAL
     STORE r20, r0
@@ -261,7 +266,6 @@ pb_check_csi:
     JNZ r0, pb_check_osc
 
     ; CSI sequences end with a byte in 0x40-0x7E (letter or @)
-    ; Also accept digits and semicolons as intermediate params
     CMPI r5, 64    ; '@' -- first terminator
     BLT r0, pb_csi_continue
 
@@ -272,8 +276,7 @@ pb_check_csi:
     JMP pb_ret
 
 pb_csi_continue:
-    ; Still collecting CSI params (digits, semicolons, etc)
-    ; Stay in CSI state
+    ; Still collecting CSI params
     JMP pb_ret
 
 pb_check_osc:
@@ -284,18 +287,15 @@ pb_check_osc:
     ; OSC ends with BEL (0x07) or ST (ESC \)
     CMPI r5, 7     ; BEL
     JZ r0, pb_osc_end
-    ; Check for ESC (start of ST)
     CMPI r5, 27
     JNZ r0, pb_osc_continue
-    ; This ESC might be start of ST (ESC \)
-    ; Just transition to ESC state and let it resolve
+    ; ESC might be start of ST
     LDI r20, ANSI_STATE
     LDI r0, ANS_ESC
     STORE r20, r0
     JMP pb_ret
 
 pb_osc_continue:
-    ; Keep consuming OSC
     JMP pb_ret
 
 pb_osc_end:
@@ -305,7 +305,6 @@ pb_osc_end:
     JMP pb_ret
 
 pb_reset_state:
-    ; Unknown state, reset
     LDI r20, ANSI_STATE
     LDI r0, ANS_NORMAL
     STORE r20, r0
@@ -369,63 +368,203 @@ ab_ret:
     RET
 
 ; =========================================
-; TRANSLATE_KEY -- translate IKEY code to terminal byte in r0
-; Returns 0 if key should be ignored
+; TRANSLATE_KEY -- translate IKEY code to PTY byte(s)
+; Fills SEND_BUF with bytes, returns byte count in r0
 ; r5 = raw IKEY value (preserved)
 ; =========================================
 translate_key:
-    ; Printable ASCII (32-126): pass through
+    PUSH r31
+    LDI r1, 1
+
+    ; Printable ASCII (32-126): pass through as single byte
     CMPI r5, 32
     BLT r0, tk_special
     CMPI r5, 127
     BGE r0, tk_special
-    ; Return the char itself
+    LDI r20, SEND_BUF
+    STORE r20, r5
+    LDI r0, 1
     JMP tk_ret
 
 tk_special:
-    ; Enter -> \n (10)
+    ; Enter (0x0D) -> \n (10)
     CMPI r5, 13
     JNZ r0, tk_bs
+    LDI r20, SEND_BUF
     LDI r0, 10
+    STORE r20, r0
+    LDI r0, 1
     JMP tk_ret
 
 tk_bs:
-    ; Backspace (8) -> 0x7F (DEL, what terminals actually send)
+    ; Backspace (0x08) -> DEL (0x7F)
     CMPI r5, 8
     JNZ r0, tk_del
+    LDI r20, SEND_BUF
     LDI r0, 127
+    STORE r20, r0
+    LDI r0, 1
     JMP tk_ret
 
 tk_del:
-    ; Delete (127) -> 0x1B [ 3 ~ (just send DEL for now)
+    ; Delete (0x7F) -> ESC [ 3 ~ (just send DEL for simplicity)
     CMPI r5, 127
-    JNZ r0, tk_ctrl_c
-    LDI r0, 127
-    JMP tk_ret
-
-tk_ctrl_c:
-    ; Ctrl-C: IKEY sends 3 when Ctrl is held with C
-    CMPI r5, 3
-    JNZ r0, tk_ctrl_d
-    LDI r0, 3
-    JMP tk_ret
-
-tk_ctrl_d:
-    CMPI r5, 4
     JNZ r0, tk_tab
-    LDI r0, 4
+    LDI r20, SEND_BUF
+    LDI r0, 127
+    STORE r20, r0
+    LDI r0, 1
     JMP tk_ret
 
 tk_tab:
     CMPI r5, 9
-    JNZ r0, tk_escape
+    JNZ r0, tk_ctrl_c
+    LDI r20, SEND_BUF
     LDI r0, 9
+    STORE r20, r0
+    LDI r0, 1
+    JMP tk_ret
+
+tk_ctrl_c:
+    ; Ctrl-C: check for ASCII 3
+    CMPI r5, 3
+    JNZ r0, tk_ctrl_d
+    LDI r20, SEND_BUF
+    LDI r0, 3
+    STORE r20, r0
+    LDI r0, 1
+    JMP tk_ret
+
+tk_ctrl_d:
+    CMPI r5, 4
+    JNZ r0, tk_escape
+    LDI r20, SEND_BUF
+    LDI r0, 4
+    STORE r20, r0
+    LDI r0, 1
     JMP tk_ret
 
 tk_escape:
     CMPI r5, 27
-    JNZ r0, tk_ignore
+    JNZ r0, tk_arrow_up
+    LDI r20, SEND_BUF
     LDI r0, 27
+    STORE r20, r0
+    LDI r0, 1
+    JMP tk_ret
+
+tk_arrow_up:
+    ; Arrow Up (0x80) -> ESC [ A
+    CMPI r5, KEY_UP
+    JNZ r0, tk_arrow_down
+    LDI r20, SEND_BUF
+    LDI r0, 27
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    ADD r20, r1
+    LDI r0, 91
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    LDI r2, 2
+    ADD r20, r2
+    LDI r0, 65
+    STORE r20, r0
+    LDI r0, 3
+    JMP tk_ret
+
+tk_arrow_down:
+    ; Arrow Down (0x81) -> ESC [ B
+    CMPI r5, KEY_DOWN
+    JNZ r0, tk_arrow_right
+    LDI r20, SEND_BUF
+    LDI r0, 27
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    ADD r20, r1
+    LDI r0, 91
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    LDI r2, 2
+    ADD r20, r2
+    LDI r0, 66
+    STORE r20, r0
+    LDI r0, 3
+    JMP tk_ret
+
+tk_arrow_right:
+    ; Arrow Right (0x83) -> ESC [ C
+    CMPI r5, KEY_RIGHT
+    JNZ r0, tk_arrow_left
+    LDI r20, SEND_BUF
+    LDI r0, 27
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    ADD r20, r1
+    LDI r0, 91
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    LDI r2, 2
+    ADD r20, r2
+    LDI r0, 67
+    STORE r20, r0
+    LDI r0, 3
+    JMP tk_ret
+
+tk_arrow_left:
+    ; Arrow Left (0x82) -> ESC [ D
+    CMPI r5, KEY_LEFT
+    JNZ r0, tk_home
+    LDI r20, SEND_BUF
+    LDI r0, 27
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    ADD r20, r1
+    LDI r0, 91
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    LDI r2, 2
+    ADD r20, r2
+    LDI r0, 68
+    STORE r20, r0
+    LDI r0, 3
+    JMP tk_ret
+
+tk_home:
+    ; Home (0x84) -> ESC [ H
+    CMPI r5, KEY_HOME
+    JNZ r0, tk_end
+    LDI r20, SEND_BUF
+    LDI r0, 27
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    ADD r20, r1
+    LDI r0, 91
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    LDI r2, 2
+    ADD r20, r2
+    LDI r0, 72
+    STORE r20, r0
+    LDI r0, 3
+    JMP tk_ret
+
+tk_end:
+    ; End (0x85) -> ESC [ F
+    CMPI r5, KEY_END
+    JNZ r0, tk_ignore
+    LDI r20, SEND_BUF
+    LDI r0, 27
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    ADD r20, r1
+    LDI r0, 91
+    STORE r20, r0
+    LDI r20, SEND_BUF
+    LDI r2, 2
+    ADD r20, r2
+    LDI r0, 70
+    STORE r20, r0
+    LDI r0, 3
     JMP tk_ret
 
 tk_ignore:
@@ -433,6 +572,7 @@ tk_ignore:
     LDI r0, 0
 
 tk_ret:
+    POP r31
     RET
 
 ; =========================================
@@ -451,21 +591,21 @@ do_newline:
     BLT r0, dn_store
     CALL scroll_up
     LDI r20, CUR_ROW
-    LDI r6, 29
+    LDI r6, 39
 dn_store:
     STORE r20, r6
     POP r31
     RET
 
 ; =========================================
-; SCROLL_UP -- shift rows 1..29 up to 0..28, clear row 29
+; SCROLL_UP -- shift rows 1..39 up to 0..38, clear row 39
 ; =========================================
 scroll_up:
     PUSH r31
     LDI r1, 1
     LDI r10, 0
 scroll_loop:
-    CMPI r10, 29
+    CMPI r10, 39
     BGE r0, scroll_clear
 
     LDI r20, BUF
@@ -498,7 +638,7 @@ scroll_copy:
 
 scroll_clear:
     LDI r20, BUF
-    LDI r6, 29
+    LDI r6, 39
     LDI r11, COLS
     MUL r6, r11
     ADD r20, r6
@@ -515,7 +655,6 @@ sc_loop:
 
 ; =========================================
 ; WRITE_STR_TO_BUF -- write null-term string at [r20] to text buffer
-; Used for status messages
 ; =========================================
 write_str_to_buf:
     PUSH r31
@@ -533,7 +672,9 @@ wsb_done:
     RET
 
 ; =========================================
-; RENDER -- redraw text buffer + cursor
+; RENDER -- redraw text buffer using SMALLTEXT (3x5 font)
+; Terminal area starts at y=10, uses 6px per row (5px glyph + 1px spacing)
+; 40 rows * 6px = 240px. Total: 10 + 240 = 250px (fits in 256px)
 ; =========================================
 render:
     PUSH r31
@@ -541,20 +682,19 @@ render:
 
     ; Clear content area
     LDI r1, 0
-    LDI r2, 16
+    LDI r2, 10
     LDI r3, 256
-    LDI r4, 240
-    LDI r5, 0x0C0C0C
+    LDI r4, 246
+    LDI r5, 0x0A0A0A
     RECTF r1, r2, r3, r4, r5
 
     LDI r1, 1
-    LDI r8, 8
-    LDI r9, 6
-    LDI r10, 0
-    LDI r11, BUF
-    LDI r12, 16
+    LDI r10, 0        ; row counter
+    LDI r11, BUF       ; buf pointer
+    LDI r12, 10        ; y position (start after title bar)
 render_row:
-    LDI r16, 0x6000
+    ; Copy up to 85 chars to scratch buffer, null-terminate
+    LDI r16, SCRATCH
     LDI r17, 0
 copy_col:
     LOAD r6, r11
@@ -565,17 +705,25 @@ copy_col:
     CMPI r17, COLS
     BLT r17, copy_col
     LDI r0, 0
-    STORE r16, r0
+    STORE r16, r0      ; null-terminate
 
-    ; Use light gray text for terminal output
+    ; Render with SMALLTEXT: light gray text, dark bg (0=transparent bg)
     LDI r1, 0
-    LDI r13, 0x6000
-    LDI r14, 0xCCCCCC
-    LDI r15, 0
-    DRAWTEXT r1, r12, r13, r14, r15
+    LDI r13, SCRATCH
+    LDI r14, 0xBBBBBB  ; light gray terminal text
+    LDI r15, 0         ; no background (already cleared)
+    SMALLTEXT r1, r12, r13, r14, r15
 
     LDI r1, 1
-    ADD r12, r8
+    ADD r12, r1        ; y += 1... wait, tiny font is 5px tall + we want 1px spacing = 6px per row
+    ; Actually need to advance by 6 for the next row. Let me add 5 more.
+    ADD r12, r1
+    ADD r12, r1
+    ADD r12, r1
+    ADD r12, r1
+    ADD r12, r1
+    ; Now r12 advanced by 6 total
+
     ADD r10, r1
     CMPI r10, ROWS
     BLT r10, render_row
@@ -586,20 +734,22 @@ copy_col:
     LDI r7, 8
     AND r0, r7
     CMPI r0, 4
-    BLT r0, draw_cursor
-    JMP cursor_done
+    BGE r0, cursor_done
 
 draw_cursor:
+    ; Cursor: 2px wide, 5px tall at cursor position
     LDI r20, CUR_COL
     LOAD r0, r20
-    MUL r0, r9
+    LDI r7, 3
+    MUL r0, r7          ; x = col * 3 (3px per char)
     LDI r20, CUR_ROW
     LOAD r2, r20
-    MUL r2, r8
-    LDI r3, 16
-    ADD r2, r3
-    LDI r3, 6
-    LDI r4, 8
+    LDI r7, 6
+    MUL r2, r7          ; row * 6
+    LDI r3, 10
+    ADD r2, r3          ; + title bar offset
+    LDI r3, 2           ; width
+    LDI r4, 5           ; height
     LDI r5, 0x44FF44
     RECTF r0, r2, r3, r4, r5
 

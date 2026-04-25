@@ -434,7 +434,13 @@ fn main() {
         for key in window.get_keys_pressed(KeyRepeat::No) {
             if is_running {
                 // Runtime: send keys to VM key ring buffer
-                if let Some(ch) = key_to_ascii(key) {
+                // Use shift-aware mapping for proper case + special keys
+                let shift =
+                    window.is_key_down(Key::LeftShift) || window.is_key_down(Key::RightShift);
+                if let Some(ch) = key_to_ascii_shifted(key, shift) {
+                    vm.push_key(ch as u32);
+                } else if let Some(ch) = key_to_ascii(key) {
+                    // Fallback for special keys (Enter, arrows, etc.)
                     vm.push_key(ch as u32);
                 }
                 continue;
