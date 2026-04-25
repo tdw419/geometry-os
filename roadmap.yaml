@@ -4853,7 +4853,7 @@ phases:
   - Canvas text input requires understanding the canvas_buffer encoding (low byte = ASCII char)
   - Complex demos may exceed 4096-cell canvas limit
   scope_lines_total: 450
-  status: done
+  status: complete
   test_target: 6
   title: Self-Modification Showcase Demos
   _claimed_at: 1777050076
@@ -4883,7 +4883,7 @@ phases:
   - Process-per-entity could hit scheduler limits
   - Entity state persistence across frames needs careful design
   scope_lines_total: 500
-  status: done
+  status: complete
   test_target: 8
   title: Living Map Entities
   _claimed_at: 1777051825
@@ -4916,7 +4916,7 @@ phases:
   - criterion may not be in Cargo.toml yet
   - GPU rendering profiling needs wgpu-specific tools
   scope_lines_total: 300
-  status: done
+  status: complete
   test_target: 4
   title: Performance Benchmarking and Profiling
   _claimed_at: 1777053191
@@ -5075,7 +5075,7 @@ phases:
   test_target: 2026
 - id: phase-120
   title: VFS File Manager Desktop App
-  status: done
+  status: complete
   goal: Interactive file explorer using the pixel VFS surface
   description: Build a persistent desktop app (file_manager.asm) that renders the VFS surface as an interactive file browser. Shows file names, sizes, and content previews. Supports navigation with arrow
     keys, file selection with Enter, and editing. Uses WINSYS op=8 to display the VFS surface and op=9 to save changes.
@@ -5124,7 +5124,7 @@ phases:
   _claimed_at: 1777055122
 - id: phase-121
   title: Area Agent System
-  status: done
+  status: complete
   goal: Autonomous agents that patrol the infinite map and interact with buildings
   description: Introduce AI-controlled entities (Area Agents) that wander the map, enter buildings, run programs, and report results. Agents have a position, direction, task queue, and communication channel.
     They demonstrate that Geometry OS is a multi-agent environment where programs can spawn and control other entities.
@@ -5173,7 +5173,7 @@ phases:
   _claimed_at: 1777056634
 - id: phase-122
   title: RISC-V Guest Write Path
-  status: done
+  status: complete
   goal: Guest OS can create, write, and delete files via the VFS pixel surface
   description: 'Extend the RISC-V guest to use the VFS pixel surface for file creation and modification. Write a guest-side C library (vfs_pixel.h) with vfs_create, vfs_write, vfs_delete functions that
     paint pixels to create new file entries. Port existing cat.c examples. Demo: guest OS writes a log file that appears in the host filesystem.'
@@ -5214,7 +5214,7 @@ phases:
   _claimed_at: 1777058062
 - id: phase-123
   title: Alpine Linux Live Tile
-  status: done
+  status: complete
   goal: Run Alpine Linux as a live-updating tile on the Geometry OS desktop
   description: Extend the hypervisor to render the RISC-V guest framebuffer as a live window on the desktop. The Alpine Linux boot process becomes visible in real-time. The guest console output maps to
     the window content. This proves that Geometry OS can host full operating systems as first-class visual elements.
@@ -5262,7 +5262,7 @@ phases:
   test_target: 2051
 - id: phase-124
   title: Window Pipeline Improvements
-  status: done
+  status: complete
   goal: 'Make desktop windows more robust: stacking, dragging, resize, z-order'
   description: Improve the WINSYS window manager to support proper window stacking (z-order), drag-to-move with mouse, and window resize. Add window title bars and close buttons. These are essential for
     multi-window desktop usage when running apps like file manager alongside the VFS viewer and Alpine Linux tile.
