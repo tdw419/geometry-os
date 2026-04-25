@@ -1,12 +1,12 @@
 # Geometry OS Roadmap
 
-Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 153 opcodes, 3448 tests, 145 programs, 72229 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
+Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 154 opcodes, 3656 tests, 147 programs, 76635 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
 **Progress:** 125/125 phases complete, 0 in progress
 
 **Deliverables:** 511/511 complete
 
-**Tasks:** 1191/1191 complete
+**Tasks:** 1075/1075 complete
 
 ## Scope Summary
 
