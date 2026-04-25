@@ -45,6 +45,15 @@ pub struct RiscvVm {
     pub bus: bus::Bus,
 }
 
+impl std::fmt::Debug for RiscvVm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RiscvVm")
+            .field("cpu.pc", &self.cpu.pc)
+            .field("bus.ram_base", &self.bus.mem.ram_base)
+            .finish()
+    }
+}
+
 /// Result of a guest boot attempt.
 #[derive(Debug)]
 pub struct BootResult {

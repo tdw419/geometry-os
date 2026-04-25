@@ -866,22 +866,37 @@ impl Default for BackgroundVm {
     }
 }
 
-/// Phase 123: Alpine Linux Live Tile state.
-/// A single live RISC-V hypervisor that renders its console output
-/// into a WINSYS window's offscreen buffer each frame.
+// ── Phase 123: Live Hypervisor State ──────────────────────────
+
+/// State for a live RISC-V hypervisor VM running inside a WINSYS window.
+/// Managed by VM_LIVE_SPAWN / VM_LIVE_STEP / VM_LIVE_KILL opcodes.
+/// Only one live hypervisor can be active at a time.
 pub struct LiveHypervisorState {
-    /// The live RISC-V VM instance.
+    /// The RISC-V VM instance
     pub vm: crate::riscv::RiscvVm,
-    /// WINSYS window ID to render console output into.
+    /// WINSYS window ID to render console output into
     pub window_id: u32,
-    /// Number of RISC-V instructions to execute per VM_LIVE_STEP call.
+    /// How many RISC-V instructions to execute per VM_LIVE_STEP
     pub instructions_per_slice: u32,
-    /// Cumulative instructions executed.
+    /// Cumulative instruction count across all time slices
     pub total_instructions: u64,
-    /// Current console cursor row (for text rendering in the window).
+    /// Current console cursor row (in character cells)
     pub console_row: u32,
-    /// Current console cursor column.
+    /// Current console cursor column (in character cells)
     pub console_col: u32,
-    /// Whether the VM has completed its initial boot.
+    /// Whether the guest has booted (set after first successful step)
     pub booted: bool,
+}
+
+impl std::fmt::Debug for LiveHypervisorState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LiveHypervisorState")
+            .field("window_id", &self.window_id)
+            .field("instructions_per_slice", &self.instructions_per_slice)
+            .field("total_instructions", &self.total_instructions)
+            .field("console_row", &self.console_row)
+            .field("console_col", &self.console_col)
+            .field("booted", &self.booted)
+            .finish_non_exhaustive()
+    }
 }

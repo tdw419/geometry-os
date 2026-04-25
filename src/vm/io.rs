@@ -341,6 +341,7 @@ impl Vm {
             llm_config: None,
             background_vms: Vec::new(),
             next_bg_vm_id: 1,
+            live_hypervisor: None,
             segfault_addr: 0,
             pc_trace: [0; 16],
             pc_trace_idx: 0,

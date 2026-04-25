@@ -1,5 +1,5 @@
 use std::io::Write;
-#[derive(Debug)]
+
 pub struct Vm {
     pub ram: Vec<u32>,
     pub regs: [u32; NUM_REGS],
@@ -174,12 +174,6 @@ pub struct Vm {
     /// Created by VM_LIVE_SPAWN, destroyed by VM_LIVE_KILL.
     pub live_hypervisor: Option<LiveHypervisorState>,
 
-    // ── Inter-Tile Mailbox
-    /// Active live RISC-V hypervisor instance (only one at a time).
-    /// Rendered to a WINSYS window's offscreen buffer each frame.
-    /// Created by VM_LIVE_SPAWN, destroyed by VM_LIVE_KILL.
-    pub live_hypervisor: Option<LiveHypervisorState>,
-
     // ── Inter-Tile Mailbox (Phase 4.1) ──────────────────────────
     /// Write buffer for mailbox sends. Messages are committed on FRAME.
     pub mailbox_write_buf: Vec<MailboxEntry>,
@@ -199,6 +193,18 @@ pub struct Vm {
     pub crash_dialog_active: bool,
     /// PID of the process whose crash dialog is displayed.
     pub crash_dialog_pid: u32,
+}
+
+impl std::fmt::Debug for Vm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Vm")
+            .field("pc", &self.pc)
+            .field("halted", &self.halted)
+            .field("frame_count", &self.frame_count)
+            .field("current_pid", &self.current_pid)
+            .field("mode", &self.mode)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for Vm {
@@ -286,6 +292,7 @@ impl Vm {
             llm_config: None,
             background_vms: Vec::new(),
             next_bg_vm_id: 1,
+            live_hypervisor: None,
             mailbox_write_buf: vec![MailboxEntry::default(); MAILBOX_SIZE],
             mailbox_read_buf: vec![MailboxEntry::default(); MAILBOX_SIZE],
             segfault_addr: 0,
@@ -394,6 +401,7 @@ impl Vm {
         self.llm_config = None;
         self.background_vms.clear();
         self.next_bg_vm_id = 1;
+        self.live_hypervisor = None;
         self.mailbox_write_buf = vec![MailboxEntry::default(); MAILBOX_SIZE];
         self.mailbox_read_buf = vec![MailboxEntry::default(); MAILBOX_SIZE];
         self.segfault_addr = 0;
@@ -2826,7 +2834,7 @@ impl Vm {
                         let col = live.console_col;
                         let max_cols = w / 6; // 6px per char
                         let max_rows = h / 8; // 8px per char row
-                        // Drain UART
+                                              // Drain UART
                         let bytes = live.vm.bus.uart.drain_tx();
                         if !bytes.is_empty() {
                             let mut cur_row = row as usize;
@@ -2848,7 +2856,9 @@ impl Vm {
                                         let glyph_idx = byte as usize;
                                         if glyph_idx < 128 {
                                             let glyph = &crate::font::GLYPHS[glyph_idx];
-                                            let buf = self.windows.iter_mut()
+                                            let buf = self
+                                                .windows
+                                                .iter_mut()
                                                 .find(|w2| w2.id == win_id && w2.active);
                                             if let Some(buf_win) = buf {
                                                 let text_color = 0xFF00FF00u32; // green on black
@@ -2858,7 +2868,8 @@ impl Vm {
                                                             let px = char_px_x + bit;
                                                             let py = char_px_y + gi;
                                                             if px < w && py < h {
-                                                                buf_win.offscreen_buffer[py * w + px] = text_color;
+                                                                buf_win.offscreen_buffer
+                                                                    [py * w + px] = text_color;
                                                             }
                                                         }
                                                     }
@@ -2879,7 +2890,9 @@ impl Vm {
                                 let line_bytes = max_cols * 6 * 8; // one row of chars in pixels
                                 let line_width = max_cols * 6;
                                 let total_px = w * h;
-                                let buf = self.windows.iter_mut()
+                                let buf = self
+                                    .windows
+                                    .iter_mut()
                                     .find(|w2| w2.id == win_id && w2.active);
                                 if let Some(buf_win) = buf {
                                     // Shift everything up by 8 pixels (one char row)
@@ -2954,13 +2967,15 @@ impl Vm {
                     (w.x, w.y, w.w, w.offscreen_buffer.clone(), w.z_order, title)
                 });
             if let Some((wx, wy, ww, buf, z_order, title)) = win_data {
+                // Render content below the title bar
+                let bar_h = types::WINDOW_TITLE_BAR_H as i32;
                 let w_usize = ww as usize;
                 for py in 0..wh as usize {
                     for px in 0..ww as usize {
                         let color = buf[py * w_usize + px];
                         if color != 0 {
                             let sx = wx as i32 + px as i32;
-                            let sy = wy as i32 + py as i32;
+                            let sy = wy as i32 + bar_h + py as i32;
                             if sx >= 0 && sx < 256 && sy >= 0 && sy < 256 {
                                 self.screen[(sy as usize) * 256 + (sx as usize)] = color;
                             }
@@ -3007,12 +3022,18 @@ impl Vm {
         // Draw title bar background
         for dy in 0..bar_h {
             let py = y0 + dy;
-            if py < 0 { continue; }
+            if py < 0 {
+                continue;
+            }
             for dx in 0..w {
                 let px = x0 + dx;
-                if px < 0 { continue; }
+                if px < 0 {
+                    continue;
+                }
                 let idx = (py as usize) * 256 + (px as usize);
-                if idx < screen.len() { screen[idx] = bg_color; }
+                if idx < screen.len() {
+                    screen[idx] = bg_color;
+                }
             }
         }
 
@@ -3021,9 +3042,13 @@ impl Vm {
         if border_y >= 0 {
             for dx in 0..w {
                 let px = x0 + dx;
-                if px < 0 { continue; }
+                if px < 0 {
+                    continue;
+                }
                 let idx = (border_y as usize) * 256 + (px as usize);
-                if idx < screen.len() { screen[idx] = border_color; }
+                if idx < screen.len() {
+                    screen[idx] = border_color;
+                }
             }
         }
 
@@ -3032,7 +3057,9 @@ impl Vm {
         let mut cx = x0 + 2;
         let cy = y0 + 2;
         for (i, ch) in title.chars().enumerate() {
-            if i as i32 >= max_chars { break; }
+            if i as i32 >= max_chars {
+                break;
+            }
             let idx = ch as usize;
             if idx < 128 {
                 let glyph = &crate::font::GLYPHS[idx];
@@ -3043,7 +3070,9 @@ impl Vm {
                             let py = cy + row as i32;
                             if px >= 0 && py >= 0 {
                                 let buf_idx = (py as usize) * 256 + (px as usize);
-                                if buf_idx < screen.len() { screen[buf_idx] = text_color; }
+                                if buf_idx < screen.len() {
+                                    screen[buf_idx] = text_color;
+                                }
                             }
                         }
                     }
@@ -3063,7 +3092,9 @@ impl Vm {
                     let py = btn_y + row as i32;
                     if px >= 0 && py >= 0 {
                         let buf_idx = (py as usize) * 256 + (px as usize);
-                        if buf_idx < screen.len() { screen[buf_idx] = close_color; }
+                        if buf_idx < screen.len() {
+                            screen[buf_idx] = close_color;
+                        }
                     }
                 }
             }
@@ -3111,7 +3142,9 @@ impl Vm {
                     if glyph_idx < 128 {
                         let glyph = &crate::font::GLYPHS[glyph_idx];
                         let text_color = 0xFF00FF00u32; // green text
-                        let buf = self.windows.iter_mut()
+                        let buf = self
+                            .windows
+                            .iter_mut()
                             .find(|w2| w2.id == win_id && w2.active);
                         if let Some(buf_win) = buf {
                             for (gi, &row_bits) in glyph.iter().enumerate() {
@@ -3138,7 +3171,9 @@ impl Vm {
 
         // Scroll if needed
         if cur_row >= max_rows && max_rows > 0 {
-            let buf = self.windows.iter_mut()
+            let buf = self
+                .windows
+                .iter_mut()
                 .find(|w2| w2.id == win_id && w2.active);
             if let Some(buf_win) = buf {
                 for y in 8..h {

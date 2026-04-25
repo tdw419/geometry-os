@@ -948,7 +948,10 @@ fn test_guest_vfs_write_creates_file() {
     // Verify the VFS surface loaded the test fixture
     let magic = vm.bus.vfs_surface.pixels[0];
     let file_count = vm.bus.vfs_surface.pixels[1];
-    eprintln!("VFS surface: magic=0x{:08X} file_count={}", magic, file_count);
+    eprintln!(
+        "VFS surface: magic=0x{:08X} file_count={}",
+        magic, file_count
+    );
     // Debug: dump directory index
     for i in 0..6 {
         eprintln!("  pixels[{}] = 0x{:08X}", i, vm.bus.vfs_surface.pixels[i]);
@@ -1007,7 +1010,8 @@ fn test_guest_vfs_write_creates_file() {
     assert!(
         new_file_count > file_count,
         "File count should have increased after create: was {} now {}",
-        file_count, new_file_count
+        file_count,
+        new_file_count
     );
 }
 
@@ -1066,8 +1070,7 @@ fn test_vfs_pixel_cat_with_header() {
     eprintln!("vfs_pixel_cat ELF size: {} bytes", elf_data.len());
 
     // Ensure test fixture exists
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".geometry_os/fs/test.txt");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".geometry_os/fs/test.txt");
     assert!(fixture.exists(), "Test fixture missing: {:?}", fixture);
 
     let mut vm = RiscvVm::new(1024 * 1024);

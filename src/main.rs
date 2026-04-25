@@ -19,6 +19,7 @@ mod pixel;
 mod preprocessor;
 mod qemu;
 mod render;
+mod riscv;
 mod save;
 mod vfs;
 mod viewport;
@@ -2707,19 +2708,25 @@ fn main() {
 
                     // Check if click hits a world-space window title bar (top 12 pixels)
                     let mut hit_window = false;
-                    let mut sorted_wins: Vec<_> = vm
+                    // Collect owned data to avoid borrow conflict with later mutation
+                    struct WinHitInfo { id: u32, world_x: i32, world_y: i32, w: u32, z_order: u32 }
+                    let mut sorted_win_data: Vec<WinHitInfo> = vm
                         .windows
                         .iter()
                         .filter(|w| w.active && w.is_world_space())
+                        .map(|w| WinHitInfo { id: w.id, world_x: w.world_x as i32, world_y: w.world_y as i32, w: w.w, z_order: w.z_order })
                         .collect();
-                    sorted_wins.sort_by_key(|w| std::cmp::Reverse(w.z_order));
+                    sorted_win_data.sort_by_key(|info| std::cmp::Reverse(info.z_order));
 
-                    for win in sorted_wins {
-                        let world_px = (win.world_x as i32) * 8;
-                        let world_py = (win.world_y as i32) * 8;
+                    // Find which window was hit (no borrow of vm.windows during iteration)
+                    let mut hit_close_id: Option<u32> = None;
+                    let mut hit_drag: Option<(u32, i32, i32)> = None;
+                    for info in &sorted_win_data {
+                        let world_px = info.world_x * 8;
+                        let world_py = info.world_y * 8;
                         let (sx, sy) = viewport.world_pixels_to_screen(world_px, world_py);
                         let s_scale = viewport.zoom.scale as i32;
-                        let win_screen_w = win.w as i32 * s_scale;
+                        let win_screen_w = info.w as i32 * s_scale;
                         let title_bar_h = 12 * s_scale;
 
                         if vm_sx >= sx
@@ -2727,34 +2734,36 @@ fn main() {
                             && vm_sy >= sy
                             && vm_sy < sy + title_bar_h
                         {
-                            // Check if click is on close button (top-right corner)
                             let close_btn_size = 8 * s_scale;
                             let close_btn_margin = 2 * s_scale;
                             let close_x = sx + win_screen_w - close_btn_margin - close_btn_size;
                             let close_y_end = sy + close_btn_margin + close_btn_size;
 
                             if vm_sx >= close_x && vm_sy < close_y_end {
-                                // Click on close button: destroy window
-                                if let Some(w) = vm.windows.iter_mut().find(|w| w.id == win.id) {
-                                    w.active = false;
-                                }
-                                hit_window = true;
-                                break;
+                                hit_close_id = Some(info.id);
+                            } else {
+                                hit_drag = Some((info.id, info.world_x, info.world_y));
                             }
-
-                            // Click on title bar: start window drag + bring to front
-                            window_drag_active = true;
-                            window_drag_id = win.id;
-                            window_drag_start = (mx, my);
-                            window_drag_world_start = (win.world_x as i32, win.world_y as i32);
-                            // Bring to front: assign highest z-order
-                            let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
-                            if let Some(w) = vm.windows.iter_mut().find(|w| w.id == win.id) {
-                                w.z_order = max_z + 1;
-                            }
-                            hit_window = true;
                             break;
                         }
+                    }
+
+                    // Now apply mutations (separate from the immutable borrow above)
+                    if let Some(close_id) = hit_close_id {
+                        if let Some(w) = vm.windows.iter_mut().find(|w| w.id == close_id) {
+                            w.active = false;
+                        }
+                        hit_window = true;
+                    } else if let Some((drag_id, wx, wy)) = hit_drag {
+                        window_drag_active = true;
+                        window_drag_id = drag_id;
+                        window_drag_start = (mx, my);
+                        window_drag_world_start = (wx, wy);
+                        let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                        if let Some(w) = vm.windows.iter_mut().find(|w| w.id == drag_id) {
+                            w.z_order = max_z + 1;
+                        }
+                        hit_window = true;
                     }
 
                     // If no window hit, start map pan
@@ -3081,6 +3090,84 @@ fn main() {
                 }
             }
             prev_mouse_down = mouse_down;
+        }
+
+        // ── Screen-space window drag (Phase 124) ───────────────
+        // Only when NOT in fullscreen map mode and VM is running
+        if !fullscreen_map && is_running {
+            use minifb::MouseButton;
+            let mouse_down_now = window.get_mouse_down(MouseButton::Left);
+
+            if mouse_down_now && !window_drag_active {
+                if let Some((mx, my)) = window.get_mouse_pos(minifb::MouseMode::Clamp) {
+                    // Convert host coords to VM screen coords
+                    // VM screen at (VM_SCREEN_X, VM_SCREEN_Y) with 2x scale
+                    let vm_sx = ((mx as i32) - 640) / 2;
+                    let vm_sy = ((my as i32) - 64) / 2;
+
+                    if vm_sx >= 0 && vm_sx < 256 && vm_sy >= 0 && vm_sy < 256 {
+                        // Check screen-space windows (highest z_order first)
+                        let mut sorted: Vec<_> = vm.windows.iter()
+                            .filter(|w| w.active && !w.is_world_space())
+                            .collect();
+                        sorted.sort_by_key(|w| std::cmp::Reverse(w.z_order));
+
+                        for win in &sorted {
+                            let bar_h = crate::vm::types::WINDOW_TITLE_BAR_H;
+                            // Title bar hit area: window (x, y) to (x+w, y+bar_h)
+                            if vm_sx >= win.x as i32
+                                && vm_sx < (win.x + win.w) as i32
+                                && vm_sy >= win.y as i32
+                                && vm_sy < (win.y + bar_h) as i32
+                            {
+                                // Check close button (top-right corner, 8x8)
+                                let close_x = (win.x + win.w).saturating_sub(2 + 8);
+                                let close_y_end = win.y + 2 + 8;
+                                if vm_sx >= close_x as i32 && vm_sy < close_y_end as i32 {
+                                    // Close button: destroy window
+                                    let close_id = win.id;
+                                    if let Some(w) = vm.windows.iter_mut().find(|w| w.id == close_id) {
+                                        w.active = false;
+                                    }
+                                    break;
+                                }
+
+                                // Title bar drag: start dragging + bring to front
+                                let drag_id = win.id;
+                                let drag_x = win.x;
+                                let drag_y = win.y;
+                                let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                                if let Some(w) = vm.windows.iter_mut().find(|w| w.id == drag_id) {
+                                    w.z_order = max_z + 1;
+                                }
+                                window_drag_active = true;
+                                window_drag_id = drag_id;
+                                window_drag_start = (mx, my);
+                                window_drag_world_start = (drag_x as i32, drag_y as i32);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Handle active screen-space window drag
+            if window_drag_active && mouse_down_now {
+                if let Some((mx, _my)) = window.get_mouse_pos(minifb::MouseMode::Clamp) {
+                    let dx = ((mx - window_drag_start.0) / 2.0) as i32;
+                    let dy = (((_my) - window_drag_start.1) / 2.0) as i32;
+                    let new_x = window_drag_world_start.0 + dx;
+                    let new_y = window_drag_world_start.1 + dy;
+                    if let Some(w) = vm.windows.iter_mut().find(|w| w.id == window_drag_id) {
+                        w.x = if new_x >= 0 { new_x as u32 } else { 0 };
+                        w.y = if new_y >= 0 { new_y as u32 } else { 0 };
+                    }
+                }
+            }
+
+            if !mouse_down_now {
+                window_drag_active = false;
+            }
         }
 
         if let Err(e) = window.update_with_buffer(&buffer, WIDTH, HEIGHT) {

@@ -1012,17 +1012,27 @@ pub fn draw_title_bar(
 ) {
     let bar_h = (TITLE_BAR_HEIGHT as i32) * scale;
     let w = win_w as i32;
-    let bg_color = if is_active { TITLE_BAR_BG_ACTIVE } else { TITLE_BAR_BG };
+    let bg_color = if is_active {
+        TITLE_BAR_BG_ACTIVE
+    } else {
+        TITLE_BAR_BG
+    };
 
     // Draw title bar background
     for dy in 0..bar_h {
         let py = y0 + dy;
-        if py < 0 { continue; }
+        if py < 0 {
+            continue;
+        }
         for dx in 0..w * scale {
             let px = x0 + dx;
-            if px < 0 { continue; }
+            if px < 0 {
+                continue;
+            }
             let idx = (py as usize) * buf_width + (px as usize);
-            if idx < buffer.len() { buffer[idx] = bg_color; }
+            if idx < buffer.len() {
+                buffer[idx] = bg_color;
+            }
         }
     }
 
@@ -1031,9 +1041,13 @@ pub fn draw_title_bar(
     if border_y >= 0 {
         for dx in 0..w * scale {
             let px = x0 + dx;
-            if px < 0 { continue; }
+            if px < 0 {
+                continue;
+            }
             let idx = (border_y as usize) * buf_width + (px as usize);
-            if idx < buffer.len() { buffer[idx] = WINDOW_BORDER_COLOR; }
+            if idx < buffer.len() {
+                buffer[idx] = WINDOW_BORDER_COLOR;
+            }
         }
     }
 
@@ -1043,7 +1057,9 @@ pub fn draw_title_bar(
     let mut cx = x0 + 2 * scale;
     let cy = y0 + 2 * scale;
     for (i, ch) in title.chars().enumerate() {
-        if i as i32 >= max_chars { break; }
+        if i as i32 >= max_chars {
+            break;
+        }
         let idx = ch as usize;
         if idx < 128 {
             let glyph = &font::GLYPHS[idx];
@@ -1056,7 +1072,9 @@ pub fn draw_title_bar(
                                 let py = cy + (row as i32) * scale + sy;
                                 if px >= 0 && py >= 0 {
                                     let buf_idx = (py as usize) * buf_width + (px as usize);
-                                    if buf_idx < buffer.len() { buffer[buf_idx] = TITLE_BAR_TEXT; }
+                                    if buf_idx < buffer.len() {
+                                        buffer[buf_idx] = TITLE_BAR_TEXT;
+                                    }
                                 }
                             }
                         }
@@ -1080,7 +1098,9 @@ pub fn draw_title_bar(
                         let py = btn_y + (row as i32) * scale + sy;
                         if px >= 0 && py >= 0 {
                             let buf_idx = (py as usize) * buf_width + (px as usize);
-                            if buf_idx < buffer.len() { buffer[buf_idx] = TITLE_BAR_CLOSE; }
+                            if buf_idx < buffer.len() {
+                                buffer[buf_idx] = TITLE_BAR_CLOSE;
+                            }
                         }
                     }
                 }

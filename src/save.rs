@@ -201,6 +201,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         pc_trace_idx: 0,
         crash_dialog_active: false,
         crash_dialog_pid: 0,
+        live_hypervisor: None,
         mailbox_write_buf: vec![vm::MailboxEntry::default(); vm::MAILBOX_SIZE],
         mailbox_read_buf: vec![vm::MailboxEntry::default(); vm::MAILBOX_SIZE],
     };

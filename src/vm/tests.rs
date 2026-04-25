@@ -8514,11 +8514,12 @@ fn test_winsys_blit_windows_to_screen() {
     vm.halted = false;
     vm.step();
 
-    // The pixel at (2, 2) in the window should appear at screen (10+2, 10+2) = (12, 12)
+    // The pixel at (2, 2) in the window should appear at screen (10+2, 10+12+2) = (12, 24)
+    // Content is offset by WINDOW_TITLE_BAR_H (12px) below the title bar
     assert_eq!(
-        vm.screen[12 * 256 + 12],
+        vm.screen[24 * 256 + 12],
         0x00FF00,
-        "green pixel should be blitted to screen at (12, 12)"
+        "green pixel should be blitted to screen at (12, 24) with title bar offset"
     );
 }
 
@@ -8587,9 +8588,10 @@ fn test_winsys_blit_z_order() {
     vm.halted = false;
     vm.step();
 
-    // Screen pixel at (1, 1) should be red (window 2 on top)
+    // Screen pixel at (1, 13) should be red (window 2 on top)
+    // Content offset by WINDOW_TITLE_BAR_H (12): y = 0 + 12 + 1 = 13
     assert_eq!(
-        vm.screen[1 * 256 + 1],
+        vm.screen[13 * 256 + 1],
         0xFF0000,
         "red (window 2) should be on top of blue (window 1)"
     );
@@ -8645,9 +8647,10 @@ fn test_winsys_blit_clipping() {
     vm.halted = false;
     vm.step();
 
-    // Pixel at (3,3) in window -> screen (1,1) should be visible
+    // Pixel at (3,3) in window -> screen (1, 13) should be visible
+    // With title bar offset: -2 + 12 + 3 = 13
     assert_eq!(
-        vm.screen[1 * 256 + 1],
+        vm.screen[13 * 256 + 1],
         0x00FF00,
         "in-bounds pixel should be blitted"
     );
