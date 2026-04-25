@@ -19930,3 +19930,114 @@ fn test_windowed_app_slot_exhaustion() {
     let slot = (0..MAX_WINDOWED_APPS).find(|s| !used_slots.contains(s));
     assert!(slot.is_none(), "No free slot should be available when all are used");
 }
+
+#[test]
+fn test_viewport_transform() {
+    // Verify coordinate math at all 5 zoom levels (0..=4).
+    // Tests: world_to_screen, world_to_screen_unchecked, world_pixels_to_screen,
+    //        screen_to_world roundtrip, is_rect_visible, and edge visibility.
+    use crate::viewport::{Viewport, FB_W, FB_H, TILE_SIZE};
+
+    let zoom_expected: &[(u32, u32, u32)] = &[
+        // (src_region, scale, pixels_per_tile)
+        (256, 2, 16),   // zoom 0
+        (256, 3, 24),   // zoom 1
+        (128, 6, 48),   // zoom 2 (default)
+        (64, 12, 96),   // zoom 3
+        (32, 24, 192),  // zoom 4
+    ];
+
+    for (zoom, &(src_region, scale, ppt)) in (0..=4u32).zip(zoom_expected.iter()) {
+        let vp = Viewport::new(20, 30, zoom);
+        let z = &vp.zoom;
+
+        // ── Zoom level properties ──
+        assert_eq!(z.src_region, src_region, "zoom {}: src_region", zoom);
+        assert_eq!(z.scale, scale, "zoom {}: scale", zoom);
+        assert_eq!(z.pixels_per_tile(), ppt, "zoom {}: pixels_per_tile", zoom);
+        assert_eq!(z.tiles_visible(), src_region / TILE_SIZE, "zoom {}: tiles_visible", zoom);
+
+        // ── Camera tile maps to screen (0, 0) ──
+        let (sx, sy) = vp.world_to_screen_unchecked(20, 30);
+        assert_eq!(sx, 0, "zoom {}: camera tile x", zoom);
+        assert_eq!(sy, 0, "zoom {}: camera tile y", zoom);
+
+        // ── Adjacent tile is exactly pixels_per_tile away ──
+        let (sx2, sy2) = vp.world_to_screen_unchecked(21, 31);
+        assert_eq!(sx2, ppt as i32, "zoom {}: adjacent tile x", zoom);
+        assert_eq!(sy2, ppt as i32, "zoom {}: adjacent tile y", zoom);
+
+        // ── Negative offset from camera ──
+        let (snx, sny) = vp.world_to_screen_unchecked(19, 29);
+        assert_eq!(snx, -(ppt as i32), "zoom {}: negative offset x", zoom);
+        assert_eq!(sny, -(ppt as i32), "zoom {}: negative offset y", zoom);
+
+        // ── Roundtrip: world -> screen -> world ──
+        let test_tiles = [(20, 30), (25, 35), (21, 30), (20, 31)];
+        for &(wx, wy) in &test_tiles {
+            let (sx, sy) = vp.world_to_screen_unchecked(wx, wy);
+            let (rwx, rwy) = vp.screen_to_world(sx, sy);
+            assert_eq!(rwx, wx, "zoom {}: roundtrip x for world ({},{})", zoom, wx, wy);
+            assert_eq!(rwy, wy, "zoom {}: roundtrip y for world ({},{})", zoom, wx, wy);
+        }
+
+        // ── world_pixels_to_screen: sub-tile precision ──
+        // World pixel at camera tile origin should map to screen (0, 0)
+        let cam_px = 20 * TILE_SIZE as i32;
+        let cam_py = 30 * TILE_SIZE as i32;
+        let (spx, spy) = vp.world_pixels_to_screen(cam_px, cam_py);
+        assert_eq!(spx, 0, "zoom {}: world_pixels camera origin x", zoom);
+        assert_eq!(spy, 0, "zoom {}: world_pixels camera origin y", zoom);
+
+        // 4 pixels right within the camera tile -> 4*scale screen pixels
+        let (spx2, spy2) = vp.world_pixels_to_screen(cam_px + 4, cam_py + 3);
+        assert_eq!(spx2, 4 * scale as i32, "zoom {}: world_pixels offset x", zoom);
+        assert_eq!(spy2, 3 * scale as i32, "zoom {}: world_pixels offset y", zoom);
+
+        // ── Visibility: camera tile is visible, far tile is not ──
+        assert!(
+            vp.world_to_screen(20, 30).is_some(),
+            "zoom {}: camera tile should be visible",
+            zoom
+        );
+        assert!(
+            vp.world_to_screen(20 + 100, 30 + 100).is_none(),
+            "zoom {}: far-off tile should be invisible",
+            zoom
+        );
+
+        // ── is_rect_visible: window at camera origin is visible ──
+        assert!(
+            vp.is_rect_visible(cam_px, cam_py, 64, 48),
+            "zoom {}: window at camera should be visible",
+            zoom
+        );
+        // Window far away is not visible
+        assert!(
+            !vp.is_rect_visible(cam_px + 10000, cam_py + 10000, 64, 48),
+            "zoom {}: far window should be invisible",
+            zoom
+        );
+
+        // ── Tile at edge of visible region ──
+        // The tile whose top-left starts at or past FB boundary is definitely offscreen.
+        // Visible tiles: those whose screen position < FB_SIZE.
+        let tiles_fit_x = (FB_W / ppt) as i32;
+        let tiles_fit_y = (FB_H / ppt) as i32;
+        // One tile past the last fully-visible tile starts at exactly FB_W (or beyond)
+        let beyond_x = 20 + tiles_fit_x;
+        let beyond_y = 30 + tiles_fit_y;
+        let (sx_b, sy_b) = vp.world_to_screen_unchecked(beyond_x, beyond_y);
+        // At zoom levels where FB_W is not a multiple of ppt, the last visible tile
+        // starts before FB_W but extends past it. So beyond tile may start at
+        // tiles_fit_x * ppt which could be < FB_W. Check that 2 tiles beyond is definitely off.
+        let far_x = 20 + tiles_fit_x + 1;
+        let far_y = 30 + tiles_fit_y + 1;
+        let (sx_far, sy_far) = vp.world_to_screen_unchecked(far_x, far_y);
+        assert!(
+            sx_far >= FB_W as i32 || sy_far >= FB_H as i32,
+            "zoom {}: tile 2 beyond visible ({},{}) -> screen ({},{}) should be offscreen {}x{}",
+            zoom, far_x, far_y, sx_far, sy_far, FB_W, FB_H
+        );
+    }
+}
