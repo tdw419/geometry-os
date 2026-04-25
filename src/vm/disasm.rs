@@ -920,6 +920,19 @@ impl Vm {
             // FCOPY (0xB8) -- copy file within VFS
             0xB8 => ("FCOPY".into(), 3),
 
+            // SMALLTEXT x, y, addr, fg, bg (0xD0) -- tiny 3x5 font, 85 cols in 256px
+            0xD0 => (
+                format!(
+                    "SMALLTEXT {}, {}, {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3)),
+                    reg(ram(a + 4)),
+                    reg(ram(a + 5))
+                ),
+                6,
+            ),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

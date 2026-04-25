@@ -134,6 +134,7 @@ pub const OPCODES: &[&str] = &[
     "MOUSEQ",
     "COPY",
     "DRAWTEXT",
+    "SMALLTEXT",
     "BITSET",
     "BITCLR",
     "BITTEST",
@@ -173,6 +174,8 @@ pub const OPCODES: &[&str] = &[
     "PTYWRITE",
     "PTYREAD",
     "PTYCLOSE",
+    // Phase 94: Tiny font text rendering (3x5, 85 cols in 256px)
+    "SMALLTEXT",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

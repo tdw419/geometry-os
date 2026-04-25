@@ -169,7 +169,7 @@ const TITLE_BAR_CLOSE: u32 = 0xFF6666;
 const TITLE_BAR_CLOSE_BG: u32 = 0x4A2A2A;
 const WINDOW_BORDER_COLOR: u32 = 0x444466;
 const TITLE_BAR_HIGHLIGHT: u32 = 0x5A5A7A; // lighter top edge = raised/clickable
-const TITLE_BAR_SHADOW: u32 = 0x1A1A2A;   // darker bottom edge = raised/clickable
+const TITLE_BAR_SHADOW: u32 = 0x1A1A2A; // darker bottom edge = raised/clickable
 const TITLE_BAR_HEIGHT: usize = 12;
 const CLOSE_BTN_SIZE: usize = 8;
 const CLOSE_BTN_MARGIN: usize = 2;

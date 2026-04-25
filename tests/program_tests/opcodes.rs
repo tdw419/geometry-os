@@ -1135,8 +1135,11 @@ fn test_unknown_opcode_error_includes_line_number() {
     );
     // Display format should be "line N: unknown opcode: XYZ"
     let displayed = format!("{}", err);
-    assert_eq!(displayed, "line 2: unknown opcode: BOGUS_OPCODE",
-        "full error format should be 'line N: unknown opcode: XYZ', got: {}", displayed);
+    assert_eq!(
+        displayed, "line 2: unknown opcode: BOGUS_OPCODE",
+        "full error format should be 'line N: unknown opcode: XYZ', got: {}",
+        displayed
+    );
 }
 
 #[test]
@@ -1147,8 +1150,11 @@ fn test_unknown_opcode_error_on_first_line() {
     let err = result.unwrap_err();
     assert_eq!(err.line, 1, "error line should be 1, got: {}", err.line);
     let displayed = format!("{}", err);
-    assert_eq!(displayed, "line 1: unknown opcode: NOSUCH",
-        "full error format, got: {}", displayed);
+    assert_eq!(
+        displayed, "line 1: unknown opcode: NOSUCH",
+        "full error format, got: {}",
+        displayed
+    );
 }
 
 // ── PTYOPEN / PTYWRITE / PTYREAD opcode bytecode roundtrip ───────

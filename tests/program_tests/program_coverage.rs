@@ -71,16 +71,11 @@ fn assert_assembles(path: &str) {
         std::fs::read_to_string(path).unwrap_or_else(|e| panic!("failed to read {}: {}", path, e));
     let mut pp = Preprocessor::new();
     let preprocessed = pp.preprocess(&source);
-    assemble(&preprocessed, 0)
-        .unwrap_or_else(|e| panic!("assembly failed for {}: {:?}", path, e));
+    assemble(&preprocessed, 0).unwrap_or_else(|e| panic!("assembly failed for {}: {:?}", path, e));
 }
 
 fn assert_file_exists(path: &str) {
-    assert!(
-        std::path::Path::new(path).exists(),
-        "{} should exist",
-        path
-    );
+    assert!(std::path::Path::new(path).exists(), "{} should exist", path);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -165,20 +160,14 @@ fn test_code_evolution_program() {
 fn test_concentric_program() {
     let vm = compile_run("programs/concentric.asm");
     assert!(vm.halted, "concentric.asm should halt");
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "concentric.asm should draw rings"
-    );
+    assert!(drawn_pixels(&vm) > 0, "concentric.asm should draw rings");
 }
 
 #[test]
 fn test_disasm_program() {
     // Interactive disassembler with FRAME loop -- does not halt
     let vm = compile_run_steps("programs/disasm.asm", 100_000);
-    assert!(
-        vm.pc > 0,
-        "disasm.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "disasm.asm should execute instructions");
 }
 
 #[test]
@@ -267,19 +256,13 @@ fn test_net_share_program() {
 fn test_oracle_autodev_program() {
     // LLM Oracle with interactive loop -- does not halt
     let vm = compile_run_steps("programs/oracle_autodev.asm", 100_000);
-    assert!(
-        vm.pc > 0,
-        "oracle_autodev.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "oracle_autodev.asm should execute instructions");
 }
 
 #[test]
 fn test_preprocessor_advanced_test_program() {
     let vm = compile_run("programs/preprocessor_advanced_test.asm");
-    assert!(
-        vm.halted,
-        "preprocessor_advanced_test.asm should halt"
-    );
+    assert!(vm.halted, "preprocessor_advanced_test.asm should halt");
 }
 
 #[test]
@@ -356,48 +339,33 @@ fn test_browser_program() {
 #[test]
 fn test_calendar_program() {
     let vm = compile_run_steps("programs/calendar.asm", 50_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "calendar.asm should draw a calendar"
-    );
+    assert!(drawn_pixels(&vm) > 0, "calendar.asm should draw a calendar");
 }
 
 #[test]
 fn test_canvas_counter_program() {
     // Interactive counter -- uses FRAME loop, does not halt
     let vm = compile_run_steps("programs/canvas_counter.asm", 100_000);
-    assert!(
-        vm.pc > 0,
-        "canvas_counter.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "canvas_counter.asm should execute instructions");
 }
 
 #[test]
 fn test_clock_program() {
     let vm = compile_run_steps("programs/clock.asm", 50_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "clock.asm should draw a clock face"
-    );
+    assert!(drawn_pixels(&vm) > 0, "clock.asm should draw a clock face");
 }
 
 #[test]
 fn test_color_picker_program() {
     // Mouse-driven color picker with FRAME loop
     let vm = compile_run_steps("programs/color_picker.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "color_picker.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "color_picker.asm should execute instructions");
 }
 
 #[test]
 fn test_counter_program() {
     let vm = compile_run_steps("programs/counter.asm", 50_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "counter.asm should display counter"
-    );
+    assert!(drawn_pixels(&vm) > 0, "counter.asm should display counter");
 }
 
 #[test]
@@ -413,19 +381,13 @@ fn test_crash_demo_program() {
 fn test_cron_daemon_program() {
     // Cron daemon with FRAME loop -- does not halt
     let vm = compile_run_steps("programs/cron_daemon.asm", 100_000);
-    assert!(
-        vm.pc > 0,
-        "cron_daemon.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "cron_daemon.asm should execute instructions");
 }
 
 #[test]
 fn test_debugger_program() {
     let vm = compile_run_steps("programs/debugger.asm", 100_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "debugger.asm should draw debug info"
-    );
+    assert!(drawn_pixels(&vm) > 0, "debugger.asm should draw debug info");
 }
 
 #[test]
@@ -468,10 +430,7 @@ fn test_gui_calc_program() {
 #[test]
 fn test_help_program() {
     let vm = compile_run_steps("programs/help.asm", 50_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "help.asm should draw help text"
-    );
+    assert!(drawn_pixels(&vm) > 0, "help.asm should draw help text");
 }
 
 #[test]
@@ -487,29 +446,20 @@ fn test_hex_viewer_program() {
 fn test_html_browser_program() {
     // HTML browser with FRAME loop -- renders then loops
     let vm = compile_run_steps("programs/html_browser.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "html_browser.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "html_browser.asm should execute instructions");
 }
 
 #[test]
 fn test_http_get_program() {
     // HTTP client library with FRAME loop
     let vm = compile_run_steps("programs/http_get.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "http_get.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "http_get.asm should execute instructions");
 }
 
 #[test]
 fn test_imgview_program() {
     let vm = compile_run_steps("programs/imgview.asm", 50_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "imgview.asm should display an image"
-    );
+    assert!(drawn_pixels(&vm) > 0, "imgview.asm should display an image");
 }
 
 #[test]
@@ -561,39 +511,27 @@ fn test_minesweeper_program() {
 fn test_mixer_demo_program() {
     // Multi-channel music demo with FRAME loop
     let vm = compile_run_steps("programs/mixer_demo.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "mixer_demo.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "mixer_demo.asm should execute instructions");
 }
 
 #[test]
 fn test_multiproc_program() {
     // Multi-process demo with FRAME loop
     let vm = compile_run_steps("programs/multiproc.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "multiproc.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "multiproc.asm should execute instructions");
 }
 
 #[test]
 fn test_net_chat_program() {
     let vm = compile_run_steps("programs/net_chat.asm", 50_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "net_chat.asm should draw chat UI"
-    );
+    assert!(drawn_pixels(&vm) > 0, "net_chat.asm should draw chat UI");
 }
 
 #[test]
 fn test_neural_program() {
     // Neural network inference with FRAME loop
     let vm = compile_run_steps("programs/neural.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "neural.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "neural.asm should execute instructions");
 }
 
 #[test]
@@ -608,29 +546,20 @@ fn test_nn_demo_program() {
 #[test]
 fn test_notepad_program() {
     let vm = compile_run_steps("programs/notepad.asm", 50_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "notepad.asm should draw text editor"
-    );
+    assert!(drawn_pixels(&vm) > 0, "notepad.asm should draw text editor");
 }
 
 #[test]
 fn test_oracle_program() {
     // Oracle building on infinite map -- uses FRAME, has HALT path
     let vm = compile_run_steps("programs/oracle.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "oracle.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "oracle.asm should execute instructions");
 }
 
 #[test]
 fn test_paint_program() {
     let vm = compile_run_steps("programs/paint.asm", 50_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "paint.asm should draw paint canvas"
-    );
+    assert!(drawn_pixels(&vm) > 0, "paint.asm should draw paint canvas");
 }
 
 #[test]
@@ -664,10 +593,7 @@ fn test_reaction_program() {
 fn test_replay_demo_program() {
     // Draw frames then replay backward -- has HALT
     let vm = compile_run_steps("programs/replay_demo.asm", 300_000);
-    assert!(
-        vm.pc > 0,
-        "replay_demo.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "replay_demo.asm should execute instructions");
 }
 
 #[test]
@@ -683,10 +609,7 @@ fn test_sci_calc_program() {
 fn test_screensaver_program() {
     // Multi-effect screensaver with FRAME loop
     let vm = compile_run_steps("programs/screensaver.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "screensaver.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "screensaver.asm should execute instructions");
 }
 
 #[test]
@@ -728,10 +651,7 @@ fn test_simon_program() {
 #[test]
 fn test_smart_term_program() {
     let vm = compile_run_steps("programs/smart_term.asm", 50_000);
-    assert!(
-        drawn_pixels(&vm) > 0,
-        "smart_term.asm should draw terminal"
-    );
+    assert!(drawn_pixels(&vm) > 0, "smart_term.asm should draw terminal");
 }
 
 #[test]
@@ -774,10 +694,7 @@ fn test_term_mux_program() {
 fn test_tetris_clean_program() {
     // Tetris game with FRAME loop -- does not halt
     let vm = compile_run_steps("programs/tetris_clean.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "tetris_clean.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "tetris_clean.asm should execute instructions");
 }
 
 #[test]
@@ -811,10 +728,7 @@ fn test_wallpaper_program() {
 fn test_wm_drag_close_program() {
     // Window manager with drag/close -- uses WINSYS, FRAME loop
     let vm = compile_run_steps("programs/wm_drag_close.asm", 200_000);
-    assert!(
-        vm.pc > 0,
-        "wm_drag_close.asm should execute instructions"
-    );
+    assert!(vm.pc > 0, "wm_drag_close.asm should execute instructions");
 }
 
 // ═══════════════════════════════════════════════════════════════════

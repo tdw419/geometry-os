@@ -1158,8 +1158,8 @@ fn main() {
                     }
                 }
                 // Clear app data region
-                let data_base = crate::vm::types::APP_DATA_BASE
-                    + slot * crate::vm::types::APP_DATA_SIZE;
+                let data_base =
+                    crate::vm::types::APP_DATA_BASE + slot * crate::vm::types::APP_DATA_SIZE;
                 if data_base < ram_len {
                     let end = (data_base + crate::vm::types::APP_DATA_SIZE).min(ram_len);
                     for v in &mut vm.ram[data_base..end] {
@@ -1976,8 +1976,7 @@ fn main() {
                                     let prog_path = format!("programs/{}.asm", app_name);
                                     match std::fs::read_to_string(&prog_path) {
                                         Ok(source) => {
-                                            let mut pp =
-                                                crate::preprocessor::Preprocessor::new();
+                                            let mut pp = crate::preprocessor::Preprocessor::new();
                                             let preprocessed = pp.preprocess(&source);
                                             match crate::assembler::assemble(&preprocessed, 0) {
                                                 Ok(asm_result) => {
@@ -1996,9 +1995,7 @@ fn main() {
                                                         if app_base < ram_len {
                                                             let end = (app_base + APP_CODE_SIZE)
                                                                 .min(ram_len);
-                                                            for v in
-                                                                &mut vm.ram[app_base..end]
-                                                            {
+                                                            for v in &mut vm.ram[app_base..end] {
                                                                 *v = 0;
                                                             }
                                                         }
@@ -2014,9 +2011,13 @@ fn main() {
                                                         }
 
                                                         // Create a SpawnedProcess for the app
-                                                        let pid =
-                                                            (vm.processes.len() + 1) as u32;
-                                                        let mut proc = crate::vm::types::SpawnedProcess::new(pid, 0, app_base as u32);
+                                                        let pid = (vm.processes.len() + 1) as u32;
+                                                        let mut proc =
+                                                            crate::vm::types::SpawnedProcess::new(
+                                                                pid,
+                                                                0,
+                                                                app_base as u32,
+                                                            );
                                                         proc.parent_pid = 0; // kernel-spawned
                                                         proc.priority = 1;
                                                         // Assign private data region for this app
@@ -2025,11 +2026,23 @@ fn main() {
                                                         proc.data_base = data_base as u32;
 
                                                         // Position window near player/camera center
-                                                        let cam_x = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
-                                                        let cam_y = vm.ram.get(0x7801).copied().unwrap_or(0) as i32;
+                                                        let cam_x = vm
+                                                            .ram
+                                                            .get(0x7800)
+                                                            .copied()
+                                                            .unwrap_or(0)
+                                                            as i32;
+                                                        let cam_y = vm
+                                                            .ram
+                                                            .get(0x7801)
+                                                            .copied()
+                                                            .unwrap_or(0)
+                                                            as i32;
                                                         // Offset so window appears near center of view
-                                                        let win_world_x = (cam_x + 16).max(0) as u32;
-                                                        let win_world_y = (cam_y + 12).max(0) as u32;
+                                                        let win_world_x =
+                                                            (cam_x + 16).max(0) as u32;
+                                                        let win_world_y =
+                                                            (cam_y + 12).max(0) as u32;
 
                                                         let win_w = 128u32;
                                                         let win_h = 96u32;
@@ -2050,11 +2063,9 @@ fn main() {
 
                                                         // Set window title from app name
                                                         let title_base = 0x7900 + slot_idx * 32;
-                                                        for (j, b) in app_name.bytes().enumerate()
-                                                        {
+                                                        for (j, b) in app_name.bytes().enumerate() {
                                                             if title_base + j < ram_len {
-                                                                vm.ram[title_base + j] =
-                                                                    b as u32;
+                                                                vm.ram[title_base + j] = b as u32;
                                                             }
                                                         }
                                                         win.title_addr = title_base as u32;
@@ -2449,18 +2460,12 @@ fn main() {
                                 let active: Vec<&crate::vm::Window> =
                                     vm.windows.iter().filter(|w| w.active).collect();
                                 // Find focused window (highest z_order)
-                                let max_z = active
-                                    .iter()
-                                    .map(|w| w.z_order)
-                                    .max()
-                                    .unwrap_or(0);
+                                let max_z = active.iter().map(|w| w.z_order).max().unwrap_or(0);
                                 let mut overlays: Vec<geometry_os::vision::WindowOverlay> =
                                     Vec::new();
                                 for w in &active {
                                     let mut title = String::new();
-                                    if w.title_addr > 0
-                                        && (w.title_addr as usize) < vm.ram.len()
-                                    {
+                                    if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
                                         for j in 0..32 {
                                             let addr = w.title_addr as usize + j;
                                             if addr >= vm.ram.len() {
@@ -2726,9 +2731,7 @@ fn main() {
                                     Vec::new();
                                 for w in &active {
                                     let mut title = String::new();
-                                    if w.title_addr > 0
-                                        && (w.title_addr as usize) < vm.ram.len()
-                                    {
+                                    if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
                                         for j in 0..32 {
                                             let addr = w.title_addr as usize + j;
                                             if addr >= vm.ram.len() {
@@ -2741,7 +2744,8 @@ fn main() {
                                             title.push(ch as u8 as char);
                                         }
                                     }
-                                    win_data.push((w.id, w.x, w.y, w.w, w.h, w.z_order, w.pid, title));
+                                    win_data
+                                        .push((w.id, w.x, w.y, w.w, w.h, w.z_order, w.pid, title));
                                 }
 
                                 // Find focused window (highest z_order)
@@ -2753,7 +2757,9 @@ fn main() {
                                         focused_idx = i;
                                     }
                                 }
-                                if win_data.is_empty() { continue; }
+                                if win_data.is_empty() {
+                                    continue;
+                                }
                                 let fw = &win_data[focused_idx];
 
                                 // Build ASCII overlay (32x32 grid mapping 256x256 screen)

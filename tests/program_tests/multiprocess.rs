@@ -1029,33 +1029,31 @@ fill2_x:
     );
 }
 
-
-
 fn make_child_process(pid: u32, pc: u32) -> geometry_os::vm::SpawnedProcess {
     geometry_os::vm::SpawnedProcess {
-            pc: pc,
-            regs: [0; 32],
-            state: geometry_os::vm::ProcessState::Ready,
-            pid: pid,
-            mode: geometry_os::vm::CpuMode::Kernel,
-            page_dir: None,
-            segfaulted: false,
-            priority: 1,
-            slice_remaining: 0,
-            sleep_until: 0,
-            yielded: false,
-            kernel_stack: Vec::new(),
-            msg_queue: Vec::new(),
-            exit_code: 0,
-            parent_pid: 0,
-            pending_signals: Vec::new(),
-            signal_handlers: [0; 4],
-            vmas: Vec::new(),
-            brk_pos: 0,
-            custom_font: None,
-            capabilities: None,
-            data_base: 0,
-        }
+        pc: pc,
+        regs: [0; 32],
+        state: geometry_os::vm::ProcessState::Ready,
+        pid: pid,
+        mode: geometry_os::vm::CpuMode::Kernel,
+        page_dir: None,
+        segfaulted: false,
+        priority: 1,
+        slice_remaining: 0,
+        sleep_until: 0,
+        yielded: false,
+        kernel_stack: Vec::new(),
+        msg_queue: Vec::new(),
+        exit_code: 0,
+        parent_pid: 0,
+        pending_signals: Vec::new(),
+        signal_handlers: [0; 4],
+        vmas: Vec::new(),
+        brk_pos: 0,
+        custom_font: None,
+        capabilities: None,
+        data_base: 0,
+    }
 }
 
 #[test]
@@ -1071,25 +1069,38 @@ fn test_child_halt_does_not_stop_parent() {
 
     // Child at 0x200: LDI r0, 42; HALT
     vm.ram[0x200] = 0x10; // LDI
-    vm.ram[0x201] = 0;    // r0
-    vm.ram[0x202] = 42;   // imm
+    vm.ram[0x201] = 0; // r0
+    vm.ram[0x202] = 42; // imm
     vm.ram[0x203] = 0x00; // HALT
 
     vm.processes.push(make_child_process(1, 0x200));
 
     // Simulate main.rs execution loop
     for _ in 0..10_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         vm.step_all_processes();
-        if vm.frame_ready { vm.frame_ready = false; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+        }
     }
 
     // KEY: main process should NOT be halted
-    assert!(!vm.halted, "main process (map) should still be running after child halts");
+    assert!(
+        !vm.halted,
+        "main process (map) should still be running after child halts"
+    );
     // Child should be halted
-    assert!(vm.processes[0].is_halted(), "child process (app) should have halted");
+    assert!(
+        vm.processes[0].is_halted(),
+        "child process (app) should have halted"
+    );
     // Child should have executed its code
-    assert_eq!(vm.processes[0].regs[0], 42, "child should have set r0=42 before halting");
+    assert_eq!(
+        vm.processes[0].regs[0], 42,
+        "child should have set r0=42 before halting"
+    );
 }
 
 #[test]
@@ -1128,9 +1139,13 @@ fn test_child_halt_does_not_affect_other_children() {
 
     // Run execution loop
     for _ in 0..10_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         vm.step_all_processes();
-        if vm.frame_ready { vm.frame_ready = false; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+        }
     }
 
     // Main should still be running
@@ -1143,7 +1158,10 @@ fn test_child_halt_does_not_affect_other_children() {
 
     // App 2 should NOT be halted
     let app2 = vm.processes.iter().find(|p| p.pid == 2).unwrap();
-    assert!(!app2.is_halted(), "app 2 should still be running after app 1 halted");
+    assert!(
+        !app2.is_halted(),
+        "app 2 should still be running after app 1 halted"
+    );
     assert_eq!(app2.regs[0], 222, "app 2 should have set r0=222");
 
     // Simulate main.rs cleanup: destroy windows owned by halted process
@@ -1151,7 +1169,10 @@ fn test_child_halt_does_not_affect_other_children() {
 
     // Only app 2's window should remain
     assert_eq!(vm.windows.len(), 1, "only app 2's window should remain");
-    assert_eq!(vm.windows[0].pid, 2, "remaining window should belong to app 2");
+    assert_eq!(
+        vm.windows[0].pid, 2,
+        "remaining window should belong to app 2"
+    );
 }
 
 #[test]
@@ -1194,13 +1215,19 @@ fn test_halted_app_window_cleanup() {
     }
 
     // Windows for processes 1 and 2
-    vm.windows.push(geometry_os::vm::types::Window::new_world(1, 0, 0, 64, 64, 0, 1));
-    vm.windows.push(geometry_os::vm::types::Window::new_world(2, 100, 0, 64, 64, 0, 2));
+    vm.windows.push(geometry_os::vm::types::Window::new_world(
+        1, 0, 0, 64, 64, 0, 1,
+    ));
+    vm.windows.push(geometry_os::vm::types::Window::new_world(
+        2, 100, 0, 64, 64, 0, 2,
+    ));
 
     assert_eq!(vm.windows.len(), 2);
 
     // Find halted processes and remove their windows
-    let halted_pids: Vec<u32> = vm.processes.iter()
+    let halted_pids: Vec<u32> = vm
+        .processes
+        .iter()
         .filter(|p| p.is_halted())
         .map(|p| p.pid)
         .collect();
@@ -1212,7 +1239,10 @@ fn test_halted_app_window_cleanup() {
 
     // Only process 1's window should remain
     assert_eq!(vm.windows.len(), 1);
-    assert_eq!(vm.windows[0].pid, 1, "only process 1's window should survive");
+    assert_eq!(
+        vm.windows[0].pid, 1,
+        "only process 1's window should survive"
+    );
 }
 
 #[test]
@@ -1221,7 +1251,7 @@ fn test_multi_process_launch() {
     // Each app writes a unique value to its private data region,
     // proving both executed and their data regions don't overlap.
 
-    use geometry_os::vm::types::{APP_DATA_BASE, APP_DATA_SIZE, Window};
+    use geometry_os::vm::types::{Window, APP_DATA_BASE, APP_DATA_SIZE};
 
     let mut vm = Vm::new();
 
@@ -1233,17 +1263,17 @@ fn test_multi_process_launch() {
     // App 1 at 0x200: write value 0xAAAA to data region offset 0, then loop
     // LDI r1, APP_DATA_BASE (data_base for slot 0)
     vm.ram[0x200] = 0x10; // LDI
-    vm.ram[0x201] = 1;    // r1
+    vm.ram[0x201] = 1; // r1
     vm.ram[0x202] = APP_DATA_BASE as u32; // imm = data base
-    // LDI r0, 0xAAAA
+                                          // LDI r0, 0xAAAA
     vm.ram[0x203] = 0x10; // LDI
-    vm.ram[0x204] = 0;    // r0
+    vm.ram[0x204] = 0; // r0
     vm.ram[0x205] = 0xAAAA; // imm
-    // STORE [r1], r0
+                            // STORE [r1], r0
     vm.ram[0x206] = 0x12; // STORE
-    vm.ram[0x207] = 1;    // addr_reg = r1
-    vm.ram[0x208] = 0;    // reg = r0
-    // FRAME, JMP 0x203 (loop so it stays alive)
+    vm.ram[0x207] = 1; // addr_reg = r1
+    vm.ram[0x208] = 0; // reg = r0
+                       // FRAME, JMP 0x203 (loop so it stays alive)
     vm.ram[0x209] = 0x02; // FRAME
     vm.ram[0x20A] = 0x30; // JMP
     vm.ram[0x20B] = 0x203; // -> LDI r0, 0xAAAA
@@ -1251,14 +1281,14 @@ fn test_multi_process_launch() {
     // App 2 at 0x300: write value 0xBBBB to data region offset 0, then loop
     let data_base_1 = (APP_DATA_BASE + APP_DATA_SIZE) as u32;
     vm.ram[0x300] = 0x10; // LDI
-    vm.ram[0x301] = 1;    // r1
+    vm.ram[0x301] = 1; // r1
     vm.ram[0x302] = data_base_1; // data base for slot 1
     vm.ram[0x303] = 0x10; // LDI
-    vm.ram[0x304] = 0;    // r0
+    vm.ram[0x304] = 0; // r0
     vm.ram[0x305] = 0xBBBB; // imm
     vm.ram[0x306] = 0x12; // STORE
-    vm.ram[0x307] = 1;    // addr_reg = r1
-    vm.ram[0x308] = 0;    // reg = r0
+    vm.ram[0x307] = 1; // addr_reg = r1
+    vm.ram[0x308] = 0; // reg = r0
     vm.ram[0x309] = 0x02; // FRAME
     vm.ram[0x30A] = 0x30; // JMP
     vm.ram[0x30B] = 0x303; // -> LDI r0, 0xBBBB
@@ -1280,9 +1310,13 @@ fn test_multi_process_launch() {
 
     // Run the execution loop (main + children)
     for _ in 0..10_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         vm.step_all_processes();
-        if vm.frame_ready { vm.frame_ready = false; }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+        }
     }
 
     // Main process should still be running
@@ -1300,13 +1334,15 @@ fn test_multi_process_launch() {
         "app 1 should have written 0xAAAA to its data region"
     );
     assert_eq!(
-        vm.ram[APP_DATA_BASE + APP_DATA_SIZE], 0xBBBB,
+        vm.ram[APP_DATA_BASE + APP_DATA_SIZE],
+        0xBBBB,
         "app 2 should have written 0xBBBB to its data region"
     );
 
     // Data regions should NOT overlap
     assert_ne!(
-        vm.ram[APP_DATA_BASE], vm.ram[APP_DATA_BASE + APP_DATA_SIZE],
+        vm.ram[APP_DATA_BASE],
+        vm.ram[APP_DATA_BASE + APP_DATA_SIZE],
         "data regions must be separate"
     );
 
@@ -1371,7 +1407,10 @@ fn test_window_drag_updates_world_coords() {
     let win = &vm.windows[0];
     assert_eq!(win.world_x, 65, "world_x should update to 65 after drag");
     assert_eq!(win.world_y, 70, "world_y should update to 70 after drag");
-    assert!(win.is_world_space(), "window should still be world-space after drag");
+    assert!(
+        win.is_world_space(),
+        "window should still be world-space after drag"
+    );
 }
 
 #[test]
@@ -1407,7 +1446,7 @@ fn test_window_drag_negative_clamps_to_zero() {
 
     // Simulate dragging to negative position (dragged further left/up than origin)
     let new_wx: i32 = 5 - 10; // would be -5
-    let new_wy: i32 = 3 - 8;  // would be -5
+    let new_wy: i32 = 3 - 8; // would be -5
     let win = vm.windows.iter_mut().find(|w| w.id == 1).unwrap();
     win.world_x = if new_wx >= 0 { new_wx as u32 } else { 0 };
     win.world_y = if new_wy >= 0 { new_wy as u32 } else { 0 };
@@ -1449,12 +1488,17 @@ fn test_world_space_window_placement() {
         vm.ram[i] = v;
     }
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     assert_eq!(vm.windows.len(), 1, "scenario 1: one screen-space window");
     let win = &vm.windows[0];
-    assert!(!win.is_world_space(), "scenario 1: window should NOT be world-space");
+    assert!(
+        !win.is_world_space(),
+        "scenario 1: window should NOT be world-space"
+    );
     assert_eq!(win.world_x, unset, "scenario 1: world_x should be UNSET");
     assert_eq!(win.world_y, unset, "scenario 1: world_y should be UNSET");
     assert_eq!(win.x, 10, "scenario 1: screen x should be 10");
@@ -1481,12 +1525,17 @@ fn test_world_space_window_placement() {
         vm.ram[i] = v;
     }
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     assert_eq!(vm.windows.len(), 1, "scenario 2: one world-space window");
     let win = &vm.windows[0];
-    assert!(win.is_world_space(), "scenario 2: window should be world-space");
+    assert!(
+        win.is_world_space(),
+        "scenario 2: window should be world-space"
+    );
     assert_eq!(win.world_x, 0, "scenario 2: world_x should be 0");
     assert_eq!(win.world_y, 0, "scenario 2: world_y should be 0");
 
@@ -1511,12 +1560,17 @@ fn test_world_space_window_placement() {
         vm.ram[i] = v;
     }
     for _ in 0..1000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     assert_eq!(vm.windows.len(), 1, "scenario 3: one window");
     let win = &vm.windows[0];
-    assert!(win.is_world_space(), "scenario 3: window should be world-space");
+    assert!(
+        win.is_world_space(),
+        "scenario 3: window should be world-space"
+    );
     assert_eq!(win.world_x, 500, "scenario 3: world_x should be 500");
     assert_eq!(win.world_y, 300, "scenario 3: world_y should be 300");
     assert_eq!(win.w, 64, "scenario 3: width should be 64");
@@ -1553,14 +1607,22 @@ fn test_world_space_window_placement() {
         vm.ram[i] = v;
     }
     for _ in 0..2000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
     assert_eq!(vm.windows.len(), 2, "scenario 4: two windows");
     let win0 = &vm.windows[0];
     let win1 = &vm.windows[1];
-    assert!(win0.is_world_space(), "scenario 4: window 0 should be world-space");
-    assert!(win1.is_world_space(), "scenario 4: window 1 should be world-space");
+    assert!(
+        win0.is_world_space(),
+        "scenario 4: window 0 should be world-space"
+    );
+    assert!(
+        win1.is_world_space(),
+        "scenario 4: window 1 should be world-space"
+    );
     assert_eq!(win0.world_x, 20, "scenario 4: win0 world_x should be 20");
     assert_eq!(win0.world_y, 15, "scenario 4: win0 world_y should be 15");
     assert_eq!(win1.world_x, 80, "scenario 4: win1 world_x should be 80");
@@ -1598,19 +1660,42 @@ fn test_world_space_window_placement() {
         vm.ram[i] = v;
     }
     for _ in 0..2000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
     }
 
-    assert_eq!(vm.windows.len(), 2, "scenario 5: two windows (one world, one screen)");
+    assert_eq!(
+        vm.windows.len(),
+        2,
+        "scenario 5: two windows (one world, one screen)"
+    );
     let win_ws = &vm.windows[0];
     let win_ss = &vm.windows[1];
-    assert!(win_ws.is_world_space(), "scenario 5: first window should be world-space");
-    assert!(!win_ss.is_world_space(), "scenario 5: second window should be screen-space");
-    assert_eq!(win_ws.world_x, 100, "scenario 5: world-space world_x should be 100");
-    assert_eq!(win_ws.world_y, 200, "scenario 5: world-space world_y should be 200");
-    assert_eq!(win_ss.world_x, unset, "scenario 5: screen-space world_x should be UNSET");
-    assert_eq!(win_ss.world_y, unset, "scenario 5: screen-space world_y should be UNSET");
+    assert!(
+        win_ws.is_world_space(),
+        "scenario 5: first window should be world-space"
+    );
+    assert!(
+        !win_ss.is_world_space(),
+        "scenario 5: second window should be screen-space"
+    );
+    assert_eq!(
+        win_ws.world_x, 100,
+        "scenario 5: world-space world_x should be 100"
+    );
+    assert_eq!(
+        win_ws.world_y, 200,
+        "scenario 5: world-space world_y should be 200"
+    );
+    assert_eq!(
+        win_ss.world_x, unset,
+        "scenario 5: screen-space world_x should be UNSET"
+    );
+    assert_eq!(
+        win_ss.world_y, unset,
+        "scenario 5: screen-space world_y should be UNSET"
+    );
     assert_eq!(win_ss.x, 30, "scenario 5: screen-space x should be 30");
     assert_eq!(win_ss.y, 40, "scenario 5: screen-space y should be 40");
 }
-

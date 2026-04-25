@@ -135,6 +135,31 @@ impl Vm {
         }
     }
 
+    /// Draw a character using the tiny 3x5 font (for SMALLTEXT opcode).
+    /// Advance is 3 pixels (no spacing), giving 85 columns in 256px.
+    pub(super) fn draw_char_tiny(&mut self, ch: u8, x: usize, y: usize, fg: u32, bg: Option<u32>) {
+        const TINY_FONT: [[u8; 5]; 96] = include!("../tiny_font.in");
+        let idx = ch as usize;
+        if !(32..=127).contains(&idx) {
+            return;
+        }
+        let glyph = &TINY_FONT[idx - 32];
+        for (row, &glyph_row) in glyph.iter().enumerate().take(5usize) {
+            for col in 0..3usize {
+                let px = x + col;
+                let py = y + row;
+                if px < 256 && py < 256 {
+                    let on = glyph_row & (1 << (2 - col)) != 0;
+                    if on {
+                        self.screen[py * 256 + px] = fg;
+                    } else if let Some(bg_color) = bg {
+                        self.screen[py * 256 + px] = bg_color;
+                    }
+                }
+            }
+        }
+    }
+
     /// Save VM state to a binary file.
     /// Format: GEOS magic (4) + version u32 (4) + halted u8 (1) + pc u32 (4)
     ///         + regs [u32; 32] (128) + ram [u32; RAM_SIZE] + screen [u32; SCREEN_SIZE]

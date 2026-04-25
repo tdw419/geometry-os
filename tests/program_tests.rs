@@ -216,6 +216,8 @@ pub mod kernel;
 pub mod multiprocess;
 #[path = "program_tests/opcodes.rs"]
 pub mod opcodes;
+#[path = "program_tests/program_coverage.rs"]
+pub mod program_coverage;
 #[path = "program_tests/scheduling.rs"]
 pub mod scheduling;
 #[path = "program_tests/self_host.rs"]
@@ -226,5 +228,3 @@ pub mod shell;
 pub mod shell_vfs;
 #[path = "program_tests/vm_state.rs"]
 pub mod vm_state;
-#[path = "program_tests/program_coverage.rs"]
-pub mod program_coverage;

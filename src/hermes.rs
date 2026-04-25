@@ -931,6 +931,8 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0xB1 => "LOADPNG",
         0xB2 => "LOADSRCIMG",
         0xB3 => "ASM_RAM",
+        // Phase 94: Tiny font text rendering
+        0xD0 => "SMALLTEXT",
         _ => "???",
     }
 }

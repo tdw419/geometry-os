@@ -7530,6 +7530,137 @@ fn test_drawtext_newline() {
     assert!(b_pixels > 0, "'B' should render at y=20 after newline");
 }
 
+// ── SMALLTEXT: tiny 3x5 font text opcode (0xD0) ──────────────
+
+#[test]
+fn test_smalltext_assembles() {
+    let src = "LDI r0, 10\nLDI r1, 20\nLDI r2, msg\nLDI r3, 0xFF0000\nLDI r4, 0\nSMALLTEXT r0, r1, r2, r3, r4\nHALT\nmsg:\n";
+    let result = crate::assembler::assemble(src, 0);
+    assert!(
+        result.is_ok(),
+        "SMALLTEXT should assemble: {:?}",
+        result.err()
+    );
+    let asm = result.unwrap();
+    // 5 LDIs (3 bytes each) = offset 15, then SMALLTEXT
+    assert_eq!(asm.pixels[15], 0xD0, "opcode should be 0xD0");
+}
+
+#[test]
+fn test_smalltext_disassembles() {
+    let (text, len) = disasm(&[0xD0, 0, 1, 2, 3, 4]);
+    assert_eq!(text, "SMALLTEXT r0, r1, r2, r3, r4");
+    assert_eq!(len, 6);
+}
+
+#[test]
+fn test_smalltext_renders_pixels() {
+    let mut vm = Vm::new();
+    // Store "Hi" at RAM[100]
+    vm.ram[100] = 'H' as u32;
+    vm.ram[101] = 'i' as u32;
+    vm.ram[102] = 0; // null terminator
+    vm.regs[10] = 50; // x
+    vm.regs[11] = 50; // y
+    vm.regs[12] = 100; // addr
+    vm.regs[13] = 0x00FF00; // fg = green
+    vm.regs[14] = 0; // bg = transparent
+    vm.ram[0] = 0xD0; // SMALLTEXT
+    vm.ram[1] = 10;
+    vm.ram[2] = 11;
+    vm.ram[3] = 12;
+    vm.ram[4] = 13;
+    vm.ram[5] = 14;
+    vm.ram[6] = 0x00; // HALT
+    vm.step();
+    // Check that some pixels are green (foreground)
+    let mut green_count = 0;
+    for y in 50..55 {
+        for x in 50..56 {
+            if vm.screen[y * 256 + x] == 0x00FF00 {
+                green_count += 1;
+            }
+        }
+    }
+    assert!(
+        green_count > 0,
+        "SMALLTEXT should render green fg pixels, found {}",
+        green_count
+    );
+}
+
+#[test]
+fn test_smalltext_with_background() {
+    let mut vm = Vm::new();
+    vm.ram[100] = 'A' as u32;
+    vm.ram[101] = 0;
+    vm.regs[10] = 20;
+    vm.regs[11] = 20;
+    vm.regs[12] = 100;
+    vm.regs[13] = 0xFFFFFF; // fg = white
+    vm.regs[14] = 0x0000FF; // bg = blue
+    vm.ram[0] = 0xD0;
+    vm.ram[1] = 10;
+    vm.ram[2] = 11;
+    vm.ram[3] = 12;
+    vm.ram[4] = 13;
+    vm.ram[5] = 14;
+    vm.ram[6] = 0x00;
+    vm.step();
+    // Should have both white (fg) and blue (bg) pixels
+    let mut blue_count = 0;
+    for y in 20..25 {
+        for x in 20..23 {
+            if vm.screen[y * 256 + x] == 0x0000FF {
+                blue_count += 1;
+            }
+        }
+    }
+    assert!(
+        blue_count > 0,
+        "SMALLTEXT with bg should fill bg pixels, found {} blue",
+        blue_count
+    );
+}
+
+#[test]
+fn test_smalltext_85_columns() {
+    let mut vm = Vm::new();
+    // Write 86 characters (should fill 85*3=255 pixels, last char at x=255)
+    for i in 0..86u32 {
+        vm.ram[100 + i as usize] = (b'A' + (i % 26) as u8) as u32;
+    }
+    vm.ram[186] = 0; // null terminator
+    vm.regs[10] = 0; // x = 0
+    vm.regs[11] = 0; // y = 0
+    vm.regs[12] = 100; // addr
+    vm.regs[13] = 0xFFFFFF; // fg = white
+    vm.regs[14] = 0; // bg = transparent
+    vm.ram[0] = 0xD0;
+    vm.ram[1] = 10;
+    vm.ram[2] = 11;
+    vm.ram[3] = 12;
+    vm.ram[4] = 13;
+    vm.ram[5] = 14;
+    vm.ram[6] = 0x00;
+    vm.step();
+    // With 3px advance, 85 chars = 255 pixels. Last char starts at x=255 (3 pixels, but only first fits).
+    // Check that there are white pixels at x=252,253,254 (char 85 area)
+    let mut white_at_end = 0;
+    for y in 0..5 {
+        for x in 252..256 {
+            if vm.screen[y * 256 + x] == 0xFFFFFF {
+                white_at_end += 1;
+            }
+        }
+    }
+    assert!(
+        white_at_end > 0,
+        "SMALLTEXT should render near x=255 for 85+ chars, found {} white pixels",
+        white_at_end
+    );
+}
+
 // ── BITSET/BITCLR/BITTEST opcodes (0x8D-0x8F) ───────────────
 
 #[test]
@@ -9058,14 +9189,14 @@ fn test_winsys_resize() {
     // WINSYS op=7 (RESIZE): r0=win_id, r1=new_w, r2=new_h
     let mut vm = Vm::new();
     // Create window first (op=0): 64x48
-    vm.regs[1] = 0;  // x
-    vm.regs[2] = 0;  // y
+    vm.regs[1] = 0; // x
+    vm.regs[2] = 0; // y
     vm.regs[3] = 64; // w
     vm.regs[4] = 48; // h
-    vm.regs[5] = 0;  // title_addr
-    vm.regs[6] = 0;  // op = create
+    vm.regs[5] = 0; // title_addr
+    vm.regs[6] = 0; // op = create
     vm.ram[0] = 0x94; // WINSYS
-    vm.ram[1] = 6;    // op_reg
+    vm.ram[1] = 6; // op_reg
     vm.ram[2] = 0x00; // HALT
     vm.pc = 0;
     vm.halted = false;
@@ -9077,8 +9208,8 @@ fn test_winsys_resize() {
     // Resize to 128x96 (op=7)
     vm.regs[0] = win_id;
     vm.regs[1] = 128; // new_w
-    vm.regs[2] = 96;  // new_h
-    vm.regs[6] = 7;   // op = resize
+    vm.regs[2] = 96; // new_h
+    vm.regs[6] = 7; // op = resize
     vm.ram[3] = 0x94;
     vm.ram[4] = 6;
     vm.ram[5] = 0x00; // HALT
@@ -9115,8 +9246,8 @@ fn test_winsys_resize_invalid_size() {
 
     // Try resize to 0x0
     vm.regs[0] = win_id;
-    vm.regs[1] = 0;  // invalid
-    vm.regs[2] = 0;  // invalid
+    vm.regs[1] = 0; // invalid
+    vm.regs[2] = 0; // invalid
     vm.regs[6] = 7;
     vm.ram[3] = 0x94;
     vm.ram[4] = 6;
@@ -16461,9 +16592,13 @@ fn test_window_list_produces_valid_json_array() {
         if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
             for j in 0..32 {
                 let addr = w.title_addr as usize + j;
-                if addr >= vm.ram.len() { break; }
+                if addr >= vm.ram.len() {
+                    break;
+                }
                 let ch = vm.ram[addr];
-                if ch == 0 || ch > 127 { break; }
+                if ch == 0 || ch > 127 {
+                    break;
+                }
                 title.push(ch as u8 as char);
             }
         }
@@ -16475,8 +16610,8 @@ fn test_window_list_produces_valid_json_array() {
     let output = format!("[{}]", windows_json.join(","));
 
     // Verify it parses as valid JSON
-    let parsed: serde_json::Value = serde_json::from_str(&output)
-        .expect("window_list output should be valid JSON");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&output).expect("window_list output should be valid JSON");
 
     // Verify structure
     let arr = parsed.as_array().expect("should be a JSON array");
@@ -16525,9 +16660,13 @@ fn test_window_list_json_with_title() {
         if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
             for j in 0..32 {
                 let addr = w.title_addr as usize + j;
-                if addr >= vm.ram.len() { break; }
+                if addr >= vm.ram.len() {
+                    break;
+                }
                 let ch = vm.ram[addr];
-                if ch == 0 || ch > 127 { break; }
+                if ch == 0 || ch > 127 {
+                    break;
+                }
                 t.push(ch as u8 as char);
             }
         }
@@ -16557,9 +16696,13 @@ fn test_window_list_empty_returns_empty_json_array() {
         if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
             for j in 0..32 {
                 let addr = w.title_addr as usize + j;
-                if addr >= vm.ram.len() { break; }
+                if addr >= vm.ram.len() {
+                    break;
+                }
                 let ch = vm.ram[addr];
-                if ch == 0 || ch > 127 { break; }
+                if ch == 0 || ch > 127 {
+                    break;
+                }
                 t.push(ch as u8 as char);
             }
         }
@@ -16571,7 +16714,10 @@ fn test_window_list_empty_returns_empty_json_array() {
     let output = format!("[{}]", windows_json.join(","));
 
     let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
-    assert!(parsed.as_array().unwrap().is_empty(), "empty VM should produce []");
+    assert!(
+        parsed.as_array().unwrap().is_empty(),
+        "empty VM should produce []"
+    );
 }
 
 #[test]
@@ -16599,10 +16745,22 @@ fn test_window_list_socket_format() {
     assert!(handler.contains("w.active"), "should filter active windows");
     // Should produce JSON format
     assert!(handler.contains("\\\"id\\\""), "should have JSON id field");
-    assert!(handler.contains("\\\"title\\\""), "should have JSON title field");
-    assert!(handler.contains("\\\"pid\\\""), "should have JSON pid field");
-    assert!(handler.contains("\\\"z_order\\\""), "should have JSON z_order field");
-    assert!(handler.contains("[{") || handler.contains("windows.join"), "should produce JSON array");
+    assert!(
+        handler.contains("\\\"title\\\""),
+        "should have JSON title field"
+    );
+    assert!(
+        handler.contains("\\\"pid\\\""),
+        "should have JSON pid field"
+    );
+    assert!(
+        handler.contains("\\\"z_order\\\""),
+        "should have JSON z_order field"
+    );
+    assert!(
+        handler.contains("[{") || handler.contains("windows.join"),
+        "should produce JSON array"
+    );
 }
 
 #[test]
@@ -16660,7 +16818,10 @@ fn test_window_move_socket() {
 
     // Test moving a non-existent window returns none
     let not_found = vm.windows.iter_mut().find(|w| w.id == 999 && w.active);
-    assert!(not_found.is_none(), "non-existent window should not be found");
+    assert!(
+        not_found.is_none(),
+        "non-existent window should not be found"
+    );
 
     // Test moving an inactive window returns none
     let mut w2 = Window::new(2, 50, 60, 64, 32, 0, 2);
@@ -16724,11 +16885,17 @@ fn test_window_close_socket() {
 
     // Test closing a non-existent window returns none
     let not_found = vm.windows.iter_mut().find(|w| w.id == 999 && w.active);
-    assert!(not_found.is_none(), "non-existent window should not be found");
+    assert!(
+        not_found.is_none(),
+        "non-existent window should not be found"
+    );
 
     // Test closing an already-inactive window returns none
     let inactive = vm.windows.iter_mut().find(|w| w.id == 1 && w.active);
-    assert!(inactive.is_none(), "inactive window should not be closeable again");
+    assert!(
+        inactive.is_none(),
+        "inactive window should not be closeable again"
+    );
 }
 
 #[test]
@@ -16813,10 +16980,7 @@ fn test_window_resize_socket() {
     );
 
     // Test invalid sizes are rejected
-    let found = vm
-        .windows
-        .iter_mut()
-        .find(|w| w.id == win_id && w.active);
+    let found = vm.windows.iter_mut().find(|w| w.id == win_id && w.active);
     assert!(found.is_some());
     // 0 size should fail
     let bad_w: u32 = 0;
@@ -16883,7 +17047,10 @@ fn test_window_focus_socket() {
 
     // Verify window 1 now has the highest z_order
     let w1 = vm.windows.iter().find(|w| w.id == 1).unwrap();
-    assert_eq!(w1.z_order, 6, "window 1 should have z_order 6 (was 1, max was 5)");
+    assert_eq!(
+        w1.z_order, 6,
+        "window 1 should have z_order 6 (was 1, max was 5)"
+    );
 
     // Window 2 should still have z_order 5
     let w2 = vm.windows.iter().find(|w| w.id == 2).unwrap();
@@ -16891,7 +17058,10 @@ fn test_window_focus_socket() {
 
     // Test focusing a non-existent window
     let not_found = vm.windows.iter_mut().find(|w| w.id == 999 && w.active);
-    assert!(not_found.is_none(), "non-existent window should not be found");
+    assert!(
+        not_found.is_none(),
+        "non-existent window should not be found"
+    );
 
     // Test focusing an inactive window
     let mut w3 = Window::new(3, 30, 30, 64, 32, 0, 1);
@@ -16900,7 +17070,10 @@ fn test_window_focus_socket() {
     vm.windows.push(w3);
 
     let inactive = vm.windows.iter_mut().find(|w| w.id == 3 && w.active);
-    assert!(inactive.is_none(), "inactive window should not be focusable");
+    assert!(
+        inactive.is_none(),
+        "inactive window should not be focusable"
+    );
 }
 
 #[test]
@@ -16941,7 +17114,11 @@ fn test_process_kill_socket() {
     assert_eq!(count, 2, "should kill 2 active windows for PID 5");
 
     // Verify PID 5 windows are all inactive now
-    let pid5_active: Vec<_> = vm.windows.iter().filter(|w| w.pid == 5 && w.active).collect();
+    let pid5_active: Vec<_> = vm
+        .windows
+        .iter()
+        .filter(|w| w.pid == 5 && w.active)
+        .collect();
     assert!(pid5_active.is_empty(), "no PID 5 windows should be active");
 
     // Verify PID 7 window is still active
@@ -16960,7 +17137,10 @@ fn test_process_kill_socket() {
             count2 += 1;
         }
     }
-    assert_eq!(count2, 0, "killing non-existent PID should affect 0 windows");
+    assert_eq!(
+        count2, 0,
+        "killing non-existent PID should affect 0 windows"
+    );
 }
 
 #[test]
@@ -17059,7 +17239,9 @@ fn test_desktop_vision_socket_returns_json() {
         serde_json::from_str(&json_str).expect("desktop_vision output should be valid JSON");
 
     // Verify windows array
-    let windows = parsed["windows"].as_array().expect("windows should be array");
+    let windows = parsed["windows"]
+        .as_array()
+        .expect("windows should be array");
     assert_eq!(windows.len(), 2, "should have 2 windows");
 
     // Verify window fields
@@ -17076,7 +17258,11 @@ fn test_desktop_vision_socket_returns_json() {
     // Verify focused_window is the one with highest z_order (window 2)
     let focused = &parsed["focused_window"];
     assert!(focused.is_object(), "focused_window should be object");
-    assert_eq!(focused["id"].as_u64().unwrap(), 2, "focused should be window 2 (highest z_order)");
+    assert_eq!(
+        focused["id"].as_u64().unwrap(),
+        2,
+        "focused should be window 2 (highest z_order)"
+    );
     assert_eq!(focused["z_order"].as_u64().unwrap(), 5);
 
     // Verify ascii_desktop is a string
@@ -17172,8 +17358,14 @@ fn test_desktop_mouse_move_updates_registers() {
     vm.push_mouse(150, 200);
     assert_eq!(vm.mouse_x, 150, "mouse_x should be updated");
     assert_eq!(vm.mouse_y, 200, "mouse_y should be updated");
-    assert_eq!(vm.ram[0xFF9], 150, "mouse_x should mirror to RAM port 0xFF9");
-    assert_eq!(vm.ram[0xFFA], 200, "mouse_y should mirror to RAM port 0xFFA");
+    assert_eq!(
+        vm.ram[0xFF9], 150,
+        "mouse_x should mirror to RAM port 0xFF9"
+    );
+    assert_eq!(
+        vm.ram[0xFFA], 200,
+        "mouse_y should mirror to RAM port 0xFFA"
+    );
 
     // Second move overwrites
     vm.push_mouse(50, 75);
@@ -17194,7 +17386,10 @@ fn test_desktop_mouse_click_updates_position_then_button() {
     vm.push_mouse_button(2); // left click
     assert_eq!(vm.mouse_x, 100, "mouse_x should be updated before click");
     assert_eq!(vm.mouse_y, 150, "mouse_y should be updated before click");
-    assert_eq!(vm.mouse_button, 2, "mouse_button should be set after position");
+    assert_eq!(
+        vm.mouse_button, 2,
+        "mouse_button should be set after position"
+    );
 
     // Verify position is set first (button query depends on position for hit testing)
     vm.push_mouse(200, 50);
@@ -19847,9 +20042,8 @@ fn test_windowed_app_launch() {
     vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
     let win_id = 1u32;
     let win = Window::new_world(
-        win_id,
-        16, // world_x
-        12, // world_y
+        win_id, 16,  // world_x
+        12,  // world_y
         128, // w
         96,  // h
         0,   // title_addr
@@ -19907,7 +20101,11 @@ fn test_windowed_app_multiple_slots() {
 
     // Verify slots don't overlap
     assert_ne!(base0, base1, "Slots must have different bases");
-    assert_eq!(base1 - base0, APP_CODE_SIZE, "Slots should be APP_CODE_SIZE apart");
+    assert_eq!(
+        base1 - base0,
+        APP_CODE_SIZE,
+        "Slots should be APP_CODE_SIZE apart"
+    );
 
     // Verify both processes exist
     assert_eq!(vm.processes.len(), 2);
@@ -19928,7 +20126,10 @@ fn test_windowed_app_slot_exhaustion() {
 
     // No free slot available
     let slot = (0..MAX_WINDOWED_APPS).find(|s| !used_slots.contains(s));
-    assert!(slot.is_none(), "No free slot should be available when all are used");
+    assert!(
+        slot.is_none(),
+        "No free slot should be available when all are used"
+    );
 }
 
 #[test]
@@ -19936,15 +20137,15 @@ fn test_viewport_transform() {
     // Verify coordinate math at all 5 zoom levels (0..=4).
     // Tests: world_to_screen, world_to_screen_unchecked, world_pixels_to_screen,
     //        screen_to_world roundtrip, is_rect_visible, and edge visibility.
-    use crate::viewport::{Viewport, FB_W, FB_H, TILE_SIZE};
+    use crate::viewport::{Viewport, FB_H, FB_W, TILE_SIZE};
 
     let zoom_expected: &[(u32, u32, u32)] = &[
         // (src_region, scale, pixels_per_tile)
-        (256, 2, 16),   // zoom 0
-        (256, 3, 24),   // zoom 1
-        (128, 6, 48),   // zoom 2 (default)
-        (64, 12, 96),   // zoom 3
-        (32, 24, 192),  // zoom 4
+        (256, 2, 16),  // zoom 0
+        (256, 3, 24),  // zoom 1
+        (128, 6, 48),  // zoom 2 (default)
+        (64, 12, 96),  // zoom 3
+        (32, 24, 192), // zoom 4
     ];
 
     for (zoom, &(src_region, scale, ppt)) in (0..=4u32).zip(zoom_expected.iter()) {
@@ -19955,7 +20156,12 @@ fn test_viewport_transform() {
         assert_eq!(z.src_region, src_region, "zoom {}: src_region", zoom);
         assert_eq!(z.scale, scale, "zoom {}: scale", zoom);
         assert_eq!(z.pixels_per_tile(), ppt, "zoom {}: pixels_per_tile", zoom);
-        assert_eq!(z.tiles_visible(), src_region / TILE_SIZE, "zoom {}: tiles_visible", zoom);
+        assert_eq!(
+            z.tiles_visible(),
+            src_region / TILE_SIZE,
+            "zoom {}: tiles_visible",
+            zoom
+        );
 
         // ── Camera tile maps to screen (0, 0) ──
         let (sx, sy) = vp.world_to_screen_unchecked(20, 30);
@@ -19977,8 +20183,16 @@ fn test_viewport_transform() {
         for &(wx, wy) in &test_tiles {
             let (sx, sy) = vp.world_to_screen_unchecked(wx, wy);
             let (rwx, rwy) = vp.screen_to_world(sx, sy);
-            assert_eq!(rwx, wx, "zoom {}: roundtrip x for world ({},{})", zoom, wx, wy);
-            assert_eq!(rwy, wy, "zoom {}: roundtrip y for world ({},{})", zoom, wx, wy);
+            assert_eq!(
+                rwx, wx,
+                "zoom {}: roundtrip x for world ({},{})",
+                zoom, wx, wy
+            );
+            assert_eq!(
+                rwy, wy,
+                "zoom {}: roundtrip y for world ({},{})",
+                zoom, wx, wy
+            );
         }
 
         // ── world_pixels_to_screen: sub-tile precision ──
@@ -19991,8 +20205,18 @@ fn test_viewport_transform() {
 
         // 4 pixels right within the camera tile -> 4*scale screen pixels
         let (spx2, spy2) = vp.world_pixels_to_screen(cam_px + 4, cam_py + 3);
-        assert_eq!(spx2, 4 * scale as i32, "zoom {}: world_pixels offset x", zoom);
-        assert_eq!(spy2, 3 * scale as i32, "zoom {}: world_pixels offset y", zoom);
+        assert_eq!(
+            spx2,
+            4 * scale as i32,
+            "zoom {}: world_pixels offset x",
+            zoom
+        );
+        assert_eq!(
+            spy2,
+            3 * scale as i32,
+            "zoom {}: world_pixels offset y",
+            zoom
+        );
 
         // ── Visibility: camera tile is visible, far tile is not ──
         assert!(
@@ -20037,7 +20261,13 @@ fn test_viewport_transform() {
         assert!(
             sx_far >= FB_W as i32 || sy_far >= FB_H as i32,
             "zoom {}: tile 2 beyond visible ({},{}) -> screen ({},{}) should be offscreen {}x{}",
-            zoom, far_x, far_y, sx_far, sy_far, FB_W, FB_H
+            zoom,
+            far_x,
+            far_y,
+            sx_far,
+            sy_far,
+            FB_W,
+            FB_H
         );
     }
 }
@@ -20046,7 +20276,7 @@ fn test_viewport_transform() {
 fn test_composite_rendering() {
     // Verify that blit_windows() places window pixels at the correct screen position,
     // composites multiple windows in z-order, respects transparency, and clips at edges.
-    use crate::vm::types::{Window, WINDOW_TITLE_BAR_H, TASKBAR_Y};
+    use crate::vm::types::{Window, TASKBAR_Y, WINDOW_TITLE_BAR_H};
 
     let mut vm = Vm::new();
 
@@ -20066,7 +20296,8 @@ fn test_composite_rendering() {
         vm.screen[expected_y * 256 + expected_x],
         0xFF0000,
         "single window: red pixel should be at screen ({}, {})",
-        expected_x, expected_y
+        expected_x,
+        expected_y
     );
 
     // Adjacent pixel in buffer (4,5) was never written -> screen should be 0
@@ -20107,7 +20338,8 @@ fn test_composite_rendering() {
         vm.screen[overlap_y * 256 + overlap_x],
         0x0000FF,
         "overlap: higher z-order (blue) should overwrite lower (green) at ({}, {})",
-        overlap_x, overlap_y
+        overlap_x,
+        overlap_y
     );
 
     // Win A only region: pixel at (10, 23) -- only covered by win A content
@@ -20119,7 +20351,8 @@ fn test_composite_rendering() {
         vm.screen[a_only_y * 256 + a_only_x],
         0x00FF00,
         "win A only region should be green at ({}, {})",
-        a_only_x, a_only_y
+        a_only_x,
+        a_only_y
     );
 
     // ── 3. Transparency: buffer pixel 0 does NOT overwrite screen ──
@@ -20133,11 +20366,11 @@ fn test_composite_rendering() {
     vm.screen[trans_y * 256 + trans_x] = 0xFFFF00; // yellow background
 
     let mut win_c = Window::new(30, 28, 38, 8, 8, 0, 3);
-    win_c.offscreen_buffer[0] = 0xFF00FF;          // corner (0,0)
-    win_c.offscreen_buffer[7] = 0xFF00FF;          // corner (7,0)
+    win_c.offscreen_buffer[0] = 0xFF00FF; // corner (0,0)
+    win_c.offscreen_buffer[7] = 0xFF00FF; // corner (7,0)
     win_c.offscreen_buffer[7 * 8 + 0] = 0xFF00FF; // corner (0,7)
     win_c.offscreen_buffer[7 * 8 + 7] = 0xFF00FF; // corner (7,7)
-    // buffer (2,2) stays 0 -> transparent
+                                                  // buffer (2,2) stays 0 -> transparent
     vm.windows.push(win_c);
     vm.blit_windows();
 
@@ -20148,7 +20381,8 @@ fn test_composite_rendering() {
         vm.screen[trans_y * 256 + trans_x],
         0xFFFF00,
         "transparent window pixel should not overwrite background at ({}, {})",
-        trans_x, trans_y
+        trans_x,
+        trans_y
     );
 
     // ── 4. Edge clipping: window partially off-screen ──
@@ -20156,7 +20390,7 @@ fn test_composite_rendering() {
     vm.windows.clear();
 
     let mut win_d = Window::new(40, 250, 10, 16, 16, 0, 4);
-    win_d.offscreen_buffer[0] = 0xABCDEF;  // (0,0) -> screen (250, 22)
+    win_d.offscreen_buffer[0] = 0xABCDEF; // (0,0) -> screen (250, 22)
     win_d.offscreen_buffer[10] = 0x123456; // (10,0) -> screen (260, 22) clipped
     vm.windows.push(win_d);
     vm.blit_windows();
@@ -20245,14 +20479,30 @@ fn test_offscreen_culling() {
     // world_x=18 -> vm_fb = (18-10)*8 = 64 (at left edge of crop). 64+32=96 > 64 => visible.
     let visible = Window::new_world(1, 18, 18, 32, 32, 0, 1);
     assert!(
-        !is_window_culled(visible.world_x, visible.world_y, visible.w, visible.h, cam_x, cam_y, src_region),
+        !is_window_culled(
+            visible.world_x,
+            visible.world_y,
+            visible.w,
+            visible.h,
+            cam_x,
+            cam_y,
+            src_region
+        ),
         "window at (18,18) should NOT be culled -- within crop region"
     );
 
     // ── Case 2: Window far offscreen IS culled ──
     let far_offscreen = Window::new_world(2, 1000, 1000, 32, 32, 0, 1);
     assert!(
-        is_window_culled(far_offscreen.world_x, far_offscreen.world_y, far_offscreen.w, far_offscreen.h, cam_x, cam_y, src_region),
+        is_window_culled(
+            far_offscreen.world_x,
+            far_offscreen.world_y,
+            far_offscreen.w,
+            far_offscreen.h,
+            cam_x,
+            cam_y,
+            src_region
+        ),
         "window at (1000,1000) should be culled -- far offscreen"
     );
 
@@ -20262,7 +20512,15 @@ fn test_offscreen_culling() {
     // world_y=18 -> vm_fb = (18-10)*8 = 64, 64+32=96 > 64 => NOT culled top.
     let edge_visible = Window::new_world(3, 22, 18, 64, 32, 0, 1);
     assert!(
-        !is_window_culled(edge_visible.world_x, edge_visible.world_y, edge_visible.w, edge_visible.h, cam_x, cam_y, src_region),
+        !is_window_culled(
+            edge_visible.world_x,
+            edge_visible.world_y,
+            edge_visible.w,
+            edge_visible.h,
+            cam_x,
+            cam_y,
+            src_region
+        ),
         "window at (22,18) with w=64 should be partially visible"
     );
 
@@ -20271,7 +20529,15 @@ fn test_offscreen_culling() {
     // Try world_x=34: vm_fb=(34-10)*8=192 >= 192 => culled
     let just_past = Window::new_world(4, 34, 18, 32, 32, 0, 1);
     assert!(
-        is_window_culled(just_past.world_x, just_past.world_y, just_past.w, just_past.h, cam_x, cam_y, src_region),
+        is_window_culled(
+            just_past.world_x,
+            just_past.world_y,
+            just_past.w,
+            just_past.h,
+            cam_x,
+            cam_y,
+            src_region
+        ),
         "window at (34,18) should be culled -- past right edge"
     );
 
@@ -20279,7 +20545,15 @@ fn test_offscreen_culling() {
     // world_y=2 -> vm_fb_y = (2-10)*8 = -64, vm_fb_y + h = -64+32 = -32 <= 64 => culled
     let above = Window::new_world(5, 18, 2, 32, 32, 0, 1);
     assert!(
-        is_window_culled(above.world_x, above.world_y, above.w, above.h, cam_x, cam_y, src_region),
+        is_window_culled(
+            above.world_x,
+            above.world_y,
+            above.w,
+            above.h,
+            cam_x,
+            cam_y,
+            src_region
+        ),
         "window at (18,2) should be culled -- above visible crop"
     );
 
@@ -20322,9 +20596,9 @@ fn test_hermes_opcode_mock() {
     vm.hermes_mock_response = Some("I am Hermes, how can I help?".to_string());
 
     // Response buffer at address 500, max len 256
-    vm.regs[1] = 100;   // prompt addr
-    vm.regs[2] = 500;   // response addr
-    vm.regs[3] = 256;   // max len
+    vm.regs[1] = 100; // prompt addr
+    vm.regs[2] = 500; // response addr
+    vm.regs[3] = 256; // max len
 
     // HERMES r1, r2, r3
     vm.ram[0] = 0xA8;
@@ -20339,14 +20613,20 @@ fn test_hermes_opcode_mock() {
 
     // Check response was written
     let resp_len = vm.regs[0] as usize;
-    assert!(resp_len > 0, "HERMES should return non-zero length for mock");
+    assert!(
+        resp_len > 0,
+        "HERMES should return non-zero length for mock"
+    );
 
     let mut response = String::new();
     for i in 0..resp_len {
         response.push(vm.ram[500 + i] as u8 as char);
     }
     assert_eq!(response, "I am Hermes, how can I help?");
-    assert_eq!(vm.hermes_mock_response, None, "mock should be cleared after use");
+    assert_eq!(
+        vm.hermes_mock_response, None,
+        "mock should be cleared after use"
+    );
 }
 
 #[test]
@@ -20356,9 +20636,9 @@ fn test_hermes_opcode_empty_prompt() {
     // Empty prompt (null byte at address 200)
     vm.ram[200] = 0;
 
-    vm.regs[1] = 200;  // prompt addr
-    vm.regs[2] = 500;  // response addr
-    vm.regs[3] = 256;  // max len
+    vm.regs[1] = 200; // prompt addr
+    vm.regs[2] = 500; // response addr
+    vm.regs[3] = 256; // max len
 
     vm.ram[0] = 0xA8;
     vm.ram[1] = 1;
@@ -20412,4 +20692,3 @@ fn test_hermes_opcode_truncation() {
     // Check null terminator
     assert_eq!(vm.ram[505], 0, "should be null-terminated");
 }
-

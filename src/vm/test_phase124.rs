@@ -337,8 +337,14 @@ fn test_mouseq_routes_to_window_owner_screen_space() {
     vm.halted = false;
     vm.step();
 
-    assert_eq!(vm.regs[5], 10, "MOUSEQ x should be window-relative (50 - 40 = 10)");
-    assert_eq!(vm.regs[6], 10, "MOUSEQ y should be window-relative (40 - 30 = 10)");
+    assert_eq!(
+        vm.regs[5], 10,
+        "MOUSEQ x should be window-relative (50 - 40 = 10)"
+    );
+    assert_eq!(
+        vm.regs[6], 10,
+        "MOUSEQ y should be window-relative (40 - 30 = 10)"
+    );
 }
 
 #[test]
@@ -434,8 +440,14 @@ fn test_mouseq_clamps_negative_to_zero() {
     vm.halted = false;
     vm.step();
 
-    assert_eq!(vm.regs[10], 0, "MOUSEQ x should clamp to 0 when mouse is left of window");
-    assert_eq!(vm.regs[11], 0, "MOUSEQ y should clamp to 0 when mouse is above window");
+    assert_eq!(
+        vm.regs[10], 0,
+        "MOUSEQ x should clamp to 0 when mouse is left of window"
+    );
+    assert_eq!(
+        vm.regs[11], 0,
+        "MOUSEQ y should clamp to 0 when mouse is above window"
+    );
 }
 
 #[test]
@@ -457,8 +469,14 @@ fn test_mouseq_inactive_window_uses_global() {
     vm.halted = false;
     vm.step();
 
-    assert_eq!(vm.regs[5], 50, "MOUSEQ x should be global for inactive window");
-    assert_eq!(vm.regs[6], 40, "MOUSEQ y should be global for inactive window");
+    assert_eq!(
+        vm.regs[5], 50,
+        "MOUSEQ x should be global for inactive window"
+    );
+    assert_eq!(
+        vm.regs[6], 40,
+        "MOUSEQ y should be global for inactive window"
+    );
 }
 
 #[test]
@@ -470,9 +488,9 @@ fn test_mouse_routing() {
     let mut vm = Vm::new();
 
     // Set up 3 overlapping active windows from different PIDs
-    let win_a = Window::new(1, 10, 20, 64, 48, 0, 2);   // PID 2 at screen (10,20)
-    let win_b = Window::new(2, 100, 50, 80, 60, 0, 3);  // PID 3 at screen (100,50)
-    let win_c = Window::new(3, 200, 10, 48, 48, 0, 5);  // PID 5 at screen (200,10)
+    let win_a = Window::new(1, 10, 20, 64, 48, 0, 2); // PID 2 at screen (10,20)
+    let win_b = Window::new(2, 100, 50, 80, 60, 0, 3); // PID 3 at screen (100,50)
+    let win_c = Window::new(3, 200, 10, 48, 48, 0, 5); // PID 5 at screen (200,10)
     vm.windows.push(win_a);
     vm.windows.push(win_b);
     vm.windows.push(win_c);
@@ -488,8 +506,14 @@ fn test_mouse_routing() {
     vm.pc = 0;
     vm.halted = false;
     vm.step();
-    assert_eq!(vm.regs[5], 20, "PID 2 MOUSEQ x should be relative to win_a (10,20)");
-    assert_eq!(vm.regs[6], 20, "PID 2 MOUSEQ y should be relative to win_a (10,20)");
+    assert_eq!(
+        vm.regs[5], 20,
+        "PID 2 MOUSEQ x should be relative to win_a (10,20)"
+    );
+    assert_eq!(
+        vm.regs[6], 20,
+        "PID 2 MOUSEQ y should be relative to win_a (10,20)"
+    );
 
     // ── Case 2: Same mouse position, but PID 3 owns win_b at (100,50).
     // Mouse at (30,40) is OUTSIDE win_b, so should clamp.
@@ -503,8 +527,14 @@ fn test_mouse_routing() {
     vm.pc = 0;
     vm.halted = false;
     vm.step();
-    assert_eq!(vm.regs[5], 0, "PID 3 MOUSEQ x should clamp 0 (mouse left of win_b)");
-    assert_eq!(vm.regs[6], 0, "PID 3 MOUSEQ y should clamp 0 (mouse above win_b)");
+    assert_eq!(
+        vm.regs[5], 0,
+        "PID 3 MOUSEQ x should clamp 0 (mouse left of win_b)"
+    );
+    assert_eq!(
+        vm.regs[6], 0,
+        "PID 3 MOUSEQ y should clamp 0 (mouse above win_b)"
+    );
 
     // ── Case 3: Move mouse to (130, 70). PID 3 gets relative (130-100, 70-50) = (30, 20)
     vm.push_mouse(130, 70);
@@ -544,8 +574,14 @@ fn test_mouse_routing() {
     vm.pc = 0;
     vm.halted = false;
     vm.step();
-    assert_eq!(vm.regs[5], 130, "PID 4 (no window) MOUSEQ x should be global 130");
-    assert_eq!(vm.regs[6], 70, "PID 4 (no window) MOUSEQ y should be global 70");
+    assert_eq!(
+        vm.regs[5], 130,
+        "PID 4 (no window) MOUSEQ x should be global 130"
+    );
+    assert_eq!(
+        vm.regs[6], 70,
+        "PID 4 (no window) MOUSEQ y should be global 70"
+    );
 
     // ── Case 6: PID 5 owns win_c at (200,10). Mouse at (130,70) is outside (left).
     // (130-200).max(0) = 0, (70-10).max(0) = 60
@@ -558,7 +594,10 @@ fn test_mouse_routing() {
     vm.pc = 0;
     vm.halted = false;
     vm.step();
-    assert_eq!(vm.regs[5], 0, "PID 5 MOUSEQ x should clamp 0 (mouse left of win_c)");
+    assert_eq!(
+        vm.regs[5], 0,
+        "PID 5 MOUSEQ x should clamp 0 (mouse left of win_c)"
+    );
     assert_eq!(vm.regs[6], 60, "PID 5 MOUSEQ y should be 60 (70 - 10)");
 
     // ── Case 7: Button state is preserved across all PID switches

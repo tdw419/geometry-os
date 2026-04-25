@@ -262,7 +262,7 @@ fn draw_rect_filled(buf: &mut [u32], x0: u32, y0: u32, w: u32, h: u32, color: u3
 
 /// Draw a single character from the 8x8 font onto the pixel buffer.
 fn draw_char(buf: &mut [u32], ch: char, px: u32, py: u32, color: u32) {
-    use crate::font::{GLYPH_H, GLYPH_W, GLYPHS};
+    use crate::font::{GLYPHS, GLYPH_H, GLYPH_W};
     let code = ch as usize;
     if code >= 128 {
         return;
@@ -343,7 +343,14 @@ pub fn encode_png_annotated(screen: &[u32], windows: &[WindowOverlay]) -> Vec<u8
         } else {
             win.y + win.h
         };
-        draw_rect_filled(&mut buf, win.x, label_y, label_w.min(256 - win.x), 8, 0x000000);
+        draw_rect_filled(
+            &mut buf,
+            win.x,
+            label_y,
+            label_w.min(256 - win.x),
+            8,
+            0x000000,
+        );
         draw_text(&mut buf, &label_display, win.x, label_y, border_color);
     }
 

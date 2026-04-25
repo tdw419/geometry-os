@@ -66,7 +66,7 @@ fn test_hermes_ram_isolation() {
 
     vm.regs[1] = 0x100; // prompt addr
     vm.regs[2] = 0x200; // response addr
-    vm.regs[3] = 256;   // max len
+    vm.regs[3] = 256; // max len
 
     exec_hermes(&mut vm, 1, 2, 3);
 
@@ -179,11 +179,7 @@ fn test_hermes_rapid_fire() {
         assert!(resp_len > 0, "call {} should return non-zero length", i);
 
         let response = read_str_from_ram(&vm, response_addr, resp_len);
-        assert_eq!(
-            response, expected_response,
-            "call {} response mismatch",
-            i
-        );
+        assert_eq!(response, expected_response, "call {} response mismatch", i);
     }
 }
 
@@ -204,7 +200,10 @@ fn test_hermes_zero_max_len() {
 
     exec_hermes(&mut vm, 1, 2, 3);
 
-    assert_eq!(vm.regs[0], 0, "zero max_len should produce 0 length response");
+    assert_eq!(
+        vm.regs[0], 0,
+        "zero max_len should produce 0 length response"
+    );
     assert_eq!(
         vm.ram[0x200], 0xFEEDFACE,
         "response buffer should be untouched when max_len=0"
@@ -290,14 +289,14 @@ fn test_hermes_unicode_prompt_handling() {
 
     // Write a prompt with a character > 127 (non-ASCII byte)
     // The handler does char::from_u32(ch) and falls back to '?'
-    vm.ram[0x100] = 0x41;     // 'A'
-    vm.ram[0x101] = 0xFF;     // non-ASCII byte (not a valid Unicode codepoint by itself)
-    vm.ram[0x102] = 0x42;     // 'B'
-    vm.ram[0x103] = 0;        // null terminator
+    vm.ram[0x100] = 0x41; // 'A'
+    vm.ram[0x101] = 0xFF; // non-ASCII byte (not a valid Unicode codepoint by itself)
+    vm.ram[0x102] = 0x42; // 'B'
+    vm.ram[0x103] = 0; // null terminator
 
     // 0xFF as u32 -> char::from_u32(255) -> Some('ÿ') actually IS valid Unicode
     // Let's use a truly invalid codepoint instead
-    vm.ram[0x101] = 0xD800;   // surrogate, invalid Unicode codepoint
+    vm.ram[0x101] = 0xD800; // surrogate, invalid Unicode codepoint
 
     vm.hermes_mock_response = Some("got it".to_string());
 
@@ -331,7 +330,10 @@ fn test_hermes_long_prompt() {
 
     exec_hermes(&mut vm, 1, 2, 3);
 
-    assert!(vm.regs[0] > 0, "long prompt should still produce a response");
+    assert!(
+        vm.regs[0] > 0,
+        "long prompt should still produce a response"
+    );
 
     let response = read_str_from_ram(&vm, 0x2000, vm.regs[0] as usize);
     assert_eq!(response, "Long prompt received.");
