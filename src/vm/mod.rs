@@ -162,6 +162,11 @@ pub struct Vm {
     /// LLM configuration URL. Defaults to provider.json or local Ollama.
     /// Can be overridden by tests or host. Format: "url model api_key"
     pub llm_config: Option<String>,
+    /// Mock HERMES response for testing. When set, the HERMES opcode returns
+    /// this instead of shelling out. Cleared after use.
+    pub hermes_mock_response: Option<String>,
+    /// Session ID for Hermes --resume continuity across HERMES opcode calls.
+    pub hermes_session_id: Option<String>,
     /// Background hypervisor VM instances (Phase 87: Multi-Hypervisor).
     /// Each building on the map can host one. Host time-slices between active ones.
     pub background_vms: Vec<BackgroundVm>,
@@ -290,6 +295,8 @@ impl Vm {
             next_window_id: 1,
             llm_mock_response: None,
             llm_config: None,
+            hermes_mock_response: None,
+            hermes_session_id: None,
             background_vms: Vec::new(),
             next_bg_vm_id: 1,
             live_hypervisor: None,
@@ -433,6 +440,8 @@ impl Vm {
         self.llm_mock_response = None;
         self.hit_regions.clear();
         self.llm_config = None;
+        self.hermes_mock_response = None;
+        self.hermes_session_id = None;
         self.background_vms.clear();
         self.next_bg_vm_id = 1;
         self.live_hypervisor = None;
@@ -1971,6 +1980,63 @@ impl Vm {
                     self.regs[0] = parsed.len() as u32;
                 } else {
                     self.regs[0] = 0;
+                }
+            }
+
+            // HERMES prompt_addr_reg, response_addr_reg, max_len_reg (0xA8)
+            // Sends null-terminated prompt string from RAM to the Hermes Agent CLI.
+            // Response written to RAM at response_addr. r0 = response length (0 on error).
+            // Uses hermes_mock_response if set (for testing), otherwise shells out.
+            // Maintains session continuity via hermes_session_id for --resume.
+            0xA8 => {
+                let r_prompt = self.fetch() as usize;
+                let r_response = self.fetch() as usize;
+                let r_max_len = self.fetch() as usize;
+                if r_prompt < NUM_REGS && r_response < NUM_REGS && r_max_len < NUM_REGS {
+                    let prompt_addr = self.regs[r_prompt] as usize;
+                    let response_addr = self.regs[r_response] as usize;
+                    let max_len = self.regs[r_max_len] as usize;
+
+                    // Read null-terminated prompt string from RAM
+                    let mut prompt = String::new();
+                    let mut addr = prompt_addr;
+                    while addr < self.ram.len() {
+                        let ch = self.ram[addr];
+                        if ch == 0 {
+                            break;
+                        }
+                        if let Some(c) = char::from_u32(ch) {
+                            prompt.push(c);
+                        } else {
+                            prompt.push('?');
+                        }
+                        addr += 1;
+                    }
+
+                    // Get response: use mock if available, otherwise call Hermes CLI
+                    let response = if let Some(mock) = self.hermes_mock_response.take() {
+                        mock
+                    } else if prompt.is_empty() {
+                        String::new()
+                    } else {
+                        self.call_hermes_cli(&prompt).unwrap_or_default()
+                    };
+
+                    // Write response to RAM, one char per u32 word
+                    let write_len = response.len().min(max_len);
+                    for (i, byte) in response.bytes().take(write_len).enumerate() {
+                        let dest = response_addr + i;
+                        if dest < self.ram.len() {
+                            self.ram[dest] = byte as u32;
+                        }
+                    }
+                    // Null-terminate if space allows
+                    if response_addr + write_len < self.ram.len() {
+                        self.ram[response_addr + write_len] = 0;
+                    }
+                    self.regs[0] = write_len as u32;
+                } else {
+                    self.regs[0] = 0; // error: invalid registers
                 }
             }
 
@@ -3656,6 +3722,79 @@ print(r if r else '')";
              Never invent opcodes — if a name isn't in the inventory above, it doesn't exist. Use CALL into a helper label instead.",
             opcode_inventory, focus_hint, asm_status_line, frame
         )
+    }
+
+    /// Call the Hermes Agent CLI (`hermes chat -Q -q`) with a prompt.
+    /// Maintains session continuity via `hermes_session_id` for `--resume`.
+    /// Returns the agent's text response, or None on failure.
+    fn call_hermes_cli(&mut self, prompt: &str) -> Option<String> {
+        // Write prompt to a temp file to avoid shell escaping issues
+        let tmp_path = "/tmp/geo_hermes_prompt.txt";
+        if std::fs::write(tmp_path, prompt).is_err() {
+            return None;
+        }
+
+        let mut args: Vec<String> = vec![
+            "chat".to_string(),
+            "-Q".to_string(),   // quiet (no UI chrome)
+            "-q".to_string(),   // non-interactive
+        ];
+
+        // Resume session if we have one for continuity
+        if let Some(ref sid) = self.hermes_session_id {
+            args.push("--resume".to_string());
+            args.push(sid.clone());
+        }
+
+        // Use --from-file to pass the prompt (avoids shell escaping nightmares)
+        args.push("--from-file".to_string());
+        args.push(tmp_path.to_string());
+
+        let output = match std::process::Command::new("hermes")
+            .args(&args)
+            .env("TERM", "dumb")
+            .env("NO_COLOR", "1")
+            .output()
+        {
+            Ok(o) => o,
+            Err(_) => return None,
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+        // Try to extract session ID from stderr for --resume on next call
+        // Hermes prints "Session: <id>" or similar on startup
+        for line in stderr.lines() {
+            if line.contains("session") && line.contains(':') {
+                if let Some(id) = line.split(':').nth(1) {
+                    let id = id.trim().to_string();
+                    if !id.is_empty() && id.len() < 100 {
+                        self.hermes_session_id = Some(id);
+                    }
+                }
+            }
+        }
+
+        // Also check stdout for session ID pattern
+        if self.hermes_session_id.is_none() {
+            for line in stdout.lines() {
+                if line.contains("session") && line.contains(':') {
+                    if let Some(id) = line.split(':').nth(1) {
+                        let id = id.trim().to_string();
+                        if !id.is_empty() && id.len() < 100 {
+                            self.hermes_session_id = Some(id);
+                        }
+                    }
+                }
+            }
+        }
+
+        if stdout.is_empty() {
+            None
+        } else {
+            Some(stdout)
+        }
     }
 
     /// Fallback: raw curl-based LLM call using provider.json config.

@@ -802,6 +802,22 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "HERMES" => {
+            // HERMES prompt_addr_reg, response_addr_reg, max_len_reg (0xA8)
+            // Call the Hermes Agent CLI with a prompt, write response to RAM.
+            if tokens.len() != 4 {
+                return Err(
+                    "HERMES requires 3 arguments: HERMES prompt_addr_reg, response_addr_reg, max_len_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0xA8);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
         "UNLINK" => {
             if tokens.len() < 2 {
                 return Err("UNLINK requires 1 argument: UNLINK name_reg".to_string());

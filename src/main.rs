@@ -109,6 +109,7 @@ fn main() {
             i += 1;
         }
     }
+
     let socket = std::net::UdpSocket::bind(format!("127.0.0.1:{}", local_port)).ok();
     if let Some(ref s) = socket {
         let _ = s.set_nonblocking(true);

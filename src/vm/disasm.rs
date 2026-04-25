@@ -846,6 +846,18 @@ impl Vm {
                 3,
             ),
 
+            // HERMES prompt_addr_reg, response_addr_reg, max_len_reg (0xA8)
+            // Send prompt to Hermes Agent CLI, write response to RAM.
+            0xA8 => (
+                format!(
+                    "HERMES {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3))
+                ),
+                4,
+            ),
+
             // ── Phase 88: AI Vision Bridge ──
 
             // AI_AGENT op_reg (0xB0) -- AI vision operations

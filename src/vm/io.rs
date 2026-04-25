@@ -339,6 +339,8 @@ impl Vm {
             next_window_id: 1,
             llm_mock_response: None,
             llm_config: None,
+            hermes_mock_response: None,
+            hermes_session_id: None,
             background_vms: Vec::new(),
             next_bg_vm_id: 1,
             live_hypervisor: None,

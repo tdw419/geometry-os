@@ -20306,3 +20306,110 @@ fn test_offscreen_culling() {
         "screen-space window should not be world-space"
     );
 }
+
+#[test]
+fn test_hermes_opcode_mock() {
+    let mut vm = Vm::new();
+
+    // Write prompt at address 100: "Hello Hermes"
+    let prompt = "Hello Hermes";
+    for (i, ch) in prompt.bytes().enumerate() {
+        vm.ram[100 + i] = ch as u32;
+    }
+    vm.ram[100 + prompt.len()] = 0; // null terminate
+
+    // Set mock response
+    vm.hermes_mock_response = Some("I am Hermes, how can I help?".to_string());
+
+    // Response buffer at address 500, max len 256
+    vm.regs[1] = 100;   // prompt addr
+    vm.regs[2] = 500;   // response addr
+    vm.regs[3] = 256;   // max len
+
+    // HERMES r1, r2, r3
+    vm.ram[0] = 0xA8;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00; // HALT
+
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    // Check response was written
+    let resp_len = vm.regs[0] as usize;
+    assert!(resp_len > 0, "HERMES should return non-zero length for mock");
+
+    let mut response = String::new();
+    for i in 0..resp_len {
+        response.push(vm.ram[500 + i] as u8 as char);
+    }
+    assert_eq!(response, "I am Hermes, how can I help?");
+    assert_eq!(vm.hermes_mock_response, None, "mock should be cleared after use");
+}
+
+#[test]
+fn test_hermes_opcode_empty_prompt() {
+    let mut vm = Vm::new();
+
+    // Empty prompt (null byte at address 200)
+    vm.ram[200] = 0;
+
+    vm.regs[1] = 200;  // prompt addr
+    vm.regs[2] = 500;  // response addr
+    vm.regs[3] = 256;  // max len
+
+    vm.ram[0] = 0xA8;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00;
+
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0, "empty prompt should return 0 length");
+}
+
+#[test]
+fn test_hermes_opcode_truncation() {
+    let mut vm = Vm::new();
+
+    // Write prompt
+    let prompt = "test";
+    for (i, ch) in prompt.bytes().enumerate() {
+        vm.ram[100 + i] = ch as u32;
+    }
+    vm.ram[104] = 0;
+
+    // Mock response longer than max_len
+    vm.hermes_mock_response = Some("ABCDEFGHIJ".to_string());
+
+    vm.regs[1] = 100;
+    vm.regs[2] = 500;
+    vm.regs[3] = 5; // max_len = 5, response is 10 chars
+
+    vm.ram[0] = 0xA8;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00;
+
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 5, "response should be truncated to max_len");
+
+    let mut response = String::new();
+    for i in 0..5 {
+        response.push(vm.ram[500 + i] as u8 as char);
+    }
+    assert_eq!(response, "ABCDE");
+
+    // Check null terminator
+    assert_eq!(vm.ram[505], 0, "should be null-terminated");
+}
+

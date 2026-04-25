@@ -194,6 +194,8 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         next_window_id: 1,
         llm_mock_response: None,
         llm_config: None,
+        hermes_mock_response: None,
+        hermes_session_id: None,
         background_vms: Vec::new(),
         next_bg_vm_id: 1,
         segfault_addr: 0,
