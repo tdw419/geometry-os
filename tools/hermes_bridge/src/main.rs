@@ -30,7 +30,7 @@ fn main() {
         .unwrap_or(9123);
 
     // Collect extra args to pass to hermes chat (e.g. --model)
-    let hermes_extra: Vec<String> = args[2..].to_vec();
+    let hermes_extra: Vec<String> = if args.len() > 2 { args[2..].to_vec() } else { vec![] };
 
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port))
         .unwrap_or_else(|e| {

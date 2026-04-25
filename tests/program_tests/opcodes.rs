@@ -1111,3 +1111,42 @@ fn test_loads_stores() {
     }
     assert_eq!(vm.regs[2], 42, "LOADS should read back what STORES wrote");
 }
+
+// ── ASSEMBLER ERROR MESSAGES ─────────────────────────────────────
+
+#[test]
+fn test_unknown_opcode_error_includes_line_number() {
+    let source = "LDI r0, 1\nBOGUS_OPCODE r0, r1\nHALT";
+    let result = assemble(source, 0);
+    assert!(result.is_err(), "assembly with unknown opcode should fail");
+    let err = result.unwrap_err();
+    // AsmError.line should point to line 2
+    assert_eq!(err.line, 2, "error line should be 2, got: {}", err.line);
+    // AsmError.message should contain the opcode name
+    assert!(
+        err.message.contains("unknown opcode"),
+        "message should mention 'unknown opcode', got: {}",
+        err.message
+    );
+    assert!(
+        err.message.contains("BOGUS_OPCODE"),
+        "message should mention the bad opcode name, got: {}",
+        err.message
+    );
+    // Display format should be "line N: unknown opcode: XYZ"
+    let displayed = format!("{}", err);
+    assert_eq!(displayed, "line 2: unknown opcode: BOGUS_OPCODE",
+        "full error format should be 'line N: unknown opcode: XYZ', got: {}", displayed);
+}
+
+#[test]
+fn test_unknown_opcode_error_on_first_line() {
+    let source = "NOSUCH r0\nHALT";
+    let result = assemble(source, 0);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert_eq!(err.line, 1, "error line should be 1, got: {}", err.line);
+    let displayed = format!("{}", err);
+    assert_eq!(displayed, "line 1: unknown opcode: NOSUCH",
+        "full error format, got: {}", displayed);
+}
