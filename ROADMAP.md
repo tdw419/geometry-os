@@ -4,7 +4,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 
 **Progress:** 125/125 phases complete, 0 in progress
 
-**Deliverables:** 515/520 complete
+**Deliverables:** 511/511 complete
 
 **Tasks:** 111/142 complete
 
@@ -3119,7 +3119,7 @@ Improve the WINSYS window manager to support proper window stacking (z-order), d
     > MOUSE_DRAG on title bar moves window
   _~150 LOC_
 
-## [ ] phase-125: Shell VFS Integration (PLANNED)
+## [x] phase-125: Shell VFS Integration (COMPLETE)
 
 **Goal:** Geometry OS shell commands for VFS file operations
 
@@ -3127,7 +3127,7 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
 
 ### Deliverables
 
-- [ ] **Shell file commands (ls, cat, edit)** -- Core read-only file commands via VFS surface
+- [x] **Shell file commands (ls, cat, edit)** -- Core read-only file commands via VFS surface
   - [ ] `p125.d1.t1` ls command: list files from VFS surface
     > Read directory index, print filenames and sizes
   - [ ] `p125.d1.t2` cat command: read file to terminal
@@ -3135,7 +3135,7 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [ ] `p125.d1.t3` edit command: open file in canvas editor
     > Load file content into canvas text surface for editing
   _~200 LOC_
-- [ ] **Shell write commands (save, rm, cp)** -- Write operations that modify the VFS surface and flush
+- [x] **Shell write commands (save, rm, cp)** -- Write operations that modify the VFS surface and flush
   - [ ] `p125.d2.t1` save command: write canvas to VFS file
     > Paint canvas content as pixels, trigger flush
   - [ ] `p125.d2.t2` rm command: delete file from surface

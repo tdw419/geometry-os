@@ -443,6 +443,14 @@ execute_command:
     CALL cmd_is_hypervisor
     JNZ r0, do_hypervisor
 
+    ; edit
+    CALL cmd_is_edit
+    JNZ r0, do_edit
+
+    ; save
+    CALL cmd_is_save
+    JNZ r0, do_save
+
     ; Not a built-in -- try EXEC
     JMP do_exec
 
@@ -770,6 +778,64 @@ cmd_is_hypervisor:
     CMP r0, r1
     JNZ r0, cno
     LDI r9, 0x040A
+    LDI r0, 0
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r0, 1
+    RET
+
+cmd_is_edit:
+    LDI r9, 0x0400
+    LDI r0, 101       ; e
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0401
+    LDI r0, 100       ; d
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0402
+    LDI r0, 105       ; i
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0403
+    LDI r0, 116       ; t
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0404
+    LDI r0, 0
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r0, 1
+    RET
+
+cmd_is_save:
+    LDI r9, 0x0400
+    LDI r0, 115       ; s
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0401
+    LDI r0, 97        ; a
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0402
+    LDI r0, 118       ; v
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0403
+    LDI r0, 101       ; e
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0404
     LDI r0, 0
     LOAD r1, r9
     CMP r0, r1
@@ -1292,6 +1358,261 @@ hypervisor_done:
     POP r14
     JMP exec_done
 
+do_edit:
+    PUSH r15
+    PUSH r14
+    PUSH r13
+    PUSH r12
+
+    ; Check for argument
+    LDI r9, 0x0600
+    LOAD r0, r9
+    JZ r0, edit_usage
+
+    ; Open file for reading
+    LDI r1, 0x0600       ; filename addr
+    LDI r2, 0            ; mode = read
+    OPEN r1, r2           ; r0 = fd
+    ; Check for error
+    LDI r1, 0xFFFFFFFF
+    CMP r0, r1
+    JZ r0, edit_err      ; file not found
+
+    MOV r5, r0            ; save fd in r5
+
+    ; Read file content into buffer at 0x2000
+    LDI r3, 0x2000        ; read buffer (8KB, up to row 127 * 32 cols)
+    LDI r4, 4096          ; max words to read
+    READ r5, r3, r4       ; r0 = bytes read
+
+    ; Close the file
+    CLOSE r5
+
+    ; Null terminate at position bytes_read
+    LDI r6, 0x2000
+    ADD r6, r0            ; r6 = buffer + bytes_read
+    LDI r7, 0
+    STORE r6, r7          ; null terminator
+
+    ; Display file content on screen, line by line
+    ; Each line is up to 32 chars, separated by newline (10) or null
+    LDI r10, 0x2000       ; source pointer
+    LDI r11, 4            ; y position (start near top)
+    LDI r12, 0            ; line buffer index
+
+edit_line_loop:
+    LOAD r0, r10
+    JZ r0, edit_done      ; null = end of file
+
+    ; Check for newline (10)
+    LDI r1, 10
+    CMP r0, r1
+    JZ r0, edit_newline
+
+    ; Store char in line buffer at 0x2100 + index
+    LDI r13, 0x2100
+    ADD r13, r12
+    STORE r13, r0
+
+    LDI r1, 1
+    ADD r10, r1           ; advance source
+    ADD r12, r1           ; advance line index
+
+    ; Check if line is 32 chars (screen width at 8px font)
+    LDI r1, 32
+    CMP r12, r1
+    JZ r0, edit_line_full
+    JMP edit_line_loop
+
+edit_newline:
+    ; Null-terminate current line
+    LDI r13, 0x2100
+    ADD r13, r12
+    LDI r0, 0
+    STORE r13, r0
+
+    ; Display line at y position
+    LDI r2, 4             ; x = 4
+    LDI r3, 0x2100        ; line buffer
+    TEXT r2, r11, r3      ; render text at (4, y)
+
+    ; Advance to next line
+    LDI r1, 1
+    ADD r10, r1           ; skip the newline char
+    ADD r11, r1           ; next y position
+    LDI r12, 0            ; reset line buffer index
+    JMP edit_line_loop
+
+edit_line_full:
+    ; Null-terminate
+    LDI r13, 0x2100
+    ADD r13, r12
+    LDI r0, 0
+    STORE r13, r0
+
+    ; Display line
+    LDI r2, 4
+    LDI r3, 0x2100
+    TEXT r2, r11, r3
+
+    ; Next line (no source advance since char was already stored)
+    LDI r1, 1
+    ADD r10, r1
+    ADD r11, r1
+    LDI r12, 0
+    JMP edit_line_loop
+
+edit_done:
+    ; Null-terminate last line if there's content
+    JZ r12, edit_show_msg
+    LDI r13, 0x2100
+    ADD r13, r12
+    LDI r0, 0
+    STORE r13, r0
+    LDI r2, 4
+    LDI r3, 0x2100
+    TEXT r2, r11, r3
+
+edit_show_msg:
+    ; Show "[edit: filename]" at bottom
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    LDI r2, 4
+    LDI r3, edit_ok_msg
+    TEXT r2, r1, r3
+    JMP edit_cleanup
+
+edit_usage:
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    LDI r2, 4
+    LDI r3, edit_usage_msg
+    TEXT r2, r1, r3
+    JMP edit_cleanup
+
+edit_err:
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    LDI r2, 4
+    LDI r3, edit_err_msg
+    TEXT r2, r1, r3
+
+edit_cleanup:
+    POP r12
+    POP r13
+    POP r14
+    POP r15
+    JMP exec_done
+
+do_save:
+    PUSH r15
+    PUSH r14
+    PUSH r13
+    PUSH r12
+
+    ; Check for argument
+    LDI r9, 0x0600
+    LOAD r0, r9
+    JZ r0, save_usage
+
+    ; Open file for writing (mode 1 = write/create)
+    LDI r1, 0x0600       ; filename addr
+    LDI r2, 1            ; mode = write
+    OPEN r1, r2           ; r0 = fd
+    ; Check for error
+    LDI r1, 0xFFFFFFFF
+    CMP r0, r1
+    JZ r0, save_err      ; could not create file
+
+    MOV r5, r0            ; save fd in r5
+
+    ; Calculate content length from edit buffer at 0x2000
+    ; Scan for null terminator
+    LDI r10, 0x2000
+    LDI r11, 0            ; length counter
+save_scan:
+    LOAD r0, r10
+    JZ r0, save_scan_done
+    LDI r1, 1
+    ADD r10, r1
+    ADD r11, r1
+    JMP save_scan
+
+save_scan_done:
+    ; If nothing to save, show message
+    JZ r11, save_empty
+
+    ; Write content to file
+    LDI r1, 0x2000        ; buffer addr
+    MOV r2, r1             ; fd_reg = r5 already
+    ; WRITE fd_reg, buf_reg, len_reg
+    MOV r1, r5             ; r1 = fd
+    LDI r2, 0x2000         ; buf addr
+    MOV r3, r11            ; length
+    WRITE r1, r2, r3       ; r0 = bytes written
+
+    CLOSE r5               ; close file
+
+    ; Show "[saved: N bytes]" message
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    LDI r2, 4
+    LDI r3, save_ok_msg
+    TEXT r2, r1, r3
+    JMP save_cleanup
+
+save_empty:
+    CLOSE r5
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    LDI r2, 4
+    LDI r3, save_empty_msg
+    TEXT r2, r1, r3
+    JMP save_cleanup
+
+save_usage:
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    LDI r2, 4
+    LDI r3, save_usage_msg
+    TEXT r2, r1, r3
+    JMP save_cleanup
+
+save_err:
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    LDI r2, 4
+    LDI r3, save_err_msg
+    TEXT r2, r1, r3
+
+save_cleanup:
+    POP r12
+    POP r13
+    POP r14
+    POP r15
+    JMP exec_done
+
 do_exec:
     ; Execute external program via EXEC
     ; Command name at 0x0400
@@ -1380,6 +1701,16 @@ help_text:
     .byte 97  ; a
     .byte 116 ; t
     .byte 32  ; space
+    .byte 101 ; e
+    .byte 100  ; d
+    .byte 105 ; i
+    .byte 116 ; t
+    .byte 32  ; space
+    .byte 115 ; s
+    .byte 97  ; a
+    .byte 118 ; v
+    .byte 101 ; e
+    .byte 32  ; space
     .byte 112 ; p
     .byte 115  ; s
     .byte 32  ; space
@@ -1387,6 +1718,12 @@ help_text:
     .byte 105 ; i
     .byte 108 ; l
     .byte 108 ; l
+    .byte 32  ; space
+    .byte 114 ; r
+    .byte 109 ; m
+    .byte 32  ; space
+    .byte 99  ; c
+    .byte 112 ; p
     .byte 32  ; space
     .byte 99  ; c
     .byte 108 ; l
@@ -1411,15 +1748,9 @@ help_text:
     .byte 115 ; s
     .byte 111 ; o
     .byte 114 ; r
-    .byte 32  ; space
-    .byte 114 ; r
-    .byte 109 ; m
-    .byte 32  ; space
-    .byte 99  ; c
-    .byte 112 ; p
     .byte 0
 
-.org 0x1A50
+.org 0x1A60
 
 kill_msg:
     .byte 107 ; k
@@ -1445,7 +1776,7 @@ kill_msg:
     .byte 62  ; >
     .byte 0
 
-.org 0x1A70
+.org 0x1A80
 
 export_msg:
     .byte 101 ; e
@@ -1461,7 +1792,7 @@ export_msg:
     .byte 116  ; t
     .byte 0
 
-.org 0x1A90
+.org 0x1AA0
 
 not_found_msg:
     .byte 99  ; c
@@ -1483,7 +1814,7 @@ not_found_msg:
     .byte 100 ; d
     .byte 0
 
-.org 0x1AB0
+.org 0x1AC0
 
 hypervisor_usage_msg:
     .byte 117 ; u
@@ -1531,7 +1862,7 @@ hypervisor_usage_msg:
     .byte 62  ; >
     .byte 0
 
-.org 0x1AE0
+.org 0x1AF0
 
 hypervisor_err_msg:
     .byte 104 ; h
@@ -1554,9 +1885,9 @@ hypervisor_err_msg:
     .byte 100 ; d
     .byte 0
 
-.org 0x1B00
+.org 0x1B10
 
-; Config buffer for hypervisor arguments (256 bytes: 0x1B00 - 0x1BFF)
+; Config buffer for hypervisor arguments (256 bytes: 0x1B10 - 0x1C0F)
 ; Written by do_hypervisor, read by HYPERVISOR opcode
 
 .org 0x1C00
@@ -1581,6 +1912,129 @@ hypervisor_ok_msg:
     .byte 116 ; t
     .byte 101 ; e
     .byte 100 ; d
+    .byte 0
+
+.org 0x1D00
+
+edit_ok_msg:
+    .byte 91  ; [
+    .byte 101 ; e
+    .byte 100 ; d
+    .byte 105 ; i
+    .byte 116 ; t
+    .byte 58  ; :
+    .byte 32  ; space
+    .byte 111 ; o
+    .byte 107 ; k
+    .byte 93  ; ]
+    .byte 0
+
+.org 0x1D10
+
+edit_usage_msg:
+    .byte 117 ; u
+    .byte 115 ; s
+    .byte 97  ; a
+    .byte 103 ; g
+    .byte 101 ; e
+    .byte 58  ; :
+    .byte 32  ; space
+    .byte 101 ; e
+    .byte 100 ; d
+    .byte 105 ; i
+    .byte 116 ; t
+    .byte 32  ; space
+    .byte 60  ; <
+    .byte 102 ; f
+    .byte 105 ; i
+    .byte 108 ; l
+    .byte 101 ; e
+    .byte 62  ; >
+    .byte 0
+
+.org 0x1D30
+
+edit_err_msg:
+    .byte 101 ; e
+    .byte 100 ; d
+    .byte 105 ; i
+    .byte 116 ; t
+    .byte 58  ; :
+    .byte 32  ; space
+    .byte 110 ; n
+    .byte 111 ; o
+    .byte 116 ; t
+    .byte 32  ; space
+    .byte 102 ; f
+    .byte 111 ; o
+    .byte 117 ; u
+    .byte 110 ; n
+    .byte 100 ; d
+    .byte 0
+
+.org 0x1D50
+
+save_ok_msg:
+    .byte 115 ; s
+    .byte 97  ; a
+    .byte 118 ; v
+    .byte 101 ; e
+    .byte 100 ; d
+    .byte 0
+
+.org 0x1D60
+
+save_empty_msg:
+    .byte 115 ; s
+    .byte 97  ; a
+    .byte 118 ; v
+    .byte 101 ; e
+    .byte 58  ; :
+    .byte 32  ; space
+    .byte 101 ; e
+    .byte 109 ; m
+    .byte 112 ; p
+    .byte 116 ; t
+    .byte 121 ; y
+    .byte 0
+
+.org 0x1D80
+
+save_usage_msg:
+    .byte 117 ; u
+    .byte 115 ; s
+    .byte 97  ; a
+    .byte 103 ; g
+    .byte 101 ; e
+    .byte 58  ; :
+    .byte 32  ; space
+    .byte 115 ; s
+    .byte 97  ; a
+    .byte 118 ; v
+    .byte 101 ; e
+    .byte 32  ; space
+    .byte 60  ; <
+    .byte 102 ; f
+    .byte 105 ; i
+    .byte 108 ; l
+    .byte 101 ; e
+    .byte 62  ; >
+    .byte 0
+
+.org 0x1DA0
+
+save_err_msg:
+    .byte 115 ; s
+    .byte 97  ; a
+    .byte 118 ; v
+    .byte 101 ; e
+    .byte 58  ; :
+    .byte 32  ; space
+    .byte 101 ; e
+    .byte 114 ; r
+    .byte 114 ; r
+    .byte 111 ; o
+    .byte 114 ; r
     .byte 0
 
 HALT
