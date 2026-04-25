@@ -5436,15 +5436,15 @@ phases:
       Use the existing DRAWTEXT/MEDTEXT for rendering.'
     name: Status bar with PTY info and clock
     scope_lines: 80
-    status: todo
+    status: done
     tasks:
     - description: Extract path from OSC 7 sequence for status bar display
       id: p127.d2.t1
-      status: todo
+      status: done
       title: Parse OSC 7 (set working directory) from bash
     - description: 'Show ''bash: ~/path'' and connected indicator in title bar'
       id: p127.d2.t2
-      status: todo
+      status: done
       title: Render status bar with cwd and connection state
   - description: 'Optimize scroll_up: use block copy instead of per-character loop. Add proper line wrapping when cursor reaches column 42. Handle carriage return correctly (\r = col=0 without newline).'
     name: Scroll optimization and line wrapping
@@ -5468,7 +5468,7 @@ phases:
   goal: Make the terminal look like a real terminal with proper ANSI handling, cursor positioning, and visual feedback
   id: phase-127
   scope_lines_total: 72830
-  status: in_progress
+  status: done
   test_target: 2076
   title: Host Terminal -- ANSI Rendering and Visual Polish
 - _claimed_at: 1777158271

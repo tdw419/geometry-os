@@ -37,6 +37,11 @@
 #define BLINK 0x4E02
 #define PTY_HANDLE 0x4E03
 #define ANSI_STATE 0x4E04
+#define STATUS_CONNECTED 0x4E05
+#define STATUS_CWD 0x6100
+#define STATUS_CWD_LEN 0x4E06
+#define OSC_BUF 0x6200
+#define OSC_LEN 0x4E07
 #define CMD_BUF 0x5000
 #define SEND_BUF 0x5400
 #define RECV_BUF 0x5800
@@ -89,8 +94,14 @@ STORE r20, r0
 LDI r20, ANSI_STATE
 LDI r0, 0
 STORE r20, r0
+LDI r20, STATUS_CONNECTED
+STORE r20, r0
+LDI r20, STATUS_CWD_LEN
+STORE r20, r0
+LDI r20, OSC_LEN
+STORE r20, r0
 
-; Title bar (compact -- 10px high since tiny font is 5px)
+; Title bar background (drawn once, content updated each frame by render)
 LDI r1, 0
 LDI r2, 0
 LDI r3, 256
@@ -124,11 +135,14 @@ STORE r1, r0
 LDI r5, CMD_BUF
 PTYOPEN r5, r10
 
-; Save handle
+; Save handle and mark connected
 LDI r20, PTY_HANDLE
 STORE r20, r10
 LDI r28, 0
 ADD r28, r10
+LDI r20, STATUS_CONNECTED
+LDI r0, 1
+STORE r20, r0
 
 ; r1 = 1 (restore after earlier code clobbered it)
 LDI r1, 1
@@ -318,6 +332,10 @@ append_loop:
     JMP append_loop
 
 pty_closed:
+    ; Mark disconnected
+    LDI r20, STATUS_CONNECTED
+    LDI r0, 0
+    STORE r20, r0
     ; Show message and stop
     LDI r20, SEND_BUF
     STRO r20, "[pty closed]"
@@ -452,9 +470,22 @@ pb_check_osc:
     JMP pb_ret
 
 pb_osc_continue:
+    ; Collect OSC byte into buffer (max 80 chars)
+    LDI r20, OSC_LEN
+    LOAD r0, r20
+    LDI r7, 80
+    CMP r0, r7
+    BGE r0, pb_ret
+    LDI r7, OSC_BUF
+    ADD r7, r0
+    STORE r7, r5
+    ADD r0, r1
+    STORE r20, r0
     JMP pb_ret
 
 pb_osc_end:
+    ; Process collected OSC sequence
+    CALL process_osc
     LDI r20, ANSI_STATE
     LDI r0, ANS_NORMAL
     STORE r20, r0
@@ -828,6 +859,199 @@ wsb_done:
     RET
 
 ; =========================================
+; PROCESS_OSC -- handle collected OSC sequence
+; Checks for OSC 7 (set cwd) and extracts path
+; OSC 7 format: "7;file://host/path"
+; =========================================
+process_osc:
+    PUSH r31
+    LDI r1, 1
+
+    ; Check if OSC starts with '7' (OSC 7 = set working directory)
+    LDI r20, OSC_BUF
+    LOAD r0, r20
+    CMPI r0, 55    ; '7' = 55
+    JNZ r0, po_done
+
+    ; Check second byte is ';' (59)
+    LDI r20, OSC_BUF
+    ADD r20, r1
+    LOAD r0, r20
+    CMPI r0, 59    ; ';'
+    JNZ r0, po_done
+
+    ; Extract path from "7;file://HOST/PATH"
+    ; Find the 3rd '/' (after file://host)
+    LDI r10, 0     ; position in OSC_BUF
+    LDI r11, 0     ; slash count
+po_find_path:
+    LDI r20, OSC_BUF
+    ADD r20, r10
+    LOAD r0, r20
+    JZ r0, po_done  ; null terminator, no path found
+    CMPI r0, 47    ; '/'
+    JNZ r0, po_next
+    ADD r11, r1
+    ; After 3 slashes, we're at the path
+    CMPI r11, 3
+    BGE r0, po_copy_path
+po_next:
+    ADD r10, r1
+    LDI r7, 80
+    CMP r10, r7
+    BLT r0, po_find_path
+    JMP po_done
+
+po_copy_path:
+    ; r10 points to the 3rd '/' -- copy from there into STATUS_CWD
+    LDI r12, 0     ; cwd offset
+po_cp_loop:
+    LDI r20, OSC_BUF
+    ADD r20, r10
+    LOAD r0, r20
+    JZ r0, po_cp_done
+    LDI r7, STATUS_CWD
+    ADD r7, r12
+    STORE r7, r0
+    ADD r10, r1
+    ADD r12, r1
+    LDI r7, 60
+    CMP r12, r7
+    BLT r0, po_cp_loop
+po_cp_done:
+    ; Null-terminate and store length
+    LDI r7, STATUS_CWD
+    ADD r7, r12
+    LDI r0, 0
+    STORE r7, r0
+    LDI r20, STATUS_CWD_LEN
+    STORE r20, r12
+
+po_done:
+    ; Reset OSC buffer
+    LDI r20, OSC_LEN
+    LDI r0, 0
+    STORE r20, r0
+    POP r31
+    RET
+
+; =========================================
+; DRAW_STATUS_BAR -- render title bar with shell info
+; Shows: "bash: ~/path" + connected indicator on the right
+; =========================================
+draw_status_bar:
+    PUSH r31
+    LDI r1, 1
+
+    ; Clear title bar area
+    LDI r1, 0
+    LDI r2, 0
+    LDI r3, 256
+    LDI r4, 10
+    LDI r5, 0x1A1A2E
+    RECTF r1, r2, r3, r4, r5
+
+    ; Build status string in SCRATCH: "bash: " + cwd
+    LDI r20, SCRATCH
+    STRO r20, "bash: "
+    ; Append cwd
+    LDI r20, SCRATCH
+    ; Find end of "bash: " (6 chars)
+    LDI r10, 0
+dsb_find_end:
+    LDI r7, SCRATCH
+    ADD r7, r10
+    LOAD r0, r7
+    JZ r0, dsb_append_cwd
+    ADD r10, r1
+    JMP dsb_find_end
+
+dsb_append_cwd:
+    ; Check if we have a cwd
+    LDI r20, STATUS_CWD_LEN
+    LOAD r0, r20
+    JZ r0, dsb_no_cwd
+
+    ; Append cwd chars
+    LDI r11, 0
+dsb_cp:
+    LDI r7, STATUS_CWD
+    ADD r7, r11
+    LOAD r0, r7
+    JZ r0, dsb_cp_done
+    LDI r7, SCRATCH
+    ADD r7, r10
+    STORE r7, r0
+    ADD r10, r1
+    ADD r11, r1
+    LDI r7, 38     ; max 38 chars for title
+    CMP r10, r7
+    BLT r0, dsb_cp
+    JMP dsb_cp_done
+
+dsb_no_cwd:
+    ; No cwd known yet -- show "~"
+    LDI r7, SCRATCH
+    ADD r7, r10
+    LDI r0, 126    ; '~'
+    STORE r7, r0
+    ADD r10, r1
+
+dsb_cp_done:
+    ; Null-terminate
+    LDI r7, SCRATCH
+    ADD r7, r10
+    LDI r0, 0
+    STORE r7, r0
+
+    ; Draw the status text
+    LDI r1, 2
+    LDI r2, 1
+    LDI r3, SCRATCH
+    LDI r4, 0x44DD44
+    LDI r5, 0x1A1A2E
+    DRAWTEXT r1, r2, r3, r4, r5
+
+    ; Draw connection indicator on the right side
+    LDI r20, STATUS_CONNECTED
+    LOAD r0, r20
+    JZ r0, dsb_disconnected
+
+    ; Connected: green dot (0x25CF = filled circle, or just use ASCII)
+    LDI r20, SCRATCH
+    LDI r0, 42    ; '*' as connected indicator
+    STORE r20, r0
+    LDI r0, 0
+    ADD r20, r1
+    STORE r20, r0
+    LDI r1, 230
+    LDI r2, 1
+    LDI r3, SCRATCH
+    LDI r4, 0x44FF44
+    LDI r5, 0x1A1A2E
+    DRAWTEXT r1, r2, r3, r4, r5
+    JMP dsb_ret
+
+dsb_disconnected:
+    ; Disconnected: red "X"
+    LDI r20, SCRATCH
+    LDI r0, 88    ; 'X'
+    STORE r20, r0
+    LDI r0, 0
+    ADD r20, r1
+    STORE r20, r0
+    LDI r1, 230
+    LDI r2, 1
+    LDI r3, SCRATCH
+    LDI r4, 0xFF4444
+    LDI r5, 0x1A1A2E
+    DRAWTEXT r1, r2, r3, r4, r5
+
+dsb_ret:
+    POP r31
+    RET
+
+; =========================================
 ; RENDER -- redraw text buffer using MEDTEXT (5x7 font)
 ; Terminal area starts at y=12, uses 8px per row (7px glyph + 1px spacing)
 ; 30 rows * 8px = 240px. Total: 12 + 240 = 252px (fits in 256px)
@@ -835,6 +1059,9 @@ wsb_done:
 render:
     PUSH r31
     LDI r1, 1
+
+    ; Draw status bar first
+    CALL draw_status_bar
 
     ; Clear content area
     LDI r1, 0
