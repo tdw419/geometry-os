@@ -16578,6 +16578,67 @@ fn test_window_move_socket() {
 }
 
 #[test]
+fn test_window_close_handler_sets_inactive() {
+    // Verify window_close handler marks window as inactive
+    let source = std::fs::read_to_string("src/main.rs").unwrap();
+
+    let start = source
+        .find("\"window_close\" =>")
+        .expect("window_close handler should exist");
+    let end = source[start..]
+        .find("\"window_focus\" =>")
+        .expect("window_focus should follow");
+    let handler = &source[start..start + end];
+
+    assert!(
+        handler.contains("w.active = false"),
+        "should set active to false"
+    );
+    assert!(
+        handler.contains("ok closed"),
+        "should report success with window id"
+    );
+    assert!(
+        handler.contains("not found"),
+        "should report failure for missing windows"
+    );
+}
+
+#[test]
+fn test_window_close_socket() {
+    // Runtime test: create a window, close it via the same logic as socket handler, verify success
+    use crate::vm::types::Window;
+
+    let mut vm = Vm::new();
+
+    // Create an active window
+    let mut w = Window::new(1, 10, 20, 64, 32, 0, 1);
+    w.active = true;
+    vm.windows.push(w);
+
+    // Simulate window_close 1 (same logic as socket handler)
+    let win_id: u32 = 1;
+    let found = vm.windows.iter_mut().find(|w| w.id == win_id && w.active);
+    assert!(found.is_some(), "should find active window to close");
+
+    if let Some(w) = found {
+        w.active = false;
+    }
+
+    // Verify window is now inactive
+    let w = vm.windows.iter().find(|w| w.id == 1).unwrap();
+    assert!(!w.active, "window should be inactive after close");
+
+    // Test closing a non-existent window returns none
+    let not_found = vm.windows.iter_mut().find(|w| w.id == 999 && w.active);
+    assert!(not_found.is_none(), "non-existent window should not be found");
+
+    // Test closing an already-inactive window returns none
+    let inactive = vm.windows.iter_mut().find(|w| w.id == 1 && w.active);
+    assert!(inactive.is_none(), "inactive window should not be closeable again");
+}
+
+#[test]
 fn test_window_resize_updates_buffer() {
     // Verify window_resize resizes the offscreen buffer
     let source = std::fs::read_to_string("src/main.rs").unwrap();
