@@ -2639,7 +2639,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
   - [x] process_kill <pid> kills all windows for a PID
   _~300 LOC_
 - [x] **Desktop input injection MCP tools** -- MCP tools: desktop_key, desktop_mouse_move, desktop_mouse_click. Aliases for input_key/input_mouse with desktop-specific semantics. Documents that these target the VM keyboard buffer and mouse registers, not the hypervisor.
-  - [ ] desktop_key injects key into VM key buffer (same as inject_key but named for desktop context)
+  - [x] desktop_key injects key into VM key buffer (same as inject_key but named for desktop context)
   - [ ] desktop_mouse_move updates mouse_x, mouse_y registers
   - [ ] desktop_mouse_click updates mouse position then triggers mouse button
   _~80 LOC_
@@ -2656,7 +2656,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
   - [x] test_window_focus_socket verifies z_order change
   - [x] test_window_resize_socket verifies buffer resize
   - [x] test_process_kill_socket verifies all PID windows destroyed
-  - [ ] test_desktop_key_mcp verifies MCP tool translation
+  - [x] test_desktop_key_mcp verifies MCP tool translation
   - [ ] test_desktop_mouse_mcp verifies MCP tool translation
   - [ ] test_desktop_vision_mcp verifies JSON structure
   - [ ] test_vision_screenshot_annotations verifies window labels
