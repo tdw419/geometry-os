@@ -181,6 +181,7 @@ fn test_spawnc_creates_process_with_capabilities() {
         brk_pos: 0,
         custom_font: None,
         capabilities: caps.clone(),
+        data_base: 0,
     });
 
     assert_eq!(vm.processes.len(), 1);
@@ -219,6 +220,7 @@ fn test_spawnc_no_capabilities_is_none() {
         brk_pos: 0,
         custom_font: None,
         capabilities: None,
+        data_base: 0,
     });
 
     assert!(vm.processes[0].capabilities.is_none());

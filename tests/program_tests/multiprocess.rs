@@ -179,6 +179,7 @@ fn test_active_process_count() {
         brk_pos: 0,
         custom_font: None,
         capabilities: None,
+        data_base: 0,
     });
     assert_eq!(vm.active_process_count(), 1);
     vm.processes.push(geometry_os::vm::SpawnedProcess {
@@ -203,6 +204,7 @@ fn test_active_process_count() {
         brk_pos: 0,
         custom_font: None,
         capabilities: None,
+        data_base: 0,
     });
     assert_eq!(vm.active_process_count(), 1);
 }
@@ -1052,6 +1054,7 @@ fn make_child_process(pid: u32, pc: u32) -> geometry_os::vm::SpawnedProcess {
             brk_pos: 0,
             custom_font: None,
             capabilities: None,
+            data_base: 0,
         }
 }
 
@@ -1186,6 +1189,7 @@ fn test_halted_app_window_cleanup() {
             brk_pos: 0,
             custom_font: None,
             capabilities: None,
+            data_base: 0,
         });
     }
 
@@ -1209,5 +1213,104 @@ fn test_halted_app_window_cleanup() {
     // Only process 1's window should remain
     assert_eq!(vm.windows.len(), 1);
     assert_eq!(vm.windows[0].pid, 1, "only process 1's window should survive");
+}
+
+#[test]
+fn test_multi_process_launch() {
+    // Verify two apps can run simultaneously in separate windows.
+    // Each app writes a unique value to its private data region,
+    // proving both executed and their data regions don't overlap.
+
+    use geometry_os::vm::types::{APP_DATA_BASE, APP_DATA_SIZE, Window};
+
+    let mut vm = Vm::new();
+
+    // Main process at 0x000: FRAME, JMP 0 (infinite loop simulating map)
+    vm.ram[0x000] = 0x02; // FRAME
+    vm.ram[0x001] = 0x30; // JMP
+    vm.ram[0x002] = 0x000; // -> back to FRAME
+
+    // App 1 at 0x200: write value 0xAAAA to data region offset 0, then loop
+    // LDI r1, APP_DATA_BASE (data_base for slot 0)
+    vm.ram[0x200] = 0x10; // LDI
+    vm.ram[0x201] = 1;    // r1
+    vm.ram[0x202] = APP_DATA_BASE as u32; // imm = data base
+    // LDI r0, 0xAAAA
+    vm.ram[0x203] = 0x10; // LDI
+    vm.ram[0x204] = 0;    // r0
+    vm.ram[0x205] = 0xAAAA; // imm
+    // STORE [r1], r0
+    vm.ram[0x206] = 0x12; // STORE
+    vm.ram[0x207] = 1;    // addr_reg = r1
+    vm.ram[0x208] = 0;    // reg = r0
+    // FRAME, JMP 0x203 (loop so it stays alive)
+    vm.ram[0x209] = 0x02; // FRAME
+    vm.ram[0x20A] = 0x30; // JMP
+    vm.ram[0x20B] = 0x203; // -> LDI r0, 0xAAAA
+
+    // App 2 at 0x300: write value 0xBBBB to data region offset 0, then loop
+    let data_base_1 = (APP_DATA_BASE + APP_DATA_SIZE) as u32;
+    vm.ram[0x300] = 0x10; // LDI
+    vm.ram[0x301] = 1;    // r1
+    vm.ram[0x302] = data_base_1; // data base for slot 1
+    vm.ram[0x303] = 0x10; // LDI
+    vm.ram[0x304] = 0;    // r0
+    vm.ram[0x305] = 0xBBBB; // imm
+    vm.ram[0x306] = 0x12; // STORE
+    vm.ram[0x307] = 1;    // addr_reg = r1
+    vm.ram[0x308] = 0;    // reg = r0
+    vm.ram[0x309] = 0x02; // FRAME
+    vm.ram[0x30A] = 0x30; // JMP
+    vm.ram[0x30B] = 0x303; // -> LDI r0, 0xBBBB
+
+    // Create two processes with separate data regions
+    let mut proc1 = make_child_process(1, 0x200);
+    proc1.data_base = APP_DATA_BASE as u32;
+    let mut proc2 = make_child_process(2, 0x300);
+    proc2.data_base = data_base_1;
+
+    vm.processes.push(proc1);
+    vm.processes.push(proc2);
+
+    // Create windows for both apps
+    let win1 = Window::new_world(1, 10, 10, 64, 64, 0, 1);
+    let win2 = Window::new_world(2, 100, 10, 64, 64, 0, 2);
+    vm.windows.push(win1);
+    vm.windows.push(win2);
+
+    // Run the execution loop (main + children)
+    for _ in 0..10_000 {
+        if !vm.step() { break; }
+        vm.step_all_processes();
+        if vm.frame_ready { vm.frame_ready = false; }
+    }
+
+    // Main process should still be running
+    assert!(!vm.halted, "main process should still be running");
+
+    // Both child processes should be alive (they loop)
+    let app1 = vm.processes.iter().find(|p| p.pid == 1).unwrap();
+    let app2 = vm.processes.iter().find(|p| p.pid == 2).unwrap();
+    assert!(!app1.is_halted(), "app 1 should still be running");
+    assert!(!app2.is_halted(), "app 2 should still be running");
+
+    // Both apps should have written to their private data regions
+    assert_eq!(
+        vm.ram[APP_DATA_BASE], 0xAAAA,
+        "app 1 should have written 0xAAAA to its data region"
+    );
+    assert_eq!(
+        vm.ram[APP_DATA_BASE + APP_DATA_SIZE], 0xBBBB,
+        "app 2 should have written 0xBBBB to its data region"
+    );
+
+    // Data regions should NOT overlap
+    assert_ne!(
+        vm.ram[APP_DATA_BASE], vm.ram[APP_DATA_BASE + APP_DATA_SIZE],
+        "data regions must be separate"
+    );
+
+    // Both windows should still be active
+    assert_eq!(vm.windows.len(), 2, "both windows should be active");
 }
 

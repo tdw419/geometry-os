@@ -152,6 +152,7 @@ fn test_waitpid_still_running() {
         brk_pos: 0,
         custom_font: None,
         capabilities: None,
+        data_base: 0,
     });
     vm.regs[1] = 1; // PID of running process
     step_waitpid(&mut vm);
@@ -184,6 +185,7 @@ fn test_waitpid_halted_process() {
         brk_pos: 0,
         custom_font: None,
         capabilities: None,
+        data_base: 0,
     });
     vm.regs[1] = 1;
     step_waitpid(&mut vm);

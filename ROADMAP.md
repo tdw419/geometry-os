@@ -6,7 +6,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 
 **Deliverables:** 511/511 complete
 
-**Tasks:** 1050/1075 complete
+**Tasks:** 1053/1075 complete
 
 ## Scope Summary
 
@@ -2689,8 +2689,8 @@ Transform the map from a launcher into an infinite spatial desktop where app win
 - [x] **Multi-process app execution in windows** -- The current launch flow replaces the map program with the app, then reloads the map when the app halts. For the infinite desktop, apps need to run as sub-processes inside WINSYS windows while the map continues running. Add a multi-process execution model: the main loop time-shares between the map program and windowed app programs. Each app gets a RAM slice and its own PC/registers. On app HALT, only that app's windows are destroyed.
   - [x] launch command supports --window flag that loads app into a WINSYS window instead of replacing map
   - [x] App HALT only kills its own process/windows, map keeps running
-  - [ ] Multiple apps can run simultaneously in separate windows
-  - [ ] Each windowed app gets its own RAM region (0x8000+N*4096)
+  - [x] Multiple apps can run simultaneously in separate windows
+  - [x] Each windowed app gets its own RAM region (0x8000+N*4096)
   _~400 LOC_
 - [x] **Window drag and mouse routing** -- Extend the mouse handling to support dragging windows in world space. When the mouse clicks on a window's title bar (top 8 pixels), enter drag mode. Mouse movement updates the window's world_x, world_y. MOUSEQ events from programs are translated relative to the window's screen-space position so the app thinks it has its own mouse.
   - [ ] Dragging a window by its title bar updates world_x, world_y
@@ -2702,7 +2702,7 @@ Transform the map from a launcher into an infinite spatial desktop where app win
   - [ ] test_world_space_window_placement verifies world_x/world_y set correctly
   - [ ] test_viewport_transform verifies coordinate math at all zoom levels
   - [ ] test_composite_rendering verifies window blit at correct screen position
-  - [ ] test_multi_process_launch verifies two apps run simultaneously
+  - [x] test_multi_process_launch verifies two apps run simultaneously
   - [ ] test_window_drag verifies world_x/world_y update on mouse drag
   - [ ] test_offscreen_culling verifies windows outside viewport are skipped
   - [ ] test_mouse_routing verifies MOUSEQ events reach correct window

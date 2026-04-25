@@ -260,6 +260,7 @@ impl Vm {
                                                     brk_pos: PAGE_SIZE as u32,
                                                     custom_font: None,
                                                     capabilities: None,
+                                                    data_base: 0,
                                                 });
                                                 self.regs[0] = pid;
                                                 self.ram[0xFFA] = pid;
@@ -493,6 +494,7 @@ impl Vm {
                                                     brk_pos: PAGE_SIZE as u32,
                                                     custom_font: None,
                                                     capabilities: None,
+                                                    data_base: 0,
                                                 });
                                                 // Set up fd redirection for the new child
                                                 let child_pid = pid;

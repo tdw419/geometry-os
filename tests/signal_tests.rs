@@ -10,6 +10,7 @@ fn vm_with_child(child_pc: u32) -> Vm {
     vm.processes.push(geometry_os::vm::SpawnedProcess {
         custom_font: None,
         capabilities: None,
+        data_base: 0,
         pc: child_pc,
         regs: [0; 32],
         state: geometry_os::vm::ProcessState::Ready,

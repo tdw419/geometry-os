@@ -536,6 +536,12 @@ pub struct Process {
     /// Pending signals queued for delivery on next step.
     pub pending_signals: Vec<Signal>,
 
+    // ── Windowed App Data Region (Phase 107) ──────────────────────
+    /// Base address of this process's private data region in RAM.
+    /// For windowed apps: 0x9000 + slot * 0x1000 (4096 words each).
+    /// 0 = unset (main process, no private region).
+    pub data_base: u32,
+
     // ── Virtual Memory Areas (Phase 44) ────────────────────────────
     /// Per-process list of virtual memory areas describing address space layout.
     /// Used by the page fault handler to decide whether to allocate on demand.
@@ -594,6 +600,7 @@ impl Process {
             segfaulted: false,
             custom_font: None,
             capabilities: None,
+            data_base: 0,
         }
     }
 
@@ -709,6 +716,13 @@ pub const WORLD_COORD_UNSET: u32 = 0xFFFFFFFF;
 /// RAM address for the window world-coords flag.
 /// When RAM[0x7810] == 1, WINSYS op=0 uses r1/r2 as world-space coordinates.
 pub const WINDOW_WORLD_COORDS_ADDR: usize = 0x7810;
+
+/// Base address for windowed app data regions.
+/// Each app gets APP_DATA_SIZE words of private data starting at APP_DATA_BASE + slot * APP_DATA_SIZE.
+/// Placed at 0x9000 to avoid canvas RAM (0x8000-0x8FFF) and hardware ports (0xFF00+).
+pub const APP_DATA_BASE: usize = 0x9000;
+/// Size of each windowed app's private data region (4096 words = 16KB).
+pub const APP_DATA_SIZE: usize = 0x1000;
 
 impl Window {
     /// Create a new window with the given parameters.

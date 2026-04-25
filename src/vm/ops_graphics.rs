@@ -530,6 +530,7 @@ impl Vm {
                             brk_pos: PAGE_SIZE as u32,
                             custom_font: None,
                             capabilities: None,
+                            data_base: 0,
                         });
                         self.ram[0xFFA] = pid;
                     }

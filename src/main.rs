@@ -1155,6 +1155,15 @@ fn main() {
                         *v = 0;
                     }
                 }
+                // Clear app data region
+                let data_base = crate::vm::types::APP_DATA_BASE
+                    + slot * crate::vm::types::APP_DATA_SIZE;
+                if data_base < ram_len {
+                    let end = (data_base + crate::vm::types::APP_DATA_SIZE).min(ram_len);
+                    for v in &mut vm.ram[data_base..end] {
+                        *v = 0;
+                    }
+                }
                 active_apps.remove(idx);
             }
         }
@@ -2008,6 +2017,10 @@ fn main() {
                                                         let mut proc = crate::vm::types::SpawnedProcess::new(pid, 0, app_base as u32);
                                                         proc.parent_pid = 0; // kernel-spawned
                                                         proc.priority = 1;
+                                                        // Assign private data region for this app
+                                                        let data_base = crate::vm::types::APP_DATA_BASE
+                                                            + slot_idx * crate::vm::types::APP_DATA_SIZE;
+                                                        proc.data_base = data_base as u32;
 
                                                         // Position window near player/camera center
                                                         let cam_x = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
@@ -3253,6 +3266,10 @@ fn main() {
                                                             let mut proc = crate::vm::types::SpawnedProcess::new(pid, 0, app_base as u32);
                                                             proc.parent_pid = 0; // kernel-spawned
                                                             proc.priority = 1;
+                                                            // Assign private data region for this app
+                                                            let data_base = crate::vm::types::APP_DATA_BASE
+                                                                + slot_idx * crate::vm::types::APP_DATA_SIZE;
+                                                            proc.data_base = data_base as u32;
 
                                                             // Create a world-space WINSYS window for the app
                                                             let win_w = 128u32;

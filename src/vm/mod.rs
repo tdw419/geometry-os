@@ -2377,6 +2377,7 @@ impl Vm {
                             } else {
                                 Some(capabilities)
                             },
+                            data_base: 0,
                         });
                         self.ram[0xFFA] = pid;
                     }
