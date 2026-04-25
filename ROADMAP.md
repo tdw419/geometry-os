@@ -2696,7 +2696,7 @@ Transform the map from a launcher into an infinite spatial desktop where app win
   - [x] Dragging a window by its title bar updates world_x, world_y
   - [x] Click on window brings it to front (z_order update)
   - [x] Window title bars render as clickable regions
-  - [ ] MOUSEQ events routed to correct window based on world-space hit test
+  - [x] MOUSEQ events routed to correct window based on world-space hit test
   _~200 LOC_
 - [x] **Integration tests** -- 12+ integration tests covering the new coordinate model, rendering, multi-process execution, drag, and mouse routing.
   - [ ] test_world_space_window_placement verifies world_x/world_y set correctly
