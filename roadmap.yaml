@@ -5309,15 +5309,15 @@ phases:
     tasks:
     - id: p125.d1.t1
       title: 'ls command: list files from VFS surface'
-      status: todo
+      status: done
       description: Read directory index, print filenames and sizes
     - id: p125.d1.t2
       title: 'cat command: read file to terminal'
-      status: todo
+      status: done
       description: Read data pixels, output as text to terminal window
     - id: p125.d1.t3
       title: 'edit command: open file in canvas editor'
-      status: todo
+      status: done
       description: Load file content into canvas text surface for editing
     scope_lines: 200
   - name: Shell write commands (save, rm, cp)
