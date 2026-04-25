@@ -193,7 +193,10 @@ fn get_tool_list() -> Vec<serde_json::Value> {
         tool(
             "desktop_launch",
             "Launch an app by name (opens window without walking to building)",
-            vec![param("app_name", "string", "App name to launch", true)],
+            vec![
+                param("app_name", "string", "App name to launch", true),
+                param("window", "boolean", "If true, launch in a WINSYS window instead of replacing map", false),
+            ],
             desktop_launch_schema(),
         ),
         tool(
@@ -480,7 +483,7 @@ fn desktop_state_schema() -> serde_json::Value {
     serde_json::json!({"type": "object", "properties": {"player": {"type": "object"}, "camera": {"type": "object"}, "frame": {"type": "integer"}, "buildings": {"type": "array"}}})
 }
 fn desktop_launch_schema() -> serde_json::Value {
-    serde_json::json!({"type": "object", "properties": {"launched": {"type": "boolean"}, "app_name": {"type": "string"}}})
+    serde_json::json!({"type": "object", "properties": {"launched": {"type": "boolean"}, "app_name": {"type": "string"}, "window_mode": {"type": "boolean"}}})
 }
 fn player_position_schema() -> serde_json::Value {
     serde_json::json!({"type": "object", "properties": {"world_x": {"type": "integer"}, "world_y": {"type": "integer"}, "facing": {"type": "string"}}})
@@ -854,10 +857,18 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
             let app_name = args["app_name"]
                 .as_str()
                 .ok_or("Missing 'app_name' parameter")?;
-            let resp = send_socket_cmd(&format!("launch {}", app_name))?;
+            let window_mode = args["window"].as_bool().unwrap_or(false);
+            let cmd = if window_mode {
+                format!("launch --window {}", app_name)
+            } else {
+                format!("launch {}", app_name)
+            };
+            let resp = send_socket_cmd(&cmd)?;
+            let launched = resp.contains("launching") || resp.contains("windowed");
             Ok(serde_json::json!({
-                "launched": resp.contains("launching"),
+                "launched": launched,
                 "app_name": app_name,
+                "window_mode": window_mode,
                 "response": resp,
             }))
         }

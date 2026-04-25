@@ -1775,7 +1775,7 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app> [--window], player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             "loadasm" => {
@@ -1928,10 +1928,149 @@ fn main() {
                             }
                             "launch" => {
                                 // Launch an app by name (sets VM state to run the program)
-                                let app_name = parts.get(1).copied().unwrap_or("");
+                                // Supports --window flag to load into WINSYS window
+                                let mut args_iter = parts.iter().skip(1).peekable();
+                                let mut window_mode = false;
+                                let mut app_name = "";
+
+                                // Parse flags
+                                while let Some(&arg) = args_iter.peek() {
+                                    if *arg == "--window" {
+                                        window_mode = true;
+                                        args_iter.next();
+                                    } else {
+                                        app_name = arg;
+                                        args_iter.next();
+                                    }
+                                }
+
                                 if app_name.is_empty() {
                                     response.push_str("[error: launch requires app name]\n");
+                                } else if window_mode {
+                                    // ── Windowed launch: create a new WINSYS windowed process ──
+                                    let prog_path = format!("programs/{}.asm", app_name);
+                                    match std::fs::read_to_string(&prog_path) {
+                                        Ok(source) => {
+                                            let mut pp =
+                                                crate::preprocessor::Preprocessor::new();
+                                            let preprocessed = pp.preprocess(&source);
+                                            match crate::assembler::assemble(&preprocessed, 0) {
+                                                Ok(asm_result) => {
+                                                    // Find a free app slot
+                                                    let used_slots: Vec<usize> =
+                                                        active_apps.iter().map(|a| a.0).collect();
+                                                    let slot = (0..MAX_WINDOWED_APPS)
+                                                        .find(|s| !used_slots.contains(s));
+
+                                                    if let Some(slot_idx) = slot {
+                                                        let app_base = APP_CODE_BASE
+                                                            + slot_idx * APP_CODE_SIZE;
+                                                        let ram_len = vm.ram.len();
+
+                                                        // Clear app code region
+                                                        if app_base < ram_len {
+                                                            let end = (app_base + APP_CODE_SIZE)
+                                                                .min(ram_len);
+                                                            for v in
+                                                                &mut vm.ram[app_base..end]
+                                                            {
+                                                                *v = 0;
+                                                            }
+                                                        }
+
+                                                        // Load app bytecode
+                                                        for (idx, &word) in
+                                                            asm_result.pixels.iter().enumerate()
+                                                        {
+                                                            let addr = app_base + idx;
+                                                            if addr < ram_len {
+                                                                vm.ram[addr] = word;
+                                                            }
+                                                        }
+
+                                                        // Create a SpawnedProcess for the app
+                                                        let pid =
+                                                            (vm.processes.len() + 1) as u32;
+                                                        let mut proc = crate::vm::types::SpawnedProcess::new(pid, 0, app_base as u32);
+                                                        proc.parent_pid = 0; // kernel-spawned
+                                                        proc.priority = 1;
+
+                                                        // Position window near player/camera center
+                                                        let cam_x = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
+                                                        let cam_y = vm.ram.get(0x7801).copied().unwrap_or(0) as i32;
+                                                        // Offset so window appears near center of view
+                                                        let win_world_x = (cam_x + 16).max(0) as u32;
+                                                        let win_world_y = (cam_y + 12).max(0) as u32;
+
+                                                        let win_w = 128u32;
+                                                        let win_h = 96u32;
+
+                                                        // Create a world-space WINSYS window
+                                                        vm.ram[crate::vm::types::WINDOW_WORLD_COORDS_ADDR] = 1;
+                                                        let win_id = vm.windows.len() as u32 + 1;
+                                                        let mut win =
+                                                            crate::vm::types::Window::new_world(
+                                                                win_id,
+                                                                win_world_x,
+                                                                win_world_y,
+                                                                win_w,
+                                                                win_h,
+                                                                0, // title addr
+                                                                pid,
+                                                            );
+
+                                                        // Set window title from app name
+                                                        let title_base = 0x7900 + slot_idx * 32;
+                                                        for (j, b) in app_name.bytes().enumerate()
+                                                        {
+                                                            if title_base + j < ram_len {
+                                                                vm.ram[title_base + j] =
+                                                                    b as u32;
+                                                            }
+                                                        }
+                                                        win.title_addr = title_base as u32;
+                                                        vm.windows.push(win);
+
+                                                        // Push the process
+                                                        vm.processes.push(proc);
+
+                                                        // Track active app
+                                                        active_apps.push((
+                                                            slot_idx,
+                                                            pid,
+                                                            app_name.to_string(),
+                                                        ));
+
+                                                        // Map stays running
+                                                        is_running = true;
+                                                        hit_breakpoint = false;
+                                                        response.push_str(&format!(
+                                                            "[windowed: {} PID={} slot={} win={}]\n",
+                                                            app_name, pid, slot_idx, win_id
+                                                        ));
+                                                    } else {
+                                                        response.push_str(
+                                                            "[max apps: close a window first]\n",
+                                                        );
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    response.push_str(&format!(
+                                                        "[assembly error for {}: {}]\n",
+                                                        app_name, e
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            response.push_str(&format!(
+                                                "[no program file for {}: {}]\n",
+                                                app_name, e
+                                            ));
+                                        }
+                                    }
                                 } else {
+                                    // ── Legacy launch: replace map with app ──
                                     // Find the building with matching name
                                     let mut found = false;
                                     let bldg_count = vm.ram[0x7580].min(32) as u32;
