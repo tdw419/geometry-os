@@ -175,6 +175,7 @@ fn main() {
             ("oracle", "oracle"),
             ("ai_terminal", "ai_terminal"),
             ("hermes", "hermes_term"),
+            ("host", "host_term"),
         ];
         for (app_name, asm_name) in &desktop_apps {
             let pxpk_path = format!("{}.pxpk.png", app_name);

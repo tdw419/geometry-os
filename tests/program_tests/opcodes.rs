@@ -1150,3 +1150,105 @@ fn test_unknown_opcode_error_on_first_line() {
     assert_eq!(displayed, "line 1: unknown opcode: NOSUCH",
         "full error format, got: {}", displayed);
 }
+
+// ── PTYOPEN / PTYWRITE / PTYREAD opcode bytecode roundtrip ───────
+//
+// End-to-end check that the assembler emits valid PTY opcodes, the dispatch
+// arms wire them to the right handlers, and a guest can drive bash through
+// the bytecode path. Spawns a real bash via portable-pty.
+
+#[test]
+fn test_pty_opcodes_pwd_roundtrip() {
+    // Program: open bash, write "pwd\nexit\n", drain forever into RAM[0x6000..]
+    // advancing the buffer pointer by exactly the bytes drained so we don't
+    // overrun RAM and don't overwrite earlier output.
+    //
+    // The test runs the VM step-by-step against a wall-clock budget; bash
+    // needs real time to spin up and emit its first prompt.
+    let source = "
+        LDI r1, 0x5000
+        LDI r0, 0
+        STORE r1, r0
+        LDI r1, 0x5100
+        LDI r0, 112
+        STORE r1, r0
+        LDI r2, 1
+        ADD r1, r2
+        LDI r0, 119
+        STORE r1, r0
+        ADD r1, r2
+        LDI r0, 100
+        STORE r1, r0
+        ADD r1, r2
+        LDI r0, 10
+        STORE r1, r0
+        ADD r1, r2
+        LDI r0, 101
+        STORE r1, r0
+        ADD r1, r2
+        LDI r0, 120
+        STORE r1, r0
+        ADD r1, r2
+        LDI r0, 105
+        STORE r1, r0
+        ADD r1, r2
+        LDI r0, 116
+        STORE r1, r0
+        ADD r1, r2
+        LDI r0, 10
+        STORE r1, r0
+        LDI r5, 0x5000
+        PTYOPEN r5, r10
+        LDI r6, 0x5100
+        LDI r7, 9
+        PTYWRITE r10, r6, r7
+        LDI r12, 0x6000
+        LDI r16, 256
+drain_loop:
+        PTYREAD r10, r12, r16
+        ADD r12, r0
+        JMP drain_loop
+    ";
+
+    let asm = match assemble(source, 0) {
+        Ok(a) => a,
+        Err(e) => panic!("assembly failed: {} on line {}", e.message, e.line),
+    };
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while std::time::Instant::now() < deadline {
+        for _ in 0..2000 {
+            if !vm.step() {
+                break;
+            }
+        }
+        if vm.halted {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    let mut bytes = Vec::with_capacity(8192);
+    for i in 0..8192 {
+        let cell = vm.ram[0x6000 + i];
+        if cell == 0 {
+            continue;
+        }
+        bytes.push((cell & 0xFF) as u8);
+    }
+    let text = String::from_utf8_lossy(&bytes);
+
+    assert!(
+        text.contains('/'),
+        "expected pwd output containing '/', got: {:?}",
+        text
+    );
+}
