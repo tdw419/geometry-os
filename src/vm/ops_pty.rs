@@ -28,7 +28,7 @@ pub const PTY_ERR_CLOSED: u32 = 7;
 
 pub struct PtySlot {
     master: Box<dyn MasterPty + Send>,
-    writer: Option<Box<dyn std::io::Write + Send>>,
+    pub writer: Option<Box<dyn std::io::Write + Send>>,
     rx: Receiver<u8>,
     /// Set true when the reader thread observes EOF or an error.
     closed_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,

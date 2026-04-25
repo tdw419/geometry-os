@@ -1050,3 +1050,16 @@ mod tests {
         assert_eq!(&png_data[0..4], &[0x89, 0x50, 0x4E, 0x47]); // PNG magic
     }
 }
+
+/// Get the 5x7 mini font glyph for a character.
+/// Returns a static array of 7 rows, each a 5-bit bitmap.
+/// Bit test: glyph[row] & (1 << (4 - col))
+pub fn mini_font_glyph(ch: u8) -> &'static [u8; 7] {
+    const MINI_FONT: [[u8; 7]; 96] = include!("mini_font.in");
+    let idx = if ch >= 32 && ch < 128 {
+        (ch - 32) as usize
+    } else {
+        0 // space for out-of-range
+    };
+    &MINI_FONT[idx]
+}

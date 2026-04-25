@@ -515,7 +515,7 @@ pub use trace::*;
 mod ops_extended;
 mod ops_graphics;
 mod ops_memory;
-mod ops_pty;
+pub mod ops_pty;
 mod ops_syscall;
 
 mod formula;

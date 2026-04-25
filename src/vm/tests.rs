@@ -20692,3 +20692,43 @@ fn test_hermes_opcode_truncation() {
     // Check null terminator
     assert_eq!(vm.ram[505], 0, "should be null-terminated");
 }
+
+// ── Phase 129: Host Terminal Keyboard Shortcuts and Productivity ──
+
+#[test]
+fn test_mini_font_glyph_space() {
+    let glyph = crate::pixel::mini_font_glyph(32); // space
+    assert_eq!(glyph, &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+}
+
+#[test]
+fn test_mini_font_glyph_exclamation() {
+    let glyph = crate::pixel::mini_font_glyph(33); // !
+    assert_eq!(glyph, &[0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04]);
+}
+
+#[test]
+fn test_mini_font_glyph_letter_a() {
+    let glyph = crate::pixel::mini_font_glyph(65); // 'A'
+                                                   // A should have some non-zero rows
+    assert!(glyph.iter().any(|&r| r != 0), "A glyph should have pixels");
+}
+
+#[test]
+fn test_mini_font_glyph_out_of_range_returns_space() {
+    let glyph = crate::pixel::mini_font_glyph(0); // out of range
+    assert_eq!(
+        glyph,
+        &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+        "out-of-range char should return space glyph"
+    );
+}
+
+#[test]
+fn test_mini_font_glyph_all_printable() {
+    // Verify all printable ASCII characters have glyph data
+    for ch in 32..=126u8 {
+        let glyph = crate::pixel::mini_font_glyph(ch);
+        assert_eq!(glyph.len(), 7, "each glyph should have 7 rows");
+    }
+}

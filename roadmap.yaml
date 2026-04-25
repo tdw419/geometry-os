@@ -6235,7 +6235,7 @@ phases:
   _claimed_at: 1777148280
 - id: phase-127
   title: Host Terminal -- ANSI Rendering and Visual Polish
-  status: planned
+  status: in_progress
   goal: Make the terminal look like a real terminal with proper ANSI handling, cursor
     positioning, and visual feedback
   description: Once bash output flows, the terminal needs to handle real ANSI escape
@@ -6246,8 +6246,8 @@ phases:
   - name: ANSI CSI handler -- cursor movement
     description: Parse CSI sequences for cursor up/down/left/right (A/B/C/D), cursor
       home (H), cursor position (CUP), and line clear (K). Update CUR_COL/CUR_ROW
-      based on CUP params. The existing ANSI filter in process_byte already
-      strips these but doesn't act on them.
+      based on CUP params. The existing ANSI filter in process_byte already strips
+      these but doesn't act on them.
     status: todo
     tasks:
     - id: p127.d1.t1
@@ -6302,9 +6302,11 @@ phases:
     scope_lines: 60
   scope_lines_total: 72830
   test_target: 2076
+  _claimed_by: worker-0
+  _claimed_at: 1777148989
 - id: phase-128
   title: Host Terminal -- Multi-Session and Shell Selection
-  status: planned
+  status: in_progress
   goal: Support multiple terminal tabs, shell selection, and session persistence
   description: The terminal becomes a first-class desktop app. Users can open multiple
     terminals (up to MAX_PTY_SLOTS=4), switch between them with tabs, choose their
@@ -6363,9 +6365,11 @@ phases:
     scope_lines: 60
   scope_lines_total: 73140
   test_target: 2080
+  _claimed_by: worker-0
+  _claimed_at: 1777152489
 - id: phase-129
   title: Host Terminal -- Keyboard Shortcuts and Productivity
-  status: planned
+  status: in_progress
   goal: Make the terminal feel like a real terminal emulator with copy/paste, scrollback,
     and keyboard shortcuts
   description: 'Add essential terminal productivity features: scrollback buffer (scroll
@@ -6427,6 +6431,8 @@ phases:
     scope_lines: 60
   scope_lines_total: 73400
   test_target: 2085
+  _claimed_by: worker-0
+  _claimed_at: 1777155202
 - id: phase-130
   title: Host Terminal -- Test Suite and Desktop Integration
   status: planned
