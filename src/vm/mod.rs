@@ -3728,16 +3728,9 @@ print(r if r else '')";
     /// Maintains session continuity via `hermes_session_id` for `--resume`.
     /// Returns the agent's text response, or None on failure.
     fn call_hermes_cli(&mut self, prompt: &str) -> Option<String> {
-        // Write prompt to a temp file to avoid shell escaping issues
-        let tmp_path = "/tmp/geo_hermes_prompt.txt";
-        if std::fs::write(tmp_path, prompt).is_err() {
-            return None;
-        }
-
         let mut args: Vec<String> = vec![
             "chat".to_string(),
-            "-Q".to_string(),   // quiet (no UI chrome)
-            "-q".to_string(),   // non-interactive
+            "-Q".to_string(), // quiet mode (suppress banner/spinner)
         ];
 
         // Resume session if we have one for continuity
@@ -3746,9 +3739,9 @@ print(r if r else '')";
             args.push(sid.clone());
         }
 
-        // Use --from-file to pass the prompt (avoids shell escaping nightmares)
-        args.push("--from-file".to_string());
-        args.push(tmp_path.to_string());
+        // Pass prompt via -q flag (hermes chat -Q -q "<prompt>")
+        args.push("-q".to_string());
+        args.push(prompt.to_string());
 
         let output = match std::process::Command::new("hermes")
             .args(&args)
