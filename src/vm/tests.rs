@@ -18730,7 +18730,6 @@ fn test_winsys_vfs_blit_invalid_window() {
     assert_eq!(vm.regs[0], 0, "VFS_BLIT with bad window id should return 0");
 }
 
-
 #[test]
 fn test_unlink_assembles() {
     let source = "UNLINK r1";
@@ -18793,7 +18792,10 @@ fn test_unlink_nonexistent_file() {
     vm.pc = 0;
     vm.step();
 
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "UNLINK should return error for nonexistent file");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "UNLINK should return error for nonexistent file"
+    );
 }
 
 #[test]
@@ -18885,7 +18887,10 @@ fn test_fcopy_nonexistent_source() {
     vm.pc = 0;
     vm.step();
 
-    assert_eq!(vm.regs[0], 0xFFFFFFFF, "FCOPY should error on nonexistent source");
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "FCOPY should error on nonexistent source"
+    );
 }
 
 #[test]

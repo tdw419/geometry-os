@@ -814,7 +814,7 @@ pub(super) fn try_parse(
         "FCOPY" => {
             if tokens.len() < 3 {
                 return Err(
-                    "FCOPY requires 2 arguments: FCOPY src_name_reg, dst_name_reg".to_string()
+                    "FCOPY requires 2 arguments: FCOPY src_name_reg, dst_name_reg".to_string(),
                 );
             }
             bytecode.push(0xB8);

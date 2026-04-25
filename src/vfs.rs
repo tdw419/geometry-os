@@ -594,8 +594,12 @@ impl Vfs {
             None => return FD_ERROR,
         };
         // Sanitize
-        if src_name.contains('/') || src_name.contains('\\') || src_name.starts_with('.')
-            || dst_name.contains('/') || dst_name.contains('\\') || dst_name.starts_with('.')
+        if src_name.contains('/')
+            || src_name.contains('\\')
+            || src_name.starts_with('.')
+            || dst_name.contains('/')
+            || dst_name.contains('\\')
+            || dst_name.starts_with('.')
         {
             return FD_ERROR;
         }

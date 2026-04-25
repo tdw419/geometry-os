@@ -9,8 +9,8 @@ fn test_title_bar_offset_content_below_bar() {
     vm.regs[2] = 20; // y
     vm.regs[3] = 64; // w
     vm.regs[4] = 64; // h
-    vm.regs[5] = 0;  // no title
-    vm.regs[6] = 0;  // op = create
+    vm.regs[5] = 0; // no title
+    vm.regs[6] = 0; // op = create
     vm.ram[0] = 0x94;
     vm.ram[1] = 6;
     vm.pc = 0;
@@ -55,11 +55,13 @@ fn test_title_bar_offset_content_below_bar() {
 
     // Pixel at (0,0) in window -> screen (20, 20+12) = (20, 32) with title bar offset
     assert_eq!(
-        vm.screen[32 * 256 + 20], 0xFF0000,
+        vm.screen[32 * 256 + 20],
+        0xFF0000,
         "red pixel at (0,0) should be at screen (20, 32) with title bar offset"
     );
     assert_eq!(
-        vm.screen[37 * 256 + 25], 0x0000FF,
+        vm.screen[37 * 256 + 25],
+        0x0000FF,
         "blue pixel at (5,5) should be at screen (25, 37) with title bar offset"
     );
 
@@ -187,9 +189,24 @@ fn test_bring_to_front_updates_z_order() {
     vm.step();
     let id2 = vm.regs[0];
 
-    let z1 = vm.windows.iter().find(|w| w.id == id1).map(|w| w.z_order).unwrap();
-    let z2 = vm.windows.iter().find(|w| w.id == id2).map(|w| w.z_order).unwrap();
-    assert!(z2 > z1, "window 2 z_order ({}) should be > window 1 ({})", z2, z1);
+    let z1 = vm
+        .windows
+        .iter()
+        .find(|w| w.id == id1)
+        .map(|w| w.z_order)
+        .unwrap();
+    let z2 = vm
+        .windows
+        .iter()
+        .find(|w| w.id == id2)
+        .map(|w| w.z_order)
+        .unwrap();
+    assert!(
+        z2 > z1,
+        "window 2 z_order ({}) should be > window 1 ({})",
+        z2,
+        z1
+    );
 
     // Bring window 1 to front
     vm.regs[0] = id1;
@@ -200,6 +217,16 @@ fn test_bring_to_front_updates_z_order() {
     vm.halted = false;
     vm.step();
 
-    let z1_new = vm.windows.iter().find(|w| w.id == id1).map(|w| w.z_order).unwrap();
-    assert!(z1_new > z2, "window 1 z_order ({}) should now be > window 2 ({})", z1_new, z2);
+    let z1_new = vm
+        .windows
+        .iter()
+        .find(|w| w.id == id1)
+        .map(|w| w.z_order)
+        .unwrap();
+    assert!(
+        z1_new > z2,
+        "window 1 z_order ({}) should now be > window 2 ({})",
+        z1_new,
+        z2
+    );
 }

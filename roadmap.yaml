@@ -5326,15 +5326,15 @@ phases:
     tasks:
     - id: p125.d2.t1
       title: 'save command: write canvas to VFS file'
-      status: todo
+      status: done
       description: Paint canvas content as pixels, trigger flush
     - id: p125.d2.t2
       title: 'rm command: delete file from surface'
-      status: todo
+      status: done
       description: Zero out file rows, update directory index
     - id: p125.d2.t3
       title: 'cp command: copy file within VFS'
-      status: todo
+      status: done
       description: Read source pixels, write to new rows
     scope_lines: 200
   dependencies:

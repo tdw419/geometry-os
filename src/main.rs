@@ -2709,12 +2709,24 @@ fn main() {
                     // Check if click hits a world-space window title bar (top 12 pixels)
                     let mut hit_window = false;
                     // Collect owned data to avoid borrow conflict with later mutation
-                    struct WinHitInfo { id: u32, world_x: i32, world_y: i32, w: u32, z_order: u32 }
+                    struct WinHitInfo {
+                        id: u32,
+                        world_x: i32,
+                        world_y: i32,
+                        w: u32,
+                        z_order: u32,
+                    }
                     let mut sorted_win_data: Vec<WinHitInfo> = vm
                         .windows
                         .iter()
                         .filter(|w| w.active && w.is_world_space())
-                        .map(|w| WinHitInfo { id: w.id, world_x: w.world_x as i32, world_y: w.world_y as i32, w: w.w, z_order: w.z_order })
+                        .map(|w| WinHitInfo {
+                            id: w.id,
+                            world_x: w.world_x as i32,
+                            world_y: w.world_y as i32,
+                            w: w.w,
+                            z_order: w.z_order,
+                        })
                         .collect();
                     sorted_win_data.sort_by_key(|info| std::cmp::Reverse(info.z_order));
 
@@ -3107,7 +3119,9 @@ fn main() {
 
                     if vm_sx >= 0 && vm_sx < 256 && vm_sy >= 0 && vm_sy < 256 {
                         // Check screen-space windows (highest z_order first)
-                        let mut sorted: Vec<_> = vm.windows.iter()
+                        let mut sorted: Vec<_> = vm
+                            .windows
+                            .iter()
                             .filter(|w| w.active && !w.is_world_space())
                             .collect();
                         sorted.sort_by_key(|w| std::cmp::Reverse(w.z_order));
@@ -3126,7 +3140,9 @@ fn main() {
                                 if vm_sx >= close_x as i32 && vm_sy < close_y_end as i32 {
                                     // Close button: destroy window
                                     let close_id = win.id;
-                                    if let Some(w) = vm.windows.iter_mut().find(|w| w.id == close_id) {
+                                    if let Some(w) =
+                                        vm.windows.iter_mut().find(|w| w.id == close_id)
+                                    {
                                         w.active = false;
                                     }
                                     break;
