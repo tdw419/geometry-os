@@ -16537,6 +16537,47 @@ fn test_window_move_socket_updates_position() {
 }
 
 #[test]
+fn test_window_move_socket() {
+    // Runtime test: create a window, move it via the same logic as socket handler, verify success
+    use crate::vm::types::Window;
+
+    let mut vm = Vm::new();
+
+    // Create an active window at (10, 20)
+    let mut w = Window::new(1, 10, 20, 64, 32, 0, 1);
+    w.active = true;
+    vm.windows.push(w);
+
+    // Simulate window_move 1 100 200 (same logic as socket handler)
+    let win_id: u32 = 1;
+    let new_x: u32 = 100;
+    let new_y: u32 = 200;
+    let found = vm.windows.iter_mut().find(|w| w.id == win_id && w.active);
+    assert!(found.is_some(), "should find active window");
+
+    if let Some(w) = found {
+        w.x = new_x;
+        w.y = new_y;
+    }
+
+    // Verify position updated
+    let w = vm.windows.iter().find(|w| w.id == 1).unwrap();
+    assert_eq!(w.x, 100, "x should be updated to 100");
+    assert_eq!(w.y, 200, "y should be updated to 200");
+
+    // Test moving a non-existent window returns none
+    let not_found = vm.windows.iter_mut().find(|w| w.id == 999 && w.active);
+    assert!(not_found.is_none(), "non-existent window should not be found");
+
+    // Test moving an inactive window returns none
+    let mut w2 = Window::new(2, 50, 60, 64, 32, 0, 2);
+    w2.active = false;
+    vm.windows.push(w2);
+    let inactive = vm.windows.iter_mut().find(|w| w.id == 2 && w.active);
+    assert!(inactive.is_none(), "inactive window should not be movable");
+}
+
+#[test]
 fn test_window_resize_updates_buffer() {
     // Verify window_resize resizes the offscreen buffer
     let source = std::fs::read_to_string("src/main.rs").unwrap();

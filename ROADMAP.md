@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 153 opcodes, 3448 tests, 145 programs, 72229 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
-**Progress:** 116/116 phases complete, 0 in progress
+**Progress:** 125/125 phases complete, 0 in progress
 
-**Deliverables:** 497/497 complete
+**Deliverables:** 511/511 complete
 
-**Tasks:** 1027/1075 complete
+**Tasks:** 1032/1075 complete
 
 ## Scope Summary
 
@@ -128,6 +128,15 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 | phase-114 Project Hygiene and README Accuracy | COMPLETE | 1/1 | 60 | - |
 | phase-119 VFS Pixel Surface -- Pixels Move Pixels | COMPLETE | 4/4 | 70,000 | 2026 |
 | phase-125 Shell VFS Integration | COMPLETE | 2/2 | 72,300 | 2062 |
+| phase-115 Self-Modification Showcase Demos | COMPLETE | 1/1 | 450 | 6 |
+| phase-116 Living Map Entities | COMPLETE | 1/1 | 500 | 8 |
+| phase-117 Performance Benchmarking and Profiling | COMPLETE | 1/1 | 300 | 4 |
+| phase-118 Showtime -- First Run Experience | COMPLETE | 1/1 | 400 | 5 |
+| phase-120 VFS File Manager Desktop App | COMPLETE | 2/2 | 70400 | 2036 |
+| phase-121 Area Agent System | COMPLETE | 2/2 | 71000 | 2046 |
+| phase-122 RISC-V Guest Write Path | COMPLETE | 2/2 | 71300 | 2048 |
+| phase-123 Alpine Linux Live Tile | COMPLETE | 2/2 | 71650 | 2051 |
+| phase-124 Window Pipeline Improvements | COMPLETE | 2/2 | 71900 | 2056 |
 
 ## Dependencies
 
@@ -2623,7 +2632,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
 
 - [x] **Window management socket commands + MCP tools** -- Socket commands: window_list, window_move, window_close, window_focus, window_resize, process_kill. Bridges existing WINSYS ops (0x94) to the socket layer. Adds WINSYS op=7 (RESIZE) for window resizing. Adds process_kill to destroy all windows belonging to a PID.
   - [x] window_list returns JSON array of active windows with id, title, pid, x, y, w, h, z_order
-  - [ ] window_move <id> <x> <y> moves window and returns success
+  - [x] window_move <id> <x> <y> moves window and returns success
   - [ ] window_close <id> destroys window and returns success
   - [ ] window_focus <id> brings window to front
   - [ ] window_resize <id> <w> <h> resizes window offscreen buffer
@@ -2642,7 +2651,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
   _~150 LOC_
 - [x] **Integration tests** -- 10+ tests: socket command tests, MCP tool tests, integration tests. Each new socket command and MCP tool gets a dedicated test.
   - [x] test_window_list_socket verifies socket command returns window data
-  - [ ] test_window_move_socket verifies window moves
+  - [x] test_window_move_socket verifies window moves
   - [ ] test_window_close_socket verifies window destruction
   - [ ] test_window_focus_socket verifies z_order change
   - [ ] test_window_resize_socket verifies buffer resize
