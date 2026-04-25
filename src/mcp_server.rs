@@ -907,11 +907,13 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
 
         // Phase 88: AI Vision Bridge tools
         "vision_screenshot" => {
-            let resp = send_socket_cmd("screenshot_b64")?;
+            let resp = send_socket_cmd("screenshot_annotated_b64")?;
+            let wins_resp = send_socket_cmd("window_list")?;
             Ok(serde_json::json!({
                 "png_base64": resp,
                 "width": 256,
                 "height": 256,
+                "windows": wins_resp,
             }))
         }
 

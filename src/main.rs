@@ -1775,7 +1775,7 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app>, player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             "loadasm" => {
@@ -2273,6 +2273,51 @@ fn main() {
                             // Phase 88: AI Vision Bridge socket commands
                             "screenshot_b64" => {
                                 let b64 = geometry_os::vision::encode_png_base64(&vm.screen);
+                                response.push_str(&b64);
+                                response.push('\n');
+                            }
+                            "screenshot_annotated_b64" => {
+                                // Screenshot with window bounding boxes and labels overlaid
+                                let active: Vec<&crate::vm::Window> =
+                                    vm.windows.iter().filter(|w| w.active).collect();
+                                // Find focused window (highest z_order)
+                                let max_z = active
+                                    .iter()
+                                    .map(|w| w.z_order)
+                                    .max()
+                                    .unwrap_or(0);
+                                let mut overlays: Vec<geometry_os::vision::WindowOverlay> =
+                                    Vec::new();
+                                for w in &active {
+                                    let mut title = String::new();
+                                    if w.title_addr > 0
+                                        && (w.title_addr as usize) < vm.ram.len()
+                                    {
+                                        for j in 0..32 {
+                                            let addr = w.title_addr as usize + j;
+                                            if addr >= vm.ram.len() {
+                                                break;
+                                            }
+                                            let ch = vm.ram[addr];
+                                            if ch == 0 || ch > 127 {
+                                                break;
+                                            }
+                                            title.push(ch as u8 as char);
+                                        }
+                                    }
+                                    overlays.push(geometry_os::vision::WindowOverlay {
+                                        id: w.id,
+                                        x: w.x,
+                                        y: w.y,
+                                        w: w.w,
+                                        h: w.h,
+                                        title,
+                                        focused: w.z_order == max_z,
+                                    });
+                                }
+                                let b64 = geometry_os::vision::encode_png_annotated_base64(
+                                    &vm.screen, &overlays,
+                                );
                                 response.push_str(&b64);
                                 response.push('\n');
                             }

@@ -1,6 +1,7 @@
 //! Geometry OS Vision Module
 //!
-//! Provides canvas-to-PNG encoding, checksum computation, and canvas diffing.
+//! Provides canvas-to-PNG encoding, checksum computation, canvas diffing,
+//! and window overlay annotation for annotated screenshots.
 //! Pure Rust, zero external dependencies. Used by the AI_AGENT opcode (0xB0)
 //! and the MCP server vision tools.
 
@@ -212,6 +213,149 @@ fn base64_encode(data: &[u8]) -> String {
     out
 }
 
+/// A window overlay to draw on the annotated screenshot.
+#[derive(Clone, Debug)]
+pub struct WindowOverlay {
+    pub id: u32,
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+    pub title: String,
+    pub focused: bool,
+}
+
+/// Draw a colored rectangle outline onto a mutable pixel buffer (256x256).
+/// Uses Bresenham-style edge drawing. `color` is 0x00RRGGBB.
+fn draw_rect(buf: &mut [u32], x0: u32, y0: u32, w: u32, h: u32, color: u32) {
+    let screen_w: u32 = 256;
+    let x1 = (x0 + w).min(256);
+    let y1 = (y0 + h).min(256);
+    // Top and bottom edges
+    for x in x0..x1 {
+        if x < screen_w && y0 < 256 {
+            buf[(y0 * screen_w + x) as usize] = color;
+        }
+        if h > 1 && y1 > 0 && (y1 - 1) < 256 {
+            buf[((y1 - 1) * screen_w + x) as usize] = color;
+        }
+    }
+    // Left and right edges
+    for y in y0..y1 {
+        if y < 256 && x0 < screen_w {
+            buf[(y * screen_w + x0) as usize] = color;
+        }
+        if w > 1 && x1 > 0 && (x1 - 1) < screen_w {
+            buf[(y * screen_w + (x1 - 1)) as usize] = color;
+        }
+    }
+}
+
+/// Draw a filled rectangle (used for label backgrounds).
+fn draw_rect_filled(buf: &mut [u32], x0: u32, y0: u32, w: u32, h: u32, color: u32) {
+    for y in y0..(y0 + h).min(256) {
+        for x in x0..(x0 + w).min(256) {
+            buf[(y * 256 + x) as usize] = color;
+        }
+    }
+}
+
+/// Draw a single character from the 8x8 font onto the pixel buffer.
+fn draw_char(buf: &mut [u32], ch: char, px: u32, py: u32, color: u32) {
+    use crate::font::{GLYPH_H, GLYPH_W, GLYPHS};
+    let code = ch as usize;
+    if code >= 128 {
+        return;
+    }
+    let glyph = &GLYPHS[code];
+    for row in 0..GLYPH_H {
+        for col in 0..GLYPH_W {
+            if glyph[row] & (1 << (7 - col)) != 0 {
+                let x = px + col as u32;
+                let y = py + row as u32;
+                if x < 256 && y < 256 {
+                    buf[(y * 256 + x) as usize] = color;
+                }
+            }
+        }
+    }
+}
+
+/// Draw a text string onto the pixel buffer using the 8x8 font.
+fn draw_text(buf: &mut [u32], text: &str, px: u32, py: u32, color: u32) {
+    for (i, ch) in text.chars().enumerate() {
+        draw_char(buf, ch, px + (i as u32) * 8, py, color);
+    }
+}
+
+/// Encode the screen buffer with window overlays as a PNG.
+/// Draws colored bounding boxes and title labels for each window.
+pub fn encode_png_annotated(screen: &[u32], windows: &[WindowOverlay]) -> Vec<u8> {
+    // Clone screen so we don't modify the original
+    let mut buf = screen.to_vec();
+
+    // Color palette for window borders (cycle through distinct colors)
+    let border_colors: &[u32] = &[
+        0x00FFFF, // cyan
+        0xFFFF00, // yellow
+        0xFF00FF, // magenta
+        0x00FF00, // green
+        0xFF8000, // orange
+        0x8080FF, // light blue
+        0xFF0080, // pink
+        0x00FF80, // spring green
+    ];
+
+    for (i, win) in windows.iter().enumerate() {
+        let border_color = border_colors[i % border_colors.len()];
+        let border_width = if win.focused { 2u32 } else { 1u32 };
+
+        // Draw border (potentially 2px wide for focused window)
+        for offset in 0..border_width {
+            draw_rect(
+                &mut buf,
+                win.x.saturating_sub(offset),
+                win.y.saturating_sub(offset),
+                win.w + offset * 2,
+                win.h + offset * 2,
+                border_color,
+            );
+        }
+
+        // Build label: "ID:Title" (truncated to fit)
+        let label = if win.title.is_empty() {
+            format!("[{}]", win.id)
+        } else {
+            format!("[{}] {}", win.id, win.title)
+        };
+        // Truncate label to fit within window width (each char = 8px)
+        let max_chars = ((win.w / 8) as usize).max(3).min(28);
+        let label_display = if label.len() > max_chars {
+            format!("{}..", &label[..max_chars.saturating_sub(2)])
+        } else {
+            label
+        };
+
+        // Draw label background (dark with alpha-like effect)
+        let label_w = (label_display.len() as u32) * 8;
+        let label_y = if win.y >= 10 {
+            win.y - 10
+        } else {
+            win.y + win.h
+        };
+        draw_rect_filled(&mut buf, win.x, label_y, label_w.min(256 - win.x), 8, 0x000000);
+        draw_text(&mut buf, &label_display, win.x, label_y, border_color);
+    }
+
+    encode_png(&buf)
+}
+
+/// Encode the annotated screen buffer as base64 PNG.
+pub fn encode_png_annotated_base64(screen: &[u32], windows: &[WindowOverlay]) -> String {
+    let png_bytes = encode_png_annotated(screen, windows);
+    base64_encode(&png_bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,5 +458,87 @@ mod tests {
             b64.starts_with("iVBOR"),
             "should start with PNG base64 prefix"
         );
+    }
+
+    #[test]
+    fn test_annotated_png_no_windows() {
+        // Annotated screenshot with no windows should be same as plain screenshot
+        let screen = vec![0x00FF00u32; 256 * 256]; // all green
+        let windows: Vec<WindowOverlay> = vec![];
+        let png = encode_png_annotated(&screen, &windows);
+        let plain_png = encode_png(&screen);
+        assert_eq!(png, plain_png, "no windows = same as plain PNG");
+    }
+
+    #[test]
+    fn test_annotated_png_with_window() {
+        // Single window should produce a different PNG (has borders drawn)
+        let screen = vec![0u32; 256 * 256];
+        let windows = vec![WindowOverlay {
+            id: 1,
+            x: 50,
+            y: 50,
+            w: 80,
+            h: 60,
+            title: "TestWin".to_string(),
+            focused: true,
+        }];
+        let annotated = encode_png_annotated(&screen, &windows);
+        let plain = encode_png(&screen);
+        assert_ne!(annotated, plain, "annotated should differ from plain");
+        // Should still be a valid PNG
+        assert!(annotated.starts_with(&[137, 80, 78, 71, 13, 10, 26, 10]));
+    }
+
+    #[test]
+    fn test_annotated_png_draws_border_pixels() {
+        // Verify that border pixels are actually drawn (non-zero after annotation)
+        let screen = vec![0u32; 256 * 256];
+        let windows = vec![WindowOverlay {
+            id: 1,
+            x: 10,
+            y: 10,
+            w: 20,
+            h: 20,
+            title: "W".to_string(),
+            focused: false,
+        }];
+        let mut buf = screen.clone();
+        // Replicate what encode_png_annotated does for border checking
+        // The top edge at y=10 should have colored pixels
+        super::draw_rect(&mut buf, 10, 10, 20, 20, 0x00FFFF);
+        // Top-left pixel of the window should now be cyan
+        assert_ne!(buf[10 * 256 + 10], 0, "border pixel should be drawn");
+        assert_eq!(buf[10 * 256 + 10], 0x00FFFF, "should be cyan border");
+        // Center pixel should still be 0 (not on border)
+        assert_eq!(buf[20 * 256 + 20], 0, "center should be unchanged");
+    }
+
+    #[test]
+    fn test_annotated_base64_with_multiple_windows() {
+        let screen = vec![0u32; 256 * 256];
+        let windows = vec![
+            WindowOverlay {
+                id: 1,
+                x: 0,
+                y: 0,
+                w: 100,
+                h: 100,
+                title: "First".to_string(),
+                focused: false,
+            },
+            WindowOverlay {
+                id: 2,
+                x: 100,
+                y: 100,
+                w: 100,
+                h: 100,
+                title: "Second".to_string(),
+                focused: true,
+            },
+        ];
+        let b64 = encode_png_annotated_base64(&screen, &windows);
+        assert!(b64.starts_with("iVBOR"), "should be valid PNG base64");
+        assert!(b64.len() > 1000, "base64 should be substantial");
     }
 }
