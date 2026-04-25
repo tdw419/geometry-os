@@ -2649,9 +2649,9 @@ Transform the map from a launcher into an infinite spatial desktop where app win
   - [ ] Existing programs that use screen-space WINSYS continue to work (flag defaults to off)
   _~120 LOC_
 - [x] **Viewport coordinate transform module** -- Add a viewport module that converts between world coordinates (tile-based, infinite range) and screen coordinates (256x256 framebuffer). This is pure math -- no rendering. The viewport tracks camera position and zoom level, already partially in RAM[0x7800-0x7801].
-  - [ ] viewport struct tracks (cam_x, cam_y, zoom) mapping world tiles to framebuffer pixels
-  - [ ] world_to_screen(world_x, world_y) returns screen (x, y) or None if offscreen
-  - [ ] world_to_screen handles zoom (8px, 4px, 2px, 1px per tile)
+  - [x] viewport struct tracks (cam_x, cam_y, zoom) mapping world tiles to framebuffer pixels
+  - [x] world_to_screen(world_x, world_y) returns screen (x, y) or None if offscreen
+  - [x] world_to_screen handles zoom (8px, 4px, 2px, 1px per tile)
   _~100 LOC_
 - [x] **Composite rendering -- windows on map** -- Modify the rendering loop in main.rs: after world_desktop renders terrain, iterate WINSYS windows with world coords, convert to screen space via viewport, and blit their offscreen buffers onto the framebuffer. Windows that are offscreen are culled. This is the visual integration -- windows become part of the map surface.
   - [ ] world_desktop.asm renders terrain below windows, windows render on top
