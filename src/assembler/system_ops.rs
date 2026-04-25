@@ -802,6 +802,27 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "UNLINK" => {
+            if tokens.len() < 2 {
+                return Err("UNLINK requires 1 argument: UNLINK name_reg".to_string());
+            }
+            bytecode.push(0xB7);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
+        "FCOPY" => {
+            if tokens.len() < 3 {
+                return Err(
+                    "FCOPY requires 2 arguments: FCOPY src_name_reg, dst_name_reg".to_string()
+                );
+            }
+            bytecode.push(0xB8);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

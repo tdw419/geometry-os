@@ -2933,6 +2933,36 @@ impl Vm {
                 }
             }
 
+            // UNLINK name_reg -- delete file from VFS
+            // Returns 0 on success, 0xFFFFFFFF on error
+            // Encoding: 1 word [0xB7] + 1 word [name_reg]
+            0xB7 => {
+                let name_reg = self.fetch() as usize;
+                if name_reg < NUM_REGS {
+                    let name_addr = self.regs[name_reg];
+                    let pid = self.current_pid;
+                    self.regs[0] = self.vfs.funlink(&self.ram, name_addr, pid);
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // FCOPY src_reg, dst_reg -- copy file within VFS
+            // Returns 0 on success, 0xFFFFFFFF on error
+            // Encoding: 1 word [0xB8] + 1 word [src_name_reg] + 1 word [dst_name_reg]
+            0xB8 => {
+                let src_reg = self.fetch() as usize;
+                let dst_reg = self.fetch() as usize;
+                if src_reg < NUM_REGS && dst_reg < NUM_REGS {
+                    let src_addr = self.regs[src_reg];
+                    let dst_addr = self.regs[dst_reg];
+                    let pid = self.current_pid;
+                    self.regs[0] = self.vfs.fcopy(&self.ram, src_addr, dst_addr, pid);
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;
@@ -3037,8 +3067,8 @@ impl Vm {
             }
         }
 
-        // Draw border line under title bar
-        let border_y = y0 + bar_h;
+        // Draw border line at bottom of title bar (inside title bar area, not content area)
+        let border_y = y0 + bar_h - 1;
         if border_y >= 0 {
             for dx in 0..w {
                 let px = x0 + dx;
@@ -4291,3 +4321,6 @@ mod tests;
 
 #[cfg(test)]
 mod tests_bgvm;
+
+#[cfg(test)]
+mod test_phase124;

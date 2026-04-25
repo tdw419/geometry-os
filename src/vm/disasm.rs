@@ -875,6 +875,10 @@ impl Vm {
 
             // VM_LIVE_KILL (0xB6) -- Kill the live RISC-V hypervisor
             0xB6 => ("VM_LIVE_KILL".into(), 1),
+            // UNLINK (0xB7) -- delete file from VFS
+            0xB7 => ("UNLINK".into(), 2),
+            // FCOPY (0xB8) -- copy file within VFS
+            0xB8 => ("FCOPY".into(), 3),
 
             _ => (format!("??? (0x{:02X})", op), 1),
         }
