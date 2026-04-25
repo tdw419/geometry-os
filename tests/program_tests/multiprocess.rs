@@ -806,3 +806,223 @@ fn test_peek_bounce_bounces_off_walls() {
         ball_y
     );
 }
+
+// === Phase 117: Composite rendering -- terrain below windows ===
+
+#[test]
+fn test_screen_space_window_renders_on_top_of_terrain() {
+    // Simulate the world_desktop rendering pipeline:
+    // 1. Terrain is drawn to the VM screen buffer
+    // 2. A screen-space WINSYS window is created with colored content
+    // 3. blit_windows() is called (happens at FRAME time)
+    // 4. The window pixels should appear on top of the terrain
+
+    let mut vm = Vm::new();
+
+    // 1. Draw terrain to screen: fill screen with a known "terrain" color
+    let terrain_color = 0x228811; // green
+    for pixel in vm.screen.iter_mut() {
+        *pixel = terrain_color;
+    }
+
+    // 2. Create a screen-space WINSYS window at (10, 10), size 32x32
+    let source = "
+    LDI r7, 1
+    LDI r1, 10
+    LDI r2, 10
+    LDI r3, 32
+    LDI r4, 32
+    LDI r5, 0x2000
+    LDI r6, 0
+    WINSYS r6
+    MOV r10, r0
+
+    ; Write red pixels to the window offscreen buffer
+    LDI r3, 0xFF0000
+    LDI r4, 0
+fill_y:
+    LDI r6, 0
+fill_x:
+    WPIXEL r10, r6, r4, r3
+    ADD r6, r7
+    LDI r25, 32
+    CMP r6, r25
+    BLT r0, fill_x
+    ADD r4, r7
+    LDI r25, 32
+    CMP r4, r25
+    BLT r0, fill_y
+
+    FRAME
+    HALT
+    ";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+
+    // Run until halt
+    for _ in 0..100_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // 3. Verify: window pixels should be on top of terrain
+    // The window is at (10, 10) with size 32x32.
+    // The title bar takes WINDOW_TITLE_BAR_H pixels at the top.
+    // So content starts at y=10+bar_h.
+    let bar_h = geometry_os::vm::types::WINDOW_TITLE_BAR_H as usize;
+    let content_y = 10 + bar_h;
+
+    // Check a pixel inside the window content area
+    let check_x = 20; // within window x range [10, 42)
+    let check_y = content_y + 5; // within window y range, below title bar
+    let idx = check_y * 256 + check_x;
+
+    // The blit_windows() should have composited the window on top of terrain.
+    // The window content is red (0xFF0000), terrain is green (0x228811).
+    // Note: blit_windows() skips transparent (0) pixels, but our window has red.
+    assert_ne!(
+        vm.screen[idx], terrain_color,
+        "Window pixel at ({}, {}) should NOT be terrain color -- window should render on top",
+        check_x, check_y
+    );
+
+    // Check that a pixel OUTSIDE the window is still terrain
+    let outside_x = 5;
+    let outside_y = 5;
+    let outside_idx = outside_y * 256 + outside_x;
+    assert_eq!(
+        vm.screen[outside_idx], terrain_color,
+        "Pixel at ({}, {}) outside window should still be terrain",
+        outside_x, outside_y
+    );
+}
+
+#[test]
+fn test_world_space_window_creation_with_world_coords() {
+    // Verify that when RAM[0x7810]=1, WINSYS op=0 creates a world-space window
+    // with world_x/world_y set instead of screen x/y.
+
+    let source = "
+    ; Enable world-space mode
+    LDI r17, 0x7810
+    LDI r18, 1
+    STORE r17, r18
+
+    ; Create window with world coords (50, 60)
+    LDI r1, 50
+    LDI r2, 60
+    LDI r3, 64
+    LDI r4, 48
+    LDI r5, 0x2000
+    LDI r6, 0
+    WINSYS r6
+    HALT
+    ";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Verify a window was created
+    assert_eq!(vm.windows.len(), 1, "One window should be created");
+    let win = &vm.windows[0];
+
+    // Verify it's a world-space window
+    assert!(win.is_world_space(), "Window should be in world-space mode");
+
+    // Verify world coordinates
+    assert_eq!(win.world_x, 50, "world_x should be 50");
+    assert_eq!(win.world_y, 60, "world_y should be 60");
+
+    // Verify dimensions
+    assert_eq!(win.w, 64, "Window width should be 64");
+    assert_eq!(win.h, 48, "Window height should be 48");
+}
+
+#[test]
+fn test_screen_space_window_below_title_bar_not_terrain() {
+    // After blit_windows(), verify the title bar area is drawn with its
+    // background color (not terrain), and window content appears below it.
+
+    let mut vm = Vm::new();
+
+    // Fill screen with terrain blue
+    let terrain_color = 0x000044;
+    for pixel in vm.screen.iter_mut() {
+        *pixel = terrain_color;
+    }
+
+    let source = "
+    LDI r7, 1
+    ; Create window at (50, 50), size 40x40
+    LDI r1, 50
+    LDI r2, 50
+    LDI r3, 40
+    LDI r4, 40
+    LDI r5, 0x2000
+    LDI r6, 0
+    WINSYS r6
+    MOV r10, r0        ; save window id to r10
+
+    ; Write bright green to entire window
+    LDI r3, 0x00FF00
+    LDI r4, 0
+fill2_y:
+    LDI r6, 0
+fill2_x:
+    WPIXEL r10, r6, r4, r3
+    ADD r6, r7
+    LDI r25, 40
+    CMP r6, r25
+    BLT r0, fill2_x
+    ADD r4, r7
+    LDI r25, 40
+    CMP r4, r25
+    BLT r0, fill2_y
+
+    FRAME
+    HALT
+    ";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+
+    for _ in 0..200_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    let bar_h = geometry_os::vm::types::WINDOW_TITLE_BAR_H as usize;
+
+    // Title bar area at (60, 50) should be title bar color, not terrain
+    let title_x = 60;
+    let title_y = 50; // within title bar
+    let title_idx = title_y * 256 + title_x;
+    assert_ne!(
+        vm.screen[title_idx], terrain_color,
+        "Title bar at ({}, {}) should not be terrain -- title bar renders on top",
+        title_x, title_y
+    );
+
+    // Window content area at (60, 50+bar_h+5) should be window content, not terrain
+    let content_x = 55;
+    let content_y = 50 + bar_h + 5;
+    let content_idx = content_y * 256 + content_x;
+    assert_ne!(
+        vm.screen[content_idx], terrain_color,
+        "Window content at ({}, {}) should not be terrain -- window renders on top of terrain",
+        content_x, content_y
+    );
+}

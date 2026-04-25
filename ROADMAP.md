@@ -2681,7 +2681,7 @@ Transform the map from a launcher into an infinite spatial desktop where app win
   - [x] world_to_screen handles zoom (8px, 4px, 2px, 1px per tile)
   _~100 LOC_
 - [x] **Composite rendering -- windows on map** -- Modify the rendering loop in main.rs: after world_desktop renders terrain, iterate WINSYS windows with world coords, convert to screen space via viewport, and blit their offscreen buffers onto the framebuffer. Windows that are offscreen are culled. This is the visual integration -- windows become part of the map surface.
-  - [ ] world_desktop.asm renders terrain below windows, windows render on top
+  - [x] world_desktop.asm renders terrain below windows, windows render on top
   - [ ] Windows pan with the map as camera moves
   - [ ] Windows outside viewport are skipped (no rendering cost)
   - [ ] Z-order works correctly (terrain < windows < taskbar)
