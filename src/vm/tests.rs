@@ -19663,3 +19663,81 @@ fn test_fcopy_disasm() {
     assert!(mnem.contains("FCOPY"), "got: {}", mnem);
     assert_eq!(len, 3);
 }
+
+#[test]
+fn test_vision_screenshot_annotations() {
+    // Verify that vision_screenshot MCP tool uses the annotated screenshot
+    // and includes window bounding boxes with labels.
+    // Tests: (1) vision.rs overlay drawing, (2) socket command, (3) MCP handler.
+    use crate::vision::WindowOverlay;
+
+    // --- Part 1: Verify overlay drawing produces different output ---
+    let screen = vec![0u32; 256 * 256];
+    let windows = vec![
+        WindowOverlay {
+            id: 1,
+            x: 20,
+            y: 20,
+            w: 60,
+            h: 40,
+            title: "Shell".to_string(),
+            focused: false,
+        },
+        WindowOverlay {
+            id: 2,
+            x: 100,
+            y: 80,
+            w: 80,
+            h: 60,
+            title: "Editor".to_string(),
+            focused: true,
+        },
+    ];
+    let annotated = crate::vision::encode_png_annotated(&screen, &windows);
+    let plain = crate::vision::encode_png(&screen);
+    assert_ne!(
+        annotated, plain,
+        "annotated screenshot should differ from plain (has window borders)"
+    );
+    // Must be valid PNG
+    assert!(
+        annotated.starts_with(&[137, 80, 78, 71, 13, 10, 26, 10]),
+        "must be valid PNG"
+    );
+
+    // --- Part 2: Verify socket command exists in main.rs ---
+    let main_src = std::fs::read_to_string("src/main.rs").unwrap();
+    assert!(
+        main_src.contains("\"screenshot_annotated_b64\" =>"),
+        "screenshot_annotated_b64 socket command must exist"
+    );
+    // Must use encode_png_annotated_base64
+    assert!(
+        main_src.contains("encode_png_annotated_base64"),
+        "must call encode_png_annotated_base64"
+    );
+    // Must gather window overlays from active windows
+    assert!(
+        main_src.contains("WindowOverlay"),
+        "must construct WindowOverlay structs"
+    );
+
+    // --- Part 3: Verify MCP vision_screenshot uses annotated version ---
+    let mcp_src = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+    let vs_start = mcp_src
+        .find("\"vision_screenshot\" =>")
+        .expect("vision_screenshot handler must exist");
+    let vs_section = &mcp_src[vs_start..vs_start + 500];
+    assert!(
+        vs_section.contains("screenshot_annotated_b64"),
+        "vision_screenshot MCP must use screenshot_annotated_b64"
+    );
+    assert!(
+        vs_section.contains("window_list"),
+        "vision_screenshot MCP must include window_list data"
+    );
+    assert!(
+        vs_section.contains("windows"),
+        "vision_screenshot response must include windows field"
+    );
+}

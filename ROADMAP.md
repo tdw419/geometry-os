@@ -2645,7 +2645,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
   _~80 LOC_
 - [x] **Desktop-aware vision MCP tool** -- desktop_vision MCP tool returns structured JSON: which windows are open, what PID owns them, which has focus (highest z_order), and ASCII art of the desktop with window boundaries drawn as box-drawing characters. The AI's eyes -- no vision model needed for basic awareness.
   - [x] desktop_vision returns JSON with windows array, focused_window, ascii_desktop (ASCII art with window boundaries overlaid)
-  - [ ] vision_screenshot includes window bounding boxes with labels
+  - [x] vision_screenshot includes window bounding boxes with labels
   _~200 LOC_
 - [x] **AI demo tour prompt** -- demo_tour.md: A guided walkthrough script for AI agents. Walk the map, enter buildings, launch shell/notepad/calculator/paint/tetris, demonstrate window management, boot a RISC-V guest, narrate each step. Proves the full MCP bridge works end-to-end.
   _~150 LOC_
@@ -2659,7 +2659,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
   - [x] test_desktop_key_mcp verifies MCP tool translation
   - [x] test_desktop_mouse_mcp verifies MCP tool translation
   - [x] test_desktop_vision_mcp verifies JSON structure
-  - [ ] test_vision_screenshot_annotations verifies window labels
+  - [x] test_vision_screenshot_annotations verifies window labels
   _~200 LOC_
 
 ## [x] phase-107: Infinite Spatial Desktop (COMPLETE)
