@@ -1074,6 +1074,7 @@ fn main() {
         }
 
         // ── VM execution ─────────────────────────────────────────
+        let has_active_apps = !active_apps.is_empty();
         if is_running && !vm.halted {
             // Phase 45: Sync canvas buffer TO VM before execution
             vm.canvas_buffer.copy_from_slice(&canvas_buffer);
@@ -1082,7 +1083,10 @@ fn main() {
             vm.frame_ready = false;
             for _ in 0..1_000_000 {
                 if !vm.step() {
-                    is_running = false;
+                    // Main process halted -- but keep running if windowed apps exist
+                    if !has_active_apps {
+                        is_running = false;
+                    }
                     break;
                 }
                 // Step all spawned child processes in lock-step with the primary
@@ -1101,6 +1105,16 @@ fn main() {
 
             // Phase 45: Sync canvas buffer FROM VM after execution
             canvas_buffer.copy_from_slice(&vm.canvas_buffer);
+        } else if vm.halted && has_active_apps {
+            // Main process halted but windowed apps are still running.
+            // Keep scheduling child processes so apps stay alive.
+            vm.frame_ready = false;
+            for _ in 0..1_000_000 {
+                vm.step_all_processes();
+                if vm.frame_ready {
+                    break;
+                }
+            }
         }
 
         // ── Audio dispatch ───────────────────────────────────────

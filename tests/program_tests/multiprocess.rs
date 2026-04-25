@@ -1026,3 +1026,188 @@ fill2_x:
         content_x, content_y
     );
 }
+
+
+
+fn make_child_process(pid: u32, pc: u32) -> geometry_os::vm::SpawnedProcess {
+    geometry_os::vm::SpawnedProcess {
+            pc: pc,
+            regs: [0; 32],
+            state: geometry_os::vm::ProcessState::Ready,
+            pid: pid,
+            mode: geometry_os::vm::CpuMode::Kernel,
+            page_dir: None,
+            segfaulted: false,
+            priority: 1,
+            slice_remaining: 0,
+            sleep_until: 0,
+            yielded: false,
+            kernel_stack: Vec::new(),
+            msg_queue: Vec::new(),
+            exit_code: 0,
+            parent_pid: 0,
+            pending_signals: Vec::new(),
+            signal_handlers: [0; 4],
+            vmas: Vec::new(),
+            brk_pos: 0,
+            custom_font: None,
+            capabilities: None,
+        }
+}
+
+#[test]
+fn test_child_halt_does_not_stop_parent() {
+    // When a child process (windowed app) halts, the main process (map)
+    // must keep running. This is the core invariant for windowed apps.
+    let mut vm = Vm::new();
+
+    // Main code at 0x000: FRAME, JMP 0 (infinite loop simulating map)
+    vm.ram[0x000] = 0x02; // FRAME
+    vm.ram[0x001] = 0x30; // JMP
+    vm.ram[0x002] = 0x000; // addr -> main_loop
+
+    // Child at 0x200: LDI r0, 42; HALT
+    vm.ram[0x200] = 0x10; // LDI
+    vm.ram[0x201] = 0;    // r0
+    vm.ram[0x202] = 42;   // imm
+    vm.ram[0x203] = 0x00; // HALT
+
+    vm.processes.push(make_child_process(1, 0x200));
+
+    // Simulate main.rs execution loop
+    for _ in 0..10_000 {
+        if !vm.step() { break; }
+        vm.step_all_processes();
+        if vm.frame_ready { vm.frame_ready = false; }
+    }
+
+    // KEY: main process should NOT be halted
+    assert!(!vm.halted, "main process (map) should still be running after child halts");
+    // Child should be halted
+    assert!(vm.processes[0].is_halted(), "child process (app) should have halted");
+    // Child should have executed its code
+    assert_eq!(vm.processes[0].regs[0], 42, "child should have set r0=42 before halting");
+}
+
+#[test]
+fn test_child_halt_does_not_affect_other_children() {
+    // When child 1 halts, child 2 should keep running.
+    // Simulates two windowed apps where closing one doesn't close the other.
+    let mut vm = Vm::new();
+
+    // Main: FRAME, JMP 0
+    vm.ram[0x000] = 0x02;
+    vm.ram[0x001] = 0x30;
+    vm.ram[0x002] = 0x000;
+
+    // Child 1 at 0x200: LDI r0, 111; HALT
+    vm.ram[0x200] = 0x10;
+    vm.ram[0x201] = 0;
+    vm.ram[0x202] = 111;
+    vm.ram[0x203] = 0x00;
+
+    // Child 2 at 0x300: LDI r0, 222; FRAME, JMP 0x303
+    vm.ram[0x300] = 0x10;
+    vm.ram[0x301] = 0;
+    vm.ram[0x302] = 222;
+    vm.ram[0x303] = 0x02; // FRAME
+    vm.ram[0x304] = 0x30; // JMP
+    vm.ram[0x305] = 0x303; // -> FRAME
+
+    vm.processes.push(make_child_process(1, 0x200));
+    vm.processes.push(make_child_process(2, 0x300));
+
+    // Create windows for both apps
+    let win1 = geometry_os::vm::types::Window::new_world(1, 10, 10, 64, 64, 0, 1);
+    let win2 = geometry_os::vm::types::Window::new_world(2, 100, 10, 64, 64, 0, 2);
+    vm.windows.push(win1);
+    vm.windows.push(win2);
+
+    // Run execution loop
+    for _ in 0..10_000 {
+        if !vm.step() { break; }
+        vm.step_all_processes();
+        if vm.frame_ready { vm.frame_ready = false; }
+    }
+
+    // Main should still be running
+    assert!(!vm.halted, "main process should still be running");
+
+    // App 1 should be halted
+    let app1 = vm.processes.iter().find(|p| p.pid == 1).unwrap();
+    assert!(app1.is_halted(), "app 1 should have halted");
+    assert_eq!(app1.regs[0], 111, "app 1 should have set r0=111");
+
+    // App 2 should NOT be halted
+    let app2 = vm.processes.iter().find(|p| p.pid == 2).unwrap();
+    assert!(!app2.is_halted(), "app 2 should still be running after app 1 halted");
+    assert_eq!(app2.regs[0], 222, "app 2 should have set r0=222");
+
+    // Simulate main.rs cleanup: destroy windows owned by halted process
+    vm.windows.retain(|w| w.pid != 1);
+
+    // Only app 2's window should remain
+    assert_eq!(vm.windows.len(), 1, "only app 2's window should remain");
+    assert_eq!(vm.windows[0].pid, 2, "remaining window should belong to app 2");
+}
+
+#[test]
+fn test_halted_app_window_cleanup() {
+    // Verify the cleanup pattern used in main.rs:
+    // detect halted processes, destroy their windows.
+    let mut vm = Vm::new();
+
+    // Create 3 processes, process 2 is halted (simulating closed app)
+    for pid in 1..=3u32 {
+        let halted = pid == 2;
+        vm.processes.push(geometry_os::vm::SpawnedProcess {
+            pc: 0,
+            regs: [0; 32],
+            state: if halted {
+                geometry_os::vm::ProcessState::Zombie
+            } else {
+                geometry_os::vm::ProcessState::Ready
+            },
+            pid,
+            mode: geometry_os::vm::CpuMode::Kernel,
+            page_dir: None,
+            segfaulted: false,
+            priority: 1,
+            slice_remaining: 0,
+            sleep_until: 0,
+            yielded: false,
+            kernel_stack: Vec::new(),
+            msg_queue: Vec::new(),
+            exit_code: 0,
+            parent_pid: 0,
+            pending_signals: Vec::new(),
+            signal_handlers: [0; 4],
+            vmas: Vec::new(),
+            brk_pos: 0,
+            custom_font: None,
+            capabilities: None,
+        });
+    }
+
+    // Windows for processes 1 and 2
+    vm.windows.push(geometry_os::vm::types::Window::new_world(1, 0, 0, 64, 64, 0, 1));
+    vm.windows.push(geometry_os::vm::types::Window::new_world(2, 100, 0, 64, 64, 0, 2));
+
+    assert_eq!(vm.windows.len(), 2);
+
+    // Find halted processes and remove their windows
+    let halted_pids: Vec<u32> = vm.processes.iter()
+        .filter(|p| p.is_halted())
+        .map(|p| p.pid)
+        .collect();
+    assert_eq!(halted_pids, vec![2], "only process 2 should be halted");
+
+    for &pid in &halted_pids {
+        vm.windows.retain(|w| w.pid != pid);
+    }
+
+    // Only process 1's window should remain
+    assert_eq!(vm.windows.len(), 1);
+    assert_eq!(vm.windows[0].pid, 1, "only process 1's window should survive");
+}
+
