@@ -2705,7 +2705,7 @@ Transform the map from a launcher into an infinite spatial desktop where app win
   - [x] test_multi_process_launch verifies two apps run simultaneously
   - [x] test_window_drag verifies world_x/world_y update on mouse drag
   - [x] test_offscreen_culling verifies windows outside viewport are skipped
-  - [ ] test_mouse_routing verifies MOUSEQ events reach correct window
+  - [x] test_mouse_routing verifies MOUSEQ events reach correct window
   _~250 LOC_
 
 ## [x] phase-108: Sandboxed AI Execution (COMPLETE)
