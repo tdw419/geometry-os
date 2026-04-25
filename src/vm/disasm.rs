@@ -858,6 +858,34 @@ impl Vm {
                 4,
             ),
 
+            // PTYOPEN cmd_addr_reg, handle_reg (0xA9) -- spawn host shell in pty
+            0xA9 => (
+                format!("PTYOPEN {}, {}", reg(ram(a + 1)), reg(ram(a + 2))),
+                3,
+            ),
+            // PTYWRITE handle_reg, buf_reg, len_reg (0xAA) -- write bytes to pty
+            0xAA => (
+                format!(
+                    "PTYWRITE {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3))
+                ),
+                4,
+            ),
+            // PTYREAD handle_reg, buf_reg, max_len_reg (0xAB) -- drain pty output
+            0xAB => (
+                format!(
+                    "PTYREAD {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3))
+                ),
+                4,
+            ),
+            // PTYCLOSE handle_reg (0xAC) -- close pty slot
+            0xAC => (format!("PTYCLOSE {}", reg(ram(a + 1))), 2),
+
             // ── Phase 88: AI Vision Bridge ──
 
             // AI_AGENT op_reg (0xB0) -- AI vision operations

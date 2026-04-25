@@ -9,6 +9,7 @@ default-run = "geometry_os"
 libc = "0.2"
 serde_json = "1"
 png = "0.18.1"
+portable-pty = "0.9"
 
 # GUI binary deps (only needed for native build)
 minifb = { version = "0.27", optional = true }

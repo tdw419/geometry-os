@@ -148,6 +148,9 @@ pub struct Vm {
     /// Active TCP connections (Phase 41: Networking).
     /// Up to 8 simultaneous connections, indexed by fd.
     pub tcp_connections: Vec<Option<std::net::TcpStream>>,
+    /// Persistent PTY slots for PTYOPEN/PTYWRITE/PTYREAD/PTYCLOSE.
+    /// Each slot owns a child process and a background reader thread.
+    pub pty_slots: Vec<Option<ops_pty::PtySlot>>,
     /// Network inbox: received pixel frames waiting to be consumed by NET_RECV.
     /// Each entry is a Vec<u32> containing a pixel protocol frame.
     pub net_inbox: Vec<Vec<u32>>,
@@ -290,6 +293,7 @@ impl Vm {
             mouse_y: 0,
             mouse_button: 0,
             tcp_connections: (0..MAX_TCP_CONNECTIONS).map(|_| None).collect(),
+            pty_slots: (0..ops_pty::MAX_PTY_SLOTS).map(|_| None).collect(),
             net_inbox: Vec::new(),
             windows: Vec::with_capacity(MAX_WINDOWS),
             next_window_id: 1,
@@ -507,6 +511,7 @@ pub use trace::*;
 mod ops_extended;
 mod ops_graphics;
 mod ops_memory;
+mod ops_pty;
 mod ops_syscall;
 
 mod formula;
@@ -2039,6 +2044,15 @@ impl Vm {
                     self.regs[0] = 0; // error: invalid registers
                 }
             }
+
+            // PTYOPEN cmd_addr_reg, handle_reg  (0xA9)
+            0xA9 => self.op_ptyopen(),
+            // PTYWRITE handle_reg, buf_reg, len_reg  (0xAA)
+            0xAA => self.op_ptywrite(),
+            // PTYREAD handle_reg, buf_reg, max_len_reg  (0xAB)
+            0xAB => self.op_ptyread(),
+            // PTYCLOSE handle_reg  (0xAC)
+            0xAC => self.op_ptyclose(),
 
             // HITCLR  (0x9E) -- clear all hit-test regions
             0x9E => {
@@ -4570,6 +4584,7 @@ mod boot;
 mod disasm;
 mod net;
 pub(crate) use net::MAX_TCP_CONNECTIONS;
+pub(crate) use ops_pty::MAX_PTY_SLOTS;
 mod scheduler;
 
 #[cfg(test)]

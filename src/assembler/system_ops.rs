@@ -818,6 +818,62 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "PTYOPEN" => {
+            // PTYOPEN cmd_addr_reg, handle_reg (0xA9)
+            // Spawn a host shell (or the command at cmd_addr) inside a pty.
+            // Slot index written to handle_reg; r0 = PTY_OK or error code.
+            if tokens.len() != 3 {
+                return Err(
+                    "PTYOPEN requires 2 arguments: PTYOPEN cmd_addr_reg, handle_reg".to_string(),
+                );
+            }
+            bytecode.push(0xA9);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
+        "PTYWRITE" => {
+            // PTYWRITE handle_reg, buf_reg, len_reg (0xAA)
+            if tokens.len() != 4 {
+                return Err(
+                    "PTYWRITE requires 3 arguments: PTYWRITE handle_reg, buf_reg, len_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0xAA);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
+        "PTYREAD" => {
+            // PTYREAD handle_reg, buf_reg, max_len_reg (0xAB)
+            // Drains pending bytes; r0 = bytes drained or 0xFFFFFFFF on close.
+            if tokens.len() != 4 {
+                return Err(
+                    "PTYREAD requires 3 arguments: PTYREAD handle_reg, buf_reg, max_len_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0xAB);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
+        "PTYCLOSE" => {
+            // PTYCLOSE handle_reg (0xAC)
+            if tokens.len() != 2 {
+                return Err("PTYCLOSE requires 1 argument: PTYCLOSE handle_reg".to_string());
+            }
+            bytecode.push(0xAC);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+
         "UNLINK" => {
             if tokens.len() < 2 {
                 return Err("UNLINK requires 1 argument: UNLINK name_reg".to_string());

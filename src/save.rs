@@ -185,6 +185,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         snapshots: Vec::new(),
         pixel_write_log: vm::PixelWriteLog::new(vm::DEFAULT_PIXEL_WRITE_CAPACITY),
         tcp_connections: (0..vm::MAX_TCP_CONNECTIONS).map(|_| None).collect(),
+        pty_slots: (0..vm::MAX_PTY_SLOTS).map(|_| None).collect(),
         net_inbox: Vec::new(),
         hit_regions: Vec::with_capacity(vm::MAX_HIT_REGIONS),
         mouse_x: 0,

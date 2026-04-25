@@ -168,6 +168,11 @@ pub const OPCODES: &[&str] = &[
     "LOADSRCIMG",
     // Assemble source from RAM address (for AI Terminal /run)
     "ASM_RAM",
+    // Persistent host PTY (for replacing the ubuntu terminal with geos)
+    "PTYOPEN",
+    "PTYWRITE",
+    "PTYREAD",
+    "PTYCLOSE",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",
