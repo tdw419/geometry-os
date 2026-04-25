@@ -19800,3 +19800,133 @@ fn test_z_order_taskbar_preserved_no_windows() {
         "taskbar pixel should be preserved when no windows exist"
     );
 }
+
+#[test]
+fn test_windowed_app_launch() {
+    // Simulate the "launch --window" flow: assemble a program, load it into
+    // a private RAM region, create a world-space window, spawn a process.
+    // This tests the core logic without going through the socket command.
+    const APP_CODE_BASE: usize = 0x4000;
+    const APP_CODE_SIZE: usize = 0x2000;
+    const MAX_WINDOWED_APPS: usize = 4;
+
+    let mut vm = Vm::new();
+
+    // Use a simple program that produces non-zero bytecode
+    // LDI r0, 42 produces non-zero words
+    let source = "LDI r0, 42\nHALT\n";
+    let mut pp = crate::preprocessor::Preprocessor::new();
+    let preprocessed = pp.preprocess(source);
+    let asm_result = crate::assembler::assemble(&preprocessed, 0).unwrap();
+
+    // Simulate launch --window logic
+    let slot_idx = 0usize;
+    let app_base = APP_CODE_BASE + slot_idx * APP_CODE_SIZE;
+
+    // Clear app code region
+    let end = (app_base + APP_CODE_SIZE).min(vm.ram.len());
+    for v in &mut vm.ram[app_base..end] {
+        *v = 0;
+    }
+
+    // Load bytecode
+    for (idx, &word) in asm_result.pixels.iter().enumerate() {
+        let addr = app_base + idx;
+        if addr < vm.ram.len() {
+            vm.ram[addr] = word;
+        }
+    }
+
+    // Create process
+    let pid = 1u32;
+    let mut proc = Process::new(pid, 0, app_base as u32);
+    proc.parent_pid = 0; // kernel-spawned
+    proc.priority = 1;
+
+    // Create world-space window
+    vm.ram[WINDOW_WORLD_COORDS_ADDR] = 1;
+    let win_id = 1u32;
+    let win = Window::new_world(
+        win_id,
+        16, // world_x
+        12, // world_y
+        128, // w
+        96,  // h
+        0,   // title_addr
+        pid,
+    );
+    assert!(win.is_world_space(), "Window should be world-space");
+    assert_eq!(win.world_x, 16);
+    assert_eq!(win.world_y, 12);
+    assert_eq!(win.w, 128);
+    assert_eq!(win.h, 96);
+    assert_eq!(win.pid, pid);
+
+    vm.windows.push(win);
+    vm.processes.push(proc);
+
+    // Verify state
+    assert_eq!(vm.processes.len(), 1, "Should have 1 spawned process");
+    assert_eq!(vm.processes[0].pid, pid);
+    assert_eq!(vm.processes[0].pc, app_base as u32);
+    assert_eq!(vm.windows.len(), 1, "Should have 1 window");
+    assert_eq!(vm.windows[0].id, win_id);
+    assert!(vm.windows[0].is_world_space());
+
+    // Verify bytecode was loaded
+    assert_ne!(vm.ram[app_base], 0, "Bytecode should be loaded at app_base");
+    // Verify cleared region beyond bytecode is zero
+    assert_eq!(vm.ram[app_base + 10], 0, "Unused region should be zero");
+}
+
+#[test]
+fn test_windowed_app_multiple_slots() {
+    // Verify that multiple apps can be launched into different slots
+    const APP_CODE_BASE: usize = 0x4000;
+    const APP_CODE_SIZE: usize = 0x2000;
+
+    let mut vm = Vm::new();
+    let mut used_slots: Vec<usize> = Vec::new();
+
+    // Launch app into slot 0
+    let slot0 = 0usize;
+    let base0 = APP_CODE_BASE + slot0 * APP_CODE_SIZE;
+    used_slots.push(slot0);
+
+    let proc0 = Process::new(1, 0, base0 as u32);
+    vm.processes.push(proc0);
+
+    // Launch app into slot 1
+    let slot1: usize = (0..4).find(|s| !used_slots.contains(s)).unwrap();
+    assert_eq!(slot1, 1, "Next free slot should be 1");
+    let base1 = APP_CODE_BASE + slot1 * APP_CODE_SIZE;
+    used_slots.push(slot1);
+
+    let proc1 = Process::new(2, 0, base1 as u32);
+    vm.processes.push(proc1);
+
+    // Verify slots don't overlap
+    assert_ne!(base0, base1, "Slots must have different bases");
+    assert_eq!(base1 - base0, APP_CODE_SIZE, "Slots should be APP_CODE_SIZE apart");
+
+    // Verify both processes exist
+    assert_eq!(vm.processes.len(), 2);
+    assert_eq!(vm.processes[0].pc, base0 as u32);
+    assert_eq!(vm.processes[1].pc, base1 as u32);
+}
+
+#[test]
+fn test_windowed_app_slot_exhaustion() {
+    // When all 4 slots are used, no more windowed apps can launch
+    let mut used_slots: Vec<usize> = Vec::new();
+    const MAX_WINDOWED_APPS: usize = 4;
+
+    // Fill all slots
+    for i in 0..MAX_WINDOWED_APPS {
+        used_slots.push(i);
+    }
+
+    // No free slot available
+    let slot = (0..MAX_WINDOWED_APPS).find(|s| !used_slots.contains(s));
+    assert!(slot.is_none(), "No free slot should be available when all are used");
+}

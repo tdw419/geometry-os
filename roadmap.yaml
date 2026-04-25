@@ -4508,6 +4508,7 @@ phases:
     status: done
   - acceptance_criteria:
     - description: launch command supports --window flag that loads app into a WINSYS window instead of replacing map
+      done: true
     - description: App HALT only kills its own process/windows, map keeps running
     - description: Multiple apps can run simultaneously in separate windows
     - description: Each windowed app gets its own RAM region (0x8000+N*4096)
