@@ -2030,8 +2030,8 @@ impl Vm {
                             self.ram[dest] = byte as u32;
                         }
                     }
-                    // Null-terminate if space allows
-                    if response_addr + write_len < self.ram.len() {
+                    // Null-terminate if space allows and we actually wrote data
+                    if write_len > 0 && response_addr + write_len < self.ram.len() {
                         self.ram[response_addr + write_len] = 0;
                     }
                     self.regs[0] = write_len as u32;
