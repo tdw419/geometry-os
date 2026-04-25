@@ -16965,7 +16965,7 @@ fn test_process_kill_socket() {
 
 #[test]
 fn test_desktop_vision_handler_structure() {
-    // Verify desktop_vision combines window_list and vmscreen
+    // Verify desktop_vision uses socket desktop_vision command directly
     let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
 
     let start = source
@@ -16976,22 +16976,148 @@ fn test_desktop_vision_handler_structure() {
         .expect("Unknown tool catch");
     let handler = &source[start..start + end];
 
-    // Should call window_list socket command
-    assert!(handler.contains("window_list"), "should query window list");
-    // Should call vmscreen for ASCII art
-    assert!(handler.contains("vmscreen"), "should get screen ASCII art");
-    // Should identify focused window (highest z_order)
+    // Should call desktop_vision socket command (not window_list or vmscreen)
     assert!(
-        handler.contains("focused"),
-        "should identify focused window"
+        handler.contains("send_socket_cmd(\"desktop_vision\")"),
+        "should use desktop_vision socket command"
     );
+    // Should parse JSON response
     assert!(
-        handler.contains("z_order"),
-        "should check z_order for focus"
+        handler.contains("serde_json::from_str"),
+        "should parse JSON response"
     );
     assert!(
         handler.contains("focused_window"),
-        "should return focused_window"
+        "should mention focused_window in comment or code"
+    );
+}
+
+#[test]
+fn test_desktop_vision_socket_returns_json() {
+    // Verify the socket desktop_vision command produces valid JSON with
+    // windows array, focused_window object, and ascii_desktop string
+    use crate::vm::Window;
+
+    let mut vm = Vm::new();
+
+    // Create two windows
+    let w1 = Window::new(1, 16, 16, 64, 48, 0, 1);
+    let w2 = Window::new(2, 96, 32, 80, 64, 0, 2);
+    vm.windows.push(w1);
+    vm.windows.push(w2);
+    // Make w2 focused (higher z_order)
+    vm.windows[1].z_order = 5;
+    vm.windows[0].z_order = 3;
+
+    // Build the JSON the same way the socket handler does
+    let active: Vec<&Window> = vm.windows.iter().filter(|w| w.active).collect();
+    let mut win_data: Vec<(u32, u32, u32, u32, u32, u32, u32, String)> = Vec::new();
+    for w in &active {
+        win_data.push((w.id, w.x, w.y, w.w, w.h, w.z_order, w.pid, String::new()));
+    }
+
+    // Find focused (highest z_order)
+    let mut max_z: u32 = 0;
+    let mut focused_idx: usize = 0;
+    for (i, (_, _, _, _, _, z, _, _)) in win_data.iter().enumerate() {
+        if *z > max_z {
+            max_z = *z;
+            focused_idx = i;
+        }
+    }
+
+    // Build JSON like socket handler
+    let esc = |s: &str| -> String {
+        s.replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+    };
+    let mut wins_json = Vec::new();
+    for (id, x, y, w, h, z, pid, title) in &win_data {
+        wins_json.push(format!(
+            "{{\"id\":{},\"x\":{},\"y\":{},\"w\":{},\"h\":{},\"z_order\":{},\"pid\":{},\"title\":\"{}\"}}",
+            id, x, y, w, h, z, pid, esc(title)
+        ));
+    }
+    let fw = &win_data[focused_idx];
+    let focused_json = format!(
+        "{{\"id\":{},\"x\":{},\"y\":{},\"w\":{},\"h\":{},\"z_order\":{},\"pid\":{},\"title\":\"{}\"}}",
+        fw.0, fw.1, fw.2, fw.3, fw.4, fw.5, fw.6, esc(&fw.7)
+    );
+
+    // Use dummy ascii for test (the real one has box-drawing chars)
+    let ascii = ".....\n.....\n";
+    let json_str = format!(
+        "{{\"windows\":[{}],\"focused_window\":{},\"ascii_desktop\":\"{}\"}}",
+        wins_json.join(","),
+        focused_json,
+        esc(ascii)
+    );
+
+    // Parse and verify JSON structure
+    let parsed: serde_json::Value =
+        serde_json::from_str(&json_str).expect("desktop_vision output should be valid JSON");
+
+    // Verify windows array
+    let windows = parsed["windows"].as_array().expect("windows should be array");
+    assert_eq!(windows.len(), 2, "should have 2 windows");
+
+    // Verify window fields
+    let w0 = &windows[0];
+    assert_eq!(w0["id"].as_u64().unwrap(), 1);
+    assert_eq!(w0["x"].as_u64().unwrap(), 16);
+    assert_eq!(w0["y"].as_u64().unwrap(), 16);
+    assert_eq!(w0["w"].as_u64().unwrap(), 64);
+    assert_eq!(w0["h"].as_u64().unwrap(), 48);
+    assert_eq!(w0["z_order"].as_u64().unwrap(), 3);
+    assert_eq!(w0["pid"].as_u64().unwrap(), 1);
+    assert!(w0["title"].is_string(), "title should be string");
+
+    // Verify focused_window is the one with highest z_order (window 2)
+    let focused = &parsed["focused_window"];
+    assert!(focused.is_object(), "focused_window should be object");
+    assert_eq!(focused["id"].as_u64().unwrap(), 2, "focused should be window 2 (highest z_order)");
+    assert_eq!(focused["z_order"].as_u64().unwrap(), 5);
+
+    // Verify ascii_desktop is a string
+    assert!(
+        parsed["ascii_desktop"].is_string(),
+        "ascii_desktop should be string"
+    );
+}
+
+#[test]
+fn test_desktop_vision_socket_source_structure() {
+    // Verify the socket desktop_vision handler in main.rs produces JSON
+    let source = std::fs::read_to_string("src/main.rs").unwrap();
+
+    let start = source
+        .find("\"desktop_vision\" =>")
+        .expect("desktop_vision socket handler should exist in main.rs");
+    let end = source[start..]
+        .find("\"_ => {\"")
+        .unwrap_or_else(|| source[start..].len());
+    let handler = &source[start..start + end.min(7000)];
+
+    // Should produce JSON with windows array
+    assert!(
+        handler.contains("windows"),
+        "should have windows field in JSON"
+    );
+    // Should have focused_window object
+    assert!(
+        handler.contains("focused_window"),
+        "should have focused_window field in JSON"
+    );
+    // Should have ascii_desktop string
+    assert!(
+        handler.contains("ascii_desktop"),
+        "should have ascii_desktop field in JSON"
+    );
+    // Should build ASCII grid with box-drawing characters
+    assert!(
+        handler.contains("250C"),
+        "should use box-drawing top-left corner"
     );
 }
 

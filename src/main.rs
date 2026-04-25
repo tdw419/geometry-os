@@ -2507,14 +2507,41 @@ fn main() {
                                 // Return structured JSON: windows array, focused_window, ascii_desktop
                                 let active: Vec<&crate::vm::Window> =
                                     vm.windows.iter().filter(|w| w.active).collect();
-                                let mut max_z: u32 = 0;
-                                let mut focused_id: u32 = 0;
+
+                                // Read titles from RAM
+                                let mut win_data: Vec<(u32, u32, u32, u32, u32, u32, u32, String)> =
+                                    Vec::new();
                                 for w in &active {
-                                    if w.z_order > max_z {
-                                        max_z = w.z_order;
-                                        focused_id = w.id;
+                                    let mut title = String::new();
+                                    if w.title_addr > 0
+                                        && (w.title_addr as usize) < vm.ram.len()
+                                    {
+                                        for j in 0..32 {
+                                            let addr = w.title_addr as usize + j;
+                                            if addr >= vm.ram.len() {
+                                                break;
+                                            }
+                                            let ch = vm.ram[addr];
+                                            if ch == 0 || ch > 127 {
+                                                break;
+                                            }
+                                            title.push(ch as u8 as char);
+                                        }
+                                    }
+                                    win_data.push((w.id, w.x, w.y, w.w, w.h, w.z_order, w.pid, title));
+                                }
+
+                                // Find focused window (highest z_order)
+                                let mut max_z: u32 = 0;
+                                let mut focused_idx: usize = 0;
+                                for (i, (_, _, _, _, _, z, _, _)) in win_data.iter().enumerate() {
+                                    if *z > max_z {
+                                        max_z = *z;
+                                        focused_idx = i;
                                     }
                                 }
+                                let fw = &win_data[focused_idx];
+
                                 // Build ASCII overlay (32x32 grid mapping 256x256 screen)
                                 // Each char represents an 8x8 pixel block
                                 let mut grid = [['.'; 32]; 32];
@@ -2525,19 +2552,18 @@ fn main() {
                                     let y1 = ((w.y + w.h).min(256) / 8) as usize;
                                     for gy in y0.min(32)..y1.min(32) {
                                         for gx in x0.min(32)..x1.min(32) {
-                                            // Draw borders and corners
                                             if gy == y0 && gx == x0 {
-                                                grid[gy][gx] = '\u{250C}'; // top-left corner
+                                                grid[gy][gx] = '\u{250C}';
                                             } else if gy == y0 && gx + 1 >= x1 {
-                                                grid[gy][gx] = '\u{2510}'; // top-right corner
+                                                grid[gy][gx] = '\u{2510}';
                                             } else if gy + 1 >= y1 && gx == x0 {
-                                                grid[gy][gx] = '\u{2514}'; // bottom-left corner
+                                                grid[gy][gx] = '\u{2514}';
                                             } else if gy + 1 >= y1 && gx + 1 >= x1 {
-                                                grid[gy][gx] = '\u{2518}'; // bottom-right corner
+                                                grid[gy][gx] = '\u{2518}';
                                             } else if gy == y0 || gy + 1 >= y1 {
-                                                grid[gy][gx] = '\u{2500}'; // horizontal
+                                                grid[gy][gx] = '\u{2500}';
                                             } else if gx == x0 || gx + 1 >= x1 {
-                                                grid[gy][gx] = '\u{2502}'; // vertical
+                                                grid[gy][gx] = '\u{2502}';
                                             } else {
                                                 let digit = (w.id % 10) as u8;
                                                 grid[gy][gx] = (b'0' + digit) as char;
@@ -2551,32 +2577,32 @@ fn main() {
                                     ascii.push_str(&line);
                                     ascii.push('\n');
                                 }
-                                // Build response
-                                response.push_str(&format!("focused={}\n", focused_id));
-                                response.push_str(&format!("count={}\n", active.len()));
-                                for w in &active {
-                                    // Read title from RAM
-                                    let mut title = String::new();
-                                    if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
-                                        for j in 0..32 {
-                                            let addr = w.title_addr as usize + j;
-                                            if addr >= vm.ram.len() {
-                                                break;
-                                            }
-                                            let ch = vm.ram[addr];
-                                            if ch == 0 || ch > 127 {
-                                                break;
-                                            }
-                                            title.push(ch as u8 as char);
-                                        }
-                                    }
-                                    response.push_str(&format!(
-                                        "win:{},{},{},{},{},{},{},{}\n",
-                                        w.id, w.x, w.y, w.w, w.h, w.z_order, w.pid, title
+
+                                // Escape title/ascii for JSON
+                                let esc = |s: &str| -> String {
+                                    s.replace('\\', "\\\\")
+                                        .replace('"', "\\\"")
+                                        .replace('\n', "\\n")
+                                };
+
+                                // Build JSON response
+                                let mut wins_json = Vec::new();
+                                for (id, x, y, w, h, z, pid, title) in &win_data {
+                                    wins_json.push(format!(
+                                        "{{\"id\":{},\"x\":{},\"y\":{},\"w\":{},\"h\":{},\"z_order\":{},\"pid\":{},\"title\":\"{}\"}}",
+                                        id, x, y, w, h, z, pid, esc(title)
                                     ));
                                 }
-                                response.push_str("ascii:\n");
-                                response.push_str(&ascii);
+                                let focused_json = format!(
+                                    "{{\"id\":{},\"x\":{},\"y\":{},\"w\":{},\"h\":{},\"z_order\":{},\"pid\":{},\"title\":\"{}\"}}",
+                                    fw.0, fw.1, fw.2, fw.3, fw.4, fw.5, fw.6, esc(&fw.7)
+                                );
+                                response.push_str(&format!(
+                                    "{{\"windows\":[{}],\"focused_window\":{},\"ascii_desktop\":\"{}\"}}\n",
+                                    wins_json.join(","),
+                                    focused_json,
+                                    esc(&ascii)
+                                ));
                             }
                             _ => {
                                 response.push_str(&format!("[unknown: {}]\n", line));

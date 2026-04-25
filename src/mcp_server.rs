@@ -1197,32 +1197,16 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
         }
 
         "desktop_vision" => {
-            let win_resp = send_socket_cmd("window_list")?;
-            // Socket now returns JSON array: [{"id":...,"title":...,"pid":...,...}, ...]
-            let win_trimmed = win_resp.trim();
-            let windows: Vec<serde_json::Value> = if win_trimmed.starts_with('[') {
-                serde_json::from_str(win_trimmed).unwrap_or_default()
+            // Socket desktop_vision now returns JSON directly:
+            // {"windows":[...], "focused_window":{...}, "ascii_desktop":"..."}
+            let resp = send_socket_cmd("desktop_vision")?;
+            let trimmed = resp.trim();
+            let parsed: serde_json::Value = if trimmed.starts_with('{') {
+                serde_json::from_str(trimmed).unwrap_or_else(|_| serde_json::json!({}))
             } else {
-                Vec::new()
+                serde_json::json!({})
             };
-            let mut focused_id: u32 = 0;
-            let mut max_z: u32 = 0;
-            for w in &windows {
-                let z = w["z_order"].as_u64().unwrap_or(0) as u32;
-                let id = w["id"].as_u64().unwrap_or(0) as u32;
-                if z > max_z {
-                    max_z = z;
-                    focused_id = id;
-                }
-            }
-
-            let screen = send_socket_cmd("vmscreen").unwrap_or_default();
-
-            Ok(serde_json::json!({
-                "windows": windows,
-                "focused_window_id": focused_id,
-                "ascii_desktop": screen,
-            }))
+            Ok(parsed)
         }
         _ => Err(format!("Unknown tool: {}", name)),
     }
