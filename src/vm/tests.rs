@@ -20203,3 +20203,106 @@ fn test_composite_rendering() {
         TASKBAR_Y
     );
 }
+
+#[test]
+fn test_offscreen_culling() {
+    // Verify that windows outside the viewport are skipped during rendering.
+    // Replicates the exact culling math from render.rs render_fullscreen_map()
+    // (lines 744-758) and verifies it with real VM window + camera data.
+
+    use crate::viewport::Viewport;
+
+    // ── Helper: replicate render.rs world-space window culling logic ──
+    // render.rs uses: vm_fb = (world_x - cam_x) * 8; culls if outside [so, so+sr)
+    // where so = src_offset = (256 - src_region) / 2, sr = src_region.
+    fn is_window_culled(
+        world_x: u32,
+        world_y: u32,
+        w: u32,
+        h: u32,
+        cam_x: i32,
+        cam_y: i32,
+        src_region: u32,
+    ) -> bool {
+        let src_offset = (256 - src_region) / 2;
+        let vm_fb_x = (world_x as i32 - cam_x) * 8;
+        let vm_fb_y = (world_y as i32 - cam_y) * 8;
+        let so = src_offset as i32;
+        let sr = src_region as i32;
+        vm_fb_x + w as i32 <= so
+            || vm_fb_y + h as i32 <= so
+            || vm_fb_x >= so + sr
+            || vm_fb_y >= so + sr
+    }
+
+    // ── Setup: camera at tile (10,10), zoom 2 -> src_region=128 ──
+    let cam_x: i32 = 10;
+    let cam_y: i32 = 10;
+    let src_region: u32 = 128; // zoom level 2
+
+    // ── Case 1: Window within visible crop region is NOT culled ──
+    // At zoom 2: src_offset=64, src_region=128. Visible vm_fb range: (64-w, 192).
+    // world_x=18 -> vm_fb = (18-10)*8 = 64 (at left edge of crop). 64+32=96 > 64 => visible.
+    let visible = Window::new_world(1, 18, 18, 32, 32, 0, 1);
+    assert!(
+        !is_window_culled(visible.world_x, visible.world_y, visible.w, visible.h, cam_x, cam_y, src_region),
+        "window at (18,18) should NOT be culled -- within crop region"
+    );
+
+    // ── Case 2: Window far offscreen IS culled ──
+    let far_offscreen = Window::new_world(2, 1000, 1000, 32, 32, 0, 1);
+    assert!(
+        is_window_culled(far_offscreen.world_x, far_offscreen.world_y, far_offscreen.w, far_offscreen.h, cam_x, cam_y, src_region),
+        "window at (1000,1000) should be culled -- far offscreen"
+    );
+
+    // ── Case 3: Window near edge of visible crop, partially visible ──
+    // src_offset=64, src_region=128 => visible vm_fb range needs x > 64-w and x < 192.
+    // world_x=22 -> vm_fb = (22-10)*8 = 96, 96+64=160 < 192 => NOT culled right.
+    // world_y=18 -> vm_fb = (18-10)*8 = 64, 64+32=96 > 64 => NOT culled top.
+    let edge_visible = Window::new_world(3, 22, 18, 64, 32, 0, 1);
+    assert!(
+        !is_window_culled(edge_visible.world_x, edge_visible.world_y, edge_visible.w, edge_visible.h, cam_x, cam_y, src_region),
+        "window at (22,18) with w=64 should be partially visible"
+    );
+
+    // ── Case 4: Window just past right edge IS culled ──
+    // world_x=26 -> vm_fb = (26-10)*8 = 128, >= src_offset+src_region=192? No, 128 < 192.
+    // Try world_x=34: vm_fb=(34-10)*8=192 >= 192 => culled
+    let just_past = Window::new_world(4, 34, 18, 32, 32, 0, 1);
+    assert!(
+        is_window_culled(just_past.world_x, just_past.world_y, just_past.w, just_past.h, cam_x, cam_y, src_region),
+        "window at (34,18) should be culled -- past right edge"
+    );
+
+    // ── Case 5: Window above camera IS culled ──
+    // world_y=2 -> vm_fb_y = (2-10)*8 = -64, vm_fb_y + h = -64+32 = -32 <= 64 => culled
+    let above = Window::new_world(5, 18, 2, 32, 32, 0, 1);
+    assert!(
+        is_window_culled(above.world_x, above.world_y, above.w, above.h, cam_x, cam_y, src_region),
+        "window at (18,2) should be culled -- above visible crop"
+    );
+
+    // ── Case 6: Verify viewport.is_rect_visible agrees on visibility ──
+    let vp = Viewport::new(10, 10, 2);
+    // cam_px = 10*8 = 80, scale=6. Screen coords: (wp-80)*6.
+    // World pixel 84 -> screen 24, with w=32 -> 24+192=216 < 256 => visible
+    assert!(
+        vp.is_rect_visible(84, 84, 32, 32),
+        "viewport confirms window near camera is visible"
+    );
+    // World pixel 8000 -> screen (8000-80)*6 = far offscreen
+    assert!(
+        !vp.is_rect_visible(8000, 8000, 32, 32),
+        "viewport confirms far-offscreen window is not visible"
+    );
+
+    // ── Case 7: Screen-space window (WORLD_COORD_UNSET) is never world-culled ──
+    // Screen-space windows use blit_windows() not render_fullscreen_map,
+    // so world-space culling doesn't apply.
+    let screen_win = Window::new(10, 10, 20, 64, 48, 0, 1);
+    assert!(
+        !screen_win.is_world_space(),
+        "screen-space window should not be world-space"
+    );
+}

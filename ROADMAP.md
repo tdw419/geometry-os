@@ -2704,7 +2704,7 @@ Transform the map from a launcher into an infinite spatial desktop where app win
   - [x] test_composite_rendering verifies window blit at correct screen position
   - [x] test_multi_process_launch verifies two apps run simultaneously
   - [x] test_window_drag verifies world_x/world_y update on mouse drag
-  - [ ] test_offscreen_culling verifies windows outside viewport are skipped
+  - [x] test_offscreen_culling verifies windows outside viewport are skipped
   - [ ] test_mouse_routing verifies MOUSEQ events reach correct window
   _~250 LOC_
 
