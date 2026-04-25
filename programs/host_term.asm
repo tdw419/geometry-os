@@ -1,37 +1,37 @@
-; host_term.asm -- Host Shell Terminal for Geometry OS (v3)
+; host_term.asm -- Host Shell Terminal for Geometry OS (v4)
 ;
 ; Spawns bash inside a real PTY via the PTYOPEN opcode. Pipes keystrokes
 ; through PTYWRITE, drains PTY output through PTYREAD each frame.
 ;
-; v3 improvements:
-;   - SMALLTEXT opcode (3x5 font) for 85 columns
+; v4 improvements:
+;   - MEDTEXT opcode (5x7 font) for 42 readable columns
 ;   - Arrow key support (ESC [ A/B/C/D sequences)
 ;   - Shift-aware lowercase text input
 ;   - ANSI escape stripping (CSI + OSC sequences)
 ;   - Backspace/Delete, Ctrl-C (0x03), Ctrl-D (0x04), Tab (0x09)
 ;
 ; RAM Layout:
-;   0x4000-0x49F5  Text buffer (85*30 = 2550 u32 cells, row-major)
-;   0x4A00         Cursor column
-;   0x4A01         Cursor row
-;   0x4A02         Blink counter
-;   0x4A03         PTY handle
-;   0x4A04         ANSI state (0=normal, 1=saw ESC, 2=in CSI, 3=in OSC)
+;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
+;   0x4E00         Cursor column
+;   0x4E01         Cursor row
+;   0x4E02         Blink counter
+;   0x4E03         PTY handle
+;   0x4E04         ANSI state (0=normal, 1=saw ESC, 2=in CSI, 3=in OSC)
 ;   0x5000         Empty cmd string (null -> default $SHELL)
 ;   0x5400         Send buffer (multi-byte for arrow key sequences)
 ;   0x5800-0x5FFF  Receive buffer (2048 cells)
-;   0x6000-0x60FF  Scratch buffer for SMALLTEXT rendering (128 chars)
+;   0x6000-0x60FF  Scratch buffer for MEDTEXT rendering (128 chars)
 ;
 ; Registers:
 ;   r0  CMP/result
 ;   r1  constant 1
 ;   r28 PTY handle (live copy)
 ;   r30 stack pointer
-
-#define COLS 85
-#define ROWS 40
+;
+#define COLS 42
+#define ROWS 30
 #define BUF 0x4000
-#define BUF_END 0x4D48
+#define BUF_END 0x44EC
 #define CUR_COL 0x4E00
 #define CUR_ROW 0x4E01
 #define BLINK 0x4E02
@@ -594,21 +594,21 @@ do_newline:
     BLT r0, dn_store
     CALL scroll_up
     LDI r20, CUR_ROW
-    LDI r6, 39
+    LDI r6, 29
 dn_store:
     STORE r20, r6
     POP r31
     RET
 
 ; =========================================
-; SCROLL_UP -- shift rows 1..39 up to 0..38, clear row 39
+; SCROLL_UP -- shift rows 1..29 up to 0..28, clear row 29
 ; =========================================
 scroll_up:
     PUSH r31
     LDI r1, 1
     LDI r10, 0
 scroll_loop:
-    CMPI r10, 39
+    CMPI r10, 29
     BGE r0, scroll_clear
 
     LDI r20, BUF
@@ -641,7 +641,7 @@ scroll_copy:
 
 scroll_clear:
     LDI r20, BUF
-    LDI r6, 39
+    LDI r6, 29
     LDI r11, COLS
     MUL r6, r11
     ADD r20, r6
@@ -675,9 +675,9 @@ wsb_done:
     RET
 
 ; =========================================
-; RENDER -- redraw text buffer using SMALLTEXT (3x5 font)
-; Terminal area starts at y=10, uses 6px per row (5px glyph + 1px spacing)
-; 40 rows * 6px = 240px. Total: 10 + 240 = 250px (fits in 256px)
+; RENDER -- redraw text buffer using MEDTEXT (5x7 font)
+; Terminal area starts at y=12, uses 8px per row (7px glyph + 1px spacing)
+; 30 rows * 8px = 240px. Total: 12 + 240 = 252px (fits in 256px)
 ; =========================================
 render:
     PUSH r31
@@ -685,18 +685,18 @@ render:
 
     ; Clear content area
     LDI r1, 0
-    LDI r2, 10
+    LDI r2, 12
     LDI r3, 256
-    LDI r4, 246
+    LDI r4, 244
     LDI r5, 0x0A0A0A
     RECTF r1, r2, r3, r4, r5
 
     LDI r1, 1
     LDI r10, 0        ; row counter
     LDI r11, BUF       ; buf pointer
-    LDI r12, 10        ; y position (start after title bar)
+    LDI r12, 12        ; y position (start after title bar)
 render_row:
-    ; Copy up to 85 chars to scratch buffer, null-terminate
+    ; Copy up to 42 chars to scratch buffer, null-terminate
     LDI r16, SCRATCH
     LDI r17, 0
 copy_col:
@@ -710,22 +710,23 @@ copy_col:
     LDI r0, 0
     STORE r16, r0      ; null-terminate
 
-    ; Render with SMALLTEXT: light gray text, dark bg (0=transparent bg)
+    ; Render with MEDTEXT: light gray text, dark bg (0=transparent bg)
     LDI r1, 0
     LDI r13, SCRATCH
     LDI r14, 0xBBBBBB  ; light gray terminal text
     LDI r15, 0         ; no background (already cleared)
-    SMALLTEXT r1, r12, r13, r14, r15
+    MEDTEXT r1, r12, r13, r14, r15
 
     LDI r1, 1
-    ADD r12, r1        ; y += 1... wait, tiny font is 5px tall + we want 1px spacing = 6px per row
-    ; Actually need to advance by 6 for the next row. Let me add 5 more.
+    ; Advance y by 8 (7px glyph + 1px spacing)
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
-    ; Now r12 advanced by 6 total
+    ADD r12, r1
+    ADD r12, r1
+    ; Now r12 advanced by 8 total
 
     ADD r10, r1
     CMPI r10, ROWS
@@ -740,19 +741,19 @@ copy_col:
     BGE r0, cursor_done
 
 draw_cursor:
-    ; Cursor: 2px wide, 5px tall at cursor position
+    ; Cursor: 2px wide, 7px tall at cursor position
     LDI r20, CUR_COL
     LOAD r0, r20
-    LDI r7, 3
-    MUL r0, r7          ; x = col * 3 (3px per char)
+    LDI r7, 6
+    MUL r0, r7          ; x = col * 6 (6px per char)
     LDI r20, CUR_ROW
     LOAD r2, r20
-    LDI r7, 6
-    MUL r2, r7          ; row * 6
-    LDI r3, 10
+    LDI r7, 8
+    MUL r2, r7          ; row * 8
+    LDI r3, 12
     ADD r2, r3          ; + title bar offset
     LDI r3, 2           ; width
-    LDI r4, 5           ; height
+    LDI r4, 7           ; height
     LDI r5, 0x44FF44
     RECTF r0, r2, r3, r4, r5
 

@@ -933,6 +933,19 @@ impl Vm {
                 6,
             ),
 
+            // MEDTEXT x, y, addr, fg, bg (0xD1) -- medium 5x7 font, 42 cols in 256px
+            0xD1 => (
+                format!(
+                    "MEDTEXT {}, {}, {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3)),
+                    reg(ram(a + 4)),
+                    reg(ram(a + 5))
+                ),
+                6,
+            ),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

@@ -1265,6 +1265,52 @@ impl Vm {
                 }
             }
 
+            // MEDTEXT x_reg, y_reg, addr_reg, fg_reg, bg_reg  (0xD1)
+            // 5x7 medium font for readable terminal text. 42 cols in 256px.
+            // Advance per char: 6px horizontal, 8px vertical (7px + 1 spacing).
+            0xD1 => {
+                let xr = self.fetch() as usize;
+                let yr = self.fetch() as usize;
+                let ar = self.fetch() as usize;
+                let fgr = self.fetch() as usize;
+                let bgr = self.fetch() as usize;
+                if xr < NUM_REGS
+                    && yr < NUM_REGS
+                    && ar < NUM_REGS
+                    && fgr < NUM_REGS
+                    && bgr < NUM_REGS
+                {
+                    let mut sx = self.regs[xr] as usize;
+                    let mut sy = self.regs[yr] as usize;
+                    let mut addr = self.regs[ar] as usize;
+                    let fg = self.regs[fgr];
+                    let bg_val = self.regs[bgr];
+                    let bg = if bg_val == 0 { None } else { Some(bg_val) };
+                    loop {
+                        if addr >= self.ram.len() {
+                            break;
+                        }
+                        let ch = (self.ram[addr] & 0xFF) as u8;
+                        if ch == 0 {
+                            break;
+                        }
+                        if ch == b'\n' {
+                            sx = self.regs[xr] as usize;
+                            sy += 8;
+                            addr += 1;
+                            continue;
+                        }
+                        self.draw_char_medium(ch, sx, sy, fg, bg);
+                        sx += 6;
+                        if sx > 250 {
+                            sx = self.regs[xr] as usize;
+                            sy += 8;
+                        }
+                        addr += 1;
+                    }
+                }
+            }
+
             // BITSET rd, bit_reg  (0x8D) -- rd |= 1 << bit_reg
             0x8D => {
                 let rd = self.fetch() as usize;

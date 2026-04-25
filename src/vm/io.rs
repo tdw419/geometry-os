@@ -135,6 +135,31 @@ impl Vm {
         }
     }
 
+    /// Draw a character using the medium 5x7 font (for MEDTEXT opcode).
+    /// Advance is 6 pixels (5 wide + 1 spacing), giving 42 columns in 256px.
+    pub(super) fn draw_char_medium(&mut self, ch: u8, x: usize, y: usize, fg: u32, bg: Option<u32>) {
+        const MED_FONT: [[u8; 7]; 96] = include!("../med_font.in");
+        let idx = ch as usize;
+        if !(32..=127).contains(&idx) {
+            return;
+        }
+        let glyph = &MED_FONT[idx - 32];
+        for (row, &glyph_row) in glyph.iter().enumerate().take(7usize) {
+            for col in 0..5usize {
+                let px = x + col;
+                let py = y + row;
+                if px < 256 && py < 256 {
+                    let on = glyph_row & (1 << (4 - col)) != 0;
+                    if on {
+                        self.screen[py * 256 + px] = fg;
+                    } else if let Some(bg_color) = bg {
+                        self.screen[py * 256 + px] = bg_color;
+                    }
+                }
+            }
+        }
+    }
+
     /// Draw a character using the tiny 3x5 font (for SMALLTEXT opcode).
     /// Advance is 3 pixels (no spacing), giving 85 columns in 256px.
     pub(super) fn draw_char_tiny(&mut self, ch: u8, x: usize, y: usize, fg: u32, bg: Option<u32>) {

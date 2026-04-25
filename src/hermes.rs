@@ -933,6 +933,8 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0xB3 => "ASM_RAM",
         // Phase 94: Tiny font text rendering
         0xD0 => "SMALLTEXT",
+        // Phase 95: Medium font text rendering
+        0xD1 => "MEDTEXT",
         _ => "???",
     }
 }
