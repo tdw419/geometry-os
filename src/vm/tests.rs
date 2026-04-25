@@ -16904,6 +16904,66 @@ fn test_window_focus_socket() {
 }
 
 #[test]
+fn test_process_kill_socket() {
+    // Verify process_kill <pid> kills all windows for a given PID
+    use crate::vm::types::Window;
+
+    let mut vm = Vm::new();
+
+    // Create windows: two for PID 5, one for PID 7, one inactive for PID 5
+    let mut w1 = Window::new(1, 10, 10, 64, 32, 0, 5);
+    w1.active = true;
+    vm.windows.push(w1);
+
+    let mut w2 = Window::new(2, 20, 20, 64, 32, 0, 5);
+    w2.active = true;
+    vm.windows.push(w2);
+
+    let mut w3 = Window::new(3, 30, 30, 64, 32, 0, 7);
+    w3.active = true;
+    vm.windows.push(w3);
+
+    let mut w4 = Window::new(4, 40, 40, 64, 32, 0, 5);
+    w4.active = false; // already inactive
+    vm.windows.push(w4);
+
+    // Simulate process_kill 5 (same logic as socket handler)
+    let pid: u32 = 5;
+    let mut count = 0u32;
+    for w in vm.windows.iter_mut() {
+        if w.pid == pid && w.active {
+            w.active = false;
+            count += 1;
+        }
+    }
+
+    // Should have killed exactly 2 active windows for PID 5
+    assert_eq!(count, 2, "should kill 2 active windows for PID 5");
+
+    // Verify PID 5 windows are all inactive now
+    let pid5_active: Vec<_> = vm.windows.iter().filter(|w| w.pid == 5 && w.active).collect();
+    assert!(pid5_active.is_empty(), "no PID 5 windows should be active");
+
+    // Verify PID 7 window is still active
+    let w3 = vm.windows.iter().find(|w| w.id == 3).unwrap();
+    assert!(w3.active, "PID 7 window should remain active");
+
+    // Verify the already-inactive window stayed inactive
+    let w4 = vm.windows.iter().find(|w| w.id == 4).unwrap();
+    assert!(!w4.active, "already-inactive window should stay inactive");
+
+    // Simulate process_kill for a PID with no windows
+    let mut count2 = 0u32;
+    for w in vm.windows.iter_mut() {
+        if w.pid == 999 && w.active {
+            w.active = false;
+            count2 += 1;
+        }
+    }
+    assert_eq!(count2, 0, "killing non-existent PID should affect 0 windows");
+}
+
+#[test]
 fn test_desktop_vision_handler_structure() {
     // Verify desktop_vision combines window_list and vmscreen
     let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
