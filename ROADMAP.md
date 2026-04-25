@@ -2640,8 +2640,8 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
   _~300 LOC_
 - [x] **Desktop input injection MCP tools** -- MCP tools: desktop_key, desktop_mouse_move, desktop_mouse_click. Aliases for input_key/input_mouse with desktop-specific semantics. Documents that these target the VM keyboard buffer and mouse registers, not the hypervisor.
   - [x] desktop_key injects key into VM key buffer (same as inject_key but named for desktop context)
-  - [ ] desktop_mouse_move updates mouse_x, mouse_y registers
-  - [ ] desktop_mouse_click updates mouse position then triggers mouse button
+  - [x] desktop_mouse_move updates mouse_x, mouse_y registers
+  - [x] desktop_mouse_click updates mouse position then triggers mouse button
   _~80 LOC_
 - [x] **Desktop-aware vision MCP tool** -- desktop_vision MCP tool returns structured JSON: which windows are open, what PID owns them, which has focus (highest z_order), and ASCII art of the desktop with window boundaries drawn as box-drawing characters. The AI's eyes -- no vision model needed for basic awareness.
   - [ ] desktop_vision returns JSON with windows array, focused_window, ascii_desktop (ASCII art with window boundaries overlaid)

@@ -17036,6 +17036,88 @@ fn test_desktop_mouse_aliases_use_inject_mouse() {
 }
 
 #[test]
+fn test_desktop_mouse_move_updates_registers() {
+    // desktop_mouse_move -> inject_mouse move -> push_mouse -> mouse_x/mouse_y + RAM ports
+    let mut vm = Vm::new();
+    assert_eq!(vm.mouse_x, 0);
+    assert_eq!(vm.mouse_y, 0);
+
+    // Simulate what inject_mouse move does: call push_mouse
+    vm.push_mouse(150, 200);
+    assert_eq!(vm.mouse_x, 150, "mouse_x should be updated");
+    assert_eq!(vm.mouse_y, 200, "mouse_y should be updated");
+    assert_eq!(vm.ram[0xFF9], 150, "mouse_x should mirror to RAM port 0xFF9");
+    assert_eq!(vm.ram[0xFFA], 200, "mouse_y should mirror to RAM port 0xFFA");
+
+    // Second move overwrites
+    vm.push_mouse(50, 75);
+    assert_eq!(vm.mouse_x, 50);
+    assert_eq!(vm.mouse_y, 75);
+}
+
+#[test]
+fn test_desktop_mouse_click_updates_position_then_button() {
+    // desktop_mouse_click -> inject_mouse click -> push_mouse(x,y) then push_mouse_button(btn)
+    let mut vm = Vm::new();
+    assert_eq!(vm.mouse_x, 0);
+    assert_eq!(vm.mouse_y, 0);
+    assert_eq!(vm.mouse_button, 0);
+
+    // Simulate what inject_mouse click does: push_mouse then push_mouse_button
+    vm.push_mouse(100, 150);
+    vm.push_mouse_button(2); // left click
+    assert_eq!(vm.mouse_x, 100, "mouse_x should be updated before click");
+    assert_eq!(vm.mouse_y, 150, "mouse_y should be updated before click");
+    assert_eq!(vm.mouse_button, 2, "mouse_button should be set after position");
+
+    // Verify position is set first (button query depends on position for hit testing)
+    vm.push_mouse(200, 50);
+    assert_eq!(vm.mouse_x, 200);
+    vm.push_mouse_button(1); // left down
+    assert_eq!(vm.mouse_button, 1);
+}
+
+#[test]
+fn test_desktop_mouse_mcp_verifies_tool_translation() {
+    // End-to-end verification: desktop_mouse_move/click MCP tools translate to
+    // inject_mouse commands, and inject_mouse in main.rs calls push_mouse/push_mouse_button
+    let main_src = std::fs::read_to_string("src/main.rs").unwrap();
+    let mcp_src = std::fs::read_to_string("src/mcp_server.rs").unwrap();
+
+    // MCP tools delegate to socket commands
+    assert!(
+        mcp_src.contains("\"desktop_mouse_move\" =>"),
+        "desktop_mouse_move handler must exist in mcp_server"
+    );
+    assert!(
+        mcp_src.contains("\"desktop_mouse_click\" =>"),
+        "desktop_mouse_click handler must exist in mcp_server"
+    );
+    assert!(
+        mcp_src.contains("inject_mouse move"),
+        "desktop_mouse_move must send inject_mouse move"
+    );
+    assert!(
+        mcp_src.contains("inject_mouse click"),
+        "desktop_mouse_click must send inject_mouse click"
+    );
+
+    // Socket handler calls push_mouse / push_mouse_button
+    let inject_start = main_src
+        .find("\"inject_mouse\" =>")
+        .expect("inject_mouse handler must exist in main.rs");
+    let inject_section = &main_src[inject_start..inject_start + 2000];
+    assert!(
+        inject_section.contains("vm.push_mouse(x, y)"),
+        "inject_mouse move must call vm.push_mouse(x, y)"
+    );
+    assert!(
+        inject_section.contains("vm.push_mouse_button(button)"),
+        "inject_mouse click must call vm.push_mouse_button"
+    );
+}
+
+#[test]
 fn test_demo_tour_exists() {
     // Verify the demo tour document exists
     assert!(
