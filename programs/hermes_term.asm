@@ -117,12 +117,9 @@ LDI r1, 1
 
 ; --- Connect to hermes_bridge ---
 ; Store IP "127.0.0.1" in SEND_BUF temporarily
+; (STRO null-terminates automatically)
 LDI r20, SEND_BUF
 STRO r20, "127.0.0.1"
-; Null terminate
-CALL advance_to_null_tmp
-LDI r0, 0
-STORE r20, r0
 
 ; CONNECT addr_reg=r3, port_reg=r4, fd_reg=r5
 LDI r3, SEND_BUF    ; address of IP string
@@ -167,8 +164,14 @@ connect_failed:
 main_loop:
     LDI r1, 1
 
-    ; Check for incoming data from bridge
+    ; Only poll for TCP data when actively receiving
+    LDI r20, RECV_STATE
+    LOAD r0, r20
+    CMPI r0, 1
+    JNZ r0, skip_poll
     CALL poll_recv
+    LDI r1, 1
+skip_poll:
 
     ; Blink counter
     LDI r20, BLINK
@@ -204,23 +207,13 @@ poll_recv:
     JZ r0, poll_ret
 
     ; Try to receive up to 256 bytes
-    ; SOCKRECV fd_reg, buf_reg, max_len_reg, recv_reg
-    LDI r3, 2            ; fd_reg = r2 (use r3 for temp)
-    ; Actually: SOCKRECV uses register indices. Let me use direct regs.
-    ; fd is in TCP_FD. Load it.
     LDI r20, TCP_FD
     LOAD r6, r20          ; r6 = fd value
 
-    ; We need to pass register indices to SOCKRECV.
-    ; SOCKRECV fd_reg_idx, buf_reg_idx, max_reg_idx, recv_count_reg_idx
-    ; Put values in registers first:
-    ;   r14 = fd value
-    ;   r15 = RECV_BUF address
-    ;   r16 = max length (256)
-    MOV r14, r6
+    ; SOCKRECV takes register indices for fd, buf, max_len, recv_count
+    MOV r14, r6           ; regs[14] = fd value
     LDI r15, RECV_BUF
     LDI r16, 256
-
     SOCKRECV r14, r15, r16, r17
 
     ; r0 = error code, r17 = bytes received
@@ -733,12 +726,9 @@ rc_connect:
     CALL write_line_to_buf
     LDI r1, 1
 
-    ; Store IP string
+    ; Store IP string (STRO null-terminates)
     LDI r20, SEND_BUF
     STRO r20, "127.0.0.1"
-    CALL advance_to_null_tmp
-    LDI r0, 0
-    STORE r20, r0
 
     LDI r3, SEND_BUF
     LDI r4, 9123

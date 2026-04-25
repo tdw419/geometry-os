@@ -1079,29 +1079,15 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
         // ── Phase 106: AI Desktop Control Tool Handlers ──
         "window_list" => {
             let resp = send_socket_cmd("window_list")?;
-            let resp_lines: Vec<&str> = resp.lines().collect();
-            let count = resp_lines
-                .first()
-                .and_then(|l| l.parse::<usize>().ok())
-                .unwrap_or(0);
-            let mut windows = Vec::new();
-            for line in resp_lines.iter().skip(1).take(count) {
-                let fields: Vec<&str> = line.split(',').collect();
-                if fields.len() >= 7 {
-                    windows.push(serde_json::json!({
-                        "id": fields[0].parse::<u32>().unwrap_or(0),
-                        "x": fields[1].parse::<u32>().unwrap_or(0),
-                        "y": fields[2].parse::<u32>().unwrap_or(0),
-                        "w": fields[3].parse::<u32>().unwrap_or(0),
-                        "h": fields[4].parse::<u32>().unwrap_or(0),
-                        "z_order": fields[5].parse::<u32>().unwrap_or(0),
-                        "pid": fields[6].parse::<u32>().unwrap_or(0),
-                        "title": if fields.len() > 7 { fields[7..].join(",") } else { String::new() },
-                    }));
-                }
-            }
+            // Socket now returns JSON array directly: [{"id":...,"title":...}, ...]
+            let resp_trimmed = resp.trim();
+            let windows: Vec<serde_json::Value> = if resp_trimmed.starts_with('[') {
+                serde_json::from_str(resp_trimmed).unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             Ok(serde_json::json!({
-                "count": count,
+                "count": windows.len(),
                 "windows": windows,
             }))
         }
@@ -1212,39 +1198,21 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
 
         "desktop_vision" => {
             let win_resp = send_socket_cmd("window_list")?;
-            let win_lines: Vec<&str> = win_resp.lines().collect();
-            let win_count = win_lines
-                .first()
-                .and_then(|l| l.parse::<usize>().ok())
-                .unwrap_or(0);
-            let mut windows = Vec::new();
+            // Socket now returns JSON array: [{"id":...,"title":...,"pid":...,...}, ...]
+            let win_trimmed = win_resp.trim();
+            let windows: Vec<serde_json::Value> = if win_trimmed.starts_with('[') {
+                serde_json::from_str(win_trimmed).unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             let mut focused_id: u32 = 0;
             let mut max_z: u32 = 0;
-            for line in win_lines.iter().skip(1).take(win_count) {
-                let fields: Vec<&str> = line.split(',').collect();
-                if fields.len() >= 7 {
-                    let z = fields[5].parse::<u32>().unwrap_or(0);
-                    let id = fields[0].parse::<u32>().unwrap_or(0);
-                    let pid = fields[6].parse::<u32>().unwrap_or(0);
-                    let title = if fields.len() > 7 {
-                        fields[7..].join(",")
-                    } else {
-                        String::new()
-                    };
-                    if z > max_z {
-                        max_z = z;
-                        focused_id = id;
-                    }
-                    windows.push(serde_json::json!({
-                        "id": id,
-                        "x": fields[1].parse::<u32>().unwrap_or(0),
-                        "y": fields[2].parse::<u32>().unwrap_or(0),
-                        "w": fields[3].parse::<u32>().unwrap_or(0),
-                        "h": fields[4].parse::<u32>().unwrap_or(0),
-                        "z_order": z,
-                        "pid": pid,
-                        "title": title,
-                    }));
+            for w in &windows {
+                let z = w["z_order"].as_u64().unwrap_or(0) as u32;
+                let id = w["id"].as_u64().unwrap_or(0) as u32;
+                if z > max_z {
+                    max_z = z;
+                    focused_id = id;
                 }
             }
 

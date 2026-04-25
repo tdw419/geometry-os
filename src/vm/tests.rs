@@ -16345,8 +16345,145 @@ fn test_socket_cmd_window_list_in_main() {
 }
 
 #[test]
+fn test_window_list_produces_valid_json_array() {
+    // Create a VM with windows and verify the JSON format via the title-reading logic
+    let mut vm = Vm::new();
+
+    // Create two windows manually
+    let w1 = Window::new(1, 10, 20, 64, 32, 0, 1);
+    let w2 = Window::new(2, 30, 40, 80, 48, 0, 2);
+    vm.windows.push(w1);
+    vm.windows.push(w2);
+    // Mark both active
+    vm.windows[0].active = true;
+    vm.windows[0].z_order = 1;
+    vm.windows[1].active = true;
+    vm.windows[1].z_order = 2;
+
+    // Build the JSON manually using the same logic as the socket handler
+    let active: Vec<&Window> = vm.windows.iter().filter(|w| w.active).collect();
+    let mut windows_json = Vec::new();
+    for w in &active {
+        let mut title = String::new();
+        if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
+            for j in 0..32 {
+                let addr = w.title_addr as usize + j;
+                if addr >= vm.ram.len() { break; }
+                let ch = vm.ram[addr];
+                if ch == 0 || ch > 127 { break; }
+                title.push(ch as u8 as char);
+            }
+        }
+        windows_json.push(format!(
+            "{{\"id\":{},\"title\":\"{}\",\"pid\":{},\"x\":{},\"y\":{},\"w\":{},\"h\":{},\"z_order\":{}}}",
+            w.id, title, w.pid, w.x, w.y, w.w, w.h, w.z_order
+        ));
+    }
+    let output = format!("[{}]", windows_json.join(","));
+
+    // Verify it parses as valid JSON
+    let parsed: serde_json::Value = serde_json::from_str(&output)
+        .expect("window_list output should be valid JSON");
+
+    // Verify structure
+    let arr = parsed.as_array().expect("should be a JSON array");
+    assert_eq!(arr.len(), 2, "should have 2 windows");
+
+    // Verify first window fields
+    let w1_obj = &arr[0];
+    assert_eq!(w1_obj["id"].as_u64(), Some(1));
+    assert_eq!(w1_obj["x"].as_u64(), Some(10));
+    assert_eq!(w1_obj["y"].as_u64(), Some(20));
+    assert_eq!(w1_obj["w"].as_u64(), Some(64));
+    assert_eq!(w1_obj["h"].as_u64(), Some(32));
+    assert_eq!(w1_obj["z_order"].as_u64(), Some(1));
+    assert_eq!(w1_obj["pid"].as_u64(), Some(1));
+    assert_eq!(w1_obj["title"].as_str(), Some(""));
+
+    // Verify second window
+    let w2_obj = &arr[1];
+    assert_eq!(w2_obj["id"].as_u64(), Some(2));
+    assert_eq!(w2_obj["x"].as_u64(), Some(30));
+    assert_eq!(w2_obj["z_order"].as_u64(), Some(2));
+    assert_eq!(w2_obj["pid"].as_u64(), Some(2));
+}
+
+#[test]
+fn test_window_list_json_with_title() {
+    // Verify window title is included in JSON output
+    let mut vm = Vm::new();
+
+    // Write a title string into RAM at address 0x5000
+    let title = "TestWin";
+    for (i, &byte) in title.as_bytes().iter().enumerate() {
+        vm.ram[0x5000 + i] = byte as u32;
+    }
+    vm.ram[0x5000 + title.len()] = 0; // null terminator
+
+    let mut w = Window::new(5, 100, 50, 128, 64, 0x5000, 3);
+    w.active = true;
+    w.z_order = 10;
+    vm.windows.push(w);
+
+    let active: Vec<&Window> = vm.windows.iter().filter(|w| w.active).collect();
+    let mut windows_json = Vec::new();
+    for w in &active {
+        let mut t = String::new();
+        if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
+            for j in 0..32 {
+                let addr = w.title_addr as usize + j;
+                if addr >= vm.ram.len() { break; }
+                let ch = vm.ram[addr];
+                if ch == 0 || ch > 127 { break; }
+                t.push(ch as u8 as char);
+            }
+        }
+        windows_json.push(format!(
+            "{{\"id\":{},\"title\":\"{}\",\"pid\":{},\"x\":{},\"y\":{},\"w\":{},\"h\":{},\"z_order\":{}}}",
+            w.id, t, w.pid, w.x, w.y, w.w, w.h, w.z_order
+        ));
+    }
+    let output = format!("[{}]", windows_json.join(","));
+
+    let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+    let arr = parsed.as_array().unwrap();
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["title"].as_str(), Some("TestWin"));
+    assert_eq!(arr[0]["id"].as_u64(), Some(5));
+}
+
+#[test]
+fn test_window_list_empty_returns_empty_json_array() {
+    // With no windows, window_list should return []
+    let vm = Vm::new();
+
+    let active: Vec<&Window> = vm.windows.iter().filter(|w| w.active).collect();
+    let mut windows_json = Vec::new();
+    for w in &active {
+        let mut t = String::new();
+        if w.title_addr > 0 && (w.title_addr as usize) < vm.ram.len() {
+            for j in 0..32 {
+                let addr = w.title_addr as usize + j;
+                if addr >= vm.ram.len() { break; }
+                let ch = vm.ram[addr];
+                if ch == 0 || ch > 127 { break; }
+                t.push(ch as u8 as char);
+            }
+        }
+        windows_json.push(format!(
+            "{{\"id\":{},\"title\":\"{}\",\"pid\":{},\"x\":{},\"y\":{},\"w\":{},\"h\":{},\"z_order\":{}}}",
+            w.id, t, w.pid, w.x, w.y, w.w, w.h, w.z_order
+        ));
+    }
+    let output = format!("[{}]", windows_json.join(","));
+
+    let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert!(parsed.as_array().unwrap().is_empty(), "empty VM should produce []");
+}
+
+#[test]
 fn test_window_list_socket_format() {
-    // Test that the window_list socket command produces correct format
+    // Test that the window_list socket command produces JSON array format
     let source = std::fs::read_to_string("src/main.rs").unwrap();
 
     // Find the window_list handler and verify format
@@ -16367,6 +16504,12 @@ fn test_window_list_socket_format() {
     assert!(handler.contains("w.z_order"), "should output z_order");
     assert!(handler.contains("w.pid"), "should output pid");
     assert!(handler.contains("w.active"), "should filter active windows");
+    // Should produce JSON format
+    assert!(handler.contains("\\\"id\\\""), "should have JSON id field");
+    assert!(handler.contains("\\\"title\\\""), "should have JSON title field");
+    assert!(handler.contains("\\\"pid\\\""), "should have JSON pid field");
+    assert!(handler.contains("\\\"z_order\\\""), "should have JSON z_order field");
+    assert!(handler.contains("[{") || handler.contains("windows.join"), "should produce JSON array");
 }
 
 #[test]

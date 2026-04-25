@@ -2363,10 +2363,10 @@ fn main() {
                             }
                             // ── Phase 106: Window Management Socket Commands ──────
                             "window_list" => {
-                                // List all active WINSYS windows
+                                // List all active WINSYS windows as JSON array
                                 let active: Vec<&crate::vm::Window> =
                                     vm.windows.iter().filter(|w| w.active).collect();
-                                response.push_str(&format!("{}\n", active.len()));
+                                let mut windows = Vec::new();
                                 for w in &active {
                                     // Read title from RAM
                                     let mut title = String::new();
@@ -2383,11 +2383,12 @@ fn main() {
                                             title.push(ch as u8 as char);
                                         }
                                     }
-                                    response.push_str(&format!(
-                                        "{},{},{},{},{},{},{},{}\n",
-                                        w.id, w.x, w.y, w.w, w.h, w.z_order, w.pid, title
+                                    windows.push(format!(
+                                        "{{\"id\":{},\"title\":\"{}\",\"pid\":{},\"x\":{},\"y\":{},\"w\":{},\"h\":{},\"z_order\":{}}}",
+                                        w.id, title, w.pid, w.x, w.y, w.w, w.h, w.z_order
                                     ));
                                 }
+                                response.push_str(&format!("[{}]\n", windows.join(",")));
                             }
                             "window_move" => {
                                 // window_move <id> <x> <y>

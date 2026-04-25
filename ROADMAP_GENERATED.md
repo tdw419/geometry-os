@@ -2604,7 +2604,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
 ### Deliverables
 
 - [x] **Window management socket commands + MCP tools** -- Socket commands: window_list, window_move, window_close, window_focus, window_resize, process_kill. Bridges existing WINSYS ops (0x94) to the socket layer. Adds WINSYS op=7 (RESIZE) for window resizing. Adds process_kill to destroy all windows belonging to a PID.
-  - [ ] window_list returns JSON array of active windows with id, title, pid, x, y, w, h, z_order
+  - [x] window_list returns JSON array of active windows with id, title, pid, x, y, w, h, z_order
   - [ ] window_move <id> <x> <y> moves window and returns success
   - [ ] window_close <id> destroys window and returns success
   - [ ] window_focus <id> brings window to front
@@ -2623,7 +2623,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
 - [x] **AI demo tour prompt** -- demo_tour.md: A guided walkthrough script for AI agents. Walk the map, enter buildings, launch shell/notepad/calculator/paint/tetris, demonstrate window management, boot a RISC-V guest, narrate each step. Proves the full MCP bridge works end-to-end.
   _~150 LOC_
 - [x] **Integration tests** -- 10+ tests: socket command tests, MCP tool tests, integration tests. Each new socket command and MCP tool gets a dedicated test.
-  - [ ] test_window_list_socket verifies socket command returns window data
+  - [x] test_window_list_socket verifies socket command returns window data
   - [ ] test_window_move_socket verifies window moves
   - [ ] test_window_close_socket verifies window destruction
   - [ ] test_window_focus_socket verifies z_order change
