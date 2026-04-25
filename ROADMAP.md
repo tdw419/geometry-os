@@ -362,7 +362,7 @@ the VM runs it. Missing piece: assembler callable as VM subroutine.
 ### Deliverables
 
 - [x] **Tests for untested programs** -- ball, fire, hello, circles, lines, scroll_demo, rainbow, rings, colors, checkerboard, painter -- assemble + first-frame sanity
-  - [ ] cargo test all green
+  - [x] cargo test all green
   - [ ] Each untested program has at least one test
   _~220 LOC_
 - [x] **Assembler error line numbers** -- Error messages include source line number
