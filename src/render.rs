@@ -718,13 +718,12 @@ pub fn render_fullscreen_map(
 
     // ── Phase 107: Blit world-space windows (scaled with zoom) ──
     // World-space windows are positioned in tile coordinates and pan with the camera.
-    // They use the viewport module to convert world coords to screen coords.
+    // Uses the same crop+scale mapping as the terrain blit to stay aligned.
     {
-        use crate::viewport::Viewport;
         use crate::vm::types::WORLD_COORD_UNSET;
 
-        let zoom_level = vm.ram.get(0x7812).copied().unwrap_or(2).min(4);
-        let viewport = Viewport::from_ram(&vm.ram, zoom_level);
+        let cam_x_tiles = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
+        let cam_y_tiles = vm.ram.get(0x7801).copied().unwrap_or(0) as i32;
 
         // Collect world-space windows sorted by z_order
         let mut world_wins: Vec<&crate::vm::Window> = vm
@@ -740,18 +739,26 @@ pub fn render_fullscreen_map(
         world_wins.sort_by_key(|w| w.z_order);
 
         for win in &world_wins {
-            // Convert world tile coords to world pixel coords
-            let world_px = (win.world_x as i32) * 8; // 8 pixels per tile
-            let world_py = (win.world_y as i32) * 8;
+            // Window position in VM framebuffer coords (same space as terrain)
+            let vm_fb_x = (win.world_x as i32 - cam_x_tiles) * 8;
+            let vm_fb_y = (win.world_y as i32 - cam_y_tiles) * 8;
 
-            // Check visibility
-            if !viewport.is_rect_visible(world_px, world_py, win.w, win.h) {
+            // Visibility check: any part of the window within the cropped region?
+            let so = src_offset as i32;
+            let sr = src_region as i32;
+            if vm_fb_x + win.w as i32 <= so
+                || vm_fb_y + win.h as i32 <= so
+                || vm_fb_x >= so + sr
+                || vm_fb_y >= so + sr
+            {
                 continue;
             }
 
-            // Get screen position
-            let (sx, sy) = viewport.world_pixels_to_screen(world_px, world_py);
-            let s_scale = viewport.zoom.scale as i32;
+            // Apply same crop + scale as terrain blit:
+            // display = map_offset + (vm_fb - src_offset) * scale
+            let sx = map_offset as i32 + (vm_fb_x - so) * scale as i32;
+            let sy = map_offset as i32 + (vm_fb_y - so) * scale as i32;
+            let s_scale = scale as i32;
 
             // Blit offscreen buffer with scale
             let ww = win.w as usize;

@@ -2682,8 +2682,8 @@ Transform the map from a launcher into an infinite spatial desktop where app win
   _~100 LOC_
 - [x] **Composite rendering -- windows on map** -- Modify the rendering loop in main.rs: after world_desktop renders terrain, iterate WINSYS windows with world coords, convert to screen space via viewport, and blit their offscreen buffers onto the framebuffer. Windows that are offscreen are culled. This is the visual integration -- windows become part of the map surface.
   - [x] world_desktop.asm renders terrain below windows, windows render on top
-  - [ ] Windows pan with the map as camera moves
-  - [ ] Windows outside viewport are skipped (no rendering cost)
+  - [x] Windows pan with the map as camera moves
+  - [x] Windows outside viewport are skipped (no rendering cost)
   - [ ] Z-order works correctly (terrain < windows < taskbar)
   _~150 LOC_
 - [x] **Multi-process app execution in windows** -- The current launch flow replaces the map program with the app, then reloads the map when the app halts. For the infinite desktop, apps need to run as sub-processes inside WINSYS windows while the map continues running. Add a multi-process execution model: the main loop time-shares between the map program and windowed app programs. Each app gets a RAM slice and its own PC/registers. On app HALT, only that app's windows are destroyed.

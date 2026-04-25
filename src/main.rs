@@ -2759,10 +2759,7 @@ fn main() {
             if mouse_down_now && !mouse_drag_active && !window_drag_active {
                 // Check if click is on a window title bar first
                 if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
-                    use crate::viewport::Viewport;
-                    let viewport = Viewport::from_ram(&vm.ram, zoom_level);
-
-                    // Convert host coords to VM screen coords
+                    // Convert host coords to VM screen framebuffer coords
                     let (src_region, _) = match zoom_level {
                         0 => (256usize, 2usize),
                         1 => (256, 3),
@@ -2778,6 +2775,10 @@ fn main() {
                         ((mx as i32 - map_offset as i32).max(0) / scale as i32) + src_offset as i32;
                     let vm_sy =
                         ((my as i32 - map_offset as i32).max(0) / scale as i32) + src_offset as i32;
+
+                    // Read camera for framebuffer-space window positions
+                    let cam_x_tiles = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
+                    let cam_y_tiles = vm.ram.get(0x7801).copied().unwrap_or(0) as i32;
 
                     // Check if click hits a world-space window title bar (top 12 pixels)
                     let mut hit_window = false;
@@ -2803,26 +2804,25 @@ fn main() {
                         .collect();
                     sorted_win_data.sort_by_key(|info| std::cmp::Reverse(info.z_order));
 
-                    // Find which window was hit (no borrow of vm.windows during iteration)
+                    // Find which window was hit using VM framebuffer coordinates
+                    // (both vm_sx/vm_sy and window positions are in 0-255 framebuffer space)
                     let mut hit_close_id: Option<u32> = None;
                     let mut hit_drag: Option<(u32, i32, i32)> = None;
                     for info in &sorted_win_data {
-                        let world_px = info.world_x * 8;
-                        let world_py = info.world_y * 8;
-                        let (sx, sy) = viewport.world_pixels_to_screen(world_px, world_py);
-                        let s_scale = viewport.zoom.scale as i32;
-                        let win_screen_w = info.w as i32 * s_scale;
-                        let title_bar_h = 12 * s_scale;
+                        let win_fb_x = (info.world_x - cam_x_tiles) * 8;
+                        let win_fb_y = (info.world_y - cam_y_tiles) * 8;
+                        let win_w = info.w as i32;
+                        let title_bar_h = 12;
 
-                        if vm_sx >= sx
-                            && vm_sx < sx + win_screen_w
-                            && vm_sy >= sy
-                            && vm_sy < sy + title_bar_h
+                        if vm_sx >= win_fb_x
+                            && vm_sx < win_fb_x + win_w
+                            && vm_sy >= win_fb_y
+                            && vm_sy < win_fb_y + title_bar_h
                         {
-                            let close_btn_size = 8 * s_scale;
-                            let close_btn_margin = 2 * s_scale;
-                            let close_x = sx + win_screen_w - close_btn_margin - close_btn_size;
-                            let close_y_end = sy + close_btn_margin + close_btn_size;
+                            let close_btn_size = 8;
+                            let close_btn_margin = 2;
+                            let close_x = win_fb_x + win_w - close_btn_margin - close_btn_size;
+                            let close_y_end = win_fb_y + close_btn_margin + close_btn_size;
 
                             if vm_sx >= close_x && vm_sy < close_y_end {
                                 hit_close_id = Some(info.id);
