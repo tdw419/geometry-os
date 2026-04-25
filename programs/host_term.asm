@@ -31,12 +31,12 @@
 #define COLS 85
 #define ROWS 40
 #define BUF 0x4000
-#define BUF_END 0x49F6
-#define CUR_COL 0x4A00
-#define CUR_ROW 0x4A01
-#define BLINK 0x4A02
-#define PTY_HANDLE 0x4A03
-#define ANSI_STATE 0x4A04
+#define BUF_END 0x4D48
+#define CUR_COL 0x4E00
+#define CUR_ROW 0x4E01
+#define BLINK 0x4E02
+#define PTY_HANDLE 0x4E03
+#define ANSI_STATE 0x4E04
 #define CMD_BUF 0x5000
 #define SEND_BUF 0x5400
 #define RECV_BUF 0x5800
@@ -129,6 +129,17 @@ LDI r20, PTY_HANDLE
 STORE r20, r10
 LDI r28, 0
 ADD r28, r10
+
+; Restore r1 = 1 (clobbered by earlier HITSET/DRAWTEXT/STORE code)
+LDI r1, 1
+
+; Busy-wait for bash to start up (~150ms)
+; SUB + JNZ = 2 steps per iteration. 50000 iters = 100000 steps.
+; At ~1M steps/sec, that's ~100ms. Good enough for bash startup.
+LDI r11, 50000
+busy_wait:
+    SUB r11, r1
+    JNZ r11, busy_wait
 
 LDI r1, 1
 

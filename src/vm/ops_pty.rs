@@ -39,6 +39,19 @@ impl PtySlot {
     fn is_closed(&self) -> bool {
         self.closed_flag.load(std::sync::atomic::Ordering::Relaxed)
     }
+
+    /// Drain all pending bytes from the channel (diagnostic).
+    pub fn drain_remaining(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        while let Ok(b) = self.rx.try_recv() {
+            bytes.push(b);
+        }
+        bytes
+    }
+
+    pub fn is_alive(&self) -> bool {
+        !self.is_closed()
+    }
 }
 
 /// Read a null-terminated ASCII string from RAM (one byte per u32 cell).
@@ -78,6 +91,8 @@ pub fn spawn(cmd_line: &str) -> Result<PtySlot, String> {
         if let Ok(home) = std::env::var("HOME") {
             c.cwd(home);
         }
+        // Use dumb terminal to avoid escape sequence queries that would block
+        c.env("TERM", "dumb");
         c
     } else {
         // crude split on whitespace; good enough for single commands like

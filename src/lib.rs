@@ -6,6 +6,8 @@ pub mod episode_log;
 pub mod font;
 pub mod glyph_backend;
 pub mod inode_fs;
+#[cfg(feature = "native")]
+pub mod keys;
 #[allow(dead_code)]
 pub mod pixel;
 pub mod preprocessor;
