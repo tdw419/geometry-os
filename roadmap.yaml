@@ -4831,7 +4831,6 @@ phases:
   status: complete
   test_target: 3
   title: Custom Bitmap Fonts
-  _claimed_by: worker-0
   _claimed_at: 1776899382
 - deliverables:
   - description: A sound mixer daemon that reads note data from a named pipe, mixes
@@ -4992,7 +4991,6 @@ phases:
   status: complete
   test_target: 2
   title: Terminal Multiplexer
-  _claimed_by: worker-0
   _claimed_at: 1776896708
 - deliverables:
   - acceptance_criteria:
@@ -5155,7 +5153,6 @@ phases:
   status: complete
   test_target: 10
   title: AI Desktop Control and Guided Demo
-  _claimed_by: worker-0
   _claimed_at: 1776905288
 - deliverables:
   - acceptance_criteria:
@@ -5274,7 +5271,6 @@ phases:
   status: complete
   test_target: 12
   title: Infinite Spatial Desktop
-  _claimed_by: worker-0
   _claimed_at: 1776907894
 - name: Sandboxed AI Execution
   description: 'Replace the insecure RUNNEXT execution model in the AI Terminal''s
@@ -5588,7 +5584,6 @@ phases:
   status: complete
   test_target: 0
   title: Project Hygiene and README Accuracy
-  _claimed_by: worker-0
   _claimed_at: 1777031258
 - deliverables:
   - acceptance_criteria:
@@ -5627,7 +5622,6 @@ phases:
   status: done
   test_target: 6
   title: Self-Modification Showcase Demos
-  _claimed_by: worker-0
   _claimed_at: 1777050076
 - deliverables:
   - acceptance_criteria:
@@ -5665,7 +5659,6 @@ phases:
   status: done
   test_target: 8
   title: Living Map Entities
-  _claimed_by: worker-0
   _claimed_at: 1777051825
 - deliverables:
   - acceptance_criteria:
@@ -5705,7 +5698,6 @@ phases:
   status: done
   test_target: 4
   title: Performance Benchmarking and Profiling
-  _claimed_by: worker-0
   _claimed_at: 1777053191
 - deliverables:
   - acceptance_criteria:
@@ -5742,7 +5734,6 @@ phases:
   status: complete
   test_target: 5
   title: Showtime -- First Run Experience
-  _claimed_by: worker-0
   _claimed_at: 1777054241
 - id: phase-119
   title: VFS Pixel Surface -- Pixels Move Pixels
@@ -5928,7 +5919,6 @@ phases:
     reason: Needs VFS surface and WINSYS ops 8/9
   scope_lines_total: 70400
   test_target: 2036
-  _claimed_by: worker-0
   _claimed_at: 1777055122
 - id: phase-121
   title: Area Agent System
@@ -5980,7 +5970,6 @@ phases:
     reason: Living map entities needed first
   scope_lines_total: 71000
   test_target: 2046
-  _claimed_by: worker-0
   _claimed_at: 1777056634
 - id: phase-122
   title: RISC-V Guest Write Path
@@ -6025,7 +6014,6 @@ phases:
     reason: Needs VFS surface MMIO
   scope_lines_total: 71300
   test_target: 2048
-  _claimed_by: worker-0
   _claimed_at: 1777058062
 - id: phase-123
   title: Alpine Linux Live Tile
@@ -6117,7 +6105,7 @@ phases:
   test_target: 2056
 - id: phase-125
   title: Shell VFS Integration
-  status: planned
+  status: complete
   goal: Geometry OS shell commands for VFS file operations
   description: 'Add shell commands: ls (list VFS files), cat (read file to terminal),
     edit (open file in canvas editor), save (write canvas to VFS file), rm (delete

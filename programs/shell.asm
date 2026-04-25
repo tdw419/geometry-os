@@ -2,7 +2,7 @@
 ;
 ; A minimal command shell that provides:
 ; - Command prompt display
-; - Built-in commands: help, echo, ls, cat, ps, kill, export, clear
+; - Built-in commands: help, echo, ls, cat, ps, kill, export, clear, rm, cp
 ; - External program execution via EXEC
 ; - Pipe operator (cmd1 | cmd2)
 ; - Output redirection (cmd > file, cmd >> file)
@@ -431,6 +431,14 @@ execute_command:
     CALL cmd_is_clear
     JNZ r0, do_clear
 
+    ; rm
+    CALL cmd_is_rm
+    JNZ r0, do_rm
+
+    ; cp
+    CALL cmd_is_cp
+    JNZ r0, do_cp
+
     ; hypervisor
     CALL cmd_is_hypervisor
     JNZ r0, do_hypervisor
@@ -672,6 +680,44 @@ cmd_is_clear:
     LDI r0, 1
     RET
 
+cmd_is_rm:
+    LDI r9, 0x0400
+    LDI r0, 114       ; r
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0401
+    LDI r0, 109       ; m
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0402
+    LDI r0, 0
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r0, 1
+    RET
+
+cmd_is_cp:
+    LDI r9, 0x0400
+    LDI r0, 99        ; c
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0401
+    LDI r0, 112       ; p
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r9, 0x0402
+    LDI r0, 0
+    LOAD r1, r9
+    CMP r0, r1
+    JNZ r0, cno
+    LDI r0, 1
+    RET
+
 cmd_is_hypervisor:
     LDI r9, 0x0400
     LDI r0, 104       ; h
@@ -886,6 +932,291 @@ do_clear:
     STORE r9, r0
     JMP exec_done
 
+do_rm:
+    ; Delete a file: rm <filename>
+    ; Argument (filename) at 0x0600
+    LDI r9, 0x0600
+    LOAD r0, r9
+    JZ r0, rm_usage
+    ; Copy arg to a clean buffer at 0x1600
+    LDI r13, 0x0600
+    LDI r14, 0x1600
+rm_copy:
+    LOAD r0, r13
+    JZ r0, rm_copy_done
+    STORE r14, r0
+    LDI r0, 1
+    ADD r13, r0
+    ADD r14, r0
+    JMP rm_copy
+rm_copy_done:
+    LDI r0, 0
+    STORE r14, r0      ; null terminate
+    ; UNLINK r1 where r1 = 0x1600
+    LDI r1, 0x1600
+    UNLINK r1
+    ; r0 = 0 on success, 0xFFFFFFFF on error
+    LDI r1, 0xFFFFFFFF
+    CMP r0, r1
+    JNZ r0, rm_ok
+    ; Print error
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r2, 8          ; "rm: error"
+    LDI r3, 0x1700
+    ; Store "rm: error" message
+    LDI r9, 0x1700
+    LDI r0, 114        ; r
+    STORE r9, r0
+    LDI r9, 0x1701
+    LDI r0, 109        ; m
+    STORE r9, r0
+    LDI r9, 0x1702
+    LDI r0, 58         ; :
+    STORE r9, r0
+    LDI r9, 0x1703
+    LDI r0, 32         ; space
+    STORE r9, r0
+    LDI r9, 0x1704
+    LDI r0, 101        ; e
+    STORE r9, r0
+    LDI r9, 0x1705
+    LDI r0, 114        ; r
+    STORE r9, r0
+    LDI r9, 0x1706
+    LDI r0, 114        ; r
+    STORE r9, r0
+    LDI r9, 0x1707
+    LDI r0, 111        ; o
+    STORE r9, r0
+    LDI r9, 0x1708
+    LDI r0, 114        ; r
+    STORE r9, r0
+    LDI r9, 0x1709
+    LDI r0, 0
+    STORE r9, r0
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r2, 9
+    LDI r3, 0x1700
+    TEXT r2, r1, r3
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    JMP exec_done
+rm_ok:
+    JMP exec_done
+rm_usage:
+    ; Print "rm <file>"
+    LDI r9, 0x1700
+    LDI r0, 114        ; r
+    STORE r9, r0
+    LDI r9, 0x1701
+    LDI r0, 109        ; m
+    STORE r9, r0
+    LDI r9, 0x1702
+    LDI r0, 32         ; space
+    STORE r9, r0
+    LDI r9, 0x1703
+    LDI r0, 60         ; <
+    STORE r9, r0
+    LDI r9, 0x1704
+    LDI r0, 102        ; f
+    STORE r9, r0
+    LDI r9, 0x1705
+    LDI r0, 105        ; i
+    STORE r9, r0
+    LDI r9, 0x1706
+    LDI r0, 108        ; l
+    STORE r9, r0
+    LDI r9, 0x1707
+    LDI r0, 101        ; e
+    STORE r9, r0
+    LDI r9, 0x1708
+    LDI r0, 62         ; >
+    STORE r9, r0
+    LDI r9, 0x1709
+    LDI r0, 0
+    STORE r9, r0
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r2, 9
+    LDI r3, 0x1700
+    TEXT r2, r1, r3
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    JMP exec_done
+
+do_cp:
+    ; Copy a file: cp <src> <dst>
+    ; Arguments at 0x0600, separated by space
+    ; Parse second argument from 0x0600 into 0x1800
+    LDI r9, 0x0600
+    LOAD r0, r9
+    JZ r0, cp_usage
+    ; Find space separator
+    LDI r13, 0x0600
+cp_find_space:
+    LOAD r0, r13
+    JZ r0, cp_usage    ; no space found -- need 2 args
+    LDI r1, 32         ; space
+    CMP r0, r1
+    JZ r0, cp_found_space
+    LDI r0, 1
+    ADD r13, r0
+    JMP cp_find_space
+cp_found_space:
+    ; Skip the space, copy rest to 0x1800
+    LDI r0, 1
+    ADD r13, r0
+    LDI r14, 0x1800
+cp_copy_dst:
+    LOAD r0, r13
+    JZ r0, cp_copy_dst_done
+    STORE r14, r0
+    LDI r0, 1
+    ADD r13, r0
+    ADD r14, r0
+    JMP cp_copy_dst
+cp_copy_dst_done:
+    LDI r0, 0
+    STORE r14, r0
+    ; Null-terminate the source filename (replace space with 0)
+    LDI r13, 0x0600
+    LDI r14, 0x1600
+cp_copy_src:
+    LOAD r0, r13
+    JZ r0, cp_src_done
+    LDI r1, 32
+    CMP r0, r1
+    JZ r0, cp_src_terminate
+    STORE r14, r0
+    LDI r0, 1
+    ADD r13, r0
+    ADD r14, r0
+    JMP cp_copy_src
+cp_src_terminate:
+    LDI r0, 0
+    STORE r14, r0
+    JMP cp_do_copy
+cp_src_done:
+    STORE r14, r0
+cp_do_copy:
+    ; FCOPY r1, r2 where r1=0x1600 (src), r2=0x1800 (dst)
+    LDI r1, 0x1600
+    LDI r2, 0x1800
+    FCOPY r1, r2
+    ; Check result
+    LDI r1, 0xFFFFFFFF
+    CMP r0, r1
+    JNZ r0, cp_ok
+    ; Print error
+    LDI r9, 0x1700
+    LDI r0, 99         ; c
+    STORE r9, r0
+    LDI r9, 0x1701
+    LDI r0, 112        ; p
+    STORE r9, r0
+    LDI r9, 0x1702
+    LDI r0, 58         ; :
+    STORE r9, r0
+    LDI r9, 0x1703
+    LDI r0, 32         ; space
+    STORE r9, r0
+    LDI r9, 0x1704
+    LDI r0, 101        ; e
+    STORE r9, r0
+    LDI r9, 0x1705
+    LDI r0, 114        ; r
+    STORE r9, r0
+    LDI r9, 0x1706
+    LDI r0, 114        ; r
+    STORE r9, r0
+    LDI r9, 0x1707
+    LDI r0, 111        ; o
+    STORE r9, r0
+    LDI r9, 0x1708
+    LDI r0, 114        ; r
+    STORE r9, r0
+    LDI r9, 0x1709
+    LDI r0, 0
+    STORE r9, r0
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r2, 9
+    LDI r3, 0x1700
+    TEXT r2, r1, r3
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    JMP exec_done
+cp_ok:
+    JMP exec_done
+cp_usage:
+    LDI r9, 0x1700
+    LDI r0, 99         ; c
+    STORE r9, r0
+    LDI r9, 0x1701
+    LDI r0, 112        ; p
+    STORE r9, r0
+    LDI r9, 0x1702
+    LDI r0, 32         ; space
+    STORE r9, r0
+    LDI r9, 0x1703
+    LDI r0, 60         ; <
+    STORE r9, r0
+    LDI r9, 0x1704
+    LDI r0, 115        ; s
+    STORE r9, r0
+    LDI r9, 0x1705
+    LDI r0, 114        ; r
+    STORE r9, r0
+    LDI r9, 0x1706
+    LDI r0, 99        ; c
+    STORE r9, r0
+    LDI r9, 0x1707
+    LDI r0, 62         ; >
+    STORE r9, r0
+    LDI r9, 0x1708
+    LDI r0, 32         ; space
+    STORE r9, r0
+    LDI r9, 0x1709
+    LDI r0, 60         ; <
+    STORE r9, r0
+    LDI r9, 0x170A
+    LDI r0, 100        ; d
+    STORE r9, r0
+    LDI r9, 0x170B
+    LDI r0, 115        ; s
+    STORE r9, r0
+    LDI r9, 0x170C
+    LDI r0, 116        ; t
+    STORE r9, r0
+    LDI r9, 0x170D
+    LDI r0, 62         ; >
+    STORE r9, r0
+    LDI r9, 0x170E
+    LDI r0, 0
+    STORE r9, r0
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r2, 14
+    LDI r3, 0x1700
+    TEXT r2, r1, r3
+    LDI r9, 0x1201
+    LOAD r1, r9
+    LDI r0, 12
+    ADD r1, r0
+    STORE r9, r1
+    JMP exec_done
+
 do_hypervisor:
     PUSH r14
     PUSH r13
@@ -1080,6 +1411,12 @@ help_text:
     .byte 115 ; s
     .byte 111 ; o
     .byte 114 ; r
+    .byte 32  ; space
+    .byte 114 ; r
+    .byte 109 ; m
+    .byte 32  ; space
+    .byte 99  ; c
+    .byte 112 ; p
     .byte 0
 
 .org 0x1A50

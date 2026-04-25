@@ -18729,3 +18729,182 @@ fn test_winsys_vfs_blit_invalid_window() {
     vm.step();
     assert_eq!(vm.regs[0], 0, "VFS_BLIT with bad window id should return 0");
 }
+
+
+#[test]
+fn test_unlink_assembles() {
+    let source = "UNLINK r1";
+    let asm = crate::assembler::assemble(source, 0).expect("UNLINK should assemble");
+    assert_eq!(asm.pixels, vec![0xB7, 1]);
+}
+
+#[test]
+fn test_fcopy_assembles() {
+    let source = "FCOPY r1, r2";
+    let asm = crate::assembler::assemble(source, 0).expect("FCOPY should assemble");
+    assert_eq!(asm.pixels, vec![0xB8, 1, 2]);
+}
+
+#[test]
+fn test_unlink_deletes_file() {
+    let dir = std::env::temp_dir().join("geo_test_unlink_1");
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::create_dir_all(&dir);
+    let file_path = dir.join("test_delete.txt");
+    std::fs::write(&file_path, b"delete me").expect("write");
+
+    let mut vm = Vm::new();
+    vm.vfs.base_dir = dir.clone();
+
+    let filename = b"test_delete.txt";
+    for (i, &ch) in filename.iter().enumerate() {
+        vm.ram[0x100 + i] = ch as u32;
+    }
+    vm.ram[0x100 + filename.len()] = 0;
+
+    vm.regs[1] = 0x100;
+    vm.ram[0] = 0xB7;
+    vm.ram[1] = 1;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0, "UNLINK should return 0 on success");
+    assert!(!file_path.exists(), "File should be deleted");
+}
+
+#[test]
+fn test_unlink_nonexistent_file() {
+    let dir = std::env::temp_dir().join("geo_test_unlink_2");
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::create_dir_all(&dir);
+
+    let mut vm = Vm::new();
+    vm.vfs.base_dir = dir.clone();
+
+    let filename = b"no_such_file.txt";
+    for (i, &ch) in filename.iter().enumerate() {
+        vm.ram[0x100 + i] = ch as u32;
+    }
+    vm.ram[0x100 + filename.len()] = 0;
+
+    vm.regs[1] = 0x100;
+    vm.ram[0] = 0xB7;
+    vm.ram[1] = 1;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "UNLINK should return error for nonexistent file");
+}
+
+#[test]
+fn test_unlink_path_traversal_blocked() {
+    let dir = std::env::temp_dir().join("geo_test_unlink_3");
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::create_dir_all(&dir);
+
+    let mut vm = Vm::new();
+    vm.vfs.base_dir = dir.clone();
+
+    let filename = b"../etc/passwd";
+    for (i, &ch) in filename.iter().enumerate() {
+        vm.ram[0x100 + i] = ch as u32;
+    }
+    vm.ram[0x100 + filename.len()] = 0;
+
+    vm.regs[1] = 0x100;
+    vm.ram[0] = 0xB7;
+    vm.ram[1] = 1;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "UNLINK should block path traversal");
+}
+
+#[test]
+fn test_fcopy_copies_file() {
+    let dir = std::env::temp_dir().join("geo_test_fcopy_1");
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::create_dir_all(&dir);
+    std::fs::write(dir.join("original.txt"), b"copy me").expect("write");
+
+    let mut vm = Vm::new();
+    vm.vfs.base_dir = dir.clone();
+
+    let src_name = b"original.txt";
+    for (i, &ch) in src_name.iter().enumerate() {
+        vm.ram[0x100 + i] = ch as u32;
+    }
+    vm.ram[0x100 + src_name.len()] = 0;
+
+    let dst_name = b"copy.txt";
+    for (i, &ch) in dst_name.iter().enumerate() {
+        vm.ram[0x200 + i] = ch as u32;
+    }
+    vm.ram[0x200 + dst_name.len()] = 0;
+
+    vm.regs[1] = 0x100;
+    vm.regs[2] = 0x200;
+    vm.ram[0] = 0xB8;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0, "FCOPY should return 0 on success");
+    assert!(dir.join("copy.txt").exists(), "Copy should exist");
+    let content = std::fs::read(dir.join("copy.txt")).expect("read");
+    assert_eq!(content, b"copy me");
+}
+
+#[test]
+fn test_fcopy_nonexistent_source() {
+    let dir = std::env::temp_dir().join("geo_test_fcopy_2");
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::create_dir_all(&dir);
+
+    let mut vm = Vm::new();
+    vm.vfs.base_dir = dir.clone();
+
+    let src_name = b"no_source.txt";
+    for (i, &ch) in src_name.iter().enumerate() {
+        vm.ram[0x100 + i] = ch as u32;
+    }
+    vm.ram[0x100 + src_name.len()] = 0;
+
+    let dst_name = b"dest.txt";
+    for (i, &ch) in dst_name.iter().enumerate() {
+        vm.ram[0x200 + i] = ch as u32;
+    }
+    vm.ram[0x200 + dst_name.len()] = 0;
+
+    vm.regs[1] = 0x100;
+    vm.regs[2] = 0x200;
+    vm.ram[0] = 0xB8;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.pc = 0;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "FCOPY should error on nonexistent source");
+}
+
+#[test]
+fn test_unlink_disasm() {
+    let mut vm = Vm::new();
+    vm.ram[0] = 0xB7;
+    vm.ram[1] = 1;
+    let (mnem, len) = vm.disassemble_at(0);
+    assert!(mnem.contains("UNLINK"), "got: {}", mnem);
+    assert_eq!(len, 2);
+}
+
+#[test]
+fn test_fcopy_disasm() {
+    let mut vm = Vm::new();
+    vm.ram[0] = 0xB8;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    let (mnem, len) = vm.disassemble_at(0);
+    assert!(mnem.contains("FCOPY"), "got: {}", mnem);
+    assert_eq!(len, 3);
+}
