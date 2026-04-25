@@ -337,6 +337,40 @@ impl Vm {
         self.mouse_button = button;
     }
 
+    /// Translate global mouse coordinates to window-relative for the current process.
+    /// If the current process (current_pid) owns a window, returns mouse coords
+    /// relative to that window's top-left corner. Otherwise returns global coords.
+    /// For world-space windows, computes screen position from camera + world coords.
+    fn translate_mouse_for_current_process(&self) -> (u32, u32) {
+        if self.current_pid == 0 {
+            // Main/kernel context: use global coordinates as-is
+            return (self.mouse_x, self.mouse_y);
+        }
+
+        // Find the window owned by the current process
+        let win = match self.windows.iter().find(|w| w.pid == self.current_pid && w.active) {
+            Some(w) => w,
+            None => return (self.mouse_x, self.mouse_y), // No window: global coords
+        };
+
+        let (win_x, win_y) = if win.is_world_space() {
+            // World-space window: compute screen position from camera + world coords
+            // Same formula as render.rs: vm_fb = (world - cam) * 8
+            let cam_x = self.ram.get(0x7800).copied().unwrap_or(0) as i32;
+            let cam_y = self.ram.get(0x7801).copied().unwrap_or(0) as i32;
+            let sx = (win.world_x as i32 - cam_x) * 8;
+            let sy = (win.world_y as i32 - cam_y) * 8;
+            (sx, sy)
+        } else {
+            (win.x as i32, win.y as i32)
+        };
+
+        // Translate: mouse position relative to window origin
+        let rel_x = (self.mouse_x as i32 - win_x).max(0) as u32;
+        let rel_y = (self.mouse_y as i32 - win_y).max(0) as u32;
+        (rel_x, rel_y)
+    }
+
     /// Reset the VM to initial state (zeroed RAM, registers, screen, halted=false).
     #[allow(dead_code)]
     pub fn reset(&mut self) {
@@ -962,11 +996,14 @@ impl Vm {
             // Reads current mouse X into x_reg, mouse Y into x_reg+1, button into x_reg+2.
             // Button: 0=none, 1=left down, 2=left click (auto-cleared after read).
             // Set by host via push_mouse(x, y) and push_mouse_button(btn).
+            // Phase 124: When the calling process owns a window, coordinates are
+            // translated to be window-relative so the app sees (0,0) at its top-left.
             0x85 => {
                 let xr = self.fetch() as usize;
                 if xr < NUM_REGS && xr + 2 < NUM_REGS {
-                    self.regs[xr] = self.mouse_x;
-                    self.regs[xr + 1] = self.mouse_y;
+                    let (mx, my) = self.translate_mouse_for_current_process();
+                    self.regs[xr] = mx;
+                    self.regs[xr + 1] = my;
                     self.regs[xr + 2] = self.mouse_button;
                     // Auto-clear click state after read (but not down state)
                     if self.mouse_button == 2 {

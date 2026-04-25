@@ -310,3 +310,153 @@ fn test_title_bar_renders_as_clickable_region() {
         "middle of title bar (past text) should be regular active bg color"
     );
 }
+
+// ── Phase 124: MOUSEQ Window Routing Tests ───────────────────────────
+
+#[test]
+fn test_mouseq_routes_to_window_owner_screen_space() {
+    // When a process owns a screen-space window, MOUSEQ returns coords
+    // relative to the window's top-left corner.
+    let mut vm = Vm::new();
+
+    // Create a window at screen position (40, 30), size 64x48, owned by PID 3
+    let win = Window::new(1, 40, 30, 64, 48, 0, 3);
+    vm.windows.push(win);
+
+    // Set current process to PID 3 (the window owner)
+    vm.current_pid = 3;
+
+    // Move mouse to global position (50, 40) -- which is (10, 10) relative to the window
+    vm.push_mouse(50, 40);
+
+    // MOUSEQ r5
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.regs[5], 10, "MOUSEQ x should be window-relative (50 - 40 = 10)");
+    assert_eq!(vm.regs[6], 10, "MOUSEQ y should be window-relative (40 - 30 = 10)");
+}
+
+#[test]
+fn test_mouseq_routes_to_window_owner_world_space() {
+    // When a process owns a world-space window, MOUSEQ computes screen position
+    // from camera + world coords, then translates.
+    let mut vm = Vm::new();
+
+    // Camera at (5, 3) in tile coords
+    vm.ram[0x7800] = 5;
+    vm.ram[0x7801] = 3;
+
+    // World-space window at tile (10, 8), size 64x48
+    // Screen position = (10 - 5) * 8 = 40, (8 - 3) * 8 = 40
+    let win = Window::new_world(1, 10, 8, 64, 48, 0, 5);
+    vm.windows.push(win);
+
+    // Set current process to PID 5 (the window owner)
+    vm.current_pid = 5;
+
+    // Move mouse to global position (60, 55)
+    // Relative to window: (60 - 40, 55 - 40) = (20, 15)
+    vm.push_mouse(60, 55);
+
+    // MOUSEQ r10
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.regs[10], 20, "MOUSEQ x should be world-window-relative");
+    assert_eq!(vm.regs[11], 15, "MOUSEQ y should be world-window-relative");
+}
+
+#[test]
+fn test_mouseq_global_when_no_window() {
+    // Process with no window gets global coordinates (unchanged behavior)
+    let mut vm = Vm::new();
+    vm.current_pid = 7; // PID 7 has no window
+    vm.push_mouse(100, 200);
+
+    // MOUSEQ r5
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.regs[5], 100, "MOUSEQ x should be global when no window");
+    assert_eq!(vm.regs[6], 200, "MOUSEQ y should be global when no window");
+}
+
+#[test]
+fn test_mouseq_global_when_pid0() {
+    // Main/kernel context (PID 0) gets global coordinates
+    let mut vm = Vm::new();
+    vm.current_pid = 0;
+    vm.push_mouse(42, 84);
+
+    // MOUSEQ r1
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.regs[1], 42, "MOUSEQ x should be global for PID 0");
+    assert_eq!(vm.regs[2], 84, "MOUSEQ y should be global for PID 0");
+}
+
+#[test]
+fn test_mouseq_clamps_negative_to_zero() {
+    // Mouse position outside window (above/left) should clamp to 0
+    let mut vm = Vm::new();
+
+    // Window at (100, 80)
+    let win = Window::new(1, 100, 80, 64, 48, 0, 2);
+    vm.windows.push(win);
+    vm.current_pid = 2;
+
+    // Mouse at (50, 50) -- before the window
+    vm.push_mouse(50, 50);
+
+    // MOUSEQ r10
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 10;
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.regs[10], 0, "MOUSEQ x should clamp to 0 when mouse is left of window");
+    assert_eq!(vm.regs[11], 0, "MOUSEQ y should clamp to 0 when mouse is above window");
+}
+
+#[test]
+fn test_mouseq_inactive_window_uses_global() {
+    // Inactive window should not intercept -- process gets global coords
+    let mut vm = Vm::new();
+
+    let mut win = Window::new(1, 40, 30, 64, 48, 0, 3);
+    win.active = false;
+    vm.windows.push(win);
+    vm.current_pid = 3;
+    vm.push_mouse(50, 40);
+
+    // MOUSEQ r5
+    vm.ram[0] = 0x85;
+    vm.ram[1] = 5;
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.regs[5], 50, "MOUSEQ x should be global for inactive window");
+    assert_eq!(vm.regs[6], 40, "MOUSEQ y should be global for inactive window");
+}
