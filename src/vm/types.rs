@@ -758,6 +758,26 @@ impl Window {
     pub fn is_world_space(&self) -> bool {
         self.world_x != WORLD_COORD_UNSET && self.world_y != WORLD_COORD_UNSET
     }
+
+    /// Read the window title from RAM (up to 32 chars, null-terminated).
+    /// Returns empty string if title_addr is 0 or invalid.
+    pub fn read_title(&self, ram: &[u32]) -> String {
+        let mut title = String::new();
+        if self.title_addr > 0 && (self.title_addr as usize) < ram.len() {
+            for j in 0..32 {
+                let addr = self.title_addr as usize + j;
+                if addr >= ram.len() {
+                    break;
+                }
+                let ch = ram[addr];
+                if ch == 0 || ch > 127 {
+                    break;
+                }
+                title.push(ch as u8 as char);
+            }
+        }
+        title
+    }
 }
 
 /// Magic bytes for save files

@@ -1320,6 +1320,12 @@ ent_ai_ghost:
   ; Uses agent task table at 0x7950+ (agent0) or 0x7960+ (agent1) based on entity index.
   ; Temp storage: RAM[0x797E] = agent_table_base for this agent
 ent_ai_area_agent:
+  ; Save entity loop registers (r20=entity ptr, r26=entity index)
+  LDI r22, 0x793E
+  STORE r22, r20             ; save entity pointer
+  ADDI r22, 1
+  STORE r22, r26             ; save entity index
+
   ; Compute agent_table_idx: entity_index - 7, clamped 0-1
   LDI r22, 7
   CMP r26, r22
@@ -1481,7 +1487,7 @@ ent_agent_arrived:
   LOAD r17, r22             ; target_bldg_idx
   STORE r23, r17
 ent_agent_arrived_done:
-  JMP ent_next
+  JMP ent_agent_restore_and_next
 
   ; --- Greedy movement toward target building ---
 ent_agent_move_dx:
@@ -1494,10 +1500,10 @@ ent_agent_move_dx:
   SAR r25, r23              ; sign of dx
   JNZ r25, ent_agent_dx_left
   LDI r25, 3                ; dx > 0: move right
-  JMP ent_compute_target
+  JMP ent_agent_restore_and_compute
 ent_agent_dx_left:
   LDI r25, 2                ; dx < 0: move left
-  JMP ent_compute_target
+  JMP ent_agent_restore_and_compute
 
 ent_agent_move_dy:
   ; Need sign of original dy
@@ -1509,10 +1515,10 @@ ent_agent_move_dy:
   SAR r25, r23
   JNZ r25, ent_agent_dy_up
   LDI r25, 1                ; dy > 0: move down
-  JMP ent_compute_target
+  JMP ent_agent_restore_and_compute
 ent_agent_dy_up:
   LDI r25, 0                ; dy < 0: move up
-  JMP ent_compute_target
+  JMP ent_agent_restore_and_compute
 
   ; --- State: inside_bldg (3) - wait some frames then exit ---
 ent_agent_state_inside:
@@ -1538,7 +1544,7 @@ ent_agent_state_inside:
   LDI r17, 0
   STORE r22, r17
 ent_agent_stay_inside:
-  JMP ent_next
+  JMP ent_agent_restore_and_next
 
   ; --- State: returning (5) - move back toward home ---
 ent_agent_state_returning:
@@ -1604,7 +1610,7 @@ ent_agent_home_arrived:
   LOAD r22, r22
   LDI r17, 0xFFFFFFFF
   STORE r22, r17
-  JMP ent_next
+  JMP ent_agent_restore_and_next
 
 ent_agent_home_move_dx:
   ; Reuse ent_agent_move_dx logic (target is in 0x797C already)
@@ -1616,10 +1622,10 @@ ent_agent_home_move_dx:
   SAR r25, r23
   JNZ r25, ent_agent_home_dx_left
   LDI r25, 3
-  JMP ent_compute_target
+  JMP ent_agent_restore_and_compute
 ent_agent_home_dx_left:
   LDI r25, 2
-  JMP ent_compute_target
+  JMP ent_agent_restore_and_compute
 
 ent_agent_home_move_dy:
   LDI r22, 0x797D
@@ -1630,12 +1636,18 @@ ent_agent_home_move_dy:
   SAR r25, r23
   JNZ r25, ent_agent_home_dy_up
   LDI r25, 1
-  JMP ent_compute_target
+  JMP ent_agent_restore_and_compute
 ent_agent_home_dy_up:
   LDI r25, 0
-  JMP ent_compute_target
+  JMP ent_agent_restore_and_compute
 
   ; ===== Compute target position from direction =====
+ent_agent_restore_and_compute:
+  LDI r22, 0x793E
+  LOAD r20, r22
+  ADDI r22, 1
+  LOAD r26, r22
+
 ent_compute_target:
   ; dir 0=up(y-1), 1=down(y+1), 2=left(x-1), 3=right(x+1)
   MOV r22, r3              ; target_x = world_x
@@ -1676,7 +1688,7 @@ ent_do_biome_check:
   LDI r22, 16
   SHL r25, r22             ; direction << 16
   STORE r24, r25
-  JMP ent_next
+  JMP ent_agent_restore_and_next
 
 ent_compute_target_no_walkability:
   ; Same as above but skip biome check (ghost/animal flee)
@@ -1708,7 +1720,7 @@ ent_do_move_no_check:
   LDI r22, 16
   SHL r25, r22
   STORE r24, r25
-  JMP ent_next
+  JMP ent_agent_restore_and_next
 
 ent_move_blocked:
   ; Try a different direction next time
@@ -1719,6 +1731,12 @@ ent_move_blocked:
   LDI r23, 16
   SHL r22, r23
   STORE r24, r22
+
+ent_agent_restore_and_next:
+  LDI r22, 0x793E
+  LOAD r20, r22
+  ADDI r22, 1
+  LOAD r26, r22
 
 ent_next:
   ; Advance to next entity (5 words per entity)

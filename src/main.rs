@@ -2727,11 +2727,31 @@ fn main() {
                             && vm_sy >= sy
                             && vm_sy < sy + title_bar_h
                         {
-                            // Click on title bar: start window drag
+                            // Check if click is on close button (top-right corner)
+                            let close_btn_size = 8 * s_scale;
+                            let close_btn_margin = 2 * s_scale;
+                            let close_x = sx + win_screen_w - close_btn_margin - close_btn_size;
+                            let close_y_end = sy + close_btn_margin + close_btn_size;
+
+                            if vm_sx >= close_x && vm_sy < close_y_end {
+                                // Click on close button: destroy window
+                                if let Some(w) = vm.windows.iter_mut().find(|w| w.id == win.id) {
+                                    w.active = false;
+                                }
+                                hit_window = true;
+                                break;
+                            }
+
+                            // Click on title bar: start window drag + bring to front
                             window_drag_active = true;
                             window_drag_id = win.id;
                             window_drag_start = (mx, my);
                             window_drag_world_start = (win.world_x as i32, win.world_y as i32);
+                            // Bring to front: assign highest z-order
+                            let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                            if let Some(w) = vm.windows.iter_mut().find(|w| w.id == win.id) {
+                                w.z_order = max_z + 1;
+                            }
                             hit_window = true;
                             break;
                         }

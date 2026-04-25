@@ -160,6 +160,17 @@ const BG: u32 = 0x050508;
 const GRID_BG: u32 = 0x0A0A14;
 const GRID_LINE: u32 = 0x141420;
 const CURSOR_COL: u32 = 0x00FFFF;
+
+// Window title bar colors
+const TITLE_BAR_BG: u32 = 0x2A2A3A;
+const TITLE_BAR_BG_ACTIVE: u32 = 0x3A3A5A;
+const TITLE_BAR_TEXT: u32 = 0xCCCCCC;
+const TITLE_BAR_CLOSE: u32 = 0xFF6666;
+const WINDOW_BORDER_COLOR: u32 = 0x444466;
+const TITLE_BAR_HEIGHT: usize = 12;
+const CLOSE_BTN_SIZE: usize = 8;
+const CLOSE_BTN_MARGIN: usize = 2;
+
 const STATUS_FG: u32 = 0x888899;
 const SCROLLBAR_BG: u32 = 0x181828;
 const SCROLLBAR_FG: u32 = 0x334466;
@@ -768,6 +779,25 @@ pub fn render_fullscreen_map(
                     }
                 }
             }
+
+            // Draw title bar overlay on world-space window
+            let title = win.read_title(&vm.ram);
+            let display_title = if title.is_empty() {
+                format!("Win {}", win.id)
+            } else {
+                title
+            };
+            let is_active = win.z_order == world_wins.iter().map(|w| w.z_order).max().unwrap_or(0);
+            draw_title_bar(
+                buffer,
+                WIDTH,
+                sx,
+                sy,
+                win.w,
+                &display_title,
+                is_active,
+                s_scale,
+            );
         }
     }
 
@@ -964,6 +994,98 @@ pub fn render_text(buffer: &mut [u32], x0: usize, y0: usize, text: &str, color: 
             }
         }
         cx += font::GLYPH_W + 1;
+    }
+}
+
+/// Draw a window title bar into a pixel buffer.
+/// Used by both screen-space windows (scale=1, buf_width=256) and
+/// world-space windows (scale=zoom, buf_width=1024).
+pub fn draw_title_bar(
+    buffer: &mut [u32],
+    buf_width: usize,
+    x0: i32,
+    y0: i32,
+    win_w: u32,
+    title: &str,
+    is_active: bool,
+    scale: i32,
+) {
+    let bar_h = (TITLE_BAR_HEIGHT as i32) * scale;
+    let w = win_w as i32;
+    let bg_color = if is_active { TITLE_BAR_BG_ACTIVE } else { TITLE_BAR_BG };
+
+    // Draw title bar background
+    for dy in 0..bar_h {
+        let py = y0 + dy;
+        if py < 0 { continue; }
+        for dx in 0..w * scale {
+            let px = x0 + dx;
+            if px < 0 { continue; }
+            let idx = (py as usize) * buf_width + (px as usize);
+            if idx < buffer.len() { buffer[idx] = bg_color; }
+        }
+    }
+
+    // Draw border line under title bar
+    let border_y = y0 + bar_h;
+    if border_y >= 0 {
+        for dx in 0..w * scale {
+            let px = x0 + dx;
+            if px < 0 { continue; }
+            let idx = (border_y as usize) * buf_width + (px as usize);
+            if idx < buffer.len() { buffer[idx] = WINDOW_BORDER_COLOR; }
+        }
+    }
+
+    // Draw title text (8x8 font, scaled)
+    let char_w = (font::GLYPH_W as i32) * scale;
+    let max_chars = (w * scale) / (char_w + scale) - 3;
+    let mut cx = x0 + 2 * scale;
+    let cy = y0 + 2 * scale;
+    for (i, ch) in title.chars().enumerate() {
+        if i as i32 >= max_chars { break; }
+        let idx = ch as usize;
+        if idx < 128 {
+            let glyph = &font::GLYPHS[idx];
+            for (row, &glyph_row) in glyph.iter().enumerate().take(font::GLYPH_H) {
+                for col in 0..font::GLYPH_W {
+                    if glyph_row & (1 << (7 - col)) != 0 {
+                        for sy in 0..scale {
+                            for sx in 0..scale {
+                                let px = cx + (col as i32) * scale + sx;
+                                let py = cy + (row as i32) * scale + sy;
+                                if px >= 0 && py >= 0 {
+                                    let buf_idx = (py as usize) * buf_width + (px as usize);
+                                    if buf_idx < buffer.len() { buffer[buf_idx] = TITLE_BAR_TEXT; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        cx += char_w + scale;
+    }
+
+    // Draw close button (X glyph) at top-right corner
+    let btn_x = x0 + (w - CLOSE_BTN_MARGIN as i32 - CLOSE_BTN_SIZE as i32) * scale;
+    let btn_y = y0 + CLOSE_BTN_MARGIN as i32 * scale;
+    let x_glyph = &font::GLYPHS['X' as usize];
+    for (row, &glyph_row) in x_glyph.iter().enumerate().take(font::GLYPH_H) {
+        for col in 0..font::GLYPH_W {
+            if glyph_row & (1 << (7 - col)) != 0 {
+                for sy in 0..scale {
+                    for sx in 0..scale {
+                        let px = btn_x + (col as i32) * scale + sx;
+                        let py = btn_y + (row as i32) * scale + sy;
+                        if px >= 0 && py >= 0 {
+                            let buf_idx = (py as usize) * buf_width + (px as usize);
+                            if buf_idx < buffer.len() { buffer[buf_idx] = TITLE_BAR_CLOSE; }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

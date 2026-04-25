@@ -1332,8 +1332,9 @@ impl Vm {
                             // HITTEST: Check which window the mouse is over.
                             // Uses mouse_x, mouse_y. Iterates windows front-to-back
                             // (highest z_order first). Returns in r0: window_id (0=none).
-                            // In r1: hit_type (0=none, 1=title bar, 2=body).
-                            // Title bar = top 12 pixels of window (including border).
+                            // In r1: hit_type (0=none, 1=title bar, 2=body, 3=close button).
+                            // Title bar = top WINDOW_TITLE_BAR_H pixels.
+                            // Close button = top-right area within title bar.
                             let mx = self.mouse_x;
                             let my = self.mouse_y;
                             let mut best_id: u32 = 0;
@@ -1349,9 +1350,16 @@ impl Vm {
                                 if in_x && in_y && w.z_order > best_z {
                                     best_z = w.z_order;
                                     best_id = w.id;
-                                    // Title bar = top 12 pixels
-                                    if my < w.y + 12 {
-                                        best_hit = 1; // title bar
+                                    let title_bar_h = crate::vm::types::WINDOW_TITLE_BAR_H;
+                                    if my < w.y + title_bar_h {
+                                        // Check if in close button area
+                                        let close_x_start = w.x + w.w - 2 - 8;
+                                        let close_y_end = w.y + 2 + 8;
+                                        if mx >= close_x_start && my < close_y_end {
+                                            best_hit = 3; // close button
+                                        } else {
+                                            best_hit = 1; // title bar
+                                        }
                                     } else {
                                         best_hit = 2; // body
                                     }
@@ -2736,27 +2744,126 @@ impl Vm {
             .collect();
         wins.sort_by_key(|w| w.5); // sort by z_order ascending (lowest first)
 
+        let max_z = wins.iter().map(|w| w.5).max().unwrap_or(0);
+
         for (win_id, _wx, _wy, _ww, wh, _z) in wins {
-            // Find the window and blit its offscreen buffer
-            // We need to clone the relevant parts to avoid borrow issues
-            let win_data: Option<(u32, u32, u32, Vec<u32>)> = self
-                .windows
-                .iter()
-                .find(|w| w.id == win_id)
-                .map(|w| (w.x, w.y, w.w, w.offscreen_buffer.clone()));
-            if let Some((wx, wy, ww, buf)) = win_data {
+            // Find the window and blit its offscreen buffer + title bar
+            let win_data: Option<(u32, u32, u32, Vec<u32>, u32, String)> =
+                self.windows.iter().find(|w| w.id == win_id).map(|w| {
+                    let title = w.read_title(&self.ram);
+                    (w.x, w.y, w.w, w.offscreen_buffer.clone(), w.z_order, title)
+                });
+            if let Some((wx, wy, ww, buf, z_order, title)) = win_data {
                 let w_usize = ww as usize;
                 for py in 0..wh as usize {
                     for px in 0..ww as usize {
                         let color = buf[py * w_usize + px];
                         if color != 0 {
-                            // Transparent pixels (0x00000000) don't overwrite
                             let sx = wx as i32 + px as i32;
                             let sy = wy as i32 + py as i32;
                             if sx >= 0 && sx < 256 && sy >= 0 && sy < 256 {
                                 self.screen[(sy as usize) * 256 + (sx as usize)] = color;
                             }
                         }
+                    }
+                }
+
+                // Draw title bar on top of window content
+                let is_active = z_order == max_z;
+                let display_title = if title.is_empty() {
+                    format!("Win {}", win_id)
+                } else {
+                    title
+                };
+                Self::draw_title_bar_screen(
+                    &mut self.screen,
+                    wx as i32,
+                    wy as i32,
+                    ww,
+                    &display_title,
+                    is_active,
+                );
+            }
+        }
+    }
+
+    /// Draw a title bar onto the 256x256 VM screen buffer.
+    /// Renders: background, border, title text (8x8 font), close button (X).
+    fn draw_title_bar_screen(
+        screen: &mut [u32],
+        x0: i32,
+        y0: i32,
+        win_w: u32,
+        title: &str,
+        is_active: bool,
+    ) {
+        let bar_h = types::WINDOW_TITLE_BAR_H as i32;
+        let w = win_w as i32;
+        let bg_color = if is_active { 0x3A3A5A } else { 0x2A2A3A };
+        let border_color = 0x444466u32;
+        let text_color = 0xCCCCCCu32;
+        let close_color = 0xFF6666u32;
+
+        // Draw title bar background
+        for dy in 0..bar_h {
+            let py = y0 + dy;
+            if py < 0 { continue; }
+            for dx in 0..w {
+                let px = x0 + dx;
+                if px < 0 { continue; }
+                let idx = (py as usize) * 256 + (px as usize);
+                if idx < screen.len() { screen[idx] = bg_color; }
+            }
+        }
+
+        // Draw border line under title bar
+        let border_y = y0 + bar_h;
+        if border_y >= 0 {
+            for dx in 0..w {
+                let px = x0 + dx;
+                if px < 0 { continue; }
+                let idx = (border_y as usize) * 256 + (px as usize);
+                if idx < screen.len() { screen[idx] = border_color; }
+            }
+        }
+
+        // Draw title text (8x8 font)
+        let max_chars = w / 9 - 2;
+        let mut cx = x0 + 2;
+        let cy = y0 + 2;
+        for (i, ch) in title.chars().enumerate() {
+            if i as i32 >= max_chars { break; }
+            let idx = ch as usize;
+            if idx < 128 {
+                let glyph = &crate::font::GLYPHS[idx];
+                for (row, &glyph_row) in glyph.iter().enumerate().take(crate::font::GLYPH_H) {
+                    for col in 0..crate::font::GLYPH_W {
+                        if glyph_row & (1 << (7 - col)) != 0 {
+                            let px = cx + col as i32;
+                            let py = cy + row as i32;
+                            if px >= 0 && py >= 0 {
+                                let buf_idx = (py as usize) * 256 + (px as usize);
+                                if buf_idx < screen.len() { screen[buf_idx] = text_color; }
+                            }
+                        }
+                    }
+                }
+            }
+            cx += crate::font::GLYPH_W as i32 + 1;
+        }
+
+        // Draw close button (X) at top-right corner
+        let btn_x = x0 + w - 2 - 8;
+        let btn_y = y0 + 2;
+        let x_glyph = &crate::font::GLYPHS['X' as usize];
+        for (row, &glyph_row) in x_glyph.iter().enumerate().take(crate::font::GLYPH_H) {
+            for col in 0..crate::font::GLYPH_W {
+                if glyph_row & (1 << (7 - col)) != 0 {
+                    let px = btn_x + col as i32;
+                    let py = btn_y + row as i32;
+                    if px >= 0 && py >= 0 {
+                        let buf_idx = (py as usize) * 256 + (px as usize);
+                        if buf_idx < screen.len() { screen[buf_idx] = close_color; }
                     }
                 }
             }
