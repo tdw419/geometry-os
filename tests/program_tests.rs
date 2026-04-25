@@ -226,3 +226,5 @@ pub mod shell;
 pub mod shell_vfs;
 #[path = "program_tests/vm_state.rs"]
 pub mod vm_state;
+#[path = "program_tests/program_coverage.rs"]
+pub mod program_coverage;

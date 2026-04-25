@@ -14,3 +14,4 @@ Cargo.lock
 *.npy
 pixelflow/gpt2_weights/
 __pycache__/
+tools/hermes_bridge/target/
