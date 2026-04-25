@@ -2946,7 +2946,7 @@ fn main() {
                     let cam_x_tiles = vm.ram.get(0x7800).copied().unwrap_or(0) as i32;
                     let cam_y_tiles = vm.ram.get(0x7801).copied().unwrap_or(0) as i32;
 
-                    // Check if click hits a world-space window title bar (top 12 pixels)
+                    // Check if click hits a world-space window (title bar or body)
                     let mut hit_window = false;
                     // Collect owned data to avoid borrow conflict with later mutation
                     struct WinHitInfo {
@@ -2954,6 +2954,7 @@ fn main() {
                         world_x: i32,
                         world_y: i32,
                         w: u32,
+                        h: u32,
                         z_order: u32,
                     }
                     let mut sorted_win_data: Vec<WinHitInfo> = vm
@@ -2965,6 +2966,7 @@ fn main() {
                             world_x: w.world_x as i32,
                             world_y: w.world_y as i32,
                             w: w.w,
+                            h: w.h,
                             z_order: w.z_order,
                         })
                         .collect();
@@ -2974,26 +2976,38 @@ fn main() {
                     // (both vm_sx/vm_sy and window positions are in 0-255 framebuffer space)
                     let mut hit_close_id: Option<u32> = None;
                     let mut hit_drag: Option<(u32, i32, i32)> = None;
+                    let mut hit_focus_id: Option<u32> = None;
                     for info in &sorted_win_data {
                         let win_fb_x = (info.world_x - cam_x_tiles) * 8;
                         let win_fb_y = (info.world_y - cam_y_tiles) * 8;
                         let win_w = info.w as i32;
+                        let win_h = info.h as i32;
                         let title_bar_h = 12;
 
-                        if vm_sx >= win_fb_x
+                        let in_window = vm_sx >= win_fb_x
                             && vm_sx < win_fb_x + win_w
                             && vm_sy >= win_fb_y
-                            && vm_sy < win_fb_y + title_bar_h
-                        {
-                            let close_btn_size = 8;
-                            let close_btn_margin = 2;
-                            let close_x = win_fb_x + win_w - close_btn_margin - close_btn_size;
-                            let close_y_end = win_fb_y + close_btn_margin + close_btn_size;
+                            && vm_sy < win_fb_y + win_h;
+                        let in_title_bar = vm_sx >= win_fb_x
+                            && vm_sx < win_fb_x + win_w
+                            && vm_sy >= win_fb_y
+                            && vm_sy < win_fb_y + title_bar_h;
 
-                            if vm_sx >= close_x && vm_sy < close_y_end {
-                                hit_close_id = Some(info.id);
+                        if in_window {
+                            if in_title_bar {
+                                let close_btn_size = 8;
+                                let close_btn_margin = 2;
+                                let close_x = win_fb_x + win_w - close_btn_margin - close_btn_size;
+                                let close_y_end = win_fb_y + close_btn_margin + close_btn_size;
+
+                                if vm_sx >= close_x && vm_sy < close_y_end {
+                                    hit_close_id = Some(info.id);
+                                } else {
+                                    hit_drag = Some((info.id, info.world_x, info.world_y));
+                                }
                             } else {
-                                hit_drag = Some((info.id, info.world_x, info.world_y));
+                                // Window body click: bring to front
+                                hit_focus_id = Some(info.id);
                             }
                             break;
                         }
@@ -3012,6 +3026,12 @@ fn main() {
                         window_drag_world_start = (wx, wy);
                         let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
                         if let Some(w) = vm.windows.iter_mut().find(|w| w.id == drag_id) {
+                            w.z_order = max_z + 1;
+                        }
+                        hit_window = true;
+                    } else if let Some(focus_id) = hit_focus_id {
+                        let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                        if let Some(w) = vm.windows.iter_mut().find(|w| w.id == focus_id) {
                             w.z_order = max_z + 1;
                         }
                         hit_window = true;
@@ -3362,48 +3382,84 @@ fn main() {
 
                     if vm_sx >= 0 && vm_sx < 256 && vm_sy >= 0 && vm_sy < 256 {
                         // Check screen-space windows (highest z_order first)
-                        let mut sorted: Vec<_> = vm
+                        // Collect owned data to avoid borrow conflict with later mutation
+                        struct ScreenWinInfo {
+                            id: u32,
+                            x: u32,
+                            y: u32,
+                            w: u32,
+                            h: u32,
+                            z_order: u32,
+                        }
+                        let mut sorted_win_data: Vec<ScreenWinInfo> = vm
                             .windows
                             .iter()
                             .filter(|w| w.active && !w.is_world_space())
+                            .map(|w| ScreenWinInfo {
+                                id: w.id,
+                                x: w.x,
+                                y: w.y,
+                                w: w.w,
+                                h: w.h,
+                                z_order: w.z_order,
+                            })
                             .collect();
-                        sorted.sort_by_key(|w| std::cmp::Reverse(w.z_order));
+                        sorted_win_data.sort_by_key(|info| std::cmp::Reverse(info.z_order));
 
-                        for win in &sorted {
+                        let mut hit_close_id: Option<u32> = None;
+                        let mut hit_drag: Option<(u32, u32, u32)> = None;
+                        let mut hit_focus_id: Option<u32> = None;
+
+                        for info in &sorted_win_data {
                             let bar_h = crate::vm::types::WINDOW_TITLE_BAR_H;
-                            // Title bar hit area: window (x, y) to (x+w, y+bar_h)
-                            if vm_sx >= win.x as i32
-                                && vm_sx < (win.x + win.w) as i32
-                                && vm_sy >= win.y as i32
-                                && vm_sy < (win.y + bar_h) as i32
-                            {
-                                // Check close button (top-right corner, 8x8)
-                                let close_x = (win.x + win.w).saturating_sub(2 + 8);
-                                let close_y_end = win.y + 2 + 8;
-                                if vm_sx >= close_x as i32 && vm_sy < close_y_end as i32 {
-                                    // Close button: destroy window
-                                    let close_id = win.id;
-                                    if let Some(w) =
-                                        vm.windows.iter_mut().find(|w| w.id == close_id)
-                                    {
-                                        w.active = false;
-                                    }
-                                    break;
-                                }
+                            let in_window = vm_sx >= info.x as i32
+                                && vm_sx < (info.x + info.w) as i32
+                                && vm_sy >= info.y as i32
+                                && vm_sy < (info.y + info.h) as i32;
+                            let in_title_bar = vm_sx >= info.x as i32
+                                && vm_sx < (info.x + info.w) as i32
+                                && vm_sy >= info.y as i32
+                                && vm_sy < (info.y + bar_h) as i32;
 
-                                // Title bar drag: start dragging + bring to front
-                                let drag_id = win.id;
-                                let drag_x = win.x;
-                                let drag_y = win.y;
-                                let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
-                                if let Some(w) = vm.windows.iter_mut().find(|w| w.id == drag_id) {
-                                    w.z_order = max_z + 1;
+                            if in_window {
+                                if in_title_bar {
+                                    // Check close button (top-right corner, 8x8)
+                                    let close_x = (info.x + info.w).saturating_sub(2 + 8);
+                                    let close_y_end = info.y + 2 + 8;
+                                    if vm_sx >= close_x as i32 && vm_sy < close_y_end as i32 {
+                                        hit_close_id = Some(info.id);
+                                        break;
+                                    }
+                                    // Title bar drag
+                                    hit_drag = Some((info.id, info.x, info.y));
+                                } else {
+                                    // Window body click: just bring to front
+                                    hit_focus_id = Some(info.id);
                                 }
-                                window_drag_active = true;
-                                window_drag_id = drag_id;
-                                window_drag_start = (mx, my);
-                                window_drag_world_start = (drag_x as i32, drag_y as i32);
                                 break;
+                            }
+                        }
+
+                        // Apply mutations (separate from immutable borrow)
+                        if let Some(close_id) = hit_close_id {
+                            let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                            if let Some(w) = vm.windows.iter_mut().find(|w| w.id == close_id) {
+                                w.z_order = max_z + 1;
+                                w.active = false;
+                            }
+                        } else if let Some((drag_id, drag_x, drag_y)) = hit_drag {
+                            let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                            if let Some(w) = vm.windows.iter_mut().find(|w| w.id == drag_id) {
+                                w.z_order = max_z + 1;
+                            }
+                            window_drag_active = true;
+                            window_drag_id = drag_id;
+                            window_drag_start = (mx, my);
+                            window_drag_world_start = (drag_x as i32, drag_y as i32);
+                        } else if let Some(focus_id) = hit_focus_id {
+                            let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                            if let Some(w) = vm.windows.iter_mut().find(|w| w.id == focus_id) {
+                                w.z_order = max_z + 1;
                             }
                         }
                     }
