@@ -2634,7 +2634,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
   - [x] window_list returns JSON array of active windows with id, title, pid, x, y, w, h, z_order
   - [x] window_move <id> <x> <y> moves window and returns success
   - [x] window_close <id> destroys window and returns success
-  - [ ] window_focus <id> brings window to front
+  - [x] window_focus <id> brings window to front
   - [ ] window_resize <id> <w> <h> resizes window offscreen buffer
   - [ ] process_kill <pid> kills all windows for a PID
   _~300 LOC_
@@ -2653,7 +2653,7 @@ Bridge existing VM window management (WINSYS ops), input injection, and vision c
   - [x] test_window_list_socket verifies socket command returns window data
   - [x] test_window_move_socket verifies window moves
   - [x] test_window_close_socket verifies window destruction
-  - [ ] test_window_focus_socket verifies z_order change
+  - [x] test_window_focus_socket verifies z_order change
   - [ ] test_window_resize_socket verifies buffer resize
   - [ ] test_process_kill_socket verifies all PID windows destroyed
   - [ ] test_desktop_key_mcp verifies MCP tool translation

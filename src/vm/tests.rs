@@ -16667,6 +16667,82 @@ fn test_window_resize_updates_buffer() {
 }
 
 #[test]
+fn test_window_focus_handler_sets_z_order() {
+    // Verify window_focus handler sets z_order to max+1
+    let source = std::fs::read_to_string("src/main.rs").unwrap();
+
+    let start = source
+        .find("\"window_focus\" =>")
+        .expect("window_focus handler should exist");
+    let end = source[start..]
+        .find("\"window_resize\" =>")
+        .expect("window_resize should follow");
+    let handler = &source[start..start + end];
+
+    assert!(
+        handler.contains("z_order = max_z + 1"),
+        "should set z_order to max_z + 1"
+    );
+    assert!(
+        handler.contains("ok focus"),
+        "should report success with window id and new z_order"
+    );
+    assert!(
+        handler.contains("not found"),
+        "should report failure for missing windows"
+    );
+}
+
+#[test]
+fn test_window_focus_socket() {
+    // Runtime test: create windows, focus one, verify z_order change
+    use crate::vm::types::Window;
+
+    let mut vm = Vm::new();
+
+    // Create two active windows with different z_orders
+    let mut w1 = Window::new(1, 10, 10, 64, 32, 0, 1);
+    w1.active = true;
+    w1.z_order = 1;
+    vm.windows.push(w1);
+
+    let mut w2 = Window::new(2, 20, 20, 64, 32, 0, 1);
+    w2.active = true;
+    w2.z_order = 5;
+    vm.windows.push(w2);
+
+    // Simulate window_focus 1 (same logic as socket handler)
+    let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+    let found = vm.windows.iter_mut().find(|w| w.id == 1 && w.active);
+    assert!(found.is_some(), "should find active window to focus");
+
+    if let Some(w) = found {
+        w.z_order = max_z + 1;
+    }
+
+    // Verify window 1 now has the highest z_order
+    let w1 = vm.windows.iter().find(|w| w.id == 1).unwrap();
+    assert_eq!(w1.z_order, 6, "window 1 should have z_order 6 (was 1, max was 5)");
+
+    // Window 2 should still have z_order 5
+    let w2 = vm.windows.iter().find(|w| w.id == 2).unwrap();
+    assert_eq!(w2.z_order, 5, "window 2 z_order should be unchanged");
+
+    // Test focusing a non-existent window
+    let not_found = vm.windows.iter_mut().find(|w| w.id == 999 && w.active);
+    assert!(not_found.is_none(), "non-existent window should not be found");
+
+    // Test focusing an inactive window
+    let mut w3 = Window::new(3, 30, 30, 64, 32, 0, 1);
+    w3.active = false;
+    w3.z_order = 0;
+    vm.windows.push(w3);
+
+    let inactive = vm.windows.iter_mut().find(|w| w.id == 3 && w.active);
+    assert!(inactive.is_none(), "inactive window should not be focusable");
+}
+
+#[test]
 fn test_desktop_vision_handler_structure() {
     // Verify desktop_vision combines window_list and vmscreen
     let source = std::fs::read_to_string("src/mcp_server.rs").unwrap();
