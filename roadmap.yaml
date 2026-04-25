@@ -6160,7 +6160,7 @@ phases:
   test_target: 2062
 - id: phase-126
   title: Host Terminal -- PTY Read/Write Fix
-  status: in_progress
+  status: done
   goal: Fix the critical PTYREAD bug where bash output never reaches the VM, enabling
     the first working host shell terminal
   description: 'The host_term.asm program spawns bash via PTYOPEN but PTYREAD returns
@@ -6175,35 +6175,35 @@ phases:
       or 'xterm' so bash emits a prompt. Also set PS1='$ ' in the spawned bash env
       to guarantee a simple prompt. Optionally write a '\n' to the master after spawn
       to trigger bash prompt emission.
-    status: todo
+    status: done
     tasks:
     - id: p126.d1.t1
       title: Change TERM to xterm in spawn()
-      status: todo
+      status: done
       description: 'Edit ops_pty.rs: c.env("TERM", "xterm") instead of "dumb"'
     - id: p126.d1.t2
       title: Set simple PS1 in spawned shell env
-      status: todo
+      status: done
       description: Add c.env("PS1", "$ ") to CommandBuilder for predictable prompt
     - id: p126.d1.t3
       title: Write newline to master after spawn
-      status: todo
+      status: done
       description: After spawn, write b"\n" to master to trigger prompt output
     scope_lines: 30
   - name: Add PTY open/write/read integration test
     description: 'Add a test that: spawns bash, sends ''echo hello\n'', drains PTYREAD,
       asserts ''hello'' appears in output. This catches the PTYREAD-empty-channel
       regression. Place in tests/program_tests.rs as test_host_term_pty_roundtrip.'
-    status: todo
+    status: done
     tasks:
     - id: p126.d2.t1
       title: Write PTY roundtrip integration test
-      status: todo
+      status: done
       description: 'Test: PTYOPEN -> PTYWRITE ''echo hello\n'' -> PTYREAD -> assert
         ''hello'' in RAM buffer'
     - id: p126.d2.t2
       title: Test initial prompt emission
-      status: todo
+      status: done
       description: Test that after PTYOPEN, PTYREAD returns non-zero within 100 frames
         without any write
     scope_lines: 80
@@ -6212,21 +6212,21 @@ phases:
       for ~60 frames before entering the main loop. Also add a diagnostic: if no bytes
       received after 500 frames, send ''echo $HOSTNAME\n'' to probe the PTY. Display
       ''[connecting...]'' in the terminal area.'
-    status: todo
+    status: done
     tasks:
     - id: p126.d3.t1
       title: Add startup drain loop after PTYOPEN
-      status: todo
+      status: done
       description: Run PTYREAD for ~60 frames to collect initial prompt before entering
         main loop
     - id: p126.d3.t2
       title: Add connection status indicator
-      status: todo
+      status: done
       description: Show '[connecting...]' text, then switch to prompt when first bytes
         arrive
     - id: p126.d3.t3
       title: Add probe echo if no output after timeout
-      status: todo
+      status: done
       description: After 500 frames with no PTY output, send 'echo ready\n' to probe
     scope_lines: 120
   scope_lines_total: 72600
