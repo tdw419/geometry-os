@@ -6,7 +6,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 
 **Deliverables:** 511/511 complete
 
-**Tasks:** 1075/1075 complete
+**Tasks:** 1191/1191 complete
 
 ## Scope Summary
 

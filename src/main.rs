@@ -2751,6 +2751,7 @@ fn main() {
                                         focused_idx = i;
                                     }
                                 }
+                                if win_data.is_empty() { continue; }
                                 let fw = &win_data[focused_idx];
 
                                 // Build ASCII overlay (32x32 grid mapping 256x256 screen)
