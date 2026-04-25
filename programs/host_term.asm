@@ -130,17 +130,7 @@ STORE r20, r10
 LDI r28, 0
 ADD r28, r10
 
-; Restore r1 = 1 (clobbered by earlier HITSET/DRAWTEXT/STORE code)
-LDI r1, 1
-
-; Busy-wait for bash to start up (~150ms)
-; SUB + JNZ = 2 steps per iteration. 50000 iters = 100000 steps.
-; At ~1M steps/sec, that's ~100ms. Good enough for bash startup.
-LDI r11, 50000
-busy_wait:
-    SUB r11, r1
-    JNZ r11, busy_wait
-
+; r1 = 1 (restore after earlier code clobbered it)
 LDI r1, 1
 
 ; =========================================
@@ -154,16 +144,18 @@ main_loop:
     LDI r7, 512
     PTYREAD r28, r6, r7
     ; r0 = bytes drained (0 = nothing, 0xFFFFFFFF = closed)
-    CMPI r0, 0
+    ; Save byte count before CMPI destroys it
+    MOV r8, r0
+    CMPI r8, 0
     JZ r0, after_drain
-    LDI r8, 0xFFFFFFFF
-    CMP r0, r8
+    LDI r7, 0xFFFFFFFF
+    CMP r8, r7
     JZ r0, pty_closed
 
     ; Process each byte through ANSI filter -> text buffer
     LDI r9, 0
 append_loop:
-    CMP r9, r0
+    CMP r9, r8
     BGE r0, after_drain
     LDI r20, RECV_BUF
     ADD r20, r9

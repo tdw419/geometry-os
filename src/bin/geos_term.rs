@@ -8,7 +8,7 @@
 // Usage:
 //   geos-term                        # runs programs/host_term.asm
 //   geos-term programs/snake.asm     # runs any GeOS program
-//   geos-term -- --scale 4           # 4x scale (1024x1024 window)
+//   geos-term --scale 4              # 4x scale (1024x1024 window)
 
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 
@@ -88,53 +88,43 @@ fn main() {
                 if !vm.step() {
                     break;
                 }
-                // No child processes in standalone mode -- skip scheduler
                 if vm.frame_ready {
                     break;
                 }
             }
-            // Give PTY reader thread time to deliver data
-            if frame % 100 == 99 {
-                std::thread::sleep(std::time::Duration::from_millis(10));
+            // Give PTY reader thread time to deliver data.
+            // First frame: bash needs ~200ms to start and output prompt.
+            if frame == 0 {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            } else {
+                std::thread::sleep(std::time::Duration::from_millis(1));
             }
         }
-        // Dump diagnostics
+        // Quick diagnostics
         let pty_handle = vm.ram[0x4E03];
-        eprintln!("[geos-term] PTY slots: {} active, handle={}", 
-            vm.pty_slots.iter().filter(|s| s.is_some()).count(), pty_handle);
-        // Drain PTY channel directly to see what's left
-        if pty_handle < vm.pty_slots.len() as u32 {
-            if let Some(ref slot) = vm.pty_slots[pty_handle as usize] {
-                let leftover = slot.drain_remaining();
-                eprintln!("[geos-term] PTY channel leftover: {} bytes", leftover.len());
-                if !leftover.is_empty() {
-                    let hex: Vec<String> = leftover[..leftover.len().min(60)].iter()
-                        .map(|b| format!("{:02x}", b)).collect();
-                    eprintln!("[geos-term] hex: {}", hex.join(" "));
-                    let txt: String = leftover.iter().map(|&b| {
-                        if b >= 32 && b < 127 { b as char } else { '.' }
-                    }).collect();
-                    eprintln!("[geos-term] txt: '{}'", &txt[..txt.len().min(200)]);
-                }
-                eprintln!("[geos-term] PTY alive? {}", slot.is_alive());
-            }
-        }
-        let cur_col = vm.ram[0x4E00];
-        let cur_row = vm.ram[0x4E01];
-        let ansi_state = vm.ram[0x4E04];
-        eprintln!("[geos-term] cursor: col={}, row={}, ansi_state={}, pc={}, r28={}", 
-            cur_col, cur_row, ansi_state, vm.pc, vm.regs[28]);
+        eprintln!(
+            "[geos-term] PTY active={} handle={} cursor={}/{} ansi={} pc={}",
+            vm.pty_slots.iter().filter(|s| s.is_some()).count(),
+            pty_handle,
+            vm.ram[0x4E00],
+            vm.ram[0x4E01],
+            vm.ram[0x4E04],
+            vm.pc,
+        );
         // Sample text buffer rows
         for row in 0..3 {
             let mut sample = String::new();
-            for col in 0..20 {
+            for col in 0..40 {
                 let ch = vm.ram[0x4000 + row * 85 + col] & 0xFF;
-                if ch >= 32 && ch < 127 { sample.push(ch as u8 as char); } else { sample.push('.'); }
+                if ch >= 32 && ch < 127 {
+                    sample.push(ch as u8 as char);
+                } else {
+                    sample.push('.');
+                }
             }
             eprintln!("[geos-term] buf row {}: '{}'", row, sample);
         }
         // Dump 256x256 screen as ASCII
-        // Map pixel brightness to characters
         let chars = " .:-=+*#%@";
         for y in 0..VM_H {
             let mut line = String::with_capacity(VM_W);
@@ -147,7 +137,6 @@ fn main() {
                 let idx = bright.min(chars.len() - 1);
                 line.push(chars.chars().nth(idx).unwrap());
             }
-            // Trim trailing spaces for readability
             let trimmed = line.trim_end();
             if !trimmed.is_empty() {
                 println!("{}", trimmed);
@@ -184,7 +173,7 @@ fn main() {
             }
         }
 
-        // Step until FRAME or halt (cap to keep the window responsive)
+        // Step until FRAME or halt
         if !vm.halted {
             vm.frame_ready = false;
             for _ in 0..1_000_000 {
