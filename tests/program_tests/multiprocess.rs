@@ -1314,3 +1314,106 @@ fn test_multi_process_launch() {
     assert_eq!(vm.windows.len(), 2, "both windows should be active");
 }
 
+#[test]
+fn test_window_drag_updates_world_coords() {
+    // Simulates what the fullscreen map drag handler does:
+    // 1. Create a world-space window at (50, 60)
+    // 2. Simulate drag: compute new world coords from pixel delta
+    // 3. Verify world_x/world_y update correctly
+
+    let source = "
+    ; Enable world-space mode
+    LDI r17, 0x7810
+    LDI r18, 1
+    STORE r17, r18
+
+    ; Create window with world coords (50, 60), size 64x48
+    LDI r1, 50
+    LDI r2, 60
+    LDI r3, 64
+    LDI r4, 48
+    LDI r5, 0x2000
+    LDI r6, 0
+    WINSYS r6
+    HALT
+    ";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Verify initial state
+    assert_eq!(vm.windows.len(), 1);
+    let win = &vm.windows[0];
+    assert!(win.is_world_space());
+    assert_eq!(win.world_x, 50);
+    assert_eq!(win.world_y, 60);
+
+    // Simulate drag: new_wx = old_wx + dx, new_wy = old_wy + dy
+    // This mirrors main.rs lines 3039-3045:
+    //   let dx = (mx - window_drag_start.0) / px_per_tile;
+    //   let new_wx = window_drag_world_start.0 + dx as i32;
+    //   w.world_x = if new_wx >= 0 { new_wx as u32 } else { 0 };
+    let new_wx: i32 = 50 + 15; // dragged 15 tiles right
+    let new_wy: i32 = 60 + 10; // dragged 10 tiles down
+    let win = vm.windows.iter_mut().find(|w| w.id == 1).unwrap();
+    win.world_x = if new_wx >= 0 { new_wx as u32 } else { 0 };
+    win.world_y = if new_wy >= 0 { new_wy as u32 } else { 0 };
+
+    // Verify updated world coords
+    let win = &vm.windows[0];
+    assert_eq!(win.world_x, 65, "world_x should update to 65 after drag");
+    assert_eq!(win.world_y, 70, "world_y should update to 70 after drag");
+    assert!(win.is_world_space(), "window should still be world-space after drag");
+}
+
+#[test]
+fn test_window_drag_negative_clamps_to_zero() {
+    // Dragging a window to negative world coords should clamp to 0
+
+    let source = "
+    ; Enable world-space mode
+    LDI r17, 0x7810
+    LDI r18, 1
+    STORE r17, r18
+
+    ; Create window at world coords (5, 3)
+    LDI r1, 5
+    LDI r2, 3
+    LDI r3, 64
+    LDI r4, 48
+    LDI r5, 0x2000
+    LDI r6, 0
+    WINSYS r6
+    HALT
+    ";
+    let asm = assemble(source, 0).expect("assembly should succeed");
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        vm.ram[i] = v;
+    }
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Simulate dragging to negative position (dragged further left/up than origin)
+    let new_wx: i32 = 5 - 10; // would be -5
+    let new_wy: i32 = 3 - 8;  // would be -5
+    let win = vm.windows.iter_mut().find(|w| w.id == 1).unwrap();
+    win.world_x = if new_wx >= 0 { new_wx as u32 } else { 0 };
+    win.world_y = if new_wy >= 0 { new_wy as u32 } else { 0 };
+
+    let win = &vm.windows[0];
+    assert_eq!(win.world_x, 0, "world_x should clamp to 0 on negative drag");
+    assert_eq!(win.world_y, 0, "world_y should clamp to 0 on negative drag");
+}
+

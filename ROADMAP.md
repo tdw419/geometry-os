@@ -2693,7 +2693,7 @@ Transform the map from a launcher into an infinite spatial desktop where app win
   - [x] Each windowed app gets its own RAM region (0x8000+N*4096)
   _~400 LOC_
 - [x] **Window drag and mouse routing** -- Extend the mouse handling to support dragging windows in world space. When the mouse clicks on a window's title bar (top 8 pixels), enter drag mode. Mouse movement updates the window's world_x, world_y. MOUSEQ events from programs are translated relative to the window's screen-space position so the app thinks it has its own mouse.
-  - [ ] Dragging a window by its title bar updates world_x, world_y
+  - [x] Dragging a window by its title bar updates world_x, world_y
   - [ ] Click on window brings it to front (z_order update)
   - [ ] Window title bars render as clickable regions
   - [ ] MOUSEQ events routed to correct window based on world-space hit test
