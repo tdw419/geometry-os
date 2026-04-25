@@ -863,6 +863,16 @@ impl Vm {
             // ASM_RAM src_addr_reg (0xB3) -- Assemble source string from RAM
             0xB3 => (format!("ASM_RAM {}", reg(ram(a + 1))), 2),
 
+            // ── Phase 123: Alpine Linux Live Tile Opcodes ──
+            // VM_LIVE_SPAWN config_reg, window_reg (0xB4)
+            0xB4 => (format!("VM_LIVE_SPAWN {}, {}", reg(ram(a + 1)), reg(ram(a + 2))), 3),
+
+            // VM_LIVE_STEP (0xB5) -- Advance live RISC-V VM by one time slice
+            0xB5 => ("VM_LIVE_STEP".into(), 1),
+
+            // VM_LIVE_KILL (0xB6) -- Kill the live RISC-V hypervisor
+            0xB6 => ("VM_LIVE_KILL".into(), 1),
+
             _ => (format!("??? (0x{:02X})", op), 1),
         }
     }

@@ -772,6 +772,36 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        // ── Phase 123: Alpine Linux Live Tile Opcodes ──
+        "VM_LIVE_SPAWN" => {
+            // VM_LIVE_SPAWN config_reg, window_reg
+            // 3 words: [0xB4, config_reg, window_reg]
+            if tokens.len() < 3 {
+                return Err(
+                    "VM_LIVE_SPAWN requires 2 arguments: VM_LIVE_SPAWN config_reg, window_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0xB4);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
+        "VM_LIVE_STEP" => {
+            // VM_LIVE_STEP (no args)
+            // 1 word: [0xB5]
+            bytecode.push(0xB5);
+            Ok(Some(()))
+        }
+
+        "VM_LIVE_KILL" => {
+            // VM_LIVE_KILL (no args)
+            // 1 word: [0xB6]
+            bytecode.push(0xB6);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

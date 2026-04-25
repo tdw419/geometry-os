@@ -168,6 +168,18 @@ pub struct Vm {
     /// Next background VM ID to assign (monotonically increasing, 1-based).
     pub next_bg_vm_id: u32,
 
+    // ── Phase 123: Alpine Linux Live Tile ────────────────────
+    /// Active live RISC-V hypervisor instance (only one at a time).
+    /// Rendered to a WINSYS window's offscreen buffer each frame.
+    /// Created by VM_LIVE_SPAWN, destroyed by VM_LIVE_KILL.
+    pub live_hypervisor: Option<LiveHypervisorState>,
+
+    // ── Inter-Tile Mailbox
+    /// Active live RISC-V hypervisor instance (only one at a time).
+    /// Rendered to a WINSYS window's offscreen buffer each frame.
+    /// Created by VM_LIVE_SPAWN, destroyed by VM_LIVE_KILL.
+    pub live_hypervisor: Option<LiveHypervisorState>,
+
     // ── Inter-Tile Mailbox (Phase 4.1) ──────────────────────────
     /// Write buffer for mailbox sends. Messages are committed on FRAME.
     pub mailbox_write_buf: Vec<MailboxEntry>,
@@ -2720,6 +2732,194 @@ impl Vm {
                 }
             }
 
+            // ── Phase 123: Alpine Linux Live Tile Opcodes ──────────────
+
+            // VM_LIVE_SPAWN config_reg, window_reg (0xB4) -- Create a live RISC-V hypervisor.
+            // Reads config string from RAM at address in config_reg.
+            // window_reg: WINSYS window_id (MUST be >0 for console rendering).
+            // Creates a RiscvVm, sets PC to 0x80000000 (default RAM base), and stores
+            // in live_hypervisor. Only one live VM at a time.
+            // r0 = 0 on success, 0xFFFFFFFF on bad config, 0xFFFFFFFE on no window,
+            // 0xFFFFFFFD on already active, 0xFFFFFFFC on missing kernel=.
+            // Encoding: 3 words [0xB4, config_reg, window_reg]
+            0xB4 => {
+                let config_reg = self.fetch() as usize;
+                let win_reg = self.fetch() as usize;
+                let window_id = if win_reg < NUM_REGS {
+                    self.regs[win_reg]
+                } else {
+                    0
+                };
+                if window_id == 0 {
+                    self.regs[0] = 0xFFFFFFFE; // no window
+                } else if self.live_hypervisor.is_some() {
+                    self.regs[0] = 0xFFFFFFFD; // already active
+                } else if config_reg >= NUM_REGS {
+                    self.regs[0] = 0xFFFFFFFF; // bad register
+                } else {
+                    let addr = self.regs[config_reg] as usize;
+                    let config = Self::read_string_static(&self.ram, addr);
+                    match config {
+                        Some(cfg) => {
+                            let has_arch = cfg
+                                .split_whitespace()
+                                .any(|t| t.to_lowercase().starts_with("arch=") && t.len() > 5);
+                            let has_kernel = cfg
+                                .split_whitespace()
+                                .any(|t| t.to_lowercase().starts_with("kernel=") && t.len() > 7);
+                            if !has_arch {
+                                self.regs[0] = 0xFFFFFFFF; // missing arch=
+                            } else if !has_kernel {
+                                self.regs[0] = 0xFFFFFFFC; // missing kernel=
+                            } else {
+                                // Parse ram size (default 64MB)
+                                let ram_mb: u32 = cfg
+                                    .split_whitespace()
+                                    .find(|t| t.to_lowercase().starts_with("ram="))
+                                    .and_then(|t| t.split('=').nth(1))
+                                    .and_then(|v| {
+                                        let v = v.to_lowercase();
+                                        let num: u32 = v.trim_end_matches('m').parse().ok()?;
+                                        Some(num)
+                                    })
+                                    .unwrap_or(64);
+                                let ram_size = (ram_mb as usize) * 1024 * 1024;
+                                let riscv_vm = crate::riscv::RiscvVm::new(ram_size);
+                                self.live_hypervisor = Some(LiveHypervisorState {
+                                    vm: riscv_vm,
+                                    window_id,
+                                    instructions_per_slice: 500,
+                                    total_instructions: 0,
+                                    console_row: 0,
+                                    console_col: 0,
+                                    booted: false,
+                                });
+                                self.regs[0] = 0; // success
+                            }
+                        }
+                        None => {
+                            self.regs[0] = 0xFFFFFFFF; // empty/null config
+                        }
+                    }
+                }
+            }
+
+            // VM_LIVE_STEP (0xB5) -- Advance the live RISC-V VM by one time slice.
+            // Steps the RiscvVm for instructions_per_slice instructions,
+            // drains UART output to the window offscreen buffer.
+            // r0 = total instructions executed (cumulative), 0xFFFFFFFF if no live VM.
+            // Encoding: 1 word [0xB5]
+            0xB5 => {
+                if let Some(ref mut live) = self.live_hypervisor {
+                    let budget = live.instructions_per_slice;
+                    let win_id = live.window_id;
+                    for _ in 0..budget {
+                        live.vm.step();
+                        live.total_instructions += 1;
+                    }
+                    // Drain UART output to window
+                    let win = self.windows.iter().find(|w| w.id == win_id && w.active);
+                    if let Some(win) = win {
+                        let w = win.w as usize;
+                        let h = win.h as usize;
+                        let row = live.console_row;
+                        let col = live.console_col;
+                        let max_cols = w / 6; // 6px per char
+                        let max_rows = h / 8; // 8px per char row
+                        // Drain UART
+                        let bytes = live.vm.bus.uart.drain_tx();
+                        if !bytes.is_empty() {
+                            let mut cur_row = row as usize;
+                            let mut cur_col = col as usize;
+                            for &byte in &bytes {
+                                if byte == b'\n' {
+                                    cur_row += 1;
+                                    cur_col = 0;
+                                } else if byte == b'\r' {
+                                    cur_col = 0;
+                                } else if byte == 0x1B {
+                                    // Skip ANSI escapes (simplified)
+                                    continue;
+                                } else {
+                                    // Render char to offscreen buffer
+                                    let char_px_x = cur_col * 6;
+                                    let char_px_y = cur_row * 8;
+                                    if char_px_x + 6 <= w && char_px_y + 8 <= h {
+                                        let glyph_idx = byte as usize;
+                                        if glyph_idx < 128 {
+                                            let glyph = &crate::font::GLYPHS[glyph_idx];
+                                            let buf = self.windows.iter_mut()
+                                                .find(|w2| w2.id == win_id && w2.active);
+                                            if let Some(buf_win) = buf {
+                                                let text_color = 0xFF00FF00u32; // green on black
+                                                for (gi, &row_bits) in glyph.iter().enumerate() {
+                                                    for bit in 0..6 {
+                                                        if row_bits & (1 << (5 - bit)) != 0 {
+                                                            let px = char_px_x + bit;
+                                                            let py = char_px_y + gi;
+                                                            if px < w && py < h {
+                                                                buf_win.offscreen_buffer[py * w + px] = text_color;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    cur_col += 1;
+                                    if cur_col >= max_cols {
+                                        cur_row += 1;
+                                        cur_col = 0;
+                                    }
+                                }
+                            }
+                            // Handle scroll
+                            if cur_row >= max_rows && max_rows > 0 {
+                                // Scroll up by one line
+                                let line_bytes = max_cols * 6 * 8; // one row of chars in pixels
+                                let line_width = max_cols * 6;
+                                let total_px = w * h;
+                                let buf = self.windows.iter_mut()
+                                    .find(|w2| w2.id == win_id && w2.active);
+                                if let Some(buf_win) = buf {
+                                    // Shift everything up by 8 pixels (one char row)
+                                    for y in 8..h {
+                                        for x in 0..w {
+                                            buf_win.offscreen_buffer[(y - 8) * w + x] =
+                                                buf_win.offscreen_buffer[y * w + x];
+                                        }
+                                    }
+                                    // Clear last row
+                                    for y in (h - 8)..h {
+                                        for x in 0..w {
+                                            buf_win.offscreen_buffer[y * w + x] = 0;
+                                        }
+                                    }
+                                }
+                                cur_row = max_rows - 1;
+                            }
+                            live.console_row = cur_row as u32;
+                            live.console_col = cur_col as u32;
+                        }
+                    }
+                    self.regs[0] = live.total_instructions as u32;
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
+            // VM_LIVE_KILL (0xB6) -- Kill the live RISC-V hypervisor.
+            // r0 = 0 on success, 0xFFFFFFFF if no live VM.
+            // Encoding: 1 word [0xB6]
+            0xB6 => {
+                if self.live_hypervisor.is_some() {
+                    self.live_hypervisor = None;
+                    self.regs[0] = 0;
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;
@@ -2868,6 +3068,96 @@ impl Vm {
                 }
             }
         }
+    }
+
+    /// Render console output from the live hypervisor into its window.
+    /// Drains UART TX, renders printable chars to the offscreen buffer,
+    /// handles newlines, scroll, and ANSI escapes (simplified).
+    /// Phase 123: used by tests to verify console rendering.
+    pub fn render_console_to_window(&mut self, live: &mut LiveHypervisorState) {
+        let win_id = live.window_id;
+        let win = self.windows.iter().find(|w| w.id == win_id && w.active);
+        if win.is_none() {
+            return;
+        }
+        let w = win.unwrap().w as usize;
+        let h = win.unwrap().h as usize;
+        let max_cols = if w >= 6 { w / 6 } else { 1 };
+        let max_rows = if h >= 8 { h / 8 } else { 1 };
+
+        let bytes = live.vm.bus.uart.drain_tx();
+        if bytes.is_empty() {
+            return;
+        }
+
+        let mut cur_row = live.console_row as usize;
+        let mut cur_col = live.console_col as usize;
+
+        for &byte in &bytes {
+            if byte == b'\n' {
+                cur_row += 1;
+                cur_col = 0;
+            } else if byte == b'\r' {
+                cur_col = 0;
+            } else if byte == 0x1B {
+                // Skip ANSI escape sequences (simplified)
+                continue;
+            } else {
+                // Render character
+                let char_px_x = cur_col * 6;
+                let char_px_y = cur_row * 8;
+                if char_px_x + 6 <= w && char_px_y + 8 <= h {
+                    let glyph_idx = byte as usize;
+                    if glyph_idx < 128 {
+                        let glyph = &crate::font::GLYPHS[glyph_idx];
+                        let text_color = 0xFF00FF00u32; // green text
+                        let buf = self.windows.iter_mut()
+                            .find(|w2| w2.id == win_id && w2.active);
+                        if let Some(buf_win) = buf {
+                            for (gi, &row_bits) in glyph.iter().enumerate() {
+                                for bit in 0..6 {
+                                    if row_bits & (1 << (5 - bit)) != 0 {
+                                        let px = char_px_x + bit;
+                                        let py = char_px_y + gi;
+                                        if px < w && py < h {
+                                            buf_win.offscreen_buffer[py * w + px] = text_color;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                cur_col += 1;
+                if cur_col >= max_cols {
+                    cur_row += 1;
+                    cur_col = 0;
+                }
+            }
+        }
+
+        // Scroll if needed
+        if cur_row >= max_rows && max_rows > 0 {
+            let buf = self.windows.iter_mut()
+                .find(|w2| w2.id == win_id && w2.active);
+            if let Some(buf_win) = buf {
+                for y in 8..h {
+                    for x in 0..w {
+                        buf_win.offscreen_buffer[(y - 8) * w + x] =
+                            buf_win.offscreen_buffer[y * w + x];
+                    }
+                }
+                for y in (h - 8)..h {
+                    for x in 0..w {
+                        buf_win.offscreen_buffer[y * w + x] = 0;
+                    }
+                }
+            }
+            cur_row = max_rows - 1;
+        }
+
+        live.console_row = cur_row as u32;
+        live.console_col = cur_col as u32;
     }
 
     /// Call an external LLM API via curl. Returns the response text or None on error.

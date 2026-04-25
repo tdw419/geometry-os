@@ -865,3 +865,23 @@ impl Default for BackgroundVm {
         }
     }
 }
+
+/// Phase 123: Alpine Linux Live Tile state.
+/// A single live RISC-V hypervisor that renders its console output
+/// into a WINSYS window's offscreen buffer each frame.
+pub struct LiveHypervisorState {
+    /// The live RISC-V VM instance.
+    pub vm: crate::riscv::RiscvVm,
+    /// WINSYS window ID to render console output into.
+    pub window_id: u32,
+    /// Number of RISC-V instructions to execute per VM_LIVE_STEP call.
+    pub instructions_per_slice: u32,
+    /// Cumulative instructions executed.
+    pub total_instructions: u64,
+    /// Current console cursor row (for text rendering in the window).
+    pub console_row: u32,
+    /// Current console cursor column.
+    pub console_col: u32,
+    /// Whether the VM has completed its initial boot.
+    pub booted: bool,
+}
