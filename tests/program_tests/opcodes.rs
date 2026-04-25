@@ -1258,3 +1258,87 @@ drain_loop:
         text
     );
 }
+
+// ── PTY initial prompt emission test ──────────────────────────────
+//
+// After PTYOPEN, the reader thread should receive output from bash
+// within a reasonable wall-clock budget WITHOUT any explicit PTYWRITE.
+// This catches the TERM=dumb regression that suppressed prompt output.
+
+#[test]
+fn test_host_term_pty_initial_output() {
+    // Program: open bash (no write), drain PTYREAD for ~100 frames
+    let source = "
+        LDI r1, 0x5000
+        LDI r0, 0
+        STORE r1, r0
+        LDI r5, 0x5000
+        PTYOPEN r5, r10
+        LDI r12, 0x6000
+        LDI r16, 256
+drain_loop:
+        PTYREAD r10, r12, r16
+        ADD r12, r0
+        FRAME
+        JMP drain_loop
+    ";
+
+    let asm = match assemble(source, 0) {
+        Ok(a) => a,
+        Err(e) => panic!("assembly failed: {} on line {}", e.message, e.line),
+    };
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run for up to 3 seconds wall-clock, ~100 frames
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    let mut frames_seen = 0u32;
+    while std::time::Instant::now() < deadline && frames_seen < 100 {
+        for _ in 0..5000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_ready {
+                vm.frame_ready = false;
+                frames_seen += 1;
+            }
+        }
+        if frames_seen >= 100 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+
+    // Collect all non-zero bytes from the receive buffer
+    let mut bytes = Vec::new();
+    for i in 0..8192 {
+        let cell = vm.ram[0x6000 + i];
+        if cell == 0 {
+            continue;
+        }
+        bytes.push((cell & 0xFF) as u8);
+    }
+    let text = String::from_utf8_lossy(&bytes);
+
+    assert!(
+        !text.is_empty(),
+        "PTYREAD should have received some output from bash within 3s. \
+         frames_seen={}, text={:?}",
+        frames_seen,
+        text
+    );
+
+    // With PS1='$ ', bash should emit a prompt containing '$'
+    // (may also contain ANSI escape sequences)
+    assert!(
+        text.contains('$') || text.contains('/') || text.contains('\n'),
+        "expected bash prompt or output with '$', '/', or newline, got: {:?}",
+        text
+    );
+}

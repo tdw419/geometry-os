@@ -134,6 +134,159 @@ ADD r28, r10
 LDI r1, 1
 
 ; =========================================
+; STARTUP DRAIN -- collect initial bash output
+; =========================================
+; Show "[connecting...]" in the terminal
+LDI r20, SEND_BUF
+STRO r20, "[connecting...]"
+CALL write_str_to_buf
+CALL render
+FRAME
+
+; Drain initial output for ~60 frames to collect bash prompt.
+; Bash with TERM=xterm and PS1='$ ' should emit prompt bytes
+; after the initial newline we sent during PTY spawn.
+LDI r21, 0          ; received_any flag
+LDI r22, 0          ; frame counter
+LDI r23, 60         ; max startup frames
+
+startup_drain:
+    ; Read from PTY
+    LDI r6, RECV_BUF
+    LDI r7, 512
+    PTYREAD r28, r6, r7
+    MOV r8, r0
+    CMPI r8, 0
+    JZ r0, startup_check_done
+    LDI r7, 0xFFFFFFFF
+    CMP r8, r7
+    JZ r0, pty_closed
+
+    ; Process received bytes
+    LDI r9, 0
+startup_append:
+    CMP r9, r8
+    BGE r0, startup_after
+    LDI r20, RECV_BUF
+    ADD r20, r9
+    LOAD r5, r20
+    CALL process_byte
+    ADD r9, r1
+    JMP startup_append
+startup_after:
+    LDI r21, 1      ; mark as received
+
+startup_check_done:
+    CALL render
+    FRAME
+    ADD r22, r1
+    CMPI r22, 60
+    BLT r22, startup_drain
+
+; If no output received after 60 frames, probe with echo
+CMPI r21, 0
+JNZ r0, startup_done
+
+; Show "[probing...]" and send echo to trigger output
+LDI r20, SEND_BUF
+STRO r20, "[probing...]"
+CALL write_str_to_buf
+CALL render
+FRAME
+
+; Send "echo ready\n" to probe the PTY
+LDI r20, SEND_BUF
+LDI r0, 101
+STORE r20, r0
+LDI r20, SEND_BUF
+ADD r20, r1
+LDI r0, 99
+STORE r20, r0
+LDI r20, SEND_BUF
+LDI r2, 2
+ADD r20, r2
+LDI r0, 104
+STORE r20, r0
+LDI r20, SEND_BUF
+LDI r2, 3
+ADD r20, r2
+LDI r0, 111
+STORE r20, r0
+LDI r20, SEND_BUF
+LDI r2, 4
+ADD r20, r2
+LDI r0, 32
+STORE r20, r0
+LDI r20, SEND_BUF
+LDI r2, 5
+ADD r20, r2
+LDI r0, 114
+STORE r20, r0
+LDI r20, SEND_BUF
+LDI r2, 6
+ADD r20, r2
+LDI r0, 101
+STORE r20, r0
+LDI r20, SEND_BUF
+LDI r2, 7
+ADD r20, r2
+LDI r0, 97
+STORE r20, r0
+LDI r20, SEND_BUF
+LDI r2, 8
+ADD r20, r2
+LDI r0, 100
+STORE r20, r0
+LDI r20, SEND_BUF
+LDI r2, 9
+ADD r20, r2
+LDI r0, 121
+STORE r20, r0
+LDI r20, SEND_BUF
+LDI r2, 10
+ADD r20, r2
+LDI r0, 10
+STORE r20, r0
+
+LDI r6, SEND_BUF
+LDI r7, 11
+PTYWRITE r28, r6, r7
+
+; Drain probe response for 30 more frames
+LDI r22, 0
+probe_drain:
+    LDI r6, RECV_BUF
+    LDI r7, 512
+    PTYREAD r28, r6, r7
+    MOV r8, r0
+    CMPI r8, 0
+    JZ r0, probe_next
+    LDI r7, 0xFFFFFFFF
+    CMP r8, r7
+    JZ r0, pty_closed
+    LDI r9, 0
+probe_append:
+    CMP r9, r8
+    BGE r0, probe_after
+    LDI r20, RECV_BUF
+    ADD r20, r9
+    LOAD r5, r20
+    CALL process_byte
+    ADD r9, r1
+    JMP probe_append
+probe_after:
+    LDI r21, 1
+probe_next:
+    CALL render
+    FRAME
+    ADD r22, r1
+    CMPI r22, 30
+    BLT r22, probe_drain
+
+startup_done:
+    LDI r1, 1
+
+; =========================================
 ; MAIN LOOP
 ; =========================================
 main_loop:

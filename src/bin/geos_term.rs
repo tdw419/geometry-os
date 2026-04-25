@@ -167,13 +167,7 @@ fn dump_diagnostics(vm: &Vm) {
     };
     eprintln!(
         "[geos-term] PTY active={} handle={} alive={} cursor={}/{} ansi={} pc={}",
-        active,
-        pty_handle,
-        alive,
-        vm.ram[CUR_COL],
-        vm.ram[CUR_ROW],
-        vm.ram[ANSI_STATE],
-        vm.pc,
+        active, pty_handle, alive, vm.ram[CUR_COL], vm.ram[CUR_ROW], vm.ram[ANSI_STATE], vm.pc,
     );
     for row in 0..BUF_ROWS.min(5) {
         eprintln!("[geos-term] buf row {}: '{}'", row, read_buf_row(vm, row));
@@ -214,7 +208,9 @@ fn execute_script(vm: &mut Vm, cmds: &[ScriptCmd]) -> Result<(), String> {
                 if actual.contains(text) {
                     eprintln!(
                         "[script] PASS assert row {} contains '{}' (got '{}')",
-                        row, text, &actual[..actual.len().min(60)]
+                        row,
+                        text,
+                        &actual[..actual.len().min(60)]
                     );
                 } else {
                     return Err(format!(
@@ -264,11 +260,7 @@ fn run_test(test_name: &str, vm: &mut Vm) -> i32 {
                     failed += 1;
                 }
             }
-            eprintln!(
-                "\n[TEST] {}/{} passed",
-                tests.len() - failed,
-                tests.len()
-            );
+            eprintln!("\n[TEST] {}/{} passed", tests.len() - failed, tests.len());
             if failed > 0 {
                 1
             } else {
@@ -296,7 +288,10 @@ fn test_echo_round_trip(vm: &mut Vm) -> i32 {
         eprintln!("[TEST] FAIL: no shell prompt in row 0: '{}'", row0);
         return 1;
     }
-    eprintln!("[TEST] Phase 1 PASS: prompt detected '{}'", &row0[..row0.len().min(40)]);
+    eprintln!(
+        "[TEST] Phase 1 PASS: prompt detected '{}'",
+        &row0[..row0.len().min(40)]
+    );
 
     // Push ALL keys at once into the ring buffer (16 slots, "echo hello\n" = 11).
     // Each frame the program reads 1 key via IKEY, so we need >= 11 frames.
@@ -305,7 +300,7 @@ fn test_echo_round_trip(vm: &mut Vm) -> i32 {
         vm.push_key(ch as u32);
     }
     vm.push_key(0x0D); // Enter
-    // 11 frames to drain keys + 60 more for bash execution + output
+                       // 11 frames to drain keys + 60 more for bash execution + output
     for _ in 0..80 {
         run_one_frame(vm);
     }
@@ -317,7 +312,11 @@ fn test_echo_round_trip(vm: &mut Vm) -> i32 {
     for row in 0..BUF_ROWS {
         let text = read_buf_row(vm, row);
         if text.contains("hello") {
-            eprintln!("[TEST] PASS: 'hello' found in row {}: '{}'", row, &text[..text.len().min(50)]);
+            eprintln!(
+                "[TEST] PASS: 'hello' found in row {}: '{}'",
+                row,
+                &text[..text.len().min(50)]
+            );
             found = true;
             break;
         }
@@ -373,7 +372,10 @@ fn test_line_wrap(vm: &mut Vm) -> i32 {
         eprintln!("[TEST] PASS: {} rows with numeric output found", found_rows);
         0
     } else {
-        eprintln!("[TEST] FAIL: only {} rows with numbers (need >= 5)", found_rows);
+        eprintln!(
+            "[TEST] FAIL: only {} rows with numbers (need >= 5)",
+            found_rows
+        );
         1
     }
 }
@@ -547,8 +549,7 @@ fn main() {
                 let r = (px >> 16) & 0xFF;
                 let g = (px >> 8) & 0xFF;
                 let b = px & 0xFF;
-                let bright =
-                    ((r as usize + g as usize + b as usize) * chars.len()) / (3 * 256 + 1);
+                let bright = ((r as usize + g as usize + b as usize) * chars.len()) / (3 * 256 + 1);
                 let idx = bright.min(chars.len() - 1);
                 line.push(chars.chars().nth(idx).unwrap());
             }

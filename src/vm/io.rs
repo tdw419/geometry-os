@@ -137,7 +137,14 @@ impl Vm {
 
     /// Draw a character using the medium 5x7 font (for MEDTEXT opcode).
     /// Advance is 6 pixels (5 wide + 1 spacing), giving 42 columns in 256px.
-    pub(super) fn draw_char_medium(&mut self, ch: u8, x: usize, y: usize, fg: u32, bg: Option<u32>) {
+    pub(super) fn draw_char_medium(
+        &mut self,
+        ch: u8,
+        x: usize,
+        y: usize,
+        fg: u32,
+        bg: Option<u32>,
+    ) {
         const MED_FONT: [[u8; 7]; 96] = include!("../med_font.in");
         let idx = ch as usize;
         if !(32..=127).contains(&idx) {

@@ -100,7 +100,10 @@ pub(super) fn try_parse(
 
         "MEDTEXT" => {
             if tokens.len() < 6 {
-                return Err("MEDTEXT requires 5 arguments: MEDTEXT x_reg, y_reg, addr_reg, fg_reg, bg_reg".to_string());
+                return Err(
+                    "MEDTEXT requires 5 arguments: MEDTEXT x_reg, y_reg, addr_reg, fg_reg, bg_reg"
+                        .to_string(),
+                );
             }
             bytecode.push(0xD1);
             bytecode.push(parse_reg(tokens[1])? as u32);

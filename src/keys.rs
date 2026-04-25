@@ -52,21 +52,21 @@ pub fn key_to_ascii(key: Key) -> Option<u8> {
         Key::RightBracket => Some(b']'),
         Key::Backslash => Some(b'\\'),
         // Special keys -- return their control character values
-        Key::Enter => Some(0x0D),      // CR
-        Key::Backspace => Some(0x08),   // BS
-        Key::Tab => Some(0x09),         // HT
-        Key::Escape => Some(0x1B),      // ESC
-        Key::Delete => Some(0x7F),      // DEL
+        Key::Enter => Some(0x0D),     // CR
+        Key::Backspace => Some(0x08), // BS
+        Key::Tab => Some(0x09),       // HT
+        Key::Escape => Some(0x1B),    // ESC
+        Key::Delete => Some(0x7F),    // DEL
         // Arrow keys -- use high codes (0x80+) that IKEY consumers can detect
-        Key::Up => Some(0x80),          // extended: up arrow
-        Key::Down => Some(0x81),        // extended: down arrow
-        Key::Left => Some(0x82),        // extended: left arrow
-        Key::Right => Some(0x83),       // extended: right arrow
-        Key::Home => Some(0x84),        // extended: home
-        Key::End => Some(0x85),         // extended: end
-        Key::PageUp => Some(0x86),      // extended: page up
-        Key::PageDown => Some(0x87),    // extended: page down
-        Key::Insert => Some(0x88),      // extended: insert
+        Key::Up => Some(0x80),       // extended: up arrow
+        Key::Down => Some(0x81),     // extended: down arrow
+        Key::Left => Some(0x82),     // extended: left arrow
+        Key::Right => Some(0x83),    // extended: right arrow
+        Key::Home => Some(0x84),     // extended: home
+        Key::End => Some(0x85),      // extended: end
+        Key::PageUp => Some(0x86),   // extended: page up
+        Key::PageDown => Some(0x87), // extended: page down
+        Key::Insert => Some(0x88),   // extended: insert
         _ => None,
     }
 }

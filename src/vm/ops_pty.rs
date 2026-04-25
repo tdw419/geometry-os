@@ -92,8 +92,14 @@ pub fn spawn(cmd_line: &str) -> Result<PtySlot, String> {
         if let Ok(home) = std::env::var("HOME") {
             c.cwd(home);
         }
-        // Use dumb terminal to avoid escape sequence queries that would block
-        c.env("TERM", "dumb");
+        // Use xterm so bash emits a prompt and handles line editing.
+        // xterm-256color may send complex queries; xterm is the safe middle ground.
+        c.env("TERM", "xterm");
+        // Simple prompt so we can detect when bash is ready
+        c.env("PS1", "$ ");
+        // Disable startup files that might produce complex output
+        c.arg("--norc");
+        c.arg("--noprofile");
         c
     } else {
         // crude split on whitespace; good enough for single commands like
@@ -103,6 +109,8 @@ pub fn spawn(cmd_line: &str) -> Result<PtySlot, String> {
         for arg in &parts[1..] {
             c.arg(arg);
         }
+        c.env("TERM", "xterm");
+        c.env("PS1", "$ ");
         c
     };
 
@@ -148,7 +156,15 @@ pub fn spawn(cmd_line: &str) -> Result<PtySlot, String> {
         .map_err(|e| format!("spawn reader: {}", e))?;
 
     // Take the writer once at creation time so PTYWRITE can reuse it.
-    let writer = pair.master.take_writer().ok();
+    let mut writer = pair.master.take_writer().ok();
+
+    // Write a newline to trigger bash prompt emission. Without this,
+    // bash may buffer its initial prompt indefinitely, especially when
+    // the reader hasn't started consuming yet.
+    if let Some(ref mut w) = writer {
+        let _ = w.write_all(b"\n");
+        let _ = w.flush();
+    }
 
     Ok(PtySlot {
         master: pair.master,
@@ -226,6 +242,7 @@ impl super::Vm {
         if let Some(ref mut w) = slot.writer {
             match w.write_all(&bytes) {
                 Ok(()) => {
+                    let _ = w.flush();
                     self.regs[0] = PTY_OK;
                 }
                 Err(_) => {
@@ -338,6 +355,152 @@ mod tests {
             text.contains('/'),
             "expected pwd output containing '/', got: {:?}",
             text
+        );
+    }
+
+    /// VM-level integration test: PTYOPEN -> PTYWRITE "echo hello\n" -> PTYREAD -> assert "hello"
+    ///
+    /// Tests the full opcode pipeline by setting up RAM with instruction operands
+    /// and calling the opcode handlers directly.
+    #[test]
+    fn pty_vm_echo_roundtrip() {
+        use crate::vm::Vm;
+
+        let mut vm = Vm::new();
+
+        // Write empty command string at 0x5000 (null byte = spawn default shell)
+        vm.ram[0x5000] = 0;
+
+        // PTYOPEN: set registers for cmd_addr_reg=5, handle_reg=10
+        vm.regs[5] = 0x5000;
+        // Set up fetch stream at current PC: [opcode, cmd_reg, handle_reg]
+        let base_pc = vm.pc as usize;
+        vm.ram[base_pc] = 0xA9; // PTYOPEN opcode (consumed by step(), not op_ptyopen)
+        vm.ram[base_pc + 1] = 5; // cmd_addr_reg
+        vm.ram[base_pc + 2] = 10; // handle_reg
+        vm.pc = base_pc as u32 + 1; // skip opcode (op_ptyopen reads from pc)
+        vm.op_ptyopen();
+
+        let handle = vm.regs[10];
+        assert_eq!(
+            vm.regs[0], PTY_OK,
+            "PTYOPEN should succeed, got r0={}",
+            vm.regs[0]
+        );
+
+        // Wait for bash to start up and emit its initial prompt
+        thread::sleep(Duration::from_millis(500));
+
+        // Drain initial output using PTYREAD
+        let drain_pc = vm.pc as usize;
+        vm.ram[drain_pc] = 12; // handle_reg
+        vm.ram[drain_pc + 1] = 6; // buf_reg
+        vm.ram[drain_pc + 2] = 7; // max_len_reg
+        vm.regs[12] = handle;
+        vm.regs[6] = 0x5800;
+        vm.regs[7] = 512;
+        vm.pc = drain_pc as u32;
+        vm.op_ptyread();
+
+        // Write "echo hello\n" to send buffer at 0x5400
+        let send_buf: usize = 0x5400;
+        let msg = b"echo hello
+";
+        for (i, &byte) in msg.iter().enumerate() {
+            vm.ram[send_buf + i] = byte as u32;
+        }
+
+        // PTYWRITE handle, send_buf, len
+        let write_pc = vm.pc as usize;
+        vm.ram[write_pc] = 12; // handle_reg
+        vm.ram[write_pc + 1] = 6; // buf_reg
+        vm.ram[write_pc + 2] = 7; // len_reg
+        vm.regs[12] = handle;
+        vm.regs[6] = send_buf as u32;
+        vm.regs[7] = msg.len() as u32;
+        vm.pc = write_pc as u32;
+        vm.op_ptywrite();
+        assert_eq!(vm.regs[0], PTY_OK, "PTYWRITE should succeed");
+
+        // Wait for echo output to arrive
+        thread::sleep(Duration::from_millis(500));
+
+        // PTYREAD the response
+        let read_pc = vm.pc as usize;
+        vm.ram[read_pc] = 12; // handle_reg
+        vm.ram[read_pc + 1] = 6; // buf_reg
+        vm.ram[read_pc + 2] = 7; // max_len_reg
+        vm.regs[12] = handle;
+        vm.regs[6] = 0x5800;
+        vm.regs[7] = 512;
+        vm.pc = read_pc as u32;
+        vm.op_ptyread();
+
+        let bytes_read = vm.regs[0];
+        assert!(
+            bytes_read > 0 && bytes_read != u32::MAX,
+            "PTYREAD should return bytes, got r0={}",
+            bytes_read
+        );
+
+        // Collect the bytes from RAM and check for "hello"
+        let recv_buf: usize = 0x5800;
+        let mut output = Vec::new();
+        for i in 0..bytes_read as usize {
+            output.push((vm.ram[recv_buf + i] & 0xFF) as u8);
+        }
+        let text = String::from_utf8_lossy(&output);
+        assert!(
+            text.contains("hello"),
+            "expected 'hello' in PTY output, got: {:?}",
+            text
+        );
+
+        // Clean up with PTYCLOSE
+        let close_pc = vm.pc as usize;
+        vm.ram[close_pc] = 12; // handle_reg
+        vm.regs[12] = handle;
+        vm.pc = close_pc as u32;
+        vm.op_ptyclose();
+        assert_eq!(vm.regs[0], PTY_OK, "PTYCLOSE should succeed");
+    }
+
+    /// Test that PTYREAD returns initial bash output (prompt) after PTYOPEN.
+    /// This verifies that the TERM=xterm + PS1 + newline trigger actually works.
+    #[test]
+    fn pty_initial_output_available() {
+        let slot = match spawn("") {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("skipping: pty spawn failed: {}", e);
+                return;
+            }
+        };
+
+        // Wait briefly for bash to start and emit prompt
+        thread::sleep(Duration::from_millis(500));
+
+        // Drain all available output
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut output = Vec::new();
+        while Instant::now() < deadline {
+            match slot.rx.try_recv() {
+                Ok(b) => output.push(b),
+                Err(_) => {
+                    if !output.is_empty() {
+                        // Got some output and channel is now empty -- done
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(50));
+                }
+            }
+        }
+
+        let text = String::from_utf8_lossy(&output);
+        // With TERM=xterm and PS1='$ ', bash should emit SOMETHING (prompt, ANSI codes, etc.)
+        assert!(
+            !text.is_empty(),
+            "PTY should have initial output after spawn, got empty string"
         );
     }
 }
