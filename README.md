@@ -6,13 +6,13 @@ Write assembly. Press F5. Watch it run.
 
 ## What Is This?
 
-Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 167 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling with memory protection, virtual filesystem, in-memory inode filesystem, device drivers, TCP networking, a Unix-like shell, and an integrated text editor where you type assembly directly into the VM's memory and execute it live. It also includes a native RISC-V RV32I interpreter with SV32 virtual memory, capable of booting a real Linux kernel.
+Geometry OS is a from-scratch virtual machine: 32 registers, 65536 words of RAM, a 256x256 pixel framebuffer, and 178 opcodes. It has its own two-pass assembler, a real-time animation loop at 60fps, keyboard input, sound, sprite blitting, multi-process scheduling with memory protection, virtual filesystem, in-memory inode filesystem, device drivers, TCP networking, a Unix-like shell, and an integrated text editor where you type assembly directly into the VM's memory and execute it live. It also includes a native RISC-V RV32I interpreter with SV32 virtual memory, capable of booting a real Linux kernel.
 
 There is no compiler. No runtime. No garbage collector. You write the opcodes, the VM runs them. It's a computer small enough to hold in your head.
 
 ## Programs
 
-139 programs included -- static art, animations, interactive games, and system utilities:
+147 programs included -- static art, animations, interactive games, and system utilities:
 
 **Visual demos:** hello, gradient, diagonal, border, checkerboard, rainbow, rings, nested_rects, colors, circles, lines, fill_screen, stripes, plasma, starfield, wirecube
 
@@ -82,7 +82,7 @@ Running `cargo run --release` drops you into the **infinite map desktop** — a 
 
 **Going deeper:** Read `docs/CANVAS_TEXT_SURFACE.md` for the full specification, or browse `programs/` for 139 example programs ranging from visual demos to games to a Unix-like shell.
 
-## The Instruction Set (167 opcodes)
+## The Instruction Set (178 opcodes)
 
 ### Control
 | Opcode | Args | Description |
@@ -418,7 +418,7 @@ child:
 │  └──────────────┘  └──────────────────┘     │
 └──────────────────────────────────────────────┘
 
-VM: 32 registers, 65536-word RAM, 167 opcodes, 8 concurrent processes
+VM: 32 registers, 65536-word RAM, 178 opcodes, 8 concurrent processes
 Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xFFF ports
 ```
 
@@ -448,7 +448,7 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 ## Stats
 
 - 68,622 lines of Rust
-- 167 opcodes
+- 178 opcodes
 - 141 programs
 - 3,055 tests
 - MIT licensed

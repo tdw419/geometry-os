@@ -10,10 +10,10 @@ conventions:
 - Canvas and screen mappings use LOAD/STORE interception, not new opcodes
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
-description: Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 153 opcodes, 3448 tests, 145 programs, 72229 LOC.
+description: Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 178 opcodes, 3408 tests, 147 programs, 76533 LOC.
   Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 global_risks:
-- 'Opcode space: 167 of ~256 slots used, plenty of room'
+- 'Opcode space: 178 of ~256 slots used, plenty of room'
 - Scope creep -- adding features is easy, keeping the OS coherent is hard
 - Kernel boundary breaks existing programs -- need a compatibility mode
 - Memory protection removes shared RAM -- IPC now in place (Phase 27), window_manager tests passing
@@ -29,16 +29,16 @@ global_risks:
 meta:
   gui: minifb
   language: Rust
-  loc: 72229
-  opcodes: 153
-  programs: 145
+  loc: 76533
+  opcodes: 178
+  programs: 147
   ram: 65536 words
   registers: 32
   screen: 256x256 pixels
-  source_files: 88
-  tests: 3448
-  integration_tests: 2022
-  lib_tests: 1426
+  source_files: 92
+  tests: 3408
+  integration_tests: 1934
+  lib_tests: 1474
   vfs_surface: 0x7000_0000 (256x256)
   riscv_guest: true
   hypervisor: true
