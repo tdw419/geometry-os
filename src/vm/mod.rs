@@ -3071,6 +3071,9 @@ impl Vm {
         let border_color = 0x444466u32;
         let text_color = 0xCCCCCCu32;
         let close_color = 0xFF6666u32;
+        let highlight_color = 0x5A5A7Au32; // raised edge = clickable affordance
+        let shadow_color = 0x1A1A2Au32;
+        let close_bg_color = 0x4A2A2Au32;
 
         // Draw title bar background
         for dy in 0..bar_h {
@@ -3090,6 +3093,48 @@ impl Vm {
             }
         }
 
+        // Draw raised edge: lighter top row + left column (clickable affordance)
+        {
+            // Top edge (highlight)
+            let py = y0;
+            if py >= 0 {
+                for dx in 0..w {
+                    let px = x0 + dx;
+                    if px >= 0 {
+                        let idx = (py as usize) * 256 + (px as usize);
+                        if idx < screen.len() {
+                            screen[idx] = highlight_color;
+                        }
+                    }
+                }
+            }
+            // Left edge (highlight)
+            if x0 >= 0 {
+                for dy in 0..bar_h {
+                    let py = y0 + dy;
+                    if py >= 0 {
+                        let idx = (py as usize) * 256 + (x0 as usize);
+                        if idx < screen.len() {
+                            screen[idx] = highlight_color;
+                        }
+                    }
+                }
+            }
+            // Right edge (shadow)
+            let px = x0 + w - 1;
+            if px >= 0 {
+                for dy in 0..bar_h {
+                    let py = y0 + dy;
+                    if py >= 0 {
+                        let idx = (py as usize) * 256 + (px as usize);
+                        if idx < screen.len() {
+                            screen[idx] = shadow_color;
+                        }
+                    }
+                }
+            }
+        }
+
         // Draw border line at bottom of title bar (inside title bar area, not content area)
         let border_y = y0 + bar_h - 1;
         if border_y >= 0 {
@@ -3101,6 +3146,30 @@ impl Vm {
                 let idx = (border_y as usize) * 256 + (px as usize);
                 if idx < screen.len() {
                     screen[idx] = border_color;
+                }
+            }
+        }
+
+        // Draw close button background rectangle
+        {
+            let cb_x0 = x0 + w - 2 - 8 - 1;
+            let cb_y0 = y0 + 1;
+            let cb_w = 10i32; // 8 + 2 margin
+            let cb_h = 10i32;
+            for dy in 0..cb_h {
+                let py = cb_y0 + dy;
+                if py < 0 {
+                    continue;
+                }
+                for dx in 0..cb_w {
+                    let px = cb_x0 + dx;
+                    if px < 0 {
+                        continue;
+                    }
+                    let idx = (py as usize) * 256 + (px as usize);
+                    if idx < screen.len() {
+                        screen[idx] = close_bg_color;
+                    }
                 }
             }
         }

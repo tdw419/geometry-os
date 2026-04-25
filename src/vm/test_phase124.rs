@@ -68,12 +68,21 @@ fn test_title_bar_offset_content_below_bar() {
     // Verify title bar area is NOT zero (has bg/text)
     // Check a pixel in the title bar area that is background color
     // Title bar spans y=20..31, x=20..83 for a 64-wide window
-    // Row y=20 (first title bar row), at x=60 (after the title text)
-    let title_bg_pixel = vm.screen[20 * 256 + 60];
+    // Row y=20 is the top highlight edge (0x5A5A7A), row y=21 is regular bg.
+    // Check row y=21 at x=60 (middle of title bar, after title text)
+    let title_bg_pixel = vm.screen[21 * 256 + 60];
     assert_eq!(
         title_bg_pixel, 0x3A3A5A,
-        "title bar bg should be at (60, 20), got {:X}",
+        "title bar bg should be at (60, 21), got {:X}",
         title_bg_pixel
+    );
+
+    // Verify top row has highlight edge (clickable affordance)
+    let highlight_pixel = vm.screen[20 * 256 + 60];
+    assert_eq!(
+        highlight_pixel, 0x5A5A7A,
+        "title bar top edge should be highlight color at (60, 20), got {:X}",
+        highlight_pixel
     );
 }
 
@@ -228,5 +237,76 @@ fn test_bring_to_front_updates_z_order() {
         "window 1 z_order ({}) should now be > window 2 ({})",
         z1_new,
         z2
+    );
+}
+
+#[test]
+fn test_title_bar_renders_as_clickable_region() {
+    // Verify title bar has visual affordance for clickability:
+    // 1. Top row has highlight edge (lighter = raised button look)
+    // 2. Left column has highlight edge
+    // 3. Right column has shadow edge (darker = 3D raised effect)
+    // 4. Close button has a distinct background rectangle
+    let mut vm = Vm::new();
+    vm.regs[1] = 30; // x
+    vm.regs[2] = 40; // y
+    vm.regs[3] = 80; // w
+    vm.regs[4] = 60; // h
+    vm.regs[5] = 0; // no title
+    vm.regs[6] = 0; // op = create
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let _win_id = vm.regs[0];
+    assert!(_win_id > 0, "window should be created");
+
+    // FRAME to blit
+    vm.ram[2] = 0x02;
+    vm.pc = 2;
+    vm.halted = false;
+    vm.step();
+
+    let highlight: u32 = 0x5A5A7A;
+    let shadow: u32 = 0x1A1A2A;
+    let close_bg: u32 = 0x4A2A2A;
+
+    // Top edge (y=40) at x=50 should be highlight
+    assert_eq!(
+        vm.screen[40 * 256 + 50],
+        highlight,
+        "top row of title bar should be highlight (clickable affordance)"
+    );
+
+    // Left edge (x=30) at y=45 should be highlight
+    assert_eq!(
+        vm.screen[45 * 256 + 30],
+        highlight,
+        "left column of title bar should be highlight (clickable affordance)"
+    );
+
+    // Right edge (x=109) at y=45 should be shadow
+    assert_eq!(
+        vm.screen[45 * 256 + 109],
+        shadow,
+        "right column of title bar should be shadow (3D raised effect)"
+    );
+
+    // Close button background area: near top-right of title bar
+    // x = 30 + 80 - 2 - 8 - 1 = 99, y = 40 + 1 = 41
+    assert_eq!(
+        vm.screen[41 * 256 + 100],
+        close_bg,
+        "close button area should have distinct background (clickable indicator)"
+    );
+
+    // Middle of title bar (not on edges or text) should be regular bg color
+    // y=44 is mid-bar, x=35 is near left edge but past the highlight column
+    // Actually x=35 is right after "W" char which starts at x=32, so use x=70 past title text
+    assert_eq!(
+        vm.screen[44 * 256 + 70],
+        0x3A3A5A,
+        "middle of title bar (past text) should be regular active bg color"
     );
 }

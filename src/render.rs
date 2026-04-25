@@ -166,7 +166,10 @@ const TITLE_BAR_BG: u32 = 0x2A2A3A;
 const TITLE_BAR_BG_ACTIVE: u32 = 0x3A3A5A;
 const TITLE_BAR_TEXT: u32 = 0xCCCCCC;
 const TITLE_BAR_CLOSE: u32 = 0xFF6666;
+const TITLE_BAR_CLOSE_BG: u32 = 0x4A2A2A;
 const WINDOW_BORDER_COLOR: u32 = 0x444466;
+const TITLE_BAR_HIGHLIGHT: u32 = 0x5A5A7A; // lighter top edge = raised/clickable
+const TITLE_BAR_SHADOW: u32 = 0x1A1A2A;   // darker bottom edge = raised/clickable
 const TITLE_BAR_HEIGHT: usize = 12;
 const CLOSE_BTN_SIZE: usize = 8;
 const CLOSE_BTN_MARGIN: usize = 2;
@@ -1083,6 +1086,49 @@ pub fn draw_title_bar(
         }
     }
 
+    // Draw raised edge: lighter top row + left column (clickable affordance)
+    {
+        // Top edge (highlight)
+        let py = y0;
+        if py >= 0 {
+            for dx in 0..w * scale {
+                let px = x0 + dx;
+                if px >= 0 {
+                    let idx = (py as usize) * buf_width + (px as usize);
+                    if idx < buffer.len() {
+                        buffer[idx] = TITLE_BAR_HIGHLIGHT;
+                    }
+                }
+            }
+        }
+        // Left edge (highlight)
+        let px = x0;
+        if px >= 0 {
+            for dy in 0..bar_h {
+                let py = y0 + dy;
+                if py >= 0 {
+                    let idx = (py as usize) * buf_width + (px as usize);
+                    if idx < buffer.len() {
+                        buffer[idx] = TITLE_BAR_HIGHLIGHT;
+                    }
+                }
+            }
+        }
+        // Right edge (shadow)
+        let px = x0 + w * scale - 1;
+        if px >= 0 {
+            for dy in 0..bar_h {
+                let py = y0 + dy;
+                if py >= 0 {
+                    let idx = (py as usize) * buf_width + (px as usize);
+                    if idx < buffer.len() {
+                        buffer[idx] = TITLE_BAR_SHADOW;
+                    }
+                }
+            }
+        }
+    }
+
     // Draw border line under title bar
     let border_y = y0 + bar_h;
     if border_y >= 0 {
@@ -1094,6 +1140,30 @@ pub fn draw_title_bar(
             let idx = (border_y as usize) * buf_width + (px as usize);
             if idx < buffer.len() {
                 buffer[idx] = WINDOW_BORDER_COLOR;
+            }
+        }
+    }
+
+    // Draw close button background rectangle
+    {
+        let cb_x0 = x0 + (w - CLOSE_BTN_MARGIN as i32 - CLOSE_BTN_SIZE as i32 - 1) * scale;
+        let cb_y0 = y0 + (CLOSE_BTN_MARGIN as i32 - 1) * scale;
+        let cb_w = (CLOSE_BTN_SIZE as i32 + 2) * scale;
+        let cb_h = (CLOSE_BTN_SIZE as i32 + 2) * scale;
+        for dy in 0..cb_h {
+            let py = cb_y0 + dy;
+            if py < 0 {
+                continue;
+            }
+            for dx in 0..cb_w {
+                let px = cb_x0 + dx;
+                if px < 0 {
+                    continue;
+                }
+                let idx = (py as usize) * buf_width + (px as usize);
+                if idx < buffer.len() {
+                    buffer[idx] = TITLE_BAR_CLOSE_BG;
+                }
             }
         }
     }
