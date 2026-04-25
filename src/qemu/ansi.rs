@@ -17,6 +17,8 @@ enum AnsiState {
     Csi,
     /// Received CSI ?, collecting private mode parameters.
     CsiPrivate,
+    /// Received ESC ], collecting OSC string (terminated by BEL or ST).
+    Osc,
 }
 
 /// ANSI escape sequence handler with canvas buffer writing.
@@ -119,6 +121,10 @@ impl AnsiHandler {
                     self.state = AnsiState::Csi;
                     self.csi_params.clear();
                 }
+                b']' => {
+                    // OSC (Operating System Command) -- consume until BEL or ST
+                    self.state = AnsiState::Osc;
+                }
                 b'7' => {
                     self.saved_cursor = self.cursor;
                     self.state = AnsiState::Normal;
@@ -170,6 +176,18 @@ impl AnsiHandler {
                 }
                 self.handle_csi_private(b, canvas_buffer);
                 self.state = AnsiState::Normal;
+            }
+            AnsiState::Osc => {
+                // Consume OSC string until BEL (0x07) or ST (ESC \)
+                if b == 0x07 {
+                    // BEL terminates OSC
+                    self.state = AnsiState::Normal;
+                } else if b == 0x1B {
+                    // ESC inside OSC: transition to Escape state.
+                    // Next byte will be '\' (ST terminator) or a new ESC sequence.
+                    self.state = AnsiState::Escape;
+                }
+                // All other bytes inside OSC are consumed silently
             }
         }
     }
@@ -875,5 +893,511 @@ mod tests {
         assert_eq!(buf[2 * CANVAS_COLS + 0], b'b' as u32);
         assert_eq!(buf[2 * CANVAS_COLS + 1], b'o' as u32);
         assert_eq!(buf[2 * CANVAS_COLS + 2], b't' as u32);
+    }
+
+    // ── Phase 130: Additional ANSI parser unit tests ────────────────
+
+    #[test]
+    fn test_ansi_osc_title_set_bel() {
+        // OSC title: ESC ] 0 ; title BEL -- should not render anything
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"before\x1B]0;window title\x07after", &mut buf);
+        assert_eq!(buf[0], b'b' as u32);
+        assert_eq!(buf[1], b'e' as u32);
+        assert_eq!(buf[2], b'f' as u32);
+        assert_eq!(buf[3], b'o' as u32);
+        assert_eq!(buf[4], b'r' as u32);
+        assert_eq!(buf[5], b'e' as u32);
+        assert_eq!(buf[6], b'a' as u32); // "after" starts right after "before"
+        assert_eq!(buf[7], b'f' as u32);
+        assert_eq!(buf[8], b't' as u32);
+        assert_eq!(buf[9], b'e' as u32);
+        assert_eq!(buf[10], b'r' as u32);
+    }
+
+    #[test]
+    fn test_ansi_osc_title_set_st() {
+        // OSC title: ESC ] 0 ; title ESC \ (String Terminator = ST)
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"before\x1B]2;my title\x1B\\after", &mut buf);
+        assert_eq!(buf[0], b'b' as u32);
+        assert_eq!(buf[5], b'e' as u32);
+        assert_eq!(buf[6], b'a' as u32); // "after" immediately after "before"
+    }
+
+    #[test]
+    fn test_ansi_partial_esc_sequence() {
+        // ESC at end of input should not crash, just change state
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"AB\x1B", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], b'B' as u32);
+        // State should be Escape -- cursor hasn't moved past the ESC
+        let c = handler.cursor();
+        assert_eq!(c.col, 2);
+    }
+
+    #[test]
+    fn test_ansi_partial_csi_sequence() {
+        // ESC [ at end of input should not crash
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"AB\x1B[", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], b'B' as u32);
+        let c = handler.cursor();
+        assert_eq!(c.col, 2);
+    }
+
+    #[test]
+    fn test_ansi_partial_csi_params_only() {
+        // ESC [ 3 ; (partial params, no final byte) should not crash
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"AB\x1B[3;", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], b'B' as u32);
+    }
+
+    #[test]
+    fn test_ansi_invalid_esc_char() {
+        // ESC followed by unknown char (not '[' or known single-char)
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"AB\x1BZtext", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], b'B' as u32);
+        assert_eq!(buf[2], b't' as u32); // 'text' rendered after ESC Z is ignored
+    }
+
+    #[test]
+    fn test_ansi_csi_cursor_up_at_row_zero() {
+        // Cursor up at row 0 should stay at row 0
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\x1B[5A", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 0);
+        assert_eq!(c.col, 0);
+    }
+
+    #[test]
+    fn test_ansi_csi_cursor_left_at_col_zero() {
+        // Cursor left at col 0 should stay at 0
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\x1B[10D", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.col, 0);
+    }
+
+    #[test]
+    fn test_ansi_csi_cursor_right_at_max_col() {
+        // Cursor right should not exceed CANVAS_COLS-1
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        // Move to near end, then try to go way past
+        handler.set_cursor(0, CANVAS_COLS - 2);
+        handler.process_bytes(b"\x1B[100C", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.col, CANVAS_COLS - 1);
+    }
+
+    #[test]
+    fn test_ansi_erase_in_line_to_start() {
+        // ESC[1K clears from start of line to cursor
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"ABCDE\x1B[1;3H\x1B[1K", &mut buf);
+        // Cols 0,1,2 should be cleared; cursor at row 0, col 2
+        assert_eq!(buf[0], 0);
+        assert_eq!(buf[1], 0);
+        assert_eq!(buf[2], 0);
+        assert_eq!(buf[3], b'D' as u32);
+        assert_eq!(buf[4], b'E' as u32);
+    }
+
+    #[test]
+    fn test_ansi_erase_from_cursor_to_screen_end() {
+        // ESC[0J (default) clears from cursor to end
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"Row0\x1B[2;1HMore\x1B[1;3H\x1B[0J", &mut buf);
+        // Row 0 cols 0-1 preserved, col 2+ cleared, row 1+ all cleared
+        assert_eq!(buf[0], b'R' as u32);
+        assert_eq!(buf[1], b'o' as u32);
+        assert_eq!(buf[2], 0); // cleared from cursor
+        assert_eq!(buf[3], 0);
+        // Row 1 should be fully cleared
+        assert_eq!(buf[CANVAS_COLS], 0);
+    }
+
+    #[test]
+    fn test_ansi_scroll_region_set() {
+        // ESC[5;10r sets scroll region
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\x1B[5;10r", &mut buf);
+        let c = handler.cursor();
+        // After setting scroll region, cursor goes to scroll_top
+        assert_eq!(c.row, 4); // 5-1 = row 4
+        assert_eq!(c.col, 0);
+    }
+
+    #[test]
+    fn test_ansi_delete_lines() {
+        // ESC[1M deletes one line at cursor
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"Row0\nRow1\nRow2\x1B[2;1H\x1B[1M", &mut buf);
+        // After deleting row 1 (cursor row), Row2 shifts up
+        assert_eq!(buf[0 * CANVAS_COLS], b'R' as u32); // Row0 intact
+        assert_eq!(buf[1 * CANVAS_COLS], b'R' as u32); // Row2 moved to row 1
+    }
+
+    #[test]
+    fn test_ansi_insert_lines() {
+        // ESC[1L inserts one blank line at cursor
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"Row0\nRow1\nRow2\x1B[2;1H\x1B[1L", &mut buf);
+        // After inserting at row 1, Row1 shifts to row 2, Row2 to row 3
+        assert_eq!(buf[0 * CANVAS_COLS], b'R' as u32); // Row0 intact
+        assert_eq!(buf[1 * CANVAS_COLS], 0); // New blank line
+        assert_eq!(buf[2 * CANVAS_COLS], b'R' as u32); // Was Row1
+    }
+
+    #[test]
+    fn test_ansi_delete_chars() {
+        // ESC[2P deletes 2 chars at cursor
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"ABCDE\x1B[1;2H\x1B[2P", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], b'D' as u32); // C and D shifted left over B,C
+        assert_eq!(buf[2], b'E' as u32);
+    }
+
+    #[test]
+    fn test_ansi_multiple_sgr_sequences() {
+        // Multiple SGR sequences should all be ignored, text flows through
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(
+            b"\x1B[1m\x1B[31m\x1B[4mBoldRedUnderline\x1B[0mNormal",
+            &mut buf,
+        );
+        let expected = b"BoldRedUnderlineNormal";
+        for (i, &byte) in expected.iter().enumerate() {
+            assert_eq!(
+                buf[i], byte as u32,
+                "char at {} should be '{}'",
+                i, byte as char
+            );
+        }
+    }
+
+    #[test]
+    fn test_ansi_cursor_next_line() {
+        // ESC[E moves cursor N lines down, column 0
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"Hello\x1B[3E", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 3);
+        assert_eq!(c.col, 0);
+    }
+
+    #[test]
+    fn test_ansi_cursor_prev_line() {
+        // ESC[F moves cursor N lines up, column 0
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\n\n\nHello\x1B[2F", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 1);
+        assert_eq!(c.col, 0);
+    }
+
+    #[test]
+    fn test_ansi_esc_save_restore_cursor_cs() {
+        // ESC[s and ESC[u (CSI save/restore, not ESC 7/8)
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"Hello\x1B[s\nWorld\x1B[uX", &mut buf);
+        // After ESC[s at col 5, then newline writes World on row 1,
+        // ESC[u restores cursor to row 0 col 5, 'X' writes at row 0 col 5
+        assert_eq!(buf[5], b'X' as u32);
+    }
+
+    #[test]
+    fn test_ansi_scroll_up_command() {
+        // ESC[1S scrolls entire screen up by 1 line
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"Row0\nRow1\nRow2\n\x1B[1S", &mut buf);
+        // Row0 gone, Row1 at row 0, Row2 at row 1
+        assert_eq!(buf[0 * CANVAS_COLS], b'R' as u32); // "Row1"
+        assert_eq!(buf[0 * CANVAS_COLS + 1], b'o' as u32);
+        assert_eq!(buf[1 * CANVAS_COLS], b'R' as u32); // "Row2"
+    }
+
+    #[test]
+    fn test_ansi_consecutive_esc_sequences() {
+        // Multiple back-to-back ESC sequences
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\x1B[5;10H\x1B[1;31m\x1B[4mHi\x1B[0m", &mut buf);
+        assert_eq!(buf[4 * CANVAS_COLS + 9], b'H' as u32);
+        assert_eq!(buf[4 * CANVAS_COLS + 10], b'i' as u32);
+    }
+
+    #[test]
+    fn test_ansi_csi_private_mode_set_reset() {
+        // ESC[?25h (show cursor) and ESC[?25l (hide cursor) should be silently handled
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"A\x1B[?25lB\x1B[?25hC", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], b'B' as u32);
+        assert_eq!(buf[2], b'C' as u32);
+    }
+
+    #[test]
+    fn test_ansi_csi_private_erase_scrollback() {
+        // ESC[?3J (erase scrollback) should be silently handled
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"Test\x1B[?3JMore", &mut buf);
+        assert_eq!(buf[0], b'T' as u32);
+        assert_eq!(buf[4], b'M' as u32);
+    }
+
+    #[test]
+    fn test_ansi_carriage_return_newline_combo() {
+        // \r\n (CR+LF) is the standard line ending from terminals
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"Line1\r\nLine2\r\nLine3", &mut buf);
+        assert_eq!(buf[0 * CANVAS_COLS], b'L' as u32);
+        assert_eq!(buf[1 * CANVAS_COLS], b'L' as u32);
+        assert_eq!(buf[2 * CANVAS_COLS], b'L' as u32);
+        let c = handler.cursor();
+        assert_eq!(c.row, 2);
+        assert_eq!(c.col, 5); // "Line3" = 5 chars
+    }
+
+    #[test]
+    fn test_ansi_overwrite_with_cr() {
+        // Classic overwriting pattern: write, CR, overwrite
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"XXXXX\rABC", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], b'B' as u32);
+        assert_eq!(buf[2], b'C' as u32);
+        assert_eq!(buf[3], b'X' as u32); // Not overwritten
+        assert_eq!(buf[4], b'X' as u32);
+    }
+
+    #[test]
+    fn test_ansi_real_ps1_prompt() {
+        // Simulate a real bash PS1 prompt with ANSI color codes
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        let prompt = b"\x1B[01;32muser@host\x1B[00m:\x1B[01;34m~\x1B[00m$ ";
+        handler.process_bytes(prompt, &mut buf);
+        // Should strip all SGR and render: "user@host:~$ "
+        let expected = b"user@host:~$ ";
+        for (i, &byte) in expected.iter().enumerate() {
+            assert_eq!(
+                buf[i], byte as u32,
+                "char at {} should be '{}'",
+                i, byte as char
+            );
+        }
+    }
+
+    #[test]
+    fn test_ansi_full_screen_clear_and_rewrite() {
+        // Simulate a full-screen app (like vim, top) clearing and rewriting
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        // Draw some content
+        handler.process_bytes(b"Old content", &mut buf);
+        // Clear entire screen
+        handler.process_bytes(b"\x1B[2J", &mut buf);
+        // Move to top-left and draw new content
+        handler.process_bytes(b"\x1B[1;1HNew content", &mut buf);
+        assert_eq!(buf[0], b'N' as u32);
+        assert_eq!(buf[1], b'e' as u32);
+        assert_eq!(buf[2], b'w' as u32);
+    }
+
+    #[test]
+    fn test_ansi_cursor_position_with_both_params() {
+        // ESC[row;colH with explicit params
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\x1B[10;20H", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 9); // 1-based to 0-based
+        assert_eq!(c.col, 19);
+    }
+
+    #[test]
+    fn test_ansi_cursor_position_with_row_only() {
+        // ESC[row;H (col defaults to 1)
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\x1B[5;H", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 4);
+        assert_eq!(c.col, 0);
+    }
+
+    #[test]
+    fn test_ansi_esc_reset() {
+        // ESC c = reset terminal (full reset)
+        // Feed content, then OSC, then ESC c to reset
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        // Write "Some text" then OSC title then ESC c reset
+        let input = b"Some text\x1B]0;title\x07";
+        handler.process_bytes(input, &mut buf);
+        // Now send ESC c (reset) separately to avoid \x1B confusion
+        handler.process_bytes(&[0x1B, b'c'], &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 0);
+        assert_eq!(c.col, 0);
+    }
+
+    #[test]
+    fn test_ansi_esc_index_down() {
+        // ESC D = index (move cursor down one line, scroll if at bottom)
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"Hello\x1BD\x1BD", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 2);
+    }
+
+    #[test]
+    fn test_ansi_esc_reverse_index() {
+        // ESC M = reverse index (move cursor up one line, scroll if at top)
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\n\nHello\x1BM", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 1); // Was at row 2, moved up to 1
+    }
+
+    #[test]
+    fn test_ansi_tab_advances_to_next_8_boundary() {
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"A\tB", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        let c = handler.cursor();
+        assert_eq!(c.col, 9); // Tab from col 1 to col 8, then 'B' at col 8 -> cursor at 9
+        assert_eq!(buf[8], b'B' as u32);
+    }
+
+    #[test]
+    fn test_ansi_tab_at_boundary() {
+        // Tab at col 0 should advance to col 8
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\tX", &mut buf);
+        assert_eq!(buf[8], b'X' as u32);
+    }
+
+    #[test]
+    fn test_ansi_empty_csi_defaults() {
+        // ESC[H with no params defaults to row 1, col 1
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"\n\n\n\x1B[H", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 0);
+        assert_eq!(c.col, 0);
+    }
+
+    #[test]
+    fn test_ansi_insert_chars_shift() {
+        // ESC[3@ inserts 3 blank chars at cursor, shifting right
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"ABCDE\x1B[1;2H\x1B[3@", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], 0); // 3 blanks inserted at col 1
+        assert_eq!(buf[2], 0);
+        assert_eq!(buf[3], 0);
+        assert_eq!(buf[4], b'B' as u32); // shifted right by 3
+    }
+
+    #[test]
+    fn test_ansi_multiple_scrolls() {
+        // Fill more rows than buffer, verify oldest rows are gone
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        for i in 0..=CANVAS_MAX_ROWS {
+            let line = format!("Row{}\n", i);
+            handler.process_bytes(line.as_bytes(), &mut buf);
+        }
+        // After scrolling, row 0 should NOT contain "Row0" (the first row scrolled off)
+        // All rows start with 'R', so check the full "Row0" string
+        let row0_text: Vec<u32> = (0..4).map(|c| buf[c]).collect();
+        let row0_str: String = row0_text
+            .iter()
+            .map(|&v| {
+                if v >= 0x20 && v < 0x7F {
+                    v as u8 as char
+                } else {
+                    '?'
+                }
+            })
+            .collect();
+        assert_ne!(
+            row0_str, "Row0",
+            "Row0 should have scrolled off, but found '{}'",
+            row0_str
+        );
+    }
+
+    #[test]
+    fn test_ansi_process_bytes_empty() {
+        // Empty input should not crash
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"", &mut buf);
+        let c = handler.cursor();
+        assert_eq!(c.row, 0);
+        assert_eq!(c.col, 0);
+    }
+
+    #[test]
+    fn test_ansi_non_printable_low_chars() {
+        // Chars 0x00-0x06 (except 0x07 bell, 0x08 BS, 0x09 TAB, 0x0A LF, 0x0D CR) ignored
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"A\x00\x01\x02\x03\x04\x05\x06B", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], b'B' as u32); // Control chars ignored, B at col 1
+    }
+
+    #[test]
+    fn test_ansi_high_ascii_ignored() {
+        // Bytes >= 0x7F (DEL and above) should not be rendered as printable
+        let mut handler = AnsiHandler::new();
+        let mut buf = make_canvas();
+        handler.process_bytes(b"AB\x7F\x80\xFFCD", &mut buf);
+        assert_eq!(buf[0], b'A' as u32);
+        assert_eq!(buf[1], b'B' as u32);
+        assert_eq!(buf[2], b'C' as u32); // 0x7F, 0x80, 0xFF not in 0x20..0x7F range
+        assert_eq!(buf[3], b'D' as u32);
     }
 }

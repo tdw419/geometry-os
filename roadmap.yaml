@@ -6303,7 +6303,7 @@ phases:
   scope_lines_total: 72830
   test_target: 2076
   _claimed_by: worker-0
-  _claimed_at: 1777148989
+  _claimed_at: 1777158041
 - id: phase-128
   title: Host Terminal -- Multi-Session and Shell Selection
   status: in_progress
@@ -6366,7 +6366,7 @@ phases:
   scope_lines_total: 73140
   test_target: 2080
   _claimed_by: worker-0
-  _claimed_at: 1777152489
+  _claimed_at: 1777158271
 - id: phase-129
   title: Host Terminal -- Keyboard Shortcuts and Productivity
   status: done
@@ -6435,7 +6435,7 @@ phases:
   _claimed_at: 1777155202
 - id: phase-130
   title: Host Terminal -- Test Suite and Desktop Integration
-  status: planned
+  status: in_progress
   goal: Comprehensive test coverage for the terminal, desktop building entry, and
     real-world usage validation
   description: 'Build a proper test suite for host_term: unit tests for ANSI parsing,
@@ -6517,6 +6517,8 @@ phases:
     scope_lines: 40
   scope_lines_total: 73660
   test_target: 2095
+  _claimed_by: worker-0
+  _claimed_at: 1777158379
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

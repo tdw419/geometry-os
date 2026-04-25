@@ -542,7 +542,9 @@ impl Vm {
         let opcode = self.fetch();
 
         // Track opcode execution for diagnostic context
-        self.opcode_histogram[opcode as usize] += 1;
+        if (opcode as usize) < self.opcode_histogram.len() {
+            self.opcode_histogram[opcode as usize] += 1;
+        }
 
         // Execution trace: record (pc, regs, opcode) if recording is enabled.
         // Zero overhead when off (single bool check).

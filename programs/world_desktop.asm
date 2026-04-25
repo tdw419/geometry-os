@@ -607,9 +607,23 @@ LDI r17, 0x76E0
 STORE r20, r17
 ADDI r20, 1
 
+; Building 15: host_term (terminal/green-white 0xAAFFCC)
+LDI r17, 140
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 80
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0xAAFFCC
+STORE r20, r17
+ADDI r20, 1
+LDI r17, 0x76F0
+STORE r20, r17
+ADDI r20, 1
+
 ; Building count
 LDI r17, 0x7580
-LDI r18, 15
+LDI r18, 16
 STORE r17, r18
 
 ; ===== Claim Table =====
@@ -663,6 +677,8 @@ LDI r20, 0x76D0
 STRO r20, "file_browser"
 LDI r20, 0x76E0
 STRO r20, "hex_viewer"
+LDI r20, 0x76F0
+STRO r20, "host"
 
 ; Clear nearby building flag
 LDI r17, 0x7584
