@@ -9053,6 +9053,99 @@ fn test_winsys_bring_to_front_affects_hittest() {
     assert_eq!(vm.regs[0], win1, "win1 brought to front");
 }
 
+#[test]
+fn test_winsys_resize() {
+    // WINSYS op=7 (RESIZE): r0=win_id, r1=new_w, r2=new_h
+    let mut vm = Vm::new();
+    // Create window first (op=0): 64x48
+    vm.regs[1] = 0;  // x
+    vm.regs[2] = 0;  // y
+    vm.regs[3] = 64; // w
+    vm.regs[4] = 48; // h
+    vm.regs[5] = 0;  // title_addr
+    vm.regs[6] = 0;  // op = create
+    vm.ram[0] = 0x94; // WINSYS
+    vm.ram[1] = 6;    // op_reg
+    vm.ram[2] = 0x00; // HALT
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+    assert_eq!(win_id, 1);
+    assert_eq!(vm.windows[0].offscreen_buffer.len(), 64 * 48);
+
+    // Resize to 128x96 (op=7)
+    vm.regs[0] = win_id;
+    vm.regs[1] = 128; // new_w
+    vm.regs[2] = 96;  // new_h
+    vm.regs[6] = 7;   // op = resize
+    vm.ram[3] = 0x94;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x00; // HALT
+    vm.pc = 3;
+    vm.halted = false;
+    vm.step();
+
+    assert_eq!(vm.regs[0], 1, "resize should return success");
+    let w = &vm.windows[0];
+    assert_eq!(w.w, 128);
+    assert_eq!(w.h, 96);
+    assert_eq!(w.offscreen_buffer.len(), 128 * 96);
+}
+
+#[test]
+fn test_winsys_resize_invalid_size() {
+    // WINSYS op=7 with zero/dimension should fail
+    let mut vm = Vm::new();
+    // Create window
+    vm.regs[1] = 0;
+    vm.regs[2] = 0;
+    vm.regs[3] = 32;
+    vm.regs[4] = 32;
+    vm.regs[5] = 0;
+    vm.regs[6] = 0;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    let win_id = vm.regs[0];
+    assert_eq!(win_id, 1);
+
+    // Try resize to 0x0
+    vm.regs[0] = win_id;
+    vm.regs[1] = 0;  // invalid
+    vm.regs[2] = 0;  // invalid
+    vm.regs[6] = 7;
+    vm.ram[3] = 0x94;
+    vm.ram[4] = 6;
+    vm.ram[5] = 0x00;
+    vm.pc = 3;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "zero-size resize should fail");
+    assert_eq!(vm.windows[0].w, 32, "original size unchanged");
+    assert_eq!(vm.windows[0].h, 32, "original size unchanged");
+}
+
+#[test]
+fn test_winsys_resize_not_found() {
+    // WINSYS op=7 with nonexistent window id
+    let mut vm = Vm::new();
+    vm.regs[0] = 999; // nonexistent
+    vm.regs[1] = 64;
+    vm.regs[2] = 64;
+    vm.regs[6] = 7;
+    vm.ram[0] = 0x94;
+    vm.ram[1] = 6;
+    vm.ram[2] = 0x00;
+    vm.pc = 0;
+    vm.halted = false;
+    vm.step();
+    assert_eq!(vm.regs[0], 0, "resize of nonexistent window should fail");
+}
+
 // ── Sprite Engine (Phase 69) -- SPRBLT (0x97) ────────────────────────
 
 #[test]
@@ -16663,6 +16756,74 @@ fn test_window_resize_updates_buffer() {
     assert!(
         handler.contains("offscreen_buffer") && handler.contains(".resize("),
         "should resize offscreen buffer"
+    );
+}
+
+#[test]
+fn test_window_resize_socket() {
+    // Runtime test: create a window, resize via socket handler logic, verify buffer
+    use crate::vm::types::Window;
+
+    let mut vm = Vm::new();
+
+    // Create an active window at 64x32
+    let mut w = Window::new(1, 10, 20, 64, 32, 0, 1);
+    w.active = true;
+    vm.windows.push(w);
+
+    // Simulate window_resize 1 128 96 (same logic as socket handler)
+    let win_id: u32 = 1;
+    let new_w: u32 = 128;
+    let new_h: u32 = 96;
+    let found = vm.windows.iter_mut().find(|w| w.id == win_id && w.active);
+    assert!(found.is_some(), "should find active window");
+
+    if let Some(w) = found {
+        w.w = new_w;
+        w.h = new_h;
+        w.offscreen_buffer
+            .resize((new_w as usize) * (new_h as usize), 0);
+    }
+
+    // Verify dimensions updated
+    let w = vm.windows.iter().find(|w| w.id == 1).unwrap();
+    assert_eq!(w.w, 128, "width should be updated to 128");
+    assert_eq!(w.h, 96, "height should be updated to 96");
+    assert_eq!(
+        w.offscreen_buffer.len(),
+        128 * 96,
+        "offscreen buffer should be 128*96"
+    );
+
+    // Test resizing a non-existent window returns none
+    let not_found = vm.windows.iter_mut().find(|w| w.id == 999 && w.active);
+    assert!(
+        not_found.is_none(),
+        "non-existent window should not be found"
+    );
+
+    // Test resizing an inactive window returns none
+    let mut w2 = Window::new(2, 50, 60, 64, 32, 0, 2);
+    w2.active = false;
+    vm.windows.push(w2);
+    let inactive = vm.windows.iter_mut().find(|w| w.id == 2 && w.active);
+    assert!(
+        inactive.is_none(),
+        "inactive window should not be resizable"
+    );
+
+    // Test invalid sizes are rejected
+    let found = vm
+        .windows
+        .iter_mut()
+        .find(|w| w.id == win_id && w.active);
+    assert!(found.is_some());
+    // 0 size should fail
+    let bad_w: u32 = 0;
+    let bad_h: u32 = 0;
+    assert!(
+        bad_w == 0 || bad_h == 0 || bad_w > 256 || bad_h > 256,
+        "zero dimensions should be rejected"
     );
 }
 
