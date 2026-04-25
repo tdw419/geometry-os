@@ -28,6 +28,7 @@ pub const PTY_ERR_CLOSED: u32 = 7;
 
 pub struct PtySlot {
     master: Box<dyn MasterPty + Send>,
+    writer: Option<Box<dyn std::io::Write + Send>>,
     rx: Receiver<u8>,
     /// Set true when the reader thread observes EOF or an error.
     closed_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -146,8 +147,12 @@ pub fn spawn(cmd_line: &str) -> Result<PtySlot, String> {
         })
         .map_err(|e| format!("spawn reader: {}", e))?;
 
+    // Take the writer once at creation time so PTYWRITE can reuse it.
+    let writer = pair.master.take_writer().ok();
+
     Ok(PtySlot {
         master: pair.master,
+        writer,
         rx,
         closed_flag,
         _child: child,
@@ -218,18 +223,17 @@ impl super::Vm {
         }
 
         let slot = self.pty_slots[h].as_mut().unwrap();
-        match slot.master.take_writer() {
-            Ok(mut w) => match w.write_all(&bytes) {
+        if let Some(ref mut w) = slot.writer {
+            match w.write_all(&bytes) {
                 Ok(()) => {
                     self.regs[0] = PTY_OK;
                 }
                 Err(_) => {
                     self.regs[0] = PTY_ERR_WRITE_FAILED;
                 }
-            },
-            Err(_) => {
-                self.regs[0] = PTY_ERR_WRITE_FAILED;
             }
+        } else {
+            self.regs[0] = PTY_ERR_WRITE_FAILED;
         }
     }
 
@@ -311,7 +315,7 @@ mod tests {
         };
 
         {
-            let mut w = slot.master.take_writer().expect("writer");
+            let w = slot.writer.as_mut().expect("writer");
             w.write_all(b"pwd\nexit\n").expect("write pwd");
         }
 
