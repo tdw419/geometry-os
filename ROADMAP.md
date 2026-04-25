@@ -6,7 +6,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 
 **Deliverables:** 511/511 complete
 
-**Tasks:** 1053/1075 complete
+**Tasks:** 1071/1075 complete
 
 ## Scope Summary
 
@@ -2701,7 +2701,7 @@ Transform the map from a launcher into an infinite spatial desktop where app win
 - [x] **Integration tests** -- 12+ integration tests covering the new coordinate model, rendering, multi-process execution, drag, and mouse routing.
   - [x] test_world_space_window_placement verifies world_x/world_y set correctly
   - [x] test_viewport_transform verifies coordinate math at all zoom levels
-  - [ ] test_composite_rendering verifies window blit at correct screen position
+  - [x] test_composite_rendering verifies window blit at correct screen position
   - [x] test_multi_process_launch verifies two apps run simultaneously
   - [ ] test_window_drag verifies world_x/world_y update on mouse drag
   - [ ] test_offscreen_culling verifies windows outside viewport are skipped

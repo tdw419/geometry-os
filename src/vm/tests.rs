@@ -20041,3 +20041,165 @@ fn test_viewport_transform() {
         );
     }
 }
+
+#[test]
+fn test_composite_rendering() {
+    // Verify that blit_windows() places window pixels at the correct screen position,
+    // composites multiple windows in z-order, respects transparency, and clips at edges.
+    use crate::vm::types::{Window, WINDOW_TITLE_BAR_H, TASKBAR_Y};
+
+    let mut vm = Vm::new();
+
+    // ── 1. Single window: pixel at known position ──
+    // Window at (20, 30), size 16x16. Content pixel at buffer (3, 5) = red.
+    // After blit, screen position = (20+3, 30+TITLE_BAR_H+5) = (23, 47).
+    {
+        let mut win = Window::new(1, 20, 30, 16, 16, 0, 10);
+        win.offscreen_buffer[5 * 16 + 3] = 0xFF0000; // red at (3,5)
+        vm.windows.push(win);
+    }
+    vm.blit_windows();
+
+    let expected_x = 20 + 3;
+    let expected_y = 30 + WINDOW_TITLE_BAR_H as usize + 5;
+    assert_eq!(
+        vm.screen[expected_y * 256 + expected_x],
+        0xFF0000,
+        "single window: red pixel should be at screen ({}, {})",
+        expected_x, expected_y
+    );
+
+    // Adjacent pixel in buffer (4,5) was never written -> screen should be 0
+    assert_eq!(
+        vm.screen[expected_y * 256 + expected_x + 1],
+        0,
+        "unwritten pixel should remain 0 (transparent)"
+    );
+
+    // ── 2. Z-order: overlapping windows, higher z paints on top ──
+    vm.screen.fill(0);
+    vm.windows.clear();
+
+    // Window A at (10, 10), 8x8, z_order=1, all green
+    let mut win_a = Window::new(10, 10, 10, 8, 8, 0, 1);
+    win_a.z_order = 1;
+    for i in win_a.offscreen_buffer.iter_mut() {
+        *i = 0x00FF00;
+    }
+    vm.windows.push(win_a);
+
+    // Window B at (12, 12), 8x8, z_order=2, all blue
+    let mut win_b = Window::new(20, 12, 12, 8, 8, 0, 2);
+    win_b.z_order = 2;
+    for i in win_b.offscreen_buffer.iter_mut() {
+        *i = 0x0000FF;
+    }
+    vm.windows.push(win_b);
+
+    vm.blit_windows();
+
+    // Overlap: Win A content at buffer (4,4) -> screen (14, 26).
+    // Win B content at buffer (2,2) -> screen (14, 26).
+    // Win B z_order=2 > Win A z_order=1, so blue wins.
+    let overlap_x = 14usize;
+    let overlap_y = 12 + WINDOW_TITLE_BAR_H as usize + 2;
+    assert_eq!(
+        vm.screen[overlap_y * 256 + overlap_x],
+        0x0000FF,
+        "overlap: higher z-order (blue) should overwrite lower (green) at ({}, {})",
+        overlap_x, overlap_y
+    );
+
+    // Win A only region: pixel at (10, 23) -- only covered by win A content
+    // (win B title bar covers x=12..19, y=12..23, and win B close button covers
+    //  x=9..18, y=13..22, so x=10, y=23 is exclusively win A)
+    let a_only_x = 10usize;
+    let a_only_y = 10 + WINDOW_TITLE_BAR_H as usize + 1;
+    assert_eq!(
+        vm.screen[a_only_y * 256 + a_only_x],
+        0x00FF00,
+        "win A only region should be green at ({}, {})",
+        a_only_x, a_only_y
+    );
+
+    // ── 3. Transparency: buffer pixel 0 does NOT overwrite screen ──
+    vm.screen.fill(0);
+    vm.windows.clear();
+
+    // Place yellow background at the exact screen pixel the transparent buffer pixel maps to
+    // Window C at (28, 38), 8x8. Buffer (2,2) -> screen (30, 52). Place yellow there.
+    let trans_x = 28 + 2;
+    let trans_y = 38 + WINDOW_TITLE_BAR_H as usize + 2;
+    vm.screen[trans_y * 256 + trans_x] = 0xFFFF00; // yellow background
+
+    let mut win_c = Window::new(30, 28, 38, 8, 8, 0, 3);
+    win_c.offscreen_buffer[0] = 0xFF00FF;          // corner (0,0)
+    win_c.offscreen_buffer[7] = 0xFF00FF;          // corner (7,0)
+    win_c.offscreen_buffer[7 * 8 + 0] = 0xFF00FF; // corner (0,7)
+    win_c.offscreen_buffer[7 * 8 + 7] = 0xFF00FF; // corner (7,7)
+    // buffer (2,2) stays 0 -> transparent
+    vm.windows.push(win_c);
+    vm.blit_windows();
+
+    // screen (30, 50) = window buffer (2, 2) = transparent -> yellow survives
+    let trans_x = 28 + 2;
+    let trans_y = 38 + WINDOW_TITLE_BAR_H as usize + 2;
+    assert_eq!(
+        vm.screen[trans_y * 256 + trans_x],
+        0xFFFF00,
+        "transparent window pixel should not overwrite background at ({}, {})",
+        trans_x, trans_y
+    );
+
+    // ── 4. Edge clipping: window partially off-screen ──
+    vm.screen.fill(0);
+    vm.windows.clear();
+
+    let mut win_d = Window::new(40, 250, 10, 16, 16, 0, 4);
+    win_d.offscreen_buffer[0] = 0xABCDEF;  // (0,0) -> screen (250, 22)
+    win_d.offscreen_buffer[10] = 0x123456; // (10,0) -> screen (260, 22) clipped
+    vm.windows.push(win_d);
+    vm.blit_windows();
+
+    let content_y = 10 + WINDOW_TITLE_BAR_H as usize;
+    assert_eq!(
+        vm.screen[content_y * 256 + 250],
+        0xABCDEF,
+        "on-screen pixel at x=250 should be rendered"
+    );
+    assert_eq!(
+        vm.screen[content_y * 256 + 255],
+        0,
+        "pixel beyond screen edge (x>255) should not be rendered"
+    );
+
+    // ── 5. Title bar drawn above content ──
+    let title_bar_pixel = vm.screen[(10 + 2) * 256 + 252];
+    assert_ne!(
+        title_bar_pixel, 0,
+        "title bar should be drawn (non-zero pixel) at (252, 12)"
+    );
+
+    // ── 6. Taskbar preservation: window content does not overwrite taskbar ──
+    vm.screen.fill(0);
+    vm.windows.clear();
+
+    for tx in 0..256u32 {
+        vm.screen[TASKBAR_Y * 256 + tx as usize] = 0xAAAAAA;
+    }
+
+    // Window y=230, h=30 -> content starts at y=242 (inside taskbar area y>=240)
+    let mut win_e = Window::new(50, 100, 230, 30, 30, 0, 5);
+    for i in win_e.offscreen_buffer.iter_mut() {
+        *i = 0xFF0000;
+    }
+    vm.windows.push(win_e);
+    vm.blit_windows();
+
+    assert_eq!(
+        vm.screen[TASKBAR_Y * 256 + 110],
+        0xAAAAAA,
+        "taskbar pixel should survive window overlap at (110, {})",
+        TASKBAR_Y
+    );
+}
