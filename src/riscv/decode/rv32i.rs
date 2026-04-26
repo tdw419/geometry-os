@@ -122,6 +122,7 @@ pub fn decode(word: u32) -> Operation {
                 match (funct3, funct12) {
                 (0b000, 0x000) => Operation::Ecall,
                 (0b000, 0x001) => Operation::Ebreak,
+                (0b000, 0x105) => Operation::Nop, // WFI (Wait For Interrupt) -- NOP in emulator
                 (0b000, 0x302) => Operation::Mret,
                 (0b000, 0x102) => Operation::Sret,
                 // CSR register-register

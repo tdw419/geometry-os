@@ -367,7 +367,7 @@ fn test_linux_kernel_early_boot() {
         eprintln!("Initramfs size: {} bytes", ir.len());
     }
 
-    let bootargs = "console=ttyS0 earlycon=sbi panic=5 quiet";
+    let bootargs = "console=ttyS0 earlycon=sbi panic=5 loglevel=7";
     let start = Instant::now();
     let (mut vm, result) = RiscvVm::boot_linux(
         &kernel_data,
