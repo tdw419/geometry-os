@@ -391,20 +391,51 @@ fn test_linux_kernel_early_boot() {
     eprintln!("PC: 0x{:08X}, Privilege: {:?}", vm.cpu.pc, vm.cpu.privilege);
     eprintln!("RAM base: 0x{:08X}", vm.bus.mem.ram_base);
 
-    // Check UART output
-    let mut uart_output = Vec::new();
-    loop {
-        match vm.bus.uart.read_byte(0) {
-            0 => break, // no more data
-            b => uart_output.push(b),
-        }
-    }
-    if !uart_output.is_empty() {
-        let s = String::from_utf8_lossy(&uart_output);
-        eprintln!("UART output ({} bytes): {}", uart_output.len(), s);
+    // Check UART TX output (tx_buf is where SBI putchar writes go)
+    if !vm.bus.uart.tx_buf.is_empty() {
+        let s = String::from_utf8_lossy(&vm.bus.uart.tx_buf);
+        eprintln!("UART TX output ({} bytes): {}", vm.bus.uart.tx_buf.len(), s);
     } else {
-        eprintln!("No UART output");
+        eprintln!("No UART TX output");
     }
+
+    // Check SBI console output
+    if !vm.bus.sbi.console_output.is_empty() {
+        let s = String::from_utf8_lossy(&vm.bus.sbi.console_output);
+        eprintln!(
+            "SBI console output ({} bytes): {}",
+            vm.bus.sbi.console_output.len(),
+            s
+        );
+    } else {
+        eprintln!("No SBI console output");
+    }
+
+    // Dump SBI ecall log (first 50 and last 20 calls)
+    let ecall_count = vm.bus.sbi.ecall_log.len();
+    eprintln!("SBI ecall_log: {} calls", ecall_count);
+    let show_first = 50.min(ecall_count);
+    for i in 0..show_first {
+        let (a7, a6, a0) = vm.bus.sbi.ecall_log[i];
+        eprintln!(
+            "  ecall[{}]: a7=0x{:08X} a6=0x{:08X} a0=0x{:08X}",
+            i, a7, a6, a0
+        );
+    }
+    if ecall_count > show_first + 20 {
+        eprintln!("  ... ({} more) ...", ecall_count - show_first - 20);
+    }
+    let show_last_start = show_first.max(ecall_count.saturating_sub(20));
+    for i in show_last_start..ecall_count {
+        let (a7, a6, a0) = vm.bus.sbi.ecall_log[i];
+        eprintln!(
+            "  ecall[{}]: a7=0x{:08X} a6=0x{:08X} a0=0x{:08X}",
+            i, a7, a6, a0
+        );
+    }
+
+    // CPU ecall count
+    eprintln!("CPU ecall_count: {}", vm.cpu.ecall_count);
 
     // Check CSRs
     eprintln!(

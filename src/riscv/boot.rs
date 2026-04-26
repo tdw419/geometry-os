@@ -1201,12 +1201,19 @@ impl RiscvVm {
                                     | (sie << csr::MSTATUS_SPIE);
                                 vm.cpu.csr.mstatus &= !(1 << csr::MSTATUS_SIE);
 
-                                // For timer interrupts: advance mtimecmp to prevent
-                                // immediate re-trap. Without this, MTIP stays pending
-                                // after forwarding, and the next vm.step() traps back
-                                // to M-mode before the S-mode handler can execute.
-                                // The kernel will set its own mtimecmp via SBI_SET_TIMER.
+                                // Translate MTI (cause 7) to STI (cause 5) for S-mode.
+                                // On real hardware, OpenSBI handles MTI in M-mode and
+                                // injects STI by setting STIP (bit 5) in MIP. The kernel
+                                // expects scause = 0x80000005 (STI), not 0x80000007 (MTI).
+                                // Without this translation, the kernel's interrupt handler
+                                // doesn't recognize the timer interrupt and the scheduler
+                                // never wakes up (hang in calibrate_delay / schedule).
                                 if cause_code == csr::INT_MTI {
+                                    vm.cpu.csr.scause = (1u32 << 31) | csr::INT_STI;
+                                    // Clear MTIP and set STIP in MIP so the CPU doesn't
+                                    // immediately re-trap to M-mode on the next step.
+                                    // The kernel's timer handler will clear STIP via
+                                    // SBI_SET_TIMER which writes mtimecmp.
                                     vm.bus.clint.mtimecmp = vm.bus.clint.mtime + 100_000;
                                 }
 

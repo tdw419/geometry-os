@@ -326,6 +326,8 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
     // This prevents the allocator from returning PA 0 (which has kernel code).
     if !config.reserved_regions.is_empty() {
         b.begin_node("reserved-memory");
+        b.prop_u32("#address-cells", 2);
+        b.prop_u32("#size-cells", 2);
         b.prop_empty("ranges");
         for &(base, size) in config.reserved_regions.iter() {
             let name = format!("region@{:x}", base);

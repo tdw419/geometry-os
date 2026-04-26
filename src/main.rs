@@ -2306,7 +2306,7 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, scrollback [offset] [count], buildings [radius], desktop_json, launch <app> [--window], player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, scrollback [offset] [count], buildings [radius], desktop_json, launch <app> [--window], player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, launcher [cmd|close|status], clipboard [get|set <text>], help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             "scrollback" => {
@@ -3394,7 +3394,69 @@ fn main() {
                                     }
                                 }
                             }
-                            // TODO: launcher socket command (needs launcher_active, launcher_saved_rows, launcher_input state)
+                            "launcher" => {
+                                let subcmd = parts.get(1).copied().unwrap_or("");
+                                match subcmd {
+                                    "close" => {
+                                        if launcher_active {
+                                            for i in 0..3 {
+                                                let row_start = i * CANVAS_COLS;
+                                                canvas_buffer[row_start..row_start + CANVAS_COLS]
+                                                    .copy_from_slice(&launcher_saved_rows[i]);
+                                            }
+                                            launcher_active = false;
+                                            launcher_input.clear();
+                                            response.push_str("ok launcher closed\n");
+                                        } else {
+                                            response.push_str("ok launcher not active\n");
+                                        }
+                                    }
+                                    "status" => {
+                                        if launcher_active {
+                                            response.push_str(&format!(
+                                                "active input={}\n",
+                                                launcher_input
+                                            ));
+                                        } else {
+                                            response.push_str("inactive\n");
+                                        }
+                                    }
+                                    "" => {
+                                        if !launcher_active {
+                                            launcher_active = true;
+                                            launcher_input.clear();
+                                            for i in 0..3 {
+                                                let row_start = i * CANVAS_COLS;
+                                                launcher_saved_rows[i].copy_from_slice(
+                                                    &canvas_buffer
+                                                        [row_start..row_start + CANVAS_COLS],
+                                                );
+                                            }
+                                            response.push_str("ok launcher opened\n");
+                                        } else {
+                                            response.push_str("ok launcher already active\n");
+                                        }
+                                    }
+                                    _ => {
+                                        let cmd = line.strip_prefix("launcher ").unwrap_or(subcmd);
+                                        if !launcher_active {
+                                            launcher_active = true;
+                                            for i in 0..3 {
+                                                let row_start = i * CANVAS_COLS;
+                                                launcher_saved_rows[i].copy_from_slice(
+                                                    &canvas_buffer
+                                                        [row_start..row_start + CANVAS_COLS],
+                                                );
+                                            }
+                                        }
+                                        launcher_input = cmd.to_string();
+                                        response.push_str(&format!(
+                                            "ok launcher opened with: {}\n",
+                                            launcher_input
+                                        ));
+                                    }
+                                }
+                            }
                             _ => {
                                 response.push_str(&format!("[unknown: {}]\n", line));
                             }

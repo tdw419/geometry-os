@@ -452,6 +452,11 @@ pub fn handle_terminal_command(
                 *output_row,
                 "  PageUp/PageDown   Scroll terminal history",
             );
+            *output_row = write_line_to_canvas(
+                canvas_buffer,
+                *output_row,
+                "  Ctrl+Space        Quick launch bar",
+            );
             *output_row = write_line_to_canvas(canvas_buffer, *output_row, "geo> ");
             ensure_scroll(*output_row, scroll_offset);
             (None, false, false)
