@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 154 opcodes, 3656 tests, 147 programs, 76635 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
-**Progress:** 133/134 phases complete, 1 in progress, 0 planned
+**Progress:** 134/134 phases complete, 0 in progress, 0 planned
 
-**Deliverables:** 537/537 complete
+**Deliverables:** 538/538 complete
 
 ## Scope Summary
 
@@ -142,8 +142,8 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 | phase-130 Host Terminal -- Test Suite and Desktop Integration | COMPLETE | 4/4 | ~260 | 8 |
 | phase-131 Host Terminal -- PTY Resize and Column Sync | COMPLETE | 3/3 | ~140 | 8 |
 | phase-132 Host Terminal -- ANSI Color Rendering | COMPLETE | 3/3 | ~300 | 9 |
-| phase-133 Host Terminal -- Wider Display and Horizontal Scroll | COMPLETE | 1/1 | ~240 | 9 |
-| phase-134 Host Terminal -- Extended Character Support | IN PROGRESS | 3/3 | ~260 | 8 |
+| phase-133 Host Terminal -- Wider Display and Horizontal Scroll | COMPLETE | 2/2 | ~240 | 9 |
+| phase-134 Host Terminal -- Extended Character Support | COMPLETE | 3/3 | ~260 | 8 |
 
 ## Dependencies
 
@@ -3105,21 +3105,22 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [x] p133.d1.t2: Set COLS=80, ROWS=40, update text buffer
   - [x] p133.d1.t3: Add PTYSIZE 80x40 call after PTYOPEN
   - [x] p133.d1.t4: Update cursor and scroll for new dimensions
+- [x] **Update WINSYS window size to 256x256 for host_term** -- Expanded window from 240x180 to 256x256 to fit the wider 80-column display
 
-## [ ] phase-134: Host Terminal -- Extended Character Support (IN PROGRESS)
+## [x] phase-134: Host Terminal -- Extended Character Support (COMPLETE)
 
 **Goal:** Support box-drawing characters and basic UTF-8 so htop, tree, and other TUI tools render correctly
 
 ### Deliverables
 
-- [ ] **Define bitmap font for box-drawing characters (30 glyphs)** -- 5x7 pixel bitmaps for ─│┌┐└┘├┤┬┴┼ arrows and block elements, stored in RAM
-  - [ ] p134.d1.t1: Design 5x7 bitmaps for box-drawing chars
-  - [ ] p134.d1.t2: Store custom font table at fixed RAM address
-  - [ ] p134.d1.t3: MEDTEXT fallback: check FONT_EXT for codes >127
-- [ ] **UTF-8 decoder for incoming PTY bytes** -- State machine for 2/3-byte sequences, map codepoints to custom font, unknown -> '?'
-  - [ ] p134.d2.t1: UTF-8 decode state machine in assembly
-  - [ ] p134.d2.t2: Map codepoints to custom font indices
-  - [ ] p134.d2.t3: Test: htop box characters render correctly
-- [ ] **Full-width character support (CJK fallback)** -- Detect wide chars, render as two filled-block cells to prevent misalignment
-  - [ ] p134.d3.t1: Detect full-width codepoints (CJK range)
-  - [ ] p134.d3.t2: Render full-width as two filled-block cells
+- [x] **Define bitmap font for box-drawing characters (30 glyphs)** -- 5x7 pixel bitmaps for ─│┌┐└┘├┤┬┴┼ arrows and block elements, stored in RAM
+  - [x] p134.d1.t1: Design 5x7 bitmaps for box-drawing chars
+  - [x] p134.d1.t2: Store custom font table at fixed RAM address
+  - [x] p134.d1.t3: MEDTEXT fallback: check FONT_EXT for codes >127
+- [x] **UTF-8 decoder for incoming PTY bytes** -- State machine for 2/3-byte sequences, map codepoints to custom font, unknown -> '?'
+  - [x] p134.d2.t1: UTF-8 decode state machine in assembly
+  - [x] p134.d2.t2: Map codepoints to custom font indices
+  - [x] p134.d2.t3: Test: htop box characters render correctly
+- [x] **Full-width character support (CJK fallback)** -- Detect wide chars, render as two filled-block cells to prevent misalignment
+  - [x] p134.d3.t1: Detect full-width codepoints (CJK range)
+  - [x] p134.d3.t2: Render full-width as two filled-block cells
