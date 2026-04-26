@@ -2,7 +2,7 @@
 ; Phase 139 -- Daily Driver Text Editor App
 ;
 ; Opens a host file, displays with scrolling, edits with cursor keys,
-; and saves via FSWRITE. Making GeOS usable for real writing and coding.
+; and saves via FSWRITE. Search and goto for navigation.
 ;
 ; Controls:
 ;   Arrow keys (bitmask 0xFFB)  -- Move cursor
@@ -11,6 +11,10 @@
 ;   Backspace (8)               -- Delete char before cursor
 ;   Ctrl+S (19)                 -- Save file
 ;   Ctrl+Q (17)                 -- Quit editor
+;   Ctrl+F (6)                  -- Search forward
+;   F3 (next match in search)   -- Find next
+;   Ctrl+G (7)                  -- Goto line number
+;   Escape (27)                 -- Cancel prompt
 ;
 ; Screen: 256x256, DRAWTEXT 8x8 font
 ;   Title bar: y=0..11 (filename, status)
@@ -29,6 +33,12 @@
 ;   0x7406         Buffer size (chars in buffer)
 ;   0x7420-0x744F  Filename (null-terminated, max 48 chars)
 ;   0x7460-0x748A  Scratch buffer (43 cells for one line + null)
+;   0x7490-0x74BF  Search string buffer (48 chars)
+;   0x74C0         Prompt mode (0=none, 1=search, 2=goto)
+;   0x74C1         Search string length
+;   0x74C2         Search match line (-1 if none)
+;   0x74C3         Search match col
+;   0x74C4         Goto number accumulator
 
 ; === Constants ===
 #define COLS     42
@@ -45,6 +55,8 @@
 #define C_HINT   0x555577
 #define C_CURLN  0x151520
 #define C_SEL    0x335577
+#define C_MATCH  0x664400
+#define C_PROMPT 0x333355
 
 ; RAM addresses
 #define LS       0x5000
@@ -60,6 +72,12 @@
 #define R_BS     0x7406
 #define R_FN     0x7420
 #define R_SCR    0x7460
+#define R_SEARCH 0x7490
+#define R_PM     0x74C0
+#define R_SLEN   0x74C1
+#define R_SML    0x74C2
+#define R_SMC    0x74C3
+#define R_GNUM   0x74C4
 
 ; =========================================
 ; INIT
@@ -85,6 +103,21 @@
     ; Set filename
     LDI r10, R_FN
     STRO r10, "~/.geos_notes.txt"
+
+    ; Init prompt state
+    LDI r10, R_PM
+    LDI r11, 0
+    STORE r10, r11
+    LDI r10, R_SLEN
+    STORE r10, r11
+    LDI r10, R_SML
+    LDI r11, 0xFFFFFFFF
+    STORE r10, r11
+    LDI r10, R_SMC
+    LDI r11, 0
+    STORE r10, r11
+    LDI r10, R_GNUM
+    STORE r10, r11
 
     ; Try to load file
     CALL load_file
@@ -283,6 +316,13 @@ handle_input:
     PUSH r5
     PUSH r6
 
+    ; Check if in prompt mode
+    LDI r10, R_PM
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JNZ r0, hi_prompt
+
     ; Check arrow bitmask first
     MOV r10, r6
 
@@ -325,6 +365,21 @@ handle_input:
     LDI r12, 19
     CMP r11, r12
     JZ r0, hi_save
+
+    ; Ctrl+F (6)?
+    LDI r12, 6
+    CMP r11, r12
+    JZ r0, hi_search
+
+    ; Ctrl+G (7)?
+    LDI r12, 7
+    CMP r11, r12
+    JZ r0, hi_goto
+
+    ; Escape (27) -- clear search match
+    LDI r12, 27
+    CMP r11, r12
+    JZ r0, hi_clear_match
 
     ; Backspace (8)?
     LDI r12, 8
@@ -370,6 +425,146 @@ hi_bksp:
     JMP hi_done
 hi_enter:
     CALL insert_newline
+    JMP hi_done
+hi_search:
+    CALL enter_search
+    JMP hi_done
+hi_goto:
+    CALL enter_goto
+    JMP hi_done
+hi_clear_match:
+    LDI r10, R_SML
+    LDI r11, 0xFFFFFFFF
+    STORE r10, r11
+    JMP hi_done
+
+; =========================================
+; PROMPT MODE HANDLER
+; =========================================
+hi_prompt:
+    MOV r11, r5
+    LDI r12, 0
+    CMP r11, r12
+    JZ r0, hi_done
+
+    ; Escape (27) -- cancel prompt
+    LDI r12, 27
+    CMP r11, r12
+    JZ r0, hp_cancel
+
+    ; Enter (10) -- execute prompt
+    LDI r12, 10
+    CMP r11, r12
+    JZ r0, hp_execute
+
+    ; Backspace (8) -- delete last char
+    LDI r12, 8
+    CMP r11, r12
+    JZ r0, hp_bksp
+
+    ; Printable (32-126)?
+    LDI r12, 32
+    CMP r11, r12
+    BLT r0, hi_done
+    LDI r12, 127
+    CMP r11, r12
+    BGE r0, hi_done
+
+    ; Add char to prompt
+    LDI r10, R_PM
+    LOAD r10, r10              ; prompt mode
+    LDI r12, 1
+    CMP r10, r12
+    JZ r0, hp_add_search
+
+    ; Goto mode -- accumulate digit
+    LDI r11, 48                ; '0'
+    SUB r5, r11                ; digit value (assumes 0-9 input)
+    LDI r12, 0
+    CMP r5, r12
+    BLT r0, hi_done
+    LDI r12, 9
+    CMP r5, r12
+    BGE r0, hi_done            ; not a digit
+
+    ; gnum = gnum * 10 + digit
+    LDI r10, R_GNUM
+    LOAD r10, r10
+    LDI r12, 10
+    MUL r10, r12
+    ADD r10, r5
+    LDI r12, R_GNUM
+    STORE r12, r10
+    JMP hi_done
+
+hp_add_search:
+    ; Add char to search string
+    LDI r1, 1                  ; increment constant
+    LDI r10, R_SLEN
+    LOAD r10, r10
+    LDI r12, 40                ; max 40 chars
+    CMP r10, r12
+    BGE r0, hi_done
+
+    LDI r12, R_SEARCH
+    ADD r12, r10
+    STORE r12, r5              ; search_buf[slen] = char
+    ADD r10, r1
+    LDI r12, R_SLEN
+    STORE r12, r10             ; slen++
+    JMP hi_done
+
+hp_bksp:
+    LDI r10, R_PM
+    LOAD r10, r10
+    LDI r12, 1
+    CMP r10, r12
+    JZ r0, hp_bksp_search
+
+    ; Goto backspace
+    LDI r10, R_GNUM
+    LOAD r10, r10
+    LDI r12, 10
+    DIV r10, r12
+    LDI r12, R_GNUM
+    STORE r12, r10
+    JMP hi_done
+
+hp_bksp_search:
+    LDI r1, 1                  ; decrement constant
+    LDI r10, R_SLEN
+    LOAD r10, r10
+    LDI r12, 0
+    CMP r10, r12
+    JZ r0, hi_done
+    SUB r10, r1
+    LDI r12, R_SLEN
+    STORE r12, r10             ; slen--
+    LDI r12, R_SEARCH
+    ADD r12, r10
+    LDI r13, 0
+    STORE r12, r13             ; null terminate
+    JMP hi_done
+
+hp_execute:
+    LDI r10, R_PM
+    LOAD r10, r10
+    LDI r12, 1
+    CMP r10, r12
+    JZ r0, hp_do_search
+
+    ; Execute goto
+    CALL do_goto
+    JMP hp_cancel
+
+hp_do_search:
+    CALL do_search
+    ; Fall through to cancel (exit prompt mode)
+
+hp_cancel:
+    LDI r10, R_PM
+    LDI r11, 0
+    STORE r10, r11
     JMP hi_done
 
 hi_done:
@@ -1134,21 +1329,175 @@ render_hints:
     LDI r5, C_BAR
     RECTF r1, r2, r3, r4, r5
 
-    ; Hints text
+    ; Check if in prompt mode
+    LDI r10, R_PM
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JNZ r0, rh_prompt
+
+    ; Normal hints
     LDI r10, R_SCR
-    STRO r10, "Ctrl+S:Save  Ctrl+Q:Quit  Arrows:Move"
+    STRO r10, "^S:Save ^Q:Quit ^F:Find ^G:Goto Esc:Clr"
     LDI r10, 4
     LDI r11, 242
     LDI r12, R_SCR
     LDI r13, C_HINT
     LDI r14, C_BAR
     DRAWTEXT r10, r11, r12, r13, r14
+    JMP rh_ln
 
+rh_prompt:
+    ; Search prompt
+    LDI r11, 1
+    CMP r10, r11
+    JNZ r0, rh_goto_prompt
+
+    LDI r10, R_SCR
+    STRO r10, "Search: "
+    LDI r10, 4
+    LDI r11, 242
+    LDI r12, R_SCR
+    LDI r13, C_AMBER
+    LDI r14, C_BAR
+    DRAWTEXT r10, r11, r12, r13, r14
+
+    ; Show search text after "Search: " (8 chars)
+    LDI r10, R_SLEN
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JZ r0, rh_ln
+
+    ; Copy search string to scratch
+    LDI r10, R_SCR
+    STRO r10, "                                        "
+    LDI r15, R_SCR
+    LDI r16, 0
+
+rh_scopy:
+    LDI r1, 1
+    LDI r17, R_SLEN
+    LOAD r17, r17
+    CMP r16, r17
+    BGE r0, rh_scopy_done
+    LDI r17, R_SEARCH
+    ADD r17, r16
+    LOAD r17, r17
+    STORE r15, r17
+    ADD r15, r1
+    ADD r16, r1
+    JMP rh_scopy
+
+rh_scopy_done:
+    LDI r17, 0
+    STORE r15, r17
+    LDI r10, 52             ; x = 8 chars * 6px + 4
+    LDI r11, 242
+    LDI r12, R_SCR
+    LDI r13, C_FG
+    LDI r14, C_BAR
+    DRAWTEXT r10, r11, r12, r13, r14
+    JMP rh_ln
+
+rh_goto_prompt:
+    ; Goto prompt
+    LDI r10, R_SCR
+    STRO r10, "Goto line: "
+    LDI r10, 4
+    LDI r11, 242
+    LDI r12, R_SCR
+    LDI r13, C_AMBER
+    LDI r14, C_BAR
+    DRAWTEXT r10, r11, r12, r13, r14
+
+    ; Show number
+    LDI r10, R_GNUM
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JZ r0, rh_show_zero
+
+    ; Convert number to decimal string
+    LDI r1, 1                  ; increment constant
+    LDI r10, R_GNUM
+    LOAD r10, r10
+    LDI r11, R_SCR
+    LDI r12, 0
+    STRO r11, "                                        "
+    LDI r15, R_SCR
+    ADD r15, r12            ; points to end of number string
+    LDI r16, 10
+
+rh_ndiv:
+    LDI r11, 0
+    CMP r10, r11
+    JZ r0, rh_ndone
+    MOV r17, r10            ; save value before MOD
+    LDI r11, 10
+    MOD r10, r11            ; r10 = value % 10 (digit)
+    LDI r12, 48
+    ADD r10, r12            ; digit char
+    STORE r15, r10
+    ADD r15, r1
+    LDI r11, 10
+    DIV r17, r11            ; r17 = value / 10 (quotient)
+    MOV r10, r17            ; r10 = quotient for next iteration
+    JMP rh_ndiv
+
+rh_ndone:
+    ; Reverse the string in place
+    ; r15 points past last digit, r12 = R_SCR was start
+    ; Actually we need to reverse from R_SCR to r15-1
+    LDI r10, R_SCR
+    MOV r11, r15
+    SUB r11, r1             ; r11 = last digit position
+    LDI r12, 0
+    CMP r10, r11
+    BGE r0, rh_nshow        ; 0 or 1 digits, no reversal needed
+
+rh_rev:
+    CMP r10, r11
+    BGE r0, rh_nshow
+    LOAD r12, r10
+    LOAD r13, r11
+    STORE r10, r13
+    STORE r11, r12
+    ADD r10, r1
+    SUB r11, r1
+    JMP rh_rev
+
+rh_nshow:
+    ; Null terminate
+    LDI r10, 0
+    STORE r15, r10
+    LDI r10, 64             ; x = 10 chars * 6px + 4
+    LDI r11, 242
+    LDI r12, R_SCR
+    LDI r13, C_FG
+    LDI r14, C_BAR
+    DRAWTEXT r10, r11, r12, r13, r14
+    JMP rh_ln
+
+rh_show_zero:
+    LDI r10, R_SCR
+    LDI r11, 48             ; '0'
+    STORE r10, r11
+    LDI r11, 0
+    ADD r10, r1
+    STORE r10, r11
+    LDI r10, 64
+    LDI r11, 242
+    LDI r12, R_SCR
+    LDI r13, C_FG
+    LDI r14, C_BAR
+    DRAWTEXT r10, r11, r12, r13, r14
+    JMP rh_ln
+
+rh_ln:
     ; Line/col info
     LDI r10, R_SCR
     STRO r10, "Ln:"
-    ; TODO -- convert numbers to strings for display
-    ; For now, just show the line/col prefix
     LDI r10, 4
     LDI r11, 250
     LDI r12, R_SCR
@@ -1156,5 +1505,277 @@ render_hints:
     LDI r14, C_BAR
     DRAWTEXT r10, r11, r12, r13, r14
 
+    POP r31
+    RET
+
+; =========================================
+; ENTER SEARCH -- start search prompt mode
+; =========================================
+enter_search:
+    PUSH r31
+
+    ; If already have search string, do find-next instead
+    LDI r10, R_SLEN
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JNZ r0, es_next
+
+    ; Enter prompt mode
+    LDI r10, R_PM
+    LDI r11, 1
+    STORE r10, r11
+
+    ; Clear search string
+    LDI r10, R_SLEN
+    LDI r11, 0
+    STORE r10, r11
+    LDI r10, R_SEARCH
+    STORE r10, r11
+
+    POP r31
+    RET
+
+es_next:
+    ; Find next from current position
+    CALL do_search
+    POP r31
+    RET
+
+; =========================================
+; ENTER GOTO -- start goto prompt mode
+; =========================================
+enter_goto:
+    PUSH r31
+
+    LDI r10, R_PM
+    LDI r11, 2
+    STORE r10, r11
+
+    ; Clear goto number
+    LDI r10, R_GNUM
+    LDI r11, 0
+    STORE r10, r11
+
+    POP r31
+    RET
+
+; =========================================
+; DO SEARCH -- find search string in buffer
+; Scans forward from cursor position (or from match+1 if searching again)
+; =========================================
+do_search:
+    PUSH r31
+    PUSH r1
+    PUSH r5
+    PUSH r10
+    PUSH r11
+    PUSH r12
+    PUSH r13
+    PUSH r14
+    PUSH r15
+    PUSH r16
+    PUSH r17
+    PUSH r18
+    LDI r1, 1
+
+    ; Get search length
+    LDI r10, R_SLEN
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JZ r0, ds_done          ; empty string, skip
+
+    ; Start position: cursor_pos + 1 (search forward from after cursor)
+    LDI r10, R_CL
+    LOAD r10, r10
+    LDI r11, LS
+    ADD r11, r10
+    LOAD r11, r11
+    LDI r12, R_CC
+    LOAD r12, r12
+    ADD r11, r12            ; r11 = cursor offset
+    ADD r11, r1             ; start one past cursor
+
+    ; Check bounds
+    LDI r13, R_BS
+    LOAD r13, r13
+    LDI r10, R_SLEN
+    LOAD r10, r10
+
+ds_outer:
+    ; Check if remaining buffer is long enough
+    MOV r14, r11
+    ADD r14, r10             ; end of potential match
+    CMP r14, r13
+    BGE r0, ds_not_found
+
+    ; Try matching at position r11
+    LDI r15, 0               ; match offset
+
+ds_inner:
+    CMP r15, r10
+    BGE r0, ds_found
+
+    ; Load buffer char
+    LDI r16, FB
+    ADD r16, r11
+    ADD r16, r15
+    LOAD r16, r16
+
+    ; Load search char
+    LDI r17, R_SEARCH
+    ADD r17, r15
+    LOAD r17, r17
+
+    CMP r16, r17
+    JNZ r0, ds_no_match
+
+    ADD r15, r1
+    JMP ds_inner
+
+ds_no_match:
+    ADD r11, r1
+    JMP ds_outer
+
+ds_found:
+    ; Found at position r11
+    ; Convert offset to line,col
+    ; Find which line this offset belongs to
+    LDI r12, R_NL
+    LOAD r12, r12            ; line count
+    LDI r14, 0               ; line index
+
+ds_find_line:
+    CMP r14, r12
+    BGE r0, ds_not_found
+
+    LDI r15, LS
+    ADD r15, r14
+    LOAD r15, r15            ; line_starts[line]
+
+    ; Check next line start
+    MOV r16, r14
+    ADD r16, r1
+    CMP r16, r12
+    BGE r0, ds_last_line
+
+    LDI r17, LS
+    ADD r17, r16
+    LOAD r17, r17            ; line_starts[line+1]
+
+    ; r11 >= line_starts[line] AND r11 < line_starts[line+1]
+    CMP r11, r15
+    BLT r0, ds_fl_next
+    CMP r11, r17
+    BGE r0, ds_fl_next
+
+    ; Found the line
+    ; col = r11 - line_starts[line]
+    SUB r11, r15             ; col = offset - line_start
+    MOV r10, r14             ; line
+    JMP ds_set_match
+
+ds_fl_next:
+    ADD r14, r1
+    JMP ds_find_line
+
+ds_last_line:
+    CMP r11, r15
+    BLT r0, ds_not_found
+    ; It is on the last line
+    SUB r11, r15
+    MOV r10, r14
+    JMP ds_set_match
+
+ds_set_match:
+    ; Set cursor to match position
+    LDI r15, R_CL
+    STORE r15, r10           ; cursor line
+    LDI r15, R_CC
+    STORE r15, r11           ; cursor col
+    LDI r15, R_SML
+    STORE r15, r10           ; match line
+    LDI r15, R_SMC
+    STORE r15, r11           ; match col
+
+    ; Adjust scroll
+    CALL scroll_adj
+    JMP ds_done
+
+ds_not_found:
+    ; Clear match indicator
+    LDI r10, R_SML
+    LDI r11, 0xFFFFFFFF
+    STORE r10, r11
+
+ds_done:
+    POP r18
+    POP r17
+    POP r16
+    POP r15
+    POP r14
+    POP r13
+    POP r12
+    POP r11
+    POP r10
+    POP r5
+    POP r1
+    POP r31
+    RET
+
+; =========================================
+; DO GOTO -- jump to line number in R_GNUM
+; =========================================
+do_goto:
+    PUSH r31
+    PUSH r1
+    PUSH r10
+    PUSH r11
+    PUSH r12
+    LDI r1, 1
+
+    ; Get target line (user enters 1-based, we use 0-based)
+    LDI r10, R_GNUM
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JZ r0, dg_done          ; goto line 0 = noop
+
+    ; Convert to 0-based
+    SUB r10, r1
+    LDI r11, 0
+    CMP r10, r11
+    BLT r0, dg_done         ; negative, invalid
+
+    ; Clamp to last line
+    LDI r12, R_NL
+    LOAD r12, r12
+    SUB r12, r1             ; last valid line index
+    CMP r10, r12
+    BLT r0, dg_ok
+    MOV r10, r12            ; clamp
+
+dg_ok:
+    ; Set cursor line
+    LDI r11, R_CL
+    STORE r11, r10
+    LDI r11, R_CC
+    LDI r12, 0
+    STORE r11, r12          ; col = 0
+
+    ; Adjust scroll
+    CALL scroll_adj
+
+dg_done:
+    ; Reset goto number
+    LDI r10, R_GNUM
+    LDI r11, 0
+    STORE r10, r11
+
+    POP r12
+    POP r11
+    POP r10
+    POP r1
     POP r31
     RET
