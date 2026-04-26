@@ -306,6 +306,7 @@ fn main() {
     let mut remote_port = 9001;
     let mut boot_mode = false;
     let mut fullscreen_mode = false;
+    let mut terminal_mode = false;
     let mut i = 1;
     while i < args.len() {
         if args[i] == "--local-port" && i + 1 < args.len() {
@@ -319,6 +320,9 @@ fn main() {
             i += 1;
         } else if args[i] == "--fullscreen" {
             fullscreen_mode = true;
+            i += 1;
+        } else if args[i] == "--terminal" {
+            terminal_mode = true;
             i += 1;
         } else {
             i += 1;
@@ -494,6 +498,16 @@ fn main() {
     // Track how many scrollback lines existed before current command output
     let mut _scrollback_pre_cmd: usize = 0;
 
+    // ── Quick Launch Bar (Phase 158) ──────────────────────────
+    let mut launcher_active: bool = false;
+    let mut launcher_input: String = String::new();
+    // Save the top 3 canvas rows so we can restore them after launcher closes
+    let mut launcher_saved_rows: [Vec<u32>; 3] = [
+        vec![0u32; CANVAS_COLS],
+        vec![0u32; CANVAS_COLS],
+        vec![0u32; CANVAS_COLS],
+    ];
+
     // ── Text Selection & Clipboard (Phase 157) ──────────────────
     let mut text_sel_active: bool = false; // currently dragging a selection
     let mut text_sel_start: (usize, usize) = (0, 0); // (row, col) of drag start
@@ -642,6 +656,48 @@ fn main() {
                     }
                 }
             }
+        }
+    }
+
+    // ── Terminal boot: --terminal flag skips map, boots host_term directly ──
+    // Loads host_term.asm as the primary program instead of world_desktop.asm.
+    // When bash exits (host_term halts), the process quits gracefully.
+    let mut terminal_direct_mode = false;
+    if terminal_mode {
+        let term_path = "programs/host_term.asm";
+        if let Ok(source) = std::fs::read_to_string(term_path) {
+            let mut pp = preprocessor::Preprocessor::new();
+            let preprocessed = pp.preprocess(&source);
+            match assembler::assemble(&preprocessed, CANVAS_BYTECODE_ADDR) {
+                Ok(asm_result) => {
+                    let ram_len = vm.ram.len();
+                    for v in vm.ram[CANVAS_BYTECODE_ADDR..ram_len.min(CANVAS_BYTECODE_ADDR + 8192)]
+                        .iter_mut()
+                    {
+                        *v = 0;
+                    }
+                    for (i, &pixel) in asm_result.pixels.iter().enumerate() {
+                        let addr = CANVAS_BYTECODE_ADDR + i;
+                        if addr < ram_len {
+                            vm.ram[addr] = pixel;
+                        }
+                    }
+                    canvas_assembled = true;
+                    vm.pc = CANVAS_BYTECODE_ADDR as u32;
+                    vm.halted = false;
+                    is_running = true;
+                    terminal_direct_mode = true;
+                    fullscreen_map = false;
+                    status_msg = String::from(
+                        "[Geometry OS Terminal -- bash shell, Ctrl+D or exit to quit]",
+                    );
+                }
+                Err(e) => {
+                    status_msg = format!("[terminal boot failed: {}]", e);
+                }
+            }
+        } else {
+            status_msg = String::from("[terminal boot failed: host_term.asm not found]");
         }
     }
 
@@ -3338,6 +3394,7 @@ fn main() {
                                     }
                                 }
                             }
+                            // TODO: launcher socket command (needs launcher_active, launcher_saved_rows, launcher_input state)
                             _ => {
                                 response.push_str(&format!("[unknown: {}]\n", line));
                             }
@@ -3396,7 +3453,11 @@ fn main() {
             }
         } else {
             // If a launched app halted, return to map
-            if launched_from_map.is_some() && vm.halted {
+            // --terminal mode: quit when host_term halts (bash exited)
+            if terminal_direct_mode && vm.halted {
+                should_quit = true;
+                status_msg = String::from("[Terminal exited -- shutting down]");
+            } else if launched_from_map.is_some() && vm.halted {
                 // Reload the map program
                 if let Some(ref app_name) = launched_from_map {
                     // The map was running before, reload world_desktop
