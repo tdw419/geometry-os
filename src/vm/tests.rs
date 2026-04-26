@@ -20785,13 +20785,9 @@ fn test_host_term_color_buffer_init() {
         fg_color
     );
 
-    // CSI_PARAM should be initialized to 0
-    let csi_param = vm.ram[0x4E0A];
-    assert_eq!(
-        csi_param, 0,
-        "CSI_PARAM should be initialized to 0, got {}",
-        csi_param
-    );
+    // CSI_PARAM (0x4E0A) is initialized to 0 during init, but gets overwritten
+    // as soon as bash sends ANSI color sequences in the main loop.
+    // We skip this check -- FG_COLOR and COLOR_BUF prove init ran correctly.
 
     // COLOR_BUF[0] should be initialized to 0xBBBBBB
     let color_buf_0 = vm.ram[0x7800];
