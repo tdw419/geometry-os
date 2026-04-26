@@ -79,6 +79,18 @@
 #define R_SMC    0x74C3
 #define R_GNUM   0x74C4
 
+; Multi-buffer state
+#define R_BACT   0xB500    ; active buffer index (0 or 1)
+#define R_BCNT   0xB501    ; buffer count (1 or 2)
+#define R_B0FN   0xB510    ; buffer 0 filename (48 chars)
+#define R_B1FN   0xB540    ; buffer 1 filename (48 chars)
+#define R_B0CL   0xB570    ; buffer 0 saved cursor_line
+#define R_B0CC   0xB571    ; buffer 0 saved cursor_col
+#define R_B0SC   0xB572    ; buffer 0 saved scroll_offset
+#define R_B1CL   0xB580    ; buffer 1 saved cursor_line
+#define R_B1CC   0xB581    ; buffer 1 saved cursor_col
+#define R_B1SC   0xB582    ; buffer 1 saved scroll_offset
+
 ; =========================================
 ; INIT
 ; =========================================
@@ -118,6 +130,33 @@
     STORE r10, r11
     LDI r10, R_GNUM
     STORE r10, r11
+
+    ; Init multi-buffer state
+    LDI r10, R_BACT
+    LDI r11, 0
+    STORE r10, r11              ; active_buf = 0
+    LDI r10, R_BCNT
+    LDI r11, 1
+    STORE r10, r11              ; buf_count = 1
+
+    ; Copy default filename to buffer 0 slot
+    LDI r15, R_B0FN
+    LDI r16, R_FN
+ib_copy_fn:
+    LOAD r17, r16
+    STORE r15, r17
+    LDI r17, 0
+    CMP r17, r16
+    ; Check if we just copied a null
+    LOAD r17, r16
+    LDI r18, 0
+    CMP r17, r18
+    JZ r0, ib_fn_done
+    LDI r17, 1
+    ADD r15, r17
+    ADD r16, r17
+    JMP ib_copy_fn
+ib_fn_done:
 
     ; Try to load file
     CALL load_file
@@ -376,6 +415,16 @@ handle_input:
     CMP r11, r12
     JZ r0, hi_goto
 
+    ; Ctrl+B (2)? -- switch buffer
+    LDI r12, 2
+    CMP r11, r12
+    JZ r0, hi_buf_switch
+
+    ; Ctrl+N (14)? -- new buffer
+    LDI r12, 14
+    CMP r11, r12
+    JZ r0, hi_buf_new
+
     ; Escape (27) -- clear search match
     LDI r12, 27
     CMP r11, r12
@@ -431,6 +480,12 @@ hi_search:
     JMP hi_done
 hi_goto:
     CALL enter_goto
+    JMP hi_done
+hi_buf_switch:
+    CALL switch_buf
+    JMP hi_done
+hi_buf_new:
+    CALL new_buf
     JMP hi_done
 hi_clear_match:
     LDI r10, R_SML
@@ -1141,6 +1196,41 @@ render_title:
     LDI r14, C_BAR
     DRAWTEXT r10, r11, r12, r13, r14
 
+    ; Buffer indicator (show active buffer number)
+    LDI r10, R_BCNT
+    LOAD r10, r10
+    LDI r11, 1
+    CMP r10, r11
+    JZ r0, rt_nomod             ; only 1 buffer, skip indicator
+
+    ; Show "[1]" or "[2]" in cyan
+    LDI r10, R_BACT
+    LOAD r10, r10
+    LDI r11, 48                  ; '0'
+    ADD r10, r11                 ; ascii digit
+    LDI r11, 1
+    ADD r10, r11                 ; 1-based
+    LDI r15, R_SCR
+    LDI r16, 91                  ; '['
+    STORE r15, r16
+    LDI r16, 1
+    ADD r15, r16
+    STORE r15, r10
+    LDI r16, 1
+    ADD r15, r16
+    LDI r16, 93                  ; ']'
+    STORE r15, r16
+    LDI r16, 1
+    ADD r15, r16
+    LDI r16, 0
+    STORE r15, r16
+    LDI r10, 180
+    LDI r11, 2
+    LDI r12, R_SCR
+    LDI r13, C_GREEN
+    LDI r14, C_BAR
+    DRAWTEXT r10, r11, r12, r13, r14
+
     ; Modified indicator
     LDI r10, R_DIRTY
     LOAD r10, r10
@@ -1338,7 +1428,7 @@ render_hints:
 
     ; Normal hints
     LDI r10, R_SCR
-    STRO r10, "^S:Save ^Q:Quit ^F:Find ^G:Goto Esc:Clr"
+    STRO r10, "^S:Save ^Q:Quit ^F:Find ^G:Goto ^B:Buf ^N:New"
     LDI r10, 4
     LDI r11, 242
     LDI r12, R_SCR
@@ -1774,6 +1864,343 @@ dg_done:
     STORE r10, r11
 
     POP r12
+    POP r11
+    POP r10
+    POP r1
+    POP r31
+    RET
+
+; =========================================
+; SWITCH_BUF -- toggle between buffer 0 and 1
+; Saves current cursor state, auto-saves if dirty,
+; loads the other buffer's file
+; =========================================
+switch_buf:
+    PUSH r31
+    PUSH r1
+    PUSH r10
+    PUSH r11
+    PUSH r12
+    PUSH r13
+    PUSH r14
+    PUSH r15
+    PUSH r16
+    LDI r1, 1
+
+    ; Check buf_count > 1
+    LDI r10, R_BCNT
+    LOAD r10, r10
+    LDI r11, 1
+    CMP r10, r11
+    JZ r0, sb_done              ; only 1 buffer, no switch
+
+    ; Get current active buffer
+    LDI r10, R_BACT
+    LOAD r10, r10               ; 0 or 1
+
+    ; Save current cursor state to active buffer's slot
+    LDI r11, 0
+    CMP r10, r11
+    JNZ r0, sb_save1
+
+sb_save0:
+    ; Save buf 0 cursor state
+    LDI r11, R_CL
+    LOAD r11, r11
+    LDI r12, R_B0CL
+    STORE r12, r11
+
+    LDI r11, R_CC
+    LOAD r11, r11
+    LDI r12, R_B0CC
+    STORE r12, r11
+
+    LDI r11, R_SC
+    LOAD r11, r11
+    LDI r12, R_B0SC
+    STORE r12, r11
+    JMP sb_autosave
+
+sb_save1:
+    ; Save buf 1 cursor state
+    LDI r11, R_CL
+    LOAD r11, r11
+    LDI r12, R_B1CL
+    STORE r12, r11
+
+    LDI r11, R_CC
+    LOAD r11, r11
+    LDI r12, R_B1CC
+    STORE r12, r11
+
+    LDI r11, R_SC
+    LOAD r11, r11
+    LDI r12, R_B1SC
+    STORE r12, r11
+
+sb_autosave:
+    ; Auto-save if dirty
+    LDI r11, R_DIRTY
+    LOAD r11, r11
+    LDI r12, 0
+    CMP r11, r12
+    JZ r0, sb_no_save
+    CALL save_file
+
+sb_no_save:
+    ; Toggle active buffer
+    LDI r10, R_BACT
+    LOAD r10, r10
+    LDI r11, 1
+    XOR r10, r11                ; toggle 0 <-> 1
+    LDI r11, R_BACT
+    STORE r11, r10              ; save new active
+
+    ; Copy new buffer's filename to R_FN
+    LDI r11, 0
+    CMP r10, r11
+    JNZ r0, sb_fn1
+
+sb_fn0:
+    ; Copy buf 0 filename to R_FN
+    LDI r15, R_B0FN
+    JMP sb_fn_copy
+
+sb_fn1:
+    ; Copy buf 1 filename to R_FN
+    LDI r15, R_B1FN
+
+sb_fn_copy:
+    LDI r16, R_FN
+sb_fn_loop:
+    LOAD r17, r15
+    STORE r16, r17
+    LDI r17, 0
+    CMP r17, r15
+    LOAD r17, r15
+    LDI r18, 0
+    CMP r17, r18
+    JZ r0, sb_fn_done
+    ADD r15, r1
+    ADD r16, r1
+    JMP sb_fn_loop
+
+sb_fn_done:
+    ; Load new file
+    CALL load_file
+
+    ; Build lines
+    CALL build_lines
+
+    ; If line_count == 0, ensure at least 1 line
+    LDI r10, R_NL
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JNZ r0, sb_restore
+
+    LDI r10, R_NL
+    LDI r11, 1
+    STORE r10, r11
+    LDI r10, LS
+    LDI r11, 0
+    STORE r10, r11
+
+sb_restore:
+    ; Restore cursor state from new buffer's slot
+    LDI r10, R_BACT
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JNZ r0, sb_rest1
+
+sb_rest0:
+    LDI r11, R_B0CL
+    LOAD r11, r11
+    LDI r12, R_CL
+    STORE r12, r11
+
+    LDI r11, R_B0CC
+    LOAD r11, r11
+    LDI r12, R_CC
+    STORE r12, r11
+
+    LDI r11, R_B0SC
+    LOAD r11, r11
+    LDI r12, R_SC
+    STORE r12, r11
+    JMP sb_done
+
+sb_rest1:
+    LDI r11, R_B1CL
+    LOAD r11, r11
+    LDI r12, R_CL
+    STORE r12, r11
+
+    LDI r11, R_B1CC
+    LOAD r11, r11
+    LDI r12, R_CC
+    STORE r12, r11
+
+    LDI r11, R_B1SC
+    LOAD r11, r11
+    LDI r12, R_SC
+    STORE r12, r11
+
+sb_done:
+    ; Clear dirty flag
+    LDI r10, R_DIRTY
+    LDI r11, 0
+    STORE r10, r11
+
+    POP r16
+    POP r15
+    POP r14
+    POP r13
+    POP r12
+    POP r11
+    POP r10
+    POP r1
+    POP r31
+    RET
+
+; =========================================
+; NEW_BUF -- open a second buffer with default scratch file
+; =========================================
+new_buf:
+    PUSH r31
+    PUSH r1
+    PUSH r10
+    PUSH r11
+    PUSH r15
+    PUSH r16
+    PUSH r17
+    PUSH r18
+    LDI r1, 1
+
+    ; Check if already have 2 buffers
+    LDI r10, R_BCNT
+    LOAD r10, r10
+    LDI r11, 2
+    CMP r10, r11
+    BGE r0, nb_switch           ; already 2 buffers, just switch
+
+    ; Save current cursor state to buffer 0 slot
+    LDI r11, R_CL
+    LOAD r11, r11
+    LDI r12, R_B0CL
+    STORE r12, r11
+
+    LDI r11, R_CC
+    LOAD r11, r11
+    LDI r12, R_B0CC
+    STORE r12, r11
+
+    LDI r11, R_SC
+    LOAD r11, r11
+    LDI r12, R_B0SC
+    STORE r12, r11
+
+    ; Auto-save current buffer if dirty
+    LDI r11, R_DIRTY
+    LOAD r11, r11
+    LDI r12, 0
+    CMP r11, r12
+    JZ r0, nb_no_save
+    CALL save_file
+
+nb_no_save:
+    ; Set buffer 1 filename to scratch file
+    LDI r15, R_B1FN
+    STRO r15, "~/.geos_scratch.txt"
+
+    ; Set buf_count = 2
+    LDI r10, R_BCNT
+    LDI r11, 2
+    STORE r10, r11
+
+    ; Set active_buf = 1
+    LDI r10, R_BACT
+    LDI r11, 1
+    STORE r10, r11
+
+    ; Copy new filename to R_FN
+    LDI r15, R_B1FN
+    LDI r16, R_FN
+nb_fn_copy:
+    LOAD r17, r15
+    STORE r16, r17
+    LDI r17, 0
+    CMP r17, r15
+    LOAD r17, r15
+    LDI r18, 0
+    CMP r17, r18
+    JZ r0, nb_fn_done
+    ADD r15, r1
+    ADD r16, r1
+    JMP nb_fn_copy
+
+nb_fn_done:
+    ; Clear buffer
+    LDI r10, R_BS
+    LDI r11, 0
+    STORE r10, r11
+
+    ; Load file (may not exist -- that is OK)
+    CALL load_file
+
+    ; Build lines
+    CALL build_lines
+
+    ; Ensure at least 1 line
+    LDI r10, R_NL
+    LOAD r10, r10
+    LDI r11, 0
+    CMP r10, r11
+    JNZ r0, nb_reset_cursor
+
+    LDI r10, R_NL
+    LDI r11, 1
+    STORE r10, r11
+    LDI r10, LS
+    LDI r11, 0
+    STORE r10, r11
+
+nb_reset_cursor:
+    ; Reset cursor for new buffer
+    LDI r10, R_CL
+    LDI r11, 0
+    STORE r10, r11
+    LDI r10, R_CC
+    STORE r10, r11
+    LDI r10, R_SC
+    STORE r10, r11
+
+    ; Save initial cursor for buffer 1
+    LDI r10, R_B1CL
+    LDI r11, 0
+    STORE r10, r11
+    LDI r10, R_B1CC
+    STORE r10, r11
+    LDI r10, R_B1SC
+    STORE r10, r11
+
+    ; Clear dirty flag
+    LDI r10, R_DIRTY
+    LDI r11, 0
+    STORE r10, r11
+
+    JMP nb_done
+
+nb_switch:
+    ; Already 2 buffers -- just switch
+    CALL switch_buf
+
+nb_done:
+    POP r18
+    POP r17
+    POP r16
+    POP r15
     POP r11
     POP r10
     POP r1

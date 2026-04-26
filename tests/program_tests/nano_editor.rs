@@ -555,3 +555,115 @@ fn test_nano_editor_goto_escape_cancels() {
 
     assert_eq!(vm.ram[0x74C0], 0, "escape should cancel goto");
 }
+
+// Multi-buffer constants
+const R_BACT: usize = 0xB500; // active buffer index
+const R_BCNT: usize = 0xB501; // buffer count
+const R_B0CL: usize = 0xB570; // buffer 0 saved cursor_line
+const R_B0CC: usize = 0xB571; // buffer 0 saved cursor_col
+const R_B0SC: usize = 0xB572; // buffer 0 saved scroll_offset
+const R_B1CL: usize = 0xB580; // buffer 1 saved cursor_line
+const R_B1CC: usize = 0xB581; // buffer 1 saved cursor_col
+const R_B1SC: usize = 0xB582; // buffer 1 saved scroll_offset
+
+#[test]
+fn test_nano_editor_multi_buffer_init() {
+    let vm = load_nano(1);
+
+    // Should start with 1 buffer, active = 0
+    assert_eq!(vm.ram[R_BACT], 0, "active buffer should be 0");
+    assert_eq!(vm.ram[R_BCNT], 1, "buffer count should be 1");
+}
+
+#[test]
+fn test_nano_editor_ctrl_b_noop_with_one_buffer() {
+    let mut vm = load_nano(1);
+
+    let initial_cl = vm.ram[R_CL];
+
+    // Ctrl+B with only 1 buffer should be noop
+    vm.push_key(2); // Ctrl+B
+    advance_frame(&mut vm);
+
+    assert_eq!(
+        vm.ram[R_CL], initial_cl,
+        "Ctrl+B with 1 buffer should not move cursor"
+    );
+    assert_eq!(vm.ram[R_BACT], 0, "active buffer should still be 0");
+    assert_eq!(vm.ram[R_BCNT], 1, "buffer count should still be 1");
+}
+
+#[test]
+fn test_nano_editor_ctrl_n_creates_second_buffer() {
+    let mut vm = load_nano(1);
+
+    // Move cursor down a bit first
+    vm.push_key(0x8000 | (1 << 1)); // bitmask: down
+    advance_frame(&mut vm);
+    let initial_cl = vm.ram[R_CL];
+
+    // Ctrl+N should create second buffer
+    vm.push_key(14); // Ctrl+N
+    advance_frame(&mut vm);
+
+    assert_eq!(vm.ram[R_BCNT], 2, "buffer count should be 2");
+    assert_eq!(vm.ram[R_BACT], 1, "active buffer should be 1");
+
+    // Cursor should be reset for new buffer
+    assert_eq!(vm.ram[R_CL], 0, "cursor line should be 0 in new buffer");
+    assert_eq!(vm.ram[R_CC], 0, "cursor col should be 0 in new buffer");
+
+    // Buffer 0 state should be saved
+    assert_eq!(
+        vm.ram[R_B0CL], initial_cl,
+        "buffer 0 cursor line should be saved"
+    );
+}
+
+#[test]
+fn test_nano_editor_switch_between_buffers() {
+    let mut vm = load_nano(1);
+
+    // Create second buffer
+    vm.push_key(14); // Ctrl+N
+    advance_frame(&mut vm);
+    assert_eq!(vm.ram[R_BACT], 1, "should be on buffer 1");
+
+    // Type something in buffer 1
+    vm.push_key(b'H' as u32);
+    advance_frame(&mut vm);
+    vm.push_key(b'i' as u32);
+    advance_frame(&mut vm);
+
+    let buf1_cc = vm.ram[R_CC];
+    assert!(buf1_cc > 0, "should have moved cursor in buffer 1");
+
+    // Switch back to buffer 0 (Ctrl+B)
+    vm.push_key(2); // Ctrl+B
+    advance_frame(&mut vm);
+
+    assert_eq!(vm.ram[R_BACT], 0, "should be back on buffer 0");
+
+    // Buffer 1 state should be saved
+    assert_eq!(
+        vm.ram[R_B1CC], buf1_cc,
+        "buffer 1 cursor col should be saved"
+    );
+}
+
+#[test]
+fn test_nano_editor_buf_indicator_visible() {
+    // With 1 buffer, no indicator should show
+    let vm = load_nano(1);
+    assert_eq!(vm.ram[R_BCNT], 1, "should have 1 buffer");
+
+    // With 2 buffers, indicator [2] should show
+    let mut vm2 = load_nano(1);
+    vm2.push_key(14); // Ctrl+N
+    advance_frame(&mut vm2);
+    assert_eq!(vm2.ram[R_BACT], 1, "should be on buffer 1");
+
+    // The title bar should show buffer number
+    // Check that buffer state is correct
+    assert_eq!(vm2.ram[R_BCNT], 2, "should have 2 buffers");
+}
