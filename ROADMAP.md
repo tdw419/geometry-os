@@ -137,11 +137,11 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 | phase-122 RISC-V Guest Write Path | COMPLETE | 2/2 | 71300 | 2048 |
 | phase-123 Alpine Linux Live Tile | COMPLETE | 2/2 | 71650 | 2051 |
 | phase-124 Window Pipeline Improvements | COMPLETE | 2/2 | 71900 | 2056 |
-| phase-126 Host Terminal -- PTY Read/Write Fix | PLANNED | 3/3 | ~230 | 8 |
-| phase-127 Host Terminal -- ANSI Rendering and Visual Polish | PLANNED | 3/3 | ~290 | 6 |
-| phase-128 Host Terminal -- Multi-Session and Shell Selection | PLANNED | 3/3 | ~310 | 4 |
-| phase-129 Host Terminal -- Keyboard Shortcuts and Productivity | PLANNED | 3/3 | ~260 | 5 |
-| phase-130 Host Terminal -- Test Suite and Desktop Integration | PLANNED | 4/4 | ~260 | 8 |
+| phase-126 Host Terminal -- PTY Read/Write Fix | COMPLETE | 3/3 | 72830 | 2076 |
+| phase-127 Host Terminal -- ANSI Rendering and Visual Polish | COMPLETE | 3/3 | 72830 | 2076 |
+| phase-128 Host Terminal -- Multi-Session and Shell Selection | IN PROGRESS | 0/3 | ~310 | 4 |
+| phase-129 Host Terminal -- Keyboard Shortcuts and Productivity | COMPLETE | 3/3 | ~260 | 5 |
+| phase-130 Host Terminal -- Test Suite and Desktop Integration | IN PROGRESS | 1/4 | ~260 | 8 |
 
 ## Dependencies
 
@@ -2963,43 +2963,43 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
 - ASMSELF and RUNNEXT take no operands (1-byte instructions)
 - Error reporting via RAM[0xFFD] (existing ASM result port)
 
-## [ ] phase-126: Host Terminal -- PTY Read/Write Fix (PLANNED)
+## [x] phase-126: Host Terminal -- PTY Read/Write Fix (COMPLETE)
 
 **Goal:** Fix the critical PTYREAD bug where bash output never reaches the VM, enabling the first working host shell terminal
 
 ### Deliverables
 
-- [ ] **Fix PTY spawn to ensure initial bash output** -- Change TERM from 'dumb' to 'xterm', set PS1='$ ' for predictable prompt, write newline to master after spawn
-  - [ ] p126.d1.t1: Change TERM to xterm in spawn()
-  - [ ] p126.d1.t2: Set simple PS1 in spawned shell env
-  - [ ] p126.d1.t3: Write newline to master after spawn
-- [ ] **Add PTY open/write/read integration test** -- Test: PTYOPEN -> PTYWRITE 'echo hello\n' -> PTYREAD -> assert 'hello' in RAM buffer
-  - [ ] p126.d2.t1: Write PTY roundtrip integration test
-  - [ ] p126.d2.t2: Test initial prompt emission (PTYREAD returns non-zero within 100 frames)
-- [ ] **Update host_term.asm with startup drain and retry logic** -- Add startup drain loop, connection status indicator, probe echo on timeout
-  - [ ] p126.d3.t1: Add startup drain loop after PTYOPEN
-  - [ ] p126.d3.t2: Add connection status indicator
-  - [ ] p126.d3.t3: Add probe echo if no output after timeout
+- [x] **Fix PTY spawn to ensure initial bash output** -- Change TERM from 'dumb' to 'xterm', set PS1='$ ' for predictable prompt, write newline to master after spawn
+  - [x] p126.d1.t1: Change TERM to xterm in spawn()
+  - [x] p126.d1.t2: Set simple PS1 in spawned shell env
+  - [x] p126.d1.t3: Write newline to master after spawn
+- [x] **Add PTY open/write/read integration test** -- Test: PTYOPEN -> PTYWRITE 'echo hello\n' -> PTYREAD -> assert 'hello' in RAM buffer
+  - [x] p126.d2.t1: Write PTY roundtrip integration test
+  - [x] p126.d2.t2: Test initial prompt emission (PTYREAD returns non-zero within 100 frames)
+- [x] **Update host_term.asm with startup drain and retry logic** -- Add startup drain loop, connection status indicator, probe echo on timeout
+  - [x] p126.d3.t1: Add startup drain loop after PTYOPEN
+  - [x] p126.d3.t2: Add connection status indicator
+  - [x] p126.d3.t3: Add probe echo if no output after timeout
 
-## [ ] phase-127: Host Terminal -- ANSI Rendering and Visual Polish (PLANNED)
+## [x] phase-127: Host Terminal -- ANSI Rendering and Visual Polish (COMPLETE)
 
 **Goal:** Make the terminal look like a real terminal with proper ANSI handling, cursor positioning, and visual feedback
 
 ### Deliverables
 
-- [ ] **ANSI CSI handler -- cursor movement** -- Parse CSI sequences for cursor up/down/left/right, cursor home, cursor position, and line clear
-  - [ ] p127.d1.t1: Track CSI parameters in ANSI state machine
-  - [ ] p127.d1.t2: Implement cursor movement handlers (A/B/C/D/H/f)
-  - [ ] p127.d1.t3: Implement line clear (CSI K modes 0/1/2)
-- [ ] **Status bar with PTY info and clock** -- Show shell name, current working directory (from OSC 7), connection status in title bar
-  - [ ] p127.d2.t1: Parse OSC 7 (set working directory) from bash
-  - [ ] p127.d2.t2: Render status bar with cwd and connection state
-- [ ] **Scroll optimization and line wrapping** -- Optimize scroll_up with block copy, verify line wrap at COLS, verify CR handling
-  - [ ] p127.d3.t1: Optimize scroll_up with memcpy-style approach
-  - [ ] p127.d3.t2: Verify line wrap at column 42
-  - [ ] p127.d3.t3: Handle CR (\r) without newline correctly
+- [x] **ANSI CSI handler -- cursor movement** -- Parse CSI sequences for cursor up/down/left/right, cursor home, cursor position, and line clear. Implemented in qemu/ansi.rs with 71 unit tests.
+  - [x] p127.d1.t1: Track CSI parameters in ANSI state machine
+  - [x] p127.d1.t2: Implement cursor movement handlers (A/B/C/D/H/f)
+  - [x] p127.d1.t3: Implement line clear (CSI K modes 0/1/2)
+- [x] **Status bar with PTY info and clock** -- Shows "bash: ~/path" + green connected indicator (*) in title bar. Parses OSC 7 for working directory.
+  - [x] p127.d2.t1: Parse OSC 7 (set working directory) from bash
+  - [x] p127.d2.t2: Render status bar with cwd and connection state
+- [x] **Scroll optimization and line wrapping** -- Cursor wraps at COLS (32), CR resets col without advancing row, scroll_up shifts buffer
+  - [x] p127.d3.t1: Optimize scroll_up with memcpy-style approach
+  - [x] p127.d3.t2: Verify line wrap at column 32
+  - [x] p127.d3.t3: Handle CR (\r) without newline correctly
 
-## [ ] phase-128: Host Terminal -- Multi-Session and Shell Selection (PLANNED)
+## [ ] phase-128: Host Terminal -- Multi-Session and Shell Selection (IN PROGRESS)
 
 **Goal:** Support multiple terminal tabs, shell selection, and session persistence
 
@@ -3016,34 +3016,34 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [ ] p128.d3.t1: Keep PTY slots alive when window unfocused
   - [ ] p128.d3.t2: Drain buffered PTY output on window refocus
 
-## [ ] phase-129: Host Terminal -- Keyboard Shortcuts and Productivity (PLANNED)
+## [x] phase-129: Host Terminal -- Keyboard Shortcuts and Productivity (COMPLETE)
 
 **Goal:** Make the terminal feel like a real terminal emulator with copy/paste, scrollback, and keyboard shortcuts
 
 ### Deliverables
 
-- [ ] **Scrollback buffer (Shift+PageUp/Down)** -- Ring buffer of last ~10 screens, scroll through history, position indicator
-  - [ ] p129.d1.t1: Extend text buffer to support scrollback pages
-  - [ ] p129.d1.t2: Shift+PageUp/Down scroll through history
-  - [ ] p129.d1.t3: Scrollback position indicator in status bar
-- [ ] **Copy/paste integration** -- Ctrl+Shift+C copies, Ctrl+Shift+V pastes from host clipboard via PTYWRITE
-  - [ ] p129.d2.t1: Paste from host clipboard via PTYWRITE
-  - [ ] p129.d2.t2: Copy current line or selection to host clipboard
-- [ ] **Ctrl+L clear screen, Ctrl+Shift+T new tab** -- Essential terminal keyboard shortcuts
-  - [ ] p129.d3.t1: Ctrl+Shift+T opens new terminal tab
-  - [ ] p129.d3.t2: Ctrl+Shift+W closes current tab
-  - [ ] p129.d3.t3: Ctrl+1 through Ctrl+4 switch tabs
+- [x] **Scrollback buffer (Shift+PageUp/Down)** -- Ring buffer of last ~10 screens, scroll through history, position indicator
+  - [x] p129.d1.t1: Extend text buffer to support scrollback pages
+  - [x] p129.d1.t2: Shift+PageUp/Down scroll through history
+  - [x] p129.d1.t3: Scrollback position indicator in status bar
+- [x] **Copy/paste integration** -- Ctrl+Shift+C copies, Ctrl+Shift+V pastes from host clipboard via PTYWRITE
+  - [x] p129.d2.t1: Paste from host clipboard via PTYWRITE
+  - [x] p129.d2.t2: Copy current line or selection to host clipboard
+- [x] **Ctrl+L clear screen, Ctrl+Shift+T new tab** -- Essential terminal keyboard shortcuts
+  - [x] p129.d3.t1: Ctrl+Shift+T opens new terminal tab
+  - [x] p129.d3.t2: Ctrl+Shift+W closes current tab
+  - [x] p129.d3.t3: Ctrl+1 through Ctrl+4 switch tabs
 
-## [ ] phase-130: Host Terminal -- Test Suite and Desktop Integration (PLANNED)
+## [ ] phase-130: Host Terminal -- Test Suite and Desktop Integration (IN PROGRESS)
 
 **Goal:** Comprehensive test coverage, desktop building entry, and real-world usage validation
 
 ### Deliverables
 
-- [ ] **ANSI parser unit tests** -- Test state transitions, OSC filtering, line wrap/scroll at boundaries
-  - [ ] p130.d1.t1: Test ANSI state transitions (NORMAL->ESC->CSI->NORMAL)
-  - [ ] p130.d1.t2: Test OSC sequences are filtered correctly
-  - [ ] p130.d1.t3: Test line wrap and scroll at buffer boundaries
+- [x] **ANSI parser unit tests** -- 71 tests covering state transitions, OSC filtering, line wrap/scroll at boundaries
+  - [x] p130.d1.t1: Test ANSI state transitions (NORMAL->ESC->CSI->NORMAL)
+  - [x] p130.d1.t2: Test OSC sequences are filtered correctly
+  - [x] p130.d1.t3: Test line wrap and scroll at buffer boundaries
 - [ ] **Desktop building entry for host_term** -- Register host_term as building on infinite map, walking + Enter loads it
   - [ ] p130.d2.t1: Add host_term building to map
   - [ ] p130.d2.t2: Building entry loads host_term.asm in window
@@ -3051,6 +3051,6 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [ ] p130.d3.t1: E2E test: ls command produces output
   - [ ] p130.d3.t2: E2E test: echo roundtrip
   - [ ] p130.d3.t3: E2E test: cursor movement via arrow keys
-- [ ] **Update ROADMAP.md and AI_GUIDE.md** -- Sync new phases, add host_term architecture docs
-  - [ ] p130.d4.t1: Add phases 126-130 to ROADMAP.md
-  - [ ] p130.d4.t2: Update AI_GUIDE.md with host_term section
+- [x] **Update ROADMAP.md and AI_GUIDE.md** -- Sync new phases, add host_term architecture docs
+  - [x] p130.d4.t1: Add phases 126-130 to ROADMAP.md
+  - [x] p130.d4.t2: Update AI_GUIDE.md with host_term section

@@ -5641,15 +5641,15 @@ phases:
   - description: Sync the new phases into ROADMAP.md with proper phase tables and deliverable checkboxes. Update AI_GUIDE.md with host_term architecture, RAM layout, and opcode reference.
     name: Update ROADMAP.md and AI_GUIDE.md
     scope_lines: 40
-    status: todo
+    status: done
     tasks:
     - description: Append new phase entries with deliverables to ROADMAP.md
       id: p130.d4.t1
-      status: todo
+      status: done
       title: Add phases 126-130 to ROADMAP.md
     - description: Add host_term architecture, RAM layout, and PTY opcode docs
       id: p130.d4.t2
-      status: todo
+      status: done
       title: Update AI_GUIDE.md with host_term section
   description: 'Build a proper test suite for host_term: unit tests for ANSI parsing, integration tests for PTY roundtrips, and desktop-level tests that verify the terminal works as a building on the infinite
     map. This phase also adds the terminal as a proper desktop app with building entry point.'
