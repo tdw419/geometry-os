@@ -1697,11 +1697,22 @@ fn test_host_term_building_launch_mapping() {
 fn test_host_term_tmux_assembles() {
     let source = std::fs::read_to_string("programs/host_term_tmux.asm").unwrap();
     let result = assemble(&source, 0);
-    assert!(result.is_ok(), "host_term_tmux.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "host_term_tmux.asm should assemble: {:?}",
+        result.err()
+    );
     let asm = result.unwrap();
-    assert!(!asm.pixels.is_empty(), "host_term_tmux.asm should produce bytecode");
+    assert!(
+        !asm.pixels.is_empty(),
+        "host_term_tmux.asm should produce bytecode"
+    );
     // Should be reasonable size (2000-3000 words)
-    assert!(asm.pixels.len() > 500, "tmux program should have substantial bytecode, got {} words", asm.pixels.len());
+    assert!(
+        asm.pixels.len() > 500,
+        "tmux program should have substantial bytecode, got {} words",
+        asm.pixels.len()
+    );
 }
 
 #[test]
@@ -1710,7 +1721,9 @@ fn test_host_term_tmux_tab_metadata_init() {
     let asm = assemble(&source, 0).unwrap();
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
@@ -1719,7 +1732,9 @@ fn test_host_term_tmux_tab_metadata_init() {
     // Run enough steps to clear buffers and init metadata
     let mut steps = 0;
     for _ in 0..500_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         steps += 1;
         // Stop when we reach PTYOPEN (which needs real PTY hardware)
         // PTYOPEN opcode is 0xA9
@@ -1757,14 +1772,18 @@ fn test_host_term_tmux_buffer_init() {
     let asm = assemble(&source, 0).unwrap();
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
 
     // Run until PTYOPEN
     for _ in 0..500_000 {
-        if !vm.step() { break; }
+        if !vm.step() {
+            break;
+        }
         if vm.pc > 0 && vm.ram[vm.pc as usize - 1] == 0xA9 {
             break;
         }
@@ -1774,9 +1793,11 @@ fn test_host_term_tmux_buffer_init() {
     let tab0_base = 0x9000;
     for i in 0..10 {
         assert_eq!(
-            vm.ram[tab0_base + i], 0x20,
+            vm.ram[tab0_base + i],
+            0x20,
             "tab0 buffer[{}] should be space (0x20), got 0x{:08X}",
-            i, vm.ram[tab0_base + i]
+            i,
+            vm.ram[tab0_base + i]
         );
     }
 
@@ -1784,9 +1805,11 @@ fn test_host_term_tmux_buffer_init() {
     let tab1_base = 0x9600;
     for i in 0..10 {
         assert_eq!(
-            vm.ram[tab1_base + i], 0x20,
+            vm.ram[tab1_base + i],
+            0x20,
             "tab1 buffer[{}] should be space (0x20), got 0x{:08X}",
-            i, vm.ram[tab1_base + i]
+            i,
+            vm.ram[tab1_base + i]
         );
     }
 }

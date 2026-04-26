@@ -62,6 +62,71 @@ pub fn read_canvas_line(canvas_buffer: &[u32], row: usize) -> String {
     s
 }
 
+/// Extract text from canvas buffer between two selection endpoints (row, col).
+/// The selection spans from min(start,end) to max(start,end) in reading order.
+/// Returns the selected text with newlines between rows.
+pub fn extract_selection(
+    canvas_buffer: &[u32],
+    start: (usize, usize),
+    end: (usize, usize),
+) -> String {
+    // Normalize: start <= end in reading order (top-to-bottom, left-to-right)
+    let (start, end) = if start.0 < end.0 || (start.0 == end.0 && start.1 <= end.1) {
+        (start, end)
+    } else {
+        (end, start)
+    };
+
+    let mut result = String::new();
+    if start.0 == end.0 {
+        // Single row selection
+        for col in start.1..=end.1.min(CANVAS_COLS - 1) {
+            let val = canvas_buffer[start.0 * CANVAS_COLS + col];
+            let byte = (val & 0xFF) as u8;
+            if byte == 0 {
+                break; // stop at null within selection
+            }
+            result.push(byte as char);
+        }
+    } else {
+        // Multi-row selection
+        // First row: from start col to end of line
+        for col in start.1..CANVAS_COLS {
+            let val = canvas_buffer[start.0 * CANVAS_COLS + col];
+            let byte = (val & 0xFF) as u8;
+            if byte == 0 {
+                break;
+            }
+            result.push(byte as char);
+        }
+        result.push('\n');
+
+        // Middle rows: full lines
+        for row in (start.0 + 1)..end.0 {
+            for col in 0..CANVAS_COLS {
+                let val = canvas_buffer[row * CANVAS_COLS + col];
+                let byte = (val & 0xFF) as u8;
+                if byte == 0 {
+                    break;
+                }
+                result.push(byte as char);
+            }
+            result.push('\n');
+        }
+
+        // Last row: from start to end col
+        for col in 0..=end.1.min(CANVAS_COLS - 1) {
+            let val = canvas_buffer[end.0 * CANVAS_COLS + col];
+            let byte = (val & 0xFF) as u8;
+            if byte == 0 {
+                break;
+            }
+            result.push(byte as char);
+        }
+    }
+    result
+}
+
 /// Handle a terminal command. Returns (switch_to_editor, should_quit).
 pub fn ensure_scroll(output_row: usize, scroll_offset: &mut usize) {
     if output_row >= *scroll_offset + CANVAS_ROWS {
@@ -871,5 +936,77 @@ pub fn handle_terminal_command(
             ensure_scroll(*output_row, scroll_offset);
             (None, false, false)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_canvas_with_text(rows: &[&str]) -> Vec<u32> {
+        let mut buf = vec![0u32; CANVAS_MAX_ROWS * CANVAS_COLS];
+        for (row_idx, &line) in rows.iter().enumerate() {
+            for (col, ch) in line.chars().enumerate() {
+                if col < CANVAS_COLS {
+                    buf[row_idx * CANVAS_COLS + col] = ch as u32;
+                }
+            }
+        }
+        buf
+    }
+
+    #[test]
+    fn test_extract_selection_single_row() {
+        let buf = make_canvas_with_text(&["hello world", "second line"]);
+        let result = extract_selection(&buf, (0, 0), (0, 4));
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_extract_selection_single_row_middle() {
+        let buf = make_canvas_with_text(&["hello world"]);
+        let result = extract_selection(&buf, (0, 6), (0, 10));
+        assert_eq!(result, "world");
+    }
+
+    #[test]
+    fn test_extract_selection_multi_row() {
+        let buf = make_canvas_with_text(&["first line", "second line", "third line"]);
+        let result = extract_selection(&buf, (0, 6), (2, 4));
+        assert_eq!(
+            result,
+            "line
+second line
+third"
+        );
+    }
+
+    #[test]
+    fn test_extract_selection_reversed() {
+        // End before start should be normalized
+        let buf = make_canvas_with_text(&["hello world"]);
+        let result = extract_selection(&buf, (0, 4), (0, 0));
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_extract_selection_stops_at_null() {
+        let mut buf = vec![0u32; CANVAS_MAX_ROWS * CANVAS_COLS];
+        // Write "hi" at row 0, then a gap, then "lo"
+        buf[0] = 'h' as u32;
+        buf[1] = 'i' as u32;
+        buf[2] = 0; // null
+        buf[3] = 'l' as u32;
+        buf[4] = 'o' as u32;
+        // Selection covers all 5 cells but should stop at null
+        let result = extract_selection(&buf, (0, 0), (0, 4));
+        assert_eq!(result, "hi");
+    }
+
+    #[test]
+    fn test_extract_selection_empty() {
+        let buf = vec![0u32; CANVAS_MAX_ROWS * CANVAS_COLS];
+        let result = extract_selection(&buf, (0, 0), (0, 5));
+        assert_eq!(result, "");
     }
 }

@@ -7589,6 +7589,26 @@ phases:
     scope_lines: 200
   scope_lines_total: 78630
   test_target: 10
+- id: phase-153b
+  title: Host Terminal Hardening -- Performance and ANSI Foundation
+  status: done
+  goal: Fix foundational performance and correctness issues in host_term.asm before
+    building more features on top.
+  description: MEMCPY scroll optimization, STRO string building, CSI cursor/erase
+    support (K/H/J/A/B/C/D), dirty status bar, unified startup drain.
+  deliverables:
+  - name: MEMCPY scroll_up optimization
+    status: done
+  - name: STRO-based string construction
+    status: done
+  - name: CSI cursor movement and erase sequences
+    status: done
+  - name: Status bar dirty flag optimization
+    status: done
+  - name: Startup drain consolidation
+    status: done
+  scope_lines_total: 79000
+  test_target: 8
 - id: phase-154
   title: Terminal Daily Driver -- Direct Boot to Terminal
   status: in_progress
@@ -7637,7 +7657,7 @@ phases:
   scope_lines_total: 76200
   test_target: 5
   _claimed_by: worker-0
-  _claimed_at: 1777234914
+  _claimed_at: 1777240241
 - id: phase-155
   title: Terminal Daily Driver -- Terminal Multiplexer (tmux-like tabs)
   status: done
@@ -7679,7 +7699,7 @@ phases:
   test_target: 8
 - id: phase-156
   title: Terminal Daily Driver -- Scrollback Buffer
-  status: planned
+  status: done
   goal: PageUp/PageDown scrolls through terminal history. At least 1000 lines of scrollback.
   description: You can't use a terminal without scrollback. When something scrolls
     off screen, you need to see it. PageUp/PageDown navigates a scrollback buffer
@@ -7688,31 +7708,33 @@ phases:
   deliverables:
   - name: Scrollback ring buffer with PageUp/PageDown navigation
     description: Maintain a ring buffer of past terminal output (at least 1000 lines
-      x 80 cols). PageUp enters scrollback mode, renders older content. PageDown scrolls
+      x 32 cols). PageUp enters scrollback mode, renders older content. PageDown scrolls
       toward live. Any typing exits scrollback and returns to live prompt.
-    status: todo
+    status: done
     tasks:
     - id: p156.d1.t1
-      title: Ring buffer for terminal history (1000 lines)
-      status: todo
+      title: Ring buffer for terminal history (1024 lines)
+      status: done
       description: RAM region for scrollback. Every line that scrolls off the visible
         area gets pushed into the buffer.
     - id: p156.d1.t2
       title: PageUp/PageDown scroll navigation
-      status: todo
+      status: done
       description: 'PageUp: enter scrollback mode, show older lines. PageDown: scroll
         toward live. Track scroll offset.'
     - id: p156.d1.t3
       title: Visual indicator when in scrollback mode
-      status: todo
+      status: done
       description: Show 'SCROLLBACK [line X of Y]' in status bar when browsing history.
         Any typing exits to live.
     scope_lines: 200
   scope_lines_total: 76700
   test_target: 5
+  _claimed_by: worker-0
+  _claimed_at: 1777237397
 - id: phase-157
   title: Terminal Daily Driver -- Copy and Paste
-  status: planned
+  status: in_progress
   goal: Select text with mouse, copy to clipboard, paste with middle-click or Ctrl+Shift+V
   description: You need to copy output and paste commands. Mouse drag to select text
     (highlight). Ctrl+Shift+C copies. Ctrl+Shift+V or middle-click pastes. The clipboard
@@ -7742,6 +7764,8 @@ phases:
     scope_lines: 200
   scope_lines_total: 76900
   test_target: 5
+  _claimed_by: worker-0
+  _claimed_at: 1777240243
 - id: phase-158
   title: Terminal Daily Driver -- Quick Launch Bar
   status: planned

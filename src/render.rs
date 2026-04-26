@@ -219,6 +219,7 @@ pub fn render(
     pc_history: &VecDeque<u32>,
     ram_view_base: usize,
     icon_cache: Option<&BuildingIconCache>,
+    text_sel: Option<((usize, usize), (usize, usize))>, // Phase 157: selection highlight
 ) {
     for pixel in buffer.iter_mut() {
         *pixel = BG;
@@ -270,8 +271,42 @@ pub fn render(
                 GRID_BG
             };
 
+            // Phase 157: Check if this cell is in the text selection range
+            let in_selection = if let Some((sel_start, sel_end)) = text_sel {
+                // Normalize selection to top-left..bottom-right
+                let (tl, br) = if sel_start.0 < sel_end.0
+                    || (sel_start.0 == sel_end.0 && sel_start.1 <= sel_end.1)
+                {
+                    (sel_start, sel_end)
+                } else {
+                    (sel_end, sel_start)
+                };
+                let cell = (log_row, col);
+                // Cell is in selection if: same row as tl and col >= tl.1, or
+                // same row as br and col <= br.1, or row strictly between tl and br
+                if cell.0 == tl.0 && cell.0 == br.0 {
+                    cell.1 >= tl.1 && cell.1 <= br.1
+                } else if cell.0 == tl.0 {
+                    cell.1 >= tl.1
+                } else if cell.0 == br.0 {
+                    cell.1 <= br.1
+                } else {
+                    cell.0 > tl.0 && cell.0 < br.0
+                }
+            } else {
+                false
+            };
+            // Selection colors: blue background, white text
+            let sel_bg: u32 = 0x264F78;
+            let sel_fg: u32 = 0xFFFFFF;
+            let cell_bg = if in_selection { sel_bg } else { cell_bg };
+
             if use_pixel_font {
-                let fg = syntax_highlight_color(canvas_buffer, log_row, col);
+                let fg = if in_selection {
+                    sel_fg
+                } else {
+                    syntax_highlight_color(canvas_buffer, log_row, col)
+                };
                 let glyph = &font::GLYPHS[ascii_byte as usize];
 
                 for dy in 0..CANVAS_SCALE {

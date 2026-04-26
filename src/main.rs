@@ -494,6 +494,13 @@ fn main() {
     // Track how many scrollback lines existed before current command output
     let mut _scrollback_pre_cmd: usize = 0;
 
+    // ── Text Selection & Clipboard (Phase 157) ──────────────────
+    let mut text_sel_active: bool = false; // currently dragging a selection
+    let mut text_sel_start: (usize, usize) = (0, 0); // (row, col) of drag start
+    let mut text_sel_end: (usize, usize) = (0, 0); // (row, col) of drag end (updated live)
+    let mut text_sel_anchor: Option<((usize, usize), (usize, usize))> = None; // persisted selection (after drag ends)
+    let mut clipboard: String = String::new(); // internal clipboard
+
     // If --boot flag, perform boot sequence: load init.asm as PID 1
     if boot_mode {
         match vm.boot() {
@@ -778,10 +785,22 @@ fn main() {
                 let alt = window.is_key_down(Key::LeftAlt) || window.is_key_down(Key::RightAlt);
                 if alt {
                     match key {
-                        Key::Key1 => { vm.push_key(0xA0); continue; }
-                        Key::Key2 => { vm.push_key(0xA1); continue; }
-                        Key::Key3 => { vm.push_key(0xA2); continue; }
-                        Key::Key4 => { vm.push_key(0xA3); continue; }
+                        Key::Key1 => {
+                            vm.push_key(0xA0);
+                            continue;
+                        }
+                        Key::Key2 => {
+                            vm.push_key(0xA1);
+                            continue;
+                        }
+                        Key::Key3 => {
+                            vm.push_key(0xA2);
+                            continue;
+                        }
+                        Key::Key4 => {
+                            vm.push_key(0xA3);
+                            continue;
+                        }
                         _ => {}
                     }
                 }
@@ -1079,7 +1098,11 @@ fn main() {
                         term_output_row = term_prompt_row + 1;
 
                         // Record prompt line to scrollback before execution
-                        scrollback.push_canvas_rows(&canvas_buffer, term_prompt_row, term_prompt_row + 1);
+                        scrollback.push_canvas_rows(
+                            &canvas_buffer,
+                            term_prompt_row,
+                            term_prompt_row + 1,
+                        );
 
                         let (hermes_prompt, go_edit, quit) = handle_terminal_command(
                             cmd,
@@ -1093,7 +1116,11 @@ fn main() {
                         );
 
                         // Record command output to scrollback (lines from after prompt to before new prompt)
-                        scrollback.push_canvas_rows(&canvas_buffer, term_prompt_row + 1, term_output_row);
+                        scrollback.push_canvas_rows(
+                            &canvas_buffer,
+                            term_prompt_row + 1,
+                            term_output_row,
+                        );
                         _scrollback_pre_cmd = scrollback.len();
 
                         // Handle hermes/build prompt if returned
@@ -1174,6 +1201,40 @@ fn main() {
                         if cursor_row < CANVAS_MAX_ROWS - 1 {
                             cursor_row += 1;
                             ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                        }
+                    }
+                    Key::C => {
+                        // Ctrl+Shift+C: Copy selection to clipboard
+                        let ctrl =
+                            window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl);
+                        let shift = window.is_key_down(Key::LeftShift)
+                            || window.is_key_down(Key::RightShift);
+                        if ctrl && shift {
+                            if let Some((start, end)) = text_sel_anchor {
+                                let sel_text = extract_selection(&canvas_buffer, start, end);
+                                if !sel_text.is_empty() {
+                                    clipboard = sel_text;
+                                    status_msg = format!("[copied {} chars]", clipboard.len());
+                                }
+                            }
+                        }
+                    }
+                    Key::V => {
+                        // Ctrl+Shift+V: Paste clipboard into prompt line
+                        let ctrl =
+                            window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl);
+                        let shift = window.is_key_down(Key::LeftShift)
+                            || window.is_key_down(Key::RightShift);
+                        if ctrl && shift && !clipboard.is_empty() {
+                            for ch in clipboard.chars() {
+                                if cursor_col < CANVAS_COLS - 1 {
+                                    let idx = cursor_row * CANVAS_COLS + cursor_col;
+                                    canvas_buffer[idx] = ch as u32;
+                                    cursor_col += 1;
+                                }
+                            }
+                            // Clear selection after paste
+                            text_sel_anchor = None;
                         }
                     }
                     _ => {
@@ -1334,7 +1395,8 @@ fn main() {
                             scrollback_offset = scrollback_offset.saturating_sub(CANVAS_ROWS);
                             status_msg = format!(
                                 "[SCROLLBACK {}/{} -- PageUp/Down=navigate, any key=exit]",
-                                scrollback_offset, scrollback.max_scroll()
+                                scrollback_offset,
+                                scrollback.max_scroll()
                             );
                         }
                     } else if scroll_offset > 0 {
@@ -2192,8 +2254,10 @@ fn main() {
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             "scrollback" => {
-                                let offset: usize = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-                                let count: usize = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(32);
+                                let offset: usize =
+                                    parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+                                let count: usize =
+                                    parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(32);
                                 response.push_str(&format!(
                                     "[scrollback: {} lines buffered, max_scroll={}]\n",
                                     scrollback.len(),
@@ -2202,7 +2266,8 @@ fn main() {
                                 let end = (offset + count).min(scrollback.len());
                                 for i in offset..end {
                                     if let Some(line) = scrollback.get_line(i) {
-                                        let text: String = line.iter()
+                                        let text: String = line
+                                            .iter()
                                             .take_while(|&&v| v != 0)
                                             .map(|&v| (v & 0xFF) as u8 as char)
                                             .collect();
@@ -3250,6 +3315,29 @@ fn main() {
                                     esc(&ascii)
                                 ));
                             }
+                            "clipboard" => {
+                                // clipboard [get|set <text>] -- read/write internal clipboard
+                                let subcmd = parts.get(1).copied().unwrap_or("get");
+                                match subcmd {
+                                    "get" => {
+                                        response.push_str(&format!("{}\n", clipboard));
+                                    }
+                                    "set" => {
+                                        if let Some(text) = line.strip_prefix("clipboard set ") {
+                                            clipboard = text.to_string();
+                                            response.push_str(&format!(
+                                                "ok {} chars\n",
+                                                clipboard.len()
+                                            ));
+                                        } else {
+                                            response.push_str("[usage: clipboard set <text>]\n");
+                                        }
+                                    }
+                                    _ => {
+                                        response.push_str("[usage: clipboard [get|set <text>]]\n");
+                                    }
+                                }
+                            }
                             _ => {
                                 response.push_str(&format!("[unknown: {}]\n", line));
                             }
@@ -3565,7 +3653,9 @@ fn main() {
             let mut sb_canvas = vec![0u32; CANVAS_MAX_ROWS * CANVAS_COLS];
             let page = scrollback.get_page(scrollback_offset);
             for (vis_row, line) in page.iter().enumerate() {
-                if vis_row >= CANVAS_MAX_ROWS { break; }
+                if vis_row >= CANVAS_MAX_ROWS {
+                    break;
+                }
                 let offset = vis_row * CANVAS_COLS;
                 sb_canvas[offset..offset + CANVAS_COLS].copy_from_slice(line.as_slice());
             }
@@ -3576,7 +3666,7 @@ fn main() {
                 &sb_canvas,
                 0, // no cursor in scrollback
                 0,
-                0, // no scroll offset (we handle it via sb_canvas content)
+                0,     // no scroll offset (we handle it via sb_canvas content)
                 false, // not running
                 false,
                 &status_msg,
@@ -3585,8 +3675,15 @@ fn main() {
                 &pc_history,
                 ram_view_base,
                 Some(&icon_cache),
+                None, // no text selection in scrollback
             );
         } else {
+            // Compute current selection for rendering (active drag or anchored selection)
+            let current_sel = if text_sel_active {
+                Some((text_sel_start, text_sel_end))
+            } else {
+                text_sel_anchor
+            };
             render(
                 &mut buffer,
                 &vm,
@@ -3602,6 +3699,11 @@ fn main() {
                 &pc_history,
                 ram_view_base,
                 Some(&icon_cache),
+                if !fullscreen_map && !is_running {
+                    current_sel
+                } else {
+                    None
+                },
             );
         }
         // ── Desktop polish: clock + system tray overlay ──────────────
@@ -4102,6 +4204,71 @@ fn main() {
 
             if !mouse_down_now {
                 window_drag_active = false;
+            }
+        }
+
+        // ── Terminal text selection (Phase 157) ──────────────────
+        // Mouse drag to select text when NOT in fullscreen map and NOT running
+        // (i.e., in terminal/editor mode with VM paused)
+        if !fullscreen_map && !is_running && mode == Mode::Terminal {
+            let mouse_down_now = window.get_mouse_down(MouseButton::Left);
+            let canvas_pixel_x = CANVAS_COLS * CANVAS_SCALE; // 32 * 16 = 512
+            let canvas_pixel_y = CANVAS_ROWS * CANVAS_SCALE; // 32 * 16 = 512
+
+            // Mouse press: start selection
+            if mouse_down_now && !text_sel_active {
+                if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
+                    // Convert host pixel to canvas row/col (accounting for scroll offset)
+                    let col = (mx as usize) / CANVAS_SCALE;
+                    let row = (my as usize) / CANVAS_SCALE + scroll_offset;
+                    if col < CANVAS_COLS
+                        && row < CANVAS_MAX_ROWS
+                        && (mx as usize) < canvas_pixel_x
+                        && (my as usize) < canvas_pixel_y
+                    {
+                        text_sel_active = true;
+                        text_sel_start = (row, col);
+                        text_sel_end = (row, col);
+                        text_sel_anchor = None; // clear previous selection
+                    }
+                }
+            }
+
+            // Mouse drag: update selection end
+            if text_sel_active && mouse_down_now {
+                if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
+                    let col = ((mx as usize) / CANVAS_SCALE).min(CANVAS_COLS - 1);
+                    let row = (my as usize) / CANVAS_SCALE + scroll_offset;
+                    let row = row.min(CANVAS_MAX_ROWS - 1);
+                    if (mx as usize) < canvas_pixel_x && (my as usize) < canvas_pixel_y {
+                        text_sel_end = (row, col);
+                    }
+                }
+            }
+
+            // Mouse release: finalize selection
+            if !mouse_down_now && text_sel_active {
+                text_sel_active = false;
+                // Only keep selection if start != end (non-trivial selection)
+                if text_sel_start != text_sel_end {
+                    text_sel_anchor = Some((text_sel_start, text_sel_end));
+                } else {
+                    text_sel_anchor = None;
+                }
+            }
+
+            // Middle-click paste
+            if window.get_mouse_down(MouseButton::Middle) {
+                if !clipboard.is_empty() {
+                    for ch in clipboard.chars() {
+                        if cursor_col < CANVAS_COLS - 1 {
+                            let idx = cursor_row * CANVAS_COLS + cursor_col;
+                            canvas_buffer[idx] = ch as u32;
+                            cursor_col += 1;
+                        }
+                    }
+                    text_sel_anchor = None;
+                }
             }
         }
 

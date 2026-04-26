@@ -383,6 +383,144 @@ impl ScrollbackBuffer {
     }
 }
 
+// ── Text Selection ──────────────────────────────────────────────
+
+/// Tracks a mouse-drag text selection in the terminal text buffer.
+/// Coordinates are in (row, col) of the text buffer (BUF_BASE layout).
+struct TextSelection {
+    /// Start position (row, col) of the selection.
+    start: Option<(usize, usize)>,
+    /// End position (row, col) of the selection.
+    end: Option<(usize, usize)>,
+    /// Whether the mouse button is currently held (dragging).
+    dragging: bool,
+}
+
+impl TextSelection {
+    fn new() -> Self {
+        TextSelection {
+            start: None,
+            end: None,
+            dragging: false,
+        }
+    }
+
+    /// Begin a selection at the given buffer position.
+    fn begin(&mut self, row: usize, col: usize) {
+        let c = col.min(BUF_COLS - 1);
+        self.start = Some((row, c));
+        self.end = Some((row, c));
+        self.dragging = true;
+    }
+
+    /// Extend the selection to a new end position during drag.
+    fn extend(&mut self, row: usize, col: usize) {
+        if self.dragging {
+            let c = col.min(BUF_COLS - 1);
+            let r = row.min(BUF_ROWS - 1);
+            self.end = Some((r, c));
+        }
+    }
+
+    /// Finish the selection (mouse up).
+    fn finish(&mut self) {
+        self.dragging = false;
+    }
+
+    /// Clear the selection entirely.
+    fn clear(&mut self) {
+        self.start = None;
+        self.end = None;
+        self.dragging = false;
+    }
+
+    /// Check if there is an active selection with extent (start != end).
+    fn has_selection(&self) -> bool {
+        match (self.start, self.end) {
+            (Some((sr, sc)), Some((er, ec))) => sr != er || sc != ec,
+            _ => false,
+        }
+    }
+
+    /// Get the ordered (top-left, bottom-right) of the selection.
+    fn ordered(&self) -> Option<((usize, usize), (usize, usize))> {
+        match (self.start, self.end) {
+            (Some((sr, sc)), Some((er, ec))) => {
+                if (sr, sc) <= (er, ec) {
+                    Some(((sr, sc), (er, ec)))
+                } else {
+                    Some(((er, ec), (sr, sc)))
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if a buffer cell (row, col) is within the selection.
+    fn contains(&self, row: usize, col: usize) -> bool {
+        if let Some(((sr, sc), (er, ec))) = self.ordered() {
+            if row < sr || row > er {
+                return false;
+            }
+            if row == sr && col < sc {
+                return false;
+            }
+            if row == er && col > ec {
+                return false;
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Extract the selected text from the VM text buffer.
+    fn extract_text(&self, vm: &Vm) -> String {
+        if let Some(((sr, sc), (er, ec))) = self.ordered() {
+            let mut result = String::new();
+            for row in sr..=er {
+                let col_start = if row == sr { sc } else { 0 };
+                let col_end = if row == er { ec } else { BUF_COLS - 1 };
+                for col in col_start..=col_end {
+                    let ch = vm.ram[BUF_BASE + row * BUF_COLS + col] & 0xFF;
+                    if ch >= 32 && ch < 127 {
+                        result.push(ch as u8 as char);
+                    } else if ch == 0 {
+                        // stop at null within a row
+                        break;
+                    }
+                }
+                if row < er {
+                    result.push('\n');
+                }
+            }
+            result
+        } else {
+            String::new()
+        }
+    }
+}
+
+/// Convert screen (pixel) coordinates to text buffer (row, col).
+/// Returns None if the coordinates are outside the text area.
+fn screen_to_buf_pos(screen_x: usize, screen_y: usize, scale: usize) -> Option<(usize, usize)> {
+    // Text area starts at y=12 (VM coords), each char is 6x8
+    let text_start_y = 12;
+    let char_w = 6;
+    let char_h = 8;
+    let vm_x = screen_x / scale;
+    let vm_y = screen_y / scale;
+    if vm_y < text_start_y || vm_x >= BUF_COLS * char_w {
+        return None;
+    }
+    let row = (vm_y - text_start_y) / char_h;
+    let col = vm_x / char_w;
+    if row >= BUF_ROWS || col >= BUF_COLS {
+        return None;
+    }
+    Some((row, col))
+}
+
 // ── Clipboard helpers ────────────────────────────────────────────
 
 /// Read text from host clipboard using xclip.
@@ -945,6 +1083,7 @@ fn main() {
     let mut prev_top_row: Vec<u32> = vec![32u32; BUF_COLS];
     let mut status_msg = String::new();
     let mut status_ttl: usize = 0; // frames until status bar disappears
+    let mut selection = TextSelection::new();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let ctrl = window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl);
@@ -970,15 +1109,20 @@ fn main() {
                 status_ttl = 120;
                 continue;
             }
-            // Ctrl+Shift+C: copy visible text to clipboard
+            // Ctrl+Shift+C: copy selected or all visible text to clipboard
             if key == Key::C && ctrl && shift {
-                let text = collect_visible_text(&vm);
+                let text = if selection.has_selection() {
+                    selection.extract_text(&vm)
+                } else {
+                    collect_visible_text(&vm)
+                };
                 if clipboard_write(&text) {
                     status_msg = format!("copied {} chars", text.len());
                 } else {
                     status_msg = "clipboard write failed".to_string();
                 }
                 status_ttl = 120;
+                selection.clear();
                 continue;
             }
             // Ctrl+Shift+V: paste from clipboard

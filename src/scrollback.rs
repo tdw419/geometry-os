@@ -175,7 +175,11 @@ mod tests {
             let line = [0u32; SCROLLBACK_COLS];
             sb.push_line(&line);
         }
-        let expected = if 50 > SCROLLBACK_VISIBLE_ROWS { 50 - SCROLLBACK_VISIBLE_ROWS } else { 0 };
+        let expected = if 50 > SCROLLBACK_VISIBLE_ROWS {
+            50 - SCROLLBACK_VISIBLE_ROWS
+        } else {
+            0
+        };
         assert_eq!(sb.max_scroll(), expected);
     }
 

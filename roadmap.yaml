@@ -7594,8 +7594,8 @@ phases:
   status: done
   goal: Fix foundational performance and correctness issues in host_term.asm before
     building more features on top.
-  description: 'MEMCPY scroll optimization, STRO string building, CSI cursor/erase
-    support (K/H/J/A/B/C/D), dirty status bar, unified startup drain.'
+  description: MEMCPY scroll optimization, STRO string building, CSI cursor/erase
+    support (K/H/J/A/B/C/D), dirty status bar, unified startup drain.
   deliverables:
   - name: MEMCPY scroll_up optimization
     status: done
@@ -7611,7 +7611,7 @@ phases:
   test_target: 8
 - id: phase-154
   title: Terminal Daily Driver -- Direct Boot to Terminal
-  status: planned
+  status: in_progress
   goal: Boot GeOS straight into the host terminal, no map. --terminal flag skips the
     map entirely and launches host_term as PID 1.
   description: The map is impressive but it's not what you use daily. What you use
@@ -7657,7 +7657,7 @@ phases:
   scope_lines_total: 76200
   test_target: 5
   _claimed_by: worker-0
-  _claimed_at: 1777234914
+  _claimed_at: 1777240241
 - id: phase-155
   title: Terminal Daily Driver -- Terminal Multiplexer (tmux-like tabs)
   status: done
@@ -7734,7 +7734,7 @@ phases:
   _claimed_at: 1777237397
 - id: phase-157
   title: Terminal Daily Driver -- Copy and Paste
-  status: planned
+  status: in_progress
   goal: Select text with mouse, copy to clipboard, paste with middle-click or Ctrl+Shift+V
   description: You need to copy output and paste commands. Mouse drag to select text
     (highlight). Ctrl+Shift+C copies. Ctrl+Shift+V or middle-click pastes. The clipboard
@@ -7765,10 +7765,10 @@ phases:
   scope_lines_total: 76900
   test_target: 5
   _claimed_by: worker-0
-  _claimed_at: 1777238180
+  _claimed_at: 1777240243
 - id: phase-158
   title: Terminal Daily Driver -- Quick Launch Bar
-  status: planned
+  status: in_progress
   goal: Ctrl+Space opens a command launcher overlay. Type 'nano foo.txt' or 'htop'
     to launch apps inside terminal tabs.
   description: Instead of the map's app launcher, a terminal-native launcher. Ctrl+Space
@@ -7797,6 +7797,8 @@ phases:
     scope_lines: 200
   scope_lines_total: 77100
   test_target: 5
+  _claimed_by: worker-0
+  _claimed_at: 1777240246
 - id: phase-159
   title: Terminal Daily Driver -- Fullscreen Scaling and Font Sizes
   status: planned
