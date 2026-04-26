@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 154 opcodes, 3656 tests, 147 programs, 76635 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
-**Progress:** 134/134 phases complete, 0 in progress, 0 planned
+**Progress:** 130/140 phases complete, 0 in progress, 10 planned
 
-**Deliverables:** 538/538 complete
+**Deliverables:** 524/564 complete
 
-## Scope Summary
+**Tasks:** 176/252 complete
 
 | Phase | Status | Deliverables | LOC Target | Tests |
 |-------|--------|-------------|-----------|-------|
@@ -144,6 +144,12 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 | phase-132 Host Terminal -- ANSI Color Rendering | COMPLETE | 3/3 | ~300 | 9 |
 | phase-133 Host Terminal -- Wider Display and Horizontal Scroll | COMPLETE | 2/2 | ~240 | 9 |
 | phase-134 Host Terminal -- Extended Character Support | COMPLETE | 3/3 | ~260 | 8 |
+| phase-135 Host Terminal -- Test Failure Fixes | PLANNED | 1/1 | - | - |
+| phase-136 Daily Driver -- Fix Test Regressions and Build Green | PLANNED | 3/3 | ~170 | 10 |
+| phase-137 Daily Driver -- Host Filesystem Bridge | PLANNED | 4/4 | ~280 | 9 |
+| phase-138 Daily Driver -- Fullscreen Desktop as Display Manager | PLANNED | 3/3 | ~240 | 5 |
+| phase-139 Daily Driver -- Text Editor App | PLANNED | 2/2 | ~320 | 5 |
+| phase-140 Daily Driver -- Process Monitor and System Dashboard | PLANNED | 2/2 | ~200 | 5 |
 
 ## Dependencies
 
@@ -3124,3 +3130,90 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
 - [x] **Full-width character support (CJK fallback)** -- Detect wide chars, render as two filled-block cells to prevent misalignment
   - [x] p134.d3.t1: Detect full-width codepoints (CJK range)
   - [x] p134.d3.t2: Render full-width as two filled-block cells
+
+## [ ] phase-136: Daily Driver -- Fix Test Regressions and Build Green (PLANNED)
+
+**Goal:** Get cargo test back to 100% green. 13 world_desktop tests are failing from autodev commits.
+
+### Deliverables
+
+- [ ] **Fix 13 failing world_desktop tests** -- All failures in games:: module, likely from world_desktop.asm changes
+  - [ ] p136.d1.t1: Run cargo test and capture all 13 failures
+  - [ ] p136.d1.t2: Diff world_desktop.asm against last green commit
+  - [ ] p136.d1.t3: Fix tests or fix program until 0 failures
+- [ ] **Add cargo test gate to autodev preflight** -- Workers must not merge breaking changes
+  - [ ] p136.d2.t1: Add cargo test check to oracle_preflight.py
+  - [ ] p136.d2.t2: Test the gate: intentionally break a test, verify preflight halts
+- [ ] **Fix 3 failing terminal QA built-in tests** -- echo_round_trip, line_wrap, ctrl_c check wrong row
+  - [ ] p136.d3.t1: Fix geos-term built-in test row assertions
+  - [ ] p136.d3.t2: Verify geos-term --test all passes 3/3
+
+## [ ] phase-137: Daily Driver -- Host Filesystem Bridge (PLANNED)
+
+**Goal:** Let GeOS programs read and write files on the host Linux filesystem via FSOPEN/FSREAD/FSWRITE/FSLS opcodes
+
+### Deliverables
+
+- [ ] **FSOPEN/FSCLOSE opcodes for host file access** -- Open host files by path from RAM, up to 8 simultaneous files
+  - [ ] p137.d1.t1: Implement FSOPEN opcode (host file open)
+  - [ ] p137.d1.t2: Implement FSCLOSE opcode (host file close)
+  - [ ] p137.d1.t3: Test: FSOPEN /etc/hostname, read contents
+- [ ] **FSREAD/FSWRITE opcodes for file I/O** -- Read/write host file bytes to/from RAM (same convention as PTYREAD/PTYWRITE)
+  - [ ] p137.d2.t1: Implement FSREAD (read host file into RAM)
+  - [ ] p137.d2.t2: Implement FSWRITE (write RAM to host file)
+  - [ ] p137.d2.t3: Test: write and read back a file through opcodes
+- [ ] **FSLS opcode for directory listing** -- List host directory contents into RAM buffer
+  - [ ] p137.d3.t1: Implement FSLS (list directory)
+  - [ ] p137.d3.t2: Update file_browser.asm to use FSLS for host dirs
+  - [ ] p137.d3.t3: Add 'host' command to shell.asm
+- [ ] **Security: sandbox to home directory** -- Restrict file access to $HOME, prevent system file access
+  - [ ] p137.d4.t1: Path validation: reject paths outside $HOME
+  - [ ] p137.d4.t2: Test: FSOPEN /etc/passwd returns error
+
+## [ ] phase-138: Daily Driver -- Fullscreen Desktop as Display Manager (PLANNED)
+
+**Goal:** Launch GeOS fullscreen on boot as the primary interface, replacing the need for a Linux desktop environment
+
+### Deliverables
+
+- [ ] **Fullscreen mode and borderless window** -- --fullscreen flag, scale 256x256 to fill screen, ESC exits
+  - [ ] p138.d1.t1: Add --fullscreen CLI flag
+  - [ ] p138.d1.t2: Handle ESC to exit fullscreen gracefully
+  - [ ] p138.d1.t3: Test fullscreen launch with various monitor sizes
+- [ ] **Auto-start on login (systemd user service)** -- GeOS starts automatically when you log in
+  - [ ] p138.d2.t1: Create ~/.config/systemd/user/geometry-os.service
+  - [ ] p138.d2.t2: Add .desktop file for session selection
+- [ ] **Desktop polish: alt-tab, task switcher, notifications** -- Make the desktop feel like a real OS
+  - [ ] p138.d3.t1: Alt-Tab window switcher overlay
+  - [ ] p138.d3.t2: Notification system (background events)
+  - [ ] p138.d3.t3: Host system tray (battery, network, volume from Linux)
+
+## [ ] phase-139: Daily Driver -- Text Editor App (PLANNED)
+
+**Goal:** A nano-like text editor that edits host files, making GeOS usable for coding and writing
+
+### Deliverables
+
+- [ ] **Core text editor (open, scroll, edit, save)** -- nano_editor.asm using FSREAD/FSWRITE, MEDTEXT rendering, Ctrl+S/Q
+  - [ ] p139.d1.t1: File loading: FSREAD into line buffer
+  - [ ] p139.d1.t2: Rendering: visible window of lines with MEDTEXT
+  - [ ] p139.d1.t3: Editing: insert/delete chars, line breaks
+  - [ ] p139.d1.t4: Save: FSWRITE modified buffer back to file
+- [ ] **Search, goto line, multiple buffers** -- Ctrl+F search, Ctrl+G goto, Ctrl+N second file
+  - [ ] p139.d2.t1: Search: Ctrl+F forward search with highlight
+  - [ ] p139.d2.t2: Goto: Ctrl+G jump to line number
+  - [ ] p139.d2.t3: Multiple file buffers (Ctrl+N new, Ctrl+Tab switch)
+
+## [ ] phase-140: Daily Driver -- Process Monitor and System Dashboard (PLANNED)
+
+**Goal:** A htop-like system monitor showing GeOS processes and host system stats
+
+### Deliverables
+
+- [ ] **GeOS process monitor (htop for the VM)** -- Read process table from RAM, show PID/state/PC/cycles, interactive kill
+  - [ ] p140.d1.t1: Read process table from VM RAM
+  - [ ] p140.d1.t2: Render process list with color coding
+  - [ ] p140.d1.t3: Interactive: kill process, sort by column
+- [ ] **Host system stats via /proc** -- Read /proc/stat and /proc/meminfo through FSREAD for CPU/RAM usage
+  - [ ] p140.d2.t1: Parse /proc/meminfo for RAM stats
+  - [ ] p140.d2.t2: Render system stats panel

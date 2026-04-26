@@ -6798,7 +6798,7 @@ phases:
   _claimed_at: 1777192760
 - id: phase-135
   title: Host Terminal -- Test Failure Fixes (3 issues)
-  status: planned
+  status: in_progress
   goal: Fix 3 non-blocking test failures from terminal QA
   description: Automated terminal QA found functional issues.
   deliverables:
@@ -6822,6 +6822,336 @@ phases:
     scope_lines: 90
   scope_lines_total: 74650
   test_target: 0
+  _claimed_by: worker-0
+  _claimed_at: 1777203060
+- id: phase-136
+  title: Daily Driver -- Fix Test Regressions and Build Green
+  status: planned
+  goal: Get cargo test back to 100% green. 13 world_desktop tests are failing from
+    autodev commits. No new work until tests pass.
+  description: The autodev workers shipped phases 126-134 but broke 13 world_desktop
+    tests in the process. This is a hard stop -- no new features until the build is
+    green. Fix the broken tests, then add a preflight gate so workers can't merge
+    breaking changes. This establishes the discipline the project needs for daily-driver
+    quality.
+  deliverables:
+  - name: Fix 13 failing world_desktop tests
+    description: 'All 13 failures are in tests/program_tests.rs games:: module. Likely
+      caused by world_desktop.asm changes from autodev workers. Read each failing
+      test, understand what changed, fix the test expectations or fix the program.'
+    status: todo
+    tasks:
+    - id: p136.d1.t1
+      title: Run cargo test and capture all 13 failures
+      status: todo
+      description: Get exact error messages for each failing test
+    - id: p136.d1.t2
+      title: Diff world_desktop.asm against last green commit
+      status: todo
+      description: Find what changed that broke the tests
+    - id: p136.d1.t3
+      title: Fix tests or fix program until 0 failures
+      status: todo
+      description: 'Target: cargo test 463 passed, 0 failed'
+    scope_lines: 100
+  - name: Add cargo test gate to autodev preflight
+    description: 'The oracle_preflight.py should run ''cargo test'' and HALT if tests
+      fail. Workers must not pick up new phases when the build is red. Add a quick
+      check (cargo test --test program_tests -- --test-threads=8, 30s timeout). If
+      any failures, the preflight outputs STATUS: HALT with the failing test names.'
+    status: todo
+    tasks:
+    - id: p136.d2.t1
+      title: Add cargo test check to oracle_preflight.py
+      status: todo
+      description: 'After git pull, run cargo test. If failures, output STATUS: HALT'
+    - id: p136.d2.t2
+      title: 'Test the gate: intentionally break a test, verify preflight halts'
+      status: todo
+      description: Verify the circuit breaker works before trusting it
+    scope_lines: 40
+  - name: Fix 3 failing terminal QA built-in tests
+    description: echo_round_trip, line_wrap, ctrl_c fail because the built-in tests
+      check row 0 for prompt but the terminal is now 80x40 and prompt is on a different
+      row. Fix the test assertions in geos-term source to match the current layout.
+    status: todo
+    tasks:
+    - id: p136.d3.t1
+      title: Fix geos-term built-in test row assertions
+      status: todo
+      description: Update prompt row checks to match 80x40 layout
+    - id: p136.d3.t2
+      title: Verify geos-term --test all passes 3/3
+      status: todo
+      description: All built-in tests green
+    scope_lines: 30
+  scope_lines_total: 74700
+  test_target: 465
+- id: phase-137
+  title: Daily Driver -- Host Filesystem Bridge
+  status: planned
+  goal: Let GeOS programs read and write files on the host Linux filesystem, not just
+    the VFS pixel surface
+  description: 'The VFS pixel surface is clever but isolated. Programs can''t read
+    /etc/hostname or write to ~/documents. For GeOS to be a daily driver, it needs
+    to access host files. Two approaches: (1) Add FSREAD/FSWRITE opcodes that delegate
+    to the host OS, (2) Mount a host directory into VFS. Approach 1 is simpler and
+    more practical. Programs read/write through opcodes, the host Rust code handles
+    actual filesystem I/O. This is the single most important feature for daily driver
+    use.'
+  deliverables:
+  - name: FSOPEN/FSCLOSE opcodes for host file access
+    description: 'FSOPEN path_reg, mode_reg, fd_reg -- opens a host file. path_reg
+      points to null-terminated string in RAM. mode_reg: 0=read, 1=write, 2=append.
+      fd_reg gets file descriptor (0-7). FSCLOSE fd_reg -- closes file. r0 = 0 on
+      success, error code on failure. Up to 8 simultaneous host files.'
+    status: todo
+    tasks:
+    - id: p137.d1.t1
+      title: Implement FSOPEN opcode (host file open)
+      status: todo
+      description: Read path from RAM, std::fs::File::open, store in host_files slot
+    - id: p137.d1.t2
+      title: Implement FSCLOSE opcode (host file close)
+      status: todo
+      description: Close file, free slot
+    - id: p137.d1.t3
+      title: 'Test: FSOPEN /etc/hostname, read contents'
+      status: todo
+      description: Open a real host file through the VM opcode
+    scope_lines: 80
+  - name: FSREAD/FSWRITE opcodes for file I/O
+    description: FSREAD fd_reg, buf_reg, len_reg -- reads up to len bytes into RAM
+      buffer. r0 = bytes read. FSWRITE fd_reg, buf_reg, len_reg -- writes len bytes
+      from RAM buffer. r0 = bytes written. Bytes are one-per-u32-cell (same as PTYREAD/PTYWRITE
+      convention).
+    status: todo
+    tasks:
+    - id: p137.d2.t1
+      title: Implement FSREAD (read host file into RAM)
+      status: todo
+      description: Read from host_files[fd], write bytes to RAM[buf..buf+len]
+    - id: p137.d2.t2
+      title: Implement FSWRITE (write RAM to host file)
+      status: todo
+      description: Read bytes from RAM, write to host_files[fd]
+    - id: p137.d2.t3
+      title: 'Test: write and read back a file through opcodes'
+      status: todo
+      description: FSOPEN write -> FSWRITE 'hello' -> FSCLOSE -> FSOPEN read -> FSREAD
+        -> assert 'hello'
+    scope_lines: 80
+  - name: FSLS opcode for directory listing
+    description: FSLS path_reg, buf_reg, max_len_reg -- lists directory contents.
+      Writes null-separated filenames to RAM buffer. r0 = total bytes written. This
+      lets the file browser and shell list real host directories.
+    status: todo
+    tasks:
+    - id: p137.d3.t1
+      title: Implement FSLS (list directory)
+      status: todo
+      description: std::fs::read_dir, write null-separated filenames to RAM
+    - id: p137.d3.t2
+      title: Update file_browser.asm to use FSLS for host dirs
+      status: todo
+      description: Add option to browse host filesystem via FSLS/FSREAD
+    - id: p137.d3.t3
+      title: Add 'host' command to shell.asm
+      status: todo
+      description: '''host ls ~/documents'' lists real host directory'
+    scope_lines: 80
+  - name: 'Security: sandbox to home directory'
+    description: FSOPEN/FSREAD/FSWRITE/FSLS should be restricted to the user's home
+      directory by default. No access to /etc, /root, /var, etc. Configurable via
+      settings. Prevents GeOS programs from accidentally or maliciously modifying
+      system files.
+    status: todo
+    tasks:
+    - id: p137.d4.t1
+      title: 'Path validation: reject paths outside $HOME'
+      status: todo
+      description: Canonicalize path, verify it starts with HOME. Reject .. escapes.
+    - id: p137.d4.t2
+      title: 'Test: FSOPEN /etc/passwd returns error'
+      status: todo
+      description: Verify sandbox prevents access to system files
+    scope_lines: 40
+  scope_lines_total: 74980
+  test_target: 475
+- id: phase-138
+  title: Daily Driver -- Fullscreen Desktop as Display Manager
+  status: planned
+  goal: Launch GeOS fullscreen on boot as the primary interface, replacing the need
+    for a Linux desktop environment
+  description: 'When you log in, GeOS should start fullscreen and be your entire computing
+    experience. No GNOME/KDE, no terminal emulator window -- GeOS IS the desktop.
+    The host terminal gives you bash. GeOS apps give you everything else. This requires:
+    auto-start on login, fullscreen mode, proper keyboard grab, and graceful exit
+    back to Linux when needed.'
+  deliverables:
+  - name: Fullscreen mode and borderless window
+    description: Add --fullscreen flag that sets the minifb window to fullscreen.
+      Remove window decorations. Scale the 256x256 framebuffer to fill the screen
+      with nearest-neighbor scaling (or window-dependent scaling for wider terminals).
+      ESC exits fullscreen.
+    status: todo
+    tasks:
+    - id: p138.d1.t1
+      title: Add --fullscreen CLI flag
+      status: todo
+      description: minifb WindowOptions::resize mode, borderless, fullscreen
+    - id: p138.d1.t2
+      title: Handle ESC to exit fullscreen gracefully
+      status: todo
+      description: ESC shows confirm dialog, then exits to windowed mode
+    - id: p138.d1.t3
+      title: Test fullscreen launch with various monitor sizes
+      status: todo
+      description: Verify scaling works on 1080p, 1440p, 4K
+    scope_lines: 60
+  - name: Auto-start on login (systemd user service)
+    description: Create a systemd user service that starts geometry_os --fullscreen
+      on login. This makes GeOS your display manager. Optionally replace the default
+      X/Wayland session with GeOS.
+    status: todo
+    tasks:
+    - id: p138.d2.t1
+      title: Create ~/.config/systemd/user/geometry-os.service
+      status: todo
+      description: ExecStart=geometry_os --fullscreen, After=graphical-session.target
+    - id: p138.d2.t2
+      title: Add .desktop file for session selection
+      status: todo
+      description: Geometry OS appears in login manager session list
+    scope_lines: 30
+  - name: 'Desktop polish: alt-tab, task switcher, notifications'
+    description: Make the desktop feel like a real OS. Alt-Tab switches between open
+      windows. A notification system for background events (terminal command finished,
+      cron job done). Clock in the taskbar. System tray with battery/network indicators
+      from host.
+    status: todo
+    tasks:
+    - id: p138.d3.t1
+      title: Alt-Tab window switcher overlay
+      status: todo
+      description: Show window list, highlight active, Tab cycles, Enter selects
+    - id: p138.d3.t2
+      title: Notification system (background events)
+      status: todo
+      description: RAM-based notification queue. Programs push notifications. Taskbar
+        shows count.
+    - id: p138.d3.t3
+      title: Host system tray (battery, network, volume from Linux)
+      status: todo
+      description: Read host state via Rust, expose through opcodes or RAM ports
+    scope_lines: 150
+  scope_lines_total: 75220
+  test_target: 480
+- id: phase-139
+  title: Daily Driver -- Text Editor App
+  status: planned
+  goal: A real text editor (nano-like) that edits host files through the FS bridge,
+    making GeOS usable for coding and writing
+  description: 'The canvas editor only edits assembly. The host terminal gives you
+    vim/nano but that''s Linux, not GeOS. We need a GeOS-native text editor that:
+    opens host files via FSREAD, displays them with scrolling, lets you edit with
+    cursor keys, saves via FSWRITE. Even a basic nano clone would be a game-changer.
+    Use the MEDTEXT font for rendering, the new wider window for 80 cols.'
+  deliverables:
+  - name: Core text editor (open, scroll, edit, save)
+    description: 'nano_editor.asm: opens a file via FSREAD into a line buffer (RAM
+      0x6100-0x7FFF = 8K). Renders visible lines with MEDTEXT. Cursor movement with
+      arrows. Insert/delete chars. Ctrl+S saves via FSWRITE. Ctrl+Q quits. Status
+      bar shows filename, line count, modified flag.'
+    status: todo
+    tasks:
+    - id: p139.d1.t1
+      title: 'File loading: FSREAD into line buffer'
+      status: todo
+      description: Open file, split into lines, store in line buffer with line starts
+        table
+    - id: p139.d1.t2
+      title: 'Rendering: visible window of lines with MEDTEXT'
+      status: todo
+      description: Render viewport of current lines, highlight cursor position
+    - id: p139.d1.t3
+      title: 'Editing: insert/delete chars, line breaks'
+      status: todo
+      description: Handle printable chars, backspace, delete, enter (split line)
+    - id: p139.d1.t4
+      title: 'Save: FSWRITE modified buffer back to file'
+      status: todo
+      description: Ctrl+S triggers save. Join lines with newlines, FSWRITE to original
+        path.
+    scope_lines: 200
+  - name: Search, goto line, multiple buffers
+    description: Ctrl+F search forward. Ctrl+G goto line number. Ctrl+N open second
+      file in split view. Buffer switcher with tab-like interface. These make the
+      editor practical for real work.
+    status: todo
+    tasks:
+    - id: p139.d2.t1
+      title: 'Search: Ctrl+F forward search with highlight'
+      status: todo
+      description: Prompt for search string, highlight matches, F3 for next
+    - id: p139.d2.t2
+      title: 'Goto: Ctrl+G jump to line number'
+      status: todo
+      description: Prompt for line number, scroll to it
+    - id: p139.d2.t3
+      title: Multiple file buffers (Ctrl+N new, Ctrl+Tab switch)
+      status: todo
+      description: Up to 4 file buffers in RAM, tab bar to switch
+    scope_lines: 120
+  scope_lines_total: 75540
+  test_target: 485
+- id: phase-140
+  title: Daily Driver -- Process Monitor and System Dashboard
+  status: planned
+  goal: A GeOS-native system monitor (like htop/task manager) showing running processes,
+    resource usage, and host system stats
+  description: 'You need to see what''s running. A process monitor that shows: GeOS
+    processes (from the VM scheduler), host processes (from /proc via FSREAD), memory
+    usage, frame rate, PTY session status. This is both a useful daily tool and a
+    showcase that GeOS can introspect itself and the host.'
+  deliverables:
+  - name: GeOS process monitor (htop for the VM)
+    description: 'procmon.asm: reads process table from RAM (0xF00-0xFFF region).
+      Shows PID, state, PC, cycles used, memory allocated. Updates every frame. Color-coded
+      by state (green=running, yellow=waiting, red=crashed). Arrow keys scroll, k
+      kills process.'
+    status: todo
+    tasks:
+    - id: p140.d1.t1
+      title: Read process table from VM RAM
+      status: todo
+      description: Parse process slots at 0xF00, extract PID/state/PC
+    - id: p140.d1.t2
+      title: Render process list with color coding
+      status: todo
+      description: 'Columnar display: PID, State, PC, Cycles, Memory'
+    - id: p140.d1.t3
+      title: 'Interactive: kill process, sort by column'
+      status: todo
+      description: k kills selected process, s sorts by CPU/memory
+    scope_lines: 120
+  - name: Host system stats via /proc
+    description: Read /proc/stat and /proc/meminfo through FSREAD. Show CPU usage,
+      memory usage, uptime, load average. These come from the host Linux system and
+      give context for how GeOS is affecting the real machine.
+    status: todo
+    tasks:
+    - id: p140.d2.t1
+      title: Parse /proc/meminfo for RAM stats
+      status: todo
+      description: FSREAD /proc/meminfo, extract MemTotal/MemFree
+    - id: p140.d2.t2
+      title: Render system stats panel
+      status: todo
+      description: 'Top bar: CPU%, RAM%, Uptime, FPS'
+    scope_lines: 80
+  scope_lines_total: 75740
+  test_target: 490
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
