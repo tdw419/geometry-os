@@ -306,3 +306,252 @@ fn test_nano_editor_ctrl_q_quits() {
 
     assert!(vm.halted, "editor should halt after Ctrl+Q");
 }
+
+/// Helper: load nano_editor with text pre-loaded into the file buffer
+fn load_nano_with_text(text: &str) -> Vm {
+    let source = std::fs::read_to_string("programs/nano_editor.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run 1 frame to initialize
+    for _ in 0..1_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Write text into the file buffer
+    let fb: usize = 0x5400;
+    let ls: usize = 0x5000;
+    let r_nl: usize = 0x7400;
+    let r_bs: usize = 0x7406;
+    let r_dirty: usize = 0x7401;
+
+    let bytes: Vec<u32> = text.chars().map(|c| c as u32).collect();
+    for (i, &b) in bytes.iter().enumerate() {
+        vm.ram[fb + i] = b;
+    }
+    vm.ram[r_bs] = bytes.len() as u32;
+    vm.ram[r_dirty] = 0; // not dirty from user edits
+
+    // Build line starts table
+    let mut line_starts = vec![0u32];
+    for (i, &b) in bytes.iter().enumerate() {
+        if b == 10 {
+            // newline
+            line_starts.push((i + 1) as u32);
+        }
+    }
+    for (i, &start) in line_starts.iter().enumerate() {
+        vm.ram[ls + i] = start;
+    }
+    vm.ram[r_nl] = line_starts.len() as u32;
+
+    vm
+}
+
+/// Advance VM by one frame
+fn advance_frame(vm: &mut Vm) {
+    vm.frame_ready = false;
+    for _ in 0..200_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+}
+
+#[test]
+fn test_nano_editor_search_finds_text() {
+    let mut vm = load_nano_with_text("Hello World\nSecond line\nThird line");
+
+    // Ctrl+F to enter search mode
+    vm.push_key(6); // Ctrl+F
+    advance_frame(&mut vm);
+
+    // Check prompt mode is search (1)
+    assert_eq!(vm.ram[0x74C0], 1, "should be in search prompt mode");
+
+    // Type "Second"
+    for ch in "Second".chars() {
+        vm.push_key(ch as u32);
+        advance_frame(&mut vm);
+    }
+
+    // Press Enter to execute search
+    vm.push_key(10);
+    advance_frame(&mut vm);
+
+    // Should find "Second" on line 1
+    let match_line = vm.ram[0x74C2]; // R_SML
+    assert_ne!(match_line, 0xFFFFFFFF, "should find a match");
+    assert_eq!(match_line, 1, "match should be on line 1 (Second line)");
+
+    // Cursor should be on the match line
+    assert_eq!(vm.ram[0x7402], 1, "cursor should be on line 1");
+
+    // Prompt mode should be cleared after execute
+    assert_eq!(vm.ram[0x74C0], 0, "prompt mode should be cleared");
+}
+
+#[test]
+fn test_nano_editor_search_not_found() {
+    let mut vm = load_nano_with_text("Hello World\nSecond line");
+
+    // Ctrl+F
+    vm.push_key(6);
+    advance_frame(&mut vm);
+
+    // Type "xyz"
+    for ch in "xyz".chars() {
+        vm.push_key(ch as u32);
+        advance_frame(&mut vm);
+    }
+
+    // Execute search
+    vm.push_key(10);
+    advance_frame(&mut vm);
+
+    // Should not find
+    let match_line = vm.ram[0x74C2]; // R_SML
+    assert_eq!(match_line, 0xFFFFFFFF, "should not find match for 'xyz'");
+}
+
+#[test]
+fn test_nano_editor_search_empty_string() {
+    let mut vm = load_nano_with_text("Hello World");
+
+    // Ctrl+F
+    vm.push_key(6);
+    advance_frame(&mut vm);
+
+    // Press Enter immediately (empty search)
+    vm.push_key(10);
+    advance_frame(&mut vm);
+
+    // Should not crash, match should be "not found"
+    let match_line = vm.ram[0x74C2]; // R_SML
+    assert_eq!(match_line, 0xFFFFFFFF, "empty search should not find");
+}
+
+#[test]
+fn test_nano_editor_search_escape_cancels() {
+    let mut vm = load_nano_with_text("Hello World");
+
+    // Ctrl+F
+    vm.push_key(6);
+    advance_frame(&mut vm);
+    assert_eq!(vm.ram[0x74C0], 1, "should be in search mode");
+
+    // Escape
+    vm.push_key(27);
+    advance_frame(&mut vm);
+
+    // Prompt mode should be cleared
+    assert_eq!(vm.ram[0x74C0], 0, "escape should cancel search");
+}
+
+#[test]
+fn test_nano_editor_goto_line() {
+    let mut vm = load_nano_with_text("Line 0\nLine 1\nLine 2\nLine 3\nLine 4");
+
+    // Ctrl+G to enter goto mode
+    vm.push_key(7); // Ctrl+G
+    advance_frame(&mut vm);
+
+    // Check prompt mode is goto (2)
+    assert_eq!(vm.ram[0x74C0], 2, "should be in goto prompt mode");
+
+    // Type "3" (1-based line number)
+    vm.push_key(51); // '3'
+    advance_frame(&mut vm);
+
+    // Press Enter
+    vm.push_key(10);
+    advance_frame(&mut vm);
+
+    // Should jump to line 2 (0-based)
+    assert_eq!(vm.ram[0x7402], 2, "cursor should be on line 2 (0-based)");
+    assert_eq!(vm.ram[0x7403], 0, "cursor col should be 0");
+
+    // Prompt mode should be cleared
+    assert_eq!(vm.ram[0x74C0], 0, "prompt mode should be cleared");
+}
+
+#[test]
+fn test_nano_editor_goto_multi_digit() {
+    let mut vm = load_nano_with_text("Line 0\nLine 1\nLine 2\nLine 3\nLine 4");
+
+    // Ctrl+G
+    vm.push_key(7);
+    advance_frame(&mut vm);
+
+    // Type "12" -> line 11 (0-based), but clamped to last line (4)
+    vm.push_key(49); // '1'
+    advance_frame(&mut vm);
+    vm.push_key(50); // '2'
+    advance_frame(&mut vm);
+
+    // Enter
+    vm.push_key(10);
+    advance_frame(&mut vm);
+
+    // Should clamp to last line (line 4, 0-based)
+    assert_eq!(vm.ram[0x7402], 4, "cursor should clamp to last line");
+}
+
+#[test]
+fn test_nano_editor_goto_zero_is_noop() {
+    let mut vm = load_nano_with_text("Line 0\nLine 1\nLine 2");
+
+    // Move cursor to line 1 first
+    vm.ram[0x7402] = 1; // R_CL = 1
+
+    // Ctrl+G
+    vm.push_key(7);
+    advance_frame(&mut vm);
+
+    // Type "0"
+    vm.push_key(48); // '0'
+    advance_frame(&mut vm);
+
+    // Enter
+    vm.push_key(10);
+    advance_frame(&mut vm);
+
+    // Cursor should stay where it was (goto 0 = noop)
+    assert_eq!(
+        vm.ram[0x7402], 1,
+        "goto 0 should be noop, cursor stays at line 1"
+    );
+}
+
+#[test]
+fn test_nano_editor_goto_escape_cancels() {
+    let mut vm = load_nano_with_text("Line 0\nLine 1");
+
+    // Ctrl+G
+    vm.push_key(7);
+    advance_frame(&mut vm);
+    assert_eq!(vm.ram[0x74C0], 2, "should be in goto mode");
+
+    // Escape
+    vm.push_key(27);
+    advance_frame(&mut vm);
+
+    assert_eq!(vm.ram[0x74C0], 0, "escape should cancel goto");
+}

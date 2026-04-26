@@ -7101,7 +7101,7 @@ phases:
     scope_lines: 120
   scope_lines_total: 75540
   test_target: 485
-  _claimed_at: 1777228487
+  _claimed_at: 1777230801
   _claimed_by: worker-0
 - id: phase-140
   title: Daily Driver -- Process Monitor and System Dashboard
@@ -7546,7 +7546,7 @@ phases:
   test_target: 550
 - id: phase-153
   title: Desktop Polish and Integration Testing
-  status: planned
+  status: done
   goal: Make the desktop feel like a real OS, not a demo
   description: Alt-tab window switcher, notification system, drag-and-drop windows,
     host system tray (battery/network/volume from Linux). Integration test all daily
@@ -7555,32 +7555,32 @@ phases:
   - name: Window management improvements
     description: Alt-Tab window switcher overlay, drag to move windows, double-click
       titlebar to maximize
-    status: todo
+    status: done
     tasks:
     - id: p153.d1.t1
       title: Alt-Tab window switcher overlay
-      status: todo
+      status: done
       description: Alt-Tab window switcher overlay
     - id: p153.d1.t2
       title: Drag windows by title bar
-      status: todo
+      status: done
       description: Drag windows by title bar
     - id: p153.d1.t3
       title: Double-click titlebar to maximize/restore
-      status: todo
+      status: done
       description: Double-click titlebar to maximize/restore
     scope_lines: 300
   - name: System tray with host stats
     description: Taskbar icons showing battery, network, volume from /proc and dbus
-    status: todo
+    status: done
     tasks:
     - id: p153.d2.t1
       title: Read battery from /sys via FSREAD
-      status: todo
+      status: done
       description: Read battery from /sys via FSREAD
     - id: p153.d2.t2
       title: Render system tray icons in taskbar
-      status: todo
+      status: done
       description: Render system tray icons in taskbar
     scope_lines: 200
   scope_lines_total: 78630
