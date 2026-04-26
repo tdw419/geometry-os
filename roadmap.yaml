@@ -7766,7 +7766,7 @@ phases:
   test_target: 5
 - id: phase-158
   title: Terminal Daily Driver -- Quick Launch Bar
-  status: in_progress
+  status: done
   goal: Ctrl+Space opens a command launcher overlay. Type 'nano foo.txt' or 'htop'
     to launch apps inside terminal tabs.
   description: Instead of the map's app launcher, a terminal-native launcher. Ctrl+Space
@@ -7778,15 +7778,15 @@ phases:
     description: 'Ctrl+Space: clear top 3 rows, show ''> '' prompt. Type command,
       Enter executes in current tab (via PTY write). Escape cancels and restores screen.
       Tab completion against host $PATH.'
-    status: todo
+    status: done
     tasks:
     - id: p158.d1.t1
       title: Overlay prompt on Ctrl+Space
-      status: todo
+      status: done
       description: Save top rows, render input prompt, handle typing, restore on Escape
     - id: p158.d1.t2
       title: Execute typed command in active PTY
-      status: todo
+      status: done
       description: Write command + newline to active PTY's master fd. Bash runs it.
     - id: p158.d1.t3
       title: 'History: up/down arrow recalls previous commands'

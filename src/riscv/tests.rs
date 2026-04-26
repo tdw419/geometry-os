@@ -373,7 +373,7 @@ fn test_linux_kernel_early_boot() {
         &kernel_data,
         initramfs_data.as_deref(),
         512,        // 512MB RAM (kernel needs ~305MB)
-        20_000_000, // 20M instructions (calibrate_delay needs more time)
+        50_000_000, // 50M instructions (linear mapping + timer init needs more)
         bootargs,
     )
     .expect("operation should succeed");
