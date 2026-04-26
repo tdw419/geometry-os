@@ -6796,6 +6796,32 @@ phases:
   test_target: 2120
   _claimed_by: worker-0
   _claimed_at: 1777192760
+- id: phase-135
+  title: Host Terminal -- Test Failure Fixes (3 issues)
+  status: planned
+  goal: Fix 3 non-blocking test failures from terminal QA
+  description: Automated terminal QA found functional issues.
+  deliverables:
+  - name: Fix 3 test failures
+    description: 'Test failed: echo_round_trip; Test failed: line_wrap; Test failed:
+      ctrl_c'
+    status: todo
+    tasks:
+    - id: p135.d1.t1
+      title: 'Fix: echo_round_trip (logic) -- Test failed: echo_round_trip'
+      status: todo
+      description: Investigate test output for specific failure
+    - id: p135.d1.t2
+      title: 'Fix: line_wrap (logic) -- Test failed: line_wrap'
+      status: todo
+      description: Investigate test output for specific failure
+    - id: p135.d1.t3
+      title: 'Fix: ctrl_c (logic) -- Test failed: ctrl_c'
+      status: todo
+      description: Investigate test output for specific failure
+    scope_lines: 90
+  scope_lines_total: 74650
+  test_target: 0
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
