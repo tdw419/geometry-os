@@ -7589,9 +7589,29 @@ phases:
     scope_lines: 200
   scope_lines_total: 78630
   test_target: 10
+- id: phase-153b
+  title: Host Terminal Hardening -- Performance and ANSI Foundation
+  status: done
+  goal: Fix foundational performance and correctness issues in host_term.asm before
+    building more features on top.
+  description: 'MEMCPY scroll optimization, STRO string building, CSI cursor/erase
+    support (K/H/J/A/B/C/D), dirty status bar, unified startup drain.'
+  deliverables:
+  - name: MEMCPY scroll_up optimization
+    status: done
+  - name: STRO-based string construction
+    status: done
+  - name: CSI cursor movement and erase sequences
+    status: done
+  - name: Status bar dirty flag optimization
+    status: done
+  - name: Startup drain consolidation
+    status: done
+  scope_lines_total: 79000
+  test_target: 8
 - id: phase-154
   title: Terminal Daily Driver -- Direct Boot to Terminal
-  status: in_progress
+  status: planned
   goal: Boot GeOS straight into the host terminal, no map. --terminal flag skips the
     map entirely and launches host_term as PID 1.
   description: The map is impressive but it's not what you use daily. What you use
@@ -7744,6 +7764,8 @@ phases:
     scope_lines: 200
   scope_lines_total: 76900
   test_target: 5
+  _claimed_by: worker-0
+  _claimed_at: 1777238180
 - id: phase-158
   title: Terminal Daily Driver -- Quick Launch Bar
   status: planned
