@@ -6364,7 +6364,7 @@ phases:
   goal: Support multiple terminal tabs, shell selection, and session persistence
   id: phase-128
   scope_lines_total: 73140
-  status: done
+  status: in_progress
   test_target: 2080
   title: Host Terminal -- Multi-Session and Shell Selection
 - _claimed_at: 1777155202
@@ -6519,6 +6519,314 @@ phases:
   status: done
   test_target: 2095
   title: Host Terminal -- Test Suite and Desktop Integration
+- id: phase-131
+  title: Host Terminal -- PTY Resize and Column Sync
+  status: planned
+  goal: Fix the PTY column mismatch (80 cols PTY vs 42 cols display) that breaks bash
+    line wrapping, tab completion, and prompt alignment
+  description: 'The PTY is spawned with PtySize{rows:30, cols:80} but the terminal
+    only renders 42 columns. Bash thinks it has 80 cols so it wraps lines at 80, tab
+    completion aligns to 80-col tabs, and prompts like ''\w'' take too much space.
+    Two fixes needed: (1) add a PTYSIZE opcode so the VM can resize the PTY dynamically,
+    (2) set initial size to 42x30 at spawn time so bash is correct from the start.
+    This is a correctness blocker -- without it the terminal feels broken even though
+    output flows correctly.'
+  deliverables:
+  - name: PTYSIZE opcode (0xAD) -- resize PTY at runtime
+    description: 'PTYSIZE handle_reg, rows_reg, cols_reg. Calls master.resize(PtySize{...})
+      on the slot. This lets programs dynamically resize the terminal. Add to vm.rs
+      match block, assembler, preprocessor, disassembler. Write test: resize and verify
+      bash knows new size.'
+    status: todo
+    tasks:
+    - id: p131.d1.t1
+      title: Implement PTYSIZE in ops_pty.rs
+      status: todo
+      description: Call slot.master.resize(PtySize{rows, cols, 0, 0}) from the opcode
+        handler
+    - id: p131.d1.t2
+      title: Register PTYSIZE in assembler + preprocessor
+      status: todo
+      description: Add opcode 0xAD to assembler.rs dispatch, preprocessor.rs OPCODES
+        list
+    - id: p131.d1.t3
+      title: 'Test: PTYSIZE changes bash $COLUMNS'
+      status: todo
+      description: Spawn bash, PTYSIZE to 42x30, send 'echo $COLUMNS', verify '42'
+        in output
+    scope_lines: 60
+  - name: Fix initial PTY size to match terminal display (42x30)
+    description: 'Change spawn() in ops_pty.rs to use PtySize{rows: ROWS(30), cols:
+      COLS(42)} instead of hardcoded 80x30. The COLS/ROWS constants should match what
+      host_term.asm renders. Also add $LINES and $COLUMNS env vars to the spawned
+      shell.'
+    status: todo
+    tasks:
+    - id: p131.d2.t1
+      title: Set PtySize cols=42 rows=30 at spawn time
+      status: todo
+      description: Edit ops_pty.rs spawn() PtySize from 80 to 42 cols
+    - id: p131.d2.t2
+      title: Set COLUMNS and LINES env vars in spawned shell
+      status: todo
+      description: Add c.env('COLUMNS', '42') and c.env('LINES', '30') to CommandBuilder
+    - id: p131.d2.t3
+      title: 'Test: bash prompt wraps at column 42'
+      status: todo
+      description: Send 42 chars, verify bash wraps at col 42 not 80
+    scope_lines: 30
+  - name: Window resize propagation to PTY
+    description: When the WINSYS window is resized, host_term should recalculate how
+      many columns fit and call PTYSIZE to update bash. Needs a frame-rate check on
+      window dimensions. Store window size in RAM and diff each frame.
+    status: todo
+    tasks:
+    - id: p131.d3.t1
+      title: Detect window resize from RAM window bounds
+      status: todo
+      description: Read window width from RAM, calculate new col count, call PTYSIZE
+        if changed
+    - id: p131.d3.t2
+      title: Handle resize edge cases (minimum size)
+      status: todo
+      description: Don't resize below 20 cols or 10 rows. Clamp to valid range.
+    scope_lines: 50
+  scope_lines_total: 73800
+  test_target: 2100
+- id: phase-132
+  title: Host Terminal -- ANSI Color Rendering
+  status: planned
+  goal: Render ANSI SGR color codes so ls, grep, git diff, and prompts display with
+    proper colors
+  description: 'Currently the ANSI filter strips all CSI m (SGR) sequences silently.
+    This means every colored CLI tool shows monochrome output on a dark background
+    -- hard to read. Need to: (1) parse SGR parameters (bold, fg/bg colors, reset),
+    (2) map the 8 standard ANSI colors to GeOS palette colors, (3) pass color info
+    through the text buffer (extend cells from char-only to char+color pairs), (4)
+    render colored text via MEDTEXT with per-character colors. This is the single
+    biggest visual quality improvement for the terminal.'
+  deliverables:
+  - name: Parse ANSI SGR (CSI m) sequences into color attributes
+    description: 'Extend the ANSI state machine to collect SGR params (e.g., ESC[0;32m
+      for green). Map standard colors: 0=black, 1=red, 2=green, 3=yellow, 4=blue,
+      5=magenta, 6=cyan, 7=white. Support bold (bright variants), reset (ESC[0m).
+      Store current fg/bg colors in RAM (FG_COLOR at 0x4E10, BG_COLOR at 0x4E11).'
+    status: todo
+    tasks:
+    - id: p132.d1.t1
+      title: Collect CSI numeric params in state machine
+      status: todo
+      description: On CSI state, accumulate digit chars into param buffer. On 'm'
+        terminator, parse params.
+    - id: p132.d1.t2
+      title: Map SGR codes to GeOS color palette
+      status: todo
+      description: 8 ANSI colors + 8 bright variants mapped to 16 GeOS palette entries
+    - id: p132.d1.t3
+      title: Track current FG/BG color in RAM cells
+      status: todo
+      description: Store active FG at 0x4E10, BG at 0x4E11. Update on each SGR sequence.
+    scope_lines: 120
+  - name: Extend text buffer to store per-cell colors
+    description: 'Current text buffer (0x4000-0x44EB) stores one u32 per cell (the
+      character). Extend to use a parallel color buffer (0x4500-0x49EB) storing one
+      u32 per cell (packed fg_color in low 16 bits, bg_color in high 16 bits). Default:
+      fg=0xBBBBBB (light gray), bg=0. append_byte writes both char and color.'
+    status: todo
+    tasks:
+    - id: p132.d2.t1
+      title: Add COLOR_BUF at 0x4500 parallel to text buffer
+      status: todo
+      description: Define COLOR_BUF = 0x4500, same layout as BUF (42*30 = 1260 u32
+        cells)
+    - id: p132.d2.t2
+      title: append_byte writes current FG/BG to color buffer
+      status: todo
+      description: When inserting a char, also write (fg | bg << 16) to COLOR_BUF
+        at same offset
+    - id: p132.d2.t3
+      title: Clear color buffer on init and scroll
+      status: todo
+      description: Initialize COLOR_BUF to default gray-on-black. scroll_up copies
+        color buffer too.
+    scope_lines: 80
+  - name: Render colored text using per-character MEDTEXT calls
+    description: In render(), instead of one MEDTEXT per row, iterate per-character.
+      For each character, read its color from COLOR_BUF. If color differs from previous
+      char, emit what we have and start a new MEDTEXT call with the new color. Batch
+      consecutive same-color chars for performance. Alternatively, extend MEDTEXT
+      to accept a color array.
+    status: todo
+    tasks:
+    - id: p132.d3.t1
+      title: Batch render by color runs per row
+      status: todo
+      description: Walk each row, group consecutive chars with same color, one MEDTEXT
+        per group
+    - id: p132.d3.t2
+      title: Handle background colors (fill rect behind chars)
+      status: todo
+      description: If bg color != 0, draw RECTF of bg color behind the text run before
+        MEDTEXT
+    - id: p132.d3.t3
+      title: 'Test: ls --color output renders with green/blue/cyan'
+      status: todo
+      description: 'E2E test: send ''ls --color'', verify text buffer has different
+        color values'
+    scope_lines: 100
+  scope_lines_total: 74100
+  test_target: 2108
+- id: phase-133
+  title: Host Terminal -- Wider Display and Horizontal Scroll
+  status: planned
+  goal: Support 80+ column display by either wider windows or horizontal scroll, so
+    standard CLI tools render correctly
+  description: '42 columns is too narrow for real work. Most CLI tools assume 80 columns
+    minimum. Three approaches: (a) Wider WINSYS window (e.g. 512x384) with more columns,
+    (b) smaller 4x6 font for 60+ columns, (c) horizontal scroll with Shift+Left/Right.
+    The best solution is likely (a) -- make the terminal window larger than 256x256
+    using WINSYS resize, then calculate columns from pixel width. Phase 131''s PTYSIZE
+    opcode lets us sync the wider display back to bash.'
+  deliverables:
+  - name: Launch terminal in a wider WINSYS window (512x320 or similar)
+    description: When host_term launches as a desktop app, request a larger window
+      via WINSYS. At 512px wide with 6px-per-char MEDTEXT, that's 85 columns -- matches
+      standard 80-col terminal. Height 320px gives 38 rows (12px title + 308px / 8px
+      per row). Call PTYSIZE to sync.
+    status: todo
+    tasks:
+    - id: p133.d1.t1
+      title: Set WINSYS window size to 512x320 on launch
+      status: todo
+      description: Use WINSYS opcode to set window dimensions larger than default
+        256x256
+    - id: p133.d1.t2
+      title: Calculate COLS/ROWS from window pixel dimensions
+      status: todo
+      description: COLS = (width / 6), ROWS = ((height - title_height) / 8). Store
+        in RAM.
+    - id: p133.d1.t3
+      title: Call PTYSIZE with calculated dimensions
+      status: todo
+      description: After window size known, PTYSIZE to tell bash the real terminal
+        size
+    scope_lines: 80
+  - name: Dynamic text buffer sizing (no hardcoded 42x30)
+    description: 'Replace #define COLS 42 / ROWS 30 with values loaded from RAM at
+      startup. The text buffer size, cursor limits, scroll logic all derive from COLS
+      and ROWS. This lets the terminal adapt to any window size without recompilation.'
+    status: todo
+    tasks:
+    - id: p133.d2.t1
+      title: 'Load COLS/ROWS from RAM instead of #define'
+      status: todo
+      description: Store computed COLS/ROWS at fixed RAM addresses, read them everywhere
+        instead of constants
+    - id: p133.d2.t2
+      title: Dynamic buffer allocation based on window size
+      status: todo
+      description: Text buffer size = COLS*ROWS. Calculate BUF_END from COLS*ROWS
+        + BUF.
+    - id: p133.d2.t3
+      title: 'Test: terminal works at 42x30, 85x38, and 60x25'
+      status: todo
+      description: Verify correct rendering at multiple window sizes
+    scope_lines: 100
+  - name: Horizontal scroll fallback for narrow windows
+    description: If window is narrow (e.g. 256px = 42 cols), add horizontal scroll
+      with Shift+Left/Right. Track a horizontal offset. Render starts from (offset
+      * 6)px. Bash still thinks it has 42 cols (or whatever the PTY reports). This
+      is a view-only scroll, not a PTY resize.
+    status: todo
+    tasks:
+    - id: p133.d3.t1
+      title: Track horizontal scroll offset in RAM
+      status: todo
+      description: H_SCROLL at 0x4E12. Shift+Left/Right adjusts by 10 chars.
+    - id: p133.d3.t2
+      title: Render with horizontal offset into text buffer
+      status: todo
+      description: Skip first H_SCROLL chars per row when copying to SCRATCH for MEDTEXT
+    - id: p133.d3.t3
+      title: Show scroll indicator when horizontally scrolled
+      status: todo
+      description: Render '<' or '>' arrows on the right/left edge when scrolled
+    scope_lines: 60
+  scope_lines_total: 74340
+  test_target: 2114
+- id: phase-134
+  title: Host Terminal -- Extended Character Support
+  status: planned
+  goal: Support box-drawing characters, common symbols, and basic UTF-8 so htop, tree,
+    and other TUI tools render correctly
+  description: The current printable range is 32-126 (basic ASCII). Many CLI tools
+    use box-drawing characters (U+2500-U+257F), block elements (U+2580-U+259F), and
+    other extended characters. Since the VM font is 5x7 pixel bitmaps, we can define
+    custom bitmaps for the most commonly needed characters without full Unicode support.
+    Map the most useful ~30 characters into the 128-255 range.
+  deliverables:
+  - name: Define bitmap font for box-drawing characters (30 glyphs)
+    description: 'Create 5x7 bitmap definitions for: horizontal line ─, vertical │,
+      corners ┌┐└┘, tees ├┤┬┴┼, arrows ←→↑↓, check ✓, cross ✗, bullet •, middot ·,
+      ellipsis …, and block elements █▌▐▀▄. Store as a custom font table in RAM (30
+      entries * 7 bytes = 210 bytes). Map each to a byte value 128-157 (or use a lookup
+      table).'
+    status: todo
+    tasks:
+    - id: p134.d1.t1
+      title: Design 5x7 bitmaps for box-drawing chars
+      status: todo
+      description: Create pixel patterns for ─│┌┐└┘├┤┬┴┼ and encode as 7-byte rows
+    - id: p134.d1.t2
+      title: Store custom font table at fixed RAM address
+      status: todo
+      description: FONT_EXT at 0x6100, 30 glyphs * 7 bytes = 210 bytes
+    - id: p134.d1.t3
+      title: 'MEDTEXT fallback: check FONT_EXT for codes >127'
+      status: todo
+      description: When MEDTEXT encounters byte >127, look up bitmap from FONT_EXT
+        instead of built-in font
+    scope_lines: 100
+  - name: UTF-8 decoder for incoming PTY bytes
+    description: 'PTY output is UTF-8 encoded. Need to decode multi-byte sequences:
+      2-byte (U+0080-U+07FF), 3-byte (U+0800-U+FFFF). Map decoded codepoints to the
+      custom font table. Unknown chars render as ''?'' (0x3F). The decoder is a small
+      state machine: track expected continuation bytes.'
+    status: todo
+    tasks:
+    - id: p134.d2.t1
+      title: UTF-8 decode state machine in assembly
+      status: todo
+      description: Track UTF-8 state in RAM. Collect 2-3 byte sequences, decode to
+        codepoint
+    - id: p134.d2.t2
+      title: Map codepoints to custom font indices
+      status: todo
+      description: 'Lookup table: U+2500 -> 128, U+2502 -> 129, etc. Unknown -> 63
+        (''?'')'
+    - id: p134.d2.t3
+      title: 'Test: htop box characters render correctly'
+      status: todo
+      description: Send htop output through PTY, verify box chars appear in text buffer
+    scope_lines: 120
+  - name: Full-width character support (CJK fallback)
+    description: Some output contains CJK characters (e.g., filenames). These are
+      double-width in a terminal. Render them as two consecutive cells with a simple
+      fallback glyph (a filled block). This prevents the terminal from misaligning
+      when it encounters wide characters.
+    status: todo
+    tasks:
+    - id: p134.d3.t1
+      title: Detect full-width codepoints (CJK range)
+      status: todo
+      description: Check if decoded codepoint is in U+3000-U+9FFF range
+    - id: p134.d3.t2
+      title: Render full-width as two filled-block cells
+      status: todo
+      description: Insert character at col, then advance col by 2 instead of 1
+    scope_lines: 40
+  scope_lines_total: 74560
+  test_target: 2120
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 154 opcodes, 3656 tests, 147 programs, 76635 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
-**Progress:** 129/130 phases complete, 1 in progress, 0 planned
+**Progress:** 129/134 phases complete, 1 in progress, 4 planned
 
-**Deliverables:** 524/527 complete
+**Deliverables:** 524/539 complete
 
-**Tasks:** 1122/1132 complete
+**Tasks:** 176/217 complete
 
 ## Scope Summary
 
@@ -142,6 +142,10 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 | phase-128 Host Terminal -- Multi-Session and Shell Selection | IN PROGRESS | 0/3 | ~310 | 4 |
 | phase-129 Host Terminal -- Keyboard Shortcuts and Productivity | COMPLETE | 3/3 | ~260 | 5 |
 | phase-130 Host Terminal -- Test Suite and Desktop Integration | COMPLETE | 4/4 | ~260 | 8 |
+| phase-131 Host Terminal -- PTY Resize and Column Sync | PLANNED | 3/3 | ~140 | 8 |
+| phase-132 Host Terminal -- ANSI Color Rendering | PLANNED | 3/3 | ~300 | 9 |
+| phase-133 Host Terminal -- Wider Display and Horizontal Scroll | PLANNED | 3/3 | ~240 | 9 |
+| phase-134 Host Terminal -- Extended Character Support | PLANNED | 3/3 | ~260 | 8 |
 
 ## Dependencies
 
@@ -3054,3 +3058,77 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
 - [x] **Update ROADMAP.md and AI_GUIDE.md** -- Sync new phases, add host_term architecture docs
   - [x] p130.d4.t1: Add phases 126-130 to ROADMAP.md
   - [x] p130.d4.t2: Update AI_GUIDE.md with host_term section
+
+## [ ] phase-131: Host Terminal -- PTY Resize and Column Sync (PLANNED)
+
+**Goal:** Fix the PTY column mismatch (80 cols PTY vs 42 cols display) that breaks bash line wrapping, tab completion, and prompt alignment
+
+### Deliverables
+
+- [ ] **PTYSIZE opcode (0xAD) -- resize PTY at runtime** -- Calls master.resize(PtySize{...}) on the slot, lets programs dynamically resize
+  - [ ] p131.d1.t1: Implement PTYSIZE in ops_pty.rs
+  - [ ] p131.d1.t2: Register PTYSIZE in assembler + preprocessor
+  - [ ] p131.d1.t3: Test: PTYSIZE changes bash $COLUMNS
+- [ ] **Fix initial PTY size to match terminal display (42x30)** -- Change spawn() PtySize from 80 to 42 cols, set COLUMNS/LINES env vars
+  - [ ] p131.d2.t1: Set PtySize cols=42 rows=30 at spawn time
+  - [ ] p131.d2.t2: Set COLUMNS and LINES env vars in spawned shell
+  - [ ] p131.d2.t3: Test: bash prompt wraps at column 42
+- [ ] **Window resize propagation to PTY** -- When WINSYS window resizes, recalculate columns and call PTYSIZE
+  - [ ] p131.d3.t1: Detect window resize from RAM window bounds
+  - [ ] p131.d3.t2: Handle resize edge cases (minimum size)
+
+## [ ] phase-132: Host Terminal -- ANSI Color Rendering (PLANNED)
+
+**Goal:** Render ANSI SGR color codes so ls, grep, git diff, and prompts display with proper colors
+
+### Deliverables
+
+- [ ] **Parse ANSI SGR (CSI m) sequences into color attributes** -- Collect SGR params, map 8 ANSI colors + bright variants to GeOS palette, track FG/BG in RAM
+  - [ ] p132.d1.t1: Collect CSI numeric params in state machine
+  - [ ] p132.d1.t2: Map SGR codes to GeOS color palette
+  - [ ] p132.d1.t3: Track current FG/BG color in RAM cells
+- [ ] **Extend text buffer to store per-cell colors** -- Parallel COLOR_BUF at 0x4500, append_byte writes char + color, scroll copies colors too
+  - [ ] p132.d2.t1: Add COLOR_BUF at 0x4500 parallel to text buffer
+  - [ ] p132.d2.t2: append_byte writes current FG/BG to color buffer
+  - [ ] p132.d2.t3: Clear color buffer on init and scroll
+- [ ] **Render colored text using per-character MEDTEXT calls** -- Batch render by color runs per row, handle bg rects, test with ls --color
+  - [ ] p132.d3.t1: Batch render by color runs per row
+  - [ ] p132.d3.t2: Handle background colors (fill rect behind chars)
+  - [ ] p132.d3.t3: Test: ls --color output renders with green/blue/cyan
+
+## [ ] phase-133: Host Terminal -- Wider Display and Horizontal Scroll (PLANNED)
+
+**Goal:** Support 80+ column display so standard CLI tools render correctly
+
+### Deliverables
+
+- [ ] **Launch terminal in a wider WINSYS window (512x320)** -- 512px / 6px per char = 85 columns, matching standard 80-col terminal
+  - [ ] p133.d1.t1: Set WINSYS window size to 512x320 on launch
+  - [ ] p133.d1.t2: Calculate COLS/ROWS from window pixel dimensions
+  - [ ] p133.d1.t3: Call PTYSIZE with calculated dimensions
+- [ ] **Dynamic text buffer sizing** -- Replace hardcoded COLS 42 / ROWS 30 with RAM-loaded values, adapt to any window size
+  - [ ] p133.d2.t1: Load COLS/ROWS from RAM instead of #define
+  - [ ] p133.d2.t2: Dynamic buffer allocation based on window size
+  - [ ] p133.d2.t3: Test: terminal works at 42x30, 85x38, and 60x25
+- [ ] **Horizontal scroll fallback for narrow windows** -- Shift+Left/Right scrolls view, scroll indicator arrows on edges
+  - [ ] p133.d3.t1: Track horizontal scroll offset in RAM
+  - [ ] p133.d3.t2: Render with horizontal offset into text buffer
+  - [ ] p133.d3.t3: Show scroll indicator when horizontally scrolled
+
+## [ ] phase-134: Host Terminal -- Extended Character Support (PLANNED)
+
+**Goal:** Support box-drawing characters and basic UTF-8 so htop, tree, and other TUI tools render correctly
+
+### Deliverables
+
+- [ ] **Define bitmap font for box-drawing characters (30 glyphs)** -- 5x7 pixel bitmaps for ─│┌┐└┘├┤┬┴┼ arrows and block elements, stored in RAM
+  - [ ] p134.d1.t1: Design 5x7 bitmaps for box-drawing chars
+  - [ ] p134.d1.t2: Store custom font table at fixed RAM address
+  - [ ] p134.d1.t3: MEDTEXT fallback: check FONT_EXT for codes >127
+- [ ] **UTF-8 decoder for incoming PTY bytes** -- State machine for 2/3-byte sequences, map codepoints to custom font, unknown -> '?'
+  - [ ] p134.d2.t1: UTF-8 decode state machine in assembly
+  - [ ] p134.d2.t2: Map codepoints to custom font indices
+  - [ ] p134.d2.t3: Test: htop box characters render correctly
+- [ ] **Full-width character support (CJK fallback)** -- Detect wide chars, render as two filled-block cells to prevent misalignment
+  - [ ] p134.d3.t1: Detect full-width codepoints (CJK range)
+  - [ ] p134.d3.t2: Render full-width as two filled-block cells
