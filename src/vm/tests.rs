@@ -20721,3 +20721,86 @@ fn test_mini_font_glyph_all_printable() {
         assert_eq!(glyph.len(), 7, "each glyph should have 7 rows");
     }
 }
+
+#[test]
+fn test_host_term_sgr_color_parsing() {
+    // Test that host_term.asm assembles and the color buffer logic is present
+    let source = std::fs::read_to_string("programs/host_term.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).expect("host_term.asm should assemble");
+
+    // Verify key constants are in the bytecode
+    // FG_COLOR = 0x4E09
+    // CSI_PARAM = 0x4E0A
+    // COLOR_BUF = 0x7800
+    let has_fg_color = asm.pixels.iter().any(|&v| v == 0x4E09);
+    let has_csi_param = asm.pixels.iter().any(|&v| v == 0x4E0A);
+    let has_color_buf = asm.pixels.iter().any(|&v| v == 0x7800);
+    assert!(has_fg_color, "host_term should reference FG_COLOR (0x4E09)");
+    assert!(
+        has_csi_param,
+        "host_term should reference CSI_PARAM (0x4E0A)"
+    );
+    assert!(
+        has_color_buf,
+        "host_term should reference COLOR_BUF (0x7800)"
+    );
+
+    // Verify ANSI color palette values are in the bytecode
+    let has_red = asm.pixels.iter().any(|&v| v == 0xCD0000);
+    let has_green = asm.pixels.iter().any(|&v| v == 0x00CD00);
+    let has_blue = asm.pixels.iter().any(|&v| v == 0x0000EE);
+    let has_yellow = asm.pixels.iter().any(|&v| v == 0xCDCD00);
+    let has_cyan = asm.pixels.iter().any(|&v| v == 0x00CDCD);
+    assert!(has_red, "should contain red color 0xCD0000");
+    assert!(has_green, "should contain green color 0x00CD00");
+    assert!(has_blue, "should contain blue color 0x0000EE");
+    assert!(has_yellow, "should contain yellow color 0xCDCD00");
+    assert!(has_cyan, "should contain cyan color 0x00CDCD");
+}
+
+#[test]
+fn test_host_term_color_buffer_init() {
+    // Load and partially run host_term to verify COLOR_BUF initialization
+    let source = std::fs::read_to_string("programs/host_term.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).expect("host_term.asm should assemble");
+    let mut vm = crate::vm::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run enough steps for initialization (FG_COLOR, CSI_PARAM, COLOR_BUF init)
+    // The clear_buf_init loop alone is ~14K iterations, so we need plenty of steps
+    for _ in 0..200_000 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // FG_COLOR should be initialized to default gray (0xBBBBBB)
+    let fg_color = vm.ram[0x4E09];
+    assert_eq!(
+        fg_color, 0xBBBBBB,
+        "FG_COLOR should be initialized to 0xBBBBBB, got 0x{:06X}",
+        fg_color
+    );
+
+    // CSI_PARAM should be initialized to 0
+    let csi_param = vm.ram[0x4E0A];
+    assert_eq!(
+        csi_param, 0,
+        "CSI_PARAM should be initialized to 0, got {}",
+        csi_param
+    );
+
+    // COLOR_BUF[0] should be initialized to 0xBBBBBB
+    let color_buf_0 = vm.ram[0x7800];
+    assert_eq!(
+        color_buf_0, 0xBBBBBB,
+        "COLOR_BUF[0] should be 0xBBBBBB, got 0x{:06X}",
+        color_buf_0
+    );
+}

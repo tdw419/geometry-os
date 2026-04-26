@@ -2068,8 +2068,16 @@ fn main() {
                                                         // Phase 133: host_term uses SMALLTEXT (3x5 font) for 80 cols x 40 rows
                                                         // 80*3px = 240px wide, 40*6px + 10px title = 250px tall -> 256x256 window
                                                         // Other apps keep 128x96
-                                                        let win_w = if app_name == "host_term" { 256u32 } else { 128u32 };
-                                                        let win_h = if app_name == "host_term" { 256u32 } else { 96u32 };
+                                                        let win_w = if app_name == "host_term" {
+                                                            256u32
+                                                        } else {
+                                                            128u32
+                                                        };
+                                                        let win_h = if app_name == "host_term" {
+                                                            256u32
+                                                        } else {
+                                                            96u32
+                                                        };
 
                                                         // Create a world-space WINSYS window
                                                         vm.ram[crate::vm::types::WINDOW_WORLD_COORDS_ADDR] = 1;

@@ -1,7 +1,13 @@
-; host_term.asm -- Host Shell Terminal for Geometry OS (v5)
+; host_term.asm -- Host Shell Terminal for Geometry OS (v6)
 ;
 ; Spawns bash inside a real PTY via the PTYOPEN opcode. Pipes keystrokes
 ; through PTYWRITE, drains PTY output through PTYREAD each frame.
+;
+; v6 improvements (Phase 132: ANSI Color Rendering):
+;   - SGR (Set Graphics Rendition) color support
+;   - Per-character color buffer parallel to text buffer
+;   - ANSI 16-color palette (standard + bright)
+;   - Color-run rendering for efficient display
 ;
 ; v5 improvements (Phase 133: Wider Display):
 ;   - SMALLTEXT opcode (3x5 font) for 80 readable columns
@@ -22,12 +28,15 @@
 ;   0x4E06         STATUS_CWD_LEN
 ;   0x4E07         OSC_LEN
 ;   0x4E08         SCROLL_X (horizontal scroll offset)
+;   0x4E09         FG_COLOR (current foreground color, default 0xBBBBBB)
+;   0x4E0A         CSI_PARAM (accumulated SGR parameter)
 ;   0x5000         Empty cmd string
 ;   0x5400         Send buffer
 ;   0x5800-0x5FFF  Receive buffer (2048 cells)
 ;   0x6000-0x60FF  Scratch buffer for SMALLTEXT rendering (128 chars)
 ;   0x6100-0x613F  STATUS_CWD (64 chars max)
 ;   0x6200-0x6250  OSC_BUF (80 chars max)
+;   0x7800-0x847F  Color buffer (80*40 = 3200 u32 cells, parallel to text buffer)
 ;
 ; Registers:
 ;   r0  CMP/result
@@ -48,12 +57,15 @@
 #define STATUS_CWD_LEN 0x4E06
 #define OSC_LEN 0x4E07
 #define SCROLL_X 0x4E08
+#define FG_COLOR 0x4E09
+#define CSI_PARAM 0x4E0A
 #define STATUS_CWD 0x6100
 #define CMD_BUF 0x5000
 #define SEND_BUF 0x5400
 #define RECV_BUF 0x5800
 #define SCRATCH 0x6000
 #define OSC_BUF 0x6200
+#define COLOR_BUF 0x7800
 
 ; ANSI states
 #define ANS_NORMAL 0
@@ -110,6 +122,25 @@ LDI r20, OSC_LEN
 STORE r20, r0
 LDI r20, SCROLL_X
 STORE r20, r0
+
+; FG_COLOR init (default light gray)
+LDI r20, FG_COLOR
+LDI r0, 0xBBBBBB
+STORE r20, r0
+
+; CSI_PARAM init
+LDI r20, CSI_PARAM
+LDI r0, 0
+STORE r20, r0
+
+; Clear COLOR_BUF to default FG color
+LDI r20, COLOR_BUF
+LDI r6, 0xBBBBBB
+clr_color_init:
+    STORE r20, r6
+    ADD r20, r1
+    CMPI r20, 0x8480
+    BLT r0, clr_color_init
 
 ; Title bar background
 LDI r1, 0
@@ -428,15 +459,51 @@ pb_check_csi:
     CMPI r4, ANS_CSI
     JNZ r0, pb_check_osc
 
+    ; Check if this is a final byte (>= 0x40)
     CMPI r5, 64
-    BLT r0, pb_csi_continue
+    BLT r0, pb_csi_param
 
+    ; Final byte arrived -- apply SGR if 'm' (0x6D = 109)
     LDI r20, ANSI_STATE
     LDI r0, ANS_NORMAL
     STORE r20, r0
+
+    CMPI r5, 109
+    JNZ r0, pb_ret
+
+    ; Apply SGR with accumulated CSI_PARAM
+    CALL apply_sgr
     JMP pb_ret
 
-pb_csi_continue:
+pb_csi_param:
+    ; Check for digit (0x30-0x39)
+    CMPI r5, 48
+    BLT r0, pb_csi_semi
+    CMPI r5, 58
+    BGE r0, pb_csi_semi
+
+    ; Accumulate digit: CSI_PARAM = CSI_PARAM * 10 + (r5 - 48)
+    LDI r20, CSI_PARAM
+    LOAD r0, r20
+    LDI r6, 10
+    MUL r0, r6
+    LDI r6, 48
+    SUB r5, r6
+    ADD r0, r5
+    STORE r20, r0
+    JMP pb_ret
+
+pb_csi_semi:
+    ; Semicolon (0x3B) -- apply current param and reset for next
+    CMPI r5, 59
+    JNZ r0, pb_ret
+
+    CALL apply_sgr
+
+    ; Reset CSI_PARAM for next parameter
+    LDI r20, CSI_PARAM
+    LDI r0, 0
+    STORE r20, r0
     JMP pb_ret
 
 pb_check_osc:
@@ -518,6 +585,13 @@ ab_check_print:
     LDI r20, BUF
     ADD r20, r2
     STORE r20, r5
+
+    ; color_buf[row*COLS + col] = FG_COLOR
+    LDI r20, COLOR_BUF
+    ADD r20, r2
+    LDI r6, FG_COLOR
+    LOAD r6, r6
+    STORE r20, r6
 
     ; col++
     LDI r20, CUR_COL
@@ -782,10 +856,35 @@ scroll_copy:
     CMPI r22, COLS
     BLT r22, scroll_copy
 
+    ; Also scroll color buffer for this row
+    LDI r20, COLOR_BUF
+    MOV r0, r10
+    ADD r0, r1
+    LDI r11, COLS
+    MUL r0, r11
+    ADD r20, r0
+
+    LDI r21, COLOR_BUF
+    MOV r0, r10
+    LDI r11, COLS
+    MUL r0, r11
+    ADD r21, r0
+
+    LDI r22, 0
+scroll_color_copy:
+    LOAD r0, r20
+    STORE r21, r0
+    ADD r20, r1
+    ADD r21, r1
+    ADD r22, r1
+    CMPI r22, COLS
+    BLT r0, scroll_color_copy
+
     ADD r10, r1
     JMP scroll_loop
 
 scroll_clear:
+    ; Clear last row of text buffer
     LDI r20, BUF
     LDI r6, 39
     LDI r11, COLS
@@ -799,6 +898,23 @@ sc_loop:
     ADD r22, r1
     CMPI r22, COLS
     BLT r0, sc_loop
+
+    ; Clear last row of color buffer with default FG color
+    LDI r20, COLOR_BUF
+    LDI r6, 39
+    LDI r11, COLS
+    MUL r6, r11
+    ADD r20, r6
+    LDI r6, FG_COLOR
+    LOAD r6, r6
+    LDI r22, 0
+sc_color_loop:
+    STORE r20, r6
+    ADD r20, r1
+    ADD r22, r1
+    CMPI r22, COLS
+    BLT r0, sc_color_loop
+
     POP r31
     RET
 
@@ -991,9 +1107,176 @@ dsb_ret:
     RET
 
 ; =========================================
+; APPLY_SGR -- apply SGR code from CSI_PARAM to FG_COLOR
+; Reads CSI_PARAM from RAM, updates FG_COLOR in RAM.
+; Preserves all registers except r0 (CMP clobbers it).
+; =========================================
+apply_sgr:
+    PUSH r31
+    LDI r1, 1
+
+    LDI r20, CSI_PARAM
+    LOAD r6, r20       ; r6 = SGR code
+
+    ; 0 = reset (default light gray)
+    CMPI r6, 0
+    JNZ r0, sgr_bold
+    LDI r20, FG_COLOR
+    LDI r0, 0xBBBBBB
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_bold:
+    ; 1 = bold (brighten -- just use bright white)
+    CMPI r6, 1
+    JNZ r0, sgr_black
+    LDI r20, FG_COLOR
+    LDI r0, 0xFFFFFF
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_black:
+    ; 30 = black
+    CMPI r6, 30
+    JNZ r0, sgr_red
+    LDI r20, FG_COLOR
+    LDI r0, 0x555555
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_red:
+    CMPI r6, 31
+    JNZ r0, sgr_green
+    LDI r20, FG_COLOR
+    LDI r0, 0xCD0000
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_green:
+    CMPI r6, 32
+    JNZ r0, sgr_yellow
+    LDI r20, FG_COLOR
+    LDI r0, 0x00CD00
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_yellow:
+    CMPI r6, 33
+    JNZ r0, sgr_blue
+    LDI r20, FG_COLOR
+    LDI r0, 0xCDCD00
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_blue:
+    CMPI r6, 34
+    JNZ r0, sgr_magenta
+    LDI r20, FG_COLOR
+    LDI r0, 0x0000EE
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_magenta:
+    CMPI r6, 35
+    JNZ r0, sgr_cyan
+    LDI r20, FG_COLOR
+    LDI r0, 0xCD00CD
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_cyan:
+    CMPI r6, 36
+    JNZ r0, sgr_white
+    LDI r20, FG_COLOR
+    LDI r0, 0x00CDCD
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_white:
+    CMPI r6, 37
+    JNZ r0, sgr_bright_black
+    LDI r20, FG_COLOR
+    LDI r0, 0xE5E5E5
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_bright_black:
+    CMPI r6, 90
+    JNZ r0, sgr_bright_red
+    LDI r20, FG_COLOR
+    LDI r0, 0x808080
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_bright_red:
+    CMPI r6, 91
+    JNZ r0, sgr_bright_green
+    LDI r20, FG_COLOR
+    LDI r0, 0xFF0000
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_bright_green:
+    CMPI r6, 92
+    JNZ r0, sgr_bright_yellow
+    LDI r20, FG_COLOR
+    LDI r0, 0x00FF00
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_bright_yellow:
+    CMPI r6, 93
+    JNZ r0, sgr_bright_blue
+    LDI r20, FG_COLOR
+    LDI r0, 0xFFFF00
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_bright_blue:
+    CMPI r6, 94
+    JNZ r0, sgr_bright_magenta
+    LDI r20, FG_COLOR
+    LDI r0, 0x5C5CFF
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_bright_magenta:
+    CMPI r6, 95
+    JNZ r0, sgr_bright_cyan
+    LDI r20, FG_COLOR
+    LDI r0, 0xFF00FF
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_bright_cyan:
+    CMPI r6, 96
+    JNZ r0, sgr_bright_white
+    LDI r20, FG_COLOR
+    LDI r0, 0x00FFFF
+    STORE r20, r0
+    JMP sgr_ret
+
+sgr_bright_white:
+    CMPI r6, 97
+    JNZ r0, sgr_ret
+    LDI r20, FG_COLOR
+    LDI r0, 0xFFFFFF
+    STORE r20, r0
+
+sgr_ret:
+    ; Reset CSI_PARAM for next sequence
+    LDI r20, CSI_PARAM
+    LDI r0, 0
+    STORE r20, r0
+
+    POP r31
+    RET
+
+; =========================================
 ; RENDER -- redraw text buffer using SMALLTEXT (3x5 font)
 ; Terminal area starts at y=10, 6px per row (5px glyph + 1px spacing)
 ; 40 rows * 6px = 240px. Total: 10 + 240 = 250px (fits in 256px)
+; Now uses color-run rendering from COLOR_BUF
 ; =========================================
 render:
     PUSH r31
@@ -1011,42 +1294,96 @@ render:
 
     LDI r1, 1
     LDI r10, 0
-    LDI r11, BUF
     LDI r12, 10
+    LDI r7, COLS
+
 render_row:
-    ; Copy up to COLS chars to scratch, null-terminate
-    LDI r16, SCRATCH
-    LDI r17, 0
-copy_col:
-    LOAD r6, r11
-    STORE r16, r6
-    ADD r11, r1
-    ADD r16, r1
-    ADD r17, r1
-    CMPI r17, COLS
-    BLT r17, copy_col
-    LDI r0, 0
-    STORE r16, r0
+    ; Compute row base addresses
+    MOV r11, r10
+    MUL r11, r7
+    LDI r25, BUF
+    ADD r25, r11
+    LDI r26, COLOR_BUF
+    ADD r26, r11
 
-    ; Render with SMALLTEXT: light gray text, transparent bg
-    LDI r1, 0
-    LDI r13, SCRATCH
-    LDI r14, 0xBBBBBB
-    LDI r15, 0
-    SMALLTEXT r1, r12, r13, r14, r15
+    LDI r20, 0
 
-    LDI r1, 1
-    ; Advance y by 6
-    ADD r12, r1
-    ADD r12, r1
-    ADD r12, r1
-    ADD r12, r1
-    ADD r12, r1
-    ADD r12, r1
+render_run:
+    ; Check if past end of row
+    CMP r20, r7
+    BGE r0, end_row
+
+    ; Read run-start color
+    MOV r27, r26
+    ADD r27, r20
+    LOAD r22, r27
+
+    ; Scan for end of same-color run
+    MOV r21, r20
+
+rr_scan:
+    CMP r21, r7
+    BGE r0, rr_emit
+
+    MOV r27, r26
+    ADD r27, r21
+    LOAD r23, r27
+    CMP r23, r22
+    JNZ r0, rr_emit
+
+    ADD r21, r1
+    JMP rr_scan
+
+rr_emit:
+    ; Copy run chars to scratch buffer
+    LDI r23, 0
+    MOV r24, r20
+
+rr_copy:
+    CMP r24, r21
+    BGE r0, rr_copy_done
+    MOV r27, r25
+    ADD r27, r24
+    LOAD r6, r27
+    LDI r27, SCRATCH
+    ADD r27, r23
+    STORE r27, r6
+    ADD r23, r1
+    ADD r24, r1
+    JMP rr_copy
+
+rr_copy_done:
+    ; Null-terminate scratch
+    LDI r27, SCRATCH
+    ADD r27, r23
+    LDI r6, 0
+    STORE r27, r6
+
+    ; Skip empty runs
+    CMP r23, r6
+    JZ r0, rr_next
+
+    ; Compute x pixel pos (col * 3)
+    MOV r14, r20
+    LDI r6, 3
+    MUL r14, r6
+    MOV r13, r12
+    LDI r3, SCRATCH
+    MOV r4, r22
+    LDI r5, 0
+    SMALLTEXT r14, r13, r3, r4, r5
+
+rr_next:
+    MOV r20, r21
+    JMP render_run
+
+end_row:
+    LDI r6, 6
+    ADD r12, r6
 
     ADD r10, r1
     CMPI r10, ROWS
-    BLT r10, render_row
+    BLT r0, render_row
 
     ; Cursor blink
     LDI r20, BLINK

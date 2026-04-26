@@ -41,6 +41,7 @@ const CUR_COL: usize = 0x4E00;
 const CUR_ROW: usize = 0x4E01;
 const PTY_HANDLE: usize = 0x4E03;
 const ANSI_STATE: usize = 0x4E04;
+const COLOR_BUF_BASE: usize = 0x7800;
 /// Slot bitmap base: RAM[0x4E10..0x4E13] = 1 if slot N is active, 0 if empty.
 const SLOT_MAP: usize = 0x4E10;
 
@@ -1089,7 +1090,7 @@ fn render_text_buffer(vm: &Vm, framebuffer: &mut [u32], fb_width: usize, scale: 
             }
         }
     }
-    // Render each row
+    // Render each row with per-character colors from COLOR_BUF
     for row in 0..BUF_ROWS {
         let y_pos = (12 + row * 8) * scale;
         for col in 0..BUF_COLS {
@@ -1097,6 +1098,9 @@ fn render_text_buffer(vm: &Vm, framebuffer: &mut [u32], fb_width: usize, scale: 
             if ch < 32 || ch >= 127 {
                 continue;
             }
+            let color = vm.ram[COLOR_BUF_BASE + row * BUF_COLS + col];
+            // Use default gray if color is 0 (uninitialized)
+            let fg = if color == 0 { 0xBBBBBB } else { color };
             let x_pos = (col * 6) * scale;
             draw_char_5x7(
                 framebuffer,
@@ -1105,7 +1109,7 @@ fn render_text_buffer(vm: &Vm, framebuffer: &mut [u32], fb_width: usize, scale: 
                 x_pos,
                 y_pos,
                 ch,
-                0xBBBBBB,
+                fg,
                 scale,
             );
         }
