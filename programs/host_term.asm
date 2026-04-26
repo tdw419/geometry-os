@@ -86,6 +86,10 @@
 
 ; UTF-8 decoding accumulator
 #define UTF8_CP 0x4E0B
+; CSI second parameter (row for H, unused for most others)
+#define CSI_PARAM2 0x4E0C
+; Dirty flag for status bar (1 = needs redraw)
+#define DIRTY_STATUS 0x4E0D
 
 ; =========================================
 ; INIT
@@ -137,6 +141,16 @@ STORE r20, r0
 ; CSI_PARAM init
 LDI r20, CSI_PARAM
 LDI r0, 0
+STORE r20, r0
+
+; CSI_PARAM2 init
+LDI r20, CSI_PARAM2
+LDI r0, 0
+STORE r20, r0
+
+; DIRTY_STATUS init (start dirty so first frame draws)
+LDI r20, DIRTY_STATUS
+LDI r0, 1
 STORE r20, r0
 
 ; Clear COLOR_BUF to default FG color
@@ -200,7 +214,7 @@ PTYSIZE r28, r10, r11
 LDI r1, 1
 
 ; =========================================
-; STARTUP DRAIN
+; STARTUP DRAIN (unified)
 ; =========================================
 LDI r20, SEND_BUF
 STRO r20, "[connecting...]"
@@ -208,9 +222,12 @@ CALL write_str_to_buf
 CALL render
 FRAME
 
+; r21 = got_output flag
+; r22 = frame counter
+; r23 = phase (0=drain, 1=probing, 2=probe_drain)
 LDI r21, 0
 LDI r22, 0
-LDI r23, 60
+LDI r23, 0
 
 startup_drain:
     LDI r6, RECV_BUF
@@ -218,128 +235,63 @@ startup_drain:
     PTYREAD r28, r6, r7
     MOV r8, r0
     CMPI r8, 0
-    JZ r0, startup_check_done
+    JZ r0, startup_check_phase
     LDI r7, 0xFFFFFFFF
     CMP r8, r7
     JZ r0, pty_closed
 
     LDI r9, 0
-startup_append:
+sd_append:
     CMP r9, r8
-    BGE r0, startup_after
+    BGE r0, sd_after
     LDI r20, RECV_BUF
     ADD r20, r9
     LOAD r5, r20
     CALL process_byte
     ADD r9, r1
-    JMP startup_append
-startup_after:
+    JMP sd_append
+sd_after:
     LDI r21, 1
 
-startup_check_done:
+startup_check_phase:
     CALL render
     FRAME
     ADD r22, r1
+
+    ; Phase 0: drain for 60 frames
+    CMPI r23, 0
+    JNZ r0, sd_phase1
     CMPI r22, 60
     BLT r22, startup_drain
+    ; Check if we got output
+    CMPI r21, 0
+    JNZ r0, startup_done
+    ; No output -- enter probe phase
+    LDI r23, 1
+    LDI r22, 0
+    JMP sd_do_probe
 
-CMPI r21, 0
-JNZ r0, startup_done
+sd_phase1:
+    ; Phase 1/2: probe + drain for 30 frames
+    CMPI r22, 30
+    BLT r22, startup_drain
+    ; Give up -- proceed anyway
+    JMP startup_done
 
-; Probe with echo
-LDI r20, SEND_BUF
-STRO r20, "[probing...]"
-CALL write_str_to_buf
-CALL render
-FRAME
-
-; Send "echo ready\n"
-LDI r20, SEND_BUF
-LDI r0, 101
-STORE r20, r0
-LDI r20, SEND_BUF
-ADD r20, r1
-LDI r0, 99
-STORE r20, r0
-LDI r20, SEND_BUF
-LDI r2, 2
-ADD r20, r2
-LDI r0, 104
-STORE r20, r0
-LDI r20, SEND_BUF
-LDI r2, 3
-ADD r20, r2
-LDI r0, 111
-STORE r20, r0
-LDI r20, SEND_BUF
-LDI r2, 4
-ADD r20, r2
-LDI r0, 32
-STORE r20, r0
-LDI r20, SEND_BUF
-LDI r2, 5
-ADD r20, r2
-LDI r0, 114
-STORE r20, r0
-LDI r20, SEND_BUF
-LDI r2, 6
-ADD r20, r2
-LDI r0, 101
-STORE r20, r0
-LDI r20, SEND_BUF
-LDI r2, 7
-ADD r20, r2
-LDI r0, 97
-STORE r20, r0
-LDI r20, SEND_BUF
-LDI r2, 8
-ADD r20, r2
-LDI r0, 100
-STORE r20, r0
-LDI r20, SEND_BUF
-LDI r2, 9
-ADD r20, r2
-LDI r0, 121
-STORE r20, r0
-LDI r20, SEND_BUF
-LDI r2, 10
-ADD r20, r2
-LDI r0, 10
-STORE r20, r0
-
-LDI r6, SEND_BUF
-LDI r7, 11
-PTYWRITE r28, r6, r7
-
-LDI r22, 0
-probe_drain:
-    LDI r6, RECV_BUF
-    LDI r7, 512
-    PTYREAD r28, r6, r7
-    MOV r8, r0
-    CMPI r8, 0
-    JZ r0, probe_next
-    LDI r7, 0xFFFFFFFF
-    CMP r8, r7
-    JZ r0, pty_closed
-    LDI r9, 0
-probe_append:
-    CMP r9, r8
-    BGE r0, probe_after
-    LDI r20, RECV_BUF
-    ADD r20, r9
-    LOAD r5, r20
-    CALL process_byte
-    ADD r9, r1
-    JMP probe_append
-probe_after:
-    LDI r21, 1
-probe_next:
+sd_do_probe:
+    LDI r20, SEND_BUF
+    STRO r20, "[probing...]"
+    CALL write_str_to_buf
     CALL render
     FRAME
-    ADD r22, r1
-    CMPI r22, 30
-    BLT r22, probe_drain
+    LDI r20, SEND_BUF
+    STRO r20, "echo ready\n"
+    LDI r6, SEND_BUF
+    LDI r7, 11
+    PTYWRITE r28, r6, r7
+    LDI r23, 2
+    LDI r22, 0
+    JMP startup_drain
 
 startup_done:
     LDI r1, 1
@@ -375,6 +327,9 @@ append_loop:
 pty_closed:
     LDI r20, STATUS_CONNECTED
     LDI r0, 0
+    STORE r20, r0
+    LDI r20, DIRTY_STATUS
+    LDI r0, 1
     STORE r20, r0
     LDI r20, SEND_BUF
     STRO r20, "[pty closed]"
@@ -503,16 +458,68 @@ pb_check_csi:
     CMPI r5, 64
     BLT r0, pb_csi_param
 
-    ; Final byte arrived -- apply SGR if 'm' (0x6D = 109)
+    ; Final byte arrived -- dispatch based on letter
     LDI r20, ANSI_STATE
     LDI r0, ANS_NORMAL
     STORE r20, r0
 
+    ; 'm' (109) = SGR color
     CMPI r5, 109
-    JNZ r0, pb_ret
-
-    ; Apply SGR with accumulated CSI_PARAM
+    JNZ r0, pb_csi_k
     CALL apply_sgr
+    JMP pb_ret
+
+pb_csi_k:
+    ; 'K' (75) = erase in line
+    CMPI r5, 75
+    JNZ r0, pb_csi_j
+    CALL csi_erase_line
+    JMP pb_ret
+
+pb_csi_j:
+    ; 'J' (74) = erase in display
+    CMPI r5, 74
+    JNZ r0, pb_csi_h
+    CALL csi_erase_display
+    JMP pb_ret
+
+pb_csi_h:
+    ; 'H' (72) = cursor position (CSI_PARAM2=row, CSI_PARAM=col)
+    CMPI r5, 72
+    JNZ r0, pb_csi_a
+    CALL csi_cursor_position
+    JMP pb_ret
+
+pb_csi_a:
+    ; 'A' (65) = cursor up
+    CMPI r5, 65
+    JNZ r0, pb_csi_b
+    CALL csi_cursor_up
+    JMP pb_ret
+
+pb_csi_b:
+    ; 'B' (66) = cursor down
+    CMPI r5, 66
+    JNZ r0, pb_csi_c
+    CALL csi_cursor_down
+    JMP pb_ret
+
+pb_csi_c:
+    ; 'C' (67) = cursor right
+    CMPI r5, 67
+    JNZ r0, pb_csi_d
+    CALL csi_cursor_right
+    JMP pb_ret
+
+pb_csi_d:
+    ; 'D' (68) = cursor left
+    CMPI r5, 68
+    JNZ r0, pb_csi_unknown
+    CALL csi_cursor_left
+    JMP pb_ret
+
+pb_csi_unknown:
+    ; Unknown CSI final byte -- ignore
     JMP pb_ret
 
 pb_csi_param:
@@ -534,13 +541,22 @@ pb_csi_param:
     JMP pb_ret
 
 pb_csi_semi:
-    ; Semicolon (0x3B) -- apply current param and reset for next
+    ; Semicolon (0x3B)
+    ; For SGR: apply current param (so multi-color like ESC[1;32m works)
+    ; For cursor: save param for later (CSI_PARAM2 = row before ';')
     CMPI r5, 59
     JNZ r0, pb_ret
 
+    ; Save CSI_PARAM to CSI_PARAM2 for cursor sequences
+    LDI r20, CSI_PARAM
+    LOAD r0, r20
+    LDI r7, CSI_PARAM2
+    STORE r7, r0
+
+    ; Also apply as SGR (harmless for non-SGR sequences)
     CALL apply_sgr
 
-    ; Reset CSI_PARAM for next parameter
+    ; Reset CSI_PARAM for next digit
     LDI r20, CSI_PARAM
     LDI r0, 0
     STORE r20, r0
@@ -1236,11 +1252,20 @@ dn_store:
 scroll_up:
     PUSH r31
     LDI r1, 1
+    LDI r11, COLS
     LDI r10, 0
 scroll_loop:
     CMPI r10, 39
     BGE r0, scroll_clear
 
+    ; dst = BUF + row * COLS
+    LDI r21, BUF
+    MOV r0, r10
+    LDI r11, COLS
+    MUL r0, r11
+    ADD r21, r0
+
+    ; src = BUF + (row+1) * COLS
     LDI r20, BUF
     MOV r0, r10
     ADD r0, r1
@@ -1248,23 +1273,17 @@ scroll_loop:
     MUL r0, r11
     ADD r20, r0
 
-    LDI r21, BUF
+    ; MEMCPY dst, src, COLS
+    MEMCPY r21, r20, r11
+
+    ; Same for color buffer: dst = COLOR_BUF + row * COLS
+    LDI r21, COLOR_BUF
     MOV r0, r10
     LDI r11, COLS
     MUL r0, r11
     ADD r21, r0
 
-    LDI r22, 0
-scroll_copy:
-    LOAD r0, r20
-    STORE r21, r0
-    ADD r20, r1
-    ADD r21, r1
-    ADD r22, r1
-    CMPI r22, COLS
-    BLT r22, scroll_copy
-
-    ; Also scroll color buffer for this row
+    ; src = COLOR_BUF + (row+1) * COLS
     LDI r20, COLOR_BUF
     MOV r0, r10
     ADD r0, r1
@@ -1272,27 +1291,16 @@ scroll_copy:
     MUL r0, r11
     ADD r20, r0
 
-    LDI r21, COLOR_BUF
-    MOV r0, r10
-    LDI r11, COLS
-    MUL r0, r11
-    ADD r21, r0
-
-    LDI r22, 0
-scroll_color_copy:
-    LOAD r0, r20
-    STORE r21, r0
-    ADD r20, r1
-    ADD r21, r1
-    ADD r22, r1
-    CMPI r22, COLS
-    BLT r0, scroll_color_copy
+    ; MEMCPY dst, src, COLS
+    MEMCPY r21, r20, r11
 
     ADD r10, r1
     JMP scroll_loop
 
 scroll_clear:
-    ; Clear last row of text buffer
+    ; Clear last row of text buffer using MEMCPY from a pre-zeroed region
+    ; We use a trick: copy from a region we already cleared (row 0 after scroll is row 1's old data)
+    ; Simpler: just use a STORE loop for the fill (MEMCPY can't fill)
     LDI r20, BUF
     LDI r6, 39
     LDI r11, COLS
@@ -1410,6 +1418,10 @@ po_cp_done:
 po_done:
     LDI r20, OSC_LEN
     LDI r0, 0
+    STORE r20, r0
+    ; Mark status bar dirty (CWD may have changed)
+    LDI r20, DIRTY_STATUS
+    LDI r0, 1
     STORE r20, r0
     POP r31
     RET
@@ -1685,6 +1697,310 @@ sgr_ret:
     RET
 
 ; =========================================
+; CSI_ERASE_LINE -- 'K' handler
+; CSI_PARAM: 0=cursor to EOL (default), 1=BOL to cursor, 2=whole line
+; =========================================
+csi_erase_line:
+    PUSH r31
+    LDI r1, 1
+
+    LDI r20, CSI_PARAM
+    LOAD r6, r20       ; r6 = mode (0, 1, or 2)
+
+    ; Get current row
+    LDI r20, CUR_ROW
+    LOAD r7, r20       ; r7 = row
+    LDI r8, COLS
+    MUL r7, r8         ; r7 = row * COLS
+
+    ; Get current col
+    LDI r20, CUR_COL
+    LOAD r9, r20       ; r9 = col
+
+    ; Determine start and end columns
+    ; mode 0: col..COLS-1 (default)
+    ; mode 1: 0..col
+    ; mode 2: 0..COLS-1
+    LDI r10, 0         ; r10 = start_col
+    MOV r11, r9        ; r11 = end_col (exclusive)
+    CMPI r6, 0
+    JZ r0, cel_clear
+    CMPI r6, 1
+    JNZ r0, cel_mode2
+    ; mode 1: 0..col+1
+    LDI r10, 0
+    ADD r11, r1        ; col+1
+    JMP cel_clear
+cel_mode2:
+    ; mode 2: 0..COLS
+    LDI r10, 0
+    LDI r11, COLS
+
+cel_clear:
+    ; Clear text cells from start_col to end_col
+    MOV r12, r10
+cel_loop:
+    CMP r12, r11
+    BGE r0, cel_done
+    LDI r20, BUF
+    ADD r20, r7
+    ADD r20, r12
+    LDI r0, 32
+    STORE r20, r0
+    ; Clear color cell too
+    LDI r20, COLOR_BUF
+    LDI r0, 0
+    ADD r0, r7
+    ADD r0, r12
+    LDI r13, FG_COLOR
+    LOAD r13, r13
+    ADD r20, r0
+    STORE r20, r13
+    ADD r12, r1
+    JMP cel_loop
+
+cel_done:
+    LDI r20, DIRTY_STATUS
+    LDI r0, 1
+    STORE r20, r0
+
+    POP r31
+    RET
+
+; =========================================
+; CSI_ERASE_DISPLAY -- 'J' handler
+; CSI_PARAM: 0=cursor to end (default), 1=start to cursor, 2=whole screen
+; =========================================
+csi_erase_display:
+    PUSH r31
+    LDI r1, 1
+
+    LDI r20, CSI_PARAM
+    LOAD r6, r20       ; r6 = mode
+
+    CMPI r6, 2
+    JNZ r0, ced_check0
+
+    ; Mode 2: clear entire screen
+    LDI r20, BUF
+    LDI r6, 32
+    LDI r10, 0
+ced_full:
+    STORE r20, r6
+    ADD r20, r1
+    ADD r10, r1
+    LDI r7, ROWS
+    LDI r8, COLS
+    MUL r7, r8
+    CMP r10, r7
+    BLT r0, ced_full
+
+    ; Clear color buffer
+    LDI r20, COLOR_BUF
+    LDI r6, FG_COLOR
+    LOAD r6, r6
+    LDI r10, 0
+ced_full_color:
+    STORE r20, r6
+    ADD r20, r1
+    ADD r10, r1
+    LDI r7, ROWS
+    LDI r8, COLS
+    MUL r7, r8
+    CMP r10, r7
+    BLT r0, ced_full_color
+
+    ; Reset cursor
+    LDI r20, CUR_COL
+    LDI r0, 0
+    STORE r20, r0
+    LDI r20, CUR_ROW
+    LDI r0, 0
+    STORE r20, r0
+    JMP ced_done
+
+ced_check0:
+    ; Mode 0: clear from cursor to end of screen
+    ; Mode 1: clear from start to cursor
+    ; For now just implement mode 0 (most common -- used by 'clear')
+    ; Clear current row from cursor to end
+    LDI r20, CUR_COL
+    LOAD r9, r20
+    LDI r20, CUR_ROW
+    LOAD r10, r20
+    LDI r11, COLS
+    MUL r10, r11
+    ADD r10, r9        ; offset = row*COLS + col
+
+    LDI r7, ROWS
+    LDI r8, COLS
+    MUL r7, r8         ; total cells
+ced_loop0:
+    CMP r10, r7
+    BGE r0, ced_done
+    LDI r20, BUF
+    ADD r20, r10
+    LDI r0, 32
+    STORE r20, r0
+    LDI r20, COLOR_BUF
+    ADD r20, r10
+    LDI r6, FG_COLOR
+    LOAD r6, r6
+    STORE r20, r6
+    ADD r10, r1
+    JMP ced_loop0
+
+ced_done:
+    LDI r20, DIRTY_STATUS
+    LDI r0, 1
+    STORE r20, r0
+
+    POP r31
+    RET
+
+; =========================================
+; CSI_CURSOR_POSITION -- 'H' handler
+; CSI_PARAM2 = row (1-based, 0 or omitted = 1)
+; CSI_PARAM  = col (1-based, 0 or omitted = 1)
+; =========================================
+csi_cursor_position:
+    PUSH r31
+    LDI r1, 1
+
+    ; Row: CSI_PARAM2, default 0 means row 1
+    LDI r20, CSI_PARAM2
+    LOAD r6, r20
+    CMPI r6, 0
+    JNZ r0, ccp_row_set
+    LDI r6, 1
+ccp_row_set:
+    SUB r6, r1         ; convert to 0-based
+    CMPI r6, 0
+    BGE r0, ccp_row_clamp
+    LDI r6, 0
+ccp_row_clamp:
+    LDI r7, ROWS
+    SUB r7, r1
+    CMP r6, r7
+    BLT r0, ccp_row_ok
+    MOV r6, r7
+ccp_row_ok:
+    LDI r20, CUR_ROW
+    STORE r20, r6
+
+    ; Col: CSI_PARAM, default 0 means col 1
+    LDI r20, CSI_PARAM
+    LOAD r6, r20
+    CMPI r6, 0
+    JNZ r0, ccp_col_set
+    LDI r6, 1
+ccp_col_set:
+    SUB r6, r1         ; convert to 0-based
+    CMPI r6, 0
+    BGE r0, ccp_col_clamp
+    LDI r6, 0
+ccp_col_clamp:
+    LDI r7, COLS
+    SUB r7, r1
+    CMP r6, r7
+    BLT r0, ccp_col_ok
+    MOV r6, r7
+ccp_col_ok:
+    LDI r20, CUR_COL
+    STORE r20, r6
+
+    POP r31
+    RET
+
+; =========================================
+; CSI cursor movement A/B/C/D
+; CSI_PARAM = count (default 1)
+; =========================================
+csi_cursor_up:
+    PUSH r31
+    LDI r1, 1
+    LDI r20, CSI_PARAM
+    LOAD r6, r20
+    CMPI r6, 0
+    JNZ r0, ccu_move
+    LDI r6, 1
+ccu_move:
+    LDI r20, CUR_ROW
+    LOAD r7, r20
+    SUB r7, r6
+    CMPI r7, 0
+    BGE r0, ccu_ok
+    LDI r7, 0
+ccu_ok:
+    STORE r20, r7
+    POP r31
+    RET
+
+csi_cursor_down:
+    PUSH r31
+    LDI r1, 1
+    LDI r20, CSI_PARAM
+    LOAD r6, r20
+    CMPI r6, 0
+    JNZ r0, ccd_move
+    LDI r6, 1
+ccd_move:
+    LDI r20, CUR_ROW
+    LOAD r7, r20
+    ADD r7, r6
+    LDI r8, ROWS
+    SUB r8, r1
+    CMP r7, r8
+    BLT r0, ccd_ok
+    MOV r7, r8
+ccd_ok:
+    STORE r20, r7
+    POP r31
+    RET
+
+csi_cursor_right:
+    PUSH r31
+    LDI r1, 1
+    LDI r20, CSI_PARAM
+    LOAD r6, r20
+    CMPI r6, 0
+    JNZ r0, ccr_move
+    LDI r6, 1
+ccr_move:
+    LDI r20, CUR_COL
+    LOAD r7, r20
+    ADD r7, r6
+    LDI r8, COLS
+    SUB r8, r1
+    CMP r7, r8
+    BLT r0, ccr_ok
+    MOV r7, r8
+ccr_ok:
+    STORE r20, r7
+    POP r31
+    RET
+
+csi_cursor_left:
+    PUSH r31
+    LDI r1, 1
+    LDI r20, CSI_PARAM
+    LOAD r6, r20
+    CMPI r6, 0
+    JNZ r0, ccl_move
+    LDI r6, 1
+ccl_move:
+    LDI r20, CUR_COL
+    LOAD r7, r20
+    SUB r7, r6
+    CMPI r7, 0
+    BGE r0, ccl_ok
+    LDI r7, 0
+ccl_ok:
+    STORE r20, r7
+    POP r31
+    RET
+
+; =========================================
 ; RENDER -- redraw text buffer using SMALLTEXT (3x5 font)
 ; Terminal area starts at y=10, 6px per row (5px glyph + 1px spacing)
 ; 40 rows * 6px = 240px. Total: 10 + 240 = 250px (fits in 256px)
@@ -1694,7 +2010,16 @@ render:
     PUSH r31
     LDI r1, 1
 
+    ; Only redraw status bar when dirty
+    LDI r20, DIRTY_STATUS
+    LOAD r0, r20
+    JZ r0, render_skip_status
     CALL draw_status_bar
+    LDI r20, DIRTY_STATUS
+    LDI r0, 0
+    STORE r20, r0
+
+render_skip_status:
 
     ; Clear content area
     LDI r1, 0
