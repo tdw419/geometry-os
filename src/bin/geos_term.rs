@@ -1091,11 +1091,19 @@ fn render_text_buffer(vm: &Vm, framebuffer: &mut [u32], fb_width: usize, scale: 
         }
     }
     // Render each row with per-character colors from COLOR_BUF
+    // Supports ASCII 32-126 plus extended box-drawing chars 128-157
     for row in 0..BUF_ROWS {
         let y_pos = (12 + row * 8) * scale;
         for col in 0..BUF_COLS {
             let ch = vm.ram[BUF_BASE + row * BUF_COLS + col] as u8;
-            if ch < 32 || ch >= 127 {
+            // Skip control chars, but allow extended chars 128-157
+            if ch < 32 {
+                continue;
+            }
+            if ch >= 127 && ch > 157 {
+                continue;
+            }
+            if ch == 127 {
                 continue;
             }
             let color = vm.ram[COLOR_BUF_BASE + row * BUF_COLS + col];

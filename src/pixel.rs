@@ -1056,10 +1056,13 @@ mod tests {
 /// Bit test: glyph[row] & (1 << (4 - col))
 pub fn mini_font_glyph(ch: u8) -> &'static [u8; 7] {
     const MINI_FONT: [[u8; 7]; 96] = include!("mini_font.in");
-    let idx = if ch >= 32 && ch < 128 {
-        (ch - 32) as usize
+    const EXT_FONT: [[u8; 7]; 30] = include!("ext_font.in");
+    let idx = ch as usize;
+    if ch >= 32 && ch < 128 {
+        &MINI_FONT[(ch - 32) as usize]
+    } else if ch >= 128 && ch <= 157 {
+        &EXT_FONT[idx - 128]
     } else {
-        0 // space for out-of-range
-    };
-    &MINI_FONT[idx]
+        &MINI_FONT[0] // space for out-of-range
+    }
 }

@@ -6723,7 +6723,7 @@ phases:
   test_target: 2114
 - id: phase-134
   title: Host Terminal -- Extended Character Support
-  status: in_progress
+  status: done
   goal: Support box-drawing characters, common symbols, and basic UTF-8 so htop, tree,
     and other TUI tools render correctly
   description: The current printable range is 32-126 (basic ASCII). Many CLI tools
@@ -6738,19 +6738,19 @@ phases:
       ellipsis …, and block elements █▌▐▀▄. Store as a custom font table in RAM (30
       entries * 7 bytes = 210 bytes). Map each to a byte value 128-157 (or use a lookup
       table).'
-    status: todo
+    status: done
     tasks:
     - id: p134.d1.t1
       title: Design 5x7 bitmaps for box-drawing chars
-      status: todo
+      status: done
       description: Create pixel patterns for ─│┌┐└┘├┤┬┴┼ and encode as 7-byte rows
     - id: p134.d1.t2
       title: Store custom font table at fixed RAM address
-      status: todo
+      status: done
       description: FONT_EXT at 0x6100, 30 glyphs * 7 bytes = 210 bytes
     - id: p134.d1.t3
       title: 'MEDTEXT fallback: check FONT_EXT for codes >127'
-      status: todo
+      status: done
       description: When MEDTEXT encounters byte >127, look up bitmap from FONT_EXT
         instead of built-in font
     scope_lines: 100
@@ -6759,21 +6759,21 @@ phases:
       2-byte (U+0080-U+07FF), 3-byte (U+0800-U+FFFF). Map decoded codepoints to the
       custom font table. Unknown chars render as ''?'' (0x3F). The decoder is a small
       state machine: track expected continuation bytes.'
-    status: todo
+    status: done
     tasks:
     - id: p134.d2.t1
       title: UTF-8 decode state machine in assembly
-      status: todo
+      status: done
       description: Track UTF-8 state in RAM. Collect 2-3 byte sequences, decode to
         codepoint
     - id: p134.d2.t2
       title: Map codepoints to custom font indices
-      status: todo
+      status: done
       description: 'Lookup table: U+2500 -> 128, U+2502 -> 129, etc. Unknown -> 63
         (''?'')'
     - id: p134.d2.t3
       title: 'Test: htop box characters render correctly'
-      status: todo
+      status: done
       description: Send htop output through PTY, verify box chars appear in text buffer
     scope_lines: 120
   - name: Full-width character support (CJK fallback)
@@ -6781,21 +6781,21 @@ phases:
       double-width in a terminal. Render them as two consecutive cells with a simple
       fallback glyph (a filled block). This prevents the terminal from misaligning
       when it encounters wide characters.
-    status: todo
+    status: done
     tasks:
     - id: p134.d3.t1
       title: Detect full-width codepoints (CJK range)
-      status: todo
+      status: done
       description: Check if decoded codepoint is in U+3000-U+9FFF range
     - id: p134.d3.t2
       title: Render full-width as two filled-block cells
-      status: todo
+      status: done
       description: Insert character at col, then advance col by 2 instead of 1
     scope_lines: 40
   scope_lines_total: 74560
   test_target: 2120
   _claimed_by: worker-0
-  _claimed_at: 1777184119
+  _claimed_at: 1777192760
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

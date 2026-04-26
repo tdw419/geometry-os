@@ -72,6 +72,9 @@
 #define ANS_ESC    1
 #define ANS_CSI    2
 #define ANS_OSC    3
+#define ANS_UTF8_2 4
+#define ANS_UTF8_3A 5
+#define ANS_UTF8_3B 6
 
 ; Extended key codes (from keys.rs)
 #define KEY_UP    0x80
@@ -80,6 +83,9 @@
 #define KEY_RIGHT 0x83
 #define KEY_HOME  0x84
 #define KEY_END   0x85
+
+; UTF-8 decoding accumulator
+#define UTF8_CP 0x4E0B
 
 ; =========================================
 ; INIT
@@ -425,6 +431,40 @@ process_byte:
     JMP pb_ret
 
 pb_normal_byte:
+    ; Check for UTF-8 multi-byte start
+    CMPI r5, 192
+    BLT r0, pb_ascii
+    CMPI r5, 224
+    BGE r0, pb_utf8_3_start
+
+    ; 2-byte UTF-8 (0xC0-0xDF): cp = (r5 & 0x1F) << 6
+    LDI r7, 31
+    AND r5, r7
+    LDI r7, 6
+    SHL r5, r7
+    LDI r20, UTF8_CP
+    STORE r20, r5
+    LDI r20, ANSI_STATE
+    LDI r0, ANS_UTF8_2
+    STORE r20, r0
+    JMP pb_ret
+
+pb_utf8_3_start:
+    CMPI r5, 240
+    BGE r0, pb_ret
+    ; 3-byte UTF-8 (0xE0-0xEF): cp = (r5 & 0x0F) << 12
+    LDI r7, 15
+    AND r5, r7
+    LDI r7, 12
+    SHL r5, r7
+    LDI r20, UTF8_CP
+    STORE r20, r5
+    LDI r20, ANSI_STATE
+    LDI r0, ANS_UTF8_3A
+    STORE r20, r0
+    JMP pb_ret
+
+pb_ascii:
     CALL append_byte
     JMP pb_ret
 
@@ -508,7 +548,7 @@ pb_csi_semi:
 
 pb_check_osc:
     CMPI r4, ANS_OSC
-    JNZ r0, pb_reset_state
+    JNZ r0, pb_check_utf8_2
 
     CMPI r5, 7
     JZ r0, pb_osc_end
@@ -534,6 +574,81 @@ pb_osc_continue:
 
 pb_osc_end:
     CALL process_osc
+    LDI r20, ANSI_STATE
+    LDI r0, ANS_NORMAL
+    STORE r20, r0
+    JMP pb_ret
+
+pb_check_utf8_2:
+    CMPI r4, ANS_UTF8_2
+    JNZ r0, pb_check_utf8_3a
+
+    ; Validate continuation byte (0x80-0xBF)
+    CMPI r5, 128
+    BLT r0, pb_reset_state
+    CMPI r5, 192
+    BGE r0, pb_reset_state
+
+    ; cp |= (r5 & 0x3F)
+    LDI r7, 63
+    AND r5, r7
+    LDI r20, UTF8_CP
+    LOAD r0, r20
+    OR r0, r5
+    STORE r20, r0
+
+    ; Map codepoint to extended font index and append
+    CALL map_codepoint
+    LDI r20, ANSI_STATE
+    LDI r0, ANS_NORMAL
+    STORE r20, r0
+    JMP pb_ret
+
+pb_check_utf8_3a:
+    CMPI r4, ANS_UTF8_3A
+    JNZ r0, pb_check_utf8_3b
+
+    ; Validate continuation byte
+    CMPI r5, 128
+    BLT r0, pb_reset_state
+    CMPI r5, 192
+    BGE r0, pb_reset_state
+
+    ; cp |= (r5 & 0x3F) << 6
+    LDI r7, 63
+    AND r5, r7
+    LDI r7, 6
+    SHL r5, r7
+    LDI r20, UTF8_CP
+    LOAD r0, r20
+    OR r0, r5
+    STORE r20, r0
+
+    LDI r20, ANSI_STATE
+    LDI r0, ANS_UTF8_3B
+    STORE r20, r0
+    JMP pb_ret
+
+pb_check_utf8_3b:
+    CMPI r4, ANS_UTF8_3B
+    JNZ r0, pb_reset_state
+
+    ; Validate continuation byte
+    CMPI r5, 128
+    BLT r0, pb_reset_state
+    CMPI r5, 192
+    BGE r0, pb_reset_state
+
+    ; cp |= (r5 & 0x3F)
+    LDI r7, 63
+    AND r5, r7
+    LDI r20, UTF8_CP
+    LOAD r0, r20
+    OR r0, r5
+    STORE r20, r0
+
+    ; Map codepoint to extended font index and append
+    CALL map_codepoint
     LDI r20, ANSI_STATE
     LDI r0, ANS_NORMAL
     STORE r20, r0
@@ -571,9 +686,17 @@ ab_check_cr:
 ab_check_print:
     CMPI r5, 32
     BLT r0, ab_ret
+    ; Accept 32-126 (ASCII printable)
     CMPI r5, 127
+    BLT r0, ab_store
+    ; Reject 127 (DEL)
+    CMPI r5, 127
+    JZ r0, ab_ret
+    ; Accept 128-157 (extended box-drawing)
+    CMPI r5, 158
     BGE r0, ab_ret
 
+ab_store:
     ; buf[row*COLS + col] = r5
     LDI r20, CUR_ROW
     LOAD r2, r20
@@ -603,6 +726,291 @@ ab_check_print:
     CALL do_newline
 
 ab_ret:
+    POP r31
+    RET
+
+; =========================================
+; MAP_CODEPOINT -- map Unicode codepoint to extended font byte
+; Reads UTF8_CP, maps to 128-157 range, calls append_byte
+; Unknown codepoints render as '?' (63)
+; CJK full-width (0x3000-0x9FFF) rendered as full block (148)
+; =========================================
+map_codepoint:
+    PUSH r31
+    LDI r1, 1
+
+    LDI r20, UTF8_CP
+    LOAD r5, r20
+
+    ; Box drawing U+2500-U+257F
+    CMPI r5, 9472
+    BLT r0, mc_check_arrows
+    CMPI r5, 9600
+    BGE r0, mc_check_blocks
+
+    ; Map U+2500-257F to 128+
+    ; 0x2500 = 9472, 128 + (cp - 9472) but only for known chars
+    LDI r7, 9472
+    SUB r5, r7
+    ; r5 = offset from U+2500
+
+    ; U+2500 (0) = 128 (horiz)
+    CMPI r5, 0
+    JNZ r0, mc_2502
+    LDI r5, 128
+    CALL append_byte
+    JMP mc_ret
+
+mc_2502:
+    CMPI r5, 2
+    JNZ r0, mc_250c
+    LDI r5, 129
+    CALL append_byte
+    JMP mc_ret
+
+mc_250c:
+    CMPI r5, 12
+    JNZ r0, mc_2510
+    LDI r5, 130
+    CALL append_byte
+    JMP mc_ret
+
+mc_2510:
+    CMPI r5, 16
+    JNZ r0, mc_2514
+    LDI r5, 131
+    CALL append_byte
+    JMP mc_ret
+
+mc_2514:
+    CMPI r5, 20
+    JNZ r0, mc_2518
+    LDI r5, 132
+    CALL append_byte
+    JMP mc_ret
+
+mc_2518:
+    CMPI r5, 24
+    JNZ r0, mc_251c
+    LDI r5, 133
+    CALL append_byte
+    JMP mc_ret
+
+mc_251c:
+    CMPI r5, 28
+    JNZ r0, mc_2524
+    LDI r5, 134
+    CALL append_byte
+    JMP mc_ret
+
+mc_2524:
+    CMPI r5, 36
+    JNZ r0, mc_252c
+    LDI r5, 135
+    CALL append_byte
+    JMP mc_ret
+
+mc_252c:
+    CMPI r5, 44
+    JNZ r0, mc_2534
+    LDI r5, 136
+    CALL append_byte
+    JMP mc_ret
+
+mc_2534:
+    CMPI r5, 52
+    JNZ r0, mc_253c
+    LDI r5, 137
+    CALL append_byte
+    JMP mc_ret
+
+mc_253c:
+    CMPI r5, 60
+    JNZ r0, mc_2550
+    LDI r5, 138
+    CALL append_byte
+    JMP mc_ret
+
+mc_2550:
+    ; U+2550 = 9552, offset = 80
+    CMPI r5, 80
+    JNZ r0, mc_2551
+    LDI r5, 155
+    CALL append_byte
+    JMP mc_ret
+
+mc_2551:
+    CMPI r5, 81
+    JNZ r0, mc_box_unknown
+    LDI r5, 156
+    CALL append_byte
+    JMP mc_ret
+
+mc_box_unknown:
+    ; Unknown box-drawing char, render as '?'
+    LDI r5, 63
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_arrows:
+    ; U+2190-U+2193 (arrows)
+    CMPI r5, 8592
+    JNZ r0, mc_check_sym
+    LDI r5, 139
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_sym:
+    CMPI r5, 8594
+    JNZ r0, mc_check_up
+    LDI r5, 140
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_up:
+    CMPI r5, 8593
+    JNZ r0, mc_check_down
+    LDI r5, 141
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_down:
+    CMPI r5, 8595
+    JNZ r0, mc_check_sym2
+    LDI r5, 142
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_sym2:
+    ; U+2713 (check) = 10003
+    CMPI r5, 10003
+    JNZ r0, mc_check_sym3
+    LDI r5, 143
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_sym3:
+    ; U+2717 (ballot X) = 10007
+    CMPI r5, 10007
+    JNZ r0, mc_check_bullet
+    LDI r5, 144
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_bullet:
+    ; U+2022 (bullet) = 8226
+    CMPI r5, 8226
+    JNZ r0, mc_check_middot
+    LDI r5, 145
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_middot:
+    ; U+00B7 (middot) = 183
+    CMPI r5, 183
+    JNZ r0, mc_check_ellipsis
+    LDI r5, 146
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_ellipsis:
+    ; U+2026 (ellipsis) = 8230
+    CMPI r5, 8230
+    JNZ r0, mc_check_raquo
+    LDI r5, 147
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_raquo:
+    ; U+00BB (right double angle) = 187
+    CMPI r5, 187
+    JNZ r0, mc_check_cjk
+    LDI r5, 157
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_blocks:
+    ; Block elements U+2580-U+259F
+    CMPI r5, 9600
+    BLT r0, mc_unknown
+    CMPI r5, 9632
+    BGE r0, mc_check_cjk
+
+    LDI r7, 9600
+    SUB r5, r7
+    ; U+2580 (0) = 151 (upper half)
+    CMPI r5, 0
+    JNZ r0, mc_2584
+    LDI r5, 151
+    CALL append_byte
+    JMP mc_ret
+
+mc_2584:
+    CMPI r5, 4
+    JNZ r0, mc_2588
+    LDI r5, 152
+    CALL append_byte
+    JMP mc_ret
+
+mc_2588:
+    CMPI r5, 8
+    JNZ r0, mc_258c
+    LDI r5, 148
+    CALL append_byte
+    JMP mc_ret
+
+mc_258c:
+    CMPI r5, 12
+    JNZ r0, mc_258e
+    LDI r5, 149
+    CALL append_byte
+    JMP mc_ret
+
+mc_258e:
+    CMPI r5, 14
+    JNZ r0, mc_2590
+    LDI r5, 153
+    CALL append_byte
+    JMP mc_ret
+
+mc_2590:
+    CMPI r5, 16
+    JNZ r0, mc_258a
+    LDI r5, 150
+    CALL append_byte
+    JMP mc_ret
+
+mc_258a:
+    CMPI r5, 10
+    JNZ r0, mc_block_unknown
+    LDI r5, 154
+    CALL append_byte
+    JMP mc_ret
+
+mc_block_unknown:
+    LDI r5, 148
+    CALL append_byte
+    JMP mc_ret
+
+mc_check_cjk:
+    ; CJK Unified Ideographs U+3000-U+9FFF -- render as double-width full block
+    CMPI r5, 12288
+    BLT r0, mc_unknown
+    CMPI r5, 40960
+    BGE r0, mc_unknown
+
+    ; Full-width char: insert full block, advance col by 2
+    LDI r5, 148
+    CALL append_byte
+    CALL append_byte
+    JMP mc_ret
+
+mc_unknown:
+    ; Unknown codepoint, render as '?'
+    LDI r5, 63
+    CALL append_byte
+
+mc_ret:
     POP r31
     RET
 

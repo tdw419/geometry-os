@@ -82,10 +82,8 @@ impl Vm {
         bg: Option<u32>,
     ) {
         const MINI_FONT: [[u8; 7]; 96] = include!("../mini_font.in");
+        const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
         let idx = ch as usize;
-        if !(32..=127).contains(&idx) {
-            return;
-        }
 
         // Check if current process has a custom font (Phase 98)
         // Custom font overrides the built-in mini font with 8x8 glyphs
@@ -99,7 +97,10 @@ impl Vm {
         };
 
         if let Some(font) = custom_font {
-            // Use custom 8x8 font
+            // Use custom 8x8 font (only supports 0-255 if font has 256 entries)
+            if idx >= font.len() {
+                return;
+            }
             let glyph = &font[idx];
             for (row, &glyph_row) in glyph.iter().enumerate().take(8usize) {
                 for col in 0..8usize {
@@ -115,9 +116,26 @@ impl Vm {
                     }
                 }
             }
-        } else {
+        } else if (32..=127).contains(&idx) {
             // Use built-in 5x7 mini font
             let glyph = &MINI_FONT[idx - 32];
+            for (row, &glyph_row) in glyph.iter().enumerate().take(7usize) {
+                for col in 0..5usize {
+                    let px = x + col;
+                    let py = y + row;
+                    if px < 256 && py < 256 {
+                        let on = glyph_row & (1 << (4 - col)) != 0;
+                        if on {
+                            self.screen[py * 256 + px] = fg;
+                        } else if let Some(bg_color) = bg {
+                            self.screen[py * 256 + px] = bg_color;
+                        }
+                    }
+                }
+            }
+        } else if (128..=157).contains(&idx) {
+            // Extended box-drawing characters
+            let glyph = &EXT_FONT[idx - 128];
             for (row, &glyph_row) in glyph.iter().enumerate().take(7usize) {
                 for col in 0..5usize {
                     let px = x + col;
@@ -137,6 +155,7 @@ impl Vm {
 
     /// Draw a character using the medium 5x7 font (for MEDTEXT opcode).
     /// Advance is 6 pixels (5 wide + 1 spacing), giving 42 columns in 256px.
+    /// Supports ASCII 32-127 plus extended box-drawing chars 128-157.
     pub(super) fn draw_char_medium(
         &mut self,
         ch: u8,
@@ -146,11 +165,15 @@ impl Vm {
         bg: Option<u32>,
     ) {
         const MED_FONT: [[u8; 7]; 96] = include!("../med_font.in");
+        const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
         let idx = ch as usize;
-        if !(32..=127).contains(&idx) {
+        let glyph: &[u8; 7] = if (32..=127).contains(&idx) {
+            &MED_FONT[idx - 32]
+        } else if (128..=157).contains(&idx) {
+            &EXT_FONT[idx - 128]
+        } else {
             return;
-        }
-        let glyph = &MED_FONT[idx - 32];
+        };
         for (row, &glyph_row) in glyph.iter().enumerate().take(7usize) {
             for col in 0..5usize {
                 let px = x + col;
@@ -169,23 +192,43 @@ impl Vm {
 
     /// Draw a character using the tiny 3x5 font (for SMALLTEXT opcode).
     /// Advance is 3 pixels (no spacing), giving 85 columns in 256px.
+    /// Supports ASCII 32-127 plus extended box-drawing chars 128-157.
     pub(super) fn draw_char_tiny(&mut self, ch: u8, x: usize, y: usize, fg: u32, bg: Option<u32>) {
         const TINY_FONT: [[u8; 5]; 96] = include!("../tiny_font.in");
+        // For extended chars in tiny font, we use a simplified 3x5 representation
         let idx = ch as usize;
-        if !(32..=127).contains(&idx) {
-            return;
-        }
-        let glyph = &TINY_FONT[idx - 32];
-        for (row, &glyph_row) in glyph.iter().enumerate().take(5usize) {
-            for col in 0..3usize {
-                let px = x + col;
-                let py = y + row;
-                if px < 256 && py < 256 {
-                    let on = glyph_row & (1 << (2 - col)) != 0;
-                    if on {
-                        self.screen[py * 256 + px] = fg;
-                    } else if let Some(bg_color) = bg {
-                        self.screen[py * 256 + px] = bg_color;
+        if (32..=127).contains(&idx) {
+            let glyph = &TINY_FONT[idx - 32];
+            for (row, &glyph_row) in glyph.iter().enumerate().take(5usize) {
+                for col in 0..3usize {
+                    let px = x + col;
+                    let py = y + row;
+                    if px < 256 && py < 256 {
+                        let on = glyph_row & (1 << (2 - col)) != 0;
+                        if on {
+                            self.screen[py * 256 + px] = fg;
+                        } else if let Some(bg_color) = bg {
+                            self.screen[py * 256 + px] = bg_color;
+                        }
+                    }
+                }
+            }
+        } else if (128..=157).contains(&idx) {
+            // For extended chars in tiny font, render directly from the 5x7 ext font
+            // but sampling only 3x5 pixels (cols 1-3, rows 1-5 of the 5x7 glyph)
+            const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
+            let glyph = &EXT_FONT[idx - 128];
+            for row in 0..5usize {
+                for col in 1..4usize {
+                    let px = x + (col - 1);
+                    let py = y + row;
+                    if px < 256 && py < 256 {
+                        let on = glyph[row] & (1 << (4 - col)) != 0;
+                        if on {
+                            self.screen[py * 256 + px] = fg;
+                        } else if let Some(bg_color) = bg {
+                            self.screen[py * 256 + px] = bg_color;
+                        }
                     }
                 }
             }

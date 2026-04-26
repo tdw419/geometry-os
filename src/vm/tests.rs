@@ -20804,3 +20804,201 @@ fn test_host_term_color_buffer_init() {
         color_buf_0
     );
 }
+
+// =========================================
+// Phase 134: Extended Character Support Tests
+// =========================================
+
+#[test]
+fn test_ext_font_file_valid() {
+    // Verify ext_font.in compiles as valid 5x7 font data
+    const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
+    assert_eq!(EXT_FONT.len(), 30, "should have 30 extended glyphs");
+    // Each glyph should be 7 rows
+    for (i, glyph) in EXT_FONT.iter().enumerate() {
+        assert_eq!(glyph.len(), 7, "glyph {} should have 7 rows", i);
+    }
+}
+
+#[test]
+fn test_ext_font_horizontal_line() {
+    // 128 = horizontal line ─ should have all 5 bits set on row 3
+    const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
+    let glyph = &EXT_FONT[0]; // 128 - 128 = 0
+    // Row 3 (middle) should be 0x1F (all 5 bits set)
+    assert_eq!(glyph[3], 0x1F, "horizontal line middle row should be 0x1F, got 0x{:02X}", glyph[3]);
+    // Other rows should be 0
+    assert_eq!(glyph[0], 0x00, "horizontal line row 0 should be 0");
+    assert_eq!(glyph[6], 0x00, "horizontal line row 6 should be 0");
+}
+
+#[test]
+fn test_ext_font_vertical_line() {
+    // 129 = vertical line │ should have center bit on all rows
+    const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
+    let glyph = &EXT_FONT[1]; // 129 - 128 = 1
+    // All rows should have center bit (bit 2, value 0x04)
+    for (row, &val) in glyph.iter().enumerate() {
+        assert_ne!(val & 0x04, 0, "vertical line row {} should have center bit set, got 0x{:02X}", row, val);
+    }
+}
+
+#[test]
+fn test_ext_font_full_block() {
+    // 148 = full block █ should be entirely filled
+    const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
+    let glyph = &EXT_FONT[20]; // 148 - 128 = 20
+    for (row, &val) in glyph.iter().enumerate() {
+        assert_eq!(val, 0x1F, "full block row {} should be 0x1F, got 0x{:02X}", row, val);
+    }
+}
+
+#[test]
+fn test_draw_char_medium_extended_horizontal() {
+    // Test that MEDTEXT renders extended char 128 (horizontal line)
+    let source = r#"
+        LDI r1, 10
+        LDI r2, 10
+        LDI r3, 0x2000
+        LDI r0, 128
+        STORE r3, r0
+        LDI r0, 0
+        LDI r4, 0xFFFFFF
+        LDI r5, 0
+        MEDTEXT r1, r2, r3, r4, r5
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = super::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = pixel; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000 { if !vm.step() { break; } }
+    assert!(vm.halted, "program should halt");
+    // The horizontal line middle row at y=13, x=10-14 should be white
+    assert_eq!(vm.screen[13 * 256 + 12], 0xFFFFFF, "center pixel of horiz line should be white");
+}
+
+#[test]
+fn test_draw_char_medium_extended_full_block() {
+    // Test that MEDTEXT renders extended char 148 (full block)
+    let source = r#"
+        LDI r1, 20
+        LDI r2, 20
+        LDI r3, 0x2000
+        LDI r0, 148
+        STORE r3, r0
+        LDI r0, 0
+        LDI r4, 0xFF0000
+        LDI r5, 0
+        MEDTEXT r1, r2, r3, r4, r5
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = super::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = pixel; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000 { if !vm.step() { break; } }
+    assert!(vm.halted, "program should halt");
+    // Full block should fill 5x7 pixels with red
+    assert_eq!(vm.screen[20 * 256 + 20], 0xFF0000, "full block top-left should be red");
+    assert_eq!(vm.screen[26 * 256 + 24], 0xFF0000, "full block bottom-right should be red");
+    // Outside the block should be black
+    assert_eq!(vm.screen[20 * 256 + 19], 0, "pixel left of block should be black");
+}
+
+#[test]
+fn test_draw_char_with_bg_extended_vertical() {
+    // Test that DRAWTEXT renders extended char 129 (vertical line)
+    let source = r#"
+        LDI r1, 15
+        LDI r2, 15
+        LDI r3, 0x2000
+        LDI r0, 129
+        STORE r3, r0
+        LDI r0, 0
+        LDI r4, 0x00FF00
+        LDI r5, 0
+        DRAWTEXT r1, r2, r3, r4, r5
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = super::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = pixel; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000 { if !vm.step() { break; } }
+    assert!(vm.halted, "program should halt");
+    // Vertical line center column at x=17, y=15-21 should be green
+    assert_eq!(vm.screen[15 * 256 + 17], 0x00FF00, "vert line top should be green");
+    assert_eq!(vm.screen[21 * 256 + 17], 0x00FF00, "vert line bottom should be green");
+}
+
+#[test]
+fn test_smalltext_extended_char() {
+    // Test that SMALLTEXT renders extended char 128 (horizontal line)
+    let source = r#"
+        LDI r1, 5
+        LDI r2, 5
+        LDI r3, 0x2000
+        LDI r0, 128
+        STORE r3, r0
+        LDI r0, 0
+        LDI r4, 0xFFFF00
+        LDI r5, 0
+        SMALLTEXT r1, r2, r3, r4, r5
+        HALT
+    "#;
+    let asm = crate::assembler::assemble(source, 0).unwrap();
+    let mut vm = super::Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = pixel; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000 { if !vm.step() { break; } }
+    assert!(vm.halted, "program should halt");
+    // Should render at least one pixel for the horizontal line
+    let mut found_yellow = false;
+    for dy in 0..5 {
+        for dx in 0..3 {
+            if vm.screen[(5 + dy) * 256 + (5 + dx)] == 0xFFFF00 {
+                found_yellow = true;
+            }
+        }
+    }
+    assert!(found_yellow, "SMALLTEXT should render yellow pixel for extended char");
+}
+
+#[test]
+fn test_mini_font_glyph_extended_chars() {
+    use crate::pixel::mini_font_glyph;
+    // Extended char 128 (horizontal line) should return non-space glyph
+    let glyph = mini_font_glyph(128);
+    assert_ne!(glyph[3], 0, "extended char 128 should have non-zero middle row");
+    // Extended char 148 (full block) should be fully filled
+    let glyph = mini_font_glyph(148);
+    for row in 0..7 {
+        assert_eq!(glyph[row], 0x1F, "full block row {} should be 0x1F", row);
+    }
+    // Out-of-range char 200 should return space
+    let glyph = mini_font_glyph(200);
+    assert_eq!(glyph[0], 0, "out-of-range char should return space");
+}
+
+#[test]
+fn test_host_term_assembles_with_utf8() {
+    // Verify host_term.asm still assembles after adding UTF-8 decoder
+    let source = std::fs::read_to_string("programs/host_term.asm").unwrap();
+    let result = crate::assembler::assemble(&source, 0);
+    assert!(result.is_ok(), "host_term.asm should assemble: {:?}", result.err());
+    let asm = result.unwrap();
+    assert!(asm.pixels.len() > 100, "host_term.asm should produce bytecode, got {} words", asm.pixels.len());
+}
