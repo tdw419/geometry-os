@@ -3254,6 +3254,73 @@ impl Vm {
                 self.op_fsls();
             }
 
+            // NPROC (0xBE) -- Number of processes
+            // r0 = number of processes (including main as PID 0)
+            // Encoding: 1 word [0xBE]
+            0xBE => {
+                // Count: 1 (main) + spawned children
+                self.regs[0] = 1 + self.processes.len() as u32;
+            }
+
+            // PROCINFO pid_reg, field_reg  (0xBF) -- Query process info
+            // pid_reg: PID to query (0 = main process, 1+ = spawned child)
+            // field_reg: field number (0=state, 1=pc, 2=priority, 3=parent_pid, 4=page_count)
+            // Returns: value in r0, 0xFFFFFFFF on error (invalid pid/field)
+            // Encoding: 3 words [0xBF, pid_reg, field_reg]
+            0xBF => {
+                let pr = self.fetch() as usize;
+                let fr = self.fetch() as usize;
+                if pr < NUM_REGS && fr < NUM_REGS {
+                    let pid = self.regs[pr];
+                    let field = self.regs[fr];
+                    if pid == 0 {
+                        // Main process info
+                        self.regs[0] = match field {
+                            0 => 1, // Running
+                            1 => self.pc,
+                            2 => 1, // default priority
+                            3 => 0, // no parent
+                            4 => 0, // main uses identity mapping, no private pages
+                            _ => 0xFFFFFFFF,
+                        };
+                    } else {
+                        let idx = (pid - 1) as usize;
+                        if idx < self.processes.len() {
+                            let p = &self.processes[idx];
+                            self.regs[0] = match field {
+                                0 => match p.state {
+                                    types::ProcessState::Ready => 0,
+                                    types::ProcessState::Running => 1,
+                                    types::ProcessState::Sleeping => 2,
+                                    types::ProcessState::Blocked => 3,
+                                    types::ProcessState::Zombie => 4,
+                                    types::ProcessState::Stopped => 5,
+                                },
+                                1 => p.pc,
+                                2 => p.priority as u32,
+                                3 => p.parent_pid,
+                                4 => {
+                                    // Count mapped pages in page directory
+                                    match &p.page_dir {
+                                        Some(pd) => pd
+                                            .iter()
+                                            .filter(|&&e| e != types::PAGE_UNMAPPED)
+                                            .count()
+                                            as u32,
+                                        None => 0,
+                                    }
+                                }
+                                _ => 0xFFFFFFFF,
+                            };
+                        } else {
+                            self.regs[0] = 0xFFFFFFFF;
+                        }
+                    }
+                } else {
+                    self.regs[0] = 0xFFFFFFFF;
+                }
+            }
+
             _ => {
                 self.halted = true;
                 return false;

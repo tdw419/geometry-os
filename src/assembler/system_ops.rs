@@ -966,6 +966,23 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "NPROC" => {
+            bytecode.push(0xBE);
+            Ok(Some(()))
+        }
+
+        "PROCINFO" => {
+            if tokens.len() < 3 {
+                return Err(
+                    "PROCINFO requires 2 arguments: PROCINFO pid_reg, field_reg".to_string()
+                );
+            }
+            bytecode.push(0xBF);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

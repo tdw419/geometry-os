@@ -935,6 +935,8 @@ impl Vm {
             0xBB => ("FSREAD".into(), 4),
             0xBC => ("FSWRITE".into(), 4),
             0xBD => ("FSLS".into(), 4),
+            0xBE => ("NPROC".into(), 1),
+            0xBF => ("PROCINFO".into(), 3),
 
             // SMALLTEXT x, y, addr, fg, bg (0xD0) -- tiny 3x5 font, 85 cols in 256px
             0xD0 => (

@@ -186,6 +186,8 @@ pub const OPCODES: &[&str] = &[
     "FSREAD",
     "FSWRITE",
     "FSLS",
+    "NPROC",
+    "PROCINFO",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

@@ -21634,3 +21634,305 @@ fn test_fswrite_append_mode() {
 
     let _ = std::fs::remove_file(&test_path);
 }
+
+// ============================================================
+// Phase 140: NPROC and PROCINFO opcode tests
+// ============================================================
+
+#[test]
+fn test_nproc_no_children() {
+    let mut vm = Vm::new();
+    // NPROC with no spawned processes should return 1 (main only)
+    vm.ram[0] = 0xBE; // NPROC
+    vm.halted = false;
+    vm.pc = 0;
+    assert!(vm.step());
+    assert_eq!(vm.regs[0], 1, "NPROC should return 1 with no children");
+}
+
+#[test]
+fn test_nproc_with_child() {
+    let mut vm = Vm::new();
+    // Spawn a child at address 0x100
+    // First put some code at 0x100 that the child will run
+    vm.ram[0x100] = 0x00; // HALT at child entry
+
+    // LDI r1, 0x100; SPAWN r1; NPROC
+    vm.ram[0] = 0x10; // LDI
+    vm.ram[1] = 1; // r1
+    vm.ram[2] = 0x100; // address
+
+    vm.ram[3] = 0x4D; // SPAWN
+    vm.ram[4] = 1; // r1
+
+    vm.ram[5] = 0xBE; // NPROC
+
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    // After spawning one child, NPROC should return 2
+    assert_eq!(
+        vm.regs[0], 2,
+        "NPROC should return 2 after spawning one child"
+    );
+}
+
+#[test]
+fn test_procinfo_main_process() {
+    let mut vm = Vm::new();
+    // PROCINFO with pid=0, field=0 (state) should return 1 (Running)
+    vm.regs[1] = 0; // PID 0 = main process
+    vm.regs[2] = 0; // field 0 = state
+    vm.ram[0] = 0xBF; // PROCINFO
+    vm.ram[1] = 1; // pid_reg
+    vm.ram[2] = 2; // field_reg
+
+    vm.halted = false;
+    vm.pc = 0;
+    assert!(vm.step());
+    assert_eq!(vm.regs[0], 1, "Main process state should be Running (1)");
+
+    // Test field=1 (pc)
+    vm.regs[1] = 0;
+    vm.regs[2] = 1; // field 1 = PC
+    vm.ram[0] = 0xBF;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.halted = false;
+    vm.pc = 0;
+    assert!(vm.step());
+    // PC should be 3 (after the 3-word instruction)
+    assert_eq!(vm.regs[0], 3, "Main process PC should be 3 after PROCINFO");
+
+    // Test field=2 (priority)
+    vm.regs[1] = 0;
+    vm.regs[2] = 2;
+    vm.ram[0] = 0xBF;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.halted = false;
+    vm.pc = 0;
+    assert!(vm.step());
+    assert_eq!(vm.regs[0], 1, "Main process priority should be 1");
+
+    // Test field=3 (parent_pid)
+    vm.regs[1] = 0;
+    vm.regs[2] = 3;
+    vm.ram[0] = 0xBF;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.halted = false;
+    vm.pc = 0;
+    assert!(vm.step());
+    assert_eq!(vm.regs[0], 0, "Main process parent PID should be 0");
+
+    // Test invalid field
+    vm.regs[1] = 0;
+    vm.regs[2] = 99; // invalid field
+    vm.ram[0] = 0xBF;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.halted = false;
+    vm.pc = 0;
+    assert!(vm.step());
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "Invalid field should return error");
+}
+
+#[test]
+fn test_procinfo_invalid_pid() {
+    let mut vm = Vm::new();
+    vm.regs[1] = 99; // nonexistent PID
+    vm.regs[2] = 0;
+    vm.ram[0] = 0xBF; // PROCINFO
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.halted = false;
+    vm.pc = 0;
+    assert!(vm.step());
+    assert_eq!(vm.regs[0], 0xFFFFFFFF, "Invalid PID should return error");
+}
+
+#[test]
+fn test_procinfo_child_state() {
+    let mut vm = Vm::new();
+    // Spawn a child at 0x100
+    vm.ram[0x100] = 0x00; // HALT
+
+    // LDI r1, 0x100; SPAWN r1; PROCINFO r3, r2 (pid=1, field=0=state)
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x100; // LDI r1, 0x100
+    vm.ram[3] = 0x4D;
+    vm.ram[4] = 1; // SPAWN r1
+    vm.ram[5] = 0x10;
+    vm.ram[6] = 3;
+    vm.ram[7] = 1; // LDI r3, 1 (PID)
+    vm.ram[8] = 0x10;
+    vm.ram[9] = 2;
+    vm.ram[10] = 0; // LDI r2, 0 (field=state)
+    vm.ram[11] = 0xBF;
+    vm.ram[12] = 3;
+    vm.ram[13] = 2; // PROCINFO r3, r2
+
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    // Child should be in Ready state (0) since it hasn't been scheduled yet
+    // But after spawning, the scheduler may run it, so state could be Ready or Running
+    assert!(
+        vm.regs[0] <= 5,
+        "Child state should be a valid ProcessState value (got {})",
+        vm.regs[0]
+    );
+}
+
+#[test]
+fn test_nproc_disasm() {
+    let (m, l) = disasm(&[0xBE]);
+    assert_eq!(m, "NPROC");
+    assert_eq!(l, 1);
+}
+
+#[test]
+fn test_procinfo_disasm() {
+    let (m, l) = disasm(&[0xBF, 1, 2]);
+    assert_eq!(m, "PROCINFO");
+    assert_eq!(l, 3);
+}
+
+// ============================================================
+// Phase 140: procmon.asm and sysmon.asm integration tests
+// ============================================================
+
+#[test]
+fn test_procmon_assembles_and_runs() {
+    let source = std::fs::read_to_string("programs/procmon.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    assert!(
+        asm.pixels.len() > 100,
+        "procmon should produce meaningful bytecode"
+    );
+
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run for enough steps to render first frame
+    let mut frames = 0;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            frames += 1;
+            if frames >= 1 {
+                break;
+            }
+        }
+    }
+    assert!(
+        frames >= 1,
+        "procmon should produce at least 1 frame (got {})",
+        frames
+    );
+}
+
+#[test]
+fn test_sysmon_assembles_and_runs() {
+    let source = std::fs::read_to_string("programs/sysmon.asm").unwrap();
+    let asm = crate::assembler::assemble(&source, 0).unwrap();
+    assert!(
+        asm.pixels.len() > 100,
+        "sysmon should produce meaningful bytecode"
+    );
+
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let mut frames = 0;
+    for _ in 0..500_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            frames += 1;
+            if frames >= 1 {
+                break;
+            }
+        }
+    }
+    assert!(
+        frames >= 1,
+        "sysmon should produce at least 1 frame (got {})",
+        frames
+    );
+}
+
+#[test]
+fn test_procmon_with_spawned_child() {
+    // Spawn a child, then check that NPROC returns 2 and PROCINFO can query it
+    let mut vm = Vm::new();
+
+    // Put HALT at child entry
+    vm.ram[0x400] = 0x00; // HALT
+
+    // LDI r1, 0x400; SPAWN r1; NPROC; HALT
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x400; // LDI r1, 0x400
+    vm.ram[3] = 0x4D;
+    vm.ram[4] = 1; // SPAWN r1
+    vm.ram[5] = 0xBE; // NPROC
+    vm.ram[6] = 0x00; // HALT
+
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..1000 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(
+        vm.regs[0], 2,
+        "After spawning one child, NPROC should return 2"
+    );
+    assert_eq!(vm.processes.len(), 1, "Should have 1 child process");
+
+    // Query the child's state via PROCINFO
+    vm.regs[1] = 1; // PID 1
+    vm.regs[2] = 0; // field = state
+    vm.ram[0] = 0xBF; // PROCINFO
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert!(
+        vm.regs[0] <= 5,
+        "Child state should be valid (got {})",
+        vm.regs[0]
+    );
+}

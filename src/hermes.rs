@@ -943,6 +943,9 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0xBB => "FSREAD",
         0xBC => "FSWRITE",
         0xBD => "FSLS",
+        // Phase 140: Process introspection
+        0xBE => "NPROC",
+        0xBF => "PROCINFO",
         // Phase 94: Tiny font text rendering
         0xD0 => "SMALLTEXT",
         // Phase 95: Medium font text rendering
