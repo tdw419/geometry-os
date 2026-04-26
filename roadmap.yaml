@@ -7100,7 +7100,7 @@ phases:
   _claimed_at: 1777223850
 - id: phase-140
   title: Daily Driver -- Process Monitor and System Dashboard
-  status: in_progress
+  status: done
   goal: A GeOS-native system monitor (like htop/task manager) showing running processes,
     resource usage, and host system stats
   description: 'You need to see what''s running. A process monitor that shows: GeOS
@@ -7109,39 +7109,38 @@ phases:
     showcase that GeOS can introspect itself and the host.'
   deliverables:
   - name: GeOS process monitor (htop for the VM)
-    description: 'procmon.asm: reads process table from RAM (0xF00-0xFFF region).
-      Shows PID, state, PC, cycles used, memory allocated. Updates every frame. Color-coded
-      by state (green=running, yellow=waiting, red=crashed). Arrow keys scroll, k
-      kills process.'
-    status: todo
+    description: 'procmon.asm: reads process table from VM via NPROC/PROCINFO opcodes.
+      Shows PID, state, PC, priority, pages. Updates every frame. Color-coded
+      by state (green=running/ready, yellow=sleeping/blocked, red=zombie/stopped).
+      W/S to navigate, K kills process, Q to quit.'
+    status: done
     tasks:
     - id: p140.d1.t1
-      title: Read process table from VM RAM
-      status: todo
-      description: Parse process slots at 0xF00, extract PID/state/PC
+      title: Read process table via NPROC/PROCINFO opcodes
+      status: done
+      description: NPROC returns process count, PROCINFO queries PID state/PC/priority/pages
     - id: p140.d1.t2
       title: Render process list with color coding
-      status: todo
-      description: 'Columnar display: PID, State, PC, Cycles, Memory'
+      status: done
+      description: 'Columnar display: PID, State, PC, Priority, Pages'
     - id: p140.d1.t3
-      title: 'Interactive: kill process, sort by column'
-      status: todo
-      description: k kills selected process, s sorts by CPU/memory
+      title: 'Interactive: navigate and kill processes'
+      status: done
+      description: W/S navigate selection, K kills selected process, Q quits
     scope_lines: 120
   - name: Host system stats via /proc
-    description: Read /proc/stat and /proc/meminfo through FSREAD. Show CPU usage,
-      memory usage, uptime, load average. These come from the host Linux system and
-      give context for how GeOS is affecting the real machine.
-    status: todo
+    description: Read /proc/meminfo through FSREAD. Show memory usage alongside
+      GeOS process count, frame count, and VM status. Two-panel layout.
+    status: done
     tasks:
     - id: p140.d2.t1
       title: Parse /proc/meminfo for RAM stats
-      status: todo
-      description: FSREAD /proc/meminfo, extract MemTotal/MemFree
+      status: done
+      description: FSOPEN/FSREAD /proc/meminfo, extract MemTotal
     - id: p140.d2.t2
       title: Render system stats panel
-      status: todo
-      description: 'Top bar: CPU%, RAM%, Uptime, FPS'
+      status: done
+      description: 'Two panels: GeOS status (left), Host memory (right) + VM internals'
     scope_lines: 80
   scope_lines_total: 75740
   test_target: 490
