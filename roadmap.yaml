@@ -6980,7 +6980,7 @@ phases:
   test_target: 475
 - id: phase-138
   title: Daily Driver -- Fullscreen Desktop as Display Manager
-  status: planned
+  status: in_progress
   goal: Launch GeOS fullscreen on boot as the primary interface, replacing the need
     for a Linux desktop environment
   description: 'When you log in, GeOS should start fullscreen and be your entire computing
@@ -7047,6 +7047,8 @@ phases:
     scope_lines: 150
   scope_lines_total: 75220
   test_target: 480
+  _claimed_by: worker-0
+  _claimed_at: 1777223283
 - id: phase-139
   title: Daily Driver -- Text Editor App
   status: planned

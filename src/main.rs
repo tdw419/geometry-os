@@ -82,6 +82,74 @@ fn resolve_qemu_pixel_paths(config: &str) -> String {
     result
 }
 
+/// Detect the primary monitor resolution via xrandr.
+/// Falls back to 1920x1080 if detection fails.
+fn detect_monitor_resolution() -> (usize, usize) {
+    if let Ok(output) = std::process::Command::new("xrandr")
+        .arg("--query")
+        .output()
+    {
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if line.contains(" connected") || line.contains(" connected primary") {
+                // Parse: "eDP-1 connected primary 2560x1600+0+0 ..."
+                if let Some(star_idx) = line.find('*') {
+                    // Active resolution has * marker in mode list
+                }
+                // First format: "NAME connected primary WxH+X+Y ..."
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                for part in parts {
+                    if part.contains('x') && part.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+                        let dims: Vec<&str> = part.split('x').collect();
+                        if dims.len() == 2 {
+                            if let (Ok(w), Ok(h)) = (dims[0].parse::<usize>(), dims[1].parse::<usize>()) {
+                                return (w, h);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Fallback: 1920x1080
+    (1920, 1080)
+}
+
+/// Scale the internal 1024x768 render buffer into a fullscreen buffer
+/// using nearest-neighbor scaling, centered with black bars.
+fn scale_buffer_to_fullscreen(
+    src: &[u32],
+    src_w: usize,
+    src_h: usize,
+    dst: &mut [u32],
+    dst_w: usize,
+    dst_h: usize,
+) {
+    // Clear destination
+    dst.fill(0);
+
+    // Compute scale factor (fit to screen, maintain aspect ratio)
+    let scale_x = dst_w as f64 / src_w as f64;
+    let scale_y = dst_h as f64 / src_h as f64;
+    let scale = scale_x.min(scale_y);
+    let scaled_w = (src_w as f64 * scale) as usize;
+    let scaled_h = (src_h as f64 * scale) as usize;
+
+    // Center offset
+    let ox = (dst_w - scaled_w) / 2;
+    let oy = (dst_h - scaled_h) / 2;
+
+    // Nearest-neighbor scale
+    for dy in 0..scaled_h {
+        let sy = dy * src_h / scaled_h;
+        let dst_row = dy * dst_w + ox;
+        let src_row = sy * src_w;
+        for dx in 0..scaled_w {
+            let sx = dx * src_w / scaled_w;
+            dst[dst_row + dx] = src[src_row + sx];
+        }
+    }
+}
+
 fn main() {
     // ── CLI mode: headless geo> prompt on stdin/stdout ─────────────
     let args: Vec<String> = std::env::args().collect();
@@ -94,6 +162,7 @@ fn main() {
     let mut local_port = 9000;
     let mut remote_port = 9001;
     let mut boot_mode = false;
+    let mut fullscreen_mode = false;
     let mut i = 1;
     while i < args.len() {
         if args[i] == "--local-port" && i + 1 < args.len() {
@@ -105,6 +174,9 @@ fn main() {
         } else if args[i] == "--boot" {
             boot_mode = true;
             i += 1;
+        } else if args[i] == "--fullscreen" {
+            fullscreen_mode = true;
+            i += 1;
         } else {
             i += 1;
         }
@@ -115,20 +187,51 @@ fn main() {
         let _ = s.set_nonblocking(true);
     }
 
+    // Detect monitor resolution for fullscreen mode
+    let (win_w, win_h, win_opts) = if fullscreen_mode {
+        let (mw, mh) = detect_monitor_resolution();
+        (
+            mw,
+            mh,
+            WindowOptions {
+                borderless: true,
+                title: false,
+                resize: false,
+                topmost: false,
+                ..Default::default()
+            },
+        )
+    } else {
+        (
+            WIDTH,
+            HEIGHT,
+            WindowOptions {
+                resize: false,
+                ..Default::default()
+            },
+        )
+    };
+
     let mut window = Window::new(
         "Geometry OS -- Canvas Text Surface",
-        WIDTH,
-        HEIGHT,
-        WindowOptions {
-            resize: false,
-            ..Default::default()
-        },
+        win_w,
+        win_h,
+        win_opts,
     )
     .expect("Failed to create window. Ensure a display is available.");
 
     window.set_target_fps(60);
 
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
+
+    // Fullscreen: create a second buffer at monitor resolution
+    let mut fs_buffer: Vec<u32> = if fullscreen_mode {
+        vec![0; win_w * win_h]
+    } else {
+        Vec::new()
+    };
+    let fs_win_w = win_w;
+    let fs_win_h = win_h;
 
     // ── State ────────────────────────────────────────────────────
     let mut vm = vm::Vm::new();
