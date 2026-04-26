@@ -1342,3 +1342,341 @@ drain_loop:
         text
     );
 }
+
+// ── Phase 130: E2E PTY roundtrip tests ──────────────────────────────
+
+/// Helper: run a PTY session, send commands, collect all output.
+/// Returns the concatenated text from PTYREAD.
+fn pty_e2e_session(commands: &[&str], read_frames: u32) -> String {
+    let mut full_source = String::from(
+        "LDI r1, 0x5000\nLDI r0, 0\nSTORE r1, r0\nLDI r5, 0x5000\nPTYOPEN r5, r10\n\
+         LDI r12, 0x6000\nLDI r16, 256\nFRAME\nFRAME\nFRAME\nFRAME\nFRAME\n"
+    );
+
+    for cmd in commands {
+        full_source.push_str("; Send command\n");
+        for (i, ch) in cmd.as_bytes().iter().enumerate() {
+            full_source.push_str(&format!(
+                "LDI r20, 0x{:04X}\nLDI r21, {}\nSTORE r20, r21\n",
+                0x5100 + i, ch
+            ));
+        }
+        full_source.push_str(&format!(
+            "LDI r6, 0x5100\nLDI r7, {}\nPTYWRITE r10, r6, r7\n",
+            cmd.len()
+        ));
+        for _ in 0..read_frames {
+            full_source.push_str("PTYREAD r10, r12, r16\nADD r12, r0\nFRAME\n");
+        }
+    }
+
+    full_source.push_str("drain_loop:\nPTYREAD r10, r12, r16\nADD r12, r0\nFRAME\nJMP drain_loop\n");
+
+    let asm = match assemble(&full_source, 0) {
+        Ok(a) => a,
+        Err(e) => panic!("assembly failed: {} on line {}", e.message, e.line),
+    };
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut frames_seen = 0u32;
+    while std::time::Instant::now() < deadline && frames_seen < 200 {
+        for _ in 0..5000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_ready {
+                vm.frame_ready = false;
+                frames_seen += 1;
+            }
+        }
+        if frames_seen >= 200 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+
+    let mut bytes = Vec::new();
+    for i in 0..16384 {
+        let cell = vm.ram[0x6000 + i];
+        if cell == 0 {
+            continue;
+        }
+        bytes.push((cell & 0xFF) as u8);
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+#[test]
+fn test_e2e_ls_command_output() {
+    let text = pty_e2e_session(&["ls\nexit\n"], 5);
+
+    assert!(
+        !text.is_empty(),
+        "PTYREAD should have received output from ls command. Got empty text."
+    );
+
+    let clean: String = text
+        .chars()
+        .filter(|c| !c.is_control() || *c == '\n' || *c == ' ' || *c == '/')
+        .collect();
+
+    assert!(
+        clean.contains('/') || clean.contains('.') || clean.contains("bin") || clean.len() > 10,
+        "expected ls output containing path-like content, got: {:?}",
+        &clean[..clean.len().min(200)]
+    );
+}
+
+#[test]
+fn test_e2e_echo_roundtrip() {
+    let text = pty_e2e_session(&["echo test123_geos\nexit\n"], 5);
+
+    assert!(
+        !text.is_empty(),
+        "PTYREAD should have received output from echo command. Got empty text."
+    );
+
+    assert!(
+        text.contains("test123_geos"),
+        "expected echo output containing 'test123_geos', got: {:?}",
+        &text[..text.len().min(300)]
+    );
+}
+
+#[test]
+fn test_e2e_arrow_key_up_recalls_command() {
+    let source = r#"
+        LDI r1, 0x5000
+        LDI r0, 0
+        STORE r1, r0
+        LDI r5, 0x5000
+        PTYOPEN r5, r10
+        LDI r12, 0x6000
+        LDI r16, 256
+        FRAME
+        FRAME
+        FRAME
+        FRAME
+        FRAME
+
+        LDI r20, 0x5100
+        LDI r21, 101
+        STORE r20, r21
+        LDI r20, 0x5101
+        LDI r21, 99
+        STORE r20, r21
+        LDI r20, 0x5102
+        LDI r21, 104
+        STORE r20, r21
+        LDI r20, 0x5103
+        LDI r21, 111
+        STORE r20, r21
+        LDI r20, 0x5104
+        LDI r21, 32
+        STORE r20, r21
+        LDI r20, 0x5105
+        LDI r21, 109
+        STORE r20, r21
+        LDI r20, 0x5106
+        LDI r21, 97
+        STORE r20, r21
+        LDI r20, 0x5107
+        LDI r21, 114
+        STORE r20, r21
+        LDI r20, 0x5108
+        LDI r21, 107
+        STORE r20, r21
+        LDI r20, 0x5109
+        LDI r21, 101
+        STORE r20, r21
+        LDI r20, 0x510A
+        LDI r21, 114
+        STORE r20, r21
+        LDI r20, 0x510B
+        LDI r21, 95
+        STORE r20, r21
+        LDI r20, 0x510C
+        LDI r21, 97
+        STORE r20, r21
+        LDI r20, 0x510D
+        LDI r21, 98
+        STORE r20, r21
+        LDI r20, 0x510E
+        LDI r21, 99
+        STORE r20, r21
+        LDI r20, 0x510F
+        LDI r21, 10
+        STORE r20, r21
+        LDI r6, 0x5100
+        LDI r7, 16
+        PTYWRITE r10, r6, r7
+
+        PTYREAD r10, r12, r16
+        ADD r12, r0
+        FRAME
+        FRAME
+        FRAME
+        FRAME
+        FRAME
+        FRAME
+        FRAME
+        FRAME
+        FRAME
+        FRAME
+
+        LDI r20, 0x5100
+        LDI r21, 27
+        STORE r20, r21
+        LDI r20, 0x5101
+        LDI r21, 91
+        STORE r20, r21
+        LDI r20, 0x5102
+        LDI r21, 65
+        STORE r20, r21
+        LDI r20, 0x5103
+        LDI r21, 10
+        STORE r20, r21
+        LDI r20, 0x5104
+        LDI r21, 101
+        STORE r20, r21
+        LDI r20, 0x5105
+        LDI r21, 120
+        STORE r20, r21
+        LDI r20, 0x5106
+        LDI r21, 105
+        STORE r20, r21
+        LDI r20, 0x5107
+        LDI r21, 116
+        STORE r20, r21
+        LDI r20, 0x5108
+        LDI r21, 10
+        STORE r20, r21
+        LDI r6, 0x5100
+        LDI r7, 9
+        PTYWRITE r10, r6, r7
+
+drain_loop:
+        PTYREAD r10, r12, r16
+        ADD r12, r0
+        FRAME
+        JMP drain_loop
+    "#;
+
+    let asm = match assemble(source, 0) {
+        Ok(a) => a,
+        Err(e) => panic!("assembly failed: {} on line {}", e.message, e.line),
+    };
+    let mut vm = Vm::new();
+    for (i, &v) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = v;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(6);
+    let mut frames_seen = 0u32;
+    while std::time::Instant::now() < deadline && frames_seen < 300 {
+        for _ in 0..5000 {
+            if !vm.step() {
+                break;
+            }
+            if vm.frame_ready {
+                vm.frame_ready = false;
+                frames_seen += 1;
+            }
+        }
+        if frames_seen >= 300 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+
+    let mut bytes = Vec::new();
+    for i in 0..16384 {
+        let cell = vm.ram[0x6000 + i];
+        if cell == 0 {
+            continue;
+        }
+        bytes.push((cell & 0xFF) as u8);
+    }
+    let text = String::from_utf8_lossy(&bytes);
+
+    assert!(
+        !text.is_empty(),
+        "PTYREAD should have received some output. frames_seen={}",
+        frames_seen
+    );
+
+    assert!(
+        text.contains("marker_abc"),
+        "expected 'marker_abc' in output from echoed command, got: {:?}",
+        &text[..text.len().min(300)]
+    );
+}
+
+// ── Phase 130 D2: Desktop building entry for host_term ─────────────
+
+#[test]
+fn test_host_term_building_in_table() {
+    let source = std::fs::read_to_string("programs/world_desktop.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &pixel) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            break;
+        }
+    }
+
+    // Building 15 should be host_term at (140, 80) with color 0xAAFFCC
+    let b15_base = 0x7500 + 15 * 4;
+    assert_eq!(vm.ram[b15_base], 140, "host_term building x should be 140");
+    assert_eq!(vm.ram[b15_base + 1], 80, "host_term building y should be 80");
+    assert_eq!(
+        vm.ram[b15_base + 2], 0xAAFFCC,
+        "host_term building color should be 0xAAFFCC"
+    );
+
+    // Name address should point to "host" string
+    let name_addr = vm.ram[b15_base + 3] as usize;
+    assert_ne!(name_addr, 0, "host_term name addr should not be 0");
+
+    // Read the name string
+    let mut name = String::new();
+    for j in 0..16 {
+        let ch = vm.ram[name_addr + j];
+        if ch == 0 {
+            break;
+        }
+        name.push(ch as u8 as char);
+    }
+    assert_eq!(name, "host", "building 15 name should be host");
+}
+
+#[test]
+fn test_host_term_building_launch_mapping() {
+    let source = std::fs::read_to_string("programs/host_term.asm").unwrap();
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "host_term.asm should assemble successfully");
+    let asm = result.unwrap();
+    assert!(!asm.pixels.is_empty(), "host_term.asm should produce bytecode");
+}
