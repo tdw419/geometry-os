@@ -702,12 +702,19 @@ pub struct Window {
     pub active: bool,
     /// Offscreen pixel buffer (w * h pixels). Initialized to all black (0).
     /// Programs write pixels here; FRAME blits to main screen in Z-order.
+    /// Can be larger than 256x256; viewport_x/y controls which portion is displayed.
     pub offscreen_buffer: Vec<u32>,
     // ── Phase 107: World-space coordinates ──
     /// World-space X position (tile coordinate). 0xFFFFFFFF = unset (screen-space window).
     pub world_x: u32,
     /// World-space Y position (tile coordinate). 0xFFFFFFFF = unset (screen-space window).
     pub world_y: u32,
+    // ── Phase 133: Viewport offset for wider/taller windows ──
+    /// Horizontal scroll offset within the offscreen buffer (pixels).
+    /// Controls which portion of a wider buffer is visible on the 256x256 screen.
+    pub viewport_x: u32,
+    /// Vertical scroll offset within the offscreen buffer (pixels).
+    pub viewport_y: u32,
 }
 
 /// Sentinel value: world coords unset, window uses screen-space positioning.
@@ -742,6 +749,8 @@ impl Window {
             offscreen_buffer: vec![0u32; buf_size],
             world_x: WORLD_COORD_UNSET,
             world_y: WORLD_COORD_UNSET,
+            viewport_x: 0,
+            viewport_y: 0,
         }
     }
 
@@ -770,6 +779,8 @@ impl Window {
             offscreen_buffer: vec![0u32; buf_size],
             world_x,
             world_y,
+            viewport_x: 0,
+            viewport_y: 0,
         }
     }
 

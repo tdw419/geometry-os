@@ -2065,8 +2065,11 @@ fn main() {
                                                         let win_world_y =
                                                             (cam_y + 12).max(0) as u32;
 
-                                                        let win_w = 128u32;
-                                                        let win_h = 96u32;
+                                                        // Phase 133: host_term uses SMALLTEXT (3x5 font) for 80 cols x 40 rows
+                                                        // 80*3px = 240px wide, 40*6px + 10px title = 250px tall -> 256x256 window
+                                                        // Other apps keep 128x96
+                                                        let win_w = if app_name == "host_term" { 256u32 } else { 128u32 };
+                                                        let win_h = if app_name == "host_term" { 256u32 } else { 96u32 };
 
                                                         // Create a world-space WINSYS window
                                                         vm.ram[crate::vm::types::WINDOW_WORLD_COORDS_ADDR] = 1;
@@ -2091,6 +2094,12 @@ fn main() {
                                                         }
                                                         win.title_addr = title_base as u32;
                                                         vm.windows.push(win);
+
+                                                        // Phase 133: tell host_term its WINSYS window ID (0x4E08)
+                                                        // This enables dynamic sizing when launched in a window
+                                                        if 0x4E08 < ram_len {
+                                                            vm.ram[0x4E08] = win_id;
+                                                        }
 
                                                         // Push the process
                                                         vm.processes.push(proc);
@@ -2702,8 +2711,8 @@ fn main() {
                                     let win_id = id_str.parse::<u32>().unwrap_or(0);
                                     let new_w = w_str.parse::<u32>().unwrap_or(0);
                                     let new_h = h_str.parse::<u32>().unwrap_or(0);
-                                    if new_w == 0 || new_h == 0 || new_w > 256 || new_h > 256 {
-                                        response.push_str("[error: invalid size (1-256)]\n");
+                                    if new_w == 0 || new_h == 0 || new_w > 512 || new_h > 512 {
+                                        response.push_str("[error: invalid size (1-512)]\n");
                                     } else if let Some(w) =
                                         vm.windows.iter_mut().find(|w| w.id == win_id && w.active)
                                     {

@@ -1,59 +1,51 @@
-; host_term.asm -- Host Shell Terminal for Geometry OS (v5)
+; host_term.asm -- Host Shell Terminal for Geometry OS (v4)
 ;
 ; Spawns bash inside a real PTY via the PTYOPEN opcode. Pipes keystrokes
 ; through PTYWRITE, drains PTY output through PTYREAD each frame.
 ;
-; v5 improvements (Phase 133: Wider Display):
-;   - SMALLTEXT opcode (3x5 font) for 80 readable columns
-;   - 80x40 terminal (standard 80 cols, 40 rows) via PTYSIZE
+; v4 improvements:
+;   - MEDTEXT opcode (5x7 font) for 42 readable columns
 ;   - Arrow key support (ESC [ A/B/C/D sequences)
 ;   - Shift-aware lowercase text input
 ;   - ANSI escape stripping (CSI + OSC sequences)
 ;   - Backspace/Delete, Ctrl-C (0x03), Ctrl-D (0x04), Tab (0x09)
 ;
 ; RAM Layout:
-;   0x4000-0x77FF  Text buffer (80*47 = 3760 u32 cells, row-major)
+;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
 ;   0x4E00         Cursor column
 ;   0x4E01         Cursor row
 ;   0x4E02         Blink counter
 ;   0x4E03         PTY handle
-;   0x4E04         ANSI state
-;   0x4E05         STATUS_CONNECTED
-;   0x4E06         STATUS_CWD_LEN
-;   0x4E07         OSC_LEN
-;   0x4E08         SCROLL_X (horizontal scroll offset)
-;   0x5000         Empty cmd string
-;   0x5400         Send buffer
+;   0x4E04         ANSI state (0=normal, 1=saw ESC, 2=in CSI, 3=in OSC)
+;   0x5000         Empty cmd string (null -> default $SHELL)
+;   0x5400         Send buffer (multi-byte for arrow key sequences)
 ;   0x5800-0x5FFF  Receive buffer (2048 cells)
-;   0x6000-0x60FF  Scratch buffer for SMALLTEXT rendering (128 chars)
-;   0x6100-0x613F  STATUS_CWD (64 chars max)
-;   0x6200-0x6250  OSC_BUF (80 chars max)
+;   0x6000-0x60FF  Scratch buffer for MEDTEXT rendering (128 chars)
 ;
 ; Registers:
 ;   r0  CMP/result
 ;   r1  constant 1
-;   r28 PTY handle (live copies)
+;   r28 PTY handle (live copy)
 ;   r30 stack pointer
 ;
-#define COLS 80
-#define ROWS 40
+#define COLS 42
+#define ROWS 30
 #define BUF 0x4000
-#define BUF_END 0x77F0
+#define BUF_END 0x44EC
 #define CUR_COL 0x4E00
 #define CUR_ROW 0x4E01
 #define BLINK 0x4E02
 #define PTY_HANDLE 0x4E03
 #define ANSI_STATE 0x4E04
 #define STATUS_CONNECTED 0x4E05
-#define STATUS_CWD_LEN 0x4E06
-#define OSC_LEN 0x4E07
-#define SCROLL_X 0x4E08
 #define STATUS_CWD 0x6100
+#define STATUS_CWD_LEN 0x4E06
+#define OSC_BUF 0x6200
+#define OSC_LEN 0x4E07
 #define CMD_BUF 0x5000
 #define SEND_BUF 0x5400
 #define RECV_BUF 0x5800
 #define SCRATCH 0x6000
-#define OSC_BUF 0x6200
 
 ; ANSI states
 #define ANS_NORMAL 0
@@ -108,10 +100,8 @@ LDI r20, STATUS_CWD_LEN
 STORE r20, r0
 LDI r20, OSC_LEN
 STORE r20, r0
-LDI r20, SCROLL_X
-STORE r20, r0
 
-; Title bar background
+; Title bar background (drawn once, content updated each frame by render)
 LDI r1, 0
 LDI r2, 0
 LDI r3, 256
@@ -119,15 +109,15 @@ LDI r4, 10
 LDI r5, 0x1A1A2E
 RECTF r1, r2, r3, r4, r5
 
-; Title text (using SMALLTEXT for compact display)
+; Title text (using DRAWTEXT for readability in title bar)
 LDI r20, SCRATCH
-STRO r20, "shell 80x40"
+STRO r20, "host shell"
 LDI r1, 2
-LDI r2, 2
+LDI r2, 1
 LDI r3, SCRATCH
 LDI r4, 0x44DD44
 LDI r5, 0x1A1A2E
-SMALLTEXT r1, r2, r3, r4, r5
+DRAWTEXT r1, r2, r3, r4, r5
 
 ; Close button hit region
 LDI r1, 230
@@ -154,28 +144,28 @@ LDI r20, STATUS_CONNECTED
 LDI r0, 1
 STORE r20, r0
 
-; PTYSIZE -- tell the PTY we want 80 cols x 40 rows
-LDI r10, 40
-LDI r11, 80
-PTYSIZE r28, r10, r11
-
-; r1 = 1 (restore)
+; r1 = 1 (restore after earlier code clobbered it)
 LDI r1, 1
 
 ; =========================================
-; STARTUP DRAIN
+; STARTUP DRAIN -- collect initial bash output
 ; =========================================
+; Show "[connecting...]" in the terminal
 LDI r20, SEND_BUF
 STRO r20, "[connecting...]"
 CALL write_str_to_buf
 CALL render
 FRAME
 
-LDI r21, 0
-LDI r22, 0
-LDI r23, 60
+; Drain initial output for ~60 frames to collect bash prompt.
+; Bash with TERM=xterm and PS1='$ ' should emit prompt bytes
+; after the initial newline we sent during PTY spawn.
+LDI r21, 0          ; received_any flag
+LDI r22, 0          ; frame counter
+LDI r23, 60         ; max startup frames
 
 startup_drain:
+    ; Read from PTY
     LDI r6, RECV_BUF
     LDI r7, 512
     PTYREAD r28, r6, r7
@@ -186,6 +176,7 @@ startup_drain:
     CMP r8, r7
     JZ r0, pty_closed
 
+    ; Process received bytes
     LDI r9, 0
 startup_append:
     CMP r9, r8
@@ -197,7 +188,7 @@ startup_append:
     ADD r9, r1
     JMP startup_append
 startup_after:
-    LDI r21, 1
+    LDI r21, 1      ; mark as received
 
 startup_check_done:
     CALL render
@@ -206,17 +197,18 @@ startup_check_done:
     CMPI r22, 60
     BLT r22, startup_drain
 
+; If no output received after 60 frames, probe with echo
 CMPI r21, 0
 JNZ r0, startup_done
 
-; Probe with echo
+; Show "[probing...]" and send echo to trigger output
 LDI r20, SEND_BUF
 STRO r20, "[probing...]"
 CALL write_str_to_buf
 CALL render
 FRAME
 
-; Send "echo ready\n"
+; Send "echo ready\n" to probe the PTY
 LDI r20, SEND_BUF
 LDI r0, 101
 STORE r20, r0
@@ -274,6 +266,7 @@ LDI r6, SEND_BUF
 LDI r7, 11
 PTYWRITE r28, r6, r7
 
+; Drain probe response for 30 more frames
 LDI r22, 0
 probe_drain:
     LDI r6, RECV_BUF
@@ -317,6 +310,8 @@ main_loop:
     LDI r6, RECV_BUF
     LDI r7, 512
     PTYREAD r28, r6, r7
+    ; r0 = bytes drained (0 = nothing, 0xFFFFFFFF = closed)
+    ; Save byte count before CMPI destroys it
     MOV r8, r0
     CMPI r8, 0
     JZ r0, after_drain
@@ -324,6 +319,7 @@ main_loop:
     CMP r8, r7
     JZ r0, pty_closed
 
+    ; Process each byte through ANSI filter -> text buffer
     LDI r9, 0
 append_loop:
     CMP r9, r8
@@ -336,9 +332,11 @@ append_loop:
     JMP append_loop
 
 pty_closed:
+    ; Mark disconnected
     LDI r20, STATUS_CONNECTED
     LDI r0, 0
     STORE r20, r0
+    ; Show message and stop
     LDI r20, SEND_BUF
     STRO r20, "[pty closed]"
     CALL write_str_to_buf
@@ -363,6 +361,7 @@ after_drain:
 
     ; Translate key and send to PTY
     CALL translate_key
+    ; r0 = number of bytes to send (0 = ignore, 1 = single, 3 = arrow escape)
     CMPI r0, 0
     JZ r0, main_loop
 
@@ -372,36 +371,44 @@ after_drain:
     JMP main_loop
 
 ; =========================================
-; PROCESS_BYTE -- ANSI state machine
+; PROCESS_BYTE -- ANSI state machine + text buffer append
 ; r5 = byte from PTY
+; Uses ANSI_STATE at 0x4A04
 ; =========================================
 process_byte:
     PUSH r31
     LDI r1, 1
 
+    ; Load ANSI state
     LDI r20, ANSI_STATE
     LOAD r4, r20
 
+    ; State: NORMAL
     CMPI r4, ANS_NORMAL
     JNZ r0, pb_check_esc
 
+    ; Check for ESC (0x1B)
     CMPI r5, 27
     JNZ r0, pb_normal_byte
 
+    ; Saw ESC -> transition to ESC state
     LDI r20, ANSI_STATE
     LDI r0, ANS_ESC
     STORE r20, r0
     JMP pb_ret
 
 pb_normal_byte:
+    ; Pass through to append_byte
     CALL append_byte
     JMP pb_ret
 
 pb_check_esc:
+    ; State: ESC (just saw 0x1B)
     CMPI r4, ANS_ESC
     JNZ r0, pb_check_csi
 
-    CMPI r5, 91
+    ; Check for [ -> CSI
+    CMPI r5, 91   ; '['
     JNZ r0, pb_esc_check_osc
 
     LDI r20, ANSI_STATE
@@ -410,7 +417,8 @@ pb_check_esc:
     JMP pb_ret
 
 pb_esc_check_osc:
-    CMPI r5, 93
+    ; Check for ] -> OSC
+    CMPI r5, 93   ; ']'
     JNZ r0, pb_esc_other
 
     LDI r20, ANSI_STATE
@@ -419,40 +427,50 @@ pb_esc_check_osc:
     JMP pb_ret
 
 pb_esc_other:
+    ; Any other char after ESC: not a recognized sequence.
+    ; Two-char ESC sequences (ESC M, ESC 7, ESC 8) -- skip.
     LDI r20, ANSI_STATE
     LDI r0, ANS_NORMAL
     STORE r20, r0
     JMP pb_ret
 
 pb_check_csi:
+    ; State: CSI (saw ESC [)
     CMPI r4, ANS_CSI
     JNZ r0, pb_check_osc
 
-    CMPI r5, 64
+    ; CSI sequences end with a byte in 0x40-0x7E (letter or @)
+    CMPI r5, 64    ; '@' -- first terminator
     BLT r0, pb_csi_continue
 
+    ; Byte >= 0x40 is a terminator -> sequence done
     LDI r20, ANSI_STATE
     LDI r0, ANS_NORMAL
     STORE r20, r0
     JMP pb_ret
 
 pb_csi_continue:
+    ; Still collecting CSI params
     JMP pb_ret
 
 pb_check_osc:
+    ; State: OSC (saw ESC ])
     CMPI r4, ANS_OSC
     JNZ r0, pb_reset_state
 
-    CMPI r5, 7
+    ; OSC ends with BEL (0x07) or ST (ESC \)
+    CMPI r5, 7     ; BEL
     JZ r0, pb_osc_end
     CMPI r5, 27
     JNZ r0, pb_osc_continue
+    ; ESC might be start of ST
     LDI r20, ANSI_STATE
     LDI r0, ANS_ESC
     STORE r20, r0
     JMP pb_ret
 
 pb_osc_continue:
+    ; Collect OSC byte into buffer (max 80 chars)
     LDI r20, OSC_LEN
     LOAD r0, r20
     LDI r7, 80
@@ -466,6 +484,7 @@ pb_osc_continue:
     JMP pb_ret
 
 pb_osc_end:
+    ; Process collected OSC sequence
     CALL process_osc
     LDI r20, ANSI_STATE
     LDI r0, ANS_NORMAL
@@ -482,12 +501,14 @@ pb_ret:
     RET
 
 ; =========================================
-; APPEND_BYTE -- append r5 to text buffer
+; APPEND_BYTE -- append r5 to text buffer (visible chars only)
+; \n (10) -> newline; \r (13) -> col=0; printable -> insert
 ; =========================================
 append_byte:
     PUSH r31
     LDI r1, 1
 
+    ; Newline
     CMPI r5, 10
     JNZ r0, ab_check_cr
     CALL do_newline
@@ -502,6 +523,7 @@ ab_check_cr:
     JMP ab_ret
 
 ab_check_print:
+    ; printable range 32..126 inclusive
     CMPI r5, 32
     BLT r0, ab_ret
     CMPI r5, 127
@@ -533,12 +555,15 @@ ab_ret:
     RET
 
 ; =========================================
-; TRANSLATE_KEY
+; TRANSLATE_KEY -- translate IKEY code to PTY byte(s)
+; Fills SEND_BUF with bytes, returns byte count in r0
+; r5 = raw IKEY value (preserved)
 ; =========================================
 translate_key:
     PUSH r31
     LDI r1, 1
 
+    ; Printable ASCII (32-126): pass through as single byte
     CMPI r5, 32
     BLT r0, tk_special
     CMPI r5, 127
@@ -549,6 +574,7 @@ translate_key:
     JMP tk_ret
 
 tk_special:
+    ; Enter (0x0D) -> \n (10)
     CMPI r5, 13
     JNZ r0, tk_bs
     LDI r20, SEND_BUF
@@ -558,6 +584,7 @@ tk_special:
     JMP tk_ret
 
 tk_bs:
+    ; Backspace (0x08) -> DEL (0x7F)
     CMPI r5, 8
     JNZ r0, tk_del
     LDI r20, SEND_BUF
@@ -567,6 +594,7 @@ tk_bs:
     JMP tk_ret
 
 tk_del:
+    ; Delete (0x7F) -> ESC [ 3 ~ (just send DEL for simplicity)
     CMPI r5, 127
     JNZ r0, tk_tab
     LDI r20, SEND_BUF
@@ -585,6 +613,7 @@ tk_tab:
     JMP tk_ret
 
 tk_ctrl_c:
+    ; Ctrl-C: check for ASCII 3
     CMPI r5, 3
     JNZ r0, tk_ctrl_d
     LDI r20, SEND_BUF
@@ -612,6 +641,7 @@ tk_escape:
     JMP tk_ret
 
 tk_arrow_up:
+    ; Arrow Up (0x80) -> ESC [ A
     CMPI r5, KEY_UP
     JNZ r0, tk_arrow_down
     LDI r20, SEND_BUF
@@ -630,6 +660,7 @@ tk_arrow_up:
     JMP tk_ret
 
 tk_arrow_down:
+    ; Arrow Down (0x81) -> ESC [ B
     CMPI r5, KEY_DOWN
     JNZ r0, tk_arrow_right
     LDI r20, SEND_BUF
@@ -648,6 +679,7 @@ tk_arrow_down:
     JMP tk_ret
 
 tk_arrow_right:
+    ; Arrow Right (0x83) -> ESC [ C
     CMPI r5, KEY_RIGHT
     JNZ r0, tk_arrow_left
     LDI r20, SEND_BUF
@@ -666,6 +698,7 @@ tk_arrow_right:
     JMP tk_ret
 
 tk_arrow_left:
+    ; Arrow Left (0x82) -> ESC [ D
     CMPI r5, KEY_LEFT
     JNZ r0, tk_home
     LDI r20, SEND_BUF
@@ -684,6 +717,7 @@ tk_arrow_left:
     JMP tk_ret
 
 tk_home:
+    ; Home (0x84) -> ESC [ H
     CMPI r5, KEY_HOME
     JNZ r0, tk_end
     LDI r20, SEND_BUF
@@ -702,6 +736,7 @@ tk_home:
     JMP tk_ret
 
 tk_end:
+    ; End (0x85) -> ESC [ F
     CMPI r5, KEY_END
     JNZ r0, tk_ignore
     LDI r20, SEND_BUF
@@ -720,6 +755,7 @@ tk_end:
     JMP tk_ret
 
 tk_ignore:
+    ; Unknown key -- don't send anything
     LDI r0, 0
 
 tk_ret:
@@ -742,35 +778,37 @@ do_newline:
     BLT r0, dn_store
     CALL scroll_up
     LDI r20, CUR_ROW
-    LDI r6, 39
+    LDI r6, 29
 dn_store:
     STORE r20, r6
     POP r31
     RET
 
 ; =========================================
-; SCROLL_UP -- shift rows up, clear last row
+; SCROLL_UP -- shift rows 1..29 up to 0..28, clear row 29
 ; =========================================
 scroll_up:
     PUSH r31
     LDI r1, 1
     LDI r10, 0
 scroll_loop:
-    CMPI r10, 39
+    CMPI r10, 29
     BGE r0, scroll_clear
 
     LDI r20, BUF
-    MOV r0, r10
+    LDI r0, 0
+    ADD r0, r10
     ADD r0, r1
     LDI r11, COLS
     MUL r0, r11
-    ADD r20, r0
+    ADD r20, r0          ; src = BUF + (row+1)*COLS
 
     LDI r21, BUF
-    MOV r0, r10
+    LDI r0, 0
+    ADD r0, r10
     LDI r11, COLS
     MUL r0, r11
-    ADD r21, r0
+    ADD r21, r0          ; dst = BUF + row*COLS
 
     LDI r22, 0
 scroll_copy:
@@ -787,7 +825,7 @@ scroll_copy:
 
 scroll_clear:
     LDI r20, BUF
-    LDI r6, 39
+    LDI r6, 29
     LDI r11, COLS
     MUL r6, r11
     ADD r20, r6
@@ -803,7 +841,7 @@ sc_loop:
     RET
 
 ; =========================================
-; WRITE_STR_TO_BUF
+; WRITE_STR_TO_BUF -- write null-term string at [r20] to text buffer
 ; =========================================
 write_str_to_buf:
     PUSH r31
@@ -821,33 +859,40 @@ wsb_done:
     RET
 
 ; =========================================
-; PROCESS_OSC -- handle OSC sequence
+; PROCESS_OSC -- handle collected OSC sequence
+; Checks for OSC 7 (set cwd) and extracts path
+; OSC 7 format: "7;file://host/path"
 ; =========================================
 process_osc:
     PUSH r31
     LDI r1, 1
 
+    ; Check if OSC starts with '7' (OSC 7 = set working directory)
     LDI r20, OSC_BUF
     LOAD r0, r20
-    CMPI r0, 55
+    CMPI r0, 55    ; '7' = 55
     JNZ r0, po_done
 
+    ; Check second byte is ';' (59)
     LDI r20, OSC_BUF
     ADD r20, r1
     LOAD r0, r20
-    CMPI r0, 59
+    CMPI r0, 59    ; ';'
     JNZ r0, po_done
 
-    LDI r10, 0
-    LDI r11, 0
+    ; Extract path from "7;file://HOST/PATH"
+    ; Find the 3rd '/' (after file://host)
+    LDI r10, 0     ; position in OSC_BUF
+    LDI r11, 0     ; slash count
 po_find_path:
     LDI r20, OSC_BUF
     ADD r20, r10
     LOAD r0, r20
-    JZ r0, po_done
-    CMPI r0, 47
+    JZ r0, po_done  ; null terminator, no path found
+    CMPI r0, 47    ; '/'
     JNZ r0, po_next
     ADD r11, r1
+    ; After 3 slashes, we're at the path
     CMPI r11, 3
     BGE r0, po_copy_path
 po_next:
@@ -858,7 +903,8 @@ po_next:
     JMP po_done
 
 po_copy_path:
-    LDI r12, 0
+    ; r10 points to the 3rd '/' -- copy from there into STATUS_CWD
+    LDI r12, 0     ; cwd offset
 po_cp_loop:
     LDI r20, OSC_BUF
     ADD r20, r10
@@ -873,6 +919,7 @@ po_cp_loop:
     CMP r12, r7
     BLT r0, po_cp_loop
 po_cp_done:
+    ; Null-terminate and store length
     LDI r7, STATUS_CWD
     ADD r7, r12
     LDI r0, 0
@@ -881,6 +928,7 @@ po_cp_done:
     STORE r20, r12
 
 po_done:
+    ; Reset OSC buffer
     LDI r20, OSC_LEN
     LDI r0, 0
     STORE r20, r0
@@ -888,12 +936,14 @@ po_done:
     RET
 
 ; =========================================
-; DRAW_STATUS_BAR
+; DRAW_STATUS_BAR -- render title bar with shell info
+; Shows: "bash: ~/path" + connected indicator on the right
 ; =========================================
 draw_status_bar:
     PUSH r31
     LDI r1, 1
 
+    ; Clear title bar area
     LDI r1, 0
     LDI r2, 0
     LDI r3, 256
@@ -901,9 +951,12 @@ draw_status_bar:
     LDI r5, 0x1A1A2E
     RECTF r1, r2, r3, r4, r5
 
+    ; Build status string in SCRATCH: "bash: " + cwd
     LDI r20, SCRATCH
     STRO r20, "bash: "
+    ; Append cwd
     LDI r20, SCRATCH
+    ; Find end of "bash: " (6 chars)
     LDI r10, 0
 dsb_find_end:
     LDI r7, SCRATCH
@@ -914,10 +967,12 @@ dsb_find_end:
     JMP dsb_find_end
 
 dsb_append_cwd:
+    ; Check if we have a cwd
     LDI r20, STATUS_CWD_LEN
     LOAD r0, r20
     JZ r0, dsb_no_cwd
 
+    ; Append cwd chars
     LDI r11, 0
 dsb_cp:
     LDI r7, STATUS_CWD
@@ -929,92 +984,99 @@ dsb_cp:
     STORE r7, r0
     ADD r10, r1
     ADD r11, r1
-    LDI r7, 38
+    LDI r7, 38     ; max 38 chars for title
     CMP r10, r7
     BLT r0, dsb_cp
     JMP dsb_cp_done
 
 dsb_no_cwd:
+    ; No cwd known yet -- show "~"
     LDI r7, SCRATCH
     ADD r7, r10
-    LDI r0, 126
+    LDI r0, 126    ; '~'
     STORE r7, r0
     ADD r10, r1
 
 dsb_cp_done:
+    ; Null-terminate
     LDI r7, SCRATCH
     ADD r7, r10
     LDI r0, 0
     STORE r7, r0
 
+    ; Draw the status text
     LDI r1, 2
-    LDI r2, 2
+    LDI r2, 1
     LDI r3, SCRATCH
     LDI r4, 0x44DD44
     LDI r5, 0x1A1A2E
-    SMALLTEXT r1, r2, r3, r4, r5
+    DRAWTEXT r1, r2, r3, r4, r5
 
+    ; Draw connection indicator on the right side
     LDI r20, STATUS_CONNECTED
     LOAD r0, r20
     JZ r0, dsb_disconnected
 
+    ; Connected: green dot (0x25CF = filled circle, or just use ASCII)
     LDI r20, SCRATCH
-    LDI r0, 42
+    LDI r0, 42    ; '*' as connected indicator
     STORE r20, r0
     LDI r0, 0
     ADD r20, r1
     STORE r20, r0
-    LDI r1, 240
-    LDI r2, 2
+    LDI r1, 230
+    LDI r2, 1
     LDI r3, SCRATCH
     LDI r4, 0x44FF44
     LDI r5, 0x1A1A2E
-    SMALLTEXT r1, r2, r3, r4, r5
+    DRAWTEXT r1, r2, r3, r4, r5
     JMP dsb_ret
 
 dsb_disconnected:
+    ; Disconnected: red "X"
     LDI r20, SCRATCH
-    LDI r0, 88
+    LDI r0, 88    ; 'X'
     STORE r20, r0
     LDI r0, 0
     ADD r20, r1
     STORE r20, r0
-    LDI r1, 240
-    LDI r2, 2
+    LDI r1, 230
+    LDI r2, 1
     LDI r3, SCRATCH
     LDI r4, 0xFF4444
     LDI r5, 0x1A1A2E
-    SMALLTEXT r1, r2, r3, r4, r5
+    DRAWTEXT r1, r2, r3, r4, r5
 
 dsb_ret:
     POP r31
     RET
 
 ; =========================================
-; RENDER -- redraw text buffer using SMALLTEXT (3x5 font)
-; Terminal area starts at y=10, 6px per row (5px glyph + 1px spacing)
-; 40 rows * 6px = 240px. Total: 10 + 240 = 250px (fits in 256px)
+; RENDER -- redraw text buffer using MEDTEXT (5x7 font)
+; Terminal area starts at y=12, uses 8px per row (7px glyph + 1px spacing)
+; 30 rows * 8px = 240px. Total: 12 + 240 = 252px (fits in 256px)
 ; =========================================
 render:
     PUSH r31
     LDI r1, 1
 
+    ; Draw status bar first
     CALL draw_status_bar
 
     ; Clear content area
     LDI r1, 0
-    LDI r2, 10
+    LDI r2, 12
     LDI r3, 256
-    LDI r4, 246
+    LDI r4, 244
     LDI r5, 0x0A0A0A
     RECTF r1, r2, r3, r4, r5
 
     LDI r1, 1
-    LDI r10, 0
-    LDI r11, BUF
-    LDI r12, 10
+    LDI r10, 0        ; row counter
+    LDI r11, BUF       ; buf pointer
+    LDI r12, 12        ; y position (start after title bar)
 render_row:
-    ; Copy up to COLS chars to scratch, null-terminate
+    ; Copy up to 42 chars to scratch buffer, null-terminate
     LDI r16, SCRATCH
     LDI r17, 0
 copy_col:
@@ -1026,23 +1088,25 @@ copy_col:
     CMPI r17, COLS
     BLT r17, copy_col
     LDI r0, 0
-    STORE r16, r0
+    STORE r16, r0      ; null-terminate
 
-    ; Render with SMALLTEXT: light gray text, transparent bg
+    ; Render with MEDTEXT: light gray text, dark bg (0=transparent bg)
     LDI r1, 0
     LDI r13, SCRATCH
-    LDI r14, 0xBBBBBB
-    LDI r15, 0
-    SMALLTEXT r1, r12, r13, r14, r15
+    LDI r14, 0xBBBBBB  ; light gray terminal text
+    LDI r15, 0         ; no background (already cleared)
+    MEDTEXT r1, r12, r13, r14, r15
 
     LDI r1, 1
-    ; Advance y by 6
+    ; Advance y by 8 (7px glyph + 1px spacing)
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
+    ADD r12, r1
+    ; Now r12 advanced by 8 total
 
     ADD r10, r1
     CMPI r10, ROWS
@@ -1057,18 +1121,19 @@ copy_col:
     BGE r0, cursor_done
 
 draw_cursor:
+    ; Cursor: 2px wide, 7px tall at cursor position
     LDI r20, CUR_COL
     LOAD r0, r20
-    LDI r7, 3
-    MUL r0, r7
+    LDI r7, 6
+    MUL r0, r7          ; x = col * 6 (6px per char)
     LDI r20, CUR_ROW
     LOAD r2, r20
-    LDI r7, 6
-    MUL r2, r7
-    LDI r3, 10
-    ADD r2, r3
-    LDI r3, 2
-    LDI r4, 5
+    LDI r7, 8
+    MUL r2, r7          ; row * 8
+    LDI r3, 12
+    ADD r2, r3          ; + title bar offset
+    LDI r3, 2           ; width
+    LDI r4, 7           ; height
     LDI r5, 0x44FF44
     RECTF r0, r2, r3, r4, r5
 

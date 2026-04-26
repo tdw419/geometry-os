@@ -41,6 +41,19 @@ const CUR_COL: usize = 0x4E00;
 const CUR_ROW: usize = 0x4E01;
 const PTY_HANDLE: usize = 0x4E03;
 const ANSI_STATE: usize = 0x4E04;
+/// Slot bitmap base: RAM[0x4E10..0x4E13] = 1 if slot N is active, 0 if empty.
+const SLOT_MAP: usize = 0x4E10;
+
+/// Write the current PTY slot occupancy bitmap into RAM for the ASM program to read.
+fn sync_slot_map(vm: &mut Vm) {
+    for i in 0..4 {
+        vm.ram[SLOT_MAP + i] = if i < vm.pty_slots.len() && vm.pty_slots[i].is_some() {
+            1
+        } else {
+            0
+        };
+    }
+}
 
 // ── Script mode ──────────────────────────────────────────────────────
 

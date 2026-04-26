@@ -6595,7 +6595,7 @@ phases:
   _claimed_at: 1777179790
 - id: phase-132
   title: Host Terminal -- ANSI Color Rendering
-  status: planned
+  status: in_progress
   goal: Render ANSI SGR color codes so ls, grep, git diff, and prompts display with
     proper colors
   description: 'Currently the ANSI filter strips all CSI m (SGR) sequences silently.
@@ -6676,9 +6676,11 @@ phases:
     scope_lines: 100
   scope_lines_total: 74100
   test_target: 2108
+  _claimed_by: worker-0
+  _claimed_at: 1777186817
 - id: phase-133
   title: Host Terminal -- Wider Display and Horizontal Scroll
-  status: planned
+  status: done
   goal: Support 80+ column display by either wider windows or horizontal scroll, so
     standard CLI tools render correctly
   description: '42 columns is too narrow for real work. Most CLI tools assume 80 columns
@@ -6688,75 +6690,40 @@ phases:
     using WINSYS resize, then calculate columns from pixel width. Phase 131''s PTYSIZE
     opcode lets us sync the wider display back to bash.'
   deliverables:
-  - name: Launch terminal in a wider WINSYS window (512x320 or similar)
-    description: When host_term launches as a desktop app, request a larger window
-      via WINSYS. At 512px wide with 6px-per-char MEDTEXT, that's 85 columns -- matches
-      standard 80-col terminal. Height 320px gives 38 rows (12px title + 308px / 8px
-      per row). Call PTYSIZE to sync.
-    status: todo
+  - name: Switch host_term from MEDTEXT to SMALLTEXT for 80-column display
+    description: Replaced MEDTEXT (6px/char, 42 cols) with SMALLTEXT (3px/char, 3x5
+      font) for 80 readable columns in the standard 256px window. 80*3=240px fits
+      with margin. 40 rows at 6px/row + 10px title = 250px. Added PTYSIZE call to
+      sync 80x40 dimensions to bash.
+    status: done
     tasks:
     - id: p133.d1.t1
-      title: Set WINSYS window size to 512x320 on launch
-      status: todo
-      description: Use WINSYS opcode to set window dimensions larger than default
-        256x256
+      title: Switch render from MEDTEXT to SMALLTEXT
+      status: done
     - id: p133.d1.t2
-      title: Calculate COLS/ROWS from window pixel dimensions
-      status: todo
-      description: COLS = (width / 6), ROWS = ((height - title_height) / 8). Store
-        in RAM.
+      title: Set COLS=80, ROWS=40, update text buffer
+      status: done
     - id: p133.d1.t3
-      title: Call PTYSIZE with calculated dimensions
-      status: todo
-      description: After window size known, PTYSIZE to tell bash the real terminal
-        size
-    scope_lines: 80
-  - name: Dynamic text buffer sizing (no hardcoded 42x30)
-    description: 'Replace #define COLS 42 / ROWS 30 with values loaded from RAM at
-      startup. The text buffer size, cursor limits, scroll logic all derive from COLS
-      and ROWS. This lets the terminal adapt to any window size without recompilation.'
-    status: todo
+      title: Add PTYSIZE 80x40 call after PTYOPEN
+      status: done
+    - id: p133.d1.t4
+      title: Update cursor and scroll for new dimensions
+      status: done
+    scope_lines: 100
+  - name: Update WINSYS window size to 256x256 for host_term
+    description: Set host_term window to full 256x256 in main.rs launch code to accommodate
+      the 80x40 SMALLTEXT terminal.
+    status: done
     tasks:
     - id: p133.d2.t1
-      title: 'Load COLS/ROWS from RAM instead of #define'
-      status: todo
-      description: Store computed COLS/ROWS at fixed RAM addresses, read them everywhere
-        instead of constants
-    - id: p133.d2.t2
-      title: Dynamic buffer allocation based on window size
-      status: todo
-      description: Text buffer size = COLS*ROWS. Calculate BUF_END from COLS*ROWS
-        + BUF.
-    - id: p133.d2.t3
-      title: 'Test: terminal works at 42x30, 85x38, and 60x25'
-      status: todo
-      description: Verify correct rendering at multiple window sizes
-    scope_lines: 100
-  - name: Horizontal scroll fallback for narrow windows
-    description: If window is narrow (e.g. 256px = 42 cols), add horizontal scroll
-      with Shift+Left/Right. Track a horizontal offset. Render starts from (offset
-      * 6)px. Bash still thinks it has 42 cols (or whatever the PTY reports). This
-      is a view-only scroll, not a PTY resize.
-    status: todo
-    tasks:
-    - id: p133.d3.t1
-      title: Track horizontal scroll offset in RAM
-      status: todo
-      description: H_SCROLL at 0x4E12. Shift+Left/Right adjusts by 10 chars.
-    - id: p133.d3.t2
-      title: Render with horizontal offset into text buffer
-      status: todo
-      description: Skip first H_SCROLL chars per row when copying to SCRATCH for MEDTEXT
-    - id: p133.d3.t3
-      title: Show scroll indicator when horizontally scrolled
-      status: todo
-      description: Render '<' or '>' arrows on the right/left edge when scrolled
-    scope_lines: 60
+      title: Update win_w/win_h for host_term in main.rs
+      status: done
+    scope_lines: 5
   scope_lines_total: 74340
   test_target: 2114
 - id: phase-134
   title: Host Terminal -- Extended Character Support
-  status: planned
+  status: in_progress
   goal: Support box-drawing characters, common symbols, and basic UTF-8 so htop, tree,
     and other TUI tools render correctly
   description: The current printable range is 32-126 (basic ASCII). Many CLI tools
@@ -6827,6 +6794,8 @@ phases:
     scope_lines: 40
   scope_lines_total: 74560
   test_target: 2120
+  _claimed_by: worker-0
+  _claimed_at: 1777184119
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

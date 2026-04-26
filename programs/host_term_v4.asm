@@ -1,26 +1,36 @@
-; host_term.asm -- Host Shell Terminal for Geometry OS (v4)
+; host_term.asm -- Host Shell Terminal for Geometry OS (v5)
 ;
 ; Spawns bash inside a real PTY via the PTYOPEN opcode. Pipes keystrokes
 ; through PTYWRITE, drains PTY output through PTYREAD each frame.
 ;
-; v4 improvements:
-;   - MEDTEXT opcode (5x7 font) for 42 readable columns
-;   - Arrow key support (ESC [ A/B/C/D sequences)
-;   - Shift-aware lowercase text input
-;   - ANSI escape stripping (CSI + OSC sequences)
-;   - Backspace/Delete, Ctrl-C (0x03), Ctrl-D (0x04), Tab (0x09)
+; v5 improvements (Phase 133):
+;   - SMALLTEXT opcode (3x5 font) for 85 readable columns
+;   - Dynamic COLS/ROWS from WINSYS window size
+;   - Horizontal scroll with Shift+Left/Right
+;   - Default: 85 cols x 40 rows in 256px (3px/char, 6px/row)
 ;
 ; RAM Layout:
-;   0x4000-0x44EB  Text buffer (42*30 = 1260 u32 cells, row-major)
+;   0x4000-0x4D47  Text buffer (85*40 = 3400 u32 cells, row-major)
 ;   0x4E00         Cursor column
 ;   0x4E01         Cursor row
 ;   0x4E02         Blink counter
 ;   0x4E03         PTY handle
 ;   0x4E04         ANSI state (0=normal, 1=saw ESC, 2=in CSI, 3=in OSC)
+;   0x4E05         STATUS_CONNECTED
+;   0x4E06         STATUS_CWD_LEN
+;   0x4E07         OSC_LEN
+;   0x4E08         WIN_ID (WINSYS window ID, 0 = disabled)
+;   0x4E09         LAST_COLS (last known column count)
+;   0x4E0A         H_SCROLL (horizontal scroll offset in chars)
+;   0x4E0B         COLS_RAM (current column count)
+;   0x4E0C         ROWS_RAM (current row count)
 ;   0x5000         Empty cmd string (null -> default $SHELL)
 ;   0x5400         Send buffer (multi-byte for arrow key sequences)
 ;   0x5800-0x5FFF  Receive buffer (2048 cells)
-;   0x6000-0x60FF  Scratch buffer for MEDTEXT rendering (128 chars)
+;   0x6000-0x60FF  Scratch buffer for SMALLTEXT rendering (128 chars)
+;   0x6100         STATUS_CWD
+;   0x6200         OSC_BUF
+;   0x6300         WINFO_BUF
 ;
 ; Registers:
 ;   r0  CMP/result
@@ -28,10 +38,10 @@
 ;   r28 PTY handle (live copy)
 ;   r30 stack pointer
 ;
-#define COLS 42
-#define ROWS 30
+#define COLS 85
+#define ROWS 40
 #define BUF 0x4000
-#define BUF_END 0x44EC
+#define BUF_END 0x4D48
 #define CUR_COL 0x4E00
 #define CUR_ROW 0x4E01
 #define BLINK 0x4E02
@@ -49,6 +59,9 @@
 #define WIN_ID 0x4E08
 #define LAST_COLS 0x4E09
 #define WINFO_BUF 0x6300
+#define H_SCROLL 0x4E0A
+#define COLS_RAM 0x4E0B
+#define ROWS_RAM 0x4E0C
 
 ; ANSI states
 #define ANS_NORMAL 0
@@ -74,9 +87,10 @@ LDI r30, 0xFD00
 LDI r0, 0x0A0A0A
 FILL r0
 
-; Clear text buffer to spaces
+; Clear text buffer to spaces (85*40 = 3400 cells)
 LDI r20, BUF
 LDI r6, 32
+LDI r15, 3400
 clear_buf_init:
     STORE r20, r6
     ADD r20, r1
@@ -104,6 +118,17 @@ STORE r20, r0
 LDI r20, OSC_LEN
 STORE r20, r0
 
+; Phase 133: init dynamic sizing vars
+LDI r20, H_SCROLL
+STORE r20, r0
+LDI r20, COLS_RAM
+LDI r0, COLS
+STORE r20, r0
+LDI r20, ROWS_RAM
+LDI r0, ROWS
+STORE r20, r0
+LDI r0, 0
+
 ; Initialize resize tracking (WINSYS window ID = 0 = disabled)
 LDI r20, WIN_ID
 STORE r20, r0
@@ -112,17 +137,17 @@ LDI r0, COLS
 STORE r20, r0
 LDI r0, 0
 
-; Title bar background (drawn once, content updated each frame by render)
+; Title bar background (8px tall for SMALLTEXT)
 LDI r1, 0
 LDI r2, 0
 LDI r3, 256
-LDI r4, 10
+LDI r4, 8
 LDI r5, 0x1A1A2E
 RECTF r1, r2, r3, r4, r5
 
 ; Title text (using DRAWTEXT for readability in title bar)
 LDI r20, SCRATCH
-STRO r20, "host shell"
+STRO r20, "shell"
 LDI r1, 2
 LDI r2, 1
 LDI r3, SCRATCH
@@ -134,7 +159,7 @@ DRAWTEXT r1, r2, r3, r4, r5
 LDI r1, 230
 LDI r2, 0
 LDI r3, 26
-LDI r4, 10
+LDI r4, 8
 HITSET r1, r2, r3, r4, 99
 
 ; Empty cmd string for PTYOPEN
@@ -1066,9 +1091,10 @@ dsb_ret:
     RET
 
 ; =========================================
-; RENDER -- redraw text buffer using MEDTEXT (5x7 font)
-; Terminal area starts at y=12, uses 8px per row (7px glyph + 1px spacing)
-; 30 rows * 8px = 240px. Total: 12 + 240 = 252px (fits in 256px)
+; RENDER -- redraw text buffer using SMALLTEXT (3x5 font)
+; Terminal area starts at y=8, uses 6px per row (5px glyph + 1px spacing)
+; 40 rows * 6px = 240px. Total: 8 + 240 = 248px (fits in 256px)
+; Phase 133: supports horizontal scroll via H_SCROLL
 ; =========================================
 render:
     PUSH r31
@@ -1079,22 +1105,33 @@ render:
 
     ; Clear content area
     LDI r1, 0
-    LDI r2, 12
+    LDI r2, 8
     LDI r3, 256
-    LDI r4, 244
+    LDI r4, 248
     LDI r5, 0x0A0A0A
     RECTF r1, r2, r3, r4, r5
 
+    ; Load horizontal scroll offset
+    LDI r20, H_SCROLL
+    LOAD r25, r20        ; r25 = h_scroll (chars to skip)
+
     LDI r1, 1
-    LDI r10, 0        ; row counter
-    LDI r11, BUF       ; buf pointer
-    LDI r12, 12        ; y position (start after title bar)
+    LDI r10, 0           ; row counter
+    LDI r11, BUF         ; buf pointer
+    LDI r12, 8           ; y position (start after title bar)
 render_row:
-    ; Copy up to 42 chars to scratch buffer, null-terminate
+    ; Copy up to COLS chars to scratch buffer, skipping h_scroll
     LDI r16, SCRATCH
     LDI r17, 0
 copy_col:
     LOAD r6, r11
+    ; Skip chars before h_scroll offset (fill with spaces)
+    LDI r26, 0
+    CMP r17, r25
+    BGE r0, copy_col_after_skip
+    ; Within scroll zone -- write space
+    LDI r6, 32
+copy_col_after_skip:
     STORE r16, r6
     ADD r11, r1
     ADD r16, r1
@@ -1104,23 +1141,21 @@ copy_col:
     LDI r0, 0
     STORE r16, r0      ; null-terminate
 
-    ; Render with MEDTEXT: light gray text, dark bg (0=transparent bg)
+    ; Render with SMALLTEXT: light gray text, no background
     LDI r1, 0
     LDI r13, SCRATCH
     LDI r14, 0xBBBBBB  ; light gray terminal text
     LDI r15, 0         ; no background (already cleared)
-    MEDTEXT r1, r12, r13, r14, r15
+    SMALLTEXT r1, r12, r13, r14, r15
 
     LDI r1, 1
-    ; Advance y by 8 (7px glyph + 1px spacing)
+    ; Advance y by 6 (5px glyph + 1px spacing)
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
     ADD r12, r1
-    ADD r12, r1
-    ; Now r12 advanced by 8 total
 
     ADD r10, r1
     CMPI r10, ROWS
@@ -1135,23 +1170,42 @@ copy_col:
     BGE r0, cursor_done
 
 draw_cursor:
-    ; Cursor: 2px wide, 7px tall at cursor position
+    ; Cursor: 2px wide, 5px tall at cursor position
     LDI r20, CUR_COL
     LOAD r0, r20
-    LDI r7, 6
-    MUL r0, r7          ; x = col * 6 (6px per char)
+    LDI r7, 3
+    MUL r0, r7          ; x = col * 3 (3px per char)
     LDI r20, CUR_ROW
     LOAD r2, r20
-    LDI r7, 8
-    MUL r2, r7          ; row * 8
-    LDI r3, 12
+    LDI r7, 6
+    MUL r2, r7          ; row * 6
+    LDI r3, 8
     ADD r2, r3          ; + title bar offset
     LDI r3, 2           ; width
-    LDI r4, 7           ; height
+    LDI r4, 5           ; height
     LDI r5, 0x44FF44
     RECTF r0, r2, r3, r4, r5
 
 cursor_done:
+    ; Show horizontal scroll indicator if scrolled
+    LDI r20, H_SCROLL
+    LOAD r0, r20
+    JZ r0, no_scroll_indicator
+    ; Draw '<' at top-left to indicate horizontal scroll
+    LDI r1, 0
+    LDI r2, 8
+    LDI r20, SCRATCH
+    LDI r0, 60    ; '<'
+    STORE r20, r0
+    LDI r0, 0
+    ADD r20, r1
+    STORE r20, r0
+    LDI r13, SCRATCH
+    LDI r14, 0xFFFF00  ; yellow indicator
+    LDI r15, 0
+    SMALLTEXT r1, r2, r13, r14, r15
+
+no_scroll_indicator:
     POP r31
     RET
 

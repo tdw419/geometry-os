@@ -1588,10 +1588,11 @@ impl Vm {
                         7 => {
                             // RESIZE: Resize window offscreen buffer.
                             // r0=win_id, r1=new_w, r2=new_h.
+                            // Phase 133: allow up to 512x512 for wider terminal windows.
                             let win_id = self.regs[0];
                             let new_w = if 1 < NUM_REGS { self.regs[1] } else { 64 };
                             let new_h = if 2 < NUM_REGS { self.regs[2] } else { 48 };
-                            if new_w == 0 || new_h == 0 || new_w > 256 || new_h > 256 {
+                            if new_w == 0 || new_h == 0 || new_w > 512 || new_h > 512 {
                                 self.regs[0] = 0; // invalid size
                             } else if let Some(w) =
                                 self.windows.iter_mut().find(|w| w.id == win_id && w.active)
@@ -1650,6 +1651,25 @@ impl Vm {
                         _ => {
                             // Unknown op -- r0 = 0 (error)
                             self.regs[0] = 0;
+                        }
+                        10 => {
+                            // WVIEWPORT: Set viewport (scroll) offset for a window.
+                            // r0=win_id, r1=viewport_x, r2=viewport_y.
+                            // Phase 133: for wider windows, controls which portion is
+                            // visible on the 256x256 screen during blit_windows().
+                            let win_id = self.regs[0];
+                            let vp_x = if 1 < NUM_REGS { self.regs[1] } else { 0 };
+                            let vp_y = if 2 < NUM_REGS { self.regs[2] } else { 0 };
+                            if let Some(w) =
+                                self.windows.iter_mut().find(|w| w.id == win_id && w.active)
+                            {
+                                // Clamp viewport to window dimensions
+                                w.viewport_x = vp_x.min(w.w.saturating_sub(1));
+                                w.viewport_y = vp_y.min(w.h.saturating_sub(1));
+                                self.regs[0] = 1; // success
+                            } else {
+                                self.regs[0] = 0; // window not found
+                            }
                         }
                     }
                 }
@@ -3219,23 +3239,40 @@ impl Vm {
 
         for (win_id, _wx, _wy, _ww, wh, _z) in wins {
             // Find the window and blit its offscreen buffer + title bar
-            let win_data: Option<(u32, u32, u32, Vec<u32>, u32, String)> =
+            // Phase 133: also capture viewport offset for scroll support
+            let win_data: Option<(u32, u32, u32, Vec<u32>, u32, String, u32, u32)> =
                 self.windows.iter().find(|w| w.id == win_id).map(|w| {
                     let title = w.read_title(&self.ram);
-                    (w.x, w.y, w.w, w.offscreen_buffer.clone(), w.z_order, title)
+                    (
+                        w.x,
+                        w.y,
+                        w.w,
+                        w.offscreen_buffer.clone(),
+                        w.z_order,
+                        title,
+                        w.viewport_x,
+                        w.viewport_y,
+                    )
                 });
-            if let Some((wx, wy, ww, buf, z_order, title)) = win_data {
-                // Render content below the title bar
+            if let Some((wx, wy, ww, buf, z_order, title, vp_x, vp_y)) = win_data {
+                // Render content below the title bar, offset by viewport
                 let bar_h = types::WINDOW_TITLE_BAR_H as i32;
                 let w_usize = ww as usize;
-                for py in 0..wh as usize {
-                    for px in 0..ww as usize {
-                        let color = buf[py * w_usize + px];
-                        if color != 0 {
-                            let sx = wx as i32 + px as i32;
-                            let sy = wy as i32 + bar_h + py as i32;
-                            if sx >= 0 && sx < 256 && sy >= 0 && sy < 256 {
-                                self.screen[(sy as usize) * 256 + (sx as usize)] = color;
+                // Phase 133: only render the visible portion starting from viewport offset
+                let visible_w = (ww - vp_x).min(256);
+                let visible_h = (wh - vp_y).min(256);
+                for py in 0..visible_h as usize {
+                    for px in 0..visible_w as usize {
+                        let src_x = vp_x as usize + px;
+                        let src_y = vp_y as usize + py;
+                        if src_x < w_usize && src_y < buf.len() / w_usize {
+                            let color = buf[src_y * w_usize + src_x];
+                            if color != 0 {
+                                let sx = wx as i32 + px as i32;
+                                let sy = wy as i32 + bar_h + py as i32;
+                                if sx >= 0 && sx < 256 && sy >= 0 && sy < 256 {
+                                    self.screen[(sy as usize) * 256 + (sx as usize)] = color;
+                                }
                             }
                         }
                     }
