@@ -6595,7 +6595,7 @@ phases:
   _claimed_at: 1777179790
 - id: phase-132
   title: Host Terminal -- ANSI Color Rendering
-  status: in_progress
+  status: done
   goal: Render ANSI SGR color codes so ls, grep, git diff, and prompts display with
     proper colors
   description: 'Currently the ANSI filter strips all CSI m (SGR) sequences silently.
@@ -6611,11 +6611,11 @@ phases:
       for green). Map standard colors: 0=black, 1=red, 2=green, 3=yellow, 4=blue,
       5=magenta, 6=cyan, 7=white. Support bold (bright variants), reset (ESC[0m).
       Store current fg/bg colors in RAM (FG_COLOR at 0x4E10, BG_COLOR at 0x4E11).'
-    status: todo
+    status: done
     tasks:
     - id: p132.d1.t1
       title: Collect CSI numeric params in state machine
-      status: todo
+      status: done
       description: On CSI state, accumulate digit chars into param buffer. On 'm'
         terminator, parse params.
     - id: p132.d1.t2
@@ -6624,7 +6624,7 @@ phases:
       description: 8 ANSI colors + 8 bright variants mapped to 16 GeOS palette entries
     - id: p132.d1.t3
       title: Track current FG/BG color in RAM cells
-      status: todo
+      status: done
       description: Store active FG at 0x4E10, BG at 0x4E11. Update on each SGR sequence.
     scope_lines: 120
   - name: Extend text buffer to store per-cell colors
@@ -6632,21 +6632,21 @@ phases:
       character). Extend to use a parallel color buffer (0x4500-0x49EB) storing one
       u32 per cell (packed fg_color in low 16 bits, bg_color in high 16 bits). Default:
       fg=0xBBBBBB (light gray), bg=0. append_byte writes both char and color.'
-    status: todo
+    status: done
     tasks:
     - id: p132.d2.t1
       title: Add COLOR_BUF at 0x4500 parallel to text buffer
-      status: todo
+      status: done
       description: Define COLOR_BUF = 0x4500, same layout as BUF (42*30 = 1260 u32
         cells)
     - id: p132.d2.t2
       title: append_byte writes current FG/BG to color buffer
-      status: todo
+      status: done
       description: When inserting a char, also write (fg | bg << 16) to COLOR_BUF
         at same offset
     - id: p132.d2.t3
       title: Clear color buffer on init and scroll
-      status: todo
+      status: done
       description: Initialize COLOR_BUF to default gray-on-black. scroll_up copies
         color buffer too.
     scope_lines: 80
@@ -6656,16 +6656,16 @@ phases:
       char, emit what we have and start a new MEDTEXT call with the new color. Batch
       consecutive same-color chars for performance. Alternatively, extend MEDTEXT
       to accept a color array.
-    status: todo
+    status: done
     tasks:
     - id: p132.d3.t1
       title: Batch render by color runs per row
-      status: todo
+      status: done
       description: Walk each row, group consecutive chars with same color, one MEDTEXT
         per group
     - id: p132.d3.t2
       title: Handle background colors (fill rect behind chars)
-      status: todo
+      status: done
       description: If bg color != 0, draw RECTF of bg color behind the text run before
         MEDTEXT
     - id: p132.d3.t3
