@@ -929,6 +929,12 @@ impl Vm {
             0xB7 => ("UNLINK".into(), 2),
             // FCOPY (0xB8) -- copy file within VFS
             0xB8 => ("FCOPY".into(), 3),
+            // Phase 137: Host Filesystem Bridge
+            0xB9 => ("FSOPEN".into(), 3),
+            0xBA => ("FSCLOSE".into(), 2),
+            0xBB => ("FSREAD".into(), 4),
+            0xBC => ("FSWRITE".into(), 4),
+            0xBD => ("FSLS".into(), 4),
 
             // SMALLTEXT x, y, addr, fg, bg (0xD0) -- tiny 3x5 font, 85 cols in 256px
             0xD0 => (

@@ -194,7 +194,7 @@ pub struct Vm {
     /// Read buffer for mailbox receives. Swapped from write_buf on FRAME.
     pub mailbox_read_buf: Vec<MailboxEntry>,
 
-    // ── Crash Recovery (Phase 104) ───────────────────────────────
+    /// Crash Recovery (Phase 104) ───────────────────────────────
     /// Virtual address that caused the last segfault (0 if none).
     /// Set by trigger_segfault_with_addr.
     pub segfault_addr: u32,
@@ -207,6 +207,11 @@ pub struct Vm {
     pub crash_dialog_active: bool,
     /// PID of the process whose crash dialog is displayed.
     pub crash_dialog_pid: u32,
+
+    // ── Phase 137: Host Filesystem Bridge ─────────────────────────
+    /// Active host file handles. Up to MAX_HOST_FILES (16) simultaneous.
+    /// Indices 0..N are used. host_file_handles[i] = Some((File, mode)) when open.
+    pub host_file_handles: Vec<Option<(std::fs::File, u8)>>,
 }
 
 impl std::fmt::Debug for Vm {
@@ -318,6 +323,9 @@ impl Vm {
             pc_trace_idx: 0,
             crash_dialog_active: false,
             crash_dialog_pid: 0,
+            host_file_handles: (0..crate::vm::types::MAX_HOST_FILES)
+                .map(|_| None)
+                .collect(),
         }
     }
 
@@ -469,6 +477,9 @@ impl Vm {
         self.crash_dialog_pid = 0;
         self.key_port = 0;
         self.key_bitmask = 0;
+        self.host_file_handles = (0..crate::vm::types::MAX_HOST_FILES)
+            .map(|_| None)
+            .collect();
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -522,6 +533,7 @@ pub use trace::*;
 // Opcode handler submodules
 mod ops_extended;
 mod ops_graphics;
+mod ops_host_fs;
 mod ops_memory;
 pub mod ops_pty;
 mod ops_syscall;
@@ -2173,11 +2185,16 @@ impl Vm {
             }
 
             // PTYOPEN cmd_addr_reg, handle_reg  (0xA9)
-            0xA9 => self.op_ptyopen(),
+            0xA9 => {
+                self.op_ptyopen();
+            }
             // PTYWRITE handle_reg, buf_reg, len_reg  (0xAA)
             0xAA => self.op_ptywrite(),
             // PTYREAD handle_reg, buf_reg, max_len_reg  (0xAB)
-            0xAB => self.op_ptyread(),
+            0xAB => {
+                eprintln!("[VM] PTYREAD dispatch at PC={}", self.pc);
+                self.op_ptyread();
+            }
             // PTYCLOSE handle_reg  (0xAC)
             0xAC => self.op_ptyclose(),
             // PTYSIZE handle_reg, rows_reg, cols_reg  (0xAD)
@@ -3208,6 +3225,33 @@ impl Vm {
                 } else {
                     self.regs[0] = 0xFFFFFFFF;
                 }
+            }
+
+            // ── Phase 137: Host Filesystem Bridge ──────────────────────
+            // FSOPEN path_reg, mode_reg  (0xB9) -- Open host file
+            // Encoding: 3 words [0xB9, path_reg, mode_reg]
+            0xB9 => {
+                self.op_fsopen();
+            }
+            // FSCLOSE handle_reg  (0xBA) -- Close host file
+            // Encoding: 2 words [0xBA, handle_reg]
+            0xBA => {
+                self.op_fsclose();
+            }
+            // FSREAD handle_reg, buf_reg, len_reg  (0xBB) -- Read from host file
+            // Encoding: 4 words [0xBB, handle_reg, buf_reg, len_reg]
+            0xBB => {
+                self.op_fsread();
+            }
+            // FSWRITE handle_reg, buf_reg, len_reg  (0xBC) -- Write to host file
+            // Encoding: 4 words [0xBC, handle_reg, buf_reg, len_reg]
+            0xBC => {
+                self.op_fswrite();
+            }
+            // FSLS path_reg, buf_reg, max_len_reg  (0xBD) -- List directory
+            // Encoding: 4 words [0xBD, path_reg, buf_reg, max_len_reg]
+            0xBD => {
+                self.op_fsls();
             }
 
             _ => {

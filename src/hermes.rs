@@ -937,6 +937,12 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0xB1 => "LOADPNG",
         0xB2 => "LOADSRCIMG",
         0xB3 => "ASM_RAM",
+        // Phase 137: Host Filesystem Bridge
+        0xB9 => "FSOPEN",
+        0xBA => "FSCLOSE",
+        0xBB => "FSREAD",
+        0xBC => "FSWRITE",
+        0xBD => "FSLS",
         // Phase 94: Tiny font text rendering
         0xD0 => "SMALLTEXT",
         // Phase 95: Medium font text rendering

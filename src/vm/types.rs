@@ -162,6 +162,7 @@ pub const DEVICE_COUNT: usize = 4;
 /// Double-buffered: writes go to write_buf, FRAME swaps write_buf into read_buf.
 /// Max 256 tiles (supports 16x16 tile grid at 16px tiles).
 pub const MAILBOX_SIZE: usize = 256;
+pub const MAX_HOST_FILES: usize = 16;
 /// MMIO base address for mailbox region (documented convention).
 pub const MAILBOX_RAM_BASE: usize = 0x5000;
 /// A single mailbox message entry.

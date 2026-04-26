@@ -208,6 +208,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         live_hypervisor: None,
         mailbox_write_buf: vec![vm::MailboxEntry::default(); vm::MAILBOX_SIZE],
         mailbox_read_buf: vec![vm::MailboxEntry::default(); vm::MAILBOX_SIZE],
+        host_file_handles: (0..vm::types::MAX_HOST_FILES).map(|_| None).collect(),
     };
 
     // Parse canvas trailer

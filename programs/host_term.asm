@@ -1332,14 +1332,17 @@ sc_color_loop:
 write_str_to_buf:
     PUSH r31
     PUSH r20
+    PUSH r25
+    MOV r25, r20          ; r25 = string pointer (r20 clobbered by append_byte)
     LDI r1, 1
 wsb_loop:
-    LOAD r5, r20
+    LOAD r5, r25
     JZ r5, wsb_done
     CALL append_byte
-    ADD r20, r1
+    ADD r25, r1
     JMP wsb_loop
 wsb_done:
+    POP r25
     POP r20
     POP r31
     RET
@@ -1425,6 +1428,7 @@ draw_status_bar:
     LDI r5, 0x1A1A2E
     RECTF r1, r2, r3, r4, r5
 
+    LDI r1, 1
     LDI r20, SCRATCH
     STRO r20, "bash: "
     LDI r20, SCRATCH

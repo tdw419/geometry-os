@@ -180,6 +180,12 @@ pub const OPCODES: &[&str] = &[
     "SMALLTEXT",
     // Phase 95: Medium font text rendering (5x7, 42 cols in 256px)
     "MEDTEXT",
+    // Phase 137: Host Filesystem Bridge
+    "FSOPEN",
+    "FSCLOSE",
+    "FSREAD",
+    "FSWRITE",
+    "FSLS",
     // Preprocessor macros (not real opcodes, but recognized as Opcode tokens)
     "VAR",
     "SET",

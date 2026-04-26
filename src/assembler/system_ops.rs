@@ -910,6 +910,62 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        // ── Phase 137: Host Filesystem Bridge ─────────────────────────────
+        "FSOPEN" => {
+            if tokens.len() < 3 {
+                return Err("FSOPEN requires 2 arguments: FSOPEN path_reg, mode_reg".to_string());
+            }
+            bytecode.push(0xB9);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            Ok(Some(()))
+        }
+        "FSCLOSE" => {
+            if tokens.len() < 2 {
+                return Err("FSCLOSE requires 1 argument: FSCLOSE handle_reg".to_string());
+            }
+            bytecode.push(0xBA);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            Ok(Some(()))
+        }
+        "FSREAD" => {
+            if tokens.len() < 4 {
+                return Err(
+                    "FSREAD requires 3 arguments: FSREAD handle_reg, buf_reg, len_reg".to_string(),
+                );
+            }
+            bytecode.push(0xBB);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+        "FSWRITE" => {
+            if tokens.len() < 4 {
+                return Err(
+                    "FSWRITE requires 3 arguments: FSWRITE handle_reg, buf_reg, len_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0xBC);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+        "FSLS" => {
+            if tokens.len() < 4 {
+                return Err(
+                    "FSLS requires 3 arguments: FSLS path_reg, buf_reg, max_len_reg".to_string(),
+                );
+            }
+            bytecode.push(0xBD);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
         _ => Ok(None),
     }
 }

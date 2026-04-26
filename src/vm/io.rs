@@ -459,6 +459,7 @@ impl Vm {
                 super::types::MailboxEntry::default();
                 super::types::MAILBOX_SIZE
             ],
+            host_file_handles: (0..super::types::MAX_HOST_FILES).map(|_| None).collect(),
         })
     }
 }

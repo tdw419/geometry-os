@@ -12,7 +12,7 @@ conventions:
 - Error reporting via RAM[0xFFD] (existing ASM result port)
 description: Pixel-art virtual machine with built-in assembler, debugger, and live
   GUI. Write assembly in the built-in text editor, press F5, watch it run. 154 opcodes,
-  3656 tests, 147 programs, 76635 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor.
+  3720 tests, 147 programs, 76635 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor.
   Infinite map desktop.
 global_risks:
 - 'Opcode space: 154 of ~256 slots used, plenty of room'
@@ -35,8 +35,8 @@ meta:
   gui: minifb
   hypervisor: true
   integration_tests: 2182
+  lib_tests: 1538
   language: Rust
-  lib_tests: 1474
   loc: 76635
   opcodes: 154
   programs: 147
@@ -45,7 +45,7 @@ meta:
   riscv_guest: true
   screen: 256x256 pixels
   source_files: 92
-  tests: 3656
+  tests: 3720
   vfs_surface: 0x7000_0000 (256x256)
 phases:
 - deliverables:
@@ -6798,7 +6798,7 @@ phases:
   _claimed_at: 1777192760
 - id: phase-135
   title: Host Terminal -- Test Failure Fixes (3 issues)
-  status: planned
+  status: in_progress
   goal: Fix 3 non-blocking test failures from terminal QA
   description: Automated terminal QA found functional issues.
   deliverables:
@@ -6823,10 +6823,10 @@ phases:
   scope_lines_total: 74650
   test_target: 0
   _claimed_by: worker-0
-  _claimed_at: 1777203060
+  _claimed_at: 1777219235
 - id: phase-136
   title: Daily Driver -- Fix Test Regressions and Build Green
-  status: planned
+  status: done
   goal: Get cargo test back to 100% green. 13 world_desktop tests are failing from
     autodev commits. No new work until tests pass.
   description: The autodev workers shipped phases 126-134 but broke 13 world_desktop
@@ -6839,19 +6839,19 @@ phases:
     description: 'All 13 failures are in tests/program_tests.rs games:: module. Likely
       caused by world_desktop.asm changes from autodev workers. Read each failing
       test, understand what changed, fix the test expectations or fix the program.'
-    status: todo
+    status: done
     tasks:
     - id: p136.d1.t1
       title: Run cargo test and capture all 13 failures
-      status: todo
+      status: done
       description: Get exact error messages for each failing test
     - id: p136.d1.t2
       title: Diff world_desktop.asm against last green commit
-      status: todo
+      status: done
       description: Find what changed that broke the tests
     - id: p136.d1.t3
       title: Fix tests or fix program until 0 failures
-      status: todo
+      status: done
       description: 'Target: cargo test 463 passed, 0 failed'
     scope_lines: 100
   - name: Add cargo test gate to autodev preflight
@@ -6859,34 +6859,36 @@ phases:
       fail. Workers must not pick up new phases when the build is red. Add a quick
       check (cargo test --test program_tests -- --test-threads=8, 30s timeout). If
       any failures, the preflight outputs STATUS: HALT with the failing test names.'
-    status: todo
+    status: done
     tasks:
     - id: p136.d2.t1
       title: Add cargo test check to oracle_preflight.py
-      status: todo
+      status: done
       description: 'After git pull, run cargo test. If failures, output STATUS: HALT'
     - id: p136.d2.t2
       title: 'Test the gate: intentionally break a test, verify preflight halts'
-      status: todo
+      status: done
       description: Verify the circuit breaker works before trusting it
     scope_lines: 40
   - name: Fix 3 failing terminal QA built-in tests
     description: echo_round_trip, line_wrap, ctrl_c fail because the built-in tests
       check row 0 for prompt but the terminal is now 80x40 and prompt is on a different
       row. Fix the test assertions in geos-term source to match the current layout.
-    status: todo
+    status: done
     tasks:
     - id: p136.d3.t1
       title: Fix geos-term built-in test row assertions
-      status: todo
+      status: done
       description: Update prompt row checks to match 80x40 layout
     - id: p136.d3.t2
       title: Verify geos-term --test all passes 3/3
-      status: todo
+      status: done
       description: All built-in tests green
     scope_lines: 30
   scope_lines_total: 74700
   test_target: 465
+  _claimed_by: worker-0
+  _claimed_at: 1777220555
 - id: phase-137
   title: Daily Driver -- Host Filesystem Bridge
   status: planned
@@ -6978,6 +6980,8 @@ phases:
     scope_lines: 40
   scope_lines_total: 74980
   test_target: 475
+  _claimed_by: worker-0
+  _claimed_at: 1777218387
 - id: phase-138
   title: Daily Driver -- Fullscreen Desktop as Display Manager
   status: planned
@@ -7152,6 +7156,76 @@ phases:
     scope_lines: 80
   scope_lines_total: 75740
   test_target: 490
+- id: phase-141
+  title: Fix VFS Pixel Surface Test Failures (2 tests)
+  status: planned
+  goal: Fix test_vfs_pixel_surface_cat and test_vfs_pixel_cat_with_header so cargo
+    test passes 100% green
+  description: 'Two VFS pixel surface tests are failing. Both expect "HellofromGeometryOSVFS"
+    in the flattened UART output, but the actual output contains "OriginalContent"
+    instead. The test fixture files on the pixel VFS surface have apparently been
+    overwritten or the vfs_pixel_cat program is reading stale/changed data. Phase-136
+    tracks world_desktop test regressions but these VFS tests are a separate regression
+    not covered by that phase. Fixing these is essential before any VFS-dependent
+    features (file browser, host filesystem bridge) can be trusted.'
+  deliverables:
+  - name: Fix 2 failing VFS pixel surface tests
+    description: 'test_vfs_pixel_surface_cat and test_vfs_pixel_cat_with_header fail
+      because the flattened UART output does not contain "HellofromGeometryOSVFS".
+      Actual flat output shows files with "OriginalContent" instead. Investigate
+      whether the test fixture .geometry_os/fs/test.txt was changed, whether vfs_pixel_cat.c
+      reads the wrong rows, or whether a recent VFS refactor changed the pixel surface
+      layout.'
+    status: todo
+    tasks:
+    - id: p141.d1.t1
+      title: Investigate VFS pixel surface test fixture contents
+      status: todo
+      description: Check .geometry_os/fs/ directory and vfs_pixel_cat.c to understand
+        what file data is expected on the pixel surface vs what is actually there
+    - id: p141.d1.t2
+      title: Fix test fixture or test expectations
+      status: todo
+      description: 'Either restore the test fixture to contain "Hello from Geometry
+        OS VFS" or update the test assertions to match the new fixture contents.
+        Target: cargo test 0 failures.'
+    scope_lines: 80
+  scope_lines_total: 75820
+  test_target: 1496
+- id: phase-142
+  title: Daily Driver -- Fix High Idle CPU Usage (49% CPU on Blank Canvas)
+  status: planned
+  goal: Reduce GeOS idle CPU from 49% to under 5% when the desktop is idle and the
+    canvas is mostly blank
+  description: 'The main geometry_os process (PID 1510026) consumes 49% CPU while
+    displaying a mostly blank canvas. The render loop calls set_target_fps(60) via
+    minifb but this alone does not prevent busy-waiting. For a daily driver OS, leaving
+    49% CPU consumed at idle is unacceptable -- it drains laptop batteries and wastes
+    thermal budget. The fix likely involves adding frame timing/sleep in the main
+    loop, or using minifb''s native frame limiting more effectively.'
+  deliverables:
+  - name: Reduce idle CPU to under 5%
+    description: 'Profile the main loop in src/main.rs (line ~391, the while window.is_open()
+      loop). Check if minifb::Window::update_with_buffer already sleeps or if we need
+      explicit frame pacing. The loop runs at 60fps target but appears to spin without
+      yielding. Also investigate whether the VM execution in the loop contributes
+      to CPU even when no instructions are being processed.'
+    status: todo
+    tasks:
+    - id: p142.d1.t1
+      title: Profile the main render loop for busy-wait
+      status: todo
+      description: Add timing instrumentation to the main loop (line 391 in main.rs)
+        to measure actual sleep time per frame vs CPU time
+    - id: p142.d1.t2
+      title: Add frame pacing to reduce idle CPU
+      status: todo
+      description: 'Implement proper frame pacing: either use std::thread::sleep for
+        the remaining frame budget, or verify minifb''s set_target_fps is working.
+        Target: under 5% CPU when idle.'
+    scope_lines: 60
+  scope_lines_total: 75880
+  test_target: 1496
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

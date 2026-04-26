@@ -273,6 +273,10 @@ impl super::Vm {
         let h_reg = self.fetch() as usize;
         let b_reg = self.fetch() as usize;
         let m_reg = self.fetch() as usize;
+        eprintln!(
+            "[PTYREAD] handle_reg={} buf_reg={} max_reg={}",
+            h_reg, b_reg, m_reg
+        );
         if h_reg >= super::NUM_REGS || b_reg >= super::NUM_REGS || m_reg >= super::NUM_REGS {
             self.regs[0] = PTY_ERR_INVALID_HANDLE;
             return;

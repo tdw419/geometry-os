@@ -155,9 +155,13 @@ fn run_frames(vm: &mut Vm, n: usize) {
             }
         }
         if frame == 0 {
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            // Bash needs time to start and send its initial prompt
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+        } else if frame < 10 {
+            // First few frames: longer wait for PTY data to arrive
+            std::thread::sleep(std::time::Duration::from_millis(50));
         } else {
-            std::thread::sleep(std::time::Duration::from_millis(1));
+            std::thread::sleep(std::time::Duration::from_millis(5));
         }
     }
 }
@@ -182,17 +186,115 @@ fn run_one_frame(vm: &mut Vm) {
 /// Dump diagnostics to stderr.
 fn dump_diagnostics(vm: &Vm) {
     let pty_handle = vm.ram[PTY_HANDLE];
-    let active = vm.pty_slots.iter().filter(|s| s.is_some()).count();
-    let alive = if pty_handle < vm.pty_slots.len() as u32 {
+    let _active = vm.pty_slots.iter().filter(|s| s.is_some()).count();
+    let _alive = if pty_handle < vm.pty_slots.len() as u32 {
         vm.pty_slots[pty_handle as usize]
             .as_ref()
             .map_or(false, |s| s.is_alive())
     } else {
         false
     };
+    // Opcode histogram for key opcodes
+    let key_opcodes = [
+        (0x02, "FRAME"),
+        (0x10, "LDI"),
+        (0x11, "LOAD"),
+        (0x12, "STORE"),
+        (0x20, "ADD"),
+        (0x30, "JMP"),
+        (0x31, "JZ"),
+        (0x32, "JNZ"),
+        (0x33, "CALL"),
+        (0x34, "RET"),
+        (0x35, "BLT"),
+        (0x36, "BGE"),
+        (0x50, "CMP"),
+        (0x15, "CMPI"),
+        (0x51, "MOV"),
+        (0xA9, "PTYOPEN"),
+        (0xAA, "PTYWRITE"),
+        (0xAB, "PTYREAD"),
+        (0xAC, "PTYCLOSE"),
+    ];
+    eprintln!("[geos-term] Opcode histogram (key opcodes):");
+    for (op, name) in &key_opcodes {
+        let count = if (*op as usize) < vm.opcode_histogram.len() {
+            vm.opcode_histogram[*op as usize]
+        } else {
+            0
+        };
+        if count > 0 {
+            eprintln!("  {:3} (0x{:02X}) {:12}: {}", op, op, name, count);
+        }
+    }
+    // Dump ALL non-zero histogram entries
+    eprintln!("[geos-term] Full opcode histogram (all non-zero):");
+    for i in 0..vm.opcode_histogram.len() {
+        if vm.opcode_histogram[i] > 0 {
+            eprintln!("  [0x{:02X}] {}", i, vm.opcode_histogram[i]);
+        }
+    }
+    // Show what instruction is at current PC
     eprintln!(
-        "[geos-term] PTY active={} handle={} alive={} cursor={}/{} ansi={} pc={}",
-        active, pty_handle, alive, vm.ram[CUR_COL], vm.ram[CUR_ROW], vm.ram[ANSI_STATE], vm.pc,
+        "[geos-term] Instruction at PC={}: opcode=0x{:02X}",
+        vm.pc, vm.ram[vm.pc as usize]
+    );
+    // Show 10 instructions starting at current PC
+    let mut trace_pc = vm.pc as usize;
+    eprintln!("[geos-term] Trace from PC:");
+    for _ in 0..10 {
+        if trace_pc >= vm.ram.len() {
+            break;
+        }
+        let op = vm.ram[trace_pc];
+        eprintln!("  [{:5}] 0x{:02X}", trace_pc, op);
+        // advance by instruction size
+        if op == 0x00
+            || op == 0x01
+            || op == 0x02
+            || op == 0x73
+            || op == 0x74
+            || op == 0x76
+            || op == 0x34
+        {
+            trace_pc += 1;
+        } else if (op >= 0x20 && op <= 0x2B)
+            || (op >= 0x10 && op <= 0x17)
+            || op == 0x50
+            || op == 0x51
+        {
+            trace_pc += 3;
+        } else if op == 0x30 || op == 0x33 {
+            trace_pc += 2;
+        } else if op == 0xA9 || op == 0xAA || op == 0xAC {
+            trace_pc += 2;
+        } else if op == 0xAB {
+            trace_pc += 4;
+        } else {
+            trace_pc += 1;
+        }
+    }
+    // Check RAM[0x6000..0x6010] for the "bash: " string
+    let mut dump_6000 = String::new();
+    for i in 0..16 {
+        let b = vm.ram[0x6000 + i] & 0xFF;
+        if b == 0 {
+            dump_6000.push('.');
+        } else {
+            dump_6000.push(if b >= 32 && b < 127 {
+                (b as u8) as char
+            } else {
+                '?'
+            });
+        }
+    }
+    eprintln!(
+        "[geos-term] RAM[0x6000..0x6010]: '{}' (hex: {})",
+        dump_6000,
+        (0..8)
+            .map(|i| format!("{:02X}", vm.ram[0x6000 + i] & 0xFF))
+            .collect::<Vec<_>>()
+            .join(" ")
     );
     for row in 0..BUF_ROWS.min(5) {
         eprintln!("[geos-term] buf row {}: '{}'", row, read_buf_row(vm, row));
@@ -459,15 +561,38 @@ fn test_echo_round_trip(vm: &mut Vm) -> i32 {
     eprintln!("[TEST] Phase 1: Wait for bash prompt...");
     run_frames(vm, 50);
 
-    // Verify prompt appeared
-    let row0 = read_buf_row(vm, 0);
-    if !row0.contains("$") && !row0.contains("#") {
-        eprintln!("[TEST] FAIL: no shell prompt in row 0: '{}'", row0);
-        return 1;
+    // Verify prompt appeared (scan all rows -- prompt may not be on row 0)
+    // Retry up to 5 times with short waits for bash to start
+    let mut prompt_row = None;
+    for attempt in 0..5 {
+        for row in 0..BUF_ROWS {
+            let text = read_buf_row(vm, row);
+            if text.contains("$") || text.contains("#") {
+                prompt_row = Some((row, text));
+                break;
+            }
+        }
+        if prompt_row.is_some() {
+            break;
+        }
+        eprintln!(
+            "[TEST] Phase 1: waiting for prompt (attempt {})...",
+            attempt + 1
+        );
+        run_frames(vm, 30);
     }
+    let (prompt_row_idx, prompt_text) = match prompt_row {
+        Some((r, t)) => (r, t),
+        None => {
+            eprintln!("[TEST] FAIL: no shell prompt in any buffer row after 5 retries");
+            dump_diagnostics(vm);
+            return 1;
+        }
+    };
     eprintln!(
-        "[TEST] Phase 1 PASS: prompt detected '{}'",
-        &row0[..row0.len().min(40)]
+        "[TEST] Phase 1 PASS: prompt detected in row {}: '{}'",
+        prompt_row_idx,
+        &prompt_text[..prompt_text.len().min(40)]
     );
 
     // Push ALL keys at once into the ring buffer (16 slots, "echo hello\n" = 11).
@@ -510,9 +635,28 @@ fn test_line_wrap(vm: &mut Vm) -> i32 {
     eprintln!("[TEST] Phase 1: Wait for bash prompt...");
     run_frames(vm, 50);
 
-    let row0 = read_buf_row(vm, 0);
-    if !row0.contains("$") && !row0.contains("#") {
-        eprintln!("[TEST] FAIL: no shell prompt");
+    // Scan all rows for prompt (may not be on row 0), retry for bash startup
+    let mut found_prompt = false;
+    for attempt in 0..5 {
+        for row in 0..BUF_ROWS {
+            let text = read_buf_row(vm, row);
+            if text.contains("$") || text.contains("#") {
+                found_prompt = true;
+                break;
+            }
+        }
+        if found_prompt {
+            break;
+        }
+        eprintln!(
+            "[TEST] Phase 1: waiting for prompt (attempt {})...",
+            attempt + 1
+        );
+        run_frames(vm, 30);
+    }
+    if !found_prompt {
+        eprintln!("[TEST] FAIL: no shell prompt in any row after 5 retries");
+        dump_diagnostics(vm);
         return 1;
     }
 
@@ -529,7 +673,7 @@ fn test_line_wrap(vm: &mut Vm) -> i32 {
         vm.push_key(ch as u32);
     }
     vm.push_key(0x0D); // Enter
-    for _ in 0..100 {
+    for _ in 0..200 {
         run_one_frame(vm);
     }
 
@@ -538,11 +682,17 @@ fn test_line_wrap(vm: &mut Vm) -> i32 {
 
     // seq 1 90 outputs numbers 1-90, each on its own line.
     // Verify the buffer has multiple rows with numbers (proves scroll/output).
+    // Check if the trimmed row starts with a digit (numbers on the left margin)
+    // or contains a standalone number (ANSI positioning may offset the number).
     let mut found_rows = 0;
     for row in 0..BUF_ROWS {
         let text = read_buf_row(vm, row);
-        if !text.trim().is_empty() && text.chars().next().map_or(false, |c| c.is_ascii_digit()) {
-            found_rows += 1;
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            // Accept rows where the first non-space char is a digit
+            if trimmed.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+                found_rows += 1;
+            }
         }
     }
     if found_rows >= 5 {
@@ -562,9 +712,28 @@ fn test_ctrl_c(vm: &mut Vm) -> i32 {
     eprintln!("[TEST] Phase 1: Wait for bash prompt...");
     run_frames(vm, 50);
 
-    let row0 = read_buf_row(vm, 0);
-    if !row0.contains("$") && !row0.contains("#") {
-        eprintln!("[TEST] FAIL: no shell prompt");
+    // Scan all rows for prompt (may not be on row 0), retry for bash startup
+    let mut found_prompt = false;
+    for attempt in 0..5 {
+        for row in 0..BUF_ROWS {
+            let text = read_buf_row(vm, row);
+            if text.contains("$") || text.contains("#") {
+                found_prompt = true;
+                break;
+            }
+        }
+        if found_prompt {
+            break;
+        }
+        eprintln!(
+            "[TEST] Phase 1: waiting for prompt (attempt {})...",
+            attempt + 1
+        );
+        run_frames(vm, 30);
+    }
+    if !found_prompt {
+        eprintln!("[TEST] FAIL: no shell prompt in any row after 5 retries");
+        dump_diagnostics(vm);
         return 1;
     }
 
@@ -679,6 +848,22 @@ fn main() {
     });
 
     let mut vm = Vm::new();
+    eprintln!(
+        "[geos-term] Assembled {} bytes ({} words)",
+        asm.pixels.len() * 4,
+        asm.pixels.len()
+    );
+    // Check if PTY opcodes are in the bytecode
+    let mut ptyread_count = 0;
+    for &w in &asm.pixels {
+        if w == 0xAB {
+            ptyread_count += 1;
+        }
+    }
+    eprintln!(
+        "[geos-term] PTYREAD (0xAB) appears {} times in bytecode",
+        ptyread_count
+    );
     for (i, &word) in asm.pixels.iter().enumerate() {
         if i < vm.ram.len() {
             vm.ram[i] = word;
