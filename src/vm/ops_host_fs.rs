@@ -4,7 +4,7 @@
 /// Security: restricted to the user's home directory by default.
 use super::types::*;
 use super::Vm;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 
 /// Maximum path length for host filesystem operations
 const MAX_PATH_LEN: usize = 512;

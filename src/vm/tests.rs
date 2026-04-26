@@ -21075,3 +21075,566 @@ fn test_host_term_assembles_with_utf8() {
         asm.pixels.len()
     );
 }
+
+// ── Phase 137: Host Filesystem Bridge Tests ──────────────────────────────
+
+/// Helper: write a null-terminated string into RAM at given address
+fn write_test_string(ram: &mut [u32], addr: usize, s: &str) {
+    for (i, ch) in s.chars().enumerate() {
+        ram[addr + i] = ch as u32;
+    }
+    ram[addr + s.len()] = 0; // null terminator
+}
+
+/// Helper: read a null-terminated string from RAM
+fn read_test_string(ram: &[u32], addr: usize) -> String {
+    let mut s = String::new();
+    let mut i = addr;
+    while i < ram.len() && ram[i] != 0 {
+        s.push((ram[i] & 0xFF) as u8 as char);
+        i += 1;
+    }
+    s
+}
+
+#[test]
+fn test_fsopen_fsclose_host_file() {
+    use crate::vm::types::MAX_HOST_FILES;
+    let mut vm = crate::vm::Vm::new();
+
+    // Create a temp file path in home directory
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let test_path = format!("{}/.geos_test_fsopen.txt", home);
+
+    // Ensure file exists
+    std::fs::write(&test_path, "hello").unwrap();
+
+    // Write path into RAM at 0x2000
+    write_test_string(&mut vm.ram, 0x2000, &test_path);
+
+    // LDI r1, 0x2000  (path)
+    // LDI r2, 0       (mode = read)
+    // FSOPEN r1, r2
+    // HALT
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 2;
+    vm.ram[5] = 0;
+    vm.ram[6] = 0xB9;
+    vm.ram[7] = 1;
+    vm.ram[8] = 2;
+    vm.ram[9] = 0x00;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // r0 should be a valid handle (0..MAX_HOST_FILES-1)
+    assert!(
+        vm.regs[0] < MAX_HOST_FILES as u32,
+        "FSOPEN should return valid handle, got {}",
+        vm.regs[0]
+    );
+    let handle = vm.regs[0];
+
+    // FSCLOSE handle
+    vm.regs[1] = handle;
+    vm.ram[0] = 0xBA;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(vm.regs[0], 0, "FSCLOSE should return 0 on success");
+
+    // Cleanup
+    let _ = std::fs::remove_file(&test_path);
+}
+
+#[test]
+fn test_fsopen_sandbox_rejects_system_paths() {
+    let mut vm = crate::vm::Vm::new();
+
+    // Try to open /etc/passwd (should be rejected by sandbox)
+    write_test_string(&mut vm.ram, 0x2000, "/etc/passwd");
+
+    // LDI r1, 0x2000  (path)
+    // LDI r2, 0       (mode = read)
+    // FSOPEN r1, r2
+    // HALT
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 2;
+    vm.ram[5] = 0;
+    vm.ram[6] = 0xB9;
+    vm.ram[7] = 1;
+    vm.ram[8] = 2;
+    vm.ram[9] = 0x00;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFE,
+        "FSOPEN should reject /etc/passwd with EACCES, got 0x{:X}",
+        vm.regs[0]
+    );
+}
+
+#[test]
+fn test_fswrite_fsread_roundtrip() {
+    let mut vm = crate::vm::Vm::new();
+
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let test_path = format!("{}/.geos_test_rw.txt", home);
+    let _ = std::fs::remove_file(&test_path);
+
+    // Write "HELLO" string to RAM at 0x3000
+    write_test_string(&mut vm.ram, 0x3000, "HELLO");
+
+    // Write path to RAM at 0x2000
+    write_test_string(&mut vm.ram, 0x2000, &test_path);
+
+    // Phase 1: FSOPEN for write (mode=1)
+    // LDI r1, 0x2000; LDI r2, 1; FSOPEN r1, r2
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000; // LDI r1, 0x2000
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 2;
+    vm.ram[5] = 1; // LDI r2, 1 (write mode)
+    vm.ram[6] = 0xB9;
+    vm.ram[7] = 1;
+    vm.ram[8] = 2; // FSOPEN r1, r2
+    vm.ram[9] = 0x00; // HALT
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    let handle = vm.regs[0];
+    assert!(
+        handle < 16,
+        "FSOPEN write should succeed, got handle {}",
+        handle
+    );
+
+    // Phase 2: FSWRITE "HELLO" (5 bytes from 0x3000)
+    vm.regs[1] = handle; // fd
+    vm.regs[2] = 0x3000; // buf addr
+    vm.regs[3] = 5; // len
+    vm.ram[0] = 0xBC;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3; // FSWRITE r1, r2, r3
+    vm.ram[4] = 0x00;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(
+        vm.regs[0], 5,
+        "FSWRITE should write 5 bytes, got {}",
+        vm.regs[0]
+    );
+
+    // Phase 3: FSCLOSE
+    vm.regs[1] = handle;
+    vm.ram[0] = 0xBA;
+    vm.ram[1] = 1; // FSCLOSE r1
+    vm.ram[2] = 0x00;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[0], 0, "FSCLOSE should succeed");
+
+    // Phase 4: FSOPEN for read (mode=0)
+    vm.regs[1] = 0x2000; // path
+    vm.regs[2] = 0; // read mode
+    vm.ram[0] = 0xB9;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2; // FSOPEN r1, r2
+    vm.ram[3] = 0x00;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    let handle2 = vm.regs[0];
+    assert!(
+        handle2 < 16,
+        "FSOPEN read should succeed, got handle {}",
+        handle2
+    );
+
+    // Phase 5: FSREAD 10 bytes into 0x4000
+    vm.regs[1] = handle2; // fd
+    vm.regs[2] = 0x4000; // buf addr
+    vm.regs[3] = 10; // max len
+    vm.ram[0] = 0xBB;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3; // FSREAD r1, r2, r3
+    vm.ram[4] = 0x00;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(
+        vm.regs[0], 5,
+        "FSREAD should read 5 bytes, got {}",
+        vm.regs[0]
+    );
+
+    // Verify the bytes at 0x4000 are "HELLO"
+    let read_back = read_test_string(&vm.ram, 0x4000);
+    assert_eq!(read_back, "HELLO", "FSREAD data should match FSWRITE data");
+
+    // Cleanup
+    vm.regs[1] = handle2;
+    vm.ram[0] = 0xBA;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    let _ = std::fs::remove_file(&test_path);
+}
+
+#[test]
+fn test_fsls_lists_home_directory() {
+    let mut vm = crate::vm::Vm::new();
+
+    // Use home directory path
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    write_test_string(&mut vm.ram, 0x2000, &home);
+
+    // FSLS r1(path), r2(buf), r3(max_len)
+    vm.regs[1] = 0x2000; // path addr
+    vm.regs[2] = 0x5000; // buf addr
+    vm.regs[3] = 1024; // max len
+    vm.ram[0] = 0xBD;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    let bytes_written = vm.regs[0];
+    assert!(
+        bytes_written > 0 && bytes_written < 0xFFFFFFFF,
+        "FSLS should list home dir contents, got {} bytes",
+        bytes_written
+    );
+
+    // Verify some filenames are present (home should have at least a few entries)
+    let mut names = Vec::new();
+    let mut i = 0x5000;
+    while i < 0x5000 + bytes_written as usize {
+        let name = read_test_string(&vm.ram, i);
+        if !name.is_empty() {
+            names.push(name.clone());
+        }
+        i += name.len() + 1; // skip past name + null
+    }
+    assert!(
+        !names.is_empty(),
+        "FSLS should return at least one filename from home dir"
+    );
+}
+
+#[test]
+fn test_fsls_sandbox_rejects_system_dirs() {
+    let mut vm = crate::vm::Vm::new();
+
+    // Try to list /etc (should be rejected)
+    write_test_string(&mut vm.ram, 0x2000, "/etc");
+
+    vm.regs[1] = 0x2000;
+    vm.regs[2] = 0x5000;
+    vm.regs[3] = 1024;
+    vm.ram[0] = 0xBD;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFE,
+        "FSLS should reject /etc with EACCES, got 0x{:X}",
+        vm.regs[0]
+    );
+}
+
+#[test]
+fn test_fsclose_bad_handle() {
+    let mut vm = crate::vm::Vm::new();
+
+    // Try to close handle 99 (never opened)
+    vm.regs[1] = 99;
+    vm.ram[0] = 0xBA;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "FSCLOSE should fail on invalid handle"
+    );
+}
+
+#[test]
+fn test_fsread_bad_handle() {
+    let mut vm = crate::vm::Vm::new();
+
+    vm.regs[1] = 5; // unopened handle
+    vm.regs[2] = 0x4000;
+    vm.regs[3] = 10;
+    vm.ram[0] = 0xBB;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFF,
+        "FSREAD should fail on unopened handle"
+    );
+}
+
+#[test]
+fn test_fsopen_tilde_expansion() {
+    let mut vm = crate::vm::Vm::new();
+
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let test_path = format!("{}/.geos_test_tilde.txt", home);
+    std::fs::write(&test_path, "tilde works").unwrap();
+
+    // Use ~/ path
+    write_test_string(&mut vm.ram, 0x2000, "~/.geos_test_tilde.txt");
+
+    vm.ram[0] = 0x10;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x2000;
+    vm.ram[3] = 0x10;
+    vm.ram[4] = 2;
+    vm.ram[5] = 0;
+    vm.ram[6] = 0xB9;
+    vm.ram[7] = 1;
+    vm.ram[8] = 2;
+    vm.ram[9] = 0x00;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    assert!(
+        vm.regs[0] < 16,
+        "FSOPEN with ~/ should expand tilde, got 0x{:X}",
+        vm.regs[0]
+    );
+
+    // Cleanup
+    if vm.regs[0] < 16 {
+        vm.regs[1] = vm.regs[0];
+        vm.ram[0] = 0xBA;
+        vm.ram[1] = 1;
+        vm.ram[2] = 0x00;
+        vm.halted = false;
+        vm.pc = 0;
+        for _ in 0..100 {
+            if !vm.step() {
+                break;
+            }
+        }
+    }
+    let _ = std::fs::remove_file(&test_path);
+}
+
+#[test]
+fn test_fsopen_too_many_files() {
+    let mut vm = crate::vm::Vm::new();
+    use crate::vm::types::MAX_HOST_FILES;
+
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+
+    // Open MAX_HOST_FILES files first
+    for i in 0..MAX_HOST_FILES {
+        let path = format!("{}/.geos_test_max_{}.txt", home, i);
+        std::fs::write(&path, "x").unwrap();
+        write_test_string(&mut vm.ram, 0x2000, &path);
+
+        vm.regs[1] = 0x2000;
+        vm.regs[2] = 0;
+        vm.ram[0] = 0xB9;
+        vm.ram[1] = 1;
+        vm.ram[2] = 2;
+        vm.ram[3] = 0x00;
+        vm.halted = false;
+        vm.pc = 0;
+        for _ in 0..100 {
+            if !vm.step() {
+                break;
+            }
+        }
+        assert!(
+            vm.regs[0] < MAX_HOST_FILES as u32,
+            "FSOPEN {} should succeed",
+            i
+        );
+    }
+
+    // Now try one more (should fail with EMFILE)
+    let extra_path = format!("{}/.geos_test_max_extra.txt", home);
+    std::fs::write(&extra_path, "x").unwrap();
+    write_test_string(&mut vm.ram, 0x2000, &extra_path);
+    vm.regs[1] = 0x2000;
+    vm.regs[2] = 0;
+    vm.ram[0] = 0xB9;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(
+        vm.regs[0], 0xFFFFFFFD,
+        "FSOPEN should return EMFILE when all slots used, got 0x{:X}",
+        vm.regs[0]
+    );
+
+    // Cleanup
+    for i in 0..MAX_HOST_FILES {
+        let _ = std::fs::remove_file(format!("{}/.geos_test_max_{}.txt", home, i));
+    }
+    let _ = std::fs::remove_file(&extra_path);
+}
+
+#[test]
+fn test_fswrite_append_mode() {
+    let mut vm = crate::vm::Vm::new();
+
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let test_path = format!("{}/.geos_test_append.txt", home);
+    let _ = std::fs::remove_file(&test_path);
+
+    // Write "AB" first
+    std::fs::write(&test_path, "AB").unwrap();
+    write_test_string(&mut vm.ram, 0x2000, &test_path);
+    write_test_string(&mut vm.ram, 0x3000, "CD");
+
+    // Open in append mode (2)
+    vm.regs[1] = 0x2000;
+    vm.regs[2] = 2; // append
+    vm.ram[0] = 0xB9;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 0x00;
+    vm.halted = false;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    let handle = vm.regs[0];
+    assert!(handle < 16, "FSOPEN append should succeed");
+
+    // Write "CD"
+    vm.regs[1] = handle;
+    vm.regs[2] = 0x3000;
+    vm.regs[3] = 2;
+    vm.ram[0] = 0xBC;
+    vm.ram[1] = 1;
+    vm.ram[2] = 2;
+    vm.ram[3] = 3;
+    vm.ram[4] = 0x00;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+    assert_eq!(vm.regs[0], 2, "FSWRITE append should write 2 bytes");
+
+    // Close
+    vm.regs[1] = handle;
+    vm.ram[0] = 0xBA;
+    vm.ram[1] = 1;
+    vm.ram[2] = 0x00;
+    vm.halted = false;
+    vm.pc = 0;
+    for _ in 0..100 {
+        if !vm.step() {
+            break;
+        }
+    }
+
+    // Verify file content is "ABCD"
+    let content = std::fs::read_to_string(&test_path).unwrap();
+    assert_eq!(
+        content, "ABCD",
+        "Append mode should add to existing content"
+    );
+
+    let _ = std::fs::remove_file(&test_path);
+}

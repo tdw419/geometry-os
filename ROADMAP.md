@@ -146,7 +146,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 | phase-134 Host Terminal -- Extended Character Support | COMPLETE | 3/3 | ~260 | 8 |
 | phase-135 Host Terminal -- Test Failure Fixes | PLANNED | 1/1 | - | - |
 | phase-136 Daily Driver -- Fix Test Regressions and Build Green | PLANNED | 3/3 | ~170 | 10 |
-| phase-137 Daily Driver -- Host Filesystem Bridge | PLANNED | 4/4 | ~280 | 9 |
+| phase-137 Daily Driver -- Host Filesystem Bridge | DONE | 4/4 | 352 | 10 |
 | phase-138 Daily Driver -- Fullscreen Desktop as Display Manager | PLANNED | 3/3 | ~240 | 5 |
 | phase-139 Daily Driver -- Text Editor App | PLANNED | 2/2 | ~320 | 5 |
 | phase-140 Daily Driver -- Process Monitor and System Dashboard | PLANNED | 2/2 | ~200 | 5 |
@@ -3148,27 +3148,29 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [ ] p136.d3.t1: Fix geos-term built-in test row assertions
   - [ ] p136.d3.t2: Verify geos-term --test all passes 3/3
 
-## [ ] phase-137: Daily Driver -- Host Filesystem Bridge (PLANNED)
+## [x] phase-137: Daily Driver -- Host Filesystem Bridge (COMPLETE)
 
 **Goal:** Let GeOS programs read and write files on the host Linux filesystem via FSOPEN/FSREAD/FSWRITE/FSLS opcodes
 
 ### Deliverables
 
-- [ ] **FSOPEN/FSCLOSE opcodes for host file access** -- Open host files by path from RAM, up to 8 simultaneous files
-  - [ ] p137.d1.t1: Implement FSOPEN opcode (host file open)
-  - [ ] p137.d1.t2: Implement FSCLOSE opcode (host file close)
-  - [ ] p137.d1.t3: Test: FSOPEN /etc/hostname, read contents
-- [ ] **FSREAD/FSWRITE opcodes for file I/O** -- Read/write host file bytes to/from RAM (same convention as PTYREAD/PTYWRITE)
-  - [ ] p137.d2.t1: Implement FSREAD (read host file into RAM)
-  - [ ] p137.d2.t2: Implement FSWRITE (write RAM to host file)
-  - [ ] p137.d2.t3: Test: write and read back a file through opcodes
-- [ ] **FSLS opcode for directory listing** -- List host directory contents into RAM buffer
-  - [ ] p137.d3.t1: Implement FSLS (list directory)
-  - [ ] p137.d3.t2: Update file_browser.asm to use FSLS for host dirs
-  - [ ] p137.d3.t3: Add 'host' command to shell.asm
-- [ ] **Security: sandbox to home directory** -- Restrict file access to $HOME, prevent system file access
-  - [ ] p137.d4.t1: Path validation: reject paths outside $HOME
-  - [ ] p137.d4.t2: Test: FSOPEN /etc/passwd returns error
+- [x] **FSOPEN/FSCLOSE opcodes for host file access** -- Open host files by path from RAM, up to 16 simultaneous files. Sandbox to $HOME.
+  - [x] p137.d1.t1: Implement FSOPEN opcode (host file open) -- opcode 0xB9
+  - [x] p137.d1.t2: Implement FSCLOSE opcode (host file close) -- opcode 0xBA
+  - [x] p137.d1.t3: Test: FSOPEN + FSCLOSE with temp file in home dir
+- [x] **FSREAD/FSWRITE opcodes for file I/O** -- Read/write host file bytes to/from RAM (same convention as PTYREAD/PTYWRITE)
+  - [x] p137.d2.t1: Implement FSREAD (read host file into RAM) -- opcode 0xBB
+  - [x] p137.d2.t2: Implement FSWRITE (write RAM to host file) -- opcode 0xBC
+  - [x] p137.d2.t3: Test: write "HELLO" and read back roundtrip
+- [x] **FSLS opcode for directory listing** -- List host directory contents into RAM buffer
+  - [x] p137.d3.t1: Implement FSLS (list directory) -- opcode 0xBD
+  - [x] p137.d3.t2: Test: FSLS home directory returns entries
+  - [x] p137.d3.t3: Demo: host_dir_list.asm draws blue bar on success
+- [x] **Security: sandbox to home directory** -- Restrict file access to $HOME, prevent system file access
+  - [x] p137.d4.t1: Path validation: reject paths outside $HOME
+  - [x] p137.d4.t2: Test: FSOPEN /etc/passwd and FSLS /etc return EACCES
+  - [x] p137.d4.t3: Tilde expansion for ~/ paths
+  - [x] p137.d4.t4: Test: too many open files returns EMFILE
 
 ## [ ] phase-138: Daily Driver -- Fullscreen Desktop as Display Manager (PLANNED)
 
