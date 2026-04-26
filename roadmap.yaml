@@ -7611,7 +7611,7 @@ phases:
   test_target: 8
 - id: phase-154
   title: Terminal Daily Driver -- Direct Boot to Terminal
-  status: in_progress
+  status: done
   goal: Boot GeOS straight into the host terminal, no map. --terminal flag skips the
     map entirely and launches host_term as PID 1.
   description: The map is impressive but it's not what you use daily. What you use
@@ -7623,34 +7623,34 @@ phases:
     description: 'Add --terminal flag to geometry_os binary. When set: skip map initialization,
       skip building spawning, launch host_term.asm immediately as the only program.
       No WINSYS windows, no taskbar process. The terminal IS the OS.'
-    status: todo
+    status: done
     tasks:
     - id: p154.d1.t1
       title: Add --terminal CLI arg to main.rs
-      status: todo
+      status: done
       description: Parse --terminal flag, set a global flag that skips map::init()
     - id: p154.d1.t2
       title: When --terminal, load host_term.asm as sole program
-      status: todo
+      status: done
       description: Skip the building spawner, just load and run host_term directly
     - id: p154.d1.t3
       title: Fullscreen the terminal (no window chrome)
-      status: todo
+      status: done
       description: In --terminal mode, terminal fills the full 256x256 canvas. No
         title bar, no taskbar.
     - id: p154.d1.t4
       title: 'Test: --terminal boots to bash prompt in <2 seconds'
-      status: todo
+      status: done
       description: Verify no map loads, bash appears, typing works
     scope_lines: 150
   - name: 'Graceful exit: Ctrl+D / exit returns to map or quits'
     description: When bash exits (Ctrl+D or 'exit'), either quit the process or return
       to map mode. Configurable.
-    status: todo
+    status: done
     tasks:
     - id: p154.d2.t1
       title: Detect PTY child exit and handle gracefully
-      status: todo
+      status: done
       description: When bash exits, show 'session ended' message. Press any key to
         restart or quit.
     scope_lines: 50
