@@ -7734,7 +7734,7 @@ phases:
   _claimed_at: 1777237397
 - id: phase-157
   title: Terminal Daily Driver -- Copy and Paste
-  status: in_progress
+  status: done
   goal: Select text with mouse, copy to clipboard, paste with middle-click or Ctrl+Shift+V
   description: You need to copy output and paste commands. Mouse drag to select text
     (highlight). Ctrl+Shift+C copies. Ctrl+Shift+V or middle-click pastes. The clipboard
@@ -7744,28 +7744,26 @@ phases:
     description: Mouse click+drag to select text in the terminal. Highlight selected
       chars. Ctrl+Shift+C copies to internal clipboard. Ctrl+Shift+V pastes clipboard
       contents as keystrokes to the active PTY.
-    status: todo
+    status: done
     tasks:
     - id: p157.d1.t1
       title: Mouse drag text selection with highlight
-      status: todo
+      status: done
       description: Track mouse down/up positions, calculate row/col range, highlight
         selected cells with inverted colors.
     - id: p157.d1.t2
       title: Copy selected text to internal clipboard
-      status: todo
+      status: done
       description: 'Ctrl+Shift+C: extract selected text from screen buffer, store
         in clipboard RAM area.'
     - id: p157.d1.t3
       title: Paste clipboard as keystrokes to PTY
-      status: todo
+      status: done
       description: 'Ctrl+Shift+V or middle-click: inject clipboard text character
         by character into active PTY.'
     scope_lines: 200
   scope_lines_total: 76900
   test_target: 5
-  _claimed_by: worker-0
-  _claimed_at: 1777240243
 - id: phase-158
   title: Terminal Daily Driver -- Quick Launch Bar
   status: in_progress
