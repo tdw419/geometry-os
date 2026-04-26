@@ -3223,3 +3223,49 @@ fn test_cmd_bar_movement_blocked_in_type_mode() {
         "player_y should not change in type mode"
     );
 }
+
+#[test]
+fn trace_world_desktop_stop() {
+    let source = std::fs::read_to_string("programs/world_desktop.asm").expect("not found");
+    let asm = assemble(&source, 0).expect("assemble");
+    eprintln!("Assembly: {} words", asm.pixels.len());
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.ram[0xFFB] = 0;
+
+    for i in 0..30_000 {
+        if vm.halted {
+            panic!("HALTED at step {}, PC=0x{:04X}", i, vm.pc);
+        }
+        if vm.frame_ready {
+            eprintln!("FRAME at step {}, PC=0x{:04X} -- SUCCESS", i, vm.pc);
+            return; // success
+        }
+        let pc = vm.pc as usize;
+        let opcode = vm.ram[pc];
+        let result = vm.step();
+        if !result {
+            let pc_now = vm.pc as usize;
+            eprintln!("step()=false at step {}, PC=0x{:04X}, opcode=0x{:02X}, halted={}", i, pc, opcode, vm.halted);
+            eprintln!("PC after step: 0x{:04X}", pc_now);
+            for d in 0..10 {
+                if pc_now + d < vm.ram.len() {
+                    eprintln!("  ram[0x{:04X}] = 0x{:08X}", pc_now + d, vm.ram[pc_now + d]);
+                }
+            }
+            // Check if we hit zero-filled area
+            let mut zero_run = 0;
+            for d in 0..100 {
+                if pc_now + d < vm.ram.len() && vm.ram[pc_now + d] == 0 {
+                    zero_run += 1;
+                }
+            }
+            eprintln!("Zero run from PC: {}/100", zero_run);
+            panic!("TRACED STOP");
+        }
+    }
+    panic!("No halt or frame after 30K steps, PC=0x{:04X}", vm.pc);
+}
+

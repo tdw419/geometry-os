@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 154 opcodes, 3656 tests, 147 programs, 76635 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
-**Progress:** 130/140 phases complete, 0 in progress, 10 planned
+**Progress:** 134/140 phases complete, 0 in progress, 6 planned
 
-**Deliverables:** 524/564 complete
+**Deliverables:** 538/553 complete
 
-**Tasks:** 176/252 complete
+**Tasks:** 648/686 complete
 
 | Phase | Status | Deliverables | LOC Target | Tests |
 |-------|--------|-------------|-----------|-------|

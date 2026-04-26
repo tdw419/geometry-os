@@ -6798,7 +6798,7 @@ phases:
   _claimed_at: 1777192760
 - id: phase-135
   title: Host Terminal -- Test Failure Fixes (3 issues)
-  status: in_progress
+  status: planned
   goal: Fix 3 non-blocking test failures from terminal QA
   description: Automated terminal QA found functional issues.
   deliverables:
