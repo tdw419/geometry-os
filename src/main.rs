@@ -37,7 +37,7 @@ use audio::play_beep;
 use canvas::*;
 use cli::cli_main;
 use hermes::{run_build_canvas, run_hermes_canvas};
-use keys::{key_to_ascii, key_to_ascii_shifted};
+use keys::{key_ctrl_num, key_ctrl_shift, key_to_ascii, key_to_ascii_shifted};
 use render::*;
 use save::{load_state, save_full_buffer_png, save_screen_png, save_state};
 
@@ -434,9 +434,24 @@ fn main() {
         for key in window.get_keys_pressed(KeyRepeat::No) {
             if is_running {
                 // Runtime: send keys to VM key ring buffer
-                // Use shift-aware mapping for proper case + special keys
+                let ctrl = window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl);
                 let shift =
                     window.is_key_down(Key::LeftShift) || window.is_key_down(Key::RightShift);
+                // Check Ctrl+Shift combos first (highest priority)
+                if ctrl && shift {
+                    if let Some(ch) = key_ctrl_shift(key) {
+                        vm.push_key(ch as u32);
+                        continue;
+                    }
+                }
+                // Check Ctrl+number combos (tab switching)
+                if ctrl && !shift {
+                    if let Some(ch) = key_ctrl_num(key) {
+                        vm.push_key(ch as u32);
+                        continue;
+                    }
+                }
+                // Normal key mapping
                 if let Some(ch) = key_to_ascii_shifted(key, shift) {
                     vm.push_key(ch as u32);
                 } else if let Some(ch) = key_to_ascii(key) {

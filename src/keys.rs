@@ -71,6 +71,30 @@ pub fn key_to_ascii(key: Key) -> Option<u8> {
     }
 }
 
+/// Map Ctrl+Shift+key combos to extended key codes (0x90+).
+/// Only called when both Ctrl and Shift are held.
+pub fn key_ctrl_shift(key: Key) -> Option<u8> {
+    match key {
+        Key::T => Some(0x90), // Ctrl+Shift+T = new tab
+        Key::W => Some(0x91), // Ctrl+Shift+W = close tab
+        Key::C => Some(0x96), // Ctrl+Shift+C = copy
+        Key::V => Some(0x97), // Ctrl+Shift+V = paste
+        _ => None,
+    }
+}
+
+/// Map Ctrl+number combos to extended key codes (0x92-0x95).
+/// Only called when Ctrl is held (no Shift).
+pub fn key_ctrl_num(key: Key) -> Option<u8> {
+    match key {
+        Key::Key1 => Some(0x92), // Ctrl+1 = switch to tab 1
+        Key::Key2 => Some(0x93), // Ctrl+2 = switch to tab 2
+        Key::Key3 => Some(0x94), // Ctrl+3 = switch to tab 3
+        Key::Key4 => Some(0x95), // Ctrl+4 = switch to tab 4
+        _ => None,
+    }
+}
+
 pub fn key_to_ascii_shifted(key: Key, shift: bool) -> Option<u8> {
     // Letters
     match key {

@@ -2,11 +2,11 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 154 opcodes, 3656 tests, 147 programs, 76635 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
-**Progress:** 125/130 phases complete, 0 in progress, 5 planned
+**Progress:** 129/130 phases complete, 1 in progress, 0 planned
 
-**Deliverables:** 511/527 complete
+**Deliverables:** 524/527 complete
 
-**Tasks:** 1075/1104 complete
+**Tasks:** 1122/1132 complete
 
 ## Scope Summary
 
@@ -141,7 +141,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 | phase-127 Host Terminal -- ANSI Rendering and Visual Polish | COMPLETE | 3/3 | 72830 | 2076 |
 | phase-128 Host Terminal -- Multi-Session and Shell Selection | IN PROGRESS | 0/3 | ~310 | 4 |
 | phase-129 Host Terminal -- Keyboard Shortcuts and Productivity | COMPLETE | 3/3 | ~260 | 5 |
-| phase-130 Host Terminal -- Test Suite and Desktop Integration | IN PROGRESS | 1/4 | ~260 | 8 |
+| phase-130 Host Terminal -- Test Suite and Desktop Integration | COMPLETE | 4/4 | ~260 | 8 |
 
 ## Dependencies
 
@@ -3034,7 +3034,7 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [x] p129.d3.t2: Ctrl+Shift+W closes current tab
   - [x] p129.d3.t3: Ctrl+1 through Ctrl+4 switch tabs
 
-## [ ] phase-130: Host Terminal -- Test Suite and Desktop Integration (IN PROGRESS)
+## [x] phase-130: Host Terminal -- Test Suite and Desktop Integration (COMPLETE)
 
 **Goal:** Comprehensive test coverage, desktop building entry, and real-world usage validation
 
@@ -3044,13 +3044,13 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [x] p130.d1.t1: Test ANSI state transitions (NORMAL->ESC->CSI->NORMAL)
   - [x] p130.d1.t2: Test OSC sequences are filtered correctly
   - [x] p130.d1.t3: Test line wrap and scroll at buffer boundaries
-- [ ] **Desktop building entry for host_term** -- Register host_term as building on infinite map, walking + Enter loads it
-  - [ ] p130.d2.t1: Add host_term building to map
-  - [ ] p130.d2.t2: Building entry loads host_term.asm in window
-- [ ] **Real-world usage validation script** -- E2E: ls, echo roundtrip, arrow key history navigation
-  - [ ] p130.d3.t1: E2E test: ls command produces output
-  - [ ] p130.d3.t2: E2E test: echo roundtrip
-  - [ ] p130.d3.t3: E2E test: cursor movement via arrow keys
+- [x] **Desktop building entry for host_term** -- Register host_term as building on infinite map, walking + Enter loads it
+  - [x] p130.d2.t1: Add host_term building to map
+  - [x] p130.d2.t2: Building entry loads host_term.asm in window
+- [x] **Real-world usage validation script** -- E2E: ls, echo roundtrip, arrow key history navigation
+  - [x] p130.d3.t1: E2E test: ls command produces output
+  - [x] p130.d3.t2: E2E test: echo roundtrip
+  - [x] p130.d3.t3: E2E test: cursor movement via arrow keys
 - [x] **Update ROADMAP.md and AI_GUIDE.md** -- Sync new phases, add host_term architecture docs
   - [x] p130.d4.t1: Add phases 126-130 to ROADMAP.md
   - [x] p130.d4.t2: Update AI_GUIDE.md with host_term section

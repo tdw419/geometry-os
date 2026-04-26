@@ -465,6 +465,114 @@ mod tests {
         assert_eq!(vm.regs[0], PTY_OK, "PTYCLOSE should succeed");
     }
 
+    /// Test multi-session: open 2 PTY slots, verify both work independently,
+    /// close one, verify the other still works. Phase 128 coverage.
+    #[test]
+    fn pty_multi_session() {
+        use crate::vm::Vm;
+
+        let mut vm = Vm::new();
+
+        // Open first PTY (slot 0) with empty command = default shell
+        vm.ram[0x5000] = 0; // null-terminated empty string
+        vm.regs[5] = 0x5000;
+        vm.pc = 0;
+        vm.ram[0] = 5; // cmd_addr_reg
+        vm.ram[1] = 10; // handle_reg
+        vm.pc = 0;
+        vm.op_ptyopen();
+
+        assert_eq!(vm.regs[0], PTY_OK, "First PTYOPEN should succeed");
+        let handle0 = vm.regs[10];
+        assert_eq!(handle0, 0, "First slot should be index 0");
+
+        // Open second PTY (slot 1)
+        vm.ram[0x5001] = 0; // another null-terminated empty string
+        vm.regs[5] = 0x5001;
+        vm.regs[10] = 0;
+        vm.pc = 100;
+        vm.ram[100] = 5;
+        vm.ram[101] = 10;
+        vm.pc = 100;
+        vm.op_ptyopen();
+
+        assert_eq!(vm.regs[0], PTY_OK, "Second PTYOPEN should succeed");
+        let handle1 = vm.regs[10];
+        assert_eq!(handle1, 1, "Second slot should be index 1");
+
+        // Verify both slots are occupied
+        assert!(vm.pty_slots[0].is_some(), "Slot 0 should be occupied");
+        assert!(vm.pty_slots[1].is_some(), "Slot 1 should be occupied");
+        assert!(vm.pty_slots[2].is_none(), "Slot 2 should be empty");
+        assert!(vm.pty_slots[3].is_none(), "Slot 3 should be empty");
+
+        // Close slot 0
+        vm.regs[12] = handle0;
+        vm.pc = 200;
+        vm.ram[200] = 12;
+        vm.pc = 200;
+        vm.op_ptyclose();
+        assert_eq!(vm.regs[0], PTY_OK, "PTYCLOSE slot 0 should succeed");
+        assert!(vm.pty_slots[0].is_none(), "Slot 0 should be freed");
+        assert!(vm.pty_slots[1].is_some(), "Slot 1 should still be alive");
+
+        // Close slot 1
+        vm.regs[12] = handle1;
+        vm.pc = 300;
+        vm.ram[300] = 12;
+        vm.pc = 300;
+        vm.op_ptyclose();
+        assert_eq!(vm.regs[0], PTY_OK, "PTYCLOSE slot 1 should succeed");
+        assert!(vm.pty_slots[1].is_none(), "Slot 1 should be freed");
+
+        // Verify all slots are now empty
+        for (i, slot) in vm.pty_slots.iter().enumerate() {
+            assert!(slot.is_none(), "Slot {} should be empty after close", i);
+        }
+    }
+
+    /// Test that PTYOPEN with a specific command (shell selection) works.
+    /// Phase 128 shell selection coverage.
+    #[test]
+    fn pty_shell_selection() {
+        // Spawn with explicit /bin/sh command
+        let mut slot = match spawn("/bin/sh") {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("skipping: pty spawn /bin/sh failed: {}", e);
+                return;
+            }
+        };
+
+        // Send echo to verify it works
+        {
+            let w = slot.writer.as_mut().expect("writer");
+            let _ = w.write_all(b"echo test_selection_ok\nexit\n");
+            let _ = w.flush();
+        }
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut output = Vec::new();
+        while Instant::now() < deadline {
+            match slot.rx.try_recv() {
+                Ok(b) => output.push(b),
+                Err(_) => {
+                    if slot.is_closed() && output.contains(&b't') {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(20));
+                }
+            }
+        }
+
+        let text = String::from_utf8_lossy(&output);
+        assert!(
+            text.contains("test_selection_ok"),
+            "expected 'test_selection_ok' in output from /bin/sh, got: {:?}",
+            text
+        );
+    }
+
     /// Test that PTYREAD returns initial bash output (prompt) after PTYOPEN.
     /// This verifies that the TERM=xterm + PS1 + newline trigger actually works.
     #[test]

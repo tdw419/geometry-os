@@ -6304,7 +6304,7 @@ phases:
   status: done
   test_target: 2076
   title: Host Terminal -- ANSI Rendering and Visual Polish
-- _claimed_at: 1777168904
+- _claimed_at: 1777173844
   _claimed_by: worker-0
   deliverables:
   - description: 'Add a tab bar below the title showing active terminals (bash #0,
@@ -6364,7 +6364,7 @@ phases:
   goal: Support multiple terminal tabs, shell selection, and session persistence
   id: phase-128
   scope_lines_total: 73140
-  status: in_progress
+  status: done
   test_target: 2080
   title: Host Terminal -- Multi-Session and Shell Selection
 - _claimed_at: 1777155202

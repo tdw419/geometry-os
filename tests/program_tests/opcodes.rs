@@ -1350,7 +1350,7 @@ drain_loop:
 fn pty_e2e_session(commands: &[&str], read_frames: u32) -> String {
     let mut full_source = String::from(
         "LDI r1, 0x5000\nLDI r0, 0\nSTORE r1, r0\nLDI r5, 0x5000\nPTYOPEN r5, r10\n\
-         LDI r12, 0x6000\nLDI r16, 256\nFRAME\nFRAME\nFRAME\nFRAME\nFRAME\n"
+         LDI r12, 0x6000\nLDI r16, 256\nFRAME\nFRAME\nFRAME\nFRAME\nFRAME\n",
     );
 
     for cmd in commands {
@@ -1358,7 +1358,8 @@ fn pty_e2e_session(commands: &[&str], read_frames: u32) -> String {
         for (i, ch) in cmd.as_bytes().iter().enumerate() {
             full_source.push_str(&format!(
                 "LDI r20, 0x{:04X}\nLDI r21, {}\nSTORE r20, r21\n",
-                0x5100 + i, ch
+                0x5100 + i,
+                ch
             ));
         }
         full_source.push_str(&format!(
@@ -1370,7 +1371,8 @@ fn pty_e2e_session(commands: &[&str], read_frames: u32) -> String {
         }
     }
 
-    full_source.push_str("drain_loop:\nPTYREAD r10, r12, r16\nADD r12, r0\nFRAME\nJMP drain_loop\n");
+    full_source
+        .push_str("drain_loop:\nPTYREAD r10, r12, r16\nADD r12, r0\nFRAME\nJMP drain_loop\n");
 
     let asm = match assemble(&full_source, 0) {
         Ok(a) => a,
@@ -1650,9 +1652,14 @@ fn test_host_term_building_in_table() {
     // Building 15 should be host_term at (140, 80) with color 0xAAFFCC
     let b15_base = 0x7500 + 15 * 4;
     assert_eq!(vm.ram[b15_base], 140, "host_term building x should be 140");
-    assert_eq!(vm.ram[b15_base + 1], 80, "host_term building y should be 80");
     assert_eq!(
-        vm.ram[b15_base + 2], 0xAAFFCC,
+        vm.ram[b15_base + 1],
+        80,
+        "host_term building y should be 80"
+    );
+    assert_eq!(
+        vm.ram[b15_base + 2],
+        0xAAFFCC,
         "host_term building color should be 0xAAFFCC"
     );
 
@@ -1678,5 +1685,8 @@ fn test_host_term_building_launch_mapping() {
     let result = assemble(&source, 0);
     assert!(result.is_ok(), "host_term.asm should assemble successfully");
     let asm = result.unwrap();
-    assert!(!asm.pixels.is_empty(), "host_term.asm should produce bytecode");
+    assert!(
+        !asm.pixels.is_empty(),
+        "host_term.asm should produce bytecode"
+    );
 }
