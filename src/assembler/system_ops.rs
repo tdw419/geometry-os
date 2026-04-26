@@ -874,6 +874,21 @@ pub(super) fn try_parse(
             Ok(Some(()))
         }
 
+        "PTYSIZE" => {
+            // PTYSIZE handle_reg, rows_reg, cols_reg (0xAD)
+            if tokens.len() != 4 {
+                return Err(
+                    "PTYSIZE requires 3 arguments: PTYSIZE handle_reg, rows_reg, cols_reg"
+                        .to_string(),
+                );
+            }
+            bytecode.push(0xAD);
+            bytecode.push(parse_reg(tokens[1])? as u32);
+            bytecode.push(parse_reg(tokens[2])? as u32);
+            bytecode.push(parse_reg(tokens[3])? as u32);
+            Ok(Some(()))
+        }
+
         "UNLINK" => {
             if tokens.len() < 2 {
                 return Err("UNLINK requires 1 argument: UNLINK name_reg".to_string());

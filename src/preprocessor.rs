@@ -175,6 +175,7 @@ pub const OPCODES: &[&str] = &[
     "PTYWRITE",
     "PTYREAD",
     "PTYCLOSE",
+    "PTYSIZE",
     // Phase 94: Tiny font text rendering (3x5, 85 cols in 256px)
     "SMALLTEXT",
     // Phase 95: Medium font text rendering (5x7, 42 cols in 256px)

@@ -885,6 +885,16 @@ impl Vm {
             ),
             // PTYCLOSE handle_reg (0xAC) -- close pty slot
             0xAC => (format!("PTYCLOSE {}", reg(ram(a + 1))), 2),
+            // PTYSIZE handle_reg, rows_reg, cols_reg (0xAD) -- resize pty
+            0xAD => (
+                format!(
+                    "PTYSIZE {}, {}, {}",
+                    reg(ram(a + 1)),
+                    reg(ram(a + 2)),
+                    reg(ram(a + 3))
+                ),
+                4,
+            ),
 
             // ── Phase 88: AI Vision Bridge ──
 

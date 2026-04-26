@@ -927,6 +927,12 @@ pub(crate) fn opcode_name(op: u8) -> &'static str {
         0xA6 => "AI_INJECT",
         // Phase 102: Permissions and Capability System
         0xA7 => "SPAWNC",
+        // Phase 128: Host Terminal PTY opcodes
+        0xA9 => "PTYOPEN",
+        0xAA => "PTYWRITE",
+        0xAB => "PTYREAD",
+        0xAC => "PTYCLOSE",
+        0xAD => "PTYSIZE",
         0xB0 => "AI_AGENT",
         0xB1 => "LOADPNG",
         0xB2 => "LOADSRCIMG",

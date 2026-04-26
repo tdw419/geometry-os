@@ -2151,6 +2151,8 @@ impl Vm {
             0xAB => self.op_ptyread(),
             // PTYCLOSE handle_reg  (0xAC)
             0xAC => self.op_ptyclose(),
+            // PTYSIZE handle_reg, rows_reg, cols_reg  (0xAD)
+            0xAD => self.op_ptysize(),
 
             // HITCLR  (0x9E) -- clear all hit-test regions
             0x9E => {

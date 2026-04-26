@@ -6519,7 +6519,7 @@ phases:
   title: Host Terminal -- Test Suite and Desktop Integration
 - id: phase-131
   title: Host Terminal -- PTY Resize and Column Sync
-  status: planned
+  status: done
   goal: Fix the PTY column mismatch (80 cols PTY vs 42 cols display) that breaks bash
     line wrapping, tab completion, and prompt alignment
   description: 'The PTY is spawned with PtySize{rows:30, cols:80} but the terminal
@@ -6535,7 +6535,7 @@ phases:
       on the slot. This lets programs dynamically resize the terminal. Add to vm.rs
       match block, assembler, preprocessor, disassembler. Write test: resize and verify
       bash knows new size.'
-    status: todo
+    status: done
     tasks:
     - id: p131.d1.t1
       title: Implement PTYSIZE in ops_pty.rs
@@ -6558,7 +6558,7 @@ phases:
       COLS(42)} instead of hardcoded 80x30. The COLS/ROWS constants should match what
       host_term.asm renders. Also add $LINES and $COLUMNS env vars to the spawned
       shell.'
-    status: todo
+    status: done
     tasks:
     - id: p131.d2.t1
       title: Set PtySize cols=42 rows=30 at spawn time
@@ -6577,7 +6577,7 @@ phases:
     description: When the WINSYS window is resized, host_term should recalculate how
       many columns fit and call PTYSIZE to update bash. Needs a frame-rate check on
       window dimensions. Store window size in RAM and diff each frame.
-    status: todo
+    status: done
     tasks:
     - id: p131.d3.t1
       title: Detect window resize from RAM window bounds
@@ -6591,6 +6591,8 @@ phases:
     scope_lines: 50
   scope_lines_total: 73800
   test_target: 2100
+  _claimed_by: worker-0
+  _claimed_at: 1777179790
 - id: phase-132
   title: Host Terminal -- ANSI Color Rendering
   status: planned

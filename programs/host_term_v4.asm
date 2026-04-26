@@ -46,6 +46,9 @@
 #define SEND_BUF 0x5400
 #define RECV_BUF 0x5800
 #define SCRATCH 0x6000
+#define WIN_ID 0x4E08
+#define LAST_COLS 0x4E09
+#define WINFO_BUF 0x6300
 
 ; ANSI states
 #define ANS_NORMAL 0
@@ -100,6 +103,14 @@ LDI r20, STATUS_CWD_LEN
 STORE r20, r0
 LDI r20, OSC_LEN
 STORE r20, r0
+
+; Initialize resize tracking (WINSYS window ID = 0 = disabled)
+LDI r20, WIN_ID
+STORE r20, r0
+LDI r20, LAST_COLS
+LDI r0, COLS
+STORE r20, r0
+LDI r0, 0
 
 ; Title bar background (drawn once, content updated each frame by render)
 LDI r1, 0
@@ -305,6 +316,9 @@ startup_done:
 ; =========================================
 main_loop:
     LDI r1, 1
+
+    ; Check for window resize (WINSYS mode)
+    CALL check_resize
 
     ; Drain pty into text buffer
     LDI r6, RECV_BUF
@@ -1139,4 +1153,103 @@ draw_cursor:
 
 cursor_done:
     POP r31
+    RET
+
+; =========================================
+; CHECK_RESIZE -- detect WINSYS window size changes
+; If WIN_ID > 0, use WINSYS op=6 to get window dimensions,
+; calculate new column count, and call PTYSIZE if changed.
+; Minimum size: 20 cols, 10 rows.
+; Uses: r0-r7, r10-r12 (saved/restored around CALL)
+; =========================================
+check_resize:
+    PUSH r31
+
+    ; Check if WINSYS mode is enabled (WIN_ID != 0)
+    LDI r20, WIN_ID
+    LOAD r0, r20
+    CMPI r0, 0
+    JZ r0, cr_done
+
+    ; Save PTY handle
+    PUSH r28
+
+    ; WINSYS op=6 (WINFO): r0=win_id, r1=winfo_buf_addr
+    LDI r20, WIN_ID
+    LOAD r0, r20
+    LDI r1, WINFO_BUF
+    ; WINSYS op_reg needs to hold the operation number (6)
+    LDI r10, 6
+    ; Call WINSYS with r10 containing op=6
+    ; WINSYS reads op from register at op_reg position
+    ; Set r0=win_id, r1=WINFO_BUF, r10=6 for WINSYS r10
+    WINSYS r10
+
+    ; Check success (r0=1)
+    CMPI r0, 1
+    JNZ r0, cr_restore
+
+    ; WINFO wrote [x, y, w, h, z, pid, wx, wy] to WINFO_BUF
+    ; w is at WINFO_BUF+2
+    LDI r20, WINFO_BUF
+    LDI r7, 2
+    ADD r20, r7
+    LOAD r11, r20     ; r11 = window width in pixels
+
+    ; h is at WINFO_BUF+3
+    LDI r20, WINFO_BUF
+    LDI r7, 3
+    ADD r20, r7
+    LOAD r12, r20     ; r12 = window height in pixels
+
+    ; Calculate new_cols = width / 6 (MEDTEXT is 6px per char)
+    ; Subtract title bar height (12px) from usable height
+    LDI r7, 12
+    CMP r12, r7
+    BLT r0, cr_restore  ; window too small
+
+    SUB r12, r7        ; usable height
+    LDI r7, 8          ; 8px per row
+    DIV r12, r7        ; r12 = usable rows
+
+    LDI r7, 6          ; 6px per column (MEDTEXT)
+    DIV r11, r7        ; r11 = new_cols
+
+    ; Clamp to minimum 20 cols, 10 rows
+    LDI r7, 20
+    CMP r11, r7
+    BLT r0, cr_clamp_cols
+    JMP cr_check_rows
+cr_clamp_cols:
+    LDI r11, 20
+cr_check_rows:
+    LDI r7, 10
+    CMP r12, r7
+    BGE r0, cr_compare
+    LDI r12, 10
+
+cr_compare:
+    ; Compare new_cols with last known cols
+    LDI r20, LAST_COLS
+    LOAD r7, r20
+    CMP r11, r7
+    JZ r0, cr_restore  ; no change
+
+    ; Store new cols
+    LDI r20, LAST_COLS
+    STORE r20, r11
+
+    ; Call PTYSIZE handle, rows, cols
+    LDI r7, PTY_HANDLE
+    LOAD r28, r7       ; restore PTY handle for PTYSIZE
+    PTYSIZE r28, r12, r11
+
+    ; Fall through to restore r28
+
+cr_restore:
+    POP r28
+
+cr_done:
+    POP r31
+    LDI r1, 1
     RET

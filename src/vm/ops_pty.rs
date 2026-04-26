@@ -25,6 +25,7 @@ pub const PTY_ERR_OPEN_FAILED: u32 = 2;
 pub const PTY_ERR_WRITE_FAILED: u32 = 3;
 pub const PTY_ERR_NO_SLOTS: u32 = 5;
 pub const PTY_ERR_CLOSED: u32 = 7;
+pub const PTY_ERR_RESIZE_FAILED: u32 = 8;
 
 pub struct PtySlot {
     master: Box<dyn MasterPty + Send>,
@@ -72,14 +73,18 @@ fn read_string_from_ram(ram: &[u32], addr: u32) -> String {
     s
 }
 
+/// Default terminal dimensions matching host_term_v4.asm display.
+pub const DEFAULT_COLS: u16 = 42;
+pub const DEFAULT_ROWS: u16 = 30;
+
 /// Spawn `cmd` (or bash if empty) inside a fresh pty. Returns the populated
 /// slot or an error string.
 pub fn spawn(cmd_line: &str) -> Result<PtySlot, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
-            rows: 30,
-            cols: 80,
+            rows: DEFAULT_ROWS,
+            cols: DEFAULT_COLS,
             pixel_width: 0,
             pixel_height: 0,
         })
@@ -95,6 +100,10 @@ pub fn spawn(cmd_line: &str) -> Result<PtySlot, String> {
         // Use xterm so bash emits a prompt and handles line editing.
         // xterm-256color may send complex queries; xterm is the safe middle ground.
         c.env("TERM", "xterm");
+        // Set COLUMNS/LINES to match the PTY size so bash line wrapping and
+        // tab completion align with the actual terminal width from frame 1.
+        c.env("COLUMNS", "42");
+        c.env("LINES", "30");
         // Simple prompt so we can detect when bash is ready
         c.env("PS1", "$ ");
         // Disable startup files that might produce complex output
@@ -110,6 +119,8 @@ pub fn spawn(cmd_line: &str) -> Result<PtySlot, String> {
             c.arg(arg);
         }
         c.env("TERM", "xterm");
+        c.env("COLUMNS", "42");
+        c.env("LINES", "30");
         c.env("PS1", "$ ");
         c
     };
@@ -312,6 +323,42 @@ impl super::Vm {
         }
         self.pty_slots[h] = None;
         self.regs[0] = PTY_OK;
+    }
+
+    /// PTYSIZE handle_reg, rows_reg, cols_reg  (0xAD)
+    /// Resizes the PTY to the given dimensions.
+    /// r0 = PTY_OK on success, error code otherwise.
+    pub fn op_ptysize(&mut self) {
+        let h_reg = self.fetch() as usize;
+        let rows_reg = self.fetch() as usize;
+        let cols_reg = self.fetch() as usize;
+        if h_reg >= super::NUM_REGS || rows_reg >= super::NUM_REGS || cols_reg >= super::NUM_REGS {
+            self.regs[0] = PTY_ERR_INVALID_HANDLE;
+            return;
+        }
+        let h = self.regs[h_reg] as usize;
+        let rows = self.regs[rows_reg];
+        let cols = self.regs[cols_reg];
+        if h >= MAX_PTY_SLOTS || self.pty_slots[h].is_none() {
+            self.regs[0] = PTY_ERR_INVALID_HANDLE;
+            return;
+        }
+
+        let slot = self.pty_slots[h].as_ref().unwrap();
+        match slot.master.resize(PtySize {
+            rows: rows as u16,
+            cols: cols as u16,
+            pixel_width: 0,
+            pixel_height: 0,
+        }) {
+            Ok(()) => {
+                self.regs[0] = PTY_OK;
+            }
+            Err(e) => {
+                eprintln!("PTYSIZE failed: {}", e);
+                self.regs[0] = PTY_ERR_RESIZE_FAILED;
+            }
+        }
     }
 }
 
@@ -609,6 +656,199 @@ mod tests {
         assert!(
             !text.is_empty(),
             "PTY should have initial output after spawn, got empty string"
+        );
+    }
+
+    /// Test PTYSIZE opcode resizes the PTY correctly.
+    /// Spawn bash at default size, resize to 42x30 via op_ptysize, then
+    /// verify bash reports $COLUMNS=42.
+    #[test]
+    fn pty_resize_via_opcode() {
+        use crate::vm::Vm;
+
+        let mut vm = Vm::new();
+
+        // Open PTY
+        vm.ram[0x5000] = 0; // null-terminated empty string
+        vm.regs[5] = 0x5000;
+        vm.pc = 0;
+        vm.ram[0] = 5; // cmd_addr_reg
+        vm.ram[1] = 10; // handle_reg
+        vm.pc = 0;
+        vm.op_ptyopen();
+
+        assert_eq!(vm.regs[0], PTY_OK, "PTYOPEN should succeed");
+        let handle = vm.regs[10];
+
+        // Wait for bash to start
+        thread::sleep(Duration::from_millis(500));
+
+        // Drain initial output
+        vm.regs[12] = handle;
+        vm.regs[6] = 0x5800;
+        vm.regs[7] = 512;
+        vm.pc = 100;
+        vm.ram[100] = 12;
+        vm.ram[101] = 6;
+        vm.ram[102] = 7;
+        vm.pc = 100;
+        vm.op_ptyread();
+
+        // PTYSIZE handle, rows=30, cols=42
+        let size_pc: usize = 200;
+        vm.ram[size_pc] = 12; // handle_reg
+        vm.ram[size_pc + 1] = 13; // rows_reg
+        vm.ram[size_pc + 2] = 14; // cols_reg
+        vm.regs[12] = handle;
+        vm.regs[13] = 30; // rows
+        vm.regs[14] = 42; // cols
+        vm.pc = size_pc as u32;
+        vm.op_ptysize();
+
+        assert_eq!(
+            vm.regs[0], PTY_OK,
+            "PTYSIZE should succeed, got r0={}",
+            vm.regs[0]
+        );
+
+        // Send "echo $COLUMNS\n" to verify bash sees the new width
+        let send_buf: usize = 0x5400;
+        let msg = b"echo $COLUMNS\n";
+        for (i, &byte) in msg.iter().enumerate() {
+            vm.ram[send_buf + i] = byte as u32;
+        }
+
+        vm.regs[12] = handle;
+        vm.regs[6] = send_buf as u32;
+        vm.regs[7] = msg.len() as u32;
+        vm.pc = 300;
+        vm.ram[300] = 12;
+        vm.ram[301] = 6;
+        vm.ram[302] = 7;
+        vm.pc = 300;
+        vm.op_ptywrite();
+        assert_eq!(vm.regs[0], PTY_OK, "PTYWRITE should succeed");
+
+        // Wait for bash to respond
+        thread::sleep(Duration::from_millis(500));
+
+        // Read response
+        vm.regs[12] = handle;
+        vm.regs[6] = 0x5800;
+        vm.regs[7] = 512;
+        vm.pc = 400;
+        vm.ram[400] = 12;
+        vm.ram[401] = 6;
+        vm.ram[402] = 7;
+        vm.pc = 400;
+        vm.op_ptyread();
+
+        let bytes_read = vm.regs[0];
+        assert!(
+            bytes_read > 0 && bytes_read != u32::MAX,
+            "PTYREAD should return bytes after resize, got r0={}",
+            bytes_read
+        );
+
+        let mut output = Vec::new();
+        for i in 0..bytes_read as usize {
+            output.push((vm.ram[0x5800 + i] & 0xFF) as u8);
+        }
+        let text = String::from_utf8_lossy(&output);
+        assert!(
+            text.contains("42"),
+            "expected '42' (new COLUMNS) in output, got: {:?}",
+            text
+        );
+
+        // Clean up
+        vm.regs[12] = handle;
+        vm.pc = 500;
+        vm.ram[500] = 12;
+        vm.pc = 500;
+        vm.op_ptyclose();
+        assert_eq!(vm.regs[0], PTY_OK, "PTYCLOSE should succeed");
+    }
+
+    /// Test PTYSIZE with invalid handle returns error.
+    #[test]
+    fn pty_resize_invalid_handle() {
+        use crate::vm::Vm;
+
+        let mut vm = Vm::new();
+
+        // PTYSIZE with handle pointing to non-existent slot
+        vm.regs[12] = 0; // handle = 0 (empty)
+        vm.regs[13] = 30; // rows
+        vm.regs[14] = 42; // cols
+        vm.pc = 0;
+        vm.ram[0] = 12;
+        vm.ram[1] = 13;
+        vm.ram[2] = 14;
+        vm.pc = 0;
+        vm.op_ptysize();
+
+        assert_eq!(
+            vm.regs[0], PTY_ERR_INVALID_HANDLE,
+            "PTYSIZE with no open slot should return INVALID_HANDLE"
+        );
+    }
+
+    /// Test that PTY spawns with the correct initial size (42x30).
+    #[test]
+    fn pty_initial_size_42x30() {
+        let mut slot = match spawn("") {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("skipping: pty spawn failed: {}", e);
+                return;
+            }
+        };
+
+        // Wait for bash to start
+        thread::sleep(Duration::from_millis(500));
+
+        // Drain initial prompt
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut drain = Vec::new();
+        while Instant::now() < deadline {
+            match slot.rx.try_recv() {
+                Ok(b) => drain.push(b),
+                Err(_) => {
+                    if !drain.is_empty() {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(50));
+                }
+            }
+        }
+
+        // Send "echo $COLUMNS\nexit\n" to check initial column count
+        {
+            let w = slot.writer.as_mut().expect("writer");
+            let _ = w.write_all(b"echo $COLUMNS\nexit\n");
+            let _ = w.flush();
+        }
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut output = Vec::new();
+        while Instant::now() < deadline {
+            match slot.rx.try_recv() {
+                Ok(b) => output.push(b),
+                Err(_) => {
+                    if slot.is_closed() && output.contains(&b'4') {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(20));
+                }
+            }
+        }
+
+        let text = String::from_utf8_lossy(&output);
+        assert!(
+            text.contains("42"),
+            "bash $COLUMNS should be 42 (matching initial spawn size), got: {:?}",
+            text
         );
     }
 }
