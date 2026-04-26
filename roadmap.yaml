@@ -6304,58 +6304,56 @@ phases:
   status: done
   test_target: 2076
   title: Host Terminal -- ANSI Rendering and Visual Polish
-- _claimed_at: 1777173844
-  _claimed_by: worker-0
-  deliverables:
+- deliverables:
   - description: 'Add a tab bar below the title showing active terminals (bash #0,
       python #1). Clicking a tab switches the active PTY handle. New tab button (+)
       spawns a new shell. Close button (x) on each tab sends PTYCLOSE.'
     name: Tab bar for multiple PTY sessions
     scope_lines: 150
-    status: todo
+    status: done
     tasks:
     - description: Render tab row with session names, highlight active tab
       id: p128.d1.t1
-      status: todo
+      status: done
       title: Tab bar rendering with active session indicator
     - description: Add HITSET regions for each tab, handle click to switch active
         PTY
       id: p128.d1.t2
-      status: todo
+      status: done
       title: Tab click handling via HITSET regions
     - description: Click + -> find empty slot -> PTYOPEN -> switch to new tab
       id: p128.d1.t3
-      status: todo
+      status: done
       title: New tab (+) button spawns fresh PTYOPEN
   - description: 'Right-click or long-press on + button shows a menu: bash, zsh, python3,
       node. Uses DRAWTEXT for menu rendering and HITSET for click handling.'
     name: Shell selector menu
     scope_lines: 100
-    status: todo
+    status: done
     tasks:
     - description: Render a list of shell options as a dropdown menu
       id: p128.d2.t1
-      status: todo
+      status: done
       title: Dropdown menu component
     - description: At PTYOPEN time, allow cmd string to specify shell binary
       id: p128.d2.t2
-      status: todo
+      status: done
       title: Shell detection from /etc/shells
   - description: When the terminal window loses focus (player walks away on the map),
       PTY sessions stay alive. When the player returns, the terminal reconnects to
       the same PTY slots and shows buffered output.
     name: Session persistence across window focus/blur
     scope_lines: 60
-    status: todo
+    status: done
     tasks:
     - description: PTY slots persist in VM state, not in program state. Verify they
         survive focus change.
       id: p128.d3.t1
-      status: todo
+      status: done
       title: Keep PTY slots alive when window unfocused
     - description: When window regains focus, drain all pending PTYREAD data and render
       id: p128.d3.t2
-      status: todo
+      status: done
       title: Drain buffered PTY output on window refocus
   description: The terminal becomes a first-class desktop app. Users can open multiple
     terminals (up to MAX_PTY_SLOTS=4), switch between them with tabs, choose their
@@ -6364,7 +6362,7 @@ phases:
   goal: Support multiple terminal tabs, shell selection, and session persistence
   id: phase-128
   scope_lines_total: 73140
-  status: in_progress
+  status: done
   test_target: 2080
   title: Host Terminal -- Multi-Session and Shell Selection
 - _claimed_at: 1777155202
