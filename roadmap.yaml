@@ -7044,7 +7044,8 @@ phases:
   title: Daily Driver -- Text Editor App
   status: in_progress
   goal: A real text editor (nano-like) that edits host files through the FS bridge,
-    making GeOS usable for coding and writing
+    making GeOS usable for coding and writing. D1 (core editor) shipped with 6 tests.
+    D2 (search/goto/multi-buffer) remaining.
   description: 'The canvas editor only edits assembly. The host terminal gives you
     vim/nano but that''s Linux, not GeOS. We need a GeOS-native text editor that:
     opens host files via FSREAD, displays them with scrolling, lets you edit with
@@ -7053,30 +7054,32 @@ phases:
   deliverables:
   - name: Core text editor (open, scroll, edit, save)
     description: 'nano_editor.asm: opens a file via FSREAD into a line buffer (RAM
-      0x6100-0x7FFF = 8K). Renders visible lines with MEDTEXT. Cursor movement with
-      arrows. Insert/delete chars. Ctrl+S saves via FSWRITE. Ctrl+Q quits. Status
-      bar shows filename, line count, modified flag.'
-    status: todo
+      0x5400-0x73FF = 8K). Renders visible lines with DRAWTEXT (42 cols, 28 lines).
+      Cursor movement with arrows (bitmask 0xFFB). Insert/delete chars. Ctrl+S saves
+      via FSWRITE. Ctrl+Q quits. Status bar shows filename and modified flag. Current
+      line highlighting. Line starts table for efficient navigation. 1160 lines, 1942
+      bytes bytecode, 6 integration tests passing.'
+    status: done
     tasks:
     - id: p139.d1.t1
       title: 'File loading: FSREAD into line buffer'
-      status: todo
+      status: done
       description: Open file, split into lines, store in line buffer with line starts
         table
     - id: p139.d1.t2
-      title: 'Rendering: visible window of lines with MEDTEXT'
-      status: todo
+      title: 'Rendering: visible window of lines with DRAWTEXT'
+      status: done
       description: Render viewport of current lines, highlight cursor position
     - id: p139.d1.t3
       title: 'Editing: insert/delete chars, line breaks'
-      status: todo
+      status: done
       description: Handle printable chars, backspace, delete, enter (split line)
     - id: p139.d1.t4
       title: 'Save: FSWRITE modified buffer back to file'
-      status: todo
-      description: Ctrl+S triggers save. Join lines with newlines, FSWRITE to original
+      status: done
+      description: Ctrl+S triggers save. Write buffer with newlines, FSWRITE to original
         path.
-    scope_lines: 200
+    scope_lines: 1160
   - name: Search, goto line, multiple buffers
     description: Ctrl+F search forward. Ctrl+G goto line number. Ctrl+N open second
       file in split view. Buffer switcher with tab-like interface. These make the
