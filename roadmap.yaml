@@ -6159,7 +6159,6 @@ phases:
   test_target: 2062
   title: Shell VFS Integration
 - _claimed_at: 1777148280
-  _claimed_by: worker-0
   deliverables:
   - description: In ops_pty.rs spawn(), change TERM from 'dumb' to 'xterm-256color'
       or 'xterm' so bash emits a prompt. Also set PS1='$ ' in the spawned bash env
@@ -6234,7 +6233,6 @@ phases:
   test_target: 2070
   title: Host Terminal -- PTY Read/Write Fix
 - _claimed_at: 1777158041
-  _claimed_by: worker-0
   deliverables:
   - description: Parse CSI sequences for cursor up/down/left/right (A/B/C/D), cursor
       home (H), cursor position (CUP), and line clear (K). Update CUR_COL/CUR_ROW
@@ -6366,7 +6364,6 @@ phases:
   test_target: 2080
   title: Host Terminal -- Multi-Session and Shell Selection
 - _claimed_at: 1777155202
-  _claimed_by: worker-0
   deliverables:
   - description: Maintain a scrollback ring buffer of the last N screens of output
       (e.g., 10 pages = 300 rows). Shift+PageUp scrolls back through history, Shift+PageDown
@@ -6432,7 +6429,6 @@ phases:
   test_target: 2085
   title: Host Terminal -- Keyboard Shortcuts and Productivity
 - _claimed_at: 1777169275
-  _claimed_by: worker-0
   deliverables:
   - description: 'Test the ANSI state machine in process_byte: normal chars, ESC sequences,
       CSI cursor movement, CSI line clear, OSC title set, and edge cases (partial
@@ -6591,7 +6587,6 @@ phases:
     scope_lines: 50
   scope_lines_total: 73800
   test_target: 2100
-  _claimed_by: worker-0
   _claimed_at: 1777179790
 - id: phase-132
   title: Host Terminal -- ANSI Color Rendering
@@ -6676,7 +6671,6 @@ phases:
     scope_lines: 100
   scope_lines_total: 74100
   test_target: 2108
-  _claimed_by: worker-0
   _claimed_at: 1777190543
 - id: phase-133
   title: Host Terminal -- Wider Display and Horizontal Scroll
@@ -6794,7 +6788,6 @@ phases:
     scope_lines: 40
   scope_lines_total: 74560
   test_target: 2120
-  _claimed_by: worker-0
   _claimed_at: 1777192760
 - id: phase-135
   title: Host Terminal -- Test Failure Fixes (3 issues)
@@ -6822,7 +6815,6 @@ phases:
     scope_lines: 90
   scope_lines_total: 74650
   test_target: 0
-  _claimed_by: worker-0
   _claimed_at: 1777203060
 - id: phase-136
   title: Daily Driver -- Fix Test Regressions and Build Green
@@ -6980,7 +6972,7 @@ phases:
   test_target: 475
 - id: phase-138
   title: Daily Driver -- Fullscreen Desktop as Display Manager
-  status: in_progress
+  status: done
   goal: Launch GeOS fullscreen on boot as the primary interface, replacing the need
     for a Linux desktop environment
   description: 'When you log in, GeOS should start fullscreen and be your entire computing
@@ -6994,34 +6986,34 @@ phases:
       Remove window decorations. Scale the 256x256 framebuffer to fill the screen
       with nearest-neighbor scaling (or window-dependent scaling for wider terminals).
       ESC exits fullscreen.
-    status: todo
+    status: done
     tasks:
     - id: p138.d1.t1
       title: Add --fullscreen CLI flag
-      status: todo
+      status: done
       description: minifb WindowOptions::resize mode, borderless, fullscreen
     - id: p138.d1.t2
       title: Handle ESC to exit fullscreen gracefully
-      status: todo
+      status: done
       description: ESC shows confirm dialog, then exits to windowed mode
     - id: p138.d1.t3
       title: Test fullscreen launch with various monitor sizes
-      status: todo
+      status: done
       description: Verify scaling works on 1080p, 1440p, 4K
     scope_lines: 60
   - name: Auto-start on login (systemd user service)
     description: Create a systemd user service that starts geometry_os --fullscreen
       on login. This makes GeOS your display manager. Optionally replace the default
       X/Wayland session with GeOS.
-    status: todo
+    status: done
     tasks:
     - id: p138.d2.t1
       title: Create ~/.config/systemd/user/geometry-os.service
-      status: todo
+      status: done
       description: ExecStart=geometry_os --fullscreen, After=graphical-session.target
     - id: p138.d2.t2
       title: Add .desktop file for session selection
-      status: todo
+      status: done
       description: Geometry OS appears in login manager session list
     scope_lines: 30
   - name: 'Desktop polish: alt-tab, task switcher, notifications'
@@ -7029,26 +7021,24 @@ phases:
       windows. A notification system for background events (terminal command finished,
       cron job done). Clock in the taskbar. System tray with battery/network indicators
       from host.
-    status: todo
+    status: done
     tasks:
     - id: p138.d3.t1
       title: Alt-Tab window switcher overlay
-      status: todo
+      status: done
       description: Show window list, highlight active, Tab cycles, Enter selects
     - id: p138.d3.t2
       title: Notification system (background events)
-      status: todo
+      status: done
       description: RAM-based notification queue. Programs push notifications. Taskbar
         shows count.
     - id: p138.d3.t3
       title: Host system tray (battery, network, volume from Linux)
-      status: todo
+      status: done
       description: Read host state via Rust, expose through opcodes or RAM ports
     scope_lines: 150
   scope_lines_total: 75220
   test_target: 480
-  _claimed_by: worker-0
-  _claimed_at: 1777223283
 - id: phase-139
   title: Daily Driver -- Text Editor App
   status: in_progress
@@ -7107,7 +7097,6 @@ phases:
     scope_lines: 120
   scope_lines_total: 75540
   test_target: 485
-  _claimed_by: worker-0
   _claimed_at: 1777223850
 - id: phase-140
   title: Daily Driver -- Process Monitor and System Dashboard

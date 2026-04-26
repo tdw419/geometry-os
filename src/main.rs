@@ -67,7 +67,9 @@ fn get_host_notifications() -> Vec<HostNotification> {
 /// Read current time as HH:MM string
 fn get_clock_string() -> String {
     let now = std::time::SystemTime::now();
-    let duration = now.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    let duration = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
     let total_secs = duration.as_secs();
     let hours = ((total_secs / 3600) + 0) % 24; // UTC; adjust for timezone if needed
     let minutes = (total_secs / 60) % 60;
@@ -77,10 +79,7 @@ fn get_clock_string() -> String {
 /// Read current time as HH:MM string in local timezone
 fn get_local_clock_string() -> String {
     // Try to get local time via `date` command (portable, no deps)
-    if let Ok(output) = std::process::Command::new("date")
-        .arg("+%H:%M")
-        .output()
-    {
+    if let Ok(output) = std::process::Command::new("date").arg("+%H:%M").output() {
         let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if s.len() == 5 && s.contains(':') {
             return s;
@@ -161,10 +160,7 @@ fn resolve_qemu_pixel_paths(config: &str) -> String {
 /// Detect the primary monitor resolution via xrandr.
 /// Falls back to 1920x1080 if detection fails.
 fn detect_monitor_resolution() -> (usize, usize) {
-    if let Ok(output) = std::process::Command::new("xrandr")
-        .arg("--query")
-        .output()
-    {
+    if let Ok(output) = std::process::Command::new("xrandr").arg("--query").output() {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if line.contains(" connected") || line.contains(" connected primary") {
                 // Parse: "eDP-1 connected primary 2560x1600+0+0 ..."
@@ -174,10 +170,14 @@ fn detect_monitor_resolution() -> (usize, usize) {
                 // First format: "NAME connected primary WxH+X+Y ..."
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 for part in parts {
-                    if part.contains('x') && part.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+                    if part.contains('x')
+                        && part.chars().next().map_or(false, |c| c.is_ascii_digit())
+                    {
                         let dims: Vec<&str> = part.split('x').collect();
                         if dims.len() == 2 {
-                            if let (Ok(w), Ok(h)) = (dims[0].parse::<usize>(), dims[1].parse::<usize>()) {
+                            if let (Ok(w), Ok(h)) =
+                                (dims[0].parse::<usize>(), dims[1].parse::<usize>())
+                            {
                                 return (w, h);
                             }
                         }
@@ -288,13 +288,8 @@ fn main() {
         )
     };
 
-    let mut window = Window::new(
-        "Geometry OS -- Canvas Text Surface",
-        win_w,
-        win_h,
-        win_opts,
-    )
-    .expect("Failed to create window. Ensure a display is available.");
+    let mut window = Window::new("Geometry OS -- Canvas Text Surface", win_w, win_h, win_opts)
+        .expect("Failed to create window. Ensure a display is available.");
 
     window.set_target_fps(60);
 
@@ -397,6 +392,11 @@ fn main() {
     let mut zoom_level: u32 = 2;
     // Last launched app name (for detecting return to map)
     let mut launched_from_map: Option<String> = None;
+
+    // ── Alt-Tab window switcher state ─────────────────────────────
+    let mut alt_tab_active: bool = false;
+    let mut alt_tab_index: usize = 0;
+    let mut alt_held: bool = false;
 
     // ── Windowed App Execution (Phase 107) ──────────────────────
     // Multiple apps can run simultaneously in world-space windows.
@@ -610,7 +610,70 @@ fn main() {
             }
         }
 
+        // ── Alt-Tab window switcher key handling ──────────────────────
+        let alt_now = window.is_key_down(Key::LeftAlt) || window.is_key_down(Key::RightAlt);
+        if alt_now && !alt_held {
+            // Alt just pressed
+            alt_held = true;
+        }
+        if !alt_now && alt_held {
+            // Alt released
+            alt_held = false;
+            if alt_tab_active {
+                // Select the highlighted window
+                let wins: Vec<_> = vm.windows.iter().collect();
+                if alt_tab_index < wins.len() {
+                    let win_id = wins[alt_tab_index].id;
+                    let win_title_addr = wins[alt_tab_index].title_addr;
+                    // Compute new z_order (max + 1) from immutable borrow first
+                    let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                    let new_z = max_z + 1;
+                    // Read title from RAM for status message
+                    let mut t = String::new();
+                    let addr = win_title_addr as usize;
+                    for j in 0..32 {
+                        if addr + j < vm.ram.len() {
+                            let ch = vm.ram[addr + j];
+                            if ch == 0 {
+                                break;
+                            }
+                            if let Some(c) = char::from_u32(ch) {
+                                t.push(c);
+                            }
+                        }
+                    }
+                    if t.is_empty() {
+                        t = format!("Win#{}", win_id);
+                    }
+                    // Now do the mutable update
+                    if let Some(w) = vm.windows.iter_mut().find(|w| w.id == win_id) {
+                        w.z_order = new_z;
+                        status_msg = format!("[focused: {}]", t);
+                    }
+                }
+                alt_tab_active = false;
+                alt_tab_index = 0;
+            }
+        }
+
         for key in window.get_keys_pressed(KeyRepeat::No) {
+            // Alt+Tab: cycle through open windows
+            if alt_held && key == Key::Tab {
+                if !alt_tab_active {
+                    alt_tab_active = true;
+                    alt_tab_index = 0;
+                } else {
+                    alt_tab_index = (alt_tab_index + 1) % vm.windows.len().max(1);
+                }
+                continue;
+            }
+            // Escape cancels alt-tab
+            if alt_tab_active && key == Key::Escape {
+                alt_tab_active = false;
+                alt_tab_index = 0;
+                continue;
+            }
+
             if is_running {
                 // Runtime: send keys to VM key ring buffer
                 let ctrl = window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl);
@@ -3376,14 +3439,24 @@ fn main() {
 
             // Battery indicator
             if let Some(pct) = get_battery_percent() {
-                let bat_color = if pct > 50 { 0x00CC00 } else if pct > 20 { 0xFFAA00 } else { 0xFF4444 };
+                let bat_color = if pct > 50 {
+                    0x00CC00
+                } else if pct > 20 {
+                    0xFFAA00
+                } else {
+                    0xFF4444
+                };
                 let bat_text = format!("B:{}%", pct);
                 render::render_text(&mut buffer, WIDTH - 160, HEIGHT - 20, &bat_text, bat_color);
             }
 
             // Network indicator
             let net = get_network_status();
-            let net_color = if net == "WiFi" || net == "Eth" { 0x00CC00 } else { 0x666666 };
+            let net_color = if net == "WiFi" || net == "Eth" {
+                0x00CC00
+            } else {
+                0x666666
+            };
             render::render_text(&mut buffer, WIDTH - 230, HEIGHT - 20, net, net_color);
         }
 
@@ -3407,21 +3480,56 @@ fn main() {
             }
 
             // Title
-            render::render_text(&mut buffer, overlay_x + 10, overlay_y + 5, "Window Switcher (Tab=next, Enter=select, Esc=cancel)", 0xFFFFFF);
+            render::render_text(
+                &mut buffer,
+                overlay_x + 10,
+                overlay_y + 5,
+                "Window Switcher (Tab=next, Enter=select, Esc=cancel)",
+                0xFFFFFF,
+            );
 
             // Window list
             let wins: Vec<_> = vm.windows.iter().collect();
             for (i, win) in wins.iter().enumerate() {
-                if i >= 10 { break; } // max 10 items displayed
+                if i >= 10 {
+                    break;
+                } // max 10 items displayed
                 let y = overlay_y + 25 + i * 16;
-                let color = if i == alt_tab_index { 0xFFFF00 } else { 0xAAAAAA };
+                let color = if i == alt_tab_index {
+                    0xFFFF00
+                } else {
+                    0xAAAAAA
+                };
                 let marker = if i == alt_tab_index { "> " } else { "  " };
-                let label = format!("{}{} [{}x{}] PID:{}", marker, win.title, win.w, win.h, win.pid);
+                // Read title from RAM
+                let mut title = String::new();
+                let addr = win.title_addr as usize;
+                for j in 0..32 {
+                    if addr + j < vm.ram.len() {
+                        let ch = vm.ram[addr + j];
+                        if ch == 0 {
+                            break;
+                        }
+                        if let Some(c) = char::from_u32(ch) {
+                            title.push(c);
+                        }
+                    }
+                }
+                if title.is_empty() {
+                    title = format!("Win#{}", win.id);
+                }
+                let label = format!("{}{} [{}x{}] PID:{}", marker, title, win.w, win.h, win.pid);
                 render::render_text(&mut buffer, overlay_x + 10, y, &label, color);
             }
 
             if wins.is_empty() {
-                render::render_text(&mut buffer, overlay_x + 10, overlay_y + 50, "No windows open", 0x888888);
+                render::render_text(
+                    &mut buffer,
+                    overlay_x + 10,
+                    overlay_y + 50,
+                    "No windows open",
+                    0x888888,
+                );
             }
         }
         // Only when running (desktop is active) and VM screen is visible
@@ -3768,10 +3876,7 @@ fn main() {
 
         if fullscreen_mode {
             // Scale the 1024x768 buffer into the fullscreen buffer
-            scale_buffer_to_fullscreen(
-                &buffer, WIDTH, HEIGHT,
-                &mut fs_buffer, fs_win_w, fs_win_h,
-            );
+            scale_buffer_to_fullscreen(&buffer, WIDTH, HEIGHT, &mut fs_buffer, fs_win_w, fs_win_h);
             if let Err(e) = window.update_with_buffer(&fs_buffer, fs_win_w, fs_win_h) {
                 eprintln!("Render error: {}. Exiting.", e);
                 break;
