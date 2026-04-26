@@ -124,6 +124,72 @@ fn get_network_status() -> &'static str {
     "NoNet"
 }
 
+/// Read audio volume percentage from ALSA/PulseAudio/PipeWire.
+/// Tries PipeWire first (via wpctl), then PulseAudio (pactl), then ALSA mixer.
+fn get_volume_percent() -> Option<u8> {
+    // Method 1: PipeWire via wpctl
+    if let Ok(output) = std::process::Command::new("wpctl")
+        .args(["get-volume", "@DEFAULT_AUDIO_SINK@"])
+        .output()
+    {
+        let s = String::from_utf8_lossy(&output.stdout);
+        // Output format: "Volume: 0.65" or "Volume: 0.65 [MUTED]"
+        if let Some(vol_part) = s.strip_prefix("Volume:") {
+            let vol_str = vol_part.trim();
+            if vol_str.contains("MUTED") {
+                return Some(0); // muted = 0%
+            }
+            if let Ok(f) = vol_str.parse::<f32>() {
+                return Some((f * 100.0).min(100.0) as u8);
+            }
+        }
+    }
+
+    // Method 2: PulseAudio via pactl
+    if let Ok(output) = std::process::Command::new("pactl")
+        .args(["get-sink-volume", "@DEFAULT_SINK@"])
+        .output()
+    {
+        let s = String::from_utf8_lossy(&output.stdout);
+        // Parse "Volume: front-left: 32768 /  50% ..."
+        for part in s.split('/') {
+            let trimmed = part.trim();
+            if trimmed.ends_with('%') {
+                if let Ok(pct) = trimmed.trim_end_matches('%').trim().parse::<u8>() {
+                    return Some(pct);
+                }
+            }
+        }
+    }
+
+    // Method 3: ALSA mixer via amixer
+    if let Ok(output) = std::process::Command::new("amixer")
+        .args(["get", "Master"])
+        .output()
+    {
+        let s = String::from_utf8_lossy(&output.stdout);
+        for line in s.lines() {
+            if line.contains('[') && line.contains('%') {
+                // Parse "[50%]" or "[50%] [on]"
+                let start = line.find('[').unwrap_or(0);
+                let end = line.find('%').unwrap_or(0);
+                if start < end {
+                    let num = &line[start + 1..end];
+                    if let Ok(pct) = num.parse::<u8>() {
+                        // Check for mute
+                        if line.contains("[off]") {
+                            return Some(0);
+                        }
+                        return Some(pct);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 // ── Save file ───────────────────────────────────────────────────
 const SAVE_FILE: &str = "geometry_os.sav";
 
@@ -415,6 +481,10 @@ fn main() {
     let mut window_drag_id: u32 = 0; // window id being dragged
     let mut window_drag_start: (f32, f32) = (0.0, 0.0);
     let mut window_drag_world_start: (i32, i32) = (0, 0);
+    // ── Window double-click maximize (Phase 153) ────────────
+    let mut win_dbl_click_id: u32 = 0;
+    let mut win_dbl_click_time: std::time::Instant = std::time::Instant::now();
+    let mut win_dbl_click_pos: (f32, f32) = (0.0, 0.0);
 
     // If --boot flag, perform boot sequence: load init.asm as PID 1
     if boot_mode {
@@ -3433,11 +3503,16 @@ fn main() {
         }
         // ── Desktop polish: clock + system tray overlay ──────────────
         {
-            // Update clock every frame (rendered on status bar area)
+            // System tray: positioned at bottom-right of window
+            // Order (right to left): clock | battery | network | volume
+            let tray_y = HEIGHT - 20;
+
+            // Clock (rightmost)
             let clock = get_local_clock_string();
-            render::render_text(&mut buffer, WIDTH - 80, HEIGHT - 20, &clock, 0xAAAACC);
+            render::render_text(&mut buffer, WIDTH - 80, tray_y, &clock, 0xAAAACC);
 
             // Battery indicator
+            let mut tray_x = WIDTH - 160;
             if let Some(pct) = get_battery_percent() {
                 let bat_color = if pct > 50 {
                     0x00CC00
@@ -3447,7 +3522,8 @@ fn main() {
                     0xFF4444
                 };
                 let bat_text = format!("B:{}%", pct);
-                render::render_text(&mut buffer, WIDTH - 160, HEIGHT - 20, &bat_text, bat_color);
+                render::render_text(&mut buffer, tray_x, tray_y, &bat_text, bat_color);
+                tray_x -= 80;
             }
 
             // Network indicator
@@ -3457,7 +3533,21 @@ fn main() {
             } else {
                 0x666666
             };
-            render::render_text(&mut buffer, WIDTH - 230, HEIGHT - 20, net, net_color);
+            render::render_text(&mut buffer, tray_x, tray_y, net, net_color);
+            tray_x -= 60;
+
+            // Volume indicator (Phase 153)
+            if let Some(vol) = get_volume_percent() {
+                let vol_color = if vol == 0 {
+                    0xFF4444 // muted = red
+                } else if vol > 50 {
+                    0x00CC00 // high = green
+                } else {
+                    0xFFAA00 // medium = amber
+                };
+                let vol_text = format!("V:{}%", vol);
+                render::render_text(&mut buffer, tray_x, tray_y, &vol_text, vol_color);
+            }
         }
 
         // ── Alt-Tab window switcher overlay ──────────────────────
@@ -3837,14 +3927,52 @@ fn main() {
                                 w.active = false;
                             }
                         } else if let Some((drag_id, drag_x, drag_y)) = hit_drag {
-                            let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
-                            if let Some(w) = vm.windows.iter_mut().find(|w| w.id == drag_id) {
-                                w.z_order = max_z + 1;
+                            // Check for double-click on title bar (Phase 153: maximize/restore)
+                            let now = std::time::Instant::now();
+                            let elapsed = now.duration_since(win_dbl_click_time).as_millis() as u64;
+                            let dx = mx - win_dbl_click_pos.0;
+                            let dy = my - win_dbl_click_pos.1;
+                            let dist = (dx * dx + dy * dy).sqrt();
+                            let is_dbl = drag_id == win_dbl_click_id && elapsed < 500 && dist < 8.0;
+
+                            if is_dbl {
+                                // Double-click title bar: toggle maximize/restore
+                                let max_w = 256;
+                                let max_h = 240; // leave room for taskbar
+                                let title =
+                                    if let Some(w) = vm.windows.iter().find(|w| w.id == drag_id) {
+                                        w.read_title(&vm.ram)
+                                    } else {
+                                        String::new()
+                                    };
+                                // Compute max_z before mutable borrow
+                                let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                                if let Some(w) = vm.windows.iter_mut().find(|w| w.id == drag_id) {
+                                    w.z_order = max_z + 1;
+                                    w.toggle_maximize(max_w, max_h);
+                                    if w.maximized {
+                                        status_msg = format!("[maximized: {}]", title);
+                                    } else {
+                                        status_msg = format!("[restored: {}]", title);
+                                    }
+                                }
+                                // Reset double-click tracking
+                                win_dbl_click_id = 0;
+                            } else {
+                                // Single click on title bar: start drag + bring to front
+                                let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
+                                if let Some(w) = vm.windows.iter_mut().find(|w| w.id == drag_id) {
+                                    w.z_order = max_z + 1;
+                                }
+                                window_drag_active = true;
+                                window_drag_id = drag_id;
+                                window_drag_start = (mx, my);
+                                window_drag_world_start = (drag_x as i32, drag_y as i32);
+                                // Track for potential double-click
+                                win_dbl_click_id = drag_id;
+                                win_dbl_click_time = now;
+                                win_dbl_click_pos = (mx, my);
                             }
-                            window_drag_active = true;
-                            window_drag_id = drag_id;
-                            window_drag_start = (mx, my);
-                            window_drag_world_start = (drag_x as i32, drag_y as i32);
                         } else if let Some(focus_id) = hit_focus_id {
                             let max_z = vm.windows.iter().map(|w| w.z_order).max().unwrap_or(0);
                             if let Some(w) = vm.windows.iter_mut().find(|w| w.id == focus_id) {

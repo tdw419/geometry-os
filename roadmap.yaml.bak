@@ -6803,7 +6803,8 @@ phases:
     - id: p135.d1.t1
       title: 'Fix: echo_round_trip (logic) -- Test failed: echo_round_trip'
       status: done
-      description: Tests now pass consistently. Was flaky timing issue with PTY/bash startup.
+      description: Tests now pass consistently. Was flaky timing issue with PTY/bash
+        startup.
     - id: p135.d1.t2
       title: 'Fix: line_wrap (logic) -- Test failed: line_wrap'
       status: done
@@ -6811,7 +6812,8 @@ phases:
     - id: p135.d1.t3
       title: 'Fix: ctrl_c (logic) -- Test failed: ctrl_c'
       status: done
-      description: Tests now pass consistently. Ctrl-C interrupts sleep and prompt returns.
+      description: Tests now pass consistently. Ctrl-C interrupts sleep and prompt
+        returns.
     scope_lines: 90
   scope_lines_total: 74650
   test_target: 0
@@ -7042,7 +7044,8 @@ phases:
   title: Daily Driver -- Text Editor App
   status: in_progress
   goal: A real text editor (nano-like) that edits host files through the FS bridge,
-    making GeOS usable for coding and writing
+    making GeOS usable for coding and writing. D1 (core editor) shipped with 6 tests.
+    D2 (search/goto/multi-buffer) remaining.
   description: 'The canvas editor only edits assembly. The host terminal gives you
     vim/nano but that''s Linux, not GeOS. We need a GeOS-native text editor that:
     opens host files via FSREAD, displays them with scrolling, lets you edit with
@@ -7051,30 +7054,32 @@ phases:
   deliverables:
   - name: Core text editor (open, scroll, edit, save)
     description: 'nano_editor.asm: opens a file via FSREAD into a line buffer (RAM
-      0x6100-0x7FFF = 8K). Renders visible lines with MEDTEXT. Cursor movement with
-      arrows. Insert/delete chars. Ctrl+S saves via FSWRITE. Ctrl+Q quits. Status
-      bar shows filename, line count, modified flag.'
-    status: todo
+      0x5400-0x73FF = 8K). Renders visible lines with DRAWTEXT (42 cols, 28 lines).
+      Cursor movement with arrows (bitmask 0xFFB). Insert/delete chars. Ctrl+S saves
+      via FSWRITE. Ctrl+Q quits. Status bar shows filename and modified flag. Current
+      line highlighting. Line starts table for efficient navigation. 1160 lines, 1942
+      bytes bytecode, 6 integration tests passing.'
+    status: done
     tasks:
     - id: p139.d1.t1
       title: 'File loading: FSREAD into line buffer'
-      status: todo
+      status: done
       description: Open file, split into lines, store in line buffer with line starts
         table
     - id: p139.d1.t2
-      title: 'Rendering: visible window of lines with MEDTEXT'
-      status: todo
+      title: 'Rendering: visible window of lines with DRAWTEXT'
+      status: done
       description: Render viewport of current lines, highlight cursor position
     - id: p139.d1.t3
       title: 'Editing: insert/delete chars, line breaks'
-      status: todo
+      status: done
       description: Handle printable chars, backspace, delete, enter (split line)
     - id: p139.d1.t4
       title: 'Save: FSWRITE modified buffer back to file'
-      status: todo
-      description: Ctrl+S triggers save. Join lines with newlines, FSWRITE to original
+      status: done
+      description: Ctrl+S triggers save. Write buffer with newlines, FSWRITE to original
         path.
-    scope_lines: 200
+    scope_lines: 1160
   - name: Search, goto line, multiple buffers
     description: Ctrl+F search forward. Ctrl+G goto line number. Ctrl+N open second
       file in split view. Buffer switcher with tab-like interface. These make the
@@ -7096,7 +7101,8 @@ phases:
     scope_lines: 120
   scope_lines_total: 75540
   test_target: 485
-  _claimed_at: 1777223850
+  _claimed_at: 1777228487
+  _claimed_by: worker-0
 - id: phase-140
   title: Daily Driver -- Process Monitor and System Dashboard
   status: done
@@ -7538,6 +7544,47 @@ phases:
     scope_lines: 300
   scope_lines_total: 78130
   test_target: 550
+- id: phase-153
+  title: Desktop Polish and Integration Testing
+  status: planned
+  goal: Make the desktop feel like a real OS, not a demo
+  description: Alt-tab window switcher, notification system, drag-and-drop windows,
+    host system tray (battery/network/volume from Linux). Integration test all daily
+    driver apps.
+  deliverables:
+  - name: Window management improvements
+    description: Alt-Tab window switcher overlay, drag to move windows, double-click
+      titlebar to maximize
+    status: todo
+    tasks:
+    - id: p153.d1.t1
+      title: Alt-Tab window switcher overlay
+      status: todo
+      description: Alt-Tab window switcher overlay
+    - id: p153.d1.t2
+      title: Drag windows by title bar
+      status: todo
+      description: Drag windows by title bar
+    - id: p153.d1.t3
+      title: Double-click titlebar to maximize/restore
+      status: todo
+      description: Double-click titlebar to maximize/restore
+    scope_lines: 300
+  - name: System tray with host stats
+    description: Taskbar icons showing battery, network, volume from /proc and dbus
+    status: todo
+    tasks:
+    - id: p153.d2.t1
+      title: Read battery from /sys via FSREAD
+      status: todo
+      description: Read battery from /sys via FSREAD
+    - id: p153.d2.t2
+      title: Render system tray icons in taskbar
+      status: todo
+      description: Render system tray icons in taskbar
+    scope_lines: 200
+  scope_lines_total: 78630
+  test_target: 10
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

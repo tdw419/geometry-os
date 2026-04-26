@@ -716,6 +716,11 @@ pub struct Window {
     pub viewport_x: u32,
     /// Vertical scroll offset within the offscreen buffer (pixels).
     pub viewport_y: u32,
+    // ── Phase 153: Maximize/restore ──
+    /// Whether this window is currently maximized.
+    pub maximized: bool,
+    /// Saved position/size before maximize, for restore. None if never maximized.
+    pub restore_rect: Option<(u32, u32, u32, u32)>, // (x, y, w, h)
 }
 
 /// Sentinel value: world coords unset, window uses screen-space positioning.
@@ -752,6 +757,8 @@ impl Window {
             world_y: WORLD_COORD_UNSET,
             viewport_x: 0,
             viewport_y: 0,
+            maximized: false,
+            restore_rect: None,
         }
     }
 
@@ -782,6 +789,8 @@ impl Window {
             world_y,
             viewport_x: 0,
             viewport_y: 0,
+            maximized: false,
+            restore_rect: None,
         }
     }
 
@@ -808,6 +817,41 @@ impl Window {
             }
         }
         title
+    }
+
+    /// Toggle maximize/restore for this window.
+    /// When maximizing, saves current rect to restore_rect.
+    /// When restoring, resets from restore_rect.
+    /// Returns true if state changed.
+    /// `max_w` and `max_h` are the screen dimensions to fill (e.g., 256, 240 with taskbar).
+    pub fn toggle_maximize(&mut self, max_w: u32, max_h: u32) -> bool {
+        if self.maximized {
+            // Restore
+            if let Some((rx, ry, rw, rh)) = self.restore_rect {
+                self.x = rx;
+                self.y = ry;
+                self.w = rw;
+                self.h = rh;
+                self.maximized = false;
+                // Rebuild offscreen buffer to match restored size
+                let new_size = (rw as usize) * (rh as usize);
+                self.offscreen_buffer.resize(new_size, 0);
+                return true;
+            }
+            false
+        } else {
+            // Maximize: save current rect, fill screen (minus taskbar)
+            self.restore_rect = Some((self.x, self.y, self.w, self.h));
+            self.x = 0;
+            self.y = 0;
+            self.w = max_w;
+            self.h = max_h;
+            self.maximized = true;
+            // Rebuild offscreen buffer to match new size
+            let new_size = (max_w as usize) * (max_h as usize);
+            self.offscreen_buffer.resize(new_size, 0);
+            true
+        }
     }
 }
 

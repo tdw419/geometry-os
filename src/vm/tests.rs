@@ -21936,3 +21936,90 @@ fn test_procmon_with_spawned_child() {
         vm.regs[0]
     );
 }
+
+// ── Phase 153: Window Maximize/Restore Tests ──────────────────
+
+#[test]
+fn test_window_maximize_saves_restore_rect() {
+    use super::types::Window;
+    let mut w = Window::new(1, 10, 20, 64, 32, 0, 1);
+    assert!(!w.maximized);
+    assert!(w.restore_rect.is_none());
+
+    let changed = w.toggle_maximize(256, 240);
+    assert!(changed);
+    assert!(w.maximized);
+    assert_eq!(w.restore_rect, Some((10, 20, 64, 32)));
+    assert_eq!(w.x, 0);
+    assert_eq!(w.y, 0);
+    assert_eq!(w.w, 256);
+    assert_eq!(w.h, 240);
+    // Offscreen buffer resized to max
+    assert_eq!(w.offscreen_buffer.len(), 256 * 240);
+}
+
+#[test]
+fn test_window_restore_from_maximize() {
+    use super::types::Window;
+    let mut w = Window::new(1, 10, 20, 64, 32, 0, 1);
+    w.toggle_maximize(256, 240);
+    assert!(w.maximized);
+
+    let changed = w.toggle_maximize(256, 240);
+    assert!(changed);
+    assert!(!w.maximized);
+    assert_eq!(w.x, 10);
+    assert_eq!(w.y, 20);
+    assert_eq!(w.w, 64);
+    assert_eq!(w.h, 32);
+    assert_eq!(w.offscreen_buffer.len(), 64 * 32);
+}
+
+#[test]
+fn test_window_maximize_toggle_cycle() {
+    use super::types::Window;
+    let mut w = Window::new(2, 50, 60, 80, 48, 0, 2);
+
+    // Maximize
+    w.toggle_maximize(256, 240);
+    assert!(w.maximized);
+    assert_eq!(w.restore_rect, Some((50, 60, 80, 48)));
+
+    // Restore
+    w.toggle_maximize(256, 240);
+    assert!(!w.maximized);
+    assert_eq!(w.x, 50);
+    assert_eq!(w.y, 60);
+
+    // Maximize again (should save current rect)
+    w.toggle_maximize(256, 240);
+    assert!(w.maximized);
+    assert_eq!(w.restore_rect, Some((50, 60, 80, 48)));
+}
+
+#[test]
+fn test_window_new_has_maximize_false() {
+    use super::types::Window;
+    let w = Window::new(1, 0, 0, 64, 48, 0, 1);
+    assert!(!w.maximized);
+    assert!(w.restore_rect.is_none());
+}
+
+#[test]
+fn test_window_new_world_has_maximize_false() {
+    use super::types::Window;
+    let w = Window::new_world(1, 10, 20, 64, 48, 0, 1);
+    assert!(!w.maximized);
+    assert!(w.restore_rect.is_none());
+}
+
+#[test]
+fn test_window_restore_without_maximize_returns_false() {
+    use super::types::Window;
+    let mut w = Window::new(1, 10, 20, 64, 32, 0, 1);
+    // Not maximized, no restore_rect -> toggle returns false
+    assert!(!w.maximized);
+    // This should maximize (not maximized -> maximize)
+    let changed = w.toggle_maximize(256, 240);
+    assert!(changed);
+}

@@ -7544,6 +7544,47 @@ phases:
     scope_lines: 300
   scope_lines_total: 78130
   test_target: 550
+- id: phase-153
+  title: Desktop Polish and Integration Testing
+  status: done
+  goal: Make the desktop feel like a real OS, not a demo
+  description: Alt-tab window switcher, notification system, drag-and-drop windows,
+    host system tray (battery/network/volume from Linux). Integration test all daily
+    driver apps.
+  deliverables:
+  - name: Window management improvements
+    description: Alt-Tab window switcher overlay, drag to move windows, double-click
+      titlebar to maximize
+    status: done
+    tasks:
+    - id: p153.d1.t1
+      title: Alt-Tab window switcher overlay
+      status: done
+      description: Alt-Tab window switcher overlay
+    - id: p153.d1.t2
+      title: Drag windows by title bar
+      status: done
+      description: Drag windows by title bar
+    - id: p153.d1.t3
+      title: Double-click titlebar to maximize/restore
+      status: done
+      description: Double-click titlebar to maximize/restore
+    scope_lines: 300
+  - name: System tray with host stats
+    description: Taskbar icons showing battery, network, volume from /proc and dbus
+    status: done
+    tasks:
+    - id: p153.d2.t1
+      title: Read battery from /sys via FSREAD
+      status: done
+      description: Read battery from /sys via FSREAD
+    - id: p153.d2.t2
+      title: Render system tray icons in taskbar
+      status: done
+      description: Render system tray icons in taskbar
+    scope_lines: 200
+  scope_lines_total: 78630
+  test_target: 10
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
