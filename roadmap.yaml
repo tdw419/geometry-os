@@ -7042,7 +7042,7 @@ phases:
   test_target: 480
 - id: phase-139
   title: Daily Driver -- Text Editor App
-  status: in_progress
+  status: done
   goal: A real text editor (nano-like) that edits host files through the FS bridge,
     making GeOS usable for coding and writing. D1 (core editor) shipped with 6 tests.
     D2 (search/goto/multi-buffer) remaining.
@@ -7640,7 +7640,7 @@ phases:
   _claimed_at: 1777234914
 - id: phase-155
   title: Terminal Daily Driver -- Terminal Multiplexer (tmux-like tabs)
-  status: planned
+  status: in_progress
   goal: Multiple terminal sessions in tabs, like tmux. Alt+1/2/3 to switch. Each tab
     is its own bash process.
   description: One terminal is not enough. You need tabs. Alt+1 through Alt+4 switches
@@ -7677,6 +7677,8 @@ phases:
     scope_lines: 300
   scope_lines_total: 76500
   test_target: 8
+  _claimed_by: worker-0
+  _claimed_at: 1777235315
 - id: phase-156
   title: Terminal Daily Driver -- Scrollback Buffer
   status: planned

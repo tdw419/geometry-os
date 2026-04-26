@@ -763,6 +763,17 @@ fn main() {
                         continue;
                     }
                 }
+                // Check Alt+number combos (0xA0-0xA3 = Alt+1/2/3/4 for tab switching)
+                let alt = window.is_key_down(Key::LeftAlt) || window.is_key_down(Key::RightAlt);
+                if alt {
+                    match key {
+                        Key::Key1 => { vm.push_key(0xA0); continue; }
+                        Key::Key2 => { vm.push_key(0xA1); continue; }
+                        Key::Key3 => { vm.push_key(0xA2); continue; }
+                        Key::Key4 => { vm.push_key(0xA3); continue; }
+                        _ => {}
+                    }
+                }
                 // Normal key mapping
                 if let Some(ch) = key_to_ascii_shifted(key, shift) {
                     vm.push_key(ch as u32);

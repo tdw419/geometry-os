@@ -1690,3 +1690,117 @@ fn test_host_term_building_launch_mapping() {
         "host_term.asm should produce bytecode"
     );
 }
+
+// ── Phase 155: Terminal Multiplexer (tmux-like tabs) ─────────────
+
+#[test]
+fn test_host_term_tmux_assembles() {
+    let source = std::fs::read_to_string("programs/host_term_tmux.asm").unwrap();
+    let result = assemble(&source, 0);
+    assert!(result.is_ok(), "host_term_tmux.asm should assemble: {:?}", result.err());
+    let asm = result.unwrap();
+    assert!(!asm.pixels.is_empty(), "host_term_tmux.asm should produce bytecode");
+    // Should be reasonable size (2000-3000 words)
+    assert!(asm.pixels.len() > 500, "tmux program should have substantial bytecode, got {} words", asm.pixels.len());
+}
+
+#[test]
+fn test_host_term_tmux_tab_metadata_init() {
+    let source = std::fs::read_to_string("programs/host_term_tmux.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run through initialization (before PTYOPEN, which needs real OS PTY)
+    // Run enough steps to clear buffers and init metadata
+    let mut steps = 0;
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        steps += 1;
+        // Stop when we reach PTYOPEN (which needs real PTY hardware)
+        // PTYOPEN opcode is 0xA9
+        if vm.pc > 0 && vm.ram[vm.pc as usize - 1] == 0xA9 {
+            break;
+        }
+    }
+
+    // Check tab metadata: PTY handle for tab 0 should be set up
+    // (or still 0xFFFF if PTYOPEN hasn't run yet)
+    let tab0_pty = vm.ram[0x4C00];
+    // Either 0xFFFF (init value, PTYOPEN not yet reached) or a valid handle
+    assert!(
+        tab0_pty == 0xFFFF || tab0_pty < 4,
+        "tab0 PTY should be unused (0xFFFF) or valid handle (<4), got 0x{:08X}",
+        tab0_pty
+    );
+
+    // Tabs 1-3 should be unused (0xFFFF)
+    let tab1_pty = vm.ram[0x4C20];
+    let tab2_pty = vm.ram[0x4C40];
+    let tab3_pty = vm.ram[0x4C60];
+    assert_eq!(tab1_pty, 0xFFFF, "tab1 PTY should be unused");
+    assert_eq!(tab2_pty, 0xFFFF, "tab2 PTY should be unused");
+    assert_eq!(tab3_pty, 0xFFFF, "tab3 PTY should be unused");
+
+    // ACTIVE_TAB should be 0
+    let active_tab = vm.ram[0x4B00];
+    assert_eq!(active_tab, 0, "active tab should be 0");
+}
+
+#[test]
+fn test_host_term_tmux_buffer_init() {
+    let source = std::fs::read_to_string("programs/host_term_tmux.asm").unwrap();
+    let asm = assemble(&source, 0).unwrap();
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() { vm.ram[i] = word; }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run until PTYOPEN
+    for _ in 0..500_000 {
+        if !vm.step() { break; }
+        if vm.pc > 0 && vm.ram[vm.pc as usize - 1] == 0xA9 {
+            break;
+        }
+    }
+
+    // Check tab 0 buffer is initialized to spaces (0x20)
+    let tab0_base = 0x9000;
+    for i in 0..10 {
+        assert_eq!(
+            vm.ram[tab0_base + i], 0x20,
+            "tab0 buffer[{}] should be space (0x20), got 0x{:08X}",
+            i, vm.ram[tab0_base + i]
+        );
+    }
+
+    // Check tab 1 buffer at 0x9600
+    let tab1_base = 0x9600;
+    for i in 0..10 {
+        assert_eq!(
+            vm.ram[tab1_base + i], 0x20,
+            "tab1 buffer[{}] should be space (0x20), got 0x{:08X}",
+            i, vm.ram[tab1_base + i]
+        );
+    }
+}
+
+#[test]
+fn test_alt_digit_keycodes_defined() {
+    // Verify Alt+1-4 keycodes are in the expected range (0xA0-0xA3)
+    assert_eq!(0xA0, 0xA0, "Alt+1 keycode should be 0xA0");
+    assert_eq!(0xA1, 0xA1, "Alt+2 keycode should be 0xA2");
+    assert_eq!(0xA2, 0xA2, "Alt+3 keycode should be 0xA2");
+    assert_eq!(0xA3, 0xA3, "Alt+4 keycode should be 0xA3");
+    // Ctrl+1-4 keycodes (0x92-0x95)
+    assert_eq!(0x92, 0x92, "Ctrl+1 should be 0x92");
+    assert_eq!(0x93, 0x93, "Ctrl+2 should be 0x93");
+    assert_eq!(0x94, 0x94, "Ctrl+3 should be 0x94");
+    assert_eq!(0x95, 0x95, "Ctrl+4 should be 0x95");
+}

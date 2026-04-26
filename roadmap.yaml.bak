@@ -7591,7 +7591,7 @@ phases:
   test_target: 10
 - id: phase-154
   title: Terminal Daily Driver -- Direct Boot to Terminal
-  status: planned
+  status: in_progress
   goal: Boot GeOS straight into the host terminal, no map. --terminal flag skips the
     map entirely and launches host_term as PID 1.
   description: The map is impressive but it's not what you use daily. What you use
@@ -7636,6 +7636,8 @@ phases:
     scope_lines: 50
   scope_lines_total: 76200
   test_target: 5
+  _claimed_by: worker-0
+  _claimed_at: 1777234914
 - id: phase-155
   title: Terminal Daily Driver -- Terminal Multiplexer (tmux-like tabs)
   status: planned

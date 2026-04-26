@@ -2,9 +2,9 @@
 
 Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write assembly in the built-in text editor, press F5, watch it run. 154 opcodes, 3720 tests, 147 programs, 76635 LOC. Bidirectional VFS Pixel Surface. RISC-V hypervisor. Infinite map desktop.
 
-**Progress:** 139/140 phases complete, 1 in progress, 0 planned
+**Progress:** 140/140 phases complete, 0 in progress, 0 planned
 
-**Deliverables:** 551/553 complete
+**Deliverables:** 553/553 complete
 
 **Tasks:** 648/686 complete
 
@@ -148,7 +148,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 | phase-136 Daily Driver -- Fix Test Regressions and Build Green | COMPLETE | 3/3 | ~170 | 10 |
 | phase-137 Daily Driver -- Host Filesystem Bridge | COMPLETE | 4/4 | 352 | 10 |
 | phase-138 Daily Driver -- Fullscreen Desktop as Display Manager | COMPLETE | 3/3 | ~240 | 5 |
-| phase-139 Daily Driver -- Text Editor App | IN PROGRESS | 2/2 | ~320 | 5 |
+| phase-139 Daily Driver -- Text Editor App | COMPLETE | 2/2 | ~320 | 5 |
 | phase-140 Daily Driver -- Process Monitor and System Dashboard | COMPLETE | 2/2 | ~200 | 5 |
 
 ## Dependencies
@@ -3190,32 +3190,32 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [ ] p138.d3.t2: Notification system (background events)
   - [ ] p138.d3.t3: Host system tray (battery, network, volume from Linux)
 
-## [ ] phase-139: Daily Driver -- Text Editor App (PLANNED)
+## [x] phase-139: Daily Driver -- Text Editor App (COMPLETE)
 
 **Goal:** A nano-like text editor that edits host files, making GeOS usable for coding and writing
 
 ### Deliverables
 
-- [ ] **Core text editor (open, scroll, edit, save)** -- nano_editor.asm using FSREAD/FSWRITE, MEDTEXT rendering, Ctrl+S/Q
-  - [ ] p139.d1.t1: File loading: FSREAD into line buffer
-  - [ ] p139.d1.t2: Rendering: visible window of lines with MEDTEXT
-  - [ ] p139.d1.t3: Editing: insert/delete chars, line breaks
-  - [ ] p139.d1.t4: Save: FSWRITE modified buffer back to file
-- [ ] **Search, goto line, multiple buffers** -- Ctrl+F search, Ctrl+G goto, Ctrl+N second file
-  - [ ] p139.d2.t1: Search: Ctrl+F forward search with highlight
-  - [ ] p139.d2.t2: Goto: Ctrl+G jump to line number
-  - [ ] p139.d2.t3: Multiple file buffers (Ctrl+N new, Ctrl+Tab switch)
+- [x] **Core text editor (open, scroll, edit, save)** -- nano_editor.asm using FSREAD/FSWRITE, MEDTEXT rendering, Ctrl+S/Q
+  - [x] p139.d1.t1: File loading: FSREAD into line buffer
+  - [x] p139.d1.t2: Rendering: visible window of lines with MEDTEXT
+  - [x] p139.d1.t3: Editing: insert/delete chars, line breaks
+  - [x] p139.d1.t4: Save: FSWRITE modified buffer back to file
+- [x] **Search, goto line, multiple buffers** -- Ctrl+F search, Ctrl+G goto, Ctrl+N second file
+  - [x] p139.d2.t1: Search: Ctrl+F forward search with highlight
+  - [x] p139.d2.t2: Goto: Ctrl+G jump to line number
+  - [x] p139.d2.t3: Multiple file buffers (Ctrl+N new, Ctrl+Tab switch)
 
-## [ ] phase-140: Daily Driver -- Process Monitor and System Dashboard (PLANNED)
+## [x] phase-140: Daily Driver -- Process Monitor and System Dashboard (COMPLETE)
 
 **Goal:** A htop-like system monitor showing GeOS processes and host system stats
 
 ### Deliverables
 
-- [ ] **GeOS process monitor (htop for the VM)** -- Read process table from RAM, show PID/state/PC/cycles, interactive kill
-  - [ ] p140.d1.t1: Read process table from VM RAM
-  - [ ] p140.d1.t2: Render process list with color coding
-  - [ ] p140.d1.t3: Interactive: kill process, sort by column
-- [ ] **Host system stats via /proc** -- Read /proc/stat and /proc/meminfo through FSREAD for CPU/RAM usage
-  - [ ] p140.d2.t1: Parse /proc/meminfo for RAM stats
-  - [ ] p140.d2.t2: Render system stats panel
+- [x] **GeOS process monitor (htop for the VM)** -- Read process table from RAM, show PID/state/PC/cycles, interactive kill
+  - [x] p140.d1.t1: Read process table from VM RAM
+  - [x] p140.d1.t2: Render process list with color coding
+  - [x] p140.d1.t3: Interactive: kill process, sort by column
+- [x] **Host system stats via /proc** -- Read /proc/stat and /proc/meminfo through FSREAD for CPU/RAM usage
+  - [x] p140.d2.t1: Parse /proc/meminfo for RAM stats
+  - [x] p140.d2.t2: Render system stats panel
