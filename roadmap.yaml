@@ -7083,22 +7083,24 @@ phases:
   - name: Search, goto line, multiple buffers
     description: Ctrl+F search forward. Ctrl+G goto line number. Ctrl+N open second
       file in split view. Buffer switcher with tab-like interface. These make the
-      editor practical for real work.
-    status: todo
+      editor practical for real work. Search and goto implemented with 8 tests passing.
+    status: in_progress
     tasks:
     - id: p139.d2.t1
       title: 'Search: Ctrl+F forward search with highlight'
-      status: todo
-      description: Prompt for search string, highlight matches, F3 for next
+      status: done
+      description: Prompt for search string, highlight matches, F3 for next. Implemented
+        with enter_search/do_search routines. 4 tests passing.
     - id: p139.d2.t2
       title: 'Goto: Ctrl+G jump to line number'
-      status: todo
-      description: Prompt for line number, scroll to it
+      status: done
+      description: Prompt for line number, scroll to it. Implemented with enter_goto/
+        do_goto routines. 4 tests passing.
     - id: p139.d2.t3
       title: Multiple file buffers (Ctrl+N new, Ctrl+Tab switch)
       status: todo
       description: Up to 4 file buffers in RAM, tab bar to switch
-    scope_lines: 120
+    scope_lines: 1781
   scope_lines_total: 75540
   test_target: 485
   _claimed_at: 1777232613
