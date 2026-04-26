@@ -448,7 +448,7 @@ fn infinite_map_pxpk_vm() -> Vm {
 #[test]
 fn test_infinite_map_pxpk_runs_and_renders() {
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -467,7 +467,7 @@ fn test_infinite_map_pxpk_runs_and_renders() {
 #[test]
 fn test_infinite_map_pxpk_camera_moves() {
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 2; // bit 1 = down
+    vm.key_bitmask = 2; // bit 1 = down
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready, "pxpk should reach FRAME (took {})", steps);
     // Camera should have moved -- y position in RAM[0x7801] should be > 0
@@ -482,7 +482,7 @@ fn test_infinite_map_pxpk_camera_moves() {
 fn test_infinite_map_pxpk_pattern_variety() {
     // Verify that different tiles get different patterns (not all flat)
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -511,7 +511,7 @@ fn test_infinite_map_pxpk_step_budget() {
     // Elevation contour lines: ~50 steps/tile for neighbor hash + compare = ~200K.
     // Total should be well under 850K.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready, "pxpk should reach FRAME (took {})", steps);
     eprintln!("pxpk frame: {} steps", steps);
@@ -528,7 +528,7 @@ fn test_infinite_map_pxpk_tint_phase_analysis() {
     // For flat (pattern 0) non-water tiles, color = biome + BPE + tint.
     // The tint delta should be exactly the computed tint offset.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     // Render frame 0 (dawn start, frac=0, tint=0)
     let _ = step_until_frame(&mut vm, 1_000_000);
@@ -646,7 +646,7 @@ fn test_infinite_map_pxpk_contour_lines() {
     // where fine_hash elevation (top 3 bits, 0-7) changes by > 2.
     // Not drawn on water tiles. Creates topographic map effect.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready);
 
@@ -756,7 +756,7 @@ fn test_infinite_map_pxpk_day_night_tint() {
     //   Dawn (0-63): warm R+21 G+7, Day (64-127): fade to neutral,
     //   Dusk (128-191): amber R+21, Night (192-255): cool G+7 B+21
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     // Frame 0: dawn phase, frac=0 → tint=0 (start of dawn, not yet warm)
     let _ = step_until_frame(&mut vm, 1_000_000);
@@ -828,7 +828,7 @@ fn test_infinite_map_pxpk_sky_gradient() {
     //         (2) sky color changes across phases.
     //         (3) bottom rows (below sky) are NOT overwritten by sky.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     // Frame 1: dawn phase (fc=1, phase=0). Sky should be blue-purple top, orange horizon.
     let _ = step_until_frame(&mut vm, 1_000_000);
@@ -906,7 +906,7 @@ fn test_infinite_map_pxpk_sky_gradient() {
     // Band 0 (row 0) should differ from band 3 (row 12) during dawn.
     // We re-run dawn to check.
     let mut vm2 = infinite_map_pxpk_vm();
-    vm2.ram[0xFFB] = 0;
+    vm2.key_bitmask = 0;
     let _ = step_until_frame(&mut vm2, 1_000_000);
     let screen_dawn2 = vm2.screen.to_vec();
 
@@ -929,7 +929,7 @@ fn test_infinite_map_pxpk_water_animates() {
     // due to (frame_counter & 0xF) cycling XOR on the accent.
     // Water is forced to center pattern (2x2 bright center on 4x4 base).
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     // Frame 0 (fc=1 after increment, tint=0 since frac_shr=0)
     let _ = step_until_frame(&mut vm, 1_000_000);
@@ -986,7 +986,7 @@ fn test_infinite_map_pxpk_coastline_foam() {
     // R<30, G<50). Foam water will have R>=0x30 or G>=0x30.
     // At least some foam pixels should exist on any varied map.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -1034,7 +1034,7 @@ fn test_infinite_map_pxpk_height_shading() {
     // Height shading adds equal offset to R, G, B → green channel variation
     // across same-biome tiles proves height shading is active.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -1099,7 +1099,7 @@ fn test_infinite_map_pxpk_biome_blending() {
     // The blend produces colors that are intermediate between adjacent biomes.
     // We verify by scanning biome boundaries and checking for intermediate colors.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -1189,7 +1189,7 @@ fn test_infinite_map_pxpk_y_blending() {
     // tile blends with the biome below. Uses the same masked average
     // technique as X-direction blending.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -1258,7 +1258,7 @@ fn test_infinite_map_pxpk_smooth_transition_zone() {
     // We verify by counting how many "near-edge" tiles (local_x 1 or 6)
     // show colors that differ from their biome's interior.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -1329,7 +1329,7 @@ fn test_infinite_map_pxpk_32x32_minimap_overlay() {
     // It uses the same biome hash as the main terrain, dimmed to 50%.
     // Updated every 4 frames; border + player dot drawn every frame.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -1399,7 +1399,7 @@ fn test_infinite_map_pxpk_minimap_updates_every_4_frames() {
     let mut vm = infinite_map_pxpk_vm();
 
     // Move camera right every frame
-    vm.ram[0xFFB] = 8; // bit 3 = right
+    vm.key_bitmask = 8; // bit 3 = right
 
     // Frame 0: initial minimap render (fc becomes 1, (1-1)&3=0, recompute)
     let _ = step_until_frame(&mut vm, 1_500_000);
@@ -1521,7 +1521,7 @@ fn test_infinite_map_pxpk_tree_sprites_on_grass_and_forest() {
     // on the terrain tile. They use fine_hash for deterministic placement:
     // grass ~25%, forest ~50%. We verify by scanning for tree pixels.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -1576,7 +1576,7 @@ fn test_infinite_map_pxpk_tree_sprites_on_grass_and_forest() {
 fn test_infinite_map_pxpk_trees_deterministic() {
     // Tree placement should be deterministic: same camera = same trees every frame.
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     // Render frame 0
     let _ = step_until_frame(&mut vm, 1_000_000);
@@ -1638,7 +1638,7 @@ fn test_infinite_map_pxpk_water_reflection() {
     // Reflected water pixels will have elevated R/G channels compared to normal water.
 
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let _ = step_until_frame(&mut vm, 1_000_000);
 
     // Find water pixels that could be reflections: they sit in rows where
@@ -1689,7 +1689,7 @@ fn test_infinite_map_pxpk_water_reflection_varies_per_frame() {
     // At the same camera position, water tiles at biome boundaries should have
     // slightly different colors across frames (ripple = (fc + world_x) & 0xF * 0x020202).
     let mut vm = infinite_map_pxpk_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     // Render frame 0
     let _ = step_until_frame(&mut vm, 1_000_000);
@@ -1722,7 +1722,7 @@ fn test_infinite_map_runs_and_renders() {
     let mut vm = infinite_map_vm();
 
     // No key input -- camera stays at (0,0)
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
@@ -1755,7 +1755,7 @@ fn test_infinite_map_camera_moves_on_key_input() {
     let mut vm = infinite_map_vm();
 
     // --- Frame 1: press Right (bit 3 = 8) ---
-    vm.ram[0xFFB] = 8;
+    vm.key_bitmask = 8;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -1772,7 +1772,7 @@ fn test_infinite_map_camera_moves_on_key_input() {
     );
 
     // --- Frame 2: press Down (bit 1 = 2) ---
-    vm.ram[0xFFB] = 2;
+    vm.key_bitmask = 2;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -1786,7 +1786,7 @@ fn test_infinite_map_camera_moves_on_key_input() {
     );
 
     // --- Frame 3: press Up+Left (bits 0+2 = 5) ---
-    vm.ram[0xFFB] = 5;
+    vm.key_bitmask = 5;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -1800,7 +1800,7 @@ fn test_infinite_map_camera_moves_on_key_input() {
     assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after pressing Up");
 
     // --- Frame 4: no keys, camera stays ---
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -1825,7 +1825,7 @@ fn test_infinite_map_camera_moves_multiple_steps() {
 
     // Hold Right for 5 frames.
     for frame in 1..=5 {
-        vm.ram[0xFFB] = 8; // Right
+        vm.key_bitmask = 8; // Right
         let steps = step_until_frame(&mut vm, 1_000_000);
         assert!(
             vm.frame_ready,
@@ -1841,7 +1841,7 @@ fn test_infinite_map_camera_moves_multiple_steps() {
 
     // Now hold Down+Right for 3 frames.
     for frame in 6..=8 {
-        vm.ram[0xFFB] = 8 | 2; // Right + Down = 10
+        vm.key_bitmask = 8 | 2; // Right + Down = 10
         let steps = step_until_frame(&mut vm, 1_000_000);
         assert!(
             vm.frame_ready,
@@ -1860,7 +1860,7 @@ fn test_infinite_map_screen_differs_per_camera_position() {
     let mut vm = infinite_map_vm();
 
     // Render at camera (0, 0)
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
     let screen_origin = vm.screen.clone();
@@ -1868,7 +1868,7 @@ fn test_infinite_map_screen_differs_per_camera_position() {
     // Manually set camera to (50, 50) and re-render
     vm.ram[0x7800] = 50;
     vm.ram[0x7801] = 50;
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
     let screen_far = vm.screen.clone();
@@ -1895,7 +1895,7 @@ fn test_infinite_map_diagonal_keys_move_camera() {
     let mut vm = infinite_map_vm();
 
     // --- Frame 1: press Up+Right diagonal (bit 4 = 16) ---
-    vm.ram[0xFFB] = 16;
+    vm.key_bitmask = 16;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -1913,7 +1913,7 @@ fn test_infinite_map_diagonal_keys_move_camera() {
     );
 
     // --- Frame 2: press Down+Right diagonal (bit 5 = 32) ---
-    vm.ram[0xFFB] = 32;
+    vm.key_bitmask = 32;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -1930,7 +1930,7 @@ fn test_infinite_map_diagonal_keys_move_camera() {
     );
 
     // --- Frame 3: press Down+Left diagonal (bit 6 = 64) ---
-    vm.ram[0xFFB] = 64;
+    vm.key_bitmask = 64;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -1947,7 +1947,7 @@ fn test_infinite_map_diagonal_keys_move_camera() {
     );
 
     // --- Frame 4: press Up+Left diagonal (bit 7 = 128) ---
-    vm.ram[0xFFB] = 128;
+    vm.key_bitmask = 128;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -1971,7 +1971,7 @@ fn test_infinite_map_diagonal_accumulates() {
 
     // Hold Down+Right diagonal for 3 frames.
     for frame in 1..=3 {
-        vm.ram[0xFFB] = 32; // Down+Right
+        vm.key_bitmask = 32; // Down+Right
         let steps = step_until_frame(&mut vm, 1_000_000);
         assert!(
             vm.frame_ready,
@@ -1990,7 +1990,7 @@ fn test_infinite_map_diagonal_accumulates() {
 
     // Hold Up+Left diagonal for 2 frames to partially reverse.
     for frame in 4..=5 {
-        vm.ram[0xFFB] = 128; // Up+Left
+        vm.key_bitmask = 128; // Up+Left
         let steps = step_until_frame(&mut vm, 1_000_000);
         assert!(
             vm.frame_ready,
@@ -2014,7 +2014,7 @@ fn test_infinite_map_cardinal_and_diagonal_combined() {
     // Pressing Right (bit 3) + Down+Right diagonal (bit 5) should move x+2, y+1.
     let mut vm = infinite_map_vm();
 
-    vm.ram[0xFFB] = 8 | 32; // Right + Down+Right diagonal = 40
+    vm.key_bitmask = 8 | 32; // Right + Down+Right diagonal = 40
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -2039,7 +2039,7 @@ fn test_infinite_map_render_loop_instruction_count() {
     // With biome-aware pattern overlay (1 accent PSET per tile): ~440K steps.
     // We allow some slack (500K) to account for pattern overlay + animation.
     let mut vm = infinite_map_vm();
-    vm.ram[0xFFB] = 0; // no input
+    vm.key_bitmask = 0; // no input
 
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
@@ -2063,7 +2063,7 @@ fn test_infinite_map_player_cursor_visible() {
     // frame_counter & 16 == 0. The crosshair has 4 arms around (127,127) with
     // a 1px gap at center.
     let mut vm = infinite_map_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -2114,7 +2114,7 @@ fn test_infinite_map_player_cursor_pulses() {
     // Requirement: cursor color pulses between white and yellow every 16 frames.
     // Run 17 frames; on frame 17, frame_counter=17, 17 & 16 != 0 -> yellow.
     let mut vm = infinite_map_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     // Run 16 frames to get frame_counter past the pulse boundary
     for _ in 0..16 {
@@ -2141,7 +2141,7 @@ fn test_infinite_map_minimap_overlay() {
     // of the screen (x=240..255, y=0..15) with biome-colored pixels, a gray
     // border frame, and a white player dot at the center (248, 8).
     let mut vm = infinite_map_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     step_until_frame(&mut vm, 1_000_000);
     assert!(vm.frame_ready);
 
@@ -2226,7 +2226,7 @@ fn test_infinite_map_minimap_overlay() {
 
     // Move camera 10 tiles right (10 frames with right key).
     for _ in 0..10 {
-        vm.ram[0xFFB] = 8; // right
+        vm.key_bitmask = 8; // right
         vm.frame_ready = false;
         step_until_frame(&mut vm, 1_000_000);
         assert!(vm.frame_ready);
@@ -2261,7 +2261,7 @@ fn test_infinite_map_diagonal_scroll() {
     let mut vm = infinite_map_vm();
 
     // Frame 1: Up + Right (bits 0 + 3 = 9)
-    vm.ram[0xFFB] = 9;
+    vm.key_bitmask = 9;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -2276,7 +2276,7 @@ fn test_infinite_map_diagonal_scroll() {
     );
 
     // Frame 2: Down + Left (bits 1 + 2 = 6) -- reverses frame 1
-    vm.ram[0xFFB] = 6;
+    vm.key_bitmask = 6;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -2287,7 +2287,7 @@ fn test_infinite_map_diagonal_scroll() {
     assert_eq!(vm.ram[0x7801], 0, "camera_y should be 0 after Down+Left");
 
     // Frame 3: Up + Left (bits 0 + 2 = 5) -- both decrease
-    vm.ram[0xFFB] = 5;
+    vm.key_bitmask = 5;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -2306,7 +2306,7 @@ fn test_infinite_map_diagonal_scroll() {
     );
 
     // Frame 4: Down + Right (bits 1 + 3 = 10) -- reverses frame 3
-    vm.ram[0xFFB] = 10;
+    vm.key_bitmask = 10;
     let steps = step_until_frame(&mut vm, 1_000_000);
     assert!(
         vm.frame_ready,
@@ -2728,7 +2728,7 @@ fn test_world_desktop_assembles() {
 #[test]
 fn test_world_desktop_runs_and_renders() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0; // no keys
+    vm.key_bitmask = 0; // no keys
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(
         vm.frame_ready,
@@ -2747,7 +2747,7 @@ fn test_world_desktop_runs_and_renders() {
 #[test]
 fn test_world_desktop_player_initial_position() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
 
@@ -2769,7 +2769,7 @@ fn test_world_desktop_player_initial_position() {
 #[test]
 fn test_world_desktop_camera_follows_player() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
 
@@ -2798,7 +2798,7 @@ fn test_world_desktop_camera_follows_player() {
 #[test]
 fn test_world_desktop_player_moves_right() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 8; // bit 3 = right arrow
+    vm.key_bitmask = 8; // bit 3 = right arrow
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
 
@@ -2818,7 +2818,7 @@ fn test_world_desktop_player_moves_right() {
 #[test]
 fn test_world_desktop_player_moves_down() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 2; // bit 1 = down arrow
+    vm.key_bitmask = 2; // bit 1 = down arrow
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
 
@@ -2835,7 +2835,7 @@ fn test_world_desktop_player_moves_down() {
 #[test]
 fn test_world_desktop_player_avatar_rendered() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
 
@@ -2875,7 +2875,7 @@ fn test_world_desktop_player_avatar_rendered() {
 #[test]
 fn test_world_desktop_walk_animation_toggles() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     // Run 2 frames and check walk_frame toggles
     let steps1 = step_until_frame(&mut vm, 1_500_000);
@@ -2908,7 +2908,7 @@ fn test_world_desktop_facing_updates() {
     let mut vm = world_desktop_vm();
 
     // Press up (bit 0)
-    vm.ram[0xFFB] = 1;
+    vm.key_bitmask = 1;
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
     assert_eq!(
@@ -2920,7 +2920,7 @@ fn test_world_desktop_facing_updates() {
 #[test]
 fn test_world_desktop_minimap_exists() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
 
@@ -2949,7 +2949,7 @@ fn test_world_desktop_collision_blocks_water() {
     // by checking that player doesn't move when all directions are blocked.
     // More practically: verify facing still updates even when movement is blocked.
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 1; // up
+    vm.key_bitmask = 1; // up
     let steps = step_until_frame(&mut vm, 1_500_000);
     assert!(vm.frame_ready, "should reach FRAME (took {} steps)", steps);
 
@@ -2985,7 +2985,7 @@ fn world_desktop_type_keys(vm: &mut Vm, keys: &[u32]) {
 #[test]
 fn test_cmd_bar_slash_enters_type_mode() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0; // no arrow keys
+    vm.key_bitmask = 0; // no arrow keys
 
     // Run to first frame to establish baseline
     let steps = step_until_frame(&mut vm, 1_500_000);
@@ -3009,7 +3009,7 @@ fn test_cmd_bar_slash_enters_type_mode() {
 #[test]
 fn test_cmd_bar_escape_exits_type_mode() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     // Enter type mode
     step_until_frame(&mut vm, 1_500_000);
@@ -3029,7 +3029,7 @@ fn test_cmd_bar_escape_exits_type_mode() {
 #[test]
 fn test_cmd_bar_type_and_backspace() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     step_until_frame(&mut vm, 1_500_000);
     world_desktop_run_frame_with_key(&mut vm, 47); // '/' enter type mode
@@ -3051,7 +3051,7 @@ fn test_cmd_bar_type_and_backspace() {
 #[test]
 fn test_cmd_bar_tp_teleports() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     step_until_frame(&mut vm, 1_500_000);
     assert_eq!(vm.ram[0x7808], 32, "player_x starts at 32");
@@ -3126,7 +3126,7 @@ fn test_cmd_bar_tp_teleports() {
 #[test]
 fn test_cmd_bar_build_adds_building() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     step_until_frame(&mut vm, 1_500_000);
     let initial_count = vm.ram[0x7580];
@@ -3197,7 +3197,7 @@ fn test_cmd_bar_build_adds_building() {
 #[test]
 fn test_cmd_bar_movement_blocked_in_type_mode() {
     let mut vm = world_desktop_vm();
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
     step_until_frame(&mut vm, 1_500_000);
     let px_before = vm.ram[0x7808];
@@ -3207,7 +3207,7 @@ fn test_cmd_bar_movement_blocked_in_type_mode() {
     world_desktop_run_frame_with_key(&mut vm, 47); // '/'
 
     // Try to move with arrow keys (bitmask)
-    vm.ram[0xFFB] = 1; // up arrow
+    vm.key_bitmask = 1; // up arrow
     vm.frame_ready = false;
     vm.push_key(65); // also push a typeable char to keep type mode
     let steps = step_until_frame(&mut vm, 2_000_000);
@@ -3225,47 +3225,127 @@ fn test_cmd_bar_movement_blocked_in_type_mode() {
 }
 
 #[test]
-fn trace_world_desktop_stop() {
+#[ignore] // diagnostic trace, deliberately panics with "TRACE DONE"
+fn trace_cmd_bar_multi_key() {
     let source = std::fs::read_to_string("programs/world_desktop.asm").expect("not found");
     let asm = assemble(&source, 0).expect("assemble");
-    eprintln!("Assembly: {} words", asm.pixels.len());
     let mut vm = Vm::new();
     for (i, &word) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = word; }
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
     }
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
 
-    for i in 0..30_000 {
-        if vm.halted {
-            panic!("HALTED at step {}, PC=0x{:04X}", i, vm.pc);
-        }
-        if vm.frame_ready {
-            eprintln!("FRAME at step {}, PC=0x{:04X} -- SUCCESS", i, vm.pc);
-            return; // success
-        }
-        let pc = vm.pc as usize;
-        let opcode = vm.ram[pc];
-        let result = vm.step();
-        if !result {
-            let pc_now = vm.pc as usize;
-            eprintln!("step()=false at step {}, PC=0x{:04X}, opcode=0x{:02X}, halted={}", i, pc, opcode, vm.halted);
-            eprintln!("PC after step: 0x{:04X}", pc_now);
-            for d in 0..10 {
-                if pc_now + d < vm.ram.len() {
-                    eprintln!("  ram[0x{:04X}] = 0x{:08X}", pc_now + d, vm.ram[pc_now + d]);
-                }
-            }
-            // Check if we hit zero-filled area
-            let mut zero_run = 0;
-            for d in 0..100 {
-                if pc_now + d < vm.ram.len() && vm.ram[pc_now + d] == 0 {
-                    zero_run += 1;
-                }
-            }
-            eprintln!("Zero run from PC: {}/100", zero_run);
-            panic!("TRACED STOP");
-        }
-    }
-    panic!("No halt or frame after 30K steps, PC=0x{:04X}", vm.pc);
+    // Frame 1: initial render
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    eprintln!("Frame 1 (init): {} steps", steps);
+    assert!(vm.frame_ready, "frame 1");
+
+    // Frame 2: '/' key
+    vm.frame_ready = false;
+    vm.push_key(47);
+    let steps = step_until_frame(&mut vm, 2_000_000);
+    eprintln!(
+        "Frame 2 (slash): {} steps, CMD_MODE={}",
+        steps, vm.ram[0x7830]
+    );
+    assert!(vm.frame_ready, "frame 2 failed after {} steps", steps);
+
+    // Frame 3: 'A' key
+    vm.frame_ready = false;
+    vm.push_key(65);
+    let steps = step_until_frame(&mut vm, 2_000_000);
+    eprintln!(
+        "Frame 3 (A): {} steps, CMD_MODE={}, CMD_LEN={}",
+        steps, vm.ram[0x7830], vm.ram[0x7831]
+    );
+    assert!(vm.frame_ready, "frame 3 failed after {} steps", steps);
+
+    // Frame 4: Escape key
+    vm.frame_ready = false;
+    vm.push_key(27);
+    let steps = step_until_frame(&mut vm, 2_000_000);
+    eprintln!(
+        "Frame 4 (esc): {} steps, CMD_MODE={}, CMD_LEN={}",
+        steps, vm.ram[0x7830], vm.ram[0x7831]
+    );
+    assert!(vm.frame_ready, "frame 4 failed after {} steps", steps);
+
+    panic!("TRACE DONE");
 }
 
+#[test]
+#[ignore] // diagnostic trace, deliberately panics with "TRACE DONE"
+fn trace_tp_teleports_step_by_step() {
+    let source = std::fs::read_to_string("programs/world_desktop.asm").expect("not found");
+    let asm = assemble(&source, 0).expect("assemble");
+    let mut vm = Vm::new();
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.key_bitmask = 0;
+
+    // Frame 1
+    let steps = step_until_frame(&mut vm, 1_500_000);
+    eprintln!("Frame 1 (init): {} steps", steps);
+    assert!(steps < 1_500_000, "frame 1 exceeded budget");
+    assert_eq!(vm.ram[0x7808], 32, "player_x starts at 32");
+    assert_eq!(vm.ram[0x7809], 32, "player_y starts at 32");
+
+    // Frame 2: '/' to enter type mode
+    vm.frame_ready = false;
+    vm.push_key(47);
+    let steps = step_until_frame(&mut vm, 2_000_000);
+    eprintln!("Frame 2 (/): {} steps, CMD_MODE={}", steps, vm.ram[0x7830]);
+    assert!(vm.frame_ready, "frame 2");
+    assert_eq!(vm.ram[0x7830], 1, "in type mode");
+
+    // Type "/tp 100 200" character by character
+    let cmd_keys: &[u32] = &[
+        b'/' as u32,
+        b't' as u32,
+        b'p' as u32,
+        b' ' as u32,
+        b'1' as u32,
+        b'0' as u32,
+        b'0' as u32,
+        b' ' as u32,
+        b'2' as u32,
+        b'0' as u32,
+        b'0' as u32,
+    ];
+
+    for (idx, &key) in cmd_keys.iter().enumerate() {
+        vm.frame_ready = false;
+        vm.push_key(key);
+        let steps = step_until_frame(&mut vm, 2_000_000);
+        eprintln!(
+            "Frame {} (key='{}'=0x{:02X}): {} steps, CMD_LEN={}",
+            idx + 3,
+            key as u8 as char,
+            key,
+            steps,
+            vm.ram[0x7831]
+        );
+        assert!(
+            vm.frame_ready,
+            "frame {} failed after {} steps",
+            idx + 3,
+            steps
+        );
+    }
+
+    // Press Enter
+    vm.frame_ready = false;
+    vm.push_key(13);
+    let steps = step_until_frame(&mut vm, 2_000_000);
+    eprintln!(
+        "Frame 14 (Enter): {} steps, player_x={}, player_y={}, CMD_MODE={}",
+        steps, vm.ram[0x7808], vm.ram[0x7809], vm.ram[0x7830]
+    );
+
+    panic!("TRACE DONE");
+}

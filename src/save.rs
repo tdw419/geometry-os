@@ -177,6 +177,7 @@ pub fn load_state(path: &str) -> std::io::Result<(vm::Vm, Vec<u32>, bool)> {
         key_buffer_head: 0,
         key_buffer_tail: 0,
         key_port: 0,
+        key_bitmask: 0,
         formulas: Vec::new(),
         formula_dep_index: std::collections::HashMap::new(),
         trace_recording: false,

@@ -24,8 +24,20 @@ impl Vm {
                     let vaddr = self.regs[addr_reg];
                     match self.translate_va_or_fault(vaddr) {
                         Some(addr) => {
+                            // Key bitmask port (0xFFB) -- separate field to avoid
+                            // bytecode overlap for large programs
+                            if addr == 0xFFB {
+                                self.regs[reg] = self.key_bitmask;
+                            }
+                            // TICKS port (0xFFE) -- separate field to avoid
+                            // bytecode overlap for large programs (e.g., world_desktop.asm)
+                            else if addr == 0xFFE {
+                                self.regs[reg] = self.frame_count;
+                            }
                             // Phase 46: Intercept screen buffer range
-                            if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE).contains(&addr) {
+                            else if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE)
+                                .contains(&addr)
+                            {
                                 self.regs[reg] = self.screen[addr - SCREEN_RAM_BASE];
                                 self.log_access(addr, MemAccessKind::Read);
                             } else if addr < self.ram.len() {
@@ -62,8 +74,20 @@ impl Vm {
                     self.resolve_cow_if_needed(vaddr);
                     match self.translate_va_or_fault(vaddr) {
                         Some(addr) => {
+                            // Key bitmask port (0xFFB) -- separate field to avoid
+                            // bytecode overlap for large programs
+                            if addr == 0xFFB {
+                                self.key_bitmask = self.regs[reg];
+                            }
+                            // TICKS port (0xFFE) -- no-op: read-only counter,
+                            // prevents bytecode clobber for large programs
+                            else if addr == 0xFFE {
+                                // read-only, discard write
+                            }
                             // Phase 46: Intercept screen buffer range
-                            if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE).contains(&addr) {
+                            else if (SCREEN_RAM_BASE..SCREEN_RAM_BASE + SCREEN_SIZE)
+                                .contains(&addr)
+                            {
                                 self.screen[addr - SCREEN_RAM_BASE] = self.regs[reg];
                                 self.log_access(addr, MemAccessKind::Write);
                             } else if addr < self.ram.len() {

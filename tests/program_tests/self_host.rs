@@ -477,7 +477,7 @@ fn test_living_map_footstep_trail() {
         if vm.halted {
             break;
         }
-        vm.ram[0xFFB] = 8; // bit 3 = right
+        vm.key_bitmask = 8; // bit 3 = right
         if !vm.step() {
             break;
         }

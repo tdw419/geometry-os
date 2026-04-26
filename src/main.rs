@@ -410,7 +410,7 @@ fn main() {
             if window.is_key_down(Key::Enter) {
                 mask |= 1 << 5;
             }
-            vm.ram[KEYS_BITMASK_PORT] = mask;
+            vm.key_bitmask = mask;
 
             // ── Networking ───────────────────────────────────────
             if let Some(ref s) = socket {

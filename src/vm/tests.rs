@@ -787,7 +787,7 @@ fn test_frame_increments_ticks() {
     }
     assert!(vm.frame_ready);
     assert_eq!(vm.frame_count, 1);
-    assert_eq!(vm.ram[0xFFE], 1);
+    // TICKS port (0xFFE) is now virtual -- verify via LOAD, not direct RAM access
 }
 
 // ── PSET / FILL ─────────────────────────────────────────────────
@@ -2601,7 +2601,7 @@ fn test_infinite_map_assembles_and_runs() {
     }
 
     // Simulate Right arrow (bit 3 = 8)
-    vm.ram[0xFFB] = 8;
+    vm.key_bitmask = 8;
 
     // Run until first FRAME
     vm.frame_ready = false;
@@ -2636,7 +2636,7 @@ fn test_infinite_map_assembles_and_runs() {
 
     // Second frame: press Down
     vm.frame_ready = false;
-    vm.ram[0xFFB] = 2; // Down
+    vm.key_bitmask = 2; // Down
     for _ in 0..1_000_000 {
         if vm.frame_ready {
             break;
@@ -2655,7 +2655,7 @@ fn test_infinite_map_assembles_and_runs() {
 
     // Third frame: press Left+Up (bits 2+0 = 5) -- diagonal movement
     vm.frame_ready = false;
-    vm.ram[0xFFB] = 5;
+    vm.key_bitmask = 5;
     for _ in 0..1_000_000 {
         if vm.frame_ready {
             break;
@@ -2683,7 +2683,7 @@ fn test_infinite_map_assembles_and_runs() {
     // Verify water animation: run 2 frames without moving, check screen changes
     // Frame 4: no keys
     vm.frame_ready = false;
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     for _ in 0..1_000_000 {
         if vm.frame_ready {
             break;
@@ -2697,7 +2697,7 @@ fn test_infinite_map_assembles_and_runs() {
 
     // Frame 5: no keys
     vm.frame_ready = false;
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     for _ in 0..1_000_000 {
         if vm.frame_ready {
             break;
@@ -2745,7 +2745,7 @@ fn test_infinite_map_visual_analysis() {
     // Coarse coords span (12,12) to (20,20) = 9x9 zones = lots of variety
     vm.ram[0x7800] = 100;
     vm.ram[0x7801] = 100;
-    vm.ram[0xFFB] = 0;
+    vm.key_bitmask = 0;
     vm.frame_ready = false;
     for _ in 0..1_000_000 {
         if vm.frame_ready {
@@ -6446,17 +6446,15 @@ fn test_clock_runs_persistently() {
 #[test]
 fn test_clock_time_updates() {
     let vm = boot_clock(2);
-    // At 2 frames: seconds = 2/60 = 0, minutes = 0, hours = 0
-    // Verify frame counter is advancing
-    assert_eq!(vm.ram[0xFFE], 2, "frame counter should be 2");
+    // TICKS port (0xFFE) is now virtual -- verify via frame_count field
+    assert_eq!(vm.frame_count, 2, "frame counter should be 2");
 }
 
 #[test]
 fn test_clock_day_counter() {
     let vm = boot_clock(1);
-    // Day is computed from frame count: days = (frames/60/3600) / 24
-    // At 1 frame: 0 days
-    assert!(vm.ram[0xFFE] >= 1, "frame counter should be at least 1");
+    // TICKS port (0xFFE) is now virtual -- verify via frame_count field
+    assert!(vm.frame_count >= 1, "frame counter should be at least 1");
 }
 
 #[test]
@@ -15752,7 +15750,6 @@ fn test_cron_daemon_spawns_on_interval() {
 
     // Advance TICKS past interval to trigger spawn
     vm.frame_count = 60;
-    vm.ram[0xFFE] = 60;
 
     // Run until EXEC spawns a child process
     let mut spawned = false;
@@ -20825,8 +20822,12 @@ fn test_ext_font_horizontal_line() {
     // 128 = horizontal line ─ should have all 5 bits set on row 3
     const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
     let glyph = &EXT_FONT[0]; // 128 - 128 = 0
-    // Row 3 (middle) should be 0x1F (all 5 bits set)
-    assert_eq!(glyph[3], 0x1F, "horizontal line middle row should be 0x1F, got 0x{:02X}", glyph[3]);
+                              // Row 3 (middle) should be 0x1F (all 5 bits set)
+    assert_eq!(
+        glyph[3], 0x1F,
+        "horizontal line middle row should be 0x1F, got 0x{:02X}",
+        glyph[3]
+    );
     // Other rows should be 0
     assert_eq!(glyph[0], 0x00, "horizontal line row 0 should be 0");
     assert_eq!(glyph[6], 0x00, "horizontal line row 6 should be 0");
@@ -20837,9 +20838,15 @@ fn test_ext_font_vertical_line() {
     // 129 = vertical line │ should have center bit on all rows
     const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
     let glyph = &EXT_FONT[1]; // 129 - 128 = 1
-    // All rows should have center bit (bit 2, value 0x04)
+                              // All rows should have center bit (bit 2, value 0x04)
     for (row, &val) in glyph.iter().enumerate() {
-        assert_ne!(val & 0x04, 0, "vertical line row {} should have center bit set, got 0x{:02X}", row, val);
+        assert_ne!(
+            val & 0x04,
+            0,
+            "vertical line row {} should have center bit set, got 0x{:02X}",
+            row,
+            val
+        );
     }
 }
 
@@ -20849,7 +20856,11 @@ fn test_ext_font_full_block() {
     const EXT_FONT: [[u8; 7]; 30] = include!("../ext_font.in");
     let glyph = &EXT_FONT[20]; // 148 - 128 = 20
     for (row, &val) in glyph.iter().enumerate() {
-        assert_eq!(val, 0x1F, "full block row {} should be 0x1F, got 0x{:02X}", row, val);
+        assert_eq!(
+            val, 0x1F,
+            "full block row {} should be 0x1F, got 0x{:02X}",
+            row, val
+        );
     }
 }
 
@@ -20871,14 +20882,24 @@ fn test_draw_char_medium_extended_horizontal() {
     let asm = crate::assembler::assemble(source, 0).unwrap();
     let mut vm = super::Vm::new();
     for (i, &pixel) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = pixel; }
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..10_000 { if !vm.step() { break; } }
+    for _ in 0..10_000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted, "program should halt");
     // The horizontal line middle row at y=13, x=10-14 should be white
-    assert_eq!(vm.screen[13 * 256 + 12], 0xFFFFFF, "center pixel of horiz line should be white");
+    assert_eq!(
+        vm.screen[13 * 256 + 12],
+        0xFFFFFF,
+        "center pixel of horiz line should be white"
+    );
 }
 
 #[test]
@@ -20899,17 +20920,35 @@ fn test_draw_char_medium_extended_full_block() {
     let asm = crate::assembler::assemble(source, 0).unwrap();
     let mut vm = super::Vm::new();
     for (i, &pixel) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = pixel; }
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..10_000 { if !vm.step() { break; } }
+    for _ in 0..10_000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted, "program should halt");
     // Full block should fill 5x7 pixels with red
-    assert_eq!(vm.screen[20 * 256 + 20], 0xFF0000, "full block top-left should be red");
-    assert_eq!(vm.screen[26 * 256 + 24], 0xFF0000, "full block bottom-right should be red");
+    assert_eq!(
+        vm.screen[20 * 256 + 20],
+        0xFF0000,
+        "full block top-left should be red"
+    );
+    assert_eq!(
+        vm.screen[26 * 256 + 24],
+        0xFF0000,
+        "full block bottom-right should be red"
+    );
     // Outside the block should be black
-    assert_eq!(vm.screen[20 * 256 + 19], 0, "pixel left of block should be black");
+    assert_eq!(
+        vm.screen[20 * 256 + 19],
+        0,
+        "pixel left of block should be black"
+    );
 }
 
 #[test]
@@ -20930,15 +20969,29 @@ fn test_draw_char_with_bg_extended_vertical() {
     let asm = crate::assembler::assemble(source, 0).unwrap();
     let mut vm = super::Vm::new();
     for (i, &pixel) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = pixel; }
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..10_000 { if !vm.step() { break; } }
+    for _ in 0..10_000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted, "program should halt");
     // Vertical line center column at x=17, y=15-21 should be green
-    assert_eq!(vm.screen[15 * 256 + 17], 0x00FF00, "vert line top should be green");
-    assert_eq!(vm.screen[21 * 256 + 17], 0x00FF00, "vert line bottom should be green");
+    assert_eq!(
+        vm.screen[15 * 256 + 17],
+        0x00FF00,
+        "vert line top should be green"
+    );
+    assert_eq!(
+        vm.screen[21 * 256 + 17],
+        0x00FF00,
+        "vert line bottom should be green"
+    );
 }
 
 #[test]
@@ -20959,11 +21012,17 @@ fn test_smalltext_extended_char() {
     let asm = crate::assembler::assemble(source, 0).unwrap();
     let mut vm = super::Vm::new();
     for (i, &pixel) in asm.pixels.iter().enumerate() {
-        if i < vm.ram.len() { vm.ram[i] = pixel; }
+        if i < vm.ram.len() {
+            vm.ram[i] = pixel;
+        }
     }
     vm.pc = 0;
     vm.halted = false;
-    for _ in 0..10_000 { if !vm.step() { break; } }
+    for _ in 0..10_000 {
+        if !vm.step() {
+            break;
+        }
+    }
     assert!(vm.halted, "program should halt");
     // Should render at least one pixel for the horizontal line
     let mut found_yellow = false;
@@ -20974,7 +21033,10 @@ fn test_smalltext_extended_char() {
             }
         }
     }
-    assert!(found_yellow, "SMALLTEXT should render yellow pixel for extended char");
+    assert!(
+        found_yellow,
+        "SMALLTEXT should render yellow pixel for extended char"
+    );
 }
 
 #[test]
@@ -20982,7 +21044,10 @@ fn test_mini_font_glyph_extended_chars() {
     use crate::pixel::mini_font_glyph;
     // Extended char 128 (horizontal line) should return non-space glyph
     let glyph = mini_font_glyph(128);
-    assert_ne!(glyph[3], 0, "extended char 128 should have non-zero middle row");
+    assert_ne!(
+        glyph[3], 0,
+        "extended char 128 should have non-zero middle row"
+    );
     // Extended char 148 (full block) should be fully filled
     let glyph = mini_font_glyph(148);
     for row in 0..7 {
@@ -20998,7 +21063,15 @@ fn test_host_term_assembles_with_utf8() {
     // Verify host_term.asm still assembles after adding UTF-8 decoder
     let source = std::fs::read_to_string("programs/host_term.asm").unwrap();
     let result = crate::assembler::assemble(&source, 0);
-    assert!(result.is_ok(), "host_term.asm should assemble: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "host_term.asm should assemble: {:?}",
+        result.err()
+    );
     let asm = result.unwrap();
-    assert!(asm.pixels.len() > 100, "host_term.asm should produce bytecode, got {} words", asm.pixels.len());
+    assert!(
+        asm.pixels.len() > 100,
+        "host_term.asm should produce bytecode, got {} words",
+        asm.pixels.len()
+    );
 }

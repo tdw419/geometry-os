@@ -113,6 +113,12 @@ pub struct Vm {
     /// at 4479 words). Using a separate field prevents IKEY/push_key from
     /// clobbering bytecode at that address.
     pub key_port: u32,
+    /// Multi-key bitmask port (replaces RAM[0xFFB] to avoid bytecode overlap).
+    /// Bitmask: bits 0-5 = up/down/left/right/space/enter.
+    /// Programs loaded at address 0 may extend past 0xFFB (e.g., world_desktop.asm
+    /// at 10011 words). Using a separate field prevents LOAD/STORE at 0xFFB from
+    /// clobbering bytecode at that address.
+    pub key_bitmask: u32,
     /// Active formulas on canvas cells (Phase 50: Reactive Canvas).
     pub formulas: Vec<Formula>,
     /// Reverse dependency index: dep_idx -> list of formula indices in self.formulas.
@@ -281,6 +287,7 @@ impl Vm {
             key_buffer_head: 0,
             key_buffer_tail: 0,
             key_port: 0,
+            key_bitmask: 0,
             formulas: Vec::new(),
             formula_dep_index: std::collections::HashMap::new(),
             trace_recording: false,
@@ -461,6 +468,7 @@ impl Vm {
         self.crash_dialog_active = false;
         self.crash_dialog_pid = 0;
         self.key_port = 0;
+        self.key_bitmask = 0;
     }
 
     /// Internal helper to log a memory access with a safety cap.
@@ -565,7 +573,8 @@ impl Vm {
             // FRAME -- signal host to display current screen; execution continues
             0x02 => {
                 self.frame_count = self.frame_count.wrapping_add(1);
-                self.ram[0xFFE] = self.frame_count;
+                // TICKS port (0xFFE) is now a separate virtual port (read via LOAD intercept).
+                // Do NOT write to self.ram[0xFFE] -- large programs extend past that address.
                 self.frame_ready = true;
                 self.access_log.clear(); // Reset for next frame
                                          // Phase 38b: snapshot screen if trace recording is on
