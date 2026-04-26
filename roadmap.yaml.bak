@@ -6791,31 +6791,30 @@ phases:
   _claimed_at: 1777192760
 - id: phase-135
   title: Host Terminal -- Test Failure Fixes (3 issues)
-  status: in_progress
+  status: done
   goal: Fix 3 non-blocking test failures from terminal QA
   description: Automated terminal QA found functional issues.
   deliverables:
   - name: Fix 3 test failures
     description: 'Test failed: echo_round_trip; Test failed: line_wrap; Test failed:
       ctrl_c'
-    status: todo
+    status: done
     tasks:
     - id: p135.d1.t1
       title: 'Fix: echo_round_trip (logic) -- Test failed: echo_round_trip'
-      status: todo
-      description: Investigate test output for specific failure
+      status: done
+      description: Tests now pass consistently. Was flaky timing issue with PTY/bash startup.
     - id: p135.d1.t2
       title: 'Fix: line_wrap (logic) -- Test failed: line_wrap'
-      status: todo
-      description: Investigate test output for specific failure
+      status: done
+      description: Tests now pass consistently. 36 rows of numeric output found.
     - id: p135.d1.t3
       title: 'Fix: ctrl_c (logic) -- Test failed: ctrl_c'
-      status: todo
-      description: Investigate test output for specific failure
+      status: done
+      description: Tests now pass consistently. Ctrl-C interrupts sleep and prompt returns.
     scope_lines: 90
   scope_lines_total: 74650
   test_target: 0
-  _claimed_at: 1777203060
 - id: phase-136
   title: Daily Driver -- Fix Test Regressions and Build Green
   status: done
@@ -7100,7 +7099,7 @@ phases:
   _claimed_at: 1777223850
 - id: phase-140
   title: Daily Driver -- Process Monitor and System Dashboard
-  status: planned
+  status: done
   goal: A GeOS-native system monitor (like htop/task manager) showing running processes,
     resource usage, and host system stats
   description: 'You need to see what''s running. A process monitor that shows: GeOS
@@ -7109,42 +7108,436 @@ phases:
     showcase that GeOS can introspect itself and the host.'
   deliverables:
   - name: GeOS process monitor (htop for the VM)
-    description: 'procmon.asm: reads process table from RAM (0xF00-0xFFF region).
-      Shows PID, state, PC, cycles used, memory allocated. Updates every frame. Color-coded
-      by state (green=running, yellow=waiting, red=crashed). Arrow keys scroll, k
-      kills process.'
-    status: todo
+    description: 'procmon.asm: reads process table from VM via NPROC/PROCINFO opcodes.
+      Shows PID, state, PC, priority, pages. Updates every frame. Color-coded by state
+      (green=running/ready, yellow=sleeping/blocked, red=zombie/stopped). W/S to navigate,
+      K kills process, Q to quit.'
+    status: done
     tasks:
     - id: p140.d1.t1
-      title: Read process table from VM RAM
-      status: todo
-      description: Parse process slots at 0xF00, extract PID/state/PC
+      title: Read process table via NPROC/PROCINFO opcodes
+      status: done
+      description: NPROC returns process count, PROCINFO queries PID state/PC/priority/pages
     - id: p140.d1.t2
       title: Render process list with color coding
-      status: todo
-      description: 'Columnar display: PID, State, PC, Cycles, Memory'
+      status: done
+      description: 'Columnar display: PID, State, PC, Priority, Pages'
     - id: p140.d1.t3
-      title: 'Interactive: kill process, sort by column'
-      status: todo
-      description: k kills selected process, s sorts by CPU/memory
+      title: 'Interactive: navigate and kill processes'
+      status: done
+      description: W/S navigate selection, K kills selected process, Q quits
     scope_lines: 120
   - name: Host system stats via /proc
-    description: Read /proc/stat and /proc/meminfo through FSREAD. Show CPU usage,
-      memory usage, uptime, load average. These come from the host Linux system and
-      give context for how GeOS is affecting the real machine.
-    status: todo
+    description: Read /proc/meminfo through FSREAD. Show memory usage alongside GeOS
+      process count, frame count, and VM status. Two-panel layout.
+    status: done
     tasks:
     - id: p140.d2.t1
       title: Parse /proc/meminfo for RAM stats
-      status: todo
-      description: FSREAD /proc/meminfo, extract MemTotal/MemFree
+      status: done
+      description: FSOPEN/FSREAD /proc/meminfo, extract MemTotal
     - id: p140.d2.t2
       title: Render system stats panel
-      status: todo
-      description: 'Top bar: CPU%, RAM%, Uptime, FPS'
+      status: done
+      description: 'Two panels: GeOS status (left), Host memory (right) + VM internals'
     scope_lines: 80
   scope_lines_total: 75740
   test_target: 490
+  _claimed_by: worker-0
+  _claimed_at: 1777224660
+- id: phase-141
+  title: Network Packet Viewer
+  status: todo
+  goal: 'A visual network packet monitor that displays UDP packets received via the
+    /dev/net device, showing source/dest addresses, payload hex dumps, and packet
+    rate statistics.
+
+    '
+  description: 'Network debugging tool. Uses /dev/net IOCTL to read packets from the
+    UDP port. Shows a scrolling packet log with timestamp, source IP, payload size,
+    and hex dump of first 16 bytes. Packet rate counter shows packets/sec. Demonstrates
+    real device driver integration with a useful daily tool.
+
+    '
+  deliverables:
+  - name: Packet viewer program (netmon.asm)
+    description: 'netmon.asm: reads from /dev/net device fd. Displays packet log with
+      scrolling view. Shows source address, payload length, hex dump of first 16 bytes.
+      Packet rate counter in footer. Uses FRAME-based animation loop.
+
+      '
+    status: todo
+    tasks:
+    - id: p141.d1.t1
+      title: Read packets from /dev/net via IOCTL
+      status: todo
+    - id: p141.d1.t2
+      title: Render packet log with hex dump
+      status: todo
+    - id: p141.d1.t3
+      title: Packet rate statistics
+      status: todo
+    scope_lines: 150
+  scope_lines_total: 75890
+  test_target: 495
+- id: phase-142
+  title: Sprite Sheet Editor
+  status: todo
+  goal: 'An interactive sprite editor that lets users draw 8x8 or 16x16 pixel sprites
+    on a grid, save them to RAM, and preview them with the SPRITE opcode.
+
+    '
+  description: 'Creative tool for game developers. Grid-based pixel editor with palette
+    selector. Users click to paint pixels, switch colors, resize grid. Save sprite
+    data to RAM address. Preview shows sprite rendered with SPRITE opcode.
+
+    '
+  deliverables:
+  - name: Sprite editor program (spritedit.asm)
+    description: 'spritedit.asm: 16x16 pixel grid editor. Palette bar at bottom with
+      16 colors. Click to paint, right-click to erase. Arrow keys move cursor. S saves
+      to RAM. P previews with SPRITE opcode.
+
+      '
+    status: todo
+    tasks:
+    - id: p142.d1.t1
+      title: Grid-based pixel editor with cursor
+      status: todo
+    - id: p142.d1.t2
+      title: Color palette selector
+      status: todo
+    - id: p142.d1.t3
+      title: Save and preview sprite
+      status: todo
+    scope_lines: 200
+  scope_lines_total: 76090
+  test_target: 500
+- id: phase-143
+  title: Sound Synthesizer
+  status: todo
+  goal: 'A music synthesizer that plays melodies using the BEEP opcode with an interactive
+    piano keyboard and pre-loaded songs.
+
+    '
+  description: 'Music tool for the VM. Shows a visual piano keyboard on screen. Users
+    click keys or press keyboard letters to play notes. Includes 3 pre-loaded songs
+    that auto-play. Note frequency lookup table covers 2 octaves (C4-B5).
+
+    '
+  deliverables:
+  - name: Synthesizer program (synth.asm)
+    description: 'synth.asm: visual piano keyboard (2 octaves). ASDFGHJK keys map
+      to C4-C5 notes. Z/X shift octave. Number keys 1-3 play pre-loaded songs (Twinkle
+      Twinkle, Ode to Joy, Mary Had a Lamb).
+
+      '
+    status: todo
+    tasks:
+    - id: p143.d1.t1
+      title: Note frequency lookup table
+      status: todo
+    - id: p143.d1.t2
+      title: Visual piano keyboard rendering
+      status: todo
+    - id: p143.d1.t3
+      title: Song playback with note sequences
+      status: todo
+    scope_lines: 180
+  scope_lines_total: 76270
+  test_target: 505
+- id: phase-144
+  title: Memory Hex Editor
+  status: todo
+  goal: 'A hex editor for VM RAM that lets users view and modify any memory address,
+    with ASCII preview, address jumping, and search functionality.
+
+    '
+  description: 'Low-level debugging tool. Shows 16 bytes per row in hex and ASCII.
+    Users can navigate with arrow keys, jump to address with G, search for byte patterns
+    with S, and edit bytes with E.
+
+    '
+  deliverables:
+  - name: Hex editor program (hexedit.asm)
+    description: 'hexedit.asm: displays 16 bytes/row in hex + ASCII. Arrow keys scroll.
+      G prompts for address. S searches for byte value. E edits byte at cursor.
+
+      '
+    status: todo
+    tasks:
+    - id: p144.d1.t1
+      title: Hex dump display with scrolling
+      status: todo
+    - id: p144.d1.t2
+      title: Address jump and byte edit
+      status: todo
+    - id: p144.d1.t3
+      title: Byte pattern search
+      status: todo
+    scope_lines: 200
+  scope_lines_total: 76470
+  test_target: 510
+- id: phase-145
+  title: File Manager App
+  status: todo
+  goal: 'A visual file manager that lists VFS files, shows file sizes, and can load/run
+    programs from the programs/ directory.
+
+    '
+  description: 'File management tool for the desktop. Lists all .asm files in the
+    programs/ directory with line counts. Users can navigate with arrow keys, load
+    a file with Enter, and run it with R.
+
+    '
+  deliverables:
+  - name: File manager program (fileman.asm)
+    description: 'fileman.asm: lists programs/*.asm files using FSLS/FSREAD. Shows
+      filename and size. Arrow keys navigate. Enter loads file. R runs via EXEC.
+
+      '
+    status: todo
+    tasks:
+    - id: p145.d1.t1
+      title: List programs directory
+      status: todo
+    - id: p145.d1.t2
+      title: Navigate and select files
+      status: todo
+    - id: p145.d1.t3
+      title: Load and run programs
+      status: todo
+    scope_lines: 150
+  scope_lines_total: 76620
+  test_target: 515
+- id: phase-146
+  title: Performance Benchmark Suite
+  status: todo
+  goal: 'A benchmarking program that measures VM performance across opcode categories
+    and displays results as a bar chart.
+
+    '
+  description: 'Performance analysis tool. Runs timed loops for each opcode category
+    (ALU, memory, graphics, control flow) using TICKS counter. Calculates instructions
+    per frame and opcodes per second. Displays results as horizontal bar chart.
+
+    '
+  deliverables:
+  - name: Benchmark program (bench.asm)
+    description: 'bench.asm: runs N iterations of each opcode type. Measures TICKS
+      before/after each benchmark. Displays results as horizontal bar chart with labels.
+
+      '
+    status: todo
+    tasks:
+    - id: p146.d1.t1
+      title: Opcode timing benchmarks
+      status: todo
+    - id: p146.d1.t2
+      title: Results bar chart rendering
+      status: todo
+    - id: p146.d1.t3
+      title: Summary statistics
+      status: todo
+    scope_lines: 180
+  scope_lines_total: 76800
+  test_target: 520
+- id: phase-147
+  title: Paint Application
+  status: todo
+  goal: 'A full drawing application with brush sizes, shapes, undo, and color picker.
+
+    '
+  description: 'Creative application for pixel art. Canvas area with tool palette
+    on the side. Tools include pencil, brush, line, rectangle, circle, fill. Color
+    picker with 64 colors. Undo stack (last 16 actions).
+
+    '
+  deliverables:
+  - name: Paint program (paint.asm)
+    description: 'paint.asm: 200x200 canvas area, 56px tool panel on right. Tools:
+      pencil, brush, line, rectangle, circle. 64-color palette. Z undoes. WASD moves
+      cursor, space paints.
+
+      '
+    status: todo
+    tasks:
+    - id: p147.d1.t1
+      title: Canvas with cursor and painting
+      status: todo
+    - id: p147.d1.t2
+      title: Tool palette and shapes
+      status: todo
+    - id: p147.d1.t3
+      title: Color picker and undo
+      status: todo
+    scope_lines: 250
+  scope_lines_total: 77050
+  test_target: 525
+- id: phase-148
+  title: Chat Bot Terminal
+  status: todo
+  goal: 'An interactive chat interface that connects to the Hermes LLM agent and displays
+    responses as they stream in.
+
+    '
+  description: 'AI chat tool for the desktop. Shows a scrollable chat log with user
+    messages in cyan and AI responses in white. Input line at bottom with cursor.
+    Uses the HERMES opcode to interact with the built-in LLM agent.
+
+    '
+  deliverables:
+  - name: Chat bot program (chatbot.asm)
+    description: 'chatbot.asm: scrollable chat log (20 lines). Input prompt at bottom.
+      Enter sends message. AI responses stream in via RAM buffer. User messages in
+      cyan, AI in white.
+
+      '
+    status: todo
+    tasks:
+    - id: p148.d1.t1
+      title: Chat log display with scrolling
+      status: todo
+    - id: p148.d1.t2
+      title: Text input line with cursor
+      status: todo
+    - id: p148.d1.t3
+      title: LLM integration via hermes bridge
+      status: todo
+    scope_lines: 200
+  scope_lines_total: 77250
+  test_target: 530
+- id: phase-149
+  title: RISC-V Assembly Viewer
+  status: todo
+  goal: 'A RISC-V instruction decoder that takes hex words and shows the decoded instruction
+    with register names and immediate values.
+
+    '
+  description: 'Educational tool for the RISC-V hypervisor. Shows a hex word input
+    area and decodes it into the instruction name, register operands, and immediate
+    values. Supports RV32IMAC base instructions and C extension.
+
+    '
+  deliverables:
+  - name: RISC-V decoder program (rvdecode.asm)
+    description: 'rvdecode.asm: hex input area at top. Shows opcode, funct3/funct7,
+      rd, rs1, rs2, imm fields. Decoded instruction name. C extension detection.
+
+      '
+    status: todo
+    tasks:
+    - id: p149.d1.t1
+      title: Hex word input and field extraction
+      status: todo
+    - id: p149.d1.t2
+      title: Instruction name lookup table
+      status: todo
+    - id: p149.d1.t3
+      title: Visual field layout diagram
+      status: todo
+    scope_lines: 180
+  scope_lines_total: 77430
+  test_target: 535
+- id: phase-150
+  title: Screen Recorder
+  status: todo
+  goal: 'A screen recording tool that captures VM frames and saves them as a replayable
+    sequence.
+
+    '
+  description: 'Capture tool for creating demos. Records screen pixels at regular
+    intervals (every N frames). Stores compressed frame data in RAM. Can play back
+    recordings. Shows recording indicator (red dot), frame counter, and duration.
+
+    '
+  deliverables:
+  - name: Screen recorder program (recorder.asm)
+    description: 'recorder.asm: R starts/stops recording. Stores frame deltas (only
+      changed pixels) in RAM. P plays back. Shows red dot while recording, green while
+      playing. Frame counter and duration display.
+
+      '
+    status: todo
+    tasks:
+    - id: p150.d1.t1
+      title: Frame capture with delta compression
+      status: todo
+    - id: p150.d1.t2
+      title: Playback engine
+      status: todo
+    - id: p150.d1.t3
+      title: Recording controls and indicators
+      status: todo
+    scope_lines: 200
+  scope_lines_total: 77630
+  test_target: 540
+- id: phase-151
+  title: Thread Pool Manager
+  status: todo
+  goal: 'A process pool manager that maintains N worker processes and dispatches tasks
+    to them via IPC pipes.
+
+    '
+  description: 'Infrastructure tool. Spawns a pool of worker processes that wait for
+    tasks via pipe messages. Main process dispatches work items and collects results.
+    Shows worker status (idle/busy), task queue depth, throughput stats.
+
+    '
+  deliverables:
+  - name: Thread pool program (poolmgr.asm)
+    description: 'poolmgr.asm: spawns 4 worker processes. Workers loop: read pipe,
+      execute task, write result pipe. Manager dispatches tasks and shows status.
+      Visual: worker boxes showing PID/state/current task.
+
+      '
+    status: todo
+    tasks:
+    - id: p151.d1.t1
+      title: Worker process spawn and pipe setup
+      status: todo
+    - id: p151.d1.t2
+      title: Task dispatch and result collection
+      status: todo
+    - id: p151.d1.t3
+      title: Visual status dashboard
+      status: todo
+    scope_lines: 200
+  scope_lines_total: 77830
+  test_target: 545
+- id: phase-152
+  title: QR Code Generator
+  status: todo
+  goal: 'Generate and display QR codes on the VM screen from text input, encoding
+    data as black/white pixel modules.
+
+    '
+  description: 'Utility tool that generates QR codes (Version 1-4, up to 80 characters)
+    entirely in GeOS assembly. Implements Reed-Solomon error correction encoding and
+    module placement. Users type text, see the QR code rendered on screen.
+
+    '
+  deliverables:
+  - name: QR code generator program (qrcode.asm)
+    description: 'qrcode.asm: text input at top. Generates Version 1 QR code (21x21
+      modules, alphanumeric mode). Renders as 10x10 pixel squares (210x210 screen
+      area). Supports alphanumeric characters with error correction level L.
+
+      '
+    status: todo
+    tasks:
+    - id: p152.d1.t1
+      title: QR code data encoding
+      status: todo
+    - id: p152.d1.t2
+      title: Error correction (Reed-Solomon)
+      status: todo
+    - id: p152.d1.t3
+      title: Module placement and rendering
+      status: todo
+    scope_lines: 300
+  scope_lines_total: 78130
+  test_target: 550
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

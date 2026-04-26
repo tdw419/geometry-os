@@ -214,6 +214,8 @@ pub mod ipc;
 pub mod kernel;
 #[path = "program_tests/multiprocess.rs"]
 pub mod multiprocess;
+#[path = "program_tests/nano_editor.rs"]
+pub mod nano_editor;
 #[path = "program_tests/opcodes.rs"]
 pub mod opcodes;
 #[path = "program_tests/program_coverage.rs"]

@@ -6803,7 +6803,8 @@ phases:
     - id: p135.d1.t1
       title: 'Fix: echo_round_trip (logic) -- Test failed: echo_round_trip'
       status: done
-      description: Tests now pass consistently. Was flaky timing issue with PTY/bash startup.
+      description: Tests now pass consistently. Was flaky timing issue with PTY/bash
+        startup.
     - id: p135.d1.t2
       title: 'Fix: line_wrap (logic) -- Test failed: line_wrap'
       status: done
@@ -6811,7 +6812,8 @@ phases:
     - id: p135.d1.t3
       title: 'Fix: ctrl_c (logic) -- Test failed: ctrl_c'
       status: done
-      description: Tests now pass consistently. Ctrl-C interrupts sleep and prompt returns.
+      description: Tests now pass consistently. Ctrl-C interrupts sleep and prompt
+        returns.
     scope_lines: 90
   scope_lines_total: 74650
   test_target: 0
@@ -7096,7 +7098,8 @@ phases:
     scope_lines: 120
   scope_lines_total: 75540
   test_target: 485
-  _claimed_at: 1777223850
+  _claimed_at: 1777228487
+  _claimed_by: worker-0
 - id: phase-140
   title: Daily Driver -- Process Monitor and System Dashboard
   status: done
