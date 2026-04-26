@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Geometry OS
+Comment=Canvas Text Surface Operating System
+Exec=/home/jericho/zion/projects/geometry_os/geometry_os/target/release/geometry_os --fullscreen
+Type=Application
+Categories=System;DesktopSettings;
+Terminal=false
+Keywords=geometry;os;display;manager;

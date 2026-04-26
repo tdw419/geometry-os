@@ -645,11 +645,18 @@ pub fn render(
     };
     render_text(
         buffer,
-        WIDTH - 80,
+        WIDTH - 200,
         HEIGHT - 20,
         state_label.0,
         state_label.1,
     );
+
+    // ── Desktop polish: notification count ──────────────────────
+    let notif_count = vm.ram.get(0x7600).copied().unwrap_or(0);
+    if notif_count > 0 {
+        let notif_text = format!("[{} notif]", notif_count.min(99));
+        render_text(buffer, WIDTH - 300, HEIGHT - 20, &notif_text, 0xFFAA00);
+    }
 }
 
 // ── Fullscreen Map Rendering ────────────────────────────────────

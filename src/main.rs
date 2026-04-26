@@ -48,6 +48,82 @@ const NET_PORT: usize = 0xFFC;
 const TICKS_PORT: usize = 0xFFE;
 #[allow(dead_code)]
 const KEY_PORT: usize = 0xFFF;
+const NOTIFICATION_PORT: usize = 0xFFA; // write addr of message to push notification
+const NOTIFICATION_QUEUE_BASE: usize = 0x7600; // up to 32 notifications, each 4 words (addr, timestamp, 0, 0)
+const NOTIFICATION_QUEUE_MAX: usize = 32;
+
+// ── Desktop polish: host notification state ───────────────────────
+struct HostNotification {
+    message: String,
+    timestamp_secs: u64,
+}
+
+fn get_host_notifications() -> Vec<HostNotification> {
+    // Read system notifications from /proc or systemd
+    // For now: return empty -- populated by VM programs via NOTIFICATION_PORT writes
+    Vec::new()
+}
+
+/// Read current time as HH:MM string
+fn get_clock_string() -> String {
+    let now = std::time::SystemTime::now();
+    let duration = now.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    let total_secs = duration.as_secs();
+    let hours = ((total_secs / 3600) + 0) % 24; // UTC; adjust for timezone if needed
+    let minutes = (total_secs / 60) % 60;
+    format!("{:02}:{:02}", hours, minutes)
+}
+
+/// Read current time as HH:MM string in local timezone
+fn get_local_clock_string() -> String {
+    // Try to get local time via `date` command (portable, no deps)
+    if let Ok(output) = std::process::Command::new("date")
+        .arg("+%H:%M")
+        .output()
+    {
+        let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if s.len() == 5 && s.contains(':') {
+            return s;
+        }
+    }
+    get_clock_string()
+}
+
+/// Read battery percentage from /sys (Linux)
+fn get_battery_percent() -> Option<u8> {
+    // Try common battery paths
+    for path in &[
+        "/sys/class/power_supply/BAT0/capacity",
+        "/sys/class/power_supply/BAT1/capacity",
+        "/sys/class/power_supply/battery/capacity",
+    ] {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(pct) = content.trim().parse::<u8>() {
+                return Some(pct);
+            }
+        }
+    }
+    None
+}
+
+/// Read network connection status
+fn get_network_status() -> &'static str {
+    if std::path::Path::new("/sys/class/net/wlan0/operstate").exists() {
+        if let Ok(state) = std::fs::read_to_string("/sys/class/net/wlan0/operstate") {
+            if state.trim() == "up" {
+                return "WiFi";
+            }
+        }
+    }
+    if std::path::Path::new("/sys/class/net/eth0/operstate").exists() {
+        if let Ok(state) = std::fs::read_to_string("/sys/class/net/eth0/operstate") {
+            if state.trim() == "up" {
+                return "Eth";
+            }
+        }
+    }
+    "NoNet"
+}
 
 // ── Save file ───────────────────────────────────────────────────
 const SAVE_FILE: &str = "geometry_os.sav";
@@ -1503,8 +1579,8 @@ fn main() {
                             }
                             "status" => {
                                 response.push_str(&format!(
-                                    "mode={:?} running={} assembled={} pc=0x{:04X} cursor=({},{})\n",
-                                    mode, is_running, canvas_assembled, vm.pc, cursor_row, cursor_col
+                                    "mode={:?} running={} assembled={} pc=0x{:04X} cursor=({},{}) fullscreen={}\n",
+                                    mode, is_running, canvas_assembled, vm.pc, cursor_row, cursor_col, fullscreen_mode
                                 ));
                             }
                             "screen" => {
@@ -3292,7 +3368,62 @@ fn main() {
                 Some(&icon_cache),
             );
         }
-        // ── Double-click building detection ──────────────────────
+        // ── Desktop polish: clock + system tray overlay ──────────────
+        {
+            // Update clock every frame (rendered on status bar area)
+            let clock = get_local_clock_string();
+            render::render_text(&mut buffer, WIDTH - 80, HEIGHT - 20, &clock, 0xAAAACC);
+
+            // Battery indicator
+            if let Some(pct) = get_battery_percent() {
+                let bat_color = if pct > 50 { 0x00CC00 } else if pct > 20 { 0xFFAA00 } else { 0xFF4444 };
+                let bat_text = format!("B:{}%", pct);
+                render::render_text(&mut buffer, WIDTH - 160, HEIGHT - 20, &bat_text, bat_color);
+            }
+
+            // Network indicator
+            let net = get_network_status();
+            let net_color = if net == "WiFi" || net == "Eth" { 0x00CC00 } else { 0x666666 };
+            render::render_text(&mut buffer, WIDTH - 230, HEIGHT - 20, net, net_color);
+        }
+
+        // ── Alt-Tab window switcher overlay ──────────────────────
+        if alt_tab_active {
+            // Draw semi-transparent overlay
+            let overlay_x = (WIDTH / 2) - 200;
+            let overlay_y = (HEIGHT / 2) - 100;
+            let overlay_w = 400;
+            let overlay_h = 200;
+
+            // Background
+            for y in overlay_y..overlay_y + overlay_h {
+                for x in overlay_x..overlay_x + overlay_w {
+                    let idx = y * WIDTH + x;
+                    if idx < buffer.len() {
+                        // Darken existing pixel + add dark overlay
+                        buffer[idx] = (buffer[idx] & 0xFEFEFE) >> 1;
+                    }
+                }
+            }
+
+            // Title
+            render::render_text(&mut buffer, overlay_x + 10, overlay_y + 5, "Window Switcher (Tab=next, Enter=select, Esc=cancel)", 0xFFFFFF);
+
+            // Window list
+            let wins: Vec<_> = vm.windows.iter().collect();
+            for (i, win) in wins.iter().enumerate() {
+                if i >= 10 { break; } // max 10 items displayed
+                let y = overlay_y + 25 + i * 16;
+                let color = if i == alt_tab_index { 0xFFFF00 } else { 0xAAAAAA };
+                let marker = if i == alt_tab_index { "> " } else { "  " };
+                let label = format!("{}{} [{}x{}] PID:{}", marker, win.title, win.w, win.h, win.pid);
+                render::render_text(&mut buffer, overlay_x + 10, y, &label, color);
+            }
+
+            if wins.is_empty() {
+                render::render_text(&mut buffer, overlay_x + 10, overlay_y + 50, "No windows open", 0x888888);
+            }
+        }
         // Only when running (desktop is active) and VM screen is visible
         // Rising-edge only: detect click press, not hold
         if is_running {
@@ -3635,9 +3766,21 @@ fn main() {
             }
         }
 
-        if let Err(e) = window.update_with_buffer(&buffer, WIDTH, HEIGHT) {
-            eprintln!("Render error: {}. Exiting.", e);
-            break;
+        if fullscreen_mode {
+            // Scale the 1024x768 buffer into the fullscreen buffer
+            scale_buffer_to_fullscreen(
+                &buffer, WIDTH, HEIGHT,
+                &mut fs_buffer, fs_win_w, fs_win_h,
+            );
+            if let Err(e) = window.update_with_buffer(&fs_buffer, fs_win_w, fs_win_h) {
+                eprintln!("Render error: {}. Exiting.", e);
+                break;
+            }
+        } else {
+            if let Err(e) = window.update_with_buffer(&buffer, WIDTH, HEIGHT) {
+                eprintln!("Render error: {}. Exiting.", e);
+                break;
+            }
         }
 
         if recording {

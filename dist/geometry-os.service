@@ -1,0 +1,14 @@
+[Unit]
+Description=Geometry OS - Fullscreen Display Manager
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/home/jericho/zion/projects/geometry_os/geometry_os/target/release/geometry_os --fullscreen
+Environment=DISPLAY=:0
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

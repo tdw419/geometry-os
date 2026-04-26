@@ -7051,7 +7051,7 @@ phases:
   _claimed_at: 1777223283
 - id: phase-139
   title: Daily Driver -- Text Editor App
-  status: in_progress
+  status: planned
   goal: A real text editor (nano-like) that edits host files through the FS bridge,
     making GeOS usable for coding and writing
   description: 'The canvas editor only edits assembly. The host terminal gives you
@@ -7107,8 +7107,6 @@ phases:
     scope_lines: 120
   scope_lines_total: 75540
   test_target: 485
-  _claimed_by: worker-0
-  _claimed_at: 1777223850
 - id: phase-140
   title: Daily Driver -- Process Monitor and System Dashboard
   status: planned
