@@ -126,7 +126,8 @@ static inline int vfs_read(int start_row, void *buf, int maxlen) {
     if (!(flags & VFS_FLAG_VALID)) return -1;
     if (byte_count > maxlen) byte_count = maxlen;
 
-    volatile uint32_t *data = &surface[(start_row + 1) * VFS_COLS];
+    /* Data starts at start_row, col 1 (same row as header) */
+    volatile uint32_t *data = &surface[start_row * VFS_COLS + 1];
     uint8_t *out = (uint8_t *)buf;
     for (int i = 0; i < byte_count; i++) {
         int pixel = i / 4;
@@ -154,7 +155,7 @@ static inline void vfs_write(int start_row, const void *buf, int len) {
         ((uint32_t)len << 16) | (name_hash_low << 8) | VFS_FLAG_VALID | VFS_FLAG_DIRTY;
 
     const uint8_t *src = (const uint8_t *)buf;
-    volatile uint32_t *data = &surface[(start_row + 1) * VFS_COLS];
+    volatile uint32_t *data = &surface[start_row * VFS_COLS + 1];
     int full_pixels = len / 4;
 
     for (int i = 0; i < full_pixels; i++) {
