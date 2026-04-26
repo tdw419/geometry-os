@@ -6,7 +6,7 @@ Pixel-art virtual machine with built-in assembler, debugger, and live GUI. Write
 
 **Deliverables:** 553/553 complete
 
-**Tasks:** 648/686 complete
+**Tasks:** 688/688 complete
 
 | Phase | Status | Deliverables | LOC Target | Tests |
 |-------|--------|-------------|-----------|-------|
@@ -3131,22 +3131,22 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [x] p134.d3.t1: Detect full-width codepoints (CJK range)
   - [x] p134.d3.t2: Render full-width as two filled-block cells
 
-## [ ] phase-136: Daily Driver -- Fix Test Regressions and Build Green (PLANNED)
+## [x] phase-136: Daily Driver -- Fix Test Regressions and Build Green (COMPLETE)
 
 **Goal:** Get cargo test back to 100% green. 13 world_desktop tests are failing from autodev commits.
 
 ### Deliverables
 
-- [ ] **Fix 13 failing world_desktop tests** -- All failures in games:: module, likely from world_desktop.asm changes
-  - [ ] p136.d1.t1: Run cargo test and capture all 13 failures
-  - [ ] p136.d1.t2: Diff world_desktop.asm against last green commit
-  - [ ] p136.d1.t3: Fix tests or fix program until 0 failures
-- [ ] **Add cargo test gate to autodev preflight** -- Workers must not merge breaking changes
-  - [ ] p136.d2.t1: Add cargo test check to oracle_preflight.py
-  - [ ] p136.d2.t2: Test the gate: intentionally break a test, verify preflight halts
-- [ ] **Fix 3 failing terminal QA built-in tests** -- echo_round_trip, line_wrap, ctrl_c check wrong row
-  - [ ] p136.d3.t1: Fix geos-term built-in test row assertions
-  - [ ] p136.d3.t2: Verify geos-term --test all passes 3/3
+- [x] **Fix 13 failing world_desktop tests** -- All failures in games:: module, likely from world_desktop.asm changes
+  - [x] p136.d1.t1: Run cargo test and capture all 13 failures
+  - [x] p136.d1.t2: Diff world_desktop.asm against last green commit
+  - [x] p136.d1.t3: Fix tests or fix program until 0 failures
+- [x] **Add cargo test gate to autodev preflight** -- Workers must not merge breaking changes
+  - [x] p136.d2.t1: Add cargo test check to oracle_preflight.py
+  - [x] p136.d2.t2: Test the gate: intentionally break a test, verify preflight halts
+- [x] **Fix 3 failing terminal QA built-in tests** -- echo_round_trip, line_wrap, ctrl_c check wrong row
+  - [x] p136.d3.t1: Fix geos-term built-in test row assertions
+  - [x] p136.d3.t2: Verify geos-term --test all passes 3/3
 
 ## [x] phase-137: Daily Driver -- Host Filesystem Bridge (COMPLETE)
 
@@ -3172,23 +3172,23 @@ Add shell commands: ls (list VFS files), cat (read file to terminal), edit (open
   - [x] p137.d4.t3: Tilde expansion for ~/ paths
   - [x] p137.d4.t4: Test: too many open files returns EMFILE
 
-## [ ] phase-138: Daily Driver -- Fullscreen Desktop as Display Manager (PLANNED)
+## [x] phase-138: Daily Driver -- Fullscreen Desktop as Display Manager (COMPLETE)
 
 **Goal:** Launch GeOS fullscreen on boot as the primary interface, replacing the need for a Linux desktop environment
 
 ### Deliverables
 
-- [ ] **Fullscreen mode and borderless window** -- --fullscreen flag, scale 256x256 to fill screen, ESC exits
-  - [ ] p138.d1.t1: Add --fullscreen CLI flag
-  - [ ] p138.d1.t2: Handle ESC to exit fullscreen gracefully
-  - [ ] p138.d1.t3: Test fullscreen launch with various monitor sizes
-- [ ] **Auto-start on login (systemd user service)** -- GeOS starts automatically when you log in
-  - [ ] p138.d2.t1: Create ~/.config/systemd/user/geometry-os.service
-  - [ ] p138.d2.t2: Add .desktop file for session selection
-- [ ] **Desktop polish: alt-tab, task switcher, notifications** -- Make the desktop feel like a real OS
-  - [ ] p138.d3.t1: Alt-Tab window switcher overlay
-  - [ ] p138.d3.t2: Notification system (background events)
-  - [ ] p138.d3.t3: Host system tray (battery, network, volume from Linux)
+- [x] **Fullscreen mode and borderless window** -- --fullscreen flag, scale 256x256 to fill screen, ESC exits
+  - [x] p138.d1.t1: Add --fullscreen CLI flag
+  - [x] p138.d1.t2: Handle ESC to exit fullscreen gracefully
+  - [x] p138.d1.t3: Test fullscreen launch with various monitor sizes
+- [x] **Auto-start on login (systemd user service)** -- GeOS starts automatically when you log in
+  - [x] p138.d2.t1: Create ~/.config/systemd/user/geometry-os.service
+  - [x] p138.d2.t2: Add .desktop file for session selection
+- [x] **Desktop polish: alt-tab, task switcher, notifications** -- Make the desktop feel like a real OS
+  - [x] p138.d3.t1: Alt-Tab window switcher overlay
+  - [x] p138.d3.t2: Notification system (background events)
+  - [x] p138.d3.t3: Host system tray (battery, network, volume from Linux)
 
 ## [x] phase-139: Daily Driver -- Text Editor App (COMPLETE)
 

@@ -7640,7 +7640,7 @@ phases:
   _claimed_at: 1777234914
 - id: phase-155
   title: Terminal Daily Driver -- Terminal Multiplexer (tmux-like tabs)
-  status: planned
+  status: done
   goal: Multiple terminal sessions in tabs, like tmux. Alt+1/2/3 to switch. Each tab
     is its own bash process.
   description: One terminal is not enough. You need tabs. Alt+1 through Alt+4 switches
@@ -7652,26 +7652,26 @@ phases:
     description: Extend PTY handling to support 4 concurrent PTYs. Each tab gets its
       own bash process. Only the active tab receives keyboard input and renders to
       screen. Inactive tabs buffer output (last 80x40 chars per tab).
-    status: todo
+    status: done
     tasks:
     - id: p155.d1.t1
       title: 'PTY array: spawn up to 4 bash processes'
-      status: todo
+      status: done
       description: Refactor PTY code from single to array. Each has its own master
         fd and read thread.
     - id: p155.d1.t2
       title: Tab switching with Alt+1/2/3/4
-      status: todo
+      status: done
       description: 'Key handler: Alt+digit switches active tab. Save current screen
         buffer, restore target tab buffer.'
     - id: p155.d1.t3
       title: 'Status bar: show tab numbers and active tab'
-      status: todo
+      status: done
       description: 'Bottom 2 rows: [1: bash] [2: bash] [3: ---] [4: ---]. Active tab
         highlighted.'
     - id: p155.d1.t4
       title: Background tab output buffering
-      status: todo
+      status: done
       description: Inactive tabs keep reading PTY output into a ring buffer. No data
         loss while switched away.
     scope_lines: 300

@@ -13,6 +13,7 @@ pub mod pixel;
 pub mod preprocessor;
 pub mod qemu;
 pub mod riscv;
+pub mod scrollback;
 pub mod vfs;
 pub mod viewport;
 #[allow(dead_code)]

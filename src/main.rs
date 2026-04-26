@@ -21,6 +21,7 @@ mod qemu;
 mod render;
 mod riscv;
 mod save;
+mod scrollback;
 mod vfs;
 mod viewport;
 #[allow(dead_code)]
@@ -486,6 +487,13 @@ fn main() {
     let mut win_dbl_click_time: std::time::Instant = std::time::Instant::now();
     let mut win_dbl_click_pos: (f32, f32) = (0.0, 0.0);
 
+    // ── Terminal Scrollback (Phase 156) ──────────────────────────
+    let mut scrollback = scrollback::ScrollbackBuffer::new();
+    let mut in_scrollback: bool = false;
+    let mut scrollback_offset: usize = 0;
+    // Track how many scrollback lines existed before current command output
+    let mut _scrollback_pre_cmd: usize = 0;
+
     // If --boot flag, perform boot sequence: load init.asm as PID 1
     if boot_mode {
         match vm.boot() {
@@ -531,6 +539,9 @@ fn main() {
         cursor_row = term_prompt_row;
         cursor_col = 5; // after "geo> "
         scroll_offset = 0;
+        // Record initial banner to scrollback
+        scrollback.push_canvas_rows(&canvas_buffer, 0, term_output_row);
+        _scrollback_pre_cmd = scrollback.len();
     }
 
     // File input mode (Ctrl+F8 activates this)
@@ -936,6 +947,14 @@ fn main() {
 
             // ── Mode-aware key handling ───────────────────────────
             if mode == Mode::Terminal {
+                // If in scrollback mode, exit on any key except PageUp/PageDown
+                if in_scrollback && key != Key::PageUp && key != Key::PageDown {
+                    in_scrollback = false;
+                    status_msg = String::from("[SCROLLBACK EXIT -- back to terminal]");
+                    // Don't process this key further in terminal mode
+                    // (it would type into the prompt, which is confusing)
+                    continue;
+                }
                 // Terminal mode: type into prompt line, Enter = execute
                 match key {
                     Key::Enter => {
@@ -1059,6 +1078,9 @@ fn main() {
                         // Output goes on the line after the prompt
                         term_output_row = term_prompt_row + 1;
 
+                        // Record prompt line to scrollback before execution
+                        scrollback.push_canvas_rows(&canvas_buffer, term_prompt_row, term_prompt_row + 1);
+
                         let (hermes_prompt, go_edit, quit) = handle_terminal_command(
                             cmd,
                             &mut vm,
@@ -1069,6 +1091,10 @@ fn main() {
                             &mut canvas_assembled,
                             &mut breakpoints,
                         );
+
+                        // Record command output to scrollback (lines from after prompt to before new prompt)
+                        scrollback.push_canvas_rows(&canvas_buffer, term_prompt_row + 1, term_output_row);
+                        _scrollback_pre_cmd = scrollback.len();
 
                         // Handle hermes/build prompt if returned
                         if let Some(prompt) = hermes_prompt {
@@ -1298,12 +1324,19 @@ fn main() {
                 }
                 Key::PageUp => {
                     if mode == Mode::Terminal {
-                        ram_view_base = ram_view_base.saturating_sub(1024);
-                        status_msg = format!(
-                            "[RAM Inspector: 0x{:04X}-0x{:04X}]",
-                            ram_view_base,
-                            ram_view_base + 1023
-                        );
+                        // Enter scrollback mode and scroll up through terminal history
+                        if !scrollback.is_empty() {
+                            if !in_scrollback {
+                                in_scrollback = true;
+                                // Start at bottom of scrollback (most recent output)
+                                scrollback_offset = scrollback.max_scroll();
+                            }
+                            scrollback_offset = scrollback_offset.saturating_sub(CANVAS_ROWS);
+                            status_msg = format!(
+                                "[SCROLLBACK {}/{} -- PageUp/Down=navigate, any key=exit]",
+                                scrollback_offset, scrollback.max_scroll()
+                            );
+                        }
                     } else if scroll_offset > 0 {
                         scroll_offset = scroll_offset.saturating_sub(CANVAS_ROWS);
                         let new_cursor = scroll_offset + CANVAS_ROWS / 2;
@@ -1314,12 +1347,23 @@ fn main() {
                 }
                 Key::PageDown => {
                     if mode == Mode::Terminal {
-                        ram_view_base = ram_view_base.saturating_add(1024).min(0xFC00);
-                        status_msg = format!(
-                            "[RAM Inspector: 0x{:04X}-0x{:04X}]",
-                            ram_view_base,
-                            ram_view_base + 1023
-                        );
+                        // Scroll down in scrollback
+                        if in_scrollback {
+                            let max = scrollback.max_scroll();
+                            if scrollback_offset < max {
+                                scrollback_offset = (scrollback_offset + CANVAS_ROWS).min(max);
+                            }
+                            if scrollback_offset >= max {
+                                // Reached the bottom, exit scrollback
+                                in_scrollback = false;
+                                status_msg = String::from("[SCROLLBACK END -- back to terminal]");
+                            } else {
+                                status_msg = format!(
+                                    "[SCROLLBACK {}/{} -- PageUp/Down=navigate, any key=exit]",
+                                    scrollback_offset, max
+                                );
+                            }
+                        }
                     } else {
                         let max_scroll = CANVAS_MAX_ROWS.saturating_sub(CANVAS_ROWS);
                         if scroll_offset < max_scroll {
@@ -2144,8 +2188,29 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, buildings [radius], desktop_json, launch <app> [--window], player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, scrollback [offset] [count], buildings [radius], desktop_json, launch <app> [--window], player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
+                            }
+                            "scrollback" => {
+                                let offset: usize = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+                                let count: usize = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(32);
+                                response.push_str(&format!(
+                                    "[scrollback: {} lines buffered, max_scroll={}]\n",
+                                    scrollback.len(),
+                                    scrollback.max_scroll()
+                                ));
+                                let end = (offset + count).min(scrollback.len());
+                                for i in offset..end {
+                                    if let Some(line) = scrollback.get_line(i) {
+                                        let text: String = line.iter()
+                                            .take_while(|&&v| v != 0)
+                                            .map(|&v| (v & 0xFF) as u8 as char)
+                                            .collect();
+                                        if !text.is_empty() {
+                                            response.push_str(&format!("{}|{}\n", i, text));
+                                        }
+                                    }
+                                }
                             }
                             "loadasm" => {
                                 // Assemble a .asm file directly into VM RAM at
@@ -3494,6 +3559,33 @@ fn main() {
         if fullscreen_map && is_running {
             // Fullscreen map: VM screen scaled 3x to fill window
             render_fullscreen_map(&mut buffer, &vm, Some(&icon_cache));
+        } else if in_scrollback {
+            // Scrollback mode: render scrollback buffer as canvas
+            // Build a temporary canvas buffer from scrollback lines
+            let mut sb_canvas = vec![0u32; CANVAS_MAX_ROWS * CANVAS_COLS];
+            let page = scrollback.get_page(scrollback_offset);
+            for (vis_row, line) in page.iter().enumerate() {
+                if vis_row >= CANVAS_MAX_ROWS { break; }
+                let offset = vis_row * CANVAS_COLS;
+                sb_canvas[offset..offset + CANVAS_COLS].copy_from_slice(line.as_slice());
+            }
+            // Leave remaining rows as zeros (empty)
+            render(
+                &mut buffer,
+                &vm,
+                &sb_canvas,
+                0, // no cursor in scrollback
+                0,
+                0, // no scroll offset (we handle it via sb_canvas content)
+                false, // not running
+                false,
+                &status_msg,
+                &ram_intensity,
+                &ram_kind,
+                &pc_history,
+                ram_view_base,
+                Some(&icon_cache),
+            );
         } else {
             render(
                 &mut buffer,
