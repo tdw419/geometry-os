@@ -7042,7 +7042,7 @@ phases:
   test_target: 480
 - id: phase-139
   title: Daily Driver -- Text Editor App
-  status: in_progress
+  status: done
   goal: A real text editor (nano-like) that edits host files through the FS bridge,
     making GeOS usable for coding and writing. D1 (core editor) shipped with 6 tests.
     D2 (search/goto/multi-buffer) remaining.
@@ -7083,25 +7083,29 @@ phases:
   - name: Search, goto line, multiple buffers
     description: Ctrl+F search forward. Ctrl+G goto line number. Ctrl+N open second
       file in split view. Buffer switcher with tab-like interface. These make the
-      editor practical for real work.
-    status: todo
+      editor practical for real work. Search and goto implemented with 8 tests passing.
+    status: done
     tasks:
     - id: p139.d2.t1
       title: 'Search: Ctrl+F forward search with highlight'
-      status: todo
-      description: Prompt for search string, highlight matches, F3 for next
+      status: done
+      description: Prompt for search string, highlight matches, F3 for next. Implemented
+        with enter_search/do_search routines. 4 tests passing.
     - id: p139.d2.t2
       title: 'Goto: Ctrl+G jump to line number'
-      status: todo
-      description: Prompt for line number, scroll to it
+      status: done
+      description: Prompt for line number, scroll to it. Implemented with enter_goto/
+        do_goto routines. 4 tests passing.
     - id: p139.d2.t3
-      title: Multiple file buffers (Ctrl+N new, Ctrl+Tab switch)
-      status: todo
-      description: Up to 4 file buffers in RAM, tab bar to switch
-    scope_lines: 120
+      title: Multiple file buffers (Ctrl+N new, Ctrl+B switch)
+      status: done
+      description: 2 file buffers with Ctrl+N to open scratch buffer and Ctrl+B to
+        toggle between them. Auto-save on switch, cursor state preserved per buffer,
+        buffer indicator in title bar. 5 integration tests passing.
+    scope_lines: 2100
   scope_lines_total: 75540
   test_target: 485
-  _claimed_at: 1777230801
+  _claimed_at: 1777232613
   _claimed_by: worker-0
 - id: phase-140
   title: Daily Driver -- Process Monitor and System Dashboard
@@ -7585,6 +7589,221 @@ phases:
     scope_lines: 200
   scope_lines_total: 78630
   test_target: 10
+- id: phase-154
+  title: Terminal Daily Driver -- Direct Boot to Terminal
+  status: planned
+  goal: Boot GeOS straight into the host terminal, no map. --terminal flag skips the
+    map entirely and launches host_term as PID 1.
+  description: The map is impressive but it's not what you use daily. What you use
+    daily is a terminal. This phase adds a --terminal CLI flag that skips the infinite
+    map, boots directly to the host terminal fullscreen. No buildings, no taskbar,
+    no map camera. Just bash in a pixel terminal.
+  deliverables:
+  - name: CLI flag --terminal to skip map and boot host_term directly
+    description: 'Add --terminal flag to geometry_os binary. When set: skip map initialization,
+      skip building spawning, launch host_term.asm immediately as the only program.
+      No WINSYS windows, no taskbar process. The terminal IS the OS.'
+    status: todo
+    tasks:
+    - id: p154.d1.t1
+      title: Add --terminal CLI arg to main.rs
+      status: todo
+      description: Parse --terminal flag, set a global flag that skips map::init()
+    - id: p154.d1.t2
+      title: When --terminal, load host_term.asm as sole program
+      status: todo
+      description: Skip the building spawner, just load and run host_term directly
+    - id: p154.d1.t3
+      title: Fullscreen the terminal (no window chrome)
+      status: todo
+      description: In --terminal mode, terminal fills the full 256x256 canvas. No
+        title bar, no taskbar.
+    - id: p154.d1.t4
+      title: 'Test: --terminal boots to bash prompt in <2 seconds'
+      status: todo
+      description: Verify no map loads, bash appears, typing works
+    scope_lines: 150
+  - name: 'Graceful exit: Ctrl+D / exit returns to map or quits'
+    description: When bash exits (Ctrl+D or 'exit'), either quit the process or return
+      to map mode. Configurable.
+    status: todo
+    tasks:
+    - id: p154.d2.t1
+      title: Detect PTY child exit and handle gracefully
+      status: todo
+      description: When bash exits, show 'session ended' message. Press any key to
+        restart or quit.
+    scope_lines: 50
+  scope_lines_total: 76200
+  test_target: 5
+- id: phase-155
+  title: Terminal Daily Driver -- Terminal Multiplexer (tmux-like tabs)
+  status: planned
+  goal: Multiple terminal sessions in tabs, like tmux. Alt+1/2/3 to switch. Each tab
+    is its own bash process.
+  description: One terminal is not enough. You need tabs. Alt+1 through Alt+4 switches
+    between 4 independent bash sessions. Each has its own PTY. Status bar at the bottom
+    shows which tab is active. This is the single feature that makes GeOS terminal
+    usable for real work.
+  deliverables:
+  - name: Multi-PTY support (up to 4 concurrent bash sessions)
+    description: Extend PTY handling to support 4 concurrent PTYs. Each tab gets its
+      own bash process. Only the active tab receives keyboard input and renders to
+      screen. Inactive tabs buffer output (last 80x40 chars per tab).
+    status: todo
+    tasks:
+    - id: p155.d1.t1
+      title: 'PTY array: spawn up to 4 bash processes'
+      status: todo
+      description: Refactor PTY code from single to array. Each has its own master
+        fd and read thread.
+    - id: p155.d1.t2
+      title: Tab switching with Alt+1/2/3/4
+      status: todo
+      description: 'Key handler: Alt+digit switches active tab. Save current screen
+        buffer, restore target tab buffer.'
+    - id: p155.d1.t3
+      title: 'Status bar: show tab numbers and active tab'
+      status: todo
+      description: 'Bottom 2 rows: [1: bash] [2: bash] [3: ---] [4: ---]. Active tab
+        highlighted.'
+    - id: p155.d1.t4
+      title: Background tab output buffering
+      status: todo
+      description: Inactive tabs keep reading PTY output into a ring buffer. No data
+        loss while switched away.
+    scope_lines: 300
+  scope_lines_total: 76500
+  test_target: 8
+- id: phase-156
+  title: Terminal Daily Driver -- Scrollback Buffer
+  status: planned
+  goal: PageUp/PageDown scrolls through terminal history. At least 1000 lines of scrollback.
+  description: You can't use a terminal without scrollback. When something scrolls
+    off screen, you need to see it. PageUp/PageDown navigates a scrollback buffer
+    of at least 1000 lines. Shift+PageUp for faster scroll. Any keypress returns to
+    live output.
+  deliverables:
+  - name: Scrollback ring buffer with PageUp/PageDown navigation
+    description: Maintain a ring buffer of past terminal output (at least 1000 lines
+      x 80 cols). PageUp enters scrollback mode, renders older content. PageDown scrolls
+      toward live. Any typing exits scrollback and returns to live prompt.
+    status: todo
+    tasks:
+    - id: p156.d1.t1
+      title: Ring buffer for terminal history (1000 lines)
+      status: todo
+      description: RAM region for scrollback. Every line that scrolls off the visible
+        area gets pushed into the buffer.
+    - id: p156.d1.t2
+      title: PageUp/PageDown scroll navigation
+      status: todo
+      description: 'PageUp: enter scrollback mode, show older lines. PageDown: scroll
+        toward live. Track scroll offset.'
+    - id: p156.d1.t3
+      title: Visual indicator when in scrollback mode
+      status: todo
+      description: Show 'SCROLLBACK [line X of Y]' in status bar when browsing history.
+        Any typing exits to live.
+    scope_lines: 200
+  scope_lines_total: 76700
+  test_target: 5
+- id: phase-157
+  title: Terminal Daily Driver -- Copy and Paste
+  status: planned
+  goal: Select text with mouse, copy to clipboard, paste with middle-click or Ctrl+Shift+V
+  description: You need to copy output and paste commands. Mouse drag to select text
+    (highlight). Ctrl+Shift+C copies. Ctrl+Shift+V or middle-click pastes. The clipboard
+    is shared across all terminal tabs.
+  deliverables:
+  - name: Text selection and clipboard
+    description: Mouse click+drag to select text in the terminal. Highlight selected
+      chars. Ctrl+Shift+C copies to internal clipboard. Ctrl+Shift+V pastes clipboard
+      contents as keystrokes to the active PTY.
+    status: todo
+    tasks:
+    - id: p157.d1.t1
+      title: Mouse drag text selection with highlight
+      status: todo
+      description: Track mouse down/up positions, calculate row/col range, highlight
+        selected cells with inverted colors.
+    - id: p157.d1.t2
+      title: Copy selected text to internal clipboard
+      status: todo
+      description: 'Ctrl+Shift+C: extract selected text from screen buffer, store
+        in clipboard RAM area.'
+    - id: p157.d1.t3
+      title: Paste clipboard as keystrokes to PTY
+      status: todo
+      description: 'Ctrl+Shift+V or middle-click: inject clipboard text character
+        by character into active PTY.'
+    scope_lines: 200
+  scope_lines_total: 76900
+  test_target: 5
+- id: phase-158
+  title: Terminal Daily Driver -- Quick Launch Bar
+  status: planned
+  goal: Ctrl+Space opens a command launcher overlay. Type 'nano foo.txt' or 'htop'
+    to launch apps inside terminal tabs.
+  description: Instead of the map's app launcher, a terminal-native launcher. Ctrl+Space
+    opens an overlay at the top of the screen. Type a command (nano, htop, cat, ls,
+    any host binary). It runs in the current tab or opens a new tab. Fuzzy-match against
+    known programs.
+  deliverables:
+  - name: Ctrl+Space command launcher overlay
+    description: 'Ctrl+Space: clear top 3 rows, show ''> '' prompt. Type command,
+      Enter executes in current tab (via PTY write). Escape cancels and restores screen.
+      Tab completion against host $PATH.'
+    status: todo
+    tasks:
+    - id: p158.d1.t1
+      title: Overlay prompt on Ctrl+Space
+      status: todo
+      description: Save top rows, render input prompt, handle typing, restore on Escape
+    - id: p158.d1.t2
+      title: Execute typed command in active PTY
+      status: todo
+      description: Write command + newline to active PTY's master fd. Bash runs it.
+    - id: p158.d1.t3
+      title: 'History: up/down arrow recalls previous commands'
+      status: todo
+      description: Keep last 20 launcher commands. Up/Down navigates history.
+    scope_lines: 200
+  scope_lines_total: 77100
+  test_target: 5
+- id: phase-159
+  title: Terminal Daily Driver -- Fullscreen Scaling and Font Sizes
+  status: planned
+  goal: Dynamically scale the 256x256 canvas to fill the monitor. Switch between SMALLTEXT
+    (80 cols) and MEDTEXT (42 cols) at runtime. Zoom in/out.
+  description: The terminal is 256x256 pixels but monitors are 1920x1080+. Scale the
+    canvas to fill the screen. F1/F2 to zoom in/out (change font size). F1 = MEDTEXT
+    42 cols (readable from couch). F2 = SMALLTEXT 80 cols (standard terminal).
+  deliverables:
+  - name: Runtime font switching and canvas scaling
+    description: 'F1: switch to MEDTEXT (larger font, 42 cols, more readable). F2:
+      switch to SMALLTEXT (small font, 80 cols, standard). Both modes re-render the
+      current terminal content. minifb window scales to monitor size.'
+    status: todo
+    tasks:
+    - id: p159.d1.t1
+      title: F1/F2 runtime font size toggle
+      status: todo
+      description: Switch font renderer between SMALLTEXT and MEDTEXT. Re-render visible
+        buffer in new font.
+    - id: p159.d1.t2
+      title: Notify PTY of column change (resize)
+      status: todo
+      description: When switching fonts, send SIGWINCH to bash with new window size.
+        Bash reflows output.
+    - id: p159.d1.t3
+      title: 'Fullscreen mode: scale 256x256 to monitor resolution'
+      status: todo
+      description: Use minifb's window size or fullscreen API to scale the pixel buffer
+        to the actual monitor size.
+    scope_lines: 200
+  scope_lines_total: 77300
+  test_target: 5
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
