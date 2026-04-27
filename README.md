@@ -314,9 +314,40 @@ Cell-based reactive computation. FORMULA defines a cell whose value is computed 
 
 ### Hypervisor
 
-| Opcode | Args | Description |
+|| Opcode | Args | Description |
 |--------|------|-------------|
 | HYPERVISOR | cmd_reg | RISC-V hypervisor control (boot, query status, etc.) |
+
+## RISC-V Bare-Metal Substrate
+
+Geometry OS doesn't just run its own bytecode -- it runs **real RISC-V machine code**, interpreted from ELF binaries on a bare-metal RV32IMAC virtual machine. No Linux, no kernel, no libc. Just your C program and the metal.
+
+**What it is.** A cycle-accurate RV32IMAC interpreter with:
+- Full SBI console I/O (putchar, getchar, shutdown)
+- UART at 0x1000_0000, CLINT timer at 0x0200_BFF8
+- 256x256 MMIO framebuffer at 0x6000_0000 (0xRRGGBBAA format)
+- VFS pixel surface at 0x7000_0000 (256KB, file system + raw storage)
+- Virtio-blk at 0x1000_1000 (1MB disk)
+- ~52 MIPS interpreted throughput
+- ELF loader (static, medany, freestanding)
+
+**Toolchain.** Standard `riscv64-linux-gnu-gcc` with `-march=rv32imac_zicsr -mabi=ilp32`. Link against `libgeos.a` (SBI wrappers, framebuffer helpers, timing, canvas save/load). Build any program in one command: `./build.sh my_program.c my_program.elf`.
+
+**Programs shipped:**
+
+| Program | Lines | What it demonstrates |
+|---------|-------|---------------------|
+| `hello.c` | 20 | SBI console output, shutdown |
+| `sh.c` | 418 | Interactive shell: peek, poke, hexdump, echo, clear |
+| `paint.c` | 210 | Pixel-art editor: WASD movement, 10-color palette, fill mode, save/load |
+| `life.c` | 120 | Conway's Game of Life at 53.6 fps |
+| `life64.c` | 150 | 64x64 Game of Life with extended neighborhood |
+| `cat.c` | 80 | File reader via VFS pixel surface |
+| `painter2.c` | 180 | Advanced painter with brush sizes |
+
+**The paint program.** `paint.c` is the capstone: keyboard input -> UART rx -> SBI getchar -> guest logic -> MMIO framebuffer writes -> fb_present -> live display. Full round-trip from human input to visible pixels, with no operating system in between. Supports in-session save/load (P/O keys) via the VFS pixel surface -- checkpoint your canvas and restore it later in the same session.
+
+**Verification.** Every RISC-V feature is tested with automated pixel assertions. The test harness (`tests/geos_test_lib.sh`) boots GeOS, loads an ELF, injects keyboard input, dumps the framebuffer to PNG, and asserts pixel values. Zero tolerance -- if a pixel is wrong by even one channel value, the test fails. 22 paint regression checks + 62,464-pixel round-trip persistence test, all passing.
 
 ## Memory-Mapped I/O
 
@@ -435,6 +466,10 @@ Memory: 0x000 grid | 0x400 children | 0xF00 window | 0x1000 bytecode | 0xFFB-0xF
 | ![Ball](docs/screenshots/ball.png) | ![Painter](docs/screenshots/painter.png) | ![Colors](docs/screenshots/colors.png) |
 |:--:|:--:|:--:|
 | Bouncing ball | Freehand painting | Color palette |
+
+| ![RISC-V Paint](docs/screenshots/paint_riscv.png) |
+|:--:|
+| **RISC-V bare-metal paint program** — interactive pixel art editor running on the RV32IMAC interpreter. No Linux, no OS, no libc. C program linked against libgeos.a, writing directly to the MMIO framebuffer. 10-color palette, fill mode, in-session save/load. |
 
 ## Documentation
 
