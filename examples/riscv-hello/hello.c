@@ -9,25 +9,9 @@
  * routes the byte through the UART, and UartBridge renders it on the canvas.
  */
 
-static inline void sbi_console_putchar(int ch) {
-    register int a0 asm("a0") = ch;
-    register int a7 asm("a7") = 1;
-    asm volatile("ecall" : "+r"(a0) : "r"(a7) : "memory", "a1");
-}
-
-static __attribute__((noreturn)) void sbi_shutdown(void) {
-    register int a7 asm("a7") = 8;
-    asm volatile("ecall" : : "r"(a7) : "memory", "a0", "a1");
-    __builtin_unreachable();
-}
-
-static void sbi_puts(const char *s) {
-    while (*s) {
-        sbi_console_putchar(*s++);
-    }
-}
+#include "libgeos.h"
 
 void c_start(void) {
-    sbi_puts("hello from C\n");
+    geos_puts("hello from C\n");
     sbi_shutdown();
 }

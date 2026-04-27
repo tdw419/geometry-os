@@ -9,53 +9,18 @@
  *
  * Build:
  *   riscv64-linux-gnu-gcc -march=rv32imac_zicsr -mabi=ilp32 -nostdlib \
- *       -nostartfiles -T hello.ld -O2 -o life.elf crt0.S life.c
+ *       -nostartfiles -T hello.ld -O2 -o life.elf crt0.S life.c -L. -lgeos
  */
 
-#include <stdint.h>
+#include "libgeos.h"
 
-/* ---- MMIO Framebuffer ---- */
-#define FB_BASE        0x60000000u
-#define FB_WIDTH       256
-#define FB_HEIGHT      256
-#define FB_CONTROL     (FB_BASE + (FB_WIDTH * FB_HEIGHT) * 4)
-#define FB_SIZE        (FB_WIDTH * FB_HEIGHT)
-#define FB_MASK_X      (FB_WIDTH - 1)   /* 0xFF for x wrap */
-#define FB_SHIFT_Y     8                /* log2(256) for y stride */
+/* ---- Local framebuffer helpers (program-specific optimizations) ---- */
+#define FB_SIZE        (GEOS_FB_WIDTH * GEOS_FB_HEIGHT)
+#define FB_MASK_X      (GEOS_FB_WIDTH - 1)   /* 0xFF for x wrap */
+#define FB_SHIFT_Y     8                      /* log2(256) for y stride */
 
-/* ---- SBI helpers ---- */
-static inline long sbi_console_putchar(int ch) {
-    register long a0 __asm__("a0") = ch;
-    register long a7 __asm__("a7") = 1;
-    __asm__ volatile("ecall" : "+r"(a0) : "r"(a7) : "memory", "a1");
-    return a0;
-}
-
-static __attribute__((noreturn)) void sbi_shutdown(void) {
-    register long a7 __asm__("a7") = 8;
-    __asm__ volatile("ecall" : : "r"(a7) : "memory", "a0", "a1");
-    __builtin_unreachable();
-}
-
-/* ---- Utility ---- */
-static void puts(const char *s) {
-    while (*s) sbi_console_putchar(*s++);
-}
-
-static void put_dec(uint32_t val) {
-    char buf[12];
-    int i = 0;
-    if (val == 0) { sbi_console_putchar('0'); return; }
-    while (val > 0) {
-        buf[i++] = '0' + (val % 10);
-        val /= 10;
-    }
-    while (i > 0) sbi_console_putchar(buf[--i]);
-}
-
-/* ---- Color helpers ---- */
-static inline uint32_t rgb(uint8_t r, uint8_t g, uint8_t b) {
-    return ((uint32_t)r << 24) | ((uint32_t)g << 16) | ((uint32_t)b << 8) | 0xFF;
+static inline volatile uint32_t *fb_pixel(uint32_t x, uint32_t y) {
+    return (volatile uint32_t *)(GEOS_FB_BASE + ((y << FB_SHIFT_Y) + x) * 4);
 }
 
 /* ---- Shadow bit-grids for double-buffering (8KB each) ---- */
@@ -65,14 +30,14 @@ static uint8_t grid_b[FB_SIZE / 8];
 static inline int cell_get(uint8_t *grid, uint32_t x, uint32_t y) {
     /* Toroidal wrap via bitmask (FB_WIDTH is power of 2) */
     x = x & FB_MASK_X;
-    y = y & (FB_HEIGHT - 1);
+    y = y & (GEOS_FB_HEIGHT - 1);
     uint32_t idx = (y << FB_SHIFT_Y) + x;
     return (grid[idx >> 3] >> (7 - (idx & 7))) & 1;
 }
 
 static inline void cell_set(uint8_t *grid, uint32_t x, uint32_t y, int val) {
     x = x & FB_MASK_X;
-    y = y & (FB_HEIGHT - 1);
+    y = y & (GEOS_FB_HEIGHT - 1);
     uint32_t idx = (y << FB_SHIFT_Y) + x;
     uint32_t byte_idx = idx >> 3;
     uint32_t bit = 7 - (idx & 7);
@@ -80,14 +45,6 @@ static inline void cell_set(uint8_t *grid, uint32_t x, uint32_t y, int val) {
         grid[byte_idx] |= (1u << bit);
     else
         grid[byte_idx] &= ~(1u << bit);
-}
-
-static inline volatile uint32_t *fb_pixel(uint32_t x, uint32_t y) {
-    return (volatile uint32_t *)(FB_BASE + ((y << FB_SHIFT_Y) + x) * 4);
-}
-
-static void fb_present(void) {
-    *(volatile uint32_t *)FB_CONTROL = 1;
 }
 
 /* ---- Simple PRNG for initial seeding ---- */
@@ -104,8 +61,8 @@ static uint32_t xorshift32(void) {
 
 /* ---- Initialize with random pattern in center region ---- */
 static void seed_grid(uint8_t *grid) {
-    uint32_t cx = (FB_WIDTH >> 1) - 64;
-    uint32_t cy = (FB_HEIGHT >> 1) - 64;
+    uint32_t cx = (GEOS_FB_WIDTH >> 1) - 64;
+    uint32_t cy = (GEOS_FB_HEIGHT >> 1) - 64;
     uint32_t y, x;
     for (y = 0; y < 128; y++) {
         for (x = 0; x < 128; x++) {
@@ -118,32 +75,32 @@ static void seed_grid(uint8_t *grid) {
 /* ---- Render grid to MMIO framebuffer (WRITE path) ---- */
 static void render_grid(uint8_t *grid) {
     uint32_t y, x;
-    for (y = 0; y < FB_HEIGHT; y++) {
+    for (y = 0; y < GEOS_FB_HEIGHT; y++) {
         uint32_t y_offset = y << FB_SHIFT_Y;
-        for (x = 0; x < FB_WIDTH; x++) {
+        for (x = 0; x < GEOS_FB_WIDTH; x++) {
             int alive = cell_get(grid, x, y);
             if (alive) {
                 /* Warm color gradient */
-                *(volatile uint32_t *)(FB_BASE + (y_offset + x) * 4) =
-                    rgb((uint8_t)(50 + (x * 205) / FB_WIDTH),
-                        (uint8_t)(200 - (y * 150) / FB_HEIGHT),
+                *(volatile uint32_t *)(GEOS_FB_BASE + (y_offset + x) * 4) =
+                    geos_rgb((uint8_t)(50 + (x * 205) / GEOS_FB_WIDTH),
+                        (uint8_t)(200 - (y * 150) / GEOS_FB_HEIGHT),
                         50);
             } else {
-                *(volatile uint32_t *)(FB_BASE + (y_offset + x) * 4) =
-                    rgb(8, 8, 16);
+                *(volatile uint32_t *)(GEOS_FB_BASE + (y_offset + x) * 4) =
+                    geos_rgb(8, 8, 16);
             }
         }
     }
-    fb_present();
+    geos_fb_present();
 }
 
 /* ---- READBACK: read framebuffer pixels back into grid ---- */
 static void readback_from_fb(uint8_t *grid) {
     uint32_t y, x;
-    for (y = 0; y < FB_HEIGHT; y++) {
+    for (y = 0; y < GEOS_FB_HEIGHT; y++) {
         uint32_t y_offset = y << FB_SHIFT_Y;
-        for (x = 0; x < FB_WIDTH; x++) {
-            uint32_t pixel = *(volatile uint32_t *)(FB_BASE + (y_offset + x) * 4);
+        for (x = 0; x < GEOS_FB_WIDTH; x++) {
+            uint32_t pixel = *(volatile uint32_t *)(GEOS_FB_BASE + (y_offset + x) * 4);
             int alive = ((pixel >> 24) & 0xFF) > 32 ||
                         ((pixel >> 16) & 0xFF) > 32 ||
                         ((pixel >> 8) & 0xFF) > 32;
@@ -155,8 +112,8 @@ static void readback_from_fb(uint8_t *grid) {
 /* ---- Compute one generation ---- */
 static void compute_generation(uint8_t *src, uint8_t *dst) {
     uint32_t y, x;
-    for (y = 0; y < FB_HEIGHT; y++) {
-        for (x = 0; x < FB_WIDTH; x++) {
+    for (y = 0; y < GEOS_FB_HEIGHT; y++) {
+        for (x = 0; x < GEOS_FB_WIDTH; x++) {
             int n = 0;
             int dy, dx;
             for (dy = -1; dy <= 1; dy++) {
@@ -183,25 +140,25 @@ void c_start(void) {
     uint8_t *nxt = grid_b;
     uint32_t gen;
 
-    puts("life: Conway's Game of Life -- MMIO framebuffer\n");
-    puts("life: 256x256 toroidal, ");
-    put_dec(NUM_GENERATIONS);
-    puts(" gens\n");
+    geos_puts("life: Conway's Game of Life -- MMIO framebuffer\n");
+    geos_puts("life: 256x256 toroidal, ");
+    geos_put_dec(NUM_GENERATIONS);
+    geos_puts(" gens\n");
 
-    puts("life: seeding...\n");
+    geos_puts("life: seeding...\n");
     seed_grid(cur);
 
-    puts("life: render gen 0\n");
+    geos_puts("life: render gen 0\n");
     render_grid(cur);
 
     /* READBACK TEST */
-    puts("life: readback from MMIO...\n");
+    geos_puts("life: readback from MMIO...\n");
     readback_from_fb(cur);
 
     for (gen = 1; gen <= NUM_GENERATIONS; gen++) {
-        puts("life: gen ");
-        put_dec(gen);
-        puts("...");
+        geos_puts("life: gen ");
+        geos_put_dec(gen);
+        geos_puts("...");
 
         compute_generation(cur, nxt);
         render_grid(nxt);
@@ -210,31 +167,31 @@ void c_start(void) {
         cur = nxt;
         nxt = tmp;
 
-        puts("ok\n");
+        geos_puts("ok\n");
     }
 
     /* Final readback verification */
-    puts("life: final count...\n");
+    geos_puts("life: final count...\n");
     uint32_t alive_count = 0;
     uint32_t y, x;
-    for (y = 0; y < FB_HEIGHT; y++) {
+    for (y = 0; y < GEOS_FB_HEIGHT; y++) {
         uint32_t y_offset = y << FB_SHIFT_Y;
-        for (x = 0; x < FB_WIDTH; x++) {
-            uint32_t pixel = *(volatile uint32_t *)(FB_BASE + (y_offset + x) * 4);
+        for (x = 0; x < GEOS_FB_WIDTH; x++) {
+            uint32_t pixel = *(volatile uint32_t *)(GEOS_FB_BASE + (y_offset + x) * 4);
             if (((pixel >> 24) & 0xFF) > 32)
                 alive_count++;
         }
     }
-    puts("life: alive=");
-    put_dec(alive_count);
-    puts("\n");
+    geos_puts("life: alive=");
+    geos_put_dec(alive_count);
+    geos_puts("\n");
 
     if (alive_count > 0) {
-        puts("life: READBACK OK\n");
+        geos_puts("life: READBACK OK\n");
     } else {
-        puts("life: READBACK FAIL\n");
+        geos_puts("life: READBACK FAIL\n");
     }
 
-    puts("life: shutdown.\n");
+    geos_puts("life: shutdown.\n");
     sbi_shutdown();
 }

@@ -7,46 +7,16 @@
  *
  * Build:
  *   riscv64-linux-gnu-gcc -march=rv32imac_zicsr -mabi=ilp32 -nostdlib \
- *       -nostartfiles -T hello.ld -O2 -o life64.elf crt0.S life64.c
+ *       -nostartfiles -T hello.ld -O2 -o life64.elf crt0.S life64.c -L. -lgeos
  */
 
-#include <stdint.h>
-
-/* ---- MMIO Framebuffer ---- */
-#define FB_BASE        0x60000000u
-#define FB_WIDTH       256
-#define FB_HEIGHT      256
-#define FB_CONTROL     (FB_BASE + (FB_WIDTH * FB_HEIGHT) * 4)
+#include "libgeos.h"
 
 /* ---- Life grid ---- */
 #define GRID_W         64
 #define GRID_H         64
 #define CELL_SIZE      4   /* 4x4 pixel block per cell */
 #define DENSITY        40  /* 40% initial fill */
-
-/* ---- SBI helpers ---- */
-static inline long sbi_console_putchar(int ch) {
-    register long a0 __asm__("a0") = ch;
-    register long a7 __asm__("a7") = 1;
-    __asm__ volatile("ecall" : "+r"(a0) : "r"(a7) : "memory", "a1");
-    return a0;
-}
-
-static __attribute__((noreturn)) void sbi_shutdown(void) {
-    register long a7 __asm__("a7") = 8;
-    __asm__ volatile("ecall" : : "r"(a7) : "memory", "a0", "a1");
-    __builtin_unreachable();
-}
-
-/* ---- Utility ---- */
-static void puts(const char *s) {
-    while (*s) sbi_console_putchar(*s++);
-}
-
-/* ---- Color helpers ---- */
-static inline uint32_t rgb(uint8_t r, uint8_t g, uint8_t b) {
-    return ((uint32_t)r << 24) | ((uint32_t)g << 16) | ((uint32_t)b << 8) | 0xFF;
-}
 
 /* ---- Shadow grids (512 bytes each for 64x64 = 4096 bits) ---- */
 static uint8_t grid_a[GRID_W * GRID_H / 8];
@@ -69,10 +39,6 @@ static inline void cell_set(uint8_t *grid, int x, int y, int val) {
         grid[byte_idx] |= (1u << bit);
     else
         grid[byte_idx] &= ~(1u << bit);
-}
-
-static void fb_present(void) {
-    *(volatile uint32_t *)FB_CONTROL = 1;
 }
 
 /* ---- Simple PRNG ---- */
@@ -110,21 +76,21 @@ static void render_grid(uint8_t *grid) {
                 uint8_t r = (uint8_t)(80 + (gx * 175) / GRID_W);
                 uint8_t g = (uint8_t)(220 - (gy * 160) / GRID_H);
                 uint8_t b = 60;
-                color = rgb(r, g, b);
+                color = geos_rgb(r, g, b);
             } else {
-                color = rgb(6, 6, 14);
+                color = geos_rgb(6, 6, 14);
             }
             /* Fill 4x4 pixel block */
             int base_y = gy * CELL_SIZE;
             int base_x = gx * CELL_SIZE;
             for (dy = 0; dy < CELL_SIZE; dy++) {
                 for (dx = 0; dx < CELL_SIZE; dx++) {
-                    *(volatile uint32_t *)(FB_BASE + ((base_y + dy) * FB_WIDTH + base_x + dx) * 4) = color;
+                    *(volatile uint32_t *)(GEOS_FB_BASE + ((base_y + dy) * GEOS_FB_WIDTH + base_x + dx) * 4) = color;
                 }
             }
         }
     }
-    fb_present();
+    geos_fb_present();
 }
 
 /* ---- Compute one generation ---- */
@@ -156,8 +122,8 @@ void c_start(void) {
     uint8_t *nxt = grid_b;
     uint32_t gen = 0;
 
-    puts("life64: Conway's Game of Life 64x64\n");
-    puts("life64: 40% density, infinite generations\n");
+    geos_puts("life64: Conway's Game of Life 64x64\n");
+    geos_puts("life64: 40% density, infinite generations\n");
 
     seed_grid(cur);
     render_grid(cur);
@@ -172,17 +138,9 @@ void c_start(void) {
 
         gen++;
         if ((gen & 0xFF) == 0) {
-            puts("life64: gen ");
-            /* cheap put_dec for gen counter */
-            if (gen == 0) { puts("0"); }
-            else {
-                char buf[12];
-                int i = 0;
-                uint32_t v = gen;
-                while (v > 0) { buf[i++] = '0' + (v % 10); v /= 10; }
-                while (i > 0) sbi_console_putchar(buf[--i]);
-            }
-            puts("\n");
+            geos_puts("life64: gen ");
+            geos_put_dec(gen);
+            geos_puts("\n");
         }
     }
 }

@@ -876,9 +876,17 @@ fn main() {
                 // Normal key mapping
                 if let Some(ch) = key_to_ascii_shifted(key, shift) {
                     vm.push_key(ch as u32);
+                    // Forward to RISC-V guest if running
+                    if let Some(ref riscv) = riscv_handle {
+                        riscv.send_input(ch);
+                    }
                 } else if let Some(ch) = key_to_ascii(key) {
                     // Fallback for special keys (Enter, arrows, etc.)
                     vm.push_key(ch as u32);
+                    // Forward to RISC-V guest if running
+                    if let Some(ref riscv) = riscv_handle {
+                        riscv.send_input(ch);
+                    }
                 }
                 continue;
             }

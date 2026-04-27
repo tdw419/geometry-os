@@ -45,6 +45,8 @@ pub enum ThreadControl {
     Resume,
     /// Reset VM: reload ELF from stored bytes, reset PC.
     Reset,
+    /// Forward a keyboard byte to the guest's UART RX.
+    Input(u8),
 }
 
 /// Status reports sent from the VM thread to the GUI thread.
@@ -123,6 +125,13 @@ impl RiscvVmHandle {
     /// Convenience: reset the VM.
     pub fn reset(&self) {
         self.control(ThreadControl::Reset);
+    }
+
+    /// Forward a keyboard byte to the guest's UART RX.
+    /// Call this from the GUI thread when a key is pressed and the
+    /// RISC-V program should receive it.
+    pub fn send_input(&self, byte: u8) {
+        let _ = self.control_tx.send(ThreadControl::Input(byte));
     }
 
     /// Shut down the VM thread and wait for it to finish.
@@ -284,6 +293,9 @@ fn vm_thread_main(
                 vm.bus.framebuf.on_present = Some(cb);
                 paused = false;
                 let _ = status_tx.send(VmStatus::ResetDone);
+            }
+            Ok(ThreadControl::Input(byte)) => {
+                vm.bus.uart.receive_byte(byte);
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => break,
