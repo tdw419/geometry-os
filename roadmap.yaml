@@ -7832,11 +7832,12 @@ phases:
   test_target: 5
 - id: phase-160
   title: Native RISC-V Linux Boot to Userspace
-  status: in_progress
-  priority: 99
-  goal: Boot Linux 6.14 natively in the RISC-V interpreter past idle into initramfs
-    userspace. The kernel currently reaches arch_cpu_idle (WFI loop) at 50M instructions.
-    Get it to exec /init and reach a shell prompt.
+  status: research
+  priority: 10
+  goal: "RESEARCH-ONLY: Boot Linux 6.14 natively in the RISC-V interpreter.
+    Demoted from priority 99 per SPEC.md — Geometry OS is pixel-native on bare-metal
+    RISC-V, not a Linux distribution. This phase stays as a research artifact.
+    New work targets the bare-metal mini-shell and Layer 3 tools."
   description: 'Phase-40 ''Boot Linux'' is marked done but that was the QEMU bridge
     approach.
 
