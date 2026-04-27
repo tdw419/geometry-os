@@ -16,6 +16,8 @@
  *   0        - Select eraser (black)
  *   F        - Fill mode (hold to paint while moving)
  *   C        - Clear canvas
+ *   P        - Save canvas to VFS surface (persist)
+ *   O        - Load canvas from VFS surface (open)
  *   ESC      - Quit
  *
  * Build: ./build.sh paint.c paint.elf
@@ -80,7 +82,7 @@ static void clear_canvas(void) {
 /* ---- Entry point ---- */
 void c_start(void) {
     geos_puts("paint: pixel-native interactive paint\n");
-    geos_puts("WASD=move Space=paint 1-9=colors 0=eraser C=clear F=fill ESC=quit\n");
+    geos_puts("WASD=move Space=paint 1-9=colors 0=eraser C=clear F=fill P=save O=load ESC=quit\n");
 
     /* Initialize canvas */
     clear_canvas();
@@ -175,6 +177,29 @@ void c_start(void) {
             draw_palette_bar(color_idx);
             geos_fb_present();
             geos_puts("paint: canvas cleared\n");
+        }
+        /* Save canvas to VFS surface */
+        else if (ch == 'p' || ch == 'P') {
+            geos_puts("paint: saving canvas...\n");
+            if (geos_save_canvas() == 0) {
+                geos_puts("paint: canvas saved!\n");
+            } else {
+                geos_puts("paint: save FAILED\n");
+            }
+        }
+        /* Load canvas from VFS surface */
+        else if (ch == 'o' || ch == 'O') {
+            geos_puts("paint: loading canvas...\n");
+            if (geos_load_canvas() == 0) {
+                /* Redraw palette bar and cursor on top of loaded canvas */
+                saved_pixel = geos_fb_read(cx, cy);
+                draw_palette_bar(color_idx);
+                geos_fb_pixel(cx, cy, 0xFFFF00FF);
+                geos_fb_present();
+                geos_puts("paint: canvas loaded!\n");
+            } else {
+                geos_puts("paint: no saved canvas found\n");
+            }
         }
         /* Quit */
         else if (ch == 0x1B) {

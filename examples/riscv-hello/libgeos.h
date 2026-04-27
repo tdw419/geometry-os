@@ -126,4 +126,34 @@ static inline void geos_wait_ms(uint32_t ms) {
     geos_wait_ticks((uint64_t)ms * GEOS_TICKS_PER_MS);
 }
 
+/* ---- VFS Pixel Surface ---- */
+
+/* MMIO base for the VFS Pixel Surface (256x256 RGBA, same format as framebuffer). */
+#define GEOS_VFS_BASE       0x70000000u
+#define GEOS_VFS_SIZE       (256 * 256 * 4)
+#define GEOS_VFS_CONTROL    (GEOS_VFS_BASE + GEOS_VFS_SIZE)
+
+/* Canvas save marker: written to VFS row 0, column 255 when canvas is saved.
+   Row 0 is the VFS directory index. Column 255 is unused by the directory
+   (directory uses pixels 0..1+file_count, max ~256 for 254 files).
+   Value 0x43414E56 = "CANV" in ASCII. */
+#define GEOS_CANVAS_MARKER  0x43414E56u
+#define GEOS_CANVAS_MARKER_COL 255
+
+/* Maximum number of framebuffer rows that can be saved (rows 1-255 of VFS). */
+#define GEOS_CANVAS_MAX_ROWS 255
+
+/* Save the framebuffer canvas to the VFS Pixel Surface.
+   Saves rows 0..254 of the framebuffer to VFS rows 1..255.
+   Row 255 of the framebuffer (typically UI chrome) is not saved.
+   Sets a marker pixel at VFS (0, 255) to signal valid data.
+   Returns 0 on success, -1 on error. */
+int geos_save_canvas(void);
+
+/* Load a previously saved canvas from the VFS Pixel Surface.
+   Checks for the canvas marker at VFS (0, 255). If present,
+   copies VFS rows 1..255 into framebuffer rows 0..254 and presents.
+   Returns 0 on success, -1 if no saved canvas found. */
+int geos_load_canvas(void);
+
 #endif /* LIBGEOS_H */

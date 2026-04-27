@@ -69,3 +69,43 @@ void geos_put_hex(uint32_t val) {
         sbi_console_putchar(hex[(val >> i) & 0xF]);
     }
 }
+
+/* ---- VFS Pixel Surface: Canvas Save/Load ---- */
+
+int geos_save_canvas(void) {
+    volatile uint32_t *fb = (volatile uint32_t *)GEOS_FB_BASE;
+    volatile uint32_t *vfs = (volatile uint32_t *)GEOS_VFS_BASE;
+
+    /* Copy framebuffer rows 0..254 to VFS rows 1..255.
+       Each row is 256 pixels (1024 bytes). We do word-by-word copies. */
+    for (int row = 0; row < GEOS_CANVAS_MAX_ROWS; row++) {
+        for (int col = 0; col < GEOS_FB_WIDTH; col++) {
+            vfs[(row + 1) * GEOS_FB_WIDTH + col] = fb[row * GEOS_FB_WIDTH + col];
+        }
+    }
+
+    /* Set canvas marker at VFS (row 0, col 255) */
+    vfs[GEOS_CANVAS_MARKER_COL] = GEOS_CANVAS_MARKER;
+
+    return 0;
+}
+
+int geos_load_canvas(void) {
+    volatile uint32_t *fb = (volatile uint32_t *)GEOS_FB_BASE;
+    volatile uint32_t *vfs = (volatile uint32_t *)GEOS_VFS_BASE;
+
+    /* Check for canvas marker */
+    if (vfs[GEOS_CANVAS_MARKER_COL] != GEOS_CANVAS_MARKER) {
+        return -1;
+    }
+
+    /* Copy VFS rows 1..255 into framebuffer rows 0..254 */
+    for (int row = 0; row < GEOS_CANVAS_MAX_ROWS; row++) {
+        for (int col = 0; col < GEOS_FB_WIDTH; col++) {
+            fb[row * GEOS_FB_WIDTH + col] = vfs[(row + 1) * GEOS_FB_WIDTH + col];
+        }
+    }
+
+    geos_fb_present();
+    return 0;
+}
