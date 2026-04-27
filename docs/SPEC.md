@@ -62,6 +62,14 @@ We **will not**:
 - Add opcodes without a program that needs them.
 - Use POSIX abstractions (file descriptors, processes, signals) where pixel-native equivalents already exist or are obvious.
 
+## Canonical framebuffer
+
+`vm.screen` (256×256, format `0x00RRGGBB`) is the single canonical pixel surface. All visible pixel state lives there. `render.rs` reads `vm.screen` and blits it to the display — it knows nothing about RISC-V or any other pixel source.
+
+**Writers.** GeOS bytecode programs write `vm.screen` directly via PSET and other pixel opcodes. RISC-V guests write to their own MMIO framebuffer (`framebuf.pixels`, format `0xRRGGBBAA`, mapped at `0x6000_0000`); on `fb_present` the host composites that buffer into `vm.screen` with alpha-keyed transparency (pixels with alpha=0 are skipped). From render's perspective, both are just pixel writers.
+
+**Readers.** A GeOS PEEK reads `vm.screen`. A RISC-V load from `0x6000_0000` reads `framebuf.pixels` — the guest's own MMIO buffer, not `vm.screen`. Cross-system reads (a RISC-V program reading pixels that a GeOS program drew, or vice versa) do not currently work. That unification (U3 — shared buffer with locking or same-thread execution) is gated on a real use case. No program needs it today.
+
 ## First milestone — bare-metal interactive mini-shell ✅ shipped 2026-04-27
 
 The first artifact that proves this thesis end-to-end. **Done.**

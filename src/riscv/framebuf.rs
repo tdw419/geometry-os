@@ -23,6 +23,17 @@ pub const FB_CONTROL_ADDR: u64 = FB_BASE + FB_PIXEL_SIZE as u64;
 /// Total MMIO range size (pixel buffer + control register).
 pub const FB_TOTAL_SIZE: u64 = FB_PIXEL_SIZE as u64 + 4;
 
+/// Convert a framebuffer pixel from SBI format (0xRRGGBBAA) to minifb format (0x00RRGGBB).
+///
+/// The SBI contract exposes pixels as 0xRRGGBBAA (alpha in low byte).
+/// minifb's `update_with_buffer` expects 0x00RRGGBB. Every consumer that
+/// blits framebuffer pixels to a minifb buffer should call this instead of
+/// shifting manually -- so the next render site doesn't independently forget.
+#[inline]
+pub fn pixel_to_minifb(rgba: u32) -> u32 {
+    rgba >> 8
+}
+
 /// Framebuffer width in pixels.
 pub const FB_WIDTH: usize = 256;
 /// Framebuffer height in pixels.

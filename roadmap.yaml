@@ -8224,6 +8224,78 @@ phases:
     scope_lines: 30
   scope_lines_total: 30
   test_target: 1
+
+- id: phase-164
+  title: "Fix Windowed Apps Halting Immediately After Launch"
+  status: planned
+  goal: "Windowed apps launched from the desktop (launch <app> --window) should stay open and render in their windows instead of halting instantly and being cleaned up"
+  description: "Dogfood QA found that all apps launched via 'launch <app> --window' halt within the first frame tick. The dashboard confirms: '[APP CLOSED: ball (PID 5)]'. The cleanup loop in main.rs (lines ~1742-1780) detects halted processes via is_halted() and destroys their windows. Root cause: programs loaded from programs/*.asm are standalone VM programs that hit HALT quickly in the windowed process context because they don't initialize WINSYS or enter a FRAME loop. The spawned processes need either: (a) a WINSYS stub that wraps the app in a FRAME loop, or (b) the programs need windowed-app entry points that set up the process state correctly. window_list always returns [] because windows are destroyed before any socket query can observe them."
+  deliverables:
+  - name: "Windowed app process stays alive after launch"
+    description: "When launching an app with --window, the spawned process must not halt immediately. Either inject a WINSYS event loop wrapper that calls FRAME, or modify the app loading to set up a proper execution context. The process should run until explicitly closed via window_close or process_kill."
+    status: todo
+    tasks:
+    - id: p164.d1.t1
+      title: "Diagnose why spawned processes halt on first tick"
+      status: todo
+      description: "Add debug logging to the process spawn path. Check if the loaded bytecode even reaches a FRAME opcode. The PC starts at app_base but the process may not have proper stack pointer, return address, or WINSYS context. Check SpawnedProcess::new() initialization."
+      scope_lines: 80
+    - id: p164.d1.t2
+      title: "Add WINSYS event loop wrapper for windowed apps"
+      status: todo
+      description: "Before loading app bytecode, prepend a WINSYS init sequence: (1) read window dimensions from process RAM, (2) call FRAME to yield, (3) jump to app entry point. Alternatively, wrap the app in a loop that calls FRAME after each iteration. The wrapper lives at a lower address and the app entry point is adjusted."
+      scope_lines: 120
+    - id: p164.d1.t3
+      title: "Verify window_list returns active windows after launch"
+      status: todo
+      description: "After fix, launch tetris --window via socket, wait 1 second, query window_list. Expect non-empty JSON with window id, title, pid, position. Also test with snake, ball, painter. The dashboard should show active apps instead of '[APP CLOSED: ...]'"
+      scope_lines: 40
+  scope_lines_total: 240
+  test_target: 3
+- id: phase-165
+  title: "Fix geo_mcp_server Zombie Instance Accumulation"
+  status: planned
+  goal: "Only one geo_mcp_server instance should be running at a time; stale instances must be cleaned up"
+  description: "Dogfood QA found 5 stale geo_mcp_server processes running simultaneously (PIDs: 10878 from Apr26, 431428, 457818, 660244, and one from 08:32). Each new agent session spawns a new geo_mcp_server via cargo run --bin geo_mcp_server, but previous instances are never killed. Since geo_mcp_server uses stdio (stdin/stdout for JSON-RPC), stale instances are zombies consuming PIDs and memory. The fix should either: (a) have the MCP server check for existing instances and kill them on startup, or (b) have the spawning agent/script kill old instances before launching new ones. Only the latest instance can connect to /tmp/geo_cmd.sock."
+  deliverables:
+  - name: "geo_mcp_server auto-cleanup on startup"
+    description: "When geo_mcp_server starts, it should check for and kill any existing geo_mcp_server processes before attempting to connect to the socket. Add a PID file at /tmp/geo_mcp_server.pid and kill the old PID on startup. Alternatively, add a lock file mechanism."
+    status: todo
+    tasks:
+    - id: p165.d1.t1
+      title: "Add stale instance cleanup to geo_mcp_server startup"
+      status: todo
+      description: "In mcp_server.rs main(), before connecting to the Unix socket: (1) read /tmp/geo_mcp_server.pid if it exists, (2) check if that PID is still running and is a geo_mcp_server, (3) if so, kill it, (4) write own PID to the pidfile. Use nix::unistd::kill(0) to check liveness. This ensures only one instance runs at a time."
+      scope_lines: 60
+    - id: p165.d1.t2
+      title: "Add PID file cleanup on graceful exit"
+      status: todo
+      description: "Register a Ctrl+C handler or use Drop to clean up /tmp/geo_mcp_server.pid when the server exits. This prevents stale PID files from interfering with future instances."
+      scope_lines: 20
+  scope_lines_total: 80
+  test_target: 1
+- id: phase-166
+  title: "Fix Terminal Input Not Working in Desktop Mode"
+  status: planned
+  goal: "Terminal type and inject_text commands should produce visible output in the desktop terminal"
+  description: "Dogfood QA found that in desktop mode, 'type echo hello' and 'inject_text hello' are acknowledged by the socket but the scrollback never updates past 'Geometry OS v1.0.0'. The cursor moves (from 0,0 to 0,10) but no text appears in the scrollback buffer. This suggests the desktop.asm terminal handler isn't processing injected keystrokes correctly, or the injected keys go to the map movement handler instead of the terminal. The desktop has a command bar (/ to enter type mode) but inject_text doesn't activate it."
+  deliverables:
+  - name: "inject_text routes to desktop terminal correctly"
+    description: "When in desktop/terminal mode, inject_text should type into the active terminal session. The desktop.asm command bar needs to be activated, or the terminal line editor needs to receive the injected characters. The scrollback should update with the typed text and any shell response."
+    status: todo
+    tasks:
+    - id: p166.d1.t1
+      title: "Investigate inject_text path in desktop mode"
+      status: todo
+      description: "Trace the inject_text socket command through main.rs to the VM. Check if injected keys are being delivered to the desktop.asm input handler or to a different key buffer. The desktop.asm reads keyboard input from RAM[0xFFE] or similar -- verify inject_text writes there. Check if the desktop terminal (if any) has a separate input buffer from the map movement handler."
+      scope_lines: 60
+    - id: p166.d1.t2
+      title: "Add desktop terminal type mode activation via socket"
+      status: todo
+      description: "Add a socket command 'terminal_type <text>' that: (1) activates the desktop command bar (equivalent to pressing /), (2) types the text, (3) presses Enter. Alternatively, fix inject_text to auto-activate the terminal when in desktop mode. Verify with scrollback showing the typed text."
+      scope_lines: 80
+  scope_lines_total: 140
+  test_target: 2
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

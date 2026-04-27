@@ -3984,6 +3984,48 @@ fn main() {
             cursor_blink_timer = std::time::Instant::now();
         }
 
+        // ── RISC-V → canonical framebuffer composite (Phase C, U2) ────
+        // RISC-V guests write to framebuf.pixels (0xRRGGBBAA) via MMIO.
+        // On fb_present, frames arrive here. We composite them into vm.screen
+        // (the single canonical 256×256 surface, 0x00RRGGBB) with alpha keying.
+        // This must happen BEFORE render() so render sees the latest pixels.
+        if let Some(ref mut handle) = riscv_handle {
+            // Drain all available frames, keep only the latest
+            loop {
+                match handle.try_recv_frame() {
+                    Ok(frame) => riscv_latest_frame = Some(frame),
+                    Err(_) => break,
+                }
+            }
+            // Check for halt
+            loop {
+                match handle.try_recv_status() {
+                    Ok(VmStatus::Halted { reason, .. }) => {
+                        status_msg = format!("[riscv: halted: {}]", reason);
+                        riscv_handle = None;
+                        break;
+                    }
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+        }
+        // Composite latest RISC-V frame into vm.screen (canonical framebuffer)
+        if let Some(ref frame) = riscv_latest_frame {
+            let fb_w = frame.width.min(256);
+            let fb_h = frame.height.min(256);
+            for y in 0..fb_h {
+                for x in 0..fb_w {
+                    let rgba = frame.pixels[y * frame.width + x];
+                    // Alpha key: transparent pixels (alpha=0) don't overwrite
+                    if (rgba & 0xFF) != 0 {
+                        let color = riscv::framebuf::pixel_to_minifb(rgba);
+                        vm.screen[y * 256 + x] = color;
+                    }
+                }
+            }
+        }
+
         // ── Render ───────────────────────────────────────────────
         if fullscreen_map && is_running {
             // Fullscreen map: VM screen scaled 3x to fill window
@@ -4052,48 +4094,6 @@ fn main() {
                 cursor_style,
                 cursor_blink_on,
             );
-        }
-
-        // ── RISC-V live framebuffer blit (Phase B, b.2.2) ────────────
-        // If a RISC-V program is running, overlay its framebuffer
-        // on the VM screen area (640, 64) → (896, 320).
-        if let Some(ref mut handle) = riscv_handle {
-            // Drain all available frames, keep only the latest
-            loop {
-                match handle.try_recv_frame() {
-                    Ok(frame) => riscv_latest_frame = Some(frame),
-                    Err(_) => break,
-                }
-            }
-            // Check for halt
-            loop {
-                match handle.try_recv_status() {
-                    Ok(VmStatus::Halted { reason, .. }) => {
-                        status_msg = format!("[riscv: halted: {}]", reason);
-                        riscv_handle = None;
-                        break;
-                    }
-                    Ok(_) => {}
-                    Err(_) => break,
-                }
-            }
-        }
-        if let Some(ref frame) = riscv_latest_frame {
-            let fb_w = frame.width.min(256);
-            let fb_h = frame.height.min(256);
-            for y in 0..fb_h {
-                for x in 0..fb_w {
-                    let color = frame.pixels[y * frame.width + x];
-                    if color != 0 {
-                        // Skip transparent (black) pixels -- let GeOS VM show through
-                        let sx = VM_SCREEN_X + x;
-                        let sy = VM_SCREEN_Y + y;
-                        if sx < WIDTH && sy < HEIGHT {
-                            buffer[sy * WIDTH + sx] = color;
-                        }
-                    }
-                }
-            }
         }
 
         // ── Desktop polish: clock + system tray overlay ──────────────

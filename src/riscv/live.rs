@@ -416,16 +416,16 @@ mod tests {
         // Wait for the VM to halt (hello_asm should finish quickly)
         // May need a few retries since the VM runs asynchronously
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        let final_status = loop {
+        let final_status: Result<VmStatus, String> = loop {
             match handle.try_recv_status() {
                 Ok(s) => break Ok(s),
                 Err(TryRecvError::Empty) => {
                     if std::time::Instant::now() > deadline {
-                        break Err("timeout");
+                        break Err("timeout".into());
                     }
                     std::thread::sleep(std::time::Duration::from_millis(50));
                 }
-                Err(e) => break Err(format!("{:?}", e).leak()),
+                Err(e) => break Err(format!("{:?}", e)),
             }
         };
 

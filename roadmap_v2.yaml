@@ -226,50 +226,56 @@ phases:
   # ── Phase C: Pixel VM Convergence ───────────────────────────────
   - id: "phase-C"
     title: "Pixel VM Convergence"
-    status: "future"
-    goal: "Bridge MMIO framebuffer to the canonical pixel VM screen bidirectionally"
+    status: "complete"
+    goal: "Unify RISC-V framebuffer and GeOS pixel VM into a single canonical surface"
     description: >
-      The pixel VM (Geometry OS's native 32x16 tile canvas with 512x512 display)
-      and the RISC-V MMIO framebuffer (256x256 RGBA) are currently separate surfaces.
-      This phase makes them the same thing -- RISC-V guest programs draw to what
-      IS the pixel VM screen, not a separate buffer. This is the true "pixel-native"
-      convergence.
+      RISC-V guest framebuffer composites into vm.screen (the canonical 256x256
+      surface) via alpha-keyed writes. render.rs is the sole display path -- it
+      knows nothing about RISC-V. Cross-system reads (U3) are gated on a future
+      use case per SPEC.md.
     dependencies:
       - source: "phase-B"
         target: "phase-C"
         type: "hard"
         reason: "Need the GUI bridge working before we can converge the surfaces"
     deliverables:
-      - name: "Unified pixel surface"
+      - name: "Unified pixel surface (write direction)"
         description: >
-          RISC-V framebuffer writes go directly to the pixel VM's display surface.
-          Pixel VM opcodes can also read what the RISC-V program drew. One surface,
-          two access paths (opcodes and MMIO). The 256x256 -> 512x512 scaling happens
-          in the display pipeline, not in the guest's mental model.
-        status: "todo"
+          RISC-V fb_present composites framebuf.pixels into vm.screen with alpha
+          keying and format conversion (0xRRGGBBAA -> 0x00RRGGBB via pixel_to_minifb).
+          vm.screen is the single canonical surface. render.rs blits it to display.
+          GeOS opcodes and RISC-V MMIO are both just pixel writers.
+        status: "done"
         acceptance_criteria:
-          - description: "RISC-V write at (x,y) appears as pixel VM read at same logical position"
-            validation: "Integration test: write via MMIO, read via pixel VM opcode"
-            met: false
-          - description: "No duplicate buffer -- single source of truth for pixels"
-            validation: "Memory audit: one Vec<u32> for the display surface"
-            met: false
+          - description: "No duplicate display blit -- render.rs is the only path from vm.screen to display"
+            validation: "Code review: RISC-V composite writes vm.screen, not the raw buffer"
+            met: true
+          - description: "RISC-V pixels appear with correct colors on the display"
+            validation: "Visual: life64 dead cells are rgb(6,6,14), alive gradient matches formula"
+            met: true
+          - description: "Cells animate between frames"
+            validation: "Two-frame comparison shows 10%+ pixel change"
+            met: true
         tasks:
           - id: "c.1.1"
-            title: "Map MMIO framebuffer writes to pixel VM canvas buffer"
-            status: "todo"
+            title: "Composite RISC-V frames into vm.screen before render()"
+            status: "done"
             description: >
-              When guest writes to 0x6000_0000 + offset, update the same buffer
-              that the pixel VM reads from. May need coordinate transform if
-              the pixel VM uses a different pixel format or stride.
-            files: ["src/riscv/framebuf.rs", "src/vm/types.rs", "src/main.rs"]
+              RISC-V frame receive moved before render() call. Writes vm.screen
+              instead of raw display buffer. Alpha key: transparent pixels (alpha=0)
+              don't overwrite. Format conversion via pixel_to_minifb() at the
+              framebuf boundary. render.rs now genuinely ignorant of RISC-V.
+            files: ["src/main.rs", "src/render.rs", "src/riscv/framebuf.rs"]
           - id: "c.1.2"
-            title: "Integration test for bidirectional pixel access"
-            status: "todo"
+            title: "Cross-system reads (U3) -- deferred"
+            status: "deferred"
             description: >
-              Test that RISC-V MMIO writes are visible through pixel VM opcodes
-              and vice versa.
-            files: ["src/riscv/tests.rs"]
+              RISC-V loads from 0x6000_0000 read framebuf.pixels, not vm.screen.
+              GeOS PEEK reads vm.screen, not framebuf.pixels. Cross-system reads
+              need shared buffer with locking or same-thread execution. Gated on
+              a real use case per SPEC.md "Canonical framebuffer" section. No
+              program needs this today.
+            files: []
     risks:
       - "Pixel VM may use a different pixel format (RGBA vs ARGB vs indexed)"
       - "512x512 display vs 256x256 guest resolution requires scaling decisions"
@@ -390,9 +396,9 @@ phases:
             files: ["ROADMAP.md"]
 
 global_risks:
-  - "Interpreter performance ceiling: 56 MIPS may not scale to complex guest programs"
-  - "Main app render loop coupling: hard to inject external surfaces without refactoring"
+  - "Interpreter performance ceiling: 52 MIPS may not scale to complex guest programs"
   - "Premature abstraction: libgeos.c should only be extracted when truly needed"
+  - "Cross-system pixel reads (U3) need locking or same-thread execution when a use case appears"
 
 conventions:
   - "Build all RISC-V examples with -march=rv32imac_zicsr -mabi=ilp32"
@@ -402,9 +408,11 @@ conventions:
   - "SPEC = thesis. roadmap_v2 = arc. OpenSpec = per-change diff. Three docs, three jobs."
 
 meta:
-  interpreter_mips: 56
+  interpreter_mips: 52
   framebuffer_size: "256x256"
   framebuffer_addr: "0x6000_0000"
-  pixel_format: "0xRRGGBBAA (alpha ignored)"
+  pixel_format_riscv: "0xRRGGBBAA (SBI contract, alpha in low byte)"
+  pixel_format_display: "0x00RRGGBB (minifb, vm.screen canonical surface)"
+  canonical_surface: "vm.screen (256x256 Vec<u32>)"
   sbi_extension_id: "0x47454F00"
   dtb_isa: "rv32imac"
