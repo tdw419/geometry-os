@@ -39,7 +39,7 @@ riscv64-linux-gnu-gcc \
     -nostdlib \
     -nostartfiles \
     -fno-pic \
-    -march=rv32imac \
+    -march=rv32imac_zicsr \
     -mabi=ilp32 \
     -T hello.ld \
     -O2 \

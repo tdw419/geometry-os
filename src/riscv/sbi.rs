@@ -89,6 +89,9 @@ pub struct Sbi {
     /// Set by handle_ecall when DBCN_CONSOLE_WRITE is called.
     /// The caller must read from bus memory and fulfill the request.
     pub dbcn_pending_write: Option<(u64, usize)>,
+    /// Pending DBCN console read byte.
+    /// Set by handle_ecall when DBCN_CONSOLE_READ has data.
+    pub dbcn_pending_read: Option<u8>,
     /// Pending GEO_VFS_READ request. DEPRECATED -- no longer set by handle_ecall.
     /// Retained for struct compatibility. Will be removed in a future version.
     #[deprecated(note = "Use Pixel VFS Surface")]
@@ -105,6 +108,7 @@ impl Sbi {
             shutdown_requested: false,
             ecall_log: Vec::new(),
             dbcn_pending_write: None,
+            dbcn_pending_read: None,
             geo_vfs_read_pending: None,
         }
     }
@@ -169,8 +173,16 @@ impl Sbi {
                     }
                     Some((SBI_SUCCESS as u32, 0))
                 } else {
-                    // Legacy SBI_CONSOLE_GETCHAR: return -1
-                    Some((0xFFFFFFFF_u32, 0))
+                    // Legacy SBI_CONSOLE_GETCHAR: drain UART rx_buf
+                    if !uart.rx_buf.is_empty() {
+                        let ch = uart.rx_buf.remove(0) as u32;
+                        if uart.rx_buf.is_empty() {
+                            uart.lsr &= !0x01; // Clear Data Ready
+                        }
+                        Some((ch, 0))
+                    } else {
+                        Some((0xFFFFFFFF_u32, 0)) // -1 = no char available
+                    }
                 }
             }
             SBI_SET_TIMER => {
@@ -300,8 +312,20 @@ impl Sbi {
                         Some((SBI_SUCCESS as u32, num_bytes as u32))
                     }
                     SBI_DBCN_CONSOLE_READ => {
-                        // No input available
-                        Some((SBI_ERR_FAILURE as u32, 0))
+                        // Read bytes from UART rx_buf.
+                        // Since handle_ecall doesn't have &mut Bus, we use
+                        // a simpler approach: return the first available byte in a0.
+                        if !uart.rx_buf.is_empty() {
+                            let b = uart.rx_buf.remove(0);
+                            if uart.rx_buf.is_empty() {
+                                uart.lsr &= !0x01; // Clear Data Ready
+                            }
+                            // Return (success, num_bytes_read=1, byte in a0 via pending)
+                            self.dbcn_pending_read = Some(b);
+                            Some((SBI_SUCCESS as u32, 1))
+                        } else {
+                            Some((SBI_ERR_FAILURE as u32, 0))
+                        }
                     }
                     SBI_DBCN_CONSOLE_WRITE_BYTE => {
                         // Write single byte: a0 = byte value
