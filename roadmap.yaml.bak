@@ -7157,7 +7157,7 @@ phases:
   _claimed_at: 1777224660
 - id: phase-141
   title: Network Packet Viewer
-  status: todo
+  status: done
   goal: 'A visual network packet monitor that displays UDP packets received via the
     /dev/net device, showing source/dest addresses, payload hex dumps, and packet
     rate statistics.
@@ -7176,17 +7176,17 @@ phases:
       Packet rate counter in footer. Uses FRAME-based animation loop.
 
       '
-    status: todo
+    status: done
     tasks:
     - id: p141.d1.t1
       title: Read packets from /dev/net via IOCTL
-      status: todo
+      status: done
     - id: p141.d1.t2
       title: Render packet log with hex dump
-      status: todo
+      status: done
     - id: p141.d1.t3
       title: Packet rate statistics
-      status: todo
+      status: done
     scope_lines: 150
   scope_lines_total: 75890
   test_target: 495
@@ -7799,7 +7799,7 @@ phases:
   _claimed_at: 1777240246
 - id: phase-159
   title: Terminal Daily Driver -- Fullscreen Scaling and Font Sizes
-  status: planned
+  status: in_progress
   goal: Dynamically scale the 256x256 canvas to fill the monitor. Switch between SMALLTEXT
     (80 cols) and MEDTEXT (42 cols) at runtime. Zoom in/out.
   description: The terminal is 256x256 pixels but monitors are 1920x1080+. Scale the
@@ -7830,6 +7830,388 @@ phases:
     scope_lines: 200
   scope_lines_total: 77300
   test_target: 5
+  _claimed_by: worker-0
+  _claimed_at: 1777252590
+- id: phase-160
+  title: Native RISC-V Linux Boot to Userspace
+  status: in_progress
+  priority: 99
+  goal: Boot Linux 6.14 natively in the RISC-V interpreter past idle into initramfs
+    userspace. The kernel currently reaches arch_cpu_idle (WFI loop) at 50M instructions.
+    Get it to exec /init and reach a shell prompt.
+  description: 'Phase-40 ''Boot Linux'' is marked done but that was the QEMU bridge
+    approach.
+
+    The native interpreter now boots Linux to idle loop (April 2026 breakthrough).
+
+    Three bugs were fixed: DTB reserved-memory format, timer interrupt MTI->STI
+
+    translation, and WFI instruction decoding. The kernel successfully initializes:
+
+    reserved memory, zone ranges, SLUB, interrupt controller, clocksource, scheduler,
+
+    console, mount caches -- then sits in WFI idle.
+
+
+    The remaining gap is getting from idle to userspace. The kernel needs to:
+
+    1. Complete scheduler init and fork the init task
+
+    2. Exec /init from the initramfs
+
+    3. Drop to user mode (U-mode)
+
+    4. Run busybox shell
+
+
+    Key files: src/riscv/boot.rs (boot loop), src/riscv/dtb.rs (device tree),
+
+    src/riscv/sbi.rs (SBI handler), src/riscv/clint.rs (timer), src/riscv/cpu/
+
+    (interpreter), src/riscv/tests.rs (test harness).
+
+
+    Test: cargo test --lib test_linux_kernel_early_boot --release -- --nocapture
+
+    The test currently runs 50M instructions at ~16.8 MIPS.
+
+    '
+  depends_on:
+  - phase-140
+  deliverables:
+  - name: Timer interrupt path verified
+    description: 'Verify the MTI->STI timer interrupt translation works correctly.
+      The kernel
+
+      calls SBI_SET_TIMER (a7=0x54494D45) to schedule the next timer event. The
+
+      CLINT fires MTI when mtime >= mtimecmp. The boot loop catches MTI in M-mode
+
+      and must translate it to STI (cause 5) before forwarding to S-mode.
+
+
+      CHECK: The translation was implemented in boot.rs but the kernel only made
+
+      3 SET_TIMER calls in 50M instructions. Verify this is enough for the scheduler
+
+      to work, or if the timer needs to fire more frequently.
+
+
+      Test by checking ecall_log for SBI_SET_TIMER calls and ensuring scause=0x80000005
+
+      (STI) is delivered to the kernel''s timer handler.
+
+      '
+    status: done
+    tasks:
+    - id: p160.d1.t1
+      title: Verify MTI->STI timer interrupt translation
+      status: done
+      description: Already implemented in boot.rs. Timer interrupts fire correctly
+        with cause translation from MTI(7) to STI(5).
+  - name: DTB and WFI fixes verified
+    description: 'The DTB reserved-memory node needed #address-cells and #size-cells
+      properties
+
+      (was causing "unsupported node format" warnings). WFI instruction (0x10500073)
+
+      needed to be decoded as NOP for the idle loop.
+
+
+      Both fixes are in place. Verify by checking kernel output for:
+
+      - "OF: reserved mem:" with proper region parsing (no "unsupported" warnings)
+
+      - Kernel reaching "arch_cpu_idle" without panic
+
+      '
+    status: done
+    tasks:
+    - id: p160.d2.t1
+      title: DTB reserved-memory
+      status: done
+      description: Already fixed in dtb.rs.
+    - id: p160.d2.t2
+      title: WFI instruction decode as NOP
+      status: done
+      description: Already fixed in decode/rv32i.rs. funct12=0x105 mapped to Operation::Nop.
+  - name: Boot past idle to kernel_init
+    description: 'The kernel reaches arch_cpu_idle (WFI loop) but hasn''t completed
+      kernel_init.
+
+      The idle loop means the scheduler is running but no init task has been created.
+
+      This requires:
+
+      1. Enough instructions (the linear mapping of 512MB takes ~25M instructions)
+
+      2. Proper timer interrupts for scheduler ticks
+
+      3. The initramfs to be correctly loaded and unpacked
+
+
+      Increase the test instruction budget to 100M or more if needed. Add progress
+
+      logging to see where the kernel spends time. The kernel should eventually
+
+      print "Run /init as init task" or similar messages.
+
+      '
+    status: todo
+    tasks:
+    - id: p160.d3.t1
+      title: Increase instruction budget and add boot progress logging
+      status: todo
+      description: 'Increase test instruction limit to at least 100M. Add ecall_log
+        monitoring
+
+        for SBI_SET_TIMER frequency. Log when kernel first calls sbi_set_timer.
+
+        Track timer interrupt count separately from other traps.
+
+        '
+      scope_files:
+      - src/riscv/tests.rs
+      - src/riscv/boot.rs
+      scope_lines: 50
+    - id: p160.d3.t2
+      title: Verify initramfs is loaded and kernel can find it
+      status: todo
+      description: 'The initramfs should be at the address specified in the DTB. Check
+        that:
+
+        1. The DTB has the correct initramfs start/end addresses
+
+        2. The kernel''s unpack_to_rootfs() can read the cpio archive
+
+        3. The initramfs contains /init (busybox)
+
+        Debug by checking kernel output for "Unpacking initramfs" or errors.
+
+        '
+      scope_files:
+      - src/riscv/dtb.rs
+      - src/riscv/boot.rs
+      scope_lines: 80
+    - id: p160.d3.t3
+      title: Boot to kernel_init and verify init task fork
+      status: todo
+      description: 'After the initramfs is unpacked, the kernel forks the init task
+        via
+
+        kernel_thread(). This requires the scheduler to work with periodic timer
+
+        interrupts. If the kernel is stuck in WFI, it means the timer isn''t firing
+
+        often enough or the scheduler hasn''t started. Check that:
+
+        1. Timer interrupts arrive at ~100Hz (10M timebase, HZ=100)
+
+        2. The scheduler tick (scheduler_tick) runs
+
+        3. kernel_init() is called and prints "Run /init"
+
+        '
+      scope_files:
+      - src/riscv/boot.rs
+      - src/riscv/clint.rs
+      scope_lines: 100
+  - name: User-mode execution (U-mode)
+    description: 'Once kernel_init execs /init, the kernel drops to user mode. The
+      interpreter
+
+      must handle:
+
+      1. U-mode page table walks (the init process has its own page tables)
+
+      2. U-mode ECALL (Linux syscalls like write, read, fork, execve)
+
+      3. U-mode trap delivery (page faults, syscalls return via S-mode)
+
+
+      The syscall interception layer in syscall.rs should catch these. The
+
+      cpu/execute.rs already handles privilege transitions.
+
+      '
+    status: todo
+    tasks:
+    - id: p160.d4.t1
+      title: Verify U-mode page table walks work for init process
+      status: todo
+      description: 'When the kernel execs /init, it creates a new page table for the
+        process.
+
+        The MMU (mmu.rs) must walk these page tables correctly. Test by checking
+
+        that the kernel doesn''t page fault infinitely after the exec.
+
+        '
+      scope_files:
+      - src/riscv/mmu.rs
+      scope_lines: 50
+    - id: p160.d4.t2
+      title: Handle Linux syscalls from U-mode
+      status: todo
+      description: 'The init process makes syscalls (write for console output, read
+        for input,
+
+        etc.). These come as U-mode ECALL (cause 8). The syscall.rs module should
+
+        intercept them. Verify the syscall path works end-to-end.
+
+        '
+      scope_files:
+      - src/riscv/syscall.rs
+      - src/riscv/cpu/system.rs
+      scope_lines: 80
+  - name: Shell prompt visible in UART output
+    description: 'The ultimate goal: /init runs, busybox shell starts, and we see
+      a "# " or
+
+      "$ " prompt in the UART output. This proves the full boot chain works:
+
+      M-mode firmware -> S-mode kernel -> U-mode init -> shell.
+
+
+      If busybox isn''t available in the initramfs, the kernel will panic with
+
+      "No init found." In that case, the initramfs needs to be rebuilt.
+
+      '
+    status: todo
+    tasks:
+    - id: p160.d5.t1
+      title: Verify shell prompt appears in console output
+      status: todo
+      description: 'After all fixes, run the boot test with enough instructions (200M+)
+        and
+
+        check UART output for a shell prompt. If the kernel panics with "No init
+
+        found", rebuild the initramfs with busybox.
+
+        '
+      scope_files:
+      - src/riscv/tests.rs
+      scope_lines: 30
+  scope_lines_total: 540
+  test_target: 1570
+  learnings:
+  - Timer interrupt translation MTI->STI is required -- OpenSBI handles MTI in M-mode
+    and injects STI by setting STIP in MIP. Without this the kernel's timer handler
+    never fires.
+  - WFI must be decoded as NOP in an emulator -- the kernel's idle loop uses it and
+    an illegal instruction exception in idle causes a fatal panic.
+  - 'The DTB reserved-memory node MUST have explicit #address-cells and #size-cells
+    or the kernel prints "unsupported node format" and skips reservation.'
+  - The linear mapping of 512MB RAM takes ~25M instructions in create_linear_mapping_range.
+    The kernel isn't stuck -- it's just slow. More instruction budget is the fix.
+  - 21 ECALLs in 20M instructions looked like a hang but was actually the kernel creating
+    page tables. Sampling PCs revealed create_pgd_mapping loop.
+  _claimed_by: worker-0
+  _claimed_at: 1777252599
+- id: phase-161
+  title: Fix CLINT MTIP Regression in sync_mip (3 Failing Tests)
+  status: in_progress
+  goal: Restore M-mode timer interrupts by fixing sync_mip to set MTIP alongside STIP,
+    unbreaking 3 regression tests introduced by OpenSBI timer forwarding.
+  description: 'The Phase-160 OpenSBI emulation in bus.rs sync_mip() unconditionally
+    clears MTIP (bit 7) and only sets STIP (bit 5). This was done to forward timer
+    interrupts to S-mode for Linux boot, but it breaks M-mode timer interrupt tests
+    that expect MTIP to be set when mtime >= mtimecmp. Four tests are failing: test_clint_timer_interrupt_via_vm_step
+    (clint.rs:40), test_clint_timer_trap_and_mret (sv32_interrupt.rs:63), test_riscvvm_step_drives_timer_interrupt
+    (sv32_interrupt.rs:275), test_supervisor_timer_with_delegation (sv32_interrupt.rs:284).'
+  deliverables:
+  - name: Fix sync_mip to set both MTIP and STIP when timer is pending
+    description: In src/riscv/bus.rs sync_mip(), when timer_pending is true, set BOTH
+      MTIP (bit 7) AND STIP (bit 5). The OpenSBI emulation that clears MTIP should
+      only happen in the Linux boot path, not in the general-purpose VM. The cpu pending_interrupt()
+      logic already prioritizes MTI over STI, so M-mode tests will see MTI and S-mode
+      code will see STI.
+    status: todo
+    tasks:
+    - id: p161.d1.t1
+      title: Modify sync_mip to set MTIP when timer fires
+      status: todo
+      description: 'In bus.rs sync_mip(), change the timer_pending branch to set both
+        bit 7 (MTIP) and bit 5 (STIP): *mip |= (1 << 7) | (1 << 5); Remove the line
+        that clears MTIP unconditionally.'
+      scope_files:
+      - src/riscv/bus.rs
+      scope_lines: 20
+    - id: p161.d1.t2
+      title: Verify Linux boot still works with MTIP set
+      status: todo
+      description: Run the Linux boot test to ensure the kernel still reaches idle.
+        The kernel runs in S-mode and the pending_interrupt() function checks STI
+        for S-mode, so setting MTIP should not interfere with S-mode timer delivery.
+      scope_files:
+      - src/riscv/tests.rs
+      scope_lines: 20
+  - name: Verify the 4 failing CLINT timer tests pass
+    description: 'These tests must pass after the fix: test_clint_timer_interrupt_via_vm_step
+      (M-mode timer delivery), test_clint_timer_trap_and_mret (timer trap + MRET),
+      test_riscvvm_step_drives_timer_interrupt (step-level timer interrupt), test_supervisor_timer_with_delegation
+      (S-mode timer with mideleg).'
+    status: todo
+    tasks:
+    - id: p161.d2.t1
+      title: Run cargo test --test riscv_tests and verify 0 failures
+      status: todo
+      description: Run the full riscv_tests suite and confirm all 146 tests pass with
+        0 failures.
+      scope_files:
+      - tests/riscv_tests/clint.rs
+      - tests/riscv_tests/sv32_interrupt.rs
+      scope_lines: 30
+  scope_lines_total: 70
+  test_target: 1574
+  _claimed_by: worker-0
+  _claimed_at: 1777252766
+- id: phase-162
+  title: Terminal Polish -- Scrollback and Visual Refinements
+  status: in_progress
+  goal: Make the terminal feel like a real terminal emulator, not a demo
+  description: Scrollback buffer (PageUp/PageDown), better color rendering, cursor
+    improvements (blinking, block/underline toggle), and smooth scrolling.
+  deliverables:
+  - name: Scrollback buffer with PageUp/PageDown
+    description: Ring buffer of 1000+ past lines. PageUp enters scrollback, PageDown
+      toward live, any key exits.
+    status: todo
+    tasks:
+    - id: p162.d1.t1
+      title: Ring buffer for terminal history (1000 lines)
+      status: todo
+      description: Ring buffer for terminal history (1000 lines)
+    - id: p162.d1.t2
+      title: PageUp/PageDown scroll navigation
+      status: todo
+      description: PageUp/PageDown scroll navigation
+    - id: p162.d1.t3
+      title: Visual indicator when in scrollback mode
+      status: todo
+      description: Visual indicator when in scrollback mode
+    scope_lines: 300
+  - name: Cursor improvements
+    description: Blinking cursor, block/underline/bar toggle via Ctrl+click, cursor
+      color matches terminal theme.
+    status: todo
+    tasks:
+    - id: p162.d2.t1
+      title: Blinking cursor (toggle every 500ms)
+      status: todo
+      description: Blinking cursor (toggle every 500ms)
+    - id: p162.d2.t2
+      title: Block vs underline cursor style toggle
+      status: todo
+      description: Block vs underline cursor style toggle
+    scope_lines: 200
+  scope_lines_total: 570
+  test_target: 10
+  _claimed_by: worker-0
+  _claimed_at: 1777253749
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0

@@ -152,11 +152,11 @@ pub fn source_from_canvas(canvas_buffer: &[u32]) -> String {
 
 /// Run the Hermes LLM agent loop, but write all output to the canvas buffer
 /// instead of stdout. This is the visual/canvas version of run_hermes_loop().
-pub fn ensure_cursor_visible(cursor_row: &usize, scroll_offset: &mut usize) {
+pub fn ensure_cursor_visible(cursor_row: &usize, scroll_offset: &mut usize, vis_rows: usize) {
     if *cursor_row < *scroll_offset {
         *scroll_offset = *cursor_row;
-    } else if *cursor_row >= *scroll_offset + CANVAS_ROWS {
-        *scroll_offset = *cursor_row - CANVAS_ROWS + 1;
+    } else if *cursor_row >= *scroll_offset + vis_rows {
+        *scroll_offset = cursor_row.saturating_sub(vis_rows - 1);
     }
 }
 
@@ -299,6 +299,7 @@ pub fn advance_cursor(
     row: &mut usize,
     col: &mut usize,
     scroll_offset: &mut usize,
+    vis_rows: usize,
 ) {
     *col += 1;
     if *col >= CANVAS_COLS {
@@ -308,7 +309,7 @@ pub fn advance_cursor(
             *row = CANVAS_MAX_ROWS - 1;
         }
     }
-    ensure_cursor_visible(row, scroll_offset);
+    ensure_cursor_visible(row, scroll_offset, vis_rows);
 }
 
 pub fn list_asm_files(dir: &str) -> Vec<String> {

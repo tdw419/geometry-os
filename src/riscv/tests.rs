@@ -372,8 +372,8 @@ fn test_linux_kernel_early_boot() {
     let (mut vm, result) = RiscvVm::boot_linux(
         &kernel_data,
         initramfs_data.as_deref(),
-        512,        // 512MB RAM (kernel needs ~305MB)
-        50_000_000, // 50M instructions (linear mapping + timer init needs more)
+        512,           // 512MB RAM (kernel needs ~305MB)
+        1_000_000_000, // 1B instructions -- push through full init
         bootargs,
     )
     .expect("operation should succeed");
@@ -436,6 +436,13 @@ fn test_linux_kernel_early_boot() {
 
     // CPU ecall count
     eprintln!("CPU ecall_count: {}", vm.cpu.ecall_count);
+
+    // UART MMIO write count (captures ttyS0 output after earlycon is disabled)
+    eprintln!(
+        "UART write_count: {}, tx_buf len: {}",
+        vm.bus.uart.write_count,
+        vm.bus.uart.tx_buf.len()
+    );
 
     // Check CSRs
     eprintln!(

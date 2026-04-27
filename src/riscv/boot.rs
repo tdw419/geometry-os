@@ -417,6 +417,15 @@ impl RiscvVm {
         vm.cpu.csr.medeleg = 0xA109;
         vm.cpu.csr.mideleg = 0x222;
 
+        // Enable M-mode interrupts in MIE CSR.
+        // On real hardware, OpenSBI sets MTIE (bit 7) so timer interrupts from CLINT
+        // are delivered to M-mode, where OpenSBI forwards them to S-mode as STI.
+        // Without MTIE, the kernel sets SBI_SET_TIMER but mtimecmp expiry sets MTIP
+        // which is never serviced -- the scheduler never wakes and the kernel stalls
+        // in do_idle indefinitely.
+        // Also enable MSIE (bit 3) for IPI and MEIE (bit 11) for PLIC.
+        vm.cpu.csr.mie = (1 << 7) | (1 << 3) | (1 << 11); // MTIE | MSIE | MEIE
+
         // Set SATP to boot page table (Sv32 mode, PPN = boot_pt_addr / 4096).
         // This enables MMU before entering the kernel so that the kernel's
         // _start code can use virtual addresses (e.g., j 0xC0001084).

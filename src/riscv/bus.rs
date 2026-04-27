@@ -369,16 +369,37 @@ impl Bus {
 
     /// Sync CLINT + PLIC hardware state into the MIP register.
     ///
-    /// Sets/clears MTIP (bit 7) based on mtime >= mtimecmp.
+    /// Sets/clears STIP (bit 5) based on mtime >= mtimecmp (OpenSBI emulation).
     /// Sets/clears MSIP (bit 3) based on msip register.
     /// Sets/clears MEIP (bit 11) based on PLIC pending+enabled interrupts.
-    /// Other MIP bits (SSIP, STIP, SEIP) are left unchanged (software-writable).
+    ///
+    /// OpenSBI timer forwarding: On real hardware with OpenSBI:
+    /// 1. CLINT sets MTIP when mtime >= mtimecmp
+    /// 2. MTI fires to M-mode (OpenSBI)
+    /// 3. OpenSBI sets STIP in MIP to forward the timer interrupt to S-mode
+    /// 4. OpenSBI clears MTIP (by advancing mtimecmp or masking)
+    /// 5. STI fires to S-mode → kernel's timer handler runs
+    ///
+    /// Since we don't have OpenSBI running in M-mode, we emulate steps 2-4
+    /// by setting STIP directly when the timer fires. We do NOT set MTIP
+    /// because that would cause MTI to fire to M-mode (higher priority than STI),
+    /// bypassing the kernel's S-mode timer handler entirely.
+    ///
+    /// The kernel's timer handler clears STIP by calling sbi_set_timer(),
+    /// which writes a new mtimecmp value. When mtime < mtimecmp, timer_pending()
+    /// returns false and sync_mip clears STIP.
     pub fn sync_mip(&self, mip: &mut u32) {
-        // MTIP (bit 7): machine timer interrupt pending
-        if self.clint.timer_pending() {
-            *mip |= 1 << 7;
+        // Timer interrupt: set STIP (not MTIP) when timer fires.
+        // OpenSBI emulation — see comment above.
+        let timer_pending = self.clint.timer_pending();
+        if timer_pending {
+            // Do NOT set MTIP (bit 7) — it would fire MTI to M-mode instead of
+            // STI to S-mode. Only set STIP (bit 5) for direct S-mode delivery.
+            *mip &= !(1 << 7); // Clear MTIP
+            *mip |= 1 << 5; // Set STIP
         } else {
-            *mip &= !(1 << 7);
+            *mip &= !(1 << 7); // Clear MTIP
+            *mip &= !(1 << 5); // Clear STIP
         }
 
         // MSIP (bit 3): machine software interrupt pending
@@ -638,7 +659,10 @@ mod tests {
         bus.clint.mtimecmp = 0; // Timer fires immediately (mtime=0 >= mtimecmp=0)
         let mut mip = 0u32;
         bus.sync_mip(&mut mip);
-        assert_eq!(mip & (1 << 7), 1 << 7, "MTIP should be set");
+        // OpenSBI emulation: STIP (bit 5) is set, NOT MTIP (bit 7).
+        // MTIP would fire to M-mode; STIP fires to S-mode via mideleg.
+        assert_eq!(mip & (1 << 5), 1 << 5, "STIP should be set");
+        assert_eq!(mip & (1 << 7), 0, "MTIP should NOT be set");
     }
 
     #[test]
@@ -653,8 +677,10 @@ mod tests {
     #[test]
     fn bus_sync_mip_clears_when_not_pending() {
         let bus = Bus::new(0x8000_0000, 4096);
-        let mut mip: u32 = (1 << 7) | (1 << 3);
+        // Set both STIP and MTIP to verify both are cleared when timer not pending
+        let mut mip: u32 = (1 << 5) | (1 << 7) | (1 << 3);
         bus.sync_mip(&mut mip);
+        assert_eq!(mip & (1 << 5), 0, "STIP should be cleared");
         assert_eq!(mip & (1 << 7), 0, "MTIP should be cleared");
         assert_eq!(mip & (1 << 3), 0, "MSIP should be cleared");
     }

@@ -364,6 +364,30 @@ impl super::Vm {
             }
         }
     }
+
+    /// Resize the PTY directly by handle index (called from host on font mode switch).
+    /// Returns true on success.
+    pub fn resize_pty_direct(&mut self, handle: usize, rows: u16, cols: u16) -> bool {
+        if handle >= MAX_PTY_SLOTS {
+            return false;
+        }
+        if let Some(ref slot) = self.pty_slots[handle] {
+            match slot.master.resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            }) {
+                Ok(()) => true,
+                Err(e) => {
+                    eprintln!("PTY resize failed: {}", e);
+                    false
+                }
+            }
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]

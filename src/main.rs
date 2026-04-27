@@ -461,6 +461,9 @@ fn main() {
     let mut drag_cam_start: (i32, i32) = (0, 0);
     // Zoom: 2 = default (4px tiles), 0-1 = zoomed out, 3-4 = zoomed in
     let mut zoom_level: u32 = 2;
+
+    // ── Font Mode (Phase 159) ────────────────────────────────────
+    let mut font_mode: FontMode = FontMode::Normal;
     // Last launched app name (for detecting return to map)
     let mut launched_from_map: Option<String> = None;
 
@@ -497,6 +500,11 @@ fn main() {
     let mut scrollback_offset: usize = 0;
     // Track how many scrollback lines existed before current command output
     let mut _scrollback_pre_cmd: usize = 0;
+
+    // ── Cursor Improvements (Phase 162) ──────────────────────────
+    let mut cursor_style: render::CursorStyle = render::CursorStyle::Block;
+    let mut cursor_blink_on: bool = true;
+    let mut cursor_blink_timer: std::time::Instant = std::time::Instant::now();
 
     // ── Quick Launch Bar (Phase 158) ──────────────────────────
     let mut launcher_active: bool = false;
@@ -947,7 +955,7 @@ fn main() {
                     // Set cursor to after the last "geo> " prompt
                     cursor_row = term_prompt_row;
                     cursor_col = 5;
-                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset, font_mode.vis_rows());
                     continue;
                 } else {
                     should_quit = true;
@@ -1212,7 +1220,11 @@ fn main() {
                             term_prompt_row = term_output_row - 1;
                             cursor_row = term_prompt_row;
                             cursor_col = 5;
-                            ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                            ensure_cursor_visible(
+                                &cursor_row,
+                                &mut scroll_offset,
+                                font_mode.vis_rows(),
+                            );
                             continue;
                         }
 
@@ -1235,7 +1247,11 @@ fn main() {
                             term_prompt_row = term_output_row - 1; // write_line left us after the "geo> " line
                             cursor_row = term_prompt_row;
                             cursor_col = 5; // after "geo> "
-                            ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                            ensure_cursor_visible(
+                                &cursor_row,
+                                &mut scroll_offset,
+                                font_mode.vis_rows(),
+                            );
                             // Update term_output_row for next command
                             // (it's already set past the "geo> " prompt)
                         }
@@ -1250,13 +1266,21 @@ fn main() {
                     Key::Up => {
                         if cursor_row > 0 {
                             cursor_row -= 1;
-                            ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                            ensure_cursor_visible(
+                                &cursor_row,
+                                &mut scroll_offset,
+                                font_mode.vis_rows(),
+                            );
                         }
                     }
                     Key::Down => {
                         if cursor_row < CANVAS_MAX_ROWS - 1 {
                             cursor_row += 1;
-                            ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                            ensure_cursor_visible(
+                                &cursor_row,
+                                &mut scroll_offset,
+                                font_mode.vis_rows(),
+                            );
                         }
                     }
                     Key::C => {
@@ -1319,7 +1343,7 @@ fn main() {
                     if cursor_row >= CANVAS_MAX_ROWS {
                         cursor_row = CANVAS_MAX_ROWS - 1;
                     }
-                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset, font_mode.vis_rows());
                 }
                 Key::Space => {
                     let idx = cursor_row * CANVAS_COLS + cursor_col;
@@ -1329,6 +1353,7 @@ fn main() {
                         &mut cursor_row,
                         &mut cursor_col,
                         &mut scroll_offset,
+                        font_mode.vis_rows(),
                     );
                 }
                 Key::Backspace => {
@@ -1340,7 +1365,65 @@ fn main() {
                     }
                     let idx = cursor_row * CANVAS_COLS + cursor_col;
                     canvas_buffer[idx] = 0;
-                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset, font_mode.vis_rows());
+                }
+                // Phase 159: Font mode switching + PTY resize (SIGWINCH)
+                Key::F1 => {
+                    font_mode = FontMode::Medium;
+                    let vc = font_mode.vis_cols();
+                    let vr = font_mode.vis_rows();
+                    if cursor_col >= vc {
+                        cursor_col = vc - 1;
+                    }
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset, font_mode.vis_rows());
+                    // Resize PTY so bash reflows output
+                    let pty_h = vm.ram.get(0x4E03).copied().unwrap_or(0xFFFFFFFF);
+                    if pty_h != 0xFFFFFFFF {
+                        vm.resize_pty_direct(pty_h as usize, vr as u16, vc as u16);
+                    }
+                    status_msg = format!("[Font: {} {}×{}]", font_mode.name(), vc, vr);
+                }
+                Key::F2 => {
+                    font_mode = FontMode::Small;
+                    let vc = font_mode.vis_cols();
+                    let vr = font_mode.vis_rows();
+                    if cursor_col >= vc {
+                        cursor_col = vc - 1;
+                    }
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset, font_mode.vis_rows());
+                    let pty_h = vm.ram.get(0x4E03).copied().unwrap_or(0xFFFFFFFF);
+                    if pty_h != 0xFFFFFFFF {
+                        vm.resize_pty_direct(pty_h as usize, vr as u16, vc as u16);
+                    }
+                    status_msg = format!("[Font: {} {}×{}]", font_mode.name(), vc, vr);
+                }
+                Key::F3 => {
+                    font_mode = font_mode.zoom_in();
+                    let vc = font_mode.vis_cols();
+                    let vr = font_mode.vis_rows();
+                    if cursor_col >= vc {
+                        cursor_col = vc - 1;
+                    }
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset, font_mode.vis_rows());
+                    let pty_h = vm.ram.get(0x4E03).copied().unwrap_or(0xFFFFFFFF);
+                    if pty_h != 0xFFFFFFFF {
+                        vm.resize_pty_direct(pty_h as usize, vr as u16, vc as u16);
+                    }
+                    status_msg = format!("[Font: {} {}×{}]", font_mode.name(), vc, vr);
+                }
+                Key::F4 => {
+                    font_mode = font_mode.zoom_out();
+                    let vc = font_mode.vis_cols();
+                    let vr = font_mode.vis_rows();
+                    if cursor_col >= vc {
+                        cursor_col = vc - 1;
+                    }
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset, font_mode.vis_rows());
+                    let pty_h = vm.ram.get(0x4E03).copied().unwrap_or(0xFFFFFFFF);
+                    if pty_h != 0xFFFFFFFF {
+                        vm.resize_pty_direct(pty_h as usize, vr as u16, vc as u16);
+                    }
+                    status_msg = format!("[Font: {} {}×{}]", font_mode.name(), vc, vr);
                 }
                 Key::F5 => {
                     if vm.halted {
@@ -1439,6 +1522,14 @@ fn main() {
                         );
                     }
                 }
+                Key::F12 => {
+                    // Phase 162: Toggle cursor style (Block -> Underline -> Bar)
+                    let prev_style = cursor_style;
+                    cursor_style = cursor_style.next();
+                    cursor_blink_on = true;
+                    cursor_blink_timer = std::time::Instant::now();
+                    status_msg = format!("[Cursor: {}]", cursor_style.name());
+                }
                 Key::PageUp => {
                     if mode == Mode::Terminal {
                         // Enter scrollback mode and scroll up through terminal history
@@ -1504,13 +1595,13 @@ fn main() {
                 }
                 Key::Up => {
                     cursor_row = cursor_row.saturating_sub(1);
-                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset, font_mode.vis_rows());
                 }
                 Key::Down => {
                     if cursor_row < CANVAS_MAX_ROWS - 1 {
                         cursor_row += 1;
                     }
-                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                    ensure_cursor_visible(&cursor_row, &mut scroll_offset, font_mode.vis_rows());
                 }
                 Key::V => {
                     let ctrl =
@@ -1525,7 +1616,11 @@ fn main() {
                                         &mut cursor_row,
                                         &mut cursor_col,
                                     );
-                                    ensure_cursor_visible(&cursor_row, &mut scroll_offset);
+                                    ensure_cursor_visible(
+                                        &cursor_row,
+                                        &mut scroll_offset,
+                                        font_mode.vis_rows(),
+                                    );
                                     status_msg = format!("[pasted {} chars]", pasted);
                                 }
                                 Err(e) => {
@@ -1547,6 +1642,7 @@ fn main() {
                                 &mut cursor_row,
                                 &mut cursor_col,
                                 &mut scroll_offset,
+                                font_mode.vis_rows(),
                             );
                         }
                     }
@@ -1562,6 +1658,7 @@ fn main() {
                             &mut cursor_row,
                             &mut cursor_col,
                             &mut scroll_offset,
+                            font_mode.vis_rows(),
                         );
                     }
                 }
@@ -1585,7 +1682,9 @@ fn main() {
         let has_active_apps = !active_apps.is_empty();
         if is_running && !vm.halted {
             // Phase 45: Sync canvas buffer TO VM before execution
-            vm.canvas_buffer.copy_from_slice(&canvas_buffer);
+            // VM canvas_buffer is 4096 (CANVAS_RAM_SIZE), host buffer is 128*128=16384
+            let copy_len = vm.canvas_buffer.len().min(canvas_buffer.len());
+            vm.canvas_buffer[..copy_len].copy_from_slice(&canvas_buffer[..copy_len]);
 
             // Run until FRAME, breakpoint, halt, or 1M steps (safety cap)
             vm.frame_ready = false;
@@ -1612,7 +1711,8 @@ fn main() {
             }
 
             // Phase 45: Sync canvas buffer FROM VM after execution
-            canvas_buffer.copy_from_slice(&vm.canvas_buffer);
+            let copy_len = vm.canvas_buffer.len().min(canvas_buffer.len());
+            canvas_buffer[..copy_len].copy_from_slice(&vm.canvas_buffer[..copy_len]);
         } else if vm.halted && has_active_apps {
             // Main process halted but windowed apps are still running.
             // Keep scheduling child processes so apps stay alive.
@@ -2306,7 +2406,7 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, scrollback [offset] [count], buildings [radius], desktop_json, launch <app> [--window], player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, launcher [cmd|close|status], clipboard [get|set <text>], help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, scrollback [offset] [count], buildings [radius], desktop_json, launch <app> [--window], player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, launcher [cmd|close|status], clipboard [get|set <text>], font [small|normal|medium], cursorstyle [block|underline|bar], help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             "scrollback" => {
@@ -3457,6 +3557,60 @@ fn main() {
                                     }
                                 }
                             }
+                            "font" => {
+                                // font [small|normal|medium] -- switch font mode (also resizes PTY)
+                                let subcmd = parts.get(1).copied().unwrap_or("");
+                                let new_mode = match subcmd {
+                                    "small" | "s" => Some(FontMode::Small),
+                                    "normal" | "n" => Some(FontMode::Normal),
+                                    "medium" | "med" | "m" => Some(FontMode::Medium),
+                                    "" => None, // just report current
+                                    _ => None,
+                                };
+                                if let Some(nm) = new_mode {
+                                    font_mode = nm;
+                                    let vc = font_mode.vis_cols();
+                                    let vr = font_mode.vis_rows();
+                                    if cursor_col >= vc {
+                                        cursor_col = vc - 1;
+                                    }
+                                    ensure_cursor_visible(
+                                        &cursor_row,
+                                        &mut scroll_offset,
+                                        font_mode.vis_rows(),
+                                    );
+                                    // Resize PTY if active
+                                    let pty_h = vm.ram.get(0x4E03).copied().unwrap_or(0xFFFFFFFF);
+                                    if pty_h != 0xFFFFFFFF {
+                                        vm.resize_pty_direct(pty_h as usize, vr as u16, vc as u16);
+                                    }
+                                }
+                                response.push_str(&format!(
+                                    "[font: {} {}×{}]\n",
+                                    font_mode.name(),
+                                    font_mode.vis_cols(),
+                                    font_mode.vis_rows()
+                                ));
+                            }
+                            "cursorstyle" | "cursor" => {
+                                // Phase 162: cursorstyle [block|underline|bar] -- toggle cursor style
+                                let subcmd = parts.get(1).copied().unwrap_or("");
+                                match subcmd {
+                                    "block" | "b" => cursor_style = render::CursorStyle::Block,
+                                    "underline" | "u" => {
+                                        cursor_style = render::CursorStyle::Underline
+                                    }
+                                    "bar" | "l" => cursor_style = render::CursorStyle::Bar,
+                                    "" | "toggle" | "next" => cursor_style = cursor_style.next(),
+                                    _ => {}
+                                }
+                                cursor_blink_on = true;
+                                cursor_blink_timer = std::time::Instant::now();
+                                response.push_str(&format!(
+                                    "[cursor: {} (F12 to toggle)]\n",
+                                    cursor_style.name()
+                                ));
+                            }
                             _ => {
                                 response.push_str(&format!("[unknown: {}]\n", line));
                             }
@@ -3766,6 +3920,12 @@ fn main() {
             }
         }
 
+        // ── Cursor blink timer (500ms toggle) ────────────────────
+        if cursor_blink_timer.elapsed().as_millis() >= 500 {
+            cursor_blink_on = !cursor_blink_on;
+            cursor_blink_timer = std::time::Instant::now();
+        }
+
         // ── Render ───────────────────────────────────────────────
         if fullscreen_map && is_running {
             // Fullscreen map: VM screen scaled 3x to fill window
@@ -3799,6 +3959,9 @@ fn main() {
                 ram_view_base,
                 Some(&icon_cache),
                 None, // no text selection in scrollback
+                font_mode,
+                cursor_style,
+                false, // no cursor blink in scrollback
             );
         } else {
             // Compute current selection for rendering (active drag or anchored selection)
@@ -3827,6 +3990,9 @@ fn main() {
                 } else {
                     None
                 },
+                font_mode,
+                cursor_style,
+                cursor_blink_on,
             );
         }
         // ── Desktop polish: clock + system tray overlay ──────────────
@@ -4378,6 +4544,19 @@ fn main() {
                 } else {
                     text_sel_anchor = None;
                 }
+            }
+
+            // Phase 162: Ctrl+click toggles cursor style (Block -> Underline -> Bar)
+            if mouse_down_now
+                && !text_sel_active
+                && (window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl))
+            {
+                let prev_style = cursor_style;
+                cursor_style = cursor_style.next();
+                // Reset blink timer so cursor is immediately visible after toggle
+                cursor_blink_on = true;
+                cursor_blink_timer = std::time::Instant::now();
+                status_msg = format!("[Cursor: {} -> {}]", prev_style.name(), cursor_style.name());
             }
 
             // Middle-click paste

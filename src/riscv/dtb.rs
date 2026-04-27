@@ -300,7 +300,7 @@ pub fn generate_dtb(config: &DtbConfig) -> Vec<u8> {
     b.prop_u32("reg", 0);
     b.prop_string("compatible", "riscv");
     b.prop_string("mmu-type", "riscv,sv32");
-    b.prop_string("isa", "rv32imac");
+    b.prop_string("riscv,isa", "rv32imac");
     b.prop_string("status", "okay");
     // CPU interrupt controller (phandle 1).
     b.begin_node("interrupt-controller");

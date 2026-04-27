@@ -135,10 +135,105 @@ impl BuildingIconCache {
 pub const WIDTH: usize = 1024;
 pub const HEIGHT: usize = 768;
 
-pub const CANVAS_SCALE: usize = 16;
-pub const CANVAS_COLS: usize = 32;
-pub const CANVAS_ROWS: usize = 32;
+pub const CANVAS_COLS: usize = 128; // buffer stride (max displayable columns)
+pub const CANVAS_ROWS: usize = 32; // default visible rows (Normal mode)
 pub const CANVAS_MAX_ROWS: usize = 128;
+
+// ── Font Mode ────────────────────────────────────────────────────
+/// Runtime font mode controlling cell size and visible grid dimensions.
+/// F1 = Medium (big, readable), F2 = Small (dense, 80-col terminal),
+/// F3/F4 = zoom in/out cycling through modes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FontMode {
+    Small,  // cell=12, 85 cols × 64 rows -- dense 80-col terminal feel
+    Normal, // cell=16, 32 cols × 48 rows -- default canvas grid
+    Medium, // cell=24, 42 cols × 32 rows -- big readable text
+}
+
+impl FontMode {
+    pub fn cell_size(self) -> usize {
+        match self {
+            FontMode::Small => 12,
+            FontMode::Normal => 16,
+            FontMode::Medium => 24,
+        }
+    }
+
+    pub fn vis_cols(self) -> usize {
+        match self {
+            FontMode::Small => 85,  // 85 × 12 = 1020px
+            FontMode::Normal => 32, // 32 × 16 = 512px (right panel for VM screen)
+            FontMode::Medium => 42, // 42 × 24 = 1008px
+        }
+    }
+
+    pub fn vis_rows(self) -> usize {
+        match self {
+            FontMode::Small => 64,  // 64 × 12 = 768px
+            FontMode::Normal => 48, // 48 × 16 = 768px
+            FontMode::Medium => 32, // 32 × 24 = 768px
+        }
+    }
+
+    /// Whether this mode fills the full render buffer width (no side panel)
+    pub fn is_fullwidth(self) -> bool {
+        self != FontMode::Normal
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            FontMode::Small => "SMALLTEXT",
+            FontMode::Normal => "NORMAL",
+            FontMode::Medium => "MEDTEXT",
+        }
+    }
+
+    pub fn zoom_in(self) -> FontMode {
+        match self {
+            FontMode::Small => FontMode::Normal,
+            FontMode::Normal => FontMode::Medium,
+            FontMode::Medium => FontMode::Medium,
+        }
+    }
+
+    pub fn zoom_out(self) -> FontMode {
+        match self {
+            FontMode::Small => FontMode::Small,
+            FontMode::Normal => FontMode::Small,
+            FontMode::Medium => FontMode::Normal,
+        }
+    }
+}
+
+/// Cursor style for terminal/editor modes.
+/// Toggled via Ctrl+click on the canvas cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CursorStyle {
+    Block,     // Full cell background highlight (default)
+    Underline, // Bottom 2 rows of cell
+    Bar,       // Left 2 columns of cell
+}
+
+impl CursorStyle {
+    pub fn next(self) -> CursorStyle {
+        match self {
+            CursorStyle::Block => CursorStyle::Underline,
+            CursorStyle::Underline => CursorStyle::Bar,
+            CursorStyle::Bar => CursorStyle::Block,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            CursorStyle::Block => "BLOCK",
+            CursorStyle::Underline => "UNDERLINE",
+            CursorStyle::Bar => "BAR",
+        }
+    }
+}
+
+// Legacy constant for code that still uses it
+pub const CANVAS_SCALE: usize = 16;
 
 pub const VM_SCREEN_X: usize = 640;
 pub const VM_SCREEN_Y: usize = 64;
@@ -220,15 +315,28 @@ pub fn render(
     ram_view_base: usize,
     icon_cache: Option<&BuildingIconCache>,
     text_sel: Option<((usize, usize), (usize, usize))>, // Phase 157: selection highlight
+    font_mode: FontMode,                                // Phase 159: runtime font switching
+    cursor_style: CursorStyle,                          // Phase 162: block/underline/bar
+    cursor_blink_on: bool,                              // Phase 162: blink state (toggles 500ms)
 ) {
+    let cell_size = font_mode.cell_size();
+    let vis_cols = font_mode.vis_cols();
+    let vis_rows = font_mode.vis_rows();
+
     for pixel in buffer.iter_mut() {
         *pixel = BG;
     }
 
     // ── Canvas grid (with scroll offset) ─────────────────────────
-    for vis_row in 0..CANVAS_ROWS {
+    for vis_row in 0..vis_rows {
         let log_row = vis_row + scroll_offset;
-        for col in 0..CANVAS_COLS {
+        if log_row >= CANVAS_MAX_ROWS {
+            break;
+        }
+        for col in 0..vis_cols {
+            if col >= CANVAS_COLS {
+                break;
+            }
             let ram_addr = log_row * CANVAS_COLS + col;
             let intensity = ram_intensity.get(ram_addr).copied().unwrap_or(0.0);
             let kind = ram_kind
@@ -237,9 +345,11 @@ pub fn render(
                 .unwrap_or(vm::MemAccessKind::Read);
 
             let val = canvas_buffer[log_row * CANVAS_COLS + col];
-            let x0 = col * CANVAS_SCALE;
-            let y0 = vis_row * CANVAS_SCALE;
+            let x0 = col * cell_size;
+            let y0 = vis_row * cell_size;
             let is_cursor = log_row == cursor_row && col == cursor_col && !is_running;
+            // Blinking: if cursor should blink, check blink state
+            let show_cursor = is_cursor && (is_running || cursor_blink_on);
             let ascii_byte = (val & 0xFF) as u8;
 
             let use_pixel_font = val != 0 && (0x20..0x80).contains(&ascii_byte);
@@ -301,6 +411,19 @@ pub fn render(
             let sel_fg: u32 = 0xFFFFFF;
             let cell_bg = if in_selection { sel_bg } else { cell_bg };
 
+            // Phase 162: cursor style check -- which pixels are cursor-highlighted
+            // is_cursor_pixel(dx, dy) returns true if this pixel should be cursor-colored
+            let is_cursor_pixel = |dx: usize, dy: usize| -> bool {
+                if !show_cursor {
+                    return false;
+                }
+                match cursor_style {
+                    CursorStyle::Block => true, // entire cell
+                    CursorStyle::Underline => dy >= cell_size.saturating_sub(2), // bottom 2 rows
+                    CursorStyle::Bar => dx < 2, // left 2 columns
+                }
+            };
+
             if use_pixel_font {
                 let fg = if in_selection {
                     sel_fg
@@ -309,14 +432,15 @@ pub fn render(
                 };
                 let glyph = &font::GLYPHS[ascii_byte as usize];
 
-                for dy in 0..CANVAS_SCALE {
-                    for dx in 0..CANVAS_SCALE {
+                for dy in 0..cell_size {
+                    for dx in 0..cell_size {
                         let px = x0 + dx;
                         let py = y0 + dy;
-                        let is_border = dx == CANVAS_SCALE - 1 || dy == CANVAS_SCALE - 1;
+                        let is_border = dx == cell_size - 1 || dy == cell_size - 1;
 
-                        let gc = dx / 2;
-                        let gr = dy / 2;
+                        // Scale 8x8 glyph to cell_size × cell_size
+                        let gc = dx * font::GLYPH_W / cell_size;
+                        let gr = dy * font::GLYPH_H / cell_size;
                         let glyph_on = gc < font::GLYPH_W
                             && gr < font::GLYPH_H
                             && glyph[gr] & (1 << (7 - gc)) != 0;
@@ -329,8 +453,14 @@ pub fn render(
                             cell_bg
                         };
 
-                        if is_cursor && is_border {
-                            color = CURSOR_COL;
+                        // Phase 162: style-aware cursor drawing
+                        if is_cursor_pixel(dx, dy) {
+                            if cursor_style == CursorStyle::Block {
+                                // Block cursor: invert fg/bg -- glyph pixels get bg color, background gets CURSOR_COL
+                                color = if glyph_on { cell_bg } else { CURSOR_COL };
+                            } else {
+                                color = CURSOR_COL;
+                            }
                         }
 
                         if px < WIDTH && py < HEIGHT {
@@ -340,13 +470,14 @@ pub fn render(
                 }
             } else {
                 // Empty cell
-                for dy in 0..CANVAS_SCALE {
-                    for dx in 0..CANVAS_SCALE {
+                for dy in 0..cell_size {
+                    for dx in 0..cell_size {
                         let px = x0 + dx;
                         let py = y0 + dy;
-                        let is_border = dx == CANVAS_SCALE - 1 || dy == CANVAS_SCALE - 1;
+                        let is_border = dx == cell_size - 1 || dy == cell_size - 1;
                         let mut color = if is_border { GRID_LINE } else { cell_bg };
-                        if is_cursor && is_border {
+                        // Phase 162: style-aware cursor for empty cells
+                        if is_cursor_pixel(dx, dy) {
                             color = CURSOR_COL;
                         }
                         if px < WIDTH && py < HEIGHT {
@@ -359,10 +490,10 @@ pub fn render(
     }
 
     // ── Scrollbar (right edge of canvas) ─────────────────────────
-    if CANVAS_MAX_ROWS > CANVAS_ROWS {
-        let sb_x = CANVAS_COLS * CANVAS_SCALE - 3; // 3px wide bar at right edge
-        let sb_height = CANVAS_ROWS * CANVAS_SCALE;
-        let max_scroll = CANVAS_MAX_ROWS - CANVAS_ROWS;
+    if CANVAS_MAX_ROWS > vis_rows {
+        let sb_x = vis_cols * cell_size - 3; // 3px wide bar at right edge
+        let sb_height = vis_rows * cell_size;
+        let max_scroll = CANVAS_MAX_ROWS.saturating_sub(vis_rows);
 
         // Background track
         for y in 0..sb_height {
@@ -371,8 +502,7 @@ pub fn render(
         }
 
         // Thumb (proportional to visible/total ratio, minimum 8px)
-        let thumb_ratio =
-            (CANVAS_ROWS * CANVAS_SCALE) as f32 / (CANVAS_MAX_ROWS * CANVAS_SCALE) as f32;
+        let thumb_ratio = (vis_rows * cell_size) as f32 / (CANVAS_MAX_ROWS * cell_size) as f32;
         let thumb_height = ((sb_height as f32 * thumb_ratio).max(8.0)) as usize;
         let thumb_max_travel = sb_height - thumb_height;
         let thumb_y = if max_scroll > 0 {
@@ -387,14 +517,16 @@ pub fn render(
         }
     }
 
-    // ── VM screen ────────────────────────────────────────────────
-    for y in 0..256 {
-        for x in 0..256 {
-            let color = vm.screen[y * 256 + x];
-            let sx = VM_SCREEN_X + x;
-            let sy = VM_SCREEN_Y + y;
-            if sx < WIDTH && sy < HEIGHT {
-                buffer[sy * WIDTH + sx] = color;
+    // ── VM screen (only in Normal mode where side panel exists) ───
+    if !font_mode.is_fullwidth() {
+        for y in 0..256 {
+            for x in 0..256 {
+                let color = vm.screen[y * 256 + x];
+                let sx = VM_SCREEN_X + x;
+                let sy = VM_SCREEN_Y + y;
+                if sx < WIDTH && sy < HEIGHT {
+                    buffer[sy * WIDTH + sx] = color;
+                }
             }
         }
     }
@@ -657,17 +789,34 @@ pub fn render(
 
     // ── Status bar ───────────────────────────────────────────────
     let row_info = format!("row {}/{} ", cursor_row + 1, CANVAS_MAX_ROWS);
-    let scroll_info = if scroll_offset > 0 || cursor_row >= CANVAS_ROWS {
+    let scroll_info = if scroll_offset > 0 || cursor_row >= vis_rows {
         format!(
             "[scroll {}-{}] ",
             scroll_offset + 1,
-            scroll_offset + CANVAS_ROWS
+            scroll_offset + vis_rows
         )
     } else {
         String::new()
     };
-    let pc_text = format!("PC={:04X} {}{}{}", vm.pc, scroll_info, row_info, status_msg);
+    let pc_text = format!(
+        "PC={:04X} {}{}[{} {}×{}] cur={}{} ",
+        vm.pc,
+        scroll_info,
+        row_info,
+        font_mode.name(),
+        vis_cols,
+        vis_rows,
+        cursor_style.name(),
+        if cursor_blink_on { "●" } else { "○" }
+    );
     render_text(buffer, 8, HEIGHT - 20, &pc_text, STATUS_FG);
+    // Append status_msg separately (may be long)
+    if !status_msg.is_empty() {
+        let sm_x = 8 + pc_text.len() * 6;
+        if sm_x < WIDTH - 250 {
+            render_text(buffer, sm_x, HEIGHT - 20, status_msg, STATUS_FG);
+        }
+    }
 
     let state_label = if is_running {
         ("RUNNING", 0x00FF00)
