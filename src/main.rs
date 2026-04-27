@@ -40,6 +40,7 @@ use cli::cli_main;
 use hermes::{run_build_canvas, run_hermes_canvas};
 use keys::{key_ctrl_num, key_ctrl_shift, key_to_ascii, key_to_ascii_shifted};
 use render::*;
+use riscv::live::{spawn_vm_thread, Frame, RiscvVmHandle, VmStatus, VmThreadConfig};
 use save::{load_state, save_full_buffer_png, save_screen_png, save_state};
 
 // ── Memory map ───────────────────────────────────────────────────
@@ -378,6 +379,10 @@ fn main() {
     // ── State ────────────────────────────────────────────────────
     let mut vm = vm::Vm::new();
     let mut is_running = false;
+
+    // ── RISC-V live VM state (Phase B) ───────────────────────────
+    let mut riscv_handle: Option<RiscvVmHandle> = None;
+    let mut riscv_latest_frame: Option<Frame> = None;
     let mut canvas_assembled = false;
     let mut breakpoints: HashSet<u32> = HashSet::new();
     let mut hit_breakpoint = false;
@@ -2406,7 +2411,7 @@ fn main() {
                                 }
                             }
                             "help" => {
-                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, scrollback [offset] [count], buildings [radius], desktop_json, launch <app> [--window], player_pos, hypervisor_boot <config>, hypervisor_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, launcher [cmd|close|status], clipboard [get|set <text>], font [small|normal|medium], cursorstyle [block|underline|bar], help\n");
+                                response.push_str("Commands: status, canvas, assemble, run, type <text>, clear, save, save_asm <name>, load_source <asm>, screenshot [path], screenshot_b64, screenshot_annotated_b64, canvas_checksum, canvas_diff <hex>, screen, registers, disasm, vmscreen, ram [base] [rows], vm_state, dashboard, load <path>, loadasm <path>, loadbin <path>, step, halt, scrollback [offset] [count], buildings [radius], desktop_json, launch <app> [--window], player_pos, hypervisor_boot <config>, hypervisor_kill, riscv_run <elf_path>, riscv_kill, inject_key <keycode>, inject_mouse <move|click> <x> <y> [button], inject_text <text>, window_list, window_move <id> <x> <y>, window_close <id>, window_focus <id>, window_resize <id> <w> <h>, process_kill <pid>, launcher [cmd|close|status], clipboard [get|set <text>], font [small|normal|medium], cursorstyle [block|underline|bar], help\n");
                                 response.push_str("In 'type' command, use \\n for newlines.\n");
                             }
                             "scrollback" => {
@@ -3094,6 +3099,59 @@ fn main() {
                                     response.push_str("[hypervisor: killed]\n");
                                 } else {
                                     response.push_str("[hypervisor: not running]\n");
+                                }
+                            }
+                            "riscv_run" => {
+                                // Launch a RISC-V ELF on a background thread
+                                // Usage: riscv_run <path>
+                                if let Some(elf_path) = parts.get(1) {
+                                    match std::fs::read(elf_path) {
+                                        Ok(elf_data) => {
+                                            // Kill any existing RISC-V VM first
+                                            if riscv_handle.is_some() {
+                                                riscv_handle = None;
+                                                riscv_latest_frame = None;
+                                            }
+                                            let config = VmThreadConfig {
+                                                elf_data,
+                                                ram_size: 1024 * 1024,
+                                                ..Default::default()
+                                            };
+                                            match spawn_vm_thread(config) {
+                                                Ok(handle) => {
+                                                    riscv_handle = Some(handle);
+                                                    response.push_str(&format!(
+                                                        "[riscv: launched {}]\n",
+                                                        elf_path
+                                                    ));
+                                                }
+                                                Err(e) => {
+                                                    response.push_str(&format!(
+                                                        "[riscv: spawn failed: {}]\n",
+                                                        e
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            response.push_str(&format!(
+                                                "[riscv: failed to read {}: {}]\n",
+                                                elf_path, e
+                                            ));
+                                        }
+                                    }
+                                } else {
+                                    response.push_str("[usage: riscv_run <elf_path>]\n");
+                                }
+                            }
+                            "riscv_kill" => {
+                                // Kill the running RISC-V VM
+                                if riscv_handle.is_some() {
+                                    riscv_handle = None;
+                                    riscv_latest_frame = None;
+                                    response.push_str("[riscv: killed]\n");
+                                } else {
+                                    response.push_str("[riscv: not running]\n");
                                 }
                             }
                             // Phase 88: AI Vision Bridge socket commands
@@ -3995,6 +4053,49 @@ fn main() {
                 cursor_blink_on,
             );
         }
+
+        // ── RISC-V live framebuffer blit (Phase B, b.2.2) ────────────
+        // If a RISC-V program is running, overlay its framebuffer
+        // on the VM screen area (640, 64) → (896, 320).
+        if let Some(ref mut handle) = riscv_handle {
+            // Drain all available frames, keep only the latest
+            loop {
+                match handle.try_recv_frame() {
+                    Ok(frame) => riscv_latest_frame = Some(frame),
+                    Err(_) => break,
+                }
+            }
+            // Check for halt
+            loop {
+                match handle.try_recv_status() {
+                    Ok(VmStatus::Halted { reason, .. }) => {
+                        status_msg = format!("[riscv: halted: {}]", reason);
+                        riscv_handle = None;
+                        break;
+                    }
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+        }
+        if let Some(ref frame) = riscv_latest_frame {
+            let fb_w = frame.width.min(256);
+            let fb_h = frame.height.min(256);
+            for y in 0..fb_h {
+                for x in 0..fb_w {
+                    let color = frame.pixels[y * frame.width + x];
+                    if color != 0 {
+                        // Skip transparent (black) pixels -- let GeOS VM show through
+                        let sx = VM_SCREEN_X + x;
+                        let sy = VM_SCREEN_Y + y;
+                        if sx < WIDTH && sy < HEIGHT {
+                            buffer[sy * WIDTH + sx] = color;
+                        }
+                    }
+                }
+            }
+        }
+
         // ── Desktop polish: clock + system tray overlay ──────────────
         {
             // System tray: positioned at bottom-right of window

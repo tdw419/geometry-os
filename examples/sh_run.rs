@@ -12,9 +12,7 @@
 //     or: cargo run --release --example sh_run -- /path/to/custom.elf
 
 use geometry_os::riscv::framebuf::{FB_HEIGHT, FB_WIDTH};
-use geometry_os::riscv::live::{
-    spawn_vm_thread, VmStatus, VmThreadConfig,
-};
+use geometry_os::riscv::live::{spawn_vm_thread, VmStatus, VmThreadConfig};
 use std::fs;
 use std::io::{self, Read, Write};
 
@@ -159,7 +157,10 @@ fn main() {
                     instructions,
                     reason,
                 }) => {
-                    eprintln!("\n[VM halted: {} (PC=0x{:08X}, {} instructions)]", reason, pc, instructions);
+                    eprintln!(
+                        "\n[VM halted: {} (PC=0x{:08X}, {} instructions)]",
+                        reason, pc, instructions
+                    );
                     vm_handle.shutdown();
                     // Final framebuffer dump
                     // Note: final frame may have already been received above

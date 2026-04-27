@@ -231,6 +231,26 @@ fn get_tool_list() -> Vec<serde_json::Value> {
             vec![],
             hypervisor_kill_schema(),
         ),
+        // -- Phase B: RISC-V Live VM Tools --
+        tool(
+            "riscv_run",
+            "Launch a RISC-V ELF on a background thread with live framebuffer display",
+            vec![
+                param(
+                    "elf_path",
+                    "string",
+                    "Path to the RISC-V ELF binary to run",
+                    true,
+                ),
+            ],
+            riscv_run_schema(),
+        ),
+        tool(
+            "riscv_kill",
+            "Kill the running RISC-V VM",
+            vec![],
+            riscv_kill_schema(),
+        ),
         // -- Phase 88: AI Vision Bridge Tools --
         tool(
             "vision_screenshot",
@@ -492,6 +512,12 @@ fn hypervisor_boot_schema() -> serde_json::Value {
     serde_json::json!({"type": "object", "properties": {"booted": {"type": "boolean"}, "config": {"type": "string"}, "window_id": {"type": "string"}}})
 }
 fn hypervisor_kill_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}}})
+}
+fn riscv_run_schema() -> serde_json::Value {
+    serde_json::json!({"type": "object", "properties": {"launched": {"type": "boolean"}, "elf_path": {"type": "string"}}})
+}
+fn riscv_kill_schema() -> serde_json::Value {
     serde_json::json!({"type": "object", "properties": {"ok": {"type": "boolean"}}})
 }
 
@@ -910,6 +936,22 @@ fn handle_tool_call(name: &str, args: &serde_json::Value) -> Result<serde_json::
 
         "hypervisor_kill" => {
             let resp = send_socket_cmd("hypervisor_kill")?;
+            Ok(serde_json::json!({
+                "ok": resp.contains("killed"),
+                "response": resp,
+            }))
+        }
+        "riscv_run" => {
+            let elf_path = args.get("elf_path").and_then(|v| v.as_str()).unwrap_or("");
+            let resp = send_socket_cmd(&format!("riscv_run {}", elf_path))?;
+            Ok(serde_json::json!({
+                "launched": resp.contains("launched"),
+                "elf_path": elf_path,
+                "response": resp,
+            }))
+        }
+        "riscv_kill" => {
+            let resp = send_socket_cmd("riscv_kill")?;
             Ok(serde_json::json!({
                 "ok": resp.contains("killed"),
                 "response": resp,
