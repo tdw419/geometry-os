@@ -8,13 +8,11 @@
  * Power-of-two FB_WIDTH=256 means x%256 -> x&0xFF, y*256 -> y<<8.
  *
  * Build:
- *   riscv64-linux-gnu-gcc -march=rv32im -mabi=ilp32 -nostdlib -nostdinc \
- *       -Os -T hello.ld -o life.elf crt0.S life.c
+ *   riscv64-linux-gnu-gcc -march=rv32imac_zicsr -mabi=ilp32 -nostdlib \
+ *       -nostartfiles -T hello.ld -O2 -o life.elf crt0.S life.c
  */
 
-typedef unsigned char      uint8_t;
-typedef unsigned int       uint32_t;
-typedef signed int         int32_t;
+#include <stdint.h>
 
 /* ---- MMIO Framebuffer ---- */
 #define FB_BASE        0x60000000u
