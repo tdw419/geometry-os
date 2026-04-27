@@ -403,6 +403,164 @@ phases:
               still relevant. Identify gaps between roadmap.yaml and roadmap_v2.yaml.
             files: ["ROADMAP.md"]
 
+  # ── Phase F: Visual Verification Infrastructure ──────────────────
+  - id: "phase-F"
+    title: "Visual Verification Infrastructure"
+    status: "active"
+    goal: "Regression test framework for RISC-V guest programs via framebuffer dumps"
+    description: >
+      riscv_fb_dump gives us scriptable visual verification. This phase builds
+      the regression test harness: boot a guest program, inject a known input
+      sequence, dump the framebuffer, assert on pixel values. The paint.c bugs
+      (channel bit-leaking, paint-overwrite, fill-mode position) are the first
+      regression tests. Prior encode_png claims are audited.
+    dependencies:
+      - source: "phase-D"
+        target: "phase-F"
+        type: "hard"
+        reason: "Need riscv_fb_dump (built during paint.c work) and libgeos"
+    deliverables:
+      - name: "paint.c regression test"
+        description: >
+          Shell script or Python script that boots paint.elf, injects a known
+          sequence of commands (fill mode + movement + color switches), dumps
+          the framebuffer via riscv_fb_dump, and asserts on pixel coordinates
+          and colors. Catches the three bugs that were fixed: channel leaking,
+          cursor overwrite, fill-mode position.
+        status: "todo"
+        acceptance_criteria:
+          - description: "Test asserts 10 red + 10 blue + 10 green + 11 yellow pixels at expected coords"
+            validation: "Run test script, exit 0 on correct output, exit 1 on pixel mismatch"
+            met: false
+          - description: "Test catches at least one of the three known paint.c bugs if reverted"
+            validation: "Revert a fix, run test, expect failure"
+            met: false
+        tasks:
+          - id: "f.1.1"
+            title: "Write paint_regression_test.sh"
+            status: "todo"
+            description: >
+              Boot GeOS (background), launch paint.elf via socket, inject the
+              rectangle-drawing sequence (fill on, d*11, color 3, s*10, color 2,
+              a*10, color 4, w*10, fill off), dump framebuffer, use Python/Pillow
+              to assert pixel values. Kill GeOS when done.
+            files: ["tests/paint_regression_test.sh"]
+          - id: "f.1.2"
+            title: "Verify test catches regressions"
+            status: "todo"
+            description: >
+              Revert each of the three paint.c fixes one at a time, confirm the
+              test fails. Then re-apply fixes, confirm test passes.
+            files: []
+      - name: "encode_png audit"
+        description: >
+          Prior "screenshot verified" claims that went through encode_png may
+          have been against invalid PNGs (raw deflate without zlib wrapper).
+          Audit which claims used encode_png and which used other paths.
+        status: "todo"
+        acceptance_criteria:
+          - description: "List of prior verified claims and whether they used valid PNGs"
+            validation: "Written audit in test output or comment"
+            met: false
+        tasks:
+          - id: "f.2.1"
+            title: "Audit prior visual verification claims"
+            status: "todo"
+            description: >
+              Search git history and session transcripts for "verified" claims
+              involving screenshots. Determine which used encode_png vs other
+              paths. Document findings.
+            files: []
+      - name: "Test harness pattern"
+        description: >
+          Document the pattern so any future guest program can plug in:
+          boot → inject → dump → assert. Reusable shell/Python scaffolding.
+        status: "todo"
+        acceptance_criteria:
+          - description: "Test harness documented and reusable"
+            validation: "New test for a different program can be written in <5 min"
+            met: false
+        tasks:
+          - id: "f.3.1"
+            title: "Extract common test harness functions"
+            status: "todo"
+            description: >
+              geos_boot(), geos_run_elf(), geos_inject(), geos_fb_dump(),
+              geos_kill(), assert_pixel(). Shared Python module or shell functions.
+            files: ["tests/geos_test_lib.sh"]
+
+  # ── Phase G: Persistence ────────────────────────────────────────
+  - id: "phase-G"
+    title: "Persistence — Save/Load Canvas"
+    status: "future"
+    goal: "Checkpoint and restore pixel state via the VFS surface"
+    description: >
+      Persistence means checkpointing pixels, not serializing structs. Add
+      geos_save_canvas and geos_load_canvas to libgeos that write/read the
+      framebuffer as raw pixel data to the VFS block surface at 0x7000_0000.
+      Round-trip demo: paint a known pattern → save → kill VM → relaunch →
+      load → riscv_fb_dump confirms pixel-perfect match.
+    dependencies:
+      - source: "phase-F"
+        target: "phase-G"
+        type: "hard"
+        reason: "Need regression test framework to verify round-trip fidelity"
+    deliverables:
+      - name: "geos_save_canvas / geos_load_canvas in libgeos"
+        description: >
+          Two new functions in libgeos.c. save_canvas writes the full 256x256
+          framebuffer (256K bytes) to VFS block surface. load_canvas reads it
+          back into the framebuffer. Both use the existing virtio-blk MMIO
+          interface at 0x7000_0000.
+        status: "todo"
+        acceptance_criteria:
+          - description: "save_canvas writes 256KB to VFS, load_canvas reads it back"
+            validation: "Unit test: save, clear fb, load, assert all pixels match"
+            met: false
+          - description: "Round-trip preserves exact pixel values"
+            validation: "riscv_fb_dump before save == riscv_fb_dump after load"
+            met: false
+        tasks:
+          - id: "g.1.1"
+            title: "Implement geos_save_canvas in libgeos.c"
+            status: "todo"
+            description: >
+              Write framebuffer pixels to VFS block surface. Use virtio-blk
+              MMIO writes. Block size 512 bytes, so 512 blocks for 256KB.
+            files: ["examples/riscv-hello/libgeos.c", "examples/riscv-hello/libgeos.h"]
+          - id: "g.1.2"
+            title: "Implement geos_load_canvas in libgeos.c"
+            status: "todo"
+            description: >
+              Read 256KB from VFS block surface into framebuffer pixels.
+              Verify block count and pixel integrity.
+            files: ["examples/riscv-hello/libgeos.c", "examples/riscv-hello/libgeos.h"]
+          - id: "g.1.3"
+            title: "Add save/load commands to paint.c"
+            status: "todo"
+            description: >
+              Add S key for save, L key for load. Show brief status message
+              via UART on success/failure.
+            files: ["examples/riscv-hello/paint.c"]
+      - name: "Round-trip verification test"
+        description: >
+          Automated test: paint a known pattern, save, kill VM, relaunch,
+          load, dump framebuffer, compare pixel-for-pixel with pre-save dump.
+        status: "todo"
+        acceptance_criteria:
+          - description: "Pixel-perfect round-trip with zero mismatches"
+            validation: "diff of pre-save and post-load framebuffer dumps is empty"
+            met: false
+        tasks:
+          - id: "g.2.1"
+            title: "Write persistence_roundtrip_test.sh"
+            status: "todo"
+            description: >
+              Boot paint.elf, draw pattern, dump fb (baseline), inject save,
+              kill VM, relaunch paint.elf, inject load, dump fb (restored),
+              compare the two PNGs pixel-for-pixel.
+            files: ["tests/persistence_roundtrip_test.sh"]
+
 global_risks:
   - "Interpreter performance ceiling: 52 MIPS may not scale to complex guest programs"
   - "Premature abstraction: libgeos.c should only be extracted when truly needed"

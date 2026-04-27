@@ -41,7 +41,7 @@ Three layers. Do not skip layers.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Current status (2026-04-27).** Layer 1 exists and is solid — interpreter, SBI dispatcher, UART RX/TX, ELF loader, virtio-blk. Layer 3 is starting — `programs/*.asm` is years deep on the pixel-VM side; `examples/riscv-hello/sh.c` is the first bare-metal C tool and it talks to Layer 1 directly via SBI ecalls. **Layer 2 does not exist yet.** Today, Layer 3 programs run on the M-mode bare-metal SBI surface with no kernel between them. Building Layer 2 (a small, pixel-aware C kernel) is future work; the diagram is the target, not the current state.
+**Current status (2026-04-27).** Layer 1 exists and is solid — interpreter, SBI dispatcher, UART RX/TX, ELF loader, virtio-blk. Layer 3 is active — `examples/riscv-hello/` contains 10+ bare-metal C programs including `sh.c` (mini-shell) and `paint.c` (interactive pixel painter), all linked against `libgeos.a` (a static support library with SBI wrappers, framebuffer primitives, timing, and input — not a kernel, just shared C code). **Layer 2 does not exist yet.** Today, Layer 3 programs run on the M-mode bare-metal SBI surface with no kernel between them. Building Layer 2 (a small, pixel-aware C kernel) is future work; the diagram is the target, not the current state.
 
 The Token → Pixel → GUI substrate model in [`GEMINI.md`](../GEMINI.md) is canonical for Layer 3 authoring conventions. Read it after this document.
 
@@ -114,9 +114,29 @@ Stdin is set to raw mode so keypresses pass through immediately. Ctrl-C exits th
 
 **What this validated.** ELF load, interpreter loop, SBI putchar/getchar round-trip, UART RX wiring, raw-mode terminal pass-through, CSR instruction decode. All 30 SBI/UART/loader tests still green. Every later tool (file editor, hex viewer, pixel painter, asm REPL) reuses this scaffolding.
 
+## Capstone demonstration — interactive pixel painter ✅ shipped 2026-04-27
+
+The mini-shell proved the input→compute→output loop. `paint.c` proves the pixel thesis: a bare-metal C program where the framebuffer *is* the program state, not a side effect.
+
+**What it is.** A ~200-line bare-metal C program (`examples/riscv-hello/paint.c`) that provides a pixel-art editor running in the RISC-V interpreter. Cursor movement (WASD), color selection (0-9), fill mode (F), paint (space), clear (C). 10-color palette bar at the bottom. No Linux, no windowing system, no file descriptors — just MMIO writes to the framebuffer.
+
+**What shipped.** The painter went through visual verification via `riscv_fb_dump` (a new socket command that snapshots the RISC-V framebuffer to PNG). Three bugs were caught by reading actual pixel values that no unit test would have caught:
+
+1. **Channel bit-leaking**: `(color >> 8) >> 1` without masking `& 0xFF` shifted bits across byte boundaries, producing wrong arm colors.
+2. **Paint-overwrite**: 3x3 crosshair drawn after painting overwrote the painted pixel. Redesigned to save/restore single pixel cursor.
+3. **Fill-mode position**: painting at new cursor position instead of old. Off-by-one in move-then-paint vs paint-then-move ordering.
+
+**Infrastructure added.** `riscv_fb_dump <path>` socket command triggers a `TriggerSnapshot` VM control message that clones the current framebuffer pixels and writes them as a valid PNG. Also fixed `encode_png` in `vision.rs` to produce valid zlib-wrapped PNGs (was raw deflate without header/checksum). This makes visual verification scriptable — automated tests can launch a guest, inject inputs, dump the framebuffer, and assert on pixel values.
+
+**Verified output.** Rectangle drawn with fill mode: 10 red + 10 blue + 10 green + 11 yellow pixels at expected coordinates. Adjacent pixels are background (10,10,20). No spill. Palette bar renders correctly with all 10 colors and white border on selection.
+
+## Verification
+
+Visual verification is now scriptable via `riscv_fb_dump` and `vision::encode_png` (which now produces valid PNGs). New milestones close by asserting on pixel values, not by looking at a screenshot. The pattern: boot guest program → inject known input sequence → dump framebuffer → assert pixel values at specific coordinates.
+
 ## Reading order
 
 1. **`docs/SPEC.md`** (this file) — what we are building and why.
 2. **`GEMINI.md`** — Token → Pixel → GUI layer model and authoring conventions for Layer 3.
 3. **`docs/NORTH_STAR.md`** — priority hierarchy and "DO / DON'T" rules. The "be like Linux" framing is retired but the hierarchy still holds.
-4. **`roadmap.yaml`** — concrete deliverables. Phase-160 (Linux boot to userspace) is now research-only; new work hangs off the mini-shell milestone above.
+4. **`roadmap_v2.yaml`** — concrete deliverables. Phase-160 (Linux boot to userspace) is now research-only; new work hangs off the mini-shell milestone above. Phase E (legacy reconciliation) is hygiene. Phases F and G are next (verification + persistence).
