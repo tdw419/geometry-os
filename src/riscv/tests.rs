@@ -1193,3 +1193,89 @@ fn test_surface_direct_read() {
         uart_str
     );
 }
+
+// ── Framebuffer sub-word access tests (Phase A, a.3) ──────────────
+
+#[test]
+fn test_framebuf_write_word_read_word() {
+    let mut vm = super::RiscvVm::new(4096);
+    let addr = framebuf::FB_BASE;
+    vm.bus.write_word(addr, 0xAABBCCDD).unwrap();
+    let val = vm.bus.read_word(addr).unwrap();
+    assert_eq!(val, 0xAABBCCDD, "word write/read roundtrip");
+}
+
+#[test]
+fn test_framebuf_write_half_read_half() {
+    let mut vm = super::RiscvVm::new(4096);
+    let addr = framebuf::FB_BASE;
+
+    // Write a full word first
+    vm.bus.write_word(addr, 0x11223344).unwrap();
+
+    // Overwrite the lower half
+    vm.bus.write_half(addr, 0x5566).unwrap();
+    let word = vm.bus.read_word(addr).unwrap();
+    assert_eq!(word, 0x11225566, "lower half overwrite");
+
+    // Overwrite the upper half
+    vm.bus.write_half(addr + 2, 0x7788).unwrap();
+    let word = vm.bus.read_word(addr).unwrap();
+    assert_eq!(word, 0x77885566, "upper half overwrite");
+
+    // Read halves back
+    let lo = vm.bus.read_half(addr).unwrap();
+    let hi = vm.bus.read_half(addr + 2).unwrap();
+    assert_eq!(lo, 0x5566, "read lower half");
+    assert_eq!(hi, 0x7788, "read upper half");
+}
+
+#[test]
+fn test_framebuf_write_byte_read_byte() {
+    let mut vm = super::RiscvVm::new(4096);
+    let addr = framebuf::FB_BASE;
+
+    // Write individual bytes
+    vm.bus.write_byte(addr, 0x11).unwrap();
+    vm.bus.write_byte(addr + 1, 0x22).unwrap();
+    vm.bus.write_byte(addr + 2, 0x33).unwrap();
+    vm.bus.write_byte(addr + 3, 0x44).unwrap();
+
+    // Read back as word
+    let word = vm.bus.read_word(addr).unwrap();
+    assert_eq!(word, 0x44332211, "byte writes assembled to word (little-endian)");
+
+    // Read individual bytes
+    assert_eq!(vm.bus.read_byte(addr).unwrap(), 0x11);
+    assert_eq!(vm.bus.read_byte(addr + 1).unwrap(), 0x22);
+    assert_eq!(vm.bus.read_byte(addr + 2).unwrap(), 0x33);
+    assert_eq!(vm.bus.read_byte(addr + 3).unwrap(), 0x44);
+}
+
+#[test]
+fn test_framebuf_half_word_does_not_corrupt_ram() {
+    let mut vm = super::RiscvVm::new(4096);
+    let fb_addr = framebuf::FB_BASE;
+
+    // Write to RAM at same offset (should go to RAM, not framebuffer)
+    let ram_addr = vm.bus.mem.ram_base;
+    vm.bus.write_word(ram_addr, 0xDEADBEEF).unwrap();
+
+    // Write half-word to framebuffer (should NOT touch RAM)
+    vm.bus.write_half(fb_addr, 0x1234).unwrap();
+
+    // RAM should be untouched
+    let ram_val = vm.bus.read_word(ram_addr).unwrap();
+    assert_eq!(ram_val, 0xDEADBEEF, "RAM unchanged after framebuffer half write");
+}
+
+#[test]
+fn test_framebuf_control_register() {
+    let mut vm = super::RiscvVm::new(4096);
+    let ctrl_addr = framebuf::FB_CONTROL_ADDR;
+
+    // Write to control register (should not panic)
+    vm.bus.write_word(ctrl_addr, 1).unwrap();
+    assert!(vm.bus.framebuf.present_flag, "present flag set");
+}
+

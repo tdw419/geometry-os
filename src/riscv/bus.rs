@@ -347,6 +347,38 @@ impl Bus {
                 .ok_or(MemoryError { addr, size: 2 })?;
             let half_off = ((addr >> 1) & 1) as usize;
             Ok((word >> (half_off * 16)) as u16)
+        } else if super::uart::Uart::contains(addr) {
+            let word = self.uart.read_word(addr & !3).unwrap_or(0);
+            let half_off = ((addr >> 1) & 1) as usize;
+            Ok((word >> (half_off * 16)) as u16)
+        } else if super::plic::Plic::contains(addr) {
+            let word = self
+                .plic
+                .read(addr & !3)
+                .ok_or(MemoryError { addr, size: 2 })?;
+            let half_off = ((addr >> 1) & 1) as usize;
+            Ok((word >> (half_off * 16)) as u16)
+        } else if super::virtio_blk::VirtioBlk::contains(addr) {
+            let word = self
+                .virtio_blk
+                .read(addr & !3)
+                .ok_or(MemoryError { addr, size: 2 })?;
+            let half_off = ((addr >> 1) & 1) as usize;
+            Ok((word >> (half_off * 16)) as u16)
+        } else if super::vfs_surface::VfsSurface::contains(addr) {
+            let word = self
+                .vfs_surface
+                .read(addr & !3)
+                .ok_or(MemoryError { addr, size: 2 })?;
+            let half_off = ((addr >> 1) & 1) as usize;
+            Ok((word >> (half_off * 16)) as u16)
+        } else if super::framebuf::Framebuffer::contains(addr) {
+            let word = self
+                .framebuf
+                .read(addr & !3)
+                .ok_or(MemoryError { addr, size: 2 })?;
+            let half_off = ((addr >> 1) & 1) as usize;
+            Ok((word >> (half_off * 16)) as u16)
         } else if addr < self.mem.ram_base {
             Ok(0)
         } else {
@@ -372,6 +404,41 @@ impl Bus {
             } else {
                 Err(MemoryError { addr, size: 2 })
             }
+        } else if super::uart::Uart::contains(addr) {
+            // UART doesn't have half-word writes; read-modify-write at word level
+            let word_addr = addr & !3;
+            let half_off = ((addr >> 1) & 1) as usize;
+            let mut word = self.uart.read_word(word_addr).unwrap_or(0);
+            word = (word & !(0xFFFF << (half_off * 16))) | ((val as u32) << (half_off * 16));
+            self.uart.write_word(word_addr, word);
+            Ok(())
+        } else if super::plic::Plic::contains(addr) {
+            let word_addr = addr & !3;
+            let half_off = ((addr >> 1) & 1) as usize;
+            let mut word = self.plic.read(word_addr).unwrap_or(0);
+            word = (word & !(0xFFFF << (half_off * 16))) | ((val as u32) << (half_off * 16));
+            if self.plic.write(word_addr, word) {
+                Ok(())
+            } else {
+                Err(MemoryError { addr, size: 2 })
+            }
+        } else if super::virtio_blk::VirtioBlk::contains(addr) {
+            // Virtio doesn't have half-word writes; ignore
+            Ok(())
+        } else if super::vfs_surface::VfsSurface::contains(addr) {
+            let word_addr = addr & !3;
+            let half_off = ((addr >> 1) & 1) as usize;
+            let mut word = self.vfs_surface.read(word_addr).unwrap_or(0);
+            word = (word & !(0xFFFF << (half_off * 16))) | ((val as u32) << (half_off * 16));
+            self.vfs_surface.write(word_addr, word);
+            Ok(())
+        } else if super::framebuf::Framebuffer::contains(addr) {
+            let word_addr = addr & !3;
+            let half_off = ((addr >> 1) & 1) as usize;
+            let mut word = self.framebuf.read(word_addr).unwrap_or(0);
+            word = (word & !(0xFFFF << (half_off * 16))) | ((val as u32) << (half_off * 16));
+            self.framebuf.write(word_addr, word);
+            Ok(())
         } else if addr < self.mem.ram_base {
             // Silently accept writes to unmapped addresses below RAM
             Ok(())

@@ -9,8 +9,9 @@
 # Output: hello.elf in the current directory.
 # Boot: hypervisor_boot arch=riscv32 kernel=hello.elf ram=1
 #
-# IMPORTANT: Geometry OS CPU is RV32I (see src/riscv/cpu/mod.rs). We compile
-# with -march=rv32imac -mabi=ilp32 -- do NOT change to rv64/lp64 or the
+# IMPORTANT: Geometry OS CPU supports RV32IMAC + Zicsr (see src/riscv/cpu/alu.rs for
+# M extension, src/riscv/dtb.rs advertises rv32imac). We compile with
+# -march=rv32imac_zicsr -mabi=ilp32 -- do NOT change to rv64/lp64 or the
 # compiler will emit ld/sd/addiw instructions the CPU cannot execute.
 
 set -e
