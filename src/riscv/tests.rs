@@ -1243,7 +1243,10 @@ fn test_framebuf_write_byte_read_byte() {
 
     // Read back as word
     let word = vm.bus.read_word(addr).unwrap();
-    assert_eq!(word, 0x44332211, "byte writes assembled to word (little-endian)");
+    assert_eq!(
+        word, 0x44332211,
+        "byte writes assembled to word (little-endian)"
+    );
 
     // Read individual bytes
     assert_eq!(vm.bus.read_byte(addr).unwrap(), 0x11);
@@ -1266,7 +1269,10 @@ fn test_framebuf_half_word_does_not_corrupt_ram() {
 
     // RAM should be untouched
     let ram_val = vm.bus.read_word(ram_addr).unwrap();
-    assert_eq!(ram_val, 0xDEADBEEF, "RAM unchanged after framebuffer half write");
+    assert_eq!(
+        ram_val, 0xDEADBEEF,
+        "RAM unchanged after framebuffer half write"
+    );
 }
 
 #[test]
@@ -1278,4 +1284,3 @@ fn test_framebuf_control_register() {
     vm.bus.write_word(ctrl_addr, 1).unwrap();
     assert!(vm.bus.framebuf.present_flag, "present flag set");
 }
-

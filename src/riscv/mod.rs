@@ -19,9 +19,11 @@ pub mod cpu;
 pub mod csr;
 pub mod decode;
 pub mod dtb;
+pub mod framebuf;
 pub mod gpu;
 pub mod gpu_loader;
 pub mod gpu_reference;
+pub mod live;
 pub mod loader;
 pub mod memory;
 pub mod mmu;
@@ -32,7 +34,6 @@ pub mod trace;
 pub mod uart;
 pub mod vfs_surface;
 pub mod virtio_blk;
-pub mod framebuf;
 
 #[cfg(test)]
 mod tests;
