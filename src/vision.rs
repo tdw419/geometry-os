@@ -62,7 +62,19 @@ pub fn encode_png(screen: &[u32]) -> Vec<u8> {
     }
 
     // Compress with raw deflate (stored blocks, no compression)
-    let compressed = deflate_raw(&raw_data);
+    let raw_deflate = deflate_raw(&raw_data);
+
+    // Wrap in zlib format: header (2 bytes) + deflate data + adler32 (4 bytes)
+    // zlib header: CMF=0x78 (deflate, window=32K), FLG=0x01 (no dict, check bits)
+    let mut compressed = Vec::with_capacity(6 + raw_deflate.len());
+    compressed.push(0x78); // CMF: deflate, window size 32K
+    compressed.push(0x01); // FLG: no preset dict, check bits set correctly
+
+    compressed.extend_from_slice(&raw_deflate);
+
+    // Adler-32 checksum
+    let adler = adler32(&raw_data);
+    compressed.extend_from_slice(&adler.to_be_bytes());
 
     // Build PNG file
     let mut png = Vec::new();
@@ -172,6 +184,18 @@ fn crc32(data: &[u8]) -> u32 {
         crc = (crc >> 8) ^ CRC_TABLE[idx];
     }
     crc ^ 0xFFFFFFFF
+}
+
+/// Compute Adler-32 checksum (zlib standard)
+fn adler32(data: &[u8]) -> u32 {
+    let mut a: u32 = 1;
+    let mut b: u32 = 0;
+    const MOD: u32 = 65521;
+    for &byte in data {
+        a = (a + byte as u32) % MOD;
+        b = (b + a) % MOD;
+    }
+    (b << 16) | a
 }
 
 /// Base64 encode (standard alphabet with padding)

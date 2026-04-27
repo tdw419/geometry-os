@@ -3164,6 +3164,44 @@ fn main() {
                                     response.push_str("[riscv: not running]\n");
                                 }
                             }
+                            "riscv_fb_dump" => {
+                                // Dump the RISC-V framebuffer to a PNG file.
+                                // Usage: riscv_fb_dump <path>
+                                // Requests a snapshot from the VM thread and writes it as PNG.
+                                if let Some(ref mut riscv) = riscv_handle {
+                                    if let Some(path) = parts.get(1) {
+                                        match riscv.snapshot() {
+                                            Some(frame) => {
+                                                // Convert 0xRRGGBBAA (guest format) to 0x00RRGGBB (encode_png format)
+                                                let converted: Vec<u32> = frame.pixels.iter()
+                                                    .map(|px| px >> 8)  // shift right 8: drops alpha, R moves to bit 16
+                                                    .collect();
+                                                let png_bytes = geometry_os::vision::encode_png(&converted);
+                                                match std::fs::write(path, &png_bytes) {
+                                                    Ok(_) => {
+                                                        response.push_str(&format!(
+                                                            "[riscv: framebuffer dumped to {} ({} bytes, {} instructions)]\n",
+                                                            path, png_bytes.len(), frame.instructions
+                                                        ));
+                                                    }
+                                                    Err(e) => {
+                                                        response.push_str(&format!(
+                                                            "[riscv: write error: {}]\n", e
+                                                        ));
+                                                    }
+                                                }
+                                            }
+                                            None => {
+                                                response.push_str("[riscv: snapshot timeout (VM may not be running)]\n");
+                                            }
+                                        }
+                                    } else {
+                                        response.push_str("[usage: riscv_fb_dump <path.png>]\n");
+                                    }
+                                } else {
+                                    response.push_str("[riscv: not running]\n");
+                                }
+                            }
                             // Phase 88: AI Vision Bridge socket commands
                             "screenshot_b64" => {
                                 let b64 = geometry_os::vision::encode_png_base64(&vm.screen);

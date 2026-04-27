@@ -23,7 +23,7 @@ use std::thread::{self, JoinHandle};
 // ── Messages ─────────────────────────────────────────────────────
 
 /// A single frame of pixels from the guest, sent over the channel.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Frame {
     /// 256*256 RGBA pixels (same layout as Framebuffer::pixels).
     pub pixels: Vec<u32>,
@@ -47,6 +47,9 @@ pub enum ThreadControl {
     Reset,
     /// Forward a keyboard byte to the guest's UART RX.
     Input(u8),
+    /// Send a copy of the current framebuffer over the frame channel.
+    /// Used by the socket handler to visually verify guest output.
+    TriggerSnapshot,
 }
 
 /// Status reports sent from the VM thread to the GUI thread.
@@ -85,6 +88,8 @@ pub struct RiscvVmHandle {
     thread_handle: Option<JoinHandle<()>>,
     /// Whether the VM is currently paused.
     paused: bool,
+    /// Most recent frame received from the VM (updated by render loop or snapshot).
+    pub last_frame: Option<Frame>,
 }
 
 impl RiscvVmHandle {
@@ -98,6 +103,35 @@ impl RiscvVmHandle {
     /// Send a control command to the VM thread.
     pub fn control(&self, cmd: ThreadControl) {
         let _ = self.control_tx.send(cmd);
+    }
+
+    /// Request a snapshot of the current framebuffer from the VM thread.
+    /// Sends TriggerSnapshot, waits up to 500ms for the response frame.
+    /// Returns the frame or None on timeout.
+    pub fn snapshot(&mut self) -> Option<Frame> {
+        // Drain any stale frames first
+        while self.frame_rx.try_recv().is_ok() {}
+
+        // Request snapshot
+        let _ = self.control_tx.send(ThreadControl::TriggerSnapshot);
+
+        // Wait for the response (with timeout)
+        let start = std::time::Instant::now();
+        loop {
+            match self.frame_rx.try_recv() {
+                Ok(frame) => {
+                    self.last_frame = Some(frame.clone());
+                    return Some(frame);
+                }
+                Err(TryRecvError::Empty) => {
+                    if start.elapsed().as_millis() > 500 {
+                        return self.last_frame.clone();
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                Err(TryRecvError::Disconnected) => return None,
+            }
+        }
     }
 
     /// Non-blocking check for VM status updates.
@@ -196,6 +230,7 @@ pub fn spawn_vm_thread(config: VmThreadConfig) -> Result<RiscvVmHandle, String> 
         status_rx,
         thread_handle: Some(handle),
         paused: false,
+        last_frame: None,
     })
 }
 
@@ -296,6 +331,16 @@ fn vm_thread_main(
             }
             Ok(ThreadControl::Input(byte)) => {
                 vm.bus.uart.receive_byte(byte);
+            }
+            Ok(ThreadControl::TriggerSnapshot) => {
+                // Clone current framebuffer and send as a Frame
+                let frame = Frame {
+                    pixels: vm.bus.framebuf.pixels.clone(),
+                    width: FB_WIDTH,
+                    height: FB_HEIGHT,
+                    instructions: *instruction_count.borrow(),
+                };
+                let _ = frame_tx.send(frame);
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => break,
