@@ -61,6 +61,7 @@ impl RiscvVm {
                 | StepResult::StoreFault => {}
                 StepResult::Ebreak => break,
                 StepResult::Ecall => {} // ECALL is normal during boot
+                StepResult::Shutdown => break,
             }
             count += 1;
         }
@@ -1530,6 +1531,7 @@ impl RiscvVm {
                 }
                 StepResult::Ebreak => break,
                 StepResult::Ecall => {} // ECALL is normal during boot
+                StepResult::Shutdown => break,
             }
 
             // Demand-paging is handled at the MMU level via low_addr_identity_map.

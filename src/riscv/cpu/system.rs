@@ -100,7 +100,7 @@ impl RiscvCpu {
                         self.pc = next_pc;
 
                         if bus.sbi.shutdown_requested {
-                            return StepResult::Ebreak;
+                            return StepResult::Shutdown;
                         }
                         return StepResult::Ok;
                     }

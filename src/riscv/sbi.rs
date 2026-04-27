@@ -52,7 +52,9 @@ const SBI_DBCN_CONSOLE_WRITE_BYTE: u32 = 2;
 // Geometry OS-specific SBI extension. EID is ASCII "GEO\0".
 // Function 0: GEO_VFS_READ (DEPRECATED -- use Pixel VFS Surface at 0x7000_0000)
 // Function 1: GEO_PIXEL_SET(x, y, color) -- set pixel in framebuffer
-//   a0 = x (0..63), a1 = y (0..63), a2 = RGBA color (0xRRGGBBAA, alpha ignored)
+//   a0 = x (0..63), a1 = y (0..63), a2 = RGBA color
+//   Color format: bits [31:24]=R, [23:16]=G, [15:8]=B, [7:0]=A (alpha ignored).
+//   Example: 0xFF0000FF = red, 0x00FF00FF = green, 0x0000FFFF = blue.
 //   Returns SBI_SUCCESS or SBI_ERR_INVALID_PARAM if out of bounds.
 // Function 2: GEO_PIXEL_PRESENT() -- flush framebuffer to display
 //   Returns SBI_SUCCESS.

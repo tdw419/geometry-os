@@ -32,6 +32,7 @@ pub mod trace;
 pub mod uart;
 pub mod vfs_surface;
 pub mod virtio_blk;
+pub mod framebuf;
 
 #[cfg(test)]
 mod tests;

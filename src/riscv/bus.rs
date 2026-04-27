@@ -3,8 +3,8 @@
 // Routes memory accesses to RAM or device MMIO regions.
 // Currently handles: CLINT (timer + software interrupts).
 // Phase 36 will add: UART, PLIC, virtio-blk.
-
 use super::clint::Clint;
+use super::framebuf::Framebuffer;
 use super::memory::{GuestMemory, MemoryError};
 use super::plic::Plic;
 use super::sbi::Sbi;
@@ -31,6 +31,8 @@ pub struct Bus {
     pub virtio_blk: VirtioBlk,
     /// VFS Pixel Surface MMIO device.
     pub vfs_surface: VfsSurface,
+    /// MMIO Framebuffer (256x256 RGBA at 0x6000_0000).
+    pub framebuf: Framebuffer,
     /// SBI (Supervisor Binary Interface) handler.
     /// Intercepts SBI ECALLs from the kernel before they reach the trap vector.
     pub sbi: Sbi,
@@ -97,6 +99,7 @@ impl Bus {
             plic: Plic::new(),
             virtio_blk: VirtioBlk::new(),
             vfs_surface,
+            framebuf: Framebuffer::new(),
             sbi: Sbi::new(),
             syscall_log: Vec::new(),
             mmu_log: Vec::new(),
@@ -139,6 +142,10 @@ impl Bus {
                 .ok_or(MemoryError { addr, size: 4 })
         } else if super::vfs_surface::VfsSurface::contains(addr) {
             self.vfs_surface
+                .read(addr)
+                .ok_or(MemoryError { addr, size: 4 })
+        } else if super::framebuf::Framebuffer::contains(addr) {
+            self.framebuf
                 .read(addr)
                 .ok_or(MemoryError { addr, size: 4 })
         } else if addr < self.mem.ram_base {
@@ -194,6 +201,9 @@ impl Bus {
         } else if super::vfs_surface::VfsSurface::contains(addr) {
             self.vfs_surface.write(addr, val);
             Ok(())
+        } else if super::framebuf::Framebuffer::contains(addr) {
+            self.framebuf.write(addr, val);
+            Ok(())
         } else if addr < self.mem.ram_base {
             // Silently accept writes to unmapped addresses below RAM
             Ok(())
@@ -241,6 +251,13 @@ impl Bus {
         } else if super::vfs_surface::VfsSurface::contains(addr) {
             let word = self
                 .vfs_surface
+                .read(addr & !3)
+                .ok_or(MemoryError { addr, size: 1 })?;
+            let byte_off = (addr & 3) as usize;
+            Ok((word >> (byte_off * 8)) as u8)
+        } else if super::framebuf::Framebuffer::contains(addr) {
+            let word = self
+                .framebuf
                 .read(addr & !3)
                 .ok_or(MemoryError { addr, size: 1 })?;
             let byte_off = (addr & 3) as usize;
@@ -299,6 +316,13 @@ impl Bus {
             let mut word = self.vfs_surface.read(word_addr).unwrap_or(0);
             word = (word & !(0xFF << (byte_off * 8))) | ((val as u32) << (byte_off * 8));
             self.vfs_surface.write(word_addr, word);
+            Ok(())
+        } else if super::framebuf::Framebuffer::contains(addr) {
+            let word_addr = addr & !3;
+            let byte_off = (addr & 3) as usize;
+            let mut word = self.framebuf.read(word_addr).unwrap_or(0);
+            word = (word & !(0xFF << (byte_off * 8))) | ((val as u32) << (byte_off * 8));
+            self.framebuf.write(word_addr, word);
             Ok(())
         } else if addr < self.mem.ram_base {
             Ok(())

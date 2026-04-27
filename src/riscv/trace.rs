@@ -238,6 +238,7 @@ fn result_name(r: &StepResult) -> &'static str {
         StepResult::FetchFault => "FETCH_FAULT",
         StepResult::LoadFault => "LOAD_FAULT",
         StepResult::StoreFault => "STORE_FAULT",
+        StepResult::Shutdown => "SHUTDOWN",
     }
 }
 

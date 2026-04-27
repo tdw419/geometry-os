@@ -43,6 +43,8 @@ pub enum StepResult {
     LoadFault,
     /// Store to unmapped memory.
     StoreFault,
+    /// Guest requested shutdown via SBI (sbi_shutdown or sbi_system_reset).
+    Shutdown,
 }
 
 /// Information about the last executed instruction (Phase 41: tracing).
