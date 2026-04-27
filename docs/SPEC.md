@@ -8,6 +8,22 @@
 
 The framebuffer is the canonical state of the machine. Programs are pixels that drive pixels. We use RISC-V because it is a real, proven ISA with a real toolchain — and we use it bare-metal, because the unique part of this project is the pixel substrate above the CPU, not yet another Linux distribution.
 
+## Why this stack
+
+Pixel computing — pixels-driving-pixels, framebuffer-as-canonical-state, programs-as-pixels — is genuinely **unproven technology**. Nobody has shipped a useful computer built this way. That is the bet.
+
+Everything else in the stack is **proven, load-bearing, and deliberately boring**:
+
+| Layer | Status | Why this choice |
+|---|---|---|
+| RISC-V ISA, gcc/llvm, ELF, C, SBI, UART | Proven (decades old, exhaustively documented, free toolchain) | Lets us write tools in C against a real ISA without inventing a compiler or debugger |
+| **The shim between proven and unproven** | **Tiny on purpose** (~10 lines per syscall today: SBI putchar/getchar + interpreter loop) | This is the surface area we're betting won't crack |
+| Pixel substrate (the framebuffer-as-state, pixels-driving-pixels model) | Unproven, the actual experiment | The thing nobody else has built — the only part of the system that should consume novelty budget |
+
+**The design rule that follows:** every time we're tempted to add proven complexity (a kernel, a libc, a Linux compatibility shim, an X server), ask first whether it grows the shim or shrinks it. The reason `phase-160` (boot upstream Linux) was demoted is that Linux is a 30M-line shim sitting between our proven CPU and our unproven pixel substrate — it would have inverted the ratio: huge shim, tiny pixel surface poking through. Bare-metal RISC-V + a few hundred lines of C keeps the shim collapsed and lets the pixel layer be the thing the system is actually about.
+
+The same rule rejects pivots like "use a CRT simulation instead of pixels" — that swaps one unproven model for a *more* unproven one (beam timing, phosphor decay, scanline ordering) without removing any of the existing pixel work. CRT *aesthetic* (scanlines, glow, persistence trails) belongs as a Layer 3 program over the pixel substrate, not as a substrate replacement.
+
 ## Architecture
 
 Three layers. Do not skip layers.
