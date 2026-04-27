@@ -8436,3 +8436,62 @@ version: 1.0.0
       scope_lines: 20
   scope_lines_total: 40
   test_target: 2
+
+- id: phase-172
+  title: "Fix riscv_tests Compilation: StepResult::Shutdown Not Covered"
+  status: planned
+  goal: "riscv_tests should compile and all RISC-V tests should pass"
+  description: "Dogfood QA found that the test suite fails to compile due to a non-exhaustive pattern match. Commit acc2aa5 added a Shutdown variant to StepResult (enum in src/riscv/cpu/mod.rs:33) but the run_vm() helper in tests/riscv_tests/privilege.rs:733 doesn't handle it. This prevents ALL riscv_tests from running. The fix is trivial: add StepResult::Shutdown to the match arm in run_vm(). The program_tests (490 passed) and lib tests compile fine; only riscv_tests are broken."
+  deliverables:
+  - name: "Fix non-exhaustive match in privilege.rs run_vm()"
+    description: "Add StepResult::Shutdown => break to the match in tests/riscv_tests/privilege.rs:733 run_vm() function, alongside the existing Ok/LoadFault/StoreFault arm. Shutdown should break the loop just like Ecall/Ebreak/FetchFault."
+    status: todo
+    tasks:
+    - id: p172.d1.t1
+      title: "Add StepResult::Shutdown arm to run_vm() match"
+      status: todo
+      description: "In tests/riscv_tests/privilege.rs line 733, change the match to: StepResult::Ecall | StepResult::Ebreak | StepResult::FetchFault | StepResult::Shutdown => break, StepResult::Ok | StepResult::LoadFault | StepResult::StoreFault => {}"
+      scope_lines: 10
+    - id: p172.d1.t2
+      title: "Verify all riscv_tests compile and pass"
+      status: todo
+      description: "Run cargo test --test riscv_tests and verify 0 compilation errors and 0 test failures. The test suite had 146 tests passing before the Shutdown variant was added."
+      scope_lines: 10
+  scope_lines_total: 20
+  test_target: 2
+
+- id: phase-173
+  title: "Fix 3 Failing Lib Tests: SBI, Pause/Resume, Surface Direct Read"
+  status: planned
+  goal: "All 1581 lib tests should pass (currently 1578 pass, 3 fail)"
+  description: "Dogfood QA found 3 failing lib tests (1578 passed, 3 failed). All are untracked regressions. (1) test_sbi_v02_console_putchar (sbi.rs:450): assertion left=0xFFFFFFFF right=0 -- test passes SBI_CONSOLE_GETCHAR (2) as extension ID but should pass SBI_CONSOLE_PUTCHAR (1) since the test is for putchar. The GETCHAR path returns -1 (no char in UART). (2) test_pause_resume (live.rs:452): SendError when sending on a channel to the live VM thread -- likely a race condition where the thread hasn't started or already exited. (3) test_surface_direct_read (tests.rs:1177): expects VFS count=4 but gets count=6 -- the VFS pixel surface has accumulated extra entries from cross-session persistence (Phase H), stale test files in .geometry_os/fs/, or test contamination between runs."
+  deliverables:
+  - name: "Fix test_sbi_v02_console_putchar wrong extension ID"
+    description: "In src/riscv/sbi.rs test_sbi_v02_console_putchar() at line 438, change SBI_CONSOLE_GETCHAR to SBI_CONSOLE_PUTCHAR. The test is for putchar but accidentally uses the getchar extension ID (both are numeric 2 vs 1)."
+    status: todo
+    tasks:
+    - id: p173.d1.t1
+      title: "Change SBI_CONSOLE_GETCHAR to SBI_CONSOLE_PUTCHAR in test"
+      status: todo
+      description: "In sbi.rs line 438, replace SBI_CONSOLE_GETCHAR with SBI_CONSOLE_PUTCHAR so the test actually exercises the putchar path."
+      scope_lines: 5
+  - name: "Fix test_pause_resume SendError race condition"
+    description: "In src/riscv/live.rs test_pause_resume() at line 452, the mpsc::Sender::send() fails with SendError because the receiver (live VM thread) has been dropped. Either the thread panicked, or there's a race between thread start and the first send. Add retry logic or ensure the thread is confirmed running before sending."
+    status: todo
+    tasks:
+    - id: p173.d2.t1
+      title: "Investigate and fix SendError in test_pause_resume"
+      status: todo
+      description: "Check if the live VM thread is starting correctly. The SendError at line 452 means the receiver was dropped. Either add a small sleep after thread start, use a sync channel to confirm thread readiness, or handle the SendError gracefully. Also check if the test relies on display availability that's missing in headless environments."
+      scope_lines: 40
+  - name: "Fix test_surface_direct_read VFS count mismatch (expected 4, got 6)"
+    description: "In src/riscv/tests.rs test_surface_direct_read() at line 1177, the assertion expects exactly 4 VFS entries but finds 6. This is likely because Phase H cross-session persistence added files to the VFS surface that the test doesn't account for, or stale test files from previous runs. Either clean up the VFS before the test, or make the assertion more flexible (check >= 4 or check specific entries exist)."
+    status: todo
+    tasks:
+    - id: p173.d3.t1
+      title: "Fix VFS count assertion in test_surface_direct_read"
+      status: todo
+      description: "Either (a) reset/clear the VFS pixel surface before the test to ensure a clean state, (b) update the assertion to match the current entry count (6), or (c) change assertion to check for the presence of specific expected entries rather than exact count. The test should be resilient to cross-session persistence artifacts."
+      scope_lines: 20
+  scope_lines_total: 65
+  test_target: 3

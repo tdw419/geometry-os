@@ -401,7 +401,7 @@ fn test_sbi_base_probe_from_smode() {
     assert_eq!(vm.cpu.x[11], 0, "unknown extension should return 0 in a1");
 }
 
-/// Test SBI shutdown from S-mode causes EBREAK.
+/// Test SBI shutdown from S-mode returns Shutdown result.
 #[test]
 fn test_sbi_shutdown_from_smode() {
     let mut vm = RiscvVm::new(8192);
@@ -419,6 +419,10 @@ fn test_sbi_shutdown_from_smode() {
     vm.cpu.x[17] = 8; // a7 = SBI_SHUTDOWN
 
     let r = vm.cpu.step(&mut vm.bus);
-    assert_eq!(r, StepResult::Ebreak, "SBI shutdown should return EBREAK");
+    assert_eq!(
+        r,
+        StepResult::Shutdown,
+        "SBI shutdown should return Shutdown"
+    );
     assert!(vm.bus.sbi.shutdown_requested);
 }

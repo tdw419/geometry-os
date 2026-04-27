@@ -731,7 +731,10 @@ fn test_rv32_privilege_no_interrupt_when_disabled() {
 pub(crate) fn run_vm(vm: &mut RiscvVm, steps: usize) {
     for _ in 0..steps {
         match vm.step() {
-            StepResult::Ecall | StepResult::Ebreak | StepResult::FetchFault => break,
+            StepResult::Ecall
+            | StepResult::Ebreak
+            | StepResult::FetchFault
+            | StepResult::Shutdown => break,
             StepResult::Ok | StepResult::LoadFault | StepResult::StoreFault => {}
         }
     }
