@@ -152,34 +152,17 @@ impl Sbi {
                 Some((SBI_SUCCESS as u32, 0))
             }
             SBI_CONSOLE_GETCHAR => {
-                // Extension ID 0x02 serves dual purpose:
-                // - SBI v0.2 SBI_EXT_CONSOLE_PUTCHAR (a6=0): write char
-                // - Legacy SBI_CONSOLE_GETCHAR (a6!=0): return -1 (no char)
-                //
-                // The kernel with earlycon=sbi uses SBI v0.2 calling convention:
-                // a7=0x02 (extension), a6=0 (function=putchar), a0=character.
-                // The legacy SBI v0.1 used a7=1 for putchar and a7=2 for getchar
-                // with no a6 distinction. Since we report 0x02 as available via
-                // PROBE_EXTENSION, the kernel uses v0.2, so a6=0 is putchar.
-                if a6 == 0 {
-                    // SBI v0.2 console_putchar: a0 = character
-                    let ch = a0 as u8;
-                    if ch != 0 {
-                        uart.write_byte(0, ch);
-                        self.console_output.push(ch);
+                // Legacy SBI_CONSOLE_GETCHAR (a7=2): always read from UART rx_buf.
+                // Note: SBI v0.2 extension 0x02 (console putchar) is handled separately
+                // in the extension match block below. Legacy a7=2 is getchar only.
+                if !uart.rx_buf.is_empty() {
+                    let ch = uart.rx_buf.remove(0) as u32;
+                    if uart.rx_buf.is_empty() {
+                        uart.lsr &= !0x01; // Clear Data Ready
                     }
-                    Some((SBI_SUCCESS as u32, 0))
+                    Some((ch, 0))
                 } else {
-                    // Legacy SBI_CONSOLE_GETCHAR: drain UART rx_buf
-                    if !uart.rx_buf.is_empty() {
-                        let ch = uart.rx_buf.remove(0) as u32;
-                        if uart.rx_buf.is_empty() {
-                            uart.lsr &= !0x01; // Clear Data Ready
-                        }
-                        Some((ch, 0))
-                    } else {
-                        Some((0xFFFFFFFF_u32, 0)) // -1 = no char available
-                    }
+                    Some((0xFFFFFFFF_u32, 0)) // -1 = no char available
                 }
             }
             SBI_SET_TIMER => {
@@ -245,7 +228,10 @@ impl Sbi {
                     _ => Some((SBI_ERR_NOT_SUPPORTED as u32, 0)),
                 }
             }
-            // SBI_EXT_CONSOLE_PUTCHAR (0x02) already handled above (same as SBI_CONSOLE_GETCHAR)
+            // SBI_EXT_CONSOLE_PUTCHAR (0x02) is the same numeric value as
+            // SBI_CONSOLE_GETCHAR (2). Both handled by the legacy arm above.
+            // Linux earlycon=sbi would use a7=0x02,a6=0 for putchar, but our
+            // guest programs use legacy a7=1 for putchar and a7=2 for getchar.
             SBI_EXT_TIMER => {
                 // Timer extension: function 0 = sbi_set_timer
                 // a0:a1 = 64-bit next timer event (absolute time)

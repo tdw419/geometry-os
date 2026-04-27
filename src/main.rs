@@ -874,18 +874,20 @@ fn main() {
                     }
                 }
                 // Normal key mapping
+                // When a RISC-V program is running, keystrokes go exclusively to
+                // the guest UART. Otherwise they go to the GeOS VM. This prevents
+                // double-dispatch where both systems receive the same key.
                 if let Some(ch) = key_to_ascii_shifted(key, shift) {
-                    vm.push_key(ch as u32);
-                    // Forward to RISC-V guest if running
                     if let Some(ref riscv) = riscv_handle {
                         riscv.send_input(ch);
+                    } else {
+                        vm.push_key(ch as u32);
                     }
                 } else if let Some(ch) = key_to_ascii(key) {
-                    // Fallback for special keys (Enter, arrows, etc.)
-                    vm.push_key(ch as u32);
-                    // Forward to RISC-V guest if running
                     if let Some(ref riscv) = riscv_handle {
                         riscv.send_input(ch);
+                    } else {
+                        vm.push_key(ch as u32);
                     }
                 }
                 continue;
@@ -3227,7 +3229,7 @@ fn main() {
                             // ── Phase 89: AI Input Injection Socket Commands ──
                             "inject_key" => {
                                 // inject_key <keycode> [shift]
-                                // Injects a key event into the VM's key buffer
+                                // Injects a key event: to RISC-V guest if running, else GeOS VM
                                 if let Some(keycode_str) = parts.get(1) {
                                     let keycode = keycode_str.parse::<u32>().unwrap_or_else(|_| {
                                         // Try single character
@@ -3238,8 +3240,13 @@ fn main() {
                                             0
                                         }
                                     });
-                                    let ok = vm.push_key(keycode);
-                                    response.push_str(if ok { "ok\n" } else { "buffer_full\n" });
+                                    if let Some(ref riscv) = riscv_handle {
+                                        riscv.send_input(keycode as u8);
+                                        response.push_str("ok\n");
+                                    } else {
+                                        let ok = vm.push_key(keycode);
+                                        response.push_str(if ok { "ok\n" } else { "buffer_full\n" });
+                                    }
                                 } else {
                                     response.push_str("[usage: inject_key <keycode>]\n");
                                 }
@@ -3277,13 +3284,18 @@ fn main() {
                             }
                             "inject_text" => {
                                 // inject_text <text>
-                                // Types each character into the VM's key buffer
+                                // When a RISC-V program is running, sends characters to the
+                                // guest UART exclusively. Otherwise sends to GeOS VM key buffer.
                                 if line.len() > 12 {
                                     let text = &line[12..]; // skip "inject_text "
                                     let mut count = 0u32;
                                     for ch in text.chars() {
-                                        if !vm.push_key(ch as u32) {
-                                            break;
+                                        if let Some(ref riscv) = riscv_handle {
+                                            riscv.send_input(ch as u8);
+                                        } else {
+                                            if !vm.push_key(ch as u32) {
+                                                break;
+                                            }
                                         }
                                         count += 1;
                                     }

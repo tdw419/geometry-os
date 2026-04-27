@@ -77,7 +77,20 @@ static inline uint32_t geos_fb_read(uint32_t x, uint32_t y) {
 /* ---- Timing helpers ---- */
 
 /* CLINT mtime register (64-bit free-running counter).
- * Increments once per instruction. At ~52 MIPS, 1ms ≈ 52000 ticks.
+ *
+ * IMPORTANT: mtime increments once per interpreted instruction, NOT per
+ * wall-clock millisecond. At ~52 MIPS, 1ms ≈ 52000 ticks, but this is an
+ * approximation. On a faster host the interpreter runs faster, so
+ * geos_wait_ms(16) completes in less than 16ms wall-clock time. On a slower
+ * host it takes longer.
+ *
+ * This means:
+ *   - geos_wait_ms() is fine for "give programs a sense of relative time
+ *     so they don't spin-paint maximally"
+ *   - geos_wait_ms() is NOT suitable for "60fps wall-clock-locked animation"
+ *   - Real wall-clock sync requires a future phase (e.g. host-side VSync
+ *     signal or real-time clock MMIO)
+ *
  * Read as two 32-bit halves (RISC-V is little-endian). */
 #define GEOS_CLINT_MTIME  0x0200BFF8u
 
