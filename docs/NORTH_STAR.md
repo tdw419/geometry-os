@@ -1,5 +1,7 @@
 # Geometry OS North Star
 
+> **Superseded in part by [`SPEC.md`](./SPEC.md) (2026-04-27).** The "make it more like Linux/Windows/macOS" framing in this document is no longer the goal — Geometry OS is pixel-native on a bare-metal RISC-V substrate, not a Linux-alike. The priority hierarchy and DO/DON'T rules below still hold; the old "Test" section has been removed. Read `SPEC.md` first.
+
 ## The One Rule
 
 **Every change must make Geometry OS more capable or more alive.**
@@ -35,7 +37,3 @@ A real OS has: memory protection, a filesystem, proper scheduling, IPC, device a
 ## The Drift Risk
 
 This project has 22 phases of VM construction behind it. The VM is fun to tinker with. New opcodes are easy to add. Visual polish is tempting. All of that is drift now. The goal is an OS, not a better VM. The VM serves the OS.
-
-## The Test
-
-After any change, ask: "Is Geometry OS more like Linux/Windows/macOS than it was before?" If no, it's probably not the right work right now.
