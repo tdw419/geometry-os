@@ -497,9 +497,9 @@ phases:
               library in tests/geos_test_lib.sh. Source it from test scripts.
             files: ["tests/geos_test_lib.sh"]
 
-  # ── Phase G: Persistence ────────────────────────────────────────
+  # ── Phase G: In-session Canvas Checkpoint ────────────────────────
   - id: "phase-G"
-    title: "Persistence — Save/Load Canvas"
+    title: "In-session Canvas Checkpoint — Save/Load"
     status: "done"
     goal: "Checkpoint and restore pixel state via the VFS surface"
     description: >
@@ -570,6 +570,57 @@ phases:
               Uses geos_test_lib.sh. Draws colored fill trails, saves, clears,
               loads, compares 244 rows * 256 cols = 62,464 pixels with ±3 tolerance.
             files: ["tests/persistence_roundtrip_test.sh"]
+
+  # ── Phase H: Cross-session Persistence ──────────────────────────
+  - id: "phase-H"
+    title: "Cross-session Persistence"
+    status: "future"
+    goal: "Canvas state survives VM restart"
+    description: >
+      Phase G proved in-session checkpoint/restore. Phase H makes it survive
+      across VM sessions: save today, kill GeOS, restart tomorrow, load.
+      Two implementation paths:
+        A) Raw-region flush in VfsSurface::Drop — detect CANV marker in row 0,
+           write the raw pixel region to a fixed host file (e.g., .geometry_os/canvas.raw).
+           On boot, VfsSurface::new() checks for the file and loads it.
+        B) Virtio-blk integration — route geos_save_canvas through the virtio-blk
+           device at 0x1000_1000 instead of the VFS surface. Requires implementing
+           virtqueue processing in the guest (or a simplified direct-access mode
+           in the host virtio-blk emulation).
+      Path A is simpler and keeps the "pixels copying pixels" model. Path B is
+      more general but adds virtqueue complexity to bare-metal guest code.
+    dependencies:
+      - source: "phase-G"
+        target: "phase-H"
+        type: "hard"
+        reason: "In-session save/load is the foundation; cross-session adds disk flush"
+    deliverables:
+      - name: "Canvas survives VM restart"
+        description: >
+          VfsSurface flushes the CANV region to disk on Drop, and loads it on
+          construction. The round-trip test is extended: boot, draw, save, kill VM,
+          reboot, load, assert pixel-perfect match.
+        status: "todo"
+        acceptance_criteria:
+          - description: "Saved canvas loads correctly after VM restart"
+            validation: "Two-session test: save in session 1, kill, boot session 2, load, all pixels match"
+            met: false
+        tasks:
+          - id: "h.1.1"
+            title: "Add canvas raw-region flush to VfsSurface"
+            status: "todo"
+            description: >
+              In VfsSurface::Drop::flush(), check for CANV marker at pixel (0,255).
+              If present, write rows 1-255 to .geometry_os/canvas.raw (261,120 bytes).
+              In VfsSurface::new(), check for canvas.raw and populate rows 1-255.
+            files: ["src/riscv/vfs_surface.rs"]
+          - id: "h.1.2"
+            title: "Two-session round-trip test"
+            status: "todo"
+            description: >
+              Boot GeOS, run paint, draw pattern, save, kill. Boot GeOS again,
+              run paint, load, dump framebuffer. Compare with pre-save dump.
+            files: ["tests/cross_session_persistence_test.sh"]
 
 global_risks:
   - "Interpreter performance ceiling: 52 MIPS may not scale to complex guest programs"

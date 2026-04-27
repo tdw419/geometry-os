@@ -150,7 +150,7 @@ for y in range(0, 244):
         br, bg, bb = bp[x, y]
         rr, rg, rb = rp[x, y]
         checked += 1
-        if abs(br - rr) > 3 or abs(bg - rg) > 3 or abs(bb - rb) > 3:
+        if br != rr or bg != rg or bb != rb:
             mismatches += 1
             if mismatches <= 5:
                 print(f'  MISMATCH at ({x},{y}): baseline=({br},{bg},{bb}) restored=({rr},{rg},{rb})')
@@ -159,7 +159,7 @@ if mismatches > 0:
     print(f'FAIL: {mismatches}/{checked} canvas pixels mismatched')
     sys.exit(1)
 else:
-    print(f'  OK: All {checked} canvas pixels match (tolerance ±3)')
+    print(f'  OK: All {checked} canvas pixels match exactly (tolerance=0)')
 "
 
 echo ""

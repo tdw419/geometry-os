@@ -50,7 +50,7 @@ The Token → Pixel → GUI substrate model in [`GEMINI.md`](../GEMINI.md) is ca
 We **will**:
 
 - Keep RISC-V as the substrate. It gives us a real ISA, gcc/llvm, ELF tooling, and C as a sane authoring language for kernel + tools.
-- Treat the framebuffer as canonical state. Persistence means checkpointing pixels, not serializing structs.
+- Treat the framebuffer as canonical state. Persistence means checkpointing pixels, not serializing structs. (Phase G shipped in-session checkpoint/restore via the VFS pixel surface. Cross-session persistence — surviving VM restart — is Phase H.)
 - Build the userland as a stack of small bare-metal programs that ecall into SBI for I/O.
 - Earn opcodes (the Promotion Rule from `GEMINI.md`): pattern → macro → opcode, never the reverse.
 - Keep `cargo test` green on every commit.
@@ -130,6 +130,18 @@ The mini-shell proved the input→compute→output loop. `paint.c` proves the pi
 
 **Verified output.** Rectangle drawn with fill mode: 10 red + 10 blue + 10 green + 11 yellow pixels at expected coordinates. Adjacent pixels are background (10,10,20). No spill. Palette bar renders correctly with all 10 colors and white border on selection.
 
+## Capstone demonstration — in-session canvas checkpoint ✅ shipped 2026-04-27
+
+`paint.c` now supports save/load of its canvas state via `geos_save_canvas` and `geos_load_canvas` in libgeos. This proves the "checkpointing pixels" half of the persistence thesis.
+
+**What shipped.** Two new libgeos functions that copy the framebuffer to/from the VFS pixel surface at `0x7000_0000` (a 256x256 MMIO region). The save writes framebuffer rows 0-254 to VFS rows 1-255 (preserving the VFS directory index in row 0) and sets a `CANV` marker. The load checks the marker and copies back. Word-by-word MMIO — no serialization, no structs, just pixels copying pixels. Paint.c binds P=save and O=load (S/L conflict with WASD movement keys).
+
+**Scope and limits.** This is in-session checkpoint/restore only. The VFS surface is in-memory; when the VM process exits, the saved canvas is lost. This is still useful — undo, snapshots, scratchpad within a painting session. Cross-session persistence (save today, load tomorrow) requires either flushing the raw canvas region to disk in `VfsSurface::Drop` or routing through the virtio-blk device. That's Phase H.
+
+**Round-trip verification.** `persistence_roundtrip_test.sh` draws a colored pattern (red/green/blue fill trails), dumps the framebuffer, saves, clears, loads, dumps again, and compares pixel-by-pixel. Result: all 62,464 canvas pixels match exactly (tolerance=0). The palette bar area (y=244-255) is saved and restored as part of the framebuffer but paint.c redraws it on top after load — the round-trip test only asserts on the canvas area (y<244) to avoid false positives from cursor position changes.
+
+**Infrastructure reused.** `geos_test_lib.sh` from Phase F provided boot/run/inject/dump/assert primitives. No new test harness needed.
+
 ## Verification
 
 Visual verification is now scriptable via `riscv_fb_dump` and `vision::encode_png` (which now produces valid PNGs). New milestones close by asserting on pixel values, not by looking at a screenshot. The pattern: boot guest program → inject known input sequence → dump framebuffer → assert pixel values at specific coordinates.
@@ -139,4 +151,4 @@ Visual verification is now scriptable via `riscv_fb_dump` and `vision::encode_pn
 1. **`docs/SPEC.md`** (this file) — what we are building and why.
 2. **`GEMINI.md`** — Token → Pixel → GUI layer model and authoring conventions for Layer 3.
 3. **`docs/NORTH_STAR.md`** — priority hierarchy and "DO / DON'T" rules. The "be like Linux" framing is retired but the hierarchy still holds.
-4. **`roadmap_v2.yaml`** — concrete deliverables. Phase-160 (Linux boot to userspace) is now research-only; new work hangs off the mini-shell milestone above. Phase E (legacy reconciliation) is hygiene. Phases F and G are next (verification + persistence).
+4. **`roadmap_v2.yaml`** — concrete deliverables. Phase-160 (Linux boot to userspace) is now research-only; new work hangs off the mini-shell milestone above. Phase E (legacy reconciliation) is hygiene. Phases F (verification) and G (in-session persistence) are done. Phase H (cross-session persistence) is next.
