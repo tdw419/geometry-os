@@ -1,0 +1,411 @@
+title: "Geometry OS — Post-SPEC Pixel-Native Roadmap"
+version: "0.2.0"
+description: >
+  Roadmap for the pixel-native RISC-V hypervisor layer in Geometry OS.
+  Covers toolchain hygiene, GUI bridge, pixel VM convergence, libgeos extraction,
+  and legacy roadmap reconciliation.
+  SPEC = thesis. roadmap_v2 = arc. OpenSpec = per-change diff.
+
+phases:
+  # ── Phase A: Toolchain Hygiene ──────────────────────────────────
+  - id: "phase-A"
+    title: "Toolchain Hygiene"
+    status: "complete"
+    goal: "Eliminate software-math overhead, fix bus routing, establish rv32imac baseline"
+    description: >
+      The interpreter supports RV32IMAC but examples were being compiled with rv32i,
+      forcing software division loops even for power-of-two constants. This phase
+      fixes the build defaults, audits all programs, and patches the half-word
+      bus routing gap.
+    deliverables:
+      - name: "RV32IMAC default for all examples"
+        description: >
+          All C/ASM programs compiled with -march=rv32imac_zicsr. build.sh already
+          correct; life.c and painter2.c rebuilt with standard flags. Stale comment
+          in build.sh updated.
+        status: "done"
+        acceptance_criteria:
+          - description: "life.c compiles with rv32imac_zicsr"
+            validation: "riscv64-linux-gnu-gcc -march=rv32imac_zicsr ... life.c succeeds"
+            met: true
+          - description: "No __udivsi3/__umodsi3 shims in any example"
+            validation: "grep -r __udivsi3 examples/riscv-hello/ returns nothing"
+            met: true
+        tasks:
+          - id: "a.1.1"
+            title: "Rebuild life.elf with rv32imac + O2"
+            status: "done"
+            description: "Built with build.sh-style flags. 118M instrs in 2.1s = 56 MIPS."
+            files: ["examples/riscv-hello/life.c"]
+          - id: "a.1.2"
+            title: "Rebuild painter2.elf with rv32imac + O2"
+            status: "done"
+            description: "Full 256x256 scene in 46ms (26 MIPS)."
+            files: ["examples/riscv-hello/painter2.c"]
+          - id: "a.1.3"
+            title: "Audit all programs for softmath shims"
+            status: "done"
+            description: "grep found zero shims across all examples."
+      - name: "Power-of-two math optimizations in life.c"
+        description: >
+          Replaced x%256 with x&0xFF, y*256 with y<<8, idx/8 with idx>>3.
+          Result: 85x speedup (0.6 MIPS -> 56 MIPS).
+        status: "done"
+        acceptance_criteria:
+          - description: "No modulo or multiply by FB_WIDTH in hot loops"
+            validation: "grep -n '% FB_WIDTH\\|* FB_WIDTH' life.c returns nothing"
+            met: true
+          - description: "Benchmarks at 50+ MIPS"
+            validation: "time sh_run life.elf shows 2-3s for 10 generations"
+            met: true
+        tasks: []
+      - name: "Half-word bus routing for MMIO framebuffer"
+        description: >
+          Half-word (16-bit) writes to 0x6000_0000 currently fall through to RAM
+          instead of routing to the framebuffer. Will silently corrupt if guest
+          uses memcpy or RGBA565 packing.
+        status: "todo"
+        acceptance_criteria:
+          - description: "16-bit write to framebuffer address stored correctly"
+            validation: "Unit test: write 0x1234 to FB_BASE+0, read back matches"
+            met: false
+          - description: "Byte writes to framebuffer also work"
+            validation: "Unit test: write 0xFF to FB_BASE+1, read back upper byte is 0xFF"
+            met: false
+        tasks:
+          - id: "a.3.1"
+            title: "Add half-word routing in bus.rs for framebuffer range"
+            status: "todo"
+            description: >
+              In bus.rs write_word path, add framebuffer half-word routing similar
+              to existing word routing. Also add byte-level write routing.
+              Check Framebuffer::write() handles sub-word offsets.
+            files: ["src/riscv/bus.rs", "src/riscv/framebuf.rs"]
+          - id: "a.3.2"
+            title: "Add unit tests for half-word and byte framebuffer access"
+            status: "todo"
+            description: "Test 16-bit and 8-bit writes/reads to MMIO framebuffer."
+            files: ["src/riscv/tests.rs"]
+      - name: "Update build.sh stale comment"
+        description: "Comment says 'Geometry OS CPU is RV32I' but interpreter supports RV32IMAC."
+        status: "todo"
+        acceptance_criteria:
+          - description: "Comment in build.sh mentions RV32IMAC"
+            validation: "grep RV32IMAC build.sh returns match"
+            met: false
+        tasks:
+          - id: "a.4.1"
+            title: "Fix comment in build.sh"
+            status: "todo"
+            description: "Change 'IMPORTANT: Geometry OS CPU is RV32I' to RV32IMAC."
+            files: ["examples/riscv-hello/build.sh"]
+    technical_notes: >
+      The 85x speedup was the combination of two fixes: (1) rv32im gives hardware
+      MUL/DIV/REM, (2) power-of-two constants (256) let the compiler use shift/mask
+      instead of calling division routines at all. Both were necessary -- the compiler
+      can't optimize division by constants into shifts if there's no hardware divide
+      instruction in the target ISA.
+
+  # ── Phase B: GUI Bridge ─────────────────────────────────────────
+  - id: "phase-B"
+    title: "GUI Bridge — Live Pixel Display"
+    status: "planned"
+    goal: "Watch RISC-V programs paint in real-time on the Geometry OS display"
+    description: >
+      Bridge the MMIO framebuffer to the actual Geometry OS display so programs
+      render live instead of dumping PNGs. The present callback architecture is
+      already in place -- this phase swaps the PNG-dump callback for a real
+      screen blit, runs the VM on its own thread, and delivers the experiential
+      payoff of the pixel-native thesis.
+    dependencies:
+      - source: "phase-A"
+        target: "phase-B"
+        type: "hard"
+        reason: "Need verified 50+ MIPS before GUI bridge is worth building"
+    deliverables:
+      - name: "Off-thread VM execution"
+        description: >
+          Spawn RiscvVm on its own thread. Present callback pushes frame-ready
+          signal (or buffer copy) over a channel. GUI thread blits on render tick.
+          The current synchronous-callback-in-bus-write bug becomes structurally
+          impossible.
+        status: "todo"
+        acceptance_criteria:
+          - description: "VM runs on separate thread from GUI"
+            validation: "Code review: std::thread::spawn for VM loop"
+            met: false
+          - description: "Present callback does not block interpreter"
+            validation: "Channel send is non-blocking or bounded"
+            met: false
+        tasks:
+          - id: "b.1.1"
+            title: "Create RiscvVmThread struct with channel-based present"
+            status: "todo"
+            description: >
+              New module (src/riscv/live.rs?) wrapping RiscvVm in a thread.
+              Uses mpsc::channel: VM sends (Vec<u32> or Arc<[u32]>) on present,
+              GUI thread recv()s on its tick. Include pause/resume/reset controls.
+            files: ["src/riscv/live.rs", "src/riscv/mod.rs"]
+          - id: "b.1.2"
+            title: "Replace synchronous PNG callback in sh_run with channel"
+            status: "todo"
+            description: >
+              Update sh_run to use the new threaded VM. Channel recv writes
+              PNGs (keep as debug tool) but doesn't block the VM.
+            files: ["examples/sh_run.rs"]
+      - name: "Framebuffer blit to Geometry OS display"
+        description: >
+          Find where the main app renders the pixel VM canvas. Inject the RISC-V
+          framebuffer (256x256 RGBA) as a surface in that pipeline. May need
+          scaling (256x256 -> 512x512 display) or window integration via WINSYS.
+        status: "todo"
+        acceptance_criteria:
+          - description: "RISC-V guest pixels appear on the Geometry OS display"
+            validation: "Launch life.elf via GUI, see cells moving on screen"
+            met: false
+          - description: "Frame rate is at least 5 fps for 64x64 life"
+            validation: "Visual confirmation of smooth animation"
+            met: false
+        tasks:
+          - id: "b.2.1"
+            title: "Identify main app render loop and injection point"
+            status: "todo"
+            description: >
+              Find the pixel VM canvas render path in main.rs or render.rs.
+              Determine how to add a RISC-V framebuffer surface alongside
+              existing canvas. Consider WINSYS window vs direct surface blit.
+            files: ["src/main.rs", "src/render.rs"]
+          - id: "b.2.2"
+            title: "Implement framebuffer-to-display blit"
+            status: "todo"
+            description: >
+              Wire the channel output from RiscvVmThread into the display
+              pipeline. Scale 256x256 RGBA to whatever the display expects.
+              Frame-rate limit to avoid spinning.
+            files: ["src/main.rs", "src/render.rs", "src/riscv/live.rs"]
+          - id: "b.2.3"
+            title: "Add launch control in Geometry OS UI"
+            status: "todo"
+            description: >
+              Add ability to load and run a .elf from the Geometry OS UI
+              (MCP command, keyboard shortcut, or menu item).
+            files: ["src/main.rs", "src/cli.rs"]
+      - name: "Default demo: Life at 64x64"
+        description: >
+          Life at 256x256 runs at ~5 gen/sec. Life at 64x64 should clear 20+ fps
+          and look alive. Create a 64x64 variant as the default GUI demo.
+          Moving cells, no ambiguity, proves read+compute+write in motion.
+        status: "todo"
+        acceptance_criteria:
+          - description: "life64.elf runs at 20+ gen/sec"
+            validation: "Benchmark with sh_run, divide wall time by gen count"
+            met: false
+          - description: "life64.elf launches from Geometry OS UI"
+            validation: "UI action loads and runs life64.elf, visible on display"
+            met: false
+        tasks:
+          - id: "b.3.1"
+            title: "Create life64.c variant"
+            status: "todo"
+            description: >
+              64x64 grid in a 256x256 framebuffer (each cell = 4x4 pixel block).
+              Toroidal. Same color gradient as life.c. Higher density seed (40%).
+            files: ["examples/riscv-hello/life64.c"]
+          - id: "b.3.2"
+            title: "Benchmark life64.elf"
+            status: "todo"
+            description: "Run via sh_run, measure gen/sec. Target 20+."
+            files: []
+    risks:
+      - "Main app render loop may not have an easy injection point for external surfaces"
+      - "WINSYS window approach adds complexity vs direct surface blit"
+    technical_notes: >
+      The present callback architecture from commit 355ae7f is the right shape.
+      The bug is that it runs synchronously inside bus.write(). Channel-based
+      off-thread fix makes this structurally impossible.
+
+  # ── Phase C: Pixel VM Convergence ───────────────────────────────
+  - id: "phase-C"
+    title: "Pixel VM Convergence"
+    status: "future"
+    goal: "Bridge MMIO framebuffer to the canonical pixel VM screen bidirectionally"
+    description: >
+      The pixel VM (Geometry OS's native 32x16 tile canvas with 512x512 display)
+      and the RISC-V MMIO framebuffer (256x256 RGBA) are currently separate surfaces.
+      This phase makes them the same thing -- RISC-V guest programs draw to what
+      IS the pixel VM screen, not a separate buffer. This is the true "pixel-native"
+      convergence.
+    dependencies:
+      - source: "phase-B"
+        target: "phase-C"
+        type: "hard"
+        reason: "Need the GUI bridge working before we can converge the surfaces"
+    deliverables:
+      - name: "Unified pixel surface"
+        description: >
+          RISC-V framebuffer writes go directly to the pixel VM's display surface.
+          Pixel VM opcodes can also read what the RISC-V program drew. One surface,
+          two access paths (opcodes and MMIO). The 256x256 -> 512x512 scaling happens
+          in the display pipeline, not in the guest's mental model.
+        status: "todo"
+        acceptance_criteria:
+          - description: "RISC-V write at (x,y) appears as pixel VM read at same logical position"
+            validation: "Integration test: write via MMIO, read via pixel VM opcode"
+            met: false
+          - description: "No duplicate buffer -- single source of truth for pixels"
+            validation: "Memory audit: one Vec<u32> for the display surface"
+            met: false
+        tasks:
+          - id: "c.1.1"
+            title: "Map MMIO framebuffer writes to pixel VM canvas buffer"
+            status: "todo"
+            description: >
+              When guest writes to 0x6000_0000 + offset, update the same buffer
+              that the pixel VM reads from. May need coordinate transform if
+              the pixel VM uses a different pixel format or stride.
+            files: ["src/riscv/framebuf.rs", "src/vm/types.rs", "src/main.rs"]
+          - id: "c.1.2"
+            title: "Integration test for bidirectional pixel access"
+            status: "todo"
+            description: >
+              Test that RISC-V MMIO writes are visible through pixel VM opcodes
+              and vice versa.
+            files: ["src/riscv/tests.rs"]
+    risks:
+      - "Pixel VM may use a different pixel format (RGBA vs ARGB vs indexed)"
+      - "512x512 display vs 256x256 guest resolution requires scaling decisions"
+
+  # ── Phase D: Layer 2 Emergence ──────────────────────────────────
+  - id: "phase-D"
+    title: "Layer 2 — libgeos and Primitives"
+    status: "future"
+    goal: "Extract shared C primitives into libgeos.c, add animation and input primitives"
+    description: >
+      When a third tool (beyond sh and life) needs shared primitives (puts, tokenizer,
+      fb_present, etc.), extract them into a shared library. Also add animation timing
+      primitives and bidirectional input (GUI events -> RISC-V guest).
+    dependencies:
+      - source: "phase-B"
+        target: "phase-D"
+        type: "soft"
+        reason: "Animation primitives need the GUI bridge running"
+    deliverables:
+      - name: "libgeos.c shared library"
+        description: >
+          Extracted when third program needs shared code. Contains: puts, put_dec,
+          put_hex, fb_present, fb_pixel, rgb, sbi_console_putchar, sbi_shutdown.
+          Compiled once, linked by all guest programs.
+        status: "todo"
+        acceptance_criteria:
+          - description: "Three or more programs link against libgeos.a"
+            validation: "ls examples/riscv-hello/*.c | wc -l >= 3 and all link -lgeos"
+            met: false
+        tasks:
+          - id: "d.1.1"
+            title: "Create libgeos.c and Makefile rule"
+            status: "todo"
+            description: >
+              Extract shared functions from life.c/painter2.c/sh.c into libgeos.c.
+              Build as libgeos.a. Update build.sh to link against it.
+            files: ["examples/riscv-hello/libgeos.c", "examples/riscv-hello/build.sh"]
+      - name: "Animation / frame timing primitives"
+        description: >
+          SBI extension or MMIO register for frame timing. Guest can wait for
+          next frame, query elapsed time, sync to display refresh. Enables
+          smooth animation loops instead of spin-paint.
+        status: "todo"
+        acceptance_criteria:
+          - description: "Guest can sync to display refresh rate"
+            validation: "Demo program maintains steady frame rate"
+            met: false
+        tasks:
+          - id: "d.2.1"
+            title: "Add frame timing SBI extension or MMIO register"
+            status: "todo"
+            description: >
+              Expose CLINT mtime to guest at a known MMIO address, or add SBI
+              call that blocks until next display refresh. Let guest programs
+              do frame-synced animation.
+            files: ["src/riscv/sbi.rs", "src/riscv/bus.rs"]
+      - name: "GUI-to-RISC-V input bridge"
+        description: >
+          Keyboard/mouse events from the Geometry OS GUI flow into the RISC-V
+          guest via UART RX or a dedicated input MMIO region. Enables interactive
+          painters, shells, and games.
+        status: "todo"
+        acceptance_criteria:
+          - description: "Keystroke in Geometry OS window arrives in RISC-V guest"
+            validation: "Type 'A' in GUI, guest reads 'A' from UART"
+            met: false
+        tasks:
+          - id: "d.3.1"
+            title: "Route GUI keyboard events to UART RX"
+            status: "todo"
+            description: >
+              When the RISC-V display window has focus, forward keystrokes to
+              uart.receive_byte(). Guest reads via SBI getchar or UART MMIO.
+            files: ["src/main.rs", "src/riscv/uart.rs"]
+    risks:
+      - "Premature extraction -- only extract when the third program actually needs it"
+
+  # ── Phase E: Legacy Reconciliation ──────────────────────────────
+  - id: "phase-E"
+    title: "Legacy Roadmap Reconciliation"
+    status: "future"
+    goal: "Triage roadmap.yaml (163 phases) against SPEC, demote/retire phases that don't fit"
+    description: >
+      The legacy roadmap.yaml has 163 phases spanning the full Geometry OS history.
+      Many are complete, some are superseded by the SPEC direction, some are still
+      relevant. This phase audits the legacy roadmap against the post-SPEC direction
+      and reconciles the two documents.
+    dependencies:
+      - source: "phase-A"
+        target: "phase-E"
+        type: "soft"
+        reason: "Should audit after toolchain is clean, not before"
+    deliverables:
+      - name: "Legacy roadmap audit"
+        description: >
+          Go through each phase in roadmap.yaml. Mark complete where code exists.
+          Mark superseded where SPEC direction changed. Mark relevant where still
+          needed. Produce a reconciliation report.
+        status: "todo"
+        acceptance_criteria:
+          - description: "Every phase in roadmap.yaml has an accurate status"
+            validation: "roadmap validate passes, statuses match codebase"
+            met: false
+        tasks:
+          - id: "e.1.1"
+            title: "Audit roadmap.yaml against codebase"
+            status: "todo"
+            description: >
+              Use roadmap audit workflow (see skill). Compare meta block against
+              actual opcode count, test count, LOC, program count. Update statuses.
+            files: ["roadmap.yaml"]
+          - id: "e.1.2"
+            title: "Produce reconciliation report"
+            status: "todo"
+            description: >
+              Summary: how many phases complete, how many superseded, how many
+              still relevant. Identify gaps between roadmap.yaml and roadmap_v2.yaml.
+            files: ["ROADMAP.md"]
+
+global_risks:
+  - "Interpreter performance ceiling: 56 MIPS may not scale to complex guest programs"
+  - "Main app render loop coupling: hard to inject external surfaces without refactoring"
+  - "Premature abstraction: libgeos.c should only be extracted when truly needed"
+
+conventions:
+  - "Build all RISC-V examples with -march=rv32imac_zicsr -mabi=ilp32"
+  - "Use build.sh-style flags (ffreestanding, nostdlib, O2, medany)"
+  - "Power-of-two constants: use bit masks (x & 0xFF) not modulo (x % 256)"
+  - "Present callback must be channel-based, never synchronous in bus write"
+  - "SPEC = thesis. roadmap_v2 = arc. OpenSpec = per-change diff. Three docs, three jobs."
+
+meta:
+  interpreter_mips: 56
+  framebuffer_size: "256x256"
+  framebuffer_addr: "0x6000_0000"
+  pixel_format: "0xRRGGBBAA (alpha ignored)"
+  sbi_extension_id: "0x47454F00"
+  dtb_isa: "rv32imac"

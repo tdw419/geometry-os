@@ -8207,6 +8207,23 @@ phases:
     scope_lines: 200
   scope_lines_total: 570
   test_target: 10
+- id: phase-163
+  title: "Status Bar Clock -- Local Timezone Fix"
+  status: planned
+  goal: "Display local time instead of UTC in the desktop status bar clock"
+  description: "The status bar clock (get_clock_string() in main.rs) hardcodes UTC offset (+0), showing UTC time instead of local time. For daily driver use, this should respect the system timezone. Use chrono crate or read TZ offset from environment."
+  deliverables:
+  - name: "Local timezone clock"
+    description: "Replace get_clock_string() to use local timezone. Use chrono::Local or read TZ environment variable and compute offset manually. Keep the HH:MM format."
+    status: todo
+    tasks:
+    - id: p163.d1.t1
+      title: "Replace UTC clock with local timezone clock"
+      status: todo
+      description: "In main.rs get_clock_string(), replace the hardcoded +0 UTC offset with actual local timezone offset. Options: (a) add chrono dependency and use chrono::Local::now().format(), or (b) read TZ environment variable and compute offset. Test by verifying clock shows correct local time."
+    scope_lines: 30
+  scope_lines_total: 30
+  test_target: 1
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
