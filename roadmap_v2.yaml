@@ -1,645 +1,761 @@
-title: "Geometry OS — Post-SPEC Pixel-Native Roadmap"
-version: "0.2.0"
-description: >
-  Roadmap for the pixel-native RISC-V hypervisor layer in Geometry OS.
+title: Geometry OS — Post-SPEC Pixel-Native Roadmap
+version: 0.2.0
+description: 'Roadmap for the pixel-native RISC-V hypervisor layer in Geometry OS.
   Covers toolchain hygiene, GUI bridge, pixel VM convergence, libgeos extraction,
-  and legacy roadmap reconciliation.
-  SPEC = thesis. roadmap_v2 = arc. OpenSpec = per-change diff.
+  and legacy roadmap reconciliation. SPEC = thesis. roadmap_v2 = arc. OpenSpec = per-change
+  diff.
 
+  '
 phases:
-  # ── Phase A: Toolchain Hygiene ──────────────────────────────────
-  - id: "phase-A"
-    title: "Toolchain Hygiene"
-    status: "complete"
-    goal: "Eliminate software-math overhead, fix bus routing, establish rv32imac baseline"
-    description: >
-      The interpreter supports RV32IMAC but examples were being compiled with rv32i,
-      forcing software division loops even for power-of-two constants. This phase
-      fixes the build defaults, audits all programs, and patches the half-word
-      bus routing gap.
-    deliverables:
-      - name: "RV32IMAC default for all examples"
-        description: >
-          All C/ASM programs compiled with -march=rv32imac_zicsr. build.sh already
-          correct; life.c and painter2.c rebuilt with standard flags. Stale comment
-          in build.sh updated.
-        status: "done"
-        acceptance_criteria:
-          - description: "life.c compiles with rv32imac_zicsr"
-            validation: "riscv64-linux-gnu-gcc -march=rv32imac_zicsr ... life.c succeeds"
-            met: true
-          - description: "No __udivsi3/__umodsi3 shims in any example"
-            validation: "grep -r __udivsi3 examples/riscv-hello/ returns nothing"
-            met: true
-        tasks:
-          - id: "a.1.1"
-            title: "Rebuild life.elf with rv32imac + O2"
-            status: "done"
-            description: "Built with build.sh-style flags. 118M instrs in 2.1s = 56 MIPS."
-            files: ["examples/riscv-hello/life.c"]
-          - id: "a.1.2"
-            title: "Rebuild painter2.elf with rv32imac + O2"
-            status: "done"
-            description: "Full 256x256 scene in 46ms (26 MIPS)."
-            files: ["examples/riscv-hello/painter2.c"]
-          - id: "a.1.3"
-            title: "Audit all programs for softmath shims"
-            status: "done"
-            description: "grep found zero shims across all examples."
-      - name: "Power-of-two math optimizations in life.c"
-        description: >
-          Replaced x%256 with x&0xFF, y*256 with y<<8, idx/8 with idx>>3.
-          Result: 85x speedup (0.6 MIPS -> 56 MIPS).
-        status: "done"
-        acceptance_criteria:
-          - description: "No modulo or multiply by FB_WIDTH in hot loops"
-            validation: "grep -n '% FB_WIDTH\\|* FB_WIDTH' life.c returns nothing"
-            met: true
-          - description: "Benchmarks at 50+ MIPS"
-            validation: "time sh_run life.elf shows 2-3s for 10 generations"
-            met: true
-        tasks: []
-      - name: "Half-word bus routing for MMIO framebuffer"
-        description: >
-          Half-word and byte writes now route to all MMIO devices (UART, PLIC,
-          virtio, VFS surface, framebuffer) instead of falling through to RAM.
-          Uses read-modify-write at word granularity. 5 unit tests pass.
-        status: "done"
-        acceptance_criteria:
-          - description: "16-bit write to framebuffer address stored correctly"
-            validation: "Unit test: write 0x1234 to FB_BASE+0, read back matches"
-            met: true
-          - description: "Byte writes to framebuffer also work"
-            validation: "Unit test: write 0xFF to FB_BASE+1, read back upper byte is 0xFF"
-            met: true
-        tasks:
-          - id: "a.3.1"
-            title: "Add half-word routing in bus.rs for all MMIO devices"
-            status: "done"
-            description: >
-              In bus.rs write_word path, add framebuffer half-word routing similar
-              to existing word routing. Also add byte-level write routing.
-              Check Framebuffer::write() handles sub-word offsets.
-            files: ["src/riscv/bus.rs", "src/riscv/framebuf.rs"]
-          - id: "a.3.2"
-            title: "Add unit tests for half-word and byte framebuffer access"
-            status: "done"
-            description: "Test 16-bit and 8-bit writes/reads to MMIO framebuffer."
-            files: ["src/riscv/tests.rs"]
-      - name: "Update build.sh stale comment"
-        description: "Comment updated to RV32IMAC + Zicsr with correct source references."
-        status: "done"
-        acceptance_criteria:
-          - description: "Comment in build.sh mentions RV32IMAC"
-            validation: "grep RV32IMAC build.sh returns match"
-            met: true
-        tasks:
-          - id: "a.4.1"
-            title: "Fix comment in build.sh"
-            status: "done"
-            description: "Change 'IMPORTANT: Geometry OS CPU is RV32I' to RV32IMAC."
-            files: ["examples/riscv-hello/build.sh"]
-    technical_notes: >
-      The 85x speedup was the combination of two fixes: (1) rv32im gives hardware
-      MUL/DIV/REM, (2) power-of-two constants (256) let the compiler use shift/mask
-      instead of calling division routines at all. Both were necessary -- the compiler
-      can't optimize division by constants into shifts if there's no hardware divide
-      instruction in the target ISA.
+- id: phase-A
+  title: Toolchain Hygiene
+  status: complete
+  goal: Eliminate software-math overhead, fix bus routing, establish rv32imac baseline
+  description: 'The interpreter supports RV32IMAC but examples were being compiled
+    with rv32i, forcing software division loops even for power-of-two constants. This
+    phase fixes the build defaults, audits all programs, and patches the half-word
+    bus routing gap.
 
-  # ── Phase B: GUI Bridge ─────────────────────────────────────────
-  - id: "phase-B"
-    title: "GUI Bridge — Live Pixel Display"
-    status: "complete"
-    goal: "Watch RISC-V programs paint in real-time on the Geometry OS display"
-    description: >
-      Bridge the MMIO framebuffer to the actual Geometry OS display so programs
-      render live instead of dumping PNGs. The present callback architecture is
-      already in place -- this phase swaps the PNG-dump callback for a real
-      screen blit, runs the VM on its own thread, and delivers the experiential
-      payoff of the pixel-native thesis.
-    dependencies:
-      - source: "phase-A"
-        target: "phase-B"
-        type: "hard"
-        reason: "Need verified 50+ MIPS before GUI bridge is worth building"
-    deliverables:
-      - name: "Off-thread VM execution"
-        description: >
-          Spawn RiscvVm on its own thread. Present callback pushes frame-ready
-          signal (or buffer copy) over a channel. GUI thread blits on render tick.
-          The current synchronous-callback-in-bus-write bug becomes structurally
-          impossible.
-        status: "done"
-        acceptance_criteria:
-          - description: "VM runs on separate thread from GUI"
-            validation: "Code review: std::thread::spawn for VM loop"
-            met: true
-          - description: "Present callback does not block interpreter"
-            validation: "Channel send is non-blocking or bounded"
-            met: true
-        tasks:
-          - id: "b.1.1"
-            title: "Create RiscvVmThread struct with channel-based present"
-            status: "done"
-            description: >
-              New module src/riscv/live.rs wrapping RiscvVm in a thread.
-              Uses mpsc::channel: VM sends Frame (Vec<u32>) on present,
-              GUI thread recv()s on its tick. Pause/resume/reset/shutdown controls.
-              3 unit tests pass.
-            files: ["src/riscv/live.rs", "src/riscv/mod.rs"]
-          - id: "b.1.2"
-            title: "Replace synchronous PNG callback in sh_run with channel"
-            status: "done"
-            description: >
-              sh_run now uses spawn_vm_thread(). Main thread does non-blocking
-              try_recv_frame() for PNG dumps. VM runs unimpeded.
-            files: ["examples/sh_run.rs"]
-      - name: "Framebuffer blit to Geometry OS display"
-        description: >
-          RISC-V framebuffer overlays the GeOS VM screen at (640, 64) with
-          1:1 pixel mapping (256x256). Transparent pixels pass through.
-          Launch via riscv_run/riscv_kill MCP commands.
-        status: "done"
-        acceptance_criteria:
-          - description: "RISC-V guest pixels appear on the Geometry OS display"
-            validation: "riscv_run life.elf via MCP, see pixels on VM screen"
-            met: true
-          - description: "Frame rate is at least 5 fps for 64x64 life"
-            validation: "Visual confirmation of smooth animation"
-            met: false
-        tasks:
-          - id: "b.2.1"
-            title: "Identify main app render loop and injection point"
-            status: "done"
-            description: >
-              render.rs line 528: vm.screen blitted at (VM_SCREEN_X, VM_SCREEN_Y).
-              RISC-V framebuffer overlays same area after GeOS render.
-            files: ["src/main.rs", "src/render.rs"]
-          - id: "b.2.2"
-            title: "Implement framebuffer-to-display blit"
-            status: "done"
-            description: >
-              Blit after render() call in main loop. Drains all pending frames,
-              keeps latest. Black pixels transparent (GeOS shows through).
-            files: ["src/main.rs", "src/render.rs", "src/riscv/live.rs"]
-          - id: "b.2.3"
-            title: "Add launch control in Geometry OS UI"
-            status: "done"
-            description: >
-              Added riscv_run <elf_path> and riscv_kill commands. Registered
-              in MCP server. Updated help text.
-            files: ["src/main.rs", "src/mcp_server.rs"]
-      - name: "Default demo: Life at 64x64"
-        description: >
-          Life at 256x256 runs at ~5 gen/sec. Life at 64x64 should clear 20+ fps
-          and look alive. Create a 64x64 variant as the default GUI demo.
-          Moving cells, no ambiguity, proves read+compute+write in motion.
-        status: "done"
-        acceptance_criteria:
-          - description: "life64.elf runs at 20+ gen/sec"
-            validation: "Benchmark: 53.6 fps / 52 MIPS via sh_run"
-            met: true
-          - description: "life64.elf launches from Geometry OS UI"
-            validation: "riscv_run life64.elf via MCP, visible on VM screen"
-            met: true
-        tasks:
-          - id: "b.3.1"
-            title: "Create life64.c variant"
-            status: "done"
-            description: >
-              64x64 grid in 256x256 framebuffer, 4x4 cell blocks, toroidal,
-              40% density, warm gradient, runs infinitely.
-            files: ["examples/riscv-hello/life64.c"]
-          - id: "b.3.2"
-            title: "Benchmark life64.elf"
-            status: "done"
-            description: "53.6 fps, 52 MIPS. Each frame ~982K instructions."
-            files: []
-    risks:
-      - "Main app render loop may not have an easy injection point for external surfaces"
-      - "WINSYS window approach adds complexity vs direct surface blit"
-    technical_notes: >
-      The present callback architecture from commit 355ae7f is the right shape.
-      The bug is that it runs synchronously inside bus.write(). Channel-based
-      off-thread fix makes this structurally impossible.
+    '
+  deliverables:
+  - name: RV32IMAC default for all examples
+    description: 'All C/ASM programs compiled with -march=rv32imac_zicsr. build.sh
+      already correct; life.c and painter2.c rebuilt with standard flags. Stale comment
+      in build.sh updated.
 
-  # ── Phase C: Pixel VM Convergence ───────────────────────────────
-  - id: "phase-C"
-    title: "Pixel VM Convergence"
-    status: "complete"
-    goal: "Unify RISC-V framebuffer and GeOS pixel VM into a single canonical surface"
-    description: >
-      RISC-V guest framebuffer composites into vm.screen (the canonical 256x256
-      surface) via alpha-keyed writes. render.rs is the sole display path -- it
-      knows nothing about RISC-V. Cross-system reads (U3) are gated on a future
-      use case per SPEC.md.
-    dependencies:
-      - source: "phase-B"
-        target: "phase-C"
-        type: "hard"
-        reason: "Need the GUI bridge working before we can converge the surfaces"
-    deliverables:
-      - name: "Unified pixel surface (write direction)"
-        description: >
-          RISC-V fb_present composites framebuf.pixels into vm.screen with alpha
-          keying and format conversion (0xRRGGBBAA -> 0x00RRGGBB via pixel_to_minifb).
-          vm.screen is the single canonical surface. render.rs blits it to display.
-          GeOS opcodes and RISC-V MMIO are both just pixel writers.
-        status: "done"
-        acceptance_criteria:
-          - description: "No duplicate display blit -- render.rs is the only path from vm.screen to display"
-            validation: "Code review: RISC-V composite writes vm.screen, not the raw buffer"
-            met: true
-          - description: "RISC-V pixels appear with correct colors on the display"
-            validation: "Visual: life64 dead cells are rgb(6,6,14), alive gradient matches formula"
-            met: true
-          - description: "Cells animate between frames"
-            validation: "Two-frame comparison shows 10%+ pixel change"
-            met: true
-        tasks:
-          - id: "c.1.1"
-            title: "Composite RISC-V frames into vm.screen before render()"
-            status: "done"
-            description: >
-              RISC-V frame receive moved before render() call. Writes vm.screen
-              instead of raw display buffer. Alpha key: transparent pixels (alpha=0)
-              don't overwrite. Format conversion via pixel_to_minifb() at the
-              framebuf boundary. render.rs now genuinely ignorant of RISC-V.
-            files: ["src/main.rs", "src/render.rs", "src/riscv/framebuf.rs"]
-          - id: "c.1.2"
-            title: "Cross-system reads (U3) -- deferred"
-            status: "deferred"
-            description: >
-              RISC-V loads from 0x6000_0000 read framebuf.pixels, not vm.screen.
-              GeOS PEEK reads vm.screen, not framebuf.pixels. Cross-system reads
-              need shared buffer with locking or same-thread execution. Gated on
-              a real use case per SPEC.md "Canonical framebuffer" section. No
-              program needs this today.
-            files: []
-    risks:
-      - "Pixel VM may use a different pixel format (RGBA vs ARGB vs indexed)"
-      - "512x512 display vs 256x256 guest resolution requires scaling decisions"
+      '
+    status: done
+    acceptance_criteria:
+    - description: life.c compiles with rv32imac_zicsr
+      validation: riscv64-linux-gnu-gcc -march=rv32imac_zicsr ... life.c succeeds
+      met: true
+    - description: No __udivsi3/__umodsi3 shims in any example
+      validation: grep -r __udivsi3 examples/riscv-hello/ returns nothing
+      met: true
+    tasks:
+    - id: a.1.1
+      title: Rebuild life.elf with rv32imac + O2
+      status: done
+      description: Built with build.sh-style flags. 118M instrs in 2.1s = 56 MIPS.
+      files:
+      - examples/riscv-hello/life.c
+    - id: a.1.2
+      title: Rebuild painter2.elf with rv32imac + O2
+      status: done
+      description: Full 256x256 scene in 46ms (26 MIPS).
+      files:
+      - examples/riscv-hello/painter2.c
+    - id: a.1.3
+      title: Audit all programs for softmath shims
+      status: done
+      description: grep found zero shims across all examples.
+  - name: Power-of-two math optimizations in life.c
+    description: 'Replaced x%256 with x&0xFF, y*256 with y<<8, idx/8 with idx>>3.
+      Result: 85x speedup (0.6 MIPS -> 56 MIPS).
 
-  # ── Phase D: Layer 2 Emergence ──────────────────────────────────
-  - id: "phase-D"
-    title: "Layer 2 — libgeos and Primitives"
-    status: "complete"
-    goal: "Extract shared C primitives into libgeos.c, add animation and input primitives"
-    description: >
-      When a third tool (beyond sh and life) needs shared primitives (puts, tokenizer,
-      fb_present, etc.), extract them into a shared library. Also add animation timing
-      primitives and bidirectional input (GUI events -> RISC-V guest).
-    dependencies:
-      - source: "phase-B"
-        target: "phase-D"
-        type: "soft"
-        reason: "Animation primitives need the GUI bridge running"
-    deliverables:
-      - name: "libgeos.c shared library"
-        description: >
-          Extracted when third program needs shared code. Contains: puts, put_dec,
-          put_hex, fb_present, fb_pixel, rgb, sbi_console_putchar, sbi_shutdown.
-          Compiled once, linked by all guest programs.
-        status: "done"
-        acceptance_criteria:
-          - description: "Three or more programs link against libgeos.a"
-            validation: "ls examples/riscv-hello/*.c | wc -l >= 3 and all link -lgeos"
-            met: true
-        tasks:
-          - id: "d.1.1"
-            title: "Create libgeos.c and Makefile rule"
-            status: "done"
-            description: >
-              Extracted sbi_console_putchar, sbi_shutdown, sbi_console_getchar,
-              geos_puts, geos_put_dec, geos_put_hex, geos_rgb, geos_fb_present,
-              geos_fb_pixel, geos_fb_read, geos_mtime, geos_wait_until,
-              geos_wait_ticks, geos_wait_ms, geos_getchar into libgeos.c/h.
-              build.sh supports --all and --lib flags. All 10 guest programs
-              link against libgeos.a.
-            files: ["examples/riscv-hello/libgeos.c", "examples/riscv-hello/libgeos.h", "examples/riscv-hello/build.sh"]
-      - name: "Animation / frame timing primitives"
-        description: >
-          SBI extension or MMIO register for frame timing. Guest can wait for
-          next frame, query elapsed time, sync to display refresh. Enables
-          smooth animation loops instead of spin-paint.
-        status: "done"
-        acceptance_criteria:
-          - description: "Guest can sync to display refresh rate"
-            validation: "geos_mtime() and geos_wait_ms() available in libgeos.h"
-            met: true
-        tasks:
-          - id: "d.2.1"
-            title: "Add frame timing SBI extension or MMIO register"
-            status: "done"
-            description: >
-              CLINT mtime was already exposed at 0x0200_BFF8. Added guest-side
-              wrappers: geos_mtime() for reading the counter, geos_wait_until(),
-              geos_wait_ticks(), geos_wait_ms() for spin-waiting. All inline
-              in libgeos.h for zero function-call overhead.
-            files: ["examples/riscv-hello/libgeos.h"]
-      - name: "GUI-to-RISC-V input bridge"
-        description: >
-          Keyboard/mouse events from the Geometry OS GUI flow into the RISC-V
-          guest via UART RX or a dedicated input MMIO region. Enables interactive
-          painters, shells, and games.
-        status: "done"
-        acceptance_criteria:
-          - description: "Keystroke in Geometry OS window arrives in RISC-V guest"
-            validation: "send_input() on RiscvVmHandle forwards to UART RX"
-            met: true
-        tasks:
-          - id: "d.3.1"
-            title: "Route GUI keyboard events to UART RX"
-            status: "done"
-            description: >
-              Added ThreadControl::Input(u8) variant and send_input() method on
-              RiscvVmHandle. VM thread receives Input and calls
-              vm.bus.uart.receive_byte(). main.rs forwards keypresses to
-              riscv_handle.send_input() when a RISC-V program is running.
-              geos_getchar() added to libgeos for guest-side blocking read.
-            files: ["src/riscv/live.rs", "src/main.rs", "examples/riscv-hello/libgeos.c"]
-    risks:
-      - "Premature extraction -- only extract when the third program actually needs it"
+      '
+    status: done
+    acceptance_criteria:
+    - description: No modulo or multiply by FB_WIDTH in hot loops
+      validation: grep -n '% FB_WIDTH\|* FB_WIDTH' life.c returns nothing
+      met: true
+    - description: Benchmarks at 50+ MIPS
+      validation: time sh_run life.elf shows 2-3s for 10 generations
+      met: true
+    tasks: []
+  - name: Half-word bus routing for MMIO framebuffer
+    description: 'Half-word and byte writes now route to all MMIO devices (UART, PLIC,
+      virtio, VFS surface, framebuffer) instead of falling through to RAM. Uses read-modify-write
+      at word granularity. 5 unit tests pass.
 
-  # ── Phase E: Legacy Reconciliation ──────────────────────────────
-  - id: "phase-E"
-    title: "Legacy Roadmap Reconciliation"
-    status: "future"
-    goal: "Triage roadmap.yaml (163 phases) against SPEC, demote/retire phases that don't fit"
-    description: >
-      The legacy roadmap.yaml has 163 phases spanning the full Geometry OS history.
-      Many are complete, some are superseded by the SPEC direction, some are still
-      relevant. This phase audits the legacy roadmap against the post-SPEC direction
-      and reconciles the two documents.
-    dependencies:
-      - source: "phase-A"
-        target: "phase-E"
-        type: "soft"
-        reason: "Should audit after toolchain is clean, not before"
-    deliverables:
-      - name: "Legacy roadmap audit"
-        description: >
-          Go through each phase in roadmap.yaml. Mark complete where code exists.
-          Mark superseded where SPEC direction changed. Mark relevant where still
-          needed. Produce a reconciliation report.
-        status: "todo"
-        acceptance_criteria:
-          - description: "Every phase in roadmap.yaml has an accurate status"
-            validation: "roadmap validate passes, statuses match codebase"
-            met: false
-        tasks:
-          - id: "e.1.1"
-            title: "Audit roadmap.yaml against codebase"
-            status: "todo"
-            description: >
-              Use roadmap audit workflow (see skill). Compare meta block against
-              actual opcode count, test count, LOC, program count. Update statuses.
-            files: ["roadmap.yaml"]
-          - id: "e.1.2"
-            title: "Produce reconciliation report"
-            status: "todo"
-            description: >
-              Summary: how many phases complete, how many superseded, how many
-              still relevant. Identify gaps between roadmap.yaml and roadmap_v2.yaml.
-            files: ["ROADMAP.md"]
+      '
+    status: done
+    acceptance_criteria:
+    - description: 16-bit write to framebuffer address stored correctly
+      validation: 'Unit test: write 0x1234 to FB_BASE+0, read back matches'
+      met: true
+    - description: Byte writes to framebuffer also work
+      validation: 'Unit test: write 0xFF to FB_BASE+1, read back upper byte is 0xFF'
+      met: true
+    tasks:
+    - id: a.3.1
+      title: Add half-word routing in bus.rs for all MMIO devices
+      status: done
+      description: 'In bus.rs write_word path, add framebuffer half-word routing similar
+        to existing word routing. Also add byte-level write routing. Check Framebuffer::write()
+        handles sub-word offsets.
 
-  # ── Phase F: Visual Verification Infrastructure ──────────────────
-  - id: "phase-F"
-    title: "Visual Verification Infrastructure"
-    status: "complete"
-    goal: "Regression test framework for RISC-V guest programs via framebuffer dumps"
-    description: >
-      riscv_fb_dump gives us scriptable visual verification. This phase builds
-      the regression test harness: boot a guest program, inject a known input
-      sequence, dump the framebuffer, assert on pixel values. The paint.c bugs
-      (channel bit-leaking, paint-overwrite, fill-mode position) are the first
-      regression tests. Prior encode_png claims are audited.
-    dependencies:
-      - source: "phase-D"
-        target: "phase-F"
-        type: "hard"
-        reason: "Need riscv_fb_dump (built during paint.c work) and libgeos"
-    deliverables:
-      - name: "paint.c regression test"
-        description: >
-          Shell script or Python script that boots paint.elf, injects a known
-          sequence of commands (fill mode + movement + color switches), dumps
-          the framebuffer via riscv_fb_dump, and asserts on pixel coordinates
-          and colors. Catches the three bugs that were fixed: channel leaking,
-          cursor overwrite, fill-mode position.
-        status: "todo"
-        acceptance_criteria:
-          - description: "Test asserts 10 red + 10 blue + 10 green + 11 yellow pixels at expected coords"
-            validation: "Run test script, exit 0 on correct output, exit 1 on pixel mismatch"
-            met: false
-          - description: "Test catches at least one of the three known paint.c bugs if reverted"
-            validation: "Revert a fix, run test, expect failure"
-            met: false
-        tasks:
-          - id: "f.1.1"
-            title: "Write paint_regression_test.sh"
-            status: "todo"
-            description: >
-              Boot GeOS (background), launch paint.elf via socket, inject the
-              rectangle-drawing sequence (fill on, d*11, color 3, s*10, color 2,
-              a*10, color 4, w*10, fill off), dump framebuffer, use Python/Pillow
-              to assert pixel values. Kill GeOS when done.
-            files: ["tests/paint_regression_test.sh"]
-          - id: "f.1.2"
-            title: "Verify test catches regressions"
-            status: "todo"
-            description: >
-              Revert each of the three paint.c fixes one at a time, confirm the
-              test fails. Then re-apply fixes, confirm test passes.
-            files: []
-      - name: "encode_png audit"
-        description: >
-          Prior "screenshot verified" claims that went through encode_png may
-          have been against invalid PNGs (raw deflate without zlib wrapper).
-          Audit which claims used encode_png and which used other paths.
-          Result: MCP vm_screenshot (safe path via png crate) was used for
-          all Phase B/C verifications. screenshot_b64 was broken but only
-          used by Phase 88 (experimental AI vision). No critical claims
-          were affected. See tests/encode_png_audit.md.
-        status: "done"
-        acceptance_criteria:
-          - description: "List of prior verified claims and whether they used valid PNGs"
-            validation: "Written audit in tests/encode_png_audit.md"
-            met: true
-        tasks:
-          - id: "f.2.1"
-            title: "Audit prior visual verification claims"
-            status: "done"
-            description: >
-              All Phase B/C verifications used MCP vm_screenshot (png crate, safe).
-              screenshot_b64 was broken but only affected Phase 88 AI vision (experimental).
-              No critical pixel-value claims were based on broken PNGs.
-              Paint regression test now verifies actual decodability.
-            files: ["tests/encode_png_audit.md"]
-      - name: "Test harness pattern"
-        description: >
-          Document the pattern so any future guest program can plug in:
-          boot → inject → dump → assert. Reusable shell/Python scaffolding.
-          geos_test_lib.sh extracted: boot, run, inject, dump, kill, assert_pixel,
-          assert_pixel_count. paint_regression_test.sh is the first caller.
-        status: "done"
-        acceptance_criteria:
-          - description: "Test harness documented and reusable"
-            validation: "New test for a different program can be written in <5 min"
-            met: true
-        tasks:
-          - id: "f.3.1"
-            title: "Extract common test harness functions"
-            status: "done"
-            description: >
-              geos_boot(), geos_run_elf(), geos_inject_text(), geos_fb_dump(),
-              geos_kill(), assert_pixel(), assert_pixel_count(). Shared shell
-              library in tests/geos_test_lib.sh. Source it from test scripts.
-            files: ["tests/geos_test_lib.sh"]
+        '
+      files:
+      - src/riscv/bus.rs
+      - src/riscv/framebuf.rs
+    - id: a.3.2
+      title: Add unit tests for half-word and byte framebuffer access
+      status: done
+      description: Test 16-bit and 8-bit writes/reads to MMIO framebuffer.
+      files:
+      - src/riscv/tests.rs
+  - name: Update build.sh stale comment
+    description: Comment updated to RV32IMAC + Zicsr with correct source references.
+    status: done
+    acceptance_criteria:
+    - description: Comment in build.sh mentions RV32IMAC
+      validation: grep RV32IMAC build.sh returns match
+      met: true
+    tasks:
+    - id: a.4.1
+      title: Fix comment in build.sh
+      status: done
+      description: 'Change ''IMPORTANT: Geometry OS CPU is RV32I'' to RV32IMAC.'
+      files:
+      - examples/riscv-hello/build.sh
+  technical_notes: 'The 85x speedup was the combination of two fixes: (1) rv32im gives
+    hardware MUL/DIV/REM, (2) power-of-two constants (256) let the compiler use shift/mask
+    instead of calling division routines at all. Both were necessary -- the compiler
+    can''t optimize division by constants into shifts if there''s no hardware divide
+    instruction in the target ISA.
 
-  # ── Phase G: In-session Canvas Checkpoint ────────────────────────
-  - id: "phase-G"
-    title: "In-session Canvas Checkpoint — Save/Load"
-    status: "complete"
-    goal: "Checkpoint and restore pixel state via the VFS surface"
-    description: >
-      Persistence means checkpointing pixels, not serializing structs. Add
-      geos_save_canvas and geos_load_canvas to libgeos that write/read the
-      framebuffer as raw pixel data to the VFS pixel surface at 0x7000_0000.
-      Round-trip verified: save → clear → load → pixel-perfect match.
-    dependencies:
-      - source: "phase-F"
-        target: "phase-G"
-        type: "hard"
-        reason: "Need regression test framework to verify round-trip fidelity"
-    deliverables:
-      - name: "geos_save_canvas / geos_load_canvas in libgeos"
-        description: >
-          Two new functions in libgeos.c. save_canvas copies framebuffer rows
-          0-254 to VFS surface rows 1-255 (preserving row 0 directory index).
-          load_canvas checks a CANV marker and copies back. Uses MMIO at
-          0x7000_0000 (VFS Pixel Surface), NOT virtio-blk.
-        status: "done"
-        acceptance_criteria:
-          - description: "save_canvas writes to VFS, load_canvas reads it back"
-            validation: "Round-trip test: save, clear fb, load, assert all pixels match"
-            met: true
-          - description: "Round-trip preserves exact pixel values"
-            validation: "62,464 canvas pixels match (tolerance ±3)"
-            met: true
-        tasks:
-          - id: "g.1.1"
-            title: "Implement geos_save_canvas in libgeos.c"
-            status: "done"
-            description: >
-              Copies framebuffer rows 0-254 to VFS rows 1-255 word-by-word.
-              Sets CANV marker (0x43414E56) at VFS pixel (0,255).
-              Preserves VFS directory index in row 0 pixels 0-254.
-            files: ["examples/riscv-hello/libgeos.c", "examples/riscv-hello/libgeos.h"]
-          - id: "g.1.2"
-            title: "Implement geos_load_canvas in libgeos.c"
-            status: "done"
-            description: >
-              Checks CANV marker, copies VFS rows 1-255 back to framebuffer
-              rows 0-254, calls geos_fb_present(). Returns -1 if no marker.
-            files: ["examples/riscv-hello/libgeos.c", "examples/riscv-hello/libgeos.h"]
-          - id: "g.1.3"
-            title: "Add save/load commands to paint.c"
-            status: "done"
-            description: >
-              P key = save, O key = load (S/L conflict with WASD movement).
-              UART status messages on success/failure. Load redraws palette
-              bar and cursor on top of restored canvas.
-            files: ["examples/riscv-hello/paint.c"]
-      - name: "Round-trip verification test"
-        description: >
-          Automated test: boot paint.elf, draw pattern, dump baseline,
-          save, clear, load, dump restored, compare canvas area pixel-for-pixel.
-          Single-session test (VFS surface is in-memory; cross-session needs
-          future flush-to-disk mechanism).
-        status: "done"
-        acceptance_criteria:
-          - description: "Pixel-perfect round-trip with zero mismatches"
-            validation: "All 62,464 canvas pixels match between baseline and restored"
-            met: true
-        tasks:
-          - id: "g.2.1"
-            title: "Write persistence_roundtrip_test.sh"
-            status: "done"
-            description: >
-              Uses geos_test_lib.sh. Draws colored fill trails, saves, clears,
-              loads, compares 244 rows * 256 cols = 62,464 pixels with ±3 tolerance.
-            files: ["tests/persistence_roundtrip_test.sh"]
+    '
+- id: phase-B
+  title: GUI Bridge — Live Pixel Display
+  status: complete
+  goal: Watch RISC-V programs paint in real-time on the Geometry OS display
+  description: 'Bridge the MMIO framebuffer to the actual Geometry OS display so programs
+    render live instead of dumping PNGs. The present callback architecture is already
+    in place -- this phase swaps the PNG-dump callback for a real screen blit, runs
+    the VM on its own thread, and delivers the experiential payoff of the pixel-native
+    thesis.
 
-  # ── Phase H: Cross-session Persistence ──────────────────────────
-  - id: "phase-H"
-    title: "Cross-session Persistence — VfsSurface Raw-Region Flush"
-    status: "active"
-    goal: "Canvas state survives VM restart"
-    description: >
-      Phase G proved in-session checkpoint/restore. Phase H makes it survive
-      across VM sessions: save today, kill GeOS, restart tomorrow, load.
-      Two implementation paths:
-        A) Raw-region flush in VfsSurface::Drop — detect CANV marker in row 0,
-           write the raw pixel region to a fixed host file (e.g., .geometry_os/canvas.raw).
-           On boot, VfsSurface::new() checks for the file and loads it.
-        B) Virtio-blk integration — route geos_save_canvas through the virtio-blk
-           device at 0x1000_1000 instead of the VFS surface. Requires implementing
-           virtqueue processing in the guest (or a simplified direct-access mode
-           in the host virtio-blk emulation).
-      Path A is simpler and keeps the "pixels copying pixels" model. Path B is
-      more general but adds virtqueue complexity to bare-metal guest code.
-    dependencies:
-      - source: "phase-G"
-        target: "phase-H"
-        type: "hard"
-        reason: "In-session save/load is the foundation; cross-session adds disk flush"
-    deliverables:
-      - name: "Canvas survives VM restart"
-        description: >
-          VfsSurface flushes the CANV region to disk on Drop, and loads it on
-          construction. The round-trip test is extended: boot, draw, save, kill VM,
-          reboot, load, assert pixel-perfect match.
-        status: "todo"
-        acceptance_criteria:
-          - description: "Saved canvas loads correctly after VM restart"
-            validation: "Two-session test: save in session 1, kill, boot session 2, load, all pixels match"
-            met: false
-        tasks:
-          - id: "h.1.1"
-            title: "Add canvas raw-region flush to VfsSurface"
-            status: "todo"
-            description: >
-              In VfsSurface::Drop::flush(), check for CANV marker at pixel (0,255).
-              If present, write rows 1-255 to .geometry_os/canvas.raw (261,120 bytes).
-              In VfsSurface::new(), check for canvas.raw and populate rows 1-255.
-            files: ["src/riscv/vfs_surface.rs"]
-          - id: "h.1.2"
-            title: "Two-session round-trip test"
-            status: "todo"
-            description: >
-              Boot GeOS, run paint, draw pattern, save, kill. Boot GeOS again,
-              run paint, load, dump framebuffer. Compare with pre-save dump.
-            files: ["tests/cross_session_persistence_test.sh"]
+    '
+  dependencies:
+  - source: phase-A
+    target: phase-B
+    type: hard
+    reason: Need verified 50+ MIPS before GUI bridge is worth building
+  deliverables:
+  - name: Off-thread VM execution
+    description: 'Spawn RiscvVm on its own thread. Present callback pushes frame-ready
+      signal (or buffer copy) over a channel. GUI thread blits on render tick. The
+      current synchronous-callback-in-bus-write bug becomes structurally impossible.
 
+      '
+    status: done
+    acceptance_criteria:
+    - description: VM runs on separate thread from GUI
+      validation: 'Code review: std::thread::spawn for VM loop'
+      met: true
+    - description: Present callback does not block interpreter
+      validation: Channel send is non-blocking or bounded
+      met: true
+    tasks:
+    - id: b.1.1
+      title: Create RiscvVmThread struct with channel-based present
+      status: done
+      description: 'New module src/riscv/live.rs wrapping RiscvVm in a thread. Uses
+        mpsc::channel: VM sends Frame (Vec<u32>) on present, GUI thread recv()s on
+        its tick. Pause/resume/reset/shutdown controls. 3 unit tests pass.
+
+        '
+      files:
+      - src/riscv/live.rs
+      - src/riscv/mod.rs
+    - id: b.1.2
+      title: Replace synchronous PNG callback in sh_run with channel
+      status: done
+      description: 'sh_run now uses spawn_vm_thread(). Main thread does non-blocking
+        try_recv_frame() for PNG dumps. VM runs unimpeded.
+
+        '
+      files:
+      - examples/sh_run.rs
+  - name: Framebuffer blit to Geometry OS display
+    description: 'RISC-V framebuffer overlays the GeOS VM screen at (640, 64) with
+      1:1 pixel mapping (256x256). Transparent pixels pass through. Launch via riscv_run/riscv_kill
+      MCP commands.
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: RISC-V guest pixels appear on the Geometry OS display
+      validation: riscv_run life.elf via MCP, see pixels on VM screen
+      met: true
+    - description: Frame rate is at least 5 fps for 64x64 life
+      validation: Visual confirmation of smooth animation
+      met: false
+    tasks:
+    - id: b.2.1
+      title: Identify main app render loop and injection point
+      status: done
+      description: 'render.rs line 528: vm.screen blitted at (VM_SCREEN_X, VM_SCREEN_Y).
+        RISC-V framebuffer overlays same area after GeOS render.
+
+        '
+      files:
+      - src/main.rs
+      - src/render.rs
+    - id: b.2.2
+      title: Implement framebuffer-to-display blit
+      status: done
+      description: 'Blit after render() call in main loop. Drains all pending frames,
+        keeps latest. Black pixels transparent (GeOS shows through).
+
+        '
+      files:
+      - src/main.rs
+      - src/render.rs
+      - src/riscv/live.rs
+    - id: b.2.3
+      title: Add launch control in Geometry OS UI
+      status: done
+      description: 'Added riscv_run <elf_path> and riscv_kill commands. Registered
+        in MCP server. Updated help text.
+
+        '
+      files:
+      - src/main.rs
+      - src/mcp_server.rs
+  - name: 'Default demo: Life at 64x64'
+    description: 'Life at 256x256 runs at ~5 gen/sec. Life at 64x64 should clear 20+
+      fps and look alive. Create a 64x64 variant as the default GUI demo. Moving cells,
+      no ambiguity, proves read+compute+write in motion.
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: life64.elf runs at 20+ gen/sec
+      validation: 'Benchmark: 53.6 fps / 52 MIPS via sh_run'
+      met: true
+    - description: life64.elf launches from Geometry OS UI
+      validation: riscv_run life64.elf via MCP, visible on VM screen
+      met: true
+    tasks:
+    - id: b.3.1
+      title: Create life64.c variant
+      status: done
+      description: '64x64 grid in 256x256 framebuffer, 4x4 cell blocks, toroidal,
+        40% density, warm gradient, runs infinitely.
+
+        '
+      files:
+      - examples/riscv-hello/life64.c
+    - id: b.3.2
+      title: Benchmark life64.elf
+      status: done
+      description: 53.6 fps, 52 MIPS. Each frame ~982K instructions.
+      files: []
+  risks:
+  - Main app render loop may not have an easy injection point for external surfaces
+  - WINSYS window approach adds complexity vs direct surface blit
+  technical_notes: 'The present callback architecture from commit 355ae7f is the right
+    shape. The bug is that it runs synchronously inside bus.write(). Channel-based
+    off-thread fix makes this structurally impossible.
+
+    '
+- id: phase-C
+  title: Pixel VM Convergence
+  status: complete
+  goal: Unify RISC-V framebuffer and GeOS pixel VM into a single canonical surface
+  description: 'RISC-V guest framebuffer composites into vm.screen (the canonical
+    256x256 surface) via alpha-keyed writes. render.rs is the sole display path --
+    it knows nothing about RISC-V. Cross-system reads (U3) are gated on a future use
+    case per SPEC.md.
+
+    '
+  dependencies:
+  - source: phase-B
+    target: phase-C
+    type: hard
+    reason: Need the GUI bridge working before we can converge the surfaces
+  deliverables:
+  - name: Unified pixel surface (write direction)
+    description: 'RISC-V fb_present composites framebuf.pixels into vm.screen with
+      alpha keying and format conversion (0xRRGGBBAA -> 0x00RRGGBB via pixel_to_minifb).
+      vm.screen is the single canonical surface. render.rs blits it to display. GeOS
+      opcodes and RISC-V MMIO are both just pixel writers.
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: No duplicate display blit -- render.rs is the only path from vm.screen
+        to display
+      validation: 'Code review: RISC-V composite writes vm.screen, not the raw buffer'
+      met: true
+    - description: RISC-V pixels appear with correct colors on the display
+      validation: 'Visual: life64 dead cells are rgb(6,6,14), alive gradient matches
+        formula'
+      met: true
+    - description: Cells animate between frames
+      validation: Two-frame comparison shows 10%+ pixel change
+      met: true
+    tasks:
+    - id: c.1.1
+      title: Composite RISC-V frames into vm.screen before render()
+      status: done
+      description: 'RISC-V frame receive moved before render() call. Writes vm.screen
+        instead of raw display buffer. Alpha key: transparent pixels (alpha=0) don''t
+        overwrite. Format conversion via pixel_to_minifb() at the framebuf boundary.
+        render.rs now genuinely ignorant of RISC-V.
+
+        '
+      files:
+      - src/main.rs
+      - src/render.rs
+      - src/riscv/framebuf.rs
+    - id: c.1.2
+      title: Cross-system reads (U3) -- deferred
+      status: deferred
+      description: 'RISC-V loads from 0x6000_0000 read framebuf.pixels, not vm.screen.
+        GeOS PEEK reads vm.screen, not framebuf.pixels. Cross-system reads need shared
+        buffer with locking or same-thread execution. Gated on a real use case per
+        SPEC.md "Canonical framebuffer" section. No program needs this today.
+
+        '
+      files: []
+  risks:
+  - Pixel VM may use a different pixel format (RGBA vs ARGB vs indexed)
+  - 512x512 display vs 256x256 guest resolution requires scaling decisions
+- id: phase-D
+  title: Layer 2 — libgeos and Primitives
+  status: complete
+  goal: Extract shared C primitives into libgeos.c, add animation and input primitives
+  description: 'When a third tool (beyond sh and life) needs shared primitives (puts,
+    tokenizer, fb_present, etc.), extract them into a shared library. Also add animation
+    timing primitives and bidirectional input (GUI events -> RISC-V guest).
+
+    '
+  dependencies:
+  - source: phase-B
+    target: phase-D
+    type: soft
+    reason: Animation primitives need the GUI bridge running
+  deliverables:
+  - name: libgeos.c shared library
+    description: 'Extracted when third program needs shared code. Contains: puts,
+      put_dec, put_hex, fb_present, fb_pixel, rgb, sbi_console_putchar, sbi_shutdown.
+      Compiled once, linked by all guest programs.
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: Three or more programs link against libgeos.a
+      validation: ls examples/riscv-hello/*.c | wc -l >= 3 and all link -lgeos
+      met: true
+    tasks:
+    - id: d.1.1
+      title: Create libgeos.c and Makefile rule
+      status: done
+      description: 'Extracted sbi_console_putchar, sbi_shutdown, sbi_console_getchar,
+        geos_puts, geos_put_dec, geos_put_hex, geos_rgb, geos_fb_present, geos_fb_pixel,
+        geos_fb_read, geos_mtime, geos_wait_until, geos_wait_ticks, geos_wait_ms,
+        geos_getchar into libgeos.c/h. build.sh supports --all and --lib flags. All
+        10 guest programs link against libgeos.a.
+
+        '
+      files:
+      - examples/riscv-hello/libgeos.c
+      - examples/riscv-hello/libgeos.h
+      - examples/riscv-hello/build.sh
+  - name: Animation / frame timing primitives
+    description: 'SBI extension or MMIO register for frame timing. Guest can wait
+      for next frame, query elapsed time, sync to display refresh. Enables smooth
+      animation loops instead of spin-paint.
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: Guest can sync to display refresh rate
+      validation: geos_mtime() and geos_wait_ms() available in libgeos.h
+      met: true
+    tasks:
+    - id: d.2.1
+      title: Add frame timing SBI extension or MMIO register
+      status: done
+      description: 'CLINT mtime was already exposed at 0x0200_BFF8. Added guest-side
+        wrappers: geos_mtime() for reading the counter, geos_wait_until(), geos_wait_ticks(),
+        geos_wait_ms() for spin-waiting. All inline in libgeos.h for zero function-call
+        overhead.
+
+        '
+      files:
+      - examples/riscv-hello/libgeos.h
+  - name: GUI-to-RISC-V input bridge
+    description: 'Keyboard/mouse events from the Geometry OS GUI flow into the RISC-V
+      guest via UART RX or a dedicated input MMIO region. Enables interactive painters,
+      shells, and games.
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: Keystroke in Geometry OS window arrives in RISC-V guest
+      validation: send_input() on RiscvVmHandle forwards to UART RX
+      met: true
+    tasks:
+    - id: d.3.1
+      title: Route GUI keyboard events to UART RX
+      status: done
+      description: 'Added ThreadControl::Input(u8) variant and send_input() method
+        on RiscvVmHandle. VM thread receives Input and calls vm.bus.uart.receive_byte().
+        main.rs forwards keypresses to riscv_handle.send_input() when a RISC-V program
+        is running. geos_getchar() added to libgeos for guest-side blocking read.
+
+        '
+      files:
+      - src/riscv/live.rs
+      - src/main.rs
+      - examples/riscv-hello/libgeos.c
+  risks:
+  - Premature extraction -- only extract when the third program actually needs it
+- id: phase-E
+  title: Legacy Roadmap Reconciliation
+  status: future
+  goal: Triage roadmap.yaml (163 phases) against SPEC, demote/retire phases that don't
+    fit
+  description: 'The legacy roadmap.yaml has 163 phases spanning the full Geometry
+    OS history. Many are complete, some are superseded by the SPEC direction, some
+    are still relevant. This phase audits the legacy roadmap against the post-SPEC
+    direction and reconciles the two documents.
+
+    '
+  dependencies:
+  - source: phase-A
+    target: phase-E
+    type: soft
+    reason: Should audit after toolchain is clean, not before
+  deliverables:
+  - name: Legacy roadmap audit
+    description: 'Go through each phase in roadmap.yaml. Mark complete where code
+      exists. Mark superseded where SPEC direction changed. Mark relevant where still
+      needed. Produce a reconciliation report.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: Every phase in roadmap.yaml has an accurate status
+      validation: roadmap validate passes, statuses match codebase
+      met: false
+    tasks:
+    - id: e.1.1
+      title: Audit roadmap.yaml against codebase
+      status: todo
+      description: 'Use roadmap audit workflow (see skill). Compare meta block against
+        actual opcode count, test count, LOC, program count. Update statuses.
+
+        '
+      files:
+      - roadmap.yaml
+    - id: e.1.2
+      title: Produce reconciliation report
+      status: todo
+      description: 'Summary: how many phases complete, how many superseded, how many
+        still relevant. Identify gaps between roadmap.yaml and roadmap_v2.yaml.
+
+        '
+      files:
+      - ROADMAP.md
+- id: phase-F
+  title: Visual Verification Infrastructure
+  status: complete
+  goal: Regression test framework for RISC-V guest programs via framebuffer dumps
+  description: 'riscv_fb_dump gives us scriptable visual verification. This phase
+    builds the regression test harness: boot a guest program, inject a known input
+    sequence, dump the framebuffer, assert on pixel values. The paint.c bugs (channel
+    bit-leaking, paint-overwrite, fill-mode position) are the first regression tests.
+    Prior encode_png claims are audited.
+
+    '
+  dependencies:
+  - source: phase-D
+    target: phase-F
+    type: hard
+    reason: Need riscv_fb_dump (built during paint.c work) and libgeos
+  deliverables:
+  - name: paint.c regression test
+    description: 'Shell script or Python script that boots paint.elf, injects a known
+      sequence of commands (fill mode + movement + color switches), dumps the framebuffer
+      via riscv_fb_dump, and asserts on pixel coordinates and colors. Catches the
+      three bugs that were fixed: channel leaking, cursor overwrite, fill-mode position.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: Test asserts 10 red + 10 blue + 10 green + 11 yellow pixels at
+        expected coords
+      validation: Run test script, exit 0 on correct output, exit 1 on pixel mismatch
+      met: false
+    - description: Test catches at least one of the three known paint.c bugs if reverted
+      validation: Revert a fix, run test, expect failure
+      met: false
+    tasks:
+    - id: f.1.1
+      title: Write paint_regression_test.sh
+      status: todo
+      description: 'Boot GeOS (background), launch paint.elf via socket, inject the
+        rectangle-drawing sequence (fill on, d*11, color 3, s*10, color 2, a*10, color
+        4, w*10, fill off), dump framebuffer, use Python/Pillow to assert pixel values.
+        Kill GeOS when done.
+
+        '
+      files:
+      - tests/paint_regression_test.sh
+    - id: f.1.2
+      title: Verify test catches regressions
+      status: todo
+      description: 'Revert each of the three paint.c fixes one at a time, confirm
+        the test fails. Then re-apply fixes, confirm test passes.
+
+        '
+      files: []
+  - name: encode_png audit
+    description: 'Prior "screenshot verified" claims that went through encode_png
+      may have been against invalid PNGs (raw deflate without zlib wrapper). Audit
+      which claims used encode_png and which used other paths. Result: MCP vm_screenshot
+      (safe path via png crate) was used for all Phase B/C verifications. screenshot_b64
+      was broken but only used by Phase 88 (experimental AI vision). No critical claims
+      were affected. See tests/encode_png_audit.md.
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: List of prior verified claims and whether they used valid PNGs
+      validation: Written audit in tests/encode_png_audit.md
+      met: true
+    tasks:
+    - id: f.2.1
+      title: Audit prior visual verification claims
+      status: done
+      description: 'All Phase B/C verifications used MCP vm_screenshot (png crate,
+        safe). screenshot_b64 was broken but only affected Phase 88 AI vision (experimental).
+        No critical pixel-value claims were based on broken PNGs. Paint regression
+        test now verifies actual decodability.
+
+        '
+      files:
+      - tests/encode_png_audit.md
+  - name: Test harness pattern
+    description: 'Document the pattern so any future guest program can plug in: boot
+      → inject → dump → assert. Reusable shell/Python scaffolding. geos_test_lib.sh
+      extracted: boot, run, inject, dump, kill, assert_pixel, assert_pixel_count.
+      paint_regression_test.sh is the first caller.
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: Test harness documented and reusable
+      validation: New test for a different program can be written in <5 min
+      met: true
+    tasks:
+    - id: f.3.1
+      title: Extract common test harness functions
+      status: done
+      description: 'geos_boot(), geos_run_elf(), geos_inject_text(), geos_fb_dump(),
+        geos_kill(), assert_pixel(), assert_pixel_count(). Shared shell library in
+        tests/geos_test_lib.sh. Source it from test scripts.
+
+        '
+      files:
+      - tests/geos_test_lib.sh
+- id: phase-G
+  title: In-session Canvas Checkpoint — Save/Load
+  status: complete
+  goal: Checkpoint and restore pixel state via the VFS surface
+  description: 'Persistence means checkpointing pixels, not serializing structs. Add
+    geos_save_canvas and geos_load_canvas to libgeos that write/read the framebuffer
+    as raw pixel data to the VFS pixel surface at 0x7000_0000. Round-trip verified:
+    save → clear → load → pixel-perfect match.
+
+    '
+  dependencies:
+  - source: phase-F
+    target: phase-G
+    type: hard
+    reason: Need regression test framework to verify round-trip fidelity
+  deliverables:
+  - name: geos_save_canvas / geos_load_canvas in libgeos
+    description: 'Two new functions in libgeos.c. save_canvas copies framebuffer rows
+      0-254 to VFS surface rows 1-255 (preserving row 0 directory index). load_canvas
+      checks a CANV marker and copies back. Uses MMIO at 0x7000_0000 (VFS Pixel Surface),
+      NOT virtio-blk.
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: save_canvas writes to VFS, load_canvas reads it back
+      validation: 'Round-trip test: save, clear fb, load, assert all pixels match'
+      met: true
+    - description: Round-trip preserves exact pixel values
+      validation: 62,464 canvas pixels match (tolerance ±3)
+      met: true
+    tasks:
+    - id: g.1.1
+      title: Implement geos_save_canvas in libgeos.c
+      status: done
+      description: 'Copies framebuffer rows 0-254 to VFS rows 1-255 word-by-word.
+        Sets CANV marker (0x43414E56) at VFS pixel (0,255). Preserves VFS directory
+        index in row 0 pixels 0-254.
+
+        '
+      files:
+      - examples/riscv-hello/libgeos.c
+      - examples/riscv-hello/libgeos.h
+    - id: g.1.2
+      title: Implement geos_load_canvas in libgeos.c
+      status: done
+      description: 'Checks CANV marker, copies VFS rows 1-255 back to framebuffer
+        rows 0-254, calls geos_fb_present(). Returns -1 if no marker.
+
+        '
+      files:
+      - examples/riscv-hello/libgeos.c
+      - examples/riscv-hello/libgeos.h
+    - id: g.1.3
+      title: Add save/load commands to paint.c
+      status: done
+      description: 'P key = save, O key = load (S/L conflict with WASD movement).
+        UART status messages on success/failure. Load redraws palette bar and cursor
+        on top of restored canvas.
+
+        '
+      files:
+      - examples/riscv-hello/paint.c
+  - name: Round-trip verification test
+    description: 'Automated test: boot paint.elf, draw pattern, dump baseline, save,
+      clear, load, dump restored, compare canvas area pixel-for-pixel. Single-session
+      test (VFS surface is in-memory; cross-session needs future flush-to-disk mechanism).
+
+      '
+    status: done
+    acceptance_criteria:
+    - description: Pixel-perfect round-trip with zero mismatches
+      validation: All 62,464 canvas pixels match between baseline and restored
+      met: true
+    tasks:
+    - id: g.2.1
+      title: Write persistence_roundtrip_test.sh
+      status: done
+      description: 'Uses geos_test_lib.sh. Draws colored fill trails, saves, clears,
+        loads, compares 244 rows * 256 cols = 62,464 pixels with ±3 tolerance.
+
+        '
+      files:
+      - tests/persistence_roundtrip_test.sh
+- id: phase-H
+  title: Cross-session Persistence — VfsSurface Raw-Region Flush
+  status: active
+  goal: Canvas state survives VM restart
+  description: "Phase G proved in-session checkpoint/restore. Phase H makes it survive\
+    \ across VM sessions: save today, kill GeOS, restart tomorrow, load. Two implementation\
+    \ paths:\n  A) Raw-region flush in VfsSurface::Drop — detect CANV marker in row\
+    \ 0,\n     write the raw pixel region to a fixed host file (e.g., .geometry_os/canvas.raw).\n\
+    \     On boot, VfsSurface::new() checks for the file and loads it.\n  B) Virtio-blk\
+    \ integration — route geos_save_canvas through the virtio-blk\n     device at\
+    \ 0x1000_1000 instead of the VFS surface. Requires implementing\n     virtqueue\
+    \ processing in the guest (or a simplified direct-access mode\n     in the host\
+    \ virtio-blk emulation).\nPath A is simpler and keeps the \"pixels copying pixels\"\
+    \ model. Path B is more general but adds virtqueue complexity to bare-metal guest\
+    \ code.\n"
+  dependencies:
+  - source: phase-G
+    target: phase-H
+    type: hard
+    reason: In-session save/load is the foundation; cross-session adds disk flush
+  deliverables:
+  - name: Canvas survives VM restart
+    description: 'VfsSurface flushes the CANV region to disk on Drop, and loads it
+      on construction. The round-trip test is extended: boot, draw, save, kill VM,
+      reboot, load, assert pixel-perfect match.
+
+      '
+    status: todo
+    acceptance_criteria:
+    - description: Saved canvas loads correctly after VM restart
+      validation: 'Two-session test: save in session 1, kill, boot session 2, load,
+        all pixels match'
+      met: false
+    tasks:
+    - id: h.1.1
+      title: Add canvas raw-region flush to VfsSurface
+      status: todo
+      description: 'In VfsSurface::Drop::flush(), check for CANV marker at pixel (0,255).
+        If present, write rows 1-255 to .geometry_os/canvas.raw (261,120 bytes). In
+        VfsSurface::new(), check for canvas.raw and populate rows 1-255.
+
+        '
+      files:
+      - src/riscv/vfs_surface.rs
+    - id: h.1.2
+      title: Two-session round-trip test
+      status: todo
+      description: 'Boot GeOS, run paint, draw pattern, save, kill. Boot GeOS again,
+        run paint, load, dump framebuffer. Compare with pre-save dump.
+
+        '
+      files:
+      - tests/cross_session_persistence_test.sh
+- id: phase-141
+  title: Terminal Polish -- Scrollback and Visual Refinements
+  status: done
+  goal: Make the terminal feel like a real terminal emulator, not a demo
+  description: Scrollback buffer (PageUp/PageDown), better color rendering, cursor
+    improvements (blinking, block/underline toggle), and smooth scrolling.
+  deliverables:
+  - name: Scrollback buffer with PageUp/PageDown
+    description: Ring buffer of 1000+ past lines. PageUp enters scrollback, PageDown
+      toward live, any key exits.
+    status: done
+    tasks:
+    - id: p141.d1.t1
+      title: Ring buffer for terminal history (1024 lines)
+      status: done
+      description: Ring buffer for terminal history (1024 lines via scrollback.rs)
+    - id: p141.d1.t2
+      title: PageUp/PageDown scroll navigation
+      status: done
+      description: PageUp/PageDown scroll navigation in terminal mode
+    - id: p141.d1.t3
+      title: Visual indicator when in scrollback mode
+      status: done
+      description: Colored header bar with line position, status bar indicator
+    scope_lines: 300
+  - name: Cursor improvements
+    description: Blinking cursor, block/underline/bar toggle via F12, cursor
+      color matches terminal theme.
+    status: done
+    tasks:
+    - id: p141.d2.t1
+      title: Blinking cursor (toggle every 500ms)
+      status: done
+      description: Blinking cursor via timer in main loop, shown in status bar
+    - id: p141.d2.t2
+      title: Block vs underline cursor style toggle
+      status: done
+      description: CursorStyle enum (Block/Underline/Bar), F12 to cycle
+    scope_lines: 200
+  scope_lines_total: 75500
+  test_target: 10
+  notes: |
+    All deliverables verified. scrollback.rs provides 1024-line ring buffer with
+    push_line, push_canvas_rows, get_page, max_scroll. PageUp/PageDown navigate
+    scrollback in terminal mode with colored header bar overlay. CursorStyle enum
+    supports Block/Underline/Bar via F12 toggle with 500ms blink timer.
+  _claimed_by: worker-0
+  _claimed_at: 1777317398
 global_risks:
-  - "Interpreter performance ceiling: 52 MIPS may not scale to complex guest programs"
-  - "Premature abstraction: libgeos.c should only be extracted when truly needed"
-  - "Cross-system pixel reads (U3) need locking or same-thread execution when a use case appears"
-
+- 'Interpreter performance ceiling: 52 MIPS may not scale to complex guest programs'
+- 'Premature abstraction: libgeos.c should only be extracted when truly needed'
+- Cross-system pixel reads (U3) need locking or same-thread execution when a use case
+  appears
 conventions:
-  - "Build all RISC-V examples with -march=rv32imac_zicsr -mabi=ilp32"
-  - "Use build.sh-style flags (ffreestanding, nostdlib, O2, medany)"
-  - "Power-of-two constants: use bit masks (x & 0xFF) not modulo (x % 256)"
-  - "Present callback must be channel-based, never synchronous in bus write"
-  - "SPEC = thesis. roadmap_v2 = arc. OpenSpec = per-change diff. Three docs, three jobs."
-
+- Build all RISC-V examples with -march=rv32imac_zicsr -mabi=ilp32
+- Use build.sh-style flags (ffreestanding, nostdlib, O2, medany)
+- 'Power-of-two constants: use bit masks (x & 0xFF) not modulo (x % 256)'
+- Present callback must be channel-based, never synchronous in bus write
+- SPEC = thesis. roadmap_v2 = arc. OpenSpec = per-change diff. Three docs, three jobs.
 meta:
   interpreter_mips: 52
-  framebuffer_size: "256x256"
-  framebuffer_addr: "0x6000_0000"
-  pixel_format_riscv: "0xRRGGBBAA (SBI contract, alpha in low byte)"
-  pixel_format_display: "0x00RRGGBB (minifb, vm.screen canonical surface)"
-  canonical_surface: "vm.screen (256x256 Vec<u32>)"
-  sbi_extension_id: "0x47454F00"
-  dtb_isa: "rv32imac"
+  framebuffer_size: 256x256
+  framebuffer_addr: '0x6000_0000'
+  pixel_format_riscv: 0xRRGGBBAA (SBI contract, alpha in low byte)
+  pixel_format_display: 0x00RRGGBB (minifb, vm.screen canonical surface)
+  canonical_surface: vm.screen (256x256 Vec<u32>)
+  sbi_extension_id: '0x47454F00'
+  dtb_isa: rv32imac

@@ -4121,6 +4121,31 @@ fn main() {
                 cursor_style,
                 false, // no cursor blink in scrollback
             );
+
+            // Draw scrollback header bar over the rendered content
+            {
+                let bar_h: usize = 14;
+                let bar_color: u32 = 0x1A3A5C; // dark blue
+                let total_lines = scrollback.len();
+                let current_line = scrollback_offset + CANVAS_ROWS;
+                let header = format!(
+                    "[SCROLLBACK] Line {}/{} -- PageUp/Down=navigate, any key=exit",
+                    current_line.min(total_lines),
+                    total_lines
+                );
+                // Fill bar background
+                for py in 0..bar_h {
+                    for px in 0..render::WIDTH {
+                        buffer[py * render::WIDTH + px] = bar_color;
+                    }
+                }
+                // Draw header text in bright white
+                render::render_text(&mut buffer, 8, 3, &header, 0xCCDDFF);
+                // Draw thin separator line below
+                for px in 0..render::WIDTH {
+                    buffer[bar_h * render::WIDTH + px] = 0x3366AA;
+                }
+            }
         } else {
             // Compute current selection for rendering (active drag or anchored selection)
             let current_sel = if text_sel_active {
