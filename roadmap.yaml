@@ -8353,7 +8353,7 @@ version: 1.0.0
 
 - id: phase-169
   title: "Fix Windowed Apps Crashing Due to Wrong Assembly Base Address"
-  status: planned
+  status: done
   goal: "Windowed apps (launch <app> --window) should execute correctly with proper jump targets instead of crashing on the first instruction that uses a label address"
   description: "Dogfood QA confirmed that ALL windowed apps crash within one frame tick. The root cause (not identified in phase-164) is an assembly base address mismatch. In main.rs around line 2627, the windowed launch code calls 'crate::assembler::assemble(&preprocessed, 0)' with base_addr=0, but then loads the bytecode at APP_CODE_BASE (0x4000). The assembler resolves JMP/CALL label targets as base_addr + offset (see assembler/mod.rs line 319: 'bytecode[*pos] = (base_addr + target) as u32'). So all jump targets point to addresses in the 0x0000-0x0FFF range (where the main VM code lives) instead of the 0x4000+ range where the app was actually loaded. The spawned process jumps to wrong code, executes garbage, and hits HALT or causes a fatal error within one tick. The fix is a single-line change: pass app_base as the second argument to assemble() instead of 0. This supersedes the incorrect diagnosis in phase-164 which suggested the programs 'don't initialize WINSYS' -- the real issue is purely an address relocation bug."
   deliverables:
