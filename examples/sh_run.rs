@@ -200,27 +200,4 @@ fn main() {
         writer.write_image_data(&rgba).expect("write png");
         eprintln!("MMIO framebuffer saved to {} ({}x{})", out_path, FB_WIDTH, FB_HEIGHT);
     }
-
-    // Dump SBI pixel framebuffer (64x64) if guest used SBI pixel extension
-    use geometry_os::riscv::sbi::{GEO_FB_HEIGHT, GEO_FB_WIDTH};
-    let sbi_fb = &vm.bus.sbi.pixel_fb;
-    let any_sbi = sbi_fb.iter().any(|&p| p != 0);
-    if any_sbi {
-        let out_path = "painter_output.png";
-        let file = std::fs::File::create(out_path).expect("create png");
-        let mut encoder = png::Encoder::new(file, GEO_FB_WIDTH as u32, GEO_FB_HEIGHT as u32);
-        encoder.set_color(png::ColorType::Rgba);
-        encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = encoder.write_header().expect("png header");
-        let mut rgba = vec![0u8; GEO_FB_WIDTH * GEO_FB_HEIGHT * 4];
-        for (i, &pixel) in sbi_fb.iter().enumerate() {
-            let bytes = pixel.to_be_bytes();
-            rgba[i * 4 + 0] = bytes[0]; // R
-            rgba[i * 4 + 1] = bytes[1]; // G
-            rgba[i * 4 + 2] = bytes[2]; // B
-            rgba[i * 4 + 3] = bytes[3]; // A
-        }
-        writer.write_image_data(&rgba).expect("write png");
-        eprintln!("SBI pixel framebuffer saved to {} ({}x{})", out_path, GEO_FB_WIDTH, GEO_FB_HEIGHT);
-    }
 }
