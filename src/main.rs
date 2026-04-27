@@ -3173,10 +3173,13 @@ fn main() {
                                         match riscv.snapshot() {
                                             Some(frame) => {
                                                 // Convert 0xRRGGBBAA (guest format) to 0x00RRGGBB (encode_png format)
-                                                let converted: Vec<u32> = frame.pixels.iter()
-                                                    .map(|px| px >> 8)  // shift right 8: drops alpha, R moves to bit 16
+                                                let converted: Vec<u32> = frame
+                                                    .pixels
+                                                    .iter()
+                                                    .map(|px| px >> 8) // shift right 8: drops alpha, R moves to bit 16
                                                     .collect();
-                                                let png_bytes = geometry_os::vision::encode_png(&converted);
+                                                let png_bytes =
+                                                    geometry_os::vision::encode_png(&converted);
                                                 match std::fs::write(path, &png_bytes) {
                                                     Ok(_) => {
                                                         response.push_str(&format!(
@@ -3186,7 +3189,8 @@ fn main() {
                                                     }
                                                     Err(e) => {
                                                         response.push_str(&format!(
-                                                            "[riscv: write error: {}]\n", e
+                                                            "[riscv: write error: {}]\n",
+                                                            e
                                                         ));
                                                     }
                                                 }
@@ -3283,7 +3287,11 @@ fn main() {
                                         response.push_str("ok\n");
                                     } else {
                                         let ok = vm.push_key(keycode);
-                                        response.push_str(if ok { "ok\n" } else { "buffer_full\n" });
+                                        response.push_str(if ok {
+                                            "ok\n"
+                                        } else {
+                                            "buffer_full\n"
+                                        });
                                     }
                                 } else {
                                     response.push_str("[usage: inject_key <keycode>]\n");

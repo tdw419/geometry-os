@@ -91,6 +91,7 @@ impl Bus {
     pub fn new(ram_base: u64, ram_size: usize) -> Self {
         let mut vfs_surface = VfsSurface::new();
         vfs_surface.load_files();
+        vfs_surface.restore_canvas(); // recover saved canvas from previous session
 
         Self {
             mem: GuestMemory::new(ram_base, ram_size),

@@ -19,6 +19,14 @@ pub const VFS_CONTROL_ADDR: u64 = VFS_SURFACE_BASE + VFS_SURFACE_SIZE as u64;
 const PXFS_MAGIC: u32 = 0x50584653;
 /// Maximum number of files in the directory index
 const VFS_MAX_FILES: usize = 254;
+/// CANV marker: "CANV" in ASCII — set by geos_save_canvas() at pixel (0, 255)
+const CANV_MARKER: u32 = 0x43414E56;
+/// Column in row 0 where the CANV marker lives
+const CANV_MARKER_COL: usize = 255;
+/// Number of canvas data rows (rows 1-255 of the VFS surface)
+const CANV_DATA_ROWS: usize = 255;
+/// Raw canvas file name for cross-session persistence
+const CANVAS_RAW_FILE: &str = "canvas.raw";
 
 /// The VFS Pixel Surface device.
 pub struct VfsSurface {
@@ -39,7 +47,8 @@ impl Default for VfsSurface {
 }
 
 impl VfsSurface {
-    /// Create a new empty VFS surface.
+    /// Create a new VFS surface. Does NOT restore canvas — call restore_canvas()
+    /// after load_files() to recover saved canvas from a previous session.
     pub fn new() -> Self {
         let mut pixels = vec![0u32; 256 * 256];
         let base_dir = PathBuf::from(".geometry_os/fs");
@@ -55,6 +64,43 @@ impl VfsSurface {
             file_map: HashMap::new(),
             dirty_rows: HashSet::new(),
         }
+    }
+
+    /// Restore canvas data from canvas.raw if it exists.
+    /// Call this AFTER load_files() to avoid the file loading clearing the canvas.
+    pub fn restore_canvas(&mut self) {
+        let canvas_path = self.base_dir.join(CANVAS_RAW_FILE);
+        if !canvas_path.exists() {
+            return;
+        }
+        let data = match fs::read(&canvas_path) {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        let expected_size = CANV_DATA_ROWS * 256 * 4; // 261,120 bytes
+        if data.len() != expected_size {
+            return;
+        }
+        // Decode u32 pixels from little-endian bytes and write to rows 1-255
+        for i in 0..CANV_DATA_ROWS * 256 {
+            let off = i * 4;
+            let px = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+            // File row 0 maps to VFS row 1
+            self.pixels[256 + i] = px;
+        }
+        // Set CANV marker so geos_load_canvas() can find it
+        self.pixels[CANV_MARKER_COL] = CANV_MARKER;
+    }
+
+    /// Create a new VFS surface with a custom base directory.
+    /// Useful for testing with isolated directories.
+    /// Restores canvas from the custom base_dir.
+    pub fn new_with_base(base_dir: PathBuf) -> Self {
+        let _ = fs::create_dir_all(&base_dir);
+        let mut surface = Self::new();
+        surface.base_dir = base_dir;
+        surface.restore_canvas();
+        surface
     }
 
     /// Load files from the host filesystem into the pixel surface.
@@ -348,7 +394,24 @@ impl VfsSurface {
 
 impl Drop for VfsSurface {
     fn drop(&mut self) {
+        // First, flush any VFS file entries
         self.flush();
+
+        // Then, check for CANV marker and persist raw canvas data to disk
+        // This enables cross-session persistence: save today, load tomorrow
+        if self.pixels[CANV_MARKER_COL] == CANV_MARKER {
+            let canvas_path = self.base_dir.join(CANVAS_RAW_FILE);
+            let expected_size = CANV_DATA_ROWS * 256 * 4; // 261,120 bytes
+            let mut buf = Vec::with_capacity(expected_size);
+            // Encode rows 1-255 (CANV_DATA_ROWS rows × 256 cols) as little-endian u32
+            for row in 1..=CANV_DATA_ROWS {
+                for col in 0..256 {
+                    let px = self.pixels[row * 256 + col];
+                    buf.extend_from_slice(&px.to_le_bytes());
+                }
+            }
+            let _ = fs::write(&canvas_path, &buf);
+        }
     }
 }
 
@@ -513,6 +576,165 @@ mod tests {
         s.flush();
         let data = fs::read(td.join("hello.txt")).unwrap();
         assert_eq!(&data[..6], b"Hello!");
+        let _ = fs::remove_dir_all(&td);
+    }
+
+    #[test]
+    fn test_canvas_persist_on_drop() {
+        let td = std::env::temp_dir().join("geo_vfs_canv_drop");
+        let _ = fs::remove_dir_all(&td);
+        let _ = fs::create_dir_all(&td);
+
+        // Create a surface with known pixel data and CANV marker
+        let mut s = VfsSurface::new();
+        s.base_dir = td.clone();
+
+        // Write known test pattern to VFS rows 1-3 (canvas data)
+        s.pixels[256] = 0xFF0000; // row 1 col 0 = red
+        s.pixels[257] = 0x00FF00; // row 1 col 1 = green
+        s.pixels[512] = 0x0000FF; // row 2 col 0 = blue
+        s.pixels[768] = 0xFFFFFF; // row 3 col 0 = white
+
+        // Set CANV marker
+        s.pixels[CANV_MARKER_COL] = CANV_MARKER;
+
+        // Drop the surface — should persist canvas.raw
+        drop(s);
+
+        // Verify canvas.raw exists and has correct size
+        let raw_path = td.join(CANVAS_RAW_FILE);
+        assert!(raw_path.exists(), "canvas.raw should be created on drop");
+        let data = fs::read(&raw_path).unwrap();
+        let expected_size = CANV_DATA_ROWS * 256 * 4; // 261,120 bytes
+        assert_eq!(
+            data.len(),
+            expected_size,
+            "canvas.raw should be 261,120 bytes"
+        );
+
+        // Verify first few pixels
+        assert_eq!(
+            u32::from_le_bytes([data[0], data[1], data[2], data[3]]),
+            0xFF0000,
+            "first pixel should be red"
+        );
+        assert_eq!(
+            u32::from_le_bytes([data[4], data[5], data[6], data[7]]),
+            0x00FF00,
+            "second pixel should be green"
+        );
+        assert_eq!(
+            u32::from_le_bytes([data[1024], data[1025], data[1026], data[1027]]),
+            0x0000FF,
+            "row 2 col 0 should be blue"
+        );
+
+        let _ = fs::remove_dir_all(&td);
+    }
+
+    #[test]
+    fn test_canvas_restore_on_new() {
+        let td = std::env::temp_dir().join("geo_vfs_canv_restore");
+        let _ = fs::remove_dir_all(&td);
+        let _ = fs::create_dir_all(&td);
+
+        // Write a canvas.raw file manually (simulating previous session's drop)
+        let mut raw_data = vec![0u8; CANV_DATA_ROWS * 256 * 4];
+        // Put known pixels at the start
+        let red_bytes = 0xFF0000u32.to_le_bytes();
+        raw_data[0..4].copy_from_slice(&red_bytes);
+        let green_bytes = 0x00FF00u32.to_le_bytes();
+        raw_data[4..8].copy_from_slice(&green_bytes);
+        let blue_bytes = 0x0000FFu32.to_le_bytes();
+        raw_data[1024..1028].copy_from_slice(&blue_bytes); // row 2 col 0
+        fs::write(td.join(CANVAS_RAW_FILE), &raw_data).unwrap();
+
+        // Create new surface — should restore from canvas.raw
+        let mut s = VfsSurface::new_with_base(td.clone());
+
+        // CANV marker should be set
+        assert_eq!(
+            s.pixels[CANV_MARKER_COL], CANV_MARKER,
+            "CANV marker should be restored"
+        );
+
+        // Canvas data should be restored to rows 1-255
+        assert_eq!(s.pixels[256], 0xFF0000, "row 1 col 0 = red");
+        assert_eq!(s.pixels[257], 0x00FF00, "row 1 col 1 = green");
+        assert_eq!(s.pixels[512], 0x0000FF, "row 2 col 0 = blue");
+
+        let _ = fs::remove_dir_all(&td);
+    }
+
+    #[test]
+    fn test_canvas_round_trip_persistence() {
+        let td = std::env::temp_dir().join("geo_vfs_canv_rt");
+        let _ = fs::remove_dir_all(&td);
+        let _ = fs::create_dir_all(&td);
+
+        // Session 1: Create surface, write canvas data, set CANV marker, drop
+        {
+            let mut s1 = VfsSurface::new();
+            s1.base_dir = td.clone();
+
+            // Write a recognizable pattern across multiple rows
+            for row in 1..=5u32 {
+                for col in 0..10u32 {
+                    s1.pixels[(row * 256 + col) as usize] = (row << 16) | (col << 8) | (row * col);
+                }
+            }
+            s1.pixels[CANV_MARKER_COL] = CANV_MARKER;
+            drop(s1); // persists canvas.raw
+        }
+
+        // Session 2: Create new surface, verify canvas data restored
+        {
+            let s2 = VfsSurface::new_with_base(td.clone());
+
+            // CANV marker present
+            assert_eq!(s2.pixels[CANV_MARKER_COL], CANV_MARKER);
+
+            // All pattern pixels match
+            for row in 1..=5u32 {
+                for col in 0..10u32 {
+                    let expected = (row << 16) | (col << 8) | (row * col);
+                    let actual = s2.pixels[(row * 256 + col) as usize];
+                    assert_eq!(
+                        actual, expected,
+                        "pixel at row {} col {} should match after round-trip",
+                        row, col
+                    );
+                }
+            }
+
+            // Zero pixels outside the pattern should still be zero
+            assert_eq!(s2.pixels[256 + 10], 0, "unset pixels should be 0");
+        }
+
+        let _ = fs::remove_dir_all(&td);
+    }
+
+    #[test]
+    fn test_no_canvas_raw_without_marker() {
+        let td = std::env::temp_dir().join("geo_vfs_canv_no_marker");
+        let _ = fs::remove_dir_all(&td);
+        let _ = fs::create_dir_all(&td);
+
+        // Create surface with data but NO CANV marker — should NOT persist
+        {
+            let mut s = VfsSurface::new();
+            s.base_dir = td.clone();
+            s.pixels[256] = 0x12345678; // some data
+                                        // No CANV marker set
+            drop(s);
+        }
+
+        // canvas.raw should NOT exist
+        assert!(
+            !td.join(CANVAS_RAW_FILE).exists(),
+            "canvas.raw should NOT be created without CANV marker"
+        );
+
         let _ = fs::remove_dir_all(&td);
     }
 }

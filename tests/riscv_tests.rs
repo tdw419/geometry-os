@@ -51,7 +51,10 @@ pub fn run(vm: &mut RiscvVm, max_steps: usize) {
     for _ in 0..max_steps {
         match vm.cpu.step(&mut vm.bus) {
             StepResult::Ecall | StepResult::Ebreak | StepResult::FetchFault => break,
-            StepResult::Ok | StepResult::LoadFault | StepResult::StoreFault | StepResult::Shutdown => {}
+            StepResult::Ok
+            | StepResult::LoadFault
+            | StepResult::StoreFault
+            | StepResult::Shutdown => {}
         }
     }
 }
