@@ -406,7 +406,7 @@ phases:
   # ── Phase F: Visual Verification Infrastructure ──────────────────
   - id: "phase-F"
     title: "Visual Verification Infrastructure"
-    status: "active"
+    status: "complete"
     goal: "Regression test framework for RISC-V guest programs via framebuffer dumps"
     description: >
       riscv_fb_dump gives us scriptable visual verification. This phase builds
@@ -500,7 +500,7 @@ phases:
   # ── Phase G: In-session Canvas Checkpoint ────────────────────────
   - id: "phase-G"
     title: "In-session Canvas Checkpoint — Save/Load"
-    status: "done"
+    status: "complete"
     goal: "Checkpoint and restore pixel state via the VFS surface"
     description: >
       Persistence means checkpointing pixels, not serializing structs. Add
@@ -573,8 +573,8 @@ phases:
 
   # ── Phase H: Cross-session Persistence ──────────────────────────
   - id: "phase-H"
-    title: "Cross-session Persistence"
-    status: "future"
+    title: "Cross-session Persistence — VfsSurface Raw-Region Flush"
+    status: "active"
     goal: "Canvas state survives VM restart"
     description: >
       Phase G proved in-session checkpoint/restore. Phase H makes it survive

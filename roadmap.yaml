@@ -8299,3 +8299,54 @@ phases:
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
+
+- id: phase-167
+  title: "Fix Building-to-Program Filename Mismatch for linux and host"
+  status: planned
+  goal: "All desktop buildings should launch their corresponding programs without file-not-found errors"
+  description: "Dogfood QA found that two buildings on the desktop reference non-existent program files: building 'linux' at (70,130) tries to load programs/linux.asm but the actual file is programs/linux_building.asm, and building 'host' at (140,80) tries to load programs/host.asm but the actual file is programs/host_term.asm. The launch command searches for programs/<building_name>.asm, so the building names must match the filenames. Either rename the buildings in world_desktop.asm to match the files, or create symlink/alias files. The error output is: '[no program file for linux: No such file or directory]' and '[no program file for host: No such file or directory]'."
+  deliverables:
+  - name: "All 16 desktop buildings launch successfully"
+    description: "Ensure buildings 'linux' and 'host' resolve to their correct program files (linux_building.asm and host_term.asm). Options: (a) rename building entries in world_desktop.asm from 'linux' to 'linux_building' and 'host' to 'host_term', or (b) add launch alias mapping in main.rs so 'linux'->'linux_building' and 'host'->'host_term', or (c) create programs/linux.asm and programs/host.asm as symlinks/wrappers. Verify with 'launch linux' and 'launch host' via socket."
+    status: todo
+    tasks:
+    - id: p167.d1.t1
+      title: "Fix linux building program name mapping"
+      status: todo
+      description: "In world_desktop.asm, the building at RAM slot 8 has name 'linux' but the file is programs/linux_building.asm. Either rename the building name to 'linux_building' in the desktop initialization code (around the app building setup), or add a fallback in the launch command handler in main.rs to try linux_building.asm when linux.asm is not found."
+      scope_lines: 30
+    - id: p167.d1.t2
+      title: "Fix host building program name mapping"
+      status: todo
+      description: "In world_desktop.asm, the building at RAM slot 15 has name 'host' but the file is programs/host_term.asm. Either rename the building name to 'host_term' in the desktop initialization code, or add a fallback in the launch command handler to try host_term.asm when host.asm is not found."
+      scope_lines: 30
+    - id: p167.d1.t3
+      title: "Verify all 16 buildings launch correctly via socket"
+      status: todo
+      description: "After fix, test every building name from the buildings command output (snake, ball, plasma, painter, colors, fire, init, shell, linux, tetris, smart_term, oracle, ai_terminal, file_browser, hex_viewer, host) via 'launch <name>'. All should return '[launching: ...]' not '[app not found]' or '[no program file]'."
+      scope_lines: 20
+  scope_lines_total: 80
+  test_target: 1
+
+- id: phase-168
+  title: "Fix Stale cargo test Process Consuming CPU and Memory"
+  status: planned
+  goal: "The preflight QA script should not leave stale test runner processes that consume system resources"
+  description: "Dogfood QA found a stale cargo test process (target/debug/deps/geometry_os-ef6775d9a5d4fffc --test-threads=2) consuming 98.7% CPU and 29.3% memory (19GB) long after the preflight script completed. The preflight script (geo_dogfood_qa.py) runs 'cargo test' as part of its checks but the test runner appears to hang or loop indefinitely without being killed. This starves the actual GeOS desktop process and can cause socket disappearance and general system instability. The test runner was started at 13:35 and was still running at 13:39 using 4+ minutes of CPU time."
+  deliverables:
+  - name: "Preflight script kills test runner after timeout"
+    description: "The geo_dogfood_qa.py script should add a timeout to the cargo test invocation and kill any lingering test processes before exiting. If tests complete with 0 passed/0 failed (indicating a possible hang), the script should explicitly kill the test runner. Also add cleanup at script start to kill any pre-existing test runners."
+    status: todo
+    tasks:
+    - id: p168.d1.t1
+      title: "Add timeout and cleanup to cargo test in preflight script"
+      status: todo
+      description: "In geo_dogfood_qa.py, wrap the cargo test subprocess call with a timeout (e.g., 120 seconds). Use subprocess.Popen with a kill-on-timeout pattern. Also add a cleanup function that runs at script exit (atexit or finally block) to kill any geometry_os test processes. At script start, kill any pre-existing stale test runners."
+      scope_lines: 40
+    - id: p168.d1.t2
+      title: "Investigate why test runner reports 0 passed 0 failed"
+      status: todo
+      description: "The preflight output shows 'Tests: 0 passed, 0 failed' which means either no tests were collected or the test runner hung before running any tests. Check if there's a test that blocks on I/O (e.g., trying to open a display window or connect to a socket). The test runner should not require a display. Check for tests that depend on minifb/window creation."
+      scope_lines: 60
+  scope_lines_total: 100
+  test_target: 1
