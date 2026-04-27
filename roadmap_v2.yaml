@@ -156,41 +156,39 @@ phases:
             files: ["examples/sh_run.rs"]
       - name: "Framebuffer blit to Geometry OS display"
         description: >
-          Find where the main app renders the pixel VM canvas. Inject the RISC-V
-          framebuffer (256x256 RGBA) as a surface in that pipeline. May need
-          scaling (256x256 -> 512x512 display) or window integration via WINSYS.
-        status: "todo"
+          RISC-V framebuffer overlays the GeOS VM screen at (640, 64) with
+          1:1 pixel mapping (256x256). Transparent pixels pass through.
+          Launch via riscv_run/riscv_kill MCP commands.
+        status: "done"
         acceptance_criteria:
           - description: "RISC-V guest pixels appear on the Geometry OS display"
-            validation: "Launch life.elf via GUI, see cells moving on screen"
-            met: false
+            validation: "riscv_run life.elf via MCP, see pixels on VM screen"
+            met: true
           - description: "Frame rate is at least 5 fps for 64x64 life"
             validation: "Visual confirmation of smooth animation"
             met: false
         tasks:
           - id: "b.2.1"
             title: "Identify main app render loop and injection point"
-            status: "todo"
+            status: "done"
             description: >
-              Find the pixel VM canvas render path in main.rs or render.rs.
-              Determine how to add a RISC-V framebuffer surface alongside
-              existing canvas. Consider WINSYS window vs direct surface blit.
+              render.rs line 528: vm.screen blitted at (VM_SCREEN_X, VM_SCREEN_Y).
+              RISC-V framebuffer overlays same area after GeOS render.
             files: ["src/main.rs", "src/render.rs"]
           - id: "b.2.2"
             title: "Implement framebuffer-to-display blit"
-            status: "todo"
+            status: "done"
             description: >
-              Wire the channel output from RiscvVmThread into the display
-              pipeline. Scale 256x256 RGBA to whatever the display expects.
-              Frame-rate limit to avoid spinning.
+              Blit after render() call in main loop. Drains all pending frames,
+              keeps latest. Black pixels transparent (GeOS shows through).
             files: ["src/main.rs", "src/render.rs", "src/riscv/live.rs"]
           - id: "b.2.3"
             title: "Add launch control in Geometry OS UI"
-            status: "todo"
+            status: "done"
             description: >
-              Add ability to load and run a .elf from the Geometry OS UI
-              (MCP command, keyboard shortcut, or menu item).
-            files: ["src/main.rs", "src/cli.rs"]
+              Added riscv_run <elf_path> and riscv_kill commands. Registered
+              in MCP server. Updated help text.
+            files: ["src/main.rs", "src/mcp_server.rs"]
       - name: "Default demo: Life at 64x64"
         description: >
           Life at 256x256 runs at ~5 gen/sec. Life at 64x64 should clear 20+ fps
