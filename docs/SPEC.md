@@ -50,7 +50,7 @@ The Token → Pixel → GUI substrate model in [`GEMINI.md`](../GEMINI.md) is ca
 We **will**:
 
 - Keep RISC-V as the substrate. It gives us a real ISA, gcc/llvm, ELF tooling, and C as a sane authoring language for kernel + tools.
-- Treat the framebuffer as canonical state. Persistence means checkpointing pixels, not serializing structs. (Phase G shipped in-session checkpoint/restore via the VFS pixel surface. Cross-session persistence — surviving VM restart — is Phase H.)
+- Treat the framebuffer as canonical state. Persistence means checkpointing pixels, not serializing structs. (Phase G shipped in-session checkpoint/restore via the VFS pixel surface. Phase H shipped cross-session persistence — canvas survives VM restart via `.geometry_os/fs/canvas.raw`.)
 - Build the userland as a stack of small bare-metal programs that ecall into SBI for I/O.
 - Earn opcodes (the Promotion Rule from `GEMINI.md`): pattern → macro → opcode, never the reverse.
 - Keep `cargo test` green on every commit.
@@ -142,6 +142,27 @@ The mini-shell proved the input→compute→output loop. `paint.c` proves the pi
 
 **Infrastructure reused.** `geos_test_lib.sh` from Phase F provided boot/run/inject/dump/assert primitives. No new test harness needed.
 
+## Capstone demonstration — cross-session canvas persistence ✅ shipped 2026-04-27
+
+Phase G proved in-session save/load. Phase H proves the full persistence thesis: save today, kill the VM, restart tomorrow, load. The canvas survives across process boundaries.
+
+**What shipped.** `VfsSurface::Drop` now detects the CANV marker (set by `geos_save_canvas()` at pixel (0,255)) and writes the raw pixel region (rows 1-255, 255×256×4 = 261,120 bytes) to `.geometry_os/fs/canvas.raw` as little-endian u32 words. On startup, `Bus::new()` calls `VfsSurface::restore_canvas()` after `load_files()`, which checks for canvas.raw, decodes the pixel data back into rows 1-255, and sets the CANV marker so that `geos_load_canvas()` in paint.c can find it.
+
+**Why load_files() first.** `load_files()` clears all pixels except Row 0. If canvas restoration happened before file loading, the file data would overwrite the canvas. The correct order is: create surface → load host files → restore canvas from disk. The canvas data sits in rows 1-255 which are separate from the file directory index in Row 0. If a host file occupies the same row range as the canvas, the canvas wins (it runs last) — this is intentional since the canvas represents user state, not system state.
+
+**Implementation details.** Three methods added to VfsSurface:
+- `restore_canvas()` — reads `.geometry_os/fs/canvas.raw`, decodes LE u32 pixels into rows 1-255, sets CANV marker
+- `new_with_base(path)` — test helper that creates surface with custom base_dir and calls restore_canvas()
+- Modified `Drop::drop()` — calls flush() for file entries, then checks CANV marker and writes canvas.raw
+
+**Unit tests.** Four tests covering the complete lifecycle:
+1. `test_canvas_persist_on_drop` — verifies canvas.raw is created with correct size and pixel data when CANV marker is present
+2. `test_canvas_restore_on_new` — verifies manually created canvas.raw is loaded correctly
+3. `test_canvas_round_trip_persistence` — full two-session simulation: session 1 writes pattern + drops, session 2 restores and verifies all pixels match
+4. `test_no_canvas_raw_without_marker` — verifies no file is written when CANV marker is absent
+
+All 11 VFS surface tests pass.
+
 ## Verification
 
 Visual verification is now scriptable via `riscv_fb_dump` and `vision::encode_png` (which now produces valid PNGs). New milestones close by asserting on pixel values, not by looking at a screenshot. The pattern: boot guest program → inject known input sequence → dump framebuffer → assert pixel values at specific coordinates.
@@ -151,4 +172,4 @@ Visual verification is now scriptable via `riscv_fb_dump` and `vision::encode_pn
 1. **`docs/SPEC.md`** (this file) — what we are building and why.
 2. **`GEMINI.md`** — Token → Pixel → GUI layer model and authoring conventions for Layer 3.
 3. **`docs/NORTH_STAR.md`** — priority hierarchy and "DO / DON'T" rules. The "be like Linux" framing is retired but the hierarchy still holds.
-4. **`roadmap_v2.yaml`** — concrete deliverables. Phase-160 (Linux boot to userspace) is now research-only; new work hangs off the mini-shell milestone above. Phase E (legacy reconciliation) is hygiene. Phases F (verification) and G (in-session persistence) are done. Phase H (cross-session persistence) is next.
+4. **`roadmap_v2.yaml`** — concrete deliverables. Phase-160 (Linux boot to userspace) is now research-only; new work hangs off the mini-shell milestone above. Phase E (legacy reconciliation) is hygiene. Phases F (verification), G (in-session persistence), and H (cross-session persistence) are done. Phase E (legacy reconciliation) remains as future hygiene.
