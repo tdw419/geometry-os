@@ -457,36 +457,44 @@ phases:
           Prior "screenshot verified" claims that went through encode_png may
           have been against invalid PNGs (raw deflate without zlib wrapper).
           Audit which claims used encode_png and which used other paths.
-        status: "todo"
+          Result: MCP vm_screenshot (safe path via png crate) was used for
+          all Phase B/C verifications. screenshot_b64 was broken but only
+          used by Phase 88 (experimental AI vision). No critical claims
+          were affected. See tests/encode_png_audit.md.
+        status: "done"
         acceptance_criteria:
           - description: "List of prior verified claims and whether they used valid PNGs"
-            validation: "Written audit in test output or comment"
-            met: false
+            validation: "Written audit in tests/encode_png_audit.md"
+            met: true
         tasks:
           - id: "f.2.1"
             title: "Audit prior visual verification claims"
-            status: "todo"
+            status: "done"
             description: >
-              Search git history and session transcripts for "verified" claims
-              involving screenshots. Determine which used encode_png vs other
-              paths. Document findings.
-            files: []
+              All Phase B/C verifications used MCP vm_screenshot (png crate, safe).
+              screenshot_b64 was broken but only affected Phase 88 AI vision (experimental).
+              No critical pixel-value claims were based on broken PNGs.
+              Paint regression test now verifies actual decodability.
+            files: ["tests/encode_png_audit.md"]
       - name: "Test harness pattern"
         description: >
           Document the pattern so any future guest program can plug in:
           boot → inject → dump → assert. Reusable shell/Python scaffolding.
-        status: "todo"
+          geos_test_lib.sh extracted: boot, run, inject, dump, kill, assert_pixel,
+          assert_pixel_count. paint_regression_test.sh is the first caller.
+        status: "done"
         acceptance_criteria:
           - description: "Test harness documented and reusable"
             validation: "New test for a different program can be written in <5 min"
-            met: false
+            met: true
         tasks:
           - id: "f.3.1"
             title: "Extract common test harness functions"
-            status: "todo"
+            status: "done"
             description: >
-              geos_boot(), geos_run_elf(), geos_inject(), geos_fb_dump(),
-              geos_kill(), assert_pixel(). Shared Python module or shell functions.
+              geos_boot(), geos_run_elf(), geos_inject_text(), geos_fb_dump(),
+              geos_kill(), assert_pixel(), assert_pixel_count(). Shared shell
+              library in tests/geos_test_lib.sh. Source it from test scripts.
             files: ["tests/geos_test_lib.sh"]
 
   # ── Phase G: Persistence ────────────────────────────────────────
