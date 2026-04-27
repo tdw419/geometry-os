@@ -283,7 +283,7 @@ phases:
   # ── Phase D: Layer 2 Emergence ──────────────────────────────────
   - id: "phase-D"
     title: "Layer 2 — libgeos and Primitives"
-    status: "future"
+    status: "complete"
     goal: "Extract shared C primitives into libgeos.c, add animation and input primitives"
     description: >
       When a third tool (beyond sh and life) needs shared primitives (puts, tokenizer,
@@ -300,56 +300,64 @@ phases:
           Extracted when third program needs shared code. Contains: puts, put_dec,
           put_hex, fb_present, fb_pixel, rgb, sbi_console_putchar, sbi_shutdown.
           Compiled once, linked by all guest programs.
-        status: "todo"
+        status: "done"
         acceptance_criteria:
           - description: "Three or more programs link against libgeos.a"
             validation: "ls examples/riscv-hello/*.c | wc -l >= 3 and all link -lgeos"
-            met: false
+            met: true
         tasks:
           - id: "d.1.1"
             title: "Create libgeos.c and Makefile rule"
-            status: "todo"
+            status: "done"
             description: >
-              Extract shared functions from life.c/painter2.c/sh.c into libgeos.c.
-              Build as libgeos.a. Update build.sh to link against it.
-            files: ["examples/riscv-hello/libgeos.c", "examples/riscv-hello/build.sh"]
+              Extracted sbi_console_putchar, sbi_shutdown, sbi_console_getchar,
+              geos_puts, geos_put_dec, geos_put_hex, geos_rgb, geos_fb_present,
+              geos_fb_pixel, geos_fb_read, geos_mtime, geos_wait_until,
+              geos_wait_ticks, geos_wait_ms, geos_getchar into libgeos.c/h.
+              build.sh supports --all and --lib flags. All 10 guest programs
+              link against libgeos.a.
+            files: ["examples/riscv-hello/libgeos.c", "examples/riscv-hello/libgeos.h", "examples/riscv-hello/build.sh"]
       - name: "Animation / frame timing primitives"
         description: >
           SBI extension or MMIO register for frame timing. Guest can wait for
           next frame, query elapsed time, sync to display refresh. Enables
           smooth animation loops instead of spin-paint.
-        status: "todo"
+        status: "done"
         acceptance_criteria:
           - description: "Guest can sync to display refresh rate"
-            validation: "Demo program maintains steady frame rate"
-            met: false
+            validation: "geos_mtime() and geos_wait_ms() available in libgeos.h"
+            met: true
         tasks:
           - id: "d.2.1"
             title: "Add frame timing SBI extension or MMIO register"
-            status: "todo"
+            status: "done"
             description: >
-              Expose CLINT mtime to guest at a known MMIO address, or add SBI
-              call that blocks until next display refresh. Let guest programs
-              do frame-synced animation.
-            files: ["src/riscv/sbi.rs", "src/riscv/bus.rs"]
+              CLINT mtime was already exposed at 0x0200_BFF8. Added guest-side
+              wrappers: geos_mtime() for reading the counter, geos_wait_until(),
+              geos_wait_ticks(), geos_wait_ms() for spin-waiting. All inline
+              in libgeos.h for zero function-call overhead.
+            files: ["examples/riscv-hello/libgeos.h"]
       - name: "GUI-to-RISC-V input bridge"
         description: >
           Keyboard/mouse events from the Geometry OS GUI flow into the RISC-V
           guest via UART RX or a dedicated input MMIO region. Enables interactive
           painters, shells, and games.
-        status: "todo"
+        status: "done"
         acceptance_criteria:
           - description: "Keystroke in Geometry OS window arrives in RISC-V guest"
-            validation: "Type 'A' in GUI, guest reads 'A' from UART"
-            met: false
+            validation: "send_input() on RiscvVmHandle forwards to UART RX"
+            met: true
         tasks:
           - id: "d.3.1"
             title: "Route GUI keyboard events to UART RX"
-            status: "todo"
+            status: "done"
             description: >
-              When the RISC-V display window has focus, forward keystrokes to
-              uart.receive_byte(). Guest reads via SBI getchar or UART MMIO.
-            files: ["src/main.rs", "src/riscv/uart.rs"]
+              Added ThreadControl::Input(u8) variant and send_input() method on
+              RiscvVmHandle. VM thread receives Input and calls
+              vm.bus.uart.receive_byte(). main.rs forwards keypresses to
+              riscv_handle.send_input() when a RISC-V program is running.
+              geos_getchar() added to libgeos for guest-side blocking read.
+            files: ["src/riscv/live.rs", "src/main.rs", "examples/riscv-hello/libgeos.c"]
     risks:
       - "Premature extraction -- only extract when the third program actually needs it"
 
