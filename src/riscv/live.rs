@@ -223,14 +223,15 @@ fn vm_thread_main(
 
     // Install channel-based present callback
     let ft = frame_tx.clone();
-    let mut instruction_count: u64 = 0;
+    let instruction_count: Rc<RefCell<u64>> = Rc::new(RefCell::new(0));
+    let ic_clone = instruction_count.clone();
     let present_cb: super::framebuf::PresentCallback =
         Rc::new(RefCell::new(move |pixels: &[u32]| {
             let frame = Frame {
                 pixels: pixels.to_vec(),
                 width: FB_WIDTH,
                 height: FB_HEIGHT,
-                instructions: instruction_count,
+                instructions: *ic_clone.borrow(),
             };
             let _ = ft.send(frame);
         }));
@@ -268,14 +269,15 @@ fn vm_thread_main(
                 }
                 // Re-install the callback with the new VM
                 let ft2 = frame_tx.clone();
-                instruction_count = 0;
+                *instruction_count.borrow_mut() = 0;
+                let ic2 = instruction_count.clone();
                 let cb: super::framebuf::PresentCallback =
                     Rc::new(RefCell::new(move |pixels: &[u32]| {
                         let frame = Frame {
                             pixels: pixels.to_vec(),
                             width: FB_WIDTH,
                             height: FB_HEIGHT,
-                            instructions: instruction_count,
+                            instructions: *ic2.borrow(),
                         };
                         let _ = ft2.send(frame);
                     }));
@@ -314,7 +316,7 @@ fn vm_thread_main(
                     break;
                 }
             }
-            instruction_count += 1;
+            *instruction_count.borrow_mut() += 1;
 
             if vm.bus.sbi.shutdown_requested {
                 halt_reason = Some("SBI shutdown".into());
@@ -326,7 +328,7 @@ fn vm_thread_main(
         if let Some(reason) = halt_reason {
             let _ = status_tx.send(VmStatus::Halted {
                 pc: vm.cpu.pc,
-                instructions: instruction_count,
+                instructions: *instruction_count.borrow(),
                 reason,
             });
             running = false;
