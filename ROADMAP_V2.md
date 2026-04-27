@@ -5,16 +5,16 @@ Roadmap for the pixel-native RISC-V hypervisor layer in Geometry OS. Covers tool
 
 **Progress:** 1/5 phases complete, 0 in progress
 
-**Deliverables:** 4/12 complete
+**Deliverables:** 5/12 complete
 
-**Tasks:** 6/20 complete
+**Tasks:** 8/20 complete
 
 ## Scope Summary
 
 | Phase | Status | Deliverables | LOC Target | Tests |
 |-------|--------|-------------|-----------|-------|
 | phase-A Toolchain Hygiene | COMPLETE | 4/4 | - | - |
-| phase-B GUI Bridge — Live Pixel Display | PLANNED | 0/3 | - | - |
+| phase-B GUI Bridge — Live Pixel Display | PLANNED | 1/3 | - | - |
 | phase-C Pixel VM Convergence | FUTURE | 0/1 | - | - |
 | phase-D Layer 2 — libgeos and Primitives | FUTURE | 0/3 | - | - |
 | phase-E Legacy Roadmap Reconciliation | FUTURE | 0/1 | - | - |
@@ -90,17 +90,17 @@ Bridge the MMIO framebuffer to the actual Geometry OS display so programs render
 
 ### Deliverables
 
-- [ ] **Off-thread VM execution** -- Spawn RiscvVm on its own thread. Present callback pushes frame-ready signal (or buffer copy) over a channel. GUI thread blits on render tick. The current synchronous-callback-in-bus-write bug becomes structurally impossible.
+- [x] **Off-thread VM execution** -- Spawn RiscvVm on its own thread. Present callback pushes frame-ready signal (or buffer copy) over a channel. GUI thread blits on render tick. The current synchronous-callback-in-bus-write bug becomes structurally impossible.
 
-  - [ ] `b.1.1` Create RiscvVmThread struct with channel-based present
-    > New module (src/riscv/live.rs?) wrapping RiscvVm in a thread. Uses mpsc::channel: VM sends (Vec<u32> or Arc<[u32]>) on present, GUI thread recv()s on its tick. Include pause/resume/reset controls.
+  - [x] `b.1.1` Create RiscvVmThread struct with channel-based present
+    > New module src/riscv/live.rs wrapping RiscvVm in a thread. Uses mpsc::channel: VM sends Frame (Vec<u32>) on present, GUI thread recv()s on its tick. Pause/resume/reset/shutdown controls. 3 unit tests pass.
     _Files: src/riscv/live.rs, src/riscv/mod.rs_
-  - [ ] `b.1.2` Replace synchronous PNG callback in sh_run with channel
-    > Update sh_run to use the new threaded VM. Channel recv writes PNGs (keep as debug tool) but doesn't block the VM.
+  - [x] `b.1.2` Replace synchronous PNG callback in sh_run with channel
+    > sh_run now uses spawn_vm_thread(). Main thread does non-blocking try_recv_frame() for PNG dumps. VM runs unimpeded.
     _Files: examples/sh_run.rs_
-  - [ ] VM runs on separate thread from GUI
+  - [x] VM runs on separate thread from GUI
     _Validation: Code review: std::thread::spawn for VM loop_
-  - [ ] Present callback does not block interpreter
+  - [x] Present callback does not block interpreter
     _Validation: Channel send is non-blocking or bounded_
 - [ ] **Framebuffer blit to Geometry OS display** -- Find where the main app renders the pixel VM canvas. Inject the RISC-V framebuffer (256x256 RGBA) as a surface in that pipeline. May need scaling (256x256 -> 512x512 display) or window integration via WINSYS.
 

@@ -129,29 +129,30 @@ phases:
           signal (or buffer copy) over a channel. GUI thread blits on render tick.
           The current synchronous-callback-in-bus-write bug becomes structurally
           impossible.
-        status: "todo"
+        status: "done"
         acceptance_criteria:
           - description: "VM runs on separate thread from GUI"
             validation: "Code review: std::thread::spawn for VM loop"
-            met: false
+            met: true
           - description: "Present callback does not block interpreter"
             validation: "Channel send is non-blocking or bounded"
-            met: false
+            met: true
         tasks:
           - id: "b.1.1"
             title: "Create RiscvVmThread struct with channel-based present"
-            status: "todo"
+            status: "done"
             description: >
-              New module (src/riscv/live.rs?) wrapping RiscvVm in a thread.
-              Uses mpsc::channel: VM sends (Vec<u32> or Arc<[u32]>) on present,
-              GUI thread recv()s on its tick. Include pause/resume/reset controls.
+              New module src/riscv/live.rs wrapping RiscvVm in a thread.
+              Uses mpsc::channel: VM sends Frame (Vec<u32>) on present,
+              GUI thread recv()s on its tick. Pause/resume/reset/shutdown controls.
+              3 unit tests pass.
             files: ["src/riscv/live.rs", "src/riscv/mod.rs"]
           - id: "b.1.2"
             title: "Replace synchronous PNG callback in sh_run with channel"
-            status: "todo"
+            status: "done"
             description: >
-              Update sh_run to use the new threaded VM. Channel recv writes
-              PNGs (keep as debug tool) but doesn't block the VM.
+              sh_run now uses spawn_vm_thread(). Main thread does non-blocking
+              try_recv_frame() for PNG dumps. VM runs unimpeded.
             files: ["examples/sh_run.rs"]
       - name: "Framebuffer blit to Geometry OS display"
         description: >
