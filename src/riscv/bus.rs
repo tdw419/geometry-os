@@ -369,37 +369,26 @@ impl Bus {
 
     /// Sync CLINT + PLIC hardware state into the MIP register.
     ///
-    /// Sets/clears STIP (bit 5) based on mtime >= mtimecmp (OpenSBI emulation).
+    /// Sets/clears MTIP (bit 7) AND STIP (bit 5) based on mtime >= mtimecmp.
     /// Sets/clears MSIP (bit 3) based on msip register.
     /// Sets/clears MEIP (bit 11) based on PLIC pending+enabled interrupts.
     ///
-    /// OpenSBI timer forwarding: On real hardware with OpenSBI:
-    /// 1. CLINT sets MTIP when mtime >= mtimecmp
-    /// 2. MTI fires to M-mode (OpenSBI)
-    /// 3. OpenSBI sets STIP in MIP to forward the timer interrupt to S-mode
-    /// 4. OpenSBI clears MTIP (by advancing mtimecmp or masking)
-    /// 5. STI fires to S-mode → kernel's timer handler runs
+    /// Both MTIP and STIP are set when the timer fires. The pending_interrupt()
+    /// function in csr/bank.rs handles priority correctly:
+    /// - M-mode with MTIE enabled → MTI fires (bit 7 checked first, higher priority)
+    /// - S-mode → STI fires (MTI skipped for non-Machine privilege when not delegated)
+    /// - Linux boot (S-mode with OpenSBI emulation) still works because S-mode
+    ///   sees STI via pending_interrupt(), not MTI.
     ///
-    /// Since we don't have OpenSBI running in M-mode, we emulate steps 2-4
-    /// by setting STIP directly when the timer fires. We do NOT set MTIP
-    /// because that would cause MTI to fire to M-mode (higher priority than STI),
-    /// bypassing the kernel's S-mode timer handler entirely.
-    ///
-    /// The kernel's timer handler clears STIP by calling sbi_set_timer(),
-    /// which writes a new mtimecmp value. When mtime < mtimecmp, timer_pending()
-    /// returns false and sync_mip clears STIP.
+    /// Previous code only set STIP for OpenSBI emulation, which broke M-mode
+    /// timer tests (test_clint_timer_interrupt_via_vm_step, etc.) that expect
+    /// MTIP to be set when mtime >= mtimecmp.
     pub fn sync_mip(&self, mip: &mut u32) {
-        // Timer interrupt: set STIP (not MTIP) when timer fires.
-        // OpenSBI emulation — see comment above.
         let timer_pending = self.clint.timer_pending();
         if timer_pending {
-            // Do NOT set MTIP (bit 7) — it would fire MTI to M-mode instead of
-            // STI to S-mode. Only set STIP (bit 5) for direct S-mode delivery.
-            *mip &= !(1 << 7); // Clear MTIP
-            *mip |= 1 << 5; // Set STIP
+            *mip |= (1 << 7) | (1 << 5); // Set both MTIP and STIP
         } else {
-            *mip &= !(1 << 7); // Clear MTIP
-            *mip &= !(1 << 5); // Clear STIP
+            *mip &= !((1 << 7) | (1 << 5)); // Clear both MTIP and STIP
         }
 
         // MSIP (bit 3): machine software interrupt pending
@@ -659,10 +648,11 @@ mod tests {
         bus.clint.mtimecmp = 0; // Timer fires immediately (mtime=0 >= mtimecmp=0)
         let mut mip = 0u32;
         bus.sync_mip(&mut mip);
-        // OpenSBI emulation: STIP (bit 5) is set, NOT MTIP (bit 7).
-        // MTIP would fire to M-mode; STIP fires to S-mode via mideleg.
+        // Both MTIP (bit 7) and STIP (bit 5) are set when timer fires.
+        // pending_interrupt() in csr/bank.rs handles priority:
+        // M-mode sees MTI (higher priority), S-mode sees STI.
         assert_eq!(mip & (1 << 5), 1 << 5, "STIP should be set");
-        assert_eq!(mip & (1 << 7), 0, "MTIP should NOT be set");
+        assert_eq!(mip & (1 << 7), 1 << 7, "MTIP should be set");
     }
 
     #[test]

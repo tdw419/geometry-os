@@ -297,12 +297,16 @@ fn test_supervisor_timer_with_delegation() {
         .write_word(0x8000_0208, sret())
         .expect("operation should succeed");
 
+    // Set CLINT mtimecmp=0 so timer_pending() returns true and sync_mip sets STIP.
+    // sync_mip() is called by vm.step() and overrides mip from hardware state,
+    // so we must configure the CLINT hardware, not just set mip manually.
+    vm.bus.clint.mtimecmp = 0;
+
     vm.cpu.csr.mideleg = 1 << 5; // Delegate STI
     vm.cpu.csr.mie = 1 << 5; // STIE
     vm.cpu.csr.stvec = 0x8000_0200;
     vm.cpu.privilege = geometry_os::riscv::cpu::Privilege::Supervisor;
     vm.cpu.csr.mstatus = 1 << 1; // SIE
-    vm.cpu.csr.mip = 1 << 5; // STIP
     vm.step();
     assert_eq!(vm.cpu.csr.scause, csr::MCAUSE_INTERRUPT_BIT | 5);
     assert_eq!(vm.cpu.pc, 0x8000_0200);
