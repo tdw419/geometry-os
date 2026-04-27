@@ -857,16 +857,21 @@ impl RiscvVm {
                         // PLIC:  0x0C000000 (L1[48])
                         // UART:  0x10000000 (L1[64])
                         //
-                        // Identity-map ALL addresses below PAGE_OFFSET (L1[0..768]).
-                        // This covers the entire 3GB low address space (0x0-0xBFFFFFFF).
-                        // The kernel accesses physical addresses in this range during
-                        // early boot (BSS clearing, per-CPU data, fixmap, etc.).
-                        // Without these mappings, any access to an unmapped low VA
-                        // causes a page fault cascade that leads to panic.
+                        // Identity-map low addresses up to VMALLOC_START (L1[0..640]).
+                        // This covers PA 0x00000000-0x9FFFFFFF for early boot accesses
+                        // (BSS clearing, per-CPU data, devices). We MUST NOT identity-map
+                        // L1[640..768] (VA 0xA0000000-0xC0000000) -- that's the kernel's
+                        // vmalloc/modules/fixmap region. Stamping leaf megapages there
+                        // breaks vmap() because the kernel later tries to install
+                        // page-table entries for vmalloc and our pre-installed leaf
+                        // megapages cause it to follow a bogus PT pointer (PA = VA),
+                        // which lands outside RAM and panics with a load access fault
+                        // in __vmap_pages_range_noflush.
                         // Entries 768+ are the kernel linear mapping (handled separately).
                         let identity_pte: u32 = 0x0000_00CF; // V+R+W+X+A+D, U=0
+                        const VMALLOC_START_L1: u32 = 640; // VA 0xA0000000
 
-                        for l1_idx in 0..768u32 {
+                        for l1_idx in 0..VMALLOC_START_L1 {
                             let addr = pg_dir_phys + (l1_idx as u64) * 4;
                             let existing = vm.bus.read_word(addr).unwrap_or(0);
                             if (existing & 1) == 0 {
